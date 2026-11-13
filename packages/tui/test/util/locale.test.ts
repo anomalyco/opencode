@@ -18,3 +18,15 @@ test("rolls the compact form over at the rounding boundary", () => {
   expect(Locale.number(999950)).toBe("1.0M")
   expect(Locale.number(1000000)).toBe("1.0M")
 })
+
+test("truncates text in the middle without overflowing small widths", () => {
+  expect(Locale.truncateMiddle("abcdefghij", 0)).toBe("")
+  expect(Locale.truncateMiddle("abcdefghij", 1)).toBe("…")
+  expect(Locale.truncateMiddle("abcdefghij", 2)).toBe("a…")
+  expect(Locale.truncateMiddle("abcdefghij", 3)).toBe("a…j")
+  expect(Locale.truncateMiddle("abcdefghij", 4)).toBe("ab…j")
+  expect(Locale.truncateMiddle("abcdefghij", 9)).toBe("abcd…ghij")
+  expect(Locale.truncateMiddle("abcd", 4)).toBe("abcd")
+  expect(Locale.truncateMiddle("abcd", 10)).toBe("abcd")
+  expect(Locale.truncateMiddle("a", 1)).toBe("a")
+})

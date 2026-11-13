@@ -79,8 +79,11 @@ const docTags = (schema: JsonSchema): Array<string> => {
   }
   if (typeof schema.format === "string") tags.push(`@format ${schema.format}`)
   if (schema.type === "integer") tags.push("@integer")
-  if (typeof schema.minimum === "number") tags.push(`@minimum ${schema.minimum}`)
-  if (typeof schema.maximum === "number") tags.push(`@maximum ${schema.maximum}`)
+  const integer = schema.type === "integer"
+  if (typeof schema.minimum === "number" && !(integer && schema.minimum === Number.MIN_SAFE_INTEGER))
+    tags.push(`@minimum ${schema.minimum}`)
+  if (typeof schema.maximum === "number" && !(integer && schema.maximum === Number.MAX_SAFE_INTEGER))
+    tags.push(`@maximum ${schema.maximum}`)
   if (typeof schema.exclusiveMinimum === "number") tags.push(`@exclusiveMinimum ${schema.exclusiveMinimum}`)
   if (typeof schema.exclusiveMaximum === "number") tags.push(`@exclusiveMaximum ${schema.exclusiveMaximum}`)
   if (typeof schema.multipleOf === "number") tags.push(`@multipleOf ${schema.multipleOf}`)
@@ -154,7 +157,10 @@ const renderSchema = (
   }
   if (schema.const !== undefined) return renderLiteral(schema.const)
   if (schema.enum) return schema.enum.map(renderLiteral).join(" | ")
-  const alternatives = schema.anyOf ?? schema.oneOf
+  const listed = schema.anyOf ?? schema.oneOf
+  const alternatives = listed?.some((item) => item.type === "number")
+    ? listed.filter((item) => !effectNumberSentinel(item))
+    : listed
   if (alternatives) {
     if (
       alternatives.some((item) => item.type === "number") &&
@@ -246,24 +252,9 @@ export type InputProperty = {
 
 export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
   try {
-    const document = isEffectSchema(tool.input)
-      ? (Schema.toJsonSchemaDocument(tool.input, { onExcessProperty: "error" }) as {
-          readonly schema: JsonSchema
-          readonly definitions: Readonly<Record<string, JsonSchema>>
-        })
-      : {
-          schema: tool.input,
-          definitions: { ...(tool.input.definitions ?? {}), ...(tool.input.$defs ?? {}) },
-        }
-    let schema = document.schema
-    if (schema.$ref !== undefined) {
-      const name = definitionName(schema.$ref)
-      const resolved = name === undefined ? undefined : document.definitions[name]
-      if (resolved === undefined) return []
-      schema = resolved
-    }
-    const required = new Set(schema.required ?? [])
-    return Object.entries(schema.properties ?? {}).map(([name, value]) => ({
+    const schema = inputDocument(tool)?.schema
+    const required = new Set(schema?.required ?? [])
+    return Object.entries(schema?.properties ?? {}).map(([name, value]) => ({
       name,
       description: typeof value.description === "string" ? value.description : undefined,
       required: required.has(name),
@@ -271,6 +262,39 @@ export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
   } catch {
     return []
   }
+}
+
+/** A freeform tool whose input is one required string field takes that string directly: `tools.patch(patchText: string)`. */
+export const stringParameter = <R>(tool: Tool<R>) => {
+  if (!tool.freeform) return undefined
+  try {
+    const document = inputDocument(tool)
+    const fields = Object.entries(document?.schema.properties ?? {})
+    if (document === undefined || fields.length !== 1) return undefined
+    const [name, field] = fields[0]!
+    if (field.type !== "string" || !document.schema.required?.includes(name)) return undefined
+    const label = identifierSegment.test(name) ? name : "input"
+    const type = renderSchema(field, { definitions: document.definitions, pretty: false })
+    return { name, signature: `(${jsdoc(field, "").replace(/\n$/, " ")}${label}: ${type})` }
+  } catch {
+    return undefined
+  }
+}
+
+const inputDocument = <R>(tool: Tool<R>) => {
+  const document = isEffectSchema(tool.input)
+    ? (Schema.toJsonSchemaDocument(tool.input, { onExcessProperty: "error" }) as {
+        readonly schema: JsonSchema
+        readonly definitions: Readonly<Record<string, JsonSchema>>
+      })
+    : {
+        schema: tool.input,
+        definitions: { ...(tool.input.definitions ?? {}), ...(tool.input.$defs ?? {}) },
+      }
+  if (document.schema.$ref === undefined) return document
+  const name = definitionName(document.schema.$ref)
+  const schema = name === undefined ? undefined : document.definitions[name]
+  return schema && { schema, definitions: document.definitions }
 }
 
 export const inputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>

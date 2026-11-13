@@ -1,20 +1,33 @@
-import { OpenCode, type MigrationV1StatusOutput } from "@opencode/client/promise"
+import { OpenCode } from "@opencode/client/promise"
 import { useLanguage } from "@opencode/app/desktop"
 import { Loader } from "@opencode/ui/loader"
 import { showToast, toaster, Toast } from "@opencode/ui/toast"
-import { createRoot, createSignal, onCleanup, onMount } from "solid-js"
+import { createEffect, createRoot, createSignal, onCleanup, onMount } from "solid-js"
 import type { ServerReadyData } from "../shared/ipc-contract"
+import {
+  createMigrationState,
+  selectMigrationProgress,
+  selectMigrationToastVisible,
+  transitionMigration,
+  type MigrationEffect,
+  type MigrationEvent,
+  type MigrationProgress,
+} from "./migration-status-machine"
 
-type Progress = Extract<MigrationV1StatusOutput, { status: "running" }>["progress"]
+type ToastHandle = { id: number; closed: boolean; dispose: (() => void) | undefined }
 
 export function MigrationStatus(props: { server: ServerReadyData }) {
   const language = useLanguage()
-  const [progress, setProgress] = createSignal<Progress>()
-  const abort = new AbortController()
-  let toastID: number | undefined
-  let disposeToast: (() => void) | undefined
+  const initial = createMigrationState()
+  const [state, setState] = createSignal(initial.state)
+  // The main process credentials sidecar requests; see `wireRendererHeaders`.
+  const client = OpenCode.make({ baseUrl: props.server.url })
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let controller: AbortController | undefined
+  // One handle per shown toast: a render that lands after the dismissal disposes its own root at once.
+  let toast: ToastHandle | undefined
 
-  const format = (progress: Progress | undefined) => {
+  const format = (progress: MigrationProgress | undefined) => {
     if (!progress) return ""
 
     if (progress.label === "Clearing old events") return language.t("toast.migration.progress.clearingOldEvents")
@@ -46,19 +59,22 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
   }
 
   const hide = () => {
-    if (toastID !== undefined) toaster.dismiss(toastID)
-    toastID = undefined
-    disposeToast?.()
-    disposeToast = undefined
+    if (!toast) return
+    toast.closed = true
+    toaster.dismiss(toast.id)
+    toast.dispose?.()
+    toast = undefined
   }
 
   const show = () => {
-    if (toastID !== undefined) return
-    toastID = toaster.show(
-      ({ toastId }) =>
-        createRoot((dispose) => {
-          disposeToast?.()
-          disposeToast = dispose
+    if (toast) return
+    const handle: ToastHandle = { id: 0, closed: false, dispose: undefined }
+    toast = handle
+    handle.id = toaster.show(
+      ({ toastId }) => {
+        const view = createRoot((dispose) => {
+          handle.dispose?.()
+          handle.dispose = dispose
 
           return (
             <Toast toastId={toastId}>
@@ -67,66 +83,81 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
                   <Loader />
                 </Toast.Icon>
                 <Toast.Content>
-                  <Toast.Title dir="auto">{format(progress())}</Toast.Title>
+                  <Toast.Title dir="auto">{format(selectMigrationProgress(state()))}</Toast.Title>
                 </Toast.Content>
               </div>
             </Toast>
           )
-        }),
+        })
+
+        if (handle.closed) handle.dispose?.()
+
+        return view
+      },
       { persistent: true },
     )
   }
 
-  onMount(async () => {
-    await wait(1_000, abort.signal)
+  const run = (effect: MigrationEffect) => {
+    if (effect.type === "start-wait") {
+      clearTimeout(timer)
+      timer = setTimeout(() => dispatch({ type: "poll.due", attempt: effect.attempt }), effect.delayMs)
 
-    if (abort.signal.aborted) return
+      return
+    }
 
-    // The main process credentials sidecar requests; see `wireRendererHeaders`.
-    const client = OpenCode.make({ baseUrl: props.server.url })
+    if (effect.type === "start-poll") {
+      controller?.abort()
+      const current = new AbortController()
+      controller = current
+      clearTimeout(timer)
+      timer = setTimeout(() => dispatch({ type: "poll.timed-out", attempt: effect.attempt }), effect.timeoutMs)
+      void client.experimental.migration.v1.status({ signal: current.signal }).then(
+        (output) => dispatch({ type: "poll.succeeded", attempt: effect.attempt, output }),
+        () => dispatch({ type: "poll.failed", attempt: effect.attempt }),
+      )
 
-    void (async () => {
-      while (true) {
-        const status = await client.migration.v1.status({ signal: abort.signal })
-        setProgress(status.status === "running" ? status.progress : undefined)
+      return
+    }
 
-        if (status.status === "running") show()
-        else hide()
+    if (effect.type === "cancel-timer") {
+      clearTimeout(timer)
+      timer = undefined
 
-        if (status.status === "completed") return
+      return
+    }
 
-        if (status.status === "error") throw new Error(status.error)
-        await wait(1_000, abort.signal)
-      }
-    })().catch((error) => {
-      if (abort.signal.aborted) return
-      hide()
-      showToast({
-        variant: "error",
-        title: language.t("toast.migration.failed.title"),
-        description: error instanceof Error ? error.message : String(error),
-        duration: 10_000,
-      })
+    if (effect.type === "abort-poll") {
+      controller?.abort()
+      controller = undefined
+
+      return
+    }
+
+    showToast({
+      variant: "error",
+      title: language.t("toast.migration.failed.title"),
+      description: effect.error,
+      duration: 10_000,
     })
-  })
+  }
+
+  const dispatch = (event: MigrationEvent) => {
+    const next = transitionMigration(state(), event)
+
+    if (next.state === state()) return
+    setState(next.state)
+    next.effects.forEach(run)
+  }
+
+  createEffect(() => (selectMigrationToastVisible(state()) ? show() : hide()))
+
+  onMount(() => initial.effects.forEach(run))
 
   onCleanup(() => {
-    abort.abort()
+    dispatch({ type: "disposed" })
     hide()
   })
 
   return null
-}
-
-function wait(delay: number, signal: AbortSignal) {
-  return new Promise<void>((resolve) => {
-    const timer = setTimeout(done, delay)
-    signal.addEventListener("abort", done, { once: true })
-
-    function done() {
-      clearTimeout(timer)
-      signal.removeEventListener("abort", done)
-      resolve()
-    }
-  })
 }

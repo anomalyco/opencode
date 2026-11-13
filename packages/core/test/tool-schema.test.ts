@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { Effect, Schema, SchemaGetter } from "effect"
 import { z } from "zod"
-import { emptyInputJsonSchema } from "@opencode/ai/tool"
+import { emptyInputJsonSchema } from "@opencode/ai/effect"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
@@ -191,6 +191,28 @@ test("Effect tool schemas resolve escaped definition names", () => {
 
   expect(JSON.stringify(definition(tool).inputSchema)).not.toContain("$ref")
   expect(JSON.stringify(definition(tool).inputSchema)).not.toContain("$defs")
+})
+
+test("definitions keep their pinned serialization", () => {
+  const Item = Schema.Struct({ id: Schema.String }).annotate({ identifier: "Item" })
+  const tool: Info = {
+    name: "pinned.tool",
+    description: "Pinned",
+    options: { namespace: "mcp.server" },
+    input: Schema.Struct({
+      offset: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+      items: Schema.Array(Item),
+    }),
+    output: Schema.Struct({}).annotate({ description: "Nothing" }),
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+  // Key order matters for provider prompt caches.
+  const expected =
+    '{"type":"tool","name":"mcp_server_pinned_tool","description":"Pinned","inputSchema":{"type":"object","properties":{"offset":{"type":"integer","minimum":0},"items":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false}}},"required":["items"],"additionalProperties":false},"outputSchema":{"not":{"type":"null"},"description":"Nothing"}}'
+
+  expect(JSON.stringify(definition(tool))).toBe(expected)
+  expect(JSON.stringify(definition(tool))).toBe(expected)
+  expect(JSON.stringify(definition({ ...tool }))).toBe(expected)
 })
 
 test.each(["Lookup Input", "café", "A/B~C% D#E"])(
@@ -507,6 +529,31 @@ test("raw JSON schemas pass input through when they cannot be imported", async (
   expect(await Effect.runPromise(execute(tool, { value: 1, extra: true }, context))).toMatchObject({
     content: [{ type: "text", text: '{"value":1,"extra":true}' }],
   })
+})
+
+test("raw JSON schema validation does not keep the caller alive", async () => {
+  // The session runner executes tools from Effect.fn closures over its Location's services. Building the codec must
+  // not leave anything process-wide that reaches the caller's stack frames once the Location is gone.
+  const call = async () => {
+    const services = { name: "location services" }
+    const tool: Info = {
+      name: "raw-retention",
+      description: "Raw retention tool",
+      input: { type: "object", properties: { value: { type: "string" } }, required: ["value"] },
+      execute: () => Effect.succeed({ content: services.name }),
+    }
+    const run = Effect.fn("LocationCaller.run")(function* () {
+      return yield* execute(tool, { value: "ok" }, context)
+    })
+    expect(await Effect.runPromise(run())).toMatchObject({ content: [{ type: "text", text: "location services" }] })
+    return new WeakRef(services)
+  }
+  const services = await call()
+  for (let attempt = 0; attempt < 50 && services.deref() !== undefined; attempt++) {
+    Bun.gc(true)
+    await Bun.sleep(10)
+  }
+  expect(services.deref()).toBeUndefined()
 })
 
 test("missing external input schemas fall back to an empty schema", () => {

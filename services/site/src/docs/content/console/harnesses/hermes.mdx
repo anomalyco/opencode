@@ -1,0 +1,58 @@
+---
+title: "Hermes"
+description: "Use Console and Go models from Hermes Agent."
+---
+
+[Hermes Agent](https://hermes-agent.nousresearch.com) includes OpenCode providers for pay-as-you-go and Go. It picks the
+right API for each paid or Go model. Free-tier chat models require OpenCode and return HTTP `403` from Hermes.
+
+| Provider       | Plan          | Key variable           |
+| -------------- | ------------- | ---------------------- |
+| `opencode-zen` | Pay-as-you-go | `OPENCODE_ZEN_API_KEY` |
+| `opencode-go`  | Go            | `OPENCODE_GO_API_KEY`  |
+
+## Configure
+
+Run the model setup and select **OpenCode Zen** for pay-as-you-go or **OpenCode Go** for Go.
+
+```bash
+hermes model
+```
+
+Paste a [personal API key](/console/harnesses#get-an-api-key), then choose a model. Hermes saves the
+key to `~/.hermes/.env` and the selection to `~/.hermes/config.yaml`.
+
+```yaml title="~/.hermes/config.yaml"
+model:
+  provider: opencode-go
+  default: kimi-k3
+```
+
+<Callout>Go requires a session ID on every request. Hermes v0.21.6 and later send it automatically.</Callout>
+
+## Models
+
+Use model IDs from the [Console](/console/models#endpoints) or [Go](/console/go#endpoints) table without a prefix.
+Switch models in a session with `/model`, or pick one for a single run.
+
+```bash
+hermes chat --provider opencode-zen --model claude-sonnet-5-5
+```
+
+## Console MCP
+
+Add the [Console MCP](/console/harnesses#console-mcp) server with OAuth, then sign in from the browser.
+
+```bash
+hermes mcp add opencode-console --url https://opencode.ai/console/mcp --auth oauth
+hermes mcp login opencode-console
+```
+
+Or add it to `~/.hermes/config.yaml` and run `/reload-mcp` in a session.
+
+```yaml title="~/.hermes/config.yaml"
+mcp_servers:
+  opencode-console:
+    url: https://opencode.ai/console/mcp
+    auth: oauth
+```

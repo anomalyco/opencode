@@ -14,7 +14,9 @@
   },
   "mcp": {},
   "tools": {
-    "github-triage": false,
     "github-pr-search": false,
+  },
+  "experimental": {
+    "part_rows": true,
   },
 }

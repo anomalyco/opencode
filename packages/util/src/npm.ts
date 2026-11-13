@@ -8,15 +8,22 @@ import { Global } from "./global.js"
 import { EffectFlock } from "./effect-flock.js"
 import { makeGlobalNode } from "./effect/app-node.js"
 import { filesystem } from "./effect/app-node-platform.js"
-import { LayerNode } from "./effect/layer-node.js"
-import { makeRuntime } from "./effect/runtime.js"
 import { NpmConfig } from "./npm-config.js"
 
 export class InstallFailedError extends Schema.TaggedError<InstallFailedError>()("NpmInstallFailedError", {
   add: Schema.Array(Schema.String).pipe(Schema.optional),
   dir: Schema.String,
   cause: Schema.optional(Schema.Defect()),
-}) {}
+}) {
+  override get message() {
+    const summary = `Failed to install ${this.add?.join(", ") || this.dir}`
+    if (!(this.cause instanceof Error)) return summary
+    // @npmcli/git reports most failures as "An unknown git error occurred" and keeps git's output on `stderr`.
+    const stderr = "stderr" in this.cause && typeof this.cause.stderr === "string" ? this.cause.stderr.trim() : ""
+    if (!stderr) return `${summary}: ${this.cause.message}`
+    return `${summary}: ${this.cause.message}\n${stderr}`
+  }
+}
 
 export interface Package {
   readonly directory: string
@@ -470,28 +477,6 @@ export const node = makeGlobalNode({
   layer: layer,
   deps: [FSUtil.node, Global.node, filesystem, EffectFlock.node],
 })
-
-const { runPromise } = makeRuntime(Service, LayerNode.compile(node))
-
-export async function add(...args: Parameters<Interface["add"]>) {
-  return runPromise((svc) => svc.add(...args))
-}
-
-export async function resolve(...args: Parameters<Interface["resolve"]>) {
-  return runPromise((svc) => svc.resolve(...args))
-}
-
-export async function check(...args: Parameters<Interface["check"]>) {
-  return runPromise((svc) => svc.check(...args))
-}
-
-export async function update(...args: Parameters<Interface["update"]>) {
-  return runPromise((svc) => svc.update(...args))
-}
-
-export async function which(...args: Parameters<Interface["which"]>) {
-  return runPromise((svc) => svc.which(...args))
-}
 
 function gitRevision(resolved: string | undefined) {
   return resolved?.match(/#([a-f0-9]{40}|[a-f0-9]{64})(?=::|$)/i)?.[1]

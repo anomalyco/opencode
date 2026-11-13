@@ -1,0 +1,64 @@
+/* Right to left (Arabic at /ar) and Arabic script. The layout uses logical properties, so it mirrors
+   on its own; this file holds what they can't express. Left-to-right pages never match these rules
+   except the variables, which equal the fallbacks the rules that read them use. Arabic type (font,
+   tracking, leading) is in locale-type.css and style/script-fonts.css. */
+
+/* --x-start and --x-end are the physical sides of the inline start and end, for properties with no
+   logical form (transform-origin, gradients); --x-dir is 1 or -1, to flip a horizontal translate. */
+[dir="ltr"] {
+  --x-start: left;
+  --x-end: right;
+  --x-dir: 1;
+}
+
+[dir="rtl"] {
+  --x-start: right;
+  --x-end: left;
+  --x-dir: -1;
+}
+
+/* Directional icons point the way the text reads. Brand marks, media controls and code don't. */
+[dir="rtl"] :is([data-slot="chevron-right"], [data-component="product-cycle"] svg) {
+  scale: -1 1;
+}
+
+/* The "←" and "→" in links like "← Newer" are characters, which bidi never mirrors. */
+[dir="rtl"] :is([data-slot="arrow-back"], [data-slot="arrow-forward"]) {
+  display: inline-block;
+  scale: -1 1;
+}
+
+/* Text that stays left to right inside Arabic: code, commands, terminal reels and version numbers. */
+[dir="rtl"] [data-site] :is(pre, kbd, samp, code) {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* Menu and phone sheet rows that end in an ellipsis: the cut goes at the end of the label's own text
+   (Latin platform names and commands end on the right), while the row stays against the menu's
+   start edge. */
+[dir="rtl"] :is([data-slot="menu"], [data-component="sheet"]) [data-slot="label"] {
+  unicode-bidi: plaintext;
+  text-align: right;
+}
+
+[dir="rtl"] :is([data-slot="menu"], [data-component="sheet"]) [data-slot="command"] {
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: right;
+}
+
+/* The docs lockup's "›" opens a submenu: it points the way the submenu opens, and down (not up)
+   once a nested one is open. */
+[dir="rtl"] [data-site] [data-component="docs-lockup"] [data-slot="expand"] svg {
+  scale: -1 1;
+}
+
+[dir="rtl"]
+  [data-site]
+  [data-component="docs-lockup"]
+  [data-submenu="nested"]
+  [data-slot="expand"][aria-expanded="true"]
+  svg {
+  rotate: -90deg;
+}

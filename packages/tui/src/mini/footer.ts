@@ -100,7 +100,6 @@ type RunFooterOptions = {
   onModelSelect?: (model: NonNullable<RunInput["model"]>) => CycleResult | void | Promise<CycleResult | void>
   onVariantSelect?: (variant: string | undefined) => CycleResult | void | Promise<CycleResult | void>
   onInterrupt?: () => void
-  onBackground?: () => void
   onQueuedPromptAction?: (action: QueuedPromptAction, inboxID: string) => Promise<void>
   onEditorOpen: (input: { value: string }) => Promise<string | undefined>
   onSubagentSelect?: (sessionID: string | undefined) => void
@@ -358,7 +357,6 @@ export class RunFooter implements FooterApi {
               onFormCancel: footer.handleFormCancel,
               onCycle: footer.handleCycle,
               onInterrupt: footer.handleInterrupt,
-              onBackground: options.onBackground,
               onQueuedPromptAction: options.onQueuedPromptAction,
               onEditorOpen: (input) => {
                 footer.finishStartup()
@@ -1144,7 +1142,11 @@ export class RunFooter implements FooterApi {
     this.prompts.clear()
     this.closes.clear()
     this.scrollback.destroy()
-    for (const theme of [...this.themes]) this.destroyTheme(theme)
+    void this.renderer.closed
+      .catch(() => {})
+      .then(() => {
+        for (const theme of [...this.themes]) this.destroyTheme(theme)
+      })
   }
 
   // Drains the commit queue to scrollback. The surface manager owns grouping,

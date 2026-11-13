@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import { registerOpencodeSpinner } from "../component/register-spinner"
+import "../component/spinner-renderable"
 import { Show, createMemo, createSignal, indexArray } from "solid-js"
 import { SPINNER_FRAMES } from "../component/spinner-frames"
 import { RunEntryContent, separatorRows } from "./scrollback.writer"
@@ -9,8 +9,6 @@ import type { FooterSubagentDetail, FooterSubagentTab } from "./types"
 import type { RunFooterTheme, RunTheme } from "./theme"
 import { stringWidth } from "../util/string-width"
 import { footerMenuText } from "./footer.menu"
-
-registerOpencodeSpinner()
 
 export const SUBAGENT_INSPECTOR_ROWS = 14
 

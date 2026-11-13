@@ -1,4 +1,4 @@
-import { glob, globSync, type GlobOptions } from "glob"
+import { glob, type GlobOptionsWithFileTypesFalse } from "glob"
 import { minimatch } from "minimatch"
 
 export namespace Glob {
@@ -8,24 +8,22 @@ export namespace Glob {
     include?: "file" | "all"
     dot?: boolean
     symlink?: boolean
+    ignore?: string[]
   }
 
-  function toGlobOptions(options: Options): GlobOptions {
+  function toGlobOptions(options: Options): GlobOptionsWithFileTypesFalse {
     return {
       cwd: options.cwd,
       absolute: options.absolute,
       dot: options.dot,
       follow: options.symlink ?? false,
       nodir: options.include !== "all",
+      ignore: options.ignore,
     }
   }
 
   export async function scan(pattern: string, options: Options = {}): Promise<string[]> {
-    return glob(pattern, toGlobOptions(options)) as Promise<string[]>
-  }
-
-  export function scanSync(pattern: string, options: Options = {}): string[] {
-    return globSync(pattern, toGlobOptions(options)) as string[]
+    return glob(pattern, toGlobOptions(options))
   }
 
   export function match(pattern: string, filepath: string): boolean {

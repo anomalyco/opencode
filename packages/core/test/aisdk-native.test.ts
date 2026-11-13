@@ -17,7 +17,7 @@ function map(
     package: `aisdk:${packageName}`,
     settings: { ...settings },
   }
-  AISDKNative.rewrite(target, { specifier: target.package, providerID, modelID })
+  AISDKNative.rewrite(target, { builtins: Provider.builtinPackages, specifier: target.package, providerID, modelID })
   return target.package?.startsWith("aisdk:") ? undefined : target
 }
 
@@ -240,7 +240,12 @@ describe("AISDKNative", () => {
         package: specifier,
         settings,
       }
-      AISDKNative.rewrite(target, { specifier, providerID: "test-provider", modelID })
+      AISDKNative.rewrite(target, {
+        builtins: Provider.builtinPackages,
+        specifier,
+        providerID: "test-provider",
+        modelID,
+      })
       return target
     }
 
@@ -252,6 +257,13 @@ describe("AISDKNative", () => {
       package: "@opencode/ai/providers/amazon-bedrock/mantle/messages",
       settings: { apiKey: "token" },
     })
+    expect(rewrite("@opencode/ai/providers/amazon-bedrock-mantle", {}, "openai.gpt-oss-120b").package).toBe(
+      "@opencode/ai/providers/amazon-bedrock/mantle/chat",
+    )
+    for (const name of ["chat", "responses", "interactions", "mistral"])
+      expect(rewrite(`@opencode/ai/providers/google-vertex-${name}`, {}).package).toBe(
+        `@opencode/ai/providers/google-vertex/${name}`,
+      )
     expect(rewrite("@opencode/ai/providers/azure", { useCompletionUrls: true }).package).toBe(
       "@opencode/ai/providers/azure/chat",
     )

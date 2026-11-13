@@ -76,6 +76,7 @@ export default {
     tool: samples[0].tool,
     error: samples[0].error,
     subtitle: samples[0].subtitle,
+    defaultOpen: false,
   },
   argTypes: {
     tool: {
@@ -89,16 +90,14 @@ export default {
       control: "text",
     },
   },
-  render: (props: { tool: string; error: string; subtitle?: string }) => {
-    return <ToolErrorCard tool={props.tool} error={props.error} subtitle={props.subtitle} />
-  },
 }
 
 export const All = {
-  render: () => {
+  render: (args: { tool: string; error: string; subtitle?: string; defaultOpen: boolean }) => {
     return (
       <div style="display: flex; flex-direction: column; gap: 12px; max-width: 720px;">
-        <For each={samples}>
+        <ToolErrorCard {...args} />
+        <For each={samples.slice(1)}>
           {(item) => (
             <ToolErrorCard
               tool={item.tool}

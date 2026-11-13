@@ -353,26 +353,6 @@ test("lists closed tabs newest first and reopens a selected entry", async () => 
   }
 })
 
-test("stores session tabs for the current working directory by default", async () => {
-  const setup = await renderSessionTabs("first")
-
-  try {
-    const file = path.join(setup.state, "test", "tui", "tabs.json")
-    await wait(async () => {
-      if (!(await Bun.file(file).exists())) return false
-      const stored = await Bun.file(file).json()
-      return stored.cwd[directory]?.tabs.some((tab: { sessionID: string }) => tab.sessionID === "first")
-    })
-    const stored = await Bun.file(file).json()
-    expect(stored.global).toEqual({ tabs: [], unread: {} })
-    expect(Object.keys(stored.cwd)).toEqual([directory])
-    expect(stored.cwd[directory].tabs.map((tab: { sessionID: string }) => tab.sessionID)).toEqual(["first"])
-    expect(stored.cwd[directory].unread).toEqual({})
-  } finally {
-    await setup.destroy()
-  }
-})
-
 test("keeps scroll anchors for open session tabs", async () => {
   const setup = await renderSessionTabs("first")
 

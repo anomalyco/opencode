@@ -1,73 +1,50 @@
 import { describe, expect, test } from "bun:test"
-import { ServerConnection } from "@/runtime/server/registry"
-import type { ExtensionServer } from "@/runtime/extension/servers"
-import { settingsProjects, settingsServers } from "./inventory"
+import { ServerConnection, serverName } from "@/runtime/server/registry"
+import type { PluginServer } from "@/runtime/plugin/servers"
+import { settingsServers } from "./inventory"
 
-const ssh: ExtensionServer = {
+const ssh: PluginServer = {
   key: "ssh:build",
-  extension: "ssh",
+  plugin: "ssh",
   entry: { id: "build", name: "Build server", state: "stopped" },
 }
 
-const connection: ServerConnection.Extension = {
-  type: "extension",
+const connection: ServerConnection.Plugin = {
+  type: "plugin",
   key: "ssh:build",
-  extension: "ssh",
-  state: "stopped",
-  connecting: false,
-  authenticationRequired: false,
+  plugin: "ssh",
+  status: { type: "stopped" },
+  authenticate: () => false,
   managed: true,
   displayName: "Build server",
-  http: { url: "http://127.0.0.1:4000", password: "secret" },
 }
 
-test("settings project inventory reads metadata without acquiring directory stores", () => {
-  const projects = Array.from({ length: 40 }, (_, index) => ({
-    id: `project-${index}`,
-    worktree: `/projects/${index}`,
-    name: `Project ${index}`,
-    icon: { color: "orange" },
-    commands: { start: "bun install" },
-    time: { created: 1, updated: 1, active: 1 },
-    sandboxes: [],
-    worktrees: [],
-  }))
-
-  const tracked = { ...projects[0], expanded: true, icon: { override: "local-icon" } }
-
-  const inventory = settingsProjects({
-    projects: { list: () => [tracked], closed: () => [projects[1].worktree] },
-    sync: { data: { project: projects } },
-  })
-
-  expect(inventory).toHaveLength(39)
-  expect(inventory[0]).toBe(tracked)
-  expect(inventory.some((project) => project.id === projects[1].id)).toBe(false)
-  expect(inventory[1]).toEqual({ ...projects[2], expanded: false })
-  expect(inventory[38]).toEqual({ ...projects[39], expanded: false })
-})
+const unknown = () => ({})
 
 describe("settings server inventory", () => {
   test("includes contributed servers before they connect", () => {
-    expect(settingsServers([], [ssh])).toEqual([
+    expect(settingsServers([], [ssh], serverName, unknown)).toEqual([
       {
         key: ServerConnection.Key.make("ssh:build"),
         name: "Build server",
         source: ssh,
+        availability: { status: "unreachable", reason: "stopped" },
       },
     ])
   })
 
   test("joins a ready contributed server to its live connection and withholds it while disconnected", () => {
     const ready = { ...ssh, entry: { ...ssh.entry, state: "ready" as const } }
-    expect(settingsServers([connection], [ready])).toEqual([
+    const live = { ...connection, status: { type: "ready" as const, http: { url: "http://127.0.0.1:4100" } } }
+    expect(settingsServers([live], [ready], serverName, unknown)).toEqual([
       {
         key: ServerConnection.Key.make("ssh:build"),
         name: "Build server",
-        connection,
+        connection: live,
         source: ready,
+        availability: { status: "ready", connection: live, health: undefined },
       },
     ])
-    expect(settingsServers([connection], [ssh])[0].connection).toBeUndefined()
+    expect(settingsServers([connection], [ssh], serverName, unknown)[0].connection).toBeUndefined()
   })
 })

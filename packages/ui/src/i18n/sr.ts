@@ -86,10 +86,6 @@ export const dict = {
   "dialog.usageExceeded.freeTier.description":
     "Претплатите се на OpenCode Go за 10 УСД месечно и остварите поуздан приступ најбољим моделима отвореног кода.",
   "dialog.usageExceeded.freeTier.actionLabel": "Претплатите се",
-  "dialog.usageExceeded.accountRateLimit.title": "Достигнуто је ограничење Го",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Достигнуто је ограничење употребе. Да бисте сада наставили да користите овај модел, омогућите коришћење са свог доступног стања",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Отворите подешавања",
   "ui.sessionTurn.status.delegating": "Делегирање посла",
   "ui.sessionTurn.status.planning": "Планирање следећих корака",
   "ui.sessionTurn.status.gatheringContext": "Истраживање",
@@ -179,6 +175,7 @@ export const dict = {
   "ui.common.dismiss": "Одбаци",
   "ui.common.close": "Затвори",
   "ui.common.next": "Следеће",
+  "ui.common.continue": "Настави",
   "ui.common.submit": "Пошаљи",
   "ui.common.showMore": "Прикажи више",
   "ui.permission.deny": "Дени",
@@ -205,7 +202,6 @@ export const dict = {
   "ui.question.answer.none": "(без одговора)",
   "ui.question.review.notAnswered": "(није одговорено)",
   "ui.question.multiHint": "Изаберите све одговоре који се примењују",
-  "ui.question.singleHint": "Изаберите један одговор",
   "ui.question.custom.placeholder": "Унесите свој одговор…",
   "ui.messagePart.context.match.one": "({{count}} подударање)",
   "ui.messagePart.context.match.other": "({{count}} подударања)",

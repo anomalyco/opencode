@@ -60,4 +60,10 @@ describe("parseVoiceDelegation", () => {
   ])("rejects %s", (_, text) => {
     expect(parseVoiceDelegation(text)).toBeUndefined()
   })
+
+  test("reads Desktop's first voice calls, whose voice field held the raw transcript, without a framing", () => {
+    const text = `Voice delegation.\n${JSON.stringify({ instruction: "Fix the flaky upload test.", voice: "um so the uh upload test" })}`
+
+    expect(parseVoiceDelegation(text)).toEqual({ instruction: "Fix the flaky upload test.", framing: undefined })
+  })
 })

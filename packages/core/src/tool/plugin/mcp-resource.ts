@@ -1,10 +1,11 @@
 export * as McpResourceTools from "./mcp-resource.js"
 
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 import { Mcp } from "../../mcp/index.js"
 import { Permission } from "../../permission.js"
+import { ReadToolFileSystem } from "../read-filesystem.js"
 
 export const Plugin = {
   id: "opencode.tools.mcp-resources",
@@ -38,9 +39,7 @@ export const Plugin = {
                 resources: servers,
                 save: servers,
                 metadata: {},
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: { type: "tool", messageID: context.messageID, id: context.id },
+                ...Permission.invocation(context),
               })
               if (input.server === undefined) return { output: yield* mcp.resourceCatalog() }
               return { output: yield* mcp.resources({ server: input.server }) }
@@ -67,9 +66,7 @@ export const Plugin = {
                 resources: [`${input.server}:${input.uri}`],
                 save: [`${input.server}:*`],
                 metadata: { server: input.server, uri: input.uri },
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: { type: "tool", messageID: context.messageID, id: context.id },
+                ...Permission.invocation(context),
               })
               const resource = yield* mcp.readResource(input)
               if (!resource)
@@ -79,7 +76,9 @@ export const Plugin = {
               return {
                 output: resource,
                 content: resource.contents.flatMap((part) =>
-                  part.type === "blob" && (part.mimeType?.startsWith("image/") || part.mimeType === "application/pdf")
+                  part.type === "blob" &&
+                  part.mimeType !== undefined &&
+                  ReadToolFileSystem.MEDIA_MIMES.has(part.mimeType)
                     ? [{ type: "file" as const, uri: `data:${part.mimeType};base64,${part.blob}`, mime: part.mimeType }]
                     : [],
                 ),

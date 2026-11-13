@@ -65,7 +65,7 @@ The public interrupt operation verifies that the durable Session exists. An unkn
 
 `sessions.active()` snapshots busy periods currently owned by this process. Durable execution events and claims are historical and recovery records, not proof that this process is still live.
 
-Execution commits a write-ahead claim when a process-local busy period starts. Success, failure, and user interruption release the claim; shutdown interruption and unclean process death preserve it. On startup, managed Node and fetch runtimes resume claimed top-level Sessions, append a durable continuation instruction, and count recovery attempts. Recovery is bounded per claimed execution but does not guarantee exactly-once provider requests or tool effects.
+Execution commits a write-ahead claim when a process-local busy period starts. Success, failure, and user interruption release the claim; shutdown interruption and unclean process death preserve it. On startup, managed Node and fetch runtimes resume claimed Sessions, append a durable continuation instruction, and count recovery attempts. A running subagent Job owns its child's recovery; a directly driven child resumes through its own claim. Recovery is bounded per claimed execution but does not guarantee exactly-once provider requests or tool effects.
 
 ## One Step May Have Several Physical Attempts
 
@@ -93,7 +93,7 @@ Instruction sync persists content-addressed values and may freeze rendered chron
 
 Before each Physical Attempt that reaches model execution, the runner reads every source concurrently exactly once, hashes encoded values, and admits one delta atomically with its new blobs before input delivery. The initial delta must be complete; it carries no update text. An unavailable source blocks only that initial delta and otherwise silently retains the stored value. Request assembly renders the epoch baseline from stored values. Later changes render once at admission, freeze optional `text` in the durable event, and project that text as a chronological System message; clients display changed keys rather than privileged prose.
 
-An instruction epoch spans completed compactions. `session.compaction.ended` moves the epoch start to its exact sequence, making current values initial, without reading sources or authoring an instruction event. Session movement retains state so destination changes become chronological updates; committed revert clears state so the next boundary establishes a fresh baseline. A fork copies messages only through its selected boundary but adopts the parent's newest instruction values as its baseline. Model selection affects request assembly but is not itself an instruction source.
+An instruction epoch spans completed compactions. `session.compaction.ended` moves the epoch start to its exact sequence, making current values initial, without reading sources or authoring an instruction event. Session movement retains state so destination changes become chronological updates; committed revert retains state unless it removed an instruction update, in which case it clears state so the next boundary establishes a fresh baseline. A fork copies messages only through its selected boundary but adopts the parent's newest instruction values as its baseline. Model selection affects request assembly but is not itself an instruction source.
 
 ## Compaction Rebuilds Active History
 
@@ -113,6 +113,6 @@ There is no separate finite Session-history endpoint. Request/response consumers
 
 ## Recovery Boundaries Stay Explicit
 
-An advisory wake is not itself crash recovery. Crash recovery is driven by a write-ahead execution claim that survives without a releasing terminal. Startup recovery resumes claimed top-level Sessions from durable projected history with bounded attempt accounting. It fails stale running tool projections before continuing, but it cannot prove whether an interrupted external operation already took effect and does not guarantee exactly-once provider or tool behavior.
+An advisory wake is not itself crash recovery. Crash recovery is driven by a write-ahead execution claim that survives without a releasing terminal. Startup recovery resumes claimed Sessions from durable projected history with bounded attempt accounting. It fails stale running tool projections before continuing, but it cannot prove whether an interrupted external operation already took effect and does not guarantee exactly-once provider or tool behavior.
 
 Event replay ownership is separate from Session execution ownership. Local execution remains process-owned until clustering introduces an explicit placement and fencing protocol.

@@ -9,7 +9,8 @@ import { tmpdir } from "./fixture/fixture"
 
 test("an expanded group spends the mounting budget that older rows used", async () => {
   await using state = await tmpdir()
-  const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+  const setup = await createTestRenderer({ width: 100, height: 30, kittyKeyboard: true })
+  await setup.renderer.setupTerminal()
   setup.renderer.start()
   const session = {
     id: "ses_budget",
@@ -73,6 +74,7 @@ test("an expanded group spends the mounting budget that older rows used", async 
       config: {
         get: async () => ({
           animations: false,
+          session: { verbosity: "medium" },
           tabs: { enabled: false },
           keybinds: { "session.messages_last_user": "ctrl+shift+u", "session.last": "ctrl+shift+l" },
         }),

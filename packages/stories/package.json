@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/stories",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 6006"
+  },
+  "devDependencies": {
+    "@opencode/client": "workspace:*",
+    "@opencode/session-ui": "workspace:*",
+    "@opencode/ui": "workspace:*",
+    "@playwright/test": "catalog:",
+    "@solidjs/meta": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@tanstack/solid-query": "5.91.4",
+    "@tsconfig/node22": "catalog:",
+    "@types/node": "catalog:",
+    "solid-js": "catalog:",
+    "typescript": "catalog:",
+    "vite": "7.3.7",
+    "vite-plugin-solid": "2.11.12"
+  }
+}

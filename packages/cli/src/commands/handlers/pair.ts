@@ -3,7 +3,7 @@ import { EOL } from "os"
 import { Effect, Option, Schedule } from "effect"
 import { Service } from "@opencode/client/effect/service"
 import { OpenCode } from "@opencode/client/promise"
-import { renderUnicodeCompact } from "uqr"
+import { renderUnicodeCompact } from "@opencode/util/qr"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { RemoteTunnel } from "../../services/remote-tunnel"
@@ -40,7 +40,7 @@ export default Runtime.handler(
         ...(remote.length
           ? [
               "",
-              // uqr separates rows with "\n" on every platform, so splitting on EOL ("\r\n" on Windows) indents only the first row.
+              // renderUnicodeCompact separates rows with "\n" on every platform, so splitting on EOL ("\r\n" on Windows) indents only the first row.
               renderUnicodeCompact(JSON.stringify({ code: pairing.code, urls: remote }), {
                 border: 2,
               })
@@ -139,7 +139,15 @@ const remoteURL = Effect.fnUntraced(function* (client: ReturnType<typeof OpenCod
     Effect.timeoutOrElse({
       duration: "3 minutes",
       orElse: () =>
-        Effect.fail(new Error("Timed out waiting for the remote tunnel; run `opencode pair --remote` again to retry")),
+        Effect.fail(
+          new Error(
+            [
+              "Timed out waiting for the remote tunnel; run `opencode pair --remote` again to retry.",
+              // The service may not inherit the shell's environment, and Bun ignores the Windows system (WinINET) proxy.
+              "Behind an HTTP proxy, give the background service its address with `opencode service set env HTTPS_PROXY <url>` (and `NO_PROXY` for hosts to reach directly).",
+            ].join(EOL),
+          ),
+        ),
     }),
   )
 })

@@ -1,3 +1,4 @@
+import type { WidthMethod } from "@opentui/core"
 import type { RunPromptPart } from "./types"
 import { realignPromptMentions } from "../prompt/mention"
 import { parseSlashHead } from "../prompt/parse"
@@ -13,13 +14,18 @@ export function resolveEditorSlashValue(text: string) {
   return head.arguments
 }
 
-export function realignEditorPromptParts(content: string, parts: RunPromptPart[]): RunPromptPart[] {
+export function realignEditorPromptParts(
+  content: string,
+  parts: RunPromptPart[],
+  widthMethod: WidthMethod,
+): RunPromptPart[] {
   const matches = realignPromptMentions(
     content,
     parts.map((part) => {
       if (part.type !== "file" && part.type !== "agent" && part.type !== "skill") return
       return promptPartMention(part)
     }),
+    widthMethod,
   )
 
   return parts.flatMap((part, index) => {

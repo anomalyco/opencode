@@ -1,10 +1,8 @@
 import { InputRenderable } from "@opentui/core"
 import { beforeEach, expect, test } from "bun:test"
-import { mkdir, symlink } from "node:fs/promises"
-import path from "node:path"
 import { takeDraft } from "../src/component/prompt/draft-stash"
 import { createAppFixture } from "./fixture/app"
-import { tmpdir } from "./fixture/fixture"
+import { copyPlugin } from "./fixture/fixture"
 
 type Fixture = Awaited<ReturnType<typeof createAppFixture>>
 
@@ -13,7 +11,7 @@ beforeEach(() => {
 })
 
 test("setup layers before and after await reach keyboard, palette, and slash across disable and enable", async () => {
-  await using plugin = await copyPlugin()
+  await using plugin = await copyPlugin("setup-keymap")
   await using setup = await createAppFixture({ config: { animations: false, plugins: [plugin.directory] } })
   await setup.ready
   await setup.waitForFrame((frame) => frame.includes("Fixture ready generation 1"))
@@ -60,7 +58,7 @@ test("setup layers before and after await reach keyboard, palette, and slash acr
 })
 
 test("a component layer ends when its component unmounts while the plugin stays active", async () => {
-  await using plugin = await copyPlugin()
+  await using plugin = await copyPlugin("setup-keymap")
   await using setup = await createAppFixture({ config: { animations: false, plugins: [plugin.directory] } })
   await setup.ready
   await setup.waitForFrame((frame) => frame.includes("Fixture ready generation 1"))
@@ -82,7 +80,7 @@ test("a component layer ends when its component unmounts while the plugin stays 
 })
 
 test("a component layer ends with its activation on reload while the component stays mounted", async () => {
-  await using plugin = await copyPlugin()
+  await using plugin = await copyPlugin("setup-keymap")
   await using setup = await createAppFixture({ config: { animations: false, plugins: [plugin.directory] } })
   await setup.ready
   await setup.waitForFrame((frame) => frame.includes("Fixture ready generation 1"))
@@ -105,7 +103,7 @@ test("a component layer ends with its activation on reload while the component s
 })
 
 test("failed setup reports batched layer errors and disposes earlier and later setup layers", async () => {
-  await using plugin = await copyPlugin()
+  await using plugin = await copyPlugin("setup-keymap")
   await using setup = await createAppFixture({
     config: { animations: false, plugins: [{ package: plugin.directory, options: { fail: true } }] },
   })
@@ -127,16 +125,6 @@ test("failed setup reports batched layer errors and disposes earlier and later s
   expect(setup.captureCharFrame()).not.toContain("Sync keymap ran")
   expect(setup.captureCharFrame()).not.toContain("Late keymap ran")
 })
-
-async function copyPlugin() {
-  const root = await tmpdir()
-  const directory = path.join(root.path, "setup-keymap")
-  const entry = path.join(directory, "tui.tsx")
-  await mkdir(directory)
-  await symlink(path.join(import.meta.dir, "../node_modules"), path.join(directory, "node_modules"))
-  await Bun.write(entry, Bun.file(path.join(import.meta.dir, "fixture/plugin/setup-keymap/tui.tsx")))
-  return { directory, entry, [Symbol.asyncDispose]: root[Symbol.asyncDispose] }
-}
 
 async function search(setup: Fixture, query: string) {
   setup.mockInput.pressKey("p", { ctrl: true })

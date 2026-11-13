@@ -4,6 +4,7 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { Form } from "@opencode/schema/form"
 import { Provider } from "../../provider.js"
 import { configuredSettings } from "./configured.js"
+import { credentialSettings, metadataSettings } from "./credential-settings.js"
 
 const providerID = Provider.ID.make("cloudflare-ai-gateway")
 
@@ -46,15 +47,20 @@ export const CloudflareAIGatewayPlugin = define({
         },
       })
     })
+    // The key method's form answers are stored as credential metadata.
+    const login = yield* credentialSettings(ctx, providerID, (value) =>
+      value.type === "key" ? metadataSettings(value.metadata, ["accountId", "gatewayId"]) : {},
+    )
     yield* ctx.provider.transform((evt) => {
       const item = evt.get(providerID)
-      if (!item || (!accountId && !gatewayId)) return
+      if (!item || (!accountId && !gatewayId && Object.keys(login.settings).length === 0)) return
       evt.update(item.provider.id, (provider) => {
         if (typeof provider.settings?.baseURL === "string") return
         provider.settings = {
           ...(accountId ? { accountId } : {}),
           ...(gatewayId ? { gatewayId } : {}),
           ...provider.settings,
+          ...login.settings,
         }
       })
     })
