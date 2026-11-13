@@ -131,11 +131,12 @@ pub enum Source {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ContentRef(pub u64);
 
-/// A part of a session's transcript: its text, or a tool's output.
+/// A part of a session's transcript by its id: a tool call, whose output it names.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct PartRef {
     pub session: String,
+    /// The call's id, as the transcript has it (`call_…`).
     pub part: String,
 }
 
