@@ -161,7 +161,7 @@ export const dict = {
   "provider.connect.title": "Csatlakoztassa a {{provider}}-t",
   "provider.connect.method.apiKey": "API kulcs",
   "provider.connect.status.inProgress": "Az engedélyezés folyamatban…",
-  "provider.connect.status.waiting": "Várakozás az engedélyezésre…",
+  "provider.connect.status.waiting": "Várakozás az engedélyezésre",
   "provider.connect.status.failed": "Az engedélyezés sikertelen: {{error}}",
   "provider.connect.apiKey.description":
     "Enter az Ön {{provider}} API kulcsa fiókja összekapcsolásához és a {{provider}} modellek használatához a OpenCode-ben.",
@@ -832,7 +832,6 @@ export const dict = {
   "toast.migration.progress.working.progress": "Adatok migrálása {{current}}/{{total}}",
   "command.session.location.cycle": "Munkamenet helyének váltása",
   "dialog.provider.anthropic.note": "Közvetlen hozzáférés a Claude-modellekhez API-kulccsal",
-  "provider.connect.title.anthropicProMax": "Bejelentkezés az Anthropic használatával",
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "A(z) {{filename}} feltöltésének megszakítása",
   "prompt.toast.uploadFailed.title": "A feltöltés sikertelen",

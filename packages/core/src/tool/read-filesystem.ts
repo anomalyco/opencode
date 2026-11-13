@@ -138,8 +138,8 @@ export const read = Effect.fn("ReadTool.read")(function* (
   )
   if (first instanceof ListPage) return first
 
-  const media = Mime.detect(first.bytes)
-  if (MEDIA_MIMES.has(media)) {
+  const media = Mime.detectMedia(first.bytes)
+  if (media && MEDIA_MIMES.has(media)) {
     if (first.info.size > MAX_MEDIA_INGEST_BYTES)
       return yield* new MediaIngestLimitError({ resource, maximumBytes: MAX_MEDIA_INGEST_BYTES })
     const whole = yield* readFile(files, input, resource)

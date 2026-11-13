@@ -1,5 +1,6 @@
 import { createUniqueId, onMount, Show } from "solid-js"
-import { Button } from "@opencode/ui/button"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
 import { TextInput } from "@opencode/ui/text-input"
 import { useI18n } from "../../context/i18n"
 
@@ -19,6 +20,8 @@ export function RedirectPasteForm(props: {
   submitting: boolean
   /** Focuses the field on mount, for a dialog where pasting is the main action. */
   autofocus?: boolean
+  /** Leaves submitting to Enter and the caller's own button. */
+  hideSubmit?: boolean
   onInput: (value: string) => void
   onSubmit: () => void
 }) {
@@ -42,13 +45,14 @@ export function RedirectPasteForm(props: {
         event.preventDefault()
         props.onSubmit()
       }}
-      class="flex flex-col items-start gap-5 self-stretch"
+      class="flex flex-col items-start gap-2 self-stretch"
     >
       <label class="flex w-full flex-col gap-2 font-[530] leading-4 text-v2-text-text-base">
         {i18n.t("ui.redirectPaste.label")}
         <TextInput
           ref={input}
           class="!w-full"
+          appearance="large"
           name="redirect"
           placeholder={i18n.t("ui.redirectPaste.placeholder")}
           value={props.value}
@@ -58,18 +62,28 @@ export function RedirectPasteForm(props: {
           autocomplete="off"
           spellcheck={false}
           onInput={(event) => props.onInput(event.currentTarget.value)}
+          trailing={
+            !props.hideSubmit && (
+              <IconButton
+                type="submit"
+                size="small"
+                variant="ghost"
+                icon={<Icon name="arrow-right" />}
+                disabled={props.locked}
+                aria-busy={props.submitting}
+                aria-label={i18n.t("ui.common.continue")}
+              />
+            )
+          }
         />
       </label>
       <Show when={error()}>
         {(message) => (
-          <div id={errorID} role="alert" class="-mt-4 text-xs text-v2-state-fg-danger">
+          <div id={errorID} role="alert" class="text-xs text-v2-state-fg-danger">
             {message()}
           </div>
         )}
       </Show>
-      <Button type="submit" variant="contrast" disabled={props.locked} aria-busy={props.submitting}>
-        {i18n.t("ui.common.continue")}
-      </Button>
     </form>
   )
 }

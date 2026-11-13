@@ -24,6 +24,13 @@ const absolute = (value: string) => AbsolutePath.make(value)
 describe("ReadTool text serialization", () => {
   const cases = [
     {
+      name: "reads a partial GIF signature as text",
+      content: "GIF8 is text",
+      page: {},
+      output: { type: "file", content: "GIF8 is text", encoding: "utf8" },
+      model: "Read file lines.txt, lines 1-1\n1: GIF8 is text",
+    },
+    {
       name: "preserves a selected trailing blank line before continuation",
       content: "alpha\n\nomega\n",
       page: { offset: 1, limit: 2 },
@@ -174,6 +181,30 @@ describe("ReadToolFileSystem", () => {
       expect(page).toMatchObject({ offset: 1, next: 26, truncated: true })
       expect(page.content.split("\n")).toHaveLength(25)
       expect(Buffer.byteLength(page.content)).toBeLessThanOrEqual(50 * 1024)
+    }),
+  )
+
+  it.live("reads extensionless and renamed GIFs as images", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      for (const [version, name] of [
+        ["GIF87a", "pixel"],
+        ["GIF89a", "pixel.txt"],
+      ]) {
+        // 1x1 screen, black/white palette, one pixel and trailer.
+        const bytes = Buffer.concat([
+          Buffer.from(version),
+          Buffer.from("01000100800000000000ffffff2c00000000010001000002024401003b", "hex"),
+        ])
+        const file = absolute(path.join(directory, name))
+        yield* files.writeFile(file, bytes)
+        expect(yield* ReadToolFileSystem.read(environment, file, name)).toMatchObject({
+          type: "file",
+          mime: "image/gif",
+          encoding: "base64",
+          content: bytes.toString("base64"),
+        })
+      }
     }),
   )
 

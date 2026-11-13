@@ -198,8 +198,8 @@ export const Plugin = {
               return yield* new ToolFailure({ message: `${source} is larger than 20 MiB.` })
             return (yield* environment.files.read(target.absolute)).bytes
           })
-      const mime = Mime.detect(bytes)
-      if (!INPUT_TYPES.includes(mime))
+      const mime = Mime.detectMedia(bytes)
+      if (!mime || !INPUT_TYPES.includes(mime))
         return yield* new ToolFailure({ message: `${source} is not a PNG, JPEG, WebP or GIF image.` })
       return { data: Buffer.from(bytes).toString("base64"), mime, name: path.basename(source) }
     })
@@ -314,7 +314,8 @@ export const Plugin = {
                 const image = result.images[0]
                 if (!image) return yield* Effect.fail(new Error(`${ref} returned no image.`))
                 const bytes = Buffer.from(image.data, "base64")
-                const file = stem + (EXTENSIONS[Mime.detect(bytes)] ?? ".png")
+                const mime = Mime.detectMedia(bytes)
+                const file = stem + (EXTENSIONS[mime ?? "image/png"] ?? ".png")
                 // The edit prompt covered the requested path. Replacing a different existing file needs its own
                 // approval; a new file only has to pass the deny rules.
                 if (target && file !== target.absolute) {
