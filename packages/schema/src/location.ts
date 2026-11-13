@@ -26,10 +26,10 @@ export class Info extends Schema.Class<Info>("Location.Info")({
   }),
 }) {}
 
-export const PublicInfo = Schema.Struct(Struct.omit(Info.fields, ["workspaceID"])).annotate({
-  identifier: "Location.PublicInfo",
-})
-export interface PublicInfo extends Schema.Schema.Type<typeof PublicInfo> {}
+export class PublicInfo extends Schema.Class<PublicInfo>("Location.PublicInfo")({
+  ...Struct.omit(Info.fields, ["workspaceID"]),
+  experimental: Schema.optionalKey(Schema.Struct({ tips_queue: Schema.Boolean })),
+}) {}
 
 export function response<S extends Schema.Top>(data: S) {
   return Schema.Struct({ location: PublicRef, data })

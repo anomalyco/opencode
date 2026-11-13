@@ -1,4 +1,6 @@
+import { Flag } from "@opencode/core/flag"
 import { Location } from "@opencode/core/location"
+import { PublicInfo } from "@opencode/schema/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Cause, Effect } from "effect"
@@ -13,9 +15,10 @@ export const LocationHandler = HttpApiBuilder.group(Api, "server.location", (han
         "location.get",
         Effect.fn(function* () {
           const location = yield* Location.Service
-          return new Location.Info({
+          return new PublicInfo({
             directory: location.directory,
             project: location.project,
+            experimental: { tips_queue: yield* Flag.enabled("tips_queue") },
           })
         }),
       )

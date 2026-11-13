@@ -177,7 +177,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Location.PublicInfo"
+                  "$ref": "#/components/schemas/Location.PublicInfoEncoded"
                 }
               }
             }
@@ -16656,6 +16656,9 @@
               "all_flags": {
                 "type": "boolean"
               },
+              "tips_queue": {
+                "type": "boolean"
+              },
               "todo": {
                 "type": "boolean"
               },
@@ -20096,7 +20099,7 @@
         "required": ["started"],
         "additionalProperties": false
       },
-      "Location.PublicInfo": {
+      "Location.PublicInfoEncoded": {
         "type": "object",
         "properties": {
           "directory": {
@@ -20116,6 +20119,16 @@
               }
             },
             "required": ["id", "directory", "canonical"],
+            "additionalProperties": false
+          },
+          "experimental": {
+            "type": "object",
+            "properties": {
+              "tips_queue": {
+                "type": "boolean"
+              }
+            },
+            "required": ["tips_queue"],
             "additionalProperties": false
           }
         },
