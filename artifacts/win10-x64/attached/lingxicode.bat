@@ -7,6 +7,10 @@ set OPENCODE_PARSERS_DIR=%~dp0parsers
 set OPENCODE_DISABLE_AUTOUPDATE=true
 set OPENCODE_DISABLE_MODELS_FETCH=true
 set OPENCODE_DISABLE_LSP_DOWNLOAD=true
+REM Offline switch: block npm from fetching dependencies from remote registries.
+REM Set NPM_CONFIG_OFFLINE=false before launching to allow network access.
+if not defined NPM_CONFIG_OFFLINE set "NPM_CONFIG_OFFLINE=true"
+if not defined NPM_CONFIG_AUDIT set "NPM_CONFIG_AUDIT=false"
 set "NPM_CONFIG_FETCH_RETRIES=0"
 set OPENCODE_CONFIG_DIR=%~dp0config
 set "PATH=%~dp0bin;%PATH%"

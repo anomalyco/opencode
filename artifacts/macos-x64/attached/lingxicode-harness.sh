@@ -9,6 +9,11 @@ export OPENCODE_PARSERS_DIR=$SCRIPT_DIR/parsers
 export OPENCODE_DISABLE_AUTOUPDATE=true
 export OPENCODE_DISABLE_MODELS_FETCH=true
 export OPENCODE_DISABLE_LSP_DOWNLOAD=true
+# Offline switch: block npm from fetching dependencies from remote registries.
+# Set NPM_CONFIG_OFFLINE=false before launching to allow network access.
+export NPM_CONFIG_FETCH_RETRIES=0
+export NPM_CONFIG_OFFLINE="${NPM_CONFIG_OFFLINE:-true}"
+export NPM_CONFIG_AUDIT="${NPM_CONFIG_AUDIT:-false}"
 export OMO_DISABLE_POSTHOG=1
 export OPENCODE_SCAN_DIR_PLUGINS=1
 export OPENCODE_USER_ID_ENABLED="${OPENCODE_USER_ID_ENABLED:-true}"
