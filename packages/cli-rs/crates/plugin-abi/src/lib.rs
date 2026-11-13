@@ -2029,6 +2029,17 @@ pub struct PanelBind {
 /// then renders again with the location in [`Changed::locations`].
 ///
 /// A host without a value answers `None` or empty.
+///
+/// A read is the UI thread's, as a [`Host`] is: a render cannot hand it to another thread.
+///
+/// ```compile_fail,E0277
+/// # use opencode_plugin_abi::*;
+/// fn render(read: &dyn Read) {
+///     std::thread::scope(|threads| {
+///         threads.spawn(|| read.tabs());
+///     });
+/// }
+/// ```
 pub trait Read {
     /// Whether the page theme is dark or light (TS `api.themeMode`).
     fn theme_mode(&self) -> ThemeMode;
@@ -2170,6 +2181,15 @@ pub trait Read {
 /// fn command(host: &dyn Host) {
 ///     std::thread::scope(|threads| {
 ///         threads.spawn(|| host.edit_composer(ComposerEdit::Submit));
+///     });
+/// }
+/// ```
+///
+/// ```compile_fail,E0277
+/// # use opencode_plugin_abi::*;
+/// fn command(host: &dyn Host) {
+///     std::thread::scope(|threads| {
+///         threads.spawn(|| host.foreground(Foreground { command: "true".into(), ..Foreground::default() }));
 ///     });
 /// }
 /// ```
@@ -2515,9 +2535,7 @@ impl Host for HostHandle {
     fn dialog(&self, dialog: Dialog) {
         // A host older than 1.6 does not know `xlarge` and would refuse the whole dialog: it gets the largest it knows.
         let dialog = match dialog {
-            Dialog::Panel(mut panel)
-                if panel.size == PanelSize::XLarge && self.core().is_none_or(|core| core.minor < 6) =>
-            {
+            Dialog::Panel(mut panel) if panel.size == PanelSize::XLarge && self.abi_minor() < 6 => {
                 panel.size = PanelSize::Large;
                 Dialog::Panel(panel)
             }
