@@ -1226,6 +1226,9 @@ export function Prompt(props: PromptProps) {
         })
       return false
     }
+    // This submission supersedes one still waiting for the catalogs. A blank Enter leaves the draft
+    // unchanged, so the effect above would not cancel it, and its retry would submit a second time.
+    setPendingSubmit(undefined)
     const isCommand =
       slashHead !== undefined &&
       (data.location.command.list(location) ?? []).some((command) => command.name === slashHead.name)

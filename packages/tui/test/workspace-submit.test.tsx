@@ -127,10 +127,7 @@ test("opening the workspace picker cancels a waiting send until a fresh Enter", 
 // No dialog opens here, so only the location check stops the send.
 test("a session moved while its send waits cancels the send", async () => {
   await using fixture = await workspace("agent", { session: true })
-  await fixture.setup.ready
-  await fixture.setup.waitForFrame((frame) => frame.includes("Build · Source Model Provider"))
-  await fixture.setup.waitFor(() => fixture.setup.renderer.currentFocusedEditor instanceof TextareaRenderable)
-  fixture.setup.renderer.currentFocusedEditor?.setText("Review the changes")
+  await fixture.openSession("Review the changes")
   fixture.move(fixture.target)
   await fixture.requested
   fixture.setup.mockInput.pressEnter()
@@ -143,6 +140,31 @@ test("a session moved while its send waits cancels the send", async () => {
   expect(fixture.sent).toHaveLength(0)
   expect(fixture.setup.captureCharFrame()).not.toContain("Loading workspace…")
   expect(fixture.setup.renderer.currentFocusedEditor?.plainText).toBe("Review the changes")
+})
+
+// A send made after an agent change waits for the reload that change queues, although the first load
+// already readies the workspace. A blank Enter keeps the draft, so only the next send can cancel it.
+test("an Enter that goes ahead replaces a send still waiting for the workspace", async () => {
+  await using fixture = await workspace("agent", { session: true, queued: true, holdRetry: true })
+  await fixture.openSession("")
+  fixture.move(fixture.target)
+  await fixture.requested
+  await fixture.reloadAgents()
+  fixture.setup.mockInput.pressEnter()
+  await fixture.setup.waitForFrame((frame) => frame.includes("Loading workspace…"))
+  fixture.release()
+  await fixture.retried
+  await fixture.setup.waitForFrame(
+    (frame) => frame.includes("Review · Target Model Provider") && frame.includes("Loading workspace…"),
+  )
+
+  fixture.setup.mockInput.pressEnter()
+  await fixture.setup.waitFor(() => fixture.promoted.length === 1)
+  await fixture.setup.waitForFrame((frame) => !frame.includes("Loading workspace…"))
+  fixture.releaseRetry()
+  // A send left waiting would promote again once the reload settles.
+  await fixture.setup.waitForVisualIdle({ quietFrames: 3 })
+  expect(fixture.promoted).toEqual(["msg_queued"])
 })
 
 test("a temporary catalog failure keeps Enter pending until recovery", async () => {
@@ -278,6 +300,8 @@ async function workspace(
     misplaced?: boolean
     // Open an existing session in the source worktree instead of the home screen.
     session?: boolean
+    // Give the existing session a queued prompt, which a blank Enter promotes.
+    queued?: boolean
   } = {},
 ) {
   const source = process.cwd()
@@ -305,10 +329,13 @@ async function workspace(
   const created: unknown[] = []
   const sent: unknown[] = []
   const commands: unknown[] = []
+  const promoted: string[] = []
+  const modelsReloaded = Promise.withResolvers<void>()
   let session: unknown
   let failures = 0
   let missing = false
   let loads = 0
+  let modelLoads = 0
   const setup = await createAppFixture({
     config: { animations: options.animations ?? false, tabs: { enabled: false }, keybinds: { "prompt.editor": "f9" } },
     args: options.session ? { sessionID: existing.id } : undefined,
@@ -345,6 +372,10 @@ async function workspace(
             destination && options.misplaced ? { ...location, directory: path.join(target, "canonical") } : location,
           data: [{ id: destination ? "review" : "build", mode: "primary", hidden: false, permissions: [] }],
         })
+      if (destination && url.pathname === "/api/model") {
+        modelLoads++
+        if (modelLoads === 2) modelsReloaded.resolve()
+      }
       if (url.pathname === "/api/model")
         return json({
           location,
@@ -372,6 +403,30 @@ async function workspace(
         return json({ data: session })
       }
       if (options.session && url.pathname === `/api/session/${existing.id}`) return json({ data: existing })
+      if (options.session && url.pathname === `/api/session/${existing.id}/agent`)
+        return new Response(null, { status: 204 })
+      if (options.queued && url.pathname === `/api/session/${existing.id}/inbox`)
+        return json({
+          data: [
+            {
+              id: "msg_queued",
+              sessionID: existing.id,
+              type: "user",
+              delivery: "queue",
+              payload: { text: "Queued prompt" },
+              time: { created: 2 },
+            },
+          ],
+          cursor: {},
+        })
+      if (
+        options.queued &&
+        request.method === "PATCH" &&
+        url.pathname.startsWith(`/api/session/${existing.id}/inbox/`)
+      ) {
+        promoted.push(path.basename(url.pathname))
+        return new Response(null, { status: 204 })
+      }
       if (session && /^\/api\/session\/[^/]+$/.test(url.pathname)) return json({ data: session })
       if (/^\/api\/session\/[^/]+\/(message|inbox|permission)$/.test(url.pathname))
         return json({ data: [], cursor: {} })
@@ -411,6 +466,7 @@ async function workspace(
     created,
     sent,
     commands,
+    promoted,
     requested: requested.promise,
     release: gate.resolve,
     releaseCommand: command.resolve,
@@ -441,6 +497,19 @@ async function workspace(
     },
     openWorkspace,
     selectWorkspace,
+    async openSession(text: string) {
+      await setup.ready
+      await setup.waitForFrame((frame) => frame.includes("Build · Source Model Provider"))
+      await setup.waitFor(() => setup.renderer.currentFocusedEditor instanceof TextareaRenderable)
+      setup.renderer.currentFocusedEditor?.setText(text)
+    },
+    // Changes the destination's agents during their first load, which queues a reload behind it. The client
+    // handles events in order, so the model reload that follows shows the agent change has been handled.
+    async reloadAgents() {
+      for (const type of ["agent.updated", "model.updated"] as const)
+        setup.events.emit({ id: `evt_${type}`, created: 1, type, location: { directory: target }, data: {} })
+      await modelsReloaded.promise
+    },
     async switchWorkspace() {
       await setup.ready
       await setup.waitForFrame((frame) => frame.includes("Build · Source Model Provider"))
