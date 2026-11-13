@@ -332,8 +332,15 @@ export function createBrowserPage(
   const sessions = new Map<string, string>()
   const parents = new Map<string, string>()
   const contexts = new Map<string, { id: number; sessionID?: string }>()
-  // Frames that show an extension's document, which no agent frameID may reach.
-  const extensionFrames = new Set<string>()
+  // Frames that show an extension's document, which no agent frameID may reach: an extension's out-of-process frame by
+  // the session it attached with (a web frame's own session may detach after its replacement attached), and a frame
+  // whose document has an extension's origin.
+  const extensionTargets = new Map<string, string>()
+  const extensionContexts = new Set<string>()
+  const extensionFrames = () => new Set([...extensionTargets.values(), ...extensionContexts])
+  const activity: Activity = { agentRuns: 0 }
+  // Set by the agent's first command; until then the tab renders as any other.
+  let agentDriven = false
   let dialogGate = createDialogGateState()
   // Running commands by run id: the controller that stops their remaining steps, and the wait an interruption ends.
   const runs = new Map<number, { controller: AbortController; interrupted: Interrupted }>()
@@ -347,7 +354,7 @@ export function createBrowserPage(
     revision++
 
     // A swap moves the frame to another process, where it may now show an extension's document; keep what is known.
-    if (reason === "remove") extensionFrames.delete(frameId)
+    if (reason === "remove") extensionContexts.delete(frameId)
   })
 
   const state = () =>
@@ -526,15 +533,24 @@ export function createBrowserPage(
     if (!aux?.frameId || !aux.isDefault) return
 
     // A frame that becomes an extension's document, as about:blank opened by one does, is no target for the agent.
-    if (extensionOrigin(context.origin)) {
+    if (Browser.extensionOrigin(context.origin)) {
       contexts.delete(aux.frameId)
-      extensionFrames.add(aux.frameId)
+      extensionContexts.add(aux.frameId)
+      const own = sessions.get(aux.frameId)
+
+      // An out-of-process web frame that turned into one in place leaves the frame list and stops reporting its console
+      // and network. It stays refused until the page removes it, even if it shows a web page again.
+      if (own) {
+        sessions.delete(aux.frameId)
+        parents.delete(aux.frameId)
+        void cdp.send("Target.detachFromTarget", { sessionId: own }).catch(() => undefined)
+      }
 
       return
     }
 
     contexts.set(aux.frameId, { id: context.id, sessionID })
-    extensionFrames.delete(aux.frameId)
+    extensionContexts.delete(aux.frameId)
   })
   cdp.on("Runtime.executionContextDestroyed", ({ executionContextId }, sessionID) => {
     contexts.forEach((context, key) => {
@@ -547,8 +563,8 @@ export function createBrowserPage(
     // An extension's frame, such as an autofill overlay, stays out of `sessions`: no frame list, snapshot, picker or
     // diagnostics reaches it. Site isolation gives it a process, and so a target, of its own. The context its first
     // document had in the embedding page's process is dropped, so its frameID cannot reach that page instead.
-    if (extensionOrigin(targetInfo.url)) {
-      extensionFrames.add(targetInfo.targetId)
+    if (Browser.extensionOrigin(targetInfo.url)) {
+      extensionTargets.set(sessionId, targetInfo.targetId)
       contexts.delete(targetInfo.targetId)
 
       return
@@ -579,8 +595,10 @@ export function createBrowserPage(
     "Overlay.inspectNodeRequested",
     ({ backendNodeId }, sessionID) => void dispatchPicker({ type: "node.picked", backendID: backendNodeId, sessionID }),
   )
-  cdp.on("Target.detachedFromTarget", ({ sessionId, targetId }) => {
-    if (targetId) extensionFrames.delete(targetId)
+  cdp.on("Target.detachedFromTarget", ({ sessionId }) => {
+    // Only the session that showed the extension's document clears it: the frame keeps its target ID across a swap, and
+    // the web session it replaced may detach after the extension's attached.
+    extensionTargets.delete(sessionId)
     sessions.forEach((id, frameID) => {
       if (id === sessionId) {
         sessions.delete(frameID)
@@ -1018,38 +1036,51 @@ export function createBrowserPage(
         // The frame is checked once; its context is read on each poll, so one that turns into an extension's
         // document while this waits fails the wait.
         if (frameID) await agentFrameOf(frameID)
-        await waitFor(
-          async () => {
-            if (action.condition === "load") return !contents.isLoading()
-            const context = frameID ? contexts.get(frameID) : undefined
+        // Whether a check failed; otherwise the wait ran out of time, which the server reports as met: false.
+        const checks = { failed: false }
 
-            if (frameID && (!context || extensionFrames.has(frameID))) {
-              // Names an extension's document by what it is, when that is why the context went.
-              await agentFrameOf(frameID)
-              throw new Error(
-                "Frame context is unavailable. Call browser.frames({tabID}) and use a frameID from this tab.",
-              )
-            }
+        const holds = async () => {
+          if (action.condition === "load") return !contents.isLoading()
+          // A navigation to an extension page while this waits ends it: the text would be that page's.
+          const page = agentRefusal({ type: "wait" }, mainDocument())
 
-            const value = await cdp.send(
-              "Runtime.evaluate",
-              {
-                expression: `document.body?.innerText.includes(${JSON.stringify(action.text)}) ?? false`,
-                returnByValue: true,
-                contextId: context?.id,
-              },
-              context?.sessionID,
+          if (page) throw new Error(page)
+          const context = frameID ? contexts.get(frameID) : undefined
+
+          if (frameID && (!context || extensionFrames().has(frameID))) {
+            // Names an extension's document by what it is, when that is why the context went.
+            await agentFrameOf(frameID)
+            throw new Error(
+              "Frame context is unavailable. Call browser.frames({tabID}) and use a frameID from this tab.",
             )
+          }
 
-            return Boolean(value.result.value) === (action.condition === "text")
-          },
+          const value = await cdp.send(
+            "Runtime.evaluate",
+            {
+              expression: `document.body?.innerText.includes(${JSON.stringify(action.text)}) ?? false`,
+              returnByValue: true,
+              contextId: context?.id,
+            },
+            context?.sessionID,
+          )
+
+          return Boolean(value.result.value) === (action.condition === "text")
+        }
+
+        await waitFor(
+          () =>
+            holds().catch((error: Error) => {
+              checks.failed = true
+              throw error
+            }),
           signal,
           action.timeoutMs,
-        ).catch((error) => {
-          if (signal.aborted) throw error
-          throw new Error(
-            `browser.wait failed for condition ${JSON.stringify(action.condition)} (timeoutMs: ${action.timeoutMs ?? 10_000}). Inspect browser.snapshot({tabID}) and check text/frameID before retrying; timeoutMs can be increased up to 30000 for a genuinely slow page. Details: ${error instanceof Error ? error.message : String(error)}`,
-          )
+        ).catch((cause: Error) => {
+          if (signal.aborted) throw cause
+          const text = `browser.wait failed for condition ${JSON.stringify(action.condition)} (timeoutMs: ${action.timeoutMs ?? 10_000}). Inspect browser.snapshot({tabID}) and check text/frameID before retrying; timeoutMs can be increased up to 30000 for a genuinely slow page. Details: ${cause.message}`
+
+          throw checks.failed ? new Error(text, { cause }) : new CodedError(Browser.FailureCode.unmet, text, { cause })
         })
         break
       }
@@ -1249,12 +1280,19 @@ export function createBrowserPage(
     return "ref" in action && action.ref ? [action.ref] : []
   }
 
-  function target(ref: Browser.Ref): Element {
+  /** The element a ref names: one from this tab's newest snapshot, or one the user picked. */
+  function lookup(ref: Browser.Ref) {
     const key = ref.replace(/^@/, "")
-    const value = refs.get(key) ?? picked.get(key)
+
+    return refs.get(key) ?? picked.get(key)
+  }
+
+  function target(ref: Browser.Ref): Element {
+    const value = lookup(ref)
 
     if (!value)
-      throw new Error(
+      throw new CodedError(
+        Browser.FailureCode.staleRef,
         "Element ref is stale or belongs to another tab. Call browser.snapshot({tabID}) and use a ref from that tab's newest snapshot. Do not reuse refs after navigation or a newer snapshot.",
       )
 
@@ -1262,9 +1300,7 @@ export function createBrowserPage(
   }
 
   async function frames() {
-    const trees = await frameTrees()
-
-    return agentFrames(trees.root, trees.children)
+    return agentFrames(await frameTrees())
   }
 
   async function frameTrees() {
@@ -1278,13 +1314,12 @@ export function createBrowserPage(
       }),
     )
 
-    return { root: root.frameTree, children: children.flat() }
+    return { root: root.frameTree, children: children.flat(), extensions: extensionFrames() }
   }
 
   /** The frame an agent's frameID names; every operation that takes one resolves it here. */
   async function agentFrameOf(frameID: string) {
-    const trees = await frameTrees()
-    const access = agentFrame(trees.root, trees.children, extensionFrames, frameID)
+    const access = agentFrame(await frameTrees(), frameID)
 
     if (access.type !== "frame") throw new Error(access.message)
 
@@ -1295,7 +1330,7 @@ export function createBrowserPage(
     await agentFrameOf(frameID)
     const context = contexts.get(frameID)
 
-    if (!context || extensionFrames.has(frameID))
+    if (!context)
       throw new Error(
         "Frame context is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab, or omit frameID to target the main frame.",
       )
@@ -1308,18 +1343,12 @@ export function createBrowserPage(
     if (!frameIDs.length) return undefined
     const trees = await frameTrees()
 
-    return frameIDs
-      .map((frameID) => agentFrame(trees.root, trees.children, extensionFrames, frameID))
-      .find((access) => access.type === "extension")?.message
+    return frameIDs.map((frameID) => agentFrame(trees, frameID)).find((access) => access.type === "extension")?.message
   }
 
   /** The frames an action reaches: its frameID, or the frames of the element refs it names. */
   function actionFrames(action: Browser.Action) {
-    const elements = actionRefs(action).flatMap((ref) => {
-      const element = refs.get(ref.replace(/^@/, "")) ?? picked.get(ref.replace(/^@/, ""))
-
-      return element ? [element.frameID] : []
-    })
+    const elements = actionRefs(action).flatMap((ref) => lookup(ref)?.frameID ?? [])
 
     return "frameID" in action && action.frameID ? [action.frameID, ...elements] : elements
   }

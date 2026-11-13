@@ -71,20 +71,6 @@ export function extensionURL(input: string, extensions: ReadonlyArray<string>) {
   return url.protocol === "chrome-extension:" && extensions.includes(url.hostname)
 }
 
-/**
- * Whether a URL or origin belongs to an extension: its pages, frames and the blob: URLs it makes. Such a document runs
- * with the extension's `chrome.*` access, which the agent must never gain.
- */
-export function extensionOrigin(input: string) {
-  if (!URL.canParse(input)) return false
-  const url = new URL(input)
-
-  const protocol =
-    url.protocol === "blob:" && URL.canParse(url.pathname) ? new URL(url.pathname).protocol : url.protocol
-
-  return /^(?:chrome|moz|safari-web|ms-browser)-extension:$|^extension:$/.test(protocol)
-}
-
 /** Actions that only take a tab away from its document, which the agent may run on an extension page to leave it. */
 const leaving = ["navigate", "back", "forward", "stop"]
 
@@ -121,88 +107,99 @@ type FrameTree = {
   readonly childFrames?: ReadonlyArray<FrameTree>
 }
 
+type FrameTrees = {
+  /** The main frame's tree. */
+  readonly root: FrameTree
+  /** Each out-of-process frame's tree, under the frame that holds it. */
+  readonly children: ReadonlyArray<{ readonly parentID: string; readonly tree: FrameTree }>
+  /**
+   * Frames known to show an extension's document that the trees cannot tell: an extension's out-of-process frame,
+   * whose tree is never read, and a frame whose document has an extension's origin.
+   */
+  readonly extensions: ReadonlySet<string>
+}
+
+type AgentFrameInfo = { id: string; parentID?: string; url: string; name: string }
+
+/**
+ * Every frame the trees name, in one walk, and what the agent may do with a frame ID: use it, or not, because the frame
+ * or one of its ancestors shows an extension's document, or because it hangs under no frame the trees name.
+ */
+function frameIndex(trees: FrameTrees) {
+  const frames = new Map<string, { info: AgentFrameInfo; extension: boolean }>()
+
+  const walk = (tree: FrameTree, parentID?: string) => {
+    const parent = tree.frame.parentId || parentID
+    const id = tree.frame.id
+
+    if (!frames.has(id))
+      frames.set(id, {
+        info: parent
+          ? { id, parentID: parent, url: tree.frame.url, name: tree.frame.name ?? "" }
+          : { id, url: tree.frame.url, name: tree.frame.name ?? "" },
+        // The main frame's own document is the page's, which `agentRefusal` judges.
+        extension:
+          trees.extensions.has(id) ||
+          (!!parent &&
+            (Browser.extensionOrigin(tree.frame.url) || Browser.extensionOrigin(tree.frame.securityOrigin ?? ""))),
+      })
+    tree.childFrames?.forEach((child) => walk(child, id))
+  }
+
+  walk(trees.root)
+  trees.children.forEach((child) => walk(child.tree, child.parentID))
+
+  const access = (frameID: string): "frame" | "extension" | "unavailable" => {
+    // Bounded by the number of frames, so a malformed tree with a cycle ends too.
+    for (let id = frameID, steps = 0; steps <= frames.size; steps++) {
+      const entry = frames.get(id)
+
+      if (trees.extensions.has(id) || entry?.extension) return "extension"
+
+      if (!entry) return "unavailable"
+
+      if (entry.info.parentID === undefined) return "frame"
+      id = entry.info.parentID
+    }
+
+    return "unavailable"
+  }
+
+  return { frames, access }
+}
+
 /**
  * The tab's frames the agent may see and target: the main frame's tree, then each out-of-process frame's under its
  * parent. A frame of an extension, such as a password manager's autofill overlay, is left out with every frame inside
  * it, so the page around it stays usable while no frameID, ref or snapshot reaches into it.
  */
-export function agentFrames(
-  root: FrameTree,
-  children: ReadonlyArray<{ readonly parentID: string; readonly tree: FrameTree }>,
-) {
-  const result: { id: string; parentID?: string; url: string; name: string }[] = []
+export function agentFrames(trees: FrameTrees) {
+  const index = frameIndex(trees)
 
-  const walk = (tree: FrameTree, parentID?: string) => {
-    if (result.some((frame) => frame.id === tree.frame.id)) return
-    const parent = tree.frame.parentId || parentID
-
-    if (parent && (extensionOrigin(tree.frame.url) || extensionOrigin(tree.frame.securityOrigin ?? ""))) return
-
-    if (parent && !result.some((frame) => frame.id === parent)) return
-
-    result.push(
-      parent
-        ? { id: tree.frame.id, parentID: parent, url: tree.frame.url, name: tree.frame.name ?? "" }
-        : { id: tree.frame.id, url: tree.frame.url, name: tree.frame.name ?? "" },
-    )
-    tree.childFrames?.forEach((child) => walk(child, tree.frame.id))
-  }
-
-  walk(root)
-  // A frame nested in another out-of-process frame joins once its parent has; one under a left-out frame never does.
-  const pending = [...children]
-
-  while (pending.length) {
-    const ready = pending.findIndex((child) => result.some((frame) => frame.id === child.parentID))
-
-    if (ready < 0) break
-    const [child] = pending.splice(ready, 1)
-    walk(child.tree, child.parentID)
-  }
-
-  return result
+  return Array.from(index.frames.values(), (entry) => entry.info).filter((frame) => index.access(frame.id) === "frame")
 }
 
 export type AgentFrameAccess =
-  | { type: "frame"; frame: ReturnType<typeof agentFrames>[number] }
+  | { type: "frame"; frame: AgentFrameInfo }
   | { type: "extension"; message: string }
   | { type: "unavailable"; message: string }
 
 /**
  * The frame an agent's `frameID` names, when the agent may use it. A frame that shows an extension's document, or
- * sits inside one, is refused by name, so a call never quietly runs elsewhere. `extensions` lists the frames known to
- * show one that the trees cannot: an extension's out-of-process frame, whose tree is never read, and a frame whose
- * document has an extension's origin.
+ * sits inside one, is refused by name, so a call never quietly runs elsewhere.
  */
-export function agentFrame(
-  root: FrameTree,
-  children: ReadonlyArray<{ readonly parentID: string; readonly tree: FrameTree }>,
-  extensions: ReadonlySet<string>,
-  frameID: string,
-): AgentFrameAccess {
-  const frame = agentFrames(root, children).find((item) => item.id === frameID)
-  // Each frame the trees name, with its parent, whether the agent sees it or not.
-  const known = new Map<string, { parentID?: string; extension: boolean }>()
+export function agentFrame(trees: FrameTrees, frameID: string): AgentFrameAccess {
+  const index = frameIndex(trees)
+  const access = index.access(frameID)
+  const frame = index.frames.get(frameID)?.info
 
-  const walk = (tree: FrameTree, parentID?: string) => {
-    known.set(tree.frame.id, {
-      parentID: tree.frame.parentId || parentID,
-      extension: extensionOrigin(tree.frame.url) || extensionOrigin(tree.frame.securityOrigin ?? ""),
-    })
-    tree.childFrames?.forEach((child) => walk(child, tree.frame.id))
-  }
+  if (access === "frame" && frame) return { type: "frame", frame }
 
-  walk(root)
-  children.forEach((child) => walk(child.tree, child.parentID))
-
-  if (frame && !extensions.has(frameID)) return { type: "frame", frame }
-
-  for (let id: string | undefined = frameID; id; id = known.get(id)?.parentID)
-    if (extensions.has(id) || known.get(id)?.extension)
-      return {
-        type: "extension",
-        message: `Agent browser tools cannot use extension frames: frame ${frameID} shows an extension's document, which runs with that extension's privileges. Omit frameID to use the page around it, or use another frame from browser.frames({tabID}).`,
-      }
+  if (access === "extension")
+    return {
+      type: "extension",
+      message: `Agent browser tools cannot use extension frames: frame ${frameID} shows an extension's document, which runs with that extension's privileges. Omit frameID to use the page around it, or use another frame from browser.frames({tabID}).`,
+    }
 
   return {
     type: "unavailable",
