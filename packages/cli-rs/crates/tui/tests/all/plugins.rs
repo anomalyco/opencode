@@ -536,7 +536,8 @@ fn paneled<const SUB: bool>(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 // Expected (review bigboi-7): a plugin's dialog is its own, also from a plugin whose ID starts with its ID and a `/`:
-// the other one's close and the end of its activation leave it open.
+// the other one's close and the end of its activation leave it open. A revoke ends a dialog only once the activation
+// that asked for it ended, so one that comes while it runs leaves it.
 #[test]
 fn a_plugin_ends_only_its_own_dialog() {
     let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
@@ -544,6 +545,9 @@ fn a_plugin_ends_only_its_own_dialog() {
     opencode_tui::plugins::host::add(&h.tui, abi::Plugin { id: "owner/sub", setup: paneled::<true> }.into());
     h.tui.keymap.dispatch("owner/sub.panel", None);
     h.wait_for("owner/sub panel");
+    opencode_plugin::Host::revoked(&*h.tui, "owner/sub");
+    h.app.render();
+    assert_eq!(h.tui.dialogs.key().as_deref(), Some("owner/sub/panel"));
     h.tui.keymap.dispatch("owner.close", None);
     h.app.render();
     assert_eq!(h.tui.dialogs.key().as_deref(), Some("owner/sub/panel"));
