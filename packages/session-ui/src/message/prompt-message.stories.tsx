@@ -1,4 +1,4 @@
-import { createMemo, For, Show } from "solid-js"
+import { createEffect, createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import type { SessionUserActions } from "../actions"
@@ -6,31 +6,26 @@ import { CurrentUserMessageDisplay } from "./message-content"
 import { CurrentSessionProviders } from "../storybook/current-session-story"
 import { CURRENT_SESSION_ID, STORY_MODEL, STORY_TIME } from "../storybook/current-session-fixtures"
 
+const statuses = ["delivered", "starting", "steering", "stranded", "queued", "sending"] as const
+
+type Args = { status: (typeof statuses)[number]; voice: boolean; text: boolean; grouped: boolean; fails: boolean }
+
 export default {
   title: "OpenCode/Conversation/Prompt message",
   id: "current-prompt-message",
   parameters: { layout: "fullscreen" },
+  args: { status: "steering", voice: false, text: true, grouped: false, fails: false } satisfies Args,
+  argTypes: { status: { options: statuses } },
 }
 
 export const Pending = {
-  render: () => {
-    const statuses = ["delivered", "starting", "steering", "stranded", "queued", "sending"] as const
+  render: (args: Args) => {
+    const [state, setState] = createStore({ ...args, failures: 0 })
 
-    const [state, setState] = createStore<{
-      status: (typeof statuses)[number]
-      voice: boolean
-      text: boolean
-      grouped: boolean
-      fails: boolean
-      failures: number
-    }>({
-      status: "steering",
-      voice: false,
-      text: true,
-      grouped: false,
-      fails: false,
-      failures: 0,
-    })
+    // Frame controls and host callbacks can still change the fixture after a panel edit.
+    for (const key of ["status", "voice", "text", "grouped", "fails"] as const) {
+      createEffect(() => setState({ [key]: args[key] }))
+    }
 
     // A failing host rejects, like a server error, and leaves the message as it was.
     const attempt = async (apply: () => void) => {
@@ -146,3 +141,9 @@ export const Pending = {
     )
   },
 }
+
+export const SendingAttachment = { ...Pending, args: { status: "sending", text: false } }
+
+export const DeliveredVoice = { ...Pending, args: { status: "delivered", voice: true } }
+
+export const StrandedSteer = { ...Pending, args: { status: "stranded", grouped: true } }
