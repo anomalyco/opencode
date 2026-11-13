@@ -404,26 +404,6 @@
   padding-top: var(--timeline-gap-l);
 }
 
-/* The user's message actions show in the large gap below it rather than adding to it, above the row that follows so
-   they stay reachable. */
-[data-timeline="next"][data-timeline-row="UserMessage"] {
-  position: relative;
-  z-index: 1;
-
-  [data-component="user-message"] {
-    position: relative;
-  }
-
-  [data-slot="user-message-copy-wrapper"] {
-    position: absolute;
-    inset-inline: 0;
-    top: 100%;
-    height: 28px;
-    margin-top: 0;
-    padding-top: 8px;
-  }
-}
-
 /* Rows are as tall as their text, so the gaps between them are the gaps that show. A row's 28px click area stays: 6px of
    padding above and below, taken back by margins of the same size, so neighbouring click areas meet without overlapping.
    An open row's header ends the small gap above its first nested row. */
@@ -497,21 +477,6 @@
     text-box: trim-start text;
   }
 
-  /* The agent's last words in a turn keep their actions in the large gap below them, as the user's message does. The
-     gap above the actions is their own padding, so the pointer stays over the message while it crosses to them. */
-  [data-component="text-part"]:has(> [data-slot="text-part-copy-wrapper"]) {
-    position: relative;
-
-    > [data-slot="text-part-copy-wrapper"] {
-      position: absolute;
-      inset-inline: 0;
-      top: 100%;
-      height: 28px;
-      margin-top: 0;
-      padding-top: 8px;
-    }
-  }
-
   [data-component="context-tool-group-list"],
   [data-component="timeline-event-list"] {
     gap: var(--timeline-gap-s);
@@ -544,11 +509,6 @@
       height: calc(var(--line-height-compact) + 6px + var(--timeline-gap-s));
     }
   }
-}
-
-[data-timeline="next"][data-timeline-row="AssistantPart"]:has([data-slot="text-part-copy-wrapper"]) {
-  position: relative;
-  z-index: 1;
 }
 
 /* The live thought sits where the row it settles into will, which its frame spaces like any other row. */
