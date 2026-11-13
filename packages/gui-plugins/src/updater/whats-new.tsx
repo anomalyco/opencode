@@ -263,6 +263,7 @@ function DialogReleaseNotes(props: { highlights: readonly Highlight[]; dialog: D
                   {(_, i) => (
                     <button
                       type="button"
+                      aria-label={ctx.t("releaseNotes.pagination", { index: i + 1, total: total() })}
                       class="h-6 flex items-center cursor-pointer bg-transparent border-none p-0 transition-all duration-200"
                       classList={{
                         "w-8": i === index(),
