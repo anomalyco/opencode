@@ -94,7 +94,7 @@ export const withCompletedDiffs = Effect.fnUntraced(function* (
         const path = absolutePath(file.file, cwd)
         const newText = file.status === "deleted" ? "" : yield* Effect.tryPromise(() => Bun.file(path).text())
         if (file.status === "added") return [diff(path, null, newText)]
-        const recorded = parsePatch(file.patch)[0]
+        const recorded = (yield* Effect.try(() => parsePatch(file.patch)))[0]
         if (!recorded) return []
         const oldText = yield* Effect.try(() => applyPatch(newText, reversePatch(recorded)))
         if (oldText !== false) return [diff(path, oldText, newText)]
