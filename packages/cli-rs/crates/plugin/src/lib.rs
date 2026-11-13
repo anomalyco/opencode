@@ -818,16 +818,36 @@ pub(crate) fn fail(
     activation.dispose();
 }
 
+thread_local! {
+    /// The plugins' effects that wait, in the order they were asked for, on both paths.
+    static EFFECTS: RefCell<std::collections::VecDeque<(Weak<dyn Host>, Effect)>> = RefCell::default();
+    static FLUSHING: Cell<bool> = const { Cell::new(false) };
+}
+
 /// Queues `effect` on the host's one effect queue, which both paths share: it runs in order with every other plugin
-/// effect, once the outermost plugin callback has returned and every UI and store borrow has ended.
+/// effect, once the outermost plugin callback has returned and every UI and store borrow has ended, at the latest
+/// when the host routes its next message ([`flush`]).
 pub(crate) fn defer(host: &Weak<dyn Host>, effect: impl FnOnce(&dyn Host) + 'static) {
     let Some(strong) = host.upgrade() else { return };
-    let host = host.clone();
-    strong.app().defer(move |_| {
+    EFFECTS.with(|effects| effects.borrow_mut().push_back((host.clone(), Box::new(effect))));
+    // Each effect asks for a drain of its own, as each was deferred before; a drain finds the queue empty once an
+    // earlier one or a message ran it.
+    strong.app().defer(|_| flush());
+}
+
+/// Runs the plugins' waiting effects now, in order, with those they queue in turn. The host calls it as it routes a
+/// message of its own, outside every plugin callback and borrow, so a message never overtakes what a plugin asked
+/// for while handling the one before it (an OpenTUI batch of messages runs before its deferred work).
+pub fn flush() {
+    if FLUSHING.with(|flushing| flushing.replace(true)) {
+        return;
+    }
+    while let Some((host, effect)) = EFFECTS.with(|effects| effects.borrow_mut().pop_front()) {
         if let Some(host) = host.upgrade() {
             effect(&*host);
         }
-    });
+    }
+    FLUSHING.with(|flushing| flushing.set(false));
 }
 
 /// What a plugin registers while it is active: the host's side of a setup, on either path.
