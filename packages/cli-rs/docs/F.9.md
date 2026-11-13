@@ -11,9 +11,11 @@ orchestrator decisions O-21 and O-22 apply.
    registrations in O-21 order) finds no ready, compatible service.
 2. **Never replace, never stop a service it did not start.** No version requirement is ever passed
    to `decide`, so `Replace` cannot happen. A registered service that does not answer three probes
-   in a row is left running, and `ensure` fails with a message that names it. The one exception is
-   a registration whose pid is one of this `ensure` call's own contenders: that process was started
-   by this client, so it is evicted as TS evicts any unresponsive service. `stop` is only for the
+   in a row is left running, and `ensure` fails with a message that names it. Two exceptions are
+   evicted as TS evicts any unresponsive service: a registration whose pid is one of this `ensure`
+   call's own contenders (this client started that process), and one whose pid no longer runs (a
+   stale registration; on Windows a killed service's closed port times out rather than refuses
+   the probe). `stop` is only for the
    explicit `service stop`, `restart`, and `set` commands (C.8).
 3. **What it runs.** `ts_command`: `OPENCODE_TS_BIN` (one executable path), else `opencode` on
    `PATH`. The service is `<ts> serve --service`, the standalone server `<ts> serve --stdio --port 0`.
