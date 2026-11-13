@@ -53,6 +53,8 @@ export const Plugin = {
           output: Output,
           execute: (input, context) => {
             return Effect.gen(function* () {
+              if (input.limit === 0)
+                return yield* new ToolFailure({ message: "limit must be at least 1. Omit limit to use the default." })
               if (Skill.isUri(input.path)) {
                 const parsed = parseSkillUri(input.path)
                 if (!parsed) return yield* new ToolFailure({ message: `File not found: ${input.path}` })

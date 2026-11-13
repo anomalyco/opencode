@@ -223,6 +223,23 @@ describe("ReadTool", () => {
     }),
   )
 
+  it.effect("rejects a zero limit before reading", () =>
+    Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const result = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-zero-limit", name: "read", input: { path: "README.md", limit: 0 } },
+      })
+      expect(result).toMatchObject({
+        status: "error",
+        error: { message: "limit must be at least 1. Omit limit to use the default." },
+      })
+      expect(assertions).toEqual([])
+      expect(readCalls).toEqual([])
+    }),
+  )
+
   it.effect("asks for external_directory approval before reading an external absolute path", () =>
     Effect.gen(function* () {
       const registry = yield* Tool.Service
