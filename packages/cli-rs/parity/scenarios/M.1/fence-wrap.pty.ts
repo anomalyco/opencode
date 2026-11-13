@@ -11,6 +11,9 @@ const text = `Run the story:\n\n\`\`\`sh\n${command}\n\`\`\`\n\n1. Then in a lis
 const rest = String.raw`\n\s*\S*json OPENCODE_STORY=transcript-fences bun run dev:live\s*\n`
 const wrapped = new RegExp(String.raw`${rest}[\s\S]*${rest}[\s\S]*Done\.`)
 
+// The reply is cut where Core 0.8.4 cuts it; TS loses the blank row there, before `Done.`, and Rust keeps it.
+const deviation = (lines: number) => ({ file: "M06-mini-dropped-blank-row", lines })
+
 const messages = [user("msg_u1", "show the story command", 10), assistant("msg_a1", [{ type: "text", text }], 11)]
 
 export default definePty({
@@ -21,9 +24,16 @@ export default definePty({
   setup: (root) => config(root),
   steps: [
     // Each fence's second row starts with the wrapped rest of the line, so a cut-off line times out.
-    { until: { screen: wrapped }, settle: 800, timeout: 30_000, checkpoint: "replayed", scrollback: 30 },
+    {
+      until: { screen: wrapped },
+      settle: 800,
+      timeout: 30_000,
+      checkpoint: "replayed",
+      scrollback: 30,
+      deviation: deviation(12),
+    },
     { keys: "\x03", settle: 200 },
-    { keys: "\x03", settle: 400, checkpoint: "exited" },
+    { keys: "\x03", settle: 400, checkpoint: "exited", deviation: deviation(2) },
   ],
   exits: true,
   masks: [statusMask],

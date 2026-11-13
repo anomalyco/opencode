@@ -38,7 +38,9 @@ export const assistant = (id: string, content: unknown[], created: number) => ({
   time: { created, completed: created + 1 },
 })
 
-// Oldest first: three turns, the second with reasoning and a list.
+// Oldest first: three turns, the second with reasoning and a list. The list follows its paragraph without a blank
+// line, so the reply is two of marked's tokens and mini commits it in one part; `M.1/table-gap` covers replies cut in
+// parts (`parity/deviations/M06-mini-dropped-blank-row.md`).
 export const history = [
   user("msg_u1", "first question", 10),
   assistant("msg_a1", [{ type: "text", text: "First answer." }], 11),
@@ -47,7 +49,7 @@ export const history = [
     "msg_a2",
     [
       { type: "reasoning", text: "Weighing the options." },
-      { type: "text", text: "Second answer:\n\n- one\n- two" },
+      { type: "text", text: "Second answer:\n- one\n- two" },
     ],
     21,
   ),
