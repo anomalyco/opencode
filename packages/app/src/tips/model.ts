@@ -7,7 +7,7 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
-import { selectTip, TIP_INTERVAL_MS, type Tip } from "./queue"
+import { FIRST_TIP_DELAY_MS, selectTip, TIP_INTERVAL_MS, type Tip } from "./queue"
 
 const STARTUP_DELAY = 2 * 60 * 1000
 
@@ -16,6 +16,7 @@ const History = Persistence.struct({
   shownAt: Schema.Finite,
   dismissed: Persistence.array(Schema.String),
   dismissedAt: Schema.Finite,
+  firstSeen: Persistence.fallback(Schema.Finite, () => 0),
 })
 
 export function createTipToasts() {
@@ -79,6 +80,11 @@ export function createTipToasts() {
     shownAt: 0,
     dismissed: [],
     dismissedAt: 0,
+    firstSeen: 0,
+  })
+
+  createEffect(() => {
+    if (loaded() && !history.firstSeen) setHistory("firstSeen", Date.now())
   })
 
   const [tick, setTick] = createSignal(0)
@@ -90,6 +96,7 @@ export function createTipToasts() {
 
     const times = [
       Math.max(history.shownAt, history.dismissedAt) + TIP_INTERVAL_MS,
+      history.firstSeen + FIRST_TIP_DELAY_MS,
       ...tips.flatMap((tip) => [tip.start ?? 0, tip.end ?? 0]),
     ]
 
