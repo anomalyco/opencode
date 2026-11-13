@@ -204,7 +204,7 @@ const defaultModels = [
   }),
 ]
 
-const integrations = [
+const fixtureIntegrations = [
   {
     id: "anthropic",
     name: "Anthropic",
@@ -246,6 +246,149 @@ const integrations = [
     id: "github-copilot",
     name: "GitHub Copilot",
     methods: [{ type: "oauth", id: "copilot", label: "Sign in with GitHub" }],
+    connections: [],
+  },
+  {
+    id: "xai",
+    name: "xAI",
+    methods: [
+      { type: "oauth", id: "device", label: "SuperGrok Subscription" },
+      { type: "key", label: "Manually enter API Key" },
+    ],
+    connections: [],
+  },
+  {
+    id: "gitlab",
+    name: "GitLab",
+    methods: [
+      {
+        type: "oauth",
+        id: "pkce",
+        label: "Login with GitLab (OAuth)",
+        form: [
+          {
+            key: "instanceUrl",
+            type: "string",
+            title: "GitLab instance URL",
+            description: "Use gitlab.com, or the URL of your self-managed instance.",
+            placeholder: "https://gitlab.com",
+          },
+        ],
+      },
+    ],
+    connections: [],
+  },
+  {
+    id: "snowflake-cortex",
+    name: "Snowflake Cortex",
+    methods: [
+      {
+        type: "oauth",
+        id: "browser",
+        label: "Login with Snowflake (External Browser)",
+        form: [
+          { key: "account", type: "string", title: "Snowflake account", placeholder: "org-account", required: true },
+        ],
+      },
+    ],
+    connections: [],
+  },
+  {
+    id: "amazon-bedrock",
+    name: "Amazon Bedrock",
+    methods: [
+      { type: "key", label: "Bedrock API key" },
+      {
+        type: "external",
+        id: "aws-profile",
+        label: "AWS profile (SSO or named profile)",
+        form: [
+          {
+            key: "profile",
+            type: "string",
+            title: "AWS profile",
+            description: "Profiles from ~/.aws/config.",
+            required: true,
+            custom: true,
+            options: [
+              { value: "default", label: "default" },
+              { value: "work-sso", label: "work-sso", description: "SSO · us-east-1" },
+            ],
+          },
+        ],
+      },
+    ],
+    connections: [],
+  },
+  {
+    id: "acme-search",
+    name: "Acme Search",
+    methods: [
+      {
+        type: "key",
+        label: "API key",
+        form: [
+          {
+            key: "sources",
+            type: "multiselect",
+            title: "Sources to search",
+            minItems: 1,
+            custom: true,
+            options: [
+              { value: "web", label: "Web" },
+              { value: "news", label: "News", description: "Articles from the last 30 days" },
+              { value: "code", label: "Code" },
+            ],
+          },
+          { key: "safe", type: "boolean", title: "Use safe search?", default: true },
+        ],
+      },
+    ],
+    connections: [],
+  },
+  {
+    id: "acme-cloud",
+    name: "Acme Cloud",
+    methods: [
+      {
+        type: "oauth",
+        id: "browser",
+        label: "Sign in",
+        form: [
+          {
+            key: "terms",
+            type: "external",
+            url: "https://acme.example/terms",
+            title: "Accept the Acme terms",
+            description: "Open the link, accept the terms, then come back.",
+          },
+        ],
+      },
+    ],
+    connections: [],
+  },
+  {
+    id: "acme-cli",
+    name: "Acme CLI",
+    methods: [{ type: "command", id: "login", label: "Log in", command: ["acme", "login"] }],
+    connections: [],
+  },
+  {
+    id: "acme-code",
+    name: "Acme Code",
+    methods: [{ type: "oauth", id: "code", label: "Acme account" }],
+    connections: [],
+  },
+  {
+    id: "acme-broken",
+    name: "Acme Broken",
+    methods: [{ type: "oauth", id: "browser", label: "Sign in" }],
+    connections: [],
+  },
+  {
+    id: "claude-agent",
+    name: "Claude Agent",
+    methods: [{ type: "external", id: "claude-login", label: "Claude Code login (claude auth login)" }],
     connections: [],
   },
   {
@@ -354,9 +497,18 @@ function findMatchingPaths(root: string, query: string, type: string | null) {
 type DialogStoryRuntimeOptions = {
   servers?: ServerConnection.Any[]
   platform?: Platform
+  /** Replaces fixture integrations with the same id. */
+  integrations?: IntegrationInfo[]
 }
 
-export function createStoryFetch(): typeof fetch {
+const REDIRECT_PASTE = ["openai", "gitlab", "snowflake-cortex"]
+
+export function createStoryFetch(overrides: IntegrationInfo[] = []): typeof fetch {
+  const integrations = [
+    ...overrides,
+    ...fixtureIntegrations.filter((item) => !overrides.some((override) => override.id === item.id)),
+  ]
+
   const encoder = new TextEncoder()
 
   const handler = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -472,13 +624,46 @@ export function createStoryFetch(): typeof fetch {
       if (rest[1] === "connect" && rest[2] === "oauth" && rest.length === 3 && method === "POST") {
         const now = Date.now()
 
+        if (integrationID === "acme-broken")
+          return errorResponse("InvalidRequestError", "The Acme sign-in service is unavailable. Try again later.", 400)
+
         return jsonResponse({
           location,
           data: {
             attemptID: "con_story_1",
-            url: "https://opencode.ai/auth/authorize",
+            // Device sign-ins show a code; some browser sign-ins also take the redirect URL pasted from another device.
+            url:
+              integrationID === "github-copilot" || integrationID === "xai"
+                ? "https://example.test/device?user_code=KBSC-TK37"
+                : integrationID === "opencode"
+                  ? "https://opencode.ai/auth/device?user_code=WXYZ-2345"
+                  : "https://opencode.ai/auth/authorize",
             instructions: "",
-            mode: "auto",
+            mode: integrationID === "acme-code" ? "code" : "auto",
+            paste: REDIRECT_PASTE.includes(integrationID) ? true : undefined,
+            time: { created: now, expires: now + 600_000 },
+          },
+        })
+      }
+
+      if (rest[1] === "connect" && rest[2] === "command" && rest.length === 3 && method === "POST") {
+        const now = Date.now()
+
+        return jsonResponse({
+          location,
+          data: { attemptID: "con_story_cmd", time: { created: now, expires: now + 600_000 } },
+        })
+      }
+
+      if (rest[1] === "connect" && rest[2] === "command" && rest[3] && method === "GET") {
+        const now = Date.now()
+
+        return jsonResponse({
+          location,
+          data: {
+            status: "pending",
+            message:
+              "$ acme login\nOpening https://acme.example/device in your browser…\nWaiting for you to approve this device.",
             time: { created: now, expires: now + 600_000 },
           },
         })
@@ -581,7 +766,7 @@ export function DialogStoryRuntime(props: ParentProps<DialogStoryRuntimeOptions>
     restart: async () => {},
     notify: async () => {},
     storage: createMemoryStorage(),
-    fetch: createStoryFetch(),
+    fetch: createStoryFetch(props.integrations),
   }
 
   const client = new QueryClient({

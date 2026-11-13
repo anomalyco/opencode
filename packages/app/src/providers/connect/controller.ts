@@ -23,6 +23,7 @@ import {
   selectProviderDialogView,
   transitionProviderDialog,
   type ProviderAccounts,
+  type ProviderBackTarget,
   type ProviderDialogEffect,
   type ProviderDialogEvent,
 } from "./dialog-machine"
@@ -635,7 +636,7 @@ export function createProviderDialogController(options: {
       dispatch({ type: "provider.selected", provider: id, fromPicker: true, accounts: accountsOf(id) }),
     input: (event: ProviderConnectEvent) => dispatch({ type: "connect.input", event }),
     rename: accountActions.rename,
-    back: () => dispatch({ type: "back" }),
+    navigate: (target: ProviderBackTarget) => dispatch({ type: "navigate", target }),
     checkClaude: () => {
       const id = provider()
 
