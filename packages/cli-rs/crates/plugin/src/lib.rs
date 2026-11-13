@@ -151,7 +151,8 @@ pub trait Host: 'static {
     }
     /// Sets the terminal title ([`abi::Host::set_title`]). Called outside every plugin callback.
     fn set_title(&self, title: &str) {
-        self.app().set_title(title);
+        // A title OpenTUI refuses would end the app.
+        self.app().set_title(&opencode_ui::terminal_title(title));
     }
     /// Selects theme `name`, once [`theme_known`] allowed it ([`abi::Host::set_theme`]). Called outside every plugin
     /// callback.
