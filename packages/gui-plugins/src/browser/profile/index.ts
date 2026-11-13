@@ -6,11 +6,11 @@ import type { Log, Storage } from "@opencode/plugin/gui/main"
 import { fileURLWithin } from "../policy"
 import { extensionAccess, extensionCompatibility } from "./compatibility"
 import { browserUserAgent, cookieDetails, parseCookieFile, PROBE_COOKIE, type CookieRead } from "./cookie"
-import { snapshotDatabase } from "./database"
 import { createExtensionApis } from "./extension-api"
 import { createFileGuard } from "./file-guard"
 import { clearStaging, download, stageExtension, swapIn } from "./install"
 import { createCookieMirror, type CookieMirror } from "./link"
+import { cookiesPersist } from "./probe"
 import {
   displayName,
   extensionIcon,
@@ -546,44 +546,3 @@ async function applicationIcons(files: readonly string[]) {
 
   return new Map(read.flat())
 }
-
-/**
- * Whether the profile's cookies reach its database. With cookie encryption on, Chromium writes no cookie at all while
- * the system key store refuses its key: a denied Keychain prompt, or a locked keyring. Writes one short-lived cookie,
- * flushes it and looks for it on disk. When the check itself cannot run, it says they do.
- */
-async function cookiesPersist(session: Session) {
-  const written = await session.cookies
-    .set({ url: PROBE_COOKIE.url, name: PROBE_COOKIE.name, value: "1", expirationDate: Date.now() / 1000 + 600 })
-    .then(() => session.cookies.flushStore())
-    .then(
-      () => true,
-      () => false,
-    )
-
-  if (!written || !session.storagePath) return true
-
-  const storage = session.storagePath
-
-  // Chromium keeps a partition's database under Network/ on some systems and beside it on others.
-  const counts = await Promise.all(
-    [path.join(storage, "Network", "Cookies"), path.join(storage, "Cookies")].map((file) =>
-      snapshotDatabase(file, (db) =>
-        db.prepare("SELECT count(*) AS count FROM cookies WHERE host_key = ? AND name = ?").get(PROBE_COOKIE.host, PROBE_COOKIE.name),
-      )
-        .then((row) => Number(row?.count ?? 0))
-        .catch(() => undefined),
-    ),
-  )
-
-  await session.cookies
-    .remove(PROBE_COOKIE.url, PROBE_COOKIE.name)
-    .then(() => session.cookies.flushStore())
-    .catch(() => undefined)
-
-  const read = counts.filter((count) => count !== undefined)
-
-  return read.length === 0 || read.some((count) => count > 0)
-}
-
-
