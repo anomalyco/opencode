@@ -109,7 +109,7 @@ export default function SessionBrowserPane(props: {
   const [addressState, setAddressState] = createSignal(initialAddressState)
   const [available, setAvailable] = createSignal({ width: 0, height: 0 })
   const [toolbar, setToolbar] = createSignal(initialViewportToolbar)
-  const [resizingViewport, setResizingViewport] = createSignal(false)
+  const [pointerFocusedToggle, setPointerFocusedToggle] = createSignal(false)
   const viewportID = createUniqueId()
   const [overlay, setOverlay] = createSignal(initialOverlayState)
 
@@ -434,7 +434,8 @@ export default function SessionBrowserPane(props: {
       inspect: toggleInspect,
       toggleToolbar: () => {
         toggleToolbar()
-        toolbarToggle?.focus({ preventScroll: true })
+        setPointerFocusedToggle(false)
+        toolbarToggle?.focus({ preventScroll: true, focusVisible: true })
       },
       focusAddress,
       // Dispatched inside the pane, so keybinds scoped to it, such as closing the browser tab, apply.
@@ -540,7 +541,6 @@ export default function SessionBrowserPane(props: {
               size={fixedViewport() ?? dimensions()}
               ratio={windowZoom() / (fit()?.scale ?? 1)}
               centered={{ width: size().width <= available().width, height: size().height <= available().height }}
-              dragging={setResizingViewport}
               resize={({ width, height }) => {
                 const tab = state()
 
@@ -851,6 +851,10 @@ export default function SessionBrowserPane(props: {
               ref={toolbarToggle}
               variant="ghost-muted"
               size="large"
+              classList={{ "!outline-none": pointerFocusedToggle() }}
+              onPointerDown={() => setPointerFocusedToggle(true)}
+              onBlur={() => setPointerFocusedToggle(false)}
+              onKeyDown={() => setPointerFocusedToggle(false)}
               aria-label={plugin.t("command.toggleToolbar")}
               aria-expanded={toolbarVisible()}
               aria-controls={toolbarVisible() ? viewportID : undefined}
@@ -967,7 +971,7 @@ export default function SessionBrowserPane(props: {
         <embeds.View
           id={embed()}
           visible={shown() && (!fixedViewport() || !!fit())}
-          frozen={overlayed().frozen || resizingViewport()}
+          frozen={overlayed().frozen}
           // A navigation, reload or layout viewport change invalidates stills of the previous page.
           page={JSON.stringify([
             state()?.id,

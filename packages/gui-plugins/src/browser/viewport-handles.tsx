@@ -12,7 +12,6 @@ export function ViewportHandles(props: {
   ratio: number
   centered: { width: boolean; height: boolean }
   resize: (size: Size) => void
-  dragging: (active: boolean) => void
 }) {
   const plugin = usePlugin()
   const clamp = (value: number) => Math.max(1, Math.min(4096, Math.round(value)))
@@ -49,7 +48,6 @@ export function ViewportHandles(props: {
     }
     event.currentTarget.setPointerCapture(event.pointerId)
     window.addEventListener("blur", end)
-    props.dragging(true)
   }
 
   const move = (event: PointerEvent) => {
@@ -69,7 +67,6 @@ export function ViewportHandles(props: {
     window.removeEventListener("blur", end)
 
     if (handle.hasPointerCapture(id)) handle.releasePointerCapture(id)
-    props.dragging(false)
   }
 
   onCleanup(end)
