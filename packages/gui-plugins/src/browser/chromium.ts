@@ -165,8 +165,6 @@ function zoomStep(current: number, direction: "in" | "out" | "reset") {
 /** Who may have caused a tab's download: the agent's commands running now, when the last ended, the user's last input. */
 type Activity = { agentRuns: number; agentEndedAt?: number; userInputAt?: number }
 
-type LoaderRefresh = { pending: boolean; updating?: Promise<void> }
-
 /** Ends a running command's wait when it is interrupted. */
 type Interrupted = ReturnType<typeof Promise.withResolvers<never>>
 
@@ -366,21 +364,6 @@ export function createBrowserPage(
     }, sessionID)
 
   const activity: Activity = { agentRuns: 0 }
-  const loaders: LoaderRefresh = { pending: false }
-
-  const refreshLoaders = () => {
-    if (!loaders.pending || loaders.updating || activity.agentRuns || closed()) return
-    loaders.pending = false
-    // A literal space never occurs in a serialized URL. Nothing is paused and no Network or Runtime domain changes.
-    loaders.updating = cdp.send("Fetch.enable", { patterns: [{ urlPattern: " " }] })
-      .then(() => cdp.send("Fetch.disable"))
-      .catch((error: Error) => publish(error.message))
-      .finally(() => {
-        loaders.updating = undefined
-        refreshLoaders()
-      })
-  }
-
   // Set by the agent's first command; until then the tab renders as any other.
   let agentDriven = false
   let dialogGate = createDialogGateState()
@@ -515,7 +498,7 @@ export function createBrowserPage(
   const guard = (event: Electron.Event<{ url: string; isMainFrame: boolean }>) => {
     if (event.url === "about:blank") return
 
-    const local = /^file:/i.test(event.url) || event.url.startsWith(`${previewScheme}:`)
+    const local = /^file:/i.test(event.url) || event.url.toLowerCase().startsWith(`${previewScheme}:`)
 
     if (local && preview(event.url)) return
 
@@ -726,10 +709,6 @@ export function createBrowserPage(
     contents,
     state,
     ready,
-    refreshExtensions() {
-      loaders.pending = true
-      refreshLoaders()
-    },
     /** The host embed the renderer lays this page out with. */
     embed: embed.id,
     async inspect(enabled: boolean) {
@@ -785,7 +764,6 @@ export function createBrowserPage(
     async execute(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
       await ready
 
-      while (loaders.updating) await loaders.updating
       // Registers the run before any further await, and listens for its abort in the same turn, so a dialog or a
       // cancellation that arrives while it still inspects its target interrupts it.
       const reply = dispatchDialog({ type: "run.started", actionType: command.action.type, aborted: signal.aborted })
@@ -818,7 +796,6 @@ export function createBrowserPage(
         if (origin === "agent") {
           activity.agentRuns--
           activity.agentEndedAt = Date.now()
-          refreshLoaders()
         }
       }
     },

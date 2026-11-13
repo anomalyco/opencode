@@ -114,10 +114,7 @@ export function createBrowserPane(input: {
       const shared = server.sameMachine
       const partition = shared ? input.profile.partition : `opencode-browser-${crypto.randomUUID()}`
 
-      // Navigation guards cover documents; subresources (img, script, fetch) also must not read
-      // file: URLs outside the roots. One listener per partition covers every page in this attachment.
       const remote = shared ? undefined : electron.session.fromPartition(partition)
-      remote?.webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (_details, callback) => callback({ cancel: true }))
       const preview = shared ? input.profile.previews.grant(() => selectFileRoots(machine.state, binding)) : undefined
       const unguard = remote ? guardSession(remote, downloads) : () => undefined
 
@@ -488,7 +485,6 @@ export function createBrowserPane(input: {
 
   function release(page: BrowserPage) {
     grants.get(page)?.()
-    input.profile.loaderRefresh.delete(page.contents.id)
     downloads.delete(page.contents.id)
     const done = page.dispose()
     const settled = done.catch(() => undefined)
@@ -613,7 +609,6 @@ export function createBrowserPane(input: {
 
     if (handle.shared) {
       grants.set(page, input.profile.extensionTabs.register(extensionTab(binding, id, page, win, focused)))
-      input.profile.loaderRefresh.set(page.contents.id, page.refreshExtensions)
     }
 
     handle.pages.set(attempt, page)
@@ -640,6 +635,7 @@ export function createBrowserPane(input: {
     focused: () => boolean,
   ) {
     const guarded = (url: string) => {
+      if (/^file:/i.test(url)) throw new Error("Extensions do not have file access.")
       const reason = refusal(url, { fileRoots: selectFileRoots(machine.state, binding), extensions: extensions(binding) })
 
       if (reason) throw new Error(`This browser does not open ${url}.`)

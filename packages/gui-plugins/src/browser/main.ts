@@ -180,7 +180,7 @@ const setup: Plugin.MainSetup = (ctx) => {
   })
 
   // The host withdraws the Ipc before this runs, so windows hear nothing; they suspend on the Ipc going away.
-  // The profile holds the session's preloads, extensions and file guard. One still loading is awaited and disposed
+  // The profile holds the session's preloads and extensions. One still loading is awaited and disposed
   // here, so the next instance of this plugin never starts beside it, and it never tears down the next one's.
   ctx.onCleanup(async () => {
     dispatch({ type: "disposed" })

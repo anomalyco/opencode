@@ -7,7 +7,6 @@ import { guardSession } from "../session-guard"
 import { extensionAccess, extensionCompatibility } from "./compatibility"
 import { browserUserAgent, cookieDetails, parseCookieFile, PROBE_COOKIE, type CookieRead } from "./cookie"
 import { createExtensionApis } from "./extension-api"
-import { createFileGuard } from "./file-guard"
 import { clearStaging, download, stageExtension, swapIn } from "./install"
 import { createCookieMirror, type CookieMirror } from "./link"
 import { cookiesPersist } from "./probe"
@@ -105,9 +104,6 @@ export async function createBrowserProfile(input: {
   // Browser icons by application path, read once; undefined for an application without one.
   const icons = new Map<string, string | undefined>()
 
-  // Even a non-pane window must never commit a native file document in this session.
-  const loaderRefresh = new Map<number, () => void>()
-  const stopFileGuard = createFileGuard({ session, allowed: () => false, refresh: (id) => loaderRefresh.get(id)?.() })
 
   // What each package's files show, read once per directory and version: describing runs after every change.
   const scans = new Map<string, Promise<ExtensionFiles>>()
@@ -152,13 +148,11 @@ export async function createBrowserProfile(input: {
   }
 
   // What creation set up before its first await. A step that fails releases it at once, so the next request, which
-  // tries again, starts clean instead of stacking another cookie listener and file guard.
+  // tries again, starts clean instead of stacking another cookie listener.
   const release = () => {
     unguard()
     session.cookies.off("changed", cookiesChanged)
     clearTimeout(settling)
-    stopFileGuard()
-    loaderRefresh.clear()
     previews.dispose()
   }
 
@@ -324,8 +318,6 @@ export async function createBrowserProfile(input: {
     /** Each tab's download handler by its web contents ID, which the profile's one `will-download` listener calls. */
     downloads,
     previews,
-    /** The pane tabs whose debugger can rebuild their extension request loaders. */
-    loaderRefresh,
     /** The pane's tabs and windows as extensions see them; the pane registers each tab of the profile. */
     extensionTabs: apis.tabs,
     /** Extensions loaded now, whose pages may open in a tab. */

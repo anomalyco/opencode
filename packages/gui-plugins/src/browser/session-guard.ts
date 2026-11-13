@@ -1,4 +1,4 @@
-import type { WebContents } from "electron"
+import { app, type WebContents } from "electron"
 import { Option, Schema } from "effect"
 import { pagePermission } from "./policy"
 
@@ -15,6 +15,22 @@ export function guardSession(
   session: Electron.Session,
   downloads: ReadonlyMap<number, (item: Electron.DownloadItem) => void>,
 ) {
+  // The native file loader is never a preview loader. Leave this refusal on the partition across plugin reloads.
+  if (!session.protocol.isProtocolHandled("file")) session.protocol.handle("file", () => Response.error())
+
+  // Including extension background pages and popups. Renderer navigations are cancelled before commit; main's
+  // two loadURL callers separately require a translated preview/web URL or a page of the extension's own package.
+  const created = (_event: Electron.Event, contents: WebContents) => {
+    if (contents.session !== session) return
+    contents.on("will-navigate", denyFileNavigation)
+    contents.on("will-frame-navigate", denyFileNavigation)
+    contents.on("will-redirect", denyFileNavigation)
+    // Owned pane tabs and extension popups install their narrower adoption policies. Other views open no windows.
+    contents.setWindowOpenHandler(() => ({ action: "deny" }))
+  }
+
+  app.on("web-contents-created", created)
+
   const declared = (id: string) =>
     Schema.decodeUnknownOption(ManifestPermissions)(session.extensions.getExtension(id)?.manifest).pipe(
       Option.flatMap((manifest) => Option.fromNullishOr(manifest.permissions)),
@@ -33,5 +49,12 @@ export function guardSession(
 
   session.on("will-download", download)
 
-  return () => void session.off("will-download", download)
+  return () => {
+    app.off("web-contents-created", created)
+    session.off("will-download", download)
+  }
+}
+
+function denyFileNavigation(event: Electron.Event<{ url: string }>) {
+  if (/^file:/i.test(event.url)) event.preventDefault()
 }
