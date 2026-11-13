@@ -90,10 +90,13 @@ describe("plan plugin instructions", () => {
     Effect.gen(function* () {
       const { planAgent } = yield* run()
       expect(planAgent.system).toBeUndefined()
-      expect(planAgent.instructions).toContain("You are in Plan mode")
-      expect(planAgent.instructions).toContain("Do not create or update plan files unless the user explicitly asks you to")
-      expect(planAgent.instructions).toContain(planDirectory)
-      expect(planAgent.instructions).toContain("Do not modify any other files")
+      const instructions = planAgent.instructions
+      if (typeof instructions !== "object") return yield* Effect.die("expected active and inactive instructions")
+      expect(instructions.active).toContain("You are in Plan mode")
+      expect(instructions.active).toContain("Do not create or update plan files unless the user explicitly asks you to")
+      expect(instructions.active).toContain(planDirectory)
+      expect(instructions.active).toContain("Do not modify any other files")
+      expect(instructions.inactive).toContain("NO LONGER in Plan mode")
     }),
   )
 })

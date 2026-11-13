@@ -15852,7 +15852,24 @@
             "type": "string"
           },
           "instructions": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "active": {
+                    "type": "string"
+                  },
+                  "inactive": {
+                    "type": "string"
+                  }
+                },
+                "required": ["active"],
+                "additionalProperties": false
+              }
+            ]
           },
           "description": {
             "type": "string"

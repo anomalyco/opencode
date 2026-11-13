@@ -2710,7 +2710,7 @@ export type AgentInfo = {
   model?: ModelRef
   request: ProviderRequest
   system?: string
-  instructions?: string
+  instructions?: string | { active: string; inactive?: string }
   description?: string
   mode: "subagent" | "primary" | "all"
   hidden: boolean

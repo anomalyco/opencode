@@ -2181,6 +2181,52 @@ describe("SessionRunnerLLM", () => {
       ])
     })
 
+    scenario("sends an agent's own inactive text when switching away, and only then", function* (s) {
+      const agent = yield* Agent.Service
+      yield* agent.transform((editor) =>
+        editor.update(plan, (item) => {
+          item.name = Agent.Name.make("Plan")
+          item.mode = "primary"
+          item.instructions = { active: "Plan rules", inactive: "Left Plan mode" }
+        }),
+      )
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* select(s, build)
+      yield* s.runPrompt("Second")
+      expect(systemTexts(s.requests[1]!)).toEqual(["Left Plan mode"])
+
+      // After compaction on build, neither text is shown: inactive is only for the switch itself.
+      yield* s.llm.push(TestLLM.text("## Objective\n- summary", "inactive-summary"))
+      yield* s.session.compact({ sessionID })
+      yield* s.resume
+      yield* s.runPrompt("Third")
+      expect(prompt(s.requests.at(-1))).not.toContain("Plan rules")
+      expect(prompt(s.requests.at(-1))).not.toContain("Left Plan mode")
+      expect(systemTexts(s.requests.at(-1)!)).toEqual([])
+    })
+
+    scenario("sends nothing when only an agent's inactive text changes", function* (s) {
+      const agent = yield* Agent.Service
+      const define = (inactive: string) =>
+        agent.transform((editor) =>
+          editor.update(plan, (item) => {
+            item.name = Agent.Name.make("Plan")
+            item.mode = "primary"
+            item.instructions = { active: "Plan rules", inactive }
+          }),
+        )
+      yield* define("Left Plan mode")
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* define("You have left Plan mode")
+      yield* s.runPrompt("Second")
+      expect(systemTexts(s.requests[1]!)).toEqual([])
+      yield* select(s, build)
+      yield* s.runPrompt("Third")
+      expect(systemTexts(s.requests[2]!)).toEqual(["You have left Plan mode"])
+    })
+
     scenario("moves instructions into the system prompt at compaction", function* (s) {
       yield* defineAgents()
       yield* s.runPrompt("First")

@@ -10,12 +10,14 @@ import { Permission } from "../permission.js"
 
 const plan = Agent.ID.make("plan")
 
-const instructions = (directory: string) => `You are in Plan mode. Discuss the plan with the user directly in the conversation. Do not create or update plan files unless the user explicitly asks you to; when they do, write them only in:
+const active = (directory: string) => `You are in Plan mode. Discuss the plan with the user directly in the conversation. Do not create or update plan files unless the user explicitly asks you to; when they do, write them only in:
 ${directory}
 
 Do not modify any other files or ask a subagent to do so.
 
 You remain in Plan mode until the user switches agents. If the user asks you to implement changes, do not do so. Tell them they need to switch agents.`
+
+const inactive = `You are NO LONGER in Plan mode. The previous Plan restrictions no longer apply. Any Plan mode instructions from earlier in this conversation are no longer active.`
 
 export const Plugin = define({
   id: "opencode.plan",
@@ -27,7 +29,7 @@ export const Plugin = define({
         item.name = Agent.Name.make("Plan")
         item.description = "Read-only agent for exploring the codebase and planning work before implementation."
         item.mode = "primary"
-        item.instructions = instructions(directory)
+        item.instructions = { active: active(directory), inactive }
         item.permissions.push({ action: "question", resource: "*", effect: "allow" })
         item.permissions.push({ action: "edit", resource: "*", effect: "deny" })
         item.permissions.push({ action: "edit", resource: path.join(directory, "*"), effect: "allow" })
