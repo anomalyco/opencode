@@ -154,6 +154,8 @@ export function Session(props: {
   promptMuted?: boolean
   sidebarVisible: boolean
   onToggleSidebar: () => void
+  /** No sidebar, terminal, or panel occupies the right pane, so the reopen affordance can show. */
+  sidebarOpenable?: boolean
   terminals?: boolean
   visibleTerminalID?: string
   onTerminalPicker?: (show: (() => void) | undefined) => void
@@ -304,6 +306,7 @@ export function Session(props: {
   const sessionTabs = useSessionTabs()
   const [awayFromBottom, setAwayFromBottom] = createSignal(false)
   const [latestHovered, setLatestHovered] = createSignal(false)
+  const [sidebarEntryHovered, setSidebarEntryHovered] = createSignal(false)
   let ensureAllRowsPending: (() => void)[] | undefined
   createEffect(() => {
     if (!awayFromBottom()) setLatestHovered(false)
@@ -1590,6 +1593,23 @@ export function Session(props: {
                     fg={latestHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.base}
                   >
                     Jump to latest ↓
+                  </text>
+                </box>
+              </Show>
+              <Show when={props.sidebarOpenable}>
+                <box
+                  id="session-show-sidebar"
+                  paddingLeft={1}
+                  onMouseOver={() => setSidebarEntryHovered(true)}
+                  onMouseOut={() => setSidebarEntryHovered(false)}
+                  onMouseUp={() => {
+                    // Ignore the release that finishes a text selection.
+                    if (renderer.getSelection()?.getSelectedText()) return
+                    props.onToggleSidebar()
+                  }}
+                >
+                  <text fg={sidebarEntryHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.base}>
+                    Show sidebar
                   </text>
                 </box>
               </Show>
