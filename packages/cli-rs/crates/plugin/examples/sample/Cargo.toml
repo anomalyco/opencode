@@ -21,6 +21,7 @@ app = []
 still = []
 # Builds that pretend to target another ABI version, for the version tests.
 abi-1-0 = []
+abi-1-4 = []
 minor-newer = []
 major-2 = []
 requires-future = []

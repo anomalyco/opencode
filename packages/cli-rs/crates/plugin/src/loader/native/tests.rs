@@ -163,9 +163,16 @@ fn a_panicking_command_fails_the_plugin() {
 #[test]
 fn versions_follow_the_abi_rules() {
     let load = |library: &[u8], options: Option<&str>| Native.load(&dynamic(&host()), library, options).err();
-    // The current build is 1.4; a 1.0 build has the shorter table and still loads and works on this 1.4 host.
+    // The current build is 1.5; a 1.0 build has the shorter table and still loads and works on this 1.5 host.
     let current = build("");
-    assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 1, minor: 4, version: Some("0.1.0".to_owned()) });
+    assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 1, minor: 5, version: Some("0.1.0".to_owned()) });
+    // A 1.4 build, from before the 1.5 additions, loads and draws as before.
+    let v1_4 = build("abi-1-4");
+    assert_eq!(Native.inspect(&v1_4).unwrap(), Inspected { major: 1, minor: 4, version: Some("0.1.0".to_owned()) });
+    let fresh = crate::loader::tests::host();
+    let registry = active(&fresh, &v1_4);
+    let screen = markdown(&fresh, &registry, "```sample\nfour\n```\n");
+    assert!(screen.contains("SAMPLE v1 FOUR"), "{screen}");
     let old = build("abi-1-0");
     assert_eq!(Native.inspect(&old).unwrap(), Inspected { major: 1, minor: 0, version: None });
     let host = host();
@@ -223,12 +230,12 @@ fn versions_follow_the_abi_rules() {
     // Only a major mismatch, or a plugin that needs a newer host, is refused, with a clear reason.
     assert_eq!(
         load(&build("major-2"), None).unwrap(),
-        "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.4); rebuild the \
+        "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.5); rebuild the \
          plugin against opencode-plugin-abi 1"
     );
     assert_eq!(
         load(&build("requires-future"), None).unwrap(),
-        "plugin needs host ABI 1.99 or newer, this opencode-native has 1.4; update opencode-native"
+        "plugin needs host ABI 1.99 or newer, this opencode-native has 1.5; update opencode-native"
     );
     assert!(load(b"not a library", None).unwrap().starts_with("cannot load the library"));
     // Setup runs on activation, so a setup that fails fails the plugin there.
@@ -1418,7 +1425,7 @@ fn configured(options: &str, directives: &[&str]) -> (opencode_util::temp::TempD
     (root, target, registry, loader)
 }
 
-const MAJOR_2: &str = "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.4); rebuild \
+const MAJOR_2: &str = "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.5); rebuild \
                        the plugin against opencode-plugin-abi 1";
 
 // Expected (carbon-2): an external plugin whose setup fails says so in a toast that opens the plugin manager, as a
@@ -1542,7 +1549,7 @@ fn a_library_is_staged_in_a_directory_only_this_process_owns() {
     fs::write(&claimed, "").unwrap();
     let inspected = Native.inspect(&library);
     fs::remove_file(&claimed).unwrap();
-    assert_eq!(inspected.unwrap().minor, 4);
+    assert_eq!(inspected.unwrap().minor, abi::ABI_MINOR);
     assert!(!claimed.exists());
 }
 
