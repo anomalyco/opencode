@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rm } from "node:fs/promises"
+import { cp, mkdir, readFile, realpath, rm } from "node:fs/promises"
 import path from "node:path"
 import electron, { app, type Session } from "electron"
 import { Schema } from "effect"
@@ -370,9 +370,13 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
 async function applicationIcons(files: readonly string[]) {
   if (process.platform === "win32") return windowsIcons(files)
 
+  // On macOS `getFileIcon` answers by file type, the generic application icon for every bundle. Quick Look draws the
+  // bundle's own icon, but only at its real path: Safari's /Applications entry is a symlink into a system volume.
   const read = await Promise.all(
     files.map(async (file) => {
-      const image = await app.getFileIcon(file, { size: "normal" }).catch(() => undefined)
+      const image = await realpath(file)
+        .then((bundle) => electron.nativeImage.createThumbnailFromPath(bundle, { width: 64, height: 64 }))
+        .catch(() => undefined)
 
       return image && !image.isEmpty() ? [[file, image.toDataURL()] as const] : []
     }),
