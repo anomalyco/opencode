@@ -13,6 +13,8 @@ Driven against TS:
 - `parity/scenarios/OT/table-align.sim.ts` (P-TUI): a reply with a packing list. `Item` is left-aligned, `Qty`
   right-aligned, and `Weight` and `Packed` centred. The four rows with text differ in those three columns, 86 cells.
   The borders, the `Item` column and the text around the table are equal.
+- `parity/scenarios/OT/table-align-mini.pty.ts` (P-PTY): mini replays the same table as borderless columns. The three
+  body rows differ. The header row is equal, because each header is the widest cell of its column.
 - `crates/ui/tests/all/content.rs` `markdown_table_matches_typescript` (P-COMP, `U.4c/markdown-table`, written by
   TS): the corpus table has a `---:` `Size` column. 14 cells differ.
 
