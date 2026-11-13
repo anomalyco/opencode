@@ -466,6 +466,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
               Flag.withDescription("Limit to N most recent sessions (default: 100)"),
               Flag.optional,
             ),
+            noLimit: Flag.Boolean("no-limit").pipe(
+              Flag.withDescription("List every session, following the cursor until exhausted"),
+              Flag.withDefault(false),
+            ),
             format: Flag.Literals("format", ["table", "json"]).pipe(
               Flag.withDescription("Output format"),
               Flag.withDefault("table"),

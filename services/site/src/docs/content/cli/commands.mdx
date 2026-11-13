@@ -126,7 +126,7 @@ Manages sessions.
 $ opencode session list
 ```
 
-Limit the list and print JSON.
+Limit the list and print JSON. If the server caps a page, the command follows the cursor until it has that many sessions.
 
 ```bash
 $ opencode session list --max-count 20 --format json
@@ -136,6 +136,12 @@ List sessions from every project instead of only the current one.
 
 ```bash
 $ opencode session list --all
+```
+
+List every session, following the cursor until there are no more pages. `--no-limit` cannot be combined with `--max-count`.
+
+```bash
+$ opencode session list --no-limit
 ```
 
 Delete a session and its child sessions.
