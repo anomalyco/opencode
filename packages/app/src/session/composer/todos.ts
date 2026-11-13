@@ -9,7 +9,7 @@ export type Todo = {
 
 const statuses = new Set<unknown>(["pending", "in_progress", "completed", "cancelled"])
 
-// In sessions that used `todowrite`, the current list is the input of the latest completed call
+// The experimental `todowrite` tool keeps no server state: the current list is the input of the latest completed call
 // before the revert boundary.
 export function sessionTodos(messages: readonly SessionMessageInfo[], boundary?: string): Todo[] {
   const end = boundary ? messages.findIndex((message) => message.id === boundary) : -1
