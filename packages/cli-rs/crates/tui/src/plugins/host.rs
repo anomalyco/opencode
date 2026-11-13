@@ -280,18 +280,8 @@ impl Host for Tui {
         }
     }
 
-    fn foreground(&self, program: abi::Foreground, reply: opencode_plugin::Reply) {
-        let cwd = program.cwd.clone().unwrap_or_else(|| self.directory.clone());
-        let app = self.app.clone();
-        // As `$EDITOR` runs (`prompt/external_editor.rs`): the UI waits while the program has the terminal.
-        self.app.release_terminal(move |_| {
-            let status = std::process::Command::new(&program.command).args(&program.args).current_dir(&cwd).status();
-            reply(match status {
-                Ok(status) => Ok(serde_json::json!({ "code": status.code() })),
-                Err(error) => Err(format!("{}: {error}", program.command)),
-            });
-            app.request_redraw();
-        });
+    fn foreground(&self, program: abi::Foreground, alive: Box<dyn Fn() -> bool>, reply: opencode_plugin::Reply) {
+        crate::features::foreground::run(self, program, alive, reply);
     }
 
     fn set_title(&self, title: &str) {

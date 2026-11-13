@@ -86,10 +86,8 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     if has(setup, "\"reads\":true") {
         reads::setup(setup)?;
     }
-    // `parity/plugins/title/tui.ts` in TS.
-    if cfg!(feature = "title") {
-        let title = Command { slash: Some("p0btitle".to_owned()), ..command("p0b.title", "Set the title", None) };
-        setup.command(title, |host, _| host.set_title("p0b title"));
+    if cfg!(feature = "pty") {
+        pty(setup);
     }
     if cfg!(feature = "app") {
         setup.slot(Placement::append("app"), |_, _, _| {
@@ -124,6 +122,41 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         ]
     });
     Ok(())
+}
+
+/// The commands of the P-PTY scenarios `P.0b/*`: `/p0btitle` sets the title (`parity/plugins/title/tui.ts` in TS),
+/// `/p0brun <shell command>` runs `sh -c <command>` in the foreground, twice with `/p0btwice`, and toasts how each
+/// ended and sets it as the title.
+fn pty(setup: &mut Setup) {
+    let title = Command { slash: Some("p0btitle".to_owned()), ..command("p0b.title", "Set the title", None) };
+    setup.command(title, |host, _| host.set_title("p0b title"));
+    let asked = Rc::new(std::cell::RefCell::new(Vec::new()));
+    for (name, times) in [("p0brun", 1), ("p0btwice", 2)] {
+        let run = Command {
+            slash: Some(name.to_owned()),
+            arguments: true,
+            ..command(&format!("p0b.{name}"), "Run a program", None)
+        };
+        let asked = asked.clone();
+        setup.command(run, move |host, input| {
+            for _ in 0..times {
+                let args = vec!["-c".to_owned(), input.unwrap_or_default().to_owned()];
+                let program = opencode_plugin_abi::Foreground { command: "sh".to_owned(), args, cwd: None };
+                asked.borrow_mut().push(host.foreground(program));
+            }
+        });
+    }
+    setup.on_reply(move |host, id, result| {
+        if asked.borrow().contains(&id) {
+            let text = match result {
+                Ok(value) => format!("p0b exit {value}"),
+                Err(error) => format!("p0b error {error}"),
+            };
+            // Also as the title: a terminal's title log keeps each reply, where a later toast replaces an earlier one.
+            host.set_title(&text);
+            host.toast(Toast::new(Variant::Info, text));
+        }
+    });
 }
 
 fn command(name: &str, title: &str, slash: Option<&str>) -> Command {

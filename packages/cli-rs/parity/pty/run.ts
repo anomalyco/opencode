@@ -38,7 +38,10 @@ export type PtyStep = {
   // Pushed to the `fallback: "tui"` event stream after the keys.
   emit?: Parameters<FakeServer["emit"]>[0][]
   // Waits until an OSC sequence or the screen matches (a string matches as a substring).
-  until?: { osc?: string | RegExp; screen?: string | RegExp }
+  // `oscCount` waits until that many OSC sequences contain the string.
+  until?: { osc?: string | RegExp; screen?: string | RegExp; oscCount?: [string, number] }
+  // Once `until` holds and the screen settled: the screen must not contain this.
+  absent?: string
   // Waits until the screen has not changed for this long.
   settle?: number
   // Records the screen under this name.
@@ -90,6 +93,8 @@ export type PtyCase = {
   // Compare the request log too; `"writes"` leaves the reads out, for screens whose reads belong to later steps.
   requests?: boolean | "writes"
   tsOnly?: boolean
+  // Runs only with `--sides rs,rs`: Rust behavior the TS client does not share, compared between two Rust runs.
+  rsOnly?: boolean
   // As in P-CLI: writes files into the sandbox before the command runs.
   setup?: (root: string, server: string | undefined) => Promise<void>
 }
@@ -244,7 +249,10 @@ function allowDeviations(value: PtyCase, left: Record<string, unknown>, right: R
     const differing = keys.reduce((count, key) => {
       const a = ours[key] ?? []
       const b = theirs[key] ?? []
-      return count + Array.from({ length: Math.max(a.length, b.length) }, (_, index) => a[index] !== b[index]).filter(Boolean).length
+      return (
+        count +
+        Array.from({ length: Math.max(a.length, b.length) }, (_, index) => a[index] !== b[index]).filter(Boolean).length
+      )
     }, 0)
     const file = step.deviation.file
     if (!existsSync(path.join(parityRoot, "deviations", `${file}.md`))) {
@@ -391,9 +399,17 @@ async function waitFor(step: PtyStep, probe: Probe) {
       osc === undefined ||
       probe.osc().some((entry) => (typeof osc === "string" ? entry.data.includes(osc) : osc.test(entry.data)))
     const want = step.until?.screen
-    const screenOk = want === undefined || (typeof want === "string" ? text.includes(want) : want.test(text))
+    const counted = step.until?.oscCount
+    const countOk =
+      counted === undefined || probe.osc().filter((entry) => entry.data.includes(counted[0])).length >= counted[1]
+    const screenOk =
+      countOk && (want === undefined || (typeof want === "string" ? text.includes(want) : want.test(text)))
     const settled = step.settle === undefined || Date.now() - state.since >= step.settle
-    if (oscOk && screenOk && settled) return
+    if (oscOk && screenOk && settled) {
+      if (step.absent !== undefined && text.includes(step.absent))
+        return `found ${JSON.stringify(step.absent)}\n${text}`
+      return
+    }
     if (exited && !(oscOk && screenOk)) return `exited while waiting for ${describe(step)}\n${text}`
     await Bun.sleep(25)
   }
@@ -419,6 +435,10 @@ if (import.meta.main) {
     const name = nameOf(file)
     if (value.tsOnly && sides.includes("rs")) {
       console.log(`skip ${name} (tsOnly)`)
+      continue
+    }
+    if (value.rsOnly && sides.includes("ts")) {
+      console.log(`skip ${name} (rsOnly: run it with --sides rs,rs)`)
       continue
     }
     const records = []

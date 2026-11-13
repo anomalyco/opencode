@@ -47,8 +47,11 @@ pub(super) struct TestHost {
     /// The handlers of [`Host::on_deltas`], which [`TestHost::emit_deltas`] calls.
     pub deltas: Rc<RefCell<Vec<crate::Deltas>>>,
     /// The replies of the programs run in the foreground, which [`TestHost::exit`] delivers.
-    pub programs: RefCell<Vec<Reply>>,
+    pub programs: RefCell<Vec<(Alive, Reply)>>,
 }
+
+/// Whether a program's plugin is still active.
+pub(super) type Alive = Box<dyn Fn() -> bool>;
 
 /// A fetch's reply.
 pub(super) type Reply = Box<dyn FnOnce(Result<serde_json::Value, String>)>;
@@ -238,9 +241,9 @@ impl Host for TestHost {
         self.verb("clear selection".to_owned());
     }
 
-    fn foreground(&self, program: abi::Foreground, reply: Reply) {
+    fn foreground(&self, program: abi::Foreground, alive: Box<dyn Fn() -> bool>, reply: Reply) {
         self.verb(format!("foreground {} {:?}", program.command, program.args));
-        self.programs.borrow_mut().push(reply);
+        self.programs.borrow_mut().push((alive, reply));
     }
 
     fn set_title(&self, title: &str) {
@@ -283,10 +286,18 @@ impl TestHost {
         self.verbs.borrow_mut().push(verb);
     }
 
-    /// Ends every program run in the foreground so far, with exit code 0.
+    /// Starts every program asked for so far whose plugin is still active, as the TUI does once the turn is done, and
+    /// ends it with exit code 0; one whose plugin is gone gets that error.
     pub fn exit(&self) {
         let programs = std::mem::take(&mut *self.programs.borrow_mut());
-        programs.into_iter().for_each(|reply| reply(Ok(serde_json::json!({ "code": 0 }))));
+        for (alive, reply) in programs {
+            reply(if alive() { Ok(serde_json::json!({ "code": 0 })) } else { Err("gone".to_owned()) });
+        }
+    }
+
+    /// Whether each program asked for so far would start now, its plugin still active.
+    pub fn programs_alive(&self) -> Vec<bool> {
+        self.programs.borrow().iter().map(|(alive, _)| alive()).collect()
     }
 
     /// Answers every fetch sent so far with `{"name": <its path>}`, as the server would.
