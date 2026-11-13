@@ -177,7 +177,7 @@ export function TerminalQuote(props: {
             data-prevent-autofocus
             role="toolbar"
             aria-label={plugin.t("quote.actions")}
-            class="fixed z-50 flex items-center gap-0.5 rounded-[8px] p-0.5 shadow-[var(--v2-elevation-raised)]"
+            class="fixed z-50 flex items-center gap-0.5 rounded-[8px] p-0.5 shadow-[var(--v2-elevation-floating)]"
             style={{
               top: `${view().place.top}px`,
               left: `${view().place.left}px`,
