@@ -1,0 +1,318 @@
+//! The shared fixture of the plugin work (O-124, phase Pt), Rust reader: `parity/machines/plugins.json` holds the
+//! life of a plugin as the user sees it, as states with an expected observation and named actions. The TS reader is
+//! `parity/machines/plugins.test.tsx`. This drives the real TUI through every legal path to the file's depth and its
+//! seeded walks, each on a fresh mount, observing after every action, in OpenTUI's shape
+//! (`packages/rust/crates/opentui/tests/interaction_machines.rs`). Then it drops, repeats or swaps one action inside
+//! two normal cycles; an action a state has no edge for does nothing. A known difference is an exact row of the
+//! file's `xfail`, and a row that stops failing fails the test.
+
+use crate::support::{self, Harness};
+
+use std::cell::Cell;
+use std::collections::BTreeSet;
+use std::rc::Rc;
+use std::sync::Arc;
+use std::time::Duration;
+
+use opencode_plugin::abi;
+use opencode_tui::{Deps, Route};
+use serde_json::Value;
+
+const MACHINES: &str = include_str!("../../../../parity/machines/plugins.json");
+
+thread_local! {
+    /// Life arm: the next setup fails. It outlives an activation, as the TS plugin's module state does.
+    static ARMED: Cell<bool> = const { Cell::new(false) };
+}
+
+/// The Rust twin of `parity/plugins/life/tui.tsx`.
+fn life(setup: &mut abi::Setup) -> Result<(), String> {
+    if ARMED.replace(false) {
+        return Err("life setup armed to throw".to_owned());
+    }
+    let side = Rc::new(Cell::new('A'));
+    let command = |name: &str, title: &str| abi::Command {
+        name: name.to_owned(),
+        title: title.to_owned(),
+        palette: true,
+        ..abi::Command::default()
+    };
+    let flipped = side.clone();
+    setup.command(command("life.flip", "Life flip"), move |_, _| {
+        flipped.set(if flipped.get() == 'A' { 'B' } else { 'A' });
+    });
+    setup.command(command("life.throw", "Life throw"), |_, _| panic!("life command throws"));
+    setup.command(command("life.arm", "Life arm"), |_, _| ARMED.set(true));
+    setup.slot(abi::Placement::append("home.footer"), move |_, _, _| {
+        abi::Render::Show(abi::Node::text([abi::Span::new(format!("life plugin: {}", side.get()))]))
+    });
+    Ok(())
+}
+
+/// The TUI on home with the life plugin, as the user drives it.
+struct Life {
+    harness: Harness,
+}
+
+impl Life {
+    fn open() -> Self {
+        ARMED.set(false);
+        let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+        opencode_tui::plugins::host::add(&harness.tui, abi::Plugin { id: "parity.life", setup: life }.into());
+        let life = Self { harness };
+        life.settle();
+        life
+    }
+
+    fn settle(&self) {
+        let (app, tui) = (&self.harness.app, &self.harness.tui);
+        app.advance(Duration::from_millis(1));
+        while tui.toasts.current().is_some() {
+            tui.toasts.dismiss();
+        }
+        app.advance(Duration::from_millis(1));
+    }
+
+    fn act(&self, action: &str) {
+        match action {
+            "toggle" => {
+                self.manager();
+                self.harness.app.press("enter");
+                self.settle();
+                self.harness.app.press("escape");
+            }
+            "flip" | "throw" | "arm" => {
+                self.palette(&format!("Life {action}"), true);
+            }
+            _ => panic!("unknown action {action}"),
+        }
+        self.settle();
+    }
+
+    /// Searches the palette for `title`, runs it if `run` asks and it is listed, and returns whether it is.
+    fn palette(&self, title: &str, run: bool) -> bool {
+        let app = &self.harness.app;
+        app.press("ctrl+p");
+        self.settle();
+        app.type_text(title);
+        self.settle();
+        // The filter shows the title too, so a listed command shows it twice.
+        let listed = app.text().matches(title).count() >= 2;
+        app.press(if listed && run { "enter" } else { "escape" });
+        self.settle();
+        listed
+    }
+
+    /// Opens the plugin manager filtered to the life plugin.
+    fn manager(&self) {
+        self.harness.tui.keymap.dispatch("plugins.list", None);
+        self.settle();
+        self.harness.app.type_text("life");
+        self.settle();
+    }
+
+    /// `line/palette/row`, as `parity/machines/plugins.json` writes them.
+    fn observe(&self) -> String {
+        let screen = self.harness.app.text();
+        let line = ["A", "B"].into_iter().find(|side| screen.contains(&format!("life plugin: {side}"))).unwrap_or("-");
+        let palette = if self.palette("Life flip", false) { "yes" } else { "no" };
+        self.manager();
+        let screen = self.harness.app.text();
+        self.harness.app.press("escape");
+        self.settle();
+        let row = screen.lines().find(|line| line.contains("parity.life") && !line.contains("Plugin failed"));
+        let row = match row {
+            Some(row) if row.contains("failed") => "failed",
+            Some(row) if row.contains("inactive") => "off",
+            Some(_) => "on",
+            None => "none",
+        };
+        format!("{line}/{palette}/{row}")
+    }
+}
+
+/// The known differences of this client: `state action observation`.
+struct ExpectedFailures {
+    known: BTreeSet<String>,
+    seen: BTreeSet<String>,
+}
+
+impl ExpectedFailures {
+    fn new(rows: &Value) -> Self {
+        let known = rows
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| row[0] == "rust")
+            .map(|row| {
+                // A deviation file, or an open finding of `steps/plugins-pt.md`.
+                let file = row[1].as_str().unwrap();
+                let deviation =
+                    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../parity/deviations/{file}.md"));
+                assert!(
+                    file.starts_with("finding:") || deviation.is_file(),
+                    "xfail row names no deviation file: {file}"
+                );
+                row[2].as_str().unwrap().to_owned()
+            })
+            .collect();
+        Self { known, seen: BTreeSet::new() }
+    }
+
+    fn has(&mut self, key: &str) -> bool {
+        let known = self.known.contains(key);
+        if known {
+            self.seen.insert(key.to_owned());
+        }
+        known
+    }
+
+    fn check(&self) {
+        let unseen: Vec<_> = self.known.difference(&self.seen).collect();
+        assert!(unseen.is_empty(), "expected failure disappeared: {unseen:?}");
+    }
+}
+
+/// Every path from the initial state to `depth` (`walks` false), or the seeded walks, as OpenTUI's reader makes them.
+fn traces<'a>(corpus: &Value, machine: &'a Value, walks: bool) -> Vec<Vec<&'a str>> {
+    fn visit<'a>(machine: &'a Value, state: &str, path: &mut Vec<&'a str>, depth: usize, out: &mut Vec<Vec<&'a str>>) {
+        let edges = machine["states"][state][1].as_object().unwrap();
+        if path.len() == depth || edges.is_empty() {
+            out.push(path.clone());
+            return;
+        }
+        for (action, next) in edges {
+            path.push(action);
+            visit(machine, next.as_str().unwrap(), path, depth, out);
+            path.pop();
+        }
+    }
+    let mut out = Vec::new();
+    let initial = machine["initial"].as_str().unwrap();
+    if !walks {
+        visit(machine, initial, &mut Vec::new(), corpus["depth"].as_u64().unwrap() as usize, &mut out);
+        return out;
+    }
+    for seed in 0..corpus["seeds"].as_u64().unwrap() as u32 {
+        let (mut state, mut n, mut path) = (initial, seed, Vec::new());
+        for _ in 0..corpus["steps"].as_u64().unwrap() {
+            let edges = machine["states"][state][1].as_object().unwrap();
+            n = n.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            let mut keys: Vec<_> = edges.keys().collect();
+            keys.sort_unstable();
+            let action = keys[(n >> 16) as usize % keys.len()].as_str();
+            path.push(action);
+            state = edges[action].as_str().unwrap();
+        }
+        out.push(path);
+    }
+    out
+}
+
+/// Replays `path` on a fresh TUI. An action a state has no edge for does nothing. The first difference that is not
+/// a known row, or `None`; a known row ends the path.
+fn replay(machine: &Value, path: &[&str], known: &mut ExpectedFailures) -> Option<String> {
+    let life = Life::open();
+    let mut state = machine["initial"].as_str().unwrap();
+    for (index, action) in ["mount"].into_iter().chain(path.iter().copied()).enumerate() {
+        let next = match index {
+            0 => state,
+            _ => machine["states"][state][1][action].as_str().unwrap_or(state),
+        };
+        if index > 0 {
+            life.act(action);
+        }
+        let (expected, actual) = (machine["states"][next][0].as_str().unwrap(), life.observe());
+        if actual != expected {
+            if known.has(&format!("{state} {action} {actual}")) {
+                return None;
+            }
+            return Some(format!("{state} + {action}: expected {expected:?}, got {actual:?}"));
+        }
+        state = next;
+    }
+    None
+}
+
+/// Removes chunks, largest first, while the same failure remains.
+fn shrink<T: Clone>(mut path: Vec<T>, mut fails: impl FnMut(&[T]) -> bool) -> Vec<T> {
+    for size in (1..=path.len()).rev() {
+        for start in (0..=path.len().saturating_sub(size)).rev() {
+            if start + size > path.len() {
+                continue;
+            }
+            let mut candidate = path.clone();
+            candidate.drain(start..start + size);
+            if fails(&candidate) {
+                path = candidate;
+            }
+        }
+    }
+    path
+}
+
+/// Two normal cycles, each with one action dropped, repeated, or swapped with the next.
+fn faulted<'a>(cycles: &[Vec<&'a str>]) -> BTreeSet<Vec<&'a str>> {
+    let mut out = BTreeSet::new();
+    for a in cycles {
+        for b in cycles {
+            let normal: Vec<&str> = a.iter().chain(b).copied().collect();
+            for i in 0..normal.len() {
+                let mut dropped = normal.clone();
+                dropped.remove(i);
+                let mut repeated = normal.clone();
+                repeated.insert(i, normal[i]);
+                out.extend([dropped, repeated]);
+                if i + 1 < normal.len() {
+                    let mut swapped = normal.clone();
+                    swapped.swap(i, i + 1);
+                    out.insert(swapped);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Replays `paths` of the life machine, and panics with the shrunk path of the first difference that is not a known
+/// row. Returns the known rows it met.
+fn check(paths: impl IntoIterator<Item = Vec<&'static str>>) -> ExpectedFailures {
+    let machine = &CORPUS["machines"]["life"];
+    let mut known = ExpectedFailures::new(&machine["xfail"]);
+    for path in paths {
+        let Some(failure) = replay(machine, &path, &mut known) else { continue };
+        let path = shrink(path, |candidate| {
+            replay(machine, candidate, &mut ExpectedFailures::new(&machine["xfail"])).as_ref() == Some(&failure)
+        });
+        panic!("life {path:?}: {failure}");
+    }
+    known
+}
+
+static CORPUS: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| serde_json::from_str(MACHINES).unwrap());
+
+// Expected (4.14, the shared fixture): after every legal path to depth 4 the life plugin shows what the file says,
+// and the known rows are exactly the differences.
+#[test]
+fn the_plugin_life_follows_the_shared_fixture() {
+    check(traces(&CORPUS, &CORPUS["machines"]["life"], false)).check();
+}
+
+// Expected: the same along the file's seeded walks.
+#[test]
+fn the_plugin_life_follows_the_shared_fixture_on_walks() {
+    check(traces(&CORPUS, &CORPUS["machines"]["life"], true));
+}
+
+// Expected: the same after one action of two normal cycles is dropped, repeated or swapped. An action a state has no
+// edge for does nothing.
+#[test]
+fn the_plugin_life_recovers_from_a_dropped_repeated_or_swapped_action() {
+    let cycles: Vec<Vec<&str>> = CORPUS["faults"]["life"]["cycles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|cycle| cycle.as_str().unwrap().split(' ').collect())
+        .collect();
+    check(faulted(&cycles));
+}
