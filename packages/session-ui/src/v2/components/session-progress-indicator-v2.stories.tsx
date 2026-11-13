@@ -1,5 +1,5 @@
 import { SessionProgressIndicatorV2 } from "./session-progress-indicator-v2"
-import { createSignal, onCleanup, onMount } from "solid-js"
+import { Index } from "solid-js"
 
 const docs = `### Overview
 Animated 5×5 dot grid loader for in-progress session state.
@@ -35,7 +35,9 @@ export default {
 }
 
 export const Basic = {
-  render: () => <SessionProgressIndicatorV2 />,
+  args: { size: 16 },
+  argTypes: { size: { control: { type: "range", min: 8, max: 48, step: 1 } } },
+  render: (args: { size: number }) => <SessionProgressIndicatorV2 width={args.size} height={args.size} />,
 }
 
 export const Sizes = {
@@ -49,44 +51,36 @@ export const Sizes = {
 }
 
 export const StressTest = {
+  args: { count: 16, size: 16 },
+  argTypes: { count: { control: { type: "range", min: 1, max: 256, step: 1 } } },
   parameters: {
     layout: "fullscreen",
   },
-  render: () => <StressGrid />,
-}
-
-function StressGrid() {
-  const measure = () => ({
-    columns: Math.max(1, Math.floor((window.innerWidth + 4) / 20)),
-    rows: Math.max(1, Math.floor((window.innerHeight + 4) / 20)),
-  })
-
-  const [grid, setGrid] = createSignal(measure())
-  const resize = () => setGrid(measure())
-  onMount(() => window.addEventListener("resize", resize))
-  onCleanup(() => window.removeEventListener("resize", resize))
-
-  return (
+  render: (args: { count: number; size: number }) => (
     <div
       style={{
         display: "grid",
-        width: "100vw",
-        height: "100vh",
-        overflow: "hidden",
+        width: "100%",
+        "max-height": "100%",
+        overflow: "auto",
         gap: "4px",
-        "grid-template-columns": `repeat(${grid().columns}, 16px)`,
-        "grid-template-rows": `repeat(${grid().rows}, 16px)`,
-        "place-content": "center",
+        "grid-template-columns": `repeat(auto-fill, ${args.size}px)`,
+        "justify-content": "center",
       }}
     >
-      {Array.from({ length: grid().columns * grid().rows }, () => (
-        <SessionProgressIndicatorV2 />
-      ))}
+      <Index each={Array.from({ length: Math.max(1, Math.min(256, args.count)) })}>
+        {() => <SessionProgressIndicatorV2 width={args.size} height={args.size} />}
+      </Index>
     </div>
-  )
+  ),
 }
 
 export const OnDark = {
+  ...Basic,
   globals: { theme: "dark" },
-  render: () => <SessionProgressIndicatorV2 />,
+  render: (args: { size: number }) => (
+    <div data-color-scheme="dark" class="rounded-md bg-v2-background-bg-base p-4">
+      <SessionProgressIndicatorV2 width={args.size} height={args.size} />
+    </div>
+  ),
 }

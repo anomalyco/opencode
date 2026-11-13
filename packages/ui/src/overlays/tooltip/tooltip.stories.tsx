@@ -32,15 +32,21 @@ export default {
   },
 }
 
-export const Simple = {
-  render: () => (
+function SimpleTip(props: { forceOpen?: boolean; inactive?: boolean }) {
+  return (
     <div style={{ padding: "80px", display: "flex", "justify-content": "center" }}>
-      <Tooltip value="Tooltip Text">
+      <Tooltip value="Tooltip Text" {...props}>
         <span>Hover me</span>
       </Tooltip>
     </div>
-  ),
+  )
 }
+
+export const Simple = { render: () => <SimpleTip /> }
+
+export const Open = { render: () => <SimpleTip forceOpen /> }
+
+export const Inactive = { render: () => <SimpleTip inactive /> }
 
 export const Appearances = {
   render: () => (
