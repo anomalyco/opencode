@@ -1301,15 +1301,15 @@ impl Registry {
     }
 
     /// The plugin manager's toggle of plugin `id` (TS `plugins.tsx`), `None` when it does not exist. A setup that fails
-    /// as it enables the plugin returns its error for the manager to show, and the plugin is listed as the last load
-    /// left it.
+    /// as it enables the plugin returns its error for the manager to show, and leaves the plugin as it was: enabled or
+    /// not, and listed as the last load left it, so a later reload of a disabled plugin starts nothing.
     pub fn toggle(&self, host: &Rc<dyn Host>, id: &str, active: bool) -> Option<Result<(), String>> {
-        let listed = self.with_plugin(id, |plugin| plugin.failed.clone())?;
+        let before = self.with_plugin(id, |plugin| (plugin.enabled, plugin.failed.clone()))?;
         let error = self.switch(host, id, active)?;
         Some(match error {
             None => Ok(()),
             Some(error) => {
-                self.with_plugin(id, |plugin| plugin.failed = listed);
+                self.with_plugin(id, |plugin| (plugin.enabled, plugin.failed) = before);
                 Err(error)
             }
         })

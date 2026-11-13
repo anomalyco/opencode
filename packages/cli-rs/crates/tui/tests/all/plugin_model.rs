@@ -1094,12 +1094,6 @@ const OPEN: &[(&str, &str, &[Command])] = &[
             Command::Reload(PROMPTING),
         ],
     ),
-    // Review carbon-pt-2: an enable that failed leaves the plugin enabled, so a reload starts it.
-    (
-        "a-failed-enable-leaves-the-plugin-disabled",
-        "lifecycle",
-        &[Command::Toggle, Command::Arm(Fault::Setup), Command::Toggle, Command::Reload(2)],
-    ),
 ];
 
 /// Shrunk traces that failed once and pass now.
@@ -1157,6 +1151,11 @@ const FIXED: &[(&str, &[Command])] = &[
     ("a-failed-slot-replacement-gives-the-slot-back", &[Command::Arm(Fault::Command), Command::Run]),
     // Review bigboi-6: dropping the TUI does not destroy a failed instance, which would run its dispose callback.
     ("a-failed-plugin-is-not-disposed-when-dropped", &[Command::Route, Command::Arm(Fault::Command), Command::Run]),
+    // Review carbon-pt-2: an enable that failed leaves the plugin disabled, so a reload starts nothing.
+    (
+        "a-failed-enable-leaves-the-plugin-disabled",
+        &[Command::Toggle, Command::Arm(Fault::Setup), Command::Toggle, Command::Reload(2)],
+    ),
     // Review bigboi-2, the positive control: a candidate that passes keeps the prompt its setup asked for.
     ("a-passed-candidates-prompt-shows", &[Command::Dialog(Dialog::Panel), Command::Reload(PROMPTING)]),
 ];
