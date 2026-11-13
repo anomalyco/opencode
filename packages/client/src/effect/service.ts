@@ -1,10 +1,10 @@
-import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
+import { Clock, Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import type { DiscoverOptions, EnsureOptions, StopOptions } from "../service.js"
 import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { blockedOnDisk, decide, fallback, headers, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { headers }
@@ -49,7 +49,7 @@ export const incumbent = Effect.fn("service.incumbent")(function* (
 export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOptions = {}) {
   const timing = ensureTiming(options)
   const pool = contenderPool(timing)
-  let timeouts: { readonly info: Info; readonly count: number } | undefined
+  let unresponsive: { readonly info: Info; readonly since: number } | undefined
   let announced = false
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>
     Effect.sync(() => {
@@ -73,20 +73,25 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     const info = registration.info
     const service = registration.service
     if (registration.timedOut && info !== undefined) {
-      timeouts = {
-        info,
-        count: timeouts !== undefined && same(timeouts.info, info) ? timeouts.count + 1 : 1,
-      }
-      if (timeouts.count >= 3) {
+      const now = yield* Clock.currentTimeMillis
+      // A process blocked on disk IO restarts the clock: SIGKILL cannot land until the IO returns, and a
+      // replacement would block on the same disk.
+      unresponsive =
+        unresponsive !== undefined &&
+        same(unresponsive.info, info) &&
+        !(yield* Effect.promise(() => blockedOnDisk(info.pid)))
+          ? unresponsive
+          : { info, since: now }
+      if (now - unresponsive.since >= timing.unresponsiveTimeout) {
         yield* announce("missing")
         yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
         yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
         yield* terminate(info, options, timing)
         pool.evict(info.pid)
         pool.recruitNow()
-        timeouts = undefined
+        unresponsive = undefined
       }
-    } else timeouts = undefined
+    } else unresponsive = undefined
     if (service !== undefined) {
       pool.serviceAnswered()
       const decision = decide(service, options)
@@ -107,7 +112,8 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 
     const failed = pool.reap()
     if (failed !== undefined) return yield* Effect.fail(failed)
-    if (pool.shouldRecruit(info !== undefined)) {
+    // A timed-out probe reached an owner that still holds the service port, so a contender could not bind it.
+    if (!registration.timedOut && pool.shouldRecruit(info !== undefined)) {
       yield* announce("missing")
       pool.add(yield* spawnContender)
     }

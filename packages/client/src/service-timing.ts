@@ -1,6 +1,7 @@
 export type EnsureTiming = {
   readonly pollInterval: number
   readonly requestTimeout: number
+  readonly unresponsiveTimeout: number
   readonly spawnDelay: number
   readonly maxSpawnDelay: number
   readonly promiseTimeout: number
@@ -13,9 +14,12 @@ const timings = new WeakMap<object, EnsureTiming>()
 // A freshly spawned service registers in ~250 ms, so the poll cadence is a large share of the
 // time a client waits for it. Probes are sequential, so the wait between them only matters while
 // the connection is refused; both variants give up after promiseTimeout of wall-clock time.
+// A registered service that stops answering is replaced only after unresponsiveTimeout of silence:
+// on a saturated disk a healthy server can block for many seconds, and killing it gains nothing.
 export const defaultEnsureTiming: EnsureTiming = {
   pollInterval: 25,
   requestTimeout: 2_000,
+  unresponsiveTimeout: 30_000,
   spawnDelay: 5_000,
   maxSpawnDelay: 30_000,
   promiseTimeout: 120_000,

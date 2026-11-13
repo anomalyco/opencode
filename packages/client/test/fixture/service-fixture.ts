@@ -46,6 +46,17 @@ export async function serviceFixture() {
       }
       throw new Error(`Timed out waiting for ${count} contenders`)
     },
+    async waitForRequests(count: number) {
+      const deadline = Date.now() + 3_000
+      while (Date.now() < deadline) {
+        const requests = await Bun.file(registration + ".requests")
+          .text()
+          .catch(() => "")
+        if (requests.trim().split("\n").filter(Boolean).length >= count) return
+        await Bun.sleep(5)
+      }
+      throw new Error(`Timed out waiting for ${count} health requests`)
+    },
     async release(pid: number, action: "fail" | "hang" | "ready") {
       const file = registration + `.release-${pid}`
       await Bun.write(file + ".tmp", action)

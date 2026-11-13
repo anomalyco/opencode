@@ -56,6 +56,28 @@ for (const client of clients) {
     })
   }
 
+  test(`${client.name} reconnect waits out an owner that stops answering for a while`, async () => {
+    await using fixture = await serviceFixture()
+    const owner = fixture.spawn("stalling")
+    await fixture.waitForFile()
+    const original = await Bun.file(fixture.registration).json()
+    await Bun.write(fixture.registration + ".stall", "")
+    const reconnect = client.ensure({
+      file: fixture.registration,
+      version: "test",
+      command: fixture.command("record-start"),
+    })
+
+    // Outlast the three timed-out probes that used to get a live owner killed.
+    await fixture.waitForRequests(4)
+    await Bun.file(fixture.registration + ".stall").delete()
+
+    expect((await reconnect).url).toBe(original.url)
+    expect(owner.exitCode).toBe(null)
+    expect(await fixture.signal()).toBeUndefined()
+    expect(await Bun.file(fixture.registration + ".started").exists()).toBe(false)
+  })
+
   test(`${client.name} can explicitly replace a protocol-incompatible owner with a nonmatching version`, async () => {
     await using fixture = await serviceFixture()
     const owner = fixture.spawn("protocol")

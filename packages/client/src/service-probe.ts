@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { DiscoverOptions, Endpoint, Info } from "./service.js"
@@ -87,6 +88,16 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
     } satisfies LocalService,
     timedOut: false,
   }
+}
+
+/**
+ * Whether `pid` is blocked in uninterruptible IO (Linux state `D`). Such a process is busy, not hung: no
+ * signal, not even SIGKILL, lands before its IO returns. Always false where `/proc` is missing.
+ */
+export async function blockedOnDisk(pid: number) {
+  const stat = await readFile(`/proc/${pid}/stat`, "utf8").catch(() => undefined)
+  // The state follows the command name, which is in parentheses and may contain ") " itself.
+  return stat?.split(") ").at(-1)?.startsWith("D") === true
 }
 
 /** Create HTTP authentication headers for a service endpoint. */

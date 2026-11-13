@@ -75,6 +75,11 @@ const server = Bun.serve({
       return new Response(null, { status: 404 })
     requests += 1
     if (mode === "starting") await writeFile(registration + ".status-request", "")
+    // A live owner that stops answering while the test holds `.stall`, then carries on, like one blocked on a slow disk.
+    if (mode === "stalling") {
+      await appendFile(registration + ".requests", process.pid + "\n")
+      while (await Bun.file(registration + ".stall").exists()) await Bun.sleep(5)
+    }
     if (mode === "hanging" || controlled === "hang") {
       await appendFile(registration + ".requests", process.pid + "\n")
       return new Promise<Response>(() => {})

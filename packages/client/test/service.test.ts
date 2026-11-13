@@ -192,7 +192,8 @@ test("evicts an unresponsive registered service before starting its replacement"
   const replacement = await Bun.file(registration).json()
   fixture.track(replacement.pid)
 
-  expect((await Bun.file(registration + ".requests").text()).trim().split("\n")).toHaveLength(3)
+  // It is replaced only after a silence window, not after the first few timed-out probes.
+  expect((await Bun.file(registration + ".requests").text()).trim().split("\n").length).toBeGreaterThan(3)
   expect(await existing.exited).toBe(stoppedExitCode)
   expect(replacement.pid).not.toBe(original.pid)
   expect(endpoint.url).toBe(replacement.url)
