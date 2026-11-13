@@ -141,6 +141,44 @@ describe("Media", () => {
     }),
   )
 
+  it.effect("requires a complete fixed header and aligned box size", () =>
+    Effect.sync(() => {
+      expect(Media.detectMediaType(Buffer.from("someftyp text here"))).toBeUndefined()
+      const box = Buffer.from("\0\0\0\x10ftypisom\0\0\0\0")
+      expect(Media.detectMediaType(box.subarray(0, 15))).toBeUndefined()
+      for (const size of [1, 12, 17, 0x74787874]) {
+        box.writeUInt32BE(size)
+        expect(Media.detectMediaType(box)).toBeUndefined()
+      }
+    }),
+  )
+
+  it.effect("reads extended sizes and only whole compatible brands within the box and sample", () =>
+    Effect.sync(() => {
+      const box = Buffer.from("prefix\0\0\0\x01ftyp\0\0\0\0\0\0\0\x1cmif1avisavif").subarray(6)
+      expect(Media.detectMediaType(box)).toBe("image/avif")
+      expect(Media.detectMediaType(box.subarray(0, 27))).toBe("image/heic")
+      box.writeBigUInt64BE(24n, 8)
+      expect(Media.detectMediaType(box)).toBe("image/heic")
+      box.writeBigUInt64BE(0n, 8)
+      expect(Media.detectMediaType(box)).toBeUndefined()
+    }),
+  )
+
+  it.effect("bounds the brand search even for a box extending to EOF", () =>
+    Effect.sync(() => {
+      const box = Buffer.alloc(1024)
+      box.write("ftypmsf1", 4)
+      box.write("avis", 256)
+      expect(Media.detectMediaType(box)).toBe("image/heic")
+      box.write("avis", 252)
+      expect(Media.detectMediaType(box)).toBe("image/avif")
+      box.writeUInt32BE(box.length)
+      box.write("avis", 44)
+      expect(Media.make(box.toString("base64")).mediaType).toBe("image/avif")
+    }),
+  )
+
   it.effect("materializes url assets through the request executor once", () =>
     Effect.gen(function* () {
       const requests = yield* Ref.make<Array<HttpClientRequest.HttpClientRequest>>([])
