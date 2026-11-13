@@ -22,6 +22,7 @@ export function createCookieMirror(input: { profile: Session; other: Session }) 
       path: cookie.path,
       name: cookie.name,
     })
+
     const match = found.find((item) => (item.domain ?? "") === cookie.host && (item.path ?? "/") === cookie.path)
 
     return match ? fromElectron(match) : undefined

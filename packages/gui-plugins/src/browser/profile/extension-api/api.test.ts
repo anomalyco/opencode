@@ -10,7 +10,7 @@ const namespaces: ApiNamespace[] = [
   { path: "browserAction", manifest: 2, methods: ["setPopup"] },
 ]
 
-const v3 = apiManifest({ manifest_version: 3, permissions: ["storage"] })
+const v3 = apiManifest({ manifest: { manifest_version: 3, permissions: ["storage"] } })
 
 // The trust check before every chrome.* call and subscription: which extension may reach which namespace.
 test.each([
@@ -21,7 +21,7 @@ test.each([
   { name: "browserAction.setPopup", manifest: v3, expected: false, why: "browserAction is Manifest V2's" },
   {
     name: "action.setPopup",
-    manifest: apiManifest({ manifest_version: 2 }),
+    manifest: apiManifest({ manifest: { manifest_version: 2 } }),
     expected: false,
     why: "action is Manifest V3's",
   },
@@ -31,11 +31,11 @@ test.each([
   { name: "unknown.method", manifest: v3, expected: false, why: "an unknown namespace is refused" },
   {
     name: "cookies.get",
-    manifest: apiManifest({ permissions: [{ not: "a string" }, "cookies"] }),
+    manifest: apiManifest({ manifest: { permissions: [{ not: "a string" }, "cookies"] } }),
     expected: true,
     why: "unusual entries do not hide the others",
   },
-  { name: "storage.sync.get", manifest: apiManifest("not a manifest"), expected: false, why: "no manifest, no permission" },
+  { name: "storage.sync.get", manifest: apiManifest({ manifest: "not a manifest" }), expected: false, why: "no manifest, no permission" },
 ])("$name: $expected, as $why", (row) => {
   expect(allowed(row.manifest, namespaceOf(namespaces, row.name))).toBe(row.expected)
 })

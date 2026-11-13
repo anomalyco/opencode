@@ -159,6 +159,12 @@ export function closestIcon<T>(sizes: Readonly<Record<string, T>>) {
     .toSorted((a, b) => Math.abs(Number(a[0]) - 32) - Math.abs(Number(b[0]) - 32))[0]?.[1]
 }
 
+/** An icon file's type by extension; any other is read as PNG. */
+const ICON_TYPES = [
+  [".svg", "image/svg+xml"],
+  [".webp", "image/webp"],
+] as const
+
 /** The most an icon file may hold; a larger one is not shown. */
 const ICON_BYTES = 65_536
 
@@ -175,7 +181,7 @@ export async function extensionIcon(directory: string, manifest: Manifest) {
   const file = closestIcon(manifest.icons ?? {})
   const data = file ? await readIcon(directory, file) : undefined
   const extension = file ? path.extname(file).toLowerCase() : ""
-  const mime = extension === ".svg" ? "image/svg+xml" : extension === ".webp" ? "image/webp" : "image/png"
+  const mime = ICON_TYPES.find((entry) => entry[0] === extension)?.[1] ?? "image/png"
 
   return data ? `data:${mime};base64,${data.toString("base64")}` : undefined
 }
@@ -259,8 +265,7 @@ function protobufFields(data: Uint8Array) {
   while (cursor.offset < data.byteLength) {
     const tag = varint(data, cursor)
     const wire = tag === undefined ? -1 : tag % 8
-    const skipped = wire === 0 ? (varint(data, cursor) === undefined ? undefined : 0) : undefined
-    const length = wire === 2 ? varint(data, cursor) : wire === 0 ? skipped : wire === 1 ? 8 : wire === 5 ? 4 : undefined
+    const length = fieldLength(wire, data, cursor)
 
     if (tag === undefined || length === undefined || cursor.offset + length > data.byteLength) return undefined
 
@@ -269,6 +274,20 @@ function protobufFields(data: Uint8Array) {
   }
 
   return fields
+}
+
+/**
+ * How many bytes a field of this wire type has after its tag: a length-delimited field's length, which it reads, 0 for
+ * a varint, which it skips, and the fixed sizes; undefined for a wire type CRX headers never use or a varint cut short.
+ */
+function fieldLength(wire: number, data: Uint8Array, cursor: { offset: number }) {
+  if (wire === 2) return varint(data, cursor)
+
+  if (wire === 0) return varint(data, cursor) === undefined ? undefined : 0
+
+  if (wire === 1) return 8
+
+  return wire === 5 ? 4 : undefined
 }
 
 /** A protobuf varint at the cursor, which it moves past; undefined when it runs off the end or past 2^53. */

@@ -119,6 +119,7 @@ export function createProfileJobs(
     },
     (_value, signal) => client()?.sources({ signal }) ?? Promise.resolve([]),
   )
+
   const [cookies, setCookies] = createSignal(0)
 
   // Main says when browsing changed the cookies; the SDK removes the listener when the Ipc's generation ends.

@@ -16,27 +16,27 @@ export function parseBinaryCookies(data: Uint8Array): CookieRead | undefined {
   const count = view.getUint32(4)
 
   if (8 + count * 4 > data.byteLength) return undefined
-  const result: { cookies: ImportedCookie[]; protected: number; failed: number } = { cookies: [], protected: 0, failed: 0 }
-  const cursor = { start: 8 + count * 4 }
+  const cookies: ImportedCookie[] = []
+  const cursor = { start: 8 + count * 4, failed: 0 }
 
   Array.from({ length: count }, (_, index) => view.getUint32(8 + index * 4)).forEach((size) => {
     const start = cursor.start
     cursor.start += size
     const length = Math.min(size, data.byteLength - start)
     const page = length >= 8 ? new DataView(data.buffer, data.byteOffset + start, length) : undefined
-    const cookies = page ? page.getUint32(4, true) : 0
+    const records = page ? page.getUint32(4, true) : 0
 
-    if (!page || 8 + cookies * 4 > page.byteLength) return void result.failed++
+    if (!page || 8 + records * 4 > page.byteLength) return void cursor.failed++
 
-    Array.from({ length: cookies }, (_, item) => page.getUint32(8 + item * 4, true)).forEach((offset) => {
+    Array.from({ length: records }, (_, item) => page.getUint32(8 + item * 4, true)).forEach((offset) => {
       const cookie = readCookie(page, offset)
 
-      if (cookie) return void result.cookies.push(cookie)
-      result.failed++
+      if (cookie) return void cookies.push(cookie)
+      cursor.failed++
     })
   })
 
-  return result
+  return { cookies, protected: 0, failed: cursor.failed }
 }
 
 function readCookie(page: DataView, offset: number): ImportedCookie | undefined {

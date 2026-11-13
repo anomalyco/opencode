@@ -36,8 +36,8 @@ export type ApiManifest = {
   readonly commands: readonly { readonly name: string; readonly description: string }[]
 }
 
-export function apiManifest(manifest: unknown): ApiManifest {
-  const fields = Option.getOrUndefined(decode(manifest))
+export function apiManifest(extension: Pick<Extension, "manifest">): ApiManifest {
+  const fields = Option.getOrUndefined(decode(extension.manifest))
   const permissions = (fields?.permissions ?? []).filter(Schema.is(Schema.String))
   const hosts = (fields?.host_permissions ?? []).filter(Schema.is(Schema.String))
 
@@ -65,7 +65,7 @@ export function createManifests(): Manifests {
     const cached = known.get(key)
 
     if (cached) return cached
-    const value = apiManifest(extension.manifest)
+    const value = apiManifest(extension)
     known.set(key, value)
 
     return value

@@ -445,9 +445,11 @@ export async function createBrowserProfile(input: {
       }
 
       const target = storeTarget(request.url)
+
       const crx = target
         ? await download(session, storeDownloadURL(target, process.versions.chrome ?? "140.0.0.0"))
         : undefined
+
       const parsed = crx ? parseCrx(crx) : undefined
 
       // The developer's key names the package: one that names another extension is not the one the user asked for.

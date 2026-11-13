@@ -112,6 +112,7 @@ export async function readChromiumCookies(database: string, key: ChromiumKey): P
 
         return result
       }
+
       const decrypted = rowValue(row, key)
 
       if ("error" in decrypted) {

@@ -44,6 +44,9 @@ const Tab = Schema.Struct({ tabId: optional(Schema.Number) })
 
 const Color = Schema.Union([Schema.String, Schema.Array(Schema.Number)])
 
+/** Where each byte of a BGRA pixel reads from in RGBA: red and blue trade places. */
+const SWAP = [2, 0, -2, 0] as const
+
 /** A toolbar icon's bitmap; Chrome draws them at most 38px, so 128 is generous. */
 const Side = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 128 }))
 
@@ -123,7 +126,7 @@ export function createActions(input: {
 
       const data = Buffer.from(
         source.map((byte, index) =>
-          index % 4 === 0 ? (source[index + 2] ?? 0) : index % 4 === 2 ? (source[index - 2] ?? 0) : byte,
+          source[index + (SWAP[index % 4] ?? 0)] ?? byte,
         ),
       )
 

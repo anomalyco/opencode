@@ -86,6 +86,7 @@ export async function createExtensionHost(input: {
     if (!extension || !allowed(input.manifest(extension), namespaceOf(namespaces, name))) return
     const byExtension = subscribers.get(name) ?? new Map<string, Subscriber[]>()
     const list = byExtension.get(extension.id) ?? []
+
     const same = list.some((item) =>
       item.kind === "worker" || subscriber.kind === "worker"
         ? item.kind === subscriber.kind

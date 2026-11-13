@@ -22,6 +22,12 @@ function sameCookie(a: ImportedCookie | undefined, b: ImportedCookie | undefined
   )
 }
 
+/** What reconciling one key does: the value both stores hold afterwards, and the write that gets them there. */
+export type CookieStep = {
+  readonly base: ImportedCookie | undefined
+  readonly write?: { readonly to: LinkSide; readonly cookie?: ImportedCookie }
+}
+
 /**
  * One key's next step, from what each store holds now and what both last agreed on (`base`). It compares state and
  * never predicts events, so a write that changes nothing, fails, or echoes back costs one comparison and loses no
@@ -38,7 +44,7 @@ export function reconcileCookie(input: {
   readonly profile: ImportedCookie | undefined
   readonly other: ImportedCookie | undefined
   readonly changed: LinkSide
-}): { readonly base: ImportedCookie | undefined; readonly write?: { readonly to: LinkSide; readonly cookie?: ImportedCookie } } {
+}): CookieStep {
   if (sameCookie(input.profile, input.other)) return { base: input.profile }
   const profileMoved = !sameCookie(input.profile, input.base)
   const otherMoved = !sameCookie(input.other, input.base)

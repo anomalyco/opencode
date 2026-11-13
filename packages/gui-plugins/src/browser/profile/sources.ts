@@ -478,12 +478,14 @@ function windowsPowerShell() {
 function run(command: string, args: readonly string[], input?: string) {
   return new Promise<string>((resolve, reject) => {
     if (!path.isAbsolute(command)) return reject(new Error(`${command} is not an absolute path`))
+
     const child = spawn(command, args, {
       cwd: path.dirname(command),
       shell: false,
       windowsHide: true,
       stdio: ["pipe", "pipe", "ignore"],
     })
+
     const chunks: Buffer[] = []
     const timer = setTimeout(() => child.kill(), 60_000)
     child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk))

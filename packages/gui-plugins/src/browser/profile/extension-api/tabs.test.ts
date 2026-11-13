@@ -43,6 +43,7 @@ test("url and title filters reveal nothing about tabs the extension may not read
   const tabs = [tab({ id: 2, url: "https://mail.example.com/inbox", title: "Inbox (3)" }), tab({ id: 3, url: "https://docs.test/" })]
   const windows = { current: 1, lastFocused: 1 }
   const none: Parameters<typeof answerQuery>[3] = { permissions: [], hosts: [] }
+
   const ids = (query: Parameters<typeof matchesQuery>[1], access = none) =>
     answerQuery(tabs, query, windows, access).map((item) => item.id)
 
@@ -59,9 +60,9 @@ test("url and title filters reveal nothing about tabs the extension may not read
 })
 
 test("Manifest V2 host patterns among permissions count as hosts", () => {
-  expect(apiManifest({ permissions: ["tabs", "<all_urls>", 7], host_permissions: ["https://a.com/*"] })).toMatchObject({
+  expect(apiManifest({ manifest: { permissions: ["tabs", "<all_urls>", 7], host_permissions: ["https://a.com/*"] } })).toMatchObject({
     permissions: ["tabs", "<all_urls>"],
     hosts: ["https://a.com/*", "<all_urls>"],
   })
-  expect(apiManifest("not a manifest")).toMatchObject({ permissions: [], hosts: [], version: undefined })
+  expect(apiManifest({ manifest: "not a manifest" })).toMatchObject({ permissions: [], hosts: [], version: undefined })
 })

@@ -36,7 +36,7 @@ test("choosing a checkbox flips it, and choosing a radio item turns off the othe
     { id: "b", type: "radio" as const },
   ].reduce(addItem, [])
 
-  const checked = (list: readonly MenuItem[]) => list.filter((item) => item.checked).map((item) => item.id)
+  const checked = (list: readonly MenuItem[]) => list.flatMap((item) => (item.checked ? [item.id] : []))
 
   const choose = (id: string) => {
     const item = items.find((entry) => entry.id === id)
