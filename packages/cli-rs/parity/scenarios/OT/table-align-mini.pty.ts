@@ -1,7 +1,7 @@
 // OT2112 (parity/deviations/OT2112-table-alignment.md): mini replays the packing list of `table-align.sim.ts`, alone,
 // as borderless columns. TS left-aligns every column; Rust right-aligns `Qty` and centres `Weight` and `Packed`, on the
-// body rows (each header is its column's widest cell, so that row is equal). The table is the whole reply, so the
-// blank rows of `M06-mini-table-gap` do not occur.
+// body rows (each header is its column's widest cell, so that row is equal). `M.1/table-gap` checks the rows around a
+// table.
 import { definePty } from "../../pty/run"
 import { assistant, config, server, statusMask, user } from "../M.1/fixture"
 

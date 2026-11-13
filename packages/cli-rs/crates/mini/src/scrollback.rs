@@ -661,8 +661,13 @@ impl Writer {
     }
 
     /// Commits the rows that can no longer change. Text and code keep their last row open while streaming. The
-    /// Markdown widget does not expose its block positions, so a streaming Markdown entry renders only its complete
-    /// blocks (up to the last blank line outside a fence) and commits those.
+    /// Markdown widget does not expose its block positions, so a streaming Markdown entry renders only the blocks Core
+    /// calls stable ([`stable_prefix`]) and commits those.
+    ///
+    /// A commit before the end leaves its last row open, and the next commit continues it, as in TS. A blank row at
+    /// that boundary is lost: TS's last row there is the empty gap, which the next block's first row fills; here the
+    /// next commit's first row is the gap, which adds nothing to the open row. The two clients lose the same row because
+    /// they place the boundary at the same block.
     fn flush_active(&mut self, done: bool, trailing_newline: bool) -> Result<bool> {
         let Some(active) = self.active.as_mut() else { return Ok(false) };
         let target = match &active.widget {
@@ -849,29 +854,116 @@ fn static_body(commit: &Commit, body: Body, spaced: u32) -> Body {
     }
 }
 
-/// The complete Markdown blocks of streaming `content`: everything up to and including its last blank line outside a
-/// fence. The blank line closes the blocks, so the engine renders them final instead of holding the last line.
+/// The Markdown blocks of streaming `content` that Core 0.8.4 calls stable: all but the last two of marked's tokens,
+/// up to the start of the first block held back. Marked makes each run of blank lines outside a fence a `space` token,
+/// except after a heading, a table, indented code, a link definition or an HTML block, which take the run into their
+/// own token, and inside a loose list, which stays one token. The prefix ends after a blank line, which closes its
+/// blocks, so the engine renders them final instead of holding the last line.
 pub fn stable_prefix(content: &str) -> &str {
+    // Each token's start and kind, as marked would split the text so far.
+    let mut tokens: Vec<(usize, Token)> = Vec::new();
     let mut fence: Option<&str> = None;
-    let mut end = 0;
     let mut offset = 0;
     let mut previous_blank = false;
     for line in content.split_inclusive('\n') {
         let trimmed = line.trim_start();
+        let blank = fence.is_none() && line.trim().is_empty() && line.ends_with('\n');
         let marker = ["```", "~~~"].into_iter().find(|marker| trimmed.starts_with(marker));
         match (fence, marker) {
             (None, Some(marker)) => fence = Some(marker),
             (Some(open), Some(marker)) if open == marker => fence = None,
             _ => {}
         }
-        let blank = line.trim().is_empty() && line.ends_with('\n');
-        if blank && fence.is_none() && !previous_blank && offset > 0 {
-            end = offset + line.len();
-        }
-        previous_blank = blank;
+        let block_start = offset;
         offset += line.len();
+        let last = tokens.last().copied();
+        let after_blank = std::mem::replace(&mut previous_blank, blank);
+        if blank {
+            // A blank run after a block that takes it, or inside a run, adds no token.
+            match last {
+                Some((_, Token::Space)) => {}
+                Some((_, Token::Block)) if after_blank => {}
+                Some((start, Token::Block)) if absorbs(&content[start..block_start]) => {}
+                _ => tokens.push((block_start, Token::Space)),
+            }
+            continue;
+        }
+        match last {
+            Some((_, Token::Block)) if !after_blank => {}
+            // A list item or an indented line after a blank run continues a list, which marked keeps as one token.
+            Some((_, Token::Space))
+                if tokens.len() >= 2
+                    && list_item(&content[tokens[tokens.len() - 2].0..])
+                    && (list_item(line) || line.starts_with([' ', '\t'])) =>
+            {
+                tokens.pop();
+            }
+            _ => tokens.push((block_start, Token::Block)),
+        }
     }
+    if tokens.len() <= 2 {
+        return "";
+    }
+    let held = &tokens[tokens.len() - 2..];
+    let end = held.iter().find(|(_, kind)| *kind == Token::Block).map_or(content.len(), |&(start, _)| start);
     &content[..end]
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Token {
+    Block,
+    Space,
+}
+
+/// Whether marked's token for the block `text` (lines up to a blank run) takes the blank lines after it: an ATX or
+/// setext heading, a table, indented code, a link definition or an HTML block.
+fn absorbs(text: &str) -> bool {
+    let lines: Vec<&str> = text.lines().collect();
+    let Some(&first) = lines.first() else { return false };
+    let last = lines[lines.len() - 1];
+    let indented = |line: &str| line.len() - line.trim_start_matches(' ').len() <= 3;
+    let atx = indented(last) && {
+        let hashes = last.trim_start().chars().take_while(|&c| c == '#').count();
+        (1..=6).contains(&hashes) && last.trim_start()[hashes..].chars().next().is_none_or(|c| c == ' ' || c == '\t')
+    };
+    let setext = lines.len() >= 2
+        && indented(last)
+        && !last.trim().is_empty()
+        && (last.trim().chars().all(|c| c == '=') || last.trim().chars().all(|c| c == '-'));
+    let table = lines.len() >= 2 && first.contains('|') && delimiter_row(lines[1]);
+    let code = first.starts_with("    ") || first.starts_with('\t');
+    let definition = indented(first) && first.trim_start().starts_with('[') && first.contains("]:");
+    let html = indented(first) && {
+        let tag = first.trim_start().strip_prefix('<').unwrap_or("");
+        tag.starts_with("!--") || tag.starts_with('/') || tag.starts_with(|c: char| c.is_ascii_alphabetic())
+    };
+    atx || setext || table || code || definition || html
+}
+
+/// A GFM table's delimiter row, such as `| --- | :-: |`.
+fn delimiter_row(line: &str) -> bool {
+    let cells = line.trim().trim_matches('|');
+    !cells.is_empty()
+        && cells.split('|').all(|cell| {
+            let cell = cell.trim();
+            let dashes = cell.trim_start_matches(':').trim_end_matches(':');
+            !dashes.is_empty() && dashes.chars().all(|c| c == '-')
+        })
+}
+
+/// Whether `line` starts with a list marker: `-`, `+`, `*`, or a number and `.` or `)`, then a space, a tab or the end.
+fn list_item(line: &str) -> bool {
+    let line = line.trim_start_matches(' ');
+    let marker = if line.starts_with(['-', '+', '*']) {
+        1
+    } else {
+        let digits = line.chars().take_while(char::is_ascii_digit).count();
+        if !(1..=9).contains(&digits) || !line[digits..].starts_with(['.', ')']) {
+            return false;
+        }
+        digits + 1
+    };
+    line[marker..].chars().next().is_none_or(|c| c == ' ' || c == '\t' || c == '\n')
 }
 
 #[cfg(test)]
@@ -928,13 +1020,32 @@ mod tests {
     }
 
     #[test]
-    fn the_stable_prefix_ends_at_the_last_blank_line_outside_a_fence() {
-        assert_eq!(stable_prefix("one line"), "");
-        assert_eq!(stable_prefix("a\n\nb"), "a\n\n");
-        assert_eq!(stable_prefix("a\n\nb\n\n\nc"), "a\n\nb\n\n");
-        assert_eq!(stable_prefix("a\n\n```\nx\n\ny"), "a\n\n");
-        assert_eq!(stable_prefix("a\n\n```\nx\n\n```\n\nz"), "a\n\n```\nx\n\n```\n\n");
-        assert_eq!(stable_prefix("\n\nlead"), "");
+    fn the_stable_prefix_holds_back_two_of_markeds_tokens() {
+        // Marked's tokens for each text (Core 0.8.4's lexer), then what Core's streaming Markdown calls stable.
+        for (content, prefix) in [
+            ("one line", ""),
+            ("\n\nlead", ""),
+            // paragraph, space, paragraph
+            ("a\n\nb", "a\n\n"),
+            ("a\n\nb\n\n\nc", "a\n\nb\n\n\n"),
+            // paragraph, space, an open fence with its blank line
+            ("a\n\n```\nx\n\ny", "a\n\n"),
+            ("a\n\n```\nx\n\n```\n\nz", "a\n\n```\nx\n\n```\n\n"),
+            // paragraph, space, table with its blank line, paragraph
+            ("Packing list:\n\n| Item | Qty |\n| --- | --- |\n| Tent | 1 |\n\nDone.", "Packing list:\n\n"),
+            ("A:\n\n# Head\n\nDone.", "A:\n\n"),
+            ("A:\n\nTitle\n=====\n\nDone.", "A:\n\n"),
+            ("A:\n\n    indented\n\nDone.", "A:\n\n"),
+            ("A:\n\n[x]: http://x\n\nDone.", "A:\n\n"),
+            ("A:\n\n<div>\nx\n</div>\n\nDone.", "A:\n\n"),
+            // A rule keeps its own space token.
+            ("A:\n\n---\n\nDone.", "A:\n\n---\n\n"),
+            // A loose list is one token.
+            ("Intro:\n\n1. a\n\n2. b\n\nDone.", "Intro:\n\n1. a\n\n2. b\n\n"),
+            ("Intro:\n\n1. a\n\n2. b", "Intro:\n\n"),
+        ] {
+            assert_eq!(stable_prefix(content), prefix, "{content:?}");
+        }
     }
 
     /// The rows a streaming entry commits are final: its stable prefix renders as the finished blocks do, so the
@@ -952,8 +1063,12 @@ mod tests {
             app.render().text()
         };
         for blocks in ["Para\n---", "x\n***", "```\ncode\n```", "| a |\n| - |\n| 1 |"] {
-            let content = format!("{blocks}\n\nnext");
-            assert_eq!(render(stable_prefix(&content), true), render(blocks, false), "{content:?}");
+            let content = format!("{blocks}\n\nnext\n\nmore");
+            assert_eq!(
+                render(stable_prefix(&content), true),
+                render(&format!("{blocks}\n\nnext"), false),
+                "{content:?}"
+            );
         }
     }
 
