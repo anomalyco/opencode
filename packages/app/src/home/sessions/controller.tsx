@@ -196,6 +196,13 @@ export function createHomeSessionsController(home: HomeController) {
     )
   }
 
+  const refreshTimer = setInterval(() => {
+    const target = untrack(homeSessionsTarget)
+
+    if (target?.connection === "connected") dispatchLoad({ type: "refresh", server: target.server })
+  }, HOME_SESSIONS_STALE_MS)
+  onCleanup(() => clearInterval(refreshTimer))
+
   createEffect(() => {
     const current = focus()
     untrack(() => dispatchLoad({ type: "context.changed", target: homeSessionsTarget(current) }))
