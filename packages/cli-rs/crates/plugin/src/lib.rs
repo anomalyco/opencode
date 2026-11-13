@@ -4,6 +4,7 @@
 //! plugin draws into widgets. The TUI implements [`Host`] once, and that is the only code here that sees it.
 
 mod activation;
+pub mod contain;
 pub mod loader;
 pub mod node;
 pub mod reconcile;
@@ -84,6 +85,14 @@ pub trait Host: 'static {
         self.toast(
             &abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.")
                 .title(format!("Plugin failed: {id}")),
+        );
+    }
+    /// Says that plugin `id` became slow (synthesis 4.4), once a session: `cost` is what a slow frame of it costs.
+    /// Called outside every plugin callback.
+    fn slow(&self, id: &str, cost: &str) {
+        self.toast(
+            &abi::Toast::new(abi::Variant::Warning, format!("{cost}. Run /plugins to disable it."))
+                .title(format!("Plugin is slow: {id}")),
         );
     }
     /// Ends what the host shows for an activation of plugin `id` that ended (it was disabled, replaced, unloaded, or
@@ -338,19 +347,23 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             call: RefCell::default(),
             revoked: RefCell::default(),
             mount: RefCell::default(),
+            monitor: setup.monitor.clone(),
+            slot: setup.monitor.slot(setup.id()),
         });
         let mut api = abi::Registered::new(setup.id(), None);
         api.set_waker(activation.waker());
         // Setup reaches the host as a command does: its effects wait on the one queue. A setup that panics runs its
         // dispose callbacks within the same call, as the C ABI's `create` does, so nothing either asked for happens.
-        let set_up = scope.attempt(&**setup.host(), |host| {
-            match catch_unwind(AssertUnwindSafe(|| (plugin.setup)(&mut api.setup_with(host)))) {
-                Ok(set_up) => set_up,
-                Err(panic) => {
-                    api.dispose(Some(host));
-                    std::panic::resume_unwind(panic)
+        let (set_up, _) = scope.monitor.call(scope.slot, "setup", || {
+            scope.attempt(&**setup.host(), |host| {
+                match catch_unwind(AssertUnwindSafe(|| (plugin.setup)(&mut api.setup_with(host)))) {
+                    Ok(set_up) => set_up,
+                    Err(panic) => {
+                        api.dispose(Some(host));
+                        std::panic::resume_unwind(panic)
+                    }
                 }
-            }
+            })
         });
         let set_up = match set_up {
             Some(Ok(set_up)) => set_up,
@@ -541,6 +554,8 @@ struct Scope {
     /// The mount the running call belongs to, while a command of a 2.0 surface's route runs: what it asks for, such
     /// as a fetch, ends with that mount. `None` for the plugin's own calls, whose work lives with the plugin.
     mount: RefCell<Option<Weak<()>>>,
+    monitor: Rc<contain::Monitor>,
+    slot: contain::Slot,
 }
 
 /// What one call of an in-process plugin asked for: the effects that wait for it to return, the storage it wrote, and
@@ -565,12 +580,18 @@ impl Scope {
     }
 
     /// Calls `f` as one call of the plugin, `export`, unless it failed or its activation ended, as a claim still mounted
-    /// after a disable may ask: a panic fails it.
-    fn call<R>(self: &Rc<Self>, export: &str, host: &dyn Host, f: impl FnOnce(&Scoped<'_>) -> R) -> Option<R> {
+    /// after a disable may ask: a panic fails it. The call is timed; an overrun of a built-in is a host bug, which fails
+    /// no plugin (synthesis 4.4).
+    fn call<R>(self: &Rc<Self>, export: &'static str, host: &dyn Host, f: impl FnOnce(&Scoped<'_>) -> R) -> Option<R> {
         if self.failure.borrow().is_some() || self.activation.disposed() {
             return None;
         }
-        match self.attempt(host, f)? {
+        let (out, timed) = self.monitor.call(self.slot, export, || self.attempt(host, f));
+        budget(&self.host, &self.id, &timed);
+        if timed.overrun {
+            log::error!("plugin {}: {export} took {} ms, a host bug in a built-in", self.id, timed.took.as_millis());
+        }
+        match out? {
             Ok(value) => Some(value),
             Err(panic) => {
                 let (revoked, error) = (self.revoked.take(), format!("{export} panicked: {panic}"));
@@ -609,7 +630,7 @@ impl Scope {
     }
 
     /// Runs a handler of the plugin with the host, then invalidates its claims, whose state it may have changed.
-    fn run(self: &Rc<Self>, export: &str, handler: impl FnOnce(&Scoped<'_>)) {
+    fn run(self: &Rc<Self>, export: &'static str, handler: impl FnOnce(&Scoped<'_>)) {
         let Some(host) = self.host.upgrade() else { return };
         if self.call(export, &*host, handler).is_some() {
             self.activation.invalidate();
@@ -617,7 +638,7 @@ impl Scope {
     }
 
     /// [`Scope::run`] for a command that belongs to the mount `alive` stands for.
-    fn run_owned(self: &Rc<Self>, alive: &Weak<()>, export: &str, handler: impl FnOnce(&Scoped<'_>)) {
+    fn run_owned(self: &Rc<Self>, alive: &Weak<()>, export: &'static str, handler: impl FnOnce(&Scoped<'_>)) {
         if alive.upgrade().is_none() {
             return;
         }
@@ -628,7 +649,7 @@ impl Scope {
 
     /// Runs a mount handler: a claim or route may mount and unmount after its plugin was disposed, which hears of it
     /// no more.
-    fn mounted(self: &Rc<Self>, export: &str, handler: impl FnOnce(&Scoped<'_>)) {
+    fn mounted(self: &Rc<Self>, export: &'static str, handler: impl FnOnce(&Scoped<'_>)) {
         if !self.activation.disposed() {
             self.run(export, handler);
         }
@@ -646,7 +667,10 @@ impl Scope {
             return;
         }
         let host = self.host.upgrade();
-        if host.and_then(|host| self.attempt(&*host, |host| api.dispose(Some(host)))).is_none() {
+        let (disposed, _) = self
+            .monitor
+            .call(self.slot, "dispose", || host.and_then(|host| self.attempt(&*host, |host| api.dispose(Some(host)))));
+        if disposed.is_none() {
             api.dispose(None);
         }
     }
@@ -1126,6 +1150,14 @@ thread_local! {
     static FLUSHING: Cell<bool> = const { Cell::new(false) };
 }
 
+/// Tells the host, once a session, that plugin `id` became slow, as the budget said of its last call.
+pub(crate) fn budget(host: &Weak<dyn Host>, id: &str, timed: &contain::Timed) {
+    if let Some(cost) = timed.slow.clone() {
+        let id = id.to_owned();
+        defer(host, move |host| host.slow(&id, &cost));
+    }
+}
+
 /// Queues `effect` on the host's one effect queue, which both paths share: it runs in order with every other plugin
 /// effect, once the outermost plugin callback has returned and every UI and store borrow has ended, at the latest
 /// when the host routes its next message ([`flush`]).
@@ -1158,6 +1190,8 @@ pub(crate) struct Setup<'a> {
     host: &'a Rc<dyn Host>,
     id: &'a str,
     registration: Registration,
+    /// Times the plugin's calls.
+    pub(crate) monitor: &'a Rc<contain::Monitor>,
 }
 
 impl Setup<'_> {
@@ -1379,6 +1413,8 @@ pub struct Entry {
     /// Whether the plugin has an activation, failed or not (TS `registered().active`): the plugin manager offers
     /// to disable it.
     pub active: bool,
+    /// What its calls cost, while it is slow (synthesis 4.4).
+    pub slow: Option<String>,
 }
 
 /// Why a configured TypeScript TUI plugin is listed but not loaded (deviation of F16 until P.4).
@@ -1434,6 +1470,7 @@ pub struct Registry {
     generations: Cell<u64>,
     /// The slot paths mounted now, which claims resolve against.
     live: Rc<slot::Live>,
+    monitor: Rc<contain::Monitor>,
 }
 
 impl Registry {
@@ -1470,7 +1507,13 @@ impl Registry {
             activations: Cell::new(0),
             generations: Cell::new(0),
             live: Rc::default(),
+            monitor: Rc::new(contain::Monitor::new(contain::Limits::from_env())),
         }
+    }
+
+    /// Times every plugin call and keeps the budget (synthesis 4.4).
+    pub fn monitor(&self) -> &Rc<contain::Monitor> {
+        &self.monitor
     }
 
     /// Applies the `plugins` entries of a changed `cli.json`, as TS reconciles on `config.data.plugins`: the
@@ -1786,6 +1829,7 @@ impl Registry {
                 None => plugin.failed.clone().map_or(Status::Inactive, Status::Failed),
             },
             active: plugin.active.is_some(),
+            slow: self.monitor.report(&plugin.definition.id),
         });
         let unloaded = self.unloaded.borrow();
         let unloaded = unloaded.iter().map(|(target, status)| Entry {
@@ -1794,6 +1838,7 @@ impl Registry {
             source: Source::Configured,
             status: status.clone(),
             active: false,
+            slow: None,
         });
         active.chain(unloaded).collect()
     }
@@ -1926,7 +1971,7 @@ impl Registry {
         let generation = self.generations.get() + 1;
         self.generations.set(generation);
         let registration = Registration { generation, ..Registration::default() };
-        let mut setup = Setup { host, id: &definition.id, registration };
+        let mut setup = Setup { host, id: &definition.id, registration, monitor: &self.monitor };
         if let Err(error) = (definition.setup)(&mut setup) {
             setup.registration.dispose();
             return Err(error);

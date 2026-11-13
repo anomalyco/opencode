@@ -107,7 +107,11 @@ fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Resul
         let current = current.clone();
         move |setup: &mut Setup<'_>| {
             let host = Rc::downgrade(setup.host());
-            let (instance, manifest) = Instance::create(&library, host.clone(), setup.id(), options.as_deref(), false)?;
+            let (monitor, slot) = (setup.monitor.clone(), setup.monitor.slot(setup.id()));
+            let (created, _) = monitor.call(slot, "setup", || {
+                Instance::create(&library, host.clone(), setup.id(), options.as_deref(), false)
+            });
+            let (instance, manifest) = created?;
             if manifest.id != setup.id() {
                 return Err(format!("setup returned plugin ID {}, not {}", manifest.id, setup.id()));
             }
@@ -125,6 +129,8 @@ fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Resul
                 generation: setup.generation(),
                 revoked: RefCell::default(),
                 activation,
+                monitor,
+                slot,
             });
             if manifest.wake {
                 let woken = Rc::downgrade(&guest);
@@ -752,6 +758,8 @@ struct Guest {
     revoked: RefCell<Vec<Disposer>>,
     /// The mounted slot claims and routes, which a wake draws again.
     activation: Rc<Activation>,
+    monitor: Rc<crate::contain::Monitor>,
+    slot: crate::contain::Slot,
 }
 
 /// However the guest goes, by a disposal or by the host dropping the registry, a failed instance is not destroyed:
@@ -769,17 +777,18 @@ impl Guest {
         let instance = self.instance.borrow_mut().take();
         match self.failure.borrow().is_some() {
             true => std::mem::forget(instance),
-            false => drop(instance),
+            false => self.monitor.call(self.slot, "dispose", || drop(instance)).0,
         }
     }
 
     /// Sends one request. A failed or destroyed plugin is not called; a panic fails it, and its claims draw empty.
-    /// What a call that fails it asked for is dropped, and the storage it wrote put back.
-    fn request<T: DeserializeOwned>(self: &Rc<Self>, export: &str, request: &Request) -> Option<T> {
+    /// What a call that fails it asked for is dropped, and the storage it wrote put back. A call that returned late
+    /// (an overrun, synthesis 4.4) did return: what it asked for happens, then it fails, which revokes it.
+    fn request<T: DeserializeOwned>(self: &Rc<Self>, export: &'static str, request: &Request) -> Option<T> {
         if self.failure.borrow().is_some() {
             return None;
         }
-        let result = {
+        let (result, timed) = {
             let instance = self.instance.borrow();
             let instance = instance.as_ref()?;
             if self.busy.replace(true) {
@@ -791,18 +800,28 @@ impl Guest {
                 matches!(request, Request::RenderFence(_) | Request::Render { .. } | Request::RenderRoute { .. });
             instance.shared.ctx.borrow_mut().read_only = render;
             // One store snapshot for the whole call, as in process: each read it asks for nests in this one.
-            let mut result = None;
-            if let Some(host) = self.host.upgrade() {
-                host.read(&mut |_| result = Some(instance.call(request)));
-            }
-            let result = result.unwrap_or_else(|| instance.call(request));
+            let timed = self.monitor.call(self.slot, export, || {
+                let mut result = None;
+                if let Some(host) = self.host.upgrade() {
+                    host.read(&mut |_| result = Some(instance.call(request)));
+                }
+                result.unwrap_or_else(|| instance.call(request))
+            });
             instance.shared.ctx.borrow_mut().read_only = false;
             self.busy.set(false);
-            result
+            timed
         };
+        crate::budget(&self.host, &self.id, &timed);
         let (effects, undo) = self.taken();
         let error = match result {
             Err(Some(error)) => format!("{export} {error}"),
+            Ok(_) | Err(None) if timed.overrun => {
+                self.apply(effects);
+                let limit = self.monitor.limits().overrun.as_millis();
+                let error = format!("{export} took {} ms, over the limit of {limit} ms", timed.took.as_millis());
+                fail(&self.host, &self.id, &self.failure, self.revoked.take(), &self.activation, error);
+                return None;
+            }
             // A call that returned a failure did return: its effects apply (rich plugins 4.14).
             Err(None) => {
                 self.apply(effects);
@@ -831,7 +850,7 @@ impl Guest {
     }
 
     /// Sends a request to a handler, then, if it ran, invalidates the claims, whose state it may have changed.
-    fn handle(self: &Rc<Self>, export: &str, request: &Request) {
+    fn handle(self: &Rc<Self>, export: &'static str, request: &Request) {
         if self.request::<serde_json::Value>(export, request).is_some() {
             self.activation.invalidate();
         }
