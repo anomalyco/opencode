@@ -94,6 +94,7 @@
     "./providers/minimax/images": "./src/providers/minimax/images.ts",
     "./providers/minimax/messages": "./src/providers/minimax/messages.ts",
     "./providers/minimax/responses": "./src/providers/minimax/responses.ts",
+    "./providers/minimax/videos": "./src/providers/minimax/videos.ts",
     "./providers/mistral": "./src/providers/mistral.ts",
     "./providers/moonshot": "./src/providers/moonshot.ts",
     "./providers/moonshot/chat": "./src/providers/moonshot/chat.ts",
