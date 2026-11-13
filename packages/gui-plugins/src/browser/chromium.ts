@@ -1,7 +1,7 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
 import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
-import { Schema } from "effect"
+import { Option, Schema } from "effect"
 import type { Embeds } from "@opencode/plugin/gui/main"
 import { CAPTURE_DEADLINE_MS, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
@@ -47,11 +47,12 @@ import {
   allowedDestination,
   committedLoad,
   destinationOrigin,
-  extensionOrigin,
+  downloadOwner,
   extensionURL,
   fileURLWithin,
   localFileURL,
   normalizeURL,
+  pagePermission,
   refusal,
   type Policy,
 } from "./policy"
@@ -158,6 +159,9 @@ function zoomStep(current: number, direction: "in" | "out" | "reset") {
   return zoomSteps.findLast((step) => step < current - 0.001) ?? current
 }
 
+/** Who may have caused a tab's download: the agent's commands running now, when the last ended, the user's last input. */
+type Activity = { agentRuns: number; agentEndedAt?: number; userInputAt?: number }
+
 /** Ends a running command's wait when it is interrupted. */
 type Interrupted = ReturnType<typeof Promise.withResolvers<never>>
 
@@ -181,6 +185,40 @@ function runStopError(reason: RunStopReason) {
         "Browser tab was closed. Call browser.tabs.list({}) and choose an existing tabID; do not reuse the closed tab's refs.",
       )
   }
+}
+
+const ManifestPermissions = Schema.Struct({ permissions: Schema.optional(Schema.Array(Schema.Unknown)) })
+
+/**
+ * Installs what Electron keeps once per session, which every tab of the partition shares, and in the profile its
+ * extensions' pages too: web pages get no permission, device or screen; an extension's page gets the clipboard and
+ * notifications its manifest declares (`pagePermission`); a download goes to the tab whose page started it, by web
+ * contents ID, or to the system's save flow when no tab takes it. Returns the download listener's removal. The
+ * permission handlers stay, so nothing is allowed by Electron's default after the pane goes.
+ */
+export function guardSession(
+  session: Electron.Session,
+  downloads: ReadonlyMap<number, (item: Electron.DownloadItem) => void>,
+) {
+  const declared = (id: string) =>
+    Schema.decodeUnknownOption(ManifestPermissions)(session.extensions.getExtension(id)?.manifest).pipe(
+      Option.flatMap((manifest) => Option.fromNullishOr(manifest.permissions)),
+      Option.getOrElse(() => []),
+    )
+
+  session.setPermissionRequestHandler((contents, permission, callback, details) =>
+    callback(pagePermission(permission, details.requestingUrl ?? contents.getURL(), declared)),
+  )
+  session.setPermissionCheckHandler((_contents, permission, origin) => pagePermission(permission, origin, declared))
+  session.setDevicePermissionHandler(() => false)
+  session.setDisplayMediaRequestHandler((_request, callback) => callback({}))
+
+  const download = (_event: Electron.Event, item: Electron.DownloadItem, source: WebContents) =>
+    downloads.get(source.id)?.(item)
+
+  session.on("will-download", download)
+
+  return () => void session.off("will-download", download)
 }
 
 export type BrowserPage = ReturnType<typeof createBrowserPage>
@@ -245,8 +283,14 @@ export function createBrowserPage(
 
   const contents = view.webContents
   const detachNetwork = options.network?.attach(contents)
+  contents.on("before-mouse-event", (_event, mouse) => {
+    // The agent's own input arrives while its command runs.
+    if (mouse.type === "mouseDown" && activity.agentRuns === 0) activity.userInputAt = Date.now()
+  })
   contents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return
+
+    if (activity.agentRuns === 0) activity.userInputAt = Date.now()
 
     if (pageReload(input, process.platform === "darwin")) {
       event.preventDefault()
@@ -455,10 +499,6 @@ export function createBrowserPage(
   contents.debugger.on("detach", () => {
     if (!closed()) options.fail()
   })
-  contents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
-  contents.session.setPermissionCheckHandler(() => false)
-  contents.session.setDevicePermissionHandler(() => false)
-  contents.session.setDisplayMediaRequestHandler((_request, callback) => callback({}))
   contents.on("content-bounds-updated", (event) => event.preventDefault())
 
   // Sub-frames keep Chromium's own rules so blob:/data: viewers and sandboxed previews still load,
@@ -500,8 +540,19 @@ export function createBrowserPage(
       : { action: "deny" },
   )
 
-  const download = (_event: Electron.Event, item: Electron.DownloadItem, source: WebContents) => {
-    if (source !== contents) return
+  // Called from the session's one download listener (`guardSession`) for a download this page started. One the user
+  // started is left to the system's save flow, so it goes where they save it and the agent never reads it.
+  const download = (item: Electron.DownloadItem) => {
+    const owner = downloadOwner({
+      now: Date.now(),
+      agentRunning: activity.agentRuns > 0,
+      agentEndedAt: activity.agentEndedAt,
+      userInputAt: activity.userInputAt,
+      page: [contents.mainFrame.url, contents.mainFrame.origin],
+      chain: item.getURLChain(),
+    })
+
+    if (owner === "user") return
 
     try {
       const file = files.add(item.getFilename(), item.getMimeType() || "application/octet-stream", [
@@ -525,7 +576,6 @@ export function createBrowserPage(
     }
   }
 
-  contents.session.on("will-download", download)
   cdp.on("Runtime.executionContextCreated", ({ context }, sessionID) => {
     // SAFETY: CDP documents a page execution context's auxData as `{ frameId, isDefault, type }`.
     const aux = context.auxData as { frameId?: string; isDefault?: boolean } | undefined
@@ -718,6 +768,8 @@ export function createBrowserPage(
     },
     /** Reports the page's icon and zoom when either changed since the last report. */
     detail,
+    /** Takes a download this page started; see `guardSession`. */
+    download,
     /**
      * Runs one command, the agent's or the user's. The agent's never opens, reads or acts on an extension page, which
      * would run with that extension's privileges; every agent operation reaches the page through here.
@@ -737,12 +789,26 @@ export function createBrowserPage(
       const cancel = () => dispatchDialog({ type: "run.cancelled", runID })
       signal.addEventListener("abort", cancel, { once: true })
 
+      if (origin === "agent") {
+        activity.agentRuns++
+
+        if (!agentDriven) {
+          agentDriven = true
+          contents.setBackgroundThrottling(false)
+        }
+      }
+
       try {
         return await Promise.race([perform(command, run.controller.signal, origin), run.interrupted.promise])
       } finally {
         signal.removeEventListener("abort", cancel)
         runs.delete(runID)
         dispatchDialog({ type: "run.finished", runID })
+
+        if (origin === "agent") {
+          activity.agentRuns--
+          activity.agentEndedAt = Date.now()
+        }
       }
     },
     async dispose() {
@@ -752,7 +818,6 @@ export function createBrowserPage(
       void dispatchPicker({ type: "disposed" })
       clearTimeout(pickerTimer)
       detachNetwork?.()
-      contents.session.off("will-download", download)
       await profiling.dispose()
       cdp.dispose()
       refs.clear()

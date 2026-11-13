@@ -68,7 +68,7 @@ export const info = Skill.Info.make({
     "",
     "### Files",
     "",
-    "`files.upload` and `files.drop` send server-local files into the page, 5 MiB in total. Downloads and captures stay in the desktop app until `files.get` copies one to the server.",
+    "`files.upload` and `files.drop` send server-local files into the page, 5 MiB in total. Captures, and downloads your own browser actions start, stay in the desktop app until `files.get` copies one to the server. Downloads the user starts go where the user saves them, and you never see them.",
     "",
     "## When something fails",
     "",

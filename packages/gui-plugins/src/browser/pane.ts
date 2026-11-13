@@ -7,7 +7,7 @@ import { Cause, Deferred, Effect, ManagedRuntime, Option, Queue, Schedule, Schem
 import { HttpClient, HttpClientRequest } from "effect/http"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
-import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
+import { createBrowserPage, guardSession, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
 import { agentRefusal, destinationOrigin, fileURLWithin, refusal } from "./policy"
@@ -88,6 +88,10 @@ export function createBrowserPane(input: {
   const disposals = new WeakMap<BrowserPage, Promise<void>>()
   // Keep long-lived RPC requests off Chromium's shared HTTP connection pool.
   const runtime = ManagedRuntime.make(NodeHttpClient.layerNodeHttp)
+  // Each page's download handler by its web contents ID, which the one listener of its session hands downloads to.
+  const downloads = new Map<number, (item: Electron.DownloadItem) => void>()
+  // Every page of the profile shares one session, and so do its extensions' pages, before any tab exists.
+  const unguardProfile = guardSession(input.profile.session, downloads)
 
   return {
     async register(window: number, binding: string, target: Target) {
@@ -111,12 +115,11 @@ export function createBrowserPane(input: {
 
       // Navigation guards cover documents; subresources (img, script, fetch) also must not read
       // file: URLs outside the roots. One listener per partition covers every page in this attachment.
-      if (!shared)
-        electron.session
-          .fromPartition(partition)
-          .webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (details, callback) =>
-            callback({ cancel: !fileURLWithin(details.url, selectFileRoots(machine.state, binding)) }),
-          )
+      const remote = shared ? undefined : electron.session.fromPartition(partition)
+      remote?.webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (details, callback) =>
+        callback({ cancel: !fileURLWithin(details.url, selectFileRoots(machine.state, binding)) }),
+      )
+      const unguard = remote ? guardSession(remote, downloads) : () => undefined
 
       const closed = () => dispatchBinding(binding, { type: "owner.closed" })
 
@@ -135,6 +138,8 @@ export function createBrowserPane(input: {
         abort: new AbortController(),
         registered: Promise.withResolvers(),
         cleanup: () => {
+          unguard()
+
           if (win.isDestroyed()) return
           win.webContents.off("destroyed", closed)
           win.webContents.off("did-start-navigation", navigate)
@@ -382,6 +387,7 @@ export function createBrowserPane(input: {
      */
     async dispose() {
       dispatch({ type: "disposed" })
+      unguardProfile()
       await Promise.all(releasing)
       await runtime.dispose()
     },
@@ -470,6 +476,7 @@ export function createBrowserPane(input: {
 
   function release(page: BrowserPage) {
     grants.get(page)?.()
+    downloads.delete(page.contents.id)
     const done = page.dispose()
     const settled = done.catch(() => undefined)
     disposals.set(page, done)
@@ -600,6 +607,7 @@ export function createBrowserPane(input: {
     }
 
     handle.pages.set(attempt, page)
+    downloads.set(page.contents.id, page.download)
     dispatchBinding(binding, { type: "tab.opened", tabID: id, attempt, tab: options.restore ?? page.state() })
     // Straight to the window, not through the server report: the embed is local to this desktop.
     emit(binding, { type: "embed", tabID: id, embed: page.embed })

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { Browser } from "@opencode/plugin-browser/rpc"
 import {
   agentFrame,
   agentFrames,
@@ -6,10 +7,12 @@ import {
   allowedDestination,
   committedLoad,
   destinationOrigin,
-  extensionOrigin,
+  downloadOwner,
+  DOWNLOAD_GRACE_MS,
   fileURLWithin,
   localFileURL,
   normalizeURL,
+  pagePermission,
   refusal,
 } from "./policy"
 
@@ -165,8 +168,8 @@ test("the agent cannot read or act on an extension page, even one the user opene
 })
 
 test("an extension's frame in a web page is no frame the agent can list or target", () => {
-  const frames = agentFrames(
-    {
+  const frames = agentFrames({
+    root: {
       frame: { id: "main", url: "https://example.com/", securityOrigin: "https://example.com" },
       childFrames: [
         { frame: { id: "ad", parentId: "main", url: "https://ads.example/", name: "ad" } },
@@ -283,6 +286,43 @@ test("a frame inside one known to show an extension's document is left out with 
 
   for (const id of ["opened", "web", "deeper"]) expect(agentFrame(trees, id).type).toBe("extension")
   expect(agentFrame(trees, "main").type).toBe("frame")
+})
+
+test("an extension's page gets only the clipboard and notifications its manifest declares; a web page gets nothing", () => {
+  const declared = (id: string) => (id === "pw" ? ["clipboardWrite", "storage"] : [])
+  const page = "chrome-extension://pw/popup.html"
+
+  expect(pagePermission("clipboard-sanitized-write", page, declared)).toBe(true)
+  expect(pagePermission("clipboard-sanitized-write", "blob:chrome-extension://pw/0b6f7c2e", declared)).toBe(true)
+  expect(pagePermission("clipboard-read", page, declared)).toBe(false)
+  expect(pagePermission("notifications", page, declared)).toBe(false)
+  expect(pagePermission("media", page, declared)).toBe(false)
+  expect(pagePermission("clipboard-sanitized-write", "chrome-extension://other/popup.html", declared)).toBe(false)
+
+  for (const permission of ["clipboard-sanitized-write", "clipboard-read", "notifications", "geolocation"])
+    expect(pagePermission(permission, "https://example.com/", () => ["clipboardWrite", "notifications"])).toBe(false)
+
+  expect(pagePermission("notifications", "", declared)).toBe(false)
+})
+
+test("only a download the agent's command caused is the agent's", () => {
+  const web = ["https://example.com/", "https://example.com"]
+
+  const download = (input: Partial<Parameters<typeof downloadOwner>[0]>) =>
+    downloadOwner({ now: 100_000, agentRunning: false, page: web, chain: ["https://example.com/a.csv"], ...input })
+
+  expect(download({ agentRunning: true })).toBe("agent")
+  // A click the agent made, whose response became a download after the command returned.
+  expect(download({ agentEndedAt: 99_000 })).toBe("agent")
+  // The user clicked or typed in the tab since: their download.
+  expect(download({ agentEndedAt: 99_000, userInputAt: 99_500 })).toBe("user")
+  expect(download({ agentEndedAt: 100_000 - DOWNLOAD_GRACE_MS - 1 })).toBe("user")
+  expect(download({})).toBe("user")
+  // An extension's page or download is never the agent's, even while it acts in the tab.
+  expect(download({ agentRunning: true, page: ["chrome-extension://pw/vault.html", "chrome-extension://pw"] })).toBe(
+    "user",
+  )
+  expect(download({ agentRunning: true, chain: ["blob:chrome-extension://pw/0b6f7c2e"] })).toBe("user")
 })
 
 test("the user still opens extension pages the agent may not", () => {

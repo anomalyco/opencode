@@ -71,6 +71,55 @@ export function extensionURL(input: string, extensions: ReadonlyArray<string>) {
   return url.protocol === "chrome-extension:" && extensions.includes(url.hostname)
 }
 
+/** Each Chromium permission an extension's page may hold, with the manifest permission that grants it. */
+const extensionGrants = [
+  ["clipboard-read", "clipboardRead"],
+  ["clipboard-sanitized-write", "clipboardWrite"],
+  ["notifications", "notifications"],
+] as const
+
+/**
+ * Whether a page asking from `origin` gets `permission`. A web page gets none. An extension's page (its popup, options
+ * page or blob:) gets the clipboard and notifications when the extension's manifest declares them, as Chrome grants
+ * them, so a password manager can copy a password; `declared` reads that manifest's permissions by extension ID.
+ */
+export function pagePermission(permission: string, origin: string, declared: (id: string) => ReadonlyArray<unknown>) {
+  if (!URL.canParse(origin)) return false
+  const url = new URL(origin)
+  const document = url.protocol === "blob:" && URL.canParse(url.pathname) ? new URL(url.pathname) : url
+  const needed = extensionGrants.find(([name]) => name === permission)?.[1]
+
+  return (
+    document.protocol === "chrome-extension:" && needed !== undefined && declared(document.hostname).includes(needed)
+  )
+}
+
+/** How long after an agent command a download that no user input started still counts as the command's. */
+export const DOWNLOAD_GRACE_MS = 30_000
+
+/**
+ * Whose a download in a tab is. Only one the agent's command caused is the agent's: it began while an agent command ran
+ * in the tab, or within `DOWNLOAD_GRACE_MS` after one ended with no click or key press from the user since, and
+ * neither the page nor any address it came through is an extension's. Every other download is the user's and takes
+ * the system's save flow, which the agent cannot read.
+ */
+export function downloadOwner(download: {
+  readonly now: number
+  readonly agentRunning: boolean
+  readonly agentEndedAt?: number
+  readonly userInputAt?: number
+  readonly page: ReadonlyArray<string>
+  readonly chain: ReadonlyArray<string>
+}): "agent" | "user" {
+  if ([...download.page, ...download.chain].some(Browser.extensionOrigin)) return "user"
+
+  if (download.agentRunning) return "agent"
+
+  if (download.agentEndedAt === undefined || download.now - download.agentEndedAt > DOWNLOAD_GRACE_MS) return "user"
+
+  return download.userInputAt !== undefined && download.userInputAt >= download.agentEndedAt ? "user" : "agent"
+}
+
 /** Actions that only take a tab away from its document, which the agent may run on an extension page to leave it. */
 const leaving = ["navigate", "back", "forward", "stop"]
 
