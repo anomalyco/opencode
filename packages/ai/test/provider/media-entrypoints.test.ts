@@ -513,6 +513,26 @@ const videos: ReadonlyArray<Case<VideoModel>> = [
     auth: ["authorization", "Bearer openrouter-key"],
     provider: "openrouter",
   },
+  {
+    name: "byteplus",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/byteplus/videos")
+      return model("dreamina-seedance-2-0-260128", { ...shared, apiKey: "byteplus-key" })
+    },
+    url: "https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks",
+    auth: ["authorization", "Bearer byteplus-key"],
+    provider: "byteplus",
+  },
+  {
+    name: "volcengine",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/volcengine/videos")
+      return model("doubao-seedance-2-0-260128", { ...shared, apiKey: "ark-key" })
+    },
+    url: "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
+    auth: ["authorization", "Bearer ark-key"],
+    provider: "volcengine",
+  },
 ]
 
 describe("video entrypoints", () => {
