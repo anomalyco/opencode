@@ -137,6 +137,54 @@ export function agentFrames(
   return result
 }
 
+export type AgentFrameAccess =
+  | { type: "frame"; frame: ReturnType<typeof agentFrames>[number] }
+  | { type: "extension"; message: string }
+  | { type: "unavailable"; message: string }
+
+/**
+ * The frame an agent's `frameID` names, when the agent may use it. A frame that shows an extension's document, or
+ * sits inside one, is refused by name, so a call never quietly runs elsewhere. `extensions` lists the frames known to
+ * show one that the trees cannot: an extension's out-of-process frame, whose tree is never read, and a frame whose
+ * document has an extension's origin.
+ */
+export function agentFrame(
+  root: FrameTree,
+  children: ReadonlyArray<{ readonly parentID: string; readonly tree: FrameTree }>,
+  extensions: ReadonlySet<string>,
+  frameID: string,
+): AgentFrameAccess {
+  const frame = agentFrames(root, children).find((item) => item.id === frameID)
+  // Each frame the trees name, with its parent, whether the agent sees it or not.
+  const known = new Map<string, { parentID?: string; extension: boolean }>()
+
+  const walk = (tree: FrameTree, parentID?: string) => {
+    known.set(tree.frame.id, {
+      parentID: tree.frame.parentId || parentID,
+      extension: extensionOrigin(tree.frame.url) || extensionOrigin(tree.frame.securityOrigin ?? ""),
+    })
+    tree.childFrames?.forEach((child) => walk(child, tree.frame.id))
+  }
+
+  walk(root)
+  children.forEach((child) => walk(child.tree, child.parentID))
+
+  if (frame && !extensions.has(frameID)) return { type: "frame", frame }
+
+  for (let id: string | undefined = frameID; id; id = known.get(id)?.parentID)
+    if (extensions.has(id) || known.get(id)?.extension)
+      return {
+        type: "extension",
+        message: `Agent browser tools cannot use extension frames: frame ${frameID} shows an extension's document, which runs with that extension's privileges. Omit frameID to use the page around it, or use another frame from browser.frames({tabID}).`,
+      }
+
+  return {
+    type: "unavailable",
+    message:
+      "Frame is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab; omit frameID for the main frame.",
+  }
+}
+
 export type Policy = { readonly fileRoots?: ReadonlyArray<string>; readonly extensions?: ReadonlyArray<string> }
 
 export function allowedDestination(input: string, policy?: Policy) {

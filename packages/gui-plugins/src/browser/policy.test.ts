@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import {
+  agentFrame,
   agentFrames,
   agentRefusal,
   allowedDestination,
@@ -186,6 +187,40 @@ test("an extension's frame in a web page is no frame the agent can list or targe
   expect(frames.map((frame) => frame.id)).toEqual(["main", "ad", "video"])
   expect(extensionOrigin("chrome-extension://abc")).toBe(true)
   expect(extensionOrigin("https://example.com")).toBe(false)
+})
+
+test("a frameID the agent passes resolves only to a frame it may use, and names an extension's frame", () => {
+  const root = {
+    frame: { id: "main", url: "https://example.com/", securityOrigin: "https://example.com" },
+    childFrames: [
+      { frame: { id: "same", parentId: "main", url: "https://example.com/inner" } },
+      {
+        frame: { id: "opened", parentId: "main", url: "about:blank", securityOrigin: "chrome-extension://abc" },
+        childFrames: [{ frame: { id: "inside", parentId: "opened", url: "https://example.com/x" } }],
+      },
+    ],
+  }
+
+  const children = [{ parentID: "main", tree: { frame: { id: "cross", url: "https://other.example/" } } }]
+  // The extension's own out-of-process frame, whose tree is never read, and a frame that just became one.
+  const extensions = new Set(["overlay", "cross-now-extension"])
+  const access = (frameID: string, known = extensions) => agentFrame(root, children, known, frameID).type
+
+  expect(agentFrame(root, children, extensions, "same")).toEqual({
+    type: "frame",
+    frame: { id: "same", parentID: "main", url: "https://example.com/inner", name: "" },
+  })
+  expect(access("cross")).toBe("frame")
+  expect(access("main")).toBe("frame")
+  expect(access("overlay")).toBe("extension")
+  expect(access("opened")).toBe("extension")
+  expect(access("inside")).toBe("extension")
+  expect(access("made-up")).toBe("unavailable")
+  // A web frame that now shows an extension's document is refused, even though its last tree read was a web page.
+  expect(access("cross", new Set(["cross"]))).toBe("extension")
+  expect(agentFrame(root, children, extensions, "overlay")).toMatchObject({
+    message: expect.stringContaining("Agent browser tools cannot use extension frames"),
+  })
 })
 
 test("a web tab stays fully usable by the agent", () => {

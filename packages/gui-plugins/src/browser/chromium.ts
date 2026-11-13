@@ -41,6 +41,7 @@ import {
 } from "./dialog-machine"
 import type { BrowserNetwork } from "./network"
 import {
+  agentFrame,
   agentFrames,
   agentRefusal,
   allowedDestination,
@@ -329,6 +330,8 @@ export function createBrowserPage(
   const sessions = new Map<string, string>()
   const parents = new Map<string, string>()
   const contexts = new Map<string, { id: number; sessionID?: string }>()
+  // Frames that show an extension's document, which no agent frameID may reach.
+  const extensionFrames = new Set<string>()
   let dialogGate = createDialogGateState()
   // Running commands by run id: the controller that stops their remaining steps, and the wait an interruption ends.
   const runs = new Map<number, { controller: AbortController; interrupted: Interrupted }>()
@@ -337,9 +340,12 @@ export function createBrowserPage(
     documents.set(frame.id, frame.url)
     revision++
   })
-  cdp.on("Page.frameDetached", ({ frameId }) => {
+  cdp.on("Page.frameDetached", ({ frameId, reason }) => {
     documents.delete(frameId)
     revision++
+
+    // A swap moves the frame to another process, where it may now show an extension's document; keep what is known.
+    if (reason === "remove") extensionFrames.delete(frameId)
   })
 
   const state = () =>
@@ -518,8 +524,15 @@ export function createBrowserPage(
     if (!aux?.frameId || !aux.isDefault) return
 
     // A frame that becomes an extension's document, as about:blank opened by one does, is no target for the agent.
-    if (extensionOrigin(context.origin)) contexts.delete(aux.frameId)
-    else contexts.set(aux.frameId, { id: context.id, sessionID })
+    if (extensionOrigin(context.origin)) {
+      contexts.delete(aux.frameId)
+      extensionFrames.add(aux.frameId)
+
+      return
+    }
+
+    contexts.set(aux.frameId, { id: context.id, sessionID })
+    extensionFrames.delete(aux.frameId)
   })
   cdp.on("Runtime.executionContextDestroyed", ({ executionContextId }, sessionID) => {
     contexts.forEach((context, key) => {
@@ -530,8 +543,14 @@ export function createBrowserPage(
     if (targetInfo.type !== "iframe") return
 
     // An extension's frame, such as an autofill overlay, stays out of `sessions`: no frame list, snapshot, picker or
-    // diagnostics reaches it. Site isolation gives it a process, and so a target, of its own.
-    if (extensionOrigin(targetInfo.url)) return
+    // diagnostics reaches it. Site isolation gives it a process, and so a target, of its own. The context its first
+    // document had in the embedding page's process is dropped, so its frameID cannot reach that page instead.
+    if (extensionOrigin(targetInfo.url)) {
+      extensionFrames.add(targetInfo.targetId)
+      contexts.delete(targetInfo.targetId)
+
+      return
+    }
 
     const parentID = targetInfo.parentFrameId ?? Array.from(sessions).find(([, id]) => id === parentSessionID)?.[0]
 
@@ -558,7 +577,8 @@ export function createBrowserPage(
     "Overlay.inspectNodeRequested",
     ({ backendNodeId }, sessionID) => void dispatchPicker({ type: "node.picked", backendID: backendNodeId, sessionID }),
   )
-  cdp.on("Target.detachedFromTarget", ({ sessionId }) => {
+  cdp.on("Target.detachedFromTarget", ({ sessionId, targetId }) => {
+    if (targetId) extensionFrames.delete(targetId)
     sessions.forEach((id, frameID) => {
       if (id === sessionId) {
         sessions.delete(frameID)
@@ -726,9 +746,14 @@ export function createBrowserPage(
     const refused = agentRefusal(command.action, mainDocument())
 
     if (refused) throw new Error(refused)
+    const used = actionFrames(command.action)
+    const framed = await extensionFrameRefusal(used)
+
+    if (framed) throw new Error(framed)
     const result = await attempt(command, signal)
-    // A redirect, or a navigation while it ran, may have brought an extension page in; its result stays here.
-    const moved = agentRefusal({ type: "snapshot" }, mainDocument())
+    // A redirect, or a navigation while it ran, may have brought an extension page in, in the tab or in a frame the
+    // action used; its result stays here.
+    const moved = agentRefusal({ type: "snapshot" }, mainDocument()) ?? (await extensionFrameRefusal(used))
 
     if (moved) throw new Error(moved)
 
@@ -839,12 +864,7 @@ export function createBrowserPage(
           throw new Error(
             "Pass either ref or frameID to browser.evaluate, not both. A ref already runs in its element's frame.",
           )
-        const context = action.frameID ? contexts.get(action.frameID) : undefined
-
-        if (action.frameID && !context)
-          throw new Error(
-            "Frame context is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab, or omit frameID to target the main frame.",
-          )
+        const context = action.frameID ? await frameContext(action.frameID) : undefined
         // Pinned to the main frame's current document, so a navigation to an extension page meanwhile fails the call
         // instead of running the script there.
         const main = action.frameID || action.ref ? undefined : await mainContext()
@@ -986,12 +1006,17 @@ export function createBrowserPage(
           throw new Error(
             'browser.wait requires non-empty text for condition "text" or "textGone". Use condition "load" without text to wait for loading.',
           )
+        const frameID = action.frameID
+
+        // The frame is checked once; its context is read on each poll, so one that turns into an extension's
+        // document while this waits fails the wait.
+        if (frameID) await agentFrameOf(frameID)
         await waitFor(
           async () => {
             if (action.condition === "load") return !contents.isLoading()
-            const context = action.frameID ? contexts.get(action.frameID) : undefined
+            const context = frameID ? contexts.get(frameID) : undefined
 
-            if (action.frameID && !context)
+            if (frameID && (!context || extensionFrames.has(frameID)))
               throw new Error(
                 "Frame context is unavailable. Call browser.frames({tabID}) and use a frameID from this tab.",
               )
@@ -1178,17 +1203,7 @@ export function createBrowserPage(
       return profiling.target(action.type === "trace.stop" ? "trace" : "cpu")
     const tree = await frames()
     tree.forEach((frame) => documents.set(frame.id, frame.url))
-
-    const refs =
-      action.type === "drag"
-        ? [action.from, action.to]
-        : action.type === "fill_form"
-          ? action.fields.map((field) => field.ref)
-          : "ref" in action && action.ref
-            ? [action.ref]
-            : []
-
-    const selected = refs.map(target)
+    const selected = actionRefs(action).map(target)
 
     const frameIDs = selected.length
       ? selected.map((element) => element.frameID)
@@ -1196,13 +1211,7 @@ export function createBrowserPage(
         ? [action.frameID]
         : []
 
-    const urls = frameIDs.map((id) => {
-      const frame = tree.find((frame) => frame.id === id)
-
-      if (!frame) throw new Error("Frame is unavailable. Call browser.frames({tabID}) and use a current frameID.")
-
-      return frame.url
-    })
+    const urls = await Promise.all(frameIDs.map(async (id) => (await agentFrameOf(id)).url))
 
     const capture = ["screenshot", "lighthouse", "trace.start", "cpu.start", "heap.snapshot"].includes(action.type)
 
@@ -1222,6 +1231,14 @@ export function createBrowserPage(
     }
   }
 
+  function actionRefs(action: Browser.Action) {
+    if (action.type === "drag") return [action.from, action.to]
+
+    if (action.type === "fill_form") return action.fields.map((field) => field.ref)
+
+    return "ref" in action && action.ref ? [action.ref] : []
+  }
+
   function target(ref: Browser.Ref): Element {
     const key = ref.replace(/^@/, "")
     const value = refs.get(key) ?? picked.get(key)
@@ -1235,6 +1252,12 @@ export function createBrowserPage(
   }
 
   async function frames() {
+    const trees = await frameTrees()
+
+    return agentFrames(trees.root, trees.children)
+  }
+
+  async function frameTrees() {
     const root = await cdp.send("Page.getFrameTree")
 
     const children = await Promise.all(
@@ -1245,7 +1268,50 @@ export function createBrowserPage(
       }),
     )
 
-    return agentFrames(root.frameTree, children.flat())
+    return { root: root.frameTree, children: children.flat() }
+  }
+
+  /** The frame an agent's frameID names; every operation that takes one resolves it here. */
+  async function agentFrameOf(frameID: string) {
+    const trees = await frameTrees()
+    const access = agentFrame(trees.root, trees.children, extensionFrames, frameID)
+
+    if (access.type !== "frame") throw new Error(access.message)
+
+    return access.frame
+  }
+
+  async function frameContext(frameID: string) {
+    await agentFrameOf(frameID)
+    const context = contexts.get(frameID)
+
+    if (!context || extensionFrames.has(frameID))
+      throw new Error(
+        "Frame context is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab, or omit frameID to target the main frame.",
+      )
+
+    return context
+  }
+
+  /** Why the agent may not use these frames: one shows an extension's document, perhaps since the call began. */
+  async function extensionFrameRefusal(frameIDs: readonly string[]) {
+    if (!frameIDs.length) return undefined
+    const trees = await frameTrees()
+
+    return frameIDs
+      .map((frameID) => agentFrame(trees.root, trees.children, extensionFrames, frameID))
+      .find((access) => access.type === "extension")?.message
+  }
+
+  /** The frames an action reaches: its frameID, or the frames of the element refs it names. */
+  function actionFrames(action: Browser.Action) {
+    const elements = actionRefs(action).flatMap((ref) => {
+      const element = refs.get(ref.replace(/^@/, "")) ?? picked.get(ref.replace(/^@/, ""))
+
+      return element ? [element.frameID] : []
+    })
+
+    return "frameID" in action && action.frameID ? [action.frameID, ...elements] : elements
   }
 
   async function call(element: Element, functionDeclaration: string, args: unknown[] = []) {
@@ -1593,9 +1659,10 @@ export function createBrowserPage(
   async function snapshot(action: Extract<Browser.Action, { type: "snapshot" | "find" }>) {
     const tree = await frames()
     const selected = action.type === "snapshot" && action.ref ? target(action.ref) : undefined
-    const frameID = selected?.frameID ?? action.frameID ?? tree[0]?.id
+    const named = selected?.frameID ?? action.frameID
+    const frameID = named ? (await agentFrameOf(named)).id : tree[0]?.id
 
-    if (!frameID || !tree.some((frame) => frame.id === frameID))
+    if (!frameID)
       throw new Error(
         "Frame is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab; omit frameID for the main frame.",
       )
