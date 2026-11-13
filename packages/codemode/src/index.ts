@@ -13,10 +13,10 @@ export {
   type Outcome,
   type Program,
   type ProgramOptions,
+  type Runtime,
   type Snapshot,
   type SnapshotHeader,
   type Suspended,
   type SuspendOptions,
-  type VmRuntime,
 } from "./codemode.js"
 export { ToolError, toolError } from "./tool-error.js"

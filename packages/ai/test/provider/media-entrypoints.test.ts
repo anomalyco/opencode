@@ -8,6 +8,8 @@ import {
   type EmbeddingModel,
   ImageClient,
   type ImageModel,
+  VideoClient,
+  type VideoModel,
 } from "../../src/effect.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, observe, type Call } from "../lib/http.js"
@@ -24,6 +26,15 @@ const sentImage = (model: ImageModel) =>
     yield* ai.image
       .generate({ model, prompt: "A red circle" })
       .pipe(Effect.exit, Effect.provide(ImageClient.layer.pipe(Layer.provide(record(calls)))))
+    return calls
+  })
+
+const sentVideo = (model: VideoModel) =>
+  Effect.gen(function* () {
+    const calls: Array<Call> = []
+    yield* ai.video
+      .start({ model, prompt: "A red circle" })
+      .pipe(Effect.exit, Effect.provide(VideoClient.layer.pipe(Layer.provide(record(calls)))))
     return calls
   })
 
@@ -64,7 +75,7 @@ interface Case<Model> {
 
 const expectRequest = (
   calls: ReadonlyArray<Call>,
-  model: ImageModel | DecisionModel | EmbeddingModel,
+  model: ImageModel | VideoModel | DecisionModel | EmbeddingModel,
   entry: Case<unknown>,
 ) => {
   expect(calls).toHaveLength(1)
@@ -265,6 +276,21 @@ const decisions: ReadonlyArray<Case<DecisionModel>> = [
     provider: "openrouter",
   },
   {
+    name: "openai-compatible",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/openai-compatible/decisions")
+      return model("clef-flash", {
+        ...shared,
+        apiKey: "local-key",
+        baseURL: "http://127.0.0.1:1234/v1",
+        provider: "lmstudio",
+      })
+    },
+    url: "http://127.0.0.1:1234/v1/systemone",
+    auth: ["authorization", "Bearer local-key"],
+    provider: "lmstudio",
+  },
+  {
     name: "baseten",
     load: async () => {
       const { model } = await import("@opencode/ai/providers/baseten/decisions")
@@ -283,6 +309,16 @@ const decisions: ReadonlyArray<Case<DecisionModel>> = [
     url: "https://inference.do-ai.run/v1/systemone",
     auth: ["authorization", "Bearer do-key"],
     provider: "digitalocean",
+  },
+  {
+    name: "google",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/google/decisions")
+      return model("gemini-decision-eap", { ...shared, apiKey: "google-key" })
+    },
+    url: "https://generativelanguage.googleapis.com/v1beta/decisions",
+    auth: ["x-goog-api-key", "google-key"],
+    provider: "google",
   },
   {
     name: "vercel-ai-gateway",
@@ -462,6 +498,77 @@ describe("image entrypoints", () => {
       Effect.gen(function* () {
         const model = yield* Effect.promise(entry.load)
         expectRequest(yield* sentImage(model), model, entry)
+      }),
+    )
+})
+
+const videos: ReadonlyArray<Case<VideoModel>> = [
+  {
+    name: "openrouter",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/openrouter/videos")
+      return model("x-ai/grok-imagine-video-1.5-lite", { ...shared, apiKey: "openrouter-key" })
+    },
+    url: "https://openrouter.ai/api/v1/videos",
+    auth: ["authorization", "Bearer openrouter-key"],
+    provider: "openrouter",
+  },
+  {
+    name: "byteplus",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/byteplus/videos")
+      return model("dreamina-seedance-2-0-260128", { ...shared, apiKey: "byteplus-key" })
+    },
+    url: "https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks",
+    auth: ["authorization", "Bearer byteplus-key"],
+    provider: "byteplus",
+  },
+  {
+    name: "volcengine",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/volcengine/videos")
+      return model("doubao-seedance-2-0-260128", { ...shared, apiKey: "ark-key" })
+    },
+    url: "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
+    auth: ["authorization", "Bearer ark-key"],
+    provider: "volcengine",
+  },
+  {
+    name: "minimax",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/minimax/videos")
+      return model("MiniMax-H3-Lite", { ...shared, apiKey: "minimax-key" })
+    },
+    url: "https://api.minimax.io/v2/video_generation",
+    auth: ["authorization", "Bearer minimax-key"],
+  },
+  {
+    name: "minimax (minimax-cn, Hailuo)",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/minimax/videos")
+      return model("MiniMax-Hailuo-2.3", { ...shared, apiKey: "minimax-key", baseURL: "https://api.minimax.cn" })
+    },
+    url: "https://api.minimax.cn/v1/video_generation",
+    auth: ["authorization", "Bearer minimax-key"],
+  },
+  {
+    name: "google",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/google/videos")
+      return model("gemini-omni-1.2-flash", { ...shared, apiKey: "google-key" })
+    },
+    url: "https://generativelanguage.googleapis.com/v1beta/interactions",
+    auth: ["x-goog-api-key", "google-key"],
+    provider: "google",
+  },
+]
+
+describe("video entrypoints", () => {
+  for (const entry of videos)
+    it.effect(`providers/${entry.name}/videos sends a configured request`, () =>
+      Effect.gen(function* () {
+        const model = yield* Effect.promise(entry.load)
+        expectRequest(yield* sentVideo(model), model, entry)
       }),
     )
 })

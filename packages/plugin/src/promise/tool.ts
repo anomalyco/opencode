@@ -9,6 +9,12 @@ import type { Types } from "effect"
 import type { Hooks, Transform } from "./registration.js"
 
 export interface ToolContext extends Omit<Tool.Context, "progress" | "cancel"> {
+  /**
+   * Aborted when the call is interrupted, and when the user stops the call if the tool has read this property.
+   * Reading it (spreading the context reads it too) opts the tool into a cooperative stop: on the user's stop the
+   * signal aborts and whatever the tool then returns or throws is still reported as the call's result. A tool
+   * that never reads it, or does not settle soon after the stop, is interrupted.
+   */
   readonly signal: AbortSignal
   readonly progress: (update: Tool.Metadata) => Promise<void>
 }

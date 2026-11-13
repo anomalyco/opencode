@@ -149,7 +149,7 @@ test("closing the @ menu aborts its session search", async ({ page }) => {
   }
 })
 
-test("the free usage limit opens the Go dialog once, leaves a readable notice, and restores the prompt", async ({
+test("the free usage limit opens the Go dialog once, swaps the composer for the free limit panel, and restores the prompt", async ({
   page,
   context,
 }) => {
@@ -251,7 +251,9 @@ test("the free usage limit opens the Go dialog once, leaves a readable notice, a
   const upsell = page.getByRole("dialog", { name: "Free limit reached" })
   await expect(upsell).toContainText("Your free messages reset at")
   await expect(page.getByText(/^You've used today's free messages\. They reset at /)).toBeVisible()
-  await expect(view.editor).toHaveText("Refactor the parser")
+  // With no paid provider the panel stands in for the composer until Go is connected.
+  await expect(page.locator('[data-component="session-free-limit"]')).toContainText("Free usage resets at")
+  await expect(view.editor).toHaveCount(0)
   await expect(page.getByText("Free usage limit reached.")).toHaveCount(0)
 
   // Subscribe -> Go API key -> Continue switches the model in the current session without opening a new draft tab.
@@ -1359,6 +1361,7 @@ test("lists slash commands in their built-in order", async ({ page }) => {
     "/model",
     "/connect",
     "/reload",
+    "/agent",
     "/btw",
   ])
 })
@@ -1632,9 +1635,11 @@ test("shows thinking on hover or a non-default selection while preserving keyboa
   await expect(control).toHaveText("default")
   await expect(control).toHaveCSS("opacity", "0")
 
-  // The single-agent fixture has only Add and Model before the thinking trigger.
+  // The single-agent fixture has Add, Agent and Model before the thinking trigger.
   await page.keyboard.press("Tab")
   await expect(composer.getByRole("button", { name: "Add images and files" })).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(composer.getByRole("button", { name: "Choose agent" })).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(composer.getByRole("button", { name: "Thinking Model" })).toBeFocused()
   await page.keyboard.press("Tab")

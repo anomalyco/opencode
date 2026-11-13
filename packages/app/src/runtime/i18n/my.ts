@@ -349,7 +349,6 @@ export const dict = {
   "session.new.project.search": "ရှာဖွေရေး ပရောဂျက်များ",
   "session.new.project.add": "ပရောဂျက်ကို ထည့်ပါ။",
   "session.new.workspace.runIn": "စက်ရှင်ကို ဖွင့်ပါ။",
-  "session.new.workspace.triggerLocal": "ပြည်တွင်း",
   "session.new.workspace.local": "စက်တွင်းသိုလှောင်မှု",
   "session.new.git.none": "Git မရှိပါ။",
   "session.header.open.finder": "ရှာဖွေသူ",

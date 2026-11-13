@@ -384,7 +384,6 @@ export const dict = {
   "session.new.project.search": "搜索项目",
   "session.new.project.add": "添加项目",
   "session.new.workspace.runIn": "运行会话的位置",
-  "session.new.workspace.triggerLocal": "本地",
   "session.new.workspace.local": "本地仓库",
   "session.new.git.none": "无 Git",
 

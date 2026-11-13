@@ -17,7 +17,8 @@ export const MAX_MEDIA_INGEST_BYTES = 20 * 1024 * 1024
 const FIRST_CHUNK = 256 * 1024
 const TAIL_LINES = 100
 const MAX_LINE_LENGTH = 2_000
-const TREE_BASE = 6
+// Enough UTF-8 bytes for the clamped prefix, including a BOM and a partial code point at the end.
+const LINE_BYTES = 4 * (MAX_LINE_LENGTH + 1)
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 export const MEDIA_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"])
 
@@ -123,8 +124,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
   const first = yield* files.read(input, { offset: 0, length: FIRST_CHUNK }).pipe(
     Effect.catchTag("Environment.WrongKind", (error) =>
       Effect.gen(function* () {
-        if (error.actual !== "directory")
-          return yield* new PathKindError({ resource, expected: "a file or directory" })
+        if (error.actual !== "directory") return yield* new PathKindError({ resource, expected: "a file or directory" })
         if (page.offset !== undefined && page.offset < 0) return yield* new DirectoryOffsetError({ resource })
         return yield* files.list(input).pipe(
           Effect.map((entries) => list(entries, page, virtual ? "/" : path.sep)),
@@ -165,70 +165,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
     }
   }
 
-  if (first.bytes.length >= first.info.size) return yield* completePage(input, resource, first.bytes, page)
-
-  const offset = page.offset || 1
-  const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
-  const leaves = [textLeaf(first.bytes)]
-  let bytes = first.bytes.length
-  let lines = leaves[0].summary.lines
-  let ended = false
-  while (true) {
-    const eof = ended || bytes >= first.info.size
-    const total = lineCount(lines, leaves.at(-1)?.bytes.at(-1))
-    if (eof && offset > total) {
-      const skipped = Math.max(0, total - Math.min(page.limit || TAIL_LINES, TAIL_LINES))
-      // Decode from the newline ending the last skipped line, so a byte order mark
-      // starting the tail stays content. That empty first line is never in the tail.
-      const tree = textTree(leaves)
-      const tail = textPage(
-        textSlice(leaves, Math.max(0, textOffset(tree, skipped) - 1), tree.summary.bytes),
-        true,
-        page,
-      )
-      if (tail === undefined) return yield* Effect.die("Read page did not settle for a complete file")
-      return yield* makeTextPage(
-        input,
-        resource,
-        { ...tail, offset: Math.max(0, skipped - 1) + tail.offset },
-        leaves.some((leaf) => leaf.bytes.includes(0)),
-      )
-    }
-    if (eof || (offset > 0 && lines >= offset - 1)) {
-      // A negative offset only resolves at EOF, counting back from the last line.
-      const from = offset < 0 ? Math.max(1, total + offset + 1) : offset
-      const tree = textTree(leaves)
-      const start = textOffset(tree, from - 1)
-      // Decode only the requested lines plus one byte, enough to tell whether more follow.
-      const end = Math.min(tree.summary.bytes, textOffset(tree, from - 1 + limit) + 1)
-      const result = textPage(textSlice(leaves, start, end), eof && end === tree.summary.bytes, { limit })
-      if (result !== undefined) {
-        const translated = {
-          ...result,
-          offset: from,
-          ...(result.next === undefined ? { next: undefined } : { next: from + result.next - 1 }),
-        }
-        const consumed = start + result.consumed
-        let checked = 0
-        const binary = leaves.some((leaf) => {
-          const length = Math.min(leaf.summary.bytes, consumed - checked)
-          checked += leaf.summary.bytes
-          return length > 0 && leaf.bytes.subarray(0, length).includes(0)
-        })
-        return yield* makeTextPage(input, resource, translated, binary)
-      }
-    }
-
-    const next = yield* readFile(files, input, resource, { offset: bytes, length: FIRST_CHUNK })
-    if (next.bytes.length === 0) {
-      ended = true
-      continue
-    }
-    const leaf = textLeaf(next.bytes)
-    leaves.push(leaf)
-    bytes += leaf.summary.bytes
-    lines += leaf.summary.lines
-  }
+  return yield* textPage(files, input, resource, first, page)
 })
 
 const readFile = (
@@ -243,36 +180,155 @@ const readFile = (
       Effect.catchTag("Environment.WrongKind", () => Effect.fail(new PathKindError({ resource, expected: "a file" }))),
     )
 
-const completePage = Effect.fnUntraced(function* (
+// The first line ending in a chunk may have started many chunks earlier.
+type Checkpoint = { byte: number; length: number; firstLine: number; start: number; lastLine: number }
+
+const textPage = Effect.fnUntraced(function* (
+  files: Files,
   input: AbsolutePath,
   resource: string,
-  bytes: Uint8Array,
+  first: { bytes: Uint8Array; info: { size: number } },
   page: PageInput,
 ) {
-  const total = lineCount(textLeaf(bytes).summary.lines, bytes.at(-1))
-  const result = textPage(
-    bytes,
-    true,
-    page.offset !== undefined && page.offset < 0 ? { ...page, offset: Math.max(1, total + page.offset + 1) } : page,
-  )
-  if (result === undefined) return yield* Effect.die("Read page did not settle for a complete file")
-  return yield* makeTextPage(input, resource, result, bytes.subarray(0, result.consumed).includes(0))
-})
+  const requested = page.offset || 1
+  const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
+  const checkpoints: Checkpoint[] = []
+  const entries: string[] = []
+  let size = 0
+  let from = requested
+  let tail = false
+  let consumed = 0
+  let next: number | undefined
+  let firstNul = Infinity
+  const decoder = new TextDecoder("utf-8", { ignoreBOM: true })
 
-const makeTextPage = Effect.fnUntraced(function* (
-  input: AbsolutePath,
-  resource: string,
-  result: NonNullable<ReturnType<typeof textPage>>,
-  binary: boolean,
-) {
-  if (binary) return yield* new BinaryFileError({ resource })
+  const range = (offset: number, length: number) => readFile(files, input, resource, { offset, length })
+  const reread = Effect.fnUntraced(function* (offset: number, length: number) {
+    const { bytes } = yield* range(offset, length)
+    if (bytes.length === length) return bytes
+    const result = new Uint8Array(length)
+    result.set(bytes)
+    let filled = bytes.length
+    while (filled < length) {
+      const more = yield* range(offset + filled, length - filled)
+      if (more.bytes.length === 0) break
+      result.set(more.bytes, filled)
+      filled += more.bytes.length
+    }
+    return result.subarray(0, filled)
+  })
+
+  // Select complete lines in this chunk. Only a split line's displayable prefix ever needs a separate read.
+  const collect = Effect.fnUntraced(function* (point: Checkpoint, chunk: Uint8Array) {
+    let start = point.start
+    let local = Math.max(0, start - point.byte)
+    for (let line = point.firstLine; line < from && local < chunk.length; local++) {
+      if (chunk[local] !== 10) continue
+      line++
+      start = point.byte + local + 1
+    }
+    for (let line = Math.max(point.firstLine, from); line <= point.lastLine; line++) {
+      if (!tail && (entries.length >= limit || size >= MAX_READ_BYTES)) {
+        next = line
+        return
+      }
+      const lf = chunk.indexOf(10, local)
+      const end = point.byte + (lf < 0 ? chunk.length : lf)
+      const length = Math.min(LINE_BYTES, end - start)
+      const bytes =
+        start >= point.byte
+          ? chunk.subarray(start - point.byte, start - point.byte + length)
+          : start + length <= first.bytes.length
+            ? first.bytes.subarray(start, start + length)
+            : yield* reread(start, length)
+      let text = decoder.decode(bytes)
+      // Single-chunk pages decode from byte zero. Streamed pages decode from the selected line,
+      // except a past-end tail, whose embedded BOM remains content.
+      if (
+        text.startsWith("\uFEFF") &&
+        (start === 0 || (!tail && line === from && first.bytes.length < first.info.size))
+      )
+        text = text.slice(1)
+      text = clampLine(text.endsWith("\r") ? text.slice(0, -1) : text)
+      const cost = Buffer.byteLength(text) + (entries.length > 0 ? 1 : 0)
+      if (!tail && size + cost > MAX_READ_BYTES) {
+        next = line
+        return
+      }
+      entries.push(text)
+      size += cost
+      consumed = end + Number(lf >= 0)
+      local = lf + 1
+      start = end + 1
+    }
+  })
+
+  let byte = 0
+  let total = 0
+  let start = 0
+  let chunk = first.bytes
+  let lastByte = 0
+  while (chunk.length > 0) {
+    lastByte = byte
+    if (firstNul === Infinity) {
+      const nul = chunk.indexOf(0)
+      if (nul >= 0) firstNul = byte + nul
+    }
+    let count = 0
+    for (let i = 0; i < chunk.length; i++) count += Number(chunk[i] === 10)
+    if (count > 0) {
+      const point = { byte, length: chunk.length, firstLine: total + 1, start, lastLine: total + count }
+      checkpoints.push(point)
+      total += count
+      if (requested > 0 && total >= requested) yield* collect(point, chunk)
+      start = byte + chunk.lastIndexOf(10) + 1
+    }
+    byte += chunk.length
+    // Any byte after a full page starts another line, even if that line has no newline for megabytes.
+    if (next === undefined && (entries.length >= limit || size >= MAX_READ_BYTES) && consumed < byte)
+      next = requested + entries.length
+    if (next !== undefined || byte >= first.info.size) break
+    const more = yield* range(byte, FIRST_CHUNK)
+    if (more.bytes.length === 0) break
+    chunk = more.bytes
+  }
+
+  // EOF ends an unterminated line. A trailing newline already ended the last one.
+  if (next === undefined && start < byte) {
+    total++
+    const point = { byte: lastByte, length: chunk.length, firstLine: total, start, lastLine: total }
+    checkpoints.push(point)
+    if (requested > 0 && total >= requested) yield* collect(point, chunk)
+  }
+  if (requested < 0 || requested > total) {
+    tail = requested > total
+    from = Math.max(1, total + 1 + (tail ? -Math.min(page.limit || TAIL_LINES, TAIL_LINES) : requested))
+    // Each checkpoint covers disjoint line numbers. Seek to the chunk ending the first selected line;
+    // chunks in the middle of a long line have no checkpoint and are never reread.
+    for (const point of checkpoints) {
+      if (point.lastLine < from) continue
+      const bytes =
+        point.byte === 0 ? first.bytes : point.byte === lastByte ? chunk : yield* reread(point.byte, point.length)
+      yield* collect(point, bytes)
+      if (next !== undefined) break
+    }
+    if (tail) {
+      while (size > MAX_READ_BYTES) {
+        size -= Buffer.byteLength(entries.shift() ?? "") + 1
+        from++
+      }
+      consumed = byte
+    }
+  }
+
+  if (firstNul < consumed) return yield* new BinaryFileError({ resource })
   return new TextPage({
     type: "text-page",
-    content: result.entries.join("\n"),
+    content: entries.join("\n"),
     mime: mimeType(input),
-    offset: result.offset,
-    truncated: result.next !== undefined,
-    ...(result.next === undefined ? {} : { next: result.next }),
+    offset: from,
+    truncated: next !== undefined,
+    ...(next === undefined ? {} : { next }),
   })
 })
 
@@ -309,134 +365,11 @@ const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput, sep =
   })
 }
 
-const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput) => {
-  const offset = page.offset || 1
-  const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
-  const decoded = new TextDecoder().decode(bytes)
-  const split = decoded.split("\n")
-  const complete = eof ? (split.at(-1) === "" ? split.slice(0, -1) : split) : split.slice(0, -1)
-  const available = complete.map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line))
-
-  const entries: string[] = []
-  let size = 0
-  // An offset past the end returns the file's last lines that fit, ending at the last line.
-  if (eof && offset > Math.max(1, available.length)) {
-    for (const value of available.slice(-Math.min(page.limit || TAIL_LINES, TAIL_LINES)).toReversed()) {
-      const text = clampLine(value)
-      size += Buffer.byteLength(text, "utf-8") + (entries.length > 0 ? 1 : 0)
-      if (size > MAX_READ_BYTES) break
-      entries.unshift(text)
-    }
-    return { entries, offset: available.length - entries.length + 1, next: undefined, consumed: bytes.length }
-  }
-  let next: number | undefined
-  for (const [index, value] of available.slice(offset - 1).entries()) {
-    const line = offset + index
-    if (entries.length >= limit || size >= MAX_READ_BYTES) {
-      next = line
-      break
-    }
-    const text = clampLine(value)
-    const lineSize = Buffer.byteLength(text, "utf-8") + (entries.length > 0 ? 1 : 0)
-    if (size + lineSize > MAX_READ_BYTES) {
-      next = line
-      break
-    }
-    entries.push(text)
-    size += lineSize
-  }
-  if (next === undefined && entries.length >= limit && (!eof || offset - 1 + entries.length < available.length))
-    next = offset + entries.length
-  if (!eof && next === undefined) return
-
-  const consumedLines = next === undefined ? available.length : next - 1
-  const consumed = consumedLines === 0 ? 0 : (nthNewline(bytes, consumedLines) ?? bytes.length)
-  return { entries, offset, next, consumed }
-}
-
 const clampLine = (line: string) => {
   if (line.length <= MAX_LINE_LENGTH) return line
   const code = line.charCodeAt(MAX_LINE_LENGTH - 1)
   const end = code >= 0xd800 && code <= 0xdbff ? MAX_LINE_LENGTH - 1 : MAX_LINE_LENGTH
   return line.slice(0, end) + MAX_LINE_SUFFIX
-}
-
-// A trailing newline ends the last line instead of starting an empty one.
-const lineCount = (newlines: number, last: number | undefined) => newlines + (last === undefined || last === 10 ? 0 : 1)
-
-type TextSummary = { readonly bytes: number; readonly lines: number }
-// Request-local augmented rope. Subtree byte and newline weights locate a line
-// like an order-statistic query without repeatedly decoding the accumulated text.
-// https://doi.org/10.1002/spe.4380251203
-type TextNode =
-  | { readonly type: "leaf"; readonly bytes: Uint8Array; readonly summary: TextSummary }
-  | { readonly type: "branch"; readonly children: ReadonlyArray<TextNode>; readonly summary: TextSummary }
-
-const textLeaf = (bytes: Uint8Array): Extract<TextNode, { readonly type: "leaf" }> => {
-  let lines = 0
-  for (const byte of bytes) if (byte === 10) lines++
-  return { type: "leaf", bytes, summary: { bytes: bytes.length, lines } }
-}
-
-const textTree = (nodes: ReadonlyArray<TextNode>): TextNode => {
-  if (nodes.length === 1) return nodes[0]
-  return textTree(
-    Array.from({ length: Math.ceil(nodes.length / (TREE_BASE * 2)) }, (_, index) => {
-      const children = nodes.slice(index * TREE_BASE * 2, (index + 1) * TREE_BASE * 2)
-      return {
-        type: "branch" as const,
-        children,
-        summary: {
-          bytes: children.reduce((total, child) => total + child.summary.bytes, 0),
-          lines: children.reduce((total, child) => total + child.summary.lines, 0),
-        },
-      }
-    }),
-  )
-}
-
-const textOffset = (tree: TextNode, newline: number) => {
-  if (newline === 0) return 0
-  let node = tree
-  let remaining = newline
-  let offset = 0
-  while (node.type === "branch") {
-    const child = node.children.find((candidate) => {
-      if (remaining <= candidate.summary.lines) return true
-      remaining -= candidate.summary.lines
-      offset += candidate.summary.bytes
-      return false
-    })
-    if (!child) return tree.summary.bytes
-    node = child
-  }
-  const end = nthNewline(node.bytes, remaining)
-  return end === undefined ? tree.summary.bytes : offset + end
-}
-
-const textSlice = (
-  leaves: ReadonlyArray<Extract<TextNode, { readonly type: "leaf" }>>,
-  start: number,
-  end: number,
-) => {
-  let position = 0
-  return Buffer.concat(
-    leaves.flatMap((leaf) => {
-      const leafStart = position
-      position += leaf.summary.bytes
-      if (position <= start || leafStart >= end) return []
-      return [leaf.bytes.subarray(Math.max(0, start - leafStart), end - leafStart)]
-    }),
-  )
-}
-
-const nthNewline = (bytes: Uint8Array, count: number) => {
-  let found = 0
-  for (const [index, byte] of bytes.entries()) {
-    if (byte !== 10) continue
-    found++
-    if (found === count) return index + 1
-  }
 }
 
 const layer = Layer.effect(

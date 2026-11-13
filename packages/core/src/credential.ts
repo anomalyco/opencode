@@ -30,8 +30,8 @@ export type Value = Credential.Value
 export const Event = Credential.Event
 
 /** Whether an access token is due for a refresh. `expires` 0 means the issuer gave no lifetime. */
-export const expiring = (value: OAuth, now: number) =>
-  value.expires !== 0 && value.expires <= now + Duration.toMillis(Duration.minutes(5))
+export const expiring = (value: OAuth, now: number, margin: Duration.Input = Duration.minutes(5)) =>
+  value.expires !== 0 && value.expires <= now + Duration.toMillis(margin)
 
 export class Info extends Schema.Class<Info>("Credential.Info")({
   id: ID,

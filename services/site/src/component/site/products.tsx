@@ -1098,13 +1098,6 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
             {productCopy().sdk.action}
           </a>
         </Match>
-        {/* The VS Code extension; ACP editors are on its page. */}
-        <Match when={props.slug === "ide"}>
-          <a href={extensions.href} target="_blank" rel="noopener" data-component="site-button">
-            {extensionCardCopy().action}
-            <NewTab />
-          </a>
-        </Match>
         <Match when={props.slug === "mobile" || props.slug === "terminal" || props.slug === "mini"}>
           <div data-component="site-menu" ref={menu}>
             <button

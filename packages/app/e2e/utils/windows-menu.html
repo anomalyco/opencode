@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Sized like the app's root, so the sidebar and session fill the window and their rows take pointer input. -->
+    <div id="root" style="display: flex; flex-direction: column; height: 100dvh"></div>
     <script type="module">
       import { mount } from "./windows-menu.fixture.tsx"
       const params = new URLSearchParams(location.search)

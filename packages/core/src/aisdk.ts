@@ -3,6 +3,7 @@ export * as AISDK from "./aisdk.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { httpFetch } from "@opencode/util/effect/app-node-platform"
 import { APICallError } from "@ai-sdk/provider"
+import { ClientTls } from "#client-tls"
 import type {
   JSONSchema7,
   JSONValue,
@@ -134,6 +135,7 @@ function prepareOptions(model: RuntimeInfo, pkg: string, outbound: Fetch) {
 
   const customFetch = settings.fetch
   const timeouts = Provider.timeouts(settings)
+  const tls = Provider.tls(settings)
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const opts = { ...(init ?? {}) }
     // A plain AbortSignal.timeout would keep running into the body stream, so the header limit uses
@@ -160,7 +162,12 @@ function prepareOptions(model: RuntimeInfo, pkg: string, outbound: Fetch) {
       }
     }
 
-    const send: Fetch = isFetch(customFetch) ? customFetch : outbound
+    const https = String(input instanceof Request ? input.url : input).startsWith("https:")
+    const certified = tls && https ? ClientTls.sender(tls) : undefined
+    if (tls && https && !certified) throw new Error("Client certificates aren't supported on this runtime")
+    // A followed redirect keeps the TLS options, so it would present the client certificate to another host.
+    if (certified) Object.assign(opts, certified.init, { redirect: "error" })
+    const send: Fetch = certified ? certified.fetch : isFetch(customFetch) ? customFetch : outbound
     const middleware = httpMiddleware.getStore()
     const res = await (
       middleware

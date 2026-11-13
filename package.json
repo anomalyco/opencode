@@ -13,9 +13,8 @@
     "dev:vite:live": "sh -c 'OPENCODE_TUI_CHANNEL=dev OPENCODE_PASSWORD=\"$(opencode service get password)\" exec bun run dev:vite \"$@\" --server \"$(opencode service status)\"' --",
     "dev:desktop": "bun --cwd packages/desktop dev",
     "dev:web": "bun --cwd packages/app dev",
-    "dev:stats": "bun sst shell --stage=production -- bun run --cwd packages/stats/app dev",
     "dev:site": "bun run --cwd services/site dev",
-    "lint": "oxlint && ast-grep scan -c script/ast-grep/gui-plugins/sgconfig.yml && bun script/sdk-docs.ts",
+    "lint": "oxlint && ast-grep scan -c script/ast-grep/gui-plugins/sgconfig.yml && bun script/sdk-docs.ts && bun script/check-greys.ts",
     "lint:changed": "bun script/lint-changed.ts",
     "lint:effect-patterns": "ast-grep scan -c script/ast-grep/sgconfig.yml packages/util/src packages/core/src packages/server/src packages/protocol/src packages/cli/src",
     "lint:effect-simplifications": "ast-grep scan -c script/ast-grep/effect-simplifications/sgconfig.yml --off=unused-suppression packages",
@@ -39,7 +38,7 @@
       "packages/*",
       "packages/plugins/*",
       "services/*",
-      "packages/stats/*"
+      "packages/data/*"
     ],
     "catalog": {
       "@effect/opentelemetry": "4.1.0",
@@ -49,12 +48,12 @@
       "@effect/sql-sqlite-node": "4.1.0",
       "@npmcli/arborist": "9.4.0",
       "@types/bun": "1.4.3",
-      "@hona/strobe": "0.28.0",
+      "@hona/strobe": "0.34.0",
       "@types/cross-spawn": "6.0.6",
       "@octokit/rest": "22.0.0",
-      "@opentui/core": "0.8.1",
-      "@opentui/keymap": "0.8.1",
-      "@opentui/solid": "0.8.1",
+      "@opentui/core": "0.8.4",
+      "@opentui/keymap": "0.8.4",
+      "@opentui/solid": "0.8.4",
       "@tanstack/solid-virtual": "3.13.37",
       "@standard-schema/spec": "1.1.0",
       "@kobalte/core": "0.13.13",
@@ -91,7 +90,6 @@
       "@typescript/native": "npm:typescript@7.1.0-beta",
       "zod": "4.6.7",
       "remeda": "2.26.0",
-      "sst": "4.13.1",
       "shiki": "4.4.3",
       "solid-list": "0.3.0",
       "string-width": "7.2.0",
@@ -123,7 +121,6 @@
     "oxlint": "1.60.0",
     "prettier": "3.6.2",
     "semver": "^7.6.0",
-    "sst": "catalog:",
     "turbo": "2.10.2"
   },
   "dependencies": {

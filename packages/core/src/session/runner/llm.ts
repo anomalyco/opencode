@@ -29,6 +29,7 @@ import { llmClient } from "../../effect/app-node-platform.js"
 import { StepFailedError } from "../error.js"
 import { SessionRunnerRetry } from "./retry.js"
 import { SessionStep } from "./step.js"
+import { PersistentPty } from "../../persistent-pty/index.js"
 import { ToolOutput } from "../../tool-output.js"
 import { Plugin } from "../../plugin.js"
 import { PluginHooks } from "../../plugin/hooks.js"
@@ -54,6 +55,7 @@ const layer = Layer.effect(
     const jobs = yield* Job.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
+    const pty = yield* PersistentPty.Service
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
 
@@ -293,6 +295,7 @@ const layer = Layer.effect(
         const outcome = yield* steps.attempt({
           isLocationClosed: lifecycle.isClosed,
           interruption,
+          handoffPrepared: pty.handoffPrepared,
           sessionID,
           assistantMessageID,
           agent: loaded.agent.id,
@@ -460,6 +463,7 @@ export const node = makeLocationNode({
     Job.node,
     SessionTitle.node,
     Snapshot.node,
+    PersistentPty.node,
     ToolOutput.node,
     Database.node,
   ],
