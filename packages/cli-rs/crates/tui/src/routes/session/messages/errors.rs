@@ -39,6 +39,10 @@ impl ExecutionError {
         &self.root
     }
 
+    pub fn restyle(&self, cx: &Context<'_>) {
+        self.text.fg(cx.theme.text.feedback.error.base);
+    }
+
     pub fn update(&self, message: &SessionMessageInfo) {
         if let SessionMessageInfo::Idle(idle) = message
             && let Some(error) = &idle.error
@@ -83,6 +87,12 @@ impl StepError {
 
     pub fn root(&self) -> &View {
         &self.root
+    }
+
+    /// Takes the theme of `cx`; the next update paints the notice again.
+    pub fn restyle(&self, cx: &Context<'_>) {
+        self.retry.0.text.fg(cx.theme.text.feedback.warning.base);
+        self.rendered.take();
     }
 
     pub fn update(&self, cx: &Context<'_>, message: &SessionMessageAssistant) {

@@ -17,7 +17,7 @@ pub struct Execute(Rc<Inner>);
 
 struct Inner {
     app: App,
-    theme: Theme,
+    theme: opencode_ui::theme::Live,
     root: View,
     inline: InlineTool,
     calls: View,
@@ -38,7 +38,7 @@ impl Execute {
         let root = View::new(cx.app).column().shrink(0.0).child(inline.root()).child(&calls).child(&output);
         let inner = Rc::new(Inner {
             app: cx.app.clone(),
-            theme: cx.theme.clone(),
+            theme: cx.tui.live_theme(),
             root,
             inline,
             calls,
@@ -65,6 +65,17 @@ impl Execute {
 
     pub fn root(&self) -> &View {
         &self.0.root
+    }
+
+    /// The calls keep their open state; the update that follows shows the output again.
+    pub fn restyle(&self, _cx: &Context<'_>) {
+        let inner = &self.0;
+        inner.inline.restyle();
+        for row in inner.rows.borrow().iter() {
+            row.0.paint_border();
+            row.0.paint();
+        }
+        inner.shown_output.take();
     }
 
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
@@ -126,6 +137,7 @@ impl Execute {
                 inner.output.add(
                     &Text::new(&inner.app, format!("{}{line}", if index == 0 { "↳ " } else { "  " })).fg(inner
                         .theme
+                        .get()
                         .text
                         .feedback
                         .error
@@ -147,7 +159,7 @@ struct Call(Rc<CallInner>);
 
 struct CallInner {
     app: App,
-    theme: Theme,
+    theme: opencode_ui::theme::Live,
     root: View,
     icon: Text,
     text: Text,
@@ -158,7 +170,7 @@ struct CallInner {
 }
 
 impl Call {
-    fn new(app: &App, theme: &Theme, call: ExecuteCall) -> Self {
+    fn new(app: &App, theme: &opencode_ui::theme::Live, call: ExecuteCall) -> Self {
         let icon = Text::new(app, "").width(ICON_WIDTH).shrink(0.0);
         let text = Text::new(app, "").grow(1.0).wrap(WrapMode::None).truncate(true);
         let details = View::new(app)
@@ -166,7 +178,6 @@ impl Call {
             .padding_edge(Edge::Left, 1)
             .border(BorderStyle::Heavy)
             .border_sides(Sides::LEFT)
-            .border_color(theme.decrease(&theme.text.muted, 1))
             .visible(false);
         let root = View::new(app)
             .column()
@@ -196,6 +207,7 @@ impl Call {
             inner.expanded.set(!inner.expanded.get());
             inner.paint();
         }));
+        inner.paint_border();
         inner.paint();
         Self(inner)
     }
@@ -214,13 +226,18 @@ impl Call {
 }
 
 impl CallInner {
+    fn paint_border(&self) {
+        let theme = self.theme.get();
+        self.details.border_color(theme.decrease(&theme.text.muted, 1));
+    }
+
     fn expandable(&self) -> bool {
         self.call.borrow().input.as_ref().is_some_and(|input| !input.is_empty())
     }
 
     fn paint(&self) {
         let call = self.call.borrow();
-        let theme = &self.theme;
+        let theme = &self.theme.get();
         let expanded = self.expanded.get();
         let expanded_color = theme.decrease(&theme.text.muted, 1);
         let color = if call.status == ExecuteStatus::Error {

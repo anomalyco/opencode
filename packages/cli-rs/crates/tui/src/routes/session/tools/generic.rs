@@ -15,8 +15,7 @@ struct Inner {
     root: View,
     inline: InlineTool,
     details: View,
-    muted: Color,
-    base: Color,
+    theme: Live,
     expanded: Cell<bool>,
     entries: RefCell<Option<Details>>,
 }
@@ -34,8 +33,7 @@ impl Generic {
             root,
             inline,
             details,
-            muted: cx.theme.text.muted,
-            base: cx.theme.text.base,
+            theme: cx.tui.live_theme(),
             expanded: Cell::new(false),
             entries: RefCell::default(),
         });
@@ -48,6 +46,11 @@ impl Generic {
 
     pub fn root(&self) -> &View {
         &self.0.root
+    }
+
+    pub fn restyle(&self, _cx: &Context<'_>) {
+        self.0.inline.restyle();
+        self.0.paint();
     }
 
     pub fn update(&self, _cx: &Context<'_>, props: &Props<'_>) {
@@ -89,6 +92,7 @@ impl Inner {
         }
         let entries = self.entries.borrow();
         let Some((inputs, output)) = entries.as_ref() else { return };
+        let theme = self.theme.get();
         let rows = inputs
             .iter()
             .map(|(key, value)| (key.as_str(), value.as_str()))
@@ -97,8 +101,8 @@ impl Inner {
             self.details.add(
                 &View::new(&self.app)
                     .row()
-                    .child(&Text::new(&self.app, format!("{key}: ")).shrink(0.0).fg(self.muted))
-                    .child(&Text::new(&self.app, value).grow(1.0).fg(self.base)),
+                    .child(&Text::new(&self.app, format!("{key}: ")).shrink(0.0).fg(theme.text.muted))
+                    .child(&Text::new(&self.app, value).grow(1.0).fg(theme.text.base)),
             );
         }
     }

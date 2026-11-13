@@ -1,6 +1,7 @@
 //! A file's LSP errors under the write and edit tools (E.7a): `Diagnostics` and `parseDiagnostics`
 //! (`routes/session/index.tsx:3707-3731`, `:3815-3829`).
 
+use opencode_ui::theme::Paints;
 use opentui::prelude::*;
 use serde_json::{Map, Value};
 
@@ -40,8 +41,8 @@ pub fn parse(diagnostics: Option<&Value>, path: &str) -> Vec<Diagnostic> {
         .collect()
 }
 
-/// The errors as lines of error text, or `None` when there are none.
-pub fn view(cx: &Context<'_>, metadata: &Map<String, Value>, path: &str) -> Option<View> {
+/// The errors as lines of error text, or `None` when there are none; `paints` restyles them.
+pub fn view(cx: &Context<'_>, metadata: &Map<String, Value>, path: &str, paints: &Paints) -> Option<View> {
     let errors = parse(metadata.get("diagnostics"), path);
     if errors.is_empty() {
         return None;
@@ -54,7 +55,11 @@ pub fn view(cx: &Context<'_>, metadata: &Map<String, Value>, path: &str) -> Opti
             super::dispatch::number(error.character + 1.0),
             error.message
         );
-        column.add(&Text::new(cx.app, line).fg(cx.theme.text.feedback.error.base));
+        let text = Text::new(cx.app, line);
+        column.add(&text);
+        paints.add(cx.theme, move |theme| {
+            text.fg(theme.text.feedback.error.base);
+        });
     }
     Some(column)
 }

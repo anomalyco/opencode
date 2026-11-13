@@ -54,7 +54,8 @@ pub struct Pane {
     state: RefCell<State>,
     disposed: Cell<bool>,
     attachment: String,
-    theme: Vec<u8>,
+    /// The theme's palette as OSC sequences, written to the terminal when it connects and on a theme switch.
+    theme: RefCell<Vec<u8>>,
     tui: Weak<Tui>,
 }
 
@@ -92,7 +93,7 @@ impl Pane {
             state: RefCell::new(State { terminal_size: Some(Size { cols: 80, rows: 24 }), ..State::default() }),
             disposed: Cell::new(false),
             attachment: opencode_local::id::v4(),
-            theme: super::palette::osc(&page, mode, background),
+            theme: RefCell::new(super::palette::osc(&page, mode, background)),
             tui: tui.weak(),
         });
         pane.apply_theme();
@@ -104,6 +105,18 @@ impl Pane {
 
     pub fn root(&self) -> &View {
         &self.root
+    }
+
+    /// Takes the page theme in place, as TS's `terminalPalette` follows it: the terminal keeps its screen and gets
+    /// the new palette.
+    pub fn restyle(&self, tui: &Tui) {
+        let page = tui.page();
+        let background = page.background.raised.base;
+        self.root.bg(background);
+        self.failure.fg(page.text.feedback.error.base);
+        self.shown.transparent_background(background.a == 0);
+        *self.theme.borrow_mut() = super::palette::osc(&page, tui.theme.borrow().mode(), background);
+        self.apply_theme();
     }
 
     pub fn pty(&self) -> &str {
@@ -178,7 +191,7 @@ impl Pane {
     fn apply_theme(&self) {
         let view = self.view.borrow().clone();
         if let Some(view) = view {
-            view.write(&self.theme);
+            view.write(self.theme.borrow().as_slice());
         }
     }
 

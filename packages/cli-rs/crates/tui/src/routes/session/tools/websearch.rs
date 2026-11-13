@@ -21,6 +21,10 @@ impl WebSearch {
         self.0.root()
     }
 
+    pub fn restyle(&self, _cx: &Context<'_>) {
+        self.0.restyle();
+    }
+
     pub fn update(&self, _cx: &Context<'_>, props: &Props<'_>) {
         let query = props.input_str("query");
         // `<Show when={stringValue(metadata.provider)}>`: an empty name is no provider.

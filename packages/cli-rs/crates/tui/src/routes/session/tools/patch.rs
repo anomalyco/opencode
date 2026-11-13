@@ -14,6 +14,8 @@ pub struct Patch {
     root: View,
     blocks: RefCell<Vec<BlockTool>>,
     shown: RefCell<Option<Shown>>,
+    /// Restyles the blocks' children in place.
+    paints: Paints,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -45,11 +47,25 @@ impl Patch {
             root: View::new(cx.app).column().shrink(0.0).gap(1),
             blocks: RefCell::default(),
             shown: RefCell::default(),
+            paints: Paints::default(),
         }
     }
 
     pub fn root(&self) -> &View {
         &self.root
+    }
+
+    /// The diffs keep their code and highlight.
+    pub fn restyle(&self, cx: &Context<'_>) {
+        if let Some(Shown::Pending { status, .. }) = &*self.shown.borrow() {
+            for block in self.blocks.borrow().iter() {
+                block.recolor(pending_colors(cx.theme, *status == Status::Error));
+            }
+        }
+        for block in self.blocks.borrow().iter() {
+            block.restyle();
+        }
+        self.paints.restyle(cx.theme);
     }
 
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
@@ -58,20 +74,24 @@ impl Patch {
             return;
         }
         self.root.clear();
+        self.paints.clear();
         let blocks = match &shown {
             Shown::Files { files, view, wrap, common } => files
                 .iter()
                 .map(|file| {
                     let block = self.block(cx, common, label(&file.kind), &file.relative_path);
                     let child = if file.kind == "delete" {
-                        Text::new(
+                        let text = Text::new(
                             cx.app,
                             format!("-{} line{}", number(file.deletions), if file.deletions == 1.0 { "" } else { "s" }),
-                        )
-                        .fg(cx.theme.diff.text.removed)
-                        .as_any()
+                        );
+                        let painted = text.clone();
+                        self.paints.add(cx.theme, move |theme| {
+                            painted.fg(theme.diff.text.removed);
+                        });
+                        text.as_any()
                     } else {
-                        let diff = opencode_ui::diff::view(
+                        let diff = opencode_ui::diff::view_painted(
                             cx.app,
                             cx.theme,
                             cx.syntax,
@@ -80,6 +100,7 @@ impl Patch {
                             opentui::syntax::filetype_for_path(&file.relative_path),
                             *wrap,
                             0,
+                            &self.paints,
                         );
                         View::new(cx.app).padding_edge(Edge::Left, 1).padding_edge(Edge::Right, 1).child(&diff).as_any()
                     };
@@ -92,13 +113,14 @@ impl Patch {
                 .iter()
                 .map(|(kind, resource)| {
                     let block = self.block(cx, common, label(kind), resource);
-                    let fg = if kind == "delete" { cx.theme.diff.text.removed } else { cx.theme.text.muted };
-                    block.children().add(
-                        &Text::new(cx.app, truncate_file_path(resource, (common.width - 5).max(2)))
-                            .fg(fg)
-                            .wrap(WrapMode::None)
-                            .truncate(true),
-                    );
+                    let text = Text::new(cx.app, truncate_file_path(resource, (common.width - 5).max(2)))
+                        .wrap(WrapMode::None)
+                        .truncate(true);
+                    block.children().add(&text);
+                    let deleted = kind == "delete";
+                    self.paints.add(cx.theme, move |theme| {
+                        text.fg(if deleted { theme.diff.text.removed } else { theme.text.muted });
+                    });
                     block.show_children(true);
                     block
                 })
@@ -107,10 +129,7 @@ impl Patch {
                 let block = BlockTool::new(cx);
                 let failed = *status == Status::Error;
                 let title = if failed { "# Patch failed" } else { "Patching" };
-                block.colors(BlockColors {
-                    header: failed.then_some(cx.theme.text.feedback.error.base),
-                    error: failed.then_some(cx.theme.text.muted),
-                });
+                block.colors(pending_colors(cx.theme, failed));
                 block.set(Block {
                     header: match targets.as_slice() {
                         [target] => Header::Path { label: title.to_owned(), value: format_path(cx, Some(target)) },
@@ -145,6 +164,11 @@ impl Patch {
         });
         block
     }
+}
+
+/// A failed patch's header in the error color and its error muted.
+fn pending_colors(theme: &Theme, failed: bool) -> BlockColors {
+    BlockColors { header: failed.then_some(theme.text.feedback.error.base), error: failed.then_some(theme.text.muted) }
 }
 
 fn shown(cx: &Context<'_>, props: &Props<'_>) -> Shown {

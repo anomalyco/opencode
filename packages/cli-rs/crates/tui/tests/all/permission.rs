@@ -170,6 +170,31 @@ fn a_subagent_rejection_asks_what_to_do_differently() {
     assert_eq!(harness.replies(1), [reply("per_2", "ses_child", json!({ "decision": "reject", "message": "use rg" }))]);
 }
 
+/// The rejection prompt restyles in place, keeping the reason typed so far: each cell equals the prompt mounted in
+/// the new theme with the same reason.
+#[test]
+fn a_theme_switch_keeps_the_rejection_and_its_reason() {
+    support::assert_restyles_in_place(
+        || {
+            mount(
+                Fixture { child: vec![request("per_2", "ses_child", "grep", &["TODO"], &[])], ..Fixture::default() },
+                Permissions::Prompt,
+            )
+        },
+        |harness| {
+            harness.wait_for("Fix the parser");
+            let child: SessionInfo = serde_json::from_value(session("ses_child", Some("ses_root"))).unwrap();
+            harness.tui.data.remember(child);
+            harness.wait_for("Grep \"TODO\"");
+            harness.app.press("h");
+            harness.app.press("enter");
+            harness.wait_for("Reject permission");
+            harness.app.type_text("use rg");
+        },
+        |screen| screen.contains("use rg") && screen.contains("Tell OpenCode what to do differently"),
+    );
+}
+
 #[test]
 fn ctrl_f_toggles_fullscreen_and_escape_minimizes_first() {
     let harness = mount(

@@ -396,6 +396,11 @@ impl Autocomplete {
         start
     }
 
+    /// Draws an open popup in the page theme again, keeping its search and selection.
+    pub fn restyle(&self, tui: &Tui) {
+        self.0.render(tui);
+    }
+
     /// The store changed: catalogs may have arrived.
     pub fn sync(&self) {
         if self.0.visible.get().is_some() {

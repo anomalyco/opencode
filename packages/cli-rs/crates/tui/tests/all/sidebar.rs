@@ -93,6 +93,20 @@ fn a_fold_survives_a_remount() {
     h.wait_for("sentry");
 }
 
+// Expected: a theme switch restyles the docked sidebar in place, its folded list included: each cell equals the
+// session mounted in the new theme.
+#[test]
+fn a_theme_switch_restyles_the_sidebar_in_place() {
+    support::assert_restyles_in_place(
+        || mount(&[], false),
+        |h| {
+            h.servers();
+            h.click("MCP");
+        },
+        |screen| screen.contains("MCP (1 active, 2 errors)"),
+    );
+}
+
 // Expected: dismissing the getting started card hides it, storage reads the new value back at once, and the value
 // reaches the disk.
 #[test]
