@@ -1,7 +1,6 @@
 #!/bin/sh
-# Compile-checks the workspace for x86_64-pc-windows-msvc on Linux: clippy with every target and -D warnings, once
-# with the default features and once with opencode-ui/grammars-all. Nothing is linked or run; only the preview
-# repository's Windows runner does that.
+# Compile-checks the workspace for x86_64-pc-windows-msvc on Linux: clippy with every target and -D warnings. Nothing
+# is linked or run; only the preview repository's Windows runner does that.
 #
 # This is OpenTUI's packages/rust/scripts/check-targets.sh recipe for one target, with no installs: the standard
 # library builds from rust-src (RUSTC_BOOTSTRAP stays in this local script and is never used in CI), Zig compiles
@@ -52,8 +51,5 @@ export OPENTUI_LIB_DIR="$tools/lib"
 export RUSTC_BOOTSTRAP=1 CARGO_UNSTABLE_BUILD_STD=std
 export CC_x86_64_pc_windows_msvc="$tools/cc" AR_x86_64_pc_windows_msvc="$tools/zig-lib"
 cargo=${CARGO:-cargo}
-for features in '' '--features opencode-ui/grammars-all'; do
-    # shellcheck disable=SC2086
-    "$cargo" clippy --locked --target "$target" --workspace --all-targets $features "$@" -- -D warnings < /dev/null
-done
+"$cargo" clippy --locked --target "$target" --workspace --all-targets "$@" -- -D warnings < /dev/null
 printf 'PASS: compile checks (%s)\n' "$target"

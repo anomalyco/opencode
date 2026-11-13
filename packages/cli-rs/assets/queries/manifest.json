@@ -192,13 +192,6 @@
     ]
   },
   {
-    "filetype": "ocaml",
-    "aliases": [],
-    "sources": [
-      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/ocaml/highlights.scm"
-    ]
-  },
-  {
     "filetype": "clojure",
     "aliases": [],
     "sources": [
@@ -241,13 +234,6 @@
     "aliases": [],
     "sources": [
       "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/elixir/highlights.scm"
-    ]
-  },
-  {
-    "filetype": "fsharp",
-    "aliases": [],
-    "sources": [
-      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/fsharp/highlights.scm"
     ]
   },
   {
