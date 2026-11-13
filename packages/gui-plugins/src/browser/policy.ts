@@ -162,10 +162,23 @@ type FrameTrees = {
   /** Each out-of-process frame's tree, under the frame that holds it. */
   readonly children: ReadonlyArray<{ readonly parentID: string; readonly tree: FrameTree }>
   /**
-   * Frames known to show an extension's document that the trees cannot tell: an extension's out-of-process frame,
-   * whose tree is never read, and a frame whose document has an extension's origin.
+   * Frames excluded by target or context, including every frame in an excluded target's tree.
    */
   readonly extensions: ReadonlySet<string>
+}
+
+/** An excluded target contributes only frame IDs, never names, URLs, contexts or agent targets. */
+export function excludedFrames(known: Iterable<string>, trees: readonly FrameTree[]) {
+  const ids = new Set(known)
+
+  const visit = (tree: FrameTree) => {
+    ids.add(tree.frame.id)
+    tree.childFrames?.forEach(visit)
+  }
+
+  trees.forEach(visit)
+
+  return ids
 }
 
 type AgentFrameInfo = { id: string; parentID?: string; url: string; name: string }

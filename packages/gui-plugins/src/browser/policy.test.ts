@@ -8,6 +8,7 @@ import {
   committedLoad,
   destinationOrigin,
   downloadOwner,
+  excludedFrames,
   DOWNLOAD_GRACE_MS,
   fileURLWithin,
   localFileURL,
@@ -206,8 +207,16 @@ test("a frameID the agent passes resolves only to a frame it may use, and names 
   }
 
   const children = [{ parentID: "main", tree: { frame: { id: "cross", url: "https://other.example/" } } }]
-  // The extension's own out-of-process frame, whose tree is never read, and a frame that just became one.
-  const extensions = new Set(["overlay", "cross-now-extension"])
+
+  // Neither the extension's target nor a web target below it contributes frames to the agent's visible trees.
+  const extensions = excludedFrames(["overlay", "cross-now-extension"], [
+    { frame: { id: "overlay", url: "chrome-extension://abc/menu.html" }, childFrames: [
+      { frame: { id: "nested-extension", url: "chrome-extension://abc/nested.html" } },
+    ] },
+    { frame: { id: "nested-web", url: "https://example.com/nested" }, childFrames: [
+      { frame: { id: "grandchild", url: "about:blank" } },
+    ] },
+  ])
 
   const access = (frameID: string, known = extensions) =>
     agentFrame({ root, children, extensions: known }, frameID).type
@@ -219,6 +228,8 @@ test("a frameID the agent passes resolves only to a frame it may use, and names 
   expect(access("cross")).toBe("frame")
   expect(access("main")).toBe("frame")
   expect(access("overlay")).toBe("extension")
+
+  for (const id of ["nested-extension", "nested-web", "grandchild"]) expect(access(id)).toBe("extension")
   expect(access("opened")).toBe("extension")
   expect(access("inside")).toBe("extension")
   expect(access("made-up")).toBe("unavailable")

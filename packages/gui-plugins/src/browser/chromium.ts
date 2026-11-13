@@ -49,6 +49,7 @@ import {
   committedLoad,
   destinationOrigin,
   downloadOwner,
+  excludedFrames,
   extensionURL,
   fileURLWithin,
   localFileURL,
@@ -354,6 +355,15 @@ export function createBrowserPage(
   const extensionTargets = new Map<string, string>()
   const extensionContexts = new Set<string>()
   const extensionFrames = () => new Set([...extensionTargets.values(), ...extensionContexts])
+
+  const attachFrames = (sessionID?: string) =>
+    cdp.send("Target.setAutoAttach", {
+      autoAttach: true,
+      waitForDebuggerOnStart: false,
+      flatten: true,
+      filter: [{ type: "iframe", exclude: false }, { exclude: true }],
+    }, sessionID)
+
   const activity: Activity = { agentRuns: 0 }
   const loaders: LoaderRefresh = { pending: false }
 
@@ -604,9 +614,11 @@ export function createBrowserPage(
     // An extension's frame, such as an autofill overlay, stays out of `sessions`: no frame list, snapshot, picker or
     // diagnostics reaches it. Site isolation gives it a process, and so a target, of its own. The context its first
     // document had in the embedding page's process is dropped, so its frameID cannot reach that page instead.
-    if (Browser.extensionOrigin(targetInfo.url)) {
+    if (Browser.extensionOrigin(targetInfo.url) || (parentSessionID && extensionTargets.has(parentSessionID))) {
       extensionTargets.set(sessionId, targetInfo.targetId)
       contexts.delete(targetInfo.targetId)
+      // Descendant iframe targets are excluded even if their own document is a web page. Do not enable diagnostics.
+      void attachFrames(sessionId).catch(() => undefined)
 
       return
     }
@@ -618,16 +630,7 @@ export function createBrowserPage(
     void Promise.all([
       diagnostics.enable(sessionId),
       cdp.send("Page.enable", {}, sessionId),
-      cdp.send(
-        "Target.setAutoAttach",
-        {
-          autoAttach: true,
-          waitForDebuggerOnStart: false,
-          flatten: true,
-          filter: [{ type: "iframe", exclude: false }, { exclude: true }],
-        },
-        sessionId,
-      ),
+      attachFrames(sessionId),
     ]).catch(() => undefined)
     void dispatchPicker({ type: "frame.attached", sessionID: sessionId })
   })
@@ -703,12 +706,7 @@ export function createBrowserPage(
     diagnostics.enable(),
     cdp.send("Page.enable"),
     cdp.send("DOM.enable"),
-    cdp.send("Target.setAutoAttach", {
-      autoAttach: true,
-      waitForDebuggerOnStart: false,
-      flatten: true,
-      filter: [{ type: "iframe", exclude: false }, { exclude: true }],
-    }),
+    attachFrames(),
   ]).then(() => undefined)
 
   return {
@@ -1382,7 +1380,13 @@ export function createBrowserPage(
       }),
     )
 
-    return { root: root.frameTree, children: children.flat(), extensions: extensionFrames() }
+    const excluded = await Promise.all(Array.from(extensionTargets.keys(), async (sessionID) => {
+      const tree = await cdp.send("Page.getFrameTree", {}, sessionID).catch(() => undefined)
+
+      return tree ? [tree.frameTree] : []
+    }))
+
+    return { root: root.frameTree, children: children.flat(), extensions: excludedFrames(extensionFrames(), excluded.flat()) }
   }
 
   /** The frame an agent's frameID names; every operation that takes one resolves it here. */
