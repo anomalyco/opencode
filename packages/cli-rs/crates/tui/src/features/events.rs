@@ -78,6 +78,8 @@ pub fn install(tui: &Tui) {
     // For the TUI's lifetime.
     std::mem::forget(tui.data.listen(HANDLED.iter().map(|(tag, _)| *tag)));
     tui.app.on_message(bind!(tui, |tui, _, Signal(event)| {
+        // What the plugins asked for while the signal before it was handled runs first (`opencode_plugin::flush`): a
+        // signal runs plugin handlers and can navigate.
         opencode_plugin::flush();
         if let Some(event) = Handled::of(event) {
             handle(&tui, &event);
@@ -88,10 +90,7 @@ pub fn install(tui: &Tui) {
             subscriber(&tui, event);
         }
     }));
-    tui.app.on_message(bind!(tui, |tui, _, _: &Lagged| {
-        opencode_plugin::flush();
-        resync(&tui);
-    }));
+    tui.app.on_message(bind!(tui, |tui, _, _: &Lagged| resync(&tui)));
 }
 
 #[doc(hidden)]

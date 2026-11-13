@@ -739,19 +739,16 @@ fn install_wakeups(tui: &Rc<Tui>, connect: bool) -> Wakeups {
     let pending = Arc::new(AtomicBool::new(false));
     let clear = pending.clone();
     let weak = tui.weak();
-    // Each message first runs what the plugins asked for while the one before it was handled (`opencode_plugin::flush`).
     tui.app.on_message(move |_, _: &DataChanged| {
-        opencode_plugin::flush();
         // Cleared before the read, so a flush during the sync posts another wake.
         clear.store(false, Ordering::SeqCst);
         if let Some(tui) = weak.upgrade() {
             tui.sync();
         }
     });
-    tui.app.on_message(bind!(tui, |tui, _, StatusChanged(state)| {
-        opencode_plugin::flush();
-        crate::features::overlays::connection_changed(&tui, state);
-    }));
+    tui.app.on_message(bind!(tui, |tui, _, StatusChanged(state)| crate::features::overlays::connection_changed(
+        &tui, state
+    )));
 
     // Offline until the connection reports connected, so reads behind `refresh` wait for it as in TS.
     if connect {

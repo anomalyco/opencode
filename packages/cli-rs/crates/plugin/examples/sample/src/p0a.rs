@@ -8,7 +8,7 @@
 
 use super::abi::{
     Action, Alert, Border, BorderStyle, Command, ComposerEdit, Confirm, ConfirmLabel, Dialog, Edges, Host, Layout,
-    Node, Overflow, Placement, Read, Render, Setup, Sides, Span, TitleAlign, Toast, Variant, Width,
+    Node, Overflow, Placement, Read, Render, Setup, Sides, Span, TitleAlign, Toast, Variant, Waker, Width,
 };
 
 pub fn setup(setup: &mut Setup) -> Result<(), String> {
@@ -44,6 +44,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
             host.edit_composer(ComposerEdit::Set { text: "teardown edit".to_owned() });
             host.edit_composer(ComposerEdit::Submit);
             alert(host, "p0a.closed");
+            append(host, "teardown wrote".to_owned());
             panic!("p0a's disposer panicked");
         }
     });
@@ -91,6 +92,10 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
             _ => {}
         }
     });
+    // A wake logs what the composer holds; `p0a.wake` wakes the host as the plugin's own thread would.
+    let waker = setup.waker();
+    setup.command(hidden("p0a.wake"), move |_, _| waker.iter().for_each(Waker::wake));
+    setup.on_wake(|host| append(host, format!("woke {}", host.composer().map(|it| it.text).unwrap_or_default())));
     setup.slot(Placement::append("home.footer"), |_, _, _| Render::Show(styled()));
     Ok(())
 }
