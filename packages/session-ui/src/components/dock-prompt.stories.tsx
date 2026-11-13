@@ -5,6 +5,7 @@ export default {
   title: "OpenCode/Requests/Prompt frame",
   id: "components-dock-prompt",
   component: DockPrompt,
+  args: { experimental: false },
   parameters: {
     docs: {
       description: {
@@ -16,17 +17,19 @@ export default {
 }
 
 export const Question = {
-  render: () => (
+  args: { prompt: "Which Session layout should I implement?", hint: "Select one answer" },
+  render: (args: { experimental: boolean; prompt: string; hint: string }) => (
     <DockPrompt
       kind="question"
+      variant={args.experimental ? "experimental" : undefined}
       header={
         <>
           <div data-slot="question-header-top">
             <div data-slot="question-header-title">Question</div>
           </div>
           <div data-slot="question-details">
-            <div data-slot="question-text">Which Session layout should I implement?</div>
-            <div data-slot="question-hint">Select one answer</div>
+            <div data-slot="question-text">{args.prompt}</div>
+            <div data-slot="question-hint">{args.hint}</div>
           </div>
         </>
       }
@@ -47,9 +50,11 @@ export const Question = {
 }
 
 export const Permission = {
-  render: () => (
+  args: { command: "npm publish --tag canary" },
+  render: (args: { experimental: boolean; command: string }) => (
     <DockPrompt
       kind="permission"
+      variant={args.experimental ? "experimental" : undefined}
       header={<div class="text-13-medium text-text-strong">Permission required</div>}
       footer={
         <>
@@ -62,7 +67,7 @@ export const Permission = {
         </>
       }
     >
-      <code class="text-12-regular text-text-base">npm publish --tag canary</code>
+      <code class="text-12-regular text-text-base">{args.command}</code>
     </DockPrompt>
   ),
 }
