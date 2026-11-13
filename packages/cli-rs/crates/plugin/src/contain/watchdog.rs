@@ -40,6 +40,10 @@ pub fn spawn(record: Arc<Record>, epoch: Instant, limits: Limits, mut terminal: 
         let mut noticed = None;
         loop {
             std::thread::sleep(Duration::from_millis(20));
+            // The monitor is gone: nothing calls a plugin any more.
+            if Arc::strong_count(&record) == 1 {
+                return;
+            }
             let Some((slot, kind, started)) = record.running() else { continue };
             let running = epoch.elapsed().saturating_sub(Duration::from_millis(started));
             let what = || {
