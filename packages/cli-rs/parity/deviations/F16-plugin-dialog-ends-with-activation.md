@@ -14,9 +14,13 @@ end a TS activation, so it closes nothing.
 
 When an activation of a plugin ends, its dialog closes: on a disable (the plugin manager or `cli.json`), on a reload
 that replaces the build, on an unload, at the exit, and when a call of the plugin fails. A panel, a prompt and a list
-each carry their plugin in their dialog key (`crates/tui/src/plugins/panel.rs`, `close`), and the registry calls
-`Host::revoked` last in the activation's disposal and when it fails the plugin (`crates/plugin/src/lib.rs`). A
-reload whose new build fails to set up leaves the running build and its dialog.
+each belong to the activation that asked for it: `Host::dialog` gets the activation's generation, the TUI records
+that owner while the dialog is open, and a dialog or a confirmed action of an activation that is no longer live
+(`Registry::live`) shows and runs nothing (`crates/tui/src/plugins/panel.rs`, `show`, `close`, `run`). The registry
+calls `Host::revoked` first in the activation's disposal, before the plugin's dispose callbacks, and when it fails the
+plugin (`crates/plugin/src/lib.rs`); it closes the dialog only if its owner is that plugin and not live. A dialog
+that a dispose callback or a setup that failed asks for never shows. A reload whose new build fails to set up leaves
+the running build and its dialog.
 
 The shared fixture shows it: `parity/machines/plugins.json`, rows `dialogA reload` and `dialogB reload`. TS keeps the
 prompt (`?/?/?/open`); Rust closes it and shows the plugin on its new build (`A/yes/on/-`).
