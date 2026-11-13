@@ -46,6 +46,7 @@ const description = (shell?: string) =>
     "Rely on automatic truncation unless filtering the output is more useful.",
     "Commands still running after their timeout move to the background.",
     "Background commands return immediately, and you will be notified when they complete.",
+    "Commands receive the current session's ID in the OPENCODE_SESSION_ID environment variable.",
   ].join(" ")
 
 export const Input = Schema.Struct({
