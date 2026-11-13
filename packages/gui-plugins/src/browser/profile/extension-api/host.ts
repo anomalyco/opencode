@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises"
 import path from "node:path"
 import { app, webContents, webFrameMain, type Extension, type ServiceWorkerMain, type Session, type WebContents } from "electron"
 import type { Log } from "@opencode/plugin/gui/main"
-import { allowed, namespaceOf, type ApiModule, type Emit, type ExtensionContext, type Wire } from "./api"
+import { allowed, apiReply, namespaceOf, type ApiModule, type Emit, type ExtensionContext, type Wire } from "./api"
 import type { Manifests } from "./manifest"
 import preloadSource from "./preload.js?raw"
 
@@ -115,7 +115,7 @@ export async function createExtensionHost(input: {
     contents.ipc.removeHandler("browser-extension:call")
     contents.ipc.removeHandler("browser-extension:subscribe")
     contents.ipc.handle("browser-extension:call", (event, name: string, args: readonly Wire[]) =>
-      call(frameContext(event), name, args),
+      apiReply(call(frameContext(event), name, args)),
     )
     contents.ipc.handle("browser-extension:subscribe", (event, name: string) => {
       const context = frameContext(event)
@@ -148,7 +148,7 @@ export async function createExtensionHost(input: {
     worker.ipc.removeHandler("browser-extension:call")
     worker.ipc.removeHandler("browser-extension:subscribe")
     worker.ipc.handle("browser-extension:call", (_event, name: string, args: readonly Wire[]) =>
-      call({ extension }, name, args),
+      apiReply(call({ extension }, name, args)),
     )
     worker.ipc.handle("browser-extension:subscribe", (_event, name: string) =>
       subscribe(extension, name, { kind: "worker" }),

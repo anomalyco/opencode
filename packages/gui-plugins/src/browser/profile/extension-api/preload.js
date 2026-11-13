@@ -17,13 +17,16 @@ const href = String(
 if (href.startsWith("chrome-extension://")) {
   const receiver = { dispatch: undefined }
   ipcRenderer.on("browser-extension:event", (_event, name, args) => receiver.dispatch?.(name, args))
+
   // Main attaches a worker's handlers as it starts, which can land just after the worker's first calls. Each retry
   // waits a round trip to main; a worker's preload has no timers.
   const request = (channel, args, attempt = 0) =>
     ipcRenderer.invoke(channel, ...args).catch((error) => {
       if (attempt >= 200 || !String(error?.message).includes("No handler registered")) throw error
+
       return request(channel, args, attempt + 1)
     })
+
   const bridge = {
     invoke: (name, args) => request("browser-extension:call", [name, args]),
     subscribe: (name) => void request("browser-extension:subscribe", [name]).catch(() => undefined),
@@ -31,6 +34,7 @@ if (href.startsWith("chrome-extension://")) {
       receiver.dispatch = dispatch
     },
   }
+
   if (isolated) contextBridge.executeInMainWorld({ func: install, args: [namespaces, bridge] })
   else install(namespaces, bridge)
 }
@@ -38,6 +42,7 @@ if (href.startsWith("chrome-extension://")) {
 // Runs in the extension's own world, so it must not use anything from this file's scope.
 function install(namespaces, bridge) {
   const chrome = globalThis.chrome
+
   if (!chrome?.runtime?.getManifest) return
   const manifest = chrome.runtime.getManifest()
   // Only hides namespaces the extension cannot use; main's `allowed` is the check that refuses a call.
@@ -57,6 +62,7 @@ function install(namespaces, bridge) {
   const event = (name) => ({
     addListener(listener) {
       const set = listeners.get(name) ?? new Set()
+
       if (set.size === 0) bridge.subscribe(name)
       set.add(listener)
       listeners.set(name, set)
@@ -73,26 +79,39 @@ function install(namespaces, bridge) {
   })
 
   // ImageData and other host objects become plain data; functions and undefined drop out.
+  // SAFETY: these checks marshal arguments from an extension's JavaScript world; they do not validate a method's
+  // arguments or grant access. Main checks the caller and decodes each method's wire arguments.
+  /* oxlint-disable anti-slop/no-runtime-typeof */
   const clean = (value) => {
     if (typeof ImageData !== "undefined" && value instanceof ImageData)
       return { width: value.width, height: value.height, data: new Uint8Array(value.data) }
+
     if (Array.isArray(value)) return value.map(clean)
+
     if (value && typeof value === "object" && !(value instanceof ArrayBuffer) && !ArrayBuffer.isView(value))
       return Object.fromEntries(
         Object.entries(value)
           .filter((entry) => typeof entry[1] !== "function" && entry[1] !== undefined)
           .map((entry) => [entry[0], clean(entry[1])]),
       )
+
     return typeof value === "function" ? undefined : value
   }
 
   const call = (name, sync) =>
     function (...args) {
       const callback = typeof args.at(-1) === "function" ? args.pop() : undefined
+
       if (sync && args[0] && typeof args[0] === "object" && args[0].id === undefined)
         args[0] = { ...args[0], id: crypto.randomUUID() }
       const id = sync ? args[0]?.id : undefined
-      const result = bridge.invoke(name, clean(args))
+
+      const result = bridge.invoke(name, clean(args)).then((reply) => {
+        if (!reply.ok) throw new Error(reply.message)
+
+        return reply.value
+      })
+
       if (!callback) return sync ? id : result
       result.then(
         (value) => callback(value),
@@ -101,8 +120,11 @@ function install(namespaces, bridge) {
           callback()
         },
       )
+
       return id
     }
+
+  /* oxlint-enable anti-slop/no-runtime-typeof */
 
   const define = (target, key, value) => {
     try {
@@ -117,17 +139,22 @@ function install(namespaces, bridge) {
 
   for (const namespace of namespaces) {
     if (namespace.manifest && namespace.manifest !== manifest.manifest_version) continue
+
     if (namespace.permissions?.length && !namespace.permissions.some((permission) => declared.has(permission))) continue
+
     const members = Object.fromEntries([
       ...namespace.methods.map((name) => [name, call(`${namespace.path}.${name}`, namespace.sync?.includes(name))]),
       ...(namespace.events ?? []).map((name) => [name, event(`${namespace.path}.${name}`)]),
       ...Object.entries(namespace.constants ?? {}),
     ])
+
     for (const root of roots) {
       const target = namespace.path.split(".").reduce((parent, key) => {
         if (!parent[key]) define(parent, key, {})
+
         return parent[key]
       }, root)
+
       for (const [name, value] of Object.entries(members)) define(target, name, value)
     }
   }

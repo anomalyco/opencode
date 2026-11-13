@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { allowed, namespaceOf, type ApiNamespace } from "./api"
+import { allowed, apiReply, namespaceOf, type ApiNamespace } from "./api"
 import { apiManifest } from "./manifest"
 
 const namespaces: ApiNamespace[] = [
@@ -11,6 +11,12 @@ const namespaces: ApiNamespace[] = [
 ]
 
 const v3 = apiManifest({ manifest: { manifest_version: 3, permissions: ["storage"] } })
+
+test("an IPC reply preserves a quota error verbatim, distinct from extension data with a message key", async () => {
+  const message = "QUOTA_BYTES_PER_ITEM quota exceeded"
+  expect(await apiReply(Promise.reject(new Error(message)))).toEqual({ ok: false, message })
+  expect(await apiReply(Promise.resolve({ message }))).toEqual({ ok: true, value: { message } })
+})
 
 // The trust check before every chrome.* call and subscription: which extension may reach which namespace.
 test.each([

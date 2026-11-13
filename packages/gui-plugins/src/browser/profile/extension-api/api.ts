@@ -47,6 +47,14 @@ export type ExtensionContext = {
 /** A method's implementation, called with the arguments as the extension passed them, its callback left out. */
 export type ApiMethod = (context: ExtensionContext, args: readonly Wire[]) => Wire | void | Promise<Wire | void>
 
+/** Carry API errors as data: Electron otherwise adds the IPC channel name to the extension's error message. */
+export function apiReply(call: Promise<Wire | void>) {
+  return call.then(
+    (value) => ({ ok: true, value }) as const,
+    (cause: unknown) => ({ ok: false, message: cause instanceof Error ? cause.message : String(cause) }) as const,
+  )
+}
+
 /** Declares a method whose arguments decode with `args`; arguments that do not decode reject the call. */
 export function method<const A>(
   args: Schema.Decoder<A>,
