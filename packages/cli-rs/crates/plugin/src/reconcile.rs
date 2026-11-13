@@ -612,14 +612,21 @@ impl Pass<'_, '_> {
                 (env.host.markdown(&text), Extra::None, Vec::new())
             }
             Node::Scroll { height, follow, layout, children, .. } => {
-                let scroll = ScrollBox::new(app).scrollbars(false).shrink(0.0);
+                // A scroll may be smaller than its content, as CSS's `overflow` makes `min-height: auto` zero; one that
+                // cannot shrink below its content takes the content's height, and every row is laid out and painted.
+                let scroll = ScrollBox::new(app).scrollbars(false).min_height(0);
                 if let Some(height) = height {
-                    scroll.height(*height);
+                    scroll.height(*height).shrink(0.0);
                 }
                 if *follow {
                     scroll.sticky(true);
                 }
                 lay_out(&scroll, layout);
+                // A growing scroll starts from nothing, as CSS's `flex: 1`, so it takes the room its siblings leave
+                // and never squeezes them to fit its content.
+                if layout.grow {
+                    scroll.basis(0);
+                }
                 let content = scroll.content_view().clone();
                 let built = children.iter().map(|child| self.placed(&content, child)).collect();
                 (scroll.as_any(), Extra::Scroll(scroll), built)
