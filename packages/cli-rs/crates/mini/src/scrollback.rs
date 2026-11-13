@@ -849,7 +849,8 @@ fn static_body(commit: &Commit, body: Body, spaced: u32) -> Body {
     }
 }
 
-/// The complete Markdown blocks of streaming `content`: everything before its last blank line outside a fence.
+/// The complete Markdown blocks of streaming `content`: everything up to and including its last blank line outside a
+/// fence. The blank line closes the blocks, so the engine renders them final instead of holding the last line.
 pub fn stable_prefix(content: &str) -> &str {
     let mut fence: Option<&str> = None;
     let mut end = 0;
@@ -865,7 +866,7 @@ pub fn stable_prefix(content: &str) -> &str {
         }
         let blank = line.trim().is_empty() && line.ends_with('\n');
         if blank && fence.is_none() && !previous_blank && offset > 0 {
-            end = content[..offset].trim_end_matches('\n').len();
+            end = offset + line.len();
         }
         previous_blank = blank;
         offset += line.len();
@@ -929,10 +930,30 @@ mod tests {
     #[test]
     fn the_stable_prefix_ends_at_the_last_blank_line_outside_a_fence() {
         assert_eq!(stable_prefix("one line"), "");
-        assert_eq!(stable_prefix("a\n\nb"), "a");
-        assert_eq!(stable_prefix("a\n\nb\n\n\nc"), "a\n\nb");
-        assert_eq!(stable_prefix("a\n\n```\nx\n\ny"), "a");
-        assert_eq!(stable_prefix("a\n\n```\nx\n\n```\n\nz"), "a\n\n```\nx\n\n```");
+        assert_eq!(stable_prefix("a\n\nb"), "a\n\n");
+        assert_eq!(stable_prefix("a\n\nb\n\n\nc"), "a\n\nb\n\n");
+        assert_eq!(stable_prefix("a\n\n```\nx\n\ny"), "a\n\n");
+        assert_eq!(stable_prefix("a\n\n```\nx\n\n```\n\nz"), "a\n\n```\nx\n\n```\n\n");
         assert_eq!(stable_prefix("\n\nlead"), "");
+    }
+
+    /// The rows a streaming entry commits are final: its stable prefix renders as the finished blocks do, so the
+    /// engine does not hold back a last line it cannot decide yet (a setext underline, a rule, a closing fence).
+    #[test]
+    fn the_stable_prefix_renders_as_its_blocks_finish() {
+        let theme = crate::theme::mono(opentui::theme::ThemeMode::Dark);
+        let commit = assistant("", Phase::Progress);
+        let body = Body::Markdown(String::new());
+        let render = |text: &str, streaming: bool| {
+            let app = opentui::testing::TestApp::new(30, 12);
+            let markdown = entry_markdown(app.app(), &theme, false, &commit, &body, streaming);
+            app.app().root().add(&markdown);
+            markdown.set_markdown(text);
+            app.render().text()
+        };
+        for blocks in ["Para\n---", "x\n***", "```\ncode\n```", "| a |\n| - |\n| 1 |"] {
+            let content = format!("{blocks}\n\nnext");
+            assert_eq!(render(stable_prefix(&content), true), render(blocks, false), "{content:?}");
+        }
     }
 }
