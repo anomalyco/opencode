@@ -118,8 +118,8 @@ export function parseLinuxProcStatState(stat: string) {
 
 /**
  * Whether `pid` is currently in Linux uninterruptible disk sleep (`state D`).
- * Signals including `SIGKILL` cannot take effect until kernel I/O returns, so evicting a `D`-state
- * server only guarantees it dies once its disk operation completes.
+ * Signals cannot take effect until kernel I/O returns, so automatic eviction skips `D`-state
+ * servers instead of killing them once their disk operation completes.
  */
 export async function isUninterruptibleDiskSleep(pid: number) {
   if (process.platform !== "linux") return false

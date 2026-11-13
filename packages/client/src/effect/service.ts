@@ -204,8 +204,6 @@ const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly f
   // The registration can disappear or change hands before this process exits. Only the PID we
   // signalled can tell us whether it has stopped, so escalate based on that process.
   if (Option.isNone(done)) {
-    if (yield* Effect.promise(() => isUninterruptibleDiskSleep(info.pid)))
-      return yield* Effect.fail(new Error(`Server process ${info.pid} is blocked in uninterruptible disk I/O`))
     yield* signal(info.pid, "SIGKILL")
     yield* stopped(info.pid).pipe(Effect.retry(poll(timing)))
   }

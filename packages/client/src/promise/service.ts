@@ -174,8 +174,6 @@ async function terminate(info: Info, options: { readonly file?: string }, timing
   // The registration can disappear or change hands before this process exits. Only the PID we
   // signalled can tell us whether it has stopped, so escalate based on that process.
   if (!(await waitUntilStopped(info.pid, timing))) {
-    if (await isUninterruptibleDiskSleep(info.pid))
-      throw new Error(`Server process ${info.pid} is blocked in uninterruptible disk I/O`)
     signal(info.pid, "SIGKILL")
     if (!(await waitUntilStopped(info.pid, timing))) throw new Error(`Server process ${info.pid} is still running`)
   }
