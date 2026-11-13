@@ -67,6 +67,13 @@ impl Host {
         editor.as_ref().map(|(_, textarea)| textarea.clone())
     }
 
+    /// Draws the shown form in the page theme again, keeping its draft and its editor's text.
+    pub fn restyle(&self) {
+        if let Some(prompt) = &*self.current.borrow() {
+            prompt.0.restyle();
+        }
+    }
+
     /// Shows `form`, or nothing.
     pub fn show(&self, form: Option<&Form>) {
         let current = self.current.borrow().as_ref().map(|prompt| prompt.0.form.info.id.clone());
@@ -110,6 +117,10 @@ impl SessionForms {
 
     pub fn editor(&self) -> Option<Textarea> {
         self.host.editor()
+    }
+
+    pub fn restyle(&self) {
+        self.host.restyle();
     }
 
     /// `blocked`: a permission request shows instead.
@@ -1012,6 +1023,14 @@ impl Inner {
         }));
     }
 
+    fn restyle(self: &Rc<Self>) {
+        let Some(tui) = self.tui.upgrade() else { return };
+        if let Some((kind, textarea)) = &*self.editor.borrow() {
+            paint_editor(textarea, &tui.page(), kind);
+        }
+        self.render();
+    }
+
     fn render(self: &Rc<Self>) {
         let Some(tui) = self.tui.upgrade() else { return };
         // Keys follow the state.
@@ -1064,7 +1083,7 @@ impl Inner {
         }
         let app = &tui.app;
         let field = self.answer_field();
-        let (initial, placeholder, color) = match &kind {
+        let (initial, placeholder) = match &kind {
             Editor::Answer(key) => {
                 let input = self.input();
                 let initial = if input.is_empty() {
@@ -1074,19 +1093,16 @@ impl Inner {
                 } else {
                     input
                 };
-                (initial, self.placeholder(), theme.text.base)
+                (initial, self.placeholder())
             }
-            Editor::Custom(_) => (self.input(), "Type your own answer".to_owned(), theme.text.formfield.focused),
+            Editor::Custom(_) => (self.input(), "Type your own answer".to_owned()),
         };
         let textarea = Textarea::new(app)
             .mouse_pointer(MousePointer::DEFAULT)
             .min_height(1)
             .max_height(6)
-            .placeholder(placeholder)
-            .placeholder_color(theme.text.muted)
-            .colors(color, Color::TRANSPARENT)
-            .focused_colors(color, Color::TRANSPARENT)
-            .cursor_color(color);
+            .placeholder(placeholder);
+        paint_editor(&textarea, theme, &kind);
         textarea.set_text(&initial);
         textarea.perform(EditorAction::BufferEnd);
         if matches!(kind, Editor::Custom(_)) {
@@ -1442,6 +1458,19 @@ impl Inner {
 }
 
 /// Removes key registrations once the current event is done: a command may cause this while the keymap runs it.
+/// A typed answer in the text color; the custom row's editor in the focused field color.
+fn paint_editor(textarea: &Textarea, theme: &Theme, kind: &Editor) {
+    let color = match kind {
+        Editor::Answer(_) => theme.text.base,
+        Editor::Custom(_) => theme.text.formfield.focused,
+    };
+    textarea
+        .placeholder_color(theme.text.muted)
+        .colors(color, Color::TRANSPARENT)
+        .focused_colors(color, Color::TRANSPARENT)
+        .cursor_color(color);
+}
+
 pub(crate) fn dispose_later(app: &App, disposers: Vec<Disposer>) {
     if disposers.is_empty() {
         return;

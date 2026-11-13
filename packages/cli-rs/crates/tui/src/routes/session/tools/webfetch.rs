@@ -15,6 +15,10 @@ impl WebFetch {
         self.0.root()
     }
 
+    pub fn restyle(&self, _cx: &Context<'_>) {
+        self.0.restyle();
+    }
+
     pub fn update(&self, _cx: &Context<'_>, props: &Props<'_>) {
         let url = props.input_str("url");
         self.0.set(Inline {

@@ -522,6 +522,20 @@ fn home_prompt_shows_a_placeholder_example_and_a_shell_one_in_shell_mode() {
     assert!(!setup.app.text().contains("Ask anything"), "{}", setup.app.text());
 }
 
+/// A theme switch restyles home in place: the logo, the prompt in shell mode with its text, and the footer; each
+/// cell equals home mounted in the new theme and typed the same way.
+#[test]
+fn a_theme_switch_restyles_home_in_place() {
+    support::assert_restyles_in_place(
+        || Setup::new(Route::Home),
+        |setup| {
+            setup.ready();
+            setup.app.type_text("!ls -la");
+        },
+        |screen| screen.contains("ls -la") && screen.contains("Shell"),
+    );
+}
+
 #[test]
 fn enter_before_the_catalog_loads_submits_once_it_has() {
     let setup = Setup::held(Route::Home);

@@ -17,11 +17,13 @@ pub(crate) const GO_RIGHT: [&str; 4] = ["    ", "█▀▀█", "█__█", "▀
 
 pub struct Home {
     root: View,
+    logo: View,
     prompt: crate::prompt::editor::Prompt,
     /// The global form overlay (E.9b); while it holds the keys, the prompt must not take the focus.
     forms: crate::features::home_forms::HomeForms,
-    /// The `home.footer` slot's plugin claims (P.1).
-    slot: std::rc::Rc<opencode_plugin::SlotMount>,
+    /// The `home.footer` slot's plugin claims (P.1), and the box they mount in.
+    slot: Rc<RefCell<Rc<opencode_plugin::SlotMount>>>,
+    footer: View,
 }
 
 impl Home {
@@ -57,31 +59,30 @@ impl Home {
             .child(&composer)
             .child(&spacer());
         let footer = View::new(app).column().width(Length::percent(100.0)).shrink(0.0);
-        let slot = std::rc::Rc::new(crate::plugins::host::slot(
-            tui,
-            &footer,
-            opencode_plugin::slot::HOME_FOOTER,
-            &Default::default(),
-            // The footer itself is the `opencode.home.footer` plugin's claim (E.14).
-            |_| {},
-        ));
+        let slot = Rc::new(RefCell::new(Rc::new(footer_slot(tui, &footer))));
         let root = View::new(app).column().grow(1.0).basis(Length::Auto).min_height(0).child(&center).child(&footer);
         let forms = crate::features::home_forms::mount(tui, &root);
         // The logo, the side padding and the footer follow the terminal size (`useTerminalDimensions`).
         let size = std::cell::Cell::new((width, height));
-        let footer_slot = slot.clone();
+        let (footer_slot, painted) = (slot.clone(), logo.clone());
         root.on_resize(bind!(tui, |tui, cx, _| {
             let (width, height) = cx.app().size();
             if size.replace((width, height)) == (width, height) {
                 return;
             }
             center.padding_x(padding(width));
-            paint_logo(&tui.app, &logo, &tui.page(), width, height);
-            crate::plugins::host::changed(&tui, &Changes::everything(), |changed| footer_slot.sync(&*tui, changed));
+            paint_logo(&tui.app, &painted, &tui.page(), width, height);
+            let slot = footer_slot.borrow().clone();
+            crate::plugins::host::changed(&tui, &Changes::everything(), |changed| slot.sync(&*tui, changed));
             tui.app.request_redraw();
         }));
-        Self { root, prompt, forms, slot }
+        Self { root, logo, prompt, forms, slot, footer }
     }
+}
+
+/// The `home.footer` slot; the footer itself is the `opencode.home.footer` plugin's claim (E.14).
+fn footer_slot(tui: &Tui, footer: &View) -> opencode_plugin::SlotMount {
+    crate::plugins::host::slot(tui, footer, opencode_plugin::slot::HOME_FOOTER, &Default::default(), |_| {})
 }
 
 impl RouteView for Home {
@@ -92,7 +93,8 @@ impl RouteView for Home {
     fn sync(&self, tui: &Tui, changes: &Changes) {
         crate::features::location::follow_default(tui);
         self.prompt.sync(tui, changes);
-        crate::plugins::host::changed(tui, changes, |changed| self.slot.sync(tui, changed));
+        let slot = self.slot.borrow().clone();
+        crate::plugins::host::changed(tui, changes, |changed| slot.sync(tui, changed));
         // The last form closed: the prompt takes the keys back, after any open dialog.
         let closed = self.forms.sync(tui, changes);
         self.prompt.set_disabled(self.forms.active());
@@ -108,6 +110,18 @@ impl RouteView for Home {
 
     fn focus_target(&self) -> Option<AnyWidget> {
         (!self.forms.active()).then(|| self.prompt.textarea().as_any())
+    }
+
+    fn restyle(&self, tui: &Tui) -> bool {
+        let (width, height) = tui.app.size();
+        paint_logo(&tui.app, &self.logo, &tui.page(), width, height);
+        crate::features::update_notification::restyle(tui);
+        self.prompt.restyle(tui);
+        self.forms.restyle();
+        // Plugin claims take the theme when they render, so the footer renders them again where it is.
+        self.footer.clear();
+        *self.slot.borrow_mut() = Rc::new(footer_slot(tui, &self.footer));
+        true
     }
 }
 

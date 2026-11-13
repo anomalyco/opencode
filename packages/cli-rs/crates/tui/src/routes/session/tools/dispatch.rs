@@ -38,6 +38,8 @@ pub struct Tool {
 trait ToolView {
     fn root(&self) -> &View;
     fn update(&self, cx: &Context<'_>, props: &Props<'_>);
+    /// Takes the theme of `cx` in place; the update that follows paints what the view left to it.
+    fn restyle(&self, cx: &Context<'_>);
 }
 
 macro_rules! tool_views {
@@ -49,6 +51,10 @@ macro_rules! tool_views {
 
             fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
                 <$view>::update(self, cx, props)
+            }
+
+            fn restyle(&self, cx: &Context<'_>) {
+                <$view>::restyle(self, cx)
             }
         }
     )*};
@@ -82,6 +88,14 @@ impl Tool {
 
     pub fn root(&self) -> &View {
         &self.root
+    }
+
+    /// Takes the theme of `cx` in place: the view keeps its widgets and their state.
+    pub fn restyle(&self, cx: &Context<'_>) {
+        if let Some((_, view)) = &*self.view.borrow() {
+            view.restyle(cx);
+        }
+        self.images.restyle(cx.theme);
     }
 
     pub fn update(&self, cx: &Context<'_>, _message: &SessionMessageAssistant, part: &SessionMessageAssistantTool) {
@@ -295,10 +309,12 @@ pub struct InlineTool(Rc<InlineInner>);
 
 struct InlineInner {
     app: App,
-    theme: Theme,
+    theme: Live,
     root: View,
     error: View,
     state: RefCell<Option<Inline>>,
+    /// The status badge beside a running call's spinner.
+    badge: RefCell<Option<Text>>,
     hover: Cell<bool>,
     expanded: Cell<bool>,
     painted: RefCell<Painted>,
@@ -320,10 +336,11 @@ impl InlineTool {
         let root = View::new(cx.app).column().padding_edge(Edge::Left, 3).shrink(0.0);
         let inner = Rc::new(InlineInner {
             app: cx.app.clone(),
-            theme: cx.theme.clone(),
+            theme: cx.tui.live_theme(),
             root,
             error,
             state: RefCell::default(),
+            badge: RefCell::default(),
             hover: Cell::new(false),
             expanded: Cell::new(false),
             painted: RefCell::new(Painted::None),
@@ -363,15 +380,37 @@ impl InlineTool {
         *self.0.click.borrow_mut() = Some(Rc::new(click));
     }
 
+    /// Paints in the live theme again. A running call keeps its spinner, so the spinner keeps its frame.
+    pub fn restyle(&self) {
+        let inner = &self.0;
+        let Some(state) = inner.state.borrow().clone() else { return };
+        if matches!(*inner.painted.borrow(), Painted::Row(..)) {
+            inner.state.take();
+            self.set(state);
+            return;
+        }
+        inner.recolor();
+        if let Some(badge) = &*inner.badge.borrow() {
+            paint_badge(badge, &inner.theme.get(), false);
+        }
+        inner.paint_error();
+    }
+
     pub fn set(&self, inline: Inline) {
         let inner = &self.0;
         if inner.state.borrow().as_ref() == Some(&inline) {
             return;
         }
         inner.root.clear();
+        inner.badge.take();
+        let theme = &inner.theme.get();
         let fg = inner.fg(&inline);
-        let error_color = inner.theme.text.feedback.error.base;
-        let badge = |app: &App| inline.badge.as_deref().map(|label| status_badge(app, &inner.theme, label, false));
+        let error_color = theme.text.feedback.error.base;
+        let badge = |app: &App| {
+            let badge = inline.badge.as_deref().map(|label| status_badge(app, theme, label, false));
+            inner.badge.replace(badge.clone());
+            badge
+        };
         // `InlineToolLabel`: the text, then the badge, wrapping under it when the row is full.
         let label = |text: &Text, badge: Text| {
             View::new(&inner.app)
@@ -430,15 +469,15 @@ impl InlineInner {
             return color;
         }
         if state.permission {
-            return self.theme.text.feedback.warning.base;
+            return self.theme.get().text.feedback.warning.base;
         }
         if state.failed() {
-            return self.theme.text.feedback.error.base;
+            return self.theme.get().text.feedback.error.base;
         }
         if self.hover.get() && state.clickable {
-            return self.theme.text.base;
+            return self.theme.get().text.base;
         }
-        self.theme.text.muted
+        self.theme.get().text.muted
     }
 
     /// Hover only recolors: rebuilding would drop the widget a click is pressing.
@@ -467,7 +506,7 @@ impl InlineInner {
         self.error.clear();
         self.error.visible(error.is_some());
         if let Some(error) = error {
-            self.error.add(&Text::new(&self.app, error).fg(self.theme.text.feedback.error.base));
+            self.error.add(&Text::new(&self.app, error).fg(self.theme.get().text.feedback.error.base));
         }
     }
 }
@@ -504,9 +543,11 @@ pub struct BlockTool(Rc<BlockInner>);
 
 struct BlockInner {
     app: App,
-    theme: Theme,
+    theme: Live,
     root: View,
     header: View,
+    /// The header's spinner and texts, recolored on a restyle.
+    header_widgets: RefCell<(Option<Spinner>, Vec<Text>)>,
     /// The view's children, with the panel's gap between them.
     children: View,
     error: Text,
@@ -539,9 +580,10 @@ impl BlockTool {
             .child(&error);
         let inner = Rc::new(BlockInner {
             app: cx.app.clone(),
-            theme: theme.clone(),
+            theme: cx.tui.live_theme(),
             root,
             header,
+            header_widgets: RefCell::default(),
             children,
             error,
             state: RefCell::default(),
@@ -553,9 +595,7 @@ impl BlockTool {
             let clickable = inner.state.borrow().as_ref().is_some_and(|state| state.clickable);
             inner.root.mouse_pointer(opencode_ui::click_pointer(clickable));
             inner.hover.set(hovered && clickable);
-            // `decrease` finds the token by reference, so it takes the theme's own field.
-            let raised = &inner.theme.background.raised.base;
-            inner.root.bg(if inner.hover.get() { inner.theme.decrease(raised, 1) } else { *raised });
+            inner.paint_background();
         }));
         inner.root.on_click(bind!(inner, |inner, cx, _| {
             if cx.app().selected_text().is_some_and(|text| !text.is_empty()) {
@@ -590,9 +630,32 @@ impl BlockTool {
         }
     }
 
+    /// Sets the header and error colors, keeping what the block shows, for [`Self::restyle`] to paint.
+    pub fn recolor(&self, colors: BlockColors) {
+        self.0.colors.set(colors);
+    }
+
     /// Shows the children column when it has a visible child (an empty one would add a gap).
     pub fn show_children(&self, visible: bool) {
         self.0.children.visible(visible);
+    }
+
+    /// Paints in the live theme again; a spinner in the header keeps its frame.
+    pub fn restyle(&self) {
+        let inner = &self.0;
+        let theme = inner.theme.get();
+        inner.root.border_color(theme.background.base);
+        inner.paint_background();
+        let Some(block) = inner.state.borrow().clone() else { return };
+        let (spinner_fg, fg) = inner.header_colors(&block);
+        let widgets = inner.header_widgets.borrow();
+        if let Some(spinner) = &widgets.0 {
+            spinner.set_color(spinner_fg);
+        }
+        widgets.1.iter().for_each(|text| {
+            text.fg(fg);
+        });
+        inner.error.fg(inner.colors.get().error.unwrap_or(theme.text.feedback.error.base));
     }
 
     pub fn set(&self, block: Block) {
@@ -600,40 +663,48 @@ impl BlockTool {
         if inner.state.borrow().as_ref() == Some(&block) {
             return;
         }
-        let theme = &inner.theme;
-        let raised = &theme.background.raised.base;
+        let theme = &inner.theme.get();
         if !block.clickable {
             inner.hover.set(false);
         }
-        inner.root.bg(if inner.hover.get() { theme.decrease(raised, 1) } else { *raised });
+        inner.paint_background();
         let colors = inner.colors.get();
-        let spinner_fg = if block.permission { theme.text.feedback.warning.base } else { theme.text.muted };
-        let fg =
-            if block.permission { theme.text.feedback.warning.base } else { colors.header.unwrap_or(theme.text.muted) };
+        let (spinner_fg, fg) = inner.header_colors(&block);
         let spinner =
             |label: &str| Spinner::new(&inner.app).color(spinner_fg).label(label.strip_prefix("# ").unwrap_or(label));
         inner.header.clear();
         inner.header.visible(block.header != Header::None);
+        let mut widgets = (None, Vec::new());
         match &block.header {
             Header::None => {}
             Header::Title(title) if block.spinner => {
-                inner.header.add(&spinner(title));
+                let spinner = spinner(title);
+                inner.header.add(&spinner);
+                widgets.0 = Some(spinner);
             }
             Header::Title(title) => {
-                inner.header.add(&Text::new(&inner.app, title.clone()).fg(fg));
+                let text = Text::new(&inner.app, title.clone()).fg(fg);
+                inner.header.add(&text);
+                widgets.1.push(text);
             }
             Header::Path { label, value } => {
                 if block.spinner {
-                    inner.header.add(&spinner(label).shrink(0.0));
+                    let spinner = spinner(label).shrink(0.0);
+                    inner.header.add(&spinner);
+                    widgets.0 = Some(spinner);
                 } else {
-                    inner.header.add(&Text::new(&inner.app, label.clone()).shrink(0.0).fg(fg));
+                    let text = Text::new(&inner.app, label.clone()).shrink(0.0).fg(fg);
+                    inner.header.add(&text);
+                    widgets.1.push(text);
                 }
                 let max = (block.width - 6 - label.width() as i64 - if block.spinner { 2 } else { 0 }).max(2);
-                inner.header.add(
-                    &Text::new(&inner.app, truncate_file_path(value, max)).fg(fg).wrap(WrapMode::None).truncate(true),
-                );
+                let text =
+                    Text::new(&inner.app, truncate_file_path(value, max)).fg(fg).wrap(WrapMode::None).truncate(true);
+                inner.header.add(&text);
+                widgets.1.push(text);
             }
         }
+        *inner.header_widgets.borrow_mut() = widgets;
         let error = block.error.as_deref().map(strip_ansi).unwrap_or_default();
         inner.error.visible(!error.is_empty());
         inner.error.fg(colors.error.unwrap_or(theme.text.feedback.error.base));
@@ -642,9 +713,33 @@ impl BlockTool {
     }
 }
 
+impl BlockInner {
+    /// The raised surface, darker under the pointer of a clickable block.
+    fn paint_background(&self) {
+        let theme = self.theme.get();
+        // `decrease` finds the token by reference, so it takes the theme's own field.
+        let raised = &theme.background.raised.base;
+        self.root.bg(if self.hover.get() { theme.decrease(raised, 1) } else { *raised });
+    }
+
+    /// The header's spinner and text colors.
+    fn header_colors(&self, block: &Block) -> (Color, Color) {
+        let theme = self.theme.get();
+        let header = self.colors.get().header;
+        let warning = theme.text.feedback.warning.base;
+        if block.permission { (warning, warning) } else { (theme.text.muted, header.unwrap_or(theme.text.muted)) }
+    }
+}
+
 /// `StatusBadge`: a padded label on a darker background.
 pub fn status_badge(app: &App, theme: &Theme, label: &str, raised: bool) -> Text {
+    let badge = Text::new(app, format!(" {label} ")).shrink(0.0);
+    paint_badge(&badge, theme, raised);
+    badge
+}
+
+pub fn paint_badge(badge: &Text, theme: &Theme, raised: bool) {
     // `decrease` finds the token by reference, so this borrows the theme's own field.
     let background = if raised { &theme.background.raised.base } else { &theme.background.base };
-    Text::new(app, format!(" {label} ")).shrink(0.0).bg(theme.decrease(background, 1)).fg(theme.text.muted)
+    badge.bg(theme.decrease(background, 1)).fg(theme.text.muted);
 }

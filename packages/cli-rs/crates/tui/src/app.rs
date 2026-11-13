@@ -105,8 +105,8 @@ pub struct Tui {
     files: Option<Files>,
     route: RefCell<Route>,
     view: RefCell<Option<Box<dyn RouteView>>>,
-    /// The page theme the shell was last painted with.
-    painted: RefCell<Theme>,
+    /// The page theme the shell was last painted with, which the route view's parts read when they paint.
+    painted: Live,
     /// A theme change arrived while a key sequence was pending; remount once it ends.
     restyle: Cell<bool>,
     seen: Cell<u64>,
@@ -180,6 +180,11 @@ impl Tui {
         self.connection.borrow().as_ref().map(Connection::watch)
     }
 
+    /// The page theme the views paint in, shared: it changes in place on a theme switch, before the views restyle.
+    pub fn live_theme(&self) -> Live {
+        self.painted.clone()
+    }
+
     /// The page theme.
     pub fn page(&self) -> Theme {
         self.theme.borrow().theme().page()
@@ -187,26 +192,14 @@ impl Tui {
 
     /// Replaces the route view and syncs the new one with everything.
     pub fn navigate(&self, route: Route) {
-        self.show(route, false);
-    }
-
-    /// [`Self::navigate`]; with `restyle` (a theme switch), the view of the same route restyles in place if it can.
-    fn show(&self, route: Route, restyle: bool) {
         // Going home from home to another location is a navigation, not a remount.
         let remount =
             self.view.borrow().is_some() && self.route() == route && !crate::features::location::pending(self);
         // Mounting may move the focus (a docked panel, a pending permission); an open dialog keeps it.
         let dialog = self.dialogs.is_open().then(|| self.app.focused());
-        let old = self.view.borrow_mut().take();
-        if let Some(view) = &old {
+        if let Some(view) = self.view.borrow_mut().take() {
             view.root().detach();
         }
-        let kept = if restyle && remount {
-            old
-        } else {
-            drop(old);
-            None
-        };
         *self.route.borrow_mut() = route.clone();
         // A remount (a theme change) keeps the home's location.
         if route == Route::Home && !remount {
@@ -215,13 +208,7 @@ impl Tui {
         // The tab strip shows before the view lays out, so a transcript sticks to the bottom it ends with.
         crate::tabs::route_changed(self);
         crate::frame::refresh(self);
-        let view = match kept {
-            Some(view) if view.restyle(self) => view,
-            kept => {
-                drop(kept);
-                routes::mount(self, &route)
-            }
-        };
+        let view = routes::mount(self, &route);
         self.frame.main().add(&view.root());
         view.sync(self, &opencode_store::Changes::everything());
         crate::frame::mount_app(self, remount);
@@ -336,32 +323,39 @@ impl Tui {
             }
         }
         let theme = self.page();
-        if *self.painted.borrow() == theme {
+        if self.painted.get() == theme {
             return;
         }
-        *self.painted.borrow_mut() = theme.clone();
+        self.painted.set(theme.clone());
         self.app.set_theme(app_theme(&theme));
         self.dialogs.set_theme(theme.clone());
         self.toasts.set_theme(theme);
-        // Most of the route view takes its colors when it mounts, so it builds again (the session transcript
-        // restyles in place). TS restyles in place and keeps a half-typed sequence such as `<leader>l`; the new
-        // view's focus would clear it here, so wait.
-        if self.keymap.keymap().has_pending_sequence() {
+        // The route view restyles in place, as TS's does. A plugin route mounts again, and its focus would clear a
+        // half-typed sequence such as `<leader>l` that TS keeps, so wait for that to end.
+        if matches!(self.route(), Route::Plugin { .. }) && self.keymap.keymap().has_pending_sequence() {
             self.restyle.set(true);
             return;
         }
         self.restyle_route();
     }
 
-    /// Restyles the route view for the current theme, or mounts it again, keeping the prompt focused if it was.
+    /// Restyles the route view for the current theme in place, or mounts a plugin route again, keeping the prompt
+    /// focused if it was.
     fn restyle_route(&self) {
         self.restyle.set(false);
         // Before the first route mounts there is nothing to repaint.
         if self.view.borrow().is_none() {
             return;
         }
+        // In place, the focus, the scroll positions and every widget's state stay where they are.
+        if self.view.borrow().as_ref().is_some_and(|view| view.restyle(self)) {
+            // The `app` slot's plugin claims take the theme when they render, so they render again.
+            crate::frame::mount_app(self, true);
+            self.app.request_redraw();
+            return;
+        }
         let prompt = self.textarea.borrow().as_ref().is_some_and(|textarea| is_focused(&self.app, textarea));
-        self.show(self.route(), true);
+        self.navigate(self.route());
         let textarea = self.textarea.borrow().clone();
         if let Some(textarea) = textarea.filter(|_| prompt && !self.dialogs.is_open()) {
             self.app.focus(&textarea);
@@ -473,7 +467,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         files,
         route: RefCell::new(Route::Home),
         view: RefCell::new(None),
-        painted: RefCell::new(page),
+        painted: Live::new(page),
         restyle: Cell::new(false),
         seen: Cell::new(0),
         followers: RefCell::default(),

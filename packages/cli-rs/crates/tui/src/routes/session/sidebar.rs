@@ -53,9 +53,7 @@ enum Place {
 /// Mounts the sidebar into the session frame's row; the session route keeps it and syncs it.
 pub fn mount(tui: &Tui, row: &View, session: &SessionID) -> Sidebar {
     let app = &tui.app;
-    let theme = tui.page();
-    let raised = theme.background.raised.base;
-    let title = Text::new(app, "").fg(theme.text.base).bold();
+    let title = Text::new(app, "").bold();
     let content = View::new(app).column().shrink(0.0).gap(1).padding_edge(Edge::Right, 1);
     let scroll = ScrollBox::new(app)
         .axes(false, true)
@@ -67,7 +65,6 @@ pub fn mount(tui: &Tui, row: &View, session: &SessionID) -> Sidebar {
     let footer = View::new(app).column().shrink(0.0).gap(1).padding_edge(Edge::Top, 1);
     let panel = View::new(app)
         .column()
-        .bg(raised)
         .width(SESSION_SIDEBAR_WIDTH)
         .height(Length::percent(100.0))
         .shrink(0.0)
@@ -120,12 +117,26 @@ pub fn mount(tui: &Tui, row: &View, session: &SessionID) -> Sidebar {
     inner.layers.borrow_mut().push(settings);
     install_layers(tui, &inner);
     let sidebar = Sidebar { inner };
+    sidebar.inner.paint(&tui.page());
     sidebar.inner.layout(tui);
     sidebar.inner.retitle(tui);
     sidebar
 }
 
 impl Sidebar {
+    /// Paints in the page theme again, keeping where it is and its scroll position. The plugin sections take the
+    /// theme when they render, so they render again.
+    pub fn restyle(&self, tui: &Tui) {
+        let inner = &self.inner;
+        inner.paint(&tui.page());
+        if inner.placed.get() != Place::Hidden {
+            inner.slots.borrow_mut().clear();
+            inner.content.clear();
+            inner.footer.clear();
+            *inner.slots.borrow_mut() = inner.mount_slots(tui);
+        }
+    }
+
     pub fn sync(&self, tui: &Tui, changes: &Changes) {
         if changes.session(&self.inner.session) {
             self.inner.retitle(tui);
@@ -150,6 +161,20 @@ impl Drop for Sidebar {
 }
 
 impl Inner {
+    fn paint(&self, theme: &Theme) {
+        self.title.fg(theme.text.base);
+        self.panel.bg(theme.background.raised.base);
+    }
+
+    /// The `sidebar.content` and `sidebar.footer` slots.
+    fn mount_slots(&self, tui: &Tui) -> Vec<SlotMount> {
+        let input = SlotInput { session_id: Some(self.session.0.clone()), ..SlotInput::default() };
+        vec![
+            crate::plugins::host::slot(tui, &self.content, slot::SIDEBAR_CONTENT, &input, |_| {}),
+            crate::plugins::host::slot(tui, &self.footer, slot::SIDEBAR_FOOTER, &input, |_| {}),
+        ]
+    }
+
     fn retitle(&self, tui: &Tui) {
         let title = tui.data.read(|state| state.session(&self.session).map(crate::dialogs::session_list::title));
         self.title.set_text(title.unwrap_or_default());
@@ -202,11 +227,7 @@ impl Inner {
         }
         // The sections mount as the sidebar shows and unmount as it hides, so a hidden sidebar renders nothing.
         if before == Place::Hidden {
-            let input = SlotInput { session_id: Some(self.session.0.clone()), ..SlotInput::default() };
-            *self.slots.borrow_mut() = vec![
-                crate::plugins::host::slot(tui, &self.content, slot::SIDEBAR_CONTENT, &input, |_| {}),
-                crate::plugins::host::slot(tui, &self.footer, slot::SIDEBAR_FOOTER, &input, |_| {}),
-            ];
+            *self.slots.borrow_mut() = self.mount_slots(tui);
         }
         if place == Place::Hidden {
             self.slots.borrow_mut().clear();

@@ -560,7 +560,7 @@ pub struct GroupView(Rc<Inner>);
 
 struct Inner {
     app: App,
-    theme: Theme,
+    theme: Live,
     settings: Rc<Settings>,
     root: View,
     header: View,
@@ -644,7 +644,7 @@ impl GroupView {
         let root = View::new(cx.app).column().shrink(0.0).child(&header).child(&body).child(&outside);
         let inner = Rc::new(Inner {
             app: cx.app.clone(),
-            theme: cx.theme.clone(),
+            theme: cx.tui.live_theme(),
             settings: settings.clone(),
             root,
             header,
@@ -681,6 +681,20 @@ impl GroupView {
 
     pub fn root(&self) -> &View {
         &self.0.root
+    }
+
+    /// Takes the theme of `cx` in place, with every child; the next update paints the rest.
+    pub fn restyle(&self, cx: &Context<'_>) {
+        let inner = &self.0;
+        inner.paint_color();
+        let (children, outside) = (inner.children.borrow(), inner.outside_children.borrow());
+        for (_, child) in children.iter().chain(outside.iter()) {
+            match child {
+                Child::Row(row) => row.restyle_body(cx),
+                Child::Thought(thought) => thought.restyle(cx),
+                Child::Group(group) => group.restyle(cx),
+            }
+        }
     }
 
     /// Renders a root `group`; `completed` is the group's own flag.
@@ -945,12 +959,12 @@ impl Inner {
     fn color(&self, color: HeaderColor) -> Color {
         let hover = self.hover.get();
         match color {
-            HeaderColor::Muted if hover => self.theme.text.base,
-            HeaderColor::Muted => self.theme.text.muted,
-            HeaderColor::Base => self.theme.text.base,
-            HeaderColor::Warning { open } if hover || open => self.theme.text.feedback.warning.base,
+            HeaderColor::Muted if hover => self.theme.get().text.base,
+            HeaderColor::Muted => self.theme.get().text.muted,
+            HeaderColor::Base => self.theme.get().text.base,
+            HeaderColor::Warning { open } if hover || open => self.theme.get().text.feedback.warning.base,
             // `RGBA.fromValues(…, 0.6)`.
-            HeaderColor::Warning { .. } => self.theme.text.feedback.warning.base.with_alpha(153),
+            HeaderColor::Warning { .. } => self.theme.get().text.feedback.warning.base.with_alpha(153),
         }
     }
 
@@ -1048,6 +1062,7 @@ fn child_root(child: &Child) -> &View {
 /// An open thought in a reasoning group (`ThoughtEntry`): its Markdown behind a bar.
 struct Thought {
     root: View,
+    bar: View,
     markdown: Markdown,
     content: RefCell<String>,
     streaming: Cell<bool>,
@@ -1056,12 +1071,8 @@ struct Thought {
 impl Thought {
     fn new(cx: &Context<'_>) -> Self {
         let markdown =
-            opencode_ui::markdown::view(cx.app, cx.theme, cx.thinking_syntax, cx.renderers, cx.conceal, true).colors(
-                opentui::widget::MarkdownColors {
-                    text: cx.theme.text.muted,
-                    ..opencode_ui::markdown::colors(cx.theme)
-                },
-            );
+            opencode_ui::markdown::view(cx.app, cx.theme, cx.thinking_syntax, cx.renderers, cx.conceal, true)
+                .colors(thought_colors(cx.theme));
         let bar = View::new(cx.app)
             .border(BorderStyle::Heavy)
             .border_sides(Sides::LEFT)
@@ -1069,7 +1080,13 @@ impl Thought {
             .padding_edge(Edge::Left, 1)
             .child(&markdown);
         let root = View::new(cx.app).margin_edge(Edge::Top, 1).shrink(0.0).child(&bar);
-        Self { root, markdown, content: RefCell::default(), streaming: Cell::new(true) }
+        Self { root, bar, markdown, content: RefCell::default(), streaming: Cell::new(true) }
+    }
+
+    /// Takes the theme of `cx` in place: the text and its code views stay.
+    fn restyle(&self, cx: &Context<'_>) {
+        self.bar.border_color(cx.theme.decrease(&cx.theme.background.raised.base, 1));
+        opencode_ui::markdown::restyle(&self.markdown, thought_colors(cx.theme), cx.thinking_syntax);
     }
 
     fn update(&self, message: &SessionMessageAssistant, part: &SessionMessageAssistantReasoning) {
@@ -1085,6 +1102,11 @@ impl Thought {
             self.markdown.streaming(streaming);
         }
     }
+}
+
+/// A thought's Markdown colors: the text muted.
+fn thought_colors(theme: &Theme) -> opentui::widget::MarkdownColors {
+    opentui::widget::MarkdownColors { text: theme.text.muted, ..opencode_ui::markdown::colors(theme) }
 }
 
 #[cfg(test)]

@@ -555,6 +555,68 @@ pub fn wait_fixture(app: &TestApp, name: &str) {
     opencode_parity::assert_fixture(&app.render(), name);
 }
 
+/// The theme [`assert_restyles_in_place`] switches to from the default `opencode`.
+const SWITCHED: &str = "tokyonight";
+
+/// A mounted TUI and its app, as a test's own harness holds them.
+pub trait Mounted {
+    fn app(&self) -> &TestApp;
+    fn tui(&self) -> &Rc<Tui>;
+}
+
+impl<H: std::ops::Deref<Target = Harness>> Mounted for H {
+    fn app(&self) -> &TestApp {
+        &self.app
+    }
+
+    fn tui(&self) -> &Rc<Tui> {
+        &self.tui
+    }
+}
+
+/// Switches `harness` to [`SWITCHED`]; with `remount`, mounts the route again afterwards, which draws every widget of
+/// it from scratch in the new theme.
+fn switch_theme(harness: &impl Mounted, remount: bool) {
+    let tui = harness.tui();
+    assert!(tui.theme.borrow_mut().set(SWITCHED));
+    tui.theme_changed();
+    if remount {
+        tui.navigate(tui.route());
+    }
+    harness.app().advance(Duration::from_millis(1));
+}
+
+/// A theme switch restyles the view in place, as TS's views follow their theme: the view `open` mounts, brought to
+/// a state by `prepare` and switched, draws every cell as the view mounted again in the new theme and brought to the
+/// same state. `ready` tells when a screen shows that state.
+#[track_caller]
+pub fn assert_restyles_in_place<H: Mounted>(open: impl Fn() -> H, prepare: impl Fn(&H), ready: impl Fn(&str) -> bool) {
+    let in_place = open();
+    prepare(&in_place);
+    switch_theme(&in_place, false);
+    let mounted = open();
+    switch_theme(&mounted, true);
+    prepare(&mounted);
+    for harness in [&in_place, &mounted] {
+        let app = harness.app();
+        let shown = app.wait_until(WAIT, || ready(&app.text()));
+        assert!(shown, "the state never showed:\n{}", app.text());
+    }
+    let (switched, expected) = (in_place.app().render(), mounted.app().render());
+    let differ: Vec<_> = (0..expected.height)
+        .flat_map(|y| (0..expected.width).map(move |x| (x, y)))
+        .filter(|&(x, y)| switched.cell(x, y) != expected.cell(x, y))
+        .collect();
+    let first = differ.first().map(|&(x, y)| (x, y, switched.cell(x, y).cloned(), expected.cell(x, y).cloned()));
+    assert!(
+        differ.is_empty(),
+        "{} cells differ from a mount in {SWITCHED}, first {first:?}\nin place:\n{}\nmounted:\n{}",
+        differ.len(),
+        switched.text(),
+        expected.text()
+    );
+}
+
 /// The cell where `needle` first starts in `screen`.
 pub fn at(screen: &str, needle: &str) -> Option<(u16, u16)> {
     screen.lines().enumerate().find_map(|(y, line)| {

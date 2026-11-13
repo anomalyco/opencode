@@ -370,6 +370,24 @@ impl SessionFrame {
         self.root.clone()
     }
 
+    /// Paints in the page theme again: the terminal pane keeps its connection and screen. A plugin panel takes the
+    /// theme when it renders, so its host renders it again where it is, as a plugin route mounts again.
+    pub fn restyle(&self, tui: &Tui) {
+        let state = &self.state;
+        if let Some(pane) = state.terminal.borrow().as_ref() {
+            pane.restyle(tui);
+        }
+        let Some(old) = state.host.borrow_mut().take() else { return };
+        let target = old.target().clone();
+        let width = old.root.rect().width as u16;
+        old.root.detach();
+        drop(old);
+        state.mount_host(tui, target, width);
+        if state.active.get() == Pane::Right {
+            state.focus_right(tui);
+        }
+    }
+
     /// Whether the session pane has the input (`activePane() === "session"`).
     pub fn session_active(&self) -> bool {
         self.state.active.get() == Pane::Session
@@ -377,6 +395,21 @@ impl SessionFrame {
 }
 
 impl SessionState {
+    /// Mounts the panel `target` in the right pane.
+    fn mount_host(&self, tui: &Tui, target: crate::panel::Target, width: u16) {
+        let host = Host::new(tui, target, width, self.active.get() == Pane::Right);
+        // `PanelHost`'s `onMouseDown={props.onFocus}`.
+        host.root.on_mouse(bind!(tui, |tui, _, event| {
+            if matches!(event.kind, MouseEventKind::Down(_))
+                && let Some(session) = tui.frame.session()
+            {
+                session.focus_right(&tui);
+            }
+        }));
+        self.right.add(&host.root);
+        *self.host.borrow_mut() = Some(host);
+    }
+
     /// The right pane and the handle, from the panel state and the room there is.
     fn layout(&self, tui: &Tui) {
         let panel = tui.panels.current().filter(|panel| panel.session == self.session.0);
@@ -392,17 +425,7 @@ impl SessionState {
             }
             if let Some(target) = panel.clone() {
                 let width = if fullscreen { available as u16 } else { size };
-                let host = Host::new(tui, target, width, self.active.get() == Pane::Right);
-                // `PanelHost`'s `onMouseDown={props.onFocus}`.
-                host.root.on_mouse(bind!(tui, |tui, _, event| {
-                    if matches!(event.kind, MouseEventKind::Down(_))
-                        && let Some(session) = tui.frame.session()
-                    {
-                        session.focus_right(&tui);
-                    }
-                }));
-                self.right.add(&host.root);
-                *self.host.borrow_mut() = Some(host);
+                self.mount_host(tui, target, width);
                 focus = true;
             }
         }

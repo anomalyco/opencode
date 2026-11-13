@@ -276,6 +276,85 @@ fn the_revert_banner_counts_reverted_prompts_and_a_click_clears_it() {
     );
 }
 
+/// A theme switch restyles these rows in place: an open shell output stays open, and each cell equals the rows
+/// mounted in the new theme.
+#[test]
+fn a_theme_switch_restyles_these_rows_in_place() {
+    let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+    let image = |name: &str, data: &str| json!({ "data": data, "mime": "image/png", "name": name, "source": { "type": "inline" } });
+    let mut pictures = user("msg_00", 500, "Look at these");
+    pictures["files"] =
+        json!([image("a.png", png), image("b.png", "bm90IGFuIGltYWdl"), image("c.png", png), image("d.png", png)]);
+    let output: Vec<String> = (1..=15).map(|line| format!("out {line}")).collect();
+    let failed = |id: &str, created: u64, error: Value| {
+        let mut message = assistant(id, created, json!([]));
+        message["error"] = error;
+        message["time"]["completed"] = json!(created + 100);
+        message
+    };
+    let messages = vec![
+        pictures,
+        json!({
+            "id": "msg_01", "type": "compaction", "status": "completed", "reason": "manual",
+            "summary": "The user asked about **parsing**.", "time": { "created": 1000 },
+            "tokens": { "input": 1200, "output": 300, "reasoning": 0, "cache": { "read": 50, "write": 0 } },
+        }),
+        json!({
+            "id": "msg_02", "type": "compaction", "status": "failed", "reason": "manual",
+            "error": { "type": "provider", "message": "context too large" }, "time": { "created": 1100 },
+        }),
+        json!({
+            "id": "msg_03", "type": "shell", "shellID": "shl_1", "command": "seq 15",
+            "status": "exited", "exit": 1, "time": { "created": 1200, "completed": 1300 },
+            "output": { "output": output.join("\n"), "cursor": 0, "size": 0, "truncated": false },
+        }),
+        json!({ "id": "msg_04", "type": "skill", "skill": "skl_1", "name": "rust", "text": "", "time": { "created": 1400 } }),
+        json!({ "id": "msg_05", "type": "agent-switched", "agent": "plan", "previous": "build", "time": { "created": 1500 } }),
+        json!({ "id": "msg_06", "type": "location-switched", "location": { "directory": "/elsewhere" }, "time": { "created": 1600 } }),
+        json!({
+            "id": "msg_07", "type": "synthetic", "text": "", "time": { "created": 1700 },
+            "description": "Review the diff",
+            "metadata": { "source": "subagent", "state": "completed", "agent": "explore", "childID": "ses_child" },
+        }),
+        user("msg_08", 1800, "Go"),
+        failed("msg_09", 2000, json!({ "type": "provider", "message": "bad request" })),
+        json!({
+            "id": "msg_10", "type": "idle", "outcome": "failed", "time": { "created": 2500 },
+            "error": { "type": "execution", "message": "the runner crashed" },
+        }),
+        failed("msg_11", 3000, json!({ "type": "provider.free-limit", "message": "free limit" })),
+        failed("msg_12", 4000, json!({ "type": "provider.budget-limit", "message": "budget" })),
+        user("msg_13", 5000, "Build it"),
+        assistant(
+            "msg_14",
+            6000,
+            json!([{
+                "type": "tool", "id": "call_1", "name": "bash",
+                "state": { "status": "running", "input": { "command": "make" }, "metadata": {} },
+                "time": { "created": 6000, "ran": 6000 },
+            }]),
+        ),
+        user("msg_15", 7000, "Undo this"),
+    ];
+    let inbox = vec![json!({
+        "id": "msg_99", "type": "compaction", "sessionID": ID, "time": { "created": 8000 },
+        "payload": {}, "delivery": "queue",
+    })];
+    let revert = json!({ "revert": {
+        "messageID": "msg_15",
+        "files": [{ "file": "src/parser.rs", "patch": "", "additions": 4, "deletions": 2, "status": "modified" }],
+    }});
+    let on = Info { session: Some(Session { image_preview: Some(true), ..Session::default() }), ..Info::default() };
+    support::assert_restyles_in_place(
+        || open(160, session(revert.clone()), messages.clone(), inbox.clone(), on.clone()),
+        |h| {
+            h.wait_for_all(&["$ seq 15", "Compaction queued", "1 message reverted", "+1 more", "to the background"]);
+            h.app.click(10, h.row("$ seq 15"));
+        },
+        |screen| screen.contains("out 1\n") && screen.contains("Usage limit reached"),
+    );
+}
+
 #[test]
 fn a_long_running_shell_call_shows_the_background_hint() {
     let messages = vec![

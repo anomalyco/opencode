@@ -27,6 +27,13 @@ impl Todo {
         &self.root
     }
 
+    /// The update that follows lists the entries again in the new theme.
+    pub fn restyle(&self, _cx: &Context<'_>) {
+        self.inline.restyle();
+        self.block.restyle();
+        self.shown.take();
+    }
+
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
         let status = props.status();
         let todos = parse_todos(props.input.get("todos").unwrap_or(&Value::Null));

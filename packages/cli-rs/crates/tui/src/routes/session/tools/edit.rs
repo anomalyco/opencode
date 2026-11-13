@@ -14,6 +14,8 @@ pub struct Edit {
     block: BlockTool,
     /// The inputs of the diff and diagnostics on screen.
     shown: RefCell<Option<Shown>>,
+    /// Restyles the diff and diagnostics in place.
+    paints: Paints,
 }
 
 #[derive(PartialEq)]
@@ -28,11 +30,17 @@ struct Shown {
 
 impl Edit {
     pub fn new(cx: &Context<'_>) -> Self {
-        Self { block: BlockTool::new(cx), shown: RefCell::default() }
+        Self { block: BlockTool::new(cx), shown: RefCell::default(), paints: Paints::default() }
     }
 
     pub fn root(&self) -> &View {
         self.block.root()
+    }
+
+    /// The diff keeps its code and highlight.
+    pub fn restyle(&self, cx: &Context<'_>) {
+        self.block.restyle();
+        self.paints.restyle(cx.theme);
     }
 
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
@@ -83,7 +91,8 @@ impl Edit {
         }
         let children = self.block.children();
         children.clear();
-        let diff = opencode_ui::diff::view(
+        self.paints.clear();
+        let diff = opencode_ui::diff::view_painted(
             cx.app,
             cx.theme,
             cx.syntax,
@@ -92,9 +101,10 @@ impl Edit {
             opentui::syntax::filetype_for_path(&shown.path),
             shown.wrap,
             0,
+            &self.paints,
         );
         children.add(&View::new(cx.app).padding_edge(Edge::Left, 1).padding_edge(Edge::Right, 1).child(&diff));
-        if let Some(errors) = diagnostics::view(cx, &props.metadata, &shown.input_path) {
+        if let Some(errors) = diagnostics::view(cx, &props.metadata, &shown.input_path, &self.paints) {
             children.add(&errors);
         }
         self.block.show_children(true);

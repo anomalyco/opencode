@@ -18,6 +18,8 @@ const VISIBLE: usize = 3;
 pub struct Previews {
     root: View,
     rendered: std::cell::RefCell<Option<Shown>>,
+    /// Restyles the placeholders in place.
+    paints: Paints,
 }
 
 /// The files, height, and option the previews were last built for.
@@ -34,11 +36,17 @@ impl Previews {
                 .justify(Justify::Start)
                 .visible(false),
             rendered: std::cell::RefCell::default(),
+            paints: Paints::default(),
         }
     }
 
     pub fn root(&self) -> &View {
         &self.root
+    }
+
+    /// Paints the placeholders in `theme`; the images stay.
+    pub fn restyle(&self, theme: &Theme) {
+        self.paints.restyle(theme);
     }
 
     /// Shows the prompt's images when the option is on.
@@ -55,6 +63,7 @@ impl Previews {
         let app = &tui.app;
         let theme = tui.page();
         self.root.clear();
+        self.paints.clear();
         self.root.visible(!uris.is_empty());
         self.root.height(height + 1);
         let open = |index: usize| {
@@ -80,13 +89,22 @@ impl Previews {
             let image =
                 ImageView::new(app).fit(ImageFit::Cover).width(Length::Percent(100.0)).height(Length::Percent(100.0));
             match data_uri(uri).map(|bytes| image.load(&bytes)) {
-                Some(Ok(image)) => cell.add(&image),
-                _ => cell.add(&Text::new(app, "No preview").fg(theme.text.muted)),
+                Some(Ok(image)) => {
+                    cell.add(&image);
+                }
+                _ => {
+                    let text = Text::new(app, "No preview");
+                    cell.add(&text);
+                    self.paints.add(&theme, move |theme| {
+                        text.fg(theme.text.muted);
+                    });
+                }
             };
             cell.mouse_pointer(MousePointer::POINTER).on_mouse(open(index));
             self.root.add(&cell);
         }
         if uris.len() > VISIBLE {
+            let label = Text::new(app, format!("+{} more", uris.len() - VISIBLE)).wrap(WrapMode::None).truncate(true);
             let more = View::new(app)
                 .width(8)
                 .height(height)
@@ -94,12 +112,10 @@ impl Previews {
                 .shrink(1.0)
                 .align_items(Align::Center)
                 .justify(Justify::Center)
-                .child(
-                    &Text::new(app, format!("+{} more", uris.len() - VISIBLE))
-                        .fg(theme.text.muted)
-                        .wrap(WrapMode::None)
-                        .truncate(true),
-                );
+                .child(&label);
+            self.paints.add(&theme, move |theme| {
+                label.fg(theme.text.muted);
+            });
             more.mouse_pointer(MousePointer::POINTER).on_mouse(open(VISIBLE));
             self.root.add(&more);
         }

@@ -12,6 +12,8 @@ pub struct Write {
     block: BlockTool,
     /// The content, path, and diagnostics the block shows.
     shown: RefCell<Option<(String, String, Option<serde_json::Value>)>>,
+    /// Restyles the block's children in place.
+    paints: Paints,
 }
 
 impl Write {
@@ -19,11 +21,18 @@ impl Write {
         let inline = InlineTool::new(cx);
         let block = BlockTool::new(cx);
         let root = View::new(cx.app).column().shrink(0.0).child(inline.root()).child(block.root());
-        Self { root, inline, block, shown: RefCell::default() }
+        Self { root, inline, block, shown: RefCell::default(), paints: Paints::default() }
     }
 
     pub fn root(&self) -> &View {
         &self.root
+    }
+
+    /// The file keeps its code and highlight.
+    pub fn restyle(&self, cx: &Context<'_>) {
+        self.inline.restyle();
+        self.block.restyle();
+        self.paints.restyle(cx.theme);
     }
 
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
@@ -57,10 +66,15 @@ impl Write {
         }
         let children = self.block.children();
         children.clear();
-        let code =
-            opencode_ui::code::view(cx.app, cx.theme, cx.syntax, opentui::syntax::filetype_for_path(path), &shown.0);
-        children.add(&opencode_ui::code::numbered(cx.app, cx.theme, &code));
-        if let Some(errors) = diagnostics::view(cx, &props.metadata, path) {
+        self.paints.clear();
+        let filetype = opentui::syntax::filetype_for_path(path);
+        let code = opencode_ui::code::view_painted(cx.app, cx.theme, filetype, &shown.0, &self.paints);
+        let numbered = opencode_ui::code::numbered(cx.app, cx.theme, &code);
+        children.add(&numbered);
+        self.paints.keep(move |theme| {
+            numbered.fg(theme.text.muted);
+        });
+        if let Some(errors) = diagnostics::view(cx, &props.metadata, path, &self.paints) {
             children.add(&errors);
         }
         self.block.show_children(true);

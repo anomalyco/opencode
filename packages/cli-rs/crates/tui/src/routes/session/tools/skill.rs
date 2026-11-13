@@ -16,6 +16,10 @@ impl Skill {
         self.0.root()
     }
 
+    pub fn restyle(&self, _cx: &Context<'_>) {
+        self.0.restyle();
+    }
+
     pub fn update(&self, _cx: &Context<'_>, props: &Props<'_>) {
         let name = props.metadata.get("name").and_then(serde_json::Value::as_str).or(props.input_str("id"));
         self.0.set(Inline {

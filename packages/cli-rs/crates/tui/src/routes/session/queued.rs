@@ -115,20 +115,14 @@ pub(crate) struct Inner {
     /// The session's prompt, which the undo appends to and checks for shell mode.
     prompt: Weak<PromptInner>,
     layers: RefCell<Vec<Disposer>>,
+    paints: Paints,
 }
 
 impl Queued {
     pub fn new(tui: &Tui, session: &SessionID, prompt: Weak<PromptInner>) -> Self {
         let app = &tui.app;
         let theme = tui.page();
-        let raised = theme.background.raised.base;
-        let label = Text::new(app, "")
-            .fg(theme.text.muted)
-            .wrap(WrapMode::None)
-            .truncate(true)
-            .grow(1.0)
-            .shrink(1.0)
-            .min_width(0);
+        let label = Text::new(app, "").wrap(WrapMode::None).truncate(true).grow(1.0).shrink(1.0).min_width(0);
         let body = View::new(app)
             .row()
             .width(Length::Percent(100.0))
@@ -136,21 +130,36 @@ impl Queued {
             .padding_edge(Edge::Bottom, 1)
             .padding_edge(Edge::Left, 2)
             .padding_edge(Edge::Right, 2)
-            .bg(raised)
             .child(&label);
-        let hovered = theme.decrease(&theme.background.raised.base, 1);
-        let target = body.clone();
         let root = View::new(app)
             .column()
             .shrink(0.0)
             .margin_edge(Edge::Bottom, 1)
             .border(BorderStyle::Heavy)
             .border_sides(Sides::LEFT)
-            .border_color(theme.border.base)
             .visible(false)
             .child(&body);
-        root.on_hover(move |_, hover| {
-            target.bg(if hover { hovered } else { raised });
+        let hover = Rc::new(Cell::new(false));
+        let paint_body = {
+            let (body, hover) = (body.clone(), hover.clone());
+            move |theme: &Theme| {
+                let raised = &theme.background.raised.base;
+                body.bg(if hover.get() { theme.decrease(raised, 1) } else { *raised });
+            }
+        };
+        let paints = Paints::default();
+        paints.add(&theme, {
+            let (label, root, paint_body) = (label.clone(), root.clone(), paint_body.clone());
+            move |theme| {
+                label.fg(theme.text.muted);
+                root.border_color(theme.border.base);
+                paint_body(theme);
+            }
+        });
+        let live = tui.live_theme();
+        root.on_hover(move |_, hovered| {
+            hover.set(hovered);
+            paint_body(&live.get());
         });
         let inner = Rc::new(Inner {
             tui: tui.weak(),
@@ -160,6 +169,7 @@ impl Queued {
             count: Cell::new(0),
             prompt,
             layers: RefCell::default(),
+            paints,
         });
         inner.root.mouse_pointer(MousePointer::POINTER).on_click(bind!(inner, |inner, _, _| inner.open()));
         inner.register(tui);
@@ -169,6 +179,11 @@ impl Queued {
 
     pub fn root(&self) -> &View {
         &self.0.root
+    }
+
+    pub fn restyle(&self, tui: &Tui) {
+        self.0.paints.restyle(&tui.page());
+        self.0.update(tui);
     }
 
     /// Follows the session's inbox. `blocked` is true while a permission or form replaces the prompt, which hides

@@ -24,6 +24,12 @@ impl Read {
         &self.root
     }
 
+    /// The update that follows lists the loaded files again in the new theme.
+    pub fn restyle(&self, _cx: &Context<'_>) {
+        self.inline.restyle();
+        self.shown.take();
+    }
+
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
         let path = props.input_str("path");
         let mut text = format!("Read {}", format_path(cx, path));

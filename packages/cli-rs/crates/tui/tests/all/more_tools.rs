@@ -213,6 +213,66 @@ fn blocks_list_todos_answers_and_patched_files() {
     assert_eq!(h.fg("-3 lines"), theme.diff.text.removed);
 }
 
+/// A theme switch restyles these rows in place too: an open nested call stays open, the patch keeps its diff, and
+/// each cell equals the rows mounted in the new theme.
+#[test]
+fn a_theme_switch_restyles_these_rows_in_place() {
+    let patch = "Index: a.rs\n===\n--- a.rs\n+++ a.rs\n@@ -1 +1 @@\n-old\n+new\n";
+    let calls = json!([
+        { "tool": "read", "status": "completed", "input": { "path": "src/a.rs" } },
+        { "tool": "grep", "status": "error", "input": { "pattern": "TODO" } },
+    ]);
+    let messages = turn(vec![
+        tool("c1", "webfetch", completed(json!({ "url": "https://opencode.ai/docs" }), "# Docs", json!({}))),
+        tool("c2", "websearch", completed(json!({ "query": "rust tui" }), "results", json!({ "provider": "exa" }))),
+        tool("c3", "skill", completed(json!({ "id": "x" }), "loaded", json!({ "name": "writing-doc" }))),
+        tool(
+            "c4",
+            "todowrite",
+            completed(
+                json!({ "todos": [
+                    { "content": "Prove them", "status": "in_progress" },
+                    { "content": "Drop legacy", "status": "cancelled" },
+                ] }),
+                "",
+                json!({}),
+            ),
+        ),
+        tool(
+            "c5",
+            "question",
+            completed(json!({ "questions": [{ "question": "Ship it?" }] }), "", json!({ "answers": [["Yes"]] })),
+        ),
+        tool(
+            "c6",
+            "apply_patch",
+            completed(
+                json!({ "patchText": "*** Begin Patch" }),
+                "",
+                json!({ "files": [
+                    { "file": "a.rs", "type": "update", "patch": patch, "additions": 1, "deletions": 1 },
+                    { "file": "gone.rs", "type": "delete", "patch": "", "additions": 0, "deletions": 3 },
+                ] }),
+            ),
+        ),
+        tool("c7", "apply_patch", failed(json!({ "patchText": "*** Update File: a.rs" }), "context mismatch")),
+        tool("c8", "execute", completed(json!({ "code": "throw 1" }), "Error: boom", json!({ "toolCalls": calls }))),
+        tool(
+            "c9",
+            "task",
+            completed(json!({ "description": "Check the docs", "agent": "general" }), "done", json!({})),
+        ),
+    ]);
+    support::assert_restyles_in_place(
+        || open(100, 80, messages.clone()),
+        |h| {
+            h.wait_for_all(&["read [path=src/a.rs]", "-3 lines", "# Patch failed", "Check the docs"]);
+            h.click("read [path=src/a.rs]");
+        },
+        |screen| screen.contains("path: src/a.rs") && screen.contains("Skill \"writing-doc\""),
+    );
+}
+
 #[test]
 fn a_subagent_row_opens_its_child_session() {
     let messages = turn(vec![

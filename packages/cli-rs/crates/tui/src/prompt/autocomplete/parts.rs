@@ -158,6 +158,31 @@ pub fn restore(prompt: &Inner) {
     }
 }
 
+/// Paints the marks of `old`'s styles in `new`'s, as TS's marks follow their style IDs. A mark's style is fixed when
+/// it is added, so each is added again, in creation order (which [`sync`] reads from the IDs), over the same range;
+/// its part follows the new ID. A mark an edit removed keeps its old style if undo brings it back.
+pub fn restyle(prompt: &Inner, old: &Theme, new: &Theme) {
+    const SCOPES: [&str; 4] = ["extmark.file", "extmark.agent", "extmark.skill", "extmark.paste"];
+    let (old, new) = (opencode_ui::code::syntax_theme(old), opencode_ui::code::syntax_theme(new));
+    let mut marks = prompt.textarea.extmarks();
+    marks.sort_by_key(|mark| mark.id);
+    let mut tracked = prompt.parts.marks.borrow_mut();
+    for mark in marks {
+        let Some(scope) =
+            SCOPES.iter().find(|scope| mark.options.style.is_some() && old.get(scope) == mark.options.style)
+        else {
+            continue;
+        };
+        let mut options = mark.options;
+        options.style = new.get(scope);
+        prompt.textarea.remove_extmark(mark.id);
+        let id = prompt.textarea.add_extmark(mark.range(), options);
+        if let Some(entry) = tracked.iter_mut().find(|(tracked, _, _)| *tracked == mark.id) {
+            entry.0 = id;
+        }
+    }
+}
+
 /// Copies the marks' ranges into their parts and drops parts whose marks an edit removed
 /// (`syncExtmarksWithPromptParts`). Files without a mention stay.
 pub fn sync(prompt: &Inner) {

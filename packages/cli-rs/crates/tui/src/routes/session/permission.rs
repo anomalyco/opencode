@@ -48,7 +48,7 @@ enum Prompt {
     /// `SessionQuestion` for the family's first request.
     Asking { request: PermissionRequest, selected: usize, expanded: bool, _layer: DeferredDisposer },
     /// `RejectPrompt`: a subagent's request asks what to do differently.
-    Rejecting { request: PermissionRequest, view: View, field: Textarea, _layer: DeferredDisposer },
+    Rejecting { request: PermissionRequest, view: View, field: Textarea, paints: Paints, _layer: DeferredDisposer },
 }
 
 impl Prompt {
@@ -128,6 +128,16 @@ impl Permission {
 
     pub fn root(&self) -> &View {
         &self.0.region
+    }
+
+    /// Paints in the page theme again. The question draws again where it is; the rejection keeps its text field.
+    pub fn restyle(&self, tui: &Tui) {
+        let inner = &self.0;
+        if let Prompt::Rejecting { paints, .. } = &*inner.prompt.borrow() {
+            paints.restyle(&tui.page());
+            return;
+        }
+        inner.render();
     }
 
     /// Whether a request is prompted; the session prompt hides meanwhile.
@@ -252,9 +262,10 @@ impl Inner {
     }
 
     fn reject(self: &Rc<Self>, tui: &Tui, request: PermissionRequest) {
-        let (view, field) = self.reject_view(tui, &tui.page(), tui.app.size().0 < 80);
+        let paints = Paints::default();
+        let (view, field) = self.reject_view(tui, &tui.page(), tui.app.size().0 < 80, &paints);
         let _layer = self.layer(tui, self.reject_layer());
-        self.show(tui, Prompt::Rejecting { request, view, field, _layer });
+        self.show(tui, Prompt::Rejecting { request, view, field, paints, _layer });
     }
 
     fn layer(&self, tui: &Tui, layer: KeymapLayer<u32>) -> DeferredDisposer {
@@ -555,8 +566,13 @@ impl Inner {
             .child(&footer(app, theme, narrow).child(&actions).child(&hints))
     }
 
-    fn reject_view(self: &Rc<Self>, tui: &Tui, theme: &Theme, narrow: bool) -> (View, Textarea) {
+    fn reject_view(self: &Rc<Self>, tui: &Tui, theme: &Theme, narrow: bool, paints: &Paints) -> (View, Textarea) {
         let app = &tui.app;
+        let (mark, title, subtitle) = (
+            Text::new(app, "△"),
+            Text::new(app, "Reject permission"),
+            Text::new(app, "Tell OpenCode what to do differently"),
+        );
         let heading = View::new(app)
             .column()
             .gap(1)
@@ -564,40 +580,34 @@ impl Inner {
             .padding_edge(Edge::Right, 3)
             .padding_edge(Edge::Top, 1)
             .padding_edge(Edge::Bottom, 1)
-            .child(
-                &View::new(app)
-                    .row()
-                    .gap(1)
-                    .padding_edge(Edge::Left, 1)
-                    .child(&Text::new(app, "△").fg(theme.text.feedback.error.base))
-                    .child(&Text::new(app, "Reject permission").fg(theme.text.base)),
-            )
-            .child(
-                &View::new(app)
-                    .padding_edge(Edge::Left, 1)
-                    .child(&Text::new(app, "Tell OpenCode what to do differently").fg(theme.text.muted)),
-            );
-        let field = Textarea::new(app)
-            .mouse_pointer(MousePointer::DEFAULT)
-            .grow(1.0)
-            .basis(Length::Auto)
-            .min_width(1)
-            .colors(theme.text.base, Color::TRANSPARENT)
-            .focused_colors(theme.text.base, Color::TRANSPARENT)
-            .cursor_color(theme.text.base);
+            .child(&View::new(app).row().gap(1).padding_edge(Edge::Left, 1).child(&mark).child(&title))
+            .child(&View::new(app).padding_edge(Edge::Left, 1).child(&subtitle));
+        let field = Textarea::new(app).mouse_pointer(MousePointer::DEFAULT).grow(1.0).basis(Length::Auto).min_width(1);
         let confirm = hint(app, theme, "enter", "confirm");
         confirm.mouse_pointer(MousePointer::POINTER).on_click(bind!(self, |inner, _, _| inner.confirm_reject()));
         let cancel = hint(app, theme, "esc", "cancel");
         cancel.mouse_pointer(MousePointer::POINTER).on_click(bind!(self, |inner, _, _| inner.cancel_reject()));
         let actions = View::new(app).row().gap(2).shrink(0.0).child(&confirm).child(&cancel);
+        let bottom = footer(app, theme, narrow);
         let view = View::new(app)
             .column()
-            .bg(theme.background.raised.base)
             .border(BorderStyle::Heavy)
             .border_sides(Sides::LEFT)
-            .border_color(theme.text.feedback.error.base)
             .child(&heading)
-            .child(&footer(app, theme, narrow).child(&field).child(&actions));
+            .child(&bottom.clone().child(&field).child(&actions));
+        let (painted, area) = (view.clone(), field.clone());
+        paints.add(theme, move |theme| {
+            mark.fg(theme.text.feedback.error.base);
+            title.fg(theme.text.base);
+            subtitle.fg(theme.text.muted);
+            area.colors(theme.text.base, Color::TRANSPARENT)
+                .focused_colors(theme.text.base, Color::TRANSPARENT)
+                .cursor_color(theme.text.base);
+            paint_hint(&confirm, theme, "enter", "confirm");
+            paint_hint(&cancel, theme, "esc", "cancel");
+            paint_footer(&bottom, theme);
+            painted.bg(theme.background.raised.base).border_color(theme.text.feedback.error.base);
+        });
         (view, field)
     }
 }
@@ -649,10 +659,20 @@ fn footer(app: &App, theme: &Theme, narrow: bool) -> View {
         .align_items(if narrow { Align::Start } else { Align::Center })
 }
 
+fn paint_footer(footer: &View, theme: &Theme) {
+    footer.bg(theme.decrease(&theme.background.raised.base, 1));
+}
+
 /// `key` in the text color, then `label` muted.
 /// `{key} <span muted>{label}</span>` in one text, so the space takes the key's color.
 fn hint(app: &App, theme: &Theme, key: &str, label: &str) -> Text {
-    Text::new(app, vec![format!("{key} ").fg(theme.text.base), label.to_owned().fg(theme.text.muted)]).shrink(0.0)
+    let hint = Text::new(app, "").shrink(0.0);
+    paint_hint(&hint, theme, key, label);
+    hint
+}
+
+fn paint_hint(hint: &Text, theme: &Theme, key: &str, label: &str) {
+    hint.set_text(vec![format!("{key} ").fg(theme.text.base), label.to_owned().fg(theme.text.muted)]);
 }
 
 fn lines_view(app: &App, lines: &[String], color: impl Fn(usize) -> Color) -> View {

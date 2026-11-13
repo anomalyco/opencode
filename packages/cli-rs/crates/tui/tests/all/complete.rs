@@ -306,6 +306,49 @@ fn agent_mentions_are_one_unit_and_are_sent_as_parts() {
     assert_eq!((marks[0].start, marks[0].end), (11, 19));
 }
 
+/// A theme switch restyles the prompt's mentions and the open popup in place: each cell equals the prompt mounted in
+/// the new theme and typed the same way.
+#[test]
+fn a_theme_switch_restyles_mentions_and_the_popup_in_place() {
+    support::assert_restyles_in_place(
+        Setup::new,
+        |setup| {
+            setup.app.type_text("ask @gen");
+            setup.wait_for("@general");
+            setup.app.press("return");
+            setup.app.type_text("and @ex");
+        },
+        |screen| screen.contains("@explore") && screen.contains("ask @general and @ex"),
+    );
+}
+
+/// A mention keeps its part through a theme switch, which adds its mark again in the new style.
+#[test]
+fn a_mention_keeps_its_part_through_a_theme_switch() {
+    let setup = Setup::new();
+    setup.app.type_text("ask @gen");
+    setup.wait_for("@general");
+    setup.app.press("return");
+    let before = setup.textarea().extmarks()[0];
+    assert!(setup.tui.theme.borrow_mut().set("tokyonight"));
+    setup.tui.theme_changed();
+    let after = setup.textarea().extmarks();
+    assert_eq!(after.len(), 1);
+    assert_eq!(after[0].range(), before.range());
+    assert!(after[0].options.atomic);
+    let style = opencode_ui::code::syntax_theme(&setup.tui.page()).get("extmark.agent");
+    assert_eq!(after[0].options.style, style);
+    assert_ne!(after[0].options.style, before.options.style);
+    setup.app.type_text("now");
+    setup.app.press("return");
+    let sent = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
+    assert_eq!(sent[0].1["text"], "ask @general now");
+    assert_eq!(
+        sent[0].1["agents"],
+        json!([{ "name": "general", "mention": { "start": 4, "end": 12, "text": "@general" } }])
+    );
+}
+
 // Undo brings a deleted mention's mark back with its id, but not its part: TS maps parts by mark id and forgets the
 // id with the part (`syncExtmarksWithPromptParts`), so the mention is sent as text.
 #[test]
