@@ -73,6 +73,10 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
     let deltas = Rc::new(RefCell::new(String::new()));
     let streamed = deltas.clone();
     setup.on_deltas(move |_, events| {
+        // The host never calls with none.
+        if events.is_empty() {
+            streamed.borrow_mut().push('!');
+        }
         for event in events {
             if let abi::types::V2Event::SessionTextDelta(delta) = event {
                 streamed.borrow_mut().push_str(&delta.data.delta);
