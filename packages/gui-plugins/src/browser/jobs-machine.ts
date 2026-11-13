@@ -63,7 +63,7 @@ export type JobsTransition = { readonly state: JobsState; readonly effects: read
  * How long a job may run. An import may wait on the user at a Keychain or keyring prompt, and a store install
  * downloads the package.
  */
-export const JOB_TIMEOUT_MS: Record<Job["type"], number> = {
+const JOB_TIMEOUT_MS: Record<Job["type"], number> = {
   "import-browser": 300_000,
   "import-file": 60_000,
   "install-store": 120_000,

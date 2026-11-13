@@ -9,7 +9,7 @@ export function cookieKey(cookie: Pick<ImportedCookie, "host" | "path" | "name">
 }
 
 /** Whether two stores hold the same cookie for one key; both undefined means neither holds one. */
-export function sameCookie(a: ImportedCookie | undefined, b: ImportedCookie | undefined) {
+function sameCookie(a: ImportedCookie | undefined, b: ImportedCookie | undefined) {
   if (!a || !b) return a === b
 
   return (

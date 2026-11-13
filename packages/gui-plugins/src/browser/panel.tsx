@@ -805,8 +805,7 @@ export default function SessionBrowserPane(props: {
                   {plugin.t("external.menu")}
                 </Menu.Item>
                 <Menu.Separator />
-                <Menu.Item onSelect={() => plugin.layout.settings("browser")}>{plugin.t("signins.menu")}</Menu.Item>
-                <Menu.Item onSelect={() => plugin.layout.settings("browser")}>{plugin.t("extensions.menu")}</Menu.Item>
+                <Menu.Item onSelect={() => plugin.layout.settings("browser")}>{plugin.t("settings.open")}</Menu.Item>
                 <Menu.Separator />
                 <Menu.Item disabled={props.model.visits().length === 0} onSelect={() => props.model.clearHistory()}>
                   {plugin.t("history.clear")}

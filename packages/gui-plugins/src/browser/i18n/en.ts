@@ -103,7 +103,6 @@ export default {
   "signins.other": "Import from another browser",
   "signins.more": "More import options",
   "signins.dismiss": "Not now",
-  "signins.menu": "Import sign-ins",
   "signins.imported.one": "Imported {{count}} cookie.",
   "signins.imported.other": "Imported {{count}} cookies.",
   "signins.imported.from.one": "Imported {{count}} cookie from {{browser}}",
@@ -137,6 +136,7 @@ export default {
   "signins.unsaved.mac":
     "OpenCode cannot save sign-ins: macOS did not give it its Keychain key. Sign-ins made here end when OpenCode quits, so importing is off. Quit OpenCode, open it again, and choose Allow when macOS asks.",
   "settings.title": "Browser",
+  "settings.open": "Browser settings",
   "settings.description":
     "One browser for every session, project and server in this app. Sign-ins, site data and extensions stay on this device, unless you share sign-ins with remote servers.",
   "settings.links.title": "Open links in the browser pane",

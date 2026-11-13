@@ -76,8 +76,6 @@ const MEMBERS = [
   "getUserSettings",
 ]
 
-export type ExtensionActions = ReturnType<typeof createActions>
-
 /**
  * `chrome.action`, and `browserAction` and `pageAction` for Manifest V2: the button each extension has in the pane's
  * extensions menu, with its title, icon and badge, and the popup it opens. A click opens the popup, or tells the

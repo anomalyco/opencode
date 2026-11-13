@@ -2,9 +2,9 @@ import electron, { type BrowserWindow, type Rectangle } from "electron"
 import type { ExtensionTabs } from "./tabs"
 
 /** Chrome's limits for a popup's size, in pixels. */
-export const POPUP_MIN = { width: 25, height: 25 }
+const POPUP_MIN = { width: 25, height: 25 }
 
-export const POPUP_MAX = { width: 800, height: 600 }
+const POPUP_MAX = { width: 800, height: 600 }
 
 /**
  * Where a popup goes in its window's content: under its anchor, its right edge on the anchor's, at the size its page

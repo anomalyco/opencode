@@ -9,8 +9,6 @@ import preloadSource from "./preload.js?raw"
 /** A context that listens to an event: a page frame, or the extension's service worker, which is started to hear it. */
 type Subscriber = { readonly kind: "frame"; readonly process: number; readonly routing: number } | { readonly kind: "worker" }
 
-export type ExtensionHost = Awaited<ReturnType<typeof createExtensionHost>>
-
 /**
  * The bridge between extension contexts and the API modules. It writes the profile's preload, which adds each
  * module's namespaces to the pages and service workers of installed extensions, answers their calls and delivers
