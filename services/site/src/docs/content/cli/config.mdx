@@ -36,6 +36,21 @@ OpenCode adds `$schema` when it creates or migrates this file. Valid edits reloa
 
 Unknown settings are ignored. Keep `$schema` so your editor flags invalid values.
 
+### Legacy `tui.json` migration
+
+If you have a legacy `tui.json` file from OpenCode V1, the following rules apply:
+
+- **`cli.json` takes complete precedence.** If `cli.json` exists, the CLI reads it exclusively. Legacy `tui.json` settings are not merged or layered into it.
+- **Migration only occurs when `cli.json` is absent.** The first time the V2 CLI starts without a `cli.json`, it migrates supported settings from your global `tui.json` (at `~/.config/opencode/tui.json`) and `kv.json` (at `~/.local/state/opencode/kv.json`) into a new `cli.json`.
+- **The legacy files are never deleted.** After migration, your original `tui.json` and `kv.json` remain untouched. They are simply read as a one-time source of supported settings.
+- **Once `cli.json` exists, subsequent changes to `tui.json` have no effect.** The CLI uses `cli.json` as the authoritative source going forward. Editing `tui.json` after `cli.json` has been created will not update CLI settings.
+- **If `cli.json` is deleted, migration can run again.** The next CLI startup without `cli.json` will re-read the legacy `tui.json` and `kv.json` and migrate supported settings again.
+- **Keeping `tui.json` is harmless while `cli.json` exists.** The legacy file is simply ignored once `cli.json` is present; you can safely retain or remove it.
+- **Project-local `tui.json` is not read or migrated.** Only the global `tui.json` at `~/.config/opencode/tui.json` is considered. Project-level configuration files are not used for CLI settings.
+- **Global `tui.jsonc` is not picked up.** The migration specifically reads a file named `tui.json`. A file named `tui.jsonc` is not scanned for or migrated, even if it contains valid JSON content.
+
+For the full list of supported settings that migrate from `tui.json` and `kv.json`, see the [CLI settings reference](/cli/config).
+
 ## Inline config
 
 Set `OPENCODE_CLI_CONFIG_CONTENT` to apply CLI settings from inline JSON:
