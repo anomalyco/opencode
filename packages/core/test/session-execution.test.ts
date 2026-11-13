@@ -1086,7 +1086,7 @@ describe("SessionRestart background recovery", () => {
         sessionID,
         path,
         model: "test/director",
-        providerJobID: "req_1",
+        generationID: "req_1",
       })
       yield* jobs.start({
         id: "video_done",

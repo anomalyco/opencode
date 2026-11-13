@@ -26,8 +26,8 @@ export const RecoverySchema = Schema.Union([
     sessionID: SessionSchema.ID,
     path: Schema.String,
     model: Schema.String,
-    /** The provider's job ID, so a restarted server can keep reading the same job. */
-    providerJobID: Schema.String,
+    /** The provider's ID for the video generation, so a restarted server can keep reading the same job. */
+    generationID: Schema.String,
   }),
 ])
 

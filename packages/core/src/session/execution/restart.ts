@@ -218,7 +218,7 @@ export const layer = (options?: Options) =>
       })
 
       // A video job the previous server was waiting on keeps running at the provider, so it is read again from its
-      // provider job ID in the session's Location. Without that Location it is reported as lost.
+      // generation ID in the session's Location. Without that Location it is reported as lost.
       const recoverVideoJob = Effect.fnUntraced(function* (
         background: Job.Background,
         recovery: Extract<Job.Recovery, { kind: "video" }>,
@@ -244,7 +244,7 @@ export const layer = (options?: Options) =>
           notificationID: background.notificationID,
           sessionID: recovery.sessionID,
           model: recovery.model,
-          providerJobID: recovery.providerJobID,
+          generationID: recovery.generationID,
           path: recovery.path,
         })
       })
