@@ -1998,17 +1998,28 @@ fn panicky_run(at: &'static str, leak: (&'static str, bool), through: bool) -> (
     (seen, (entry, failed, command))
 }
 
-// Expected (property `ledger`, a 1.6 registration): a plugin's deltas handler is held while it is active and gone once
-// it is disabled, on both paths, and it hears no delta after.
+// Expected (property `ledger`, a 1.6 registration): a plugin's deltas and event handlers are held while it is active
+// and gone once it is disabled, or once a call of it panicked (reviews bigboi-6, carbon-8), on both paths, so the
+// host keeps no deltas for it and it hears none after.
 #[test]
 fn a_deltas_handler_goes_with_its_plugin() {
-    for through in [false, true] {
+    for (failing, through) in [(false, false), (false, true), (true, false), (true, true)] {
+        let case = format!("failing {failing}, through the C ABI: {through}");
         let host = host();
         LEAK_AT.set(("", false));
         let registry = panicking(&host, through);
-        assert_eq!(host.deltas.borrow().len(), 1, "through the C ABI: {through}");
-        registry.set_active(&dynamic(&host), "panicky", false);
-        assert_eq!(host.deltas.borrow().len(), 0, "through the C ABI: {through}");
+        let held = || (host.deltas.borrow().len(), host.events.borrow().len());
+        assert_eq!(held(), (1, 1), "{case}");
+        if failing {
+            LEAK_AT.set(("deltas", true));
+            host.emit_deltas(&[text_delta("a")]);
+            host.app.advance(Duration::from_millis(1));
+            LEAK_AT.set(("", false));
+            assert!(matches!(registry.entries()[0].status, Status::Failed(_)), "{case}");
+        } else {
+            registry.set_active(&dynamic(&host), "panicky", false);
+        }
+        assert_eq!(held(), (0, 0), "{case}");
         host.emit_deltas(&[text_delta("a")]);
     }
 }
@@ -2041,6 +2052,8 @@ fn a_call_that_panics_has_no_effects() {
             assert_eq!((entry.status, failed, command), (Status::Active, 0, true), "{case}");
             let (leaked, _) = panicky_run(at, (at, false), through);
             assert_eq!(leaked != quiet, effects, "{case}: {leaked:?}");
+            // Every 1.6 verb ran without the panic, so the comparison covers each.
+            assert_eq!(leaked.6.len(), if effects { 8 } else { 0 }, "{case}: {:?}", leaked.6);
             let (panicked, (entry, failed, command)) = panicky_run(at, (at, true), through);
             assert_eq!(panicked, quiet, "{case}");
             assert_eq!(entry.status, Status::Failed(format!("{export} panicked: boom")), "{case}");

@@ -42,23 +42,24 @@ pub(crate) enum Follow {
 impl Data {
     /// Applies one batch of events under one flush.
     pub fn apply(&self, events: &[V2Event]) {
-        let follows: Vec<Follow> = {
+        let (follows, kept) = {
             let mut state = self.lock();
             state.batch += 1;
-            let follows = events.iter().flat_map(|event| state.apply_event(event)).collect();
+            let follows: Vec<Follow> = events.iter().flat_map(|event| state.apply_event(event)).collect();
             state.batch -= 1;
+            // The batch's deltas, the hot path, are kept only while someone takes them, and all before the revision
+            // that has them, so a sync it wakes takes them all.
+            let kept = self.keep_deltas(events.iter().filter(|event| is_delta(event)));
             self.flush(&mut state);
-            follows
+            (follows, kept)
         };
         for follow in follows {
             self.follow(follow);
         }
-        // Each event of a type someone listens to; a delta, the hot path, is neither looked up nor sent, and is kept
-        // only while someone takes them.
-        let (mut listened, mut kept) = (None, false);
+        // Each other event of a type someone listens to.
+        let mut listened = None;
         for event in events {
             if is_delta(event) {
-                kept |= self.keep_delta(event);
                 continue;
             }
             let listened = listened.get_or_insert_with(|| opencode_util::lock(&self.inner.listened));

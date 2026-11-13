@@ -79,7 +79,10 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
     });
     let deltas = Rc::new(RefCell::new(String::new()));
     let streamed = deltas.clone();
+    let calls = Rc::new(Cell::new(0));
+    let called = calls.clone();
     setup.on_deltas(move |_, events| {
+        called.set(called.get() + 1);
         // The host never calls with none.
         if events.is_empty() {
             streamed.borrow_mut().push('!');
@@ -103,7 +106,7 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
         let described = active.iter().filter(|key| key.description.is_some()).count();
         let installed = read.themes().iter().any(|name| name == "p0b-theme");
         let text = format!(
-            "p0b w{} {} [{}] {} {reachable} {} {} d:{} x:{} c{} ds{} i:{installed}",
+            "p0b w{} {} [{}] {} {reachable} {} {} d:{} x:{} c{} ds{} i:{installed} n:{}",
             input.width,
             read.theme().unwrap_or_default(),
             tabs.join(","),
@@ -114,6 +117,7 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
             exited.borrow(),
             continues.min(1),
             described.min(1),
+            calls.get(),
         );
         abi::Render::Show(abi::Node::text([abi::Span::new(text).link("https://opencode.ai/p0b")]))
     });
@@ -282,6 +286,30 @@ fn deltas_reach_the_plugin() {
         opencode_tui::features::events::deltas(&h.tui);
         h.app.wait_until(std::time::Duration::from_millis(50), || false);
         assert!(h.app.text().contains("d:hello "), "loopback {loopback}: {}", h.app.text());
+    }
+}
+
+// Expected (review bigboi-7): the deltas of two store batches synced before one frame reach the plugin in one call,
+// before that frame, in order. On both paths.
+#[test]
+fn deltas_reach_the_plugin_once_a_frame() {
+    for loopback in [false, true] {
+        let (h, _memory, _root) = home(loopback, 120, json!({}));
+        h.wait_for("p0b w120 ");
+        let delta = |ordinal: usize, delta: &str| -> opencode_api::generated::V2Event {
+            serde_json::from_value(json!({
+                "id": format!("evt_{ordinal}"), "created": 1, "type": "session.text.delta",
+                "location": { "directory": support::DIRECTORY },
+                "data": { "sessionID": "ses_a", "assistantMessageID": "msg_1", "ordinal": ordinal, "delta": delta },
+            }))
+            .unwrap()
+        };
+        h.tui.data.apply(&[delta(0, "a")]);
+        opencode_tui::features::events::deltas(&h.tui);
+        h.tui.data.apply(&[delta(1, "b"), delta(2, "c")]);
+        opencode_tui::features::events::deltas(&h.tui);
+        let first = h.app.render().text();
+        assert!(first.contains("d:abc ") && first.contains(" n:1"), "loopback {loopback}:\n{first}");
     }
 }
 

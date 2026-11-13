@@ -84,7 +84,7 @@ registers the P.1 surface as data, because widgets and closures cannot cross the
 | `api.themeMode` | `Read::theme_mode()` |
 | the composer (`renderer.currentFocusedEditor`, the composer's `ref`) | `Read::composer()` and `Host::edit_composer(ComposerEdit)` (1.5) |
 | `onSizeChange` and `this.width` in a slot (1.6) | `sized(Placement)` for the claim registered last there: `SlotInput::width` and `height`, and a render with `Changed::size` when they change |
-| `data.on("session.*.delta")` (1.6) | `on_deltas(run(&dyn Host, &[V2Event]))`, once a change batch |
+| `data.on("session.*.delta")` (1.6) | `on_deltas(run(&dyn Host, &[V2Event]))`, at most once a frame |
 | `ui.model.current`, `ui.model.variant.list/set` (1.6) | `Read::model`, `Read::variants`, `Host::set_variant(Option<&str>) -> bool`; and `Host::set_model(provider, model)` |
 | `ui.tabs.enabled/list/open/focus/move/close` (1.6) | `Read::tabs_enabled`, `Read::tabs`, `Host::edit_tab(TabEdit) -> bool` |
 | `keymap.pending/active/commands/shortcuts` (1.6) | `Read::keymap_pending`, `keymap_active`, `keymap_commands`, `shortcuts(name)` |
@@ -255,10 +255,13 @@ is active. The streaming deltas (`session.text.delta`, `session.reasoning.delta`
 `session.compaction.delta`) never arrive there. If the UI thread falls more than 1024 events behind, the oldest are
 skipped.
 
-`on_deltas(run)` (1.6) gets them instead: every delta the store applied since the last call, oldest first, in one
-call a change batch and never an empty one, also for a session whose messages the TUI has not loaded. While a plugin
-has such a handler the store keeps at most 4096 between calls and drops the oldest past that; without one the store
-keeps none. TS calls a `data.on` handler once a delta; a plugin that counts deltas counts the events in the slice.
+`on_deltas(run)` (1.6) gets them instead: every delta the store applied since the last call, or since the handler
+was registered, never one from before, oldest first. It is called at most once a frame, before the frame, and never
+with none; the deltas of one store batch come in one call. That holds also for a session whose messages the TUI has
+not loaded. While a plugin has such a handler the store keeps at most 4096 it has not taken and drops the oldest past
+that; without one the store keeps none. A plugin that fails or is disabled loses the handler, so the store stops
+keeping deltas for it. TS calls a `data.on` handler once a delta; a plugin that counts deltas counts the events in the
+slice.
 
 ### Fences
 
