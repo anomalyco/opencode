@@ -843,11 +843,15 @@ describe("Session.prompt", () => {
       yield* setup
       const session = yield* Session.Service
       const uri = `data:video/mp2t;base64,${Buffer.from("export const value = 1\n").toString("base64")}`
+      const notes = Buffer.from("BMW service schedule\n").toString("base64")
 
       const message = yield* session.prompt({
         sessionID,
         text: "Inspect this",
-        files: [{ uri, name: "main.ts" }],
+        files: [
+          { uri, name: "main.ts" },
+          { uri: `data:;base64,${notes}`, name: "notes" },
+        ],
         resume: false,
       })
 
@@ -858,6 +862,7 @@ describe("Session.prompt", () => {
           source: { type: "inline" },
           name: "main.ts",
         },
+        { data: notes, mime: "text/plain", source: { type: "inline" }, name: "notes" },
       ])
     }),
   )
