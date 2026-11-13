@@ -13,7 +13,7 @@ export function previewAddress(address: string, host: string | undefined, roots:
 export function previewFile(address: string, host: string | undefined, roots: readonly string[]) {
   const prefix = `${previewScheme}://${host}/`
 
-  if (!host || !address.startsWith(prefix) || address.startsWith(`${prefix}/`)) return
+  if (!host || !address.startsWith(prefix) || address.startsWith(`${prefix}/`) || address.split(/[?#]/, 1)[0]?.includes("\\")) return
 
   const file = `file:///${address.slice(prefix.length)}`
 

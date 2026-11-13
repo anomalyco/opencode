@@ -20,9 +20,31 @@ test("preview documents and workers can only request their own origin and worksp
   expect(previewResource(view, "first", undefined, roots)).toBe(file)
   expect(previewResource(view, "first", "oc-preview://first", roots)).toBe(file)
 
-  for (const origin of ["null", "file://", "https://example.org", "oc-preview://second"])
+  for (const origin of ["null", "file://", "https://example.org", "chrome-extension://abc", "oc-preview://second"])
     expect(previewResource(view, "first", origin, roots)).toBeUndefined()
 
   for (const url of [file, view.replace("/index", "/../index"), view.replace("/work/", "//work/"), view.replace("first", "second")])
     expect(previewResource(url, "first", undefined, roots)).toBeUndefined()
+})
+
+test("preview authority and path syntax have one interpretation before touching disk", () => {
+  for (const authority of ["user:pass@first", "first:44", "second", ""])
+    expect(previewFile(view.replace("//first", `//${authority}`), "first", roots)).toBeUndefined()
+
+  for (const component of ["%2e%2e/out", "a%2Fb", "a%5cb", "%zz", "%C3", "%00", "foo\\bar"])
+    expect(previewFile(view.replace("index.html", component), "first", roots)).toBeUndefined()
+
+  expect(previewFile(view.replace("index.html", "%252e%252e"), "first", roots)).toContain("%252e%252e")
+})
+
+test.if(process.platform === "win32")("Windows aliases and device paths do not identify preview files", () => {
+  const prefix = "oc-preview://host/c:/repo/"
+  const roots = ["C:\\repo"]
+  expect(previewFile(`${prefix}x`, "host", roots)).toBe("file:///c:/repo/x")
+
+  for (const name of ["x:stream", "x::$DATA", "D:/x", "CON.txt", "NUL", "COM1.js", "x.", "x%20"])
+    expect(previewFile(prefix + name, "host", roots)).toBeUndefined()
+
+  for (const path of ["D:/repo/x", "/server/share/x", "%5c%5c%3f%5cc:/repo/x"])
+    expect(previewFile(`oc-preview://host/${path}`, "host", roots)).toBeUndefined()
 })

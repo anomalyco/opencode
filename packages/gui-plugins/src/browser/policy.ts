@@ -37,7 +37,10 @@ function filePath(url: URL) {
     }
   })()
 
-  if (decoded === undefined || decoded.split(/[\\/]/).some((part) => part === "." || part === "..")) return undefined
+  if (decoded === undefined || decoded.includes("\0") || decoded.split(/[\\/]/).some((part) => part === "." || part === "..")) return undefined
+
+  if (process.platform === "win32" && decoded.replace(/^\/[a-z]:\//i, "").split("/").some((part) =>
+    /[:\\]|[. ]$|^(?:con(?:in\$|out\$)?|nul|prn|aux|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))) return undefined
 
   return canonicalPath(decoded)
 }
