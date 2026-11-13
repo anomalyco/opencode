@@ -18,7 +18,8 @@ use opencode_api::generated::{McpServerStatus, SessionArchivedData, SessionDelet
 use crate::prelude::*;
 
 type Subscribers = Rc<RefCell<Vec<(u64, Rc<dyn Fn(&Tui, &V2Event)>)>>>;
-type DeltaSubscribers = Rc<RefCell<Vec<(u64, Rc<dyn Fn(&[V2Event])>)>>>;
+/// Each delta subscriber with its own place in the store's deltas.
+type DeltaSubscribers = Rc<RefCell<Vec<(u64, Rc<opencode_store::DeltaListening>, Rc<dyn Fn(&[V2Event])>)>>>;
 
 /// The last status each MCP server was alerted for, and the signal and delta subscribers.
 #[derive(Default)]
@@ -26,6 +27,8 @@ pub struct Events {
     alerted: RefCell<HashMap<String, &'static str>>,
     subscribers: Subscribers,
     deltas: DeltaSubscribers,
+    /// The deltas are handed over before the next frame.
+    deltas_due: Cell<bool>,
     next: Cell<u64>,
 }
 
@@ -146,35 +149,42 @@ pub fn subscribe<S: Into<String>>(
     })
 }
 
-/// Calls `subscriber` with the streaming deltas the store applied since the last sync, once a sync that has any, until
-/// the disposer drops (the plugins' `on_deltas`).
+/// Calls `subscriber` with the streaming deltas the store applied since it last called it, or since it subscribed,
+/// once a frame that has any, until the disposer drops (the plugins' `on_deltas`).
 pub fn subscribe_deltas(tui: &Tui, subscriber: impl Fn(&[V2Event]) + 'static) -> Disposer {
     let id = tui.events.next.get();
     tui.events.next.set(id + 1);
-    tui.events.deltas.borrow_mut().push((id, Rc::new(subscriber)));
+    let listening = Rc::new(tui.data.listen_deltas());
+    tui.events.deltas.borrow_mut().push((id, listening, Rc::new(subscriber)));
     let subscribers = Rc::downgrade(&tui.events.deltas);
-    let listening = tui.data.listen_deltas();
     Disposer::new(move || {
-        drop(listening);
         if let Some(subscribers) = subscribers.upgrade() {
-            subscribers.borrow_mut().retain(|(other, _)| *other != id);
+            subscribers.borrow_mut().retain(|(other, ..)| *other != id);
         }
     })
 }
 
-/// Hands the deltas the store applied since the last sync to the delta subscribers.
+/// Hands the deltas the store applied to the delta subscribers before the next frame, once for all the syncs until
+/// then.
 pub fn deltas(tui: &Tui) {
-    if tui.events.deltas.borrow().is_empty() {
+    if tui.events.deltas.borrow().is_empty() || tui.events.deltas_due.replace(true) {
         return;
     }
-    let events = tui.data.take_deltas();
-    if events.is_empty() {
-        return;
-    }
-    let subscribers: Vec<_> = tui.events.deltas.borrow().iter().map(|(_, subscriber)| subscriber.clone()).collect();
-    for subscriber in subscribers {
-        subscriber(&events);
-    }
+    tui.app.defer(bind!(tui, |tui, _| {
+        tui.events.deltas_due.set(false);
+        let subscribers = tui.events.deltas.borrow().clone();
+        for (id, listening, subscriber) in subscribers {
+            // One an earlier subscriber's call disposed gets none.
+            if !tui.events.deltas.borrow().iter().any(|(other, ..)| *other == id) {
+                continue;
+            }
+            let events = listening.take();
+            if !events.is_empty() {
+                subscriber(&events);
+            }
+        }
+    }));
+    tui.app.request_redraw();
 }
 
 pub fn sync(tui: &Tui, changes: &Changes) {

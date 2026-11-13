@@ -1060,9 +1060,10 @@ async fn signals_carry_the_listened_events_but_no_deltas() {
     assert_eq!(tags(), Vec::<String>::new());
 }
 
-// Expected: the streaming deltas are kept for `take_deltas` only while a delta listener lives, in order, at most
-// `DELTAS` of them with the oldest dropped; a batch that kept one wakes the revision watchers, also with no change;
-// the last listener's drop forgets what was kept.
+// Expected: the streaming deltas are kept only while a delta listener lives, in order, at most `DELTAS` of them with
+// the oldest dropped; a batch that kept one wakes the revision watchers, also with no change. Each listener takes
+// its own: those since it last took, or since it started, never one from before (reviews bigboi-6, carbon-8); the
+// last listener's drop forgets what was kept.
 #[tokio::test]
 async fn deltas_are_kept_while_listened_and_bounded() {
     let data = data(handler(|_req: Req| async { ok(json!({ "data": [] })) }), Options::default());
@@ -1081,28 +1082,39 @@ async fn deltas_are_kept_while_listened_and_bounded() {
     };
     data.apply(&[delta(0)]);
     let listening = data.listen_deltas();
-    assert!(data.take_deltas().is_empty(), "kept before anyone listened");
+    assert!(listening.take().is_empty(), "kept before anyone listened");
     let mut revisions = data.subscribe();
     revisions.mark_unchanged();
     let renamed = event(durable("session.renamed", "evt_renamed", 1, json!({ "sessionID": "ses_none", "title": "T" })));
-    data.apply(&[delta(1), renamed, delta(2)]);
+    data.apply(&[delta(1), renamed.clone(), delta(2)]);
     assert!(revisions.has_changed().unwrap(), "a kept delta wakes the watchers");
-    assert_eq!(ordinals(data.take_deltas()), [1, 2]);
-    assert!(data.take_deltas().is_empty());
+    assert_eq!(ordinals(listening.take()), [1, 2]);
+    assert!(listening.take().is_empty());
+    revisions.mark_unchanged();
+    data.apply(&[renamed]);
+    assert!(listening.take().is_empty());
     let flood: Vec<V2Event> = (0..opencode_store::DELTAS + 2).map(delta).collect();
     data.apply(&flood);
-    let kept = ordinals(data.take_deltas());
+    let kept = ordinals(listening.take());
     assert_eq!(
         (kept.len(), kept[0], kept[kept.len() - 1]),
         (opencode_store::DELTAS, 2, opencode_store::DELTAS as i64 + 1)
     );
+    data.apply(&[delta(6)]);
     let second = data.listen_deltas();
-    drop(listening);
+    assert!(second.take().is_empty(), "a delta from before it listened");
     data.apply(&[delta(7)]);
-    assert_eq!(ordinals(data.take_deltas()), [7], "another listener still wants them");
+    assert_eq!(ordinals(second.take()), [7]);
+    assert_eq!(ordinals(listening.take()), [6, 7], "one listener's take takes none from another");
     data.apply(&[delta(8)]);
-    drop(second);
-    assert!(data.take_deltas().is_empty(), "the last listener's drop forgets them");
+    drop(listening);
+    assert_eq!(ordinals(second.take()), [8], "another listener still wants them");
     data.apply(&[delta(9)]);
-    assert!(data.take_deltas().is_empty());
+    drop(second);
+    let third = data.listen_deltas();
+    assert!(third.take().is_empty(), "the last listener's drop forgets them");
+    drop(third);
+    data.apply(&[delta(10)]);
+    let fourth = data.listen_deltas();
+    assert!(fourth.take().is_empty(), "kept with no listener");
 }

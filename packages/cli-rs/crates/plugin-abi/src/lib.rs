@@ -2871,8 +2871,9 @@ impl Setup<'_> {
 
     /// 1.6: calls `run` with the streaming deltas (`session.text.delta`, `session.reasoning.delta`,
     /// `session.tool.input.delta`, `session.compaction.delta`), which [`Setup::on_event`] never gets: the deltas the
-    /// host applied since the last call, oldest first, once a change batch, never empty (TS `data.on(type)` once an
-    /// event). The host keeps at most 4096 between calls and drops the oldest past that. An older host never calls it.
+    /// host applied since the last call, or since setup, oldest first, at most once a frame and before it, never
+    /// empty, with a store batch's deltas in one call (TS `data.on(type)` once an event). The host keeps at most 4096
+    /// between calls and drops the oldest past that. An older host never calls it.
     pub fn on_deltas(&mut self, run: impl Fn(&dyn Host, &[V2Event]) + 'static) {
         self.registered.manifest.deltas = true;
         self.registered.deltas.push(Rc::new(run));
