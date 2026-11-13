@@ -52,7 +52,7 @@ impl View {
         let theme = host.theme();
         let scroll = ScrollBox::new(app).scrollbars(false).grow(1.0);
         scroll.content_view().align_items(Align::Center).justify(Justify::Center).padding_y(1);
-        let mount = Mount::new(host, owner, "", &SlotInput::default(), render, on_mount);
+        let mount = Mount::new(host, owner, "", &SlotInput::default(), render, on_mount, false);
         scroll.add(&mount.root());
         let root = opentui::prelude::View::new(app)
             .width(Length::percent(100.0))
