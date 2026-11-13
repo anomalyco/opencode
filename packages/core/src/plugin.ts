@@ -12,6 +12,7 @@ import { Bus } from "./bus.js"
 import { PluginHost } from "./plugin/host.js"
 import { type Failure, type Generation, Service } from "./plugin/service.js"
 import { State } from "./state.js"
+import { PluginScheduling } from "./plugin/scheduling.js"
 
 export { awaitActivation, type Failure, type Generation, type Interface, Service } from "./plugin/service.js"
 
@@ -60,7 +61,12 @@ const layer = Layer.effect(
     })
     const hostContext = yield* Effect.context<Effect.Services<ReturnType<typeof PluginHost.make>>>()
     const load = Effect.fnUntraced(function* (plugin: Generation) {
+      yield* PluginScheduling.checkpoint
       const activation: Activation = { plugin, scope: yield* Scope.fork(scope) }
+      // First registered means last executed: yield after this plugin's cleanup
+      // on every close path, including full location eviction and failed setup.
+      // The parent scope still owns LIFO ordering and finalizer error collection.
+      yield* Scope.addFinalizer(activation.scope, PluginScheduling.scopeCheckpoint)
       const inherit = yield* State.inherit()
       const grouped = State.group((failure, refresh) => {
         activation.failure = {
