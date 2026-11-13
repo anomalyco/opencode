@@ -1,5 +1,7 @@
 [workspace]
 members = ["crates/*"]
+# The example plugins are workspaces of their own; the frozen ABI crates there are test dependencies, not members.
+exclude = ["crates/plugin/examples"]
 resolver = "3"
 
 [workspace.package]

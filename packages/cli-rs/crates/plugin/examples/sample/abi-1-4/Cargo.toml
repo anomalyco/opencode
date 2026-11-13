@@ -1,0 +1,14 @@
+# A frozen copy of `opencode-plugin-abi` at ABI 1.4 (`src/lib.rs` is unchanged from fd214a9aa0). The sample's
+# `abi-1-4` feature builds a 1.4 plugin against it, and the loader's tests decode a 1.5 plugin's requests with its
+# types, as a 1.4 host does. Never edit it.
+[package]
+name = "opencode-plugin-abi-1-4"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+opencode-api-types = { path = "../../../../api-types" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "raw_value"] }

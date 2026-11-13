@@ -26,3 +26,5 @@ opencode-util.workspace = true
 # The LaTeX and Mermaid built-ins, run through the C ABI's byte shims in the loader's tests.
 opencode-latex.workspace = true
 opencode-mermaid.workspace = true
+# The frozen ABI 1.4 crate, whose types decode a newer plugin's requests as a 1.4 host does.
+opencode-plugin-abi-1-4 = { path = "examples/sample/abi-1-4" }
