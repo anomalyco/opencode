@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
 import { dedupeWith } from "effect/Array"
 import { createSimpleContext } from "./helper"
-import { batch, createMemo, onCleanup } from "solid-js"
+import { batch, createMemo, createRenderEffect, onCleanup } from "solid-js"
 import { useEvent } from "./event"
 import path from "path"
 import { useTuiPaths } from "./runtime"
@@ -182,16 +182,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const fallbackModel = createMemo(() => {
-        if (args.model) {
-          const { providerID, modelID } = parse(args.model)
-          if (isModelValid({ providerID, modelID })) {
-            return {
-              providerID,
-              modelID,
-            }
-          }
-        }
-
         const configured = configuredModel()
         if (configured && isModelValid(configured)) return configured
 
@@ -504,6 +494,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const model = createModel()
+
+    let initializedModel = false
+    // Apply the initial choice before --prompt's effect can submit a message.
+    createRenderEffect(() => {
+      if (initializedModel || !args.model) return
+      // An empty --continue lookup returns home after its placeholder session.
+      if (args.continue && route.data.type === "session" && route.data.sessionID === "dummy") return
+      if (args.sessionID || args.fork || route.data.type !== "home") {
+        initializedModel = true
+        return
+      }
+      if (!models() || !agent.current()) return
+      initializedModel = true
+      model.set(parse(args.model), { recent: true })
+    })
 
     function createSession() {
       const [sessionStore, setSessionStore] = createStore<{
