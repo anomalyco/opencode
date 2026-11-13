@@ -443,16 +443,16 @@ struct Reference {
     armed: Option<Fault>,
     /// The last activation seen.
     last: u32,
-    /// Outside a strict run the open defect `a-failed-plugin-is-disposed` is expected: a failed plugin's dispose
-    /// callbacks run as it leaves.
-    strict: bool,
+    /// The activations that failed. The host keeps their instances, as it keeps a failed plugin's library (4.5): the
+    /// C ABI's `destroy` would run their dispose callbacks.
+    failed: Vec<u32>,
     /// The probe's dialog on screen, and the activation that opened it.
     dialog: Option<(Dialog, u32)>,
 }
 
 impl Reference {
-    fn new(build: u8, strict: bool) -> Self {
-        Self { life: Life::Disabled, build, file: build, armed: None, last: 0, strict, dialog: None }
+    fn new(build: u8) -> Self {
+        Self { life: Life::Disabled, build, file: build, armed: None, last: 0, failed: Vec::new(), dialog: None }
     }
 
     /// Checks the calls the probe logged while `command` ran, and moves the machine. `reached` says whether one of
@@ -471,7 +471,6 @@ impl Reference {
             None => expected.push(Expect::Setup(self.build)),
             Some(Command::Toggle) => match self.life {
                 Life::Active(a, _) => expected.push(Expect::Dispose(a)),
-                Life::Failed(a) if !self.strict => expected.push(Expect::Dispose(a)),
                 Life::Failed(_) | Life::Broken => {}
                 Life::Disabled | Life::SetupFailed => expected.push(Expect::Setup(self.build)),
                 Life::Exited => unreachable!(),
@@ -495,7 +494,6 @@ impl Reference {
             Some(Command::Reload(build)) if build != self.file => {
                 self.file = build;
                 match self.life {
-                    Life::Failed(a) if !self.strict => expected.extend([Expect::Setup(build), Expect::Dispose(a)]),
                     Life::Active(..) | Life::Failed(_) | Life::SetupFailed | Life::Broken => {
                         expected.push(Expect::Setup(build))
                     }
@@ -504,11 +502,11 @@ impl Reference {
                 }
             }
             Some(Command::Arm(fault)) => self.armed = Some(fault),
-            Some(Command::Exit) => match self.life {
-                Life::Active(a, _) => expected.push(Expect::Dispose(a)),
-                Life::Failed(a) if !self.strict => expected.push(Expect::Dispose(a)),
-                _ => {}
-            },
+            Some(Command::Exit) => {
+                if let Life::Active(a, _) = self.life {
+                    expected.push(Expect::Dispose(a));
+                }
+            }
             Some(_) => {}
         }
         let before = self.life;
@@ -522,6 +520,7 @@ impl Reference {
                 self.fault(Fault::Render, call)?;
                 if call.panicked {
                     self.life = Life::Failed(call.activation);
+                    self.failed.push(call.activation);
                 }
                 continue;
             }
@@ -552,7 +551,10 @@ impl Reference {
                 (Expect::Command(a), Kind::Command) if call.activation == a => {
                     self.fault(Fault::Command, call)?;
                     match (call.panicked, command) {
-                        (true, _) => self.life = Life::Failed(a),
+                        (true, _) => {
+                            self.life = Life::Failed(a);
+                            self.failed.push(a);
+                        }
                         (false, Some(Command::Dialog(dialog))) => self.dialog = Some((dialog, a)),
                         _ => {}
                     }
@@ -575,6 +577,10 @@ impl Reference {
             Some(Command::Exit) => self.life = Life::Exited,
             _ => {}
         }
+        // A dialog ends with the activation that opened it (4.14; deviation F16-plugin-dialog-ends-with-activation).
+        if self.dialog.is_some_and(|(_, a)| !matches!(self.life, Life::Active(live, _) if live == a)) {
+            self.dialog = None;
+        }
         Ok(())
     }
 
@@ -590,12 +596,9 @@ impl Reference {
         }
     }
 
-    /// The activation that may still hold registrations.
-    fn holder(&self) -> Option<u32> {
-        match self.life {
-            Life::Active(a, _) | Life::Failed(a) => Some(a),
-            _ => None,
-        }
+    /// Whether the host may hold activation `a`: it is active, or it failed and its instance is kept.
+    fn holds(&self, a: u32) -> bool {
+        matches!(self.life, Life::Active(live, _) if live == a) || self.failed.contains(&a)
     }
 }
 
@@ -628,7 +631,7 @@ impl Model for PluginModel {
     }
 
     fn run(&self, commands: &[Command]) -> Option<Failure> {
-        run(commands, std::env::var_os("MODEL_STRICT").is_some())
+        run(commands)
     }
 
     fn simplify(&self, command: &Command) -> Vec<Command> {
@@ -646,15 +649,14 @@ fn fail(property: &'static str, step: usize, detail: String) -> Option<Failure> 
     Some(Failure { property, step, detail })
 }
 
-/// Runs `commands` on the host and its twin, and checks the three properties after each. A `strict` run does not
-/// step past the open defects.
-fn run(commands: &[Command], strict: bool) -> Option<Failure> {
+/// Runs `commands` on the host and its twin, and checks the three properties after each.
+fn run(commands: &[Command]) -> Option<Failure> {
     LOG.take();
     ARMED.set(None);
     TOKENS.take();
     let mut world = World::open(Some(1));
     let mut twin = World::open(None);
-    let mut reference = Reference::new(1, strict);
+    let mut reference = Reference::new(1);
     if let Err(detail) = reference.step(None, false, &take_calls()) {
         return fail("lifecycle", 0, detail);
     }
@@ -673,14 +675,6 @@ fn run(commands: &[Command], strict: bool) -> Option<Failure> {
         if let Err(detail) = reference.step(Some(command), reached, &calls) {
             return fail("lifecycle", step, detail);
         }
-        // The open finding `a-dialog-outlives-its-activation`: outside a strict run, the dialog of an activation that
-        // is no longer active is closed here, as 4.14 asks of the host, so the search goes on past it.
-        let stale = reference.dialog.is_some_and(|(_, a)| !matches!(reference.life, Life::Active(b, _) if b == a));
-        if !strict && stale {
-            world.harness.tui.dialogs.clear();
-            world.settle();
-            reference.dialog = None;
-        }
         if let Some(detail) = ledger(&world, &twin, &reference) {
             return fail("ledger", step, detail);
         }
@@ -697,11 +691,7 @@ fn run(commands: &[Command], strict: bool) -> Option<Failure> {
 /// `ledger`: no ended activation is held, and while the probe is not active the host equals the twin.
 fn ledger(world: &World, twin: &World, reference: &Reference) -> Option<String> {
     let held: Vec<u32> = TOKENS.with_borrow(|tokens| {
-        tokens
-            .iter()
-            .filter(|(a, token)| Some(*a) != reference.holder() && token.strong_count() > 0)
-            .map(|(a, _)| *a)
-            .collect()
+        tokens.iter().filter(|(a, token)| !reference.holds(*a) && token.strong_count() > 0).map(|(a, _)| *a).collect()
     });
     if !held.is_empty() {
         return Some(format!(
@@ -823,23 +813,9 @@ fn collapse<'a>(calls: impl Iterator<Item = &'a Call>) -> Vec<Kind> {
     kinds
 }
 
-/// Shrunk traces of defects the model found, each with the property it fails. Each must still fail in a strict run.
-const OPEN: &[(&str, &str, &[Command])] = &[
-    // A plugin's dialog (panel, prompt, select) stays open, with focus, after its plugin failed, was disabled or was
-    // replaced by a reload. TS keeps a plugin's dialog on deactivation and reload too (`plugin-keymap.test.tsx`, "a
-    // component layer ends with its activation on reload while the component stays mounted"); 4.14 revokes it.
-    ("a-dialog-outlives-its-activation", "ledger", &[Command::Arm(Fault::Render), Command::Dialog(Dialog::Panel)]),
-    ("a-dialog-outlives-its-activation", "ledger", &[Command::Dialog(Dialog::Panel), Command::Toggle]),
-    ("a-dialog-outlives-its-activation", "ledger", &[Command::Dialog(Dialog::Prompt), Command::Toggle]),
-    ("a-dialog-outlives-its-activation", "ledger", &[Command::Dialog(Dialog::Select), Command::Toggle]),
-    ("a-dialog-outlives-its-activation", "reload-fresh", &[Command::Dialog(Dialog::Panel), Command::Reload(2)]),
-    ("a-dialog-outlives-its-activation", "reload-fresh", &[Command::Dialog(Dialog::Prompt), Command::Reload(2)]),
-    // A plugin that failed gets its dispose callbacks as it is disabled, replaced or the client exits: the C ABI's
-    // `destroy` and the in-process `Scope::dispose` run them. 4.14: a failed plugin is called no more.
-    ("a-failed-plugin-is-disposed", "lifecycle", &[Command::Arm(Fault::Command), Command::Run, Command::Toggle]),
-    ("a-failed-plugin-is-disposed", "lifecycle", &[Command::Arm(Fault::Render), Command::Run, Command::Reload(2)]),
-    ("a-failed-plugin-is-disposed", "lifecycle", &[Command::Arm(Fault::Command), Command::Run, Command::Exit]),
-];
+/// Shrunk traces of defects the model found and that are not fixed, each with the property it fails. Each must still
+/// fail, so a fix fails the test until its row moves to [`FIXED`].
+const OPEN: &[(&str, &str, &[Command])] = &[];
 
 /// Shrunk traces that failed once and pass now.
 const FIXED: &[(&str, &[Command])] = &[
@@ -865,6 +841,21 @@ const FIXED: &[(&str, &[Command])] = &[
             Command::Reload(1),
         ],
     ),
+    // A plugin's dialog stayed open, with focus, after its plugin failed, was disabled or was replaced by a reload,
+    // and after a reload its prompt or select ran the new build's command. TS keeps them (deviation
+    // F16-plugin-dialog-ends-with-activation); 4.14 ends them with the activation.
+    ("a-dialog-ends-with-a-failure", &[Command::Arm(Fault::Render), Command::Dialog(Dialog::Panel)]),
+    ("a-dialog-ends-with-a-disable", &[Command::Dialog(Dialog::Panel), Command::Toggle]),
+    ("a-prompt-ends-with-a-disable", &[Command::Dialog(Dialog::Prompt), Command::Toggle]),
+    ("a-select-ends-with-a-disable", &[Command::Dialog(Dialog::Select), Command::Toggle]),
+    ("a-dialog-ends-with-a-reload", &[Command::Dialog(Dialog::Panel), Command::Reload(2)]),
+    ("a-stale-prompt-reaches-no-new-build", &[Command::Dialog(Dialog::Prompt), Command::Reload(2), Command::Enter]),
+    ("a-stale-select-reaches-no-new-build", &[Command::Dialog(Dialog::Select), Command::Reload(2), Command::Enter]),
+    // A failed plugin got its dispose callbacks as it was disabled, replaced, or the client exited. 4.14 and TS call no
+    // plugin code after a failure.
+    ("a-failed-plugin-is-not-disposed-on-disable", &[Command::Arm(Fault::Command), Command::Run, Command::Toggle]),
+    ("a-failed-plugin-is-not-disposed-on-reload", &[Command::Arm(Fault::Render), Command::Run, Command::Reload(2)]),
+    ("a-failed-plugin-is-not-disposed-on-exit", &[Command::Arm(Fault::Command), Command::Run, Command::Exit]),
 ];
 
 // Expected (O-124, Pt): `lifecycle`, `ledger` and `reload-fresh` hold for 40 seeds of 64 commands. 4.14 asks for
@@ -877,13 +868,11 @@ fn the_plugin_life_holds_its_properties() {
 
 #[test]
 fn the_fixed_rows_pass_and_the_open_rows_still_fail() {
-    // Outside a strict run, so a fixed row is not failed by an open one on its way.
     for (name, commands) in FIXED {
-        assert_eq!(run(commands, false), None, "{name}");
+        assert_eq!(run(commands), None, "{name}");
     }
     for (name, property, commands) in OPEN {
-        assert_eq!(run(commands, false), None, "{name}: outside a strict run");
-        let failure = run(commands, true);
+        let failure = run(commands);
         assert_eq!(failure.as_ref().map(|failure| failure.property), Some(*property), "{name}: {failure:?}");
     }
 }
@@ -900,7 +889,7 @@ fn the_oracles_can_fail() {
     let two = World::open(Some(2));
     let three = World::open(Some(3));
     assert!(frame_diff(&two.frame(), &three.frame(), two.mask(), |_| false).is_some());
-    let mut reference = Reference::new(1, true);
+    let mut reference = Reference::new(1);
     reference.life = Life::Disabled;
     let call = Call { activation: 1, build: 1, kind: Kind::Command, panicked: false };
     assert!(reference.step(Some(Command::Run), true, &[call]).is_err());

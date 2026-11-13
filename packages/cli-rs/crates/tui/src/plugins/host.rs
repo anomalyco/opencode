@@ -138,6 +138,10 @@ impl Host for Tui {
         self.reads.changed(self);
     }
 
+    fn revoked(&self, id: &str) {
+        super::panel::close(self, id);
+    }
+
     fn attention(&self, attention: &abi::Attention) {
         let when = |when| match when {
             abi::When::Always => When::Always,

@@ -69,7 +69,26 @@ pub fn open(tui: &Tui, id: &str, key: &str) -> bool {
     tui.dialogs.key().is_some_and(|open| open.strip_prefix(id).and_then(|rest| rest.strip_prefix('/')) == Some(key))
 }
 
+/// The key of plugin `id`'s dialogs that have none of their own (a prompt, a list): no panel key matches it in
+/// [`open`], since a panel's follows a `/`.
+fn owned(id: &str) -> String {
+    format!("{id}#")
+}
+
+/// Closes the dialog plugin `id` opened, if it shows: its activation ended (4.14, deviation
+/// `F16-plugin-dialog-ends-with-activation`). The dialogs replace each other, so the one on top is the only one.
+pub fn close(tui: &Tui, id: &str) {
+    let key = tui.dialogs.key();
+    let mine = key
+        .as_deref()
+        .is_some_and(|key| key == owned(id) || key.strip_prefix(id).is_some_and(|rest| rest.starts_with('/')));
+    if mine {
+        tui.dialogs.clear();
+    }
+}
+
 fn ask(tui: &Tui, id: &str, title: String, placeholder: Option<String>, action: abi::Action) {
+    let options = DialogOptions::default().key(owned(id));
     let (weak, clear, id) = (tui.weak(), tui.dialogs.clone(), id.to_owned());
     tui.dialogs.replace(
         move |cx| {
@@ -91,12 +110,13 @@ fn ask(tui: &Tui, id: &str, title: String, placeholder: Option<String>, action: 
             view
         },
         None,
-        DialogOptions::default(),
+        options,
     );
 }
 
 /// TS `dialog.select`: picking an option closes the list, then runs the action with the option's value.
 fn pick(tui: &Tui, id: &str, select: abi::Select) {
+    let options = DialogOptions::default().key(owned(id));
     let (weak, id) = (tui.weak(), id.to_owned());
     tui.dialogs.replace(
         move |cx| {
@@ -123,7 +143,7 @@ fn pick(tui: &Tui, id: &str, select: abi::Select) {
             opencode_ui::select::select(cx, props).0
         },
         None,
-        DialogOptions::default(),
+        options,
     );
 }
 

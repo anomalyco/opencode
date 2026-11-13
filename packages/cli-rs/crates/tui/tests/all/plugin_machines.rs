@@ -15,6 +15,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use opencode_plugin::abi;
+use opencode_plugin::loader::native::loopback_described;
+use opencode_plugin::loader::{Backend, Loader, entry_file};
+use opencode_plugin::{Definition, ErrorFn, Host};
+use opencode_tui::plugins::host::host;
 use opencode_tui::{Deps, Route};
 use serde_json::Value;
 
@@ -43,23 +47,49 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
     });
     setup.command(command("life.throw", "Life throw"), |_, _| panic!("life command throws"));
     setup.command(command("life.arm", "Life arm"), |_, _| ARMED.set(true));
+    setup.command(command("life.dialog", "Life dialog"), |host, _| {
+        // TS's prompt has no action; this one names a command nobody registers.
+        let action = abi::Action::Command { name: "life.prompted".to_owned(), input: None };
+        host.dialog(abi::Dialog::Prompt { title: "Life prompt".to_owned(), placeholder: None, action });
+    });
     setup.slot(abi::Placement::append("home.footer"), move |_, _, _| {
         abi::Render::Show(abi::Node::text([abi::Span::new(format!("life plugin: {}", side.get()))]))
     });
     Ok(())
 }
 
-/// The TUI on home with the life plugin, as the user drives it.
+/// The twin's builds, through the C ABI's byte shims: every build is `life`, and a new file is a reload.
+struct Builds;
+
+impl Backend for Builds {
+    fn load(&self, host: &Rc<dyn Host>, _: &[u8], _: Option<&str>) -> Result<(Definition, ErrorFn), String> {
+        loopback_described(host, abi::export_plugin!(@loopback_described "parity.life", life))
+    }
+}
+
+/// The TUI on home with the life plugin in its plugins directory, as the user drives it.
 struct Life {
     harness: Harness,
+    loader: Loader,
+    build: std::path::PathBuf,
+    builds: Cell<u8>,
+    _root: opencode_util::temp::TempDir,
 }
 
 impl Life {
     fn open() -> Self {
         ARMED.set(false);
         let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-        opencode_tui::plugins::host::add(&harness.tui, abi::Plugin { id: "parity.life", setup: life }.into());
-        let life = Self { harness };
+        let root = opencode_util::temp::tempdir().unwrap();
+        let config = root.path().join("config");
+        // The manager labels an external plugin by its directory, so the reader finds its row as in TS.
+        let dir = config.join("plugins").join("parity.life");
+        std::fs::create_dir_all(&dir).unwrap();
+        let build = dir.join(entry_file());
+        std::fs::write(&build, [1]).unwrap();
+        let loader = Loader::new(Rc::new(Builds), config, root.path().to_path_buf(), Vec::new());
+        loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
+        let life = Self { harness, loader, build, builds: Cell::new(1), _root: root };
         life.settle();
         life
     }
@@ -81,8 +111,15 @@ impl Life {
                 self.settle();
                 self.harness.app.press("escape");
             }
-            "flip" | "throw" | "arm" => {
+            "flip" | "throw" | "arm" | "dialog" => {
                 self.palette(&format!("Life {action}"), true);
+            }
+            "escape" => self.harness.app.press("escape"),
+            "reload" => {
+                self.builds.set(self.builds.get() + 1);
+                std::fs::write(&self.build, [self.builds.get()]).unwrap();
+                let tui = &self.harness.tui;
+                self.loader.reconcile(&host(tui), &tui.plugins);
             }
             _ => panic!("unknown action {action}"),
         }
@@ -111,9 +148,13 @@ impl Life {
         self.settle();
     }
 
-    /// `line/palette/row`, as `parity/machines/plugins.json` writes them.
+    /// `line/palette/row/dialog`, as `parity/machines/plugins.json` writes them. While its prompt shows, the palette
+    /// and the manager would replace it, so the first three are not read.
     fn observe(&self) -> String {
         let screen = self.harness.app.text();
+        if screen.contains("Life prompt") {
+            return "?/?/?/open".to_owned();
+        }
         let line = ["A", "B"].into_iter().find(|side| screen.contains(&format!("life plugin: {side}"))).unwrap_or("-");
         let palette = if self.palette("Life flip", false) { "yes" } else { "no" };
         self.manager();
@@ -127,7 +168,7 @@ impl Life {
             Some(_) => "on",
             None => "none",
         };
-        format!("{line}/{palette}/{row}")
+        format!("{line}/{palette}/{row}/-")
     }
 }
 
