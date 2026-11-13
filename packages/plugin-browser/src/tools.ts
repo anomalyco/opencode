@@ -265,6 +265,11 @@ export function normalizeAction(action: Exclude<Browser.Input, { readonly type: 
     throw new Tool.Error({
       message: `${JSON.stringify(value)} is a local file, not a web address, so the browser cannot open it. To show it to the user, call browser.preview({ path: ${JSON.stringify(value)} }) instead; preview renders HTML pages, images, PDF, SVG, Markdown and other files in the Review pane. To script the page (click, evaluate, wait), serve its folder over HTTP on the server, for example with \`bunx serve <folder>\`, and open that http://localhost:<port>/ address.`,
     })
+  // The desktop refuses these too (gui-plugins browser/policy.ts `agentRefusal`); this names the reason early.
+  if (/^(?:(?:chrome|moz|safari-web|ms-browser)-extension|extension):/i.test(value))
+    throw new Tool.Error({
+      message: `Agent browser tools cannot open extension pages such as ${value}: an extension page runs with that extension's privileges. Ask the user to open it from the extensions menu.`,
+    })
   const local = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(value)
   const candidate =
     value === "about:blank" || /^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `${local ? "http" : "https"}://${value}`

@@ -40,9 +40,12 @@ import {
 } from "./dialog-machine"
 import type { BrowserNetwork } from "./network"
 import {
+  agentFrames,
+  agentRefusal,
   allowedDestination,
   committedLoad,
   destinationOrigin,
+  extensionOrigin,
   extensionURL,
   fileURLWithin,
   localFileURL,
@@ -511,7 +514,11 @@ export function createBrowserPage(
     // SAFETY: CDP documents a page execution context's auxData as `{ frameId, isDefault, type }`.
     const aux = context.auxData as { frameId?: string; isDefault?: boolean } | undefined
 
-    if (aux?.frameId && aux.isDefault) contexts.set(aux.frameId, { id: context.id, sessionID })
+    if (!aux?.frameId || !aux.isDefault) return
+
+    // A frame that becomes an extension's document, as about:blank opened by one does, is no target for the agent.
+    if (extensionOrigin(context.origin)) contexts.delete(aux.frameId)
+    else contexts.set(aux.frameId, { id: context.id, sessionID })
   })
   cdp.on("Runtime.executionContextDestroyed", ({ executionContextId }, sessionID) => {
     contexts.forEach((context, key) => {
@@ -520,6 +527,11 @@ export function createBrowserPage(
   })
   cdp.on("Target.attachedToTarget", ({ sessionId, targetInfo }, parentSessionID) => {
     if (targetInfo.type !== "iframe") return
+
+    // An extension's frame, such as an autofill overlay, stays out of `sessions`: no frame list, snapshot, picker or
+    // diagnostics reaches it. Site isolation gives it a process, and so a target, of its own.
+    if (extensionOrigin(targetInfo.url)) return
+
     const parentID = targetInfo.parentFrameId ?? Array.from(sessions).find(([, id]) => id === parentSessionID)?.[0]
 
     if (parentID) parents.set(targetInfo.targetId, parentID)
@@ -662,7 +674,11 @@ export function createBrowserPage(
     },
     /** Reports the page's icon and zoom when either changed since the last report. */
     detail,
-    async execute(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
+    /**
+     * Runs one command, the agent's or the user's. The agent's never opens, reads or acts on an extension page, which
+     * would run with that extension's privileges; every agent operation reaches the page through here.
+     */
+    async execute(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
       await ready
       // Registers the run before any further await, and listens for its abort in the same turn, so a dialog or a
       // cancellation that arrives while it still inspects its target interrupts it.
@@ -678,7 +694,7 @@ export function createBrowserPage(
       signal.addEventListener("abort", cancel, { once: true })
 
       try {
-        return await Promise.race([perform(command, run.controller.signal), run.interrupted.promise])
+        return await Promise.race([perform(command, run.controller.signal, origin), run.interrupted.promise])
       } finally {
         signal.removeEventListener("abort", cancel)
         runs.delete(runID)
@@ -704,7 +720,36 @@ export function createBrowserPage(
     },
   }
 
-  async function perform(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
+  async function perform(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user") {
+    if (origin === "user") return attempt(command, signal)
+    const refused = agentRefusal(command.action, mainDocument())
+
+    if (refused) throw new Error(refused)
+    const result = await attempt(command, signal)
+    // A redirect, or a navigation while it ran, may have brought an extension page in; its result stays here.
+    const moved = agentRefusal({ type: "snapshot" }, mainDocument())
+
+    if (moved) throw new Error(moved)
+
+    return result
+  }
+
+  function mainDocument() {
+    return { url: contents.mainFrame.url, origin: contents.mainFrame.origin }
+  }
+
+  async function mainContext() {
+    const context = contexts.get((await cdp.send("Page.getFrameTree")).frameTree.frame.id)
+
+    if (!context)
+      throw new Error(
+        "The page's JavaScript context is unavailable; it may be loading. Wait for it with browser.wait({tabID}), then retry.",
+      )
+
+    return context
+  }
+
+  async function attempt(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
     if (isPickerActive(pickerState) && pointerOperations.includes(command.action.type))
       await dispatchPicker({ type: "pointer.command" })
 
@@ -799,6 +844,9 @@ export function createBrowserPage(
           throw new Error(
             "Frame context is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab, or omit frameID to target the main frame.",
           )
+        // Pinned to the main frame's current document, so a navigation to an extension page meanwhile fails the call
+        // instead of running the script there.
+        const main = action.frameID || action.ref ? undefined : await mainContext()
         const element = action.ref ? target(action.ref) : undefined
         const objectId = element ? await resolve(element) : undefined
 
@@ -822,7 +870,7 @@ export function createBrowserPage(
               "Runtime.evaluate",
               {
                 expression: action.script,
-                contextId: context?.id,
+                contextId: (context ?? main)?.id,
                 awaitPromise: true,
                 returnByValue: true,
                 userGesture: true,
@@ -1178,37 +1226,16 @@ export function createBrowserPage(
 
   async function frames() {
     const root = await cdp.send("Page.getFrameTree")
-    const result: { id: string; parentID?: string; url: string; name: string }[] = []
-
-    const walk = (tree: Protocol.Page.FrameTree, parentID?: string) => {
-      if (!result.some((frame) => frame.id === tree.frame.id))
-        result.push(
-          tree.frame.parentId || parentID
-            ? {
-                id: tree.frame.id,
-                parentID: tree.frame.parentId ?? parentID,
-                url: tree.frame.url,
-                name: tree.frame.name ?? "",
-              }
-            : { id: tree.frame.id, url: tree.frame.url, name: tree.frame.name ?? "" },
-        )
-      tree.childFrames?.forEach((child) => walk(child, tree.frame.id))
-    }
-
-    walk(root.frameTree)
 
     const children = await Promise.all(
-      Array.from(sessions, async ([id, sessionID]) => ({
-        id,
-        tree: await cdp.send("Page.getFrameTree", {}, sessionID).catch(() => undefined),
-      })),
+      Array.from(sessions, async ([id, sessionID]) => {
+        const tree = await cdp.send("Page.getFrameTree", {}, sessionID).catch(() => undefined)
+
+        return tree ? [{ parentID: parents.get(id) ?? root.frameTree.frame.id, tree: tree.frameTree }] : []
+      }),
     )
 
-    children.forEach(({ id, tree }) => {
-      if (tree) walk(tree.frameTree, parents.get(id) ?? root.frameTree.frame.id)
-    })
-
-    return result
+    return agentFrames(root.frameTree, children.flat())
   }
 
   async function call(element: Element, functionDeclaration: string, args: unknown[] = []) {
