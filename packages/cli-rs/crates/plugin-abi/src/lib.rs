@@ -479,7 +479,8 @@ pub struct Span {
     #[serde(default, skip_serializing_if = "is_false")]
     pub strikethrough: bool,
     /// 1.6: an OSC 8 hyperlink to this URL (TS `<a href>`); a terminal without OSC 8 shows the text alone. An older
-    /// host draws the text without it.
+    /// host draws the text without it, and so does any host for a URL with a C0 or C1 control character or DEL
+    /// (OpenTUI writes no such link).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<String>,
 }
