@@ -20,6 +20,21 @@ export function download(input: { readonly path?: string; readonly mime: string 
   }
 }
 
+/**
+ * Headers for an HTML file shown in the app's sandboxed preview frame. The policy's sandbox matches the frame's, so the
+ * page runs as an opaque origin even when opened on its own, and its scripts get no cookie or API access.
+ */
+export function preview(input: { readonly path: string; readonly mime: string }) {
+  if (input.mime !== "text/html") return download(input)
+  return {
+    "content-type": "text/html; charset=utf-8",
+    "content-security-policy": "sandbox allow-scripts allow-popups allow-forms allow-modals",
+    "x-content-type-options": "nosniff",
+    // The page's own URL carries the location's directory.
+    "referrer-policy": "no-referrer",
+  }
+}
+
 // RFC 6266: an ASCII filename for older clients plus the exact UTF-8 name in filename*.
 export function disposition(name: string) {
   if (name === "") return "attachment"

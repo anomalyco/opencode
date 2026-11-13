@@ -40,13 +40,24 @@ export function headStreamedFile(
   )
 }
 
-/** Content for a streamed file from a HEAD of its URL. A changed file gets a new URL, so its element reloads. */
+/** Content for a streamed file from a HEAD of its URL. */
 export function streamedFileContent(path: string, url: string, response: Response): FileContent {
+  return {
+    type: "binary",
+    content: "",
+    size: Number(response.headers.get("content-length") ?? 0),
+    mimeType: artifactMime(path),
+    url: versionedFileUrl(url, response),
+  }
+}
+
+/** A file's URL from a HEAD of it. A changed file gets a new URL, so the element showing it reloads. */
+export function versionedFileUrl(url: string, response: Response) {
   const size = Number(response.headers.get("content-length") ?? 0)
   const versioned = new URL(url)
   versioned.searchParams.set("v", `${size}-${Date.parse(response.headers.get("last-modified") ?? "") || 0}`)
 
-  return { type: "binary", content: "", size, mimeType: artifactMime(path), url: versioned.href }
+  return versioned.href
 }
 
 /** Text files never contain NUL; a NUL in the first 8 KiB marks an unknown binary. */

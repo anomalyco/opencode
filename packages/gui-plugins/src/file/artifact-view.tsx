@@ -726,7 +726,8 @@ function ArtifactFrame(props: { path: string; content: FileContent; kind: "pdf" 
       title={getFilename(props.path)}
       src={src()}
       // The PDF viewer is Chromium's own and does not run in a sandboxed frame. HTML runs as an
-      // opaque origin: no app storage, cookies, or credentialed requests reach it.
+      // opaque origin: no app storage, cookies, or credentialed requests reach it. It loads from the
+      // host's `content.url` when there is one: a blob: document inherits the app's CSP, which can block its scripts.
       sandbox={props.kind === "html" ? "allow-scripts allow-popups allow-forms allow-modals" : undefined}
       referrerPolicy="no-referrer"
     />
