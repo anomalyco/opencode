@@ -12,6 +12,7 @@ import { Glob } from "bun"
 import path from "node:path"
 import { tmpdir } from "node:os"
 import { rm } from "node:fs/promises"
+import { existsSync } from "node:fs"
 import { EmbeddedTerminalRenderable, type CapturedLine } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { startFakeServer, type FakeServer, type Options } from "../lib/fake-server"
@@ -42,6 +43,9 @@ export type PtyStep = {
   settle?: number
   // Records the screen under this name.
   checkpoint?: string
+  // With `checkpoint`: a `parity/deviations/<file>.md` that lets the checkpoint and its `:cursor`, `:keyboard` and
+  // `:scrollback` records differ between the sides in at most `lines` lines.
+  deviation?: { file: string; lines: number }
   // Records each row's background runs under this name (see `backgrounds`).
   backgrounds?: string
   // With `checkpoint`, also records this many scrollback rows above the screen as `<name>:scrollback`.
@@ -74,6 +78,8 @@ export type PtyCase = {
   // Compare the Kitty keyboard sequences the program writes too (`keyboardLog`): all of them, and those written
   // up to each checkpoint as `<name>:keyboard`.
   keyboard?: boolean
+  // Record the terminal cursor at each checkpoint too, as `<name>:cursor` (`x,y`, 0-based, or `hidden`).
+  cursor?: boolean
   // Compare the request log too; `"writes"` leaves the reads out, for screens whose reads belong to later steps.
   requests?: boolean | "writes"
   tsOnly?: boolean
@@ -165,6 +171,10 @@ export async function runPty(side: Side, value: PtyCase) {
     }
     if (step.checkpoint) checkpoints[step.checkpoint] = await screen()
     if (step.checkpoint && value.keyboard) checkpoints[`${step.checkpoint}:keyboard`] = keyboardLog(output.text)
+    if (step.checkpoint && value.cursor) {
+      const cursor = terminal.screen().cursor
+      checkpoints[`${step.checkpoint}:cursor`] = [cursor.visible ? `${cursor.x},${cursor.y}` : "hidden"]
+    }
     if (step.backgrounds) {
       await setup.renderOnce()
       checkpoints[step.backgrounds] = backgrounds(setup.captureSpans().lines.slice(0, terminal.height), terminal.width)
@@ -206,6 +216,39 @@ export async function runPty(side: Side, value: PtyCase) {
         ? { requests: requestLog(server?.requests ?? [], context) }
         : {}),
   }
+}
+
+// The right record with each checkpoint a deviation allows taken from the left one, and a note per deviation. A
+// deviation whose file is missing, or whose checkpoint differs in more lines than it allows, is left to fail.
+function allowDeviations(value: PtyCase, left: Record<string, unknown>, right: Record<string, unknown>) {
+  const notes: string[] = []
+  const ours = left.checkpoints as Record<string, string[]>
+  const theirs = { ...(right.checkpoints as Record<string, string[]>) }
+  for (const step of value.steps) {
+    if (!step.checkpoint || !step.deviation) continue
+    const keys = Object.keys(ours).filter((key) => key === step.checkpoint || key.startsWith(`${step.checkpoint}:`))
+    const differing = keys.reduce((count, key) => {
+      const a = ours[key] ?? []
+      const b = theirs[key] ?? []
+      return count + Array.from({ length: Math.max(a.length, b.length) }, (_, index) => a[index] !== b[index]).filter(Boolean).length
+    }, 0)
+    const file = step.deviation.file
+    if (!existsSync(path.join(parityRoot, "deviations", `${file}.md`))) {
+      notes.push(`${step.checkpoint}: deviation file ${file}.md is missing`)
+      continue
+    }
+    if (differing === 0) {
+      notes.push(`${step.checkpoint}: equal; remove the deviation ${file}`)
+      continue
+    }
+    if (differing > step.deviation.lines) {
+      notes.push(`${step.checkpoint}: ${differing} lines differ, beyond the ${step.deviation.lines} ${file} allows`)
+      continue
+    }
+    notes.push(`${step.checkpoint}: ${differing} lines differ, allowed by ${file}`)
+    keys.forEach((key) => (theirs[key] = ours[key]))
+  }
+  return [{ ...right, checkpoints: theirs }, notes] as const
 }
 
 // OSC sequences in the order the program wrote them: ESC ] … terminated by BEL or ESC \.
@@ -340,7 +383,9 @@ if (import.meta.main) {
         ),
       ),
     )
-    const report = diffRecords(records[0], records[1], sides)
+    const [allowed, notes] = allowDeviations(value, records[0], records[1])
+    notes.forEach((note) => console.log(`     ${name}: ${note}`))
+    const report = diffRecords(records[0], allowed, sides)
     const broken = records.some((record) => record.failures)
     if (report || broken) failed.any = true
     console.log(
