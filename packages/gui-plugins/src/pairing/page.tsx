@@ -21,6 +21,7 @@ import {
   type PairingEffect,
   type PairingEvent,
 } from "./machine"
+import DiscoverableRow from "./discoverable"
 import { remoteAddress } from "./remote"
 
 type Client = IpcClient<typeof Pairing.spec>
@@ -260,6 +261,7 @@ export default function PairingPage(props: {
               onChange={(enabled) => dispatch({ type: "toggled", enabled })}
             />
           </ui.SettingsRow>
+          <DiscoverableRow client={main()?.value} />
           <ui.SettingsRow
             id="settings-keep-screen-active"
             title={ctx.t("screenActive.title")}

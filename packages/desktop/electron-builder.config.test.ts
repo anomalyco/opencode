@@ -102,6 +102,7 @@ test.each(channels)("macOS bundle for $channel", ({ channel }) => {
     "NSDownloadsFolderUsageDescription",
     "NSNetworkVolumesUsageDescription",
     "NSRemovableVolumesUsageDescription",
+    "NSLocalNetworkUsageDescription",
   ])
     expect(config.mac?.extendInfo?.[key], key).toMatch(/\S/)
 })

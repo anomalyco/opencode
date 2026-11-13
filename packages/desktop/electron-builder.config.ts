@@ -168,6 +168,9 @@ const getBase = (appId: string): Configuration => {
         NSDownloadsFolderUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.downloadsFolderUsage"],
         NSNetworkVolumesUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.networkVolumesUsage"],
         NSRemovableVolumesUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.removableVolumesUsage"],
+        // Pairing advertises the desktop over Bonjour so the OpenCode app on a nearby phone can list it.
+        NSLocalNetworkUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.localNetworkUsage"],
+        NSBonjourServices: ["_opencode._tcp"],
         NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
       },
       target: ["dmg", "zip"],
