@@ -68,13 +68,16 @@ pub fn run(tui: &Tui, program: abi::Foreground, alive: Box<dyn Fn() -> bool>, re
             if let Some(cwd) = &cwd {
                 command.current_dir(cwd);
             }
-            let result = opencode_util::job::run(&mut command);
-            answer.send(result.map(exit).map_err(|error| format!("{}: {error}", program.command)));
-            // The suspended terminal lost the title, and the program may have set its own.
-            if let Some(tui) = weak.upgrade() {
-                tui.app.defer(bind!(tui, |tui, _| crate::features::title::resumed(&tui)));
-                tui.app.request_redraw();
-            }
+            let result = opencode_util::job::run(&mut command).map(exit);
+            let result = result.map_err(|error| format!("{}: {error}", program.command));
+            // Once the terminal is set up again: the suspended terminal lost the title, and the program may have set
+            // its own, so the last title comes back first, before the reply, which may set another.
+            let Some(tui) = weak.upgrade() else { return answer.send(result) };
+            tui.app.defer(bind!(tui, |tui, _| {
+                crate::features::title::resumed(&tui);
+                answer.send(result);
+            }));
+            tui.app.request_redraw();
         }
     };
     if !release(tui, task) {
