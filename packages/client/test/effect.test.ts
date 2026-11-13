@@ -210,6 +210,16 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
         ),
       )
     }
+    if (url.endsWith("/wait")) {
+      return Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          new Response(`: heartbeat\n\ndata: ${JSON.stringify({ message: modelSwitchedMessage })}\n\n`, {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        ),
+      )
+    }
     if (url.includes("/prompt")) {
       return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(admission)))
     }
@@ -266,7 +276,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
       resume: false,
     })
     yield* client.session.compact({ sessionID: Session.ID.make("ses_test") })
-    yield* client.experimental.session.wait({ sessionID: Session.ID.make("ses_test") })
+    const waited = yield* client.experimental.session.wait({ sessionID: Session.ID.make("ses_test") })
     const context = yield* client.session.context({ sessionID: Session.ID.make("ses_test") })
     const log = yield* client.experimental.session
       .log({ sessionID: Session.ID.make("ses_test"), after: Event.Seq.make(0) })
@@ -276,7 +286,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
       sessionID: Session.ID.make("ses_test"),
       messageID: SessionMessage.ID.make("msg_model"),
     })
-    return { page, active, created, admitted, context, log, interrupted, message }
+    return { page, active, created, admitted, waited, context, log, interrupted, message }
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
   const listed = result.page.data[0]
@@ -300,6 +310,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   expect(logged[0]?.type === "session.model.selected" && logged[0].created).toBe(1_717_171_717_000)
   expect(logged.at(-1)).toEqual(synced)
   expect(result.message).toEqual(expect.objectContaining({ id: "msg_model", type: "model-switched" }))
+  expect(result.waited.message).toEqual(expect.objectContaining({ id: "msg_model", type: "model-switched" }))
 })
 
 test("session.log retains the typed SessionNotFoundError", async () => {
