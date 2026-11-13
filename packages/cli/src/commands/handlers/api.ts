@@ -64,9 +64,15 @@ export function rawRequest(input: readonly string[]) {
   return { method: input[0].toUpperCase(), path: input[1] }
 }
 
-function resolveRequest(endpoint: Endpoint, input: readonly string[], params: Record<string, string>) {
+export function resolveRequest(endpoint: Endpoint, input: readonly string[], params: Record<string, string>) {
   const raw = rawRequest(input)
-  if (raw) return Effect.succeed(raw)
+  if (raw) {
+    try {
+      return Effect.succeed({ ...raw, path: interpolate(raw.path, params) })
+    } catch (error) {
+      return Effect.fail(error instanceof Error ? error : new Error(String(error)))
+    }
+  }
   if (input.length !== 1) return Effect.fail(new Error("Expected an operation name or an HTTP method and path"))
   return Effect.tryPromise(async () => {
     const response = await fetch(new URL("/openapi.json", endpoint.url), { headers: Service.headers(endpoint) })
@@ -76,13 +82,18 @@ function resolveRequest(endpoint: Endpoint, input: readonly string[], params: Re
 }
 
 function interpolate(path: string, params: Record<string, string>) {
+  const index = path.indexOf("?")
+  const query = new URLSearchParams(index === -1 ? undefined : path.slice(index + 1))
   const used = new Set<string>()
-  const pathname = path.replaceAll(/\{([^}]+)\}/g, (_, name: string) => {
+  const pathname = (index === -1 ? path : path.slice(0, index)).replaceAll(/\{([^}]+)\}/g, (_, name: string) => {
     const value = params[name]
     if (value === undefined) throw new Error(`Missing path parameter: ${name}`)
     used.add(name)
     return encodeURIComponent(value)
   })
-  const query = new URLSearchParams(Object.entries(params).filter(([name]) => !used.has(name))).toString()
-  return query ? `${pathname}?${query}` : pathname
+  for (const [name, value] of Object.entries(params)) {
+    if (!used.has(name)) query.set(name, value)
+  }
+  const search = query.toString()
+  return search ? `${pathname}?${search}` : pathname
 }
