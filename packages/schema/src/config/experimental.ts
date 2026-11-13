@@ -26,6 +26,10 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     description:
       "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to false.",
   }),
+  sqlite_fts: Schema.Boolean.pipe(optional).annotate({
+    description:
+      "Build an SQLite full-text index of session titles and message text, once, in the background. It covers every session in the database and starts when any loaded location enables it; SQLite keeps it current from then on, also after this is turned off. Defaults to false.",
+  }),
   image_generate: Schema.Union([
     Schema.Boolean,
     Schema.Struct({

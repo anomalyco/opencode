@@ -15314,6 +15314,121 @@
         "summary": "Get V1 migration status"
       }
     },
+    "/api/experimental/migration/session-search": {
+      "get": {
+        "tags": ["migration"],
+        "operationId": "experimental.migration.sessionSearch.status",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["disabled"]
+                        }
+                      },
+                      "required": ["status"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["running", "paused"]
+                        },
+                        "progress": {
+                          "type": "object",
+                          "properties": {
+                            "label": {
+                              "type": "string"
+                            },
+                            "numerator": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "denominator": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": ["label", "numerator", "denominator"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["status", "progress"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["completed"]
+                        },
+                        "skipped": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["status", "skipped"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["unsupported", "error"]
+                        },
+                        "error": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status", "error"],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Experimental: may change without compatibility guarantees. Return the progress of the one-time session search index build that `experimental.sqlite_fts` starts. `paused` means the build is incomplete and not running in this server, for example while the flag is off.",
+        "summary": "Get session search build status"
+      }
+    },
     "/api/websearch/provider": {
       "get": {
         "tags": ["websearch"],
@@ -16681,6 +16796,9 @@
                 "type": "boolean"
               },
               "part_rows": {
+                "type": "boolean"
+              },
+              "sqlite_fts": {
                 "type": "boolean"
               },
               "image_generate": {

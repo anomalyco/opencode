@@ -25,6 +25,16 @@ export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/storage/Database") {}
 
+const checks: Array<(db: DatabaseShape) => Effect.Effect<void>> = []
+
+/**
+ * Runs `check` after migrations, before anything writes, each time a database is opened. Register at module load:
+ * a database opened earlier skips it.
+ */
+export function afterMigrate(check: (db: DatabaseShape) => Effect.Effect<void>) {
+  checks.push(check)
+}
+
 // The bootstrap lock is scoped to the database being built, never to this
 // module: on workerd every Durable Object in an isolate shares module state, and
 // releasing a shared semaphore resumes the waiting object's fiber inside the
@@ -48,7 +58,11 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>) =>
       // Durable Object SQLite always enforces foreign keys and rejects the pragma.
       if (supportsForeignKeyToggle && !durableObject) yield* db.run("PRAGMA foreign_keys = ON")
       const semaphore = yield* lock
-      yield* semaphore.withPermit(DatabaseMigration.apply(db))
+      yield* semaphore.withPermit(
+        DatabaseMigration.apply(db).pipe(
+          Effect.andThen(Effect.forEach(checks, (check) => check(db), { discard: true })),
+        ),
+      )
 
       return { db }
     }).pipe(Effect.orDie),
