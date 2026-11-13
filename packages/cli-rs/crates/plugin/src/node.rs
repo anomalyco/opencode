@@ -106,6 +106,7 @@ impl Mount {
                 lay_out(&self.root, layout);
                 layout.width = None;
                 layout.grow = false;
+                layout.margin = None;
             }
             let owner = self.owner.clone();
             let act: Act = Rc::new(move |action| act(&owner, action));
@@ -212,7 +213,21 @@ pub fn add(
             let spinner = opencode_ui::motion::Spinner::new(app).color(theme.interactive().step(200)).label(label);
             parent.add(&spinner);
         }
-        abi::Node::Box { row, gap, padding, justify, align, bg, layout, on_click, children } => {
+        abi::Node::Box {
+            row,
+            gap,
+            padding,
+            justify,
+            align,
+            bg,
+            layout,
+            on_click,
+            children,
+            border,
+            padding_sides,
+            wrap,
+            overflow,
+        } => {
             let view = View::new(app);
             if *row {
                 view.row();
@@ -220,11 +235,31 @@ pub fn add(
             if *gap > 0 {
                 view.gap(*gap);
             }
-            if padding.0 > 0 {
-                view.padding_x(padding.0);
+            match padding_sides {
+                Some(edges) => {
+                    for (edge, cells) in edges_of(edges) {
+                        if cells > 0 {
+                            view.padding_edge(edge, cells);
+                        }
+                    }
+                }
+                None => {
+                    if padding.0 > 0 {
+                        view.padding_x(padding.0);
+                    }
+                    if padding.1 > 0 {
+                        view.padding_y(padding.1);
+                    }
+                }
             }
-            if padding.1 > 0 {
-                view.padding_y(padding.1);
+            if let Some(border) = border {
+                bordered(&view, theme, border);
+            }
+            if *wrap {
+                view.flex_wrap(Wrap::Wrap);
+            }
+            if *overflow == abi::Overflow::Hidden {
+                view.overflow(Overflow::Hidden);
             }
             match justify {
                 abi::Justify::Start => {}
@@ -309,7 +344,63 @@ fn lay_out<W: Widget>(widget: &W, layout: &abi::Layout) -> W {
     if layout.min_width_zero {
         widget.min_width(0);
     }
+    if let Some(height) = layout.height {
+        widget.height(length(height));
+    }
+    if let Some(height) = layout.min_height {
+        widget.min_height(length(height));
+    }
+    if let Some(height) = layout.max_height {
+        widget.max_height(length(height));
+    }
+    if let Some(margin) = &layout.margin {
+        for (edge, cells) in edges_of(margin) {
+            if cells != 0 {
+                widget.margin_edge(edge, cells);
+            }
+        }
+    }
     widget.clone()
+}
+
+fn length(value: abi::Width) -> Length {
+    match value {
+        abi::Width::Cells(cells) => Length::from(cells),
+        abi::Width::Percent(percent) => Length::percent(percent),
+    }
+}
+
+/// The cells of `edges` at each of OpenTUI's edges.
+fn edges_of(edges: &abi::Edges) -> [(Edge, i16); 4] {
+    [(Edge::Top, edges.top), (Edge::Right, edges.right), (Edge::Bottom, edges.bottom), (Edge::Left, edges.left)]
+}
+
+/// Draws `border` on `view`, as TS's `<box border>` draws it: white without a color, and the title in its color.
+fn bordered(view: &View, theme: &Theme, border: &abi::Border) {
+    let sides = [
+        (border.sides.top, Sides::TOP),
+        (border.sides.right, Sides::RIGHT),
+        (border.sides.bottom, Sides::BOTTOM),
+        (border.sides.left, Sides::LEFT),
+    ]
+    .into_iter()
+    .filter(|(set, _)| *set)
+    .fold(Sides::NONE, |sides, (_, side)| sides.union(side));
+    view.border(match border.style {
+        abi::BorderStyle::Single => BorderStyle::Single,
+        abi::BorderStyle::Double => BorderStyle::Double,
+        abi::BorderStyle::Rounded => BorderStyle::Rounded,
+        abi::BorderStyle::Heavy => BorderStyle::Heavy,
+    })
+    .border_sides(sides)
+    .border_color(color(theme, border.color.as_ref()).unwrap_or(Color::rgb(255, 255, 255)));
+    if let Some(title) = &border.title {
+        view.title(title.as_str()).title_alignment(match border.title_align {
+            abi::TitleAlign::Left => Alignment::Left,
+            abi::TitleAlign::Center => Alignment::Center,
+            abi::TitleAlign::Right => Alignment::Right,
+        });
+    }
 }
 
 /// `span` styled in `theme`, in `fg` without a color of its own.

@@ -571,6 +571,18 @@ pub enum Node {
         on_click: Option<Click>,
         #[serde(default)]
         children: Vec<Node>,
+        /// 1.5: a border on the box's edge, inside its size and outside its padding.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        border: Option<std::boxed::Box<Border>>,
+        /// 1.5: cells inside each edge, instead of `padding`. A negative side counts as 0.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        padding_sides: Option<Edges>,
+        /// 1.5: children that do not fit go on to another row or column (TS `flexWrap="wrap"`).
+        #[serde(default, skip_serializing_if = "is_false")]
+        wrap: bool,
+        /// 1.5: whether what does not fit in the box draws outside it.
+        #[serde(default, skip_serializing_if = "Overflow::is_visible")]
+        overflow: Overflow,
     },
     /// Styled text. `fg` draws spans without their own; by default `text.base`.
     Text {
@@ -617,6 +629,10 @@ impl Node {
             layout: Layout::default(),
             on_click: None,
             children,
+            border: None,
+            padding_sides: None,
+            wrap: false,
+            overflow: Overflow::Visible,
         }
     }
 
@@ -743,6 +759,190 @@ impl Node {
         }
         self
     }
+
+    /// A box with `value` on its edge; text is unchanged.
+    pub fn border(mut self, value: Border) -> Self {
+        if let Node::Box { border, .. } = &mut self {
+            *border = Some(std::boxed::Box::new(value));
+        }
+        self
+    }
+
+    /// A box with `edges` cells inside each edge, instead of [`Node::padding`]; text is unchanged.
+    pub fn padding_sides(mut self, edges: Edges) -> Self {
+        if let Node::Box { padding_sides, .. } = &mut self {
+            *padding_sides = Some(edges);
+        }
+        self
+    }
+
+    /// A box whose children go on to another row or column when they do not fit; text is unchanged.
+    pub fn flex_wrap(mut self) -> Self {
+        if let Node::Box { wrap, .. } = &mut self {
+            *wrap = true;
+        }
+        self
+    }
+
+    /// A box that draws what does not fit in it as `value` says; text is unchanged.
+    pub fn overflow(mut self, value: Overflow) -> Self {
+        if let Node::Box { overflow, .. } = &mut self {
+            *overflow = value;
+        }
+        self
+    }
+}
+
+/// 1.5: a border of a [`Node::Box`] (TS `border`, `borderStyle`, `borderColor`, `title` and `titleAlignment`).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Border {
+    /// The sides that draw; all four by default.
+    #[serde(default, skip_serializing_if = "Sides::is_all")]
+    pub sides: Sides,
+    #[serde(default, skip_serializing_if = "BorderStyle::is_single")]
+    pub style: BorderStyle,
+    /// White by default, as TS draws a border without a color; name a token such as `border.base` to follow the theme.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<Color>,
+    /// A title on the top side, in the border's color.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "TitleAlign::is_left")]
+    pub title_align: TitleAlign,
+}
+
+impl Border {
+    /// A single white line on all four sides.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The border on `sides` only.
+    pub fn sides(self, sides: Sides) -> Self {
+        Self { sides, ..self }
+    }
+
+    pub fn style(self, style: BorderStyle) -> Self {
+        Self { style, ..self }
+    }
+
+    pub fn color(self, color: impl Into<Color>) -> Self {
+        Self { color: Some(color.into()), ..self }
+    }
+
+    pub fn title(self, title: impl Into<String>) -> Self {
+        Self { title: Some(title.into()), ..self }
+    }
+
+    pub fn title_align(self, title_align: TitleAlign) -> Self {
+        Self { title_align, ..self }
+    }
+}
+
+/// Which sides of a [`Border`] draw.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Sides {
+    #[serde(default)]
+    pub top: bool,
+    #[serde(default)]
+    pub right: bool,
+    #[serde(default)]
+    pub bottom: bool,
+    #[serde(default)]
+    pub left: bool,
+}
+
+impl Sides {
+    pub const ALL: Self = Self { top: true, right: true, bottom: true, left: true };
+    pub const NONE: Self = Self { top: false, right: false, bottom: false, left: false };
+
+    fn is_all(&self) -> bool {
+        *self == Self::ALL
+    }
+}
+
+impl Default for Sides {
+    fn default() -> Self {
+        Self::ALL
+    }
+}
+
+/// The lines a [`Border`] draws with.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BorderStyle {
+    #[default]
+    Single,
+    Double,
+    Rounded,
+    Heavy,
+}
+
+impl BorderStyle {
+    fn is_single(&self) -> bool {
+        *self == BorderStyle::Single
+    }
+}
+
+/// Where a [`Border`]'s title sits on its top side.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TitleAlign {
+    #[default]
+    Left,
+    Center,
+    Right,
+}
+
+impl TitleAlign {
+    fn is_left(&self) -> bool {
+        *self == TitleAlign::Left
+    }
+}
+
+/// Cells at each edge of a node: its padding ([`Node::padding_sides`]) or its margin ([`Layout::margin`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Edges {
+    #[serde(default, skip_serializing_if = "is_zero_i16")]
+    pub top: i16,
+    #[serde(default, skip_serializing_if = "is_zero_i16")]
+    pub right: i16,
+    #[serde(default, skip_serializing_if = "is_zero_i16")]
+    pub bottom: i16,
+    #[serde(default, skip_serializing_if = "is_zero_i16")]
+    pub left: i16,
+}
+
+impl Edges {
+    pub const fn new(top: i16, right: i16, bottom: i16, left: i16) -> Self {
+        Self { top, right, bottom, left }
+    }
+
+    /// `cells` at every edge.
+    pub const fn all(cells: i16) -> Self {
+        Self::new(cells, cells, cells, cells)
+    }
+}
+
+fn is_zero_i16(value: &i16) -> bool {
+    *value == 0
+}
+
+/// What a [`Node::Box`] does with what does not fit in it (TS `overflow`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Overflow {
+    /// It draws outside the box.
+    #[default]
+    Visible,
+    /// The box cuts it off.
+    Hidden,
+}
+
+impl Overflow {
+    fn is_visible(&self) -> bool {
+        *self == Overflow::Visible
+    }
 }
 
 /// What a click on a node runs.
@@ -832,11 +1032,43 @@ pub struct Layout {
     /// May shrink below its content's width.
     #[serde(default, skip_serializing_if = "is_false")]
     pub min_width_zero: bool,
+    /// 1.5: its height, in rows or percent of its parent's; its content's by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<Width>,
+    /// 1.5: the least height it takes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_height: Option<Width>,
+    /// 1.5: the most height it takes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_height: Option<Width>,
+    /// 1.5: cells outside each edge; a negative margin moves the node over its neighbors.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub margin: Option<Edges>,
 }
 
 impl Layout {
     fn is_default(&self) -> bool {
         *self == Self::default()
+    }
+
+    /// The layout `height` high.
+    pub fn height(self, height: Width) -> Self {
+        Self { height: Some(height), ..self }
+    }
+
+    /// The layout at least `height` high.
+    pub fn min_height(self, height: Width) -> Self {
+        Self { min_height: Some(height), ..self }
+    }
+
+    /// The layout at most `height` high.
+    pub fn max_height(self, height: Width) -> Self {
+        Self { max_height: Some(height), ..self }
+    }
+
+    /// The layout with `edges` cells outside each edge.
+    pub fn margin(self, edges: Edges) -> Self {
+        Self { margin: Some(edges), ..self }
     }
 
     /// The layout that grows into the room left over.
@@ -855,6 +1087,7 @@ impl Layout {
     }
 }
 
+/// A length in cells (rows, for a height) or in percent of the parent's.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Width {
