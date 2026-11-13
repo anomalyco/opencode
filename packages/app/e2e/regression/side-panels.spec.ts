@@ -392,15 +392,16 @@ test("Mod+F finds in Markdown and HTML previews with the code view's find bar", 
   await page.setViewportSize({ width: 1440, height: 900 })
   const directory = "C:/OpenCode/PreviewFind"
   const key = `local\u0000${base64Encode(directory)}/ses_previewfind`
-  const files: Record<string, string> = {
-    "notes.md": "# Needle notes\n\nOne needle here.\n\nAnother **needle** there.",
-    "page.html": "<!doctype html><title>Page</title><p>First needle</p><p style='margin-top:2000px'>Last needle</p>",
-  }
+
+  const files = new Map([
+    ["notes.md", "# Needle notes\n\nOne needle here.\n\nAnother **needle** there."],
+    ["page.html", "<!doctype html><title>Page</title><p>First needle</p><p style='margin-top:2000px'>Last needle</p>"],
+  ])
 
   await openSession(page, {
     name: "PreviewFind",
     fileList: () => [],
-    fileContent: (path) => ({ type: "text", content: files[path.split("/").at(-1) ?? ""] ?? "" }),
+    fileContent: (path) => ({ type: "text", content: files.get(path.split("/").at(-1) ?? "") ?? "" }),
     seed: {
       panes: { ses_previewfind: { review: true } },
       storage: {
