@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import type { Cookie, Extension, Session } from "electron"
-import { PROBE_COOKIE } from "../cookie"
+import { cookieURL, PROBE_COOKIE } from "../cookie"
 import { method, none, optional, type ApiModule, type Emit } from "./api"
 import { matchesHost } from "./match-pattern"
 import { declared, type ExtensionTabs } from "./tabs"
@@ -49,21 +49,40 @@ export function cookieInfo(cookie: Cookie) {
   }
 }
 
-/** Whether an extension's host permissions cover a cookie's domain, on either scheme. The profile's own probe is no one's. */
+/**
+ * Whether an extension's host permissions cover a cookie's domain and path, on a scheme it is sent over. The profile's
+ * own probe is no one's.
+ */
 export function canSeeCookie(hosts: readonly string[], cookie: Pick<Cookie, "domain" | "path" | "secure">) {
   const host = (cookie.domain ?? "").replace(/^\./, "")
-  const path = cookie.path ?? "/"
+  const at = (secure: boolean) => cookieURL({ host, path: cookie.path ?? "/", secure })
 
   return (
     !!host &&
     host !== PROBE_COOKIE.host &&
-    (matchesHost(hosts, `https://${host}${path}`) || (!cookie.secure && matchesHost(hosts, `http://${host}${path}`)))
+    (matchesHost(hosts, at(true)) || (!cookie.secure && matchesHost(hosts, at(false))))
   )
 }
 
 /**
+ * The cookie a `chrome.cookies.set` call would write: its domain (the URL's host when none is given, which makes it
+ * host-only), path (the URL's) and whether it is secure (an https URL's is).
+ */
+export function writtenCookie(details: { url: string; domain?: string | null; path?: string | null; secure?: boolean | null }) {
+  const url = new URL(details.url)
+
+  return {
+    domain: details.domain ?? url.hostname,
+    path: details.path ?? url.pathname,
+    secure: details.secure ?? url.protocol === "https:",
+  }
+}
+
+/**
  * `chrome.cookies` over the profile's cookie store, the one the pane's tabs use. An extension reads and writes only
- * the cookies of hosts its manifest has access to.
+ * the cookies of hosts its manifest has access to: the URL it names must be one, and so must the cookie it reads,
+ * writes or removes. Chrome checks only the URL, which lets an extension for `sub.example.com` write a cookie for all
+ * of `example.com`; here an extension writes only cookies it could read back.
  */
 export function createCookies(input: {
   session: Session
@@ -108,7 +127,8 @@ export function createCookies(input: {
     methods: {
       "cookies.get": method(Schema.Tuple([Details]), async (context, [details]) => {
         const url = reachable(context.extension, details.url)
-        const [cookie] = await input.session.cookies.get({ url, name: details.name })
+        const cookies = await input.session.cookies.get({ url, name: details.name })
+        const cookie = cookies.find((item) => canSeeCookie(hostsOf(context.extension), item))
 
         return cookie ? cookieInfo(cookie) : null
       }),
@@ -132,6 +152,9 @@ export function createCookies(input: {
         const url = reachable(context.extension, details.url)
         const name = details.name ?? ""
 
+        if (!canSeeCookie(hostsOf(context.extension), writtenCookie({ ...details, url })))
+          throw new Error(`No host permission for a cookie of domain "${details.domain ?? new URL(url).hostname}".`)
+
         await input.session.cookies.set({
           url,
           name,
@@ -143,12 +166,18 @@ export function createCookies(input: {
           sameSite: details.sameSite ?? undefined,
           expirationDate: details.expirationDate ?? undefined,
         })
-        const [cookie] = await input.session.cookies.get({ url, name })
+        const cookies = await input.session.cookies.get({ url, name })
+        const cookie = cookies.find((item) => canSeeCookie(hostsOf(context.extension), item))
 
         return cookie ? cookieInfo(cookie) : null
       }),
       "cookies.remove": method(Schema.Tuple([Details]), async (context, [details]) => {
         const url = reachable(context.extension, details.url)
+        // Removing by URL also removes the parent domain's cookies sent there, which need access of their own.
+        const cookies = await input.session.cookies.get({ url, name: details.name })
+
+        if (!cookies.every((item) => canSeeCookie(hostsOf(context.extension), item)))
+          throw new Error(`No host permission for every cookie "${details.name}" at url: "${url}".`)
         await input.session.cookies.remove(url, details.name)
 
         return { url, name: details.name, storeId: STORE }

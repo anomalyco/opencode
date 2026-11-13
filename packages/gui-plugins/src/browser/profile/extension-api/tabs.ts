@@ -498,6 +498,12 @@ export function createExtensionTabs(input: { emit: Emit; extensions: () => reado
     get(id: number) {
       return tabs.get(id)
     },
+    /** A tab as `chrome.tabs` describes it, before what an extension may not see is taken out. */
+    snapshot(id: number) {
+      const tab = tabs.get(id)
+
+      return tab ? snapshot(tab) : undefined
+    },
     /** Every pane tab's id. */
     ids: () => [...tabs.keys()],
     /** The window that has focus, or had it last. */

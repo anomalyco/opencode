@@ -1,6 +1,9 @@
-import { Schema } from "effect"
+import { Option, Schema } from "effect"
 import electron from "electron"
-import { method, none, optional, type ApiModule, type Emit } from "./api"
+import { closestIcon, readIcon } from "../extensions"
+import { method, none, optional, type ApiModule, type Emit, type ExtensionContext } from "./api"
+
+const Icons = Schema.Struct({ icons: Schema.optional(Schema.Record(Schema.String, Schema.String)) })
 
 const Options = Schema.Struct({
   title: optional(Schema.String),
@@ -11,22 +14,29 @@ const Options = Schema.Struct({
 })
 
 /**
- * `chrome.notifications`, shown as the system's notifications from the app. Clicking one tells the extension
- * through `onClicked`; closing it, `onClosed`. Buttons, images and progress are not shown.
+ * `chrome.notifications`, shown as the system's notifications from the app, titled with the extension's name and
+ * shown with its icon, with the extension's own title as the first line. Clicking one tells the extension through
+ * `onClicked`; closing it, `onClosed`. Buttons, images and progress are not shown.
  */
 export function createNotifications(input: { emit: Emit }): ApiModule {
   // Shown notifications by extension, then by id.
   const shown = new Map<string, Map<string, Electron.Notification>>()
 
-  const show = (extension: string, id: string, options: typeof Options.Type) => {
+  const show = async (context: ExtensionContext, id: string, options: typeof Options.Type) => {
+    const extension = context.extension.id
     const list = shown.get(extension) ?? new Map<string, Electron.Notification>()
     list.get(id)?.close()
 
     if (!electron.Notification.isSupported()) return id
+    const icons = Option.getOrUndefined(Schema.decodeUnknownOption(Icons)(context.extension.manifest))?.icons
+    const file = icons ? closestIcon(icons) : undefined
+    const icon = file ? await readIcon(context.extension.path, file) : undefined
 
+    // Titled with the extension's name and shown with its icon, so it never passes for one of the app's own.
     const notification = new electron.Notification({
-      title: options.title ?? "",
-      body: [options.message, options.contextMessage].filter(Boolean).join("\n"),
+      title: context.extension.name,
+      body: [options.title, options.message, options.contextMessage].filter(Boolean).join("\n"),
+      icon: icon ? electron.nativeImage.createFromBuffer(icon) : undefined,
       silent: options.silent ?? false,
     })
 
@@ -61,12 +71,12 @@ export function createNotifications(input: { emit: Emit }): ApiModule {
         Schema.Union([Schema.Tuple([Schema.String, Options]), Schema.Tuple([Options])]),
         (context, args) =>
           args.length === 2
-            ? show(context.extension.id, args[0] || crypto.randomUUID(), args[1])
-            : show(context.extension.id, crypto.randomUUID(), args[0]),
+            ? show(context, args[0] || crypto.randomUUID(), args[1])
+            : show(context, crypto.randomUUID(), args[0]),
       ),
-      "notifications.update": method(Schema.Tuple([Schema.String, Options]), (context, [id, options]) => {
+      "notifications.update": method(Schema.Tuple([Schema.String, Options]), async (context, [id, options]) => {
         if (!shown.get(context.extension.id)?.has(id)) return false
-        show(context.extension.id, id, options)
+        await show(context, id, options)
 
         return true
       }),
@@ -80,6 +90,11 @@ export function createNotifications(input: { emit: Emit }): ApiModule {
         Object.fromEntries([...(shown.get(context.extension.id)?.keys() ?? [])].map((id) => [id, true])),
       ),
       "notifications.getPermissionLevel": method(none, () => (electron.Notification.isSupported() ? "granted" : "denied")),
+    },
+    forget: (extension) => {
+      const list = shown.get(extension)
+      shown.delete(extension)
+      list?.forEach((notification) => notification.close())
     },
     dispose: () => shown.forEach((list) => list.forEach((notification) => notification.close())),
   }

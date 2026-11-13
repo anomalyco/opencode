@@ -188,6 +188,7 @@ export async function createExtensionHost(input: {
     /** Forgets an extension's listeners, as when it is removed or turned off. */
     forget(extension: string) {
       subscribers.forEach((byExtension) => byExtension.delete(extension))
+      input.modules.forEach((module) => module.forget?.(extension))
     },
     dispose() {
       app.off("web-contents-created", created)

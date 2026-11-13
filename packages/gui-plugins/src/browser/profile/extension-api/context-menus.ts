@@ -2,7 +2,7 @@ import { Schema } from "effect"
 import electron, { type ContextMenuParams, type Extension, type MenuItemConstructorOptions } from "electron"
 import { method, none, optional, type ApiModule, type Emit } from "./api"
 import { matchesHost } from "./match-pattern"
-import { tabInfo, type ExtensionTabs, type PaneTab } from "./tabs"
+import { declared, reveals, tabInfo, type ExtensionTabs, type PaneTab } from "./tabs"
 
 const Id = Schema.Union([Schema.String, Schema.Number])
 
@@ -70,9 +70,16 @@ export function addItem(items: readonly MenuItem[], properties: Properties): rea
   ]
 }
 
-/** Changes the properties given of one item; those left out stay. */
+/** Changes the properties given of one item; those left out stay. A new parent must exist and not sit under it. */
 export function updateItem(items: readonly MenuItem[], id: string | number, properties: Properties) {
   if (!items.some((item) => item.id === id)) throw new Error(`Cannot find menu item with id ${id}.`)
+  const parent = properties.parentId
+
+  if (parent != null && !items.some((item) => item.id === parent))
+    throw new Error(`Cannot find menu item with id ${parent}.`)
+
+  if (parent != null && ancestors(items, parent).includes(id))
+    throw new Error(`Cannot make menu item ${id} a descendant of itself.`)
 
   return items.map(
     (item): MenuItem =>
@@ -90,6 +97,28 @@ export function updateItem(items: readonly MenuItem[], id: string | number, prop
             documentUrlPatterns: properties.documentUrlPatterns ?? item.documentUrlPatterns,
             targetUrlPatterns: properties.targetUrlPatterns ?? item.targetUrlPatterns,
           },
+  )
+}
+
+/** An item and every item above it, nearest first; items only ever form a tree, so the walk ends. */
+function ancestors(items: readonly MenuItem[], id: string | number): readonly (string | number)[] {
+  const parent = items.find((item) => item.id === id)?.parentId
+
+  return parent === undefined ? [id] : [id, ...ancestors(items, parent)]
+}
+
+/**
+ * The items after the user chose `chosen`: a checkbox flips, and a radio item turns on while the other radio items
+ * beside it turn off, as Chrome keeps them.
+ */
+export function chooseItem(items: readonly MenuItem[], chosen: MenuItem): readonly MenuItem[] {
+  if (chosen.type === "checkbox")
+    return items.map((item) => (item.id === chosen.id ? { ...item, checked: !item.checked } : item))
+
+  if (chosen.type !== "radio") return items
+
+  return items.map((item) =>
+    item.type === "radio" && item.parentId === chosen.parentId ? { ...item, checked: item.id === chosen.id } : item,
   )
 }
 
@@ -161,7 +190,9 @@ export function createContextMenus(input: {
   const clicked = (extension: Extension, tab: PaneTab, item: MenuItem, params: ContextMenuParams) => {
     const target = menuTarget(params)
     const choice = item.type === "checkbox" || item.type === "radio"
-    const active = input.tabs.activeTab(tab.window)
+    // The tab that was right-clicked, with its address only for an extension that may read it.
+    const snapshot = input.tabs.snapshot(tab.contents.id)
+    change(extension.id, (items) => chooseItem(items, item))
 
     const info = {
       menuItemId: item.id,
@@ -177,7 +208,11 @@ export function createContextMenus(input: {
       checked: choice ? item.type === "radio" || !item.checked : undefined,
     }
 
-    input.emit("contextMenus.onClicked", [info, active ? tabInfo(active, true) : undefined], extension.id)
+    input.emit(
+      "contextMenus.onClicked",
+      [info, snapshot ? tabInfo(snapshot, reveals(declared(extension), snapshot.url)) : undefined],
+      extension.id,
+    )
   }
 
   const release = input.tabs.watch((tab) => {
@@ -260,6 +295,8 @@ export function createContextMenus(input: {
       ),
       "contextMenus.removeAll": method(none, (context) => void menus.delete(context.extension.id)),
     },
+    // An extension turned off and on again creates its items again at start.
+    forget: (extension) => void menus.delete(extension),
     dispose: release,
   }
 }

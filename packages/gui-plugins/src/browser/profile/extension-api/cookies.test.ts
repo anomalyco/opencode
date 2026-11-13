@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { PROBE_COOKIE } from "../cookie"
-import { canSeeCookie, cookieInfo } from "./cookies"
+import { canSeeCookie, cookieInfo, writtenCookie } from "./cookies"
 
 test("an extension sees the cookies of hosts it has access to, on the scheme they are sent over", () => {
   const hosts = ["https://*.github.com/*", "http://localhost/*"]
@@ -11,6 +11,18 @@ test("an extension sees the cookies of hosts it has access to, on the scheme the
   expect(canSeeCookie(hosts, { domain: "localhost", path: "/", secure: true })).toBe(false)
   expect(canSeeCookie(hosts, { domain: "example.com", path: "/", secure: true })).toBe(false)
   expect(canSeeCookie(["<all_urls>"], { domain: "", path: "/", secure: false })).toBe(false)
+})
+
+test("an extension writes only cookies it could read back: domain and path count, not only the URL", () => {
+  const hosts = ["https://sub.corp.com/app/*"]
+  const write = (details: Parameters<typeof writtenCookie>[0]) => canSeeCookie(hosts, writtenCookie(details))
+
+  expect(write({ url: "https://sub.corp.com/app/x" })).toBe(true)
+  expect(write({ url: "https://sub.corp.com/app/x", domain: ".corp.com" })).toBe(false)
+  expect(write({ url: "https://sub.corp.com/app/x", path: "/" })).toBe(false)
+  expect(write({ url: "https://sub.corp.com/app/x", domain: ".sub.corp.com", path: "/app/" })).toBe(true)
+  // An IPv6 host is read in brackets.
+  expect(canSeeCookie(["http://[::1]/*"], { domain: "::1", path: "/", secure: false })).toBe(true)
 })
 
 test("no extension sees the profile's start-up cookie probe, even with access to every host", () => {

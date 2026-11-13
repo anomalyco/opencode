@@ -61,10 +61,14 @@ export function constant(value: Wire): ApiMethod {
   return () => value
 }
 
-/** What one API module adds: the namespaces it exposes and the methods behind them, by `path.method`. */
+/**
+ * What one API module adds: the namespaces it exposes and the methods behind them, by `path.method`. `forget` drops
+ * what an extension set up while it ran, as when it is turned off or removed.
+ */
 export type ApiModule = {
   readonly namespaces: readonly ApiNamespace[]
   readonly methods: Readonly<Record<string, ApiMethod>>
+  readonly forget?: (extension: string) => void
   readonly dispose?: () => void
 }
 
