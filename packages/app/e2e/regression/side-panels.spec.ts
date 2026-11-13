@@ -395,7 +395,11 @@ test("Mod+F finds in Markdown and HTML previews with the code view's find bar", 
 
   const files = new Map([
     ["notes.md", "# Needle notes\n\nOne needle here.\n\nAnother **needle** there."],
-    ["page.html", "<!doctype html><title>Page</title><p>First needle</p><p style='margin-top:2000px'>Last needle</p>"],
+    ["diagram.mmd", "flowchart TD\n  A[First needle] --> B[Last needle]"],
+    [
+      "page.html",
+      "<!-- note -->\n<!doctype html><title>Page</title><p>First needle</p><p style='margin-top:2000px'>Last needle</p>",
+    ],
   ])
 
   await openSession(page, {
@@ -406,7 +410,9 @@ test("Mod+F finds in Markdown and HTML previews with the code view's find bar", 
       panes: { ses_previewfind: { review: true } },
       storage: {
         "opencode.global.dat:layout": {
-          sessionTabs: { [key]: { all: ["file://notes.md", "file://page.html"], active: "file://notes.md" } },
+          sessionTabs: {
+            [key]: { all: ["file://notes.md", "file://diagram.mmd", "file://page.html"], active: "file://notes.md" },
+          },
         },
       },
     },
@@ -428,10 +434,22 @@ test("Mod+F finds in Markdown and HTML previews with the code view's find bar", 
   await find.press("Escape")
   await expect(find).toHaveCount(0)
 
+  // Mermaid keeps its source in a hidden code block; only the drawn labels count.
+  await side.getByRole("tab", { name: "diagram.mmd", exact: true }).click()
+  await side.locator("svg").getByText("First needle").click()
+  await page.keyboard.press(`${mod}+f`)
+  await expect(find).toBeFocused()
+  await find.fill("needle")
+  await expect(page.getByText("1/2", { exact: true })).toBeVisible()
+  await find.press("Escape")
+  await expect(find).toHaveCount(0)
+
   // The HTML runs in a sandboxed frame; Mod+F pressed inside it still opens the bar.
   await side.getByRole("tab", { name: "page.html", exact: true }).click()
   const frame = side.frameLocator('iframe[data-file-find="frame"]')
   await frame.getByText("First needle").click()
+  // The find script goes after the doctype, even behind a comment, so the page keeps standards mode.
+  expect(await frame.locator("html").evaluate(() => document.compatMode)).toBe("CSS1Compat")
   await page.keyboard.press(`${mod}+f`)
   await expect(find).toBeFocused()
   await find.fill("needle")

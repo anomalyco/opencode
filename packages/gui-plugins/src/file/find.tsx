@@ -240,7 +240,7 @@ export function PreviewFindBar(props: { find: ReturnType<typeof createPreviewFin
 export function findableHtml(content: FileContent): FileContent {
   if (content.type !== "text" || content.url || content.bytes) return content
   const script = `<script>(${frameFind.toString()})(${JSON.stringify(CHANNEL)})</script>`
-  const doctype = /^\s*<!doctype[^>]*>/i.exec(content.content)?.[0] ?? ""
+  const doctype = /^(?:\s|<!--[\s\S]*?-->)*<!doctype[^>]*>/i.exec(content.content)?.[0] ?? ""
 
   return { ...content, content: doctype + script + content.content.slice(doctype.length) }
 }
@@ -282,6 +282,9 @@ function documentRanges(root: HTMLElement, query: string) {
     if (!(node instanceof Text)) continue
     const hay = node.data.toLowerCase()
 
+    // Text the preview hides, such as a diagram's source, can't be shown as a match.
+    if (!hay.includes(needle) || !node.parentElement?.checkVisibility()) continue
+
     for (let at = hay.indexOf(needle); at !== -1; at = hay.indexOf(needle, at + needle.length)) {
       const range = document.createRange()
       range.setStart(node, at)
@@ -302,7 +305,8 @@ function frameFind(channel: string) {
     message: { op: "ready" | "shortcut" } | { op: "result"; query: string; count: number; index: number },
   ) => parent.postMessage({ source: channel, ...message }, "*")
 
-  const style = document.createElement("style")
+  // An adopted sheet, since a style element would fall to the page's own Content-Security-Policy.
+  const sheet = new CSSStyleSheet()
 
   window.addEventListener("message", (event) => {
     const data = event.data
@@ -324,8 +328,10 @@ function frameFind(channel: string) {
     const walker = document.createTreeWalker(document.body ?? document.documentElement, NodeFilter.SHOW_TEXT)
 
     for (let node = walker.nextNode(); node && needle; node = walker.nextNode()) {
-      if (!(node instanceof Text) || node.parentElement?.closest("script, style")) continue
+      if (!(node instanceof Text)) continue
       const hay = node.data.toLowerCase()
+
+      if (!hay.includes(needle) || !node.parentElement?.checkVisibility()) continue
 
       for (let at = hay.indexOf(needle); at !== -1; at = hay.indexOf(needle, at + needle.length)) {
         const range = document.createRange()
@@ -337,9 +343,12 @@ function frameFind(channel: string) {
 
     const index = ranges.length === 0 ? 0 : Math.min(Math.max(data.index, 0), ranges.length - 1)
     const active = ranges[index]
-    style.textContent = `::highlight(opencode-file-find){background-color:${data.marks?.hit}}::highlight(opencode-file-find-current){background-color:${data.marks?.active}}`
+    sheet.replaceSync(
+      `::highlight(opencode-file-find){background-color:${data.marks?.hit}}::highlight(opencode-file-find-current){background-color:${data.marks?.active}}`,
+    )
 
-    if (!style.isConnected) document.head?.append(style)
+    if (!document.adoptedStyleSheets.includes(sheet))
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet]
 
     if (api) {
       api.set("opencode-file-find", new Highlight(...ranges.filter((range) => range !== active)))
