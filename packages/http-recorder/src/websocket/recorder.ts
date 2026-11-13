@@ -117,10 +117,8 @@ const decodeEvent = (event: WebSocketEvent): Frame =>
   event.kind === "text" ? event.body : new Uint8Array(Buffer.from(event.body, "base64"))
 const redactEvent = (event: WebSocketEvent, redactor: Redactor): WebSocketEvent => {
   if (event.kind === "binary") return event
-  const body =
-    event.direction === "client"
-      ? redactor.request({ method: "WEBSOCKET", url: "", headers: {}, body: event.body }).body
-      : redactor.response({ status: 101, headers: {}, body: event.body }).body
+  // Both directions share body redaction; frames have no URL to transform.
+  const body = redactor.response({ status: 101, headers: {}, body: event.body }).body
   return { ...event, body }
 }
 const comparable = (event: WebSocketEvent, asJson: boolean) => {
