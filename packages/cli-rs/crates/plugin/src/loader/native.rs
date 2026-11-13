@@ -389,7 +389,7 @@ impl Shared {
         let mut ctx = self.ctx.borrow_mut();
         let (effects, _) = ctx.take();
         if !ctx.quiet {
-            apply(&ctx.host, ctx.id.clone(), Weak::new(), effects);
+            apply(&ctx.host, ctx.id.clone(), Weak::new(), None, effects);
         }
     }
 
@@ -658,7 +658,7 @@ impl Guest {
 
     /// Queues the effects of a call on the effect queue, as the host would for a built-in.
     fn apply(self: &Rc<Self>, effects: Vec<Effect>) {
-        apply(&self.host, self.id.clone(), Rc::downgrade(self), effects);
+        apply(&self.host, self.id.clone(), Rc::downgrade(self), Some(self.generation), effects);
     }
 
     /// Sends `fetch` unless the instance is destroyed or its activation ended, as a call that panicked after the one
@@ -681,8 +681,9 @@ impl Guest {
     }
 }
 
-/// Queues `effects` of plugin `id` on the effect queue, as the host would for a built-in; a fetch replies to `guest`.
-fn apply(host: &Weak<dyn Host>, id: String, guest: Weak<Guest>, effects: Vec<Effect>) {
+/// Queues `effects` of plugin `id` on the effect queue, as the host would for a built-in; a fetch replies to `guest`, and
+/// a dialog belongs to activation `generation`.
+fn apply(host: &Weak<dyn Host>, id: String, guest: Weak<Guest>, generation: Option<u64>, effects: Vec<Effect>) {
     if effects.is_empty() {
         return;
     }
@@ -696,11 +697,11 @@ fn apply(host: &Weak<dyn Host>, id: String, guest: Weak<Guest>, effects: Vec<Eff
                 Effect::Stored => host.storage_changed(),
                 Effect::Navigate(route) => host.navigate(&id, &route),
                 Effect::Fetch(request, fetch) => Guest::fetch(&guest, host, request, fetch),
-                // A dialog belongs to its activation. What a setup that failed or a dispose callback asked for has
-                // none, and shows nowhere.
+                // The host shows it only while its activation is live. What a setup that failed or a destroyed
+                // instance asked for has none, and shows nowhere.
                 Effect::Dialog(dialog) => {
-                    if let Some(guest) = guest.upgrade() {
-                        host.dialog(&id, guest.generation, dialog);
+                    if let Some(generation) = generation {
+                        host.dialog(&id, generation, dialog);
                     }
                 }
                 Effect::Copy(text, then) => crate::copy(host, &text, then),
