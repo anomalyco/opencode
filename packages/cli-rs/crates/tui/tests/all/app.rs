@@ -89,6 +89,7 @@ fn run(recording: &Recording) -> (bool, String) {
         Some("slot") => opencode_tui::plugins::host::add(&tui, slot_plugin().into()),
         Some("app") => opencode_tui::plugins::host::add(&tui, app_plugin().into()),
         Some("p0a") => opencode_tui::plugins::host::add(&tui, p0a_plugin().into()),
+        Some("p0b") => opencode_tui::plugins::host::add(&tui, p0b_plugin().into()),
         _ => {}
     }
     // The editor context's sources (E.5): the fake IDE server and the Zed database the TS side had.
@@ -370,6 +371,27 @@ fn p0a_plugin() -> abi::Plugin {
         Ok(())
     }
     abi::Plugin { id: "parity.p0a", setup }
+}
+
+/// `parity/plugins/p0b/tui.tsx`: one line appended to `app` that shows what the reads of ABI 1.6 answer.
+fn p0b_plugin() -> abi::Plugin {
+    fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+        setup.slot(Placement::append(slot::APP), |read, input, _| {
+            let line = [
+                format!("p0b: w{}", input.width),
+                format!("tabs {} {}", read.tabs_enabled(), read.tabs().len()),
+                format!("keys {}", read.shortcuts("command.palette.show").join(",")),
+                format!("variants {}", read.variants().len()),
+                format!("pending {}", read.keymap_pending().len()),
+            ]
+            .join(" ");
+            let node = Node::column(vec![Node::text([Span::new(line)]).fg("text.muted")]);
+            Render::Show(node.padding(2, 0))
+        });
+        setup.sized(Placement::append(slot::APP));
+        Ok(())
+    }
+    abi::Plugin { id: "parity.p0b", setup }
 }
 
 /// The scenario routes first, then each recorded read by its exact query, then by path alone.
