@@ -36,8 +36,19 @@ pub fn click_pointer(clickable: bool) -> MousePointer {
 }
 
 /// A terminal title with each run of C0 and C1 control characters replaced by one space (`setTerminalTitle`), so a
-/// session title with a newline cannot break the escape sequence.
+/// session title with a newline cannot break the escape sequence, and cut to the [`TITLE_BYTES`] OpenTUI takes on a
+/// character boundary.
 pub fn terminal_title(title: &str) -> String {
+    let mut out = terminal_title_uncut(title);
+    out.truncate(out.floor_char_boundary(TITLE_BYTES));
+    out
+}
+
+/// The longest title OpenTUI sends, in UTF-8 bytes: its sequence `ESC ] 0 ; <title> BEL` fits 4096 bytes. A longer
+/// one fails the app's terminal session, which ends the TUI (`session.zig` `title_bytes_max`).
+pub const TITLE_BYTES: usize = 4096 - "\x1b]0;\x07".len();
+
+fn terminal_title_uncut(title: &str) -> String {
     let mut out = String::with_capacity(title.len());
     let mut control = false;
     for char in title.chars() {
@@ -78,6 +89,24 @@ mod tests {
     fn terminal_title_collapses_control_runs() {
         assert_eq!(super::terminal_title("OC | a\r\nb\tc\u{85}"), "OC | a b c ");
         assert_eq!(super::terminal_title("plain"), "plain");
+    }
+
+    // Expected (reviews bigboi-2, carbon-3): a title is cut to the 4091 bytes OpenTUI takes, on a character boundary,
+    // after the controls are replaced.
+    #[test]
+    fn terminal_title_fits_opentui() {
+        use super::{TITLE_BYTES, terminal_title};
+        assert_eq!(TITLE_BYTES, 4091);
+        let cases = [
+            ("a".repeat(4091), "a".repeat(4091)),
+            ("a".repeat(5000), "a".repeat(4091)),
+            // "é" is two bytes: 2045 of them are 4090 bytes, and the next does not fit.
+            ("é".repeat(3000), "é".repeat(2045)),
+            (format!("{}\r\n\r\n", "a".repeat(4089)), format!("{} ", "a".repeat(4089))),
+        ];
+        for (input, want) in cases {
+            assert_eq!(terminal_title(&input), want, "{}", input.len());
+        }
     }
 
     #[test]
