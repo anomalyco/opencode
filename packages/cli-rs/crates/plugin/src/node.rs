@@ -670,6 +670,59 @@ mod tests {
     use opencode_ui::theme::{Catalog, ThemeMode};
     use opentui::testing::TestApp;
 
+    // Expected: what the 1.5 properties of a box do, read from a fresh layout's rects and cells: a border without a
+    // color is white and takes a cell on each side it draws; a negative padding counts as 0; a negative margin moves
+    // the box over its neighbor; the minimum and maximum bound the height its children ask for.
+    #[test]
+    fn a_box_lays_out_its_1_5_properties() {
+        let app = TestApp::new(30, 12);
+        let theme = Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme;
+        let rows = |count: usize| (0..count).map(|_| abi::Node::text([abi::Span::new("x")])).collect::<Vec<_>>();
+        // The box's rect, its first child's, and the cell at the box's top left corner.
+        let draw = |node: abi::Node| {
+            let parent = View::new(app.app()).row();
+            parent.add(&Text::new(app.app(), "ab"));
+            add(
+                app.app(),
+                &theme,
+                &parent,
+                &node,
+                &(Rc::new(|_: &abi::Action| {}) as Act),
+                &mut Vec::new(),
+                &|_| View::new(app.app()).as_any(),
+                &mut |_, _| {},
+            );
+            app.app().root().clear();
+            app.app().root().add(&parent);
+            let capture = app.render();
+            let boxed = parent.children()[1].rect();
+            // Where the box's first `x` is.
+            let child = (0..capture.height)
+                .flat_map(|y| (0..capture.width).map(move |x| (x, y)))
+                .find(|(x, y)| capture.cell(*x, *y).is_some_and(|cell| cell.symbol == "x"));
+            let corner = capture.cell(boxed.screen_x as u32, boxed.screen_y as u32).cloned().unwrap();
+            (boxed, child, corner)
+        };
+        let (plain, plain_child, _) = draw(abi::Node::column(rows(1)));
+        let (bordered, child, corner) = draw(abi::Node::column(rows(1)).border(abi::Border::new()));
+        assert_eq!((corner.symbol.as_str(), corner.fg), ("┌", Color::rgb(255, 255, 255)));
+        assert_eq!((bordered.width, bordered.height), (plain.width + 2.0, plain.height + 2.0));
+        assert_eq!(child, Some((bordered.screen_x as u32 + 1, bordered.screen_y as u32 + 1)));
+        let left = abi::Border::new().sides(abi::Sides { left: true, ..abi::Sides::NONE });
+        let (ruled, _, corner) = draw(abi::Node::column(rows(1)).border(left));
+        assert_eq!((ruled.width, ruled.height, corner.symbol.as_str()), (plain.width + 1.0, plain.height, "│"));
+        let (_, padded, _) = draw(abi::Node::column(rows(1)).padding_sides(abi::Edges::all(-2)));
+        assert_eq!(padded, plain_child);
+        let shifted = abi::Layout::default().margin(abi::Edges::new(0, 0, 0, -1));
+        let (moved, _, _) = draw(abi::Node::column(rows(1)).layout(shifted));
+        assert_eq!(moved.screen_x, plain.screen_x - 1.0);
+        let at_least = abi::Layout::default().min_height(abi::Width::Cells(4));
+        assert_eq!(draw(abi::Node::column(rows(1)).layout(at_least)).0.height, 4.0);
+        let at_most = abi::Layout::default().max_height(abi::Width::Cells(2));
+        assert_eq!(draw(abi::Node::column(rows(5)).overflow(abi::Overflow::Hidden).layout(at_most)).0.height, 2.0);
+        assert_eq!(draw(abi::Node::column(rows(5))).0.height, 5.0);
+    }
+
     // Expected: a fence's key moves to the widget that replaces its block's widget, and goes once that widget is
     // freed, as when its Markdown is destroyed, or once the block falls back to the code view; the plugin hears of
     // each key that goes, once.

@@ -176,6 +176,16 @@ fn the_composer_reads_and_edits_the_same_on_both_carriers() {
         let prompts = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
         assert_eq!(prompts[0]["text"], "héllo wörld", "{carrier:?}");
         setup.wait("the clear", || setup.textarea().text().is_empty());
+        // A set keeps the mode, as TS's `ref.set` does.
+        setup.app.type_text("!");
+        setup.wait_for("Shell");
+        setup.tui.keymap.dispatch("p0a.set", Some("ls"));
+        setup.wait("the set in shell mode", || setup.textarea().text() == "ls");
+        setup.app.advance(std::time::Duration::from_millis(50));
+        assert!(setup.app.text().contains("Shell"), "{carrier:?}: {}", setup.app.text());
+        setup.app.press("escape");
+        setup.wait_for("Build");
+        setup.app.press("ctrl+c");
         // With a dialog open the composer keeps its text and loses the focus.
         setup.app.type_text("later");
         setup.tui.keymap.dispatch("p0a.alert", None);
