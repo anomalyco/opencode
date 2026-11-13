@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { Effect } from "effect"
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser"
 import { Global } from "@opencode/util/global"
+import { Flock } from "@opencode/util/flock"
 import { Npm } from "@opencode/util/npm"
 import { Host } from "@opencode/plugin/host"
 import { Commands } from "../../commands"
@@ -25,7 +26,7 @@ export default Runtime.handler(
     if (target === "server") {
       const global = yield* Global.Service
       const configPath = yield* Effect.promise(() => resolveConfigPath(global.config))
-      const changed = yield* Effect.promise(() => writePluginConfig(configPath, input.package))
+      const changed = yield* Effect.promise((signal) => writePluginConfig(configPath, input.package, signal))
       process.stdout.write(
         changed
           ? `Plugin "${input.package}" installed and added to ${configPath}${EOL}`
@@ -50,7 +51,9 @@ export function configurationTarget(entrypoints: Host.Entrypoints) {
   if (entrypoints.tui) return "tui" as const
 }
 
-export async function writePluginConfig(configPath: string, spec: string) {
+export async function writePluginConfig(configPath: string, spec: string, signal?: AbortSignal) {
+  await using _ = await Flock.acquire(configPath, { signal })
+  signal?.throwIfAborted()
   const text = await readFile(configPath, "utf8").catch((error) => {
     if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return "{}"
     throw error
