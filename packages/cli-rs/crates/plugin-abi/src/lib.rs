@@ -1465,6 +1465,14 @@ pub enum HostRequest {
     ComposerEdit {
         edit: ComposerEdit,
     },
+    /// 1.5: marks what the current call asked for so far; answers the mark, a number. The SDK sends it before each
+    /// dispose callback.
+    Checkpoint,
+    /// 1.5: drops what the current call asked for after `mark`, and puts back the storage it wrote since: the SDK sends
+    /// it when a dispose callback panicked.
+    Rollback {
+        mark: u64,
+    },
 }
 
 /// 1.5: the composer on screen, from [`Read::composer`].
@@ -1924,6 +1932,14 @@ pub trait Host: Read {
     /// Declares storage key `key` of the plugin, for [`Setup::storage_key`].
     #[doc(hidden)]
     fn declare_storage_key(&self, _key: &str) {}
+    /// 1.5: marks what the current call asked for so far, for [`Host::rollback`]; `None` from a host without marks.
+    #[doc(hidden)]
+    fn checkpoint(&self) -> Option<u64> {
+        None
+    }
+    /// 1.5: drops what the current call asked for after `mark`, and puts back the storage it wrote since.
+    #[doc(hidden)]
+    fn rollback(&self, _mark: u64) {}
 }
 
 /// [`Host::storage_merge`] by reading the stored object and setting it whole.
@@ -2149,6 +2165,14 @@ impl Host for HostHandle {
 
     fn edit_composer(&self, edit: ComposerEdit) {
         let _ = self.request(&HostRequest::ComposerEdit { edit });
+    }
+
+    fn checkpoint(&self) -> Option<u64> {
+        self.read(&HostRequest::Checkpoint)
+    }
+
+    fn rollback(&self, mark: u64) {
+        let _ = self.request(&HostRequest::Rollback { mark });
     }
 
     fn declare_storage_key(&self, key: &str) {
@@ -2491,7 +2515,12 @@ impl Registered {
         let (disposers, own) = (std::mem::take(&mut self.disposers), self.host);
         let host = host.unwrap_or(&own);
         for run in disposers.into_iter().rev() {
+            // What a callback that panics asked for is dropped, and what the others asked for stays.
+            let mark = host.checkpoint();
             if let Err(panic) = catch_unwind(AssertUnwindSafe(|| run(host))) {
+                if let Some(mark) = mark {
+                    host.rollback(mark);
+                }
                 own.log(Level::Error, &format!("a dispose callback panicked: {}", panic_message(&*panic)));
             }
         }

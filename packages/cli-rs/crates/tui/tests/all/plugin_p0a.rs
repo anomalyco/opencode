@@ -404,6 +404,25 @@ fn a_call_that_panics_leaves_no_composer_edit_and_no_dialog() {
     }
 }
 
+// Expected (`no-effects`; bigboi 3): of three dispose callbacks, the one that queues a set, a submit and an alert and
+// then panics leaves none of it, and the two around it run and keep what they wrote; on both carriers.
+#[test]
+fn a_dispose_callback_that_panics_leaves_no_effects() {
+    for carrier in CARRIERS {
+        let setup = session(carrier);
+        setup.app.type_text("untouched");
+        setup.tui.keymap.dispatch("p0a.teardown", None);
+        setup.wait("the arming", || logged(&setup, "teardown").len() == 1);
+        let host = opencode_tui::plugins::host::host(&setup.tui);
+        assert!(setup.tui.plugins.set_active(&host, "p0a", false));
+        setup.app.advance(std::time::Duration::from_millis(100));
+        assert_eq!(setup.textarea().text(), "untouched", "{carrier:?}");
+        assert!(setup.requests("POST", "/prompt").is_empty(), "{carrier:?}");
+        assert!(!setup.tui.dialogs.is_open(), "{carrier:?}: {}", setup.app.text());
+        assert_eq!(logged(&setup, "disposed"), ["disposed last @1", "disposed first @1"], "{carrier:?}");
+    }
+}
+
 /// A plugin that logs each run of its command `witness.ran` in its storage.
 fn witness() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
