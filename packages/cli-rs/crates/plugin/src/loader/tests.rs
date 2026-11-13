@@ -40,6 +40,8 @@ pub(super) struct TestHost {
     pub dialogs: RefCell<Vec<(String, abi::Dialog)>>,
     /// What [`abi::Read::interactive`] answers.
     pub interactive: Cell<bool>,
+    /// The composer edits applied.
+    pub edits: RefCell<Vec<abi::ComposerEdit>>,
 }
 
 /// A fetch's reply.
@@ -164,6 +166,10 @@ impl Host for TestHost {
     fn dialog(&self, id: &str, _: u64, dialog: abi::Dialog) {
         self.dialogs.borrow_mut().push((id.to_owned(), dialog));
     }
+
+    fn edit_composer(&self, edit: abi::ComposerEdit) {
+        self.edits.borrow_mut().push(edit);
+    }
 }
 
 impl TestHost {
@@ -198,6 +204,7 @@ pub(super) fn host() -> Rc<TestHost> {
         fetches: RefCell::default(),
         dialogs: RefCell::default(),
         interactive: Cell::new(true),
+        edits: RefCell::default(),
     })
 }
 
