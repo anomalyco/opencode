@@ -87,8 +87,8 @@ pub fn view_colors(theme: &Theme, syntax: &SyntaxTheme) -> MarkdownColors {
 /// stay, and code keeps its highlight, so nothing is parsed again. Plugin fences render again and read the theme
 /// themselves.
 ///
-/// OpenTUI builds every code block again when the table options change. They follow the `conceal` scope, which
-/// [`crate::code::syntax_theme`] leaves out, so the border stays gray and the options stay the same.
+/// The table options follow the `conceal` scope, which [`crate::code::syntax_theme`] leaves out, so they stay the
+/// same. A new border color would repaint the tables in place.
 pub fn restyle(markdown: &Markdown, colors: MarkdownColors, syntax: &SyntaxTheme) {
     markdown.colors(colors).syntax_theme(syntax.clone()).table_options(table(syntax));
 }

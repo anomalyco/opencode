@@ -13,6 +13,7 @@ use opencode_api::generated::V2Event;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_local::cli_config::{Bounded, Debug, Info, Markdown, Scroll, Session, TurnTokens, Verbosity, Visibility};
 use opencode_tui::Deps;
+use opentui::widget::Widget;
 use serde_json::{Value, json};
 use tokio::sync::Semaphore;
 
@@ -505,6 +506,61 @@ fn a_theme_switch_restyles_the_transcript_in_place() {
         .flat_map(|y| (0..switched.width).map(move |x| (x, y)))
         .find(|&(x, y)| switched.cell(x, y) != expected.cell(x, y));
     assert_eq!(diff.map(|(x, y)| (x, y, switched.cell(x, y), expected.cell(x, y))), None, "{}", switched.text());
+}
+
+/// P11 as a work counter: a theme switch builds no fence or diff again, so it parses none. The widgets one switch
+/// creates are as many with 0, 3 or 36 fences, and with 1 or 12 edit diffs. A kept code view restyles its highlight
+/// without a parse (OpenTUI's `option_changes_keep_builtin_fences_streaming` counts them).
+#[test]
+fn a_theme_switch_builds_no_fence_or_diff_again() {
+    let fence = |language: &str, line: &str| format!("```{language}\n{}```\n", format!("{line}\n").repeat(15));
+    let reply = |fences: bool| {
+        let code = [fence("rust", "let x = parse(\"a\", 1); // b"), fence("python", "total += f(1)  # n")];
+        if fences { format!("Reply.\n\n{}\n{}\n{}", code[0], code[1], code[0]) } else { "Reply.".to_owned() }
+    };
+    let edit = |index: usize| {
+        let lines: String =
+            (0..15).map(|line| format!("-    let a{line} = {line};\n+    let b{line} = {line};\n")).collect();
+        json!([{
+            "type": "tool", "id": format!("call_{index}"), "name": "edit", "time": { "created": 1, "completed": 2 },
+            "state": {
+                "status": "completed", "input": { "path": format!("/project/src/m{index}.rs") },
+                "content": [{ "type": "text", "text": "Edited" }],
+                "metadata": { "files": [{
+                    "file": format!("src/m{index}.rs"), "filePath": format!("/project/src/m{index}.rs"), "type": "update",
+                    "patch": format!("--- src/m{index}.rs\n+++ src/m{index}.rs\n@@ -1,16 +1,16 @@\n fn main() {{\n{lines}"),
+                    "additions": 15, "deletions": 15,
+                }] },
+            },
+        }])
+    };
+    let created = |replies: usize, content: &dyn Fn(usize) -> Value| {
+        let messages = (0..replies as u64)
+            .flat_map(|index| {
+                let id = |suffix: &str| format!("msg_{index:03}{suffix}");
+                let at = 1000 + index * 10_000;
+                [user(&id("a"), at, "Go"), assistant(&id("b"), at + 100, content(index as usize), Some(at + 5000))]
+            })
+            .collect();
+        let h = open(120, 200, "ses_w", messages, support::still());
+        h.wait_for("Reply.");
+        h.app.render();
+        let first = opentui::widget::View::new(&h.app).id();
+        assert!(h.tui.theme.borrow_mut().set("tokyonight"));
+        h.tui.theme_changed();
+        h.app.render();
+        opentui::widget::View::new(&h.app).id() - first
+    };
+    let text = |fences: bool| move |_: usize| json!([{ "type": "text", "text": reply(fences) }]);
+    let with_edit = |index: usize| {
+        let mut content = edit(index);
+        content.as_array_mut().unwrap().insert(0, json!({ "type": "text", "text": "Reply." }));
+        content
+    };
+    let counts = [created(12, &text(false)), created(1, &text(true)), created(12, &text(true))];
+    assert_eq!(counts, [counts[0]; 3], "widgets per switch at 0, 3 and 36 fences");
+    let counts = [created(1, &with_edit), created(12, &with_edit)];
+    assert_eq!(counts, [counts[0]; 2], "widgets per switch at 1 and 12 edit diffs");
 }
 
 /// `session.markdown` reaches the text already shown, as TS's `conceal` prop follows `markdownMode()`
