@@ -10,7 +10,8 @@
 use opencode_api::generated::{PromptAgentAttachment, PromptInputSkillAttachment};
 use opentui::widget::{ExtmarkId, ExtmarkOptions};
 
-use super::parse::measure;
+use opencode_ui::prompt_input;
+
 use crate::prelude::*;
 use crate::prompt::editor::Inner;
 
@@ -98,7 +99,7 @@ pub fn insert(prompt: &Inner, start: u32, text: &str, kind: Kind, part: Value) {
     let mention = format!("@{text}");
     let inserted = if next == " " { mention.clone() } else { format!("{mention} ") };
     replace(textarea, start, cursor, &inserted);
-    let end = start + measure(&mention);
+    let end = prompt_input::after(textarea, start, &mention);
     let id = textarea.add_extmark(start..end, options(prompt, kind));
     let mut parts = prompt.prompt.borrow_mut();
     let list = parts.as_object_mut().map(|prompt| prompt.entry(kind.key()).or_insert_with(|| json!([])));
@@ -127,7 +128,7 @@ pub fn insert_skill(prompt: &Inner, id: &str) {
     let mention = format!("@{id}");
     let start = prompt.textarea.cursor_offset();
     prompt.textarea.insert(format!("{mention} "));
-    let end = start + measure(&mention);
+    let end = prompt_input::after(&prompt.textarea, start, &mention);
     let mark = prompt.textarea.add_extmark(start..end, options(prompt, Kind::Skill));
     let mut info = prompt.prompt.borrow_mut();
     info["text"] = Value::String(prompt.textarea.text());

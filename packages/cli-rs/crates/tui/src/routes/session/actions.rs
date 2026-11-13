@@ -397,23 +397,28 @@ pub(crate) fn append_prompt(tui: &Tui, session: &SessionID, prompt: Value) {
     let mounted = tui.prompt.current.borrow().upgrade().filter(|inner| inner.session.as_ref() == Some(session));
     if let Some(inner) = mounted {
         inner.history.reset();
-        inner.restore(append(&inner.snapshot(), prompt));
+        inner.restore(append(&inner.snapshot(), prompt, inner.text_end()));
         inner.textarea.set_cursor_offset(inner.text_end());
         return;
     }
+    // A draft is in no buffer, so `measure` counts it.
     let prompt = match tui.prompt.drafts.take(Some(session)) {
-        Some(draft) => append(&draft.prompt, prompt),
+        Some(draft) => {
+            let end = opencode_ui::prompt_input::parse::measure(draft.prompt["text"].as_str().unwrap_or_default());
+            append(&draft.prompt, prompt, end)
+        }
         None => prompt,
     };
     tui.prompt.drafts.save(Some(session), Draft { prompt, cursor: u32::MAX });
 }
 
 /// `appendPrompt` (`prompt/history.tsx:37-62`): `following` after `prompt` with a blank line between, its parts'
-/// ranges shifted by the cursor offset of what precedes it. The result has no mode, so it shows in normal mode.
-fn append(prompt: &Value, following: Value) -> Value {
+/// ranges shifted by the cursor offset of what precedes it, `end` (the offset at the end of `prompt`'s text) plus the
+/// two line breaks. The result has no mode, so it shows in normal mode.
+fn append(prompt: &Value, following: Value, end: u32) -> Value {
     let text =
         prompt["text"].as_str().filter(|text| !text.is_empty()).map_or_else(String::new, |text| format!("{text}\n\n"));
-    let offset = opencode_ui::prompt_input::parse::measure(&text);
+    let offset = if text.is_empty() { 0 } else { end + 2 };
     let mut merged = serde_json::json!({ "text": format!("{text}{}", following["text"].as_str().unwrap_or_default()) });
     for (key, range) in [("files", "mention"), ("agents", "mention"), ("skills", "mention"), ("pasted", "source")] {
         let before = prompt[key].as_array().cloned().unwrap_or_default();

@@ -15,12 +15,13 @@
 use std::collections::VecDeque;
 
 use opencode_local::cli_config::PromptPaste;
+use opencode_ui::prompt_input;
 use opencode_ui::prompt_input::paste::{Content, content, strip_ansi};
 use opentui::native::ClipboardOutcome;
 use serde_json::Map;
 
 use super::attach::{self, Resolved};
-use super::autocomplete::parse::{index_at, measure};
+use super::autocomplete::parse::measure;
 use super::autocomplete::parts::{self, Kind};
 use super::editor::{Inner, Mode};
 
@@ -240,8 +241,8 @@ fn insert(prompt: &Inner, normalized: &str, pasted: &str) {
 fn paste_text(prompt: &Inner, text: &str, label: &str) {
     let textarea = &prompt.textarea;
     let start = textarea.cursor_offset();
-    let end = start + measure(label);
     textarea.insert(format!("{label} "));
+    let end = prompt_input::after(textarea, start, label);
     let mark = textarea.add_extmark(start..end, parts::styled(prompt, "extmark.paste"));
     let mut info = prompt.prompt.borrow_mut();
     info["text"] = Value::String(textarea.text());
@@ -259,9 +260,8 @@ fn attachment(prompt: &Inner, uri: &str, filename: Option<&str>, path: Option<&s
     let label = attach::label(&files, uri, filename)?;
     let textarea = &prompt.textarea;
     let start = textarea.cursor_offset();
-    // `virtualText.length`: labels are ASCII.
-    let end = start + label.len() as u32;
     textarea.insert(format!("{label} "));
+    let end = prompt_input::after(textarea, start, &label);
     let mark = textarea.add_extmark(start..end, parts::styled(prompt, "extmark.paste"));
     let mut part = Map::new();
     part.insert("uri".into(), uri.into());
@@ -300,18 +300,20 @@ fn expand(prompt: &Inner, mark: opentui::widget::ExtmarkId) -> bool {
 
 /// The text a submit sends: each paste's mark replaced by its text (`expandTrackedPastedText`).
 pub fn expanded_text(prompt: &Inner) -> String {
-    let text = prompt.textarea.text();
+    let textarea = &prompt.textarea;
     let info = prompt.prompt.borrow();
-    let ranges = prompt
-        .textarea
+    let index = |offset| prompt_input::index_at(textarea, offset);
+    let ranges = textarea
         .extmarks()
         .into_iter()
         .filter_map(|mark| match prompt.parts.get(mark.id)? {
-            (Kind::Pasted, index) => Some((mark.start, mark.end, info["pasted"][index]["text"].as_str()?.to_owned())),
+            (Kind::Pasted, at) => {
+                Some((index(mark.start), index(mark.end), info["pasted"][at]["text"].as_str()?.to_owned()))
+            }
             _ => None,
         })
         .collect();
-    expand_tracked(&text, ranges)
+    expand_tracked(&textarea.text(), ranges)
 }
 
 /// The text a copy of the mouse selection puts on the clipboard: with the prompt focused, its paste labels
@@ -329,13 +331,16 @@ pub fn clipboard_text(tui: &crate::app::Tui, text: &str) -> String {
     let Some((start, end)) = range.filter(|_| text == textarea.selected_text()) else {
         return expand_placeholders(text, info["pasted"].as_array().map(Vec::as_slice).unwrap_or_default());
     };
+    // Byte indices in `text`, which is the textarea's text from `start`.
+    let base = prompt_input::index_at(textarea, start);
+    let index = |offset| prompt_input::index_at(textarea, offset) - base;
     let ranges = textarea
         .extmarks()
         .into_iter()
         .filter(|mark| mark.start >= start && mark.end <= end)
         .filter_map(|mark| match prompt.parts.get(mark.id)? {
-            (Kind::Pasted, index) => {
-                Some((mark.start - start, mark.end - start, info["pasted"][index]["text"].as_str()?.to_owned()))
+            (Kind::Pasted, at) => {
+                Some((index(mark.start), index(mark.end), info["pasted"][at]["text"].as_str()?.to_owned()))
             }
             _ => None,
         })
@@ -364,8 +369,9 @@ fn expand_placeholders(text: &str, pasted: &[Value]) -> String {
 }
 
 /// `expandPromptInputPastedText`: the prompt with its pastes' text in place, and the mentions after
-/// each paste moved by the length it gained, for the external editor.
-pub fn expand_prompt(prompt: &Value) -> Value {
+/// each paste moved by the length it gained, for the external editor. `index` gives the byte index of an offset in
+/// the prompt's text, from the buffer that shows it; the pasted text is in no buffer, so [`measure`] counts it.
+pub fn expand_prompt(prompt: &Value, index: impl Fn(u32) -> usize) -> Value {
     let ranges: Vec<(u32, u32, String)> = prompt["pasted"]
         .as_array()
         .map(Vec::as_slice)
@@ -394,18 +400,18 @@ pub fn expand_prompt(prompt: &Value) -> Value {
         }
     }
     let text = prompt["text"].as_str().unwrap_or_default();
+    let ranges = ranges.into_iter().map(|(start, end, part)| (index(start), index(end), part)).collect();
     next["text"] = Value::String(expand_tracked(text, ranges));
     next
 }
 
-/// Replaces each `(start, end)` offset range of `text` with its text, right to left so earlier offsets
+/// Replaces each `(start, end)` byte range of `text` with its text, right to left so earlier indices
 /// stay valid.
-fn expand_tracked(text: &str, mut ranges: Vec<(u32, u32, String)>) -> String {
+fn expand_tracked(text: &str, mut ranges: Vec<(usize, usize, String)>) -> String {
     ranges.sort_by_key(|range| std::cmp::Reverse(range.0));
-    ranges.into_iter().fold(text.to_owned(), |result, (start, end, part)| {
-        let (start, end) = (index_at(text, start), index_at(text, end));
-        format!("{}{part}{}", &result[..start], &result[end..])
-    })
+    ranges
+        .into_iter()
+        .fold(text.to_owned(), |result, (start, end, part)| format!("{}{part}{}", &result[..start], &result[end..]))
 }
 
 #[cfg(test)]
@@ -413,10 +419,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pastes_expand_right_to_left_by_offset() {
-        // Offsets are display columns: the wide character before the second paste counts twice.
+    fn pastes_expand_right_to_left() {
         let text = "[A] 世 [B] end";
-        let ranges = vec![(0, 3, "one\ntwo".to_owned()), (7, 10, "three".to_owned())];
+        let ranges = vec![(0, 3, "one\ntwo".to_owned()), (8, 11, "three".to_owned())];
         assert_eq!(expand_tracked(text, ranges), "one\ntwo 世 three end");
     }
 
@@ -439,7 +444,7 @@ mod tests {
             "files": [{ "uri": "file:///a.ts", "mention": { "start": 22, "end": 27, "text": "@a.ts" } }],
             "agents": [],
         });
-        let expanded = expand_prompt(&prompt);
+        let expanded = expand_prompt(&prompt, |offset| offset as usize);
         assert_eq!(expanded["text"], "x\ny\nz see @a.ts");
         // "x\ny\nz" measures 5, the label 17: the mention moves 12 to the left.
         assert_eq!(expanded["files"][0]["mention"]["start"], 10);

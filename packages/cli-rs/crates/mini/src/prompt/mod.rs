@@ -26,9 +26,9 @@ use opencode_api::generated::{SessionInboxDelivery, SessionInboxItem, SessionInb
 use opencode_ui::dialog::{DialogKeymap, route_keys};
 use opencode_ui::keymap::{Keybinds, KeymapLayer, TuiCommand};
 use opencode_ui::prompt_input::editor::{Mention, normalize, realign_mentions};
-use opencode_ui::prompt_input::parse::{self, measure};
+use opencode_ui::prompt_input::parse;
 use opencode_ui::prompt_input::paste::{Content, content, strip_ansi};
-use opencode_ui::prompt_input::{attach, replace};
+use opencode_ui::prompt_input::{self, attach, replace};
 use opentui::input::KeyEvent;
 use opentui::keymap::{Condition, Disposer};
 use opentui::native::{ClipboardOutcome, EditorQuery};
@@ -466,7 +466,7 @@ impl Prompt {
             Some("undo"),
             Box::new(move |ok| {
                 if let Some(inner) = weak.upgrade().filter(|_| ok) {
-                    let next = inner.current().append(&prompt);
+                    let next = inner.current().append(&prompt, prompt_input::end(&inner.textarea));
                     inner.restore(&next, None);
                 }
                 done(ok);
@@ -760,7 +760,7 @@ impl Inner {
             self.textarea.set_text(&prompt.text);
         });
         self.restore_parts(prompt.parts.clone());
-        let end = measure(&prompt.text);
+        let end = prompt_input::end(&self.textarea);
         self.textarea.set_cursor_offset(cursor.unwrap_or(end).min(end));
         self.paint();
         self.rows();
@@ -808,7 +808,7 @@ impl Inner {
     fn refresh(self: &Rc<Self>) {
         let cursor = self.cursor();
         let before = self.range(0, cursor);
-        let slash = parse::slash_trigger(&before);
+        let slash = parse::slash_trigger(&before).map(|index| prompt_input::offset_at(&self.textarea, index));
         let (mode, at) = {
             let state = self.state.borrow();
             (state.mode, state.at)
@@ -849,7 +849,7 @@ impl Inner {
         if cursor == 0 {
             return;
         }
-        if let Some(at) = parse::mention_trigger(&before) {
+        if let Some(at) = parse::mention_trigger(&before).map(|index| prompt_input::offset_at(&self.textarea, index)) {
             {
                 let mut state = self.state.borrow_mut();
                 state.at = at;
@@ -969,11 +969,11 @@ impl Inner {
                 let end = match head {
                     Some(_) if shell => cursor,
                     None => cursor,
-                    Some(_) if local => measure(&text),
-                    Some((_, _, end)) => measure(&text[..end]),
+                    Some(_) if local => prompt_input::end(&self.textarea),
+                    Some((_, _, end)) => prompt_input::offset_at(&self.textarea, end),
                 };
                 self.edit(|| replace(&self.textarea, 0, end, &inserted));
-                self.textarea.set_cursor_offset(measure(&inserted));
+                self.textarea.set_cursor_offset(prompt_input::offset_at(&self.textarea, inserted.len()));
                 self.hide();
                 if !shell {
                     let prompt = self.current();
@@ -988,7 +988,7 @@ impl Inner {
                 let mention = format!("@{value}");
                 let inserted = if next == " " { mention.clone() } else { format!("{mention} ") };
                 self.edit(|| replace(&self.textarea, at, cursor, &inserted));
-                let end = at + measure(&mention);
+                let end = prompt_input::after(&self.textarea, at, &mention);
                 let mut part = part;
                 part.set_mention(Mention { start: at, end, text: mention });
                 if let Part::File(file) = &part {
@@ -1180,7 +1180,7 @@ impl Inner {
         let cursor = self.cursor();
         let step = {
             let state = self.state.borrow();
-            state.history.step(up, &text, cursor)
+            state.history.step(up, &text, cursor, prompt_input::end(&self.textarea))
         };
         if let Some((_, cursor)) = step.apply {
             if up && self.state.borrow().history.index.is_none() {
@@ -1195,10 +1195,10 @@ impl Inner {
                     Some(index) => state.history.items[index].clone(),
                 }
             };
-            self.restore(&value, Some(cursor));
+            self.restore(&value, cursor);
             return true;
         }
-        let end = measure(&text);
+        let end = prompt_input::end(&self.textarea);
         let view = self.textarea.view();
         let row = view.viewport().map_or(0, |viewport| viewport.y)
             + view.position(EditorQuery::Cursor).map_or(0, |position| position.visual_row);
@@ -1248,7 +1248,12 @@ impl Inner {
                     let text = normalize(&content);
                     let mentions: Vec<Option<Mention>> =
                         current.parts.iter().map(|part| part.mention().cloned()).collect();
-                    let aligned = realign_mentions(&text, &mentions);
+                    // The buffer measures the mentions' new offsets, so it shows the text first.
+                    inner.edit(|| {
+                        inner.textarea.set_text(&text);
+                    });
+                    let aligned =
+                        realign_mentions(&text, &mentions, |index| prompt_input::offset_at(&inner.textarea, index));
                     let parts = current
                         .parts
                         .iter()
@@ -1376,7 +1381,7 @@ impl Inner {
             self.textarea.insert(format!("{label} "));
         });
         let end = self.cursor().saturating_sub(1);
-        let start = end.saturating_sub(measure(&label));
+        let start = prompt_input::offset_at(&self.textarea, prompt_input::index_at(&self.textarea, end) - label.len());
         let mark = self.textarea.add_extmark(start..end, ExtmarkOptions::default().atomic());
         let mime = uri.strip_prefix("data:").and_then(|rest| rest.split(';').next()).map(str::to_owned);
         let mut state = self.state.borrow_mut();
