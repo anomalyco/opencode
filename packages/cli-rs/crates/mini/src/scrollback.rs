@@ -716,7 +716,7 @@ impl Writer {
     }
 
     fn markdown(&self, commit: &Commit, body: &Body, streaming: bool) -> Markdown {
-        entry_markdown(self.scrollback.app(), &self.theme, self.mono, commit, body, streaming)
+        entry_markdown(self.scrollback.app(), &self.theme, commit, body, streaming)
     }
 
     fn summary_widget(&self, summary: &TurnSummary) -> Text {
@@ -753,7 +753,7 @@ pub fn entry_content(app: &App, theme: &RunTheme, mono: bool, commit: &Commit, b
             Text::new(app, content.clone()).wrap(WrapMode::Word).fg(fg).attributes(attributes).as_any()
         }
         Body::Markdown(content) | Body::Code { content, .. } => {
-            let markdown = entry_markdown(app, theme, mono, commit, body, false);
+            let markdown = entry_markdown(app, theme, commit, body, false);
             markdown.set_markdown(content.clone());
             markdown.as_any()
         }
@@ -764,7 +764,7 @@ pub fn entry_content(app: &App, theme: &RunTheme, mono: bool, commit: &Commit, b
 
 /// Markdown for assistant text, and for code bodies in Markdown such as reasoning. Code in other languages (an
 /// unknown tool's metadata as JSON) renders as Markdown text too (`parity/deviations/M06-mini-output.md`).
-fn entry_markdown(app: &App, theme: &RunTheme, mono: bool, commit: &Commit, body: &Body, streaming: bool) -> Markdown {
+fn entry_markdown(app: &App, theme: &RunTheme, commit: &Commit, body: &Body, streaming: bool) -> Markdown {
     let color = entry_color(commit, theme);
     let code = matches!(body, Body::Code { .. });
     // A code body draws in one color (`<code fg>`); the conceal of the TS view hides its markers.
@@ -789,15 +789,12 @@ fn entry_markdown(app: &App, theme: &RunTheme, mono: bool, commit: &Commit, body
         let rule = syntax.get("conceal").and_then(|style| style.fg).unwrap_or(color);
         (MarkdownColors { text: color, rule, ..theme.markdown }, syntax)
     };
-    let table = if mono {
-        MarkdownTableOptions {
-            style: MarkdownTableStyle::Columns,
-            width_mode: Some(ColumnWidthMode::Content),
-            borders: Some(false),
-            ..MarkdownTableOptions::default()
-        }
-    } else {
-        MarkdownTableOptions { width_mode: Some(ColumnWidthMode::Content), ..MarkdownTableOptions::default() }
+    // Borderless columns in both modes: TS's mono options say so, and its `{ widthMode: "content" }` resolves to them
+    // in Core's top-level block mode, which mini's view uses.
+    let table = MarkdownTableOptions {
+        style: MarkdownTableStyle::Columns,
+        width_mode: Some(ColumnWidthMode::Content),
+        ..MarkdownTableOptions::default()
     };
     let syntax = if code { recolor(syntax, color) } else { syntax };
     opencode_ui::grammars::register();
@@ -949,7 +946,7 @@ mod tests {
         let body = Body::Markdown(String::new());
         let render = |text: &str, streaming: bool| {
             let app = opentui::testing::TestApp::new(30, 12);
-            let markdown = entry_markdown(app.app(), &theme, false, &commit, &body, streaming);
+            let markdown = entry_markdown(app.app(), &theme, &commit, &body, streaming);
             app.app().root().add(&markdown);
             markdown.set_markdown(text);
             app.render().text()
@@ -972,12 +969,34 @@ mod tests {
         });
         let commit = assistant("", Phase::Final);
         let app = opentui::testing::TestApp::new(10, 5);
-        let markdown = entry_markdown(app.app(), &theme, false, &commit, &Body::Markdown(String::new()), false);
+        let markdown = entry_markdown(app.app(), &theme, &commit, &Body::Markdown(String::new()), false);
         app.app().root().add(&markdown);
         markdown.set_markdown("a\n\n---\n\nb");
         let capture = app.render();
         assert_eq!(capture.cell(0, 2).unwrap().symbol, "─", "{}", capture.text());
         assert_eq!(capture.cell(0, 2).unwrap().fg, entry_color(&commit, &theme));
+    }
+
+    /// A table is borderless columns two cells apart in both modes, as TS's top-level Markdown draws it. The `-:` column
+    /// is right-aligned, where TS on Core 0.8.4 left-aligns it (`parity/deviations/OT2112-table-alignment.md`).
+    #[test]
+    fn tables_are_borderless_columns() {
+        let commit = assistant("", Phase::Final);
+        for mono in [false, true] {
+            let theme = crate::theme::resolve(&crate::theme::ThemeInput {
+                name: None,
+                mode: None,
+                palette: None,
+                directories: Vec::new(),
+                mono,
+            });
+            let app = opentui::testing::TestApp::new(20, 3);
+            let markdown = entry_markdown(app.app(), &theme, &commit, &Body::Markdown(String::new()), false);
+            app.app().root().add(&markdown);
+            markdown.set_markdown("| a | bb |\n| - | -: |\n| 1 | 2 |");
+            let rows: Vec<String> = app.render().text().lines().map(|row| row.trim_end().to_owned()).collect();
+            assert_eq!(rows, ["a  bb", "1   2"], "mono {mono}");
+        }
     }
 
     /// Mini hides the tildes of `~~x~~` and strikes the text through, in every theme and body: native code strikes
@@ -998,7 +1017,7 @@ mod tests {
         for theme in [&full, &mono] {
             for body in [Body::Markdown(String::new()), code.clone()] {
                 let app = opentui::testing::TestApp::new(30, 3);
-                let markdown = entry_markdown(app.app(), theme, false, &commit, &body, false);
+                let markdown = entry_markdown(app.app(), theme, &commit, &body, false);
                 app.app().root().add(&markdown);
                 markdown.set_markdown("a ~~gone~~ b");
                 let capture = app.render();
