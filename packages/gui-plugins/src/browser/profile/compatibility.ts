@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import type { ExtensionFiles, Manifest } from "./extensions"
-import type { ExtensionCompatibility, ExtensionFeature } from "./ipc"
+import type { ExtensionAccess, ExtensionCompatibility, ExtensionFeature } from "./ipc"
 
 /**
  * Permissions whose API works in this browser: Electron 44's own (Chromium 152), and the ones the profile adds in
@@ -117,6 +117,40 @@ export function extensionCompatibility(
   if (cause) return { level: "unsupported", cause, missing }
 
   return { level: missing.length > 0 ? "partial" : "supported", missing }
+}
+
+const ContentScript = Schema.Struct({ matches: Schema.optional(Schema.Array(Schema.Unknown)) })
+
+/**
+ * What an extension can do once added, from what its manifest requires, most far-reaching first, for the user to see
+ * before adding it. Host permissions and content-script matches are the sites whose pages it reads and changes;
+ * `cookies` reads and changes sign-ins there, `tabs` and `webNavigation` see every address the user visits, and
+ * `clipboardRead` reads what the user copies.
+ */
+export function extensionAccess(manifest: Manifest): ExtensionAccess[] {
+  const permissions = (manifest.permissions ?? []).filter(Schema.is(Schema.String))
+
+  const sites = [
+    ...(manifest.host_permissions ?? []),
+    ...permissions,
+    ...(manifest.content_scripts ?? []).filter(Schema.is(ContentScript)).flatMap((script) => script.matches ?? []),
+  ].filter(
+    (item): item is string => Schema.is(Schema.String)(item) && (item === "<all_urls>" || item.includes("://")),
+  )
+
+  // A pattern whose host is `*` covers every site, whatever its scheme and path.
+  const all = sites.some((pattern) => pattern === "<all_urls>" || /^[^:]+:\/\/\*(?:\/|$)/.test(pattern))
+
+  const access: (ExtensionAccess | undefined)[] = [
+    all ? "allSites" : sites.length > 0 ? "someSites" : undefined,
+    permissions.includes("cookies") ? "cookies" : undefined,
+    permissions.includes("tabs") || permissions.includes("webNavigation") || permissions.includes("history")
+      ? "activity"
+      : undefined,
+    permissions.includes("clipboardRead") ? "clipboard" : undefined,
+  ]
+
+  return access.filter((item) => item !== undefined)
 }
 
 /** Why an extension will not do its job here; only what it requires counts, not what it may ask for later. */

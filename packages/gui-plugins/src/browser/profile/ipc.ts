@@ -3,6 +3,9 @@ import { Ipc } from "@opencode/plugin/gui"
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 
+/** An image as a data URL, as icons cross to the window. */
+const DataImage = Schema.String.check(Schema.isStartingWith("data:image/"))
+
 const text = (maximum: number) => Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(maximum))
 
 /**
@@ -50,6 +53,16 @@ export const ExtensionCompatibility = Schema.Struct({
 
 export type ExtensionCompatibility = typeof ExtensionCompatibility.Type
 
+/**
+ * What an extension can do once added, from its manifest, shown before it is added.
+ * - `allSites`: read and change every website's pages. `someSites`: some websites' pages.
+ * - `cookies`: read and change cookies, sign-ins included, on those sites.
+ * - `activity`: see the address of every page the user visits. `clipboard`: read what the user copies.
+ */
+export const ExtensionAccess = Schema.Literals(["allSites", "someSites", "cookies", "activity", "clipboard"])
+
+export type ExtensionAccess = typeof ExtensionAccess.Type
+
 /** An extension the desktop browser installed, as the window lists it. */
 export const ProfileExtension = Schema.Struct({
   id: text(64),
@@ -58,7 +71,7 @@ export const ProfileExtension = Schema.Struct({
   enabled: Schema.Boolean,
   /** `folder`: loaded in place from a directory the user picked. `store`: from a store listing. `browser`: copied from another browser's profile. */
   source: Schema.Literals(["folder", "store", "browser"]),
-  icon: Schema.optional(Schema.String.check(Schema.isStartingWith("data:image/"))),
+  icon: Schema.optional(DataImage),
   /** The `chrome-extension://` page its toolbar button opens. */
   popup: Schema.optional(Schema.String),
   /** Its options page. */
@@ -66,6 +79,7 @@ export const ProfileExtension = Schema.Struct({
   /** Why an enabled extension did not load. */
   error: Schema.optional(Schema.String),
   compatibility: ExtensionCompatibility,
+  access: Schema.Array(ExtensionAccess),
   /**
    * Its toolbar button, for an extension that has one: what it set for the active tab of the last window. `icon`
    * replaces the extension's own while set; `badge` is the short text over it, in `badgeColor` and `badgeTextColor`.
@@ -73,7 +87,7 @@ export const ProfileExtension = Schema.Struct({
   action: Schema.optional(
     Schema.Struct({
       title: Schema.optional(Schema.String),
-      icon: Schema.optional(Schema.String.check(Schema.isStartingWith("data:image/"))),
+      icon: Schema.optional(DataImage),
       badge: Schema.optional(Schema.String),
       badgeColor: Schema.optional(Schema.String),
       badgeTextColor: Schema.optional(Schema.String),
@@ -90,7 +104,7 @@ export const ProfileSource = Schema.Struct({
   name: Schema.String,
   engine: Schema.Literals(["chromium", "firefox", "safari"]),
   /** The browser's own icon as a data URL, where its application was found. */
-  icon: Schema.optional(Schema.String.check(Schema.isStartingWith("data:image/"))),
+  icon: Schema.optional(DataImage),
   profiles: Schema.Array(Schema.Struct({ id: text(4096), name: Schema.String })),
 })
 
@@ -127,16 +141,17 @@ export type ImportResult = typeof ImportResult.Type
  * - `download`: the store did not serve the package.
  * - `load`: Chromium refused the extension; `message` says why.
  *
- * `unsupported`: nothing was installed, because the extension will not work here; installing again with `force` adds
- * it anyway.
+ * `unsupported`: nothing was installed, because the extension will not work here; `review`: nothing was installed yet,
+ * because the extension asks for `access` the user has not seen. Installing again with `force` adds it.
  */
 export const InstallResult = Schema.Union([
   Schema.Struct({ type: Schema.Literal("installed"), extension: ProfileExtension }),
   Schema.Struct({
-    type: Schema.Literal("unsupported"),
+    type: Schema.Literals(["unsupported", "review"]),
     name: Schema.String,
-    icon: Schema.optional(Schema.String.check(Schema.isStartingWith("data:image/"))),
+    icon: Schema.optional(DataImage),
     compatibility: ExtensionCompatibility,
+    access: Schema.Array(ExtensionAccess),
   }),
   Schema.Struct({
     type: Schema.Literal("failed"),
@@ -183,9 +198,10 @@ export const BrowserProfile = Ipc.define({
           id: text(64),
           name: Schema.String,
           version: Schema.String,
-          icon: Schema.optional(Schema.String),
+          icon: Schema.optional(DataImage),
           installed: Schema.Boolean,
           compatibility: ExtensionCompatibility,
+          access: Schema.Array(ExtensionAccess),
         }),
       ),
     },

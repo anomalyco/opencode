@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { extensionCompatibility } from "./compatibility"
+import { extensionAccess, extensionCompatibility } from "./compatibility"
 import type { Manifest } from "./extensions"
 
 const manifest = (fields: Partial<Manifest>): Manifest => ({ manifest_version: 3, name: "x", version: "1", ...fields })
@@ -57,7 +57,15 @@ test.each([
     manifest: manifest({
       manifest_version: 2,
       background: { page: "background.html" },
-      permissions: ["storage", "tabs", "webRequest", "webRequestBlocking", "contextMenus", "webNavigation", "<all_urls>"],
+      permissions: [
+        "storage",
+        "tabs",
+        "webRequest",
+        "webRequestBlocking",
+        "contextMenus",
+        "webNavigation",
+        "<all_urls>",
+      ],
       browser_action: { default_popup: "popup-fenix.html" },
     }),
     expected: { level: "supported", missing: [] },
@@ -85,7 +93,18 @@ test.each([
     name: "Vimium",
     manifest: manifest({
       background: worker,
-      permissions: ["tabs", "bookmarks", "history", "storage", "sessions", "notifications", "scripting", "webNavigation", "search", "favicon"],
+      permissions: [
+        "tabs",
+        "bookmarks",
+        "history",
+        "storage",
+        "sessions",
+        "notifications",
+        "scripting",
+        "webNavigation",
+        "search",
+        "favicon",
+      ],
       content_scripts: [{ js: ["lib/settings.js", "content_scripts/link_hints.js"], all_frames: true }],
       action: { default_popup: "pages/action.html" },
     }),
@@ -100,4 +119,33 @@ test.each([
   },
 ])("$name", (row) => {
   expect(extensionCompatibility(row.manifest, row.files)).toEqual(row.expected)
+})
+
+test.each([
+  {
+    name: "a password manager",
+    manifest: manifest({
+      permissions: ["tabs", "cookies", "clipboardRead"],
+      host_permissions: ["https://*/*", "http://*/*"],
+    }),
+    expected: ["allSites", "cookies", "activity", "clipboard"],
+  },
+  {
+    name: "a content blocker for every page",
+    manifest: manifest({ permissions: ["storage"], content_scripts: [{ matches: ["<all_urls>"], js: ["x.js"] }] }),
+    expected: ["allSites"],
+  },
+  {
+    name: "a site helper",
+    manifest: manifest({ host_permissions: ["https://*.github.com/*"], permissions: ["webNavigation"] }),
+    expected: ["someSites", "activity"],
+  },
+  {
+    name: "a Manifest V2 extension with hosts among its permissions",
+    manifest: manifest({ manifest_version: 2, permissions: ["*://*/*", "storage"] }),
+    expected: ["allSites"],
+  },
+  { name: "a formatter that asks for nothing", manifest: manifest({ permissions: ["storage"] }), expected: [] },
+])("$name asks for $expected", (row) => {
+  expect(extensionAccess(row.manifest)).toEqual([...row.expected])
 })

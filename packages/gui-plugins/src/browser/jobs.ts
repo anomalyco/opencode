@@ -151,7 +151,9 @@ export function createProfileJobs(
       if (result.type === "installed")
         return { text: ctx.t("extensions.added", { name: result.extension.name }), error: false }
 
-      if (result.type === "unsupported")
+      if (result.type === "review") return { text: ctx.t("extensions.review", { name: result.name }), error: false }
+
+      if (result.type !== "failed")
         return {
           text: ctx.t("extensions.unsupported", { name: result.name }),
           error: true,

@@ -4,7 +4,7 @@ import electron, { app, type Session } from "electron"
 import { Schema } from "effect"
 import type { Log, Storage } from "@opencode/plugin/gui/main"
 import { fileURLWithin } from "../policy"
-import { extensionCompatibility } from "./compatibility"
+import { extensionAccess, extensionCompatibility } from "./compatibility"
 import { browserUserAgent, cookieDetails, parseCookieFile, PROBE_COOKIE, type CookieRead } from "./cookie"
 import { snapshotDatabase } from "./database"
 import { createExtensionApis } from "./extension-api"
@@ -141,6 +141,7 @@ export async function createBrowserProfile(input: {
       options: page(pages.options),
       error: errors.get(record.id),
       compatibility: await compatibilityOf(record.directory, manifest),
+      access: extensionAccess(manifest),
     }
   }
 
@@ -202,27 +203,30 @@ export async function createBrowserProfile(input: {
     })
 
   /**
-   * Loads a directory as a new extension and remembers it, or reports why it is not one. One that will not work here
-   * loads only with `force`; otherwise a copy this app made is deleted again.
+   * Loads a directory as a new extension and remembers it, or reports why it is not one. One that will not work here,
+   * or that asks for access the user has not seen, loads only with `force`; until then a copy this app made is
+   * deleted again.
    */
   const add = async (folder: string, source: StoredExtension["source"], force = false): Promise<InstallResult> => {
     const manifest = await readManifest(folder)
 
     if (!manifest || manifest.theme !== undefined) return { type: "failed", reason: "manifest" }
     const compatibility = await compatibilityOf(folder, manifest)
+    const access = extensionAccess(manifest)
     // Installing one again, such as an update, keeps it, as the user added it before.
     const known = stored.value.find((record) => record.directory === folder)
+    const review = compatibility.level === "unsupported" ? "unsupported" : access.length > 0 ? "review" : undefined
 
     // Chromium keeps the loaded copy's files open; the new one loads in its place.
     if (known && session.extensions.getExtension(known.id)) session.extensions.removeExtension(known.id)
 
-    if (compatibility.level === "unsupported" && !force && !known) {
+    if (review && !force && !known) {
       const name = await displayName(folder, manifest)
       const icon = await extensionIcon(folder, manifest)
 
       if (source !== "folder") await rm(folder, { recursive: true, force: true }).catch(() => undefined)
 
-      return { type: "unsupported", name, icon, compatibility }
+      return { type: review, name, icon, compatibility, access }
     }
 
     const extension = await session.extensions.loadExtension(folder, { allowFileAccess: false }).then(
@@ -271,7 +275,7 @@ export async function createBrowserProfile(input: {
 
     const result = await add(folder, source, force)
 
-    if (result.type === "installed" || (result.type === "unsupported" && !swapped.backup)) {
+    if (result.type === "installed" || (result.type !== "failed" && !swapped.backup)) {
       if (swapped.backup) void rm(swapped.backup, { recursive: true, force: true }).catch(() => undefined)
 
       return result
@@ -407,6 +411,7 @@ export async function createBrowserProfile(input: {
               icon: await extensionIcon(item.directory, manifest),
               installed: stored.value.some((record) => record.id === item.id),
               compatibility: await compatibilityOf(item.directory, manifest),
+              access: extensionAccess(manifest),
             },
           ]
         }),

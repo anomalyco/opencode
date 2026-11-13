@@ -20,6 +20,7 @@ const Manifest = Schema.Struct({
   // What the compatibility check reads. Lists keep any entry, and the keys below only need to be present, so an
   // unusual value never makes a manifest unreadable.
   permissions: Schema.optional(Schema.Array(Schema.Unknown)),
+  host_permissions: Schema.optional(Schema.Array(Schema.Unknown)),
   optional_permissions: Schema.optional(Schema.Array(Schema.Unknown)),
   optional_host_permissions: Schema.optional(Schema.Array(Schema.Unknown)),
   background: Schema.optional(Schema.Unknown),

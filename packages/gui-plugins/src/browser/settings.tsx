@@ -4,7 +4,7 @@ import { createLatest, usePlugin, type IconName } from "@opencode/plugin/gui"
 import { choiceLabel, choiceValue, Glyph, profileChoices } from "./choices"
 import type definition from "./index"
 import { createProfileJobs, type JobMessage } from "./jobs"
-import type { ExtensionCompatibility, ProfileExtension, ProfileSource } from "./profile/ipc"
+import type { ExtensionAccess, ExtensionCompatibility, ProfileExtension, ProfileSource } from "./profile/ipc"
 
 /**
  * Settings › Browser: whether links open in the pane, importing sign-ins, the extensions the profile runs, and its
@@ -126,6 +126,8 @@ export default function BrowserSettings() {
           <ui.SettingsRow id="settings-browser-import" title={<Muted>{ctx.t("settings.import.none")}</Muted>} />
         </Show>
         <ui.SettingsRow
+          // Settings search reaches the import section before main lists the browsers.
+          id={jobs.sourcesLoaded() ? undefined : "settings-browser-import"}
           title={
             <Identity
               fallback="file-document"
@@ -278,11 +280,14 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
     return job?.type === "install-browser" && job.id === id
   }
 
-  // The install that stopped because its extension will not work here, which the user may still add.
+  // The install that stopped for the user to confirm: its extension will not work here, or asks for access the user
+  // has not seen yet.
   const confirming = () => {
     const last = jobs.last()
 
-    if (last?.outcome.type !== "installed" || last.outcome.result.type !== "unsupported") return undefined
+    if (last?.outcome.type !== "installed") return undefined
+
+    if (last.outcome.result.type !== "unsupported" && last.outcome.result.type !== "review") return undefined
     const job = last.job
     const result = last.outcome.result
 
@@ -374,14 +379,16 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                   >
                     {(compatibility) => (
                       <ui.Tooltip value={<CompatibilityDetails compatibility={compatibility()} />}>
-                        <p class="text-v2-text-text-muted">{message().text}</p>
+                        <p tabIndex={0} class="text-v2-text-text-muted">
+                          {message().text}
+                        </p>
                       </ui.Tooltip>
                     )}
                   </Show>
                 }
               >
                 {(confirm) => (
-                  <ChoiceRow image={confirm().result.icon} name={confirm().result.name}>
+                  <ChoiceRow image={confirm().result.icon} name={confirm().result.name} access={confirm().result.access}>
                     <CompatibilityNote compatibility={confirm().result.compatibility} />
                     <ui.Button
                       size="small"
@@ -389,7 +396,9 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                       disabled={blocked()}
                       onClick={() => jobs.start({ ...confirm().job, force: true })}
                     >
-                      {ctx.t("settings.extensions.anyway")}
+                      {confirm().result.type === "unsupported"
+                        ? ctx.t("settings.extensions.anyway")
+                        : ctx.t("settings.extensions.add")}
                     </ui.Button>
                   </ChoiceRow>
                 )}
@@ -398,6 +407,13 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                 {(compatibility) => (
                   <span class="text-v2-text-text-muted">
                     <CompatibilityDetails compatibility={compatibility()} />
+                  </span>
+                )}
+              </Show>
+              <Show when={confirming()?.result.access.length ? confirming()?.result.access : undefined}>
+                {(access) => (
+                  <span class="text-v2-text-text-muted">
+                    <AccessDetails access={access()} />
                   </span>
                 )}
               </Show>
@@ -429,7 +445,7 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                 }
               >
                 {(item) => (
-                  <ChoiceRow image={item.icon} name={item.name}>
+                  <ChoiceRow image={item.icon} name={item.name} access={item.access}>
                     <CompatibilityNote compatibility={item.compatibility} />
                     <ui.Button
                       size="small"
@@ -471,18 +487,47 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
 const ACTION_COLUMN = "min-w-24 justify-center"
 
 /**
- * An extension the user may add: its icon, its name in the room left, then its verdict and the action, which stay
- * whole while the name truncates.
+ * An extension the user may add: its icon, its name in the room left with the most far-reaching access it asks for
+ * under it (all of it on hover or focus), then its verdict and the action, which stay whole while the name truncates.
  */
-function ChoiceRow(props: { image?: string; name: string; children: JSX.Element }) {
+function ChoiceRow(props: { image?: string; name: string; access: readonly ExtensionAccess[]; children: JSX.Element }) {
+  const ctx = usePlugin<typeof definition>()
+  const ui = ctx.ui
+
   return (
-    <div class="flex h-9 items-center gap-3">
+    <div class="flex h-11 items-center gap-3">
       <Glyph image={props.image} fallback="extensions" />
-      <span class="min-w-0 flex-1 truncate text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-base">
-        {props.name}
+      <span class="flex min-w-0 flex-1 flex-col">
+        <span class="truncate text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-base">{props.name}</span>
+        <Show when={props.access[0]}>
+          {(first) => (
+            <span class="flex min-w-0">
+              <ui.Tooltip value={<AccessDetails access={props.access} />}>
+                <span
+                  tabIndex={0}
+                  class="block truncate text-[12px] leading-[var(--line-height-compact)] text-v2-text-text-muted"
+                >
+                  {ctx.t(`extensions.access.${first()}`)}
+                </span>
+              </ui.Tooltip>
+            </span>
+          )}
+        </Show>
       </span>
       {props.children}
     </div>
+  )
+}
+
+/** Everything an extension can do once added, one line each. */
+function AccessDetails(props: { access: readonly ExtensionAccess[] }) {
+  const ctx = usePlugin<typeof definition>()
+
+  return (
+    <span class="flex flex-col gap-1">
+      <span>{ctx.t("extensions.access.title")}</span>
+      <For each={props.access}>{(item) => <span class="ps-2">{ctx.t(`extensions.access.${item}`)}</span>}</For>
+    </span>
   )
 }
 
@@ -526,6 +571,7 @@ function CompatibilityNote(props: { compatibility: ExtensionCompatibility }) {
           <ui.Tooltip value={<CompatibilityDetails compatibility={props.compatibility} />}>
             <span
               data-compatibility={shown()}
+              tabIndex={0}
               class="whitespace-nowrap text-end text-[13px] font-[440] leading-[var(--line-height-base)]"
               classList={{
                 "text-v2-state-fg-warning": shown() === "unsupported",
