@@ -216,8 +216,11 @@ impl Host for Tui {
             });
     }
 
-    fn dialog(&self, id: &str, dialog: abi::Dialog) {
-        super::panel::show(self, id, dialog);
+    fn dialog(&self, id: &str, generation: u64, dialog: abi::Dialog) {
+        // A dialog of an activation that ended, or of a setup that was not adopted, shows nowhere.
+        if self.plugins.live(id, generation) {
+            super::panel::show(self, id, generation, dialog);
+        }
     }
 
     fn dialog_open(&self, id: &str, key: &str) -> bool {
@@ -389,6 +392,8 @@ pub struct Reads {
     batch: RefCell<abi::Changed>,
     /// The plugin panel on screen.
     pub(super) panel: RefCell<Option<super::panel::Live>>,
+    /// The plugin and activation whose dialog is on screen, until it closes.
+    pub(super) owner: RefCell<Option<(String, u64)>>,
 }
 
 impl Reads {

@@ -88,7 +88,7 @@ pub enum Command {
     Arm(Fault),
     /// The command that opens that dialog, then a reload, with no frame between: the dialog's effect waits.
     DialogThenReload(Dialog, u8),
-    /// Enter on the open dialog, then a reload, with no frame between: the dialog's action waits.
+    /// A reload queued, then Enter on the open dialog: the confirmed action runs after the reload, in the same drain.
     EnterThenReload(u8),
     Exit,
 }
@@ -266,18 +266,19 @@ impl Backend for Builds {
     }
 }
 
-/// A TUI on home, with the probe's `build` in its plugins directory, or without the probe (the twin).
+/// A TUI on a route, with the probe's `build` in its plugins directory, or without the probe (the twin).
 struct World {
     harness: Harness,
-    probe: Option<(Loader, std::path::PathBuf, opencode_util::temp::TempDir)>,
+    probe: Option<(Rc<Loader>, std::path::PathBuf, opencode_util::temp::TempDir)>,
     exited: bool,
 }
 
 impl World {
     /// The TUI, not yet settled: the first [`World::settle`] drains what the load asked for.
-    fn open(build: Option<u8>) -> Self {
+    fn open(build: Option<u8>, route: Route) -> Self {
         let deps = Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) };
         let harness = support::mount(80, 24, deps);
+        harness.tui.navigate(route);
         let probe = build.map(|build| {
             let root = opencode_util::temp::tempdir().unwrap();
             // The project root, so the loader looks for plugins in this directory and none above it.
@@ -286,7 +287,7 @@ impl World {
             let dir = config.join("plugins").join("probe");
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(dir.join(entry_file()), [build]).unwrap();
-            let loader = Loader::new(Rc::new(Builds), config, root.path().to_path_buf(), Vec::new());
+            let loader = Rc::new(Loader::new(Rc::new(Builds), config, root.path().to_path_buf(), Vec::new()));
             loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
             (loader, dir, root)
         });
@@ -331,7 +332,18 @@ impl World {
                     ARMED.set(Some(fault));
                 }
             }
-            Command::DialogThenReload(..) | Command::EnterThenReload(_) => unreachable!("run splits a batch"),
+            // An event drains what it queued, so the reload is queued first: the confirmed action waits behind it.
+            Command::EnterThenReload(build) => {
+                if let Some((loader, dir, _)) = &self.probe {
+                    std::fs::write(dir.join(entry_file()), [build]).unwrap();
+                    let (loader, tui) = (loader.clone(), tui.clone());
+                    app.app().defer(move |_| {
+                        loader.reconcile(&host(&tui), &tui.plugins);
+                    });
+                }
+                app.press("enter");
+            }
+            Command::DialogThenReload(..) => unreachable!("run splits a batch"),
             Command::Exit => {
                 tui.plugins.deactivate_all();
                 self.exited = true;
@@ -563,6 +575,14 @@ impl Reference {
                 _ => Err(format!("a call after the exit started: {calls:?}")),
             };
         }
+        // The confirm comes first; its action waits behind the reload.
+        let command = match command {
+            Some(Command::EnterThenReload(build)) => {
+                self.enter();
+                Some(Command::Reload(build))
+            }
+            command => command,
+        };
         let (before, listed) = (self.life, self.listed.clone());
         let mut expected: VecDeque<Expect> = VecDeque::new();
         match command {
@@ -594,11 +614,7 @@ impl Reference {
             }
             Some(Command::Escape) => self.dialog = None,
             // A confirmed prompt or select runs `probe.run` once the frame comes. The panel has no action and stays.
-            Some(Command::Enter) => match self.dialog.take() {
-                Some((Dialog::Panel, a, build)) => self.dialog = Some((Dialog::Panel, a, build)),
-                Some((_, a, _)) => self.confirm = Some(a),
-                None => {}
-            },
+            Some(Command::Enter) => self.enter(),
             Some(Command::Home) => self.page = Page::Home,
             Some(Command::Route) => self.page = Page::Probe,
             Some(Command::Reload(build)) if build != self.file => {
@@ -854,8 +870,8 @@ fn run(commands: &[Command]) -> Option<Failure> {
     LOG.take();
     ARMED.set(None);
     TOKENS.take();
-    let mut world = World::open(Some(1));
-    let mut twin = World::open(None);
+    let mut world = World::open(Some(1), Route::Home);
+    let mut twin = World::open(None, Route::Home);
     let mut reference = Reference::new(1);
     let reports = world.settle();
     twin.settle();
@@ -869,11 +885,12 @@ fn run(commands: &[Command]) -> Option<Failure> {
     for (step, &command) in commands.iter().enumerate() {
         let parts = match command {
             Command::DialogThenReload(dialog, build) => vec![Command::Dialog(dialog), Command::Reload(build)],
-            Command::EnterThenReload(build) => vec![Command::Enter, Command::Reload(build)],
             command => vec![command],
         };
         let (life, last) = (reference.life, parts.len() - 1);
-        let reload = parts.iter().any(|part| matches!(part, Command::Reload(build) if *build != reference.file));
+        let reload = parts.iter().any(
+            |part| matches!(part, Command::Reload(build) | Command::EnterThenReload(build) if *build != reference.file),
+        );
         let before = reload.then(|| (world.observe(false), world.frame(), life));
         let (mut calls, mut reports) = (Vec::new(), Vec::new());
         for (index, &part) in parts.iter().enumerate() {
@@ -908,6 +925,8 @@ fn run(commands: &[Command]) -> Option<Failure> {
     // Dropping the TUI releases the plugin: an active instance is destroyed once, a failed one not at all.
     take_calls();
     let expected: Vec<Kind> = reference.active().filter(|_| !world.exited).map(|_| Kind::Dispose).into_iter().collect();
+    // An open dialog's stack holds the app, and so the TUI, past the drop: the dialogs close first, as at an exit.
+    world.harness.tui.dialogs.clear();
     drop(world);
     let dropped: Vec<Kind> = take_calls().iter().map(|call| call.kind).collect();
     let detail = (dropped != expected).then(|| format!("dropped while {:?}: {dropped:?}", reference.life));
@@ -1023,8 +1042,7 @@ fn fresh(build: u8, route: Route) -> Fresh {
     }
     // The fresh host's calls, fault and token are its own, also as it is dropped.
     let (held, armed, tokens) = (LOG.take(), ARMED.take(), TOKENS.with_borrow(Vec::len));
-    let world = World::open(Some(build));
-    world.harness.tui.navigate(route);
+    let world = World::open(Some(build), route);
     world.settle();
     let (observed, frame) = (world.observe(true), world.frame());
     let log: Vec<Kind> = collapse(LOG.take().iter());
@@ -1060,26 +1078,10 @@ fn collapse<'a>(calls: impl Iterator<Item = &'a Call>) -> Vec<Kind> {
 const OPEN: &[(&str, &str, &[Command])] = &[
     // Review bigboi-1: a failed plugin's replacement of `home.footer` still wins the slot and hides the footer.
     ("a-failed-slot-replacement-gives-the-slot-back", "ledger", &[Command::Arm(Fault::Command), Command::Run]),
-    // Review bigboi-2 and carbon-pt-1: a dialog asked for by an activation that ended, or by a setup that failed, opens.
-    ("a-dispose-opens-no-dialog-on-a-reload", "ledger", &[Command::Reload(2)]),
-    ("a-dispose-opens-no-dialog-on-a-disable", "ledger", &[Command::Toggle]),
-    (
-        "a-failed-candidate-keeps-the-running-dialog",
-        "reported-once",
-        &[Command::Dialog(Dialog::Panel), Command::Reload(BAD)],
-    ),
-    ("a-failed-setup-opens-no-dialog", "ledger", &[Command::Toggle, Command::Reload(BAD), Command::Toggle]),
-    ("a-dialog-asked-for-before-a-reload-opens-no-dialog", "ledger", &[Command::DialogThenReload(Dialog::Prompt, 2)]),
-    // Review carbon-pt-1: a prompt confirmed before a reload runs the new build's command.
-    (
-        "a-confirm-before-a-reload-reaches-no-new-build",
-        "lifecycle",
-        &[Command::Dialog(Dialog::Prompt), Command::EnterThenReload(2)],
-    ),
     // Review bigboi-5: a failure is told again once the manager stopped listing it.
     (
         "a-failure-is-told-again-after-the-row-cleared",
-        "ledger",
+        "reported-once",
         &[
             Command::Arm(Fault::Setup),
             Command::Reload(2),
@@ -1092,7 +1094,7 @@ const OPEN: &[(&str, &str, &[Command])] = &[
     // Review carbon-pt-2: an enable that failed leaves the plugin enabled, so a reload starts it.
     (
         "a-failed-enable-leaves-the-plugin-disabled",
-        "ledger",
+        "lifecycle",
         &[Command::Toggle, Command::Arm(Fault::Setup), Command::Toggle, Command::Reload(2)],
     ),
     // Review carbon-pt-3: a reload that fails after a panic wedges the plugin, and enabling it sets up nothing.
@@ -1146,6 +1148,15 @@ const FIXED: &[(&str, &[Command])] = &[
     ("a-failed-plugin-is-not-disposed-on-exit", &[Command::Arm(Fault::Command), Command::Run, Command::Exit]),
     // Review bigboi-4: a reload on the plugin's route leaves the user there, on the new build's route.
     ("a-reload-keeps-the-plugin-route", &[Command::Route, Command::Reload(2)]),
+    // Reviews bigboi-2 and carbon-pt-1: a dialog an activation that ended or a setup that failed asks for shows nowhere,
+    // and the failure of a candidate is reported after the toast its setup asked for.
+    ("a-dispose-opens-no-dialog-on-a-reload", &[Command::Reload(2)]),
+    ("a-dispose-opens-no-dialog-on-a-disable", &[Command::Toggle]),
+    ("a-failed-candidate-keeps-the-running-dialog", &[Command::Dialog(Dialog::Panel), Command::Reload(BAD)]),
+    ("a-failed-setup-opens-no-dialog", &[Command::Toggle, Command::Reload(BAD), Command::Toggle]),
+    ("a-dialog-asked-for-before-a-reload-opens-no-dialog", &[Command::DialogThenReload(Dialog::Prompt, 2)]),
+    // Review carbon-pt-1: the action of a prompt confirmed as a reload is queued reaches no new build.
+    ("a-confirm-before-a-reload-reaches-no-new-build", &[Command::Dialog(Dialog::Prompt), Command::EnterThenReload(2)]),
     // Review bigboi-2, the positive control: a candidate that passes keeps the prompt its setup asked for.
     ("a-passed-candidates-prompt-shows", &[Command::Dialog(Dialog::Panel), Command::Reload(PROMPTING)]),
 ];
@@ -1188,7 +1199,7 @@ fn manager_toggle(world: &World) -> Vec<String> {
 #[test]
 fn a_failed_enable_shows_its_error_and_keeps_the_row() {
     LOG.take();
-    let world = World::open(Some(1));
+    let world = World::open(Some(1), Route::Home);
     world.settle();
     assert_eq!(manager_toggle(&world), Vec::<String>::new());
     ARMED.set(Some(Fault::Setup));
@@ -1203,14 +1214,14 @@ fn a_failed_enable_shows_its_error_and_keeps_the_row() {
 #[test]
 fn the_oracles_can_fail() {
     LOG.take();
-    let world = World::open(Some(1));
-    let twin = World::open(None);
+    let world = World::open(Some(1), Route::Home);
+    let twin = World::open(None, Route::Home);
     world.settle();
     twin.settle();
     assert_ne!(world.observe(true), twin.observe(true));
     assert!(frame_diff(&twin.frame(), &world.frame(), world.mask(), |_| false).is_some());
-    let two = World::open(Some(2));
-    let three = World::open(Some(3));
+    let two = World::open(Some(2), Route::Home);
+    let three = World::open(Some(3), Route::Home);
     two.settle();
     three.settle();
     assert!(frame_diff(&two.frame(), &three.frame(), two.mask(), |_| false).is_some());

@@ -85,7 +85,8 @@ pub trait Host: 'static {
         );
     }
     /// Ends what the host shows for an activation of plugin `id` that ended (it was disabled, replaced, unloaded, or
-    /// failed): the dialogs it opened, so nothing of an old build can run (4.14). Called outside every plugin callback.
+    /// failed): the dialog it opened, if that activation is no longer [`Registry::live`], so nothing of an old build can
+    /// run (4.14). Called outside every plugin callback.
     fn revoked(&self, _id: &str) {}
     /// Asks for the user's attention. Called outside every plugin callback.
     fn attention(&self, _attention: &abi::Attention) {}
@@ -112,8 +113,10 @@ pub trait Host: 'static {
     fn fetch(&self, _fetch: abi::Fetch, reply: Box<dyn FnOnce(Result<serde_json::Value, String>)>) {
         reply(Err("this host has no server".to_owned()));
     }
-    /// Shows plugin `id`'s `dialog` ([`abi::Host::dialog`]). Called outside every plugin callback.
-    fn dialog(&self, _id: &str, _dialog: abi::Dialog) {}
+    /// Shows `dialog` of activation `generation` of plugin `id` ([`abi::Host::dialog`]). The dialog belongs to that
+    /// activation: a host shows it only while [`Registry::live`] says so, runs its action only then, and ends it in
+    /// [`Host::revoked`]. Called outside every plugin callback.
+    fn dialog(&self, _id: &str, _generation: u64, _dialog: abi::Dialog) {}
     /// Whether plugin `id`'s panel `key` is open ([`abi::Read::dialog_open`]).
     fn dialog_open(&self, _id: &str, _key: &str) -> bool {
         false
@@ -260,11 +263,14 @@ fn in_process(plugin: abi::Plugin) -> Definition {
     };
     let mut definition = Definition::fallible(plugin.id, move |setup: &mut Setup<'_>| {
         *failure.borrow_mut() = None;
+        let failed = failure.clone();
+        setup.failure(Rc::new(move || failed.borrow().clone()));
         let proxy = setup.host().app().proxy();
         let activation = Activation::new(setup.host(), Arc::new(activation::Wake::new(Some(proxy))));
         let scope = Rc::new(Scope {
             host: Rc::downgrade(setup.host()),
             id: setup.id().to_owned(),
+            generation: setup.generation(),
             keys: RefCell::default(),
             activation: activation.clone(),
             replies: RefCell::default(),
@@ -421,6 +427,8 @@ pub(crate) fn tui_command(command: &abi::Command, run: impl Fn(Option<&str>) + '
 struct Scope {
     host: Weak<dyn Host>,
     id: String,
+    /// The activation ([`Registry::live`]), which owns the dialogs it asks for.
+    generation: u64,
     keys: RefCell<Vec<String>>,
     activation: Rc<Activation>,
     replies: RefCell<Vec<abi::ReplyFn>>,
@@ -676,8 +684,8 @@ impl abi::Host for Scoped<'_> {
     }
 
     fn dialog(&self, dialog: abi::Dialog) {
-        let id = self.scope.id.clone();
-        self.defer(move |host| host.dialog(&id, dialog));
+        let (id, generation) = (self.scope.id.clone(), self.scope.generation);
+        self.defer(move |host| host.dialog(&id, generation, dialog));
     }
 
     fn copy(&self, text: &str, then: Option<abi::Action>) {
@@ -793,6 +801,17 @@ impl Setup<'_> {
         self.id
     }
 
+    /// The activation this setup makes, unique in the registry: what it asks the host for belongs to it
+    /// ([`Registry::live`]).
+    pub(crate) fn generation(&self) -> u64 {
+        self.registration.generation
+    }
+
+    /// Tells the registry how to learn that a call of this activation panicked: then it contributes nothing more.
+    pub(crate) fn failure(&mut self, failure: ErrorFn) {
+        self.registration.failure = Some(failure);
+    }
+
     /// Claims a place in the slot tree (TS `ui.slot`).
     pub(crate) fn slot(
         &mut self,
@@ -870,6 +889,10 @@ impl Setup<'_> {
 
 #[derive(Default)]
 struct Registration {
+    /// The activation, unique in the registry.
+    generation: u64,
+    /// A call of the activation that panicked, if one did.
+    failure: Option<ErrorFn>,
     claims: Vec<(Placement, ClaimRender)>,
     routes: Vec<(String, RouteRender)>,
     code_blocks: Vec<(String, CodeBlockRender)>,
@@ -878,6 +901,11 @@ struct Registration {
 }
 
 impl Registration {
+    /// Whether a call of this activation panicked: it contributes nothing, and is called no more (4.14).
+    fn panicked(&self) -> bool {
+        self.failure.as_ref().is_some_and(|failure| failure().is_some())
+    }
+
     fn dispose(self) {
         self.disposers.into_iter().rev().for_each(Disposer::dispose);
         self.cleanups.into_iter().rev().for_each(|cleanup| cleanup());
@@ -961,6 +989,8 @@ pub struct Registry {
     /// The `plugins` targets, in order, which also enable and disable external plugins as they load.
     directives: RefCell<Vec<String>>,
     activations: Cell<u64>,
+    /// The last activation's generation ([`Registry::live`]).
+    generations: Cell<u64>,
     /// The slot paths mounted now, which claims resolve against.
     live: Rc<slot::Live>,
 }
@@ -997,6 +1027,7 @@ impl Registry {
             unloaded: RefCell::new(skipped.collect()),
             directives: RefCell::new(directives),
             activations: Cell::new(0),
+            generations: Cell::new(0),
             live: Rc::default(),
         }
     }
@@ -1387,6 +1418,18 @@ impl Registry {
         slot
     }
 
+    /// Whether activation `generation` of plugin `id` is the one that runs, and has not failed: what it asked the host
+    /// for may show and act. An activation that ended, a candidate that was not adopted, and one that panicked are not
+    /// live.
+    pub fn live(&self, id: &str, generation: u64) -> bool {
+        self.with_plugin(id, |plugin| {
+            plugin.active.as_ref().is_some_and(|(_, registration)| {
+                registration.generation == generation && !registration.panicked()
+            })
+        })
+        .unwrap_or(false)
+    }
+
     /// The route plugin `id` registers as `name`, rendered.
     pub fn route(&self, host: &dyn Host, id: &str, name: &str) -> Option<RouteMount> {
         let render = self.with_plugin(id, |plugin| {
@@ -1438,13 +1481,16 @@ impl Registry {
         definition: &Definition,
         place: Option<u64>,
     ) -> Result<(u64, Registration), String> {
-        let mut setup = Setup { host, id: &definition.id, registration: Registration::default() };
+        let generation = self.generations.get() + 1;
+        self.generations.set(generation);
+        let registration = Registration { generation, ..Registration::default() };
+        let mut setup = Setup { host, id: &definition.id, registration };
         if let Err(error) = (definition.setup)(&mut setup) {
             setup.registration.dispose();
             return Err(error);
         }
-        // However the activation ends, what the host shows for it goes. A setup that failed showed nothing, so a failed
-        // candidate leaves the running build's dialogs.
+        // However the activation ends, what the host shows for it goes; it is not live by then. A candidate that failed
+        // was never live, so what it asked for never showed.
         let (owner, id) = (Rc::downgrade(host), definition.id.clone());
         setup.on_dispose(move || {
             if let Some(host) = owner.upgrade() {
