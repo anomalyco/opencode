@@ -24,6 +24,12 @@ export function configureApplication() {
 
   app.setName(APP_NAME)
   app.setAppUserModelId(APP_ID)
+
+  // Always expose the renderer's accessibility tree so screen readers (NVDA, Narrator, JAWS,
+  // VoiceOver) announce the UI reliably. Chromium otherwise enables it only when it detects an
+  // assistive technology, which can miss a reader that attaches after startup.
+  app.accessibilitySupportEnabled = true
+
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
   const features = app.commandLine.getSwitchValue("enable-features")
   app.commandLine.appendSwitch("enable-features", features ? `${jsCallStackFeature},${features}` : jsCallStackFeature)
