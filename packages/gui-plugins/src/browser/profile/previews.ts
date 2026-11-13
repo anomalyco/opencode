@@ -7,6 +7,11 @@ export function createPreviews(session: Session, signal: AbortSignal) {
   signal.throwIfAborted()
   const grants = new Map<string, () => readonly string[]>()
 
+  const release = (host: string) => {
+    if (!grants.delete(host)) return
+    void session.clearStorageData({ origin: `${previewScheme}://${host}`, storages: ["localstorage", "indexdb", "cachestorage", "filesystem"] }).catch(() => undefined)
+  }
+
   const serve = async (request: Request) => {
     const host = new URL(request.url).host
     const grant = grants.get(host)
@@ -42,7 +47,7 @@ export function createPreviews(session: Session, signal: AbortSignal) {
     if (!active) return
     active = false
     signal.removeEventListener("abort", dispose)
-    grants.clear()
+    grants.forEach((_roots, host) => release(host))
     session.protocol.unhandle(previewScheme)
   }
 
@@ -55,7 +60,7 @@ export function createPreviews(session: Session, signal: AbortSignal) {
       const host = crypto.randomUUID()
       grants.set(host, roots)
 
-      return { host, release: () => grants.delete(host) }
+      return { host, release: () => release(host) }
     },
     dispose,
   }
