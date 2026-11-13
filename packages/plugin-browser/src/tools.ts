@@ -10,7 +10,7 @@ import { Browser } from "./rpc.js"
 import { BrowserSkill } from "./skill.js"
 
 export const register = Effect.fn("BrowserTools.register")(function* (
-  ctx: Pick<Context, "tool" | "skill" | "location">,
+  ctx: Pick<Context, "tool" | "skill" | "location" | "session">,
   connection: BrowserConnection.Connection,
 ) {
   const execute = Effect.fn("BrowserTools.execute")(function* (
@@ -33,6 +33,8 @@ export const register = Effect.fn("BrowserTools.register")(function* (
   })
 
   yield* ctx.skill.transform((editor) => editor.add(BrowserSkill.info))
+  // Names the model sees when a tool is sent directly rather than through Code Mode.
+  const direct = new Set<string>()
   yield* ctx.tool
     .transform((editor) => {
       editor.namespace({
@@ -42,13 +44,16 @@ export const register = Effect.fn("BrowserTools.register")(function* (
       })
       Browser.Operations.forEach((operation) => {
         const separator = operation.name.lastIndexOf(".")
+        const name = operation.name.slice(separator + 1)
+        const namespace = separator < 0 ? "browser" : `browser.${operation.name.slice(0, separator)}`
+        direct.add(`${namespace.replaceAll(".", "_")}_${name}`)
         editor.add({
-          name: operation.name.slice(separator + 1),
+          name,
           description: operation.description,
           input: operation.input,
           output: operation.output,
           options: {
-            namespace: separator < 0 ? "browser" : `browser.${operation.name.slice(0, separator)}`,
+            namespace,
             permission: "browser",
             codemode: true,
           },
@@ -58,6 +63,14 @@ export const register = Effect.fn("BrowserTools.register")(function* (
       })
     })
     .pipe(Effect.orDie)
+  // A child session inherits the browser grant with its parent's permissions, but the attachment belongs to the
+  // parent, so every call from the child fails. Agents without Code Mode, such as explore, would otherwise receive
+  // all browser tools directly.
+  yield* ctx.session.hook("context", (event) => {
+    if (connection.attached(event.sessionID)) return Effect.void
+    for (const name of Object.keys(event.tools)) if (direct.has(name)) delete event.tools[name]
+    return Effect.void
+  })
 })
 
 function decodeResult(operation: Browser.Operation, result: Browser.Result) {

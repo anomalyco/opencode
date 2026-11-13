@@ -570,6 +570,17 @@ export function isConnectionDisposed(state: ConnectionState) {
   return state.status === "disposed"
 }
 
+/**
+ * Whether the session has its own attachment, connecting or connected. Child sessions inherit the parent's browser
+ * grant with their permissions but never an attachment, so their browser tools could only fail.
+ */
+export function hasAttachment(state: ConnectionState, sessionID: Session.ID) {
+  if (state.status === "disposed") return false
+  const entry = state.sessions.get(sessionID)
+
+  return entry !== undefined && entry.status !== "revoking"
+}
+
 /** The attempt the next `attach` gets; the driver keys its handle by it before dispatching `attach.started`. */
 export function selectNextAttempt(state: ConnectionState) {
   return state.nextAttempt

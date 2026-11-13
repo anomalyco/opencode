@@ -253,6 +253,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
   })
 
   return {
+    attached: (sessionID: Session.ID) => BrowserMachine.hasAttachment(machine.state, sessionID),
     target: Effect.fn("BrowserConnection.target")(function* (sessionID: Session.ID, action: Browser.Action) {
       const selected = BrowserMachine.selectTarget(machine.state, sessionID, action)
       if (!selected.ok) return yield* selected.error

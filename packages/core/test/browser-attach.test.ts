@@ -5,11 +5,16 @@ import type { Permission } from "@opencode/schema/permission"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
+import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
+import { Agent } from "@opencode/core/agent"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
+import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { Provider } from "@opencode/core/provider"
 import { Rpc } from "@opencode/core/rpc"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
@@ -103,9 +108,29 @@ const setup = Effect.gen(function* () {
     ),
     Effect.forkScoped({ startImmediately: true }),
   )
+  const hooks = Context.get(context, PluginHooks.Service)
+  // The tools a request sends directly, after the browser plugin's context hook.
+  const directTools = (sessionID: Session.ID) =>
+    Effect.gen(function* () {
+      const tool = { description: "", input: { type: "object" } }
+      const event: SessionHooks["context"] = {
+        sessionID,
+        agent: Agent.ID.make("explore"),
+        model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("test") }),
+        system: [],
+        messages: [],
+        tools: { browser_click: tool, browser_tabs_open: tool, read: tool },
+        options: {},
+      }
+      yield* hooks.trigger("session", "context", event)
+      return Object.keys(event.tools)
+    })
   return {
     ref,
     locations,
+    session,
+    sessions,
+    directTools,
     attach: (connectionID: string) =>
       rpc.attach({ sessionID: session.id, connectionID, version: 4 }).pipe(Effect.forkScoped),
     attached: (connectionID: string) => Deferred.await(handshake(connectionID)).pipe(Effect.timeout("10 seconds")),
@@ -146,5 +171,18 @@ it.live("disposing the plugin revokes the browser rules before the location fini
 
     yield* browser.locations.invalidate(browser.ref)
     expect(yield* browser.permissions).toEqual([user])
+  }),
+)
+
+it.live("child sessions inherit the browser grant but are not sent browser tools", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup
+    yield* browser.attach("conn_1")
+    yield* browser.attached("conn_1")
+    const child = yield* browser.sessions.create({ parentID: browser.session.id })
+    expect(child.permissions).toEqual([user, ...allows])
+
+    expect(yield* browser.directTools(browser.session.id)).toEqual(["browser_click", "browser_tabs_open", "read"])
+    expect(yield* browser.directTools(child.id)).toEqual(["read"])
   }),
 )
