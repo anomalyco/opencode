@@ -41,7 +41,6 @@ tree-sitter-c-sharp = { workspace = true, optional = true }
 tree-sitter-clojure-orchard = { workspace = true, optional = true }
 tree-sitter-cpp = { workspace = true, optional = true }
 tree-sitter-elixir = { workspace = true, optional = true }
-tree-sitter-fsharp = { workspace = true, optional = true }
 tree-sitter-haskell = { workspace = true, optional = true }
 tree-sitter-hcl = { workspace = true, optional = true }
 tree-sitter-java = { workspace = true, optional = true }
@@ -49,7 +48,6 @@ tree-sitter-julia = { workspace = true, optional = true }
 tree-sitter-lua = { workspace = true, optional = true }
 tree-sitter-make = { workspace = true, optional = true }
 tree-sitter-nix = { workspace = true, optional = true }
-tree-sitter-ocaml = { workspace = true, optional = true }
 tree-sitter-php = { workspace = true, optional = true }
 tree-sitter-r = { workspace = true, optional = true }
 tree-sitter-ruby = { workspace = true, optional = true }
@@ -61,7 +59,7 @@ tree-sitter-xml = { workspace = true, optional = true }
 
 [features]
 default = ["grammars"]
-# The grammars transcripts show most, beside the five opentui links: shell, CSS, diff, Go, HTML, JSON, Python, YAML.
+# The rest of the TUI's 34 grammars but Kotlin, OCaml, F#, and Swift (parity/deviations/H06-highlight-queries.md).
 grammars = [
     "dep:tree-sitter-bash",
     "dep:tree-sitter-css",
@@ -71,17 +69,12 @@ grammars = [
     "dep:tree-sitter-json",
     "dep:tree-sitter-python",
     "dep:tree-sitter-yaml",
-]
-# The rest of the TUI's 34 grammars but Kotlin and Swift (parity/deviations/H06-highlight-queries.md).
-grammars-all = [
-    "grammars",
     "dep:tree-sitter-agda",
     "dep:tree-sitter-c",
     "dep:tree-sitter-c-sharp",
     "dep:tree-sitter-clojure-orchard",
     "dep:tree-sitter-cpp",
     "dep:tree-sitter-elixir",
-    "dep:tree-sitter-fsharp",
     "dep:tree-sitter-haskell",
     "dep:tree-sitter-hcl",
     "dep:tree-sitter-java",
@@ -89,7 +82,6 @@ grammars-all = [
     "dep:tree-sitter-lua",
     "dep:tree-sitter-make",
     "dep:tree-sitter-nix",
-    "dep:tree-sitter-ocaml",
     "dep:tree-sitter-php",
     "dep:tree-sitter-r",
     "dep:tree-sitter-ruby",
