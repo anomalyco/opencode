@@ -341,18 +341,18 @@ impl crate::activation::Drawn for Surface {
     }
 }
 
-/// The text of transcript part `part`: a text part's text, or a tool's output; `None` while the host has not loaded
-/// it.
+/// The text tool call `part` returned, or the text of a part with that id; `None` while the host has not loaded it.
 fn part_output(host: &dyn Host, part: &v2::PartRef) -> Option<String> {
     fn find(value: &serde_json::Value, id: &str) -> Option<String> {
         match value {
             serde_json::Value::Object(object) => {
                 if object.get("id").and_then(|found| found.as_str()) == Some(id) {
-                    let text = object
-                        .get("text")
-                        .or_else(|| object.get("state").and_then(|state| state.get("output")))
-                        .or_else(|| object.get("output"));
-                    return text.and_then(|text| text.as_str()).map(str::to_owned);
+                    if let Some(text) = object.get("text").and_then(|text| text.as_str()) {
+                        return Some(text.to_owned());
+                    }
+                    let content = object.get("state").and_then(|state| state.get("content"))?.as_array()?;
+                    let texts = content.iter().filter_map(|item| item.get("text").and_then(|text| text.as_str()));
+                    return Some(texts.collect::<Vec<_>>().join("\n"));
                 }
                 object.values().find_map(|value| find(value, id))
             }
