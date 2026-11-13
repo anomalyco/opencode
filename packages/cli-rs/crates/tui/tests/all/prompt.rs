@@ -148,14 +148,14 @@ impl Setup {
         Self::build(route, home, true)
     }
 
-    /// The fixture on `route`, answering each of `reads`' GET paths with its value.
-    pub(crate) fn serving(route: Route, reads: Vec<(&str, Value)>) -> Self {
+    /// The fixture on `route`, `width` columns wide, answering each of `reads`' GET paths with its value.
+    pub(crate) fn serving(route: Route, reads: Vec<(&str, Value)>, width: u16) -> Self {
         let reads = reads.into_iter().map(|(path, value)| (path.to_owned(), value)).collect();
-        Self::build_with(route, opencode_util::temp::tempdir().unwrap(), true, reads)
+        Self::build_with(route, opencode_util::temp::tempdir().unwrap(), true, reads, width)
     }
 
     fn build(route: Route, home: opencode_util::temp::TempDir, catalog: bool) -> Self {
-        Self::build_with(route, home, catalog, Vec::new())
+        Self::build_with(route, home, catalog, Vec::new(), 90)
     }
 
     fn build_with(
@@ -163,6 +163,7 @@ impl Setup {
         home: opencode_util::temp::TempDir,
         catalog: bool,
         reads: Vec<(String, Value)>,
+        width: u16,
     ) -> Self {
         let seen = Seen::default();
         let catalog = Arc::new(AtomicBool::new(catalog));
@@ -179,7 +180,7 @@ impl Setup {
             route,
             ..support::deps(Arc::new(fixture))
         };
-        Self { harness: support::mount(90, 24, deps), seen, catalog, reject, _home: home }
+        Self { harness: support::mount(width, 24, deps), seen, catalog, reject, _home: home }
     }
 
     /// Waits for the catalog, which shows the agent and model under the prompt.
