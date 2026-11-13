@@ -299,11 +299,10 @@ export const Plugin = {
     yield* ctx.tool.hook("execute.before", (event) =>
       Effect.sync(() => {
         if (event.tool !== name || !Predicate.isObject(event.input)) return
-        if (event.input.model !== "" && event.input.sessionID !== "" && event.input.worktree !== "") return
+        if (event.input.model !== "" && event.input.sessionID !== "") return
         const input = { ...event.input }
         if (input.model === "") delete input.model
         if (input.sessionID === "") delete input.sessionID
-        if (input.worktree === "") delete input.worktree
         event.input = input
       }),
     )

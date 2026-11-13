@@ -943,13 +943,17 @@ describe("ShellTool", () => {
         const writeA = yield* runIn(
           sessionA,
           locA,
-          isWindows ? "New-Item -ItemType Directory -Force src | Out-Null; 'from-a' | Set-Content src/only-a.txt" : "mkdir -p src && printf from-a > src/only-a.txt",
+          isWindows
+            ? "New-Item -ItemType Directory -Force src | Out-Null; 'from-a' | Set-Content -NoNewline src/only-a.txt"
+            : "mkdir -p src && printf from-a > src/only-a.txt",
           "call-write-a",
         )
         const writeB = yield* runIn(
           sessionB,
           locB,
-          isWindows ? "New-Item -ItemType Directory -Force src | Out-Null; 'from-b' | Set-Content src/only-b.txt" : "mkdir -p src && printf from-b > src/only-b.txt",
+          isWindows
+            ? "New-Item -ItemType Directory -Force src | Out-Null; 'from-b' | Set-Content -NoNewline src/only-b.txt"
+            : "mkdir -p src && printf from-b > src/only-b.txt",
           "call-write-b",
         )
         expect(writeA.status).toBe("completed")

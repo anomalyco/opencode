@@ -1,7 +1,7 @@
 export * as Session from "./session.js"
 export * from "./session/schema.js"
 
-import { DateTime, Effect, Layer, Context, Option, Stream } from "effect"
+import { Cause, DateTime, Effect, Layer, Context, Option, Stream } from "effect"
 import { LLMClient } from "@opencode/ai/effect"
 import { ListAnchor, ListCursor, ListFilter } from "@opencode/schema/session"
 import { and, desc, eq } from "drizzle-orm"
@@ -321,13 +321,18 @@ const layer = Layer.effect(
           // Probe location services so the session is not created against an unavailable destination.
           yield* locations.contextEffect(location).pipe(
             Effect.scoped,
-            Effect.catchCause((cause) =>
-              Effect.logWarning("session create child location unavailable", { directory: location.directory, cause }).pipe(
+            Effect.catchCause((cause) => {
+              if (Cause.hasInterruptsOnly(cause))
+                return Effect.failCause(Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)))
+              return Effect.logWarning("session create child location unavailable", {
+                directory: location.directory,
+                cause,
+              }).pipe(
                 Effect.andThen(
                   Effect.die(new Error(`Session.create child location is unavailable: ${location.directory}`)),
                 ),
-              ),
-            ),
+              )
+            }),
           )
         }
         // subpath is derived relative to the resolved project directory. For same-project worktrees located
