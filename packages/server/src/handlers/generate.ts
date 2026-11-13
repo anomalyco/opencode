@@ -19,7 +19,7 @@ import { Model } from "@opencode/schema/model"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
-import { awaitPlugins, locationErrors } from "../location"
+import { locationErrors } from "../location"
 
 export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (handlers) =>
   Effect.gen(function* () {
@@ -29,7 +29,6 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
     const services = locations.get(Location.Ref.make({ directory: AbsolutePath.make(global.config) }))
     const text = Effect.fn("server.generate.text")(
       function* (request: { readonly payload: { readonly prompt: string; readonly model?: Model.Ref } }) {
-        yield* awaitPlugins
         const generate = yield* Generate.Service
         return { data: { text: yield* generate.text(request.payload).pipe(Effect.mapError(generateError)) } }
       },
@@ -38,7 +37,6 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
     )
     const image = Effect.fn("server.generate.image")(
       function* (request: { readonly payload: ImageRequest }) {
-        yield* awaitPlugins
         const generate = yield* Generate.Service
         return { data: yield* generate.image(request.payload).pipe(Effect.mapError(generateError)) }
       },
@@ -53,7 +51,6 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
             message: "Decision question names must be unique",
             field: "questions",
           })
-        yield* awaitPlugins
         const generate = yield* Generate.Service
         return { data: yield* generate.decisions(request.payload).pipe(Effect.mapError(generateError)) }
       },
@@ -68,7 +65,6 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
     const videoCreate = Effect.fn("server.generate.video.create")(
       function* (request: { readonly payload: VideoRequest }) {
         yield* videoEnabled
-        yield* awaitPlugins
         return { data: yield* videos.start(request.payload).pipe(Effect.mapError(generateError)) }
       },
       Effect.provide(services),
