@@ -515,6 +515,55 @@ test("raw JSON schemas resolve draft-07 definitions", async () => {
   )
 })
 
+test("raw JSON schemas with regex patterns still validate input", async () => {
+  const tool: Info = {
+    name: "pattern",
+    description: "Pattern tool",
+    input: {
+      type: "object",
+      properties: { id: { type: "string", pattern: "^[a-f0-9]{32}$" }, count: { type: "number" } },
+      required: ["id", "count"],
+    },
+    execute: (input) => Effect.succeed({ content: JSON.stringify(input) }),
+  }
+
+  expect(await Effect.runPromise(execute(tool, { id: "not-hex", count: 1 }, context))).toMatchObject({
+    content: [{ type: "text", text: '{"id":"not-hex","count":1}' }],
+  })
+  const oneOf: Info = {
+    ...tool,
+    name: "pattern-one-of",
+    input: {
+      type: "object",
+      properties: {
+        v: {
+          oneOf: [
+            { type: "string", pattern: "^a" },
+            { type: "integer", minimum: 0 },
+            { type: "string", pattern: "^b" },
+          ],
+        },
+      },
+    },
+  }
+  expect(await Effect.runPromise(execute(oneOf, { v: "abc" }, context))).toMatchObject({
+    content: [{ type: "text", text: '{"v":"abc"}' }],
+  })
+  expect(await Effect.runPromise(Effect.flip(execute(oneOf, { v: true }, context)))).toBeInstanceOf(Tool.Error)
+  expect(await Effect.runPromise(Effect.flip(execute(tool, { id: "abc" }, context)))).toEqual(
+    new Tool.Error({
+      message:
+        'Invalid arguments for tool "pattern":\n- count: Missing key\n\nArguments provided:\n{\n  "id": "abc"\n}\n\nUpdate the arguments and call the tool again.',
+    }),
+  )
+  expect(await Effect.runPromise(Effect.flip(execute(tool, { id: "abc", count: "1" }, context)))).toEqual(
+    new Tool.Error({
+      message:
+        'Invalid arguments for tool "pattern":\n- count: Expected number\n\nArguments provided:\n{\n  "id": "abc",\n  "count": "1"\n}\n\nUpdate the arguments and call the tool again.',
+    }),
+  )
+})
+
 test("raw JSON schemas pass input through when they cannot be imported", async () => {
   const tool: Info = {
     name: "invalid-schema",
