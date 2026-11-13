@@ -133,7 +133,10 @@ impl Host for Tui {
     }
 
     fn failed(&self, id: &str) {
-        failed_toast(self, format!("Plugin failed: {id}"), String::new());
+        // After what the failing call asked for, as in TS, where its toast showed before the error was thrown: a toast
+        // replaces the one on screen, so the report must come last.
+        let title = format!("Plugin failed: {id}");
+        self.app.defer(bind!(self, |tui, _| failed_toast(&tui, title.clone(), String::new())));
         // The home footer counts the failed plugins.
         self.reads.changed(self);
     }
