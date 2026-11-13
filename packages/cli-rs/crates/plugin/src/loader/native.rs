@@ -665,22 +665,61 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
     Ok(serde_json::Value::Null)
 }
 
-/// Whether `request` asks for an effect, which a render may not.
+/// Whether `request` asks for an effect, which a render may not. Every request is sorted, so a new one has to say.
 fn effect(request: &HostRequest) -> bool {
-    matches!(
-        request,
+    match request {
         HostRequest::Toast { .. }
-            | HostRequest::StorageSet { .. }
-            | HostRequest::StorageMerge { .. }
-            | HostRequest::OpenRoute { .. }
-            | HostRequest::Dispatch { .. }
-            | HostRequest::Attention(_)
-            | HostRequest::Navigate { .. }
-            | HostRequest::Fetch(_)
-            | HostRequest::Dialog { .. }
-            | HostRequest::Copy { .. }
-            | HostRequest::ComposerEdit { .. }
-    )
+        | HostRequest::StorageSet { .. }
+        | HostRequest::StorageMerge { .. }
+        | HostRequest::OpenRoute { .. }
+        | HostRequest::Dispatch { .. }
+        | HostRequest::Attention(_)
+        | HostRequest::Navigate { .. }
+        | HostRequest::Fetch(_)
+        | HostRequest::Dialog { .. }
+        | HostRequest::Copy { .. }
+        | HostRequest::ComposerEdit { .. }
+        | HostRequest::SetVariant { .. }
+        | HostRequest::SetModel { .. }
+        | HostRequest::Tab { .. }
+        | HostRequest::ClearSelection
+        | HostRequest::Foreground(_)
+        | HostRequest::Title { .. }
+        | HostRequest::SetTheme { .. }
+        | HostRequest::InstallTheme { .. } => true,
+        HostRequest::Log { .. }
+        | HostRequest::StorageGet { .. }
+        | HostRequest::StorageKey { .. }
+        | HostRequest::Color { .. }
+        | HostRequest::Session { .. }
+        | HostRequest::Family { .. }
+        | HostRequest::Messages { .. }
+        | HostRequest::Models { .. }
+        | HostRequest::Model
+        | HostRequest::Limits
+        | HostRequest::Providers
+        | HostRequest::Info
+        | HostRequest::McpServers { .. }
+        | HostRequest::Integrations { .. }
+        | HostRequest::Vcs { .. }
+        | HostRequest::Route
+        | HostRequest::Interactive
+        | HostRequest::Shortcut { .. }
+        | HostRequest::DialogOpen { .. }
+        | HostRequest::Composer
+        | HostRequest::Checkpoint
+        | HostRequest::Rollback { .. }
+        | HostRequest::Variants
+        | HostRequest::TabsEnabled
+        | HostRequest::Tabs
+        | HostRequest::KeymapPending
+        | HostRequest::KeymapActive
+        | HostRequest::KeymapCommands
+        | HostRequest::Shortcuts { .. }
+        | HostRequest::Selection
+        | HostRequest::Theme
+        | HostRequest::Themes => false,
+    }
 }
 
 /// Answers a read through the host's [`Host::read`], as a built-in reads in process.

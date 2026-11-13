@@ -152,7 +152,10 @@ dark), and touches nothing of the host; a plugin's own thread calls `wake`.
   whether it is on screen, busy, waits on the user or has unread activity or an error), `keymap_pending`,
   `keymap_active`, `keymap_commands` and `shortcuts(name)` as the TUI shows keys, `selection` (the text the mouse
   selected), `theme` (the selected theme's name) and `themes` (every name). Over the ABI each read is one
-  `HostRequest`, and `messages` hands the visitor the plugin's own copy.
+  `HostRequest`, and `messages` hands the visitor the plugin's own copy. A C plugin can call the host table from a
+  render all the same; the host refuses every request there that is not a read, before it does anything.
+- Every read of one plugin call, in a render or a handler, sees one store snapshot: a batch the store applies on
+  another thread meanwhile waits until the call returns.
 - Setup, a command, and the handlers of events, replies, mounts, route mounts, wakes and disposal get a `Host`: the
   reads, and effects. Effects wait until the outermost plugin callback returns and then run in the order they were
   asked for, on the same queue as the built-ins' effects, so a plugin never reenters itself through the host. The
