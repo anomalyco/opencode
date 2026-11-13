@@ -881,6 +881,90 @@ describe("ShellTool ordinary shell syntax", () => {
 })
 
 describe("ShellTool", () => {
+  it.live("runs shell commands in child worktree execution contexts with correct cwd and isolation", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        reset()
+        const root = path.join(tmp.path, "repo")
+        const wtA = path.join(tmp.path, "repo-wt-a")
+        const wtB = path.join(tmp.path, "repo-wt-b")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(root, { recursive: true })
+          await Bun.$`git init`.cwd(root).quiet()
+          await Bun.$`git config user.name Test`.cwd(root).quiet()
+          await Bun.$`git config user.email test@opencode.test`.cwd(root).quiet()
+          await Bun.$`git config commit.gpgsign false`.cwd(root).quiet()
+          await Bun.$`git commit --allow-empty -m root`.cwd(root).quiet()
+          await Bun.$`git worktree add ${wtA} -b wt-a`.cwd(root).quiet()
+          await Bun.$`git worktree add ${wtB} -b wt-b`.cwd(root).quiet()
+          await fs.writeFile(path.join(root, "root.txt"), "root")
+        })
+
+        const sessions = yield* Session.Service
+        const locations = yield* LocationServiceMap.Service
+        const sessionA = Session.ID.make("ses_shell_child_a")
+        const sessionB = Session.ID.make("ses_shell_child_b")
+        const locA = Location.Ref.make({ directory: AbsolutePath.make(wtA) })
+        const locB = Location.Ref.make({ directory: AbsolutePath.make(wtB) })
+
+        const runIn = (sid: Session.ID, ref: Location.Ref, command: string, id: string) =>
+          Effect.gen(function* () {
+            yield* sessions.create({ id: sid, title: "shell child", location: ref, model: sessionModel })
+            const layer = locations.get(ref)
+            return yield* Effect.gen(function* () {
+              const plugins = yield* Plugin.Service
+              yield* plugins.awaitActivation
+              const registry = yield* Tool.Service
+              return yield* executeTool(registry, {
+                sessionID: sid,
+                ...toolIdentity,
+                call: { type: "tool-call", id, name: "shell", input: { command } },
+              })
+            }).pipe(Effect.provide(layer), Effect.ensuring(locations.invalidate(ref)))
+          })
+
+        const pwdA = yield* runIn(sessionA, locA, isWindows ? "(Get-Location).Path" : "pwd", "call-pwd-a")
+        expect(pwdA.status).toBe("completed")
+        if (pwdA.status === "completed") expect(String(pwdA.output?.output ?? "")).toContain(path.basename(wtA))
+
+        const pwdB = yield* runIn(sessionB, locB, isWindows ? "(Get-Location).Path" : "pwd", "call-pwd-b")
+        expect(pwdB.status).toBe("completed")
+        if (pwdB.status === "completed") expect(String(pwdB.output?.output ?? "")).toContain(path.basename(wtB))
+
+        const topA = yield* runIn(sessionA, locA, "git rev-parse --show-toplevel", "call-top-a")
+        const topB = yield* runIn(sessionB, locB, "git rev-parse --show-toplevel", "call-top-b")
+        expect(topA.status).toBe("completed")
+        expect(topB.status).toBe("completed")
+        if (topA.status === "completed")
+          expect(String(topA.output?.output ?? "").trim()).toContain(path.basename(wtA))
+        if (topB.status === "completed")
+          expect(String(topB.output?.output ?? "").trim()).toContain(path.basename(wtB))
+
+        const writeA = yield* runIn(
+          sessionA,
+          locA,
+          isWindows ? "New-Item -ItemType Directory -Force src | Out-Null; 'from-a' | Set-Content src/only-a.txt" : "mkdir -p src && printf from-a > src/only-a.txt",
+          "call-write-a",
+        )
+        const writeB = yield* runIn(
+          sessionB,
+          locB,
+          isWindows ? "New-Item -ItemType Directory -Force src | Out-Null; 'from-b' | Set-Content src/only-b.txt" : "mkdir -p src && printf from-b > src/only-b.txt",
+          "call-write-b",
+        )
+        expect(writeA.status).toBe("completed")
+        expect(writeB.status).toBe("completed")
+
+        expect(yield* Effect.promise(() => fs.readFile(path.join(wtA, "src", "only-a.txt"), "utf8"))).toBe("from-a")
+        expect(yield* Effect.promise(() => fs.readFile(path.join(wtB, "src", "only-b.txt"), "utf8"))).toBe("from-b")
+        expect(yield* Effect.promise(async () => { try { await fs.access(path.join(root, "src")); return true } catch { return false } })).toBe(false)
+        expect(yield* Effect.promise(async () => { try { await fs.access(path.join(wtA, "src", "only-b.txt")); return true } catch { return false } })).toBe(false)
+        expect(yield* Effect.promise(async () => { try { await fs.access(path.join(wtB, "src", "only-a.txt")); return true } catch { return false } })).toBe(false)
+        expect(yield* Effect.promise(() => fs.readFile(path.join(root, "root.txt"), "utf8"))).toBe("root")
+      }),
+    ),
+  )
+
   it.live("returns both parallel CodeMode shell results", () =>
     withTempDir((tmp) => {
       reset()
