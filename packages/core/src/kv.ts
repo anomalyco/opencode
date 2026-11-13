@@ -1,10 +1,12 @@
 export * as KV from "./kv.js"
 
-import { and, asc, eq, gt, gte, lt } from "drizzle-orm"
-import { Context, Effect, Layer, Schema } from "effect"
+import { and, asc, eq, gt, gte, lt, sql } from "drizzle-orm"
+import { Context, Effect, Layer, Option, Schema } from "effect"
 import { Database } from "./database/database.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { KVTable } from "./kv/sql.js"
+
+const decodeJSON = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json))
 
 export type Value = Schema.Json
 
@@ -39,12 +41,21 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     return Service.of({
       get: Effect.fn("KV.get")(function* (key) {
-        return (yield* db
-          .select({ value: KVTable.value })
+        // Read the column as text: the JSON column mode decodes inside the query, so one
+        // malformed row would fail every read of the table with no way to recover.
+        const row = yield* db
+          .select({ value: sql<string>`${KVTable.value}` })
           .from(KVTable)
           .where(eq(KVTable.key, key))
           .get()
-          .pipe(Effect.orDie))?.value
+          .pipe(Effect.orDie)
+        if (row === undefined) return undefined
+        const value = decodeJSON(row.value)
+        if (Option.isSome(value)) return value.value
+        // The entry is unreadable, but it is not ours to drop: callers that own a cache
+        // decide whether to discard it, and others may still recover it by hand.
+        yield* Effect.logWarning("kv entry is not valid JSON", { key })
+        return undefined
       }),
       set: Effect.fn("KV.set")(function* (key, value) {
         yield* db
@@ -61,7 +72,7 @@ const layer = Layer.effect(
         const limit = Number.isNaN(options.limit) ? 100 : Math.min(Math.max(Math.floor(options.limit ?? 100), 1), 1000)
         const end = prefixEnd(options.prefix)
         const rows = yield* db
-          .select({ key: KVTable.key, value: KVTable.value })
+          .select({ key: KVTable.key, value: sql<string>`${KVTable.value}` })
           .from(KVTable)
           .where(
             and(
@@ -74,9 +85,15 @@ const layer = Layer.effect(
           .limit(limit + 1)
           .all()
           .pipe(Effect.orDie)
-        const entries = rows.slice(0, limit)
+        const page = rows.slice(0, limit)
+        // An unreadable row is skipped instead of failing the whole page, and it still
+        // advances the cursor so a scan never stops on it.
+        const entries = page.flatMap((row) => {
+          const value = decodeJSON(row.value)
+          return Option.isSome(value) ? [{ key: row.key, value: value.value }] : []
+        })
         if (rows.length <= limit) return { entries }
-        return { entries, next: entries[entries.length - 1].key }
+        return { entries, next: page[page.length - 1].key }
       }),
     })
   }),
