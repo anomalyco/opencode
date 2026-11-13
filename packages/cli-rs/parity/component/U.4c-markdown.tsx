@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 // P-COMP fixtures of `TextPart`'s <markdown> options (routes/session/message-parts.tsx) beyond U.4a's rendered
-// prose: U.4a's prose with markers shown (`session.markdown` is `raw`), and a grid table with `cellPaddingX: 1`.
+// prose: U.4a's prose with markers shown (`session.markdown` is `raw`), a grid table with `cellPaddingX: 1`, and
+// thematic breaks.
 // crates/ui/tests/all/content.rs compares opencode_ui::markdown with them.
 import { useTheme, useThemes } from "../../../tui/src/context/theme"
 import { renderComponent } from "../lib/component"
@@ -27,9 +28,13 @@ function TextPart(props: { text: string; conceal: boolean }) {
   )
 }
 
+// Also in content.rs `markdown_rules_match_typescript`.
+const rules = "Before the rules.\n\n- - -\n\nBetween them.\n\n***\n\nAfter the rules."
+
 const cases = [
   { fixture: "U.4c/markdown-raw", text: prose.prose, conceal: false, last: "Plain closing line." },
   { fixture: "U.4c/markdown-table", text: corpus.table, conceal: true, last: "After the table." },
+  { fixture: "U.4c/markdown-rules", text: rules, conceal: true, last: "After the rules." },
 ]
 
 for (const item of cases) {
