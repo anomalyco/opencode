@@ -887,6 +887,9 @@ pub fn host(tui: &Rc<Tui>) -> Rc<dyn Host> {
 /// Activates the plugins once the TUI is built.
 pub fn install(tui: &Rc<Tui>) {
     let _ = tui.plugins.tui.set(tui.weak());
+    // The budget sums a plugin's calls by painted frame (synthesis 4.4).
+    let weak = tui.weak();
+    tui.plugins.monitor().set_frames(move || weak.upgrade().map_or(0, |tui| tui.app.frame_number()));
     tui.plugins.activate(&host(tui));
     // The plugins read the keymap (`keymap.pending()`, `keymap.active()`, `keymap.commands()`): the pending keys, and
     // the layers and focus that decide what a key reaches, as TS's keymap selectors follow its state.
