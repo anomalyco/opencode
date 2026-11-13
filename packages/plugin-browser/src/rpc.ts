@@ -152,8 +152,8 @@ const recording = Schema.Struct({ ...page, recording: Schema.Boolean })
 export const Waited = Schema.Struct({
   ...Tab.fields,
   met: Schema.Boolean.annotate({ description: "False when the condition did not hold before the timeout." }),
-  waited: Schema.Literals(["load", "text", "textGone", "element", "elementGone", "url", "pause"]).annotate({
-    description: "What the call waited for; pause means it slept for elapsedMs.",
+  waited: Schema.Literals(["load", "text", "textGone", "element", "elementGone", "url", "delay"]).annotate({
+    description: "What the call waited for: the condition it was given or implied; delay means it paused for elapsedMs.",
   }),
   elapsedMs: count,
   observed: optional(text.annotate({ description: "What the page showed when an unmet wait ended." })),

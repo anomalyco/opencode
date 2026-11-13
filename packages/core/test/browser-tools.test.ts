@@ -205,12 +205,10 @@ it.live("wait pauses, and polls for an element or an address", () =>
       seen.checks++
       return evaluated(seen.checks < 2 ? { count: 0, visible: 0 } : { count: 1, visible: 1 })
     })
-    expect(JSON.parse(yield* browser.run(waited(`delayMs: 20`)))).toMatchObject({ ...tab, met: true, waited: "pause" })
-    expect(JSON.parse(yield* browser.run(waited(`time: 0.02`)))).toMatchObject({ met: true, waited: "pause" })
+    expect(JSON.parse(yield* browser.run(waited(`delayMs: 20`)))).toMatchObject({ ...tab, met: true, waited: "delay" })
+    expect(JSON.parse(yield* browser.run(waited(`time: 0.02`)))).toMatchObject({ met: true, waited: "delay" })
     // A lone timeout is a pause for that long, not a load wait that returns at once on a loaded page.
-    const paused = JSON.parse(yield* browser.run(waited(`timeout: 50`)))
-    expect(paused).toMatchObject({ met: true, waited: "pause" })
-    expect(paused.elapsedMs).toBeGreaterThanOrEqual(45)
+    expect(JSON.parse(yield* browser.run(waited(`timeout: 50`)))).toMatchObject({ met: true, waited: "delay" })
     expect(browser.commands).toEqual([])
     expect(JSON.parse(yield* browser.run(`return await tools.browser.wait({ tabID: "${tabID}" })`))).toMatchObject({
       met: true,

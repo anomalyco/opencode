@@ -75,7 +75,8 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     })
   })
   const rulesFor = (session: Pick<Session.Info, "agent" | "permissions">, agent: string | undefined) => [
-    ...(configured.get(agent ?? session.agent ?? "") ?? []),
+    // Core denies everything to an agent it cannot resolve, such as a disabled or removed one; so does this.
+    ...(configured.get(agent ?? session.agent ?? "") ?? [{ action: "*", resource: "*", effect: "deny" as const }]),
     ...(session.permissions ?? []).filter((rule) => !BrowserMachine.isGrant(rule)),
   ]
   // The attachment's grant is a session rule, evaluated after every agent rule, so core resolves every browser call to
@@ -401,6 +402,15 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     }),
     /** Whether a desktop is attached to the session or attaching to it. */
     attached: (sessionID: Session.ID) => Effect.sync(() => BrowserMachine.hasAttachment(machine.state, sessionID)),
+    /**
+     * Fails with `[browser.disconnected]` unless a desktop is attached to the session. A session without one has no
+     * grant, so `authorize` would answer with core's bare denial; this says why instead, and reads no tab.
+     */
+    connected: (sessionID: Session.ID) =>
+      Effect.suspend(() => {
+        const connection = BrowserMachine.selectConnection(machine.state, sessionID)
+        return connection.ok ? Effect.void : Effect.fail(connection.error)
+      }),
     target: Effect.fn("BrowserConnection.target")(function* (sessionID: Session.ID, action: Browser.Action) {
       const selected = BrowserMachine.selectTarget(machine.state, sessionID, action)
       if (!selected.ok) return yield* selected.error

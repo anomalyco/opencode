@@ -50,7 +50,7 @@ export const read = Effect.fn("BrowserFiles.read")((paths: readonly string[], di
  */
 export const locate = Effect.fn("BrowserFiles.locate")(function* (path: string, directory: string) {
   const value = path.trim()
-  if (/^[a-z][a-z\d+.-]+:/i.test(value) && !/^file:/i.test(value) && !/^[a-z]:[\\/]/i.test(value)) return undefined
+  if (address(value) && !/^file:/i.test(value)) return undefined
   return yield* Effect.tryPromise(async (): Promise<Located> => {
     const { stat } = await import("node:fs/promises")
     const { isAbsolute, resolve } = await import("node:path")
@@ -80,6 +80,11 @@ export const locate = Effect.fn("BrowserFiles.locate")(function* (path: string, 
     Effect.orElseSucceed(() => undefined),
   )
 })
+
+/** Whether a preview path is an address with a scheme, such as https:, skill: or file:. A drive letter is no scheme. */
+export function address(path: string) {
+  return /^[a-z][a-z\d+.-]+:/i.test(path.trim())
+}
 
 type Located = { readonly absolute: string; readonly found: boolean | undefined; readonly directory: boolean }
 

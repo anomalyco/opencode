@@ -4,6 +4,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { Tool } from "@opencode/schema/tool"
 import { Clock, Duration, Effect, Option, Result, Schema } from "effect"
 import { Base64 } from "effect/encoding"
+import { resolve } from "node:path"
 import { Script } from "node:vm"
 import type { BrowserConnection } from "./connection.js"
 import { BrowserFiles } from "./files.js"
@@ -15,36 +16,26 @@ export const register = Effect.fn("BrowserTools.register")(function* (
   connection: BrowserConnection.Connection,
 ) {
   // Load and text waits run on the desktop; the rest poll from here with actions every desktop already supports.
-  const wait = Effect.fn("BrowserTools.wait")(function* (input: WaitInput, tool: Tool.Context) {
-    const plan = yield* Effect.try({
-      try: () => waitPlan(input),
-      catch: (error) => (error instanceof Tool.Error ? error : new Tool.Error({ message: String(error), error })),
-    })
+  const wait = Effect.fn("BrowserTools.wait")(function* (tabID: Browser.TabID, plan: WaitPlan, tool: Tool.Context) {
     const started = yield* Clock.currentTimeMillis
-    const current = connection
-      .target(tool.sessionID, { type: "tabs.focus", tabID: input.tabID })
-      .pipe(
-        Effect.flatMap((target) =>
-          target.tab
-            ? Effect.succeed(target.tab)
-            : Effect.fail(new Tool.Error({ message: "Browser tab is unavailable. Call browser.tabs.list({})." })),
-        ),
-      )
-    const waited =
-      plan.kind === "desktop"
-        ? plan.action.condition
-        : plan.kind === "delay"
-          ? "pause"
-          : plan.kind === "url"
-            ? "url"
-            : plan.gone
-              ? "elementGone"
-              : "element"
+    const current = connection.target(tool.sessionID, { type: "tabs.focus", tabID }).pipe(
+      Effect.flatMap((target) =>
+        target.tab
+          ? Effect.succeed(target.tab)
+          : Effect.fail(new Tool.Error({ message: "Browser tab is unavailable. Call browser.tabs.list({})." })),
+      ),
+    )
     const finish = (tab: Browser.Tab, met: boolean, observed?: string) =>
       Clock.currentTimeMillis.pipe(
         Effect.flatMap((now) =>
           exportResult(
-            { ...tab, met, waited, elapsedMs: now - started, ...(observed === undefined ? {} : { observed }) },
+            {
+              ...tab,
+              met,
+              waited: plan.waited,
+              elapsedMs: now - started,
+              ...(observed === undefined ? {} : { observed }),
+            },
             [],
           ),
         ),
@@ -80,10 +71,10 @@ export const register = Effect.fn("BrowserTools.register")(function* (
 
     const probe: Browser.Action =
       "ref" in plan.element
-        ? { type: "evaluate", tabID: input.tabID, ref: plan.element.ref, script: refVisibility }
+        ? { type: "evaluate", tabID, ref: plan.element.ref, script: refVisibility }
         : {
             type: "evaluate",
-            tabID: input.tabID,
+            tabID,
             ...(plan.frameID === undefined ? {} : { frameID: plan.frameID }),
             script: selectorVisibility(plan.element.selector),
           }
@@ -122,7 +113,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
   })
 
   // The desktop acknowledges a preview before the pane opens it, so a missing file used to report success (#61625).
-  const previewable = Effect.fn("BrowserTools.previewable")(function* (path: string, tool: Tool.Context) {
+  const previewable = Effect.fn("BrowserTools.previewable")(function* (path: string) {
     const located = yield* BrowserFiles.locate(path, ctx.location.directory)
     if (located?.directory)
       return yield* new Tool.Error({
@@ -132,11 +123,14 @@ export const register = Effect.fn("BrowserTools.register")(function* (
       return yield* new Tool.Error({
         message: `browser.preview found no file at ${located.absolute}. Paths are on the server, relative to the workspace (${ctx.location.directory}) or absolute. Check the path, for example with glob, then call browser.preview again.`,
       })
-    if (yield* connection.attached(tool.sessionID)) return
-    const shown = located?.absolute ?? path
-    return yield* new Tool.Error({
-      message: `[browser.disconnected] ${shown} was not shown: no OpenCode desktop app is connected to this session, so nothing can open in its Review pane. Tell the user the file is at ${shown}; do not call browser.preview again until they open this session in the desktop app.`,
-    })
+  })
+
+  // Authorization comes before anything that reads the session's tabs or the server's files: a caller that a policy
+  // blocks, or whose prompt is still open, learns nothing from them. Only the call's own input is checked first.
+  const admit = Effect.fn("BrowserTools.admit")(function* (tool: Tool.Context, operation: Browser.Method) {
+    // A session without a desktop has no grant, so it hears that it is disconnected rather than core's denial.
+    yield* connection.connected(tool.sessionID)
+    yield* connection.authorize(tool, operation)
   })
 
   const execute = Effect.fn("BrowserTools.execute")(function* (
@@ -144,21 +138,26 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     input: Browser.Input,
     tool: Tool.Context,
   ) {
-    // Before any file, tab or connection check, so a denied call reveals nothing else.
+    // Before anything else, so a call the configuration denies reveals nothing but the denial.
     yield* connection.refuse(tool, input.type)
     if (input.type === "wait") {
-      // A session without a desktop has no grant, so it hears that it is disconnected rather than core's denial.
-      yield* connection.target(tool.sessionID, { type: "tabs.focus", tabID: input.tabID })
-      yield* connection.authorize(tool, "wait")
-      return yield* wait(input, tool)
+      const plan = yield* parse(() => waitPlan(input))
+      yield* admit(tool, "wait")
+      return yield* wait(input.tabID, plan, tool)
     }
-    const action = yield* Effect.try({
-      try: () => normalizeAction(input),
-      catch: (error) => (error instanceof Tool.Error ? error : new Tool.Error({ message: String(error), error })),
-    })
-    if (action.type === "preview") yield* previewable(action.path, tool)
+    const action = yield* parse(() => normalizeAction(input))
+    if (action.type === "preview" && !(yield* connection.attached(tool.sessionID))) {
+      // Said without looking at the path, which no permission check has allowed yet.
+      const shown = BrowserFiles.address(action.path)
+        ? action.path
+        : resolve(ctx.location.directory, action.path.trim())
+      return yield* new Tool.Error({
+        message: `[browser.disconnected] ${shown} was not shown: no OpenCode desktop app is connected to this session, so nothing can open in its Review pane. Tell the user the file is at ${shown}; do not call browser.preview again until they open this session in the desktop app.`,
+      })
+    }
+    yield* admit(tool, action.type)
+    if (action.type === "preview") yield* previewable(action.path)
     const target = yield* connection.target(tool.sessionID, action)
-    yield* connection.authorize(tool, action.type)
     const uploads =
       action.type === "files.upload" || action.type === "files.drop"
         ? yield* BrowserFiles.read(action.paths, ctx.location.directory)
@@ -195,6 +194,19 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     })
     .pipe(Effect.orDie)
 })
+
+// Reads the call's own input; an invalid one fails before anyone is asked about it.
+function parse<A>(read: () => A) {
+  return Effect.try({
+    try: read,
+    catch: (error) => (error instanceof Tool.Error ? error : new Tool.Error({ message: String(error), error })),
+  })
+}
+
+/** The desktop's code for a failed browser command (`Browser.FailureCode`), or undefined for other failures. */
+function failureCode(error: Tool.Error) {
+  return error.metadata?.code
+}
 
 function decodeResult<Output extends Schema.Codec<unknown>>(
   operation: { readonly name: string; readonly output: Output },
@@ -292,7 +304,7 @@ export function normalizeAction(action: Exclude<Browser.Input, { readonly type: 
 type WaitInput = Extract<Browser.Input, { readonly type: "wait" }>
 type WaitAction = Extract<Browser.Action, { readonly type: "wait" }>
 
-export type WaitPlan = { readonly timeoutMs: number } & (
+export type WaitPlan = { readonly timeoutMs: number; readonly waited: Browser.Waited["waited"] } & (
   | { readonly kind: "desktop"; readonly action: WaitAction }
   | { readonly kind: "delay" }
   | { readonly kind: "url"; readonly url: string }
@@ -355,7 +367,7 @@ export function waitPlan(input: WaitInput): WaitPlan {
       throw new Tool.Error({
         message: "browser.wait needs a duration to pause, for example browser.wait({ tabID, delayMs: 500 }).",
       })
-    return { kind: "delay", timeoutMs: Math.min(Browser.MAX_WAIT_MS, Math.round(duration)) }
+    return { kind: "delay", waited: "delay", timeoutMs: Math.min(Browser.MAX_WAIT_MS, Math.round(duration)) }
   }
 
   if (condition === "url") {
@@ -363,7 +375,7 @@ export function waitPlan(input: WaitInput): WaitPlan {
       throw new Tool.Error({
         message: 'browser.wait needs url, for example browser.wait({ tabID, url: "/dashboard" }).',
       })
-    return { kind: "url", url: input.url, timeoutMs }
+    return { kind: "url", waited: "url", url: input.url, timeoutMs }
   }
 
   if (condition === "element" || condition === "elementGone") {
@@ -377,7 +389,7 @@ export function waitPlan(input: WaitInput): WaitPlan {
       throw new Tool.Error({
         message: 'browser.wait needs selector or ref, for example browser.wait({ tabID, selector: "#save" }).',
       })
-    return { kind: "element", element, gone: condition === "elementGone", ...frame, timeoutMs }
+    return { kind: "element", waited: condition, element, gone: condition === "elementGone", ...frame, timeoutMs }
   }
 
   const text = input.text ?? input.textGone
@@ -387,6 +399,7 @@ export function waitPlan(input: WaitInput): WaitPlan {
     })
   return {
     kind: "desktop",
+    waited: condition,
     action: {
       type: "wait",
       tabID: input.tabID,

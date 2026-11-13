@@ -282,67 +282,91 @@ it.live("a deny on wait refuses it before it probes the page", () =>
   }),
 )
 
+const missingTab = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
+
+// What `operation` fails with in `sessionID`.
+const refusal = (
+  browser: Effect.Success<ReturnType<typeof setup>>,
+  operation: string,
+  input: object,
+  sessionID = browser.session.id,
+  agent = "build",
+) =>
+  browser.run(operation, input, agent, sessionID).pipe(
+    Effect.flip,
+    Effect.map((error) => error.message),
+  )
+
 // A browser denied by config, a session beside the attached one with no desktop, a file in the workspace and a tab that
 // does not exist: whichever of them a call meets, it must hear only the denial.
-const denied = Effect.fnUntraced(function* () {
-  const browser = yield* setup({ permissions: [rule("*", "deny")] })
-  const sessions = yield* Session.Service
-  const detached = yield* sessions.create({ location: browser.ref })
-  yield* Effect.promise(() => Bun.write(path.join(browser.ref.directory, "page.html"), "<p>page</p>"))
-  const refusal = (operation: string, input: object, sessionID = browser.session.id) =>
-    browser.run(operation, input, "build", sessionID).pipe(
-      Effect.flip,
-      Effect.map((error) => error.message),
-    )
-  return { browser, detached, refusal, missingTab: Browser.TabID.make(`tab_${crypto.randomUUID()}`) }
-})
-
-it.live("a denied preview reveals neither the file nor the connection", () =>
+it.live("a denied call reveals neither its files, its tab nor the connection", () =>
   Effect.gen(function* () {
-    const { browser, detached, refusal } = yield* denied()
-    expect(yield* refusal("preview", { path: "page.html" }, detached.id)).toStartWith("[browser.denied]")
-    expect(yield* refusal("preview", { path: "missing.html" })).toStartWith("[browser.denied]")
-    expect(yield* refusal("preview", { path: "missing.html" }, detached.id)).toStartWith("[browser.denied]")
-    expect(yield* refusal("preview", { path: "." })).toStartWith("[browser.denied]")
-    expect(browser.commands.count).toBe(0)
-  }),
-)
-
-it.live("a denied upload or drop reveals neither its files, its tab nor the connection", () =>
-  Effect.gen(function* () {
-    const { browser, detached, refusal, missingTab } = yield* denied()
-    for (const operation of ["files.upload", "files.drop"]) {
-      for (const paths of [["page.html"], ["missing.html"]])
-        expect(yield* refusal(operation, { tabID: tab.id, ref: "e1", paths }, detached.id)).toStartWith(
-          "[browser.denied]",
-        )
-      expect(yield* refusal(operation, { tabID: missingTab, ref: "e1", paths: ["page.html"] })).toStartWith(
-        "[browser.denied]",
-      )
-    }
-    expect(browser.commands.count).toBe(0)
-  }),
-)
-
-it.live("a denied files.get reveals neither its tab nor the connection", () =>
-  Effect.gen(function* () {
-    const { browser, detached, refusal, missingTab } = yield* denied()
+    const browser = yield* setup({ permissions: [rule("*", "deny")] })
+    const sessions = yield* Session.Service
+    const detached = yield* sessions.create({ location: browser.ref })
+    yield* Effect.promise(() => Bun.write(path.join(browser.ref.directory, "page.html"), "<p>page</p>"))
     const fileID = `file_${crypto.randomUUID()}`
-    expect(yield* refusal("files.get", { tabID: missingTab, fileID })).toStartWith("[browser.denied]")
-    expect(yield* refusal("files.get", { tabID: tab.id, fileID }, detached.id)).toStartWith("[browser.denied]")
+    const calls: [string, object, Session.ID][] = [
+      ["preview", { path: "page.html" }, detached.id],
+      ["preview", { path: "missing.html" }, browser.session.id],
+      ["preview", { path: "missing.html" }, detached.id],
+      ["preview", { path: "." }, browser.session.id],
+      ...["files.upload", "files.drop"].flatMap((operation): [string, object, Session.ID][] => [
+        [operation, { tabID: tab.id, ref: "e1", paths: ["page.html"] }, detached.id],
+        [operation, { tabID: tab.id, ref: "e1", paths: ["missing.html"] }, detached.id],
+        [operation, { tabID: missingTab, ref: "e1", paths: ["page.html"] }, browser.session.id],
+      ]),
+      ["files.get", { tabID: missingTab, fileID }, browser.session.id],
+      ["files.get", { tabID: tab.id, fileID }, detached.id],
+      ["tabs.list", {}, detached.id],
+      ["snapshot", { tabID: missingTab }, browser.session.id],
+      ["snapshot", { tabID: tab.id }, detached.id],
+      ["wait", { tabID: missingTab, selector: "#done" }, browser.session.id],
+      ["wait", { tabID: tab.id, selector: "#done" }, detached.id],
+    ]
+    for (const [operation, input, sessionID] of calls)
+      expect(yield* refusal(browser, operation, input, sessionID)).toStartWith("[browser.denied]")
     expect(browser.commands.count).toBe(0)
   }),
 )
 
-it.live("a denied tab operation reveals neither the tab nor the connection", () =>
+it.live("a call a tool.use policy blocks hears the same answer whatever tab or file it names", () =>
   Effect.gen(function* () {
-    const { browser, detached, refusal, missingTab } = yield* denied()
-    expect(yield* refusal("tabs.list", {}, detached.id)).toStartWith("[browser.denied]")
-    expect(yield* refusal("snapshot", { tabID: missingTab })).toStartWith("[browser.denied]")
-    expect(yield* refusal("snapshot", { tabID: tab.id }, detached.id)).toStartWith("[browser.denied]")
-    expect(yield* refusal("wait", { tabID: missingTab, selector: "#done" })).toStartWith("[browser.denied]")
-    expect(yield* refusal("wait", { tabID: tab.id, selector: "#done" }, detached.id)).toStartWith("[browser.denied]")
+    const browser = yield* setup({ policies: [{ action: "tool.use", resource: "browser:*", effect: "deny" }] })
+    yield* Effect.promise(() => Bun.write(path.join(browser.ref.directory, "page.html"), "<p>page</p>"))
+    for (const [operation, input] of [
+      ["preview", { path: "page.html" }],
+      ["preview", { path: "missing.html" }],
+      ["preview", { path: "." }],
+      ["snapshot", { tabID: missingTab }],
+      ["wait", { tabID: missingTab, selector: "#done" }],
+    ] as const)
+      expect(yield* refusal(browser, operation, input)).toBe("Blocked by configuration policy")
     expect(browser.commands.count).toBe(0)
+  }),
+)
+
+it.live("a call that must ask names no tab before the prompt is answered", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup({ permissions: [rule("*", "ask")] })
+    const permissions = Context.get(browser.context, Permission.Service)
+    const call = yield* browser.run("snapshot", { tabID: missingTab }).pipe(Effect.forkScoped)
+    // Before, the call failed at once listing the open tabs and URLs; now it waits on the user before reading them.
+    const request = yield* asked(permissions, "snapshot")
+    expect(request.resources).toEqual(["snapshot"])
+    yield* permissions.reply({ requestID: request.id, reply: "reject" })
+    expect(Exit.isFailure(yield* Fiber.await(call))).toBe(true)
+    expect(browser.commands.count).toBe(0)
+  }),
+)
+
+it.live("an agent core cannot resolve, such as a disabled one, is denied the browser despite the grant", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup({ agents: { reviewer: { disabled: true } } })
+    expect(yield* refusal(browser, "tabs.list", {}, browser.session.id, "reviewer")).toStartWith("[browser.denied]")
+    expect(yield* refusal(browser, "tabs.list", {}, browser.session.id, "ghost")).toStartWith("[browser.denied]")
+    expect(browser.commands.count).toBe(0)
+    expect((yield* browser.call()).output).toEqual({ tabs: [], focusedTabID: null })
   }),
 )
 
@@ -352,14 +376,17 @@ it.live("without a deny, a session with no desktop hears that it is disconnected
     const sessions = yield* Session.Service
     const detached = yield* sessions.create({ location: browser.ref })
     yield* Effect.promise(() => Bun.write(path.join(browser.ref.directory, "page.html"), "<p>page</p>"))
-    const refusal = (operation: string, input: object) =>
-      browser.run(operation, input, "build", detached.id).pipe(
-        Effect.flip,
-        Effect.map((error) => error.message),
+    // Whether the file exists is not said: without a desktop no permission check, policies included, can run.
+    for (const file of ["page.html", "missing.html"])
+      expect(yield* refusal(browser, "preview", { path: file }, detached.id)).toStartWith(
+        `[browser.disconnected] ${path.join(browser.ref.directory, file)} was not shown`,
       )
-    expect(yield* refusal("preview", { path: "page.html" })).toStartWith("[browser.disconnected]")
-    expect(yield* refusal("preview", { path: "missing.html" })).toStartWith("browser.preview found no file")
-    expect(yield* refusal("wait", { tabID: tab.id, selector: "#done" })).toStartWith("[browser.disconnected]")
+    expect(yield* refusal(browser, "wait", { tabID: tab.id, selector: "#done" }, detached.id)).toStartWith(
+      "[browser.disconnected]",
+    )
+    expect(yield* refusal(browser, "snapshot", { tabID: missingTab }, detached.id)).toStartWith(
+      "[browser.disconnected]",
+    )
   }),
 )
 

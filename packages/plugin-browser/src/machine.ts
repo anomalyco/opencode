@@ -628,13 +628,15 @@ export function selectPendingCommand(
   return entry.pending.get(requestID)
 }
 
-/** The attachment and tab a browser tool call targets, or the error the tool returns. */
-export function selectTarget(
+/**
+ * The session's attached connection, or the error a tool call returns while it has none. Reads nothing about its tabs,
+ * so it may answer before the call is authorized.
+ */
+export function selectConnection(
   state: ConnectionState,
   sessionID: Session.ID,
-  action: Browser.Action,
 ):
-  | { readonly ok: true; readonly connectionID: string; readonly tab: Browser.Tab | undefined }
+  | { readonly ok: true; readonly connectionID: string; readonly tabs: readonly Browser.Tab[] }
   | { readonly ok: false; readonly error: Tool.Error } {
   const entry = state.status === "active" ? state.sessions.get(sessionID) : undefined
 
@@ -655,11 +657,29 @@ export function selectTarget(
           "[browser.disconnected] The desktop browser is still connecting to this session; no action ran. Call browser.tabs.list({}) once it finishes connecting.",
       }),
     }
-  const tab = "tabID" in action ? entry.browserState.tabs.find((tab) => tab.id === action.tabID) : undefined
 
-  if ("tabID" in action && !tab) return { ok: false, error: tabUnavailable(action.tabID, entry.browserState.tabs) }
+  return { ok: true, connectionID: entry.connectionID, tabs: entry.browserState.tabs }
+}
 
-  return { ok: true, connectionID: entry.connectionID, tab }
+/**
+ * The attachment and tab a browser tool call targets, or the error the tool returns. The error for an unknown tab lists
+ * the session's tabs, so this runs only once the call is authorized.
+ */
+export function selectTarget(
+  state: ConnectionState,
+  sessionID: Session.ID,
+  action: Browser.Action,
+):
+  | { readonly ok: true; readonly connectionID: string; readonly tab: Browser.Tab | undefined }
+  | { readonly ok: false; readonly error: Tool.Error } {
+  const connection = selectConnection(state, sessionID)
+
+  if (!connection.ok) return connection
+  const tab = "tabID" in action ? connection.tabs.find((tab) => tab.id === action.tabID) : undefined
+
+  if ("tabID" in action && !tab) return { ok: false, error: tabUnavailable(action.tabID, connection.tabs) }
+
+  return { ok: true, connectionID: connection.connectionID, tab }
 }
 
 /** Whether a desktop is attached to the session or attaching to it. */

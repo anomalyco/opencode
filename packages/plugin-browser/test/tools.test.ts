@@ -76,9 +76,11 @@ test("evaluate runs a script with a top-level return or await as an async functi
   expect(BrowserTools.asyncBody('const r = await fetch("/x"); return r.status')).toBe(
     wrapped('const r = await fetch("/x"); return r.status'),
   )
-  expect(BrowserTools.asyncBody("await new Promise((resolve) => resolve(1))")).toBe(
-    wrapped("await new Promise((resolve) => resolve(1))"),
-  )
+  // An awaited expression is the result, as in a DevTools console; before, it ran as a body and returned null.
+  const run = (script: string) => runInNewContext(BrowserTools.asyncBody(script))
+  expect(await run("await new Promise((resolve) => resolve(1))")).toBe(1)
+  expect(await run("await Promise.resolve(2).then((value) => value + 1);")).toBe(3)
+  expect(await run("const a = await Promise.resolve(4); return a + 1")).toBe(5)
   // Scripts that compile today keep their completion value: expressions, statement lists, nested returns, async IIFEs.
   for (const script of [
     "document.title",
@@ -143,6 +145,7 @@ describe("wait reads the condition from the keys models write", () => {
     text?: string,
   ): BrowserTools.WaitPlan => ({
     kind: "desktop",
+    waited: condition,
     timeoutMs,
     action: { type: "wait", tabID, condition, ...(text === undefined ? {} : { text }), timeoutMs },
   })
@@ -179,38 +182,40 @@ describe("wait reads the condition from the keys models write", () => {
     // 24 calls: { selector, timeout }.
     expect(plan({ selector: "#app .ready", timeout: 8_000 })).toEqual({
       kind: "element",
+      waited: "element",
       element: { selector: "#app .ready" },
       gone: false,
       timeoutMs: 8_000,
     })
     expect(plan({ selector: ".spinner", state: "hidden", frameID: "frame" })).toEqual({
       kind: "element",
+      waited: "elementGone",
       element: { selector: ".spinner" },
       gone: true,
       frameID: "frame",
       timeoutMs: 10_000,
     })
     const ref = Browser.Ref.make("e4")
-    expect(plan({ ref })).toEqual({ kind: "element", element: { ref }, gone: false, timeoutMs: 10_000 })
-    expect(plan({ url: "**/dashboard" })).toEqual({ kind: "url", url: "**/dashboard", timeoutMs: 10_000 })
+    expect(plan({ ref })).toEqual({ kind: "element", waited: "element", element: { ref }, gone: false, timeoutMs: 10_000 })
+    expect(plan({ url: "**/dashboard" })).toEqual({ kind: "url", waited: "url", url: "**/dashboard", timeoutMs: 10_000 })
   })
 
   test("time, ms and delayMs pause", () => {
     // 29 calls { time } in milliseconds and 3 in seconds (Playwright MCP); 4 { ms }.
-    expect(plan({ time: 3_000 })).toEqual({ kind: "delay", timeoutMs: 3_000 })
-    expect(plan({ time: 6 })).toEqual({ kind: "delay", timeoutMs: 6_000 })
-    expect(plan({ ms: 1_200 })).toEqual({ kind: "delay", timeoutMs: 1_200 })
-    expect(plan({ delayMs: 500 })).toEqual({ kind: "delay", timeoutMs: 500 })
-    expect(plan({ delayMs: 90_000 })).toEqual({ kind: "delay", timeoutMs: 30_000 })
-    expect(plan({ condition: "delay", timeout: 2_000 })).toEqual({ kind: "delay", timeoutMs: 2_000 })
+    expect(plan({ time: 3_000 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 3_000 })
+    expect(plan({ time: 6 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 6_000 })
+    expect(plan({ ms: 1_200 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 1_200 })
+    expect(plan({ delayMs: 500 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 500 })
+    expect(plan({ delayMs: 90_000 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 30_000 })
+    expect(plan({ condition: "delay", timeout: 2_000 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 2_000 })
   })
 
   test("a lone timeout pauses for it, up to the maximum", () => {
     // 21 calls { timeout } or { timeoutMs } with no condition: attempted pauses. A load wait on a loaded page returns
     // at once.
-    expect(plan({ timeout: 5_000 })).toEqual({ kind: "delay", timeoutMs: 5_000 })
-    expect(plan({ timeoutMs: 1_500 })).toEqual({ kind: "delay", timeoutMs: 1_500 })
-    expect(plan({ timeout: 120_000 })).toEqual({ kind: "delay", timeoutMs: 30_000 })
+    expect(plan({ timeout: 5_000 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 5_000 })
+    expect(plan({ timeoutMs: 1_500 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 1_500 })
+    expect(plan({ timeout: 120_000 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 30_000 })
   })
 
   test("an ambiguous or incomplete wait fails with one corrective example", () => {
