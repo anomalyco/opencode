@@ -534,6 +534,11 @@ impl Inner {
         prompt["text"] = Value::String(text.to_owned());
         prompt["mode"] = Value::String(self.mode.get().as_str().to_owned());
         self.restore(prompt);
+        // Replacing the text calls no change handler, so the completion hears of it here, as TS's `setText` tells it:
+        // the popup of the old text closes, and one the new text starts opens.
+        if let Some(complete) = self.autocomplete.get() {
+            complete.on_input(&self.textarea.text());
+        }
     }
 
     /// `resetComposer`.
