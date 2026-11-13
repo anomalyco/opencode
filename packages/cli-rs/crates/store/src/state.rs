@@ -32,7 +32,7 @@ use crate::messages::Transcript;
 /// How many [`Data::signals`] events a slow receiver may fall behind. One batch may hold hundreds of a listened type
 /// (a burst of `filesystem.changed`).
 const SIGNALS: usize = 1024;
-/// The most streaming deltas [`Data::take_deltas`] keeps; past that, the oldest go.
+/// The most streaming deltas kept for the [`DeltaListening`]s; past that, the oldest go.
 pub const DELTAS: usize = 4096;
 
 /// A store error. Shared, because one keyed read answers every caller.
@@ -352,9 +352,9 @@ pub(crate) struct Inner {
     pub(crate) signals: broadcast::Sender<Arc<opencode_api::generated::V2Event>>,
     /// How many [`Listening`]s want each event type on [`Data::signals`].
     pub(crate) listened: Mutex<HashMap<String, usize>>,
-    /// The streaming deltas kept for [`Data::take_deltas`] while a [`DeltaListening`] lives.
-    pub(crate) deltas: Mutex<std::collections::VecDeque<opencode_api::generated::V2Event>>,
-    /// How many [`DeltaListening`]s live; read without the lock on the hot path.
+    /// The streaming deltas kept for the [`DeltaListening`]s.
+    pub(crate) deltas: Mutex<Deltas>,
+    /// How many [`DeltaListening`]s live, as `deltas` counts them: a hint the hot path reads without the lock.
     pub(crate) delta_listeners: AtomicUsize,
     /// False while the event connection is not connected; follow-up reads are skipped then.
     pub(crate) online: AtomicBool,
@@ -451,29 +451,38 @@ impl Data {
         Listening { inner: Arc::downgrade(&self.inner), tags }
     }
 
-    /// Keeps the streaming deltas (`session.*.delta`), which [`Data::signals`] never sends, for [`Data::take_deltas`]
-    /// until the returned guard drops: at most [`DELTAS`], the oldest dropped past that. A batch that kept one wakes
-    /// [`Data::subscribe`] also when it changed nothing.
+    /// Keeps the streaming deltas (`session.*.delta`), which [`Data::signals`] never sends, for
+    /// [`DeltaListening::take`] from now until the returned guard drops: at most [`DELTAS`] it has not taken, the
+    /// oldest dropped past that. A batch that kept one wakes [`Data::subscribe`] also when it changed nothing.
     pub fn listen_deltas(&self) -> DeltaListening {
-        self.inner.delta_listeners.fetch_add(1, Ordering::SeqCst);
-        DeltaListening { inner: Arc::downgrade(&self.inner) }
+        let mut deltas = lock(&self.inner.deltas);
+        let id = deltas.ids;
+        deltas.ids += 1;
+        let next = deltas.next;
+        deltas.cursors.insert(id, next);
+        self.inner.delta_listeners.store(deltas.cursors.len(), Ordering::SeqCst);
+        DeltaListening { inner: Arc::downgrade(&self.inner), id }
     }
 
-    /// The streaming deltas the store applied since the last call, oldest first, while a [`DeltaListening`] lives.
-    pub fn take_deltas(&self) -> Vec<opencode_api::generated::V2Event> {
-        lock(&self.inner.deltas).drain(..).collect()
-    }
-
-    /// Keeps `event` for [`Data::take_deltas`] when someone listens; whether it did.
-    pub(crate) fn keep_delta(&self, event: &opencode_api::generated::V2Event) -> bool {
-        if self.inner.delta_listeners.load(Ordering::SeqCst) == 0 {
+    /// Keeps `events`, one batch, for the [`DeltaListening`]s, all under one lock so a take gets all or none of
+    /// them; whether it kept any.
+    pub(crate) fn keep_deltas<'a>(&self, events: impl Iterator<Item = &'a opencode_api::generated::V2Event>) -> bool {
+        let mut events = events.peekable();
+        if self.inner.delta_listeners.load(Ordering::SeqCst) == 0 || events.peek().is_none() {
             return false;
         }
         let mut deltas = lock(&self.inner.deltas);
-        if deltas.len() == DELTAS {
-            deltas.pop_front();
+        // Checked again under the lock: the last listener may have gone since.
+        if deltas.cursors.is_empty() {
+            return false;
         }
-        deltas.push_back(event.clone());
+        for event in events {
+            if deltas.kept.len() == DELTAS {
+                deltas.kept.pop_front();
+            }
+            deltas.kept.push_back(event.clone());
+            deltas.next += 1;
+        }
         true
     }
 
@@ -779,18 +788,56 @@ impl Drop for Listening {
     }
 }
 
-/// The streaming deltas [`Data::take_deltas`] keeps while it lives; see [`Data::listen_deltas`].
+/// The streaming deltas kept for the [`DeltaListening`]s, numbered in the order kept.
+#[derive(Default)]
+pub(crate) struct Deltas {
+    /// The number the next delta kept gets.
+    next: u64,
+    /// The deltas some listener has not taken, the last numbered `next - 1`.
+    kept: std::collections::VecDeque<opencode_api::generated::V2Event>,
+    /// Each listener's first delta not taken, by its ID.
+    cursors: HashMap<u64, u64>,
+    /// The ID of the next listener.
+    ids: u64,
+}
+
+impl Deltas {
+    /// Drops the deltas every listener has taken.
+    fn trim(&mut self) {
+        let first = self.next - self.kept.len() as u64;
+        let taken = self.cursors.values().min().copied().unwrap_or(self.next);
+        self.kept.drain(..taken.saturating_sub(first) as usize);
+    }
+}
+
+/// The streaming deltas kept for [`Self::take`] while it lives; see [`Data::listen_deltas`].
 #[must_use = "the deltas stop being kept when this drops"]
 pub struct DeltaListening {
     inner: std::sync::Weak<Inner>,
+    id: u64,
+}
+
+impl DeltaListening {
+    /// The streaming deltas the store applied since this listener last took them, or since it started, oldest first.
+    pub fn take(&self) -> Vec<opencode_api::generated::V2Event> {
+        let Some(inner) = self.inner.upgrade() else { return Vec::new() };
+        let mut deltas = lock(&inner.deltas);
+        let first = deltas.next - deltas.kept.len() as u64;
+        let next = deltas.next;
+        let Some(cursor) = deltas.cursors.insert(self.id, next) else { return Vec::new() };
+        let events = deltas.kept.iter().skip(cursor.saturating_sub(first) as usize).cloned().collect();
+        deltas.trim();
+        events
+    }
 }
 
 impl Drop for DeltaListening {
     fn drop(&mut self) {
         let Some(inner) = self.inner.upgrade() else { return };
-        if inner.delta_listeners.fetch_sub(1, Ordering::SeqCst) == 1 {
-            lock(&inner.deltas).clear();
-        }
+        let mut deltas = lock(&inner.deltas);
+        deltas.cursors.remove(&self.id);
+        inner.delta_listeners.store(deltas.cursors.len(), Ordering::SeqCst);
+        deltas.trim();
     }
 }
 

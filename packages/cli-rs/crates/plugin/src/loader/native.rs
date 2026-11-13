@@ -123,7 +123,7 @@ fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Resul
                 host,
                 id: setup.id().to_owned(),
                 generation: setup.generation(),
-                layer: RefCell::new(None),
+                revoked: RefCell::default(),
                 activation,
             });
             if manifest.wake {
@@ -690,8 +690,9 @@ struct Guest {
     id: String,
     /// The activation ([`crate::Registry::live`]), which owns the dialogs it asks for.
     generation: u64,
-    /// The commands' keymap layer, until deactivation or a panic removes it.
-    layer: RefCell<Option<Disposer>>,
+    /// What a panic revokes at once, before deactivation: the commands' keymap layer and the event and delta
+    /// subscriptions.
+    revoked: RefCell<Vec<Disposer>>,
     /// The mounted slot claims and routes, which a wake draws again.
     activation: Rc<Activation>,
 }
@@ -763,7 +764,7 @@ impl Guest {
         if let Some(host) = self.host.upgrade() {
             undo.restore(&*host);
         }
-        fail(&self.host, &self.id, &self.failure, self.layer.borrow_mut().take(), &self.activation, error);
+        fail(&self.host, &self.id, &self.failure, self.revoked.take(), &self.activation, error);
         None
     }
 
@@ -878,17 +879,13 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
     let (commands, scoped) = route::split(commands);
     if !commands.is_empty() {
         match setup.host().keymap().layer(KeymapLayer::global(commands)) {
-            Ok(disposer) => {
-                guest.layer.replace(Some(disposer));
-                let guest = guest.clone();
-                setup.on_dispose(move || {
-                    if let Some(layer) = guest.layer.take() {
-                        layer.dispose();
-                    }
-                });
-            }
+            Ok(disposer) => guest.revoked.borrow_mut().push(disposer),
             Err(error) => log::error!("plugin {} keymap layer: {error}", setup.id()),
         }
+    }
+    {
+        let guest = guest.clone();
+        setup.on_dispose(move || guest.revoked.take().into_iter().for_each(Disposer::dispose));
     }
     // A fence key that goes reaches the plugin once the event that freed its block is done.
     let gone = manifest.fence_gone.then(|| {
@@ -950,27 +947,26 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
         });
     }
     for (handler, types) in manifest.events.iter().enumerate() {
-        let (guest, kinds) = (guest.clone(), types.clone());
+        let (called, kinds) = (guest.clone(), types.clone());
         let subscription = setup.host().on_event(
             types,
             Rc::new(move |event| {
                 if kinds.iter().any(|kind| kind == event.tag()) {
-                    guest.handle("on-event", &Request::Event { handler, event: Box::new(event.clone()) });
+                    called.handle("on-event", &Request::Event { handler, event: Box::new(event.clone()) });
                 }
             }),
         );
-        if let Some(subscription) = subscription {
-            setup.on_dispose(move || drop(subscription));
-        }
+        guest.revoked.borrow_mut().extend(subscription);
     }
     if manifest.deltas {
-        let guest = guest.clone();
+        let called = guest.clone();
         let subscription = setup.host().on_deltas(Rc::new(move |events| {
-            guest.handle("on-deltas", &Request::Deltas { events: events.to_vec() });
+            // Before the copy: a failed plugin costs nothing until its subscription goes.
+            if called.failure.borrow().is_none() {
+                called.handle("on-deltas", &Request::Deltas { events: events.to_vec() });
+            }
         }));
-        if let Some(subscription) = subscription {
-            setup.on_dispose(move || drop(subscription));
-        }
+        guest.revoked.borrow_mut().extend(subscription);
     }
     for name in &manifest.routes {
         let guest = guest.clone();

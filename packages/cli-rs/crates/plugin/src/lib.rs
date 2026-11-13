@@ -159,8 +159,8 @@ pub trait Host: 'static {
     fn set_theme(&self, _name: &str) {}
     /// Installs theme `name` ([`abi::Host::install_theme`]). Called outside every plugin callback.
     fn install_theme(&self, _name: &str, _theme: serde_json::Value) {}
-    /// Calls `run` with the streaming deltas the host applied since the last call, once a change batch, until the
-    /// disposer is dropped ([`abi::Setup::on_deltas`]).
+    /// Calls `run` with the streaming deltas the host applied since the last call, or since this, at most once a frame,
+    /// until the disposer is dropped ([`abi::Setup::on_deltas`]).
     fn on_deltas(&self, _run: Deltas) -> Option<Disposer> {
         None
     }
@@ -319,7 +319,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             replies: RefCell::default(),
             failure: failure.clone(),
             call: RefCell::default(),
-            layer: RefCell::default(),
+            revoked: RefCell::default(),
         });
         let mut api = abi::Registered::new(setup.id(), None);
         api.set_waker(activation.waker());
@@ -389,6 +389,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             });
             setup.claim(slot::placement(claim), render, mount, claim.size, &activation);
         }
+        let revoked = &scope.revoked;
         for (types, run) in api.events() {
             let (kinds, run, scope) = (types.to_vec(), run.clone(), scope.clone());
             let subscription = setup.host().on_event(
@@ -399,14 +400,14 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                     }
                 }),
             );
-            setup.registration.disposers.extend(subscription);
+            revoked.borrow_mut().extend(subscription);
         }
         if !api.deltas().is_empty() {
             let (runs, scope) = (api.deltas().to_vec(), scope.clone());
             let subscription = setup.host().on_deltas(Rc::new(move |events| {
                 scope.run("on-deltas", |host| runs.iter().for_each(|run| run(host, events)));
             }));
-            setup.registration.disposers.extend(subscription);
+            revoked.borrow_mut().extend(subscription);
         }
         let commands: Vec<(abi::Scope, TuiCommand)> = api
             .commands()
@@ -422,7 +423,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
         if !global.is_empty() {
             // Kept apart from the registration, so a panic can remove it.
             match setup.host().keymap().layer(KeymapLayer::global(global)) {
-                Ok(disposer) => *scope.layer.borrow_mut() = Some(disposer),
+                Ok(disposer) => scope.revoked.borrow_mut().push(disposer),
                 Err(error) => log::error!("plugin {} keymap layer: {error}", setup.id()),
             }
         }
@@ -485,8 +486,9 @@ struct Scope {
     failure: Rc<RefCell<Option<String>>>,
     /// What the running call asked for, while one runs.
     call: RefCell<Option<Call>>,
-    /// The commands' keymap layer, until deactivation or a panic removes it.
-    layer: RefCell<Option<Disposer>>,
+    /// What a panic revokes at once, before deactivation: the commands' keymap layer and the event and delta
+    /// subscriptions.
+    revoked: RefCell<Vec<Disposer>>,
 }
 
 /// What one call of an in-process plugin asked for: the effects that wait for it to return, and the storage it wrote.
@@ -517,8 +519,8 @@ impl Scope {
         match self.attempt(host, f)? {
             Ok(value) => Some(value),
             Err(panic) => {
-                let (layer, error) = (self.layer.borrow_mut().take(), format!("{export} panicked: {panic}"));
-                fail(&self.host, &self.id, &self.failure, layer, &self.activation, error);
+                let (revoked, error) = (self.revoked.take(), format!("{export} panicked: {panic}"));
+                fail(&self.host, &self.id, &self.failure, revoked, &self.activation, error);
                 None
             }
         }
@@ -569,9 +571,7 @@ impl Scope {
     /// with the host, or without it once it is gone. A plugin that failed is called no more, so its dispose callbacks
     /// do not run (4.14; TS runs no plugin code after a failed setup either).
     fn dispose(self: &Rc<Self>, api: &mut abi::Registered) {
-        if let Some(layer) = self.layer.take() {
-            layer.dispose();
-        }
+        self.revoked.take().into_iter().for_each(Disposer::dispose);
         // First, so nothing the dispose callbacks set off calls the plugin back.
         self.activation.dispose();
         if self.failure.borrow().is_some() {
@@ -950,13 +950,14 @@ pub(crate) fn marked(mark: u64) -> (usize, usize) {
 }
 
 /// Fails plugin `id` with `error` after a call of it panicked: it is not called again, its commands leave the keymap
-/// once the key that may have run the call is handled, the host says so, and its claims draw empty. Its activation
-/// ends: a wake, a fetch it asked for in the same turn and a reply reach nothing.
+/// once the key that may have run the call is handled, as do its event and delta subscriptions (`revoked`), so the
+/// host stops keeping work for it; the host says so, and its claims draw empty. Its activation ends: a wake, a fetch
+/// it asked for in the same turn and a reply reach nothing.
 pub(crate) fn fail(
     host: &Weak<dyn Host>,
     id: &str,
     failure: &RefCell<Option<String>>,
-    layer: Option<Disposer>,
+    revoked: Vec<Disposer>,
     activation: &Rc<Activation>,
     error: String,
 ) {
@@ -964,9 +965,7 @@ pub(crate) fn fail(
     *failure.borrow_mut() = Some(error);
     let id = id.to_owned();
     defer(host, move |host| {
-        if let Some(layer) = layer {
-            layer.dispose();
-        }
+        revoked.into_iter().for_each(Disposer::dispose);
         host.revoked(&id);
         host.failed(&id);
         // The fences it drew fall back to the code view, as the ones it draws from now on do.
