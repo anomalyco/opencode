@@ -1,5 +1,7 @@
 // URL policy shared by the pane and page. Electron-free so it stays unit-testable under Bun.
 
+import { Browser } from "@opencode/plugin-browser/rpc"
+
 export function destinationOrigin(input: string) {
   if (!URL.canParse(input)) return
   const url = new URL(input)
@@ -76,10 +78,15 @@ export function agentRefusal(
   action: { readonly type: string; readonly url?: string },
   page: { readonly url: string; readonly origin: string },
 ) {
-  if ((action.type === "navigate" || action.type === "tabs.open") && action.url && extensionOrigin(action.url.trim()))
-    return `Agent browser tools cannot open extension pages such as ${action.url.trim()}: an extension page runs with that extension's privileges. Ask the user to open it from the extensions menu.`
+  if (
+    (action.type === "navigate" || action.type === "tabs.open") &&
+    action.url &&
+    Browser.extensionOrigin(action.url.trim())
+  )
+    return Browser.extensionPageRefusal(action.url.trim())
 
-  if (leaving.includes(action.type) || (!extensionOrigin(page.url) && !extensionOrigin(page.origin))) return
+  if (leaving.includes(action.type) || (!Browser.extensionOrigin(page.url) && !Browser.extensionOrigin(page.origin)))
+    return
 
   return `This tab shows an extension page (${page.url}). Agent browser tools cannot read or act on extension pages, because they run with that extension's privileges. Navigate this tab to a web page, or use another tab.`
 }
@@ -236,9 +243,8 @@ function withScheme(input: string) {
   if (!value || /^about:blank$/i.test(value)) return "about:blank"
 
   if (/^[a-z][a-z\d+.-]*:\/\//i.test(value)) return value
-  const local = /^(?:(?:[a-z\d-]+\.)*localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(value)
 
-  return `${local ? "http" : "https"}://${value}`
+  return `${Browser.loopbackAddress(value) ? "http" : "https"}://${value}`
 }
 
 /**

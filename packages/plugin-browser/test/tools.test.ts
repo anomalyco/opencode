@@ -21,8 +21,9 @@ test("URL normalization refuses extension pages, which would run with the extens
   for (const url of [
     "chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html",
     "moz-extension://x/popup.html",
+    "blob:chrome-extension://abcdefghijklmnopabcdefghijklmnop/0b6f7c2e",
   ]) {
-    expect(() => navigate(url)).toThrow(`Agent browser tools cannot open extension pages such as ${url}`)
+    expect(() => navigate(url)).toThrow(Browser.extensionPageRefusal(url))
     expect(() => BrowserTools.normalizeAction({ type: "tabs.open", url })).toThrow(
       "Agent browser tools cannot open extension pages",
     )
@@ -49,6 +50,8 @@ test("URL normalization rejects filesystem paths instead of treating them as hos
   expect(() => navigate("https://user:secret@example.com")).toThrow("is not a browser URL")
   expect(navigate("example.com/docs")).toEqual({ type: "navigate", tabID, url: "https://example.com/docs" })
   expect(navigate("localhost:8000")).toEqual({ type: "navigate", tabID, url: "http://localhost:8000/" })
+  // A subdomain of localhost is this machine too, as the pane's address bar reads it.
+  expect(navigate("app.localhost:3000")).toEqual({ type: "navigate", tabID, url: "http://app.localhost:3000/" })
   expect(BrowserTools.normalizeAction({ type: "tabs.open" })).toEqual({ type: "tabs.open" })
   expect(BrowserTools.normalizeAction({ type: "tabs.open", url: " " })).toEqual({
     type: "tabs.open",
