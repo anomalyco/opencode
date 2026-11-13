@@ -56,6 +56,7 @@ export const layer = Layer.effect(
           id: workspaceID,
           ...(typeof credential.metadata?.orgName === "string" ? { name: credential.metadata.orgName } : {}),
           usageURL: `${server}/${workspaceID}/activity/overview`,
+          goURL: `${server}/${workspaceID}/go`,
         },
         ...(go === undefined ? {} : { go }),
         budgets,

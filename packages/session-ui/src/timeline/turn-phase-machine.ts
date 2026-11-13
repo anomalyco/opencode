@@ -1,6 +1,12 @@
 import type { PartRef } from "./timeline-row"
 
-export type TurnLimitKind = "free-limit" | "go-limit" | "budget-limit" | "model-budget-limit"
+export type TurnLimitKind =
+  | "free-limit"
+  | "go-limit"
+  | "budget-limit"
+  | "model-budget-limit"
+  | "no-credits"
+  | "go-required"
 
 export type TurnErrorInfo = {
   readonly text: string

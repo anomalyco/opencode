@@ -1376,6 +1376,20 @@ export function createSessionTimelineRowRenderer(input: {
       }
     })
 
+    // Signing in to OpenCode Console doesn't lift the free limit, so a signed-in member is offered their Go page.
+    const goPageLink = (open: () => void) => (
+      <>
+        <span aria-hidden="true">{" · "}</span>
+        <button
+          type="button"
+          class="font-[530] text-v2-text-text-base hover:underline focus-visible:underline focus-visible:outline-none"
+          onClick={() => open()}
+        >
+          {i18n.t("ui.sessionTurn.goOffer.subscribe")}
+        </button>
+      </>
+    )
+
     return (
       <Frame row={current()}>
         <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
@@ -1411,6 +1425,22 @@ export function createSessionTimelineRowRenderer(input: {
                   class="text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted"
                 >
                   {text()}
+                  <Show when={current().kind === "free-limit" && input.actions?.openGoPage}>
+                    {(open) => goPageLink(open())}
+                  </Show>
+                </div>
+              )}
+            </Match>
+            <Match
+              when={(current().kind === "no-credits" || current().kind === "go-required") && input.actions?.openGoPage}
+            >
+              {(open) => (
+                <div
+                  role="status"
+                  class="text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted"
+                >
+                  {current().text}
+                  {goPageLink(open())}
                 </div>
               )}
             </Match>

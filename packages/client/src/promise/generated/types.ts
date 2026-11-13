@@ -2615,7 +2615,7 @@ export type ConfigEntry =
   | { type: "directory"; path: AbsolutePath }
 
 export type UsageLimitsInfo = {
-  workspace: { id: string; name?: string; usageURL: string }
+  workspace: { id: string; name?: string; usageURL: string; goURL: string }
   go?: UsageLimitsGo
   budgets: Array<UsageLimitsBudget>
 }

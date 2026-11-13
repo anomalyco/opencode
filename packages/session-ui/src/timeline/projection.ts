@@ -701,6 +701,19 @@ function budgetLimit(message: Pick<SessionMessageAssistant, "error">) {
   return { kind, resetAt: at }
 }
 
+// OpenCode Console refuses a workspace out of credits with 402 and a Go model without a Go subscription with 403; Go
+// would keep the member going after either.
+function goOffer(message: Pick<SessionMessageAssistant, "error"> & { model?: { providerID: string } }) {
+  const error = message.error
+
+  if (error?.status === 402 && message.model?.providerID === "opencode") return { kind: "no-credits" as const }
+
+  if (error?.status === 403 && /OpenCode Go subscription is required/.test(error.response?.body ?? error.message))
+    return { kind: "go-required" as const }
+
+  return {}
+}
+
 // Each step replaces the phase the steps before it left, so the turn ends in the phase of its last step.
 function turnPhase(entries: Entry[], active: boolean, status: SessionStatus, placement: TurnThinkingPlacement) {
   return entries.reduce(
@@ -745,11 +758,12 @@ function stepEvent(
   }
 }
 
-function errorInfo(message: Parameters<typeof usageLimit>[0]): TurnErrorInfo {
+function errorInfo(message: Parameters<typeof usageLimit>[0] & Parameters<typeof goOffer>[0]): TurnErrorInfo {
   return {
     text: unwrapErrorMessage(message.error?.message ?? ""),
     ...usageLimit(message),
     ...budgetLimit(message),
+    ...goOffer(message),
   }
 }
 

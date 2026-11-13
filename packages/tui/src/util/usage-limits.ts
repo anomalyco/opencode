@@ -116,6 +116,15 @@ export function goLimitLink(error: { readonly response?: { readonly body: string
   return workspace ? `https://opencode.ai/console/${workspace}/go` : "https://opencode.ai/console"
 }
 
+/** OpenCode Console refused a Go model because the workspace doesn't subscribe to Go. */
+export function goRequired(error: {
+  readonly status?: number
+  readonly message: string
+  readonly response?: { readonly body: string }
+}) {
+  return error.status === 403 && /OpenCode Go subscription is required/.test(error.response?.body ?? error.message)
+}
+
 /**
  * Who spends from a limit and, when it pools spend across models, which ones. A limit on each model separately names
  * only who spends from it.

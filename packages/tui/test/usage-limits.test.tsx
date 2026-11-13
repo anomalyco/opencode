@@ -35,7 +35,12 @@ test("shows what the workspace's limits leave and why a refused turn stopped", a
   const resetsAt = "2026-11-01T00:00:00.000Z"
   // One request that fills Sol's context costs $4, so the $6 left won't cover three.
   const limits = {
-    workspace: { id: "wrk_1", name: "Acme", usageURL: "https://opencode.ai/wrk_1/activity/overview" },
+    workspace: {
+      id: "wrk_1",
+      name: "Acme",
+      usageURL: "https://opencode.ai/wrk_1/activity/overview",
+      goURL: "https://opencode.ai/wrk_1/go",
+    },
     budgets: [
       {
         id: "picked",
@@ -159,4 +164,108 @@ test("shows what the workspace's limits leave and why a refused turn stopped", a
   const picker = setup.captureCharFrame()
   expect(picker).not.toContain("usage ctrl+u")
   expect(picker).not.toContain("per 1M")
+})
+
+test("links a signed-in workspace's Go page when the free limit, credits or Go stop a turn", async () => {
+  await using state = await tmpdir()
+  const session = {
+    id: "ses_go_page",
+    projectID: "proj_test",
+    location: { directory },
+    title: "Go page",
+    agent: "build",
+    model: { providerID: "opencode", id: "big-pickle" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 1 },
+  }
+  const refused = (id: string, created: number, model: { providerID: string; id: string }, error: object) => ({
+    id,
+    type: "assistant",
+    agent: "build",
+    model,
+    content: [],
+    finish: "error",
+    error,
+    time: { created, completed: created },
+  })
+  await using setup = await createAppFixture({
+    width: 110,
+    height: 48,
+    state: state.path,
+    args: { sessionID: session.id },
+    config: { animations: false, tabs: { mode: "off" }, experimental: { "new-designs": true } },
+    fetch: (url) => {
+      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (url.pathname === `/api/session/${session.id}/message`)
+        return json({
+          data: [
+            refused(
+              "msg_go",
+              6,
+              { providerID: "opencode-go", id: "glm-5" },
+              {
+                type: "provider.auth",
+                message: "An active OpenCode Go subscription is required to use Go models.",
+                status: 403,
+              },
+            ),
+            { id: "msg_user_3", type: "user", text: "Third prompt", time: { created: 5 } },
+            refused(
+              "msg_credits",
+              4,
+              { providerID: "opencode", id: "gpt-5.6-sol" },
+              { type: "provider.quota", message: "Insufficient account funds", status: 402 },
+            ),
+            { id: "msg_user_2", type: "user", text: "Second prompt", time: { created: 3 } },
+            refused("msg_free", 2, session.model, {
+              type: "provider.free-limit",
+              message: "Free usage limit reached.",
+              status: 429,
+            }),
+            { id: "msg_user_1", type: "user", text: "First prompt", time: { created: 1 } },
+          ],
+          cursor: {},
+        })
+      if ([`/api/session/${session.id}/inbox`, `/api/session/${session.id}/permission`].includes(url.pathname))
+        return json({ data: [] })
+      if (url.pathname === "/api/agent")
+        return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+      if (url.pathname === "/api/provider")
+        return json({
+          location,
+          data: [
+            { id: "opencode", integrationID: "opencode", name: "OpenCode" },
+            { id: "opencode-go", integrationID: "opencode", name: "OpenCode Go" },
+          ],
+        })
+      if (url.pathname === "/api/model") return json({ location, data: [model("gpt-5.6-sol", "GPT 5.6 Sol", 4)] })
+      if (url.pathname === "/api/experimental/usage/limits")
+        return json({
+          location,
+          data: {
+            workspace: {
+              id: "wrk_1",
+              name: "Acme",
+              usageURL: "https://opencode.ai/console/wrk_1/activity/overview",
+              goURL: "https://opencode.ai/console/wrk_1/go",
+            },
+            budgets: [],
+          },
+        })
+      return undefined
+    },
+  })
+
+  await setup.ready
+  // Signing in doesn't lift the free limit, so the notice links the Go page instead of sending the member to /connect.
+  await setup.waitForFrame(
+    (frame) =>
+      frame.includes("Subscribe to OpenCode Go:") &&
+      !frame.includes("/connect") &&
+      frame.includes("Acme is out of credits") &&
+      frame.includes("OpenCode Go subscription required") &&
+      frame.split("https://opencode.ai/console/wrk_1/go").length === 4,
+  )
 })

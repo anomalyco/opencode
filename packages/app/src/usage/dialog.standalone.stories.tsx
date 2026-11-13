@@ -34,7 +34,12 @@ const anthropic = (spent: number) =>
 const pool = (spent: number) => budget({ id: "pool", scope: "combined", shared: true, limit: 1_000, spent })
 
 const info = (budgets: UsageLimitsBudget[], go = false): UsageLimitsInfo => ({
-  workspace: { id: "wrk_1", name: "Acme", usageURL: "https://opencode.ai/wrk_1/activity/overview" },
+  workspace: {
+    id: "wrk_1",
+    name: "Acme",
+    usageURL: "https://opencode.ai/wrk_1/activity/overview",
+    goURL: "https://opencode.ai/wrk_1/go",
+  },
   go: go
     ? {
         rolling: { percent: 42, limited: false, resetsAt: Date.now() + 3 * hour },
