@@ -13,7 +13,7 @@ import path from "node:path"
 import { tmpdir } from "node:os"
 import { rm } from "node:fs/promises"
 import { existsSync } from "node:fs"
-import { EmbeddedTerminalRenderable, type CapturedLine } from "@opentui/core"
+import { EmbeddedTerminalRenderable, TextAttributes, type CapturedLine } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { startFakeServer, type FakeServer, type Options } from "../lib/fake-server"
 import {
@@ -48,6 +48,8 @@ export type PtyStep = {
   deviation?: { file: string; lines: number }
   // Records each row's background runs under this name (see `backgrounds`).
   backgrounds?: string
+  // With `checkpoint`, also records each row's text attribute runs as `<name>:attributes` (see `attributes`).
+  attributes?: boolean
   // With `checkpoint`, also records this many scrollback rows above the screen as `<name>:scrollback`.
   scrollback?: number
   // Resizes the pseudo-terminal and the emulator before the keys.
@@ -80,6 +82,11 @@ export type PtyCase = {
   keyboard?: boolean
   // Record the terminal cursor at each checkpoint too, as `<name>:cursor` (`x,y`, 0-based, or `hidden`).
   cursor?: boolean
+  // Written to the emulator before the program starts, as a shell's earlier output.
+  preface?: string
+  // The emulator stands in for kitty 0.40: it draws OSC 66 text-sizing sequences at their size, which moves the
+  // cursor as kitty does, and names itself `kitty(0.40.1)` in its XTVERSION reply.
+  terminal?: "kitty"
   // Compare the request log too; `"writes"` leaves the reads out, for screens whose reads belong to later steps.
   requests?: boolean | "writes"
   tsOnly?: boolean
@@ -104,12 +111,13 @@ export async function runPty(side: Side, value: PtyCase) {
   const terminal = new EmbeddedTerminalRenderable(setup.renderer, {
     cols,
     rows,
-    onData: (data) => proc.terminal?.write(data),
+    onData: (data) => proc.terminal?.write(value.terminal === "kitty" ? kittyReplies(data) : data),
   })
   setup.renderer.root.add(terminal)
   // The emulator draws palette slots in the terminal's colors; its default background stays its own, so
   // `backgrounds` can tell it from an explicit color.
   if (value.palette) terminal.write(value.palette.colors.map((color, index) => `\x1b]4;${index};${color}\x07`).join(""))
+  if (value.preface) terminal.write(value.preface)
   const closed = Promise.withResolvers<void>()
   const proc = Bun.spawn(value.command?.(side, server?.url) ?? command(side, withServer(value.args, server?.url)), {
     cwd: box.cwd,
@@ -120,10 +128,12 @@ export async function runPty(side: Side, value: PtyCase) {
       data(_terminal, data) {
         const text = decoder.decode(data, { stream: true })
         output.text += text
-        if (!value.palette) return terminal.write(data)
+        if (!value.palette && !value.terminal) return terminal.write(data)
+        const drawn = value.terminal === "kitty" ? drawTextSizing(text) : text
+        if (!value.palette) return terminal.write(drawn)
         const palette = value.palette
         terminal.write(
-          text.replace(/\x1b\]((?:10|11|4);[^\x07\x1b]*\?)(\x07|\x1b\\)/g, (_match, query: string, end: string) => {
+          drawn.replace(/\x1b\]((?:10|11|4);[^\x07\x1b]*\?)(\x07|\x1b\\)/g, (_match, query: string, end: string) => {
             proc.terminal?.write(colorReplies(query, palette, end))
             return ""
           }),
@@ -174,6 +184,10 @@ export async function runPty(side: Side, value: PtyCase) {
     if (step.checkpoint && value.cursor) {
       const cursor = terminal.screen().cursor
       checkpoints[`${step.checkpoint}:cursor`] = [cursor.visible ? `${cursor.x},${cursor.y}` : "hidden"]
+    }
+    if (step.checkpoint && step.attributes) {
+      await setup.renderOnce()
+      checkpoints[`${step.checkpoint}:attributes`] = attributes(setup.captureSpans().lines.slice(0, terminal.height))
     }
     if (step.backgrounds) {
       await setup.renderOnce()
@@ -318,6 +332,40 @@ function backgrounds(lines: CapturedLine[], width: number) {
     }, [])
     return runs.map((run) => `${run.from}-${run.to} ${run.color}`).join(", ")
   })
+}
+
+// Each row's runs of text attributes as `<from>-<to> <names>`, columns end-exclusive; plain text has no run.
+function attributes(lines: CapturedLine[]) {
+  const names = Object.entries(TextAttributes).filter(([, bit]) => bit !== 0)
+  const named = (value: number) => names.flatMap(([name, bit]) => (value & bit ? [name.toLowerCase()] : [])).join("+")
+  return lines.map((line) =>
+    line.spans
+      .reduce<{ from: number; to: number; value: number }[]>((all, span) => {
+        const from = all.at(-1)?.to ?? 0
+        return [...all, { from, to: from + span.width, value: span.attributes }]
+      }, [])
+      .filter((run) => run.value !== 0)
+      .map((run) => `${run.from}-${run.to} ${named(run.value)}`)
+      .join(", "),
+  )
+}
+
+// kitty draws an OSC 66 text-sizing sequence (`ESC ] 66 ; w=N:s=N ; text ST`): `s` cells high and `w` (else the
+// text's own width) times `s` wide, with the cursor after its top row. The emulator would ignore it.
+function drawTextSizing(text: string) {
+  const sized = /\x1b\]66;([^;\x07\x1b]*);([^\x07\x1b]*)(?:\x07|\x1b\\)/g
+  return text.replace(sized, (_match, params: string, body: string) => {
+    const options = new URLSearchParams(params.replaceAll(":", "&"))
+    const scale = Math.max(1, Number(options.get("s") ?? 1))
+    const cells = (Number(options.get("w") ?? 0) || body.length) * scale
+    const below = Array.from({ length: scale - 1 }, () => `\x1b[B\x1b[${cells}D${" ".repeat(cells)}`).join("")
+    return body.padEnd(cells) + below + (scale > 1 ? `\x1b[${scale - 1}A` : "")
+  })
+}
+
+function kittyReplies(data: Uint8Array) {
+  const text = new TextDecoder().decode(data)
+  return text.replace(/\x1bP>\|[^\x1b]*\x1b\\/g, "\x1bP>|kitty(0.40.1)\x1b\\")
 }
 
 type Probe = {
