@@ -1,0 +1,567 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "opencode plugin contract 2.0",
+  "description": "Generated from opencode_plugin_abi::v2 by `examples/schema.rs`. Do not edit.",
+  "$defs": {
+    "Node": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "box"
+            },
+            "id": {
+              "type": ["string", "null"]
+            },
+            "row": {
+              "type": "boolean"
+            },
+            "gap": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "padding": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "integer",
+                  "format": "uint16",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                {
+                  "type": "integer",
+                  "format": "uint16",
+                  "minimum": 0,
+                  "maximum": 65535
+                }
+              ],
+              "minItems": 2,
+              "maxItems": 2,
+              "description": "Left and right, then top and bottom."
+            },
+            "justify": {
+              "$ref": "#/$defs/Justify"
+            },
+            "align": {
+              "$ref": "#/$defs/Align"
+            },
+            "bg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "on_click": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Click"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Node"
+              },
+              "default": []
+            }
+          },
+          "required": ["type"],
+          "description": "A box that lays out its children in a column, or in a row."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "text"
+            },
+            "id": {
+              "type": ["string", "null"]
+            },
+            "spans": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Span"
+              }
+            },
+            "fg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "wrap": {
+              "$ref": "#/$defs/Wrap"
+            },
+            "truncate": {
+              "type": "boolean"
+            },
+            "selectable": {
+              "type": "boolean"
+            },
+            "hover_fg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "on_click": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Click"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": ["type", "spans"],
+          "description": "Styled text; `fg` draws spans without their own, by default `text.base`."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "slot"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": ["type", "path"],
+          "description": "The claims of a published slot inside the surface's own, in place."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "markdown"
+            },
+            "id": {
+              "type": ["string", "null"]
+            },
+            "source": {
+              "$ref": "#/$defs/Source"
+            }
+          },
+          "required": ["type", "source"],
+          "description": "Markdown, drawn as the host draws a message."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "spinner"
+            },
+            "id": {
+              "type": ["string", "null"]
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": ["type", "label"],
+          "description": "A spinner with `label`, in the host's spinner color."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "scroll"
+            },
+            "id": {
+              "type": ["string", "null"]
+            },
+            "height": {
+              "type": ["integer", "null"],
+              "format": "uint16",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "follow": {
+              "type": "boolean",
+              "description": "Stays at the bottom while it is there, as content grows."
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Node"
+              },
+              "default": []
+            }
+          },
+          "required": ["type"],
+          "description": "A box the host scrolls: the wheel, and its own keys while it has focus. Its offset is the host's and stays\nacross revisions while its id does. `height` in cells; without one it takes its layout's room, and with\n[`Layout::grow`] the room its siblings leave, never more than its parent has."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "diff"
+            },
+            "id": {
+              "type": ["string", "null"]
+            },
+            "content": {
+              "$ref": "#/$defs/Source"
+            },
+            "view": {
+              "$ref": "#/$defs/DiffView"
+            },
+            "filetype": {
+              "type": ["string", "null"],
+              "description": "The language to highlight as, such as `rust`."
+            }
+          },
+          "required": ["type", "content"],
+          "description": "A patch in the host's diff view: its own highlighting, colors and line numbers."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "keep"
+            },
+            "key": {
+              "type": "string"
+            }
+          },
+          "required": ["type", "key"],
+          "description": "The subtree last adopted under id `key` in this mount, unchanged ([`View::memo`]). A key the host does not\nhold in the last accepted tree is a contract error: the host refuses the tree whole."
+        }
+      ],
+      "description": "What a surface draws: a node of a keyed tree. A node may carry an `id`, unique in its mount; the host keeps the\nwidget of a node whose id and kind stay, and writes only what changed. Without an id a node is matched by its kind\nand place among the siblings without one."
+    },
+    "Justify": {
+      "type": "string",
+      "enum": ["start", "end", "center", "space-between", "space-around"]
+    },
+    "Align": {
+      "type": "string",
+      "enum": ["stretch", "start", "center", "end"],
+      "description": "Where a box's children sit across its row or column."
+    },
+    "Color": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Rgba"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "A color: a theme token path (`text.muted`, `markdown.heading`), a scale step (`categorical.3.300`,\n`interactive.500`), `#rrggbb`, or an [`Rgba`]. On the wire it is that text, an [`Rgba`] as `#rrggbbaa`. An\nunknown token draws in `text.base`."
+    },
+    "Rgba": {
+      "type": "string",
+      "pattern": "^#[0-9a-f]{8}$"
+    },
+    "Layout": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Width"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "grow": {
+          "type": "boolean",
+          "description": "Takes the room left over, from its own size up."
+        },
+        "shrink": {
+          "type": ["boolean", "null"],
+          "description": "Whether it gives up room when its parent is too small; the host's default when `None`."
+        },
+        "min_width_zero": {
+          "type": "boolean",
+          "description": "May shrink below its content's width."
+        }
+      },
+      "description": "How a node takes space in its parent's row or column."
+    },
+    "Width": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "cells": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0,
+              "maximum": 65535
+            }
+          },
+          "required": ["cells"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "percent": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": ["percent"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Click": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "on": {
+          "$ref": "#/$defs/Press",
+          "description": "On the press of the left button, or on its release."
+        }
+      },
+      "required": ["action", "on"],
+      "description": "What a click on a node runs."
+    },
+    "Action": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "command"
+            },
+            "name": {
+              "type": "string"
+            },
+            "input": {
+              "type": ["string", "null"]
+            }
+          },
+          "required": ["type", "name"],
+          "description": "Runs a registered command, the plugin's or the host's, palette or not, as [`Host::dispatch`] does."
+        }
+      ],
+      "description": "What a click asks the host to do, after the event that caused it."
+    },
+    "Press": {
+      "type": "string",
+      "enum": ["down", "up"]
+    },
+    "Span": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "fg": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Color"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bg": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Color"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "type": "boolean"
+        },
+        "dim": {
+          "type": "boolean"
+        },
+        "strikethrough": {
+          "type": "boolean"
+        }
+      },
+      "required": ["text"],
+      "description": "Styled text."
+    },
+    "Wrap": {
+      "type": "string",
+      "enum": ["word", "char", "none"]
+    },
+    "Source": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": ["text"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/ContentRef"
+            }
+          },
+          "required": ["content"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "part-output": {
+              "$ref": "#/$defs/PartRef"
+            }
+          },
+          "required": ["part-output"],
+          "additionalProperties": false
+        }
+      ],
+      "description": "What a text-bearing node shows: text inline, content sent once ([`View::content`]), or a transcript part's own\noutput, which never crosses to the plugin."
+    },
+    "ContentRef": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0,
+      "description": "A handle to bytes the plugin gave the host once, in this mount."
+    },
+    "PartRef": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "type": "string"
+        },
+        "part": {
+          "type": "string"
+        }
+      },
+      "required": ["session", "part"],
+      "description": "A part of a session's transcript: its text, or a tool's output."
+    },
+    "DiffView": {
+      "type": "string",
+      "enum": ["unified", "split"]
+    },
+    "SurfaceInput": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0,
+          "maximum": 65535,
+          "description": "The surface's own size in cells."
+        },
+        "height": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "palette": {
+          "$ref": "#/$defs/Palette",
+          "description": "The page theme's colors, for a plugin that computes its own. A node that names a token is restyled by the host\nwith no call; a surface that reads the palette ([`Surface::palette`]) gets a view call on a theme change."
+        },
+        "full": {
+          "type": "boolean",
+          "description": "The host refused the last tree, or holds none: [`Node::Keep`] has nothing to name. [`View::memo`] builds."
+        }
+      },
+      "required": ["width", "height", "palette"],
+      "description": "What a surface's view gets besides the plugin's own state."
+    },
+    "Palette": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/Mode"
+        },
+        "colors": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Rgba"
+          }
+        }
+      },
+      "required": ["mode", "colors"],
+      "description": "Every token of the page theme, by its path (`text.muted`, `background.panel`)."
+    },
+    "Mode": {
+      "type": "string",
+      "enum": ["dark", "light"],
+      "description": "[`ThemeMode`] on the wire."
+    },
+    "MountId": {
+      "type": "object",
+      "properties": {
+        "surface": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "generation": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": ["surface", "key", "generation"],
+      "description": "One showing of one surface: the plugin's surface, the key it chose, and a generation that is new every time. A\nsurface closed and opened again has the same key and a new generation; what the first showing owned ends with it."
+    }
+  }
+}
