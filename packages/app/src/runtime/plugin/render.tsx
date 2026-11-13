@@ -212,7 +212,9 @@ function webLink(event: MouseEvent) {
   if (!(anchor instanceof HTMLAnchorElement) || !anchor.closest("[data-pane-row]") || anchor.hasAttribute("download"))
     return
 
-  return /^https?:$/.test(anchor.protocol) ? anchor.href : undefined
+  // Only a link written as an absolute web address: a fragment or relative link resolves against the app's own
+  // origin, which is http in development, and is no web page to open beside the session.
+  return /^https?:\/\//i.test(anchor.getAttribute("href")?.trim() ?? "") ? anchor.href : undefined
 }
 
 /**
