@@ -7,7 +7,7 @@
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::hash::Hash;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use futures_util::FutureExt;
@@ -32,6 +32,8 @@ use crate::messages::Transcript;
 /// How many [`Data::signals`] events a slow receiver may fall behind. One batch may hold hundreds of a listened type
 /// (a burst of `filesystem.changed`).
 const SIGNALS: usize = 1024;
+/// The most streaming deltas [`Data::take_deltas`] keeps; past that, the oldest go.
+pub const DELTAS: usize = 4096;
 
 /// A store error. Shared, because one keyed read answers every caller.
 pub type Error = Arc<opencode_api::error::Error>;
@@ -350,6 +352,10 @@ pub(crate) struct Inner {
     pub(crate) signals: broadcast::Sender<Arc<opencode_api::generated::V2Event>>,
     /// How many [`Listening`]s want each event type on [`Data::signals`].
     pub(crate) listened: Mutex<HashMap<String, usize>>,
+    /// The streaming deltas kept for [`Data::take_deltas`] while a [`DeltaListening`] lives.
+    pub(crate) deltas: Mutex<std::collections::VecDeque<opencode_api::generated::V2Event>>,
+    /// How many [`DeltaListening`]s live; read without the lock on the hot path.
+    pub(crate) delta_listeners: AtomicUsize,
     /// False while the event connection is not connected; follow-up reads are skipped then.
     pub(crate) online: AtomicBool,
     disposed: AtomicBool,
@@ -377,6 +383,8 @@ impl Data {
                 revision: watch::channel(0).0,
                 signals: broadcast::channel(SIGNALS).0,
                 listened: Mutex::default(),
+                deltas: Mutex::default(),
+                delta_listeners: AtomicUsize::new(0),
                 online: AtomicBool::new(true),
                 disposed: AtomicBool::new(false),
                 on_error: Mutex::new(None),
@@ -428,7 +436,7 @@ impl Data {
 
     /// Receives the events of each type a [`Listening`] wants, for the views that handle one themselves (`tui.*`,
     /// `session.deleted`) and the plugins' `on_event`, after the store applied their batch. Streaming deltas are never
-    /// sent. A receiver that falls behind skips the oldest.
+    /// sent ([`Data::take_deltas`] has them). A receiver that falls behind skips the oldest.
     pub fn signals(&self) -> broadcast::Receiver<Arc<opencode_api::generated::V2Event>> {
         self.inner.signals.subscribe()
     }
@@ -441,6 +449,37 @@ impl Data {
             *listened.entry(tag.clone()).or_default() += 1;
         }
         Listening { inner: Arc::downgrade(&self.inner), tags }
+    }
+
+    /// Keeps the streaming deltas (`session.*.delta`), which [`Data::signals`] never sends, for [`Data::take_deltas`]
+    /// until the returned guard drops: at most [`DELTAS`], the oldest dropped past that. A batch that kept one wakes
+    /// [`Data::subscribe`] also when it changed nothing.
+    pub fn listen_deltas(&self) -> DeltaListening {
+        self.inner.delta_listeners.fetch_add(1, Ordering::SeqCst);
+        DeltaListening { inner: Arc::downgrade(&self.inner) }
+    }
+
+    /// The streaming deltas the store applied since the last call, oldest first, while a [`DeltaListening`] lives.
+    pub fn take_deltas(&self) -> Vec<opencode_api::generated::V2Event> {
+        lock(&self.inner.deltas).drain(..).collect()
+    }
+
+    /// Keeps `event` for [`Data::take_deltas`] when someone listens; whether it did.
+    pub(crate) fn keep_delta(&self, event: &opencode_api::generated::V2Event) -> bool {
+        if self.inner.delta_listeners.load(Ordering::SeqCst) == 0 {
+            return false;
+        }
+        let mut deltas = lock(&self.inner.deltas);
+        if deltas.len() == DELTAS {
+            deltas.pop_front();
+        }
+        deltas.push_back(event.clone());
+        true
+    }
+
+    /// Wakes [`Data::subscribe`] with the revision it has, for deltas kept without a change.
+    pub(crate) fn wake_deltas(&self) {
+        self.inner.revision.send_modify(|_| {});
     }
 
     /// The current revision and what changed after `seen`.
@@ -736,6 +775,21 @@ impl Drop for Listening {
                     listened.remove(tag);
                 }
             }
+        }
+    }
+}
+
+/// The streaming deltas [`Data::take_deltas`] keeps while it lives; see [`Data::listen_deltas`].
+#[must_use = "the deltas stop being kept when this drops"]
+pub struct DeltaListening {
+    inner: std::sync::Weak<Inner>,
+}
+
+impl Drop for DeltaListening {
+    fn drop(&mut self) {
+        let Some(inner) = self.inner.upgrade() else { return };
+        if inner.delta_listeners.fetch_sub(1, Ordering::SeqCst) == 1 {
+            lock(&inner.deltas).clear();
         }
     }
 }

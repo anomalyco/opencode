@@ -21,4 +21,4 @@ pub use location::{Catalog, Location, LocationData};
 pub use messages::{LoadMore, MessageExt, Transcript};
 pub use sessions::CreateSession;
 pub use shells::Shell;
-pub use state::{Data, Error, Listening, Options, SessionStatus, State, Task};
+pub use state::{DELTAS, Data, DeltaListening, Error, Listening, Options, SessionStatus, State, Task};

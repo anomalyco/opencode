@@ -53,14 +53,23 @@ impl Data {
         for follow in follows {
             self.follow(follow);
         }
-        // Each event of a type someone listens to; a delta, the hot path, is neither looked up, cloned nor sent.
-        let mut listened = None;
-        for event in events.iter().filter(|event| !is_delta(event)) {
+        // Each event of a type someone listens to; a delta, the hot path, is neither looked up nor sent, and is kept
+        // only while someone takes them.
+        let (mut listened, mut kept) = (None, false);
+        for event in events {
+            if is_delta(event) {
+                kept |= self.keep_delta(event);
+                continue;
+            }
             let listened = listened.get_or_insert_with(|| opencode_util::lock(&self.inner.listened));
             if listened.contains_key(event.tag()) {
                 // No receiver is not an error: views subscribe when they need to.
                 let _ = self.inner.signals.send(std::sync::Arc::new(event.clone()));
             }
+        }
+        // A delta of a session whose messages are not loaded changes nothing, and is kept all the same.
+        if kept {
+            self.wake_deltas();
         }
     }
 

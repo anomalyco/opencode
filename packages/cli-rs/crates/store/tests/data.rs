@@ -1059,3 +1059,50 @@ async fn signals_carry_the_listened_events_but_no_deltas() {
     data.apply(&[renamed_again()]);
     assert_eq!(tags(), Vec::<String>::new());
 }
+
+// Expected: the streaming deltas are kept for `take_deltas` only while a delta listener lives, in order, at most
+// `DELTAS` of them with the oldest dropped; a batch that kept one wakes the revision watchers, also with no change;
+// the last listener's drop forgets what was kept.
+#[tokio::test]
+async fn deltas_are_kept_while_listened_and_bounded() {
+    let data = data(handler(|_req: Req| async { ok(json!({ "data": [] })) }), Options::default());
+    let delta = |ordinal: usize| {
+        let body = json!({ "sessionID": "ses_none", "assistantMessageID": "msg_a", "ordinal": ordinal, "delta": "x" });
+        event(durable("session.text.delta", &format!("evt_{ordinal}"), 1, body))
+    };
+    let ordinals = |events: Vec<V2Event>| -> Vec<i64> {
+        events
+            .iter()
+            .map(|event| match event {
+                V2Event::SessionTextDelta(delta) => delta.data.ordinal,
+                other => panic!("not a text delta: {}", other.tag()),
+            })
+            .collect()
+    };
+    data.apply(&[delta(0)]);
+    let listening = data.listen_deltas();
+    assert!(data.take_deltas().is_empty(), "kept before anyone listened");
+    let mut revisions = data.subscribe();
+    revisions.mark_unchanged();
+    let renamed = event(durable("session.renamed", "evt_renamed", 1, json!({ "sessionID": "ses_none", "title": "T" })));
+    data.apply(&[delta(1), renamed, delta(2)]);
+    assert!(revisions.has_changed().unwrap(), "a kept delta wakes the watchers");
+    assert_eq!(ordinals(data.take_deltas()), [1, 2]);
+    assert!(data.take_deltas().is_empty());
+    let flood: Vec<V2Event> = (0..opencode_store::DELTAS + 2).map(delta).collect();
+    data.apply(&flood);
+    let kept = ordinals(data.take_deltas());
+    assert_eq!(
+        (kept.len(), kept[0], kept[kept.len() - 1]),
+        (opencode_store::DELTAS, 2, opencode_store::DELTAS as i64 + 1)
+    );
+    let second = data.listen_deltas();
+    drop(listening);
+    data.apply(&[delta(7)]);
+    assert_eq!(ordinals(data.take_deltas()), [7], "another listener still wants them");
+    data.apply(&[delta(8)]);
+    drop(second);
+    assert!(data.take_deltas().is_empty(), "the last listener's drop forgets them");
+    data.apply(&[delta(9)]);
+    assert!(data.take_deltas().is_empty());
+}
