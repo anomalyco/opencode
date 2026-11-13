@@ -259,6 +259,21 @@ it.live("another server's startup leaves a live attachment's grant in place", ()
   }),
 )
 
+it.live("deleting an attached session forgets the record of who granted it the browser", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup({})
+    const storage = PluginHost.storage(yield* KV.Service, "opencode.browser")
+    const sessions = yield* Session.Service
+    expect(yield* storage.get(`grant:${browser.session.id}`)).toBeDefined()
+    yield* sessions.remove(browser.session.id)
+    yield* storage.get(`grant:${browser.session.id}`).pipe(
+      Effect.flatMap((owner) => (owner === undefined ? Effect.void : Effect.fail("record still there"))),
+      Effect.retry(Schedule.spaced("10 millis")),
+      Effect.timeout("5 seconds"),
+    )
+  }),
+)
+
 const rule = (resource: string, effect: "allow" | "deny" | "ask", action = "browser") => ({ action, resource, effect })
 
 it.live("a deny on one browser operation refuses that operation and still allows the others", () =>

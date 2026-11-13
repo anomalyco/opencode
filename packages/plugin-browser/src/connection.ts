@@ -304,7 +304,14 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       dispatch({
         type: event.type === "session.deleted" ? "session.deleted" : "session.moved",
         sessionID: event.data.sessionID,
-      }),
+      }).pipe(
+        // A deleted session's grant went with it, and no revoke will forget its owner record.
+        Effect.andThen(
+          event.type === "session.deleted"
+            ? ctx.storage.remove(GRANT_PREFIX + event.data.sessionID).pipe(Effect.ignore)
+            : Effect.void,
+        ),
+      ),
     ),
     Effect.forkScoped({ startImmediately: true }),
   )
