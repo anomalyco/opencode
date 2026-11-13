@@ -62,8 +62,10 @@ pub fn view(
     streaming: bool,
 ) -> Markdown {
     crate::grammars::register();
+    // Core's rule: the `conceal` scope's color, else the text color.
+    let rule = syntax.get("conceal").and_then(|style| style.fg).unwrap_or(theme.markdown.text);
     let markdown = Markdown::new(app)
-        .colors(colors(theme))
+        .colors(MarkdownColors { rule, ..colors(theme) })
         .syntax_theme(syntax.clone())
         .scope_styles(true)
         .table_options(MarkdownTableOptions {
