@@ -55,7 +55,10 @@ const messages = [
   },
 ] as SessionMessageInfo[]
 
-test("advisor tool rows show running, reviewed, declined and unavailable states", async () => {
+async function render(
+  advisor: unknown,
+  check: (setup: Awaited<ReturnType<typeof createTestRenderer>>) => Promise<void>,
+) {
   await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 100, height: 60, kittyKeyboard: true })
   await setup.renderer.setupTerminal()
@@ -66,8 +69,7 @@ test("advisor tool rows show running, reviewed, declined and unavailable states"
     if (url.pathname === `/api/session/${session.id}/message`) return json({ data: messages.toReversed(), cursor: {} })
     if (url.pathname === `/api/session/${session.id}/inbox` || url.pathname === `/api/session/${session.id}/permission`)
       return json({ data: [] })
-    if (url.pathname === "/api/rpc/opencode.advisor/get")
-      return json({ output: { mode: "secure", model: { providerID: "fixture", id: "advisor" } } })
+    if (url.pathname === "/api/rpc/opencode.advisor/get") return json({ output: advisor })
   }, createEventStream())
   const server = Bun.serve({ port: 0, idleTimeout: 0, fetch: (request) => calls.fetch(request) })
   const { run } = await import("../src/app")
@@ -88,6 +90,16 @@ test("advisor tool rows show running, reviewed, declined and unavailable states"
   try {
     await setup.waitForFrame((frame) => frame.includes("Work is done"))
     await setup.waitForVisualIdle({ quietFrames: 3 })
+    await check(setup)
+  } finally {
+    setup.renderer.destroy()
+    await task
+    await server.stop()
+  }
+}
+
+test("advisor tool rows show running, reviewed, declined and unavailable states", () =>
+  render({ mode: "secure", model: { providerID: "fixture", id: "advisor" } }, async (setup) => {
     const frame = setup.captureCharFrame()
     expect(frame).toContain("Asking the advisor…")
     expect(frame).toContain("Advisor reviewed")
@@ -116,9 +128,11 @@ test("advisor tool rows show running, reviewed, declined and unavailable states"
     expect(setup.captureCharFrame()).toContain("The advisor had nothing to add.")
     await click("Advisor unavailable")
     expect(setup.captureCharFrame()).toContain("model not found. Continue without advice.")
-  } finally {
-    setup.renderer.destroy()
-    await task
-    await server.stop()
-  }
-})
+  }))
+
+test("the advisor indicator stays hidden while the flag is off", () =>
+  render(null, async (setup) => {
+    const frame = setup.captureCharFrame()
+    expect(frame).toContain("Advisor reviewed")
+    expect(frame).not.toContain("⊙ advisor")
+  }))

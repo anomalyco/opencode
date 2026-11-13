@@ -1,18 +1,22 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { Advisor } from "@opencode/schema/advisor"
-import { createMemo, createSignal, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useToast } from "../../ui/toast"
 
 export default Plugin.define({
   id: "opencode.advisor",
   setup(context) {
-    const [state, setState] = createSignal<Advisor.State>({ mode: "off" })
+    // `null` while the `advisor` flag is off (or the server lacks the plugin): the command and indicator stay hidden.
+    const [state, setState] = createSignal<Advisor.State | null>(null)
     const rpc = context.client.rpc(Advisor.Definition)
     const locationOption = () => (context.location ? { location: context.location } : undefined)
-    // A server without the plugin (flag off) rejects `get`, and the TUI shows nothing.
-    const load = () => void rpc.get({}, locationOption()).then(setState, () => undefined)
-    load()
+    const load = () =>
+      rpc.get({}, locationOption()).then(
+        (next) => setState(next),
+        () => setState(null),
+      )
+    void load()
 
     // Only inside a session, and as short as the goal indicator: the home screen stays clean.
     context.ui.slot({
@@ -20,9 +24,18 @@ export default Plugin.define({
       render: (input) => {
         const theme = useTheme()
         const [hovered, setHovered] = createSignal(false)
+        // The setting is shared by every open Location, but `changed` only reaches this one, so re-read it when the
+        // session changes.
+        createEffect(
+          on(
+            () => input.sessionID,
+            () => void load(),
+            { defer: true },
+          ),
+        )
         const label = createMemo(() => {
           const current = state()
-          if (!input.sessionID || current.mode === "off") return undefined
+          if (!input.sessionID || !current || current.mode === "off") return undefined
           return current.mode === "secure" ? "advisor (secure)" : "advisor"
         })
         return (
@@ -53,7 +66,7 @@ export default Plugin.define({
             setState(event.data)
           }),
         )
-        onCleanup(context.data.on("server.connected", load))
+        onCleanup(context.data.on("server.connected", () => void load()))
         context.keymap.layer(() => ({
           mode: "global",
           commands: [
@@ -64,22 +77,31 @@ export default Plugin.define({
               group: "Agent",
               palette: true,
               slash: { name: "advisor" },
+              enabled: () => state() !== null,
               async run() {
                 // `label` names the picked model for the confirmation toast; without one the advisor was turned off.
                 const set = (next: Advisor.State, label?: string) =>
                   rpc.set(next, locationOption()).then(
-                    () =>
-                      toast.show({
-                        message: label
-                          ? `${next.mode === "secure" ? "Advisor (secure)" : "Advisor"}: ${label}`
-                          : "Advisor off",
-                        variant: "info",
-                      }),
+                    (saved) =>
+                      toast.show(
+                        saved === null
+                          ? { message: "Turn on the experimental advisor flag first.", variant: "warning" }
+                          : {
+                              message: label
+                                ? `${next.mode === "secure" ? "Advisor (secure)" : "Advisor"}: ${label}`
+                                : "Advisor off",
+                              variant: "info",
+                            },
+                      ),
                     (error: unknown) => toast.error(error),
                   )
+                // Another Location may have changed it since this one last looked.
+                await load()
+                const selected = state()
+                if (!selected) return
                 const mode = await context.ui.dialog.select({
                   title: "Advisor",
-                  current: state().mode,
+                  current: selected.mode,
                   options: [
                     { title: "Off", value: "off" as const },
                     {
@@ -106,7 +128,6 @@ export default Plugin.define({
                   toast.show({ message: "No models available. Connect a provider first.", variant: "warning" })
                   return
                 }
-                const selected = state()
                 const model = await context.ui.dialog.select({
                   title: "Advisor model",
                   placeholder: "Search models",
