@@ -10,7 +10,6 @@ import { Clock, Deferred, Effect, Fiber, Option, Schema, Struct } from "effect"
 import { Environment } from "../../environment/index.js"
 import { Job } from "../../job.js"
 import { FileAccess } from "../../file-access.js"
-import { Flag } from "../../flag.js"
 import { Permission } from "../../permission.js"
 import { NonNegativeInt } from "../../schema.js"
 import { Session } from "../../session.js"
@@ -37,7 +36,7 @@ const OS =
       : process.platform === "linux"
         ? "Linux"
         : process.platform
-const description = (shell?: string, autoBackground = false) =>
+const description = (shell?: string) =>
   [
     "Execute a shell command and return its output.",
     ...(shell ? [`Commands run on ${OS} using ${shell}.`] : []),
@@ -45,31 +44,24 @@ const description = (shell?: string, autoBackground = false) =>
     "Prefer dedicated tools over shell commands when possible.",
     "When output is large, the full result is saved to a file and a truncated preview is returned.",
     "Rely on automatic truncation unless filtering the output is more useful.",
-    autoBackground
-      ? "Commands still running after their timeout move to the background."
-      : "Commands accept an optional timeout, background commands have no timeout by default.",
+    "Commands still running after their timeout move to the background.",
     "Background commands return immediately, and you will be notified when they complete.",
   ].join(" ")
 
-const input = (autoBackground: boolean) =>
-  Schema.Struct({
-    command: Schema.String.annotate({ description: "Shell command string to execute" }),
-    workdir: Schema.optionalKey(Schema.String).annotate({
-      description:
-        "Working directory to execute the command in. Defaults to the current working directory. When possible, avoid changing directories in the command and set the working directory here instead.",
-    }),
-    timeout: Schema.optionalKey(NonNegativeInt).annotate({
-      description: autoBackground
-        ? `Optional timeout in milliseconds (default ${DEFAULT_TIMEOUT_MS}). When it expires, a foreground command moves to the background and a background command is stopped.`
-        : `Timeout in milliseconds. Set to 0 to disable the timeout. Defaults to ${DEFAULT_TIMEOUT_MS} for foreground commands. Background commands have no timeout by default.`,
-    }),
-    background: Schema.optionalKey(Schema.Boolean).annotate({
-      description:
-        "Run the command in the background and return immediately (useful for dev servers and long-running builds). You do not need to use '&' at the end of the command when using this parameter. You will be notified when it completes. DO NOT poll for completion.",
-    }),
-  })
-
-export const Input = input(false)
+export const Input = Schema.Struct({
+  command: Schema.String.annotate({ description: "Shell command string to execute" }),
+  workdir: Schema.optionalKey(Schema.String).annotate({
+    description:
+      "Working directory to execute the command in. Defaults to the current working directory. When possible, avoid changing directories in the command and set the working directory here instead.",
+  }),
+  timeout: Schema.optionalKey(NonNegativeInt).annotate({
+    description: `Optional timeout in milliseconds (default ${DEFAULT_TIMEOUT_MS}). When it expires, a foreground command moves to the background and a background command is stopped.`,
+  }),
+  background: Schema.optionalKey(Schema.Boolean).annotate({
+    description:
+      "Run the command in the background and return immediately (useful for dev servers and long-running builds). You do not need to use '&' at the end of the command when using this parameter. You will be notified when it completes. DO NOT poll for completion.",
+  }),
+})
 
 const StructuredOutput = Schema.Struct({
   output: Schema.String,
@@ -287,7 +279,6 @@ export const Plugin = {
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
     const permission = yield* Permission.Service
-    const autoBackground = yield* Flag.enabled("shell_timeout_background")
 
     const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
       const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
@@ -355,15 +346,12 @@ export const Plugin = {
         editor.add({
           name,
           options: { codemode: false },
-          description: description(undefined, autoBackground),
-          input: input(autoBackground),
+          description: description(),
+          input: Input,
           output: StructuredOutput,
           execute: (input, context) => {
-            // With timeout backgrounding, a foreground timeout of 0 falls back to the default so a call can't block
-            // until the command exits.
-            const foreground = autoBackground
-              ? input.timeout || DEFAULT_TIMEOUT_MS
-              : (input.timeout ?? DEFAULT_TIMEOUT_MS)
+            // A foreground timeout of 0 falls back to the default, so a call can't block until the command exits.
+            const foreground = input.timeout || DEFAULT_TIMEOUT_MS
             const timeout = input.background === true ? (input.timeout ?? 0) : foreground
             let finalTimeout = timeout
             // Uninterruptible from spawning to blocking, so an interrupt cannot orphan a started command.
@@ -414,7 +402,7 @@ export const Plugin = {
                           ),
                         )
                         // A foreground timeout moves the command to the background instead of stopping it.
-                        if (autoBackground && input.background !== true) invocation.timeout = 0
+                        if (input.background !== true) invocation.timeout = 0
                       }),
                   )
                   yield* context.progress({ shellID: info.id })
@@ -435,7 +423,7 @@ export const Plugin = {
 
                   const waiting = jobs.block({ id: job.id, sessionID: context.sessionID })
                   const blocked =
-                    autoBackground && finalTimeout > 0
+                    finalTimeout > 0
                       ? waiting.pipe(
                           Effect.timeoutOption(finalTimeout),
                           Effect.flatMap((result) =>
@@ -498,7 +486,7 @@ export const Plugin = {
       Effect.gen(function* () {
         const tool = event.tools[name]
         if (!tool) return
-        tool.description = description(ShellSelect.name(yield* compatibleShell), autoBackground)
+        tool.description = description(ShellSelect.name(yield* compatibleShell))
       })
     yield* ctx.session.hook("context", hook)
     yield* ctx.session.hook("compaction", hook)
