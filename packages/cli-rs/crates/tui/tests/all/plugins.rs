@@ -513,6 +513,48 @@ fn toggling_a_plugin_frees_the_view_and_the_manager() {
     assert_eq!(Rc::strong_count(&marker), 1);
 }
 
+/// A command `{id}.panel` that opens a panel with key `panel`, and one `{id}.close` that closes it.
+fn paneled<const SUB: bool>(setup: &mut abi::Setup) -> Result<(), String> {
+    let id = if SUB { "owner/sub" } else { "owner" };
+    let command = |name: String| abi::Command { name, ..abi::Command::default() };
+    setup.command(command(format!("{id}.panel")), move |host, _| {
+        host.dialog(abi::Dialog::Panel(abi::Panel {
+            key: "panel".to_owned(),
+            size: abi::PanelSize::Medium,
+            title: vec![abi::Span::new(format!("{id} panel"))],
+            subtitle: None,
+            body: abi::Node::text([abi::Span::new("body")]),
+            actions: Vec::new(),
+            binds: Vec::new(),
+            bleed: false,
+            centered: false,
+        }));
+    });
+    setup
+        .command(command(format!("{id}.close")), |host, _| host.dialog(abi::Dialog::Close { key: "panel".to_owned() }));
+    Ok(())
+}
+
+// Expected (review bigboi-7): a plugin's dialog is its own, also from a plugin whose ID starts with its ID and a `/`:
+// the other one's close and the end of its activation leave it open.
+#[test]
+fn a_plugin_ends_only_its_own_dialog() {
+    let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    opencode_tui::plugins::host::add(&h.tui, abi::Plugin { id: "owner", setup: paneled::<false> }.into());
+    opencode_tui::plugins::host::add(&h.tui, abi::Plugin { id: "owner/sub", setup: paneled::<true> }.into());
+    h.tui.keymap.dispatch("owner/sub.panel", None);
+    h.wait_for("owner/sub panel");
+    h.tui.keymap.dispatch("owner.close", None);
+    h.app.render();
+    assert_eq!(h.tui.dialogs.key().as_deref(), Some("owner/sub/panel"));
+    h.tui.plugins.toggle(&opencode_tui::plugins::host::host(&h.tui), "owner", false);
+    h.app.render();
+    assert_eq!(h.tui.dialogs.key().as_deref(), Some("owner/sub/panel"));
+    h.tui.keymap.dispatch("owner/sub.close", None);
+    h.app.render();
+    assert_eq!(h.tui.dialogs.key(), None);
+}
+
 // Expected: an external plugin's `app` claim shows on the last row, under the route, on home and in a session, as
 // TS's `<Slot path="app" />` under the routes (`app.tsx:1466`); disabling the plugin takes it away.
 #[test]

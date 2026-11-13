@@ -197,13 +197,13 @@ fn only_the_btw_answer_links_sessions_among_plugin_markdown() {
             centered: true,
         })
     };
-    opencode_plugin::Host::dialog(&*h.tui, "test.other", panel("other"));
+    opencode_tui::plugins::panel::show(&h.tui, "test.other", 0, panel("other"));
     h.wait_for(&format!("See {known} here"));
     h.app.advance(std::time::Duration::from_millis(50));
     assert_eq!(linked(&h), Vec::<String>::new());
     assert_eq!(lookups(&log, &known), 0, "{:?}", support::lines(&log));
 
-    opencode_plugin::Host::dialog(&*h.tui, opencode_tui::plugins::btw::ID, panel("answer"));
+    opencode_tui::plugins::panel::show(&h.tui, opencode_tui::plugins::btw::ID, 0, panel("answer"));
     h.wait_for("See @Fix the flaky reconnect test on Windows here");
     assert_eq!(linked(&h), ["@Fix the flaky reconnect test on Windows"]);
 }
