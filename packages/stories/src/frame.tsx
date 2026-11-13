@@ -1,15 +1,11 @@
 import "../../app/src/index.css"
 
-import { createEffect, createResource, onCleanup, onMount, Show, type Component, type JSX } from "solid-js"
+import { createResource, Show, type Component, type JSX } from "solid-js"
 import { Dynamic, render } from "solid-js/web"
-import { MetaProvider } from "@solidjs/meta"
-import { DialogProvider } from "@opencode/ui/context/dialog"
-import { ThemeProvider, useTheme, type ColorScheme } from "@opencode/ui/theme"
-import { Font } from "@opencode/ui/font"
-import { LanguageProvider, UiI18nBridge, useLanguage } from "@/runtime/i18n/language"
-import { SettingsProvider } from "@/settings/model"
+import type { ColorScheme } from "@opencode/ui/theme"
 import { findStory } from "virtual:story-index"
 import { PluginStory } from "./plugin"
+import { StoryProviders } from "./providers"
 
 type Args = { [key: string]: unknown }
 
@@ -66,71 +62,20 @@ function Frame() {
 
 function Decorators(props: { scheme: ColorScheme; fullscreen: boolean; file: string; children: JSX.Element }) {
   return (
-    <MetaProvider>
-      <Font />
-      <ThemeProvider>
-        <LanguageProvider locale={globals.locale ?? "en"}>
-          <UiI18nBridge>
-            <Scheme value={props.scheme} />
-            <Direction value={globals.direction} />
-            <Motion />
-            <SettingsProvider>
-              <DialogProvider>
-                <div
-                  style={{
-                    // Outside fullscreen the page has 1rem of padding around the story. A full-viewport frame inside
-                    // it would make every story page scroll by 32px, so an incidental scroll could move the story
-                    // under a test.
-                    "min-height": props.fullscreen ? "100vh" : "calc(100vh - 2rem)",
-                    padding: props.fullscreen ? "0" : "24px",
-                    "background-color": "var(--background-base)",
-                    color: "var(--text-base)",
-                  }}
-                >
-                  <PluginStory file={props.file}>{props.children}</PluginStory>
-                </div>
-              </DialogProvider>
-            </SettingsProvider>
-          </UiI18nBridge>
-        </LanguageProvider>
-      </ThemeProvider>
-    </MetaProvider>
+    <StoryProviders scheme={props.scheme} direction={globals.direction} locale={globals.locale}>
+      <div
+        style={{
+          // The wrapper fits inside the page's 1rem padding so scrolling a locator into view doesn't shift the story.
+          "min-height": props.fullscreen ? "100vh" : "calc(100vh - 2rem)",
+          padding: props.fullscreen ? "0" : "24px",
+          "background-color": "var(--background-base)",
+          color: "var(--text-base)",
+        }}
+      >
+        <PluginStory file={props.file}>{props.children}</PluginStory>
+      </div>
+    </StoryProviders>
   )
-}
-
-function Scheme(props: { value: ColorScheme }) {
-  const theme = useTheme()
-
-  createEffect(() => theme.setColorScheme(props.value))
-  createEffect(() => {
-    document.documentElement.classList.remove("light", "dark")
-    document.documentElement.classList.add(theme.mode())
-  })
-
-  return null
-}
-
-function Direction(props: { value?: string }) {
-  const language = useLanguage()
-
-  createEffect(() => language.setDirection(props.value === "rtl" ? "rtl" : "ltr"))
-
-  return null
-}
-
-// The app derives this attribute from its reduce motion setting; stories follow the system preference.
-function Motion() {
-  onMount(() => {
-    const motion = matchMedia("(prefers-reduced-motion: reduce)")
-
-    const apply = () => (document.documentElement.dataset.motion = motion.matches ? "reduce" : "full")
-
-    apply()
-    motion.addEventListener("change", apply)
-    onCleanup(() => motion.removeEventListener("change", apply))
-  })
-
-  return null
 }
 
 function scheme(value: string): ColorScheme {

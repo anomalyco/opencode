@@ -62,8 +62,7 @@ export function ContextGroup(props: {
   const tools = createMemo(() => props.parts.filter((part) => part.type === "tool"))
   const reasoning = createMemo(() => props.parts.flatMap((part) => (part.type === "reasoning" ? [part] : [])))
   const thoughtsOnly = createMemo(() => reasoning().length > 0 && reasoning().length === props.parts.length)
-  const partEvents = createMemo(() => workEvents(props.parts))
-  const events = createMemo(() => [...partEvents().values()])
+  const events = createMemo(() => [...workEvents(props.parts).values()])
 
   // A group of only subagents and work reporting back reads as the events row it is, not a group around one. Until a
   // call has anything to count, it stays a group, so the row never renders empty.
@@ -97,16 +96,27 @@ export function ContextGroup(props: {
       const previous = groups.at(-1)
 
       // Subagents started one after another, and work reporting back, read as one events row nested in the group:
-      // "Started 3 subagents".
+      // "Started 3 subagents". The rows keep the order things happened in, which the label does not.
       if (tool.type === "event" || (tool.type === "tool" && toolRule(tool).name === "subagent")) {
-        // A subagent still being asked for has nothing to list yet, and a report its launch already says is not
-        // listed twice.
-        const event = partEvents().get(tool)
+        // A subagent still being asked for has nothing to list yet.
+        const event = tool.type === "event" ? tool.event : toolEvent(tool)
 
         if (!event) return groups
+        const run = previous && !Array.isArray(previous) && previous.type === "work" ? previous : undefined
+        const key = tool.type === "event" ? workKey(event) : undefined
 
-        if (previous && !Array.isArray(previous) && previous.type === "work") {
-          previous.events.push(event)
+        // Work reporting back right after its launch, with nothing between, finishes the launch's row. With
+        // anything between, the launch and the report each keep their row.
+        const launch = key && run ? run.events.findIndex((item) => item.verb === "started" && workKey(item) === key) : -1
+
+        if (run && launch >= 0) {
+          run.events[launch] = { ...run.events[launch]!, verb: event.verb, failed: event.failed }
+
+          return groups
+        }
+
+        if (run) {
+          run.events.push(event)
 
           return groups
         }
@@ -534,8 +544,8 @@ function usedLabel(parts: ActivityGroupPart[], i18n: UiI18n) {
 }
 
 /**
- * What each subagent or background shell in a group did, in order. Work that reports back in the group that started
- * it reads once, as how it ended: the launch says "Finished" and the report is not counted again.
+ * What each subagent or background shell in a group did, for its label. Work that reports back anywhere in the group
+ * that started it is counted once, as how it ended: "Finished", not "Started" and "Finished".
  */
 function workEvents(parts: ActivityGroupPart[]) {
   const launch = (part: ActivityGroupPart) =>

@@ -658,7 +658,10 @@ function localDay(date: Date) {
   return date.getFullYear() * 10_000 + date.getMonth() * 100 + date.getDate()
 }
 
-function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof useLanguage>): HomeSessionGroup[] {
+export function groupSessions(
+  records: HomeSessionRecord[],
+  language: ReturnType<typeof useLanguage>,
+): HomeSessionGroup[] {
   const now = new Date()
   const today = localDay(now)
   const yesterday = localDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))

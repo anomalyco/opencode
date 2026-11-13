@@ -121,6 +121,21 @@ export const Sizes = {
   ),
 }
 
+export const Settings = {
+  render: () => (
+    <OpenStoryDialog
+      render={() => (
+        <Dialog variant="settings" size="large">
+          <DialogHeader hideClose>
+            <DialogTitle>Settings</DialogTitle>
+          </DialogHeader>
+          <DialogBody>Project settings.</DialogBody>
+        </Dialog>
+      )}
+    />
+  ),
+}
+
 export const TitleOnly = {
   render: () => (
     <OpenStoryDialog
