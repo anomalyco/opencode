@@ -24,6 +24,12 @@
       "workerd": "./src/global-roots.workerd.ts",
       "default": "./src/global-roots.ts"
     },
+    "#kernel32": {
+      "workerd": "./src/kernel32.workerd.ts",
+      "bun": "./src/kernel32.bun.ts",
+      "node": "./src/kernel32.node.ts",
+      "default": "./src/kernel32.bun.ts"
+    },
     "#runtime-import": {
       "workerd": "./src/runtime/import.workerd.ts",
       "bun": "./src/runtime/import.bun.ts",
