@@ -207,15 +207,25 @@ export const Plugin = {
                   Effect.gen(function* () {
                     const moveTarget = change.type === "update" ? change.moveTarget : undefined
                     const target = moveTarget ?? change.target
+                    // A move that only changes case is the same file on macOS and Windows, where writing the new name
+                    // and removing the old one deletes it, so it is written in place and renamed.
+                    const recased = moveTarget?.absolute.toLowerCase() === change.target.absolute.toLowerCase()
                     if (change.type === "delete")
                       yield* environment.files
                         .remove(change.target.absolute)
                         .pipe(Effect.mapError((error) => fail(`Failed to delete ${change.target.resource}`, error)))
                     if (change.type !== "delete")
                       yield* environment.files
-                        .write(target.absolute, new TextEncoder().encode(change.content))
+                        .write(
+                          recased ? change.target.absolute : target.absolute,
+                          new TextEncoder().encode(change.content),
+                        )
                         .pipe(Effect.mapError((error) => fail(`Failed to write ${target.resource}`, error)))
-                    if (moveTarget)
+                    if (moveTarget && recased)
+                      yield* environment.files
+                        .move(change.target.absolute, moveTarget.absolute)
+                        .pipe(Effect.mapError((error) => fail(`Failed to rename ${change.target.resource}`, error)))
+                    if (moveTarget && !recased)
                       yield* environment.files
                         .remove(change.target.absolute)
                         .pipe(
