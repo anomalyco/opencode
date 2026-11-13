@@ -16,7 +16,6 @@ use opencode_ui::motion::{ScannerOptions, ScannerStyle, Spinner, SpinnerColor, s
 use opentui::input::Keymap;
 use std::cell::OnceCell;
 use std::path::PathBuf;
-use unicode_width::UnicodeWidthStr;
 
 use super::autocomplete::{self, Autocomplete, parts};
 use super::draft::{Draft, Drafts};
@@ -573,9 +572,7 @@ impl Inner {
 
     /// The cursor offset at the end of the text.
     pub(crate) fn text_end(&self) -> u32 {
-        let text = self.textarea.text();
-        let lines: Vec<&str> = text.split('\n').collect();
-        (lines.iter().map(|line| line.width()).sum::<usize>() + lines.len() - 1) as u32
+        opencode_ui::prompt_input::end(&self.textarea)
     }
 
     pub(crate) fn focused(&self) -> bool {

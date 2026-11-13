@@ -132,11 +132,12 @@ impl RunPrompt {
         Self { message_id: None, delivery: None, ..self.clone() }
     }
 
-    /// `promptAppend`: `following` after a blank line, its mentions shifted along. The result is a normal
-    /// prompt that keeps this prompt's command, or the following one's when this text is empty.
-    pub fn append(&self, following: &RunPrompt) -> Self {
+    /// `promptAppend`: `following` after a blank line, its mentions shifted along by `end` (the offset at the end of
+    /// this text) and the two line breaks. The result is a normal prompt that keeps this prompt's command, or the
+    /// following one's when this text is empty.
+    pub fn append(&self, following: &RunPrompt, end: u32) -> Self {
         let text = if self.text.is_empty() { String::new() } else { format!("{}\n\n", self.text) };
-        let offset = opencode_ui::prompt_input::parse::measure(&text);
+        let offset = if text.is_empty() { 0 } else { end + 2 };
         let shifted = following.parts.iter().cloned().map(|mut part| {
             if let Some(mention) = part.mention_mut() {
                 mention.start += offset;
@@ -360,14 +361,14 @@ mod tests {
             ..RunPrompt::default()
         };
         let draft = RunPrompt { shell: true, command: command("draft"), ..RunPrompt::text("héllo") };
-        let next = draft.append(&undone);
+        let next = draft.append(&undone, 5);
         assert_eq!(next.text, "héllo\n\nask @general");
         // "héllo\n\n" is seven offsets.
         assert_eq!(next.parts, [general(11, 19)]);
         assert_eq!(next.command, command("draft"));
         assert!(!next.shell);
         // Into an empty draft: unchanged offsets and the undone prompt's command.
-        let next = RunPrompt::default().append(&undone);
+        let next = RunPrompt::default().append(&undone, 0);
         assert_eq!((next.text.as_str(), next.parts.clone()), ("ask @general", vec![general(4, 12)]));
         assert_eq!(next.command, command("later"));
     }

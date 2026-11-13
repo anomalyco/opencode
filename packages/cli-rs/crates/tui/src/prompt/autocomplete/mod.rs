@@ -23,6 +23,7 @@ use opencode_store::location::{Catalog, Location};
 use opencode_ui::dialog::FocusId;
 use opencode_ui::fuzzy;
 use opencode_ui::path::Flavor;
+use opencode_ui::prompt_input;
 use opencode_ui::select::{move_wrap, truncate, truncate_middle};
 use opentui::app::{AppProxy, ProxyError};
 use opentui::input::{MouseButton, MouseEventKind};
@@ -32,7 +33,7 @@ use std::sync::atomic::{self, AtomicU64};
 use std::sync::{Arc, Mutex};
 use unicode_width::UnicodeWidthStr;
 
-use self::parse::{DirectorySearch, measure};
+use self::parse::DirectorySearch;
 use self::parts::Kind;
 use crate::prelude::*;
 use crate::prompt::editor::Inner;
@@ -431,10 +432,11 @@ impl State {
         }
         self.dismissed.replace(None);
         let (Some(tui), Some(prompt)) = (self.tui.upgrade(), self.prompt.upgrade()) else { return };
-        let offset = prompt.textarea.cursor_offset();
-        let before = &value[..parse::index_at(value, offset)];
+        let textarea = &prompt.textarea;
+        let offset = textarea.cursor_offset();
+        let before = &value[..prompt_input::index_at(textarea, offset)];
         if let Some(index) = directory_argument(&tui, before) {
-            self.show(Mode::Directory, index);
+            self.show(Mode::Directory, prompt_input::offset_at(textarea, index));
             return;
         }
         if self.visible.get().is_some() {
@@ -455,7 +457,7 @@ impl State {
             return;
         }
         if let Some(index) = parse::mention_trigger(before) {
-            self.show(Mode::Reference, index);
+            self.show(Mode::Reference, prompt_input::offset_at(textarea, index));
         }
     }
 
@@ -785,7 +787,7 @@ impl State {
             Action::Slash(name) => {
                 let text = format!("/{name} ");
                 parts::replace(textarea, 0, textarea.cursor_offset(), &text);
-                textarea.set_cursor_offset(measure(&text));
+                textarea.set_cursor_offset(prompt_input::offset_at(textarea, text.len()));
             }
             Action::Directory(value) => {
                 parts::replace(textarea, self.index.get(), textarea.cursor_offset(), value);
@@ -1036,8 +1038,8 @@ fn install(tui: &Tui, state: &Rc<State>, target: FocusId) {
     }
 }
 
-/// `slashArgumentAutocomplete`: the offset where a `/cd` argument starts, once its space is typed.
-fn directory_argument(tui: &Tui, before: &str) -> Option<u32> {
+/// `slashArgumentAutocomplete`: the byte index where a `/cd` argument starts, once its space is typed.
+fn directory_argument(tui: &Tui, before: &str) -> Option<usize> {
     let (name, _, end) = parse::slash_head(before)?;
     if end == before.len() {
         return None;
@@ -1051,7 +1053,7 @@ fn directory_argument(tui: &Tui, before: &str) -> Option<u32> {
         return None;
     }
     let separator = before[end..].chars().next().map_or(1, char::len_utf8);
-    Some(measure(&before[..end + separator]))
+    Some(end + separator)
 }
 
 /// Keymap slash commands, then server commands, sorted and padded (`commands` memo).

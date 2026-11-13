@@ -5,8 +5,6 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 
-use super::parse::measure;
-
 /// Writes `text` to a temporary file, runs the editor on it, and reads it back: `None` when it came back empty.
 pub fn edit(command: &str, text: &str, cwd: &Path) -> Result<Option<String>, String> {
     let file = create(text).map_err(|error| error.to_string())?;
@@ -126,8 +124,12 @@ struct Candidate {
 }
 
 /// `realignPromptMentions`: longer texts claim their occurrences first, so a short mention never takes part of a
-/// longer one.
-pub fn realign_mentions(content: &str, mentions: &[Option<Mention>]) -> Vec<Option<Mention>> {
+/// longer one. `offset` gives the cursor offset of a byte index of `content`, from the buffer that shows it.
+pub fn realign_mentions(
+    content: &str,
+    mentions: &[Option<Mention>],
+    offset: impl Fn(usize) -> u32,
+) -> Vec<Option<Mention>> {
     let mut aligned = vec![None; mentions.len()];
     let mut groups: Vec<(String, Vec<(usize, &Mention)>)> = Vec::new();
     for (index, mention) in mentions.iter().enumerate() {
@@ -140,7 +142,7 @@ pub fn realign_mentions(content: &str, mentions: &[Option<Mention>]) -> Vec<Opti
     groups.sort_by(|(left, _), (right, _)| right.len().cmp(&left.len()).then(left.cmp(right)));
     let mut protected: Vec<Candidate> = Vec::new();
     for (text, items) in groups {
-        let candidates = occurrences(content, &text);
+        let candidates = occurrences(content, &text, &offset);
         let available: Vec<Candidate> = candidates
             .iter()
             .copied()
@@ -149,20 +151,19 @@ pub fn realign_mentions(content: &str, mentions: &[Option<Mention>]) -> Vec<Opti
             })
             .collect();
         for (index, candidate) in assign(items, &available) {
-            aligned[index] =
-                Some(Mention { start: candidate.offset, end: candidate.offset + measure(&text), text: text.clone() });
+            aligned[index] = Some(Mention { start: candidate.offset, end: offset(candidate.end), text: text.clone() });
         }
         protected.extend(candidates);
     }
     aligned
 }
 
-fn occurrences(content: &str, text: &str) -> Vec<Candidate> {
+fn occurrences(content: &str, text: &str, offset: impl Fn(usize) -> u32) -> Vec<Candidate> {
     let mut found = Vec::new();
     let mut from = 0;
     while let Some(at) = content[from..].find(text) {
         let start = from + at;
-        found.push(Candidate { start, end: start + text.len(), offset: measure(&content[..start]) });
+        found.push(Candidate { start, end: start + text.len(), offset: offset(start) });
         from = start + text.len();
     }
     found

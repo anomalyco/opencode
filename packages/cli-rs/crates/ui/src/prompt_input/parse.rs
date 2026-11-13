@@ -2,43 +2,32 @@
 //! (`prompt/display.ts`), line ranges and slash heads (`prompt/parse.ts`), and directory completion
 //! (`prompt/directory-completion.ts`).
 //!
-//! Offsets count as the textarea's cursor does: display columns, with one per line break.
+//! Text a textarea shows is indexed in bytes here; [`super::offset_at`] and [`super::index_at`] convert to and from
+//! the cursor's offsets through the live buffer.
 
 use unicode_width::UnicodeWidthStr;
 
 use crate::path::Flavor;
 
-/// The cursor offset at the end of `text` (`measureEditText`).
+/// The cursor offset at the end of `text` that no textarea holds (`measureEditText`): display columns, one per line
+/// break, and a tab as OpenTUI's default tab width. Text in a textarea is measured by its buffer
+/// ([`super::offset_at`]).
 pub fn measure(text: &str) -> u32 {
-    text.split('\n').map(|line| line.width() + 1).sum::<usize>() as u32 - 1
+    let line =
+        |line: &str| line.split('\t').map(UnicodeWidthStr::width).sum::<usize>() + 2 * line.matches('\t').count();
+    text.split('\n').map(|text| line(text) + 1).sum::<usize>() as u32 - 1
 }
 
-/// The byte index in `text` whose offset is `offset`, or the last character boundary before it
-/// (`promptOffsetIndex`). Offsets never decrease as a prefix grows, so it binary searches.
-pub fn index_at(text: &str, offset: u32) -> usize {
-    let boundaries: Vec<usize> = text.char_indices().map(|(index, _)| index).chain([text.len()]).collect();
-    let (mut low, mut high) = (0, boundaries.len() - 1);
-    while low < high {
-        let middle = (low + high).div_ceil(2);
-        if measure(&text[..boundaries[middle]]) > offset {
-            high = middle - 1;
-            continue;
-        }
-        low = middle;
-    }
-    boundaries[low]
-}
-
-/// `mentionTriggerIndex`: the offset of the last `@` that starts a word with no whitespace after it.
-pub fn mention_trigger(text: &str) -> Option<u32> {
+/// `mentionTriggerIndex`: the byte index of the last `@` that starts a word with no whitespace after it.
+pub fn mention_trigger(text: &str) -> Option<usize> {
     let index = text.rfind('@')?;
     let before = text[..index].chars().next_back();
     let open = before.is_none_or(char::is_whitespace) && !text[index..].contains(char::is_whitespace);
-    open.then(|| measure(&text[..index]))
+    open.then_some(index)
 }
 
-/// `slashTriggerIndex`: the offset of a `/` that starts a word, with no whitespace or `/` after it.
-pub fn slash_trigger(text: &str) -> Option<u32> {
+/// `slashTriggerIndex`: the byte index of a `/` that starts a word, with no whitespace or `/` after it.
+pub fn slash_trigger(text: &str) -> Option<usize> {
     for (index, _) in text.match_indices('/').rev() {
         let before = text[..index].chars().next_back();
         if before.is_some_and(|before| !before.is_whitespace()) {
@@ -48,7 +37,7 @@ pub fn slash_trigger(text: &str) -> Option<u32> {
         if query.contains(char::is_whitespace) || query[1..].contains('/') {
             return None;
         }
-        return Some(measure(&text[..index]));
+        return Some(index);
     }
     None
 }
@@ -224,7 +213,8 @@ mod tests {
         assert_eq!(mention_trigger("fix @src/ma"), Some(4));
         assert_eq!(mention_trigger("a@b"), None);
         assert_eq!(mention_trigger("@src done"), None);
-        assert_eq!(mention_trigger("日本 @x"), Some(5));
+        assert_eq!(mention_trigger("日本 @x"), Some(7));
+        assert_eq!(mention_trigger("\t@x"), Some(1));
         assert_eq!(slash_trigger("/"), Some(0));
         assert_eq!(slash_trigger("/rev"), Some(0));
         assert_eq!(slash_trigger("/review x"), None);
@@ -319,27 +309,14 @@ mod tests {
         // `pathToFileURL` resolves first and keeps a trailing separator.
         assert_eq!(file_url(p, "/p/./x/../a/"), "file:///p/a/");
         assert_eq!(file_url(w, "C:/p/x/../a/"), "file:///C:/p/a/");
-        assert_eq!(index_at("日本x", 2), 3);
-        assert_eq!(index_at("日本x", 3), 3);
     }
 
+    // The editor's cells at OpenTUI's defaults: a tab is two, a wide character two, a line break one.
     #[test]
-    fn index_at_matches_a_linear_scan_and_stays_fast() {
-        let linear = |text: &str, offset| {
-            text.char_indices()
-                .map(|(index, _)| index)
-                .chain([text.len()])
-                .take_while(|&index| measure(&text[..index]) <= offset)
-                .last()
-                .unwrap_or(0)
-        };
-        let text = "a日\nb本\n\nxyz";
-        for offset in 0..=measure(text) + 1 {
-            assert_eq!(index_at(text, offset), linear(text, offset), "offset {offset}");
-        }
-        let long = "the quick brown fox jumps over the lazy dog 日本語\n".repeat(400);
-        let started = std::time::Instant::now();
-        assert_eq!(index_at(&long, measure(&long)), long.len());
-        assert!(started.elapsed() < std::time::Duration::from_millis(200), "{:?}", started.elapsed());
+    fn measure_counts_as_a_default_buffer() {
+        assert_eq!(measure("ab\tcd"), 6);
+        assert_eq!(measure("\t\nX"), 4);
+        assert_eq!(measure("日本\n\nx"), 7);
+        assert_eq!(measure(""), 0);
     }
 }

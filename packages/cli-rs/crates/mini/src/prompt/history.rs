@@ -2,8 +2,6 @@
 //! start of the text saves the draft and steps back; Down at the end steps forward, and past the newest entry
 //! restores the draft.
 
-use opencode_ui::prompt_input::parse::measure;
-
 use super::parts::RunPrompt;
 
 /// `HISTORY_LIMIT`.
@@ -17,11 +15,11 @@ pub struct History {
     pub draft: String,
 }
 
-/// `PromptMove`: the new state, and the text and cursor to show when the move applies.
+/// `PromptMove`: the new state, and the text and cursor to show when the move applies; no cursor is the end.
 #[derive(Debug, PartialEq)]
 pub struct Move {
     pub state: History,
-    pub apply: Option<(String, u32)>,
+    pub apply: Option<(String, Option<u32>)>,
 }
 
 impl History {
@@ -51,10 +49,10 @@ impl History {
         Self { items: items.split_off(skip), index: None, draft: String::new() }
     }
 
-    /// `movePromptHistory`.
-    pub fn step(&self, up: bool, text: &str, cursor: u32) -> Move {
+    /// `movePromptHistory`, with the cursor in `text` and `end`, the offset at its end.
+    pub fn step(&self, up: bool, text: &str, cursor: u32, end: u32) -> Move {
         let none = || Move { state: self.clone(), apply: None };
-        if self.items.is_empty() || (up && cursor != 0) || (!up && cursor != measure(text)) {
+        if self.items.is_empty() || (up && cursor != 0) || (!up && cursor != end) {
             return none();
         }
         let Some(index) = self.index else {
@@ -64,7 +62,7 @@ impl History {
             let index = self.items.len() - 1;
             return Move {
                 state: Self { index: Some(index), draft: text.to_owned(), ..self.clone() },
-                apply: Some((self.items[index].text.clone(), 0)),
+                apply: Some((self.items[index].text.clone(), Some(0))),
             };
         };
         if up && index == 0 {
@@ -72,13 +70,10 @@ impl History {
         }
         let next = if up { index - 1 } else { index + 1 };
         if next >= self.items.len() {
-            return Move {
-                state: Self { index: None, ..self.clone() },
-                apply: Some((self.draft.clone(), measure(&self.draft))),
-            };
+            return Move { state: Self { index: None, ..self.clone() }, apply: Some((self.draft.clone(), None)) };
         }
         let text = self.items[next].text.clone();
-        let cursor = if up { 0 } else { measure(&text) };
+        let cursor = up.then_some(0);
         Move { state: Self { index: Some(next), ..self.clone() }, apply: Some((text, cursor)) }
     }
 }
@@ -113,17 +108,19 @@ mod tests {
     fn steps_follow_the_cursor_and_restore_the_draft() {
         let history = History::new(&[RunPrompt::text("first"), RunPrompt::text("second")]);
         // Up away from the start does nothing.
-        assert_eq!(history.step(true, "draft", 3).apply, None);
-        let up = history.step(true, "draft", 0);
-        assert_eq!(up.apply, Some(("second".into(), 0)));
-        let up = up.state.step(true, "second", 0);
-        assert_eq!(up.apply, Some(("first".into(), 0)));
-        assert_eq!(up.state.step(true, "first", 0).apply, None);
-        let down = up.state.step(false, "first", 5);
-        assert_eq!(down.apply, Some(("second".into(), 6)));
-        let down = down.state.step(false, "second", 6);
-        assert_eq!(down.apply, Some(("draft".into(), 5)));
+        assert_eq!(history.step(true, "draft", 3, 5).apply, None);
+        let up = history.step(true, "draft", 0, 5);
+        assert_eq!(up.apply, Some(("second".into(), Some(0))));
+        let up = up.state.step(true, "second", 0, 6);
+        assert_eq!(up.apply, Some(("first".into(), Some(0))));
+        assert_eq!(up.state.step(true, "first", 0, 5).apply, None);
+        // Down away from the end does nothing.
+        assert_eq!(up.state.step(false, "first", 4, 5).apply, None);
+        let down = up.state.step(false, "first", 5, 5);
+        assert_eq!(down.apply, Some(("second".into(), None)));
+        let down = down.state.step(false, "second", 6, 6);
+        assert_eq!(down.apply, Some(("draft".into(), None)));
         assert_eq!(down.state.index, None);
-        assert_eq!(down.state.step(false, "draft", 5).apply, None);
+        assert_eq!(down.state.step(false, "draft", 5, 5).apply, None);
     }
 }
