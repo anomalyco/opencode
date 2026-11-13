@@ -13,6 +13,21 @@ describe("Mime.detect", () => {
     expect(Mime.detect(bytes)).toBe(mime)
   })
 
+  test("keeps ordinary text starting with BM as text", () => {
+    for (const text of ["BM", "BMW service schedule\n"]) expect(Mime.detect(Buffer.from(text))).toBe("text/plain")
+  })
+
+  test("detects Windows and OS/2 bitmaps from a prefix", () => {
+    // 1x1, 24-bit bitmaps with a four-byte padded pixel row.
+    const windows = "424d3a000000000000003600000028000000010000000100000001001800" + "00".repeat(28)
+    const os2 = "424d1e000000000000001a0000000c000000010001000100180000000000"
+    for (const hex of [windows, os2]) {
+      const bytes = Buffer.from(hex, "hex")
+      expect(Mime.detect(bytes)).toBe("image/bmp")
+      expect(Mime.detect(bytes.subarray(0, 18))).toBe("image/bmp")
+    }
+  })
+
   test("tells ISO-BMFF brands apart", () => {
     expect(Mime.detect(ftyp("000000206674797061766966000000004d695072617669666d6961666d696631"))).toBe("image/avif")
     expect(Mime.detect(ftyp("000000186674797061766973000000006d73663161766973"))).toBe("image/avif")
