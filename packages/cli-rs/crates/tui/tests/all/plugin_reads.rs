@@ -136,6 +136,11 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
         let cwd = Some(".".to_owned());
         asked.set(Some(host.foreground(abi::Foreground { command: "sh".to_owned(), args, cwd })));
     });
+    let asked = program.clone();
+    setup.command(command("p0b.missing"), move |host, _| {
+        let missing = abi::Foreground { command: "p0b-no-such-program".to_owned(), ..abi::Foreground::default() };
+        asked.set(Some(host.foreground(missing)));
+    });
     let exited = Rc::new(RefCell::new("-".to_owned()));
     let told = exited.clone();
     setup.on_reply(move |_, id, result| {
@@ -143,6 +148,10 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
             *told.borrow_mut() = result.map_or_else(|error| error, |value| value["code"].to_string());
         }
     });
+    // The claim's link; `p0b.link` sets another.
+    let link = Rc::new(RefCell::new("https://opencode.ai/p0b".to_owned()));
+    let linked = link.clone();
+    setup.command(command("p0b.link"), move |_, input| *linked.borrow_mut() = input.unwrap_or_default().to_owned());
     let deltas = Rc::new(RefCell::new(String::new()));
     let streamed = deltas.clone();
     let calls = Rc::new(Cell::new(0));
@@ -186,7 +195,7 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
             calls.get(),
             active.len(),
         );
-        abi::Render::Show(abi::Node::text([abi::Span::new(text).link("https://opencode.ai/p0b")]))
+        abi::Render::Show(abi::Node::text([abi::Span::new(text).link(link.borrow().clone())]))
     });
     setup.sized(abi::Placement::append("app"));
     Ok(())
@@ -254,6 +263,30 @@ fn a_claim_reads_its_width_the_theme_and_the_keymap() {
         assert!(first.contains("p0b w90 "), "loopback {loopback}:\n{first}");
         h.tui.keymap.dispatch("p0b.variant", None);
         h.wait_for("p0b variant false false");
+    }
+}
+
+// Expected (review carbon-6): a link with a control character, which would end the terminal's OSC 8 sequence early,
+// is dropped and its text shows alone; one without links. OpenTUI drops it (`link.zig` `isWritableUrl`), so the host
+// passes a plugin's URL on as it is. On both paths.
+#[test]
+fn a_link_with_a_control_character_is_dropped() {
+    for loopback in [false, true] {
+        let (h, _memory, _root) = home(loopback, 140, json!({}));
+        let screen = h.wait_for("p0b w140 ");
+        let row = screen.lines().position(|line| line.contains("p0b w140")).unwrap();
+        let column = screen.lines().nth(row).unwrap().find("p0b").unwrap() as u16;
+        let link = || opencode_tui::features::links::link_at(h.app.app(), column, row as u16);
+        for (url, kept) in [
+            ("https://x.test/\x1b]52;c;cHduZWQ=\x07", false),
+            ("https://x.test/\u{9c}", false),
+            ("https://x.test/\x7f", false),
+            ("https://x.test/ok", true),
+        ] {
+            h.tui.keymap.dispatch("p0b.link", Some(url));
+            h.app.render();
+            assert_eq!(link(), kept.then(|| url.to_owned()), "loopback {loopback}: {url:?}");
+        }
     }
 }
 
@@ -331,6 +364,9 @@ fn verbs_in_one_call_see_the_earlier_ones() {
         h.tui.keymap.dispatch("p0b.script", Some("model p/a"));
         h.wait_for("p0b script1 -");
         assert_eq!(selected(), Some(("a".to_owned(), None)), "loopback {loopback}");
+        // As the model dialog picks it: a recent model, and the claim reads its variants (review carbon-9).
+        assert_eq!(h.tui.local.recent().first().map(|model| model.model_id.as_str()), Some("a"));
+        h.wait_for(" true  1 d:");
         h.tui.keymap.dispatch("p0b.script", Some("model p/b;variant high"));
         h.wait_for("p0b script2 -,true");
         assert_eq!(selected(), Some(("b".to_owned(), Some("high".to_owned()))), "loopback {loopback}");
@@ -732,6 +768,9 @@ fn a_program_runs_in_the_foreground_and_its_exit_code_comes_back() {
         h.wait_for("p0b w120 ");
         h.tui.keymap.dispatch("p0b.run", Some("exit 3"));
         h.wait_for(" x:3");
+        // One that does not start answers why (review carbon-9).
+        h.tui.keymap.dispatch("p0b.missing", None);
+        h.wait_for(" x:p0b-no-such-program: ");
     }
 }
 
