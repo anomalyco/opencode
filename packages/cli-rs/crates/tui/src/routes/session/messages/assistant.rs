@@ -35,9 +35,11 @@ impl TextPart {
         opencode_ui::markdown::restyle(&self.markdown, colors, cx.syntax);
     }
 
-    pub fn update(&self, message: &SessionMessageAssistant, part: &SessionMessageAssistantText) {
+    pub fn update(&self, message: &SessionMessageAssistant, part: &SessionMessageAssistantText, conceal: bool) {
         let text = part.text.trim();
         self.root.visible(!text.is_empty());
+        // `session.markdown` changes in place, as TS's `conceal` prop follows it; the code views stay.
+        self.markdown.conceal(conceal);
         // Content goes in before streaming ends, so completion keeps the final tokens. The widget's source is the
         // text shown so far. Read it in place for the bytes `text` keeps (0 replaces them all), and change it only
         // after the read ends.
