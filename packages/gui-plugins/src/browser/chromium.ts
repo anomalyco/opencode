@@ -241,7 +241,6 @@ export function createBrowserPage(
       webSecurity: true,
       webviewTag: false,
       devTools: false,
-      backgroundThrottling: false,
       // Agent navigation, including in hidden tabs, must not take the user's keyboard focus.
       focusOnNavigation: false,
     },
@@ -443,10 +442,8 @@ export function createBrowserPage(
   contents.on("did-navigate", (_event, url, status, statusText) =>
     dispatch({ type: "navigation.committed", url, status, statusText, title: contents.getTitle() }),
   )
-  // The backgroundThrottling preference does not wake a renderer that starts hidden: one in a tab the pane never
-  // showed, or the new one a cross-site navigation starts in a hidden tab. It then renders no frames, so screenshots
-  // and clicks have nothing to capture or hit-test. Setting it again shows that renderer, even while the view is hidden,
-  // which costs a hidden tab its frames; so only tabs the agent works in do it, from the agent's first command.
+  // Only agent-driven tabs need fresh frames while hidden. A cross-site commit can replace the renderer
+  // we woke on the first agent command, so wake its replacement too.
   contents.on("did-navigate", () => {
     if (agentDriven) contents.setBackgroundThrottling(false)
   })
