@@ -59,7 +59,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
     let lastTimedOut = false
     while (true) {
       // An owner still within its unresponsive budget holds the deadline open, so a long budget is not cut short.
-      if (Date.now() >= deadline && !unresponsive.waiting(Date.now()))
+      if (Date.now() >= deadline && !unresponsive.waiting())
         throw (
           pool.failure() ??
           new Error(

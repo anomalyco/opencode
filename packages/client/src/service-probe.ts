@@ -121,7 +121,7 @@ export function parseLinuxProcStatState(stat: string) {
  * An owner that answers, or a different owner, starts the clock over.
  */
 export function unresponsiveOwner(budget: number) {
-  let current: { readonly info: Info; readonly since: number } | undefined
+  let current: { readonly info: Info; readonly since: number; readonly expired: boolean } | undefined
   return {
     /** Records a probe that began at `probedAt`. Returns the owner once it has been unresponsive for the budget. */
     observe(info: Info | undefined, probedAt: number, now: number) {
@@ -129,12 +129,17 @@ export function unresponsiveOwner(budget: number) {
         current = undefined
         return undefined
       }
-      if (current === undefined || !same(current.info, info)) current = { info, since: probedAt }
-      return now - current.since >= budget ? info : undefined
+      if (current === undefined || !same(current.info, info)) current = { info, since: probedAt, expired: false }
+      if (now - current.since < budget) return undefined
+      current = { ...current, expired: true }
+      return info
     },
-    /** Whether an unresponsive owner is still within its budget, so the startup deadline waits for it. */
-    waiting(now: number) {
-      return current !== undefined && now - current.since < budget
+    /**
+     * Whether an unresponsive owner has not yet been seen past its budget, so the startup deadline waits for
+     * the probe that may evict it.
+     */
+    waiting() {
+      return current !== undefined && !current.expired
     },
     forget() {
       current = undefined

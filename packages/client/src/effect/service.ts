@@ -88,7 +88,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
   const found = yield* Effect.gen(function* () {
     const probedAt = yield* Clock.currentTimeMillis
     // An owner still within its unresponsive budget holds the deadline open, so a long budget is not cut short.
-    if (probedAt >= deadline && !unresponsive.waiting(probedAt)) return yield* Effect.fail(timedOut())
+    if (probedAt >= deadline && !unresponsive.waiting()) return yield* Effect.fail(timedOut())
     const registration = yield* registered(options.file, timing.requestTimeout)
     const info = registration.info
     const service = registration.service
