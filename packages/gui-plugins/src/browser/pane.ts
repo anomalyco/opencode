@@ -578,6 +578,9 @@ export function createBrowserPane(input: {
       focused: () => {
         if (focused()) emit(binding, { type: "focused", tabID: id })
       },
+      hidden: () => {
+        if (handle.shared) input.profile.extensionTabs.hidden(page.contents.id)
+      },
       popup: (popupOptions, background) => {
         const popup = create(binding, { initialize: false, popupOptions })
 

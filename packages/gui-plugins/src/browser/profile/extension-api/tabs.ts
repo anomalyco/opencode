@@ -157,6 +157,7 @@ export function createExtensionTabs(input: { emit: Emit; extensions: () => reado
   const activated = new Map<number, number>()
   const focus: Focus = {}
   const watchers = new Set<(tab: PaneTab) => (() => void) | void>()
+  const hiders = new Set<(id: number) => void>()
 
   const inWindow = (windowId: number) => [...tabs.values()].filter((tab) => tab.window.id === windowId)
 
@@ -455,6 +456,16 @@ export function createExtensionTabs(input: { emit: Emit; extensions: () => reado
     },
     /** The pane focused a tab, or the user clicked into it. */
     activated: activate,
+    /** The tab left the screen, as when the pane shows another tab or a preview in its place. */
+    hidden(id: number) {
+      hiders.forEach((listener) => listener(id))
+    },
+    /** Hears each tab that leaves the screen, until the returned release. */
+    onHidden(listener: (id: number) => void) {
+      hiders.add(listener)
+
+      return () => void hiders.delete(listener)
+    },
     /** A popup opened over `window`: its current window is that one. Returns the release. */
     popup(contents: WebContents, window: BrowserWindow) {
       track(window)

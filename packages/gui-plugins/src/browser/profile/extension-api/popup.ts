@@ -29,8 +29,8 @@ type OpenPopup = { close?: () => void }
 
 /**
  * The one extension popup open at a time: a page of the extension in a view over the window, under the extensions
- * button. It closes when it loses focus, on Escape, when its window loses focus, moves or resizes, and when another
- * popup opens. Links it opens become tabs of the pane.
+ * button. It closes when it loses focus, on Escape, when its window loses focus, moves or resizes, when the tab it is
+ * about leaves the screen, and when another popup opens. Links it opens become tabs of the pane.
  */
 export function createPopups(input: { partition: string; tabs: ExtensionTabs }) {
   // The extensions button each window opened a popup from last, so `action.openPopup` opens one there too.
@@ -64,6 +64,12 @@ export function createPopups(input: { partition: string; tabs: ExtensionTabs }) 
 
       const contents = view.webContents
       const release = input.tabs.popup(contents, window)
+      const about = input.tabs.activeTab(window)?.id
+
+      // The popup is about the tab under it; once another tab or a preview takes its place, it would show a stale tab.
+      const leave = input.tabs.onHidden((id) => {
+        if (id === about) dismiss()
+      })
 
       const place = (size: { width: number; height: number }) => {
         if (!window.isDestroyed()) view.setBounds(popupBounds(anchor, size, window.getContentBounds()))
@@ -73,6 +79,7 @@ export function createPopups(input: { partition: string; tabs: ExtensionTabs }) 
         if (current.close !== dismiss) return
         current.close = undefined
         release()
+        leave()
         window.off("blur", dismiss)
         window.off("resize", dismiss)
         window.off("move", dismiss)

@@ -202,6 +202,8 @@ export function createBrowserPage(
     shortcut?: (shortcut: PageShortcut) => void
     /** The page took keyboard focus. */
     focused?: () => void
+    /** The page left the screen: another tab or a preview took its place, or the pane closed. */
+    hidden?: () => void
     fail: () => void
     /** Adopts a page the document opened; a background one leaves the current tab selected. */
     popup: (options: Electron.BrowserWindowConstructorOptions, background: boolean) => WebContents
@@ -602,7 +604,10 @@ export function createBrowserPage(
   // A hidden page cannot be picked from, and a comment's frozen still already shows the
   // picked element, so hiding ends the picker, any pick in progress, and the highlight.
   embed.on("visible", (visible) => {
-    if (!visible) void dispatchPicker({ type: "embed.hidden" })
+    if (visible) return
+    void dispatchPicker({ type: "embed.hidden" })
+
+    if (!closed()) options.hidden?.()
   })
 
   const load = (url: string) => {
