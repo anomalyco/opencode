@@ -8,12 +8,13 @@ import { AIError, LLMEvent, Media } from "../src/effect.js"
 import { SpeechEvent, TranscriptionEvent } from "../src/experimental.js"
 import { RequestExecutor, type StreamOptions } from "../src/route.js"
 import { AI } from "../src/index.js"
-import { AssemblyAI, OpenAI, Runway } from "../src/providers.js"
+import { AssemblyAI, OpenAI, XAI } from "../src/providers.js"
 import { handlerLayer, json } from "./lib/http.js"
 import { finishChunk, toolCallChunk } from "./lib/openai-chunks.js"
 import { sseEvents } from "./lib/sse.js"
 
 const openai = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" })
+const xai = XAI.configure({ apiKey: "test", baseURL: "https://xai.test/v1" })
 
 const chatBody = sseEvents(
   { choices: [{ delta: { content: "Hello" } }] },
@@ -22,8 +23,8 @@ const chatBody = sseEvents(
 )
 
 /**
- * Executor layer that answers chat completions with SSE text, image generations with one base64 PNG, Runway video
- * tasks with a queued submission that succeeds on the second poll, speech with raw audio or SSE audio deltas, OpenAI
+ * Executor layer that answers chat completions with SSE text, image generations with one base64 PNG, xAI video
+ * requests with a pending submission that succeeds on the second poll, speech with raw audio or SSE audio deltas, OpenAI
  * transcription with JSON or SSE text deltas, AssemblyAI transcripts that complete on the first poll, and `slow.test`
  * chat completions that send one text delta and never finish.
  */
@@ -97,15 +98,17 @@ const executor = (seen: Array<string>) =>
             return input.respond(JSON.stringify({ id: "tr_1", status: "completed", text: "Hello there." }), {
               headers: { "content-type": "application/json" },
             })
-          if (web.url.endsWith("/text_to_video"))
-            return input.respond(JSON.stringify({ id: "task_1" }), { headers: { "content-type": "application/json" } })
-          if (web.url.endsWith("/tasks/task_1")) {
-            const polls = seen.filter((url) => url.endsWith("/tasks/task_1")).length
+          if (web.url.endsWith("/videos/generations"))
+            return input.respond(JSON.stringify({ request_id: "req_1" }), {
+              headers: { "content-type": "application/json" },
+            })
+          if (web.url.endsWith("/videos/req_1")) {
+            const polls = seen.filter((url) => url.endsWith("/videos/req_1")).length
             return input.respond(
               JSON.stringify(
                 polls === 1
-                  ? { status: "RUNNING", progress: 0.5 }
-                  : { status: "SUCCEEDED", output: ["https://runway.test/out.mp4"], cost: { credits: 5 } },
+                  ? { status: "pending", progress: 50 }
+                  : { status: "done", video: { url: "https://vidgen.x.ai/out.mp4" } },
               ),
               { headers: { "content-type": "application/json" } },
             )
@@ -171,12 +174,12 @@ describe("AI promise client", () => {
   test("starts, awaits, and resumes video generations over the same runtime", async () => {
     const seen: Array<string> = []
     const ai = AI.make({ layer: executor(seen) })
-    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
+    const model = xai.video("grok-imagine-video-1.5")
 
     const generation = await ai.experimental.video.start({ model, prompt: "A kite" })
-    expect(generation.id).toBe("task_1")
-    expect(generation.status).toBe("queued")
-    expect(generation.token).toEqual({ taskID: "task_1" })
+    expect(generation.id).toBe("req_1")
+    expect(generation.status).toBe("running")
+    expect(generation.token).toEqual({ requestID: "req_1" })
 
     const refreshed = await generation.refresh()
     expect(refreshed.status).toBe("running")
@@ -184,8 +187,7 @@ describe("AI promise client", () => {
 
     const response = await refreshed.await({ poll: { interval: 10 } })
     expect(response.video).toBeInstanceOf(Media.Asset)
-    expect(response.video.source).toMatchObject({ type: "url", url: "https://runway.test/out.mp4" })
-    expect(response.usage).toEqual({ type: "credits", credits: 5 })
+    expect(response.video.source).toMatchObject({ type: "url", url: "https://vidgen.x.ai/out.mp4" })
 
     const resumed = await ai.experimental.video.resume(model, JSON.parse(JSON.stringify(generation.token)))
     expect(resumed.status).toBe("completed")
@@ -197,8 +199,8 @@ describe("AI promise client", () => {
     }
     expect(events).toEqual(["video", "finish"])
 
-    expect(seen[0]).toBe("https://runway.test/v1/text_to_video")
-    expect(seen.filter((url) => url.endsWith("/tasks/task_1")).length).toBeGreaterThanOrEqual(5)
+    expect(seen[0]).toBe("https://xai.test/v1/videos/generations")
+    expect(seen.filter((url) => url.endsWith("/videos/req_1")).length).toBeGreaterThanOrEqual(5)
     await ai.dispose()
   })
 
@@ -227,9 +229,11 @@ describe("AI promise client", () => {
 
   test("exposes a generation's snapshot and terminal state", async () => {
     const ai = AI.make({ layer: executor([]) })
-    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
-    const generation = await ai.experimental.video.start({ model, prompt: "A kite" })
-    expect(generation.snapshot).toEqual({ id: "task_1", status: "queued", progress: undefined, position: undefined })
+    const generation = await ai.experimental.video.start({
+      model: xai.video("grok-imagine-video-1.5"),
+      prompt: "A kite",
+    })
+    expect(generation.snapshot).toEqual({ id: "req_1", status: "running" })
     expect(generation.terminal).toBe(false)
     const refreshed = await generation.refresh()
     expect(refreshed.terminal).toBe(false)
@@ -239,14 +243,16 @@ describe("AI promise client", () => {
 
   test("observes a started generation's events and fetches its result", async () => {
     const ai = AI.make({ layer: executor([]) })
-    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
-    const generation = await ai.experimental.video.start({ model, prompt: "A kite" })
+    const generation = await ai.experimental.video.start({
+      model: xai.video("grok-imagine-video-1.5"),
+      prompt: "A kite",
+    })
 
     const events: Array<string> = []
     for await (const event of generation.events({ poll: { interval: 10 } })) events.push(event.type)
     expect(events).toEqual(["generation-progress", "generation-finished"])
-    expect(generation.status).toBe("queued")
-    expect((await generation.result()).video.source).toMatchObject({ url: "https://runway.test/out.mp4" })
+    expect(generation.status).toBe("running")
+    expect((await generation.result()).video.source).toMatchObject({ url: "https://vidgen.x.ai/out.mp4" })
     await ai.dispose()
   })
 
@@ -386,8 +392,10 @@ describe("AI promise client", () => {
     expect(midStreamFailure).toBe(midStream.signal.reason)
     expect(midStreamFailure).toMatchObject({ name: "AbortError" })
 
-    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
-    const generation = await ai.experimental.video.start({ model, prompt: "A kite" })
+    const generation = await ai.experimental.video.start({
+      model: xai.video("grok-imagine-video-1.5"),
+      prompt: "A kite",
+    })
     const polling = new AbortController()
     const events: Array<string> = []
     const eventsFailure = await Array.fromAsync(

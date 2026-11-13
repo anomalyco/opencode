@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CodeMode } from "./lib/index.js"
+import { CodeMode } from "../src/index.js"
 
 // One failure is one program error object, and rethrowing it keeps the diagnostic it started with.
 const run = (code: string) => Effect.runPromise(CodeMode.execute({ code, tools: {} }))

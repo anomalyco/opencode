@@ -15,6 +15,7 @@ import {
   InvalidRequestError,
   RateLimitError,
   UnknownProviderError,
+  type UserMessage,
 } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { AnthropicMessages, OpenAIResponses } from "@opencode/ai/protocols"
@@ -77,7 +78,21 @@ import { SessionSystemPrompt } from "@opencode/core/session/system-prompt"
 import { ID, Model } from "@opencode/core/model"
 import { Location } from "@opencode/core/location"
 import { Provider } from "@opencode/core/provider"
-import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream, Tracer } from "effect"
+import {
+  Cause,
+  Context,
+  DateTime,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Queue,
+  Schema,
+  Scope,
+  Stream,
+  Tracer,
+} from "effect"
 import { TestClock } from "effect/testing"
 import { and, asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -1174,6 +1189,51 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests[0]?.tools.map((tool) => tool.name)).toContain("renamed_echo")
     expect(s.requests[0]?.tools.map((tool) => tool.name)).not.toContain("echo")
     expect(s.executions).toEqual(["renamed"])
+  })
+
+  scenario("passes stored message metadata to the context hook but not to the model request", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "prompt", (event) =>
+      Effect.sync(() => {
+        event.metadata = { canary: { context: ["CANARY-TOKEN"] } }
+      }),
+    )
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        // Mirrors JavaScript plugins, which edit the payload in place.
+        for (const message of event.messages) {
+          const canary = message.metadata?.canary as { context: string[] } | undefined
+          if (message.role !== "user" || canary === undefined) continue
+          ;(message.content as Array<UserMessage["content"][number]>).unshift(Message.text(canary.context.join("\n")))
+        }
+      }),
+    )
+    yield* s.llm.push(TestLLM.text("Done", "text-done"))
+
+    yield* s.runPrompt("Start")
+
+    expect(s.requests[0]?.messages.at(-1)?.content).toEqual([Message.text("CANARY-TOKEN"), Message.text("Start")])
+    expect(s.requests[0]?.messages.some((message) => Object.hasOwn(message, "metadata"))).toBe(false)
+    const compiled = yield* compileRequest(s.requests[0]!)
+    expect(JSON.stringify(compiled.body)).toContain("CANARY-TOKEN")
+    expect(JSON.stringify(compiled.body)).not.toContain('"metadata"')
+  })
+
+  scenario("keeps context hook edits to messages without stored metadata", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        for (const message of event.messages) {
+          if (message.role !== "user" || message.metadata !== undefined) continue
+          ;(message.content as Array<UserMessage["content"][number]>).unshift(Message.text("EDITED"))
+        }
+      }),
+    )
+    yield* s.llm.push(TestLLM.text("Done", "text-done"))
+
+    yield* s.runPrompt("Start")
+
+    expect(s.requests[0]?.messages.at(-1)?.content).toEqual([Message.text("EDITED"), Message.text("Start")])
   })
 
   for (const resume of [false, true]) {
