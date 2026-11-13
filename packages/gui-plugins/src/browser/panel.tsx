@@ -12,7 +12,7 @@ import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createMemo, createSignal, For, onCleanup, Show, untrack, type Accessor, type JSX } from "solid-js"
+import { createMemo, createSignal, For, Index, onCleanup, Show, untrack, type Accessor, type JSX } from "solid-js"
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import {
   createKeyed,
@@ -726,26 +726,26 @@ export default function SessionBrowserPane(props: {
               </Tooltip>
               <Menu.Portal>
                 <Menu.Content class="w-[220px]">
-                  <For each={extensions()}>
+                  <Index each={extensions()}>
                     {(extension) => (
                       <Menu.Item
                         disabled={
-                          !extension.enabled ||
-                          extension.action?.enabled === false ||
-                          !(extension.action ?? extension.popup ?? extension.options)
+                          !extension().enabled ||
+                          extension().action?.enabled === false ||
+                          !(extension().action ?? extension().popup ?? extension().options)
                         }
-                        onSelect={() => chooseExtension(extension)}
+                        onSelect={() => chooseExtension(extension())}
                       >
-                        <Glyph image={extension.action?.icon ?? extension.icon} fallback="extensions" class="!size-4" />
-                        <span class="min-w-0 flex-1 truncate">{extension.action?.title ?? extension.name}</span>
-                        <Show when={extension.action?.badge}>
+                        <Glyph image={extension().action?.icon ?? extension().icon} fallback="extensions" class="!size-4" />
+                        <span class="min-w-0 flex-1 truncate">{extension().action?.title ?? extension().name}</span>
+                        <Show when={extension().action?.badge}>
                           {(badge) => (
                             <span
                               class="shrink-0 rounded-[3px] px-1 text-[10px] font-[530] leading-[14px]"
-                              classList={{ "text-v2-text-text-muted": !extension.action?.badgeColor }}
+                              classList={{ "text-v2-text-text-muted": !extension().action?.badgeColor }}
                               style={{
-                                "background-color": extension.action?.badgeColor,
-                                color: extension.action?.badgeColor ? (extension.action.badgeTextColor ?? "#ffffff") : undefined,
+                                "background-color": extension().action?.badgeColor,
+                                color: extension().action?.badgeColor ? (extension().action?.badgeTextColor ?? "#ffffff") : undefined,
                               }}
                             >
                               {badge()}
@@ -754,7 +754,7 @@ export default function SessionBrowserPane(props: {
                         </Show>
                       </Menu.Item>
                     )}
-                  </For>
+                  </Index>
                   <Menu.Separator />
                   <Menu.Item onSelect={() => plugin.layout.settings("browser")}>
                     {plugin.t("extensions.manage")}
