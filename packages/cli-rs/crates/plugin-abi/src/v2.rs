@@ -470,6 +470,34 @@ impl From<crate::Node> for Node {
     }
 }
 
+/// [`Rgba`] is `#rrggbbaa` on the wire.
+#[cfg(feature = "schema")]
+impl schemars::JsonSchema for Rgba {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Rgba".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({ "type": "string", "pattern": "^#[0-9a-f]{8}$" })
+    }
+}
+
+/// The JSON Schema of contract 2.0: every type a surface sends or gets, under `$defs`.
+#[cfg(feature = "schema")]
+pub fn schema() -> serde_json::Value {
+    let mut generator = schemars::SchemaGenerator::default();
+    generator.subschema_for::<Node>();
+    generator.subschema_for::<SurfaceInput>();
+    generator.subschema_for::<MountId>();
+    let defs: serde_json::Map<String, serde_json::Value> = generator.take_definitions(true);
+    serde_json::json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "opencode plugin contract 2.0",
+        "description": "Generated from opencode_plugin_abi::v2 by `examples/schema.rs`. Do not edit.",
+        "$defs": defs,
+    })
+}
+
 fn is_false(value: &bool) -> bool {
     !value
 }
