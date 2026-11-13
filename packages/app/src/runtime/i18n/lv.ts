@@ -148,7 +148,7 @@ export const dict = {
   "provider.connect.title": "Savienot {{provider}}",
   "provider.connect.method.apiKey": "API atslēga",
   "provider.connect.status.inProgress": "Notiek autorizācija…",
-  "provider.connect.status.waiting": "Gaida autorizāciju…",
+  "provider.connect.status.waiting": "Gaida autorizāciju",
   "provider.connect.status.failed": "Autorizācija neizdevās: {{error}}",
   "provider.connect.apiKey.description":
     "Ievadiet savu {{provider}} API atslēgu, lai savienotu kontu un izmantotu {{provider}} modeļus OpenCode.",
@@ -835,7 +835,6 @@ export const dict = {
   "toast.migration.progress.working.progress": "Notiek datu migrēšana {{current}}/{{total}}",
   "command.session.location.cycle": "Mainīt sesijas atrašanās vietu",
   "dialog.provider.anthropic.note": "Tieša piekļuve Claude modeļiem, izmantojot API atslēgu",
-  "provider.connect.title.anthropicProMax": "Pieteikties, izmantojot Anthropic",
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "Atcelt faila {{filename}} augšupielādi",
   "prompt.toast.uploadFailed.title": "Augšupielāde neizdevās",
