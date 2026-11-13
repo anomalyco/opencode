@@ -344,3 +344,55 @@ fn a_theme_change_calls_only_a_surface_that_reads_the_palette() {
         }
     }
 }
+
+/// A plugin whose route shows a tool call's output of `ses_p` by reference, and a call the transcript lacks.
+fn parts(setup: &mut abi::Setup) -> Result<(), String> {
+    let part = |part: &str| v2::Node::Markdown {
+        id: None,
+        source: v2::Source::PartOutput(v2::PartRef { session: "ses_p".into(), part: part.into() }),
+    };
+    setup.surface(v2::Surface::new("parts", v2::Place::Route("parts".into()), move |_| {
+        v2::Node::column(vec![part("call_1"), part("call_9"), v2::Node::text(vec![abi::Span::new("end")])])
+    }));
+    Ok(())
+}
+
+// Expected: a tool call's output named by reference shows the transcript's own text, which never crosses to the
+// plugin; a call the transcript does not have shows nothing.
+#[test]
+fn a_part_output_shows_the_transcripts_own_text() {
+    let session = support::merge(support::session("ses_p", "Parts"), serde_json::json!({ "agent": "build" }));
+    let messages = serde_json::json!([
+        {
+            "id": "msg_2", "type": "assistant", "agent": "build",
+            "model": { "providerID": "provider", "id": "model" },
+            "time": { "created": 1500, "completed": 4000 }, "finish": "stop",
+            "content": [
+                { "type": "text", "id": "t1", "text": "part one says hello" },
+                {
+                    "type": "tool", "id": "call_1", "name": "read", "time": { "created": 1600, "completed": 1700 },
+                    "state": { "status": "completed", "input": {}, "content": [{ "type": "text", "text": "tool said fn parse" }] },
+                },
+            ],
+        },
+        { "id": "msg_1", "type": "user", "text": "Show me", "time": { "created": 1000 } },
+    ]);
+    let fake = support::Fake::new(move |seen| match seen.path.as_str() {
+        "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
+        "/api/session/ses_p" => (200, serde_json::json!({ "data": session })),
+        "/api/session/ses_p/message" => (200, serde_json::json!({ "data": messages, "cursor": {} })),
+        "/api/session/ses_p/permission" => (200, serde_json::json!({ "data": [] })),
+        _ => support::not_found(),
+    });
+    let deps = Deps {
+        route: support::session_route("ses_p"),
+        builtins: vec![abi::Plugin { id: "test.parts", setup: parts }.into()],
+        ..support::deps(Arc::new(fake))
+    };
+    let harness = support::mount(80, 24, deps);
+    harness.wait_for("part one says hello");
+    harness.tui.navigate(Route::Plugin { id: "test.parts".into(), name: "parts".into() });
+    let screen = harness.wait_for("tool said fn parse");
+    let lines: Vec<&str> = screen.lines().map(str::trim).filter(|line| !line.is_empty()).collect();
+    assert_eq!(lines, ["tool said fn parse", "end"], "{screen}");
+}
