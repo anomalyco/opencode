@@ -1,9 +1,9 @@
 export default {
   title: "会话详情",
-  tooltip: "摘要",
-  "command.toggle": "切换摘要",
+  tooltip: "会话详情",
+  "command.toggle": "切换会话详情",
   noBranch: "无分支",
-  "move.title": "移至工作区",
+  "move.title": "移至工作树",
   "move.menu": "将会话移至",
   "move.failed": "移动会话失败",
   server: "扩展",
@@ -25,6 +25,6 @@ export default {
   basedOn: "基于 {{branch}}",
   "workspace.local": "本地仓库",
   "workspace.existing": "工作树",
-  "workspace.new": "新建工作区",
+  "workspace.new": "新建工作树",
   "mcp.interactiveAuth": "MCP 服务器 {{name}} 需要交互式身份验证表单",
 }
