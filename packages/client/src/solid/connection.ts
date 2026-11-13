@@ -179,7 +179,12 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
         forced = false
         continue
       }
-      await wait(Math.min(reconnectDelay * 2 ** (attempt - 1), maxReconnectDelay), controller.signal)
+      // Back off only when reconnecting can start a server: a plain stream retry is one cheap request, and a remote
+      // server that comes back should be picked up within a second.
+      const delay = options.reconnect
+        ? Math.min(reconnectDelay * 2 ** (attempt - 1), maxReconnectDelay)
+        : reconnectDelay
+      await wait(delay, controller.signal)
     }
   }
 
