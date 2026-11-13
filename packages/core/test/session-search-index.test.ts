@@ -3,6 +3,7 @@ import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { DateTime, Effect, Exit, Layer, Schema, SchemaAST } from "effect"
 import { and, eq, sql } from "drizzle-orm"
 import { Agent } from "@opencode/core/agent"
+import { Database } from "@opencode/core/database/database"
 import { DatabaseMigration } from "@opencode/core/database/migration"
 import { migrations } from "@opencode/core/database/migration.gen"
 import { EffectDrizzleSqlite } from "@opencode/core/database/drizzle"
@@ -14,6 +15,7 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionSearchIndex } from "@opencode/core/session/search-index"
+import { SessionSearchQuery } from "@opencode/core/session/search-query"
 import { SessionMessageTable, SessionPartTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionID } from "@opencode/schema/session-id"
 import { Skill } from "@opencode/schema/skill"
@@ -145,7 +147,7 @@ const writeState = (db: Db, state: Partial<SessionSearchIndex.State>) =>
   })
 
 const find = (db: Db, query: string) =>
-  SessionSearchIndex.search(db, { query }).pipe(
+  SessionSearchQuery.search(db, { query }).pipe(
     Effect.map((hits) => hits.map((hit) => hit.messageID ?? hit.sessionID).toSorted()),
   )
 
@@ -426,7 +428,8 @@ describe("SessionSearchIndex", () => {
       yield* db.run(`CREATE VIEW session_search AS SELECT json_extract('not json', '$') AS rowid`)
       expect(Exit.isFailure(yield* addMessages(db, sessionA, [user("2", "fails")], 2).pipe(Effect.exit))).toBe(true)
 
-      expect(yield* SessionSearchIndex.check(db)).toMatchObject({ status: "unsupported", dropped: true })
+      // Opening the database runs the registered check after migrations.
+      yield* Database.Service.pipe(Effect.provide(Database.layerFromClient))
       expect(yield* triggers(db)).toBe(0)
       yield* addMessages(db, sessionA, [user("2", "written while off")], 2)
       expect(yield* SessionSearchIndex.check(db)).toMatchObject({ status: "unsupported", dropped: false })

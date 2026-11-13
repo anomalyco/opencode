@@ -3,10 +3,9 @@ export * as SessionSearchIndex from "./search-index.js"
 import { eq, sql } from "drizzle-orm"
 import { Cause, Effect, Option, Predicate, Schema } from "effect"
 import { isSqlError } from "effect/sql/SqlError"
-import type { Database } from "../database/database.js"
+import { Database } from "../database/database.js"
 import { KVTable } from "../kv/sql.js"
 import { SessionMessage } from "./message.js"
-import type { SessionSchema } from "./schema.js"
 
 /**
  * A full-text index of session titles and message text that SQLite maintains itself. Triggers on the source tables
@@ -66,14 +65,6 @@ export type Ensured =
   | { readonly status: "unsupported"; readonly reason: string }
   | { readonly status: "ready"; readonly state: State }
 
-export interface Hit {
-  readonly sessionID: SessionSchema.ID
-  /** Undefined when the session title matched. */
-  readonly messageID?: SessionMessage.ID
-  /** BM25 score; lower is better. */
-  readonly rank: number
-}
-
 /**
  * Runs before anything writes, so it must stay cheap when there is no index: one sqlite_master read. If search
  * triggers exist but this SQLite can't run them (a database moved to an older SQLite), they would fail every session
@@ -89,6 +80,10 @@ export const check = Effect.fn("SessionSearchIndex.check")(function* (db: Databa
     })
   return result
 })
+
+Database.afterMigrate((db) =>
+  check(db).pipe(Effect.ignoreCause({ log: "Error", message: "session search check failed" })),
+)
 
 /**
  * Creates the index and its triggers, or recreates them when the version is older or an object is gone, and starts a
@@ -181,31 +176,6 @@ export const retry = (db: DatabaseService) =>
 
 export const state = (db: DatabaseService) => readState(db).pipe(Effect.orDie)
 
-/** Ranks entries matching any word of `query` by BM25. */
-export const search = Effect.fn("SessionSearchIndex.search")(function* (
-  db: DatabaseService,
-  input: { readonly query: string; readonly limit?: number },
-) {
-  const words = [...new Set(Array.from(input.query.matchAll(Word), (match) => match[0]))]
-  if (words.length === 0) return []
-  const match = words.map((word) => `"${word.replaceAll('"', '""')}"`).join(" OR ")
-  // `score`, not `rank`: FTS5 tables have a hidden `rank` column. Equal column weights ranked better than favoring
-  // titles and summaries on 534 recorded agent searches.
-  const rows = yield* db.all<{ sessionID: SessionSchema.ID; sourceID: string; score: number }>(sql`
-    SELECT document.session_id AS sessionID, document.source_id AS sourceID, bm25(session_search) AS score
-    FROM session_search JOIN session_search_document AS document ON document.id = session_search.rowid
-    WHERE session_search MATCH ${match}
-    ORDER BY score
-    LIMIT ${input.limit ?? 20}
-  `)
-  return rows.map(
-    (row): Hit =>
-      row.sourceID === row.sessionID
-        ? { sessionID: row.sessionID, rank: row.score }
-        : { sessionID: row.sessionID, messageID: SessionMessage.ID.make(row.sourceID), rank: row.score },
-  )
-}, Effect.orDie)
-
 /**
  * SQLITE_BUSY or SQLITE_LOCKED: another connection held the write lock past busy_timeout. Worth waiting out, unlike a
  * failing row.
@@ -215,7 +185,6 @@ export const isBusy = (cause: Cause.Cause<unknown>) => {
   return code === 5 || code === 6
 }
 
-const Word = /[\p{L}\p{M}\p{N}]+/gu
 const Columns = "title, summary, user_text, assistant_text"
 const Tokenizer = "tokenize='porter unicode61 remove_diacritics 2'"
 const Indexed = Object.entries(MessageTypes)
@@ -335,7 +304,9 @@ const prepare = Effect.fnUntraced(function* (db: DatabaseService, create: boolea
     .all<{
       name: string
       type: string
-    }>(sql`SELECT name, type FROM sqlite_master WHERE name GLOB 'session_search*' AND type IN ('table', 'view', 'trigger')`)
+    }>(
+      sql`SELECT name, type FROM sqlite_master WHERE name GLOB 'session_search*' AND type IN ('table', 'view', 'trigger')`,
+    )
     .pipe(Effect.orDie)
   if (!create && objects.length === 0) return { status: "absent" } as const
   const triggers = objects.filter((object) => object.type === "trigger").map((object) => object.name)

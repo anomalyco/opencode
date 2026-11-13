@@ -9,7 +9,6 @@ import { closeSync, existsSync, openSync } from "node:fs"
 import { chmod } from "node:fs/promises"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration.js"
-import { SessionSearchIndex } from "../session/search-index.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
@@ -25,6 +24,16 @@ export const Options = Schema.Struct({
 export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/storage/Database") {}
+
+const checks: Array<(db: DatabaseShape) => Effect.Effect<void>> = []
+
+/**
+ * Runs `check` after migrations, before anything writes, each time a database is opened. Register at module load:
+ * a database opened earlier skips it.
+ */
+export function afterMigrate(check: (db: DatabaseShape) => Effect.Effect<void>) {
+  checks.push(check)
+}
 
 // The bootstrap lock is scoped to the database being built, never to this
 // module: on workerd every Durable Object in an isolate shares module state, and
@@ -51,12 +60,7 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>) =>
       const semaphore = yield* lock
       yield* semaphore.withPermit(
         DatabaseMigration.apply(db).pipe(
-          // Before anything writes: search triggers this SQLite can't run would fail every session write.
-          Effect.andThen(
-            SessionSearchIndex.check(db).pipe(
-              Effect.ignoreCause({ log: "Error", message: "session search check failed" }),
-            ),
-          ),
+          Effect.andThen(Effect.forEach(checks, (check) => check(db), { discard: true })),
         ),
       )
 

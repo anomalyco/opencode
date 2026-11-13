@@ -11,6 +11,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionSearchBuild } from "@opencode/core/session/search-build"
 import { SessionSearchIndex } from "@opencode/core/session/search-index"
+import { SessionSearchQuery } from "@opencode/core/session/search-query"
 import { SessionTable } from "@opencode/core/session/sql"
 import { testEffect } from "./lib/effect"
 
@@ -62,7 +63,7 @@ const settled = (build: SessionSearchBuild.Interface, status: SessionSearchBuild
   until(build.status.pipe(Effect.map((current) => current.status === status)))
 
 const titles = (db: Database.Interface["db"], query: string) =>
-  SessionSearchIndex.search(db, { query }).pipe(
+  SessionSearchQuery.search(db, { query }).pipe(
     Effect.map((hits) => hits.map((hit): string => hit.sessionID).toSorted()),
   )
 
