@@ -4,6 +4,15 @@ import { Mime } from "@opencode/core/mime"
 const ftyp = (hex: string) => Uint8Array.from(Buffer.from(hex, "hex"))
 
 describe("Mime.detect", () => {
+  test.each([
+    [Uint8Array.of(65), "text/plain"],
+    [Uint8Array.of(0xff), "application/octet-stream"],
+    [Uint8Array.of(0xe2, 0x82), "text/plain"], // A sample may end inside a UTF-8 character.
+  ] as const)("leaves samples without media headers to the text fallback: %j", (bytes, mime) => {
+    expect(Mime.detectMedia(bytes)).toBeUndefined()
+    expect(Mime.detect(bytes)).toBe(mime)
+  })
+
   test("tells ISO-BMFF brands apart", () => {
     expect(Mime.detect(ftyp("000000206674797061766966000000004d695072617669666d6961666d696631"))).toBe("image/avif")
     expect(Mime.detect(ftyp("000000186674797061766973000000006d73663161766973"))).toBe("image/avif")
