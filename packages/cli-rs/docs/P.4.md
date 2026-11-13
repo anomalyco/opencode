@@ -88,7 +88,7 @@ registers the P.1 surface as data, because widgets and closures cannot cross the
 | `ui.model.current`, `ui.model.variant.list/set` (1.6) | `Read::model`, `Read::variants`, `Host::set_variant(Option<&str>) -> bool`; and `Host::set_model(provider, model)` |
 | `ui.tabs.enabled/list/open/focus/move/close` (1.6) | `Read::tabs_enabled`, `Read::tabs`, `Host::edit_tab(TabEdit) -> bool` |
 | `keymap.pending/active/commands/shortcuts` (1.6) | `Read::keymap_pending`, `keymap_active`, `keymap_commands`, `shortcuts(name)` |
-| `renderer.getSelection()`, `clearSelection()` (1.6) | `Read::selection`, `Host::clear_selection`; a plugin cannot set the range |
+| `renderer.getSelection()`, `clearSelection()` (1.6) | `Read::selection`, `Host::clear_selection`; a plugin cannot set the range. The selection is the widgets' live state, as in TS: it goes when its anchor widget goes (a transcript row scrolled out of its window, a claim whose node changed), and a key press clears it before the keymap runs, as TS's selection key handler does |
 | `renderer.suspend()`, a program, `resume()` (1.6) | `Host::foreground(Foreground { command, args, cwd }) -> RequestId`; the exit code comes to `on_reply` |
 | `renderer.setTerminalTitle` (1.6) | `Host::set_title(title)` |
 | 1.x `api.theme.selected/has/set/install` (1.6) | `Read::theme`, `Read::themes`, `Host::set_theme(name) -> bool`, `Host::install_theme(name, json)` |
@@ -185,10 +185,25 @@ dark), and touches nothing of the host; a plugin's own thread calls `wake`.
   `<config>/themes/<name>.json`, then listed; a name that is not a plain file name, or a value without `theme` or
   `base`, is refused), and
   `foreground(Foreground)`.
-- `foreground` gives the terminal to the program as the TUI does for `$EDITOR`: the TUI restores the terminal, waits
-  for the program, and sets the terminal up again; input sent meanwhile is dropped. It runs in `cwd`, else where the
-  TUI works. The reply to its `RequestId` is `{ "code": <exit code or null> }`, or the error when it did not start. A
-  second program asked for in the same turn replaces the first, whose reply never comes.
+- `foreground` gives the terminal to the program as the TUI does for `$EDITOR`: once the call is done the TUI
+  restores the terminal, runs the program, waits for it, and sets the terminal up again. It runs in `cwd`, else where
+  the TUI works when that directory exists here (a remote server's may not), else in the TUI's own. The reply to its
+  `RequestId` is `{ "code": <exit code or null> }`, plus `"signal"` on Unix when a signal ended it, or the error when
+  it did not start. Every request gets one reply. One program has the terminal at a time, shared with `$EDITOR`: a
+  second request while one waits or runs is refused at once. So is a request in a headless TUI (drive mode), and one
+  whose plugin was disabled or failed before the program started. The program has the terminal's three standard
+  streams, also standard error, which the TUI otherwise captures, and gets the signals of the terminal's keys; the TUI
+  gets none (`opencode_util::job`, deviation `F16-plugin-foreground`):
+  - Linux and macOS: the program runs in a process group of its own, which is the terminal's foreground group while it
+    runs. Ctrl+C and Ctrl+\ signal it alone. Ctrl+Z stops it, and the TUI continues it at once, as it has no shell to
+    hand a stopped job to: Ctrl+Z does nothing to a program run this way. Input the program leaves unread is dropped
+    once it exits, so it does not reach the composer. The same code runs on both; Linux is tested on a real PTY
+    (`P.0b/foreground-*`, Rust only), macOS is not.
+  - Windows: the console sends Ctrl+C and Ctrl+Break to every process attached to it; while the program runs the TUI
+    takes them and ignores them, so they end the program alone. Its standard error is `CONOUT$`, and console input it
+    leaves unread is dropped. Reasoned from the code, not run: there is no Windows toolchain here.
+  - A program that leaves the terminal in a mode the TUI does not know of (a Kitty keyboard flag it pushed, say) is not
+    undone; the TUI sets up only its own modes again. The title the TUI or a plugin set is sent again.
 - A `Dialog` is a `Prompt`, whose text goes to its action as the input; a `Select { title, placeholder, options,
   current, action }` (TS `dialog.select`), whose pick closes it and goes to its action as the input; a `Panel { key,
   size, title, subtitle, body, actions, binds, bleed, centered }`, which changes in place while its key is open and
