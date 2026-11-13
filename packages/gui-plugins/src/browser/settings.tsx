@@ -253,7 +253,8 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
   const ctx = usePlugin<typeof definition>()
   const ui = ctx.ui
   const desktop = ctx.desktop
-  const jobs = createProfileJobs()
+  // The page that opened it already lists the browsers.
+  const jobs = createProfileJobs({ profile: false })
   const [form, setForm] = createStore<{ link: string; profile?: string }>({ link: "" })
   const choices = createMemo(() => profileChoices(props.sources.filter((source) => source.engine === "chromium")))
   const selected = createMemo(() => choices().find((choice) => choiceValue(choice) === form.profile) ?? choices()[0])

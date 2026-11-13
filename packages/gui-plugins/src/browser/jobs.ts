@@ -33,17 +33,22 @@ export type JobMessage = {
  * machine against main's Ipc, one job at a time, and reads the profile again after each. Call it in a component.
  *
  * `finished` runs once per job, when it ends, for what the surface does next, such as reloading the page. `cookies`
- * reads the summary again whenever the profile's cookies change, for a surface that shows the count.
+ * reads the summary again whenever the profile's cookies change, for a surface that shows the count. With `profile`
+ * false it reads neither the browsers nor the summary, for a surface that shows neither.
  */
 export function createProfileJobs(
-  input: { readonly finished?: (finished: Finished) => void; readonly cookies?: boolean } = {},
+  input: {
+    readonly finished?: (finished: Finished) => void
+    readonly cookies?: boolean
+    readonly profile?: boolean
+  } = {},
 ) {
   const ctx = usePlugin<typeof definition>()
   const live = ctx.use(BrowserProfile)
   const preferences = ctx.stores.preferences
   const [state, setState] = createSignal(initialJobsState)
   const [version, setVersion] = createSignal(0)
-  const mac = /Mac/.test(navigator.platform)
+  const mac = ctx.desktop?.os === "macos"
   // Each running job's call and timer, by attempt.
   const handles = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
 
@@ -105,7 +110,15 @@ export function createProfileJobs(
 
   onCleanup(() => dispatch({ type: "disposed" }))
 
-  const sources = createLatest(key, (_value, signal) => client()?.sources({ signal }) ?? Promise.resolve([]))
+  // The installed browsers change only with a new generation of main's Ipc, not with a job.
+  const sources = createLatest(
+    () => {
+      const current = live()
+
+      return input.profile !== false && current.status === "active" ? current.generation : undefined
+    },
+    (_value, signal) => client()?.sources({ signal }) ?? Promise.resolve([]),
+  )
   const [cookies, setCookies] = createSignal(0)
 
   // Main says when browsing changed the cookies; the SDK removes the listener when the Ipc's generation ends.
@@ -115,7 +128,7 @@ export function createProfileJobs(
     () => {
       const current = key()
 
-      return current === undefined ? undefined : `${current}:${cookies()}`
+      return current === undefined || input.profile === false ? undefined : `${current}:${cookies()}`
     },
     (_value, signal) => client()?.summary({ signal }) ?? Promise.resolve(undefined),
   )
