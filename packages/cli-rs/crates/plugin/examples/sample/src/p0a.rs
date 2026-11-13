@@ -99,7 +99,7 @@ fn confirm(host: &dyn Host) {
     host.dialog(Dialog::Confirm(Confirm {
         title: "Delete the draft?".to_owned(),
         message: "It cannot be undone.".to_owned(),
-        label: ConfirmLabel { confirm: Some("delete".to_owned()), cancel: None },
+        label: ConfirmLabel { confirm: Some("delete".to_owned()), cancel: Some("keep".to_owned()) },
         action: Action::Command { name: "p0a.answered".to_owned(), input: None },
     }));
 }

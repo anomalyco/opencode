@@ -14,15 +14,18 @@
  },
  "routes": [],
  "steps": [
-  {"checkpoint":"home","until":"p0a","masks":[{"x":16,"y":14,"width":84,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"P.1/p0a-dialogs/home"},
+  {"checkpoint":"home","until":"p0a","masks":[{"x":16,"y":14,"width":84,"height":1,"reason":"the placeholder example: random in TS and Rust"},{"x":39,"y":28,"width":22,"height":1,"reason":"TS plugin loading notice (F16)"}],"fixture":"P.1/p0a-dialogs/home"},
   {"keys":["f6"]},
-  {"checkpoint":"confirm","until":"Delete the draft?","fixture":"P.1/p0a-dialogs/confirm"},
+  {"checkpoint":"confirm","until":"Delete the draft?","masks":[{"x":39,"y":28,"width":22,"height":1,"reason":"TS plugin loading notice (F16)"}],"fixture":"P.1/p0a-dialogs/confirm"},
   {"keys":["return"]},
-  {"checkpoint":"confirmed","until":"answered true","masks":[{"x":16,"y":14,"width":84,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"P.1/p0a-dialogs/confirmed"},
+  {"checkpoint":"confirmed","until":"answered true","masks":[{"x":16,"y":14,"width":84,"height":1,"reason":"the placeholder example: random in TS and Rust"},{"x":39,"y":28,"width":22,"height":1,"reason":"TS plugin loading notice (F16)"}],"fixture":"P.1/p0a-dialogs/confirmed"},
   {"keys":["f7"]},
-  {"checkpoint":"alert","until":"Heads up","fixture":"P.1/p0a-dialogs/alert"},
+  {"checkpoint":"alert","until":"Heads up","masks":[{"x":39,"y":28,"width":22,"height":1,"reason":"TS plugin loading notice (F16)"}],"fixture":"P.1/p0a-dialogs/alert"},
   {"keys":["escape"]},
-  {"checkpoint":"alerted","until":"alert closed","masks":[{"x":16,"y":14,"width":84,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"P.1/p0a-dialogs/alerted"}
+  {"checkpoint":"alerted","until":"alert closed","masks":[{"x":16,"y":14,"width":84,"height":1,"reason":"the placeholder example: random in TS and Rust"},{"x":39,"y":28,"width":22,"height":1,"reason":"TS plugin loading notice (F16)"}],"fixture":"P.1/p0a-dialogs/alerted"},
+  {"keys":["f6"]},
+  {"keys":["escape"]},
+  {"checkpoint":"cancelled","until":"answered false","masks":[{"x":16,"y":14,"width":84,"height":1,"reason":"the placeholder example: random in TS and Rust"},{"x":39,"y":28,"width":22,"height":1,"reason":"TS plugin loading notice (F16)"}],"fixture":"P.1/p0a-dialogs/cancelled"}
  ],
  "requests": {
   "writes": [],

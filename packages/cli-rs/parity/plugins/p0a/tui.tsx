@@ -1,6 +1,6 @@
 // The P0a test plugin, TypeScript side (rich plugins, ABI 1.5): F6 asks `dialog.confirm` and toasts the answer, F7
-// shows `dialog.alert` and toasts once it closes, F8 inserts text into the focused composer, as npm plugins do through
-// `renderer.currentFocusedEditor`, and a styled box is appended to home.footer. parity/scenarios/P.1/p0a-*.app.ts load
+// shows `dialog.alert` and toasts once it closes, F8 inserts text into the focused composer and F9 sets it, as npm
+// plugins do through `renderer.currentFocusedEditor`, and a styled box is appended to home.footer. parity/scenarios/P.1/p0a-*.app.ts load
 // this directory through the cli.json `plugins` entry; the Rust TUI skips that entry and registers its Rust twin
 // (`p0a_plugin` in crates/tui/tests/all/app.rs).
 import type { Context } from "../../../../plugin/src/tui/plugin"
@@ -19,7 +19,7 @@ export default {
             const answer = await context.ui.dialog.confirm({
               title: "Delete the draft?",
               message: "It cannot be undone.",
-              label: { confirm: "delete" },
+              label: { confirm: "delete", cancel: "keep" },
             })
             if (answer !== undefined) toast(`answered ${answer}`)
           },
@@ -37,6 +37,16 @@ export default {
           title: "Parity insert",
           run: () => {
             context.renderer.currentFocusedEditor?.insertText("inserted")
+          },
+        },
+        {
+          // As the composer's `ref.set` does: the text, then the cursor to the end.
+          bind: "f9",
+          title: "Parity set",
+          run: () => {
+            const editor = context.renderer.currentFocusedEditor
+            editor?.setText("set by the plugin")
+            editor?.gotoBufferEnd()
           },
         },
       ],
