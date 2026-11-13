@@ -164,18 +164,8 @@ export class Driver<R> {
     call.status = "running"
     const request = call.request
     if (request.kind === "tool") {
-      const options = {
-        key: call.key,
-        admit: (name: string) => this.admit(call.id, name),
-        detaching: () => this.suspending,
-        resolved: request.resolved,
-        save: (name: string, input: Json | undefined) => {
-          const current = this.vm.call(call.id)
-          if (current) current.request = { kind: "tool", path: name.split("."), args: [input], resolved: true }
-        },
-      }
       if (this.tools.mode(request.path)?._tag === "CodeModeDurable") {
-        const started = this.tools.start(request.path, request.args, options)
+        const started = this.tools.start(request.path, request.args, call.key, (name) => this.admit(call.id, name))
         return this.fork(call.id, started, (data) => {
           const current = this.vm.call(call.id)
           if (current === undefined) return
@@ -185,7 +175,14 @@ export class Driver<R> {
           this.wait(current)
         })
       }
-      return this.fork(call.id, this.tools.execute(request.path, request.args, options))
+      return this.fork(
+        call.id,
+        this.tools.execute(request.path, request.args, {
+          key: call.key,
+          admit: (name) => this.admit(call.id, name),
+          detaching: () => this.suspending,
+        }),
+      )
     }
     if (request.kind === "search") {
       return this.fork(

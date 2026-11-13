@@ -71,12 +71,7 @@ export type Job =
  * extension function's call (see `ExtensionRequest`).
  */
 export type HostRequest =
-  | {
-      readonly kind: "tool"
-      readonly path: ReadonlyArray<string>
-      readonly args: Array<Json | undefined>
-      readonly resolved?: true
-    }
+  | { readonly kind: "tool"; readonly path: ReadonlyArray<string>; readonly args: Array<Json | undefined> }
   | { readonly kind: "search"; readonly args: Array<Json | undefined> }
   | { readonly kind: "extension"; readonly call: ExtensionRequest }
 
@@ -115,7 +110,7 @@ export class HostCall {
     readonly id: number,
     /** The call's stable idempotency key, `<runId>:<callId>`. */
     readonly key: string,
-    public request: HostRequest,
+    readonly request: HostRequest,
     /** What runs: a tool path, or an extension function's label. */
     readonly label: string,
     /** The running job waits for it: its outcome continues the frame that asked, before any other job. */
