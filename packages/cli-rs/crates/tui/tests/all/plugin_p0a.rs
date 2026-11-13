@@ -574,6 +574,25 @@ fn a_dialog_of_a_failed_plugin_goes_and_answers_nobody() {
     }
 }
 
+// Expected: a confirm or an alert that closed no longer belongs to its plugin, so the dialog the host opens after it,
+// the plugin manager, stays open when the plugin is disabled.
+#[test]
+fn a_closed_dialog_leaves_the_next_one_to_the_host() {
+    for (open, title) in [("p0a.confirm", "Delete the draft?"), ("p0a.alert", "Heads up")] {
+        let h = home(Carrier::Linked);
+        h.tui.keymap.dispatch(open, None);
+        h.wait_for(title);
+        h.app.press("escape");
+        h.wait_gone(title);
+        h.tui.keymap.dispatch("plugins.list", None);
+        h.wait("the plugin manager", || h.tui.dialogs.is_open());
+        let manager = h.tui.dialogs.key();
+        assert!(h.tui.plugins.set_active(&opencode_tui::plugins::host::host(&h.tui), "p0a", false));
+        h.app.advance(std::time::Duration::from_millis(50));
+        assert!(h.tui.dialogs.is_open() && h.tui.dialogs.key() == manager, "{open}: {}", h.app.text());
+    }
+}
+
 // Expected (bigboi 2): a dialog of a live plugin that names another plugin's command runs it, once.
 #[test]
 fn a_live_dialog_runs_a_foreign_command_once() {
