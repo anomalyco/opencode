@@ -1,6 +1,10 @@
 export * as Mime from "./mime.js"
 
 export function detect(bytes: Uint8Array) {
+  return detectMedia(bytes) ?? (isText(bytes) ? "text/plain" : "application/octet-stream")
+}
+
+export function detectMedia(bytes: Uint8Array) {
   if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png"
   if (startsWith(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg"
   const signature = ascii(bytes, 0, 6)
@@ -29,7 +33,7 @@ export function detect(bytes: Uint8Array) {
     if (brand === "M4A ") return "audio/mp4"
     return "video/mp4"
   }
-  return isText(bytes) ? "text/plain" : "application/octet-stream"
+  return undefined
 }
 
 export const isTextual = (mime: string) =>
