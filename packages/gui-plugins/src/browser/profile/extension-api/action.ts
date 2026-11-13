@@ -75,8 +75,8 @@ const MEMBERS = [
   "enable",
   "disable",
   "isEnabled",
-  // No `openPopup`: a popup opens only from the user's click, so an extension cannot put a page over the app.
   "getUserSettings",
+  "openPopup",
 ]
 
 /**
@@ -200,6 +200,10 @@ export function createActions(input: {
       read(context, tab).enabled !== false,
     ),
     [`${namespace}.getUserSettings`]: method(none, () => ({ isOnToolbar: true })),
+    // A popup opens only from the user's click, so an extension cannot put a page over the app on its own.
+    [`${namespace}.openPopup`]: method(none, () => {
+      throw new Error("A popup opens only when the user clicks the extension.")
+    }),
   })
 
   const namespace = (path: string, manifest: 2 | 3, members: readonly string[]): ApiNamespace => ({
