@@ -383,6 +383,7 @@ export async function createBrowserProfile(input: {
         (info) => (info.isFile() ? info.size : Infinity),
         () => Infinity,
       )
+
       const text = size <= 32 * 1024 * 1024 ? await readFile(file, "utf8").catch(() => undefined) : undefined
 
       if (text === undefined) return { type: "failed", reason: "read" }
