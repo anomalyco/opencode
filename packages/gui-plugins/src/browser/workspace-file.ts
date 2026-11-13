@@ -1,6 +1,23 @@
 import { realpath, stat } from "node:fs/promises"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { fileURLWithin } from "./policy"
+import { previewResource } from "./preview"
+
+/** The grant must still belong to this binding after asynchronous path resolution. */
+export async function resolvePreviewRequest(url: string, method: string, initiator: string | undefined, grants: ReadonlyMap<string, () => readonly string[]>) {
+  if ((method !== "GET" && method !== "HEAD") || !URL.canParse(url)) return
+  const host = new URL(url).host
+  const grant = grants.get(host)
+
+  if (!grant) return
+  const roots = grant()
+  const file = previewResource(url, host, initiator, roots)
+
+  if (!file) return
+  const target = await workspaceFile(file, roots)
+
+  return grants.get(host) === grant ? target : undefined
+}
 
 /** Resolve again at each authority boundary. A path checked when displayed may no longer name the same file. */
 export async function workspaceFile(file: string, roots: readonly string[]) {

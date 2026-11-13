@@ -1,7 +1,6 @@
 import { net, type Session } from "electron"
 import { previewScheme } from "../scheme"
-import { previewResource } from "../preview"
-import { workspaceFile } from "../workspace-file"
+import { resolvePreviewRequest } from "../workspace-file"
 import { previewRange } from "./range"
 
 export function createPreviews(session: Session, signal: AbortSignal) {
@@ -15,20 +14,13 @@ export function createPreviews(session: Session, signal: AbortSignal) {
 
   const serve = async (request: Request) => {
     const host = new URL(request.url).host
-    const grant = grants.get(host)
     // Electron adds the Chromium initiator (not a renderer-supplied HTTP header) to protocol Requests.
     // SAFETY: Electron's Protocol.handle assigns ProtocolRequest.initiatorOrigin (string or undefined).
     const initiator = (request as Request & { initiatorOrigin?: string }).initiatorOrigin
 
-    if (!grant) return Response.error()
+    const target = await resolvePreviewRequest(request.url, request.method, initiator, grants)
 
-    if (request.method !== "GET" && request.method !== "HEAD") return Response.error()
-    const file = previewResource(request.url, host, initiator, grant())
-
-    if (!file) return Response.error()
-    const target = await workspaceFile(file, grant())
-
-    if (!target || !grants.has(host)) return Response.error()
+    if (!target) return Response.error()
     const slice = previewRange(request.headers.get("range"), target.size)
     const response = slice.status === 416 ? undefined : await net.fetch(target.href, { method: request.method, headers: slice.range ? { range: slice.range } : undefined })
     const headers = new Headers(response?.headers)
@@ -42,6 +34,12 @@ export function createPreviews(session: Session, signal: AbortSignal) {
     headers.set("Cache-Control", "no-store")
 
     if (request.method === "HEAD") await response?.body?.cancel()
+
+    if (!grants.has(host)) {
+      await response?.body?.cancel()
+
+      return Response.error()
+    }
 
     return new Response(request.method === "HEAD" ? null : response?.body, { status: slice.status, headers })
   }

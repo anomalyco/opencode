@@ -3,7 +3,7 @@ import { link, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
-import { workspaceFile } from "./workspace-file"
+import { resolvePreviewRequest, workspaceFile } from "./workspace-file"
 
 test("preview and reveal resolve existing regular files under the real workspace, including a linked root", async () => {
   const temp = await mkdtemp(path.join(tmpdir(), "preview-"))
@@ -28,6 +28,18 @@ test("preview and reveal resolve existing regular files under the real workspace
     expect(await lookup(path.join(temp, "deleted", name), path.join(temp, "deleted"))).toBeUndefined()
     await link(file, path.join(repo, "hardlink"))
     expect(await lookup(path.join(repo, "hardlink"))).toMatchObject({ size: 6 })
+
+    const grants = new Map([["first", () => [repo]]])
+    const url = pathToFileURL(file).href.replace("file://", "oc-preview://first")
+    const request = (method: string) => resolvePreviewRequest(url, method, "oc-preview://first", grants)
+
+    for (const method of ["GET", "HEAD"]) expect(await request(method)).toMatchObject({ size: 6 })
+
+    for (const method of ["POST", "PUT", "DELETE"]) expect(await request(method)).toBeUndefined()
+    const pending = request("GET")
+    grants.delete("first")
+    expect(await pending).toBeUndefined()
+    expect(await request("HEAD")).toBeUndefined()
 
     // Junctions above exercise real directory links on Windows without SeCreateSymbolicLinkPrivilege.
     if (process.platform !== "win32") {
