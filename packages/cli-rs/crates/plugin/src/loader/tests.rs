@@ -111,6 +111,14 @@ impl Host for TestHost {
         Ok(())
     }
 
+    fn storage_restore(&self, key: &str, json: Option<&str>) {
+        let mut storage = self.storage.borrow_mut();
+        match json {
+            Some(json) => storage.insert(key.to_owned(), json.to_owned()),
+            None => storage.remove(key),
+        };
+    }
+
     fn toast(&self, toast: &abi::Toast) {
         self.toasts.borrow_mut().push(toast.clone());
     }

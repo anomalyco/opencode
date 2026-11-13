@@ -184,6 +184,23 @@ fn quick_writes_land_in_order() {
     h.on_disk("plugin.test.count", json!({ "count": 39 }));
 }
 
+// Expected (panic-effects): a write the host puts back after a plugin call panicked reads at once, and lands on disk,
+// as the key was before: its old value, or nothing.
+#[test]
+fn a_restored_key_reads_and_lands_as_before() {
+    let h = mount(&[], true);
+    let key = "plugin.test.count";
+    for count in [1, 2] {
+        h.tui.storage_write(key, &json!({ "count": count }).to_string()).unwrap();
+    }
+    h.tui.storage_restore(key, Some(&json!({ "count": 1 }).to_string()));
+    assert_eq!(h.tui.storage_read(key), Some(json!({ "count": 1 }).to_string()));
+    h.on_disk(key, json!({ "count": 1 }));
+    h.tui.storage_restore(key, None);
+    assert_eq!(h.tui.storage_read(key), None);
+    h.on_disk(key, Value::Null);
+}
+
 // Expected: a mounted section listens to the settings until it unmounts, so mounting the sidebar's slots many times
 // leaves no listener behind.
 #[test]

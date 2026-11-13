@@ -1256,12 +1256,13 @@ fn setup_and_dispose_effects_are_the_same_on_both_paths() {
 }
 
 // Expected (bigboi-1): a setup that fails or panics after it registered a dispose callback runs it while the host is
-// still valid, so the sample's `destroyed` is stored, and the plugin is failed and not active.
+// still valid, and the plugin is failed and not active. After a failure the sample's `destroyed` is stored; a panic
+// has no effects (panic-effects), and the callback ran within the call that panicked, so its write is put back.
 #[test]
 fn a_failed_setup_runs_the_dispose_callbacks_it_registered() {
-    for (options, error) in [
-        ("{\"probe\":true,\"fail\":true}", "sample setup failed"),
-        ("{\"probe\":true,\"panic\":true}", "setup panicked: sample setup panicked"),
+    for (options, error, destroyed) in [
+        ("{\"probe\":true,\"fail\":true}", "sample setup failed", Some("{\"destroyed\":true}")),
+        ("{\"probe\":true,\"panic\":true}", "setup panicked: sample setup panicked", None),
     ] {
         let host = host();
         let (definition, failure) = Native.load(&dynamic(&host), &build(""), Some(options)).unwrap();
@@ -1271,7 +1272,7 @@ fn a_failed_setup_runs_the_dispose_callbacks_it_registered() {
         assert_eq!(status(&registry), Status::Failed(error.to_owned()));
         assert!(!entry(&registry.entries(), "sample.so").active);
         let stored = host.storage.borrow().get("plugin.sample.destroyed").cloned();
-        assert_eq!(stored.as_deref(), Some("{\"destroyed\":true}"), "{options}");
+        assert_eq!(stored.as_deref(), destroyed, "{options}");
     }
 }
 
@@ -1413,4 +1414,207 @@ fn a_library_is_staged_in_a_directory_only_this_process_owns() {
     fs::remove_file(&claimed).unwrap();
     assert_eq!(inspected.unwrap().minor, 4);
     assert!(!claimed.exists());
+}
+
+thread_local! {
+    /// The call of `panicky` that asks for effects, whether it then panics, the wakes it ran, and its waker.
+    static LEAK_AT: std::cell::Cell<(&'static str, bool)> = const { std::cell::Cell::new(("", false)) };
+    static WOKEN: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static PANICKY_WAKER: std::cell::RefCell<Option<abi::Waker>> = const { std::cell::RefCell::new(None) };
+}
+
+/// When `at` is the call [`LEAK_AT`] names: writes storage key `k` twice and `m`, which holds nothing, once, and asks
+/// for an effect of each kind a test host records, then panics if it should.
+fn leak(host: &dyn abi::Host, at: &str) {
+    let (leaking, panics) = LEAK_AT.get();
+    if leaking != at {
+        return;
+    }
+    let merged = || serde_json::Map::from_iter([("merged".to_owned(), serde_json::Value::Bool(true))]);
+    host.storage_set("k", serde_json::json!({ "leaked": at }));
+    host.storage_merge("m", merged());
+    host.storage_merge("k", merged());
+    host.toast(abi::Toast::new(abi::Variant::Info, "leaked"));
+    host.attention(abi::Attention { title: None, message: "leaked".into(), notify: None, sound: None });
+    host.open_route("r");
+    host.fetch(abi::Fetch { method: "GET".into(), path: "/leaked".into(), ..abi::Fetch::default() });
+    host.dialog(abi::Dialog::Close { key: "leaked".into() });
+    assert!(!panics, "boom");
+}
+
+/// Panics in a render, which can ask for nothing, when `at` is the call [`LEAK_AT`] names and it should.
+fn render_panic(at: &str) {
+    assert!(LEAK_AT.get() != (at, true), "boom");
+}
+
+/// A plugin that asks for effects in the call [`LEAK_AT`] names where the call can, then panics if it should.
+fn panicky(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.storage_key("k");
+    setup.storage_key("m");
+    // Runs within a setup that panics, so what it asks for goes with the rest.
+    setup.on_dispose(|host| {
+        if LEAK_AT.get() == ("setup", true) {
+            host.toast(abi::Toast::new(abi::Variant::Info, "disposed"));
+        }
+    });
+    leak(setup.host(), "setup");
+    PANICKY_WAKER.set(setup.waker());
+    setup.command(abi::Command { name: "x.panic".into(), ..abi::Command::default() }, |host, _| leak(host, "command"));
+    let fetch = abi::Command { name: "x.fetch".into(), ..abi::Command::default() };
+    setup.command(fetch, |host, _| {
+        host.fetch(abi::Fetch { method: "GET".into(), path: "/asked".into(), ..abi::Fetch::default() });
+    });
+    setup.on_reply(|host, _, _| leak(host, "reply"));
+    setup.on_event(&["session.execution.succeeded"], |host, _| leak(host, "event"));
+    setup.on_wake(|host| {
+        WOKEN.set(WOKEN.get() + 1);
+        leak(host, "wake");
+    });
+    setup.slot(abi::Placement::append("home.footer"), |_, _, _| {
+        render_panic("render");
+        abi::Render::Hide
+    });
+    setup.on_mount(abi::Placement::append("home.footer"), |host, _, mounted| {
+        if mounted {
+            leak(host, "mount");
+        }
+    });
+    setup.route("r", |_, _| {
+        render_panic("route");
+        abi::Render::Hide
+    });
+    setup.on_route_mount("r", |host, mounted| {
+        if mounted {
+            leak(host, "route-mount");
+        }
+    });
+    setup.code_block("panicky", |_, _| {
+        render_panic("fence");
+        abi::Fenced::Code
+    });
+    Ok(())
+}
+
+/// `panicky` active in process, or through the C ABI's byte shims as a library that tells its ID.
+fn panicking(host: &Rc<TestHost>, through: bool) -> Rc<Registry> {
+    let registry = Rc::new(Registry::define(Vec::new(), []));
+    *host.registry.borrow_mut() = Rc::downgrade(&registry);
+    if !through {
+        registry.add(abi::Plugin { id: "panicky", setup: panicky });
+        registry.activate(&dynamic(host));
+        return registry;
+    }
+    unsafe extern "C" fn describe(out: *mut Owned) -> i32 {
+        // SAFETY: the loader passes what `PluginApi::describe` documents.
+        unsafe { abi::runtime::describe("panicky", "0.1.0", out) }
+    }
+    let api = PluginApi {
+        size: size_of::<PluginApi>(),
+        major: ABI_MAJOR,
+        minor: ABI_MINOR,
+        requires_minor: 4,
+        create: Some(abi::export_plugin!(@loopback "panicky", panicky)),
+        call: Some(abi::runtime::call),
+        destroy: Some(abi::runtime::destroy),
+        free: Some(abi::runtime::free),
+        describe: Some(describe),
+    };
+    let (definition, error) = define(&dynamic(host), Library::from_table(&api, HOST_MINOR).unwrap(), None).unwrap();
+    registry.load(&dynamic(host), definition.external("panicky.so", error));
+    registry
+}
+
+/// What a host saw of the plugin's effects, without the failure toast: toasts, attention, routes, fetches, dialogs
+/// and storage.
+type Seen = (Vec<String>, usize, Vec<(String, String)>, Vec<String>, usize, Vec<(String, String)>);
+
+/// What the host lists of the plugin, how many failure toasts it showed, and whether the plugin's command still runs.
+type Listed = (Entry, usize, bool);
+
+/// Runs `panicky` on a fresh host, with storage it wrote before, through entry point `at`, with `leak` as
+/// [`LEAK_AT`]: what the host saw of it, and what it lists.
+fn panicky_run(at: &'static str, leak: (&'static str, bool), through: bool) -> (Seen, Listed) {
+    let host = host();
+    host.storage.borrow_mut().insert("plugin.panicky.k".to_owned(), "{\"kept\":true}".to_owned());
+    LEAK_AT.set(leak);
+    WOKEN.set(0);
+    let registry = panicking(&host, through);
+    let parent = View::new(host.app()).column();
+    let mut mounted = Vec::new();
+    match at {
+        "command" => drop(host.keymap().dispatch("x.panic", None)),
+        "event" => host.emit(&succeeded("ses_1")),
+        "reply" => {
+            host.keymap().dispatch("x.fetch", None);
+            host.app.advance(Duration::from_millis(1));
+            host.reply();
+        }
+        "wake" => {
+            PANICKY_WAKER.take().unwrap().wake();
+            assert!(host.app.wait_until(Duration::from_secs(10), || WOKEN.get() > 0), "no wake");
+        }
+        "render" | "mount" => {
+            mounted.push(registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {}));
+        }
+        "route" | "route-mount" => drop(registry.route(&*host, "panicky", "r")),
+        "fence" => drop(markdown(&host, &registry, "```panicky\nx\n```\n")),
+        _ => {}
+    }
+    host.app.advance(Duration::from_millis(1));
+    drop(mounted);
+    PANICKY_WAKER.take();
+    let entry = registry.entries().into_iter().find(|entry| entry.id == "panicky").unwrap();
+    // The run is over: what the plugin asks for from here on is not compared.
+    LEAK_AT.set(("", false));
+    let command = matches!(host.keymap().dispatch("x.panic", None), RunResult::Ok);
+    let toasts = host.toasts.borrow();
+    let failed = toasts.iter().filter(|toast| toast.title.as_deref() == Some("Plugin failed: panicky")).count();
+    let mut storage: Vec<(String, String)> = host.storage.borrow().clone().into_iter().collect();
+    storage.sort();
+    let seen = (
+        toasts.iter().filter(|toast| toast.title.is_none()).map(|toast| toast.message.clone()).collect(),
+        host.attention.borrow().len(),
+        host.routes.borrow().clone(),
+        host.fetches.borrow().iter().map(|(fetch, _)| fetch.path.clone()).collect(),
+        host.dialogs.borrow().len(),
+        storage,
+    );
+    (seen, (entry, failed, command))
+}
+
+// Expected (spike SC, property "a call that panics has no effects"): through every entry point and on both paths, a
+// call that asks for effects and then panics leaves the host as the same run leaves it when that call does nothing:
+// no toast, attention, route, fetch or dialog, and the storage it wrote holds what it held before. The plugin is
+// failed with the message the plugin manager lists, and the host says so once; a setup that panics leaves it not
+// active, which the loader or the plugin manager tells. The same call without the panic does have effects, where the
+// entry point can ask for them, so the comparison is not empty.
+#[test]
+fn a_call_that_panics_has_no_effects() {
+    let calls = [
+        ("setup", "setup", true),
+        ("command", "run-command", true),
+        ("event", "on-event", true),
+        ("reply", "on-reply", true),
+        ("wake", "on-wake", true),
+        ("mount", "on-mount", true),
+        ("route-mount", "on-route-mount", true),
+        ("render", "render-slot", false),
+        ("route", "render-route", false),
+        ("fence", "render-fence", false),
+    ];
+    for (at, export, effects) in calls {
+        for through in [false, true] {
+            let case = format!("{at}, through the C ABI: {through}");
+            let (quiet, (entry, failed, command)) = panicky_run(at, ("", false), through);
+            assert_eq!((entry.status, failed, command), (Status::Active, 0, true), "{case}");
+            let (leaked, _) = panicky_run(at, (at, false), through);
+            assert_eq!(leaked != quiet, effects, "{case}: {leaked:?}");
+            let (panicked, (entry, failed, command)) = panicky_run(at, (at, true), through);
+            assert_eq!(panicked, quiet, "{case}");
+            assert_eq!(entry.status, Status::Failed(format!("{export} panicked: boom")), "{case}");
+            // A failed plugin's commands leave the keymap; it stays active, so it can be disabled.
+            let listed = if at == "setup" { (false, 0, false) } else { (true, 1, false) };
+            assert_eq!((entry.active, failed, command), listed, "{case}");
+        }
+    }
 }
