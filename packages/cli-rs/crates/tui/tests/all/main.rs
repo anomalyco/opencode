@@ -30,6 +30,7 @@ mod more_tools;
 mod navigate;
 mod permission;
 mod plugin_approval;
+mod plugin_contain;
 mod plugin_fetch;
 mod plugin_gate;
 mod plugin_machines;
