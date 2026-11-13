@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import { decide, type LocalService } from "../src/service-probe"
+import { decide, parseLinuxProcStatState, type LocalService } from "../src/service-probe"
+import { defaultEnsureTiming } from "../src/service-timing"
 
 const protocolError =
   "Background service uses an incompatible health protocol. Update this client or explicitly restart the service."
@@ -51,4 +52,18 @@ test("a version mismatch replaces the service, handing off terminals only when i
     _tag: "replace",
     pty: "clear",
   })
+})
+
+test("default unresponsive eviction requires 30s of consecutive health timeouts", () => {
+  expect(defaultEnsureTiming.requestTimeout).toBe(5_000)
+  expect(defaultEnsureTiming.unresponsiveAttempts).toBe(6)
+})
+
+test("parseLinuxProcStatState reads the task state after any parenthesized command name", () => {
+  expect(parseLinuxProcStatState("3698946 (opencode) D 1 3698946 3698946 0 -1")).toBe("D")
+  expect(parseLinuxProcStatState("42 (opencode (worker) 1) D 1 42 42 0 -1")).toBe("D")
+  expect(parseLinuxProcStatState("42 (opencode (worker) 1) S 1 42 42 0 -1")).toBe("S")
+  expect(parseLinuxProcStatState("42 (opencode) Z 1 42 42 0 -1")).toBe("Z")
+  expect(parseLinuxProcStatState("42 (opencode)")).toBeUndefined()
+  expect(parseLinuxProcStatState("malformed")).toBeUndefined()
 })

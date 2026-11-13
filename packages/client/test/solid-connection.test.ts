@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, jest, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createClientConnection } from "../src/solid"
 import { OpenCode, type OpenCodeEvent } from "../src/promise"
@@ -177,5 +177,82 @@ test("a reconnect does not ask the volatile event stream to replay", async () =>
     expect(fake.streams[1].headers.get("last-event-id")).toBeNull()
   } finally {
     ctx.dispose()
+  }
+})
+
+test("repeated reconnect failures back off exponentially up to 15s and reset after a stable connection", async () => {
+  jest.useFakeTimers()
+  const attempts: number[] = []
+  let healthy = false
+  let streamController: ReadableStreamDefaultController<Uint8Array> | undefined
+  const encoder = new TextEncoder()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () => {
+      attempts.push(Date.now())
+      if (!healthy) throw new Error("offline")
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            streamController = controller
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(connected)}\n\n`))
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    },
+  })
+
+  const start = Date.now()
+  let dispose!: () => void
+  createRoot((cleanup) => {
+    dispose = cleanup
+    createClientConnection(api, {
+      reconnect: async () => {
+        if (!healthy) throw new Error("unavailable")
+        return api
+      },
+      flushInterval: 0,
+      onEvent: () => {},
+    })
+  })
+
+  const settle = async () => {
+    for (let i = 0; i < 8; i++) await Promise.resolve()
+  }
+
+  const advanceUntilAttempts = async (count: number) => {
+    for (let step = 0; step < 50 && attempts.length < count; step++) {
+      jest.advanceTimersToNextTimer()
+      await settle()
+    }
+  }
+
+  try {
+    await settle()
+    await advanceUntilAttempts(7)
+
+    const gaps = attempts.slice(1).map((time, index) => time - attempts[index])
+    expect(attempts[0]).toBe(start)
+    expect(gaps).toEqual([1_000, 2_000, 4_000, 8_000, 15_000, 15_000])
+
+    healthy = true
+    const beforeRecovery = attempts.length
+    await advanceUntilAttempts(beforeRecovery + 1)
+
+    // Hold the connection open past reconnectDelay (1s), then fail again and verify backoff resets to 1s.
+    jest.advanceTimersByTime(5_000)
+    await settle()
+    healthy = false
+    const droppedAt = Date.now()
+    const beforeDrop = attempts.length
+    streamController?.error(new Error("dropped"))
+    await settle()
+    await advanceUntilAttempts(beforeDrop + 1)
+
+    expect(attempts.at(-1)! - droppedAt).toBe(1_000)
+  } finally {
+    dispose()
+    jest.useRealTimers()
   }
 })

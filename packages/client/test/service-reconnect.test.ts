@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import { Service } from "../src/effect/service"
 import { ensure, stop } from "../src/promise/service"
 import type { EnsureOptions, EnsureReason, StopOptions } from "../src/service"
+import { withEnsureTiming } from "../src/service-timing"
 import { serviceFixture, stopSignal, stoppedExitCode } from "./fixture/service-fixture"
 import { accelerate } from "./fixture/service-timing"
 
@@ -90,5 +91,74 @@ for (const client of clients) {
     expect(await owner.exited).toBe(stoppedExitCode)
     expect(await fixture.signal()).toBe(stopSignal)
     expect(await Bun.file(fixture.registration).exists()).toBe(false)
+  })
+
+  test(`${client.name} wait policy preserves a slow owner without spawning contenders until it answers`, async () => {
+    await using fixture = await serviceFixture()
+    const owner = fixture.spawn("hanging")
+    await fixture.waitForFile()
+    const original = await Bun.file(fixture.registration).json()
+    const starts: EnsureReason[] = []
+
+    const pending = client.ensure({
+      file: fixture.registration,
+      command: fixture.command("record-start"),
+      unresponsive: "wait",
+      onStart: (reason) => starts.push(reason),
+    })
+
+    const deadline = Date.now() + 3_000
+    while (true) {
+      const count = (
+        await Bun.file(fixture.registration + ".requests")
+          .text()
+          .catch(() => "")
+      )
+        .trim()
+        .split("\n")
+        .filter(Boolean).length
+      if (count >= 5) break
+      if (Date.now() >= deadline) throw new Error(`Expected >= 5 timed-out probes, saw ${count}`)
+      await Bun.sleep(10)
+    }
+
+    expect(owner.exitCode).toBe(null)
+    expect(await Bun.file(fixture.registration + ".signal").exists()).toBe(false)
+    expect(await Bun.file(fixture.registration + ".started").exists()).toBe(false)
+    expect(starts).toEqual([])
+
+    await Bun.write(fixture.registration + ".release", "")
+    const endpoint = await pending
+    expect(endpoint.url).toBe(original.url)
+    expect(owner.exitCode).toBe(null)
+  })
+
+  test(`${client.name} wait policy reports an unresponsive timeout without killing the owner`, async () => {
+    await using fixture = await serviceFixture()
+    const owner = fixture.spawn("hanging")
+    await fixture.waitForFile()
+    const options = withEnsureTiming(
+      {
+        file: fixture.registration,
+        command: fixture.command("record-start"),
+        unresponsive: "wait" as const,
+      },
+      {
+        pollInterval: 20,
+        requestTimeout: 80,
+        unresponsiveAttempts: 2,
+        spawnDelay: 100,
+        promiseTimeout: 250,
+      },
+    )
+    const raw =
+      client.name === "Promise"
+        ? ensure(options)
+        : Effect.runPromise(Service.ensure(options).pipe(Effect.provide(NodeFileSystem.layer)))
+
+    await expect(raw).rejects.toThrow("Timed out waiting for the background service to respond")
+    expect(owner.exitCode).toBe(null)
+    expect(await Bun.file(fixture.registration + ".signal").exists()).toBe(false)
+    expect(await Bun.file(fixture.registration + ".started").exists()).toBe(false)
   })
 }

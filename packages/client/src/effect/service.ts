@@ -4,7 +4,7 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { decide, fallback, headers, isUninterruptibleDiskSleep, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { headers }
@@ -68,16 +68,24 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       catch: (cause) => new Error("Failed to start server", { cause }),
     })
   })
+  let lastTimedOut = false
   const found = yield* Effect.gen(function* () {
     const registration = yield* registered(options.file, timing.requestTimeout)
     const info = registration.info
     const service = registration.service
-    if (registration.timedOut && info !== undefined) {
+    lastTimedOut = registration.timedOut
+    let evicted = false
+    const countTimeout =
+      registration.timedOut &&
+      info !== undefined &&
+      options.unresponsive !== "wait" &&
+      !(yield* Effect.promise(() => isUninterruptibleDiskSleep(info.pid)))
+    if (countTimeout && info !== undefined) {
       timeouts = {
         info,
         count: timeouts !== undefined && same(timeouts.info, info) ? timeouts.count + 1 : 1,
       }
-      if (timeouts.count >= 3) {
+      if (timeouts.count >= timing.unresponsiveAttempts) {
         yield* announce("missing")
         yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
         yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
@@ -85,8 +93,10 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         pool.evict(info.pid)
         pool.recruitNow()
         timeouts = undefined
+        evicted = true
       }
-    } else timeouts = undefined
+    }
+    if (!countTimeout) timeouts = undefined
     if (service !== undefined) {
       pool.serviceAnswered()
       const decision = decide(service, options)
@@ -107,7 +117,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 
     const failed = pool.reap()
     if (failed !== undefined) return yield* Effect.fail(failed)
-    if (pool.shouldRecruit(info !== undefined)) {
+    if ((!registration.timedOut || evicted) && pool.shouldRecruit(info !== undefined)) {
       yield* announce("missing")
       pool.add(yield* spawnContender)
     }
@@ -122,7 +132,14 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     Effect.ensuring(Effect.sync(() => pool.releaseAll())),
   )
   if (Option.isNone(found))
-    return yield* Effect.fail(pool.failure() ?? new Error("Timed out waiting for the background service to start"))
+    return yield* Effect.fail(
+      pool.failure() ??
+        new Error(
+          lastTimedOut
+            ? "Timed out waiting for the background service to respond"
+            : "Timed out waiting for the background service to start",
+        ),
+    )
   return found.value.endpoint
 })
 
@@ -187,6 +204,8 @@ const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly f
   // The registration can disappear or change hands before this process exits. Only the PID we
   // signalled can tell us whether it has stopped, so escalate based on that process.
   if (Option.isNone(done)) {
+    if (yield* Effect.promise(() => isUninterruptibleDiskSleep(info.pid)))
+      return yield* Effect.fail(new Error(`Server process ${info.pid} is blocked in uninterruptible disk I/O`))
     yield* signal(info.pid, "SIGKILL")
     yield* stopped(info.pid).pipe(Effect.retry(poll(timing)))
   }

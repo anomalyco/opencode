@@ -4,7 +4,7 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { decide, fallback, headers, isUninterruptibleDiskSleep, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { fallback, headers }
@@ -48,16 +48,31 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   }
 
   try {
+    let lastTimedOut = false
     while (true) {
       if (Date.now() >= deadline)
-        throw pool.failure() ?? new Error("Timed out waiting for the background service to start")
+        throw (
+          pool.failure() ??
+          new Error(
+            lastTimedOut
+              ? "Timed out waiting for the background service to respond"
+              : "Timed out waiting for the background service to start",
+          )
+        )
       const registration = await registered(options.file, timing.requestTimeout)
-      if (registration.timedOut && registration.info !== undefined) {
+      lastTimedOut = registration.timedOut
+      let evicted = false
+      const countTimeout =
+        registration.timedOut &&
+        registration.info !== undefined &&
+        options.unresponsive !== "wait" &&
+        !(await isUninterruptibleDiskSleep(registration.info.pid))
+      if (countTimeout && registration.info !== undefined) {
         timeouts = {
           info: registration.info,
           count: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
         }
-        if (timeouts.count >= 3) {
+        if (timeouts.count >= timing.unresponsiveAttempts) {
           announce("missing")
           console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
           await PtyHandoff.clear(options.file ?? fallback())
@@ -65,8 +80,10 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           pool.evict(registration.info.pid)
           pool.recruitNow()
           timeouts = undefined
+          evicted = true
         }
-      } else timeouts = undefined
+      }
+      if (!countTimeout) timeouts = undefined
 
       if (registration.service !== undefined) {
         pool.serviceAnswered()
@@ -87,7 +104,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       } else {
         const failed = pool.reap()
         if (failed !== undefined) throw failed
-        if (pool.shouldRecruit(registration.info !== undefined)) {
+        if ((!registration.timedOut || evicted) && pool.shouldRecruit(registration.info !== undefined)) {
           announce("missing")
           pool.add(await spawnContender())
         }
@@ -157,6 +174,8 @@ async function terminate(info: Info, options: { readonly file?: string }, timing
   // The registration can disappear or change hands before this process exits. Only the PID we
   // signalled can tell us whether it has stopped, so escalate based on that process.
   if (!(await waitUntilStopped(info.pid, timing))) {
+    if (await isUninterruptibleDiskSleep(info.pid))
+      throw new Error(`Server process ${info.pid} is blocked in uninterruptible disk I/O`)
     signal(info.pid, "SIGKILL")
     if (!(await waitUntilStopped(info.pid, timing))) throw new Error(`Server process ${info.pid} is still running`)
   }

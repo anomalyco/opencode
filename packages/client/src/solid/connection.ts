@@ -31,6 +31,7 @@ export type ClientConnectionOptions = {
 
 const connectTimeout = 2_000
 const reconnectDelay = 1_000
+const maxReconnectDelay = 15_000
 const connectionHistoryLimit = 50
 export const defaultIdleTimeout = 45_000
 // Longer than one server keepalive interval: a stream that is silent this long when the page
@@ -178,7 +179,8 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
         forced = false
         continue
       }
-      await wait(reconnectDelay, controller.signal)
+      const delay = Math.min(reconnectDelay * 2 ** Math.min(Math.max(0, attempt - 1), 10), maxReconnectDelay)
+      await wait(delay, controller.signal)
     }
   }
 

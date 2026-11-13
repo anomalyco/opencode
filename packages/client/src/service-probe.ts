@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { DiscoverOptions, Endpoint, Info } from "./service.js"
@@ -102,4 +103,26 @@ function decodeInfo(input: unknown) {
   if (!("version" in input) || typeof input.version !== "string") return
   if (!("pid" in input) || typeof input.pid !== "number" || !Number.isInteger(input.pid) || input.pid < 0) return
   return { version: input.version, pid: input.pid }
+}
+
+/**
+ * Parse the single-character task state from Linux `/proc/<pid>/stat`.
+ * `comm` is enclosed in parentheses and may itself contain spaces or `)`, so scan from the final `)`.
+ */
+export function parseLinuxProcStatState(stat: string) {
+  const close = stat.lastIndexOf(")")
+  if (close === -1) return undefined
+  const state = stat[close + 2]
+  return state && state !== " " ? state : undefined
+}
+
+/**
+ * Whether `pid` is currently in Linux uninterruptible disk sleep (`state D`).
+ * Signals including `SIGKILL` cannot take effect until kernel I/O returns, so evicting a `D`-state
+ * server only guarantees it dies once its disk operation completes.
+ */
+export async function isUninterruptibleDiskSleep(pid: number) {
+  if (process.platform !== "linux") return false
+  const stat = await readFile(`/proc/${pid}/stat`, "utf8").catch(() => undefined)
+  return stat !== undefined && parseLinuxProcStatState(stat) === "D"
 }

@@ -24,6 +24,9 @@ export type DiscoverOptions = {
 /** Reason ensuring the service requires a new process. */
 export type EnsureReason = "missing" | "version-mismatch"
 
+/** Policy when a registered service accepts connections while health probes time out. */
+export type UnresponsivePolicy = "evict" | "wait"
+
 /** Options used to ensure the local OpenCode service is running. */
 export type EnsureOptions = DiscoverOptions & {
   /** Service command and arguments. Defaults to `opencode serve --service`. */
@@ -32,6 +35,11 @@ export type EnsureOptions = DiscoverOptions & {
   readonly env?: Readonly<Record<string, string>>
   /** Called once before spawning a new service process. */
   readonly onStart?: (reason: EnsureReason, previousVersion?: string) => void
+  /**
+   * How to handle a registered service whose health probes time out: `"evict"` (default) terminates
+   * and replaces it after sustained timeouts; `"wait"` keeps polling without killing a live server.
+   */
+  readonly unresponsive?: UnresponsivePolicy
 }
 
 /** Options used to stop the local OpenCode service. */

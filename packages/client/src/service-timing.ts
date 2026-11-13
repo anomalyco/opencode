@@ -1,6 +1,7 @@
 export type EnsureTiming = {
   readonly pollInterval: number
   readonly requestTimeout: number
+  readonly unresponsiveAttempts: number
   readonly spawnDelay: number
   readonly maxSpawnDelay: number
   readonly promiseTimeout: number
@@ -15,7 +16,8 @@ const timings = new WeakMap<object, EnsureTiming>()
 // the connection is refused; both variants give up after promiseTimeout of wall-clock time.
 export const defaultEnsureTiming: EnsureTiming = {
   pollInterval: 25,
-  requestTimeout: 2_000,
+  requestTimeout: 5_000,
+  unresponsiveAttempts: 6,
   spawnDelay: 5_000,
   maxSpawnDelay: 30_000,
   promiseTimeout: 120_000,

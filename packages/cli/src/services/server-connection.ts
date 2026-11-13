@@ -68,7 +68,7 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
 function managedService(options: EnsureOptions) {
   const reconnectOptions = { ...options, version: undefined }
   return {
-    reconnect: () => Service.ensure(reconnectOptions),
+    reconnect: () => Service.ensure({ ...reconnectOptions, unresponsive: "wait" }),
     restart: () =>
       Effect.gen(function* () {
         yield* Service.stop({ file: options.file, pty: "handoff" })

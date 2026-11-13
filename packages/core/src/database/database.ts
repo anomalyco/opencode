@@ -25,6 +25,12 @@ export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/storage/Database") {}
 
+export const checkpoint = Effect.fn("Database.checkpoint")(function* () {
+  const database = yield* Service
+  if (!supportsTuningPragmas || EffectDrizzleSqlite.managesTransactionsNatively(database.db.$client)) return
+  yield* database.db.run("PRAGMA wal_checkpoint(PASSIVE)").pipe(Effect.ignore)
+})
+
 // The bootstrap lock is scoped to the database being built, never to this
 // module: on workerd every Durable Object in an isolate shares module state, and
 // releasing a shared semaphore resumes the waiting object's fiber inside the
@@ -45,7 +51,6 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>, legacyCredentia
         yield* db.run("PRAGMA synchronous = NORMAL")
         yield* db.run("PRAGMA busy_timeout = 5000")
         yield* db.run("PRAGMA cache_size = -64000")
-        yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
       }
       // Durable Object SQLite always enforces foreign keys and rejects the pragma.
       if (supportsForeignKeyToggle && !durableObject) yield* db.run("PRAGMA foreign_keys = ON")
