@@ -253,8 +253,6 @@ export const ImageAssetSchema = AssetInstance.check(
 ).pipe(Schema.brand("Media.ImageAsset"))
 export type ImageAsset = typeof ImageAssetSchema.Type
 
-const decodeImage = Schema.decodeUnknownSync(ImageAssetSchema)
-
 const download = Effect.fn("Media.download")(function* (
   source: Extract<Source, { readonly type: "url" }>,
   headers: Record<string, string> | undefined,
@@ -347,7 +345,11 @@ export type Data = Uint8Array | ArrayBuffer | URL | string
 export type Input = Asset | Data
 
 /** Normalize input into an `ImageAsset`; throws when it's known not to be an image. */
-export const image = (input: Input, mediaType?: string): ImageAsset => decodeImage(make(input, mediaType))
+export const image = (input: Input, mediaType?: string): ImageAsset => {
+  const asset = make(input, mediaType)
+  if (!Schema.is(ImageAssetSchema)(asset)) throw invalid(`expected an image, got ${asset.mediaType}`)
+  return asset
+}
 
 /**
  * Normalize file input into an `Asset`. Data URLs carry their media type and bytes or base64 are sniffed from magic

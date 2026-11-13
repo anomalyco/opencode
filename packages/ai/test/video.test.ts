@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
-import { Media, VideoClient, ai } from "../src/effect.js"
+import { AIError, Media, VideoClient, ai } from "../src/effect.js"
 import { XAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json, observe, settle, type Call, type HandlerInput } from "./lib/http.js"
@@ -133,6 +133,13 @@ describe("ai.video.start / xAI", () => {
         .pipe(Effect.flip)
       expect(audio.reason._tag).toBe("InvalidRequest")
     }).pipe(Effect.provide(layer(() => Effect.die("a non-image frame reached the network")))),
+  )
+
+  it.effect("Media.image throws a typed AIError for a known non-image", () =>
+    Effect.sync(() => {
+      expect(() => Media.image("data:video/mp4;base64,AAAA")).toThrow(AIError)
+      expect(() => Media.image("data:video/mp4;base64,AAAA")).toThrow("expected an image, got video/mp4")
+    }),
   )
 
   it.effect("sends frames whose type it can't tell, like URLs and provider file references", () =>
