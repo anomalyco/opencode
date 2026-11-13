@@ -606,8 +606,10 @@ export function createHomeSessionsController(home: HomeController) {
         exporter.export({ server, sessionID: session.id }),
       exporting: (server: ServerConnection.Key, session: SessionInfo) =>
         exporter.exporting({ server, sessionID: session.id }),
-      showDelete: (server: ServerConnection.Key, session: SessionInfo) =>
-        dialog.show(() => <DeleteDialog server={server} session={session} />),
+      // Let the mobile menu finish dismissing before the dialog becomes the active popup layer.
+      showDelete: (server: ServerConnection.Key, session: SessionInfo) => {
+        setTimeout(() => void dialog.show(() => <DeleteDialog server={server} session={session} />))
+      },
     },
     tab: {
       isOpen: (record: HomeSessionRecord) => {
