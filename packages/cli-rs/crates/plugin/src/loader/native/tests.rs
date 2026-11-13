@@ -1172,10 +1172,16 @@ fn a_waker_never_outlives_its_target_and_a_late_wake_does_nothing() {
     assert_eq!(GUARDED_RENDERS.get(), renders, "a wake after the plugin was disposed rendered it again");
 }
 
+thread_local! {
+    /// How often a `lifecycle` dispose callback ran, whatever host it ran with.
+    static LIFECYCLE_DISPOSED: Cell<usize> = const { Cell::new(0) };
+}
+
 /// Toasts as it sets up and as it is disposed, when it also asks for a reply that must not come. Its command panics.
 fn lifecycle(setup: &mut abi::Setup) -> Result<(), String> {
     setup.host().toast(abi::Toast::new(abi::Variant::Info, "setup"));
     setup.on_dispose(|host| {
+        LIFECYCLE_DISPOSED.set(LIFECYCLE_DISPOSED.get() + 1);
         host.toast(abi::Toast::new(abi::Variant::Info, "dispose"));
         host.fetch(abi::Fetch { method: "GET".into(), path: "/disposed".into(), ..abi::Fetch::default() });
     });
@@ -1267,12 +1273,15 @@ fn setup_and_dispose_effects_are_the_same_on_both_paths() {
 // disabled, on both paths; the same plugin without the panic does run it.
 #[test]
 fn a_failed_plugin_gets_no_dispose_on_both_paths() {
-    for loopback in [false, true] {
+    for (loopback, panic) in [(false, false), (false, true), (true, false), (true, true)] {
+        LIFECYCLE_DISPOSED.set(0);
         let (_, toasts, fetches) =
-            lifecycled(lifecycle, abi::export_plugin!(@loopback "lifecycle", lifecycle), loopback, true);
+            lifecycled(lifecycle, abi::export_plugin!(@loopback "lifecycle", lifecycle), loopback, panic);
         let calls: Vec<&str> =
             toasts.iter().map(String::as_str).filter(|toast| ["setup", "dispose"].contains(toast)).collect();
-        assert_eq!((calls, fetches), (vec!["setup"], 0), "through the C ABI: {loopback}");
+        let expected = if panic { (vec!["setup"], 0) } else { (vec!["setup", "dispose"], 1) };
+        assert_eq!((calls, LIFECYCLE_DISPOSED.get()), expected, "through the C ABI: {loopback}, panic: {panic}");
+        assert_eq!(fetches, 0);
     }
 }
 
@@ -1332,9 +1341,11 @@ fn a_failed_external_setup_is_failed_and_inactive_and_a_reload_error_replaces_it
     let sample = entry(&registry.entries(), &target).clone();
     assert_eq!((sample.status, sample.active), (Status::Failed(MAJOR_2.to_owned()), false));
     assert_eq!(host.toasts.borrow()[1], failed.clone().title("Plugin failed: sample"));
+    // As a `cli.json` directive enables it, a load that fails again lists it failed and says so.
     assert!(registry.set_active(&dynamic(&host), "sample", true));
     let sample = entry(&registry.entries(), &target).clone();
     assert_eq!((sample.status, sample.active), (Status::Failed(MAJOR_2.to_owned()), false));
+    assert_eq!(host.toasts.borrow()[2..], [failed.title("Plugin failed: sample")]);
 }
 
 // Expected (plugin-live R2-3): a build that never described an ID is named by its target in the failure toast.

@@ -904,6 +904,22 @@ fn a_failed_enable_shows_its_error_and_keeps_the_row() {
     ARMED.set(None);
 }
 
+// Expected: a revoke closes its own plugin's dialog only, not one of a plugin whose ID it begins.
+#[test]
+fn a_revoke_closes_only_its_own_plugins_dialog() {
+    LOG.take();
+    for dialog in [Dialog::Panel, Dialog::Prompt, Dialog::Select] {
+        let mut world = World::open(Some(1));
+        world.apply(Command::Dialog(dialog));
+        world.settle();
+        let tui = &world.harness.tui;
+        host(tui).revoked("model.prob");
+        assert!(tui.dialogs.is_open(), "{dialog:?}");
+        host(tui).revoked(ID);
+        assert!(!tui.dialogs.is_open(), "{dialog:?}");
+    }
+}
+
 // Expected: the oracles are not empty. While the probe is active the host differs from the twin, and a host on build
 // 2 differs from a fresh one on build 3; the reference refuses a command call while the probe is disabled.
 #[test]
