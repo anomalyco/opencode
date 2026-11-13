@@ -65,9 +65,15 @@ pub fn sync(tui: &Tui, changes: &Changes) {
     }
 }
 
-/// Clears the title before the terminal is released, as `destroyRenderer` does.
+/// A plugin's title (`renderer.setTerminalTitle`), also with `terminal.title: false`. It shows until the TUI sets
+/// its own with its next change.
+pub fn set_by_plugin(tui: &Tui, title: &str) {
+    tui.title.set(tui, title.to_owned());
+}
+
+/// Clears the title before the terminal is released, as `destroyRenderer` does: the TUI's own, and a plugin's.
 pub fn clear(tui: &Tui) {
-    if enabled(tui) {
+    if enabled(tui) || tui.title.sent.borrow().as_deref().is_some_and(|sent| !sent.is_empty()) {
         tui.title.set(tui, String::new());
     }
 }

@@ -32,7 +32,8 @@ pub(crate) struct Mount {
     /// The slot it renders in.
     path: String,
     slot_input: SlotInput,
-    input: abi::SlotInput,
+    /// What its render gets: the slot's input, and the size the last frame laid the claim out at.
+    input: RefCell<abi::SlotInput>,
     /// What it shows: `None` before the first render, `Some(None)` while hidden.
     shown: RefCell<Option<Option<abi::Node>>>,
     /// The slots its node nests.
@@ -50,6 +51,7 @@ impl Mount {
         slot_input: &SlotInput,
         render: SlotRender,
         on_mount: Option<MountFn>,
+        sized: bool,
     ) -> Rc<Self> {
         let input = abi::SlotInput {
             session_id: slot_input.session_id.clone(),
@@ -57,6 +59,7 @@ impl Mount {
                 .prompt
                 .as_ref()
                 .map(|prompt| abi::PromptInput { shell: prompt.shell, show_details: prompt.show_details }),
+            ..abi::SlotInput::default()
         };
         if let Some(on_mount) = &on_mount {
             on_mount(host, &input, true);
@@ -68,25 +71,53 @@ impl Mount {
             mount: on_mount,
             path: path.to_owned(),
             slot_input: slot_input.clone(),
-            input,
+            input: RefCell::new(input),
             shown: RefCell::new(None),
             slots: RefCell::default(),
             hovers: RefCell::default(),
             watch: RefCell::new(None),
         });
         let weak = Rc::downgrade(&mount);
-        let watch = host.watch(Rc::new(move |changed| {
-            if let (Some(mount), Some(host)) = (weak.upgrade(), owner.upgrade()) {
-                mount.draw(&*host, changed);
+        let watch = host.watch(Rc::new({
+            let (weak, owner) = (weak.clone(), owner.clone());
+            move |changed| {
+                if let (Some(mount), Some(host)) = (weak.upgrade(), owner.upgrade()) {
+                    mount.draw(&*host, changed);
+                }
             }
         }));
         *mount.watch.borrow_mut() = watch;
+        if sized {
+            mount.size(weak, owner);
+        }
         mount.draw(host, &abi::Changed::everything());
         mount
     }
 
+    /// Gives the claim its laid-out size, and renders it again when the size changes (TS `onSizeChange`).
+    fn size(&self, weak: Weak<Self>, owner: Weak<dyn Host>) {
+        self.root.on_resize(move |cx, rect| {
+            let Some(mount) = weak.upgrade() else { return };
+            let size = (rect.width.max(0.0) as u16, rect.height.max(0.0) as u16);
+            {
+                let mut input = mount.input.borrow_mut();
+                if (input.width, input.height) == size {
+                    return;
+                }
+                (input.width, input.height) = size;
+            }
+            let (weak, owner) = (weak.clone(), owner.clone());
+            cx.app().defer(move |_| {
+                if let (Some(mount), Some(host)) = (weak.upgrade(), owner.upgrade()) {
+                    mount.draw(&*host, &abi::Changed { size: true, ..abi::Changed::default() });
+                }
+            });
+        });
+    }
+
     pub fn draw(&self, host: &dyn Host, changed: &abi::Changed) {
-        let node = match (self.render)(host, &self.input, changed) {
+        let input = self.input.borrow().clone();
+        let node = match (self.render)(host, &input, changed) {
             abi::Render::Keep => return,
             abi::Render::Hide => None,
             abi::Render::Show(node) => Some(node),
@@ -159,7 +190,7 @@ impl Mount {
 impl Drop for Mount {
     fn drop(&mut self) {
         if let (Some(on_mount), Some(host)) = (&self.mount, self.owner.upgrade()) {
-            on_mount(&*host, &self.input, false);
+            on_mount(&*host, &self.input.borrow(), false);
         }
     }
 }
@@ -447,7 +478,11 @@ fn styled(theme: &Theme, span: &abi::Span, fg: Option<Color>) -> Span<'static> {
     if let Some(bg) = color(theme, span.bg.as_ref()) {
         style = style.bg(bg);
     }
-    Span::styled(span.text.clone(), Style { attributes, ..style })
+    let styled = Span::styled(span.text.clone(), Style { attributes, ..style });
+    match &span.link {
+        Some(url) => styled.link(url.clone()),
+        None => styled,
+    }
 }
 
 /// What hears of each fence key that goes: the plugin's [`abi::Setup::on_fence_gone`] handlers.

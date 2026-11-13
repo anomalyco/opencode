@@ -113,7 +113,8 @@ pub struct Tui {
     /// The open dialogs and viewers that follow the store: [`Tui::follow`].
     followers: RefCell<Vec<Follower>>,
     connection: RefCell<Option<Connection>>,
-    layers: RefCell<Vec<Disposer>>,
+    /// Keymap hooks that live as long as the TUI.
+    pub(crate) layers: RefCell<Vec<Disposer>>,
     this: Weak<Tui>,
 }
 
@@ -242,6 +243,8 @@ impl Tui {
     fn sync(&self) {
         let (revision, changes) = self.data.changes_since(self.seen.get());
         self.seen.set(revision);
+        // Also with no change: a delta of a session whose messages are not loaded changes nothing.
+        crate::features::events::deltas(self);
         if changes.is_empty() {
             return;
         }
@@ -700,21 +703,27 @@ fn install_theme(tui: &Rc<Tui>) {
         }
     }));
     tui.layers.borrow_mut().push(pending);
-    // Custom themes are read from disk off the UI thread, then applied.
+    discover_themes(tui, |_| {});
+}
+
+/// Reads the custom themes from disk off the UI thread, after `prepare` ran there with the global config directory,
+/// then applies them.
+pub(crate) fn discover_themes(tui: &Tui, prepare: impl FnOnce(&std::path::Path) + Send + 'static) {
     let Some(files) = &tui.files else {
         tui.theme_changed();
         return;
     };
-    let directories = opencode_ui::theme::config_directories(
-        files.config.path().parent().unwrap_or(files.config.path()),
-        std::path::Path::new(&tui.directory),
-    );
+    let config = files.config.path().parent().unwrap_or(files.config.path()).to_path_buf();
+    let directories = opencode_ui::theme::config_directories(&config, std::path::Path::new(&tui.directory));
     tui.app.spawn(
         async move {
-            tokio::task::spawn_blocking(move || opencode_ui::theme::discover(&directories))
-                .await
-                .ok()
-                .and_then(Result::ok)
+            tokio::task::spawn_blocking(move || {
+                prepare(&config);
+                opencode_ui::theme::discover(&directories)
+            })
+            .await
+            .ok()
+            .and_then(Result::ok)
         },
         bind!(tui, |tui, _, themes| {
             match themes {
@@ -722,6 +731,8 @@ fn install_theme(tui: &Rc<Tui>) {
                 None => tui.theme.borrow_mut().discovery_failed(),
             }
             tui.theme_changed();
+            // The plugins read the theme names.
+            crate::plugins::host::local_changed(&tui);
         }),
     );
 }

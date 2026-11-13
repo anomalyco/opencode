@@ -286,6 +286,15 @@ enum Effect {
     Dialog(abi::Dialog),
     Copy(String, Option<abi::Action>),
     Composer(abi::ComposerEdit),
+    // 1.6
+    Variant(Option<String>),
+    Model(String, String),
+    Tab(abi::TabEdit),
+    ClearSelection,
+    Foreground(abi::RequestId, abi::Foreground),
+    Title(String),
+    Theme(String),
+    InstallTheme(String, serde_json::Value),
 }
 
 /// One plugin instance; dropping it destroys the instance in the plugin.
@@ -594,6 +603,46 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
             let host = ctx.host.upgrade().ok_or("the host is gone")?;
             ctx.undo.restore_after(&*host, writes);
         }
+        HostRequest::Variants => return read(ctx, |read| serde_json::to_value(read.variants())),
+        HostRequest::SetVariant { variant } => {
+            let known = read(ctx, |read| Ok(serde_json::Value::Bool(crate::variant_known(read, variant.as_deref()))))?;
+            if known == serde_json::Value::Bool(true) {
+                ctx.effects.push(Effect::Variant(variant));
+            }
+            return Ok(known);
+        }
+        HostRequest::SetModel { provider, model } => ctx.effects.push(Effect::Model(provider, model)),
+        HostRequest::TabsEnabled => return read(ctx, |read| serde_json::to_value(read.tabs_enabled())),
+        HostRequest::Tabs => return read(ctx, |read| serde_json::to_value(read.tabs())),
+        HostRequest::Tab { edit } => {
+            let allowed = ctx.host.upgrade().is_some_and(|host| host.tab_allowed(&edit));
+            if allowed {
+                ctx.effects.push(Effect::Tab(edit));
+            }
+            return Ok(serde_json::Value::Bool(allowed));
+        }
+        HostRequest::KeymapPending => return read(ctx, |read| serde_json::to_value(read.keymap_pending())),
+        HostRequest::KeymapActive => return read(ctx, |read| serde_json::to_value(read.keymap_active())),
+        HostRequest::KeymapCommands => return read(ctx, |read| serde_json::to_value(read.keymap_commands())),
+        HostRequest::Shortcuts { name } => return read(ctx, |read| serde_json::to_value(read.shortcuts(&name))),
+        HostRequest::Selection => return read(ctx, |read| serde_json::to_value(read.selection())),
+        HostRequest::ClearSelection => ctx.effects.push(Effect::ClearSelection),
+        HostRequest::Foreground(program) => {
+            let id = next_request();
+            ctx.effects.push(Effect::Foreground(id, program));
+            return Ok(serde_json::to_value(id).unwrap_or_default());
+        }
+        HostRequest::Title { title } => ctx.effects.push(Effect::Title(title)),
+        HostRequest::Theme => return read(ctx, |read| serde_json::to_value(read.theme())),
+        HostRequest::Themes => return read(ctx, |read| serde_json::to_value(read.themes())),
+        HostRequest::SetTheme { name } => {
+            let known = read(ctx, |read| Ok(serde_json::Value::Bool(crate::theme_known(read, &name))))?;
+            if known == serde_json::Value::Bool(true) {
+                ctx.effects.push(Effect::Theme(name));
+            }
+            return Ok(known);
+        }
+        HostRequest::InstallTheme { name, theme } => ctx.effects.push(Effect::InstallTheme(name, theme)),
     }
     Ok(serde_json::Value::Null)
 }
@@ -736,15 +785,15 @@ impl Guest {
         apply(&self.host, self.id.clone(), Rc::downgrade(self), Some(self.generation), effects);
     }
 
-    /// Sends `fetch` unless the instance is destroyed or its activation ended, as a call that panicked after the one
-    /// that asked for it ends it; its reply goes to the instance on the effect queue, unless the instance is destroyed
-    /// by then.
-    fn fetch(guest: &Weak<Self>, host: &dyn Host, request: abi::RequestId, fetch: abi::Fetch) {
+    /// Calls `send` unless the instance is destroyed or its activation ended, as a call that panicked after the one
+    /// that asked for it ends it: a fetch or a program in the foreground. Its reply goes to the instance as `request` on
+    /// the effect queue, unless the instance is destroyed by then.
+    fn send(guest: &Weak<Self>, host: &dyn Host, request: abi::RequestId, send: impl FnOnce(&dyn Host, crate::Reply)) {
         let live = guest.upgrade().filter(|guest| guest.instance.borrow().is_some() && !guest.activation.disposed());
         let Some(live) = live else { return };
         let (guest, owner) = (guest.clone(), live.host.clone());
-        host.fetch(
-            fetch,
+        send(
+            host,
             Box::new(move |result| {
                 defer(&owner, move |_| {
                     if let Some(guest) = guest.upgrade() {
@@ -771,7 +820,9 @@ fn apply(host: &Weak<dyn Host>, id: String, guest: Weak<Guest>, generation: Opti
                 Effect::Attention(attention) => host.attention(&attention),
                 Effect::Stored => host.storage_changed(),
                 Effect::Navigate(route) => host.navigate(&id, &route),
-                Effect::Fetch(request, fetch) => Guest::fetch(&guest, host, request, fetch),
+                Effect::Fetch(request, fetch) => {
+                    Guest::send(&guest, host, request, |host, reply| host.fetch(fetch, reply));
+                }
                 // The host shows it only while its activation is live. What a setup that failed or a destroyed
                 // instance asked for has none, and shows nowhere.
                 Effect::Dialog(dialog) => {
@@ -781,6 +832,16 @@ fn apply(host: &Weak<dyn Host>, id: String, guest: Weak<Guest>, generation: Opti
                 }
                 Effect::Copy(text, then) => crate::copy(host, &text, then),
                 Effect::Composer(edit) => host.edit_composer(edit),
+                Effect::Variant(variant) => host.set_variant(variant.as_deref()),
+                Effect::Model(provider, model) => host.set_model(&provider, &model),
+                Effect::Tab(edit) => host.edit_tab(edit),
+                Effect::ClearSelection => host.clear_selection(),
+                Effect::Foreground(request, program) => {
+                    Guest::send(&guest, host, request, |host, reply| host.foreground(program, reply));
+                }
+                Effect::Title(title) => host.set_title(&title),
+                Effect::Theme(name) => host.set_theme(&name),
+                Effect::InstallTheme(name, theme) => host.install_theme(&name, theme),
             }
         }
     });
@@ -873,7 +934,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
                 let request = Request::Render { claim, input: input.clone(), changed: changed.clone() };
                 guest.request("render-slot", &request).unwrap_or(abi::Render::Hide)
             });
-            setup.claim(placement(slot), render, mount, &activation);
+            setup.claim(placement(slot), render, mount, slot.size, &activation);
             continue;
         }
         setup.slot(placement(slot), move |host, input| {
@@ -891,6 +952,15 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
                 }
             }),
         );
+        if let Some(subscription) = subscription {
+            setup.on_dispose(move || drop(subscription));
+        }
+    }
+    if manifest.deltas {
+        let guest = guest.clone();
+        let subscription = setup.host().on_deltas(Rc::new(move |events| {
+            guest.handle("on-deltas", &Request::Deltas { events: events.to_vec() });
+        }));
         if let Some(subscription) = subscription {
             setup.on_dispose(move || drop(subscription));
         }

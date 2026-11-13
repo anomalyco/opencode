@@ -30,6 +30,7 @@ mod plugin_fetch;
 mod plugin_machines;
 mod plugin_model;
 mod plugin_p0a;
+mod plugin_reads;
 mod plugins;
 mod ports;
 mod prompt;

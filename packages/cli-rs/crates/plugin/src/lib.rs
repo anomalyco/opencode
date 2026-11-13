@@ -128,6 +128,40 @@ pub trait Host: 'static {
     }
     /// Edits the composer on screen ([`abi::Host::edit_composer`]). Called outside every plugin callback.
     fn edit_composer(&self, _edit: abi::ComposerEdit) {}
+    /// Selects `variant` of the model the next prompt uses ([`abi::Host::set_variant`]), once [`variant_known`] allowed
+    /// it. Called outside every plugin callback.
+    fn set_variant(&self, _variant: Option<&str>) {}
+    /// Selects a model for the next prompt ([`abi::Host::set_model`]). Called outside every plugin callback.
+    fn set_model(&self, _provider: &str, _model: &str) {}
+    /// Whether `edit` would change the session tabs now ([`abi::Host::edit_tab`]).
+    fn tab_allowed(&self, _edit: &abi::TabEdit) -> bool {
+        false
+    }
+    /// Changes the session tabs, once [`Host::tab_allowed`] allowed it. Called outside every plugin callback.
+    fn edit_tab(&self, _edit: abi::TabEdit) {}
+    /// Clears the mouse selection ([`abi::Host::clear_selection`]). Called outside every plugin callback.
+    fn clear_selection(&self) {
+        self.app().clear_selection();
+    }
+    /// Runs `program` in the foreground ([`abi::Host::foreground`]), and calls `reply` on the UI thread with its exit
+    /// code or the error. Called outside every plugin callback.
+    fn foreground(&self, _program: abi::Foreground, reply: Reply) {
+        reply(Err("this host has no terminal".to_owned()));
+    }
+    /// Sets the terminal title ([`abi::Host::set_title`]). Called outside every plugin callback.
+    fn set_title(&self, title: &str) {
+        self.app().set_title(title);
+    }
+    /// Selects theme `name`, once [`theme_known`] allowed it ([`abi::Host::set_theme`]). Called outside every plugin
+    /// callback.
+    fn set_theme(&self, _name: &str) {}
+    /// Installs theme `name` ([`abi::Host::install_theme`]). Called outside every plugin callback.
+    fn install_theme(&self, _name: &str, _theme: serde_json::Value) {}
+    /// Calls `run` with the streaming deltas the host applied since the last call, once a change batch, until the
+    /// disposer is dropped ([`abi::Setup::on_deltas`]).
+    fn on_deltas(&self, _run: Deltas) -> Option<Disposer> {
+        None
+    }
     /// The widget of an [`abi::Node::Markdown`]. By default, Markdown in the page theme without plugin fences.
     fn markdown(&self, text: &str) -> AnyWidget {
         let theme = self.theme();
@@ -152,6 +186,11 @@ pub trait Host: 'static {
         None
     }
 }
+
+/// What a host request of a plugin calls with its result on the UI thread: a fetch's or a program's.
+pub type Reply = Box<dyn FnOnce(Result<serde_json::Value, String>)>;
+/// What [`Host::on_deltas`] calls with the deltas.
+pub type Deltas = Rc<dyn Fn(&[abi::types::V2Event])>;
 
 /// A mounted slot claim or plugin route: its root view, and a sync with each change batch. A plain [`View`] never
 /// changes.
@@ -346,7 +385,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             let render: node::SlotRender = Rc::new(move |host: &dyn Host, input, changed| {
                 scope.call("render-slot", host, |read| render(read, input, changed)).unwrap_or(abi::Render::Hide)
             });
-            setup.claim(slot::placement(claim), render, mount, &activation);
+            setup.claim(slot::placement(claim), render, mount, claim.size, &activation);
         }
         for (types, run) in api.events() {
             let (kinds, run, scope) = (types.to_vec(), run.clone(), scope.clone());
@@ -358,6 +397,13 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                     }
                 }),
             );
+            setup.registration.disposers.extend(subscription);
+        }
+        if !api.deltas().is_empty() {
+            let (runs, scope) = (api.deltas().to_vec(), scope.clone());
+            let subscription = setup.host().on_deltas(Rc::new(move |events| {
+                scope.run("on-deltas", |host| runs.iter().for_each(|run| run(host, events)));
+            }));
             setup.registration.disposers.extend(subscription);
         }
         let commands: Vec<(abi::Scope, TuiCommand)> = api
@@ -622,6 +668,46 @@ impl abi::Read for Scoped<'_> {
     fn composer(&self) -> Option<abi::Composer> {
         self.read.composer()
     }
+
+    fn variants(&self) -> Vec<String> {
+        self.read.variants()
+    }
+
+    fn tabs_enabled(&self) -> bool {
+        self.read.tabs_enabled()
+    }
+
+    fn tabs(&self) -> Vec<abi::Tab> {
+        self.read.tabs()
+    }
+
+    fn keymap_pending(&self) -> Vec<abi::KeymapPending> {
+        self.read.keymap_pending()
+    }
+
+    fn keymap_active(&self) -> Vec<abi::KeymapActive> {
+        self.read.keymap_active()
+    }
+
+    fn keymap_commands(&self) -> Vec<abi::KeymapCommand> {
+        self.read.keymap_commands()
+    }
+
+    fn shortcuts(&self, name: &str) -> Vec<String> {
+        self.read.shortcuts(name)
+    }
+
+    fn selection(&self) -> Option<String> {
+        self.read.selection()
+    }
+
+    fn theme(&self) -> Option<String> {
+        self.read.theme()
+    }
+
+    fn themes(&self) -> Vec<String> {
+        self.read.themes()
+    }
 }
 
 impl abi::Host for Scoped<'_> {
@@ -668,26 +754,7 @@ impl abi::Host for Scoped<'_> {
     }
 
     fn fetch(&self, fetch: abi::Fetch) -> abi::RequestId {
-        let id = next_request();
-        let scope = Rc::downgrade(self.scope);
-        self.defer(move |host| {
-            if scope.upgrade().is_none_or(|scope| scope.activation.disposed()) {
-                return;
-            }
-            host.fetch(
-                fetch,
-                Box::new(move |result| {
-                    let Some(host) = scope.upgrade().map(|scope| scope.host.clone()) else { return };
-                    // The reply runs on the effect queue, in order with the effects queued before it.
-                    defer(&host, move |_| {
-                        let Some(scope) = scope.upgrade().filter(|scope| !scope.activation.disposed()) else { return };
-                        let replies = scope.replies.borrow().clone();
-                        scope.run("on-reply", |host| replies.iter().for_each(|run| run(host, id, result.clone())));
-                    });
-                }),
-            );
-        });
-        id
+        self.request(move |host, reply| host.fetch(fetch, reply))
     }
 
     fn dialog(&self, dialog: abi::Dialog) {
@@ -716,6 +783,55 @@ impl abi::Host for Scoped<'_> {
         }
     }
 
+    fn set_variant(&self, variant: Option<&str>) -> bool {
+        let known = variant_known(self.read, variant);
+        if known {
+            let variant = variant.map(str::to_owned);
+            self.defer(move |host| host.set_variant(variant.as_deref()));
+        }
+        known
+    }
+
+    fn set_model(&self, provider: &str, model: &str) {
+        let (provider, model) = (provider.to_owned(), model.to_owned());
+        self.defer(move |host| host.set_model(&provider, &model));
+    }
+
+    fn edit_tab(&self, edit: abi::TabEdit) -> bool {
+        let allowed = self.host.tab_allowed(&edit);
+        if allowed {
+            self.defer(move |host| host.edit_tab(edit));
+        }
+        allowed
+    }
+
+    fn clear_selection(&self) {
+        self.defer(|host| host.clear_selection());
+    }
+
+    fn foreground(&self, program: abi::Foreground) -> abi::RequestId {
+        self.request(move |host, reply| host.foreground(program, reply))
+    }
+
+    fn set_title(&self, title: &str) {
+        let title = title.to_owned();
+        self.defer(move |host| host.set_title(&title));
+    }
+
+    fn set_theme(&self, name: &str) -> bool {
+        let known = theme_known(self.read, name);
+        if known {
+            let name = name.to_owned();
+            self.defer(move |host| host.set_theme(&name));
+        }
+        known
+    }
+
+    fn install_theme(&self, name: &str, theme: serde_json::Value) {
+        let name = name.to_owned();
+        self.defer(move |host| host.install_theme(&name, theme));
+    }
+
     fn declare_storage_key(&self, key: &str) {
         let mut keys = self.scope.keys.borrow_mut();
         if !keys.iter().any(|known| known == key) {
@@ -731,6 +847,17 @@ pub(crate) fn copy(host: &dyn Host, text: &str, then: Option<abi::Action>) {
     }
 }
 
+/// Whether [`abi::Host::set_variant`] selects `variant`: a model is selected, and it has `variant` (TS
+/// `ui.model.variant.set`).
+pub(crate) fn variant_known(read: &dyn abi::Read, variant: Option<&str>) -> bool {
+    read.model().is_some() && variant.is_none_or(|variant| read.variants().iter().any(|known| known == variant))
+}
+
+/// Whether [`abi::Host::set_theme`] selects theme `name`: the host has it.
+pub(crate) fn theme_known(read: &dyn abi::Read, name: &str) -> bool {
+    read.themes().iter().any(|known| known == name)
+}
+
 /// A fresh [`abi::RequestId`], unique in the process.
 pub(crate) fn next_request() -> abi::RequestId {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -738,6 +865,31 @@ pub(crate) fn next_request() -> abi::RequestId {
 }
 
 impl Scoped<'_> {
+    /// Queues `send` like an effect, unless the plugin is disposed by then, and returns the ID its reply comes back to
+    /// the plugin's [`abi::Setup::on_reply`] handlers with, on the effect queue, unless the plugin is disposed first.
+    fn request(&self, send: impl FnOnce(&dyn Host, Reply) + 'static) -> abi::RequestId {
+        let id = next_request();
+        let scope = Rc::downgrade(self.scope);
+        self.defer(move |host| {
+            if scope.upgrade().is_none_or(|scope| scope.activation.disposed()) {
+                return;
+            }
+            send(
+                host,
+                Box::new(move |result| {
+                    let Some(host) = scope.upgrade().map(|scope| scope.host.clone()) else { return };
+                    // The reply runs on the effect queue, in order with the effects queued before it.
+                    defer(&host, move |_| {
+                        let Some(scope) = scope.upgrade().filter(|scope| !scope.activation.disposed()) else { return };
+                        let replies = scope.replies.borrow().clone();
+                        scope.run("on-reply", |host| replies.iter().for_each(|run| run(host, id, result.clone())));
+                    });
+                }),
+            );
+        });
+        id
+    }
+
     /// Holds `effect` until the call returns.
     fn defer(&self, effect: impl FnOnce(&dyn Host) + 'static) {
         match &mut *self.scope.call.borrow_mut() {
@@ -889,19 +1041,20 @@ impl Setup<'_> {
     }
 
     /// Claims a place in the slot tree with a render of the one API, on either path; `activation` renders its mounts
-    /// again, and `mount` hears of each mount and unmount.
+    /// again, `mount` hears of each mount and unmount, and a `sized` claim renders again when its size changes.
     pub(crate) fn claim(
         &mut self,
         placement: Placement,
         render: node::SlotRender,
         mount: Option<node::MountFn>,
+        sized: bool,
         activation: &Rc<Activation>,
     ) {
         let owner = Rc::downgrade(self.host);
         let path = placement.target.clone();
         let activation = activation.clone();
         self.slot(placement, move |host, input| {
-            let mount = node::Mount::new(host, owner.clone(), &path, input, render.clone(), mount.clone());
+            let mount = node::Mount::new(host, owner.clone(), &path, input, render.clone(), mount.clone(), sized);
             activation.track(Rc::downgrade(&mount) as Weak<dyn Drawn>);
             Box::new(mount)
         });
