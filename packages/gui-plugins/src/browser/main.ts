@@ -33,6 +33,7 @@ const setup: Plugin.MainSetup = (ctx) => {
     const pending = import("./profile")
       .then((module) =>
         module.createBrowserProfile({
+          signal: ctx.signal,
           storage: ctx.storage,
           log: ctx.log,
           changed: () => profiles.changed(),

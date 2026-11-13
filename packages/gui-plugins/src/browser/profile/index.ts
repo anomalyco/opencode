@@ -52,12 +52,14 @@ export type Profile = Awaited<ReturnType<typeof createBrowserProfile>>
  * partition's cookies in step with the profile's only while the user shares sign-ins with remote servers.
  */
 export async function createBrowserProfile(input: {
+  signal: AbortSignal
   storage: Storage
   log: Log
   changed: () => void
   cookiesChanged: () => void
 }) {
   const session = electron.session.fromPartition(PARTITION)
+  const previews = createPreviews(session, input.signal)
   session.setUserAgent(browserUserAgent(session.getUserAgent()))
   // Each tab's download handler by its web contents ID; the pane fills it. Guarded before any extension loads or pane
   // exists, so no page of the profile ever has Electron's default handlers, which grant every permission.
@@ -103,7 +105,6 @@ export async function createBrowserProfile(input: {
   // Browser icons by application path, read once; undefined for an application without one.
   const icons = new Map<string, string | undefined>()
 
-  const previews = createPreviews(session)
   // Even a non-pane window must never commit a native file document in this session.
   const loaderRefresh = new Map<number, () => void>()
   const stopFileGuard = createFileGuard({ session, allowed: () => false, refresh: (id) => loaderRefresh.get(id)?.() })

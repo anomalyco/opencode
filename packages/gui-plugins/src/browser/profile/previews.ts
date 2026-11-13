@@ -3,7 +3,8 @@ import { previewScheme } from "@opencode/gui-plugins/schemes"
 import { previewResource } from "../preview"
 import { workspaceFile } from "../workspace-file"
 
-export function createPreviews(session: Session) {
+export function createPreviews(session: Session, signal: AbortSignal) {
+  signal.throwIfAborted()
   const grants = new Map<string, () => readonly string[]>()
 
   const serve = async (request: Request) => {
@@ -35,17 +36,27 @@ export function createPreviews(session: Session) {
 
   // File loaders reject for disappearing or unreadable files. Refuse the request without throwing into Electron.
   session.protocol.handle(previewScheme, (request) => serve(request).catch(() => Response.error()))
+  let active = true
+
+  const dispose = () => {
+    if (!active) return
+    active = false
+    signal.removeEventListener("abort", dispose)
+    grants.clear()
+    session.protocol.unhandle(previewScheme)
+  }
+
+  // Revoke synchronously, before async pane teardown can exceed the plugin host's reload deadline.
+  signal.addEventListener("abort", dispose, { once: true })
 
   return {
     grant(roots: () => readonly string[]) {
+      signal.throwIfAborted()
       const host = crypto.randomUUID()
       grants.set(host, roots)
 
       return { host, release: () => grants.delete(host) }
     },
-    dispose() {
-      grants.clear()
-      session.protocol.unhandle(previewScheme)
-    },
+    dispose,
   }
 }
