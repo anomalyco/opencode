@@ -1,5 +1,12 @@
 import { Option, Schema } from "effect"
 
+/** The short-lived cookie the profile writes at start to learn whether cookies reach disk. No page or extension sees it. */
+export const PROBE_COOKIE = {
+  host: "cookie-check.opencode.invalid",
+  url: "https://cookie-check.opencode.invalid/",
+  name: "opencode_cookie_check",
+} as const
+
 /** A cookie read from another browser or a cookie file, before it is written into the profile. */
 export type ImportedCookie = {
   /** As browsers store it: `.github.com` for a domain cookie, `github.com` for a host-only one. */

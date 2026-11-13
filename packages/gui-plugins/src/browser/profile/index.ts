@@ -5,7 +5,7 @@ import { Schema } from "effect"
 import type { Log, Storage } from "@opencode/plugin/gui/main"
 import { fileURLWithin } from "../policy"
 import { extensionCompatibility } from "./compatibility"
-import { browserUserAgent, cookieDetails, parseCookieFile, type CookieRead } from "./cookie"
+import { browserUserAgent, cookieDetails, parseCookieFile, PROBE_COOKIE, type CookieRead } from "./cookie"
 import { snapshotDatabase } from "./database"
 import { createExtensionApis } from "./extension-api"
 import { createFileGuard } from "./file-guard"
@@ -432,10 +432,8 @@ async function applicationIcons(files: readonly string[]) {
  * flushes it and looks for it on disk. When the check itself cannot run, it says they do.
  */
 async function cookiesPersist(session: Session) {
-  const probe = { url: "https://cookie-check.opencode.invalid/", name: "opencode_cookie_check" }
-
   const written = await session.cookies
-    .set({ ...probe, value: "1", expirationDate: Date.now() / 1000 + 600 })
+    .set({ url: PROBE_COOKIE.url, name: PROBE_COOKIE.name, value: "1", expirationDate: Date.now() / 1000 + 600 })
     .then(() => session.cookies.flushStore())
     .then(
       () => true,
@@ -449,14 +447,16 @@ async function cookiesPersist(session: Session) {
   // Chromium keeps a partition's database under Network/ on some systems and beside it on others.
   const counts = await Promise.all(
     [path.join(storage, "Network", "Cookies"), path.join(storage, "Cookies")].map((file) =>
-      snapshotDatabase(file, (db) => db.prepare("SELECT count(*) AS count FROM cookies WHERE name = ?").get(probe.name))
+      snapshotDatabase(file, (db) =>
+        db.prepare("SELECT count(*) AS count FROM cookies WHERE host_key = ? AND name = ?").get(PROBE_COOKIE.host, PROBE_COOKIE.name),
+      )
         .then((row) => Number(row?.count ?? 0))
         .catch(() => undefined),
     ),
   )
 
   await session.cookies
-    .remove(probe.url, probe.name)
+    .remove(PROBE_COOKIE.url, PROBE_COOKIE.name)
     .then(() => session.cookies.flushStore())
     .catch(() => undefined)
 

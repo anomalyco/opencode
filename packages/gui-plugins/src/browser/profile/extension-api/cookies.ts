@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import type { Cookie, Extension, Session } from "electron"
+import { PROBE_COOKIE } from "../cookie"
 import { method, none, optional, type ApiModule, type Emit } from "./api"
 import { matchesHost } from "./match-pattern"
 import { declared, type ExtensionTabs } from "./tabs"
@@ -48,13 +49,14 @@ export function cookieInfo(cookie: Cookie) {
   }
 }
 
-/** Whether an extension's host permissions cover a cookie's domain, on either scheme. */
+/** Whether an extension's host permissions cover a cookie's domain, on either scheme. The profile's own probe is no one's. */
 export function canSeeCookie(hosts: readonly string[], cookie: Pick<Cookie, "domain" | "path" | "secure">) {
   const host = (cookie.domain ?? "").replace(/^\./, "")
   const path = cookie.path ?? "/"
 
   return (
     !!host &&
+    host !== PROBE_COOKIE.host &&
     (matchesHost(hosts, `https://${host}${path}`) || (!cookie.secure && matchesHost(hosts, `http://${host}${path}`)))
   )
 }
@@ -72,7 +74,8 @@ export function createCookies(input: {
   const hostsOf = (extension: Pick<Extension, "manifest">) => declared(extension).hosts
 
   const reachable = (extension: Pick<Extension, "manifest">, url: string) => {
-    if (!matchesHost(hostsOf(extension), url)) throw new Error(`No host permission for cookies at url: "${url}".`)
+    if (!matchesHost(hostsOf(extension), url) || (URL.canParse(url) && new URL(url).hostname === PROBE_COOKIE.host))
+      throw new Error(`No host permission for cookies at url: "${url}".`)
 
     return url
   }
@@ -92,7 +95,14 @@ export function createCookies(input: {
         permissions: ["cookies"],
         methods: ["get", "getAll", "set", "remove", "getAllCookieStores", "getPartitionKey"],
         events: ["onChanged"],
-        constants: { SameSiteStatus: { NO_RESTRICTION: "no_restriction", LAX: "lax", STRICT: "strict", UNSPECIFIED: "unspecified" } },
+        constants: {
+          SameSiteStatus: {
+            NO_RESTRICTION: "no_restriction",
+            LAX: "lax",
+            STRICT: "strict",
+            UNSPECIFIED: "unspecified",
+          },
+        },
       },
     ],
     methods: {
@@ -114,7 +124,9 @@ export function createCookies(input: {
           session: filter?.session ?? undefined,
         })
 
-        return cookies.flatMap((cookie) => (canSeeCookie(hostsOf(context.extension), cookie) ? [cookieInfo(cookie)] : []))
+        return cookies.flatMap((cookie) =>
+          canSeeCookie(hostsOf(context.extension), cookie) ? [cookieInfo(cookie)] : [],
+        )
       }),
       "cookies.set": method(Schema.Tuple([SetDetails]), async (context, [details]) => {
         const url = reachable(context.extension, details.url)
@@ -141,9 +153,7 @@ export function createCookies(input: {
 
         return { url, name: details.name, storeId: STORE }
       }),
-      "cookies.getAllCookieStores": method(none, () => [
-        { id: STORE, tabIds: input.tabs.ids() },
-      ]),
+      "cookies.getAllCookieStores": method(none, () => [{ id: STORE, tabIds: input.tabs.ids() }]),
       "cookies.getPartitionKey": method(none, () => ({ partitionKey: {} })),
     },
     dispose: () => input.session.cookies.off("changed", changed),

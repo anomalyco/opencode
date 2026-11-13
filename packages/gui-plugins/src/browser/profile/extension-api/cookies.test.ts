@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { PROBE_COOKIE } from "../cookie"
 import { canSeeCookie, cookieInfo } from "./cookies"
 
 test("an extension sees the cookies of hosts it has access to, on the scheme they are sent over", () => {
@@ -10,6 +11,11 @@ test("an extension sees the cookies of hosts it has access to, on the scheme the
   expect(canSeeCookie(hosts, { domain: "localhost", path: "/", secure: true })).toBe(false)
   expect(canSeeCookie(hosts, { domain: "example.com", path: "/", secure: true })).toBe(false)
   expect(canSeeCookie(["<all_urls>"], { domain: "", path: "/", secure: false })).toBe(false)
+})
+
+test("no extension sees the profile's start-up cookie probe, even with access to every host", () => {
+  expect(canSeeCookie(["<all_urls>"], { domain: PROBE_COOKIE.host, path: "/", secure: true })).toBe(false)
+  expect(canSeeCookie(["<all_urls>"], { domain: "example.com", path: "/", secure: true })).toBe(true)
 })
 
 test("a cookie reads as chrome.cookies describes it", () => {
