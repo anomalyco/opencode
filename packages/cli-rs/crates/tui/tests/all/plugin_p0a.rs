@@ -57,6 +57,17 @@ fn cells(h: &Harness) -> Vec<opentui::testing::Cell> {
     capture.cells.into_iter().enumerate().filter(|(index, _)| index / width != row).map(|(_, cell)| cell).collect()
 }
 
+/// The probe's log, from its storage.
+fn log(h: &Harness) -> Vec<String> {
+    let json = opencode_plugin::Host::storage_read(&*opencode_tui::plugins::host::host(&h.tui), "plugin.p0a.log");
+    json.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default()
+}
+
+/// The entries of the probe's log that start with `prefix`.
+fn logged(h: &Harness, prefix: &str) -> Vec<String> {
+    log(h).into_iter().filter(|entry| entry.starts_with(prefix)).collect()
+}
+
 /// The lines on screen that contain `text`.
 fn toasts(h: &Harness, text: &str) -> usize {
     h.app.text().lines().filter(|line| line.contains(text)).count()
@@ -125,7 +136,7 @@ fn an_alert_runs_its_action_once_however_it_closes() {
             }
             h.wait_for("alert closed");
             h.app.advance(std::time::Duration::from_millis(50));
-            assert_eq!(toasts(&h, "alert closed"), 1, "{carrier:?} {close}: {}", h.app.text());
+            assert_eq!(logged(&h, "closed"), ["closed @1"], "{carrier:?} {close}");
             assert_eq!(h.tui.dialogs.is_open(), close == "replace", "{carrier:?} {close}");
         }
     }
@@ -373,10 +384,12 @@ fn a_call_that_panics_leaves_no_composer_edit_and_no_dialog() {
             setup.app.type_text("draft");
             setup.tui.keymap.dispatch("p0a.all", panics.then_some("panic"));
             match panics {
+                // Each effect shows: the prompt sent, the alert closed by the confirm that replaced it, the confirm.
                 false => {
                     let prompts = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
                     assert_eq!(prompts[0]["text"], "all of it", "{carrier:?}");
-                    setup.wait_for("Heads up");
+                    setup.wait_for("Delete the draft?");
+                    setup.wait("the alert's close", || logged(&setup, "closed") == ["closed @1"]);
                     assert_eq!(setup.textarea().text(), "", "{carrier:?}");
                 }
                 true => {
@@ -384,30 +397,107 @@ fn a_call_that_panics_leaves_no_composer_edit_and_no_dialog() {
                     assert_eq!(setup.textarea().text(), "draft", "{carrier:?}");
                     assert!(setup.requests("POST", "/prompt").is_empty(), "{carrier:?}");
                     assert!(!setup.tui.dialogs.is_open(), "{carrier:?}: {}", setup.app.text());
+                    assert!(logged(&setup, "closed").is_empty(), "{carrier:?}");
                 }
             }
         }
     }
 }
 
-// Expected (`ledger`): a confirm or an alert that is open when its plugin is disabled calls nothing of the plugin
-// once it closes.
+/// A plugin that logs each run of its command `witness.ran` in its storage.
+fn witness() -> abi::Plugin {
+    fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+        setup.storage_key("ran");
+        let command = abi::Command { name: "witness.ran".to_owned(), ..abi::Command::default() };
+        setup.command(command, |host, _| {
+            let ran = host.storage_get("ran").and_then(|ran| ran["count"].as_u64()).unwrap_or(0);
+            host.storage_set("ran", serde_json::json!({ "count": ran + 1 }));
+        });
+        Ok(())
+    }
+    abi::Plugin { id: "witness", setup }
+}
+
+/// How often `witness.ran` ran.
+fn witnessed(h: &Harness) -> u64 {
+    let json = opencode_plugin::Host::storage_read(&*opencode_tui::plugins::host::host(&h.tui), "plugin.witness.ran");
+    json.and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok()?["count"].as_u64()).unwrap_or(0)
+}
+
+// Expected (`ledger`; bigboi 2, carbon-p0a-7): a plugin's confirm or alert closes when the plugin is disabled, and
+// the composer has the focus again; nothing it answers reaches the old activation, the new one after the plugin is
+// enabled again, or another plugin's command it names. The answer to a dialog that closes in the same turn as a
+// disable and an enable reaches nobody either.
 #[test]
-fn a_dialog_of_a_disabled_plugin_calls_nothing_of_it() {
+fn a_dialog_of_a_disabled_plugin_goes_and_answers_nobody() {
     for carrier in CARRIERS {
-        for (open, title, done) in
-            [("p0a.confirm", "Delete the draft?", "answered"), ("p0a.alert", "Heads up", "closed")]
-        {
+        let rows = [("p0a.confirm", "Delete the draft?"), ("p0a.alert", "Heads up"), ("p0a.alert-foreign", "Heads up")];
+        for (open, title) in rows {
             let h = home(carrier);
+            opencode_tui::plugins::host::add(&h.tui, witness().into());
+            let host = opencode_tui::plugins::host::host(&h.tui);
             h.tui.keymap.dispatch(open, None);
             h.wait_for(title);
-            assert!(h.tui.plugins.set_active(&opencode_tui::plugins::host::host(&h.tui), "p0a", false));
-            h.app.press("return");
+            assert!(h.tui.plugins.set_active(&host, "p0a", false));
             h.wait_gone(title);
+            h.wait("the composer's focus", || h.textarea().is_focused());
+            assert!(h.tui.plugins.set_active(&host, "p0a", true));
+            h.app.press("return");
             h.app.advance(std::time::Duration::from_millis(50));
-            assert_eq!(toasts(&h, done), 0, "{carrier:?} {open}: {}", h.app.text());
+            let answers: Vec<_> = log(&h).into_iter().filter(|entry| !entry.starts_with("setup ")).collect();
+            assert!(answers.iter().all(|entry| entry.starts_with("disposed ")), "{carrier:?} {open}: {answers:?}");
+            assert_eq!(witnessed(&h), 0, "{carrier:?} {open}");
+            // Disabled and enabled in one turn, then answered: the dialog of the first activation answers nobody.
+            h.tui.keymap.dispatch(open, None);
+            h.wait_for(title);
+            assert!(h.tui.plugins.set_active(&host, "p0a", false) && h.tui.plugins.set_active(&host, "p0a", true));
+            h.app.press("return");
+            h.app.advance(std::time::Duration::from_millis(50));
+            h.wait_gone(title);
+            let answers: Vec<_> = log(&h).into_iter().filter(|entry| !entry.starts_with("setup ")).collect();
+            assert!(answers.iter().all(|entry| entry.starts_with("disposed ")), "{carrier:?} {open}: {answers:?}");
+            assert_eq!(witnessed(&h), 0, "{carrier:?} {open}");
         }
     }
+}
+
+// Expected (bigboi 2): a dialog of a live plugin that names another plugin's command runs it, once.
+#[test]
+fn a_live_dialog_runs_a_foreign_command_once() {
+    let h = home(Carrier::Linked);
+    opencode_tui::plugins::host::add(&h.tui, witness().into());
+    h.tui.keymap.dispatch("p0a.alert-foreign", None);
+    h.wait_for("Heads up");
+    h.app.press("return");
+    h.wait("the witness", || witnessed(&h) == 1);
+    h.app.advance(std::time::Duration::from_millis(50));
+    assert_eq!(witnessed(&h), 1);
+}
+
+// Expected (bigboi 2): a reload that fails keeps the running activation and its alert, which still answers it; a
+// reload that passes closes the old activation's alert, which answers nobody.
+#[test]
+fn a_reload_keeps_or_closes_the_old_activations_dialog() {
+    let h = crate::plugins::open(Route::Home, "", &crate::plugins::build("p0a"));
+    h.wait_for("sample plugin v1: home.footer");
+    h.tui.keymap.dispatch("p0a.alert", None);
+    h.wait_for("Heads up");
+    crate::plugins::write_atomic(
+        &h.plugin.join(opencode_plugin::loader::entry_file()),
+        &crate::plugins::build("p0a,setup-fails"),
+    );
+    h.wait_for("Plugin failed: sample");
+    h.app.advance(std::time::Duration::from_millis(50));
+    assert!(h.app.text().contains("Heads up"), "{}", h.app.text());
+    crate::plugins::write_atomic(
+        &h.plugin.join(opencode_plugin::loader::entry_file()),
+        &crate::plugins::build("p0a,v2"),
+    );
+    h.wait_for("sample plugin v2: home.footer");
+    h.wait_gone("Heads up");
+    let host = opencode_tui::plugins::host::host(&h.tui);
+    let json = opencode_plugin::Host::storage_read(&*host, "plugin.sample.log").unwrap_or_default();
+    assert!(!json.contains("closed"), "{json}");
 }
 
 // Expected: a styled box draws its rounded border with the centered title, the heavy left rule and its padding inside
