@@ -188,15 +188,16 @@ describe("AI promise client", () => {
     const model = xai.video("grok-imagine-video-1.5")
 
     const job = await ai.video.start({ model, prompt: "A kite" })
-    expect(job).toEqual({ id: "req_1", token: { requestID: "req_1" } })
+    expect(job).toEqual({ id: "req_1" })
 
-    const token: unknown = JSON.parse(JSON.stringify(job.token))
-    expect(await ai.video.status(model, token)).toEqual({ status: "running", progress: 0.5 })
-    expect(await ai.video.status(model, token)).toEqual({ status: "completed" })
-    const response = await ai.video.result(model, token)
+    // The ID is plain text: store it and read the job back from any process.
+    const id = job.id
+    expect(await ai.video.status(model, id)).toEqual({ status: "running", progress: 0.5 })
+    expect(await ai.video.status(model, id)).toEqual({ status: "completed" })
+    const response = await ai.video.result(model, id)
     expect(response.video).toBeInstanceOf(Media.Asset)
     expect(response.video.source).toMatchObject({ type: "url", url: "https://vidgen.x.ai/out.mp4" })
-    expect(await ai.video.cancel(model, token).catch((error: unknown) => error)).toMatchObject({
+    expect(await ai.video.cancel(model, id).catch((error: unknown) => error)).toMatchObject({
       reason: { _tag: "UnsupportedOperation" },
     })
 
