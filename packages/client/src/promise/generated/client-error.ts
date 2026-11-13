@@ -4,6 +4,7 @@ export type ClientErrorReason =
   | "UnsupportedContentType"
   | "MalformedResponse"
   | "SseEventTooLarge"
+  | "Timeout"
 
 export class ClientError extends Error {
   override readonly name = "ClientError"

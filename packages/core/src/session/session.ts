@@ -278,6 +278,8 @@ export const make = Effect.fn("Session.make")(function* () {
   const wait = Effect.fn("Session.wait")(function* (sessionID: SessionSchema.ID) {
     yield* get(sessionID)
     yield* execution.awaitIdle(sessionID)
+    const [message] = yield* store.messages({ sessionID, type: "assistant", order: "desc", limit: 1 })
+    return { message }
   })
   const resume = Effect.fn("Session.resume")(function* (sessionID: SessionSchema.ID) {
     yield* get(sessionID)
