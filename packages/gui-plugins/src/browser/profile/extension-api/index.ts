@@ -4,6 +4,7 @@ import type { Log, Storage } from "@opencode/plugin/gui/main"
 import { createActions } from "./action"
 import type { Emit } from "./api"
 import { createContextMenus } from "./context-menus"
+import { createCookies } from "./cookies"
 import { createExtensionHost } from "./host"
 import { createNotifications } from "./notifications"
 import { createPermissions } from "./permissions"
@@ -54,6 +55,7 @@ export async function createExtensionApis(input: {
       actions.module,
       createWebNavigation({ tabs, emit }),
       createContextMenus({ tabs, emit, extensions }),
+      createCookies({ session: input.session, tabs, emit, extensions }),
       createPermissions(),
       createNotifications({ emit }),
       createStorageSync({ storage: input.storage, emit }),
