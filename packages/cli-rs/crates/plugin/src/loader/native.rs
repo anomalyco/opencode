@@ -837,7 +837,14 @@ fn apply(host: &Weak<dyn Host>, id: String, guest: Weak<Guest>, generation: Opti
                 Effect::Tab(edit) => host.edit_tab(edit),
                 Effect::ClearSelection => host.clear_selection(),
                 Effect::Foreground(request, program) => {
-                    Guest::send(&guest, host, request, |host, reply| host.foreground(program, reply));
+                    // The program starts later, once the turn is done: only if the instance is still live then.
+                    let owner = guest.clone();
+                    let alive = Box::new(move || {
+                        owner
+                            .upgrade()
+                            .is_some_and(|guest| guest.instance.borrow().is_some() && guest.failure.borrow().is_none())
+                    });
+                    Guest::send(&guest, host, request, |host, reply| host.foreground(program, alive, reply));
                 }
                 Effect::Title(title) => host.set_title(&title),
                 Effect::Theme(name) => host.set_theme(&name),

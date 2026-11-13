@@ -1,6 +1,6 @@
-// The P-PTY fixture of the terminal title a plugin sets (P0b): one directory under the sandbox's global `plugins`
-// directory holds the TS plugin (`parity/plugins/title/tui.ts`) and its Rust twin, the sample plugin built with the
-// `title` feature, as `plugin.so`. TS loads the first, Rust the second; each client ignores the other's file.
+// The P-PTY fixture of P0b's plugin verbs that need a real terminal: one directory under the sandbox's global
+// `plugins` directory holds the TS plugin (`parity/plugins/title/tui.ts`) and its Rust twin, the sample plugin built
+// with the `pty` feature, as `plugin.so`. TS loads the first, Rust the second; each client ignores the other's file.
 import { copyFile, mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { PtyStep } from "../../pty/run"
@@ -23,7 +23,7 @@ export async function install(root: string, config?: object) {
       "--target-dir",
       target,
       "--features",
-      "title",
+      "pty",
     ],
     { cwd: rs, stdout: "inherit", stderr: "inherit" },
   )
@@ -36,6 +36,26 @@ export async function install(root: string, config?: object) {
   const configured = { ...config, plugins: ["./plugins/title"] }
   await writeFile(path.join(root, "home/.config/opencode/cli.json"), JSON.stringify(configured))
 }
+
+// The home screen, once the Rust plugin's commands are listed.
+export const home: PtyStep[] = [
+  { until: { screen: "█▀▀█" }, settle: 500, timeout: 30_000 },
+  { keys: "/p0brun", until: { screen: "Run a program" }, settle: 200, timeout: 30_000 },
+  { keys: "\x1b", settle: 200 },
+  { keys: "\x15", settle: 200 },
+]
+
+// Runs `command` through `/p0brun`, which first prints `ready-<n + 1>`, and waits for that: text the command itself
+// does not contain, so the composer that shows the command does not match.
+export function run(command: string, n: number): PtyStep[] {
+  return [
+    { keys: `/p0brun echo ready-$((${n}+1)); ${command}`, settle: 300 },
+    { keys: "\r", until: { screen: `ready-${n + 1}` }, timeout: 15_000 },
+  ]
+}
+
+// Two Ctrl+C: the TUI exits.
+export const leave: PtyStep[] = [{ keys: "\x03", settle: 300 }, { keys: "\x03" }]
 
 // Home, then `/p0btitle` once both clients list it, then two Ctrl+C to exit.
 export const steps: PtyStep[] = [
