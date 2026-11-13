@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto"
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { inflateRawSync } from "node:zlib"
+import { promisify } from "node:util"
+import { inflateRaw } from "node:zlib"
 import { Option, Schema } from "effect"
 
 const Manifest = Schema.Struct({
@@ -58,12 +59,7 @@ export async function extensionFiles(directory: string, manifest: Manifest): Pro
         .flatMap((script) => (script.js ?? []).filter(Schema.is(Schema.String))),
     ),
   ]
-    .flatMap((entry) => {
-      const file = path.resolve(directory, entry.replace(/^\//, ""))
-      const relative = path.relative(path.resolve(directory), file)
-
-      return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative) ? [file] : []
-    })
+    .flatMap((entry) => within(directory, entry) ?? [])
     .slice(0, SCAN.files)
 
   const budget = { left: SCAN.total }
@@ -105,11 +101,12 @@ export async function readManifest(directory: string) {
 export async function displayName(directory: string, manifest: Manifest) {
   const match = /^__MSG_(.+)__$/.exec(manifest.name)
 
-  if (!match?.[1] || !manifest.default_locale) return manifest.name
+  // A locale is a code such as `en` or `pt_BR`, never a path; its file must stay inside the package.
+  const locale = manifest.default_locale
+  const file = locale && /^[A-Za-z0-9_-]{1,16}$/.test(locale) ? within(directory, `_locales/${locale}/messages.json`) : undefined
 
-  const text = await readFile(path.join(directory, "_locales", manifest.default_locale, "messages.json"), "utf8").catch(
-    () => undefined,
-  )
+  if (!match?.[1] || !file) return manifest.name
+  const text = await readFile(file, "utf8").catch(() => undefined)
 
   const messages = text === undefined ? undefined : Option.getOrUndefined(decodeMessages(text.replace(/^\uFEFF/, "")))
   const key = match[1].toLowerCase()
@@ -140,25 +137,46 @@ export function extensionPages(manifest: Manifest) {
   }
 }
 
+/**
+ * `file` resolved against `root` when it lands strictly inside it, else undefined. A leading slash reads from the
+ * root, as extension paths do; `..`, another drive or an absolute path that leaves the root is refused.
+ */
+export function within(root: string, file: string) {
+  const base = path.resolve(root)
+  const target = path.resolve(base, file.replace(/^[/\\]+/, ""))
+  const relative = path.relative(base, target)
+
+  return relative && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+    ? target
+    : undefined
+}
+
+/** Of an icon given in several sizes, by size, the one closest to 32px. */
+export function closestIcon<T>(sizes: Readonly<Record<string, T>>) {
+  return Object.entries(sizes)
+    .filter(([size]) => Number.isFinite(Number(size)))
+    .toSorted((a, b) => Math.abs(Number(a[0]) - 32) - Math.abs(Number(b[0]) - 32))[0]?.[1]
+}
+
+/** The most an icon file may hold; a larger one is not shown. */
+const ICON_BYTES = 65_536
+
+/** An icon file of the package: its bytes, when it is inside `root` and within `ICON_BYTES`; read only then. */
+export async function readIcon(root: string, file: string) {
+  const target = within(root, file)
+  const size = target ? await stat(target).then((info) => (info.isFile() ? info.size : Infinity), () => Infinity) : Infinity
+
+  return target && size <= ICON_BYTES ? readFile(target).catch(() => undefined) : undefined
+}
+
 /** The icon closest to 32px, as a data URL; undefined when it has none or the file is large. */
 export async function extensionIcon(directory: string, manifest: Manifest) {
-  const sizes = Object.entries(manifest.icons ?? {})
-    .map(([size, file]) => ({ size: Number(size), file }))
-    .filter((icon) => Number.isFinite(icon.size))
-    .toSorted((a, b) => Math.abs(a.size - 32) - Math.abs(b.size - 32))
+  const file = closestIcon(manifest.icons ?? {})
+  const data = file ? await readIcon(directory, file) : undefined
+  const extension = file ? path.extname(file).toLowerCase() : ""
+  const mime = extension === ".svg" ? "image/svg+xml" : extension === ".webp" ? "image/webp" : "image/png"
 
-  const icon = sizes[0]
-
-  if (!icon) return undefined
-  const file = path.resolve(directory, icon.file.replace(/^\//, ""))
-
-  if (!file.startsWith(path.resolve(directory) + path.sep)) return undefined
-  const data = await readFile(file).catch(() => undefined)
-
-  if (!data || data.byteLength > 16_384) return undefined
-  const mime = file.endsWith(".svg") ? "image/svg+xml" : file.endsWith(".webp") ? "image/webp" : "image/png"
-
-  return `data:${mime};base64,${data.toString("base64")}`
+  return data ? `data:${mime};base64,${data.toString("base64")}` : undefined
 }
 
 /** The extension id Chromium derives from a public key: its SHA-256, first 16 bytes, each nibble as `a`-`p`. */
@@ -190,164 +208,224 @@ export function storeDownloadURL(target: { id: string; store: "chrome" | "edge" 
 }
 
 /**
- * Splits a CRX package into its zip archive and the public key that signed it, so the unpacked extension keeps its
- * store id. CRX3 carries the keys in a protobuf header whose signed data names the id; CRX2 carries one key.
+ * Splits a CRX package into its zip archive and the developer's public key, so the unpacked extension keeps its store
+ * id. CRX3 carries the keys in a protobuf header whose signed data names the id, and the key is the one whose hash is
+ * that id (the store adds a key of its own, which never names the package); CRX2 carries one key. Undefined for
+ * anything that is not a well-formed CRX2 or CRX3 file.
  */
 export function parseCrx(data: Uint8Array) {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
 
-  if (data.byteLength < 16 || new TextDecoder().decode(data.subarray(0, 4)) !== "Cr24")
-    throw new Error("Not a CRX file")
+  if (data.byteLength < 12 || new TextDecoder().decode(data.subarray(0, 4)) !== "Cr24") return undefined
   const version = view.getUint32(4, true)
 
   if (version === 2) {
-    const keyLength = view.getUint32(8, true)
-    const signatureLength = view.getUint32(12, true)
-    const key = data.subarray(16, 16 + keyLength)
+    const keyLength = data.byteLength >= 16 ? view.getUint32(8, true) : Infinity
+    const signatureLength = data.byteLength >= 16 ? view.getUint32(12, true) : Infinity
 
-    return { zip: data.subarray(16 + keyLength + signatureLength), key }
+    if (16 + keyLength + signatureLength > data.byteLength) return undefined
+
+    return { zip: data.subarray(16 + keyLength + signatureLength), key: data.subarray(16, 16 + keyLength) }
   }
 
-  if (version !== 3) throw new Error(`Unsupported CRX version ${version}`)
   const length = view.getUint32(8, true)
-  const header = data.subarray(12, 12 + length)
-  const fields = protobufFields(header)
-  // SignedData { bytes crx_id = 1 } in field 10000 names the id; the matching key proof is the developer's.
+
+  if (version !== 3 || 12 + length > data.byteLength) return undefined
+  const fields = protobufFields(data.subarray(12, 12 + length))
+
+  if (!fields) return undefined
+  // SignedData { bytes crx_id = 1 } in field 10000 names the id.
   const signed = fields.find((field) => field.number === 10000)?.value
-  const crxID = signed ? protobufFields(signed).find((field) => field.number === 1)?.value : undefined
+  const crxID = signed ? protobufFields(signed)?.find((field) => field.number === 1)?.value : undefined
 
-  const keys = fields
+  const key = fields
     .filter((field) => field.number === 2 || field.number === 3)
-    .flatMap((proof) =>
-      protobufFields(proof.value)
-        .filter((field) => field.number === 1)
-        .map((field) => field.value),
-    )
-
-  // The crx_id is the first 16 bytes of the developer key's SHA-256; the store adds a key of its own.
-  const key =
-    keys.find(
+    .flatMap((proof) => (protobufFields(proof.value) ?? []).filter((field) => field.number === 1))
+    .map((field) => field.value)
+    .find(
       (candidate) =>
         !!crxID && createHash("sha256").update(candidate).digest().subarray(0, 16).equals(Buffer.from(crxID)),
-    ) ?? keys[0]
+    )
 
   return { zip: data.subarray(12 + length), key }
 }
 
-/** The length-delimited fields of a protobuf message; other wire types are skipped. */
+/** The length-delimited fields of a protobuf message, other wire types skipped; undefined when it is malformed. */
 function protobufFields(data: Uint8Array) {
   const fields: { number: number; value: Uint8Array }[] = []
   const cursor = { offset: 0 }
 
   while (cursor.offset < data.byteLength) {
     const tag = varint(data, cursor)
-    const wire = tag % 8
-    const number = Math.floor(tag / 8)
+    const wire = tag === undefined ? -1 : tag % 8
+    const skipped = wire === 0 ? (varint(data, cursor) === undefined ? undefined : 0) : undefined
+    const length = wire === 2 ? varint(data, cursor) : wire === 0 ? skipped : wire === 1 ? 8 : wire === 5 ? 4 : undefined
 
-    if (wire === 2) {
-      const length = varint(data, cursor)
-      fields.push({ number, value: data.subarray(cursor.offset, cursor.offset + length) })
-      cursor.offset += length
-      continue
-    }
+    if (tag === undefined || length === undefined || cursor.offset + length > data.byteLength) return undefined
 
-    if (wire === 0) {
-      varint(data, cursor)
-      continue
-    }
-
-    if (wire === 1) {
-      cursor.offset += 8
-      continue
-    }
-
-    if (wire === 5) {
-      cursor.offset += 4
-      continue
-    }
-
-    throw new Error("Malformed CRX header")
+    if (wire === 2) fields.push({ number: Math.floor(tag / 8), value: data.subarray(cursor.offset, cursor.offset + length) })
+    cursor.offset += length
   }
 
   return fields
 }
 
+/** A protobuf varint at the cursor, which it moves past; undefined when it runs off the end or past 2^53. */
 function varint(data: Uint8Array, cursor: { offset: number }) {
-  let value = 0
-  let scale = 1
+  const state = { value: 0, scale: 1 }
 
-  while (cursor.offset < data.byteLength) {
+  while (cursor.offset < data.byteLength && state.scale <= 2 ** 49) {
     const byte = data[cursor.offset++] ?? 0
-    value += (byte & 0x7f) * scale
+    state.value += (byte & 0x7f) * state.scale
 
-    if (byte < 0x80) return value
-    scale *= 128
+    if (byte < 0x80) return state.value
+    state.scale *= 128
   }
 
-  throw new Error("Malformed CRX header")
+  return undefined
 }
 
 /**
- * Unpacks a zip archive into `directory`, refusing entries that would land outside it. Reads the central directory and
- * inflates each entry, stored or deflated, which is all a store package or extension archive uses.
+ * What an archive may unpack to, so a hostile package costs little: entries, bytes in one entry, bytes in all. The
+ * largest store extensions unpack to a few tens of megabytes.
  */
-export async function unzip(zip: Uint8Array, directory: string) {
+const ZIP_LIMITS = { entries: 10_000, entry: 64 * 1024 * 1024, total: 256 * 1024 * 1024 }
+
+const inflate = promisify(inflateRaw)
+
+/** One file or directory of an archive, checked: its safe path, and where its bytes are. */
+type ZipEntry = {
+  readonly segments: readonly string[]
+  readonly directory: boolean
+  readonly method: number
+  readonly start: number
+  readonly compressed: number
+  readonly size: number
+}
+
+/**
+ * A zip entry's name as path segments that are safe on every system: forward slashes only, and no absolute path,
+ * drive or stream (`:`), `..`, empty segment, control or reserved character, trailing dot or space, or Windows device
+ * name (`CON`, `nul.txt`, `COM1`). `.` segments drop out, so `./` is the root itself. Undefined for an unsafe name.
+ */
+export function entryPath(name: string) {
+  const body = name.endsWith("/") ? name.slice(0, -1) : name
+  // oxlint-disable-next-line no-control-regex -- SAFETY: control characters are what this refuses.
+  const refused = /[\\:*?"<>|\u0000-\u001f]/.test(body) || body.startsWith("/")
+  const segments = body.split("/").filter((segment) => segment !== ".")
+
+  const safe = segments.every(
+    (segment) =>
+      segment !== "" &&
+      segment !== ".." &&
+      !/[. ]$/.test(segment) &&
+      !/^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\.|$)/i.test(segment),
+  )
+
+  return refused || !safe ? undefined : segments
+}
+
+/**
+ * The entries of a zip archive, every one checked before anything is written: a safe path (`entryPath`), stored or
+ * deflated, not encrypted, not a symbolic link, inside the archive's bytes, and within `ZIP_LIMITS`. Undefined when
+ * any entry fails, or the archive is damaged or uses ZIP64.
+ */
+export function readZip(zip: Uint8Array) {
   const data = Buffer.from(zip.buffer, zip.byteOffset, zip.byteLength)
   const end = data.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]))
 
-  if (end < 0) throw new Error("The package is not a zip archive")
+  if (end < 0 || end + 22 > data.length) return undefined
   const count = data.readUInt16LE(end + 10)
-  const root = path.resolve(directory)
 
-  const entries = Array.from({ length: count }).reduce<{ offset: number; list: ZipEntry[] }>(
+  if (count > ZIP_LIMITS.entries) return undefined
+
+  return Array.from({ length: count }).reduce<{ next: number; total: number; list: ZipEntry[] } | undefined>(
     (state) => {
-      const at = state.offset
+      const entry = state ? zipEntry(data, state.next) : undefined
 
-      if (data.readUInt32LE(at) !== 0x02014b50) throw new Error("The package has a damaged directory")
-      const nameLength = data.readUInt16LE(at + 28)
-      const extra = data.readUInt16LE(at + 30) + data.readUInt16LE(at + 32)
+      if (!state || !entry || state.total + entry.value.size > ZIP_LIMITS.total) return undefined
+      state.list.push(entry.value)
 
-      state.list.push({
-        name: data.subarray(at + 46, at + 46 + nameLength).toString("utf8"),
-        method: data.readUInt16LE(at + 10),
-        size: data.readUInt32LE(at + 20),
-        local: data.readUInt32LE(at + 42),
-      })
-
-      return { offset: at + 46 + nameLength + extra, list: state.list }
+      return { next: entry.next, total: state.total + entry.value.size, list: state.list }
     },
-    { offset: data.readUInt32LE(end + 16), list: [] },
-  ).list
+    { next: data.readUInt32LE(end + 16), total: 0, list: [] },
+  )?.list
+}
 
+/** The central directory record at `at`, checked, and where the next one starts. */
+function zipEntry(data: Buffer, at: number): { value: ZipEntry; next: number } | undefined {
+  if (at + 46 > data.length || data.readUInt32LE(at) !== 0x02014b50) return undefined
+  const nameLength = data.readUInt16LE(at + 28)
+  const next = at + 46 + nameLength + data.readUInt16LE(at + 30) + data.readUInt16LE(at + 32)
+
+  if (next > data.length) return undefined
+  const name = data.subarray(at + 46, at + 46 + nameLength).toString("utf8")
+  const segments = entryPath(name)
+  const directory = name.endsWith("/")
+  const method = data.readUInt16LE(at + 10)
+  const compressed = data.readUInt32LE(at + 20)
+  const size = data.readUInt32LE(at + 24)
+  const local = data.readUInt32LE(at + 42)
+  // A Unix archive keeps the file's mode in the high half of its external attributes.
+  const link = data[at + 5] === 3 && ((data.readUInt32LE(at + 38) >>> 16) & 0o170000) === 0o120000
+  const encrypted = (data.readUInt16LE(at + 8) & 1) !== 0
+
+  if (!segments || link || encrypted || (!directory && segments.length === 0)) return undefined
+
+  if (!directory && (size > ZIP_LIMITS.entry || !(method === 8 || (method === 0 && compressed === size))))
+    return undefined
+
+  if (local + 30 > data.length || data.readUInt32LE(local) !== 0x04034b50) return undefined
+  const start = local + 30 + data.readUInt16LE(local + 26) + data.readUInt16LE(local + 28)
+
+  if (start + compressed > data.length) return undefined
+
+  return { value: { segments, directory, method, start, compressed, size }, next }
+}
+
+/**
+ * Unpacks a zip archive into `directory`, after `readZip` checked every entry. Inflates off the main thread and stops
+ * when an entry inflates past the size it declares. Rejects for an unsafe or damaged archive; what it wrote by then
+ * is the caller's to remove.
+ */
+export async function unzip(zip: Uint8Array, directory: string) {
+  const entries = readZip(zip)
+
+  if (!entries) throw new Error("The package is damaged or unsafe")
+  const data = Buffer.from(zip.buffer, zip.byteOffset, zip.byteLength)
+  const root = path.resolve(directory)
   await mkdir(root, { recursive: true })
 
   for (const entry of entries) {
-    const target = path.resolve(root, entry.name)
+    const target = path.join(root, ...entry.segments)
 
-    if (target !== root && !target.startsWith(root + path.sep)) throw new Error("The package has an unsafe path")
-
-    if (entry.name.endsWith("/")) {
+    if (entry.directory) {
       await mkdir(target, { recursive: true })
       continue
     }
 
-    const start = entry.local + 30 + data.readUInt16LE(entry.local + 26) + data.readUInt16LE(entry.local + 28)
-    const body = data.subarray(start, start + entry.size)
+    const body = data.subarray(entry.start, entry.start + entry.compressed)
+    const bytes = entry.method === 8 ? await inflate(body, { maxOutputLength: Math.max(entry.size, 1) }) : body
 
-    if (entry.method !== 0 && entry.method !== 8) throw new Error("The package uses an unsupported compression")
+    if (bytes.length !== entry.size) throw new Error("The package is damaged")
     await mkdir(path.dirname(target), { recursive: true })
-    await writeFile(target, entry.method === 8 ? inflateRawSync(body) : body)
+    await writeFile(target, bytes)
   }
 }
 
-type ZipEntry = { name: string; method: number; size: number; local: number }
-
-/** Writes the store's public key into the unpacked manifest, so Electron gives the extension its store id. */
+/**
+ * Writes the store's public key into the unpacked manifest, so Electron gives the extension its store id. False when
+ * the package has no manifest object to write it into.
+ */
 export async function pinKey(directory: string, key: Uint8Array) {
   const file = path.join(directory, "manifest.json")
-  const text = (await readFile(file, "utf8")).replace(/^\uFEFF/, "")
-  const manifest = Option.getOrUndefined(decodeObject(text))
+  const text = await readFile(file, "utf8").catch(() => undefined)
+  const manifest = text === undefined ? undefined : Option.getOrUndefined(decodeObject(text.replace(/^\uFEFF/, "")))
 
-  if (!manifest || "key" in manifest) return
-  await writeFile(file, JSON.stringify({ ...manifest, key: Buffer.from(key).toString("base64") }, null, 2))
+  if (!manifest) return false
+
+  if (!("key" in manifest))
+    await writeFile(file, JSON.stringify({ ...manifest, key: Buffer.from(key).toString("base64") }, null, 2))
+
+  return true
 }

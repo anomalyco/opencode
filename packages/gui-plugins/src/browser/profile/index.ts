@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, realpath, rm } from "node:fs/promises"
+import { cp, lstat, readFile, realpath, rename, rm } from "node:fs/promises"
 import path from "node:path"
 import electron, { app, type Session } from "electron"
 import { Schema } from "effect"
@@ -9,6 +9,7 @@ import { browserUserAgent, cookieDetails, parseCookieFile, PROBE_COOKIE, type Co
 import { snapshotDatabase } from "./database"
 import { createExtensionApis } from "./extension-api"
 import { createFileGuard } from "./file-guard"
+import { clearStaging, download, stageExtension, swapIn } from "./install"
 import { createCookieMirror, type CookieMirror } from "./link"
 import {
   displayName,
@@ -173,6 +174,7 @@ export async function createBrowserProfile(input: {
     if (loaded) errors.delete(record.id)
   }
 
+  await clearStaging(directory)
   await Promise.all(stored.value.filter((record) => record.enabled).map(load))
   await refresh()
 
@@ -186,7 +188,10 @@ export async function createBrowserProfile(input: {
     if (!manifest || manifest.theme !== undefined) return { type: "failed", reason: "manifest" }
     const compatibility = await compatibilityOf(folder, manifest)
     // Installing one again, such as an update, keeps it, as the user added it before.
-    const known = stored.value.some((record) => record.directory === folder)
+    const known = stored.value.find((record) => record.directory === folder)
+
+    // Chromium keeps the loaded copy's files open; the new one loads in its place.
+    if (known && session.extensions.getExtension(known.id)) session.extensions.removeExtension(known.id)
 
     if (compatibility.level === "unsupported" && !force && !known) {
       const name = await displayName(folder, manifest)
@@ -210,6 +215,54 @@ export async function createBrowserProfile(input: {
     const described = details.get(record.id)
 
     return described ? { type: "installed", extension: described } : { type: "failed", reason: "manifest" }
+  }
+
+  /**
+   * Puts a new copy of an extension at `folder` and adds it. `fill` writes the copy into a staging directory, and only
+   * a copy with a manifest takes the old one's place. A failure at any step removes what it wrote and leaves the
+   * previous copy in place, loaded as it was.
+   */
+  const replace = async (
+    folder: string,
+    source: "store" | "browser",
+    force: boolean | undefined,
+    fill: (staging: string) => Promise<boolean>,
+  ): Promise<InstallResult> => {
+    const failed: InstallResult = { type: "failed", reason: source === "store" ? "download" : "manifest" }
+    const staging = await stageExtension(directory, fill)
+
+    if (!staging) return failed
+    const previous = stored.value.find((record) => record.directory === folder)
+
+    // Chromium keeps the loaded copy's files open, and Windows moves no open file.
+    if (previous && session.extensions.getExtension(previous.id)) session.extensions.removeExtension(previous.id)
+    const swapped = await swapIn(staging, folder)
+
+    if (!swapped) {
+      await rm(staging, { recursive: true, force: true }).catch(() => undefined)
+
+      if (previous?.enabled) await load(previous)
+
+      return failed
+    }
+
+    const result = await add(folder, source, force)
+
+    if (result.type === "installed" || (result.type === "unsupported" && !swapped.backup)) {
+      if (swapped.backup) void rm(swapped.backup, { recursive: true, force: true }).catch(() => undefined)
+
+      return result
+    }
+
+    // The new copy did not load: it goes, and the previous one, if any, comes back as it was.
+    await rm(folder, { recursive: true, force: true }).catch(() => undefined)
+
+    if (swapped.backup) await rename(swapped.backup, folder).catch(() => undefined)
+
+    if (previous?.enabled) await load(previous)
+    await refresh()
+
+    return result
   }
 
   const importCookies = async (read: CookieRead): Promise<ImportResult> => {
@@ -349,36 +402,34 @@ export async function createBrowserProfile(input: {
         const found = folder ? (await profileExtensions(folder)).find((item) => item.id === request.id) : undefined
 
         if (!found) return { type: "failed", reason: "manifest" }
-        // A copy, so the other browser updating or removing it leaves this one working.
-        const target = path.join(directory, request.id)
-        await rm(target, { recursive: true, force: true })
-        await mkdir(directory, { recursive: true })
-        await cp(found.directory, target, { recursive: true, filter: (item) => path.basename(item) !== "_metadata" })
 
-        return add(target, "browser", request.force)
+        // A copy, so the other browser updating or removing it leaves this one working. Links are left out, so the
+        // copy holds only the package's own files.
+        return replace(path.join(directory, request.id), "browser", request.force, (staging) =>
+          cp(found.directory, staging, {
+            recursive: true,
+            filter: async (item) =>
+              path.basename(item) !== "_metadata" && !(await lstat(item)).isSymbolicLink(),
+          }).then(() => true),
+        )
       }
 
       const target = storeTarget(request.url)
+      const crx = target
+        ? await download(session, storeDownloadURL(target, process.versions.chrome ?? "140.0.0.0"))
+        : undefined
+      const parsed = crx ? parseCrx(crx) : undefined
 
-      if (!target) return { type: "failed", reason: "download" }
+      // The developer's key names the package: one that names another extension is not the one the user asked for.
+      if (!target || !parsed || (parsed.key && extensionID(parsed.key) !== target.id))
+        return { type: "failed", reason: "download" }
+      const key = parsed.key
 
-      const response = await fetch(storeDownloadURL(target, process.versions.chrome ?? "140.0.0.0")).catch(
-        () => undefined,
-      )
+      return replace(path.join(directory, target.id), "store", request.force, async (staging) => {
+        await unzip(parsed.zip, staging)
 
-      if (!response?.ok) return { type: "failed", reason: "download" }
-      const crx = parseCrxSafely(new Uint8Array(await response.arrayBuffer()))
-
-      if (!crx) return { type: "failed", reason: "download" }
-      // Named by the id the package's key gives, which is the id Electron derives once `key` is in the manifest.
-      const folder = path.join(directory, crx.key ? extensionID(crx.key) : target.id)
-      await rm(folder, { recursive: true, force: true })
-      await mkdir(folder, { recursive: true })
-      await unzip(crx.zip, folder)
-
-      if (crx.key) await pinKey(folder, crx.key)
-
-      return add(folder, "store", request.force)
+        return !key || pinKey(staging, key)
+      })
     },
     async remove(id: string) {
       const record = stored.value.find((item) => item.id === id)
@@ -507,10 +558,4 @@ async function cookiesPersist(session: Session) {
   return read.length === 0 || read.some((count) => count > 0)
 }
 
-function parseCrxSafely(data: Uint8Array) {
-  try {
-    return parseCrx(data)
-  } catch {
-    return undefined
-  }
-}
+
