@@ -704,6 +704,18 @@ impl abi::Host for Scoped<'_> {
         self.defer(move |host| host.edit_composer(edit));
     }
 
+    fn checkpoint(&self) -> Option<u64> {
+        self.scope.call.borrow().as_ref().map(|call| mark(call.effects.len(), call.undo.0.len()))
+    }
+
+    fn rollback(&self, at: u64) {
+        let (effects, writes) = marked(at);
+        if let Some(call) = &mut *self.scope.call.borrow_mut() {
+            call.effects.truncate(effects);
+            call.undo.restore_after(self.host, writes);
+        }
+    }
+
     fn declare_storage_key(&self, key: &str) {
         let mut keys = self.scope.keys.borrow_mut();
         if !keys.iter().any(|known| known == key) {
@@ -756,6 +768,26 @@ impl Undo {
     pub(crate) fn restore(self, host: &dyn Host) {
         self.0.into_iter().rev().for_each(|(key, json)| host.storage_restore(&key, json.as_deref()));
     }
+
+    /// How many writes it holds.
+    pub(crate) fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Puts back the writes after the first `kept`, the last first, and forgets them.
+    pub(crate) fn restore_after(&mut self, host: &dyn Host, kept: usize) {
+        Undo(self.0.split_off(kept.min(self.0.len()))).restore(host);
+    }
+}
+
+/// A mark of a call's effects and storage writes so far, for [`abi::Host::rollback`].
+pub(crate) fn mark(effects: usize, writes: usize) -> u64 {
+    ((effects as u64) << 32) | writes as u64 & 0xffff_ffff
+}
+
+/// The effects and storage writes a mark of [`mark`] keeps.
+pub(crate) fn marked(mark: u64) -> (usize, usize) {
+    ((mark >> 32) as usize, (mark & 0xffff_ffff) as usize)
 }
 
 /// Fails plugin `id` with `error` after a call of it panicked: it is not called again, its commands leave the keymap
