@@ -123,16 +123,7 @@ V1 groups permission effects by tool. V2 uses one ordered `permissions` array, m
 Permission actions also changed: `bash` is now `shell`, `task` is now `subagent`, and `write` and `patch` are now `edit`.
 See [Permissions](/permissions) for the ordered V2 rule format.
 
-Todos are off by default in V2. To turn them on, use the experimental flag. It may change or be removed in a future
-release; see [Experimental](/config#experimental).
-
-```jsonc
-{
-  "experimental": {
-    "todo": true,
-  },
-}
-```
+V2 no longer includes the built-in todo tool.
 
 <Callout type="warning">
   V1 asks before accessing paths outside the project. V2 does not: `external_directory` is allowed by default. To keep

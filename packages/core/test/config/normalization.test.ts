@@ -566,7 +566,6 @@ describe("ConfigNormalize", () => {
         policies: [{ action: "provider.use", resource: "native", effect: "deny" }],
         experimental: {
           portable_shell_scanner: true,
-          todo: true,
           background_compaction: true,
           media_blob: true,
           part_rows: true,
@@ -579,7 +578,6 @@ describe("ConfigNormalize", () => {
     ).toMatchObject({
       experimental: {
         portable_shell_scanner: true,
-        todo: true,
         background_compaction: true,
         media_blob: true,
         part_rows: true,
@@ -617,11 +615,17 @@ describe("ConfigNormalize", () => {
   })
 
   test("normalizes every registered flag as a boolean", () => {
-    const result = normalized({ experimental: { todo: true, media_blob: false, schedules: "yes" } })
-    expect(result.encoded.experimental).toEqual({ todo: true, media_blob: false })
+    const result = normalized({ experimental: { artifacts: true, media_blob: false, schedules: "yes" } })
+    expect(result.encoded.experimental).toEqual({ artifacts: true, media_blob: false })
     expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
       ["invalid", ["experimental", "schedules"]],
     ])
+  })
+
+  test("ignores the retired todo flag without diagnostics", () => {
+    const result = normalized({ experimental: { todo: true, schedules: false } })
+    expect(result.encoded.experimental).toEqual({ schedules: false })
+    expect(result.diagnostics).toEqual([])
   })
 
   test("accepts deprecated codemode_vm and ignores retired codemodeVm without diagnostics", () => {

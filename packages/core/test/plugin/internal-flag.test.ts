@@ -10,7 +10,6 @@ import { Plugin } from "@opencode/core/plugin"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Tool } from "@opencode/core/tool"
-import { TodoTool } from "@opencode/core/tool/plugin/todo"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { Npm } from "@opencode/util/npm"
@@ -20,7 +19,6 @@ import { tempGlobalLayer } from "../fixture/global"
 import { offlineModels } from "../fixture/models"
 import { tmpdirScoped } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
-import { toolDefinitions } from "../lib/tool"
 
 const unexpected = (pkg: string) =>
   Effect.fail(new Npm.InstallFailedError({ add: [pkg], dir: "", cause: new Error(`Unexpected Npm call: ${pkg}`) }))
@@ -77,14 +75,17 @@ describe("PluginInternal flags", () => {
       const directory = yield* tmpdirScoped()
       const locations = yield* LocationServiceMap.Service
       const names = yield* Effect.gen(function* () {
-        yield* (yield* Plugin.Service).awaitActivation
-        return (yield* toolDefinitions(yield* Tool.Service)).map((definition) => definition.name)
+        const plugins = yield* Plugin.Service
+        const tools = yield* Tool.Service
+        yield* plugins.awaitActivation
+        return (yield* tools.list()).map((tool) => tool.name)
       }).pipe(
         Effect.scoped,
         Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
       )
 
-      expect(names).toContain(TodoTool.name)
+      expect(names).toContain("schedule_list")
+      expect(names).not.toContain("todowrite")
     }),
   )
 })

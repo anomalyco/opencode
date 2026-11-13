@@ -472,15 +472,7 @@ export function ActiveSessionComposerRegion(props: {
   // Like the old dock: the plan shows while the turn runs and still has work left, so stale todos never linger.
 
   const todosVisible = () =>
-    todoEnabled() && props.session.data.working() && todos().length > 0 && !todos().every(todoFinished)
-  // Matches the server: the highest-priority document that sets `experimental` decides. Migrated V1 sessions keep their
-  // old `todowrite` calls, so without this check their last plan would come back.
-
-  const todoEnabled = () =>
-    data.location.config
-      .list({ directory: location().directory })
-      ?.flatMap((entry) => (entry.type === "document" && entry.info.experimental ? [entry.info.experimental] : []))
-      .at(-1)?.todo === true
+    props.session.data.working() && todos().length > 0 && !todos().every(todoFinished)
 
   const stop = (item: SessionActivityItem) => {
     const request =

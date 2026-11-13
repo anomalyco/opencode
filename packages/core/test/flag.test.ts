@@ -11,7 +11,7 @@ import { testEffect } from "./lib/effect"
 
 const typeGuards = () => {
   // @ts-expect-error Flag.enabled requires Flag.Service in context
-  Flag.enabled("todo") satisfies Effect.Effect<boolean, never, never>
+  Flag.enabled("schedules") satisfies Effect.Effect<boolean, never, never>
   // @ts-expect-error Flag.all requires Flag.Service in context
   Flag.all satisfies Effect.Effect<Record<Flag.Key, Flag.State>, never, never>
   // @ts-expect-error A location node using App.Service must declare App.node in deps
@@ -32,7 +32,7 @@ describe("Flag.resolve", () => {
   test("turns flags on by default only in local and dev builds", () => {
     const table = ["local", "dev", "beta", "latest", "my-branch", "unknown"].map((channel) => [
       channel,
-      Flag.resolve({ entries: [], channel }).todo.enabled,
+      Flag.resolve({ entries: [], channel }).schedules.enabled,
     ])
     expect(Object.fromEntries(table)).toEqual({
       local: true,
@@ -49,10 +49,10 @@ describe("Flag.resolve", () => {
   })
 
   test("config overrides the default and OPENCODE_FLAGS overrides config", () => {
-    const entries = [document({ todo: true, schedules: false })]
-    const flags = Flag.resolve({ entries, channel: "dev", overrides: " media_blob , -todo,unknown_flag" })
+    const entries = [document({ mcp_events: true, schedules: false })]
+    const flags = Flag.resolve({ entries, channel: "dev", overrides: " media_blob , -mcp_events,unknown_flag" })
     expect(
-      [flags.todo, flags.schedules, flags.media_blob, flags.artifacts].map((flag) => [flag.enabled, flag.source]),
+      [flags.mcp_events, flags.schedules, flags.media_blob, flags.artifacts].map((flag) => [flag.enabled, flag.source]),
     ).toEqual([
       [false, "env"],
       [false, "config"],
@@ -63,10 +63,10 @@ describe("Flag.resolve", () => {
 
   test("reads experimental from the highest-priority document that sets it, as before", () => {
     const flags = Flag.resolve({
-      entries: [document({ todo: true }), document({ subagent_depth: 2 }), document()],
+      entries: [document({ schedules: true }), document({ subagent_depth: 2 }), document()],
       channel: "latest",
     })
-    expect([flags.todo.enabled, flags.todo.source]).toEqual([false, "default"])
+    expect([flags.schedules.enabled, flags.schedules.source]).toEqual([false, "default"])
   })
 
   test("OPENCODE_FLAGS=all turns every flag on, and a -key in the same list still wins", () => {
@@ -104,8 +104,8 @@ describe("Flag.resolve", () => {
   test("a global all_flags survives a project experimental block, and a project all_flags: false stops it", () => {
     const global = document({ all_flags: true })
     expect(
-      Flag.resolve({ entries: [global, document({ subagent_depth: 2, todo: false })], channel: "latest" }),
-    ).toEqual({ ...every({ enabled: true, source: "config" }), todo: { enabled: false, source: "config" } })
+      Flag.resolve({ entries: [global, document({ subagent_depth: 2, schedules: false })], channel: "latest" }),
+    ).toEqual({ ...every({ enabled: true, source: "config" }), schedules: { enabled: false, source: "config" } })
     expect(Flag.resolve({ entries: [global, document({ all_flags: false })], channel: "latest" })).toEqual(
       every({ enabled: false, source: "default" }),
     )
@@ -125,12 +125,12 @@ describe("Flag.enabled", () => {
       const config = yield* Config.Test
       expect(yield* Flag.enabled("artifacts")).toBe(true)
       expect(yield* Flag.enabled("schedules")).toBe(true)
-      expect(yield* Flag.enabled("todo")).toBe(false)
+      expect(yield* Flag.enabled("media_blob")).toBe(false)
       expect((yield* Flag.all).schedules).toEqual({ enabled: true, source: "env" })
 
-      yield* config.setEntries([document({ artifacts: false, todo: true })])
+      yield* config.setEntries([document({ artifacts: false, media_blob: true })])
       expect(yield* Flag.enabled("artifacts")).toBe(false)
-      expect(yield* Flag.enabled("todo")).toBe(true)
+      expect(yield* Flag.enabled("media_blob")).toBe(true)
     }),
   )
 })

@@ -16656,9 +16656,6 @@
               "all_flags": {
                 "type": "boolean"
               },
-              "todo": {
-                "type": "boolean"
-              },
               "background_compaction": {
                 "type": "boolean"
               },
