@@ -1,6 +1,6 @@
 import { define } from "@opencode/plugin/effect/plugin"
 import type { Entry } from "@opencode/schema/config"
-import { Duration, Effect, Option, Schedule, type Schema, Semaphore, Stream } from "effect"
+import { Duration, Effect, FiberSet, Option, Schedule, type Schema, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import photonWasm from "#photon-wasm"
 import { Config } from "../../config.js"
@@ -156,7 +156,9 @@ export function createLocalProviderPlugin<Discovered>(input: {
           }),
         )
         yield* attempt.pipe(Effect.repeat(Schedule.spaced(interval)), Effect.forkScoped)
-        yield* ProviderRefresh.onSwitch(input.providerID, attempt)
+        // Event handlers start discovery without waiting on it, so a slow endpoint doesn't hold up the next event.
+        const background = yield* FiberSet.make()
+        yield* ProviderRefresh.onSwitch(input.providerID, FiberSet.run(background, attempt))
         const reload = Effect.fn("LocalProviderPlugin.reload")(function* () {
           const next = configured(yield* config.entries(), input.providerID, defaultOrigin, suffix)
           if (
@@ -172,7 +174,7 @@ export function createLocalProviderPlugin<Discovered>(input: {
           loaded.failing = false
           yield* ctx.integration.reload()
           yield* ctx.provider.reload()
-          yield* attempt
+          yield* FiberSet.run(background, attempt)
         })
         yield* ctx.event
           .subscribe({ types: ["config.updated"] })
