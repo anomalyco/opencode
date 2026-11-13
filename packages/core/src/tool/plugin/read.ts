@@ -53,6 +53,8 @@ export const Plugin = {
           output: Output,
           execute: (input, context) => {
             return Effect.gen(function* () {
+              if (input.limit === 0)
+                return yield* new ToolFailure({ message: "Limit must be a positive integer" })
               if (Skill.isUri(input.path)) {
                 const parsed = parseSkillUri(input.path)
                 if (!parsed) return yield* new ToolFailure({ message: `File not found: ${input.path}` })
