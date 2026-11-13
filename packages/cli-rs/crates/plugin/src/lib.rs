@@ -836,8 +836,9 @@ pub(crate) fn defer(host: &Weak<dyn Host>, effect: impl FnOnce(&dyn Host) + 'sta
 }
 
 /// Runs the plugins' waiting effects now, in order, with those they queue in turn. The host calls it as it routes a
-/// message of its own, outside every plugin callback and borrow, so a message never overtakes what a plugin asked
-/// for while handling the one before it (an OpenTUI batch of messages runs before its deferred work).
+/// message that runs plugin code or navigates (a store signal, a plugin's wake), outside every plugin callback and
+/// borrow, so such a message never overtakes what a plugin asked for while handling the one before it (an OpenTUI
+/// batch of messages runs before its deferred work).
 pub fn flush() {
     if FLUSHING.with(|flushing| flushing.replace(true)) {
         return;
