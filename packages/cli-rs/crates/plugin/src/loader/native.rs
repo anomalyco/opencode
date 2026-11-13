@@ -270,6 +270,7 @@ enum Effect {
     Fetch(abi::RequestId, abi::Fetch),
     Dialog(abi::Dialog),
     Copy(String, Option<abi::Action>),
+    Composer(abi::ComposerEdit),
 }
 
 /// One plugin instance; dropping it destroys the instance in the plugin.
@@ -553,6 +554,8 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
             let open = ctx.host.upgrade().is_some_and(|host| host.dialog_open(&ctx.id, &key));
             return Ok(serde_json::Value::Bool(open));
         }
+        HostRequest::Composer => return read(ctx, |read| serde_json::to_value(read.composer())),
+        HostRequest::ComposerEdit { edit } => ctx.effects.push(Effect::Composer(edit)),
     }
     Ok(serde_json::Value::Null)
 }
@@ -705,6 +708,7 @@ fn apply(host: &Weak<dyn Host>, id: String, guest: Weak<Guest>, generation: Opti
                     }
                 }
                 Effect::Copy(text, then) => crate::copy(host, &text, then),
+                Effect::Composer(edit) => host.edit_composer(edit),
             }
         }
     });

@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use opencode_api::generated::{
     IntegrationInfo, LocationQueryInput, McpServer, ModelInfo, ModelRef, PluginInfo, PluginListInput, PluginSource,
-    PluginState, ProviderID, ProviderInfo, UsageLimitsInfo, V2Event, VcsInfo,
+    PluginState, ProviderID, ProviderInfo, SessionInboxDelivery, UsageLimitsInfo, V2Event, VcsInfo,
 };
 use opencode_local::cli_config::AttentionSoundName;
 use opencode_local::serial::Serial;
@@ -233,6 +233,18 @@ impl Host for Tui {
             self.toasts.error("Failed to copy to clipboard");
         }
         copied
+    }
+
+    fn edit_composer(&self, edit: abi::ComposerEdit) {
+        let prompt = self.prompt.current.borrow().upgrade();
+        let Some(prompt) = prompt else { return };
+        match edit {
+            abi::ComposerEdit::Set { text } => prompt.set_text(&text),
+            abi::ComposerEdit::Insert { text } => drop(prompt.textarea.insert(&text)),
+            abi::ComposerEdit::Submit => {
+                crate::prompt::submit::submit(&prompt, SessionInboxDelivery::Steer);
+            }
+        }
     }
 
     fn markdown(&self, text: &str) -> AnyWidget {
@@ -572,6 +584,32 @@ impl abi::Read for Reader<'_> {
     fn shortcut(&self, name: &str) -> Option<String> {
         self.tui.keymap.shortcut(name)
     }
+
+    fn composer(&self) -> Option<abi::Composer> {
+        let prompt = self.tui.prompt.current.borrow().upgrade()?;
+        let text = prompt.textarea.text();
+        let cursor = byte_at(&text, prompt.textarea.cursor_offset());
+        Some(abi::Composer { text, cursor, focused: prompt.focused() })
+    }
+}
+
+/// The byte of `text` at a textarea's document `offset`: display columns, and one for each line break.
+fn byte_at(text: &str, offset: u32) -> usize {
+    use unicode_width::UnicodeWidthStr;
+    let (mut left, mut start) = (offset as usize, 0);
+    for line in text.split('\n') {
+        let width = line.width();
+        if left <= width {
+            // The last character boundary that is not past the offset, so a mark that adds no column goes with its
+            // character.
+            let bounds: Vec<usize> = line.char_indices().map(|(index, _)| index).chain([line.len()]).collect();
+            let found = bounds.partition_point(|bound| line[..*bound].width() <= left);
+            return start + bounds[found - 1];
+        }
+        left -= width + 1;
+        start += line.len() + 1;
+    }
+    text.len()
 }
 
 fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
@@ -854,6 +892,28 @@ pub fn markdown(tui: &Tui) -> opentui::widget::Markdown {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Expected: a textarea's document offset (display columns, one per line break) maps to the byte of the text it is
+    // before: wide characters take two columns, a combining mark none, and an offset past the end is the end.
+    #[test]
+    fn a_document_offset_maps_to_a_byte_of_the_text() {
+        let rows: [(&str, u32, usize); 10] = [
+            ("", 0, 0),
+            ("hello", 3, 3),
+            ("hello", 5, 5),
+            ("héllo", 2, 3),
+            ("日本", 2, 3),
+            ("日本", 4, 6),
+            ("e\u{301}x", 1, 3),
+            ("ab\ncd", 3, 3),
+            ("ab\ncd", 4, 4),
+            ("ab\n日x", 6, 7),
+        ];
+        for (text, offset, byte) in rows {
+            assert_eq!(byte_at(text, offset), byte, "{text:?} at {offset}");
+        }
+        assert_eq!(byte_at("ab", 9), 2);
+    }
 
     // Expected: a watched directory that is removed and made again gets a fresh watch, and a directory that left
     // the list loses its watch.
