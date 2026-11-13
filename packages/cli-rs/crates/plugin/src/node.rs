@@ -119,7 +119,8 @@ impl Mount {
                 layout.grow = false;
                 layout.margin = None;
                 // The root takes the heights too, so a percent is of the slot's parent once; the node fills the root's
-                // height, and with a maximum it may shrink below its content to the root's.
+                // height, and with a maximum it shrinks to the root's, also when it asked not to shrink. Yoga lets an item
+                // shrink below its content.
                 let (sized, capped) =
                     (layout.height.is_some() || layout.min_height.is_some(), layout.max_height.is_some());
                 (layout.height, layout.min_height, layout.max_height) = (None, None, None);
@@ -128,7 +129,6 @@ impl Mount {
                 }
                 if capped {
                     layout.shrink = Some(true);
-                    layout.min_height = Some(abi::Width::Cells(0));
                 }
             }
             let owner = self.owner.clone();
