@@ -251,6 +251,8 @@ struct Ctx {
     undo: Undo,
     /// What it asks for is dropped.
     quiet: bool,
+    /// The running call is a render, which reads and asks for no effect.
+    read_only: bool,
 }
 
 /// What [`HostApi::ctx`] points to: the context of the UI thread's callbacks, and what `wake` reads from any thread.
@@ -313,6 +315,7 @@ impl Instance {
             effects: Vec::new(),
             undo: Undo::default(),
             quiet,
+            read_only: false,
         });
         let shared = Box::new(Shared { ctx, wake, ui: std::thread::current().id() });
         let api = Box::new(HostApi {
@@ -495,6 +498,9 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
             .then(|| format!("plugin.{}.{key}", ctx.id))
             .ok_or_else(|| format!("storage key {key} was not declared"))
     };
+    if ctx.read_only && effect(&request) {
+        return Err("a render reads the host and asks for no effect".to_owned());
+    }
     match request {
         HostRequest::Log { level, message } => {
             let level = match level {
@@ -592,6 +598,24 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
     Ok(serde_json::Value::Null)
 }
 
+/// Whether `request` asks for an effect, which a render may not.
+fn effect(request: &HostRequest) -> bool {
+    matches!(
+        request,
+        HostRequest::Toast { .. }
+            | HostRequest::StorageSet { .. }
+            | HostRequest::StorageMerge { .. }
+            | HostRequest::OpenRoute { .. }
+            | HostRequest::Dispatch { .. }
+            | HostRequest::Attention(_)
+            | HostRequest::Navigate { .. }
+            | HostRequest::Fetch(_)
+            | HostRequest::Dialog { .. }
+            | HostRequest::Copy { .. }
+            | HostRequest::ComposerEdit { .. }
+    )
+}
+
 /// Answers a read through the host's [`Host::read`], as a built-in reads in process.
 fn read(
     ctx: &Ctx,
@@ -655,21 +679,37 @@ impl Guest {
                 log::warn!("plugin {}: {export} called while the plugin runs", self.id);
                 return None;
             }
+            // The renders of 1.4 on, whose SDK hands them only reads; a 1.3 render is left as it was.
+            let render =
+                matches!(request, Request::RenderFence(_) | Request::Render { .. } | Request::RenderRoute { .. });
+            instance.shared.ctx.borrow_mut().read_only = render;
             let result = instance.call(request);
+            instance.shared.ctx.borrow_mut().read_only = false;
             self.busy.set(false);
             result
         };
         let (effects, undo) = self.taken();
         let error = match result {
             Err(Some(error)) => format!("{export} {error}"),
-            result => {
+            // A call that returned a failure did return: its effects apply (rich plugins 4.14).
+            Err(None) => {
                 self.apply(effects);
-                return result.ok().and_then(|value| {
-                    serde_json::from_value(value)
-                        .inspect_err(|error| log::warn!("plugin {}: {export}: {error}", self.id))
-                        .ok()
-                });
+                return None;
             }
+            Ok(value) => match serde_json::from_value(value) {
+                Ok(typed) => {
+                    self.apply(effects);
+                    return Some(typed);
+                }
+                // A result the host refuses leaves no effect, and its storage writes go back.
+                Err(error) => {
+                    log::warn!("plugin {}: {export}: {error}", self.id);
+                    if let Some(host) = self.host.upgrade() {
+                        undo.restore(&*host);
+                    }
+                    return None;
+                }
+            },
         };
         if let Some(host) = self.host.upgrade() {
             undo.restore(&*host);
