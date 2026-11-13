@@ -41,10 +41,9 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
         palette: true,
         ..abi::Command::default()
     };
+    let flip = |side: &Cell<char>| side.set(if side.get() == 'A' { 'B' } else { 'A' });
     let flipped = side.clone();
-    setup.command(command("life.flip", "Life flip"), move |_, _| {
-        flipped.set(if flipped.get() == 'A' { 'B' } else { 'A' });
-    });
+    setup.command(command("life.flip", "Life flip"), move |_, _| flip(&flipped));
     setup.command(command("life.throw", "Life throw"), |_, _| panic!("life command throws"));
     setup.command(command("life.arm", "Life arm"), |_, _| ARMED.set(true));
     setup.command(command("life.dialog", "Life dialog"), |host, _| {
@@ -52,6 +51,33 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
         let action = abi::Action::Command { name: "life.prompted".to_owned(), input: None };
         host.dialog(abi::Dialog::Prompt { title: "Life prompt".to_owned(), placeholder: None, action });
     });
+    // TS's confirm and alert resolve a promise that flips the line; here they name a command that does. A build that
+    // replaced this one registers the same names, so an answer that reached it would flip its line.
+    let answer = |name: &str| abi::Action::Command { name: name.to_owned(), input: None };
+    setup.command(command("life.confirm", "Life confirm"), move |host, _| {
+        host.dialog(abi::Dialog::Confirm(abi::Confirm {
+            title: "Life asks".to_owned(),
+            message: "Flip the line?".to_owned(),
+            label: abi::ConfirmLabel::default(),
+            action: answer("life.answered"),
+        }));
+    });
+    setup.command(command("life.alert", "Life alert"), move |host, _| {
+        host.dialog(abi::Dialog::Alert(abi::Alert {
+            title: "Life says".to_owned(),
+            message: "The line flips as this closes.".to_owned(),
+            action: Some(answer("life.closed")),
+        }));
+    });
+    let hidden = |name: &str| abi::Command { name: name.to_owned(), ..abi::Command::default() };
+    let answered = side.clone();
+    setup.command(hidden("life.answered"), move |_, input| {
+        if input == Some("true") {
+            flip(&answered);
+        }
+    });
+    let closed = side.clone();
+    setup.command(hidden("life.closed"), move |_, _| flip(&closed));
     setup.slot(abi::Placement::append("home.footer"), move |_, _, _| {
         abi::Render::Show(abi::Node::text([abi::Span::new(format!("life plugin: {}", side.get()))]))
     });
@@ -113,10 +139,10 @@ impl Life {
                 self.settle();
                 self.harness.app.press("escape");
             }
-            "flip" | "throw" | "arm" | "dialog" => {
+            "flip" | "throw" | "arm" | "dialog" | "confirm" | "alert" => {
                 self.palette(&format!("Life {action}"), true);
             }
-            "escape" => self.harness.app.press("escape"),
+            "escape" | "enter" => self.harness.app.press(action),
             "reload" => {
                 self.builds.set(self.builds.get() + 1);
                 std::fs::write(&self.build, [self.builds.get()]).unwrap();
@@ -150,12 +176,13 @@ impl Life {
         self.settle();
     }
 
-    /// `line/palette/row/dialog`, as `parity/machines/plugins.json` writes them. While its prompt shows, the palette
+    /// `line/palette/row/dialog`, as `parity/machines/plugins.json` writes them. While its dialog shows, the palette
     /// and the manager would replace it, so the first three are not read.
     fn observe(&self) -> String {
         let screen = self.harness.app.text();
-        if screen.contains("Life prompt") {
-            return "?/?/?/open".to_owned();
+        let dialogs = [("Life prompt", "prompt"), ("Life asks", "confirm"), ("Life says", "alert")];
+        if let Some((_, dialog)) = dialogs.into_iter().find(|(title, _)| screen.contains(title)) {
+            return format!("?/?/?/{dialog}");
         }
         let line = ["A", "B"].into_iter().find(|side| screen.contains(&format!("life plugin: {side}"))).unwrap_or("-");
         let palette = if self.palette("Life flip", false) { "yes" } else { "no" };

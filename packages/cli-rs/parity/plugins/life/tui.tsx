@@ -1,6 +1,6 @@
 // The plugin of the life machine (parity/machines/plugins.json), TypeScript side: a line in home.footer that shows A
-// or B, and four palette commands. Life flip flips the line, Life throw throws, Life arm makes the next setup throw,
-// and Life dialog opens a prompt. The TS reader copies this file and rewrites `build` to reload it. Its Rust twin is
+// or B, and six palette commands. Life flip flips the line, Life throw throws, Life arm makes the next setup throw,
+// Life dialog opens a prompt, Life confirm asks whether to flip the line, and Life alert flips it once it closes. The TS reader copies this file and rewrites `build` to reload it. Its Rust twin is
 // `life` in crates/tui/tests/all/plugin_machines.rs; each is checked against the file, not against the other.
 import type { Context } from "../../../../plugin/src/tui/plugin"
 import { createSignal } from "solid-js"
@@ -17,6 +17,7 @@ export default {
     const run = context.options?.run
     if (armed.delete(run)) throw new Error("life setup armed to throw")
     const [side, setSide] = createSignal("A")
+    const flip = () => setSide(side() === "A" ? "B" : "A")
     context.keymap.layer(() => ({
       mode: "global",
       commands: [
@@ -24,9 +25,7 @@ export default {
           id: "life.flip",
           title: "Life flip",
           palette: true,
-          run: () => {
-            setSide(side() === "A" ? "B" : "A")
-          },
+          run: flip,
         },
         {
           id: "life.throw",
@@ -50,6 +49,24 @@ export default {
           palette: true,
           run: () => {
             void context.ui.dialog.prompt({ title: "Life prompt" })
+          },
+        },
+        {
+          id: "life.confirm",
+          title: "Life confirm",
+          palette: true,
+          run: () => {
+            void context.ui.dialog.confirm({ title: "Life asks", message: "Flip the line?" }).then((yes) => {
+              if (yes) flip()
+            })
+          },
+        },
+        {
+          id: "life.alert",
+          title: "Life alert",
+          palette: true,
+          run: () => {
+            void context.ui.dialog.alert({ title: "Life says", message: "The line flips as this closes." }).then(flip)
           },
         },
       ],
