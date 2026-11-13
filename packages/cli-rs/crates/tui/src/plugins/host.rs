@@ -357,7 +357,10 @@ impl Host for Tui {
     }
 
     fn read(&self, f: &mut dyn FnMut(&dyn abi::Read)) {
-        f(&Reader { tui: self, theme: OnceCell::new() });
+        // One store snapshot for every read within `f`, a whole plugin call, which reads again and again: the reads
+        // nest in this one, and a batch another thread applies meanwhile waits until the call returns. Every read is
+        // pure, so nothing writes the store inside it.
+        self.data.read(|_| f(&Reader { tui: self, theme: OnceCell::new() }));
     }
 
     fn watch(&self, push: Rc<dyn Fn(&abi::Changed)>) -> Option<Disposer> {
@@ -858,9 +861,10 @@ pub fn host(tui: &Rc<Tui>) -> Rc<dyn Host> {
 pub fn install(tui: &Rc<Tui>) {
     let _ = tui.plugins.tui.set(tui.weak());
     tui.plugins.activate(&host(tui));
-    // The plugins read the pending keys (`keymap.pending()`, `keymap.active()`).
-    let pending = tui.keymap.keymap().on_pending_sequence(bind!(tui, |tui, _| local_changed(&tui)));
-    tui.layers.borrow_mut().push(pending);
+    // The plugins read the keymap (`keymap.pending()`, `keymap.active()`, `keymap.commands()`): the pending keys, and
+    // the layers and focus that decide what a key reaches, as TS's keymap selectors follow its state.
+    let keymap = tui.keymap.keymap().on_state(bind!(tui, |tui| local_changed(&tui)));
+    tui.layers.borrow_mut().push(keymap);
     crate::features::events::subscribe(tui, ["plugin.updated", "server.connected"], |tui, event| {
         if matches!(event, V2Event::PluginUpdated(_) | V2Event::ServerConnected(_)) {
             sync_server_plugins(tui);

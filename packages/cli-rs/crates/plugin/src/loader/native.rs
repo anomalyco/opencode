@@ -751,7 +751,12 @@ impl Guest {
             let render =
                 matches!(request, Request::RenderFence(_) | Request::Render { .. } | Request::RenderRoute { .. });
             instance.shared.ctx.borrow_mut().read_only = render;
-            let result = instance.call(request);
+            // One store snapshot for the whole call, as in process: each read it asks for nests in this one.
+            let mut result = None;
+            if let Some(host) = self.host.upgrade() {
+                host.read(&mut |_| result = Some(instance.call(request)));
+            }
+            let result = result.unwrap_or_else(|| instance.call(request));
             instance.shared.ctx.borrow_mut().read_only = false;
             self.busy.set(false);
             result
