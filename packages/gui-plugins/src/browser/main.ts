@@ -138,6 +138,21 @@ const setup: Plugin.MainSetup = (ctx) => {
     browserExtensions: async (input) => (await profile()).browserExtensions(input.source, input.profile),
     install: async (input) => (await profile()).install(input),
     remove: async (input) => (await profile()).remove(input.id),
+    click: async (input, caller) => {
+      const win = ctx.windows.get(caller.window)
+
+      if (!win || win.isDestroyed()) return false
+      // The window lays out in CSS pixels; its content is in device-independent ones.
+      const zoom = win.webContents.getZoomFactor()
+      const anchor = input.anchor
+
+      return (await profile()).clickExtension(win, input.id, {
+        x: Math.round(anchor.x * zoom),
+        y: Math.round(anchor.y * zoom),
+        width: Math.round(anchor.width * zoom),
+        height: Math.round(anchor.height * zoom),
+      })
+    },
     enable: async (input) => (await profile()).enable(input.id, input.enabled),
   })
 

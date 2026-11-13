@@ -72,6 +72,20 @@ export const ProfileExtension = Schema.Struct({
   /** Why an enabled extension did not load. */
   error: Schema.optional(Schema.String),
   compatibility: ExtensionCompatibility,
+  /**
+   * Its toolbar button, for an extension that has one: what it set for the active tab of the last window. `icon`
+   * replaces the extension's own while set; `badge` is the short text over it, in `badgeColor` and `badgeTextColor`.
+   */
+  action: Schema.optional(
+    Schema.Struct({
+      title: Schema.optional(Schema.String),
+      icon: Schema.optional(Schema.String.check(Schema.isStartingWith("data:image/"))),
+      badge: Schema.optional(Schema.String),
+      badgeColor: Schema.optional(Schema.String),
+      badgeTextColor: Schema.optional(Schema.String),
+      enabled: Schema.Boolean,
+    }),
+  ),
 })
 
 export type ProfileExtension = typeof ProfileExtension.Type
@@ -185,6 +199,18 @@ export const BrowserProfile = Ipc.define({
       output: InstallResult,
     },
     remove: { input: Schema.Struct({ id: text(64) }) },
+    /**
+     * The user chose an extension in the pane's extensions menu, whose button sits at `anchor` in the window's
+     * content, in CSS pixels: its popup opens under it, or the extension hears the click. False when the extension
+     * has no toolbar button, so the window opens its options page instead.
+     */
+    click: {
+      input: Schema.Struct({
+        id: text(64),
+        anchor: Schema.Struct({ x: Schema.Number, y: Schema.Number, width: Schema.Number, height: Schema.Number }),
+      }),
+      output: Schema.Boolean,
+    },
     enable: { input: Schema.Struct({ id: text(64), enabled: Schema.Boolean }) },
   },
 })

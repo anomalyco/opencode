@@ -99,9 +99,11 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
 
   const apis = await createExtensionApis({
     session,
+    partition: PARTITION,
     directory,
     storage: input.storage,
     log: input.log,
+    changed: input.changed,
   })
 
   const load = async (record: StoredExtension) => {
@@ -195,7 +197,18 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
     extensionTabs: apis.tabs,
     /** Extensions loaded now, whose pages may open in a tab. */
     extensionIDs: () => session.extensions.getAllExtensions().map((extension) => extension.id),
-    extensions: () => stored.value.flatMap((record) => details.get(record.id) ?? []),
+    extensions: () =>
+      stored.value.flatMap((record) => {
+        const described = details.get(record.id)
+        const loaded = session.extensions.getExtension(record.id)
+        const action = loaded ? apis.action(loaded) : undefined
+
+        if (!described) return []
+
+        return action ? [{ ...described, action }] : [described]
+      }),
+    /** The user chose an extension in a window's extensions menu; see `ExtensionApis.click`. */
+    clickExtension: apis.click,
     /** The browsers to import from, the one used last first, each with its application's icon. */
     async sources() {
       const listed = await listSources()
