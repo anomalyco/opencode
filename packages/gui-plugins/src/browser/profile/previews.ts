@@ -2,6 +2,7 @@ import { net, type Session } from "electron"
 import { previewScheme } from "@opencode/gui-plugins/schemes"
 import { previewResource } from "../preview"
 import { workspaceFile } from "../workspace-file"
+import { previewRange } from "./range"
 
 export function createPreviews(session: Session, signal: AbortSignal) {
   signal.throwIfAborted()
@@ -28,15 +29,21 @@ export function createPreviews(session: Session, signal: AbortSignal) {
     const target = await workspaceFile(file, grant())
 
     if (!target || !grants.has(host)) return Response.error()
-    const range = request.headers.get("range")
-    const response = await net.fetch(target.href, { method: request.method, headers: range ? { range } : undefined })
-    const headers = new Headers(response.headers)
+    const slice = previewRange(request.headers.get("range"), target.size)
+    const response = slice.status === 416 ? undefined : await net.fetch(target.href, { method: request.method, headers: slice.range ? { range: slice.range } : undefined })
+    const headers = new Headers(response?.headers)
+    headers.set("Accept-Ranges", "bytes")
+    headers.set("Content-Length", String(slice.length))
+
+    if (slice.content) headers.set("Content-Range", slice.content)
     headers.set("Cross-Origin-Resource-Policy", "same-origin")
     headers.set("Content-Security-Policy", "frame-ancestors 'self'")
     headers.set("Referrer-Policy", "no-referrer")
     headers.set("Cache-Control", "no-store")
 
-    return new Response(response.body, { status: response.status, headers })
+    if (request.method === "HEAD") await response?.body?.cancel()
+
+    return new Response(request.method === "HEAD" ? null : response?.body, { status: slice.status, headers })
   }
 
   // File loaders reject for disappearing or unreadable files. Refuse the request without throwing into Electron.
