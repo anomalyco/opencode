@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Chưa cấu hình tiện ích nào",
   skills: "Kỹ năng",
   "skills.empty": "Chưa cấu hình kỹ năng nào",
-  lsp: "LSP",
-  "lsp.empty": "Chưa cấu hình máy chủ LSP nào",
   failed: "Thất bại",
   retry: "Thử lại",
   connecting: "Đang kết nối…",

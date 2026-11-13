@@ -1,7 +1,6 @@
-import { onCleanup } from "solid-js"
+import { onCleanup, untrack } from "solid-js"
 import { Predicate } from "effect"
-
-type FocusLock = { pending: boolean; release?: VoidFunction }
+import { INITIAL_FOCUS_LOCK_STATE, transitionFocusLock, type FocusLockEvent } from "./focus-lock-machine"
 
 const FOCUS_LOCK = "opencode:notification-focus"
 
@@ -14,43 +13,52 @@ export function createNotificationCoordinator() {
 
   const claimed = new Set<string>()
 
-  const focus: FocusLock = { pending: false }
+  if (typeof window !== "undefined" && locks) {
+    let focusState = INITIAL_FOCUS_LOCK_STATE
+    const releases = new Map<number, VoidFunction>()
 
-  const updateFocus = () => {
-    if (typeof document === "undefined" || !document.hasFocus()) {
-      focus.release?.()
+    const dispatch = (event: FocusLockEvent) => {
+      const next = transitionFocusLock(focusState, event)
+      focusState = next.state
+      next.effects.forEach((effect) => {
+        const attempt = effect.attempt
 
-      return
+        if (effect.type === "lock.release") {
+          releases.get(attempt)?.()
+          releases.delete(attempt)
+
+          return
+        }
+
+        // A shared hold: every focused window keeps it, and an alert's exclusive request fails while any one does.
+        locks
+          .request(
+            FOCUS_LOCK,
+            { mode: "shared" },
+            () =>
+              new Promise<void>((resolve) => {
+                releases.set(attempt, resolve)
+                dispatch({ type: "lock.acquired", attempt })
+              }),
+          )
+          .catch(() => {
+            releases.delete(attempt)
+            dispatch({ type: "lock.failed", attempt })
+          })
+      })
     }
 
-    if (!locks || focus.pending || focus.release) return
+    const syncFocus = () => dispatch({ type: "focus.changed", focused: document.hasFocus() })
 
-    focus.pending = true
-    void locks
-      .request(FOCUS_LOCK, { mode: "shared" }, async () => {
-        focus.pending = false
-
-        if (!document.hasFocus()) return
-        await new Promise<void>((resolve) => {
-          focus.release = resolve
-        })
-        focus.release = undefined
-      })
-      .catch(() => {
-        focus.pending = false
-      })
-  }
-
-  if (typeof window !== "undefined") {
-    window.addEventListener("focus", updateFocus)
-    window.addEventListener("blur", updateFocus)
-    document.addEventListener("visibilitychange", updateFocus)
-    updateFocus()
+    window.addEventListener("focus", syncFocus)
+    window.addEventListener("blur", syncFocus)
+    document.addEventListener("visibilitychange", syncFocus)
+    syncFocus()
     onCleanup(() => {
-      window.removeEventListener("focus", updateFocus)
-      window.removeEventListener("blur", updateFocus)
-      document.removeEventListener("visibilitychange", updateFocus)
-      focus.release?.()
+      window.removeEventListener("focus", syncFocus)
+      window.removeEventListener("blur", syncFocus)
+      document.removeEventListener("visibilitychange", syncFocus)
+      dispatch({ type: "disposed" })
     })
   }
 
@@ -67,6 +75,44 @@ export function createNotificationCoordinator() {
   }
 
   return {
+    tip(show: () => () => void) {
+      const lifetime = new AbortController()
+
+      const closed = new Promise<void>((resolve) =>
+        lifetime.signal.addEventListener("abort", () => resolve(), { once: true }),
+      )
+
+      let hide: VoidFunction | undefined
+
+      const open = () => {
+        if (hide || lifetime.signal.aborted || !document.hasFocus() || document.hidden) return
+        hide = untrack(show)
+
+        return closed
+      }
+
+      const focus = () => {
+        if (!locks) return void open()
+        void locks
+          .request("opencode:tip", { ifAvailable: true }, (lock) => (lock ? open() : undefined))
+          .catch(() => undefined)
+      }
+
+      // Plain HTTP has no Web Locks. Only its focused window keeps a toast mounted.
+      const blur = () => {
+        if (locks) return
+        hide?.()
+        hide = undefined
+      }
+
+      window.addEventListener("focus", focus, { signal: lifetime.signal })
+      window.addEventListener("blur", blur, { signal: lifetime.signal })
+      onCleanup(() => {
+        lifetime.abort()
+        hide?.()
+      })
+      focus()
+    },
     sound<T>(eventID: string, run: () => Promise<T> | void) {
       return once("sound", eventID, run)
     },

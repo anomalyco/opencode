@@ -345,16 +345,6 @@
                 }
               }
             }
-          },
-          "503": {
-            "description": "ServiceUnavailableError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
-                }
-              }
-            }
           }
         },
         "description": "Retrieve currently registered agents.",
@@ -1085,7 +1075,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Set parentID to create a subagent session at the parent's location; set agent to choose its agent (otherwise it uses the default) and start it with session.prompt. After each completed round, the child sends a `<subagent>` report to the parent's inbox and wakes the parent unless it has a staged revert."
                   },
                   "title": {
                     "anyOf": [
@@ -3800,7 +3791,7 @@
             }
           }
         },
-        "description": "Generate transient text from the current session context without mutating session history.",
+        "description": "Generate transient text from the current session context without mutating session history. Its tokens and cost count toward the session's totals.",
         "summary": "Generate text from session context",
         "requestBody": {
           "content": {
@@ -6879,7 +6870,7 @@
             }
           }
         },
-        "description": "Complete a code-based OAuth attempt and store the resulting credential.",
+        "description": "Complete a code-based OAuth attempt and store the resulting credential. For an automatic attempt with `paste`, `code` is the redirect URL copied from the browser, and the result arrives through the attempt status.",
         "summary": "Complete OAuth connection",
         "requestBody": {
           "content": {
@@ -10128,6 +10119,7 @@
                     "session.shell.started",
                     "session.shell.ended",
                     "session.step.started",
+                    "session.step.first-token",
                     "session.step.streamed",
                     "session.step.ended",
                     "session.step.failed",
@@ -10188,7 +10180,8 @@
                     "installation.update-available",
                     "vcs.branch.updated",
                     "mcp.status.changed",
-                    "mcp.resources.changed"
+                    "mcp.resources.changed",
+                    "experimental.mcp.event"
                   ]
                 },
                 {
@@ -10237,6 +10230,7 @@
                           "session.shell.started",
                           "session.shell.ended",
                           "session.step.started",
+                          "session.step.first-token",
                           "session.step.streamed",
                           "session.step.ended",
                           "session.step.failed",
@@ -10297,7 +10291,8 @@
                           "installation.update-available",
                           "vcs.branch.updated",
                           "mcp.status.changed",
-                          "mcp.resources.changed"
+                          "mcp.resources.changed",
+                          "experimental.mcp.event"
                         ]
                       },
                       {
@@ -13367,6 +13362,122 @@
         "summary": "View local artifact"
       }
     },
+    "/api/experimental/job": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.job.list",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Session.ID"
+                }
+              ],
+              "description": "Filter to background jobs owned by this session."
+            },
+            "required": false
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Job.Kind"
+                }
+              ],
+              "description": "Filter by background job kind (shell, subagent, or image)."
+            },
+            "required": false
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Job.Status"
+                }
+              ],
+              "description": "Filter by job status (running, completed, error, or cancelled)."
+            },
+            "required": false
+          },
+          {
+            "name": "descendants",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                }
+              ],
+              "description": "When sessionID is set, also include background jobs owned by child and nested subagent sessions."
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Job.Info"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List active and unconsumed background jobs, optionally filtered by owning session, descendants, or kind. Experimental: may change without compatibility guarantees.",
+        "summary": "List background jobs"
+      }
+    },
     "/api/shell": {
       "get": {
         "tags": ["shell"],
@@ -16264,7 +16375,8 @@
                     "integration.use",
                     "mcp.use",
                     "skill.use",
-                    "plugin.use"
+                    "plugin.use",
+                    "websearch.use"
                   ]
                 },
                 "resource": {
@@ -16542,6 +16654,12 @@
               "portable_shell_scanner": {
                 "type": "boolean"
               },
+              "codemode_vm": {
+                "type": "boolean"
+              },
+              "all_flags": {
+                "type": "boolean"
+              },
               "todo": {
                 "type": "boolean"
               },
@@ -16549,6 +16667,21 @@
                 "type": "boolean"
               },
               "media_blob": {
+                "type": "boolean"
+              },
+              "schedules": {
+                "type": "boolean"
+              },
+              "artifacts": {
+                "type": "boolean"
+              },
+              "console_watches": {
+                "type": "boolean"
+              },
+              "mcp_events": {
+                "type": "boolean"
+              },
+              "part_rows": {
                 "type": "boolean"
               },
               "image_generate": {
@@ -16591,12 +16724,6 @@
                   }
                 ]
               },
-              "schedules": {
-                "type": "boolean"
-              },
-              "artifacts": {
-                "type": "boolean"
-              },
               "subagent_depth": {
                 "type": "integer",
                 "minimum": 0,
@@ -16627,7 +16754,8 @@
                         "integration.use",
                         "mcp.use",
                         "skill.use",
-                        "plugin.use"
+                        "plugin.use",
+                        "websearch.use"
                       ]
                     },
                     "resource": {
@@ -16684,6 +16812,12 @@
         "properties": {
           "tools": {
             "type": "boolean"
+          },
+          "freeform": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tool.FreeformFormat"
+            }
           },
           "input": {
             "type": "array",
@@ -17032,6 +17166,9 @@
           },
           "encoding": {
             "$ref": "#/components/schemas/Provider.Encoding"
+          },
+          "tls": {
+            "$ref": "#/components/schemas/Provider.Tls"
           }
         },
         "allOf": [
@@ -18923,6 +19060,18 @@
           },
           "instructions": {
             "type": "string"
+          },
+          "criteria": {
+            "type": "object",
+            "properties": {
+              "true": {
+                "type": "string"
+              },
+              "false": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
           }
         },
         "required": ["type", "name", "instructions"],
@@ -19145,6 +19294,10 @@
           "mode": {
             "type": "string",
             "enum": ["auto", "code"]
+          },
+          "paste": {
+            "type": "boolean",
+            "enum": [true]
           },
           "time": {
             "type": "object",
@@ -19813,6 +19966,140 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
+      "Job.Image": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["image"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Job.Status"
+          },
+          "title": {
+            "type": "string"
+          },
+          "time": {
+            "$ref": "#/components/schemas/Job.Time"
+          },
+          "path": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "id", "sessionID", "status", "time", "path", "model"],
+        "additionalProperties": false
+      },
+      "Job.Info": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Job.Shell"
+          },
+          {
+            "$ref": "#/components/schemas/Job.Subagent"
+          },
+          {
+            "$ref": "#/components/schemas/Job.Image"
+          }
+        ]
+      },
+      "Job.Kind": {
+        "type": "string",
+        "enum": ["shell", "subagent", "image"]
+      },
+      "Job.Shell": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["shell"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Job.Status"
+          },
+          "title": {
+            "type": "string"
+          },
+          "time": {
+            "$ref": "#/components/schemas/Job.Time"
+          },
+          "shellID": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "id", "sessionID", "status", "time", "shellID", "command"],
+        "additionalProperties": false
+      },
+      "Job.Status": {
+        "type": "string",
+        "enum": ["running", "completed", "error", "cancelled"]
+      },
+      "Job.Subagent": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["subagent"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Job.Status"
+          },
+          "title": {
+            "type": "string"
+          },
+          "time": {
+            "$ref": "#/components/schemas/Job.Time"
+          },
+          "childSessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "id", "sessionID", "status", "time", "childSessionID", "agent", "description"],
+        "additionalProperties": false
+      },
+      "Job.Time": {
+        "type": "object",
+        "properties": {
+          "started": {
+            "type": "number",
+            "description": "Start time in milliseconds since the Unix epoch"
+          },
+          "completed": {
+            "type": "number"
+          }
+        },
+        "required": ["started"],
+        "additionalProperties": false
+      },
       "Location.PublicInfo": {
         "type": "object",
         "properties": {
@@ -19930,6 +20217,9 @@
           },
           "protocol": {
             "$ref": "#/components/schemas/Mcp.Protocol"
+          },
+          "pool": {
+            "type": "boolean"
           }
         },
         "required": ["type", "command"],
@@ -20022,6 +20312,9 @@
           },
           "protocol": {
             "$ref": "#/components/schemas/Mcp.Protocol"
+          },
+          "pool": {
+            "type": "boolean"
           }
         },
         "required": ["type", "url"],
@@ -20236,6 +20529,12 @@
         "properties": {
           "tools": {
             "type": "boolean"
+          },
+          "freeform": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tool.FreeformFormat"
+            }
           },
           "input": {
             "type": "array",
@@ -21722,6 +22021,9 @@
           },
           "encoding": {
             "$ref": "#/components/schemas/Provider.Encoding"
+          },
+          "tls": {
+            "$ref": "#/components/schemas/Provider.Tls"
           }
         },
         "allOf": [
@@ -21730,6 +22032,24 @@
             "additionalProperties": {}
           }
         ]
+      },
+      "Provider.Tls": {
+        "type": "object",
+        "properties": {
+          "cert": {
+            "type": "string",
+            "description": "PEM client certificate, usually `{file:/path/to/client.pem}`"
+          },
+          "key": {
+            "type": "string",
+            "description": "PEM private key, usually `{file:/path/to/client.key}`"
+          },
+          "passphrase": {
+            "type": "string"
+          }
+        },
+        "required": ["cert", "key"],
+        "additionalProperties": false
       },
       "Provider.Transport": {
         "type": "string",
@@ -22637,6 +22957,9 @@
             "$ref": "#/components/schemas/session.step.started"
           },
           {
+            "$ref": "#/components/schemas/session.step.first-token"
+          },
+          {
             "$ref": "#/components/schemas/session.step.streamed"
           },
           {
@@ -23179,6 +23502,9 @@
             "type": "object",
             "properties": {
               "created": {
+                "type": "number"
+              },
+              "firstToken": {
                 "type": "number"
               },
               "streamed": {
@@ -24119,9 +24445,15 @@
             "properties": {
               "text": {
                 "type": "string"
+              },
+              "tokens": {
+                "$ref": "#/components/schemas/TokenUsage.Info"
+              },
+              "cost": {
+                "$ref": "#/components/schemas/Money.USD"
               }
             },
-            "required": ["text"],
+            "required": ["text", "tokens", "cost"],
             "additionalProperties": false
           }
         },
@@ -24803,6 +25135,10 @@
         "required": ["type", "uri", "mime"],
         "additionalProperties": false
       },
+      "Tool.FreeformFormat": {
+        "type": "string",
+        "enum": ["text", "regex", "lark"]
+      },
       "Tool.TextContent": {
         "type": "object",
         "properties": {
@@ -25137,6 +25473,9 @@
             "$ref": "#/components/schemas/session.step.started"
           },
           {
+            "$ref": "#/components/schemas/session.step.first-token"
+          },
+          {
             "$ref": "#/components/schemas/session.step.streamed"
           },
           {
@@ -25318,6 +25657,9 @@
           },
           {
             "$ref": "#/components/schemas/mcp.resources.changed"
+          },
+          {
+            "$ref": "#/components/schemas/experimental.mcp.event"
           },
           {
             "$ref": "#/components/schemas/V2Event.rpc"
@@ -26015,9 +26357,83 @@
             "$ref": "#/components/schemas/Location.Ref"
           },
           "data": {
-            "not": {
-              "type": "null"
-            }
+            "type": "object",
+            "properties": {
+              "integrationID": {
+                "$ref": "#/components/schemas/Integration.ID"
+              },
+              "credentialID": {
+                "$ref": "#/components/schemas/Credential.ID"
+              }
+            },
+            "required": ["integrationID", "credentialID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.mcp.event": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.mcp.event"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "server": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "eventId": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "string"
+              },
+              "data": {},
+              "cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "truncated": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["id", "server", "name", "eventId", "timestamp", "data", "cursor"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "created", "type", "data"],
@@ -28998,6 +29414,58 @@
         "required": ["id", "created", "type", "durable", "data"],
         "additionalProperties": false
       },
+      "session.step.first-token": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.step.first-token"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "$ref": "#/components/schemas/Event.Seq"
+              },
+              "version": {
+                "$ref": "#/components/schemas/Event.VersionEncoded_c77c5abcb68d"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "$ref": "#/components/schemas/Session.ID"
+              },
+              "assistantMessageID": {
+                "$ref": "#/components/schemas/Session.Message.ID"
+              }
+            },
+            "required": ["sessionID", "assistantMessageID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "durable", "data"],
+        "additionalProperties": false
+      },
       "session.step.started": {
         "type": "object",
         "properties": {
@@ -29849,7 +30317,7 @@
               },
               "source": {
                 "type": "string",
-                "enum": ["title", "compaction"]
+                "enum": ["title", "compaction", "generate"]
               },
               "cost": {
                 "$ref": "#/components/schemas/Money.USD"

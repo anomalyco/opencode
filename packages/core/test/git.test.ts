@@ -8,7 +8,7 @@ import { Git } from "@opencode/core/git"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { VcsPatch } from "@opencode/core/vcs/patch"
 import { branch, commit, initGit, initRepo, read, withRemote } from "./fixture/git"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { withEnv } from "./fixture/env"
 import { testEffect } from "./lib/effect"
 
@@ -17,10 +17,7 @@ const it = testEffect(LayerNode.compile(Git.node))
 describe("Git", () => {
   it.live("discovers repository metadata without a work tree", () =>
     Effect.gen(function* () {
-      const root = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-      )
+      const root = yield* tmpdirScoped()
       yield* Effect.promise(async () => {
         await initRepo(root.path)
         await $`git config core.bare true`.cwd(root.path).quiet()
@@ -80,10 +77,7 @@ describe("Git", () => {
 describe("Git worktrees", () => {
   it.live("creates, lists, and removes linked worktrees", () =>
     Effect.gen(function* () {
-      const root = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-      )
+      const root = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(root.path))
       const directory = AbsolutePath.make(yield* Effect.promise(() => fs.realpath(root.path)))
       const worktree = AbsolutePath.make(`${root.path}-git-worktree`)
@@ -107,10 +101,7 @@ describe("Git worktrees", () => {
 
   it.live("reads no remote and no root commits from an unborn repository", () =>
     Effect.gen(function* () {
-      const root = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-      )
+      const root = yield* tmpdirScoped()
       yield* Effect.promise(() => initGit(root.path))
       const git = yield* Git.Service
       const repo = yield* git.repo.discover(AbsolutePath.make(root.path))
@@ -122,10 +113,7 @@ describe("Git worktrees", () => {
 
   it.live("fingerprint changes with repository metadata, including from a linked worktree", () =>
     Effect.gen(function* () {
-      const root = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-      )
+      const root = yield* tmpdirScoped()
       const main = path.join(root.path, "main")
       const linked = path.join(root.path, "linked")
       yield* Effect.promise(() => initGit(main))
@@ -155,10 +143,7 @@ describe("Git trees", () => {
   ;[0, 1, 128].forEach((exitCode) => {
     it.live(`refresh handles check-ignore exit ${exitCode}`, () =>
       Effect.gen(function* () {
-        const root = yield* Effect.acquireRelease(
-          Effect.promise(() => tmpdir()),
-          (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-        )
+        const root = yield* tmpdirScoped()
         const project = path.join(root.path, "project")
         const paths = ["scope/allowed.txt", "scope/ignored name.txt"].map((file) => RelativePath.make(file))
         yield* Effect.promise(async () => {
@@ -216,10 +201,7 @@ describe("Git trees", () => {
 
   it.live("lists both sides of a rename as separate file changes", () =>
     Effect.gen(function* () {
-      const root = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-      )
+      const root = yield* tmpdirScoped()
       yield* Effect.promise(async () => {
         await initRepo(root.path)
         await $`git config diff.renames true`.cwd(root.path).quiet()
@@ -247,10 +229,7 @@ describe("Git trees", () => {
 
   it.live("caps batched tree patches, keeps per-file stats past the cap, and matches non-ASCII names", () =>
     Effect.gen(function* () {
-      const root = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-      )
+      const root = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(root.path))
       const git = yield* Git.Service
       const repository = yield* git.repo.discover(AbsolutePath.make(root.path))
@@ -285,10 +264,7 @@ describe("Git trees", () => {
     "diffs a path selection longer than any platform command line",
     () =>
       Effect.gen(function* () {
-        const root = yield* Effect.acquireRelease(
-          Effect.promise(() => tmpdir()),
-          (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-        )
+        const root = yield* tmpdirScoped()
         yield* Effect.promise(async () => {
           await initRepo(root.path)
           await fs.mkdir(path.join(root.path, "dir", "nested"), { recursive: true })
@@ -335,10 +311,7 @@ describe("Git trees", () => {
 
   it.live("captures, compares, previews, and restores scoped trees", () =>
     Effect.gen(function* () {
-      const root = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-      )
+      const root = yield* tmpdirScoped()
       yield* Effect.promise(async () => {
         await initRepo(root.path)
         await fs.mkdir(path.join(root.path, "scope"))
@@ -400,10 +373,7 @@ describe("Git objects", () => {
     "packs loose objects and combines packs without losing or delegating any object",
     () =>
       Effect.gen(function* () {
-        const root = yield* Effect.acquireRelease(
-          Effect.promise(() => tmpdir()),
-          (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-        )
+        const root = yield* tmpdirScoped()
         const project = path.join(root.path, "project")
         yield* Effect.promise(async () => {
           await fs.mkdir(project)
@@ -479,10 +449,7 @@ describe("Git objects", () => {
 describe("Git capture", () => {
   it.live("applies both the store's own and the source's ignore rules and never splits the index", () =>
     Effect.gen(function* () {
-      const root = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-      )
+      const root = yield* tmpdirScoped()
       const project = path.join(root.path, "project")
       yield* Effect.promise(async () => {
         await fs.mkdir(project)
@@ -559,10 +526,7 @@ describe("Git capture", () => {
 
   it.live("seeds and rebuilds the store from a source with a split index", () =>
     Effect.gen(function* () {
-      const root = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-      )
+      const root = yield* tmpdirScoped()
       const project = path.join(root.path, "project")
       yield* Effect.promise(async () => {
         await fs.mkdir(project)
@@ -585,18 +549,15 @@ describe("Git capture", () => {
 
       yield* Effect.promise(() => Bun.write(path.join(storage, "index"), "not an index"))
       expect(yield* capture()).toBe(before)
-      expect((yield* Effect.promise(() => fs.readdir(storage))).filter((entry) => entry.startsWith("sharedindex."))).toEqual(
-        [],
-      )
+      expect(
+        (yield* Effect.promise(() => fs.readdir(storage))).filter((entry) => entry.startsWith("sharedindex.")),
+      ).toEqual([])
     }),
   )
 })
 
 const captureSetup = Effect.gen(function* () {
-  const root = yield* Effect.acquireRelease(
-    Effect.promise(() => tmpdir()),
-    (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-  )
+  const root = yield* tmpdirScoped()
   const project = path.join(root.path, "project")
   yield* Effect.promise(async () => {
     await fs.mkdir(project)
@@ -625,10 +586,7 @@ const traced = (file: string) =>
 
 describe("Git capture recovery", () => {
   const setup = Effect.gen(function* () {
-    const root = yield* Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    )
+    const root = yield* tmpdirScoped()
     const project = path.join(root.path, "project")
     yield* Effect.promise(async () => {
       await fs.mkdir(project)

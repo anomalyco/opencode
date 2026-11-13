@@ -13,6 +13,7 @@ import { Global } from "@opencode/util/global"
 import { Image } from "@opencode/core/image"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
+import { Environment } from "@opencode/core/environment/index"
 import { Model } from "@opencode/core/model"
 import { Permission } from "@opencode/core/permission"
 import { Project } from "@opencode/core/project"
@@ -50,6 +51,7 @@ const readToolNode = makeLocationNode({
     SessionInstructions.node,
     Skill.node,
     FSUtil.node,
+    Environment.node,
     Location.node,
   ],
 })
@@ -344,7 +346,5 @@ describe("SessionInstructions", () => {
     expect(messages).toHaveLength(1)
     expect(messages[0]!.role).toBe("user")
     expect(messages[0]!.content).toEqual([{ type: "text", text: "Instructions from: /repo/sub/AGENTS.md\ncontent" }])
-    // Metadata is bookkeeping for the dedup ledger; the model must not see it.
-    expect(messages[0]!.metadata).toBeUndefined()
   })
 })

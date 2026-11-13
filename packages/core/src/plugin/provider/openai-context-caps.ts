@@ -1,10 +1,10 @@
 import { define } from "@opencode/plugin/effect/plugin"
-import { Effect, Stream } from "effect"
-import { Bus } from "../../bus.js"
-import { Credential } from "../../credential.js"
+import { Effect } from "effect"
 import { Integration } from "../../integration.js"
 import { Provider } from "../../provider.js"
 import type { PluginInternal } from "../internal.js"
+import { activeCredential } from "./credential-settings.js"
+import { ProviderRefresh } from "./refresh.js"
 
 const integrationID = Integration.ID.make("openai")
 const methodIDs = new Set(["chatgpt-browser", "chatgpt-headless", "chatgpt-token-sharing"])
@@ -17,14 +17,10 @@ const currentInput = 500_000
 export const OpenAIContextCapsPlugin = define({
   id: "opencode.provider.openai-context-caps",
   effect: Effect.fn(function* (ctx) {
-    const bus = yield* Bus.Service
     let signedIn = false
 
     const load = Effect.fn("OpenAIContextCapsPlugin.load")(function* () {
-      const connection = yield* ctx.integration.connection.active(integrationID)
-      const credential = connection
-        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-        : undefined
+      const { credential } = yield* activeCredential(ctx, integrationID)
       const previous = signedIn
       signedIn = credential?.type === "oauth" && methodIDs.has(credential.methodID)
       return signedIn !== previous
@@ -41,11 +37,7 @@ export const OpenAIContextCapsPlugin = define({
         })
       }
     })
-    yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === integrationID),
-      Stream.runForEach(() => load().pipe(Effect.flatMap((changed) => (changed ? ctx.provider.reload() : Effect.void)))),
-      Effect.forkScoped({ startImmediately: true }),
-    )
+    yield* ProviderRefresh.onSwitch(integrationID, ProviderRefresh.reloadIfChanged(load(), ctx.provider.reload()))
   }),
 } satisfies PluginInternal.InternalPlugin)
 

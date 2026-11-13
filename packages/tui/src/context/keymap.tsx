@@ -174,8 +174,8 @@ export interface Keymap {
   readonly mode: {
     /** Returns the active mode. */
     current(): string
-    /** Pushes a mode until the returned cleanup is called. */
-    push(mode: string): () => void
+    /** Pushes a mode until the returned cleanup is called. The mode only claims input while `active` is true. */
+    push(mode: string, active?: Accessor<boolean>): () => void
   }
   /** Registers a low-level keymap interceptor. */
   intercept: OpenTuiKeymap["intercept"]
@@ -194,7 +194,10 @@ function use(): Keymap {
     },
     mode: {
       current: value.mode.current,
-      push: (mode) => value.mode.push(mode, resolveInteractivity(enabled)),
+      push: (mode, active) => {
+        const interactive = resolveInteractivity(enabled)
+        return value.mode.push(mode, active ? () => interactive() && active() : interactive)
+      },
     },
     intercept: value.keymap.intercept.bind(value.keymap),
     isLeader,

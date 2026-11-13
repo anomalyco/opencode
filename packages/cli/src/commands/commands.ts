@@ -439,6 +439,12 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           Flag.atMost(100),
         ),
         title: Flag.String("title").pipe(Flag.withDescription("Session title"), Flag.optional),
+        archived: Flag.Boolean("archived").pipe(
+          Flag.withDescription(
+            "Create the session archived so it stays out of session lists (useful for scripted or CI runs)",
+          ),
+          Flag.withDefault(false),
+        ),
         thinking: Flag.Boolean("thinking").pipe(Flag.withDescription("Show thinking blocks"), Flag.withDefault(false)),
         ...PermissionParams,
       },

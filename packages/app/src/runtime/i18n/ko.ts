@@ -474,7 +474,6 @@ export const dict = {
   "session.new.project.search": "프로젝트 검색",
   "session.new.project.add": "프로젝트 추가",
   "session.new.workspace.runIn": "세션 실행 위치",
-  "session.new.workspace.triggerLocal": "로컬",
   "session.new.workspace.local": "로컬 저장소",
   "session.new.git.none": "Git 없음",
 

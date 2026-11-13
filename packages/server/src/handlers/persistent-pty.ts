@@ -3,7 +3,6 @@ import { PtyTicket } from "@opencode/core/pty/ticket"
 import {
   ForbiddenError,
   InvalidRequestError,
-  PtyFeatureUnsupportedError,
   PtyNotFoundError,
   ServiceUnavailableError,
 } from "@opencode/protocol/errors"
@@ -19,6 +18,7 @@ import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
 import { makeArtifact } from "./artifact"
+import { makeJob } from "./job"
 import { makeMediaGet } from "./media"
 import { type Outbound, runPtySocket } from "./pty-socket"
 import { makeSchedule } from "./schedule"
@@ -29,11 +29,13 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const cors = yield* CorsConfig
     const pty = yield* PersistentPty.Service
     const artifact = yield* makeArtifact
+    const job = yield* makeJob
     const mediaGet = yield* makeMediaGet
     const schedule = yield* makeSchedule
 
     return handlers
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
+      .handle("job.list", (ctx) => job.list(ctx.query))
       .handle("artifacts.providers", (ctx) => artifact.providers(ctx.query, ctx.request))
       .handle("artifacts.list", (ctx) => artifact.list(ctx.query, ctx.request))
       .handle("artifacts.create", (ctx) => artifact.create(ctx.query, ctx.payload, ctx.request))
@@ -110,19 +112,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
               .resize(ctx.params.ptyID, ctx.payload.size.cols, ctx.payload.size.rows, ctx.payload.attachmentID)
               .pipe(mapTerminalError)
           if (ctx.payload.title === undefined) return { data: yield* pty.get(ctx.params.ptyID).pipe(mapTerminalError) }
-          return {
-            data: yield* pty.rename(ctx.params.ptyID, ctx.payload.title).pipe(
-              Effect.catchTags({
-                "PersistentPty.NotFoundError": notFound,
-                "PersistentPty.UnsupportedError": (error) =>
-                  new PtyFeatureUnsupportedError({
-                    feature: error.feature,
-                    message: "Terminal renaming will be available after OpenCode's terminal service restarts",
-                  }),
-                "PersistentPty.UnavailableError": unavailable,
-              }),
-            ),
-          }
+          return { data: yield* pty.rename(ctx.params.ptyID, ctx.payload.title).pipe(mapTerminalError) }
         }),
       )
       .handle(

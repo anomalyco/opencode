@@ -1,9 +1,16 @@
 import { Effect, Schema, Stream } from "effect"
-import { Generation, ProgressEvent, QueuedEvent, type AwaitOptions } from "./generation.js"
+import { ProgressEvent, QueuedEvent, type AwaitOptions, type Status } from "./generation.js"
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
-import { AIError, HttpOptions, MediaUsage, ProviderMetadata, ProviderOptions, type OpenString } from "./schema/index.js"
+import {
+  AIError,
+  MediaUsage,
+  ProviderMetadata,
+  ProviderOptions,
+  type OpenString,
+  type BaseRequest,
+} from "./schema/index.js"
 import { ImageClient, Service } from "./image-client.js"
 
 // ---------------------------------------------------------------------------
@@ -17,7 +24,10 @@ export type ImageRoute = MediaRoute.AnyRoute<ImageRequest, ImageEvent, ImageResp
 export class ImageModel<Options extends ImageOptions = ImageOptions> extends MediaModel<ImageRoute, Options> {
   declare protected readonly _ImageModel: void
 
-  /** The number of type arguments selects the kind: `<Options>`, `<Options, Frame, State>`, or `<Options, Token>`. */
+  /**
+   * The number of type arguments selects the kind: `<Options>` for inline or queued, `<Options, Frame, State>` for
+   * stream. A queued route's token is the provider's job ID, so `ImageJob.id` is exactly what `status` and `result` take.
+   */
   static fromRoute<Options extends ImageOptions>(
     route: MediaModel.InlineRouteInput<ImageRequest<ImageModel<Options>>, ImageResponse>,
     input: MediaRoute.ModelInput,
@@ -26,12 +36,12 @@ export class ImageModel<Options extends ImageOptions = ImageOptions> extends Med
     route: MediaModel.StreamRouteInput<ImageRequest<ImageModel<Options>>, ImageEvent, Frame, State>,
     input: MediaRoute.ModelInput,
   ): ImageModel<Options>
-  static fromRoute<Options extends ImageOptions, Token>(
-    route: MediaModel.QueuedRouteInput<ImageRequest<ImageModel<Options>>, ImageResponse, Token>,
+  static fromRoute<Options extends ImageOptions>(
+    route: MediaModel.QueuedRouteInput<ImageRequest<ImageModel<Options>>, ImageResponse, string>,
     input: MediaRoute.ModelInput,
   ): ImageModel<Options>
-  static fromRoute<Options extends ImageOptions, Frame, State, Token>(
-    route: MediaModel.AnyRouteInput<ImageRequest<ImageModel<Options>>, ImageEvent, ImageResponse, Frame, State, Token>,
+  static fromRoute<Options extends ImageOptions, Frame, State>(
+    route: MediaModel.AnyRouteInput<ImageRequest<ImageModel<Options>>, ImageEvent, ImageResponse, Frame, State, string>,
     input: MediaRoute.ModelInput,
   ) {
     return new ImageModel<Options>({
@@ -66,20 +76,17 @@ const ImageRequestSchema = Schema.Struct({
   aspect: Schema.optional(ImageAspectRatio),
   resolution: Schema.optional(Schema.String),
   providerOptions: Schema.optional(ProviderOptions),
-  http: Schema.optional(HttpOptions),
 })
 
 /** A normalized image request, the plain object `ai.image.request(...)` returns. */
-export interface ImageRequest<Model extends ImageModel = ImageModel> {
-  readonly model: Model
+export interface ImageRequest<Model extends ImageModel = ImageModel>
+  extends BaseRequest<Model, ImageModelOptions<Model>> {
   readonly prompt: string
   /** Edit sources or style/subject references, in order. */
   readonly images?: ReadonlyArray<Media.Asset>
   readonly n?: number
   readonly aspect?: ImageAspectRatio
   readonly resolution?: ImageResolution
-  readonly providerOptions?: ImageModelOptions<Model>
-  readonly http?: HttpOptions
 }
 
 export type ImageModelOptions<Model> = Model extends ImageModel<infer Options> ? Options : never
@@ -87,25 +94,34 @@ export type ImageModelOptions<Model> = Model extends ImageModel<infer Options> ?
 /** Input accepted by `ai.image.request`, `generate`, `stream` and `start`. An `ImageRequest` is also a valid input. */
 export type ImageRequestInput<Model extends ImageModel = ImageModel> = Omit<
   ImageRequest<Model>,
-  "providerOptions" | "http"
+  "images" | "providerOptions"
 > & {
+  /** Edit sources or style/subject references, in order: assets or plain data with a detectable type. */
+  readonly images?: ReadonlyArray<Media.Input>
   readonly providerOptions?: NoInfer<ImageModelOptions<Model>>
-  readonly http?: HttpOptions.Input
 }
 
 // ---------------------------------------------------------------------------
-// Response and events
+// Job, status, response and events
 // ---------------------------------------------------------------------------
+
+/** A submitted generation on a queued route. Store `id` with the model to read the job later, from any process. */
+export interface ImageJob {
+  /** The provider's job ID. */
+  readonly id: string
+}
+
+export interface ImageStatus {
+  readonly status: Status
+  /** 0..1, only when the provider reports progress. */
+  readonly progress?: number
+}
 
 export class ImageResponse extends Schema.Class<ImageResponse>("Image.Response")({
   images: Schema.Array(Media.AssetSchema),
   usage: Schema.optional(MediaUsage),
   providerMetadata: Schema.optional(ProviderMetadata),
-}) {
-  get image() {
-    return this.images[0]
-  }
-}
+}) {}
 
 /** The `index`-th lower-fidelity preview of an image still generating; the `image` event supersedes it. */
 export const ImagePartialEvent = Schema.Struct({
@@ -164,7 +180,7 @@ const collectResponse = (events: ReadonlyArray<ImageEvent>): Effect.Effect<Image
 /** Normalize image request input into a plain `ImageRequest`. */
 export const request = <const Model extends ImageModel>(input: ImageRequestInput<Model>): ImageRequest<Model> => ({
   ...input,
-  http: HttpOptions.make(input.http),
+  images: input.images?.map((image) => Media.make(image)),
 })
 
 const validate = Schema.decodeUnknownSync(ImageRequestSchema)
@@ -192,21 +208,32 @@ export function stream(input: ImageRequestInput, options?: AwaitOptions) {
   return Stream.unwrap(requestEffect(input).pipe(Effect.map((request) => ImageClient.stream(request, options))))
 }
 
-/** Inline and streaming routes fail with `UnsupportedOperation`. */
+/** Submit a generation and return at once; nothing polls. Inline and stream routes fail with `UnsupportedOperation`. */
 export function start<const Model extends ImageModel>(
   input: ImageRequestInput<Model>,
-): Effect.Effect<Generation<ImageResponse>, AIError, Service>
+): Effect.Effect<ImageJob, AIError, Service>
 export function start(input: ImageRequestInput) {
   return requestEffect(input).pipe(Effect.flatMap((request) => ImageClient.start(request)))
 }
 
-export const resume = (model: ImageModel, token: unknown): Effect.Effect<Generation<ImageResponse>, AIError, Service> =>
-  ImageClient.resume(model, token)
+/** One status read for a job ID. */
+export const status = (model: ImageModel, id: string): Effect.Effect<ImageStatus, AIError, Service> =>
+  ImageClient.status(model, id)
+
+/** The finished images; fails while the job is still running, or with the provider's reason when it failed. */
+export const result = (model: ImageModel, id: string): Effect.Effect<ImageResponse, AIError, Service> =>
+  ImageClient.result(model, id)
+
+/** Ask the provider to stop the job; fails with `UnsupportedOperation` when the provider has no cancel call. */
+export const cancel = (model: ImageModel, id: string): Effect.Effect<void, AIError, Service> =>
+  ImageClient.cancel(model, id)
 
 export const Image = {
   request,
   generate,
   stream,
   start,
-  resume,
+  status,
+  result,
+  cancel,
 } as const

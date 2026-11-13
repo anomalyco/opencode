@@ -1,5 +1,16 @@
 import { expect, test, type Page } from "@playwright/test"
-import { REMOTE_SERVER, SERVER, expectPath, project, seed, session, sessionHref, type TabSeed } from "../utils/app"
+import {
+  REMOTE_SERVER,
+  SERVER,
+  T0,
+  expectPath,
+  holdRoute,
+  project,
+  seed,
+  session,
+  sessionHref,
+  type TabSeed,
+} from "../utils/app"
 import { mockServers, type MockServerConfig } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
 
@@ -26,7 +37,10 @@ function pending(id: string, sessionID: string) {
   return { id, sessionID, action: "shell", resources: ["git status"], metadata: {}, save: [] }
 }
 
-async function setup(page: Page, input: { tabs: TabSeed[]; a?: Partial<MockServerConfig> }) {
+async function setup(
+  page: Page,
+  input: { tabs: TabSeed[]; a?: Partial<MockServerConfig>; b?: Partial<MockServerConfig> },
+) {
   const replies: Reply[] = []
   const lists: URL[] = []
   const sessionGets: string[] = []
@@ -62,7 +76,7 @@ async function setup(page: Page, input: { tabs: TabSeed[]; a?: Partial<MockServe
       onSession: (id) => sessionGets.push(id),
       ...input.a,
     },
-    [REMOTE_SERVER]: config(REMOTE_SERVER, "Server B", directoryB, [sessionB]),
+    [REMOTE_SERVER]: { ...config(REMOTE_SERVER, "Server B", directoryB, [sessionB]), ...input.b },
   })
 
   await seed(page, { servers: [REMOTE_SERVER], tabs: input.tabs })
@@ -138,6 +152,115 @@ test("settings opened from a remote session sweep every server and keep the remo
   await page.keyboard.press("Escape")
   await expectPath(page, sessionHref(sessionB.id, REMOTE_SERVER))
   await expectSessionTitle(page, sessionB.title)
+})
+
+test("a remote session whose server signed the app out asks to sign in again, then opens", async ({ page }) => {
+  // The saved password is stale; the server's pairing link signs the app in again at the same address.
+  await setup(page, {
+    tabs: [],
+    b: { password: "session-token", pairing: { code: "one-time-code", token: "session-token" } },
+  })
+  await seed(page, {
+    storage: {
+      "opencode.global.dat:server": {
+        list: [{ type: "http", http: { url: REMOTE_SERVER, password: "old-password" } }],
+      },
+    },
+  })
+  await page.goto(sessionHref(sessionB.id, REMOTE_SERVER))
+
+  const signedOut = page.getByText("Signed out of this server", { exact: true })
+  await expect(signedOut).toBeVisible()
+  await page.getByRole("button", { name: "Sign in again", exact: true }).click()
+  const editor = page.getByRole("dialog", { name: "Edit server" })
+
+  // An empty address explains itself instead of closing the dialog.
+  await editor.getByRole("button", { name: "Use password", exact: true }).click()
+  await editor.getByLabel("Server address", { exact: true }).fill("")
+  await editor.getByRole("button", { name: "Save", exact: true }).click()
+  await expect(editor.getByRole("alert")).toHaveText("Enter a valid HTTP or HTTPS server address.")
+  await editor.getByRole("button", { name: "Use pairing link", exact: true }).click()
+
+  await editor.getByLabel("Pairing link", { exact: true }).fill(`${REMOTE_SERVER}/auth/connect/one-time-code`)
+  await editor.getByRole("button", { name: "Save", exact: true }).click()
+
+  await expect(editor).toHaveCount(0)
+  await expectSessionTitle(page, sessionB.title)
+  await expect(signedOut).toHaveCount(0)
+})
+
+// The session route waits this long for an uncached session before it calls the server unreachable.
+const RESOLUTION_TIMEOUT_MS = 30_000
+
+// How often the app checks each server's health.
+const SERVER_HEALTH_POLL_MS = 10_000
+
+test("a session its server never answers for says the server is unreachable, then opens", async ({ page }) => {
+  const late = session({ id: "ses_server_a_late", directory: directoryA, title: "Late session" })
+  const sessions = [sessionA]
+  await setup(page, { tabs: [], a: { sessions } })
+  const metadata = await holdRoute(page, new RegExp(`/api/session/${late.id}(\\?|$)`), { method: "GET" })
+  await page.clock.install()
+  await page.goto(sessionHref(late.id))
+  await metadata.arrived
+  const unreachable = page.getByText("Can't reach this server", { exact: true })
+  await expect(unreachable).toHaveCount(0)
+
+  await page.clock.fastForward(RESOLUTION_TIMEOUT_MS)
+  await expect(unreachable).toBeVisible()
+  await expect(page.getByRole("button", { name: "Close Tab", exact: true })).toBeVisible()
+
+  // The request that hung still fills the cache when it answers.
+  sessions.push(late)
+  metadata.release()
+  await expectSessionTitle(page, late.title)
+  await expect(unreachable).toHaveCount(0)
+})
+
+// The inbox shows what it has once this long passes, even while a server still has not answered.
+const INBOX_SETTLE_TIMEOUT_MS = 10_000
+
+test("one server that never answers the inbox index does not hide the other server's sessions", async ({ page }) => {
+  await setup(page, { tabs: [] })
+  await seed(page, { settings: { appearance: { tabLayout: "inbox" } } })
+
+  const index = await holdRoute(page, new RegExp(`^${REMOTE_SERVER}/api/session\\?(.*&)?order=desc`), {
+    method: "GET",
+  })
+
+  await page.clock.install()
+  await page.goto("/")
+  await index.arrived
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+  const row = inbox.locator('[data-slot="sidebar-inbox-item"]').filter({ hasText: sessionA.title })
+  await expect(inbox).toHaveAttribute("aria-busy", "true")
+  await expect(row).toHaveCount(0)
+
+  await page.clock.fastForward(INBOX_SETTLE_TIMEOUT_MS)
+  await expect(inbox).toHaveAttribute("aria-busy", "false")
+  await expect(row).toBeVisible()
+})
+
+test("an open session stays visible while its server stops answering", async ({ page }) => {
+  const late = session({ id: "ses_server_a_late", directory: directoryA, title: "Late session" })
+  await setup(page, { tabs: [sessionA.id, late.id], a: { sessions: [sessionA] } })
+  await holdRoute(page, new RegExp(`/api/session/${late.id}(\\?|$)`), { method: "GET" })
+  await page.clock.install()
+  await page.goto(sessionHref(sessionA.id))
+  await expectSessionTitle(page, sessionA.title)
+
+  await page.route(`${SERVER}/api/info`, (route) => route.fulfill({ status: 503, body: "" }))
+  await page.clock.fastForward(SERVER_HEALTH_POLL_MS)
+  const unreachable = page.getByText("Can't reach this server", { exact: true })
+
+  // An uncached session on the same server proves the app now considers the server down.
+  await page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(late.id)}"])`).click()
+  await expect(unreachable).toBeVisible()
+
+  await page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(sessionA.id)}"])`).click()
+  await expectSessionTitle(page, sessionA.title)
+  await expect(unreachable).toHaveCount(0)
 })
 
 test("auto-accept responds for an unfocused server session and its child", async ({ page }) => {
@@ -263,4 +386,138 @@ test("a project's auto-accept choice overrides the default in both directions", 
   await settings.locator('[data-action="settings-project-auto-accept-permissions"]').click()
   await page.getByRole("option", { name: "Use default (On)" }).click()
   await expect.poll(() => replies).toEqual(["permission-api", "permission-web"])
+})
+
+test("customized vertical sidebar merges a project across servers and narrows it with the view menu", async ({
+  page,
+}) => {
+  // The same repo on two machines shares its project ID, so both servers' sessions share one group.
+  const shared = (directory: string) => project({ id: "proj_shared", directory, name: "shared" })
+
+  const local = session({ id: "ses_local_open", directory: directoryA, title: "Local open", projectID: "proj_shared" })
+
+  const recent = session({
+    id: "ses_local_recent",
+    directory: directoryA,
+    title: "Local recent",
+    projectID: "proj_shared",
+    created: T0 - 60_000,
+  })
+
+  const remote = session({
+    id: "ses_remote_open",
+    directory: directoryB,
+    title: "Remote open",
+    projectID: "proj_shared",
+  })
+
+  const config = (directory: string, sessions: ReturnType<typeof session>[]) => ({
+    directory,
+    project: shared(directory),
+    provider: { all: [], connected: [], default: {} },
+    sessions,
+    pageMessages: () => ({ items: [] }),
+  })
+
+  await mockServers(page, {
+    [SERVER]: config(directoryA, [local, recent]),
+    [REMOTE_SERVER]: config(directoryB, [remote]),
+  })
+  await seed(page, {
+    servers: [REMOTE_SERVER],
+    tabs: [local.id, { session: remote.id, server: REMOTE_SERVER }],
+    settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "customize" } },
+  })
+  await page.goto(sessionHref(local.id))
+  await expectSessionTitle(page, local.title)
+
+  const sidebar = page.locator('[data-slot="vertical-tabs"]')
+
+  const groups = sidebar.locator("[data-sidebar-group]")
+
+  const titles = sidebar.locator("[data-titlebar-tab-slot] [data-titlebar-tab-title]")
+
+  await expect(groups).toHaveText([/shared$/])
+  await expect(titles).toHaveText([local.title, remote.title])
+  // Only the tab from the other machine names its server.
+  await expect(sidebar.locator('[data-slot="tab-label"]')).toHaveCount(1)
+  await expect(sidebar.getByRole("button", { name: recent.title })).toBeVisible()
+
+  // Collapsing the group that holds the current session keeps only that session below it.
+  const header = groups.first().locator("button[aria-expanded]")
+
+  await header.click()
+  await expect(header).toHaveAttribute("aria-expanded", "false")
+  // Only a collapsed group counts its open tabs.
+  await expect(groups).toHaveText([/shared\s*2$/])
+  await expect(titles).toHaveText([local.title])
+  await expect(sidebar.getByRole("button", { name: recent.title })).toHaveCount(0)
+  await header.click()
+  await expect(titles).toHaveText([local.title, remote.title])
+
+  const menu = page.getByRole("menu")
+
+  await page.getByRole("button", { name: "View options" }).click()
+
+  // Moving between submenu triggers swaps the open submenu instead of stacking them.
+  for (const [name, item] of [
+    [/^Group by/, "Server → Project"],
+    [/^Sort by/, "Attention"],
+  ] as const) {
+    const box = await menu.getByRole("menuitem", { name }).boundingBox()
+
+    if (!box) throw new Error(`no ${name} trigger`)
+    await page.mouse.move(box.x + 40, box.y + box.height / 2, { steps: 12 })
+    await expect(menu.last()).toContainText(item)
+  }
+
+  await expect(menu).toHaveCount(2)
+  await menu.getByRole("menuitem", { name: /^Group by/ }).click()
+  await page.getByRole("menuitemradio", { name: "Server → Project" }).click()
+  await page.keyboard.press("Escape")
+  await expect(groups).toHaveCount(4)
+  await expect(sidebar.locator('[data-slot="tab-label"]')).toHaveCount(0)
+
+  // A server filter hides the other server's rows, but never the active tab.
+  await page.getByRole("button", { name: "View options" }).click()
+  await page.getByRole("menuitem", { name: /^Server/ }).click()
+  await page.getByRole("menuitemcheckbox").last().click()
+  await page.keyboard.press("Escape")
+  await page.keyboard.press("Escape")
+  await expect(titles).toHaveText([local.title, remote.title])
+  await expect(sidebar.getByRole("button", { name: recent.title })).toHaveCount(0)
+  await page.getByRole("button", { name: "View options" }).click()
+  await menu.getByRole("menuitem", { name: "Reset filters" }).click()
+  await expect(sidebar.getByRole("button", { name: recent.title })).toBeVisible()
+})
+
+test("deleting a session's tab in the customized sidebar removes it from the list too", async ({ page }) => {
+  const first = session({ id: "ses_delete_first", directory: directoryA, title: "Delete me" })
+
+  const second = session({ id: "ses_delete_second", directory: directoryA, title: "Keep me" })
+
+  await mockServers(page, {
+    [SERVER]: {
+      directory: directoryA,
+      project: project({ id: "proj_delete", directory: directoryA }),
+      provider: { all: [], connected: [], default: {} },
+      sessions: [first, second],
+      pageMessages: () => ({ items: [] }),
+    },
+  })
+  await seed(page, {
+    tabs: [first.id, second.id],
+    settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "customize" } },
+  })
+  await page.goto(sessionHref(first.id))
+  await expectSessionTitle(page, first.title)
+
+  const sidebar = page.locator('[data-slot="vertical-tabs"]')
+
+  await sidebar.locator("[data-titlebar-tab-title]", { hasText: first.title }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Delete…", exact: true }).click()
+  await page.getByRole("dialog").getByRole("button", { name: "Delete session", exact: true }).click()
+  await expectSessionTitle(page, second.title)
+  // The session the app had loaded must not come back as a recent row, which would open a missing session.
+  await expect(sidebar.getByText(first.title)).toHaveCount(0)
 })

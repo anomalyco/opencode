@@ -342,7 +342,6 @@ export const dict = {
   "session.new.project.search": "Αναζήτηση έργων",
   "session.new.project.add": "Προσθήκη έργου",
   "session.new.workspace.runIn": "Εκτέλεση συνεδρίας σε",
-  "session.new.workspace.triggerLocal": "Τοπική",
   "session.new.workspace.local": "Τοπικό αποθετήριο",
   "session.new.git.none": "Χωρίς Git",
   "session.header.open.finder": "Finder",

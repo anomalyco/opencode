@@ -1,0 +1,414 @@
+/* Design mode: editing the primary nav items (nav-order.tsx): reorder, show or hide, rename. */
+
+[data-site] {
+  /* The number comes from data-n, so the pre-paint rules can set it before the nav renders. */
+  li[data-nav-id] [data-slot="number"]::before {
+    content: attr(data-n);
+  }
+
+  /* Hidden items render for Design mode; elsewhere they're gone. The spare label span only shows a
+     renamed label before the settings load (pre-paint rules). */
+  li[data-nav-hidden] {
+    display: none;
+  }
+
+  li[data-nav-id] [data-slot="label-preload"] {
+    display: none;
+  }
+
+  /* In Design mode hidden items stay listed, dimmed, so they can be shown again. */
+  ul[data-sortable] > li[data-nav-hidden] {
+    display: list-item;
+
+    > a {
+      opacity: 0.4;
+    }
+  }
+
+  /* The label being renamed edits in place, so the row keeps its size; the underline sits just
+     below the baseline. */
+  li[data-nav-id] [data-slot="label"][data-editing] {
+    min-width: 4ch;
+    outline: none;
+    color: var(--text-strong);
+    white-space: pre;
+    text-decoration: underline 1px var(--link);
+    text-underline-offset: 3px;
+    cursor: text;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  /* The eye beside each item: shows or hides it. */
+  [data-slot="nav-visibility"] {
+    position: absolute;
+    top: 50%;
+    inset-inline-end: 0;
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    margin-top: -0.75rem;
+    color: var(--text-weak);
+    opacity: 0;
+    cursor: pointer;
+
+    &[aria-pressed="false"] {
+      opacity: 1;
+      color: var(--text-weaker, var(--text-weak));
+    }
+
+    &:focus-visible {
+      color: var(--link);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--link);
+      }
+    }
+
+    &:active {
+      color: var(--link);
+    }
+  }
+
+  /* The × beside the eye: deletes the item (the versions menu's Add item brings it back). */
+  [data-slot="nav-remove"] {
+    position: absolute;
+    top: 50%;
+    inset-inline-end: 1.5rem;
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    margin-top: -0.75rem;
+    color: var(--text-weak);
+    opacity: 0;
+    cursor: pointer;
+
+    &:focus-visible {
+      color: var(--link);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--link);
+      }
+    }
+
+    &:active {
+      color: var(--link);
+    }
+  }
+
+  ul[data-sortable] > li:focus-within :is([data-slot="nav-visibility"], [data-slot="nav-remove"]) {
+    opacity: 1;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    ul[data-sortable] > li:hover :is([data-slot="nav-visibility"], [data-slot="nav-remove"]) {
+      opacity: 1;
+    }
+  }
+
+  @media (hover: none), (pointer: coarse) {
+    ul[data-sortable] > li :is([data-slot="nav-visibility"], [data-slot="nav-remove"]) {
+      opacity: 1;
+    }
+  }
+
+  ul[data-sortable] > li[data-nav-id] {
+    position: relative;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+
+    a {
+      cursor: grab;
+    }
+
+    /* A grip left of the item on hover, in the gutter beside the nav. */
+    &::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      inset-inline-start: -0.875rem;
+      width: 6px;
+      height: 10px;
+      margin-top: -5px;
+      background: radial-gradient(circle, var(--link) 1px, transparent 1.2px) 0 0 / 3px 3.33px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    &:focus-within::before,
+    &[data-nav-lifted]::before {
+      opacity: 1;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover::before {
+        opacity: 1;
+      }
+    }
+  }
+
+  /* The lifted item rides above the others, outlined like a lifted home section. */
+  ul[data-sortable] > li[data-nav-lifted] {
+    z-index: 2;
+    background: var(--bg);
+    box-shadow: var(--popover-shadow);
+    outline: 2px solid var(--link);
+    outline-offset: 4px;
+
+    a,
+    a [data-slot="index"] {
+      cursor: grabbing;
+      color: var(--link);
+    }
+  }
+
+  [data-slot="nav-announcer"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* The sheet's list is a flex column too, so the pre-paint `order` rules apply there. */
+  [data-component="site-menu-sheet"] ul {
+    display: flex;
+    flex-direction: column;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    ul[data-sortable] > li[data-nav-id]::before {
+      transition: opacity 120ms ease;
+    }
+  }
+}
+
+html:has(ul[data-sortable] > li[data-nav-lifted]) {
+  cursor: grabbing;
+}
+
+/* Design mode, under the nav: the nav versions as chips, and their menu (nav-versions.tsx). */
+[data-site] [data-component="nav-versions"] {
+  position: relative;
+  margin-top: 1.25rem;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  line-height: 1;
+  color: var(--text-weak);
+
+  button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.375rem;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: var(--text-strong);
+    cursor: pointer;
+  }
+
+  /* One row of chips that wraps; the active chip is filled. */
+  [data-slot="chips"] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  [data-slot="chip"] {
+    max-width: 100%;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--border);
+    color: var(--text-weak);
+    white-space: nowrap;
+
+    [data-slot="label"] {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+        border-color: var(--border-strong);
+      }
+    }
+
+    &:active {
+      color: var(--text-strong);
+      border-color: var(--border-strong);
+    }
+
+    &[aria-checked="true"] {
+      color: var(--bg);
+      background: var(--text-strong);
+      border-color: var(--text-strong);
+
+      [data-slot="number"] {
+        color: inherit;
+        opacity: 0.6;
+      }
+    }
+  }
+
+  [data-slot="number"] {
+    color: var(--text-weak);
+    font-variant-numeric: tabular-nums;
+  }
+
+  input[data-slot="name-input"] {
+    field-sizing: content;
+    min-width: 6ch;
+    max-width: 100%;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--link);
+    outline: none;
+    background: var(--bg);
+    font: inherit;
+    color: var(--text-strong);
+  }
+
+  /* The nav differs from the active version. */
+  [data-slot="edited"] {
+    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--link);
+  }
+
+  [data-slot="toggle"] {
+    padding: 0.375rem;
+    color: var(--text-weak);
+
+    &[aria-expanded="true"] {
+      color: var(--text-strong);
+      background: var(--menu-hover);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+        background: var(--menu-hover);
+      }
+    }
+
+    &:active {
+      color: var(--text-strong);
+      background: var(--menu-hover);
+    }
+  }
+
+  /* A version in the menu, with a pencil to rename the saved ones. */
+  [data-slot="row"] {
+    display: flex;
+    align-items: center;
+
+    > button:first-child {
+      flex: 1;
+    }
+  }
+
+  [data-slot="pencil"] {
+    color: var(--text-weak);
+  }
+
+  [data-slot="menu"] {
+    position: absolute;
+    top: calc(100% + 0.375rem);
+    inset-inline-start: 0;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    min-width: 13rem;
+    padding: 0.25rem;
+    background: var(--popover-bg);
+    box-shadow: var(--popover-shadow);
+
+    button {
+      justify-content: flex-start;
+      gap: 0.625rem;
+      padding: 0.5rem;
+      text-align: start;
+      white-space: nowrap;
+
+      &:disabled {
+        color: var(--text-weaker, var(--text-weak));
+        cursor: default;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover:not(:disabled) {
+          background: var(--menu-hover);
+        }
+      }
+
+      &:active:not(:disabled) {
+        background: var(--menu-hover);
+      }
+
+      &[aria-checked="true"] [data-slot="label"]::after {
+        content: " ✓";
+        color: var(--link);
+      }
+    }
+
+    hr {
+      margin: 0.25rem 0;
+      border: 0;
+      border-top: 1px solid var(--border);
+    }
+
+    [data-slot="heading"] {
+      margin: 0.375rem 0.5rem 0.125rem;
+      font-size: var(--fs-micro);
+      color: var(--text-weaker, var(--text-weak));
+    }
+
+    /* Custom link: label, URL and Add on one row each, set like the menu's text. */
+    [data-slot="custom"] {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      padding: 0.25rem 0.5rem 0.375rem;
+
+      input {
+        min-width: 0;
+        padding: 0.375rem 0.5rem;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        font: inherit;
+        color: var(--text-strong);
+
+        &:focus {
+          outline: none;
+          border-color: var(--link);
+        }
+      }
+
+      button[type="submit"] {
+        justify-content: center;
+        padding: 0.375rem;
+        color: var(--on-accent);
+        background: var(--link);
+      }
+    }
+
+    [data-slot="hint"] {
+      margin: 0.25rem 0.5rem 0.25rem;
+      font-size: var(--fs-micro);
+      color: var(--text-weaker, var(--text-weak));
+    }
+  }
+}

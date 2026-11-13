@@ -5,6 +5,7 @@ import { Effect, Schema, Scope } from "effect"
 import { HttpClient } from "effect/http"
 import { App } from "../../app.js"
 import { WebSearchMcp } from "./mcp.js"
+import { WebSearchProvider } from "./provider.js"
 
 export const endpoint = "https://search.parallel.ai/mcp"
 
@@ -52,52 +53,38 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
   id: "opencode.websearch.parallel",
   effect: Effect.fn("WebSearchParallel.Plugin")(function* (ctx) {
     const http = yield* HttpClient.HttpClient
-    yield* ctx.integration.transform((editor) => {
-      editor.update("parallel", (integration) => (integration.name = "Parallel"))
-      editor.method.update({
-        integrationID: "parallel",
-        method: { type: "key" },
-      })
-      editor.method.update({
-        integrationID: "parallel",
-        method: { type: "env", names: ["PARALLEL_API_KEY"] },
-      })
-    })
-    yield* ctx.websearch.transform((editor) => {
-      editor.add({
-        id: "parallel",
-        name: "Parallel",
-        execute: (input) =>
-          Effect.gen(function* () {
-            const connection = yield* ctx.integration.connection.active("parallel")
-            const credential = connection ? yield* ctx.integration.connection.resolve(connection) : undefined
-            const result = yield* WebSearchMcp.call(
-              http,
-              endpoint,
-              "web_search",
-              { input: McpInput, output: McpOutput },
-              {
-                objective: input.query,
-                search_queries: [input.query],
-              },
-              {
-                "User-Agent": App.useragent(ctx.app),
-                ...(credential?.type === "key" ? { Authorization: `Bearer ${credential.key}` } : {}),
-              },
-            )
-            return (
-              result?.structuredContent.results.map((item) => {
-                const published = item.publish_date ? Date.parse(item.publish_date) : undefined
-                return {
-                  url: item.url,
-                  ...(item.title ? { title: item.title } : {}),
-                  ...(item.excerpts.length ? { content: item.excerpts.join("\n\n") } : {}),
-                  time: { ...(published !== undefined && Number.isFinite(published) ? { published } : {}) },
-                }
-              }) ?? []
-            )
-          }),
-      })
+    yield* WebSearchProvider.register(ctx, {
+      id: "parallel",
+      name: "Parallel",
+      env: "PARALLEL_API_KEY",
+      execute: (input, credential) =>
+        Effect.gen(function* () {
+          const result = yield* WebSearchMcp.call(
+            http,
+            endpoint,
+            "web_search",
+            { input: McpInput, output: McpOutput },
+            {
+              objective: input.query,
+              search_queries: [input.query],
+            },
+            {
+              "User-Agent": App.useragent(ctx.app),
+              ...(credential?.type === "key" ? { Authorization: `Bearer ${credential.key}` } : {}),
+            },
+          )
+          return (
+            result?.structuredContent.results.map((item) => {
+              const published = item.publish_date ? Date.parse(item.publish_date) : undefined
+              return {
+                url: item.url,
+                ...(item.title ? { title: item.title } : {}),
+                ...(item.excerpts.length ? { content: item.excerpts.join("\n\n") } : {}),
+                time: { ...(published !== undefined && Number.isFinite(published) ? { published } : {}) },
+              }
+            }) ?? []
+          )
+        }),
     })
   }),
 })

@@ -2,16 +2,24 @@ import { Effect, Schema } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { MiniMaxImages, type MiniMaxImageOptions } from "../protocols/minimax-images.js"
+import { MiniMaxVideo, type MiniMaxVideoOptions } from "../protocols/minimax-video.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { ProviderShared } from "../protocols/shared.js"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { MediaRoute } from "../route/media.js"
 import { Protocol } from "../route/protocol.js"
-import { ProviderID, type LLMRequest, type ModelID, type ProviderOptions } from "../schema/index.js"
+import {
+  ProviderID,
+  type LLMRequest,
+  type ModelID,
+  type ProviderOptions,
+  type RequestOptions,
+} from "../schema/index.js"
+import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("minimax")
 
@@ -35,7 +43,7 @@ export type ResponsesOptionsInput = {
 
 export type ProviderOptionsInput = MessagesOptionsInput | ChatOptionsInput | ResponsesOptionsInput
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     /** Overrides the selected API's base URL, including its version prefix. */
     readonly baseURL?: string
@@ -48,7 +56,7 @@ export type Settings<Options = MessagesOptionsInput> = ProviderPackage.Settings 
     readonly baseURL?: string
   }
 
-export type { MiniMaxImageOptions }
+export type { MiniMaxImageOptions, MiniMaxVideoOptions }
 
 const ChatOptions = Schema.Struct({
   thinking: Schema.optional(Schema.Struct({ type: Schema.String })),
@@ -109,13 +117,7 @@ const responsesRoute = Route.make({
 export const routes = [messagesRoute, chatRoute, responsesRoute]
 
 export const configure = (input: Config = {}) => {
-  const { apiKey: _apiKey, auth: _auth, baseURL, ...rest } = input
-  const auth = AuthOptions.bearer(input, "MINIMAX_API_KEY")
-  const defaults = {
-    ...rest,
-    endpoint: baseURL === undefined ? undefined : { baseURL },
-    auth,
-  }
+  const defaults = bearerRouteDefaults(input, "MINIMAX_API_KEY")
   const messages = (modelID: string | ModelID) =>
     messagesRoute.with(defaults).model<MessagesOptionsInput>({
       id: modelID,
@@ -124,38 +126,37 @@ export const configure = (input: Config = {}) => {
   const chat = (modelID: string | ModelID) =>
     chatRoute.with(defaults).model<ChatOptionsInput>({
       id: modelID,
-      compatibility: { supportsStrictMode: false },
+      capabilities: { tools: { strict: false } },
     })
   const responses = (modelID: string | ModelID) =>
     responsesRoute.with(defaults).model<ResponsesOptionsInput>({ id: modelID })
-  const media = MediaRoute.deployment(input, auth)
+  const media = MediaRoute.deployment(input, defaults.auth)
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     MiniMaxImages.model({ ...media, id: modelID, providerOptions })
-  return { id, model: messages, messages, chat, responses, image, configure }
+  // H3 is under /v2 and Hailuo under /v1, so video drops the version a shared `baseURL` carries for the other APIs.
+  const videoBaseURL = media.baseURL?.replace(/(\/v1)?\/*$/, "")
+  const video = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    MiniMaxVideo.model({ ...media, baseURL: videoBaseURL, id: modelID, providerOptions })
+  return { id, model: messages, messages, chat, responses, image, video, configure }
 }
 
 export const provider = configure()
 
 export const model: ProviderPackage.Model<Settings<MessagesOptionsInput>, MessagesOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).model(modelID)
+  configure(toConfig(settings)).model(modelID)
 export const imageModel = (modelID: string, settings?: Settings<MiniMaxImageOptions>) => {
-  const input = config(settings)
+  const input = toConfig<Settings<{}>>(settings)
   return configure(input).image(modelID, input.providerOptions)
+}
+export const videoModel = (modelID: string, settings?: Settings<MiniMaxVideoOptions>) => {
+  const input = toConfig<Settings<{}>>(settings)
+  return configure(input).video(modelID, input.providerOptions)
 }
 
 export const messages = provider.messages
 export const chat = provider.chat
 export const responses = provider.responses
 export const image = provider.image
-
-function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings<{}> = {}) {
-  return {
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }
-}
+export const video = provider.video
 
 export * as MiniMax from "./minimax.js"

@@ -139,7 +139,7 @@ describe("CommandPlugin.Plugin", () => {
 testEffect(PluginTestLayer).effect("ignores built-in metadata supplied by a plugin command", () =>
   Effect.gen(function* () {
     const commands = yield* Command.Service
-    const context = yield* PluginHost.make(yield* Plugin.Service)
+    const context = yield* PluginHost.make(yield* Plugin.Service, "test.custom-command")
     const definition = {
       name: "init",
       description: "Custom setup",

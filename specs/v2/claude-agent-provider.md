@@ -52,6 +52,8 @@ Claude Code reads none of the user's Claude settings. The plugin passes every se
 - Away summaries. Claude Code writes a recap when you come back to an idle terminal session. Opencode does not do this.
 - Tool search. Claude Code hides MCP tools until Claude searches for them. All of opencode's tools reach Claude as MCP tools, so this would hide every one of them. Opencode also has native tool deferral through codemode for normal MCPs.
 - The advisor tool. Claude can ask a stronger model for advice in the middle of a task, using the user's plan. opencode could not show or control these calls.
+- The non-streaming fallback. When a stream fails partway, Claude Code retries without streaming, and opencode would hang waiting for the step to end.
+- The refusal fallback. When a safety classifier flags a request, Claude Code switches the session to another model, so the model running would no longer match the one picked in opencode.
 
 We also clear three variables a user might have set in their shell. `CLAUDE_CODE_SIMPLE` would skip the subscription login. `CLAUDE_CODE_EFFORT_LEVEL` would override the effort chosen in opencode. `MCP_TOOL_TIMEOUT` would cap every opencode tool call, failing subagents and permission prompts that run longer.
 
@@ -65,6 +67,7 @@ We also clear three variables a user might have set in their shell. `CLAUDE_CODE
   - Before the call: gives us Claude's ID for the call. Our tool handler can't see this ID, and opencode needs it to send back the right result. Because we only remember one ID at a time, tools must run one at a time, so we never mark them as safe to run in parallel.
   - After the call: adds PDFs and linked images from opencode's result, which a normal MCP tool result can't carry.
 - Thinking with summaries, so opencode has reasoning text to show
+- Dropping earlier thinking when the system prompt or tools change mid-session (`CLAUDE_CODE_POLISHED_DEWDROP=drop`). Without it the API rejects the next request, because each thinking block is tied to the prompt and tools it was made with.
 - Messages sent exactly as given. opencode already expands `/commands` and adds `@file` contents before sending, so Claude Code does not process them again. It also skips the context Claude Code normally adds at the start of each turn, such as nested CLAUDE.md files, skill lists and reminders. This needs Claude Code 2.1.248 or later.
 - A higher limit on tool output, so opencode's own truncation applies instead
 - Saved Claude sessions for chats, but not for side calls such as titles
