@@ -781,7 +781,11 @@ fn entry_markdown(app: &App, theme: &RunTheme, mono: bool, commit: &Commit, body
                 marker: color,
                 rule: color,
             },
-            SyntaxTheme::new().first_part_fallback().style("default", Style::new().fg(color)),
+            // Without its own `markup.strikethrough` the widget strikes `~~x~~`, which Core 0.8.4 cannot draw.
+            SyntaxTheme::new()
+                .first_part_fallback()
+                .style("default", Style::new().fg(color))
+                .style("markup.strikethrough", Style::new().fg(color)),
         )
     } else {
         (MarkdownColors { text: color, ..theme.markdown }, theme.syntax.clone().unwrap_or_default())
@@ -954,6 +958,35 @@ mod tests {
         for blocks in ["Para\n---", "x\n***", "```\ncode\n```", "| a |\n| - |\n| 1 |"] {
             let content = format!("{blocks}\n\nnext");
             assert_eq!(render(stable_prefix(&content), true), render(blocks, false), "{content:?}");
+        }
+    }
+
+    /// TS mini on Core 0.8.4 hides the tildes of `~~x~~` and draws the text plain, in every theme and body.
+    #[test]
+    fn strikethrough_text_is_not_struck() {
+        let full = crate::theme::resolve(&crate::theme::ThemeInput {
+            name: None,
+            mode: None,
+            palette: None,
+            directories: Vec::new(),
+            mono: false,
+        });
+        let mono = crate::theme::mono(opentui::theme::ThemeMode::Dark);
+        let commit = assistant("", Phase::Final);
+        let code = Body::Code { content: String::new(), filetype: Some("markdown".into()) };
+        for theme in [&full, &mono] {
+            for body in [Body::Markdown(String::new()), code.clone()] {
+                let app = opentui::testing::TestApp::new(30, 3);
+                let markdown = entry_markdown(app.app(), theme, false, &commit, &body, false);
+                app.app().root().add(&markdown);
+                markdown.set_markdown("a ~~gone~~ b");
+                let capture = app.render();
+                assert!(capture.text().starts_with("a gone b"), "{body:?}: {}", capture.text());
+                for x in 2..6 {
+                    let attributes = capture.cell(x, 0).unwrap().attributes;
+                    assert!(!attributes.contains(Attributes::STRIKETHROUGH), "{body:?} at {x}: {attributes:?}");
+                }
+            }
         }
     }
 }
