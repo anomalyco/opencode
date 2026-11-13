@@ -378,7 +378,7 @@ fn a_call_waiting_on_permission_takes_the_warning_color() {
 
 #[test]
 fn a_shell_moved_to_the_background_draws_only_its_command() {
-    // The result a timed-out command gets under `shell_timeout_background` (#63024).
+    // The result a timed-out command gets (#63024; the default since #63699).
     let output = "Command moved to the background (shell ID: sh_1).\nPID: 4321\nOutput is streaming to: /shell-output\n\nThe command did not finish within its timeout of 120 seconds and was moved to the background. Do not start another copy while it is running.";
     let messages = turn(vec![tool(
         "call_1",

@@ -466,6 +466,14 @@ impl<'de> Deserialize<'de> for ProviderEncoding {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ProviderTls {
+    pub cert: String,
+    pub key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub passphrase: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ProviderSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout: Option<ProviderSettingsTimeout>,
@@ -481,6 +489,8 @@ pub struct ProviderSettings {
     pub transport: Option<ProviderTransport>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub encoding: Option<ProviderEncoding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls: Option<ProviderTls>,
     #[serde(flatten)]
     pub extra: IndexMap<String, serde_json::Value>,
 }
@@ -14360,6 +14370,8 @@ pub struct ConfigProviderSettings {
     pub transport: Option<ProviderTransport>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub encoding: Option<ProviderEncoding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls: Option<ProviderTls>,
     #[serde(flatten)]
     pub extra: IndexMap<String, Option<serde_json::Value>>,
 }
@@ -14612,8 +14624,6 @@ pub struct ConfigEntryDocumentInfoExperimental {
     pub schedules: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifacts: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub shell_timeout_background: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub console_watches: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
