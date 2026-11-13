@@ -48,8 +48,8 @@ export type Profile = Awaited<ReturnType<typeof createBrowserProfile>>
 /**
  * The desktop browser's one profile, for the whole desktop app rather than a session, project or server: its cookies,
  * site data and extensions. Pages of a server on this machine browse in it directly. Pages of another server need that
- * server's network, which Chromium sets per partition, so they browse in their own partition that `link` keeps in step
- * with the profile's cookies.
+ * server's network, which Chromium sets per partition, so they browse in their own partition. `link` keeps that
+ * partition's cookies in step with the profile's only while the user shares sign-ins with remote servers.
  */
 export async function createBrowserProfile(input: {
   storage: Storage
