@@ -109,6 +109,7 @@ export const baseTranscript = (input: {
   readonly tools: Tool.Snapshot
   readonly initial: ReadonlyArray<Instructions.Rendered>
   readonly messages: ReadonlyArray<SessionMessage.Info>
+  readonly replayReasoning?: boolean
 }) => {
   const providerMetadataKey = input.model.model.route.providerMetadataKey ?? input.model.model.provider
   return {
@@ -126,7 +127,7 @@ export const baseTranscript = (input: {
     ].filter((part) => part.text.length > 0),
     // Hooks read each stored message's metadata on the messages built from it; `prepare` strips it before the request.
     messages: input.messages.flatMap((message) =>
-      toLLMMessages([message], input.model.ref, providerMetadataKey).map(
+      toLLMMessages([message], input.model.ref, providerMetadataKey, input.replayReasoning).map(
         (item): SessionRequestMessage =>
           message.metadata === undefined || item.id !== message.id
             ? item

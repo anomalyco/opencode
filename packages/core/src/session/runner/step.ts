@@ -5,6 +5,7 @@ import {
   InvalidProviderOutputError,
   LLMClient,
   isContextOverflowFailure,
+  isReasoningRejectedFailure,
   type ToolCall,
 } from "@opencode/ai/effect"
 import type { Agent } from "@opencode/schema/agent"
@@ -35,6 +36,7 @@ export type Outcome = Data.TaggedEnum<{
     readonly freshAssistant?: boolean
   }
   RecoverFull: {}
+  RecoverReasoning: {}
   Compacted: {}
   OutputLimit: { readonly needsContinuation: boolean }
 }>
@@ -59,6 +61,8 @@ interface Input {
     retry: boolean,
   ) => Effect.Effect<{ readonly retry: false } | SessionRunnerRetry.Decision>
   readonly recoverContinuation: boolean
+  /** Whether a provider that rejects the replayed reasoning gets the request again without it. */
+  readonly recoverReasoning?: boolean
   /** The runner owns compaction policy; the attempt invokes it only before durable output. */
   readonly recoverOverflow: Effect.Effect<boolean>
 }
@@ -241,6 +245,14 @@ export const make = Effect.gen(function* () {
           !recorded.outputStarted
         )
           return Outcome.RecoverFull()
+        if (input.recoverReasoning && !recorded.outputStarted && isReasoningRejectedFailure(llmFailure)) {
+          yield* Effect.logWarning("provider rejected replayed reasoning; retrying without it", {
+            sessionID: input.sessionID,
+            model: input.model.ref,
+            message: llmFailure?.message,
+          })
+          return Outcome.RecoverReasoning()
+        }
         const retry =
           llmFailure && llmError && !isContextOverflowFailure(llmFailure)
             ? yield* restore(

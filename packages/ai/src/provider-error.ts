@@ -80,6 +80,15 @@ export const isContextOverflowFailure = (failure: unknown) =>
   failure.reason._tag === "InvalidRequest" &&
   failure.reason.classification === "context-overflow"
 
+// OpenAI models on Bedrock answer this when they cannot verify a replayed reasoning block.
+const REASONING_REJECTED_TEXT = /invalid encrypted view/i
+
+/** The provider refused reasoning it issued earlier; the same request without that reasoning is still valid. */
+export const isReasoningRejectedFailure = (failure: unknown) =>
+  failure instanceof AIError &&
+  failure.reason._tag === "InvalidRequest" &&
+  failure.reason.classification === "reasoning-rejected"
+
 /**
  * Whether a failed call may succeed when sent again: rate limits, provider-side failures, transport failures that did
  * not deliver an accepted write, and unrecognized failures. Callers decide which calls are safe to repeat.
@@ -240,6 +249,8 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     return new InvalidRequestError({ ...details, classification: "context-overflow" })
   if (input.status === 413 || isPayloadTooLarge(text))
     return new InvalidRequestError({ ...details, classification: "payload-too-large" })
+  if (input.status === 400 && REASONING_REJECTED_TEXT.test(input.message))
+    return new InvalidRequestError({ ...details, classification: "reasoning-rejected" })
   if (codes.some((code) => CONTENT_POLICY_CODES.has(code)) || (clientScoped && CONTENT_POLICY_TEXT.test(input.message)))
     return new ContentPolicyError(details)
   if (
