@@ -233,6 +233,10 @@ export default function Layout(props: ParentProps) {
     >
       <a
         href="#shell-main"
+        onClick={(event) => {
+          event.preventDefault()
+          document.getElementById("shell-main")?.focus()
+        }}
         class="sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-v2-background-bg-base focus:px-3 focus:py-1.5 focus:text-13-regular focus:text-text-strong focus:shadow-[var(--v2-elevation-floating)]"
       >
         {language.t("shell.skipToContent")}
