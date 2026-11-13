@@ -59,12 +59,16 @@ pub enum Fault {
     Render,
 }
 
-/// The probe's dialogs. A prompt and a select run `probe.run` when they are confirmed; the panel has no action.
+/// The probe's dialogs. A prompt and a select run `probe.run` when they are confirmed, a confirm when it is answered
+/// (enter or escape), an alert however it closes (enter, escape, or a dialog that replaces it); the panel has no
+/// action.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Dialog {
     Panel,
     Prompt,
     Select,
+    Confirm,
+    Alert,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -100,6 +104,8 @@ pub enum Which {
     Panel,
     Prompt,
     Select,
+    Confirm,
+    Alert,
 }
 
 /// Where the probe rendered.
@@ -197,6 +203,24 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
             action: confirmed(),
         }));
     });
+    let held = token.clone();
+    setup.command(command("probe.confirm", "Probe confirm"), move |host, _| {
+        let _ = &held;
+        called(activation, B, Kind::Command(Which::Confirm));
+        host.dialog(abi::Dialog::Confirm(abi::Confirm {
+            title: format!("Probe confirm b{B}"),
+            message: String::new(),
+            label: abi::ConfirmLabel::default(),
+            action: confirmed(),
+        }));
+    });
+    let held = token.clone();
+    setup.command(command("probe.alert", "Probe alert"), move |host, _| {
+        let _ = &held;
+        called(activation, B, Kind::Command(Which::Alert));
+        let (title, message) = (format!("Probe alert b{B}"), String::new());
+        host.dialog(abi::Dialog::Alert(abi::Alert { title, message, action: Some(confirmed()) }));
+    });
     let (held, counted) = (token.clone(), count.clone());
     setup.slot(abi::Placement::new(abi::SlotKind::Replace, "home.footer"), move |_, _, _| {
         let _ = &held;
@@ -224,7 +248,7 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// What a confirmed prompt or select runs.
+/// What a confirmed prompt, select or confirm, and a closed alert, run.
 fn confirmed() -> abi::Action {
     abi::Action::Command { name: "probe.run".to_owned(), input: None }
 }
@@ -599,6 +623,8 @@ impl Reference {
                     Some(Command::Dialog(Dialog::Panel)) => Which::Panel,
                     Some(Command::Dialog(Dialog::Prompt)) => Which::Prompt,
                     Some(Command::Dialog(Dialog::Select)) => Which::Select,
+                    Some(Command::Dialog(Dialog::Confirm)) => Which::Confirm,
+                    Some(Command::Dialog(Dialog::Alert)) => Which::Alert,
                     _ => Which::Run,
                 };
                 // A command of the probe runs from the keymap exactly while the probe is active.
@@ -610,9 +636,21 @@ impl Reference {
                 }
                 if let Some(a) = self.active() {
                     expected.push_back(Expect::Command(which, a));
+                    // The dialog it opens replaces the probe's alert, which runs its action as it closes, unless the
+                    // command panics first.
+                    if which != Which::Run
+                        && self.armed != Some(Fault::Command)
+                        && let Some((Dialog::Alert, alert, _)) = self.dialog
+                    {
+                        self.confirm = Some(alert);
+                    }
                 }
             }
-            Some(Command::Escape) => self.dialog = None,
+            // Escape answers a confirm `false` and closes an alert, which then run their action; it closes the others.
+            Some(Command::Escape) => match self.dialog.take() {
+                Some((Dialog::Confirm | Dialog::Alert, a, _)) => self.confirm = Some(a),
+                _ => {}
+            },
             // A confirmed prompt or select runs `probe.run` once the frame comes. The panel has no action and stays.
             Some(Command::Enter) => self.enter(),
             Some(Command::Home) => self.page = Page::Home,
@@ -740,8 +778,8 @@ impl Reference {
         Ok(())
     }
 
-    /// Enter on the dialog on screen: a confirmed prompt or select runs `probe.run` once the frame comes. The panel has
-    /// no action and stays.
+    /// Enter on the dialog on screen: a confirmed prompt, select or confirm, or a closed alert, runs `probe.run` once the
+    /// frame comes. The panel has no action and stays.
     fn enter(&mut self) {
         match self.dialog.take() {
             Some((Dialog::Panel, a, build)) => self.dialog = Some((Dialog::Panel, a, build)),
@@ -797,6 +835,8 @@ impl Reference {
             Dialog::Panel => format!("probe panel b{build}"),
             Dialog::Prompt => format!("Probe prompt b{build}"),
             Dialog::Select => format!("Probe select b{build}"),
+            Dialog::Confirm => format!("Probe confirm b{build}"),
+            Dialog::Alert => format!("Probe alert b{build}"),
         })
     }
 }
@@ -810,7 +850,8 @@ pub struct PluginModel;
 
 /// One command of the generator, without the exit.
 fn pick(rng: &mut Rng) -> Command {
-    let dialog = |rng: &mut Rng| *rng.pick(&[Dialog::Panel, Dialog::Prompt, Dialog::Select]);
+    let dialog =
+        |rng: &mut Rng| *rng.pick(&[Dialog::Panel, Dialog::Prompt, Dialog::Select, Dialog::Confirm, Dialog::Alert]);
     let build = |rng: &mut Rng| *rng.pick(&[1, 2, PROMPTING, BAD]);
     match rng.below(100) {
         0..14 => Command::Toggle,
@@ -1168,6 +1209,20 @@ const FIXED: &[(&str, &[Command])] = &[
     ),
     // Review bigboi-2, the positive control: a candidate that passes keeps the prompt its setup asked for.
     ("a-passed-candidates-prompt-shows", &[Command::Dialog(Dialog::Panel), Command::Reload(PROMPTING)]),
+    // P0a (bigboi 2, carbon-p0a-7): a confirm or an alert ends with its activation, and its answer reaches no other.
+    // An alert answers as it closes, so a reload that closes it must not reach the new build.
+    ("a-confirm-ends-with-a-disable", &[Command::Dialog(Dialog::Confirm), Command::Toggle]),
+    ("an-alert-ends-with-a-failure", &[Command::Dialog(Dialog::Alert), Command::Arm(Fault::Command), Command::Run]),
+    ("a-stale-confirm-reaches-no-new-build", &[Command::Dialog(Dialog::Confirm), Command::Reload(2), Command::Escape]),
+    ("a-stale-alert-reaches-no-new-build", &[Command::Dialog(Dialog::Alert), Command::Reload(2)]),
+    ("an-alert-before-a-reload-reaches-no-new-build", &[Command::Dialog(Dialog::Alert), Command::EnterThenReload(2)]),
+    (
+        "an-alert-kept-by-a-failed-reload-still-answers",
+        &[Command::Dialog(Dialog::Alert), Command::Reload(BAD), Command::Escape],
+    ),
+    ("a-confirm-answers-false-on-escape", &[Command::Dialog(Dialog::Confirm), Command::Escape]),
+    ("a-replaced-alert-answers-once", &[Command::Dialog(Dialog::Alert), Command::Dialog(Dialog::Prompt)]),
+    ("a-replaced-confirm-answers-nothing", &[Command::Dialog(Dialog::Confirm), Command::Dialog(Dialog::Panel)]),
 ];
 
 // Expected (O-124, Pt): every property holds for 40 seeds of 64 commands. 4.14 asks for 256 seeds within about 3 s; a
