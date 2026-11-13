@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use activation::{Activation, Drawn};
 pub use opencode_plugin_abi as abi;
-use opencode_ui::dialog::{DialogKeymap, FocusId};
+use opencode_ui::dialog::DialogKeymap;
 use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::markdown::CodeBlockRenderers;
 use opencode_ui::theme::Theme;
@@ -53,6 +53,13 @@ pub trait Host: 'static {
     fn storage_write(&self, _key: &str, _json: &str) -> Result<(), String> {
         Err("no storage".to_owned())
     }
+    /// Puts back what storage key `key` held before a plugin call that panicked wrote it: `json`, or nothing. By
+    /// default it writes `json` back and cannot remove a key.
+    fn storage_restore(&self, key: &str, json: Option<&str>) {
+        if let Some(json) = json {
+            let _ = self.storage_write(key, json);
+        }
+    }
     /// Tells the mounted claims that the plugins' storage changed ([`abi::Changed::local`]). Called from the effect
     /// queue, in order with the plugin's other effects.
     fn storage_changed(&self) {}
@@ -68,8 +75,8 @@ pub trait Host: 'static {
     }
     /// Shows `toast`; with a session, it offers to open the session unless the session's family is on screen.
     fn toast(&self, _toast: &abi::Toast) {}
-    /// Says that external plugin `id` failed: it did not load or set up (`id` is its target when no build of it
-    /// described an ID), or it panicked while it ran, after its claims drew empty. Called outside every plugin
+    /// Says that plugin `id` failed: an external plugin did not load or set up (`id` is its target when no build of it
+    /// described an ID), or a plugin panicked while it ran, after its claims drew empty. Called outside every plugin
     /// callback.
     fn failed(&self, id: &str) {
         self.toast(
@@ -181,8 +188,10 @@ impl From<abi::Plugin> for Builtin {
 pub struct Definition {
     pub id: String,
     setup: SetupFn,
-    /// The `plugins` target or discovered path of an external plugin, and its failure.
-    external: Option<(String, ErrorFn)>,
+    /// The `plugins` target or discovered path of an external plugin.
+    target: Option<String>,
+    /// The failure of a plugin of the one API while it is active: a call that panicked.
+    error: Option<ErrorFn>,
 }
 
 impl Definition {
@@ -198,18 +207,24 @@ impl Definition {
         id: impl Into<String>,
         setup: impl Fn(&mut Setup<'_>) -> Result<(), String> + 'static,
     ) -> Self {
-        Self { id: id.into(), setup: Rc::new(setup), external: None }
+        Self { id: id.into(), setup: Rc::new(setup), target: None, error: None }
     }
 
     /// Marks an external plugin loaded from `target`; `error` reports its failure while it is active.
     pub(crate) fn external(mut self, target: impl Into<String>, error: ErrorFn) -> Self {
-        self.external = Some((target.into(), error));
+        self.target = Some(target.into());
+        self.error = Some(error);
         self
     }
 
     /// The target of an external plugin.
     fn target(&self) -> Option<&str> {
-        self.external.as_ref().map(|(target, _)| target.as_str())
+        self.target.as_deref()
+    }
+
+    /// Why the active plugin failed, if it did.
+    fn failure(&self) -> Option<String> {
+        self.error.as_ref().and_then(|error| error())
     }
 }
 
@@ -234,7 +249,14 @@ impl From<abi::Plugin> for Definition {
 
 /// A plugin of the one API, run in process: its closures get Rust values, with no JSON step.
 fn in_process(plugin: abi::Plugin) -> Definition {
-    Definition::fallible(plugin.id, move |setup: &mut Setup<'_>| {
+    // The failure of the running activation: a call that panicked.
+    let failure: Rc<RefCell<Option<String>>> = Rc::default();
+    let error: ErrorFn = {
+        let failure = failure.clone();
+        Rc::new(move || failure.borrow().clone())
+    };
+    let mut definition = Definition::fallible(plugin.id, move |setup: &mut Setup<'_>| {
+        *failure.borrow_mut() = None;
         let proxy = setup.host().app().proxy();
         let activation = Activation::new(setup.host(), Arc::new(activation::Wake::new(Some(proxy))));
         let scope = Rc::new(Scope {
@@ -243,15 +265,29 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             keys: RefCell::default(),
             activation: activation.clone(),
             replies: RefCell::default(),
+            failure: failure.clone(),
+            call: RefCell::default(),
+            layer: RefCell::default(),
         });
         let mut api = abi::Registered::new(setup.id(), None);
         api.set_waker(activation.waker());
-        // Setup reaches the host as a command does: its effects wait on the one queue.
-        let set_up = scope.with(|host| {
-            catch_unwind(AssertUnwindSafe(|| (plugin.setup)(&mut api.setup_with(host))))
-                .unwrap_or_else(|panic| Err(format!("setup panicked: {}", abi::panic_message(&*panic))))
+        // Setup reaches the host as a command does: its effects wait on the one queue. A setup that panics runs its
+        // dispose callbacks within the same call, as the C ABI's `create` does, so nothing either asked for happens.
+        let set_up = scope.attempt(&**setup.host(), |host| {
+            match catch_unwind(AssertUnwindSafe(|| (plugin.setup)(&mut api.setup_with(host)))) {
+                Ok(set_up) => set_up,
+                Err(panic) => {
+                    api.dispose(Some(host));
+                    std::panic::resume_unwind(panic)
+                }
+            }
         });
-        if let Err(error) = set_up.unwrap_or_else(|| Err("the host is gone".to_owned())) {
+        let set_up = match set_up {
+            Some(Ok(set_up)) => set_up,
+            Some(Err(panic)) => Err(format!("setup panicked: {panic}")),
+            None => Err("the host is gone".to_owned()),
+        };
+        if let Err(error) = set_up {
             scope.dispose(&mut api);
             return Err(error);
         }
@@ -262,16 +298,16 @@ fn in_process(plugin: abi::Plugin) -> Definition {
         *scope.replies.borrow_mut() = api.replies().to_vec();
         if !api.wakes().is_empty() {
             let (wakes, scope) = (api.wakes().to_vec(), scope.clone());
-            activation.on_wake(Rc::new(move || scope.run(|host| wakes.iter().for_each(|run| run(host)))));
+            activation.on_wake(Rc::new(move || scope.run("on-wake", |host| wakes.iter().for_each(|run| run(host)))));
         }
         // A fence key that goes reaches the plugin's handlers once the event that freed its block is done.
         let gone = (!api.fence_gone().is_empty()).then(|| {
             let (runs, scope) = (api.fence_gone().to_vec(), scope.clone());
             Rc::new(move |key| {
-                let (runs, activation) = (runs.clone(), scope.activation.clone());
-                defer(&scope.host, move |_| {
-                    if !activation.disposed() {
-                        runs.iter().for_each(|run| run(key));
+                let (runs, scope) = (runs.clone(), scope.clone());
+                defer(&scope.host.clone(), move |host| {
+                    if !scope.activation.disposed() {
+                        scope.call("fence-gone", host, |_| runs.iter().for_each(|run| run(key)));
                     }
                 });
             }) as node::Gone
@@ -281,9 +317,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             let render: CodeBlockRender = Rc::new(move |block, theme| {
                 let host = scope.host.upgrade()?;
                 fences.render(block, theme, |fence| {
-                    let mut out = abi::Fenced::Code;
-                    host.read(&mut |read| out = render(&Scoped { read, host: &*host, scope: &scope }, &fence));
-                    out
+                    scope.call("render-fence", &*host, |read| render(read, &fence)).unwrap_or(abi::Fenced::Code)
                 })
             });
             setup.registration.code_blocks.push((language.clone(), render));
@@ -295,13 +329,11 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             let mount = (!mounts.is_empty()).then(|| {
                 let scope = scope.clone();
                 Rc::new(move |_: &dyn Host, input: &abi::SlotInput, mounted: bool| {
-                    scope.mounted(|host| mounts.iter().for_each(|run| run(host, input, mounted)));
+                    scope.mounted("on-mount", |host| mounts.iter().for_each(|run| run(host, input, mounted)));
                 }) as node::MountFn
             });
             let render: node::SlotRender = Rc::new(move |host: &dyn Host, input, changed| {
-                let mut out = abi::Render::Keep;
-                host.read(&mut |read| out = render(&Scoped { read, host, scope: &scope }, input, changed));
-                out
+                scope.call("render-slot", host, |read| render(read, input, changed)).unwrap_or(abi::Render::Hide)
             });
             setup.claim(slot::placement(claim), render, mount, &activation);
         }
@@ -311,7 +343,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                 types,
                 Rc::new(move |event| {
                     if kinds.iter().any(|kind| kind == event.tag()) {
-                        scope.run(|host| run(host, event));
+                        scope.run("on-event", |host| run(host, event));
                     }
                 }),
             );
@@ -321,12 +353,19 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             .commands()
             .map(|(command, run)| {
                 let (run, scope) = (run.clone(), scope.clone());
-                (command.scope.clone(), tui_command(command, move |input| scope.run(|host| run(host, input))))
+                (
+                    command.scope.clone(),
+                    tui_command(command, move |input| scope.run("run-command", |host| run(host, input))),
+                )
             })
             .collect();
         let (global, scoped) = route::split(commands);
         if !global.is_empty() {
-            setup.layer(KeymapLayer::global(global));
+            // Kept apart from the registration, so a panic can remove it.
+            match setup.host().keymap().layer(KeymapLayer::global(global)) {
+                Ok(disposer) => *scope.layer.borrow_mut() = Some(disposer),
+                Err(error) => log::error!("plugin {} keymap layer: {error}", setup.id()),
+            }
         }
         for (name, render) in api.routes() {
             let mounts: Vec<abi::RouteMountFn> =
@@ -334,21 +373,21 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             let mount = (!mounts.is_empty()).then(|| {
                 let scope = scope.clone();
                 Rc::new(move |_: &dyn Host, _: &abi::SlotInput, mounted: bool| {
-                    scope.mounted(|host| mounts.iter().for_each(|run| run(host, mounted)));
+                    scope.mounted("on-route-mount", |host| mounts.iter().for_each(|run| run(host, mounted)));
                 }) as node::MountFn
             });
             let (render, scope) = (render.clone(), scope.clone());
             let render: node::SlotRender = Rc::new(move |host: &dyn Host, _, changed| {
-                let mut out = abi::Render::Keep;
-                host.read(&mut |read| out = render(&Scoped { read, host, scope: &scope }, changed));
-                out
+                scope.call("render-route", host, |read| render(read, changed)).unwrap_or(abi::Render::Hide)
             });
             setup.view_route(name, render, route::commands(&scoped, name), mount, &activation);
         }
-        // Disposal runs the plugin's dispose callbacks, then drops its replies and wakes.
+        // Disposal removes the plugin's commands, runs its dispose callbacks, then drops its replies and wakes.
         setup.on_dispose(move || scope.dispose(&mut api));
         Ok(())
-    })
+    });
+    definition.error = Some(error);
+    definition
 }
 
 /// The keymap command of a plugin's `command`, which calls `run` with its input.
@@ -374,15 +413,29 @@ pub(crate) fn tui_command(command: &abi::Command, run: impl Fn(Option<&str>) + '
     entry
 }
 
-/// What an in-process plugin's reads and effects are scoped to: its host, its ID and declared storage keys, and its
-/// activation.
+/// What an in-process plugin's reads and effects are scoped to: its host, its ID and declared storage keys, its
+/// activation, and the call that runs.
 struct Scope {
     host: Weak<dyn Host>,
     id: String,
     keys: RefCell<Vec<String>>,
     activation: Rc<Activation>,
     replies: RefCell<Vec<abi::ReplyFn>>,
+    failure: Rc<RefCell<Option<String>>>,
+    /// What the running call asked for, while one runs.
+    call: RefCell<Option<Call>>,
+    /// The commands' keymap layer, until deactivation or a panic removes it.
+    layer: RefCell<Option<Disposer>>,
 }
+
+/// What one call of an in-process plugin asked for: the effects that wait for it to return, and the storage it wrote.
+#[derive(Default)]
+struct Call {
+    effects: Vec<Effect>,
+    undo: Undo,
+}
+
+type Effect = Box<dyn FnOnce(&dyn Host)>;
 
 impl Scope {
     /// The host's storage key of `key`, when the plugin declared it.
@@ -394,37 +447,70 @@ impl Scope {
         None
     }
 
-    /// Calls `f` with the host as the plugin reads and calls it, unless the host is gone.
-    fn with<R>(self: &Rc<Self>, f: impl FnOnce(&dyn abi::Host) -> R) -> Option<R> {
-        let host = self.host.upgrade()?;
+    /// Calls `f` as one call of the plugin, `export`, unless it failed: a panic fails it.
+    fn call<R>(self: &Rc<Self>, export: &str, host: &dyn Host, f: impl FnOnce(&Scoped<'_>) -> R) -> Option<R> {
+        if self.failure.borrow().is_some() {
+            return None;
+        }
+        match self.attempt(host, f)? {
+            Ok(value) => Some(value),
+            Err(panic) => {
+                let (layer, error) = (self.layer.borrow_mut().take(), format!("{export} panicked: {panic}"));
+                fail(&self.host, &self.id, &self.failure, layer, &self.activation, error);
+                None
+            }
+        }
+    }
+
+    /// Calls `f` with the host as the plugin reads and calls it. What it asks for waits on the effect queue until it
+    /// returns; when it panics, that is dropped, the storage it wrote is put back, and the panic's message returned.
+    /// `None` when the host never read.
+    fn attempt<R>(self: &Rc<Self>, host: &dyn Host, f: impl FnOnce(&Scoped<'_>) -> R) -> Option<Result<R, String>> {
+        let outer = self.call.replace(Some(Call::default()));
         let (mut f, mut out) = (Some(f), None);
         host.read(&mut |read| {
             if let Some(f) = f.take() {
-                out = Some(f(&Scoped { read, host: &*host, scope: self }));
+                out = Some(catch_unwind(AssertUnwindSafe(|| f(&Scoped { read, host, scope: self }))));
             }
         });
+        let call = std::mem::replace(&mut *self.call.borrow_mut(), outer).unwrap_or_default();
+        let out = out.map(|out| out.map_err(|panic| abi::panic_message(&*panic)));
+        match (&out, &mut *self.call.borrow_mut()) {
+            (Some(Err(_)), _) => call.undo.restore(host),
+            // A call within a call is part of it.
+            (_, Some(outer)) => {
+                outer.effects.extend(call.effects);
+                outer.undo.0.extend(call.undo.0);
+            }
+            (_, None) => call.effects.into_iter().for_each(|effect| defer(&self.host, effect)),
+        }
         out
     }
 
     /// Runs a handler of the plugin with the host, then invalidates its claims, whose state it may have changed.
-    fn run(self: &Rc<Self>, handler: impl FnOnce(&dyn abi::Host)) {
-        if self.with(handler).is_some() {
+    fn run(self: &Rc<Self>, export: &str, handler: impl FnOnce(&Scoped<'_>)) {
+        let Some(host) = self.host.upgrade() else { return };
+        if self.call(export, &*host, handler).is_some() {
             self.activation.invalidate();
         }
     }
 
     /// Runs a mount handler: a claim or route may mount and unmount after its plugin was disposed, which hears of it
     /// no more.
-    fn mounted(self: &Rc<Self>, handler: impl FnOnce(&dyn abi::Host)) {
+    fn mounted(self: &Rc<Self>, export: &str, handler: impl FnOnce(&Scoped<'_>)) {
         if !self.activation.disposed() {
-            self.run(handler);
+            self.run(export, handler);
         }
     }
 
-    /// Disposes the plugin's registrations `api` with the host, or without it once it is gone, then the activation,
-    /// so no reply or wake reaches the plugin after.
+    /// Disposes the plugin's registrations `api` with the host, or without it once it is gone, also after it failed,
+    /// then the activation, so no reply or wake reaches the plugin after.
     fn dispose(self: &Rc<Self>, api: &mut abi::Registered) {
-        if self.with(|host| api.dispose(Some(host))).is_none() {
+        if let Some(layer) = self.layer.take() {
+            layer.dispose();
+        }
+        let host = self.host.upgrade();
+        if host.and_then(|host| self.attempt(&*host, |host| api.dispose(Some(host)))).is_none() {
             api.dispose(None);
         }
         self.activation.dispose();
@@ -517,6 +603,7 @@ impl abi::Read for Scoped<'_> {
 impl abi::Host for Scoped<'_> {
     fn storage_set(&self, key: &str, value: serde_json::Value) {
         let Some(stored) = self.scope.stored(key) else { return };
+        self.written(&stored);
         // The host shows it to reads at once; the claims hear of it in queue order.
         match self.host.storage_write(&stored, &value.to_string()) {
             Ok(()) => self.defer(|host| host.storage_changed()),
@@ -526,6 +613,7 @@ impl abi::Host for Scoped<'_> {
 
     fn storage_merge(&self, key: &str, fields: serde_json::Map<String, serde_json::Value>) {
         let Some(stored) = self.scope.stored(key) else { return };
+        self.written(&stored);
         match self.host.storage_merge(&stored, fields) {
             Ok(()) => self.defer(|host| host.storage_changed()),
             Err(error) => log::warn!("storage {stored}: {error}"),
@@ -570,7 +658,7 @@ impl abi::Host for Scoped<'_> {
                     defer(&host, move |_| {
                         let Some(scope) = scope.upgrade().filter(|scope| !scope.activation.disposed()) else { return };
                         let replies = scope.replies.borrow().clone();
-                        scope.run(|host| replies.iter().for_each(|run| run(host, id, result.clone())));
+                        scope.run("on-reply", |host| replies.iter().for_each(|run| run(host, id, result.clone())));
                     });
                 }),
             );
@@ -610,9 +698,60 @@ pub(crate) fn next_request() -> abi::RequestId {
 }
 
 impl Scoped<'_> {
+    /// Holds `effect` until the call returns.
     fn defer(&self, effect: impl FnOnce(&dyn Host) + 'static) {
-        defer(&self.scope.host, effect);
+        match &mut *self.scope.call.borrow_mut() {
+            Some(call) => call.effects.push(Box::new(effect)),
+            None => defer(&self.scope.host, effect),
+        }
     }
+
+    /// Records what storage key `stored` holds before the call writes it.
+    fn written(&self, stored: &str) {
+        if let Some(call) = &mut *self.scope.call.borrow_mut() {
+            call.undo.record(self.host, stored);
+        }
+    }
+}
+
+/// The storage writes of one plugin call, each with what its key held before, which a call that panics puts back.
+#[derive(Default)]
+pub(crate) struct Undo(Vec<(String, Option<String>)>);
+
+impl Undo {
+    /// Records `key`'s value before a write.
+    pub(crate) fn record(&mut self, host: &dyn Host, key: &str) {
+        self.0.push((key.to_owned(), host.storage_read(key)));
+    }
+
+    /// Puts back the last write first, so each key ends with what it held before the first.
+    pub(crate) fn restore(self, host: &dyn Host) {
+        self.0.into_iter().rev().for_each(|(key, json)| host.storage_restore(&key, json.as_deref()));
+    }
+}
+
+/// Fails plugin `id` with `error` after a call of it panicked: it is not called again, its commands leave the keymap
+/// once the key that may have run the call is handled, the host says so, and its claims draw empty.
+pub(crate) fn fail(
+    host: &Weak<dyn Host>,
+    id: &str,
+    failure: &RefCell<Option<String>>,
+    layer: Option<Disposer>,
+    activation: &Rc<Activation>,
+    error: String,
+) {
+    log::error!("plugin {id} failed: {error}");
+    *failure.borrow_mut() = Some(error);
+    let id = id.to_owned();
+    defer(host, move |host| {
+        if let Some(layer) = layer {
+            layer.dispose();
+        }
+        host.failed(&id);
+        // The fences it drew fall back to the code view, as the ones it draws from now on do.
+        host.remount();
+    });
+    activation.invalidate();
 }
 
 /// Queues `effect` on the host's one effect queue, which both paths share: it runs in order with every other plugin
@@ -690,14 +829,6 @@ impl Setup<'_> {
         });
     }
 
-    /// Registers a keymap layer: commands, their palette and slash entries, and keybinds (TS `keymap.layer`).
-    pub(crate) fn layer(&mut self, layer: KeymapLayer<FocusId>) {
-        match self.host.keymap().layer(layer) {
-            Ok(disposer) => self.registration.disposers.push(disposer),
-            Err(error) => log::error!("plugin {} keymap layer: {error}", self.id),
-        }
-    }
-
     /// Registers the route `Route::Plugin { id, name }` shows (TS `ui.router.register`).
     pub(crate) fn route(&mut self, name: impl Into<String>, render: impl Fn(&dyn Host) -> Box<dyn Claimed> + 'static) {
         self.registration.routes.push((name.into(), Rc::new(render)));
@@ -710,6 +841,15 @@ impl Setup<'_> {
         render: impl Fn(&CodeBlock<'_>, &Theme) -> Option<AnyWidget> + 'static,
     ) {
         self.registration.code_blocks.push((language.into(), Rc::new(render)));
+    }
+
+    /// Registers a keymap layer: commands, their palette and slash entries, and keybinds (TS `keymap.layer`).
+    #[cfg(test)]
+    pub(crate) fn layer(&mut self, layer: KeymapLayer<opencode_ui::dialog::FocusId>) {
+        match self.host.keymap().layer(layer) {
+            Ok(disposer) => self.registration.disposers.push(disposer),
+            Err(error) => log::error!("plugin {} keymap layer: {error}", self.id),
+        }
     }
 
     /// Runs `cleanup` when the plugin deactivates (the cleanup TS `setup` returns).
@@ -1017,8 +1157,7 @@ impl Registry {
     pub fn failed_load(&self, target: &str, error: &str) -> bool {
         // Whether it keeps running, and the registration of a plugin that panicked, which goes.
         let outcome = self.with_target(target, |plugin| {
-            let panicked = plugin.definition.external.as_ref().is_some_and(|(_, error)| error().is_some());
-            if plugin.active.is_some() && !panicked {
+            if plugin.active.is_some() && plugin.definition.failure().is_none() {
                 return (true, None);
             }
             let broken = error.to_owned();
@@ -1118,11 +1257,10 @@ impl Registry {
             }
             return true;
         }
-        // Enabling a failed external plugin restarts it with a fresh setup.
+        // Enabling a failed plugin restarts it with a fresh setup.
         let failed = self.with_plugin(id, |plugin| {
             plugin.enabled = true;
-            let failed = plugin.active.is_some()
-                && plugin.definition.external.as_ref().is_some_and(|(_, error)| error().is_some());
+            let failed = plugin.active.is_some() && plugin.definition.failure().is_some();
             failed.then(|| plugin.active.take()).flatten()
         });
         if let Some((_, registration)) = failed.flatten() {
@@ -1142,10 +1280,9 @@ impl Registry {
             id: plugin.definition.id.clone(),
             target: plugin.definition.target().map(str::to_owned),
             source: plugin.source,
-            status: match (&plugin.active, &plugin.definition.external) {
-                (Some(_), Some((_, error))) => error().map_or(Status::Active, Status::Failed),
-                (Some(_), None) => Status::Active,
-                (None, _) => plugin.failed.clone().map_or(Status::Inactive, Status::Failed),
+            status: match &plugin.active {
+                Some(_) => plugin.definition.failure().map_or(Status::Active, Status::Failed),
+                None => plugin.failed.clone().map_or(Status::Inactive, Status::Failed),
             },
             active: plugin.active.is_some(),
         });
