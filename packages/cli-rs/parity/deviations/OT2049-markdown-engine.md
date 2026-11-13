@@ -11,12 +11,16 @@ underline rows and the blank rows around rules and headings are where TS puts th
 and `- - -` is a rule. Two differences remain:
 
 - A setext heading is a heading: its text and its underline row take the `markup.heading` style (heading color,
-  bold; level 1 also underlined), as an ATX heading does in both clients.
+  bold; level 1 also underlined), as an ATX heading does in both clients. Seen by rendering `Title` / `=====`,
+  `Sub` / `---` and two rules through both clients' `TextPart` setup (the U.4c harness): every character equal, the
+  heading cells differ in color and attributes only.
 - While streaming, the engine holds a last line that has no line ending, because the next bytes can still change
   what it is. Both clients pass the message text trimmed (`TextPart`, `assistant.rs`), so a closing fence at the
-  end of the text so far stays open until more text or the end of the stream arrives. For a LaTeX or Mermaid
-  fence this keeps the last preview for those frames, where TS already shows the closed block. When the message
-  completes both clients show the same block.
+  end of the text so far stays open until more text or the end of the stream arrives. In
+  `parity/scenarios/OT/held-fence.sim.ts` a reply streams a LaTeX fence whose `x^2` renders, then
+  ` + \unsupported{x}` and the closing fence without its newline, and pauses: TS shows the source
+  `x^2 + \unsupported{x}`, Rust still shows the last formula, `x²`. Once the reply goes on (`Done.`), both show the
+  source.
 
 Reason: the engine follows CommonMark, and Core's newer releases render through it as well. Mini commits only
 closed blocks to scrollback (`stable_prefix` includes the closing blank line), so no held line is committed. The
