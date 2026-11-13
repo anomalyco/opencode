@@ -93,6 +93,14 @@ impl Host for Tui {
         Ok(())
     }
 
+    fn storage_restore(&self, key: &str, json: Option<&str>) {
+        match json.and_then(|json| serde_json::from_str::<Value>(json).ok()) {
+            Some(value) => store(self, key, value.clone(), move |stored| *stored = value),
+            // A key that held nothing goes, in order with the writes before it.
+            None => queue(self, key, None, |storage, key| storage.remove(key)),
+        }
+    }
+
     fn storage_changed(&self) {
         self.reads.changed(self);
     }
@@ -285,13 +293,25 @@ pub fn changed(tui: &Tui, changes: &Changes, sync: impl FnOnce(Option<&abi::Chan
 /// Shows `shown` under storage key `key` at once, and queues `change` of the latest stored value under the storage
 /// lock after every write made before it. The plugin queues [`opencode_plugin::Host::storage_changed`] after it.
 fn store(tui: &Tui, key: &str, shown: Value, change: impl FnOnce(&mut Value) + Send + 'static) {
-    tui.reads.stored.borrow_mut().insert(key.to_owned(), Some(shown.to_string()));
+    queue(tui, key, Some(shown.to_string()), |storage, key| {
+        storage.update(key, &serde_json::json!({}), change).map(drop)
+    });
+}
+
+/// Shows `shown` to reads of `key` at once, and runs `write` on the plugin storage's writer, after the writes before it.
+fn queue(
+    tui: &Tui,
+    key: &str,
+    shown: Option<String>,
+    write: impl FnOnce(&Storage, &str) -> Result<(), opencode_local::storage::Error> + Send + 'static,
+) {
+    tui.reads.stored.borrow_mut().insert(key.to_owned(), shown);
     if let Some(storage) = tui.storage() {
         let pending = tui.reads.pending.clone();
         pending.fetch_add(1, Ordering::SeqCst);
         let key = key.to_owned();
         tui.reads.writer.get_or_init(|| Serial::new("plugin-storage")).run(move || {
-            if let Err(error) = storage.update(&key, &serde_json::json!({}), change) {
+            if let Err(error) = write(&storage, &key) {
                 log::error!("Failed to store {key}: {error}");
             }
             pending.fetch_sub(1, Ordering::SeqCst);

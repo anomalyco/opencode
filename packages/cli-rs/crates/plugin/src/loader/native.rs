@@ -6,7 +6,8 @@
 //!   the boundary (a crash such as a segfault still takes the process down);
 //! - a panic fails the plugin: it is not called again, its fences fall back to the code view, its slots and routes
 //!   draw empty, the plugin manager lists it as `failed` with the message, and a toast says so. Enabling it again
-//!   in the plugin manager starts a fresh instance;
+//!   in the plugin manager starts a fresh instance. Nothing the call that panicked asked for happens, and the storage
+//!   it wrote gets back what it held, as for a built-in;
 //! - host effects (toasts, attention, routes, dispatches, storage notifications) wait until the plugin returns, on the
 //!   effect queue in-process plugins share, so it never reenters itself through the host.
 //!
@@ -47,7 +48,7 @@ use super::Backend;
 use crate::activation::{Activation, Drawn, Wake};
 use crate::node::{Fences, MountFn, Scroll, SlotRender, lines_widget, theme_color};
 use crate::slot::placement;
-use crate::{Claimed, Definition, ErrorFn, Host, Setup, defer, next_request, route, tui_command};
+use crate::{Claimed, Definition, ErrorFn, Host, Setup, Undo, defer, fail, next_request, route, tui_command};
 
 /// The host's minor version: it serves every entry and request up to it.
 pub const HOST_MINOR: u32 = ABI_MINOR;
@@ -130,7 +131,7 @@ fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Resul
             }
             register(setup, &guest, &manifest);
             // What setup asked for (toasts, routes) happens now that the plugin is active.
-            guest.apply(guest.effects());
+            guest.apply(guest.taken().0);
             Ok(())
         }
     });
@@ -235,13 +236,14 @@ fn has<T>(size: usize, offset: usize) -> bool {
     size >= offset + size_of::<T>()
 }
 
-/// What the host's callbacks see: the plugin's identity, its storage keys, and effects that wait for the call to
-/// return.
+/// What the host's callbacks see: the plugin's identity, its storage keys, and what the running call asked for:
+/// effects that wait for it to return, and the storage it wrote, which a panic puts back.
 struct Ctx {
     host: Weak<dyn Host>,
     id: String,
     keys: Vec<String>,
     effects: Vec<Effect>,
+    undo: Undo,
     /// What it asks for is dropped.
     quiet: bool,
 }
@@ -285,7 +287,14 @@ impl Instance {
         quiet: bool,
     ) -> Result<(Self, Manifest), String> {
         let wake = Arc::new(Wake::new(host.upgrade().map(|host| host.app().proxy())));
-        let ctx = RefCell::new(Ctx { host, id: id.to_owned(), keys: Vec::new(), effects: Vec::new(), quiet });
+        let ctx = RefCell::new(Ctx {
+            host,
+            id: id.to_owned(),
+            keys: Vec::new(),
+            effects: Vec::new(),
+            undo: Undo::default(),
+            quiet,
+        });
         let shared = Box::new(Shared { ctx, wake });
         let api = Box::new(HostApi {
             size: size_of::<HostApi>(),
@@ -308,14 +317,18 @@ impl Instance {
             (status, bytes)
         };
         let text = || String::from_utf8_lossy(&bytes).into_owned();
-        if status != abi::OK {
-            // What the failed setup and its disposal asked for still happens; its fetches reach no activation.
-            shared.drain();
-        }
         match status {
             abi::OK => {}
-            abi::PANIC => return Err(format!("setup panicked: {}", text())),
-            _ => return Err(text()),
+            // Nothing a setup that panicked asked for happens, nor what its disposal did within the call.
+            abi::PANIC => {
+                shared.undo();
+                return Err(format!("setup panicked: {}", text()));
+            }
+            // What the failed setup and its disposal asked for still happens; its fetches reach no activation.
+            _ => {
+                shared.drain();
+                return Err(text());
+            }
         }
         let instance = Self { library: library.clone(), handle, _api: api, shared };
         let manifest: Manifest =
@@ -369,10 +382,25 @@ impl Shared {
     /// Queues the effects asked for so far, without an activation.
     fn drain(&self) {
         let mut ctx = self.ctx.borrow_mut();
-        let effects = std::mem::take(&mut ctx.effects);
+        let (effects, _) = ctx.take();
         if !ctx.quiet {
             apply(&ctx.host, ctx.id.clone(), Weak::new(), effects);
         }
+    }
+
+    /// Drops the effects asked for so far, and puts back the storage written.
+    fn undo(&self) {
+        let (_, undo) = self.ctx.borrow_mut().take();
+        if let Some(host) = self.ctx.borrow().host.upgrade() {
+            undo.restore(&*host);
+        }
+    }
+}
+
+impl Ctx {
+    /// What the calls asked for since it was last taken.
+    fn take(&mut self) -> (Vec<Effect>, Undo) {
+        (std::mem::take(&mut self.effects), std::mem::take(&mut self.undo))
     }
 }
 
@@ -459,12 +487,14 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
         HostRequest::StorageSet { key: name, value } => {
             let stored = key(ctx, &name)?;
             let host = ctx.host.upgrade().ok_or("the host is gone")?;
+            ctx.undo.record(&*host, &stored);
             host.storage_write(&stored, &value)?;
             ctx.effects.push(Effect::Stored);
         }
         HostRequest::StorageMerge { key: name, fields } => {
             let stored = key(ctx, &name)?;
             let host = ctx.host.upgrade().ok_or("the host is gone")?;
+            ctx.undo.record(&*host, &stored);
             host.storage_merge(&stored, fields)?;
             ctx.effects.push(Effect::Stored);
         }
@@ -553,6 +583,7 @@ struct Guest {
 
 impl Guest {
     /// Sends one request. A failed or destroyed plugin is not called; a panic fails it, and its claims draw empty.
+    /// What a call that fails it asked for is dropped, and the storage it wrote put back.
     fn request<T: DeserializeOwned>(self: &Rc<Self>, export: &str, request: &Request) -> Option<T> {
         if self.failure.borrow().is_some() {
             return None;
@@ -568,30 +599,22 @@ impl Guest {
             self.busy.set(false);
             result
         };
-        self.apply(self.effects());
+        let (effects, undo) = self.taken();
         let error = match result {
-            Ok(value) => {
-                return serde_json::from_value(value)
-                    .inspect_err(|error| log::warn!("plugin {}: {export}: {error}", self.id))
-                    .ok();
-            }
-            Err(None) => return None,
             Err(Some(error)) => format!("{export} {error}"),
-        };
-        log::error!("plugin {} failed: {error}", self.id);
-        *self.failure.borrow_mut() = Some(error);
-        let id = self.id.clone();
-        // The layer goes once the key that may have run the panicking command is handled.
-        let layer = self.layer.borrow_mut().take();
-        defer(&self.host, move |host| {
-            if let Some(layer) = layer {
-                layer.dispose();
+            result => {
+                self.apply(effects);
+                return result.ok().and_then(|value| {
+                    serde_json::from_value(value)
+                        .inspect_err(|error| log::warn!("plugin {}: {export}: {error}", self.id))
+                        .ok()
+                });
             }
-            host.failed(&id);
-            // The fences it drew fall back to the code view, as the ones it draws from now on do.
-            host.remount();
-        });
-        self.activation.invalidate();
+        };
+        if let Some(host) = self.host.upgrade() {
+            undo.restore(&*host);
+        }
+        fail(&self.host, &self.id, &self.failure, self.layer.borrow_mut().take(), &self.activation, error);
         None
     }
 
@@ -601,13 +624,10 @@ impl Guest {
         self.activation.invalidate();
     }
 
-    /// The effects the instance asked for since they were last taken.
-    fn effects(&self) -> Vec<Effect> {
+    /// What the instance asked for since it was last taken.
+    fn taken(&self) -> (Vec<Effect>, Undo) {
         let instance = self.instance.borrow();
-        instance
-            .as_ref()
-            .map(|instance| std::mem::take(&mut instance.shared.ctx.borrow_mut().effects))
-            .unwrap_or_default()
+        instance.as_ref().map(|instance| instance.shared.ctx.borrow_mut().take()).unwrap_or_default()
     }
 
     /// Queues the effects of a call on the effect queue, as the host would for a built-in.
