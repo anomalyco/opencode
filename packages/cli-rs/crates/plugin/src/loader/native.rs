@@ -928,19 +928,10 @@ fn loopback_with(
         free: Some(abi::runtime::free),
         describe,
     };
-    // The shims silence the process's panic hook on their first `create`, as a plugin's own std does; the process
-    // here keeps its own. A `create` without an instance does only that, so it happens here, where the hook is put
-    // back, also for a plugin whose first real `create` comes later.
-    let hook = std::panic::take_hook();
-    let mut out = Owned::EMPTY;
-    // SAFETY: `out` is valid for writes; a null instance pointer makes `create` return before it reads the rest.
-    unsafe {
-        create(std::ptr::null(), Bytes::new(&[]), std::ptr::null_mut(), &mut out);
-        abi::runtime::free(out);
-    }
-    let defined = Library::from_table(&api, HOST_MINOR).and_then(|library| define(host, library, None));
-    std::panic::set_hook(hook);
-    defined
+    // The shims would silence the process's panic hook on their first `create`, as a plugin's own std does; the process
+    // here keeps its own. Taking and setting the hook around each load would race other threads' loads.
+    abi::runtime::keep_panic_hook();
+    Library::from_table(&api, HOST_MINOR).and_then(|library| define(host, library, None))
 }
 
 #[cfg(test)]
