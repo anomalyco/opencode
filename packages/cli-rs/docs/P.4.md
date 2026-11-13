@@ -217,7 +217,10 @@ A claim's first render gets `Changed::all`. After that, a mounted claim or route
   storage (also another client's write), the count of failed plugins, and since 1.6 the open tabs, the pending keys
   and the themes;
 - with `size` on a resize, and with `all` when `interactive` changes; a claim of `sized` also with `size` when its own
-  size changes, in the frame that laid it out;
+  size changes, in the frame that laid it out, which then shows the new node (at most twice a frame, then after it,
+  for a node that changes its own size). A hidden claim has no size, as a TS claim that renders nothing has no box:
+  one that follows the width while showing nothing returns an empty column. Slots only: a route reads the
+  terminal's size;
 - with `woken` after each of the plugin's commands and its event, reply, mount, route-mount and wake handlers
   (queued after their effects, and coalesced), so a handler's change shows without a wake; and after a wake.
 

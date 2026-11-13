@@ -5,6 +5,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use opencode_plugin_abi::{self as abi, Fence, Fenced, Line};
 use opencode_ui::theme::Theme;
@@ -41,7 +42,12 @@ pub(crate) struct Mount {
     /// The texts its node's hover handlers change, which hold them weakly so the texts drop with the node.
     hovers: RefCell<Vec<Rc<Text>>>,
     watch: RefCell<Option<Disposer>>,
+    /// The renders for a new size in the current frame.
+    resized: Cell<u8>,
 }
+
+/// The renders for a new size a claim gets within one frame; OpenTUI lays a frame out at most 8 times.
+const RESIZE_DRAWS: u8 = 2;
 
 impl Mount {
     pub fn new(
@@ -76,6 +82,7 @@ impl Mount {
             slots: RefCell::default(),
             hovers: RefCell::default(),
             watch: RefCell::new(None),
+            resized: Cell::new(0),
         });
         let weak = Rc::downgrade(&mount);
         let watch = host.watch(Rc::new({
@@ -94,7 +101,10 @@ impl Mount {
         mount
     }
 
-    /// Gives the claim its laid-out size, and renders it again when the size changes (TS `onSizeChange`).
+    /// Gives the claim its laid-out size, and renders it again when the size changes (TS `onSizeChange`). It renders
+    /// in the frame that laid it out, which lays the new node out again, so the frame shows the claim at its size. A
+    /// claim whose node changes its own size each time could lay out without end, and OpenTUI fails the frame past a
+    /// few rounds: past [`RESIZE_DRAWS`] in one frame, the claim renders after it, from a timer, which wakes the loop.
     fn size(&self, weak: Weak<Self>, owner: Weak<dyn Host>) {
         self.root.on_resize(move |cx, rect| {
             let Some(mount) = weak.upgrade() else { return };
@@ -107,10 +117,26 @@ impl Mount {
                 }
                 (input.width, input.height) = size;
             }
+            let draws = mount.resized.replace(mount.resized.get() + 1);
+            if draws == 0 {
+                let weak = weak.clone();
+                cx.app().set_timeout(Duration::ZERO, move |_| {
+                    if let Some(mount) = weak.upgrade() {
+                        mount.resized.set(0);
+                    }
+                });
+            }
+            let resized = abi::Changed { size: true, ..abi::Changed::default() };
+            if draws < RESIZE_DRAWS {
+                if let Some(host) = owner.upgrade() {
+                    mount.draw(&*host, &resized);
+                }
+                return;
+            }
             let (weak, owner) = (weak.clone(), owner.clone());
-            cx.app().defer(move |_| {
+            cx.app().set_timeout(Duration::ZERO, move |_| {
                 if let (Some(mount), Some(host)) = (weak.upgrade(), owner.upgrade()) {
-                    mount.draw(&*host, &abi::Changed { size: true, ..abi::Changed::default() });
+                    mount.draw(&*host, &resized);
                 }
             });
         });
