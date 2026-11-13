@@ -488,24 +488,11 @@ function markCodeLinks(root: HTMLDivElement) {
   const codeNodes = Array.from(root.querySelectorAll(":not(pre) > code"))
 
   for (const code of codeNodes) {
+    // Code inside a link already goes where the link does.
+    if (code.closest("a")) continue
     const href = codeUrl(code.textContent ?? "")
 
-    const parentLink =
-      code.parentElement instanceof HTMLAnchorElement &&
-      code.parentElement.classList.contains("external-link") &&
-      !code.parentElement.hasAttribute("data-local-link")
-        ? code.parentElement
-        : null
-
-    if (!href) {
-      if (parentLink) parentLink.replaceWith(code)
-      continue
-    }
-
-    if (parentLink) {
-      parentLink.href = href
-      continue
-    }
+    if (!href) continue
 
     const link = document.createElement("a")
     link.href = href

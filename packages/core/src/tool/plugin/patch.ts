@@ -26,25 +26,7 @@ export const Input = Schema.Struct({
   }),
 })
 
-export const Applied = Schema.Struct({
-  type: Schema.Literals(["add", "update", "delete"]),
-  resource: Schema.String,
-  target: Schema.String,
-})
-
-export const Output = Schema.Struct({
-  applied: Schema.Array(Applied),
-  files: Schema.Array(FileDiff.Info),
-})
-export type Output = typeof Output.Type
-
-export const toModelContent = (output: Output) =>
-  [
-    "Success. Updated the following files:",
-    ...output.applied.map(
-      (item) => `${item.type === "add" ? "A" : item.type === "delete" ? "D" : "M"} ${item.resource}`,
-    ),
-  ].join("\n")
+export const Output = Schema.Record(Schema.String, Schema.Never)
 
 type Prepared =
   | (Extract<Patch.Hunk, { readonly type: "add" }> & {
@@ -86,7 +68,7 @@ export const Plugin = {
           freeform: { type: "lark", grammar: GRAMMAR },
           output: Output,
           execute: (input, context) => {
-            const applied: Array<typeof Applied.Type> = []
+            const completed: string[] = []
             const parsed = Patch.parse(input.patchText)
             const lockTargets = Result.isSuccess(parsed)
               ? parsed.success.flatMap((hunk) => [
@@ -97,9 +79,8 @@ export const Plugin = {
                 ])
               : []
             const fail = (operation: string, error: unknown) => {
-              const completed = applied.map((item) => item.resource).join(", ")
               return new ToolFailure({
-                message: `${operation}: ${errorMessage(error)}${completed ? `. Completed before failure: ${completed}` : ""}`,
+                message: `${operation}: ${errorMessage(error)}${completed.length ? `. Completed before failure: ${completed.join(", ")}` : ""}`,
               })
             }
             return Effect.gen(function* () {
@@ -200,9 +181,7 @@ export const Plugin = {
                   } else {
                     updates.set(target.absolute, next)
                   }
-                }).pipe(
-                  Effect.mapError(toolFailure(`Unable to prepare patch at ${hunk.path}`)),
-                )
+                }).pipe(Effect.mapError(toolFailure(`Unable to prepare patch at ${hunk.path}`)))
               }
 
               const patchFiles = prepared.map((change) => patchFile(change))
@@ -228,15 +207,36 @@ export const Plugin = {
                   Effect.gen(function* () {
                     const moveTarget = change.type === "update" ? change.moveTarget : undefined
                     const target = moveTarget ?? change.target
+                    // On macOS and Windows a move that only changes case targets the same file, so the new name already
+                    // exists, and writing it then removing the old one would delete the file. Such a move writes in
+                    // place and renames. Symlinks keep the write-and-remove path, which leaves their target alone.
+                    const recased =
+                      moveTarget !== undefined &&
+                      moveTarget.absolute.toLowerCase() === change.target.absolute.toLowerCase() &&
+                      (yield* environment.files.stat(change.target.absolute).pipe(
+                        Effect.map((info) => info.type === "file"),
+                        Effect.orElseSucceed(() => false),
+                      )) &&
+                      (yield* environment.files.stat(moveTarget.absolute).pipe(
+                        Effect.as(true),
+                        Effect.orElseSucceed(() => false),
+                      ))
                     if (change.type === "delete")
                       yield* environment.files
                         .remove(change.target.absolute)
                         .pipe(Effect.mapError((error) => fail(`Failed to delete ${change.target.resource}`, error)))
                     if (change.type !== "delete")
                       yield* environment.files
-                        .write(target.absolute, new TextEncoder().encode(change.content))
+                        .write(
+                          recased ? change.target.absolute : target.absolute,
+                          new TextEncoder().encode(change.content),
+                        )
                         .pipe(Effect.mapError((error) => fail(`Failed to write ${target.resource}`, error)))
-                    if (moveTarget)
+                    if (moveTarget && recased)
+                      yield* environment.files
+                        .move(change.target.absolute, moveTarget.absolute)
+                        .pipe(Effect.mapError((error) => fail(`Failed to rename ${change.target.resource}`, error)))
+                    if (moveTarget && !recased)
                       yield* environment.files
                         .remove(change.target.absolute)
                         .pipe(
@@ -244,7 +244,7 @@ export const Plugin = {
                             fail(`Wrote ${moveTarget.resource} but failed to remove ${change.target.resource}`, error),
                           ),
                         )
-                    applied.push({ type: change.type, resource: target.resource, target: target.absolute })
+                    completed.push(target.resource)
                   }),
                 { discard: true },
               )
@@ -272,16 +272,18 @@ export const Plugin = {
                 const target = change.type === "update" && change.moveTarget ? change.moveTarget : change.target
                 return patchFile(change, formatted.get(target.absolute))
               })
-              return { applied, files }
-            }).pipe(
-              fileMutation.withLock(lockTargets),
-              Effect.map((output) => ({
-                output,
-                content: toModelContent(output),
-                metadata: { files: output.files },
-              })),
-              Effect.mapError(toolFailure("Unable to apply patch")),
-            )
+              return {
+                // The multi-file patch contract intentionally leaves structured output empty.
+                output: {},
+                content: [
+                  "Success. Updated the following files:",
+                  ...files.map(
+                    (file) => `${file.status === "added" ? "A" : file.status === "deleted" ? "D" : "M"} ${file.file}`,
+                  ),
+                ].join("\n"),
+                metadata: { files },
+              }
+            }).pipe(fileMutation.withLock(lockTargets), Effect.mapError(toolFailure("Unable to apply patch")))
           },
         }),
       )

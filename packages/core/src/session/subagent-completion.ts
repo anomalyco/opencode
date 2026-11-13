@@ -34,6 +34,8 @@ export function text(message: SessionMessage.Info | undefined) {
 
 const clean = (value: string) => value.replace(/\s+/g, " ").trim()
 
+const STILL_RUNNING = "\n\nBackground work still running:\n"
+
 export function formatBody(
   body: string,
   childSessionID: SessionSchema.ID,
@@ -47,7 +49,7 @@ export function formatBody(
       return `- image (${item.model}${item.sessionID !== childSessionID ? `, in ${item.sessionID}` : ""}): ${item.path}`
     return `- subagent (${item.agent}, sessionID: ${item.childSessionID}): ${clean(item.description)}`
   })
-  return `${body}\n\nBackground work still running:\n${lines.join("\n")}`
+  return `${body}${STILL_RUNNING}${lines.join("\n")}`
 }
 
 export const deliver = Effect.fnUntraced(function* <E>(
@@ -65,11 +67,14 @@ export const deliver = Effect.fnUntraced(function* <E>(
       : input.status === "error"
         ? (input.error ?? "Subagent failed")
         : (input.output ?? input.error ?? "Subagent cancelled")
+  // The body is all a recovered outbox row keeps, so the still-running list is how a replay tells this period apart.
+  // Only the model-facing tag says "running": the job and the message metadata keep the period's real status.
+  const state = input.status === "completed" && body.includes(STILL_RUNNING) ? "running" : input.status
   yield* sessions.synthetic({
     ...(input.notificationID ? { id: input.notificationID } : {}),
     sessionID: recovery.parentSessionID,
     description: recovery.description,
-    text: `<subagent sessionID="${recovery.childSessionID}" state="${input.status}" description="${recovery.description}">\n${body}\n</subagent>`,
+    text: `<subagent sessionID="${recovery.childSessionID}" state="${state}" description="${recovery.description}">\n${body}\n</subagent>`,
     metadata: { source: "subagent", childID: recovery.childSessionID, agent: recovery.agent, state: input.status },
   })
   if (input.notificationID) yield* jobs.completeBackground(input.notificationID)

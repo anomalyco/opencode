@@ -2728,7 +2728,8 @@ function inlineToolImages(part: SessionMessageAssistantTool) {
   return toolDisplayContent(part.state).flatMap((content) =>
     content.type === "file" &&
     content.mime.startsWith("image/") &&
-    (content.uri.startsWith("data:image/") || mediaHashFromUri(content.uri))
+    // An emptied `data:` URI is a payload the store dropped while previews were off.
+    ((content.uri.startsWith("data:image/") && !content.uri.endsWith(",")) || mediaHashFromUri(content.uri))
       ? [{ uri: content.uri }]
       : [],
   )
