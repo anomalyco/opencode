@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { isContextOverflow, isContextOverflowFailure, isRetryable } from "../src/effect.js"
+import { isContextOverflow, isContextOverflowFailure, isReasoningRejectedFailure, isRetryable } from "../src/effect.js"
 import { AIError, HttpContext, RateLimitError, TransportError } from "../src/schema/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../src/provider-error.js"
 
@@ -445,6 +445,22 @@ describe("provider error classification", () => {
     expect(isContextOverflow("Too many tokens per day, please wait before trying again.")).toBe(false)
     // Plain overflow phrasing without the throttle cue still compacts.
     expect(isContextOverflow("Too many tokens")).toBe(true)
+  })
+
+  test("classifies a Bedrock rejection of replayed reasoning", () => {
+    // Captured live from an OpenAI model on Bedrock Converse.
+    const body = '{"message":"The model returned the following errors: invalid encrypted view"}'
+    const error = new AIError({
+      reason: classifyProviderFailure({ message: providerErrorMessage(body), status: 400, rawBody: body }),
+    })
+    expect(error.reason).toMatchObject({ _tag: "InvalidRequest", classification: "reasoning-rejected" })
+    expect(isReasoningRejectedFailure(error)).toBe(true)
+    expect(isRetryable(error)).toBe(false)
+    // The phrase alone is not the signal: other statuses keep their own class, and a body may echo request content.
+    expect(classifyProviderFailure({ message: "invalid encrypted view", status: 429 })._tag).toBe("RateLimit")
+    expect(
+      classifyProviderFailure({ message: "Invalid request", status: 400, rawBody: body }).classification,
+    ).toBeUndefined()
   })
 
   test("classifies 429 throttles as retryable rate limits, not context overflow", () => {
