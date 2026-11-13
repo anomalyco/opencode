@@ -320,7 +320,9 @@ export class RunScrollbackStream {
     await active.surface.settle()
     this.releasePendingThemes()
     const blockCount = renderable.getChildren().length
-    const targetBlockCount = done ? blockCount : renderable.committedBlockCount
+    // A committed block goes out once a block follows it, so its line ending is known; the last one waits for the
+    // caller's line ending at completion.
+    const targetBlockCount = done ? blockCount : Math.min(renderable.committedBlockCount, blockCount - 1)
     if (targetBlockCount <= active.committedBlocks) {
       return false
     }
@@ -331,7 +333,7 @@ export class RunScrollbackStream {
         renderable,
         startBlock: active.committedBlocks,
         endBlockExclusive: targetBlockCount,
-        // Committed blocks end their rows; the gap above the next block goes out with that block.
+        // Blocks followed by another end their rows; the gap above the next block goes out with that block.
         trailingNewline: done ? trailingNewline : true,
         beforeCommit: () => this.flushPendingSpacer(active),
       })

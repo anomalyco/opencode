@@ -427,6 +427,13 @@ async function terminalText(commits: StreamCommit[], width = 60) {
   await scrollback.complete()
   await frame()
   scrollback.destroy()
+  // The caller left the line open (complete(false)); a later write continues it.
+  out.renderer.writeToScrollback(({ renderContext }) => ({
+    root: new TextRenderable(renderContext, { content: "!", width: 1, height: 1 }),
+    startOnNewLine: false,
+    trailingNewline: false,
+  }))
+  await frame()
   const view = await createTestRenderer({ width, height: 16 })
   active.push(view.renderer)
   const vt = new EmbeddedTerminalRenderable(view.renderer, { cols: width, rows: 16 })
@@ -452,9 +459,12 @@ test("markdown written in several commits keeps its blank rows on the terminal",
       metadata: { sessionID: "ses-child-1", status: "completed", output: "# Findings\n\n- stable" },
     },
   })
-  expect(await terminalText([subagent])).toContain("Findings\n\n- stable")
+  // A finished tool entry ends its line itself.
+  expect(await terminalText([subagent])).toContain("Findings\n\n- stable\n!")
   const streamed = await terminalText([assistant("A\n\n"), assistant("B\n\n"), assistant("C")])
-  expect(streamed).toContain("A\n\nB\n\nC")
+  expect(streamed).toContain("A\n\nB\n\nC!")
+  // A heading that was the whole committed text when the entry completed (bigboi-r2-2).
+  expect(await terminalText([assistant("# A\n")])).toContain("A!")
 })
 
 test("renders completed subagent markdown in monochrome mode", async () => {
