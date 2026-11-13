@@ -1,7 +1,6 @@
 export * as FileSystemSearch from "./search.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import path from "path"
 import { Clock, Context, Deferred, Duration, Effect, Layer, Scope } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
@@ -41,7 +40,9 @@ function search(index: ReturnType<typeof emptyIndex>, input: FileSystem.FindInpu
   fuzzysort.cleanup()
   return result.map((item) => {
     const relative = item.target
-    const type = relative.endsWith(path.sep) ? ("directory" as const) : ("file" as const)
+    // Relative wire paths always use "/"; directories carry a trailing "/" even on win32, so clients never
+    // receive mixed separators such as "web/src\".
+    const type = relative.endsWith("/") ? ("directory" as const) : ("file" as const)
     return FileSystem.Entry.make({
       path: RelativePath.make(relative),
       type,
@@ -75,7 +76,7 @@ const ripgrepLayer = Layer.effect(
             next.files.set(entry.path, previous.files.get(entry.path) ?? fuzzysort.prepare(entry.path))
             const parts = entry.path.split("/")
             parts.slice(0, -1).forEach((_, offset) => {
-              const directory = parts.slice(0, offset + 1).join("/") + path.sep
+              const directory = parts.slice(0, offset + 1).join("/") + "/"
               if (!next.directories.has(directory))
                 next.directories.set(directory, previous.directories.get(directory) ?? fuzzysort.prepare(directory))
             })
@@ -209,7 +210,7 @@ export const makeFffLayer = (create: CreatePicker) =>
               .map((item) => {
                 const relative = item.path.replaceAll("\\", "/").replace(/\/$/, "")
                 return FileSystem.Entry.make({
-                  path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
+                  path: RelativePath.make(relative + (item.type === "directory" ? "/" : "")),
                   type: item.type,
                 })
               })
