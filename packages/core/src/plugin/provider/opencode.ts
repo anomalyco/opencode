@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from "node:util"
 import { Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore, Stream } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
-import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
+import type { ModelHttpResponse } from "@opencode/plugin/effect/model"
 import {
   FetchHttpClient,
   HttpBody,
@@ -538,7 +538,7 @@ export const OpencodePlugin = define<
     // Console inference rejects a missing SSO sign-in with a generic 401/403. Re-check the Console config, which
     // reports the reason, and replace the response with instructions when the connection needs the user.
     // A client retrying rejected inference would otherwise send one config request per failed response.
-    const explain = (event: SessionHttpResponse) =>
+    const explain = (event: ModelHttpResponse) =>
       Effect.gen(function* () {
         if (event.response.status !== 401 && event.response.status !== 403) return
         yield* check(Duration.seconds(30))
@@ -560,7 +560,7 @@ export const OpencodePlugin = define<
       yield* Effect.forEach(explainers, (registration) => registration.dispose, { discard: true })
       explainers = yield* Effect.forEach(
         next.connection ? new Set([Provider.ID.opencode, ...Object.keys(next.remote?.providers ?? {})]) : [],
-        (providerID) => ctx.session.hook("http.response", explain, { providerID }).pipe(Scope.provide(scope)),
+        (providerID) => ctx.model.hook("experimental.http.response", explain, { providerID }).pipe(Scope.provide(scope)),
       )
     })
     yield* guard(snapshot)

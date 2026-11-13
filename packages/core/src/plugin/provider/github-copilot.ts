@@ -415,8 +415,8 @@ export const GithubCopilotPlugin = define({
         }),
       { providerID: Provider.ID.githubCopilot },
     )
-    yield* ctx.session.hook(
-      "http.request",
+    yield* ctx.model.hook(
+      "experimental.http.request",
       (evt) =>
         Effect.gen(function* () {
           // The Messages route sends the token as `x-api-key`, the OpenAI routes as a bearer token.

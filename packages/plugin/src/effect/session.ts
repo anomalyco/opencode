@@ -90,6 +90,7 @@ export interface SessionModelRequest {
   headers: Record<string, string>
 }
 
+/** Prefer `ctx.model.hook("experimental.http.request")`, which also runs for calls made outside a Session. */
 export interface SessionHttpRequest {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
@@ -98,6 +99,7 @@ export interface SessionHttpRequest {
   request: Request
 }
 
+/** Prefer `ctx.model.hook("experimental.http.response")`, which also runs for calls made outside a Session. */
 export interface SessionHttpResponse {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
@@ -207,7 +209,15 @@ export interface SessionHooks {
   readonly title: SessionTitle
   readonly "experimental.model.resolve": SessionModelResolve
   readonly "model.request": SessionModelRequest
+  /**
+   * Runs for HTTP requests a Session makes, inside `ctx.model.hook("experimental.http.request")`. Prefer the model hook,
+   * which also sees Generate calls; `event.session` holds the Session.
+   */
   readonly "http.request": SessionHttpRequest
+  /**
+   * Runs for HTTP responses to a Session's requests, before `ctx.model.hook("experimental.http.response")`. Prefer the
+   * model hook, which also sees Generate calls; `event.session` holds the Session.
+   */
   readonly "http.response": SessionHttpResponse
   readonly "experimental.ws.handshake": SessionWebSocketHandshake
   readonly "experimental.ws.send": SessionWebSocketSend

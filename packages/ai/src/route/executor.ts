@@ -285,19 +285,23 @@ export const withFetch = (
   return middleware === undefined ? send : (request) => middleware(request, send)
 }
 
+/** `executor.execute` with `fn` run on every request, outside the middleware each request passes. */
+export const withHttp = (executor: Interface, fn: HttpMiddleware | undefined): Interface["execute"] =>
+  fn === undefined
+    ? executor.execute
+    : (request, next) =>
+        executor.execute(
+          request,
+          next === undefined ? fn : (input, handler) => fn(input, (forwarded) => next(forwarded, handler)),
+        )
+
 /** Run `fn` on every request: it sees the raw response before status classification, inside middleware already on `executor`, and outside per-call middleware. */
 export const middleware = (fn: HttpMiddleware, executor: Layer.Layer<Service> = fetchLayer): Layer.Layer<Service> =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
       const inner = yield* Service
-      return Service.of({
-        execute: (request, next) =>
-          inner.execute(
-            request,
-            next === undefined ? fn : (input, handler) => fn(input, (forwarded) => next(forwarded, handler)),
-          ),
-      })
+      return Service.of({ execute: withHttp(inner, fn) })
     }),
   ).pipe(Layer.provide(executor))
 
