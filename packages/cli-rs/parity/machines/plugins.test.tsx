@@ -1,10 +1,12 @@
 // The shared fixture of the plugin work (rich-plugins 4.14, O-124), TypeScript reader: the TS TUI is driven through
 // the life machine of plugins.json, with parity/plugins/life loaded as a local plugin, each path on a fresh app,
 // observing after every action. The Rust reader is crates/tui/tests/all/plugin_machines.rs; both read the file and
-// neither reads the other. Run it from packages/cli-rs: `bun test parity/machines`. It takes a few minutes, so it is
-// not part of packages/tui's suite.
+// neither reads the other. `bun run test` in packages/cli-rs, which CI runs, covers each edge once and the seeded walks;
+// `bun run parity:machines` adds every path to the file's depth and the fault trials, which take a few minutes. Both
+// run with parity/ as the working directory, whose bunfig.toml loads the TUI's preloads.
 import { InputRenderable } from "@opentui/core"
 import { expect, test } from "bun:test"
+import { existsSync } from "node:fs"
 import { mkdir, symlink } from "node:fs/promises"
 import path from "node:path"
 import { createAppFixture } from "../../../tui/test/fixture/app"
@@ -13,6 +15,9 @@ import machines from "./plugins.json"
 
 type Fixture = Awaited<ReturnType<typeof createAppFixture>>
 type Machine = { initial: string; states: Record<string, [string, Record<string, string>]>; xfail: string[][] }
+
+// The full sweep: every path to the file's depth, and the fault trials.
+const deep = process.env.PARITY_DEEP === "1"
 // The app, and the copy of the plugin a reload rewrites.
 type App = { setup: Fixture; entry: string; builds: number }
 
@@ -35,7 +40,12 @@ async function open() {
   const directory = path.join(root.path, "life")
   const entry = path.join(directory, "tui.tsx")
   await mkdir(directory)
-  await symlink(path.join(import.meta.dir, "../../../tui/node_modules"), path.join(directory, "node_modules"))
+  // A junction on Windows, which needs no privilege (as `plugin-source.test.ts` links).
+  await symlink(
+    path.join(import.meta.dir, "../../../tui/node_modules"),
+    path.join(directory, "node_modules"),
+    process.platform === "win32" ? "junction" : "dir",
+  )
   await Bun.write(entry, Bun.file(plugin))
   const setup = await createAppFixture({
     width: 80,
@@ -121,8 +131,8 @@ async function act(app: App, action: string) {
   if (action === "toggle") {
     const before = await manager(setup)
     setup.mockInput.pressEnter()
-    // An enable whose setup throws leaves the row as it was and shows the error in a toast.
-    await poll(setup, (frame) => row(frame) !== before || frame.includes("armed to throw"), 2000)
+    // An enable whose setup throws leaves the row as it was and shows the error in a toast; one or the other shows.
+    await until(setup, (frame) => row(frame) !== before || frame.includes("armed to throw"), "the toggle's outcome")
     await closeManager(setup)
     return
   }
@@ -177,8 +187,26 @@ async function replay(path: string[], known: Set<string>, seen: Set<string>) {
   return undefined
 }
 
-function known() {
-  return new Set(machine.xfail.filter((row) => row[0] === "ts").map((row) => row[2]))
+// This client's known differences among `rows`, each naming a deviation file or an open finding.
+function known(...rows: string[][][]) {
+  const ours = rows.flat().filter((row) => row[0] === "ts")
+  for (const [, file] of ours)
+    if (!file.startsWith("finding:") && !existsSync(path.join(import.meta.dir, `../deviations/${file}.md`)))
+      throw new Error(`xfail row names no deviation file: ${file}`)
+  return new Set(ours.map((row) => row[2]))
+}
+
+// Each edge once: the shortest path to its state, then its action.
+function cover() {
+  const reach = new Map<string, string[]>([[machine.initial, []]])
+  const queue = [machine.initial]
+  for (const state of queue)
+    for (const [action, next] of Object.entries(machine.states[state][1]))
+      if (!reach.has(next)) {
+        reach.set(next, [...reach.get(state)!, action])
+        queue.push(next)
+      }
+  return [...reach].flatMap(([state, path]) => Object.keys(machine.states[state][1]).map((action) => [...path, action]))
 }
 
 // Every path from the initial state to the file's depth.
@@ -221,8 +249,8 @@ function faulted() {
   return [...out.values()]
 }
 
-async function check(paths: string[][]) {
-  const [rows, seen] = [known(), new Set<string>()]
+async function check(paths: string[][], rows: Set<string>) {
+  const seen = new Set<string>()
   const failures: string[] = []
   for (const path of paths) {
     const failure = await replay(path, rows, seen)
@@ -232,16 +260,18 @@ async function check(paths: string[][]) {
   return seen
 }
 
-// The budgets name the work: 127 paths of up to 4 actions, 8 walks of 12, and the fault trials, each on a fresh app.
+// The budgets name the work, each path on a fresh app: 17 edges or 127 paths of up to 4 actions, 8 walks of 12, and
+// the fault trials. Every edge is on some path, so either set meets every known row.
 test("the plugin life follows the shared fixture", async () => {
-  const seen = await check(paths())
-  expect([...known()].filter((row) => !seen.has(row))).toEqual([])
+  const rows = known(machine.xfail)
+  const seen = await check(deep ? paths() : cover(), rows)
+  expect([...rows].filter((row) => !seen.has(row))).toEqual([])
 }, 600_000)
 
 test("the plugin life follows the shared fixture on walks", async () => {
-  await check(walks())
+  await check(walks(), known(machine.xfail))
 }, 600_000)
 
-test("the plugin life recovers from a dropped, repeated or swapped action", async () => {
-  await check(faulted())
+test.if(deep)("the plugin life recovers from a dropped, repeated or swapped action", async () => {
+  await check(faulted(), known(machine.xfail, machines.faults.life.xfail))
 }, 600_000)

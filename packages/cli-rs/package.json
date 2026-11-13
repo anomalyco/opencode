@@ -13,11 +13,17 @@
     "parity:pty": "bun run parity/pty/run.ts",
     "parity:sim": "bun run parity/sim/run.ts",
     "live": "sh script/live.sh",
-    "parity:typecheck": "tsc --noEmit"
+    "parity:machines": "cd parity && PARITY_DEEP=1 bun test ./machines/plugins.test.tsx",
+    "parity:typecheck": "tsc --noEmit",
+    "test": "cd parity && bun test ./machines/plugins.test.tsx",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
   },
   "devDependencies": {
     "@opencode/httpapi-codegen": "workspace:*",
+    "@opencode/plugin": "workspace:*",
     "@opencode/protocol": "workspace:*",
+    "@opencode/tui": "workspace:*",
     "@opentui/core": "catalog:",
     "@opentui/solid": "catalog:",
     "@tsconfig/bun": "catalog:",

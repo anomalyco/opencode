@@ -126,3 +126,9 @@ Run them from this directory with `bun run <command>`. Each one builds the debug
 `parity:acp` runs each suite twice, once per agent, through `parity/acp/record.sh`. It fails when a test
 fails on either side or when the normalized transcripts differ. The transcripts are kept in
 `$TMPDIR/opencode-parity/acp/<suite>-<side>/`.
+
+The shared fixture of the plugin life, `parity/machines/plugins.json`, has a reader in each client. The Rust one
+is `crates/tui/tests/all/plugin_machines.rs`. The TypeScript one, `parity/machines/plugins.test.tsx`, drives the
+TypeScript TUI and builds no binary: `bun run test`, which CI runs, covers each edge of the machine once and
+the seeded walks in about 15 s, and `bun run parity:machines` adds every path to the file's depth and the fault
+trials, which take a few minutes.
