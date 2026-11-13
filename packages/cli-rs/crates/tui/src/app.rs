@@ -85,6 +85,8 @@ pub struct Tui {
     pub(crate) location: crate::features::location::LocationState,
     pub(crate) overlays: crate::features::overlays::Overlays,
     pub(crate) title: crate::features::title::Title,
+    /// The one pending release of the terminal to another program.
+    pub(crate) foreground: crate::features::foreground::Foreground,
     /// Markdown documents that link session IDs (#63224).
     pub(crate) session_links: crate::features::session_links::Registry,
     pub(crate) events: crate::features::events::Events,
@@ -458,6 +460,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         location: Default::default(),
         overlays: Default::default(),
         title: Default::default(),
+        foreground: Default::default(),
         session_links: Default::default(),
         events: Default::default(),
         attention: Default::default(),

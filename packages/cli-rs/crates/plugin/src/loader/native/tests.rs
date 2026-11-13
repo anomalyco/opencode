@@ -1173,6 +1173,50 @@ fn the_1_6_reads_and_verbs_are_the_same_in_process_and_through_the_library() {
     assert_eq!(verbed(&host, &library), direct);
 }
 
+/// A command that asks for a program in the foreground, and one that asks and then panics.
+fn asking(setup: &mut abi::Setup) -> Result<(), String> {
+    let run = |host: &dyn abi::Host| {
+        host.foreground(abi::Foreground { command: "true".into(), ..abi::Foreground::default() });
+    };
+    setup.command(abi::Command { name: "x.run".into(), ..abi::Command::default() }, move |host, _| run(host));
+    setup.command(abi::Command { name: "x.boom".into(), ..abi::Command::default() }, move |host, _| {
+        run(host);
+        panic!("boom");
+    });
+    Ok(())
+}
+
+// Expected (reviews bigboi-4, carbon-1): a program starts only while the plugin that asked for it is active: the host
+// checks as it starts, after the turn, so one asked for before a disable, or before another call fails the plugin,
+// does not start. On both paths.
+#[test]
+fn a_program_starts_only_while_its_plugin_is_active() {
+    let host = host();
+    let registries = [
+        Registry::define(vec![abi::Plugin { id: "asking", setup: asking }.into()], []),
+        loopback(&host, abi::export_plugin!(@loopback "asking", asking)),
+    ];
+    for registry in registries {
+        registry.activate(&dynamic(&host));
+        host.keymap().dispatch("x.run", None);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(host.programs_alive(), [true]);
+        registry.set_active(&dynamic(&host), "asking", false);
+        assert_eq!(host.programs_alive(), [false]);
+        host.exit();
+
+        registry.set_active(&dynamic(&host), "asking", true);
+        host.keymap().dispatch("x.run", None);
+        host.app.advance(Duration::from_millis(1));
+        host.keymap().dispatch("x.boom", None);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(host.programs_alive(), [false], "a failed plugin's program starts");
+        host.exit();
+        registry.set_active(&dynamic(&host), "asking", false);
+        host.toasts.borrow_mut().clear();
+    }
+}
+
 thread_local! {
     /// The renders of `counted`'s route.
     static ROUTE_RENDERS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };

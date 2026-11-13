@@ -414,6 +414,44 @@ fn the_tui_disposes_its_plugins_as_it_exits() {
     assert_eq!(DISPOSED_WITH.take().as_deref(), Some("9.9.9"));
 }
 
+thread_local! {
+    /// The reply the `running` plugin got for its program.
+    static RAN: RefCell<Option<Result<Value, String>>> = const { RefCell::new(None) };
+}
+
+/// `x.run` asks for `true` in the foreground; the reply goes to [`RAN`].
+fn running(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.command(abi::Command { name: "x.run".into(), ..abi::Command::default() }, |host, _| {
+        host.foreground(abi::Foreground { command: "true".into(), ..abi::Foreground::default() });
+    });
+    setup.on_reply(|_, _, result| RAN.set(Some(result)));
+    Ok(())
+}
+
+// Expected (review carbon-1): a headless TUI (drive mode) has no terminal to give a plugin's program, so the program
+// does not run and the plugin gets an error.
+#[test]
+fn a_headless_tui_refuses_a_program_in_the_foreground() {
+    let options = opentui::AppOptions { exit_on_ctrl_c: false, ..opentui::AppOptions::default() };
+    let app = opentui::App::headless(opentui::app::HeadlessOptions { width: 80, height: 24, app: options }).unwrap();
+    let launch = opencode_tui::app::Launch {
+        deps: Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) },
+        args: opencode_tui::Args::default(),
+        keep: Box::new(()),
+        plugins: None,
+    };
+    opencode_tui::app::run_on(app, launch, |tui| {
+        opencode_tui::plugins::host::add(tui, abi::Plugin { id: "running", setup: running }.into());
+        tui.keymap.dispatch("x.run", None);
+        let app = tui.app.clone();
+        tui.app.set_timeout(Duration::from_millis(200), move |_| app.quit());
+        Ok(())
+    })
+    .unwrap();
+    let ran = RAN.take().expect("the plugin got no reply");
+    assert!(ran.as_ref().is_err_and(|error| error.contains("headless")), "{ran:?}");
+}
+
 /// Stores `{"saved":true}` as it is disposed, then creates the file `OPENCODE_TEST_DISPOSED` names.
 fn saving(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("state");

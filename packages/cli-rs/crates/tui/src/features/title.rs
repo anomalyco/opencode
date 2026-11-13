@@ -66,6 +66,14 @@ pub fn sync(tui: &Tui, changes: &Changes) {
     }
 }
 
+/// Sends the last title again once the terminal is back from another program: suspending it cleared the title, and
+/// the program may have set its own.
+pub fn resumed(tui: &Tui) {
+    if let Some(title) = tui.title.sent.take() {
+        tui.title.set(tui, title);
+    }
+}
+
 /// A plugin's title (`renderer.setTerminalTitle`), also with `terminal.title: false`. It shows until the TUI sets
 /// its own with its next change.
 pub fn set_by_plugin(tui: &Tui, title: &str) {

@@ -323,3 +323,18 @@ fn a_program_runs_in_the_foreground_and_its_exit_code_comes_back() {
         h.wait_for(" x:3");
     }
 }
+
+// Expected (reviews bigboi-4, carbon-1): the terminal goes to one program at a time. A second one asked for before the
+// first ran is refused with its own reply (as is the external editor, which takes the same slot); once the first ran,
+// the next one runs.
+#[cfg(unix)]
+#[test]
+fn a_second_program_is_refused_until_the_first_ran() {
+    let (h, _memory, _root) = home(false, 200, json!({}));
+    h.wait_for("p0b w200 ");
+    h.tui.keymap.dispatch("p0b.run", Some("exit 3"));
+    h.tui.keymap.dispatch("p0b.run", Some("exit 4"));
+    h.wait_for(" x:another program is in the foreground ");
+    h.tui.keymap.dispatch("p0b.run", Some("exit 5"));
+    h.wait_for(" x:5");
+}

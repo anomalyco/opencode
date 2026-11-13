@@ -1707,7 +1707,7 @@ pub struct Foreground {
     pub command: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub args: Vec<String>,
-    /// Where it runs; where the TUI works without one.
+    /// Where it runs; without one, where the TUI works when that is a directory here, else the host's own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
 }
@@ -2211,8 +2211,13 @@ pub trait Host: Read {
     /// 1.6: clears the mouse selection (TS `renderer.clearSelection()`).
     fn clear_selection(&self) {}
     /// 1.6: gives the terminal to `program` until it exits, then takes it back, as the host does for `$EDITOR`.
-    /// [`Setup::on_reply`] gets `{ "code": <exit code or null> }` with the ID this returns, or the error when it did
-    /// not start. A plugin disposed before it starts runs nothing; an older host never replies.
+    /// [`Setup::on_reply`] gets `{ "code": <exit code or null> }` with the ID this returns, plus `"signal"` on Unix when
+    /// a signal ended it, or the error when it did not start. It starts once the current call is done, and not when
+    /// the plugin was disposed or failed by then, another program has the terminal, or the host has none (headless).
+    /// The program has the terminal on all three standard streams and gets the signals of its keys, the host does
+    /// not: on Unix it is the terminal's foreground process group, and one that stops (Ctrl+Z) is continued at once,
+    /// as the host has no shell to hand it to; on Windows the host ignores Ctrl+C and Ctrl+Break while it runs. Input
+    /// it leaves unread is dropped. An older host never replies.
     fn foreground(&self, _program: Foreground) -> RequestId {
         RequestId(0)
     }

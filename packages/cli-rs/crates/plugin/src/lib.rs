@@ -143,9 +143,10 @@ pub trait Host: 'static {
     fn clear_selection(&self) {
         self.app().clear_selection();
     }
-    /// Runs `program` in the foreground ([`abi::Host::foreground`]), and calls `reply` on the UI thread with its exit
-    /// code or the error. Called outside every plugin callback.
-    fn foreground(&self, _program: abi::Foreground, reply: Reply) {
+    /// Runs `program` in the foreground ([`abi::Host::foreground`]) while `alive` holds for the plugin that asked, which
+    /// the host checks as the program starts, and calls `reply` on the UI thread once with its exit code or the error.
+    /// Called outside every plugin callback.
+    fn foreground(&self, _program: abi::Foreground, _alive: Box<dyn Fn() -> bool>, reply: Reply) {
         reply(Err("this host has no terminal".to_owned()));
     }
     /// Sets the terminal title ([`abi::Host::set_title`]). Called outside every plugin callback.
@@ -810,7 +811,12 @@ impl abi::Host for Scoped<'_> {
     }
 
     fn foreground(&self, program: abi::Foreground) -> abi::RequestId {
-        self.request(move |host, reply| host.foreground(program, reply))
+        // The program starts later, once the turn is done: only if its plugin is still active then.
+        let owner = Rc::downgrade(self.scope);
+        let alive = Box::new(move || {
+            owner.upgrade().is_some_and(|scope| !scope.activation.disposed() && scope.failure.borrow().is_none())
+        });
+        self.request(move |host, reply| host.foreground(program, alive, reply))
     }
 
     fn set_title(&self, title: &str) {

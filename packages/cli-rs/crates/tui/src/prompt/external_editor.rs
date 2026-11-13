@@ -28,7 +28,8 @@ pub fn open(tui: &Tui, prompt: &Rc<Inner>) {
         super::paste::expand_prompt(&prompt.snapshot(), |offset| prompt_input::index_at(&prompt.textarea, offset));
     let cwd = working_directory(tui, prompt);
     let weak = Rc::downgrade(prompt);
-    tui.app.release_terminal(move |_| {
+    // One program at a time has the terminal (`features::foreground`).
+    let released = crate::features::foreground::release(tui, move || {
         let result = edit(&command, snapshot["text"].as_str().unwrap_or_default(), &cwd);
         let Some(prompt) = weak.upgrade() else { return };
         let Some(tui) = prompt.tui.upgrade() else { return };
@@ -48,6 +49,9 @@ pub fn open(tui: &Tui, prompt: &Rc<Inner>) {
         }
         tui.app.request_redraw();
     });
+    if !released {
+        failed(tui, "Another program is in the foreground");
+    }
 }
 
 fn failed(tui: &Tui, message: &str) {
