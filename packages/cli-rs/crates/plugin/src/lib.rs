@@ -1242,11 +1242,34 @@ impl Registry {
         }
     }
 
-    /// Activates or deactivates plugin `id` (the plugin manager's toggle); returns whether it exists.
+    /// Activates or deactivates plugin `id` as a `cli.json` directive does; returns whether it exists. A setup that
+    /// fails lists the plugin failed and says so, as a load does (TS reconciles).
     pub fn set_active(&self, host: &Rc<dyn Host>, id: &str, active: bool) -> bool {
-        if self.with_plugin(id, |_| ()).is_none() {
-            return false;
+        let Some(error) = self.switch(host, id, active) else { return false };
+        if error.is_some() {
+            host.failed(id);
         }
+        true
+    }
+
+    /// The plugin manager's toggle of plugin `id` (TS `plugins.tsx`), `None` when it does not exist. A setup that fails
+    /// as it enables the plugin returns its error for the manager to show, and the plugin is listed as the last load
+    /// left it.
+    pub fn toggle(&self, host: &Rc<dyn Host>, id: &str, active: bool) -> Option<Result<(), String>> {
+        let listed = self.with_plugin(id, |plugin| plugin.failed.clone())?;
+        let error = self.switch(host, id, active)?;
+        Some(match error {
+            None => Ok(()),
+            Some(error) => {
+                self.with_plugin(id, |plugin| plugin.failed = listed);
+                Err(error)
+            }
+        })
+    }
+
+    /// Activates or deactivates plugin `id`: `None` when it does not exist, else the error of a setup that failed.
+    fn switch(&self, host: &Rc<dyn Host>, id: &str, active: bool) -> Option<Option<String>> {
+        self.with_plugin(id, |_| ())?;
         if !active {
             let registration = self.with_plugin(id, |plugin| {
                 plugin.enabled = false;
@@ -1255,7 +1278,7 @@ impl Registry {
             if let Some((_, registration)) = registration.flatten() {
                 registration.dispose();
             }
-            return true;
+            return Some(None);
         }
         // Enabling a failed plugin restarts it with a fresh setup.
         let failed = self.with_plugin(id, |plugin| {
@@ -1266,11 +1289,7 @@ impl Registry {
         if let Some((_, registration)) = failed.flatten() {
             registration.dispose();
         }
-        if self.start(host, id).is_some() {
-            // Like a failed load, a setup that fails as the plugin manager enables it says so (TS `plugins.tsx`).
-            host.failed(id);
-        }
-        true
+        Some(self.start(host, id))
     }
 
     /// Every plugin and skipped entry, for the plugin manager.

@@ -253,7 +253,10 @@ impl World {
             Command::Toggle => {
                 // What the plugin manager's action does (`dialogs/plugins.rs`, `Manager::toggle`).
                 let active = tui.plugins.entries().iter().any(|entry| entry.id == ID && entry.active);
-                if tui.plugins.set_active(&host(tui), ID, !active) {
+                if let Some(toggled) = tui.plugins.toggle(&host(tui), ID, !active) {
+                    if let Err(error) = toggled {
+                        tui.toasts.error(error);
+                    }
                     tui.navigate(tui.route());
                 }
             }
