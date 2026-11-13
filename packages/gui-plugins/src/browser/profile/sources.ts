@@ -379,6 +379,8 @@ async function chromiumKey(definition: Definition): Promise<ChromiumKey | undefi
   if (process.platform === "darwin") {
     if (!definition.keychain) return undefined
 
+    // The Keychain prompt names `security`, and its Always Allow would let any process read the key through it; the
+    // window tells the user to choose Allow. Naming OpenCode needs an in-process SecItemCopyMatching (a native module).
     const password = await run("security", [
       "find-generic-password",
       "-w",

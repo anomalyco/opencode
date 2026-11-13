@@ -41,6 +41,7 @@ export function createProfileJobs(input: { readonly finished?: (finished: Finish
   const preferences = ctx.stores.preferences
   const [state, setState] = createSignal(initialJobsState)
   const [version, setVersion] = createSignal(0)
+  const mac = /Mac/.test(navigator.platform)
   // Each running job's call and timer, by attempt.
   const handles = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
 
@@ -105,8 +106,12 @@ export function createProfileJobs(input: { readonly finished?: (finished: Finish
   const sources = createLatest(key, (_value, signal) => client()?.sources({ signal }) ?? Promise.resolve([]))
   const summary = createLatest(key, (_value, signal) => client()?.summary({ signal }) ?? Promise.resolve(undefined))
 
-  const browserName = (job: Job) =>
-    job.type === "import-browser" ? sources.latest?.find((source) => source.id === job.source)?.name : undefined
+  const source = (job: Job) =>
+    job.type === "import-browser" ? sources.latest?.find((item) => item.id === job.source) : undefined
+
+  const browserName = (job: Job) => source(job)?.name
+  // On macOS a Chromium browser's cookie key is in the login Keychain, and the system asks before handing it over.
+  const keychain = (job: Job) => mac && source(job)?.engine === "chromium"
 
   /** What to say about a finished job; undefined for one whose result the surface already shows. */
   const describe = (finished: Finished | undefined): JobMessage | undefined => {
@@ -150,6 +155,9 @@ export function createProfileJobs(input: { readonly finished?: (finished: Finish
     if (result.type === "failed" && result.reason === "locked" && browser)
       return { text: ctx.t("signins.failed.locked.named", { browser }), error: true }
 
+    if (result.type === "failed" && result.reason === "key" && browser && keychain(finished.job))
+      return { text: ctx.t("signins.failed.keychain", { browser }), error: true }
+
     if (result.type === "failed") return { text: ctx.t(`signins.failed.${result.reason}`), error: true }
 
     if (result.imported === 0 && result.protected > 0)
@@ -171,6 +179,13 @@ export function createProfileJobs(input: { readonly finished?: (finished: Finish
     running: () => runningJob(state()),
     last: () => lastFinished(state()),
     describe,
+    /** What to say while a job runs: on macOS, what the Keychain prompt in front of the window asks, and how to answer. */
+    notice: (): JobMessage | undefined => {
+      const job = runningJob(state())
+      const browser = job && keychain(job) ? browserName(job) : undefined
+
+      return browser ? { text: ctx.t("signins.keychain", { browser }), error: false } : undefined
+    },
     /** Browsers to import from, the one used last first. Empty until main answers. */
     sources: (): readonly ProfileSource[] => sources.latest ?? [],
     /** Whether main has answered with the browsers once, so an empty list means none are installed. */

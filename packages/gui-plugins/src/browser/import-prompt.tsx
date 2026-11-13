@@ -33,7 +33,8 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
 
   const choices = createMemo(() => profileChoices(jobs.sources()))
   const blocked = () => !jobs.available() || jobs.running() !== undefined
-  const message = () => jobs.describe(jobs.last())
+  // What the Keychain prompt asks shows while it is open.
+  const message = () => jobs.notice() ?? jobs.describe(jobs.last())
 
   // The import that brought cookies, with the browser's name, while its confirmation shows.
   const confirmed = createMemo(() => {
@@ -138,7 +139,11 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
             </div>
             <Show when={message()}>
               {(current) => (
-                <p role="alert" class="text-[13px] leading-[var(--line-height-base)] text-v2-state-fg-danger">
+                <p
+                  role={current().error ? "alert" : "status"}
+                  class="text-[13px] leading-[var(--line-height-base)]"
+                  classList={{ "text-v2-state-fg-danger": current().error, "text-v2-text-text-base": !current().error }}
+                >
                   {current().text}
                 </p>
               )}
@@ -170,8 +175,9 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
           >
             {(current) => (
               <p
-                role="alert"
-                class="min-w-0 flex-1 text-[13px] leading-[var(--line-height-compact)] text-v2-state-fg-danger"
+                role={current().error ? "alert" : "status"}
+                class="min-w-0 flex-1 text-[13px] leading-[var(--line-height-compact)]"
+                classList={{ "text-v2-state-fg-danger": current().error, "text-v2-text-text-base": !current().error }}
               >
                 {current().text}
               </p>

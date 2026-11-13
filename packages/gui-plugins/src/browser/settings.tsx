@@ -80,7 +80,7 @@ export default function BrowserSettings() {
                   name={choice.source.name}
                   detail={choice.source.profiles.length > 1 ? choice.profile.name : undefined}
                   message={
-                    importing(choice) ? undefined : results().get(resultKey(choice.source.id, choice.profile.id))
+                    importing(choice) ? jobs.notice() : results().get(resultKey(choice.source.id, choice.profile.id))
                   }
                 />
               }
