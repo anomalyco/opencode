@@ -423,7 +423,8 @@ mod tests {
     fn without_the_variable_windows_finds_the_npm_shim_on_path() {
         let dir = opencode_util::temp::tempdir().unwrap();
         let prefix = dir.path();
-        let exe = prefix.join("node_modules/@opencode/cli/bin/opencode.exe");
+        // The shim's `\` separators become the host's: what `cmd.exe` runs, not a `/` path.
+        let exe = prefix.join(["node_modules", "@opencode", "cli", "bin", "opencode.exe"].iter().collect::<PathBuf>());
         std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
         std::fs::write(&exe, "MZ").unwrap();
         std::fs::write(
