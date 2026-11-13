@@ -177,9 +177,7 @@ const reference = (asset: Media.Asset) =>
 const resolution = (request: Request) => request.resolution?.toUpperCase()
 
 const fromRequest = Effect.fn("MiniMaxVideo.fromRequest")(function* (request: Request) {
-  // H3 always generates a soundtrack and has no field to turn it off.
-  if (request.sound === false)
-    return yield* route.unsupported("video.sound", `${route.name} always generates sound and can't be silenced`)
+  // H3 always generates a soundtrack and has no field for `sound`, so it isn't sent.
   const content = [
     { type: "text", text: request.prompt },
     ...(request.start === undefined ? [] : [yield* item(request.start, "first_frame")]),
@@ -213,8 +211,7 @@ const hailuoFromRequest = Effect.fn("MiniMaxHailuoVideo.fromRequest")(function* 
       `${hailuoRoute.name} takes only image (subject) references`,
     )
   // Hailuo output is always silent and its shape follows the model or the first frame, with no field for either.
-  if (request.sound === true)
-    return yield* hailuoRoute.unsupported("video.sound", `${hailuoRoute.name} generates silent video only`)
+  // `sound` has nothing to send, so it isn't; an aspect ratio would change the shape the caller asked for.
   if (request.aspect !== undefined && request.aspect !== "auto")
     return yield* hailuoRoute.unsupported("video.aspect", `${hailuoRoute.name} has no aspect ratio input`)
   const subjects = yield* Effect.forEach(references, (asset) =>

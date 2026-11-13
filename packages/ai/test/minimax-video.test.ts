@@ -136,12 +136,19 @@ describe("MiniMax Video / H3 start", () => {
     }),
   )
 
-  it.effect("rejects silent output, which H3 can't produce, before sending", () =>
+  it.effect("sends nothing for sound, which neither API has a field for", () =>
     Effect.gen(function* () {
-      const error = yield* ai.video.start({ model: h3, prompt: "x", sound: false }).pipe(Effect.flip)
-      expect(error.reason._tag).toBe("UnsupportedOperation")
-      expect(error.message).toContain("always generates sound")
-    }).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network")))),
+      const requests = yield* sent([
+        { model: h3, sound: false },
+        { model: h3, sound: true },
+        { model: hailuo, sound: true },
+      ])
+      expect(requests.map((request) => "generate_audio" in request.body || "sound" in request.body)).toEqual([
+        false,
+        false,
+        false,
+      ])
+    }),
   )
 
   it.effect("returns MiniMax's HTTP errors typed", () =>
@@ -242,7 +249,6 @@ describe("MiniMax Video / Hailuo start", () => {
       request: { references: [Media.url("https://example.test/v.mp3", { mediaType: "audio/mpeg" })] },
       tag: "UnsupportedOperation",
     },
-    { name: "sound", request: { sound: true }, tag: "UnsupportedOperation" },
     { name: "an aspect ratio", request: { aspect: "16:9" as const }, tag: "UnsupportedOperation" },
     { name: "a MiniMax file reference", request: { start: Media.ref("minimax", "file_1") }, tag: "InvalidRequest" },
   ]) {
