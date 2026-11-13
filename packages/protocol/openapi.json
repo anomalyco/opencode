@@ -16658,6 +16658,9 @@
               "todo": {
                 "type": "boolean"
               },
+              "advisor": {
+                "type": "boolean"
+              },
               "background_compaction": {
                 "type": "boolean"
               },
