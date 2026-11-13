@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { fileURLWithin } from "../policy"
-import { fileRequestCancelled, initialFileGuard, transitionFileGuard, type FileGuardEvent } from "./file-guard-machine"
+import { fileRequestCancelled, initialFileGuard, refreshAfterGuard, transitionFileGuard, type FileGuardEvent } from "./file-guard-machine"
 
 const replay = (events: readonly FileGuardEvent[]) =>
   events.reduce<{ state: typeof initialFileGuard; on: boolean[] }>(
@@ -17,6 +17,17 @@ const replay = (events: readonly FileGuardEvent[]) =>
 const file = "file:///C:/repo/index.html"
 
 const web = "https://example.com/"
+
+test("refresh only surviving tabs that committed while guarded, even in an already-known process", () => {
+  const commit = (id: number) => ({ type: "frame.committed", contents: id, url: web, process: id } as const)
+  const before = replay([commit(1), commit(2), { type: "navigation.started", contents: 4, url: file }, commit(2), commit(3), { type: "destroyed", contents: 3 }]).state
+  const after = transitionFileGuard(before, { type: "destroyed", contents: 4 })
+
+  expect(refreshAfterGuard(before, before)).toEqual([])
+  expect(refreshAfterGuard(before, after)).toEqual([2])
+  expect(refreshAfterGuard(after, after)).toEqual([])
+  expect(after.commits.size).toBe(0)
+})
 
 test.each([
   {

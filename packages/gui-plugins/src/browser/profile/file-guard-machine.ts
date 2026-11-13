@@ -19,6 +19,8 @@ export type FileGuardState = {
   readonly pending: ReadonlySet<number>
   readonly frames: ReadonlyMap<number, readonly number[]>
   readonly tainted: ReadonlySet<number>
+  /** Tabs with a document committed during this guard interval; only these can retain Electron's request proxy. */
+  readonly commits: ReadonlySet<number>
 }
 
 /**
@@ -33,7 +35,7 @@ export type FileGuardEvent =
   | { readonly type: "loading.stopped"; readonly contents: number; readonly frames: readonly number[] }
   | { readonly type: "destroyed"; readonly contents: number }
 
-export const initialFileGuard: FileGuardState = { on: false, pending: new Set(), frames: new Map(), tainted: new Set() }
+export const initialFileGuard: FileGuardState = { on: false, pending: new Set(), frames: new Map(), tainted: new Set(), commits: new Set() }
 
 export function transitionFileGuard(state: FileGuardState, event: FileGuardEvent): FileGuardState {
   const next = apply(state, event)
@@ -43,7 +45,12 @@ export function transitionFileGuard(state: FileGuardState, event: FileGuardEvent
   const on =
     next.pending.size > 0 || [...next.frames.values()].some((frames) => frames.some((process) => next.tainted.has(process)))
 
-  return { ...next, on }
+  return { ...next, on, commits: on ? next.commits : initialFileGuard.commits }
+}
+
+/** Which still-open pages need their request loaders rebuilt now, without a navigation. */
+export function refreshAfterGuard(before: FileGuardState, after: FileGuardState) {
+  return before.on && !after.on ? [...before.commits].filter((id) => after.frames.has(id)) : []
 }
 
 function apply(state: FileGuardState, event: FileGuardEvent): FileGuardState {
@@ -56,11 +63,13 @@ function apply(state: FileGuardState, event: FileGuardEvent): FileGuardState {
   if (event.type === "frame.committed") {
     const frames = state.frames.get(event.contents) ?? []
     const known = frames.includes(event.process) && (!fileURL(event.url) || state.tainted.has(event.process))
+    const commits = state.on && !state.commits.has(event.contents) ? new Set(state.commits).add(event.contents) : state.commits
 
-    if (known) return state
+    if (known) return commits === state.commits ? state : { ...state, commits }
 
     return {
       ...state,
+      commits,
       frames: new Map(state.frames).set(event.contents, [...new Set([...frames, event.process])]),
       tainted: fileURL(event.url) ? new Set(state.tainted).add(event.process) : state.tainted,
     }

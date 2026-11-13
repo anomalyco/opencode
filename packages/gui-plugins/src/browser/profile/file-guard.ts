@@ -1,5 +1,5 @@
 import { app, type Session, type WebContents } from "electron"
-import { fileRequestCancelled, initialFileGuard, transitionFileGuard, type FileGuardEvent } from "./file-guard-machine"
+import { fileRequestCancelled, initialFileGuard, refreshAfterGuard, transitionFileGuard, type FileGuardEvent } from "./file-guard-machine"
 
 /**
  * Drives the guard for every page of `session`, from before its first navigation: popups, extension pages and the
@@ -9,6 +9,7 @@ import { fileRequestCancelled, initialFileGuard, transitionFileGuard, type FileG
 export function createFileGuard(input: {
   session: Session
   allowed: (request: Electron.OnBeforeRequestListenerDetails) => boolean
+  refresh: (contents: number) => void
 }) {
   const state = { current: initialFileGuard, stopped: false }
   // Each watched page's listeners, removed when the page goes or the guard stops.
@@ -26,6 +27,9 @@ export function createFileGuard(input: {
 
     if (state.current.on === previous.on) return
     input.session.webRequest.onBeforeRequest({ urls: ["file://*/*"] }, state.current.on ? listener : null)
+
+    if (!state.current.on && input.session.extensions.getAllExtensions().length)
+      refreshAfterGuard(previous, state.current).forEach(input.refresh)
   }
 
   const frames = (contents: WebContents) =>

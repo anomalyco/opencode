@@ -105,7 +105,8 @@ export async function createBrowserProfile(input: {
 
   const previews = createPreviews(session)
   // Even a non-pane window must never commit a native file document in this session.
-  const stopFileGuard = createFileGuard({ session, allowed: () => false })
+  const loaderRefresh = new Map<number, () => void>()
+  const stopFileGuard = createFileGuard({ session, allowed: () => false, refresh: (id) => loaderRefresh.get(id)?.() })
 
   // What each package's files show, read once per directory and version: describing runs after every change.
   const scans = new Map<string, Promise<ExtensionFiles>>()
@@ -156,6 +157,7 @@ export async function createBrowserProfile(input: {
     session.cookies.off("changed", cookiesChanged)
     clearTimeout(settling)
     stopFileGuard()
+    loaderRefresh.clear()
     previews.dispose()
   }
 
@@ -321,6 +323,8 @@ export async function createBrowserProfile(input: {
     /** Each tab's download handler by its web contents ID, which the profile's one `will-download` listener calls. */
     downloads,
     previews,
+    /** The pane tabs whose debugger can rebuild their extension request loaders. */
+    loaderRefresh,
     /** The pane's tabs and windows as extensions see them; the pane registers each tab of the profile. */
     extensionTabs: apis.tabs,
     /** Extensions loaded now, whose pages may open in a tab. */

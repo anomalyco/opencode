@@ -477,6 +477,7 @@ export function createBrowserPane(input: {
 
   function release(page: BrowserPage) {
     grants.get(page)?.()
+    input.profile.loaderRefresh.delete(page.contents.id)
     downloads.delete(page.contents.id)
     const done = page.dispose()
     const settled = done.catch(() => undefined)
@@ -599,7 +600,10 @@ export function createBrowserPane(input: {
       },
     })
 
-    if (handle.shared) grants.set(page, input.profile.extensionTabs.register(extensionTab(binding, id, page, win, focused)))
+    if (handle.shared) {
+      grants.set(page, input.profile.extensionTabs.register(extensionTab(binding, id, page, win, focused)))
+      input.profile.loaderRefresh.set(page.contents.id, page.refreshExtensions)
+    }
 
     handle.pages.set(attempt, page)
     downloads.set(page.contents.id, page.download)
