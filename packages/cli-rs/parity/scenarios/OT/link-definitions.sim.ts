@@ -42,7 +42,7 @@ export default defineSim({
         { file: "OT2049-link-reference-definitions", cells: 224 },
         // ` (https://example.com/cafes)` after the paragraph's link.
         { file: "OT2049-link-reference-definitions", cells: 34 },
-        // The `(` of each table link's suffix.
+        // The space before each table link's ` (url)` suffix.
         { file: "OT2049-link-reference-definitions", cells: 2, styleOnly: true },
       ],
     },
