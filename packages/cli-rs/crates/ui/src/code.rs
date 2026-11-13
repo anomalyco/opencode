@@ -5,7 +5,7 @@ use opentui::prelude::*;
 use opentui::syntax::SyntaxTheme;
 use opentui::widget::{Code, LineNumbers};
 
-use crate::theme::{Theme, contrast};
+use crate::theme::{Paints, Theme, contrast};
 
 /// The capture styles for code, Markdown, and the prompt, from the TUI theme: a port of `generateSyntax`
 /// (`packages/theme/src/tui/syntax.ts`). Rules apply in order, so a scope listed twice keeps its last style.
@@ -145,6 +145,16 @@ pub fn view(app: &App, theme: &Theme, syntax: &SyntaxTheme, filetype: Option<&st
         .set_code(content)
         .wrap(WrapMode::Word)
         .focusable(false)
+}
+
+/// [`view`], restyled in place by `paints`: the code keeps its highlight.
+pub fn view_painted(app: &App, theme: &Theme, filetype: Option<&str>, content: &str, paints: &Paints) -> Code {
+    let code = view(app, theme, &syntax_theme(theme), filetype, content);
+    let painted = code.clone();
+    paints.keep(move |theme| {
+        painted.fg(theme.text.base).syntax_theme(syntax_theme(theme));
+    });
+    code
 }
 
 /// `code` with muted line numbers, as the Write tool shows a file (`<line_number fg={text.muted} minWidth={3}
