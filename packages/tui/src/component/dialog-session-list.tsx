@@ -1,7 +1,6 @@
 import { createMemo, createResource, createSignal, onMount, Show, type JSX } from "solid-js"
 import path from "path"
 import type { SessionInfo } from "@opencode/client"
-import { Project } from "@opencode/schema/project"
 import { TextAttributes, type RGBA } from "@opentui/core"
 import { DIALOG_LIST_INSET, useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
@@ -61,14 +60,7 @@ export function DialogSessionList() {
         const current = data.location.info(location)
         if (!current) throw new Error("Location unavailable")
         const response = await client.api.session.list({
-          ...(allProjects
-            ? {}
-            : current.project.id === Project.ID.global
-              ? { directory: current.directory }
-              : {
-                  project: current.project.id,
-                  subpath: path.relative(current.project.directory, current.directory).replaceAll("\\", "/"),
-                }),
+          ...(allProjects ? {} : { directory: current.directory }),
           ...(query ? { search: query } : {}),
           limit: 50,
           order: "desc",
