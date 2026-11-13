@@ -17,6 +17,8 @@ type Command = {
   rawWords: string[]
   // Exclusive raw-token ends relative to resource, for source-shaped permission prefixes.
   wordEnds?: number[]
+  // Executable offset within resource when assignments or redirects precede it.
+  commandOffset?: number
   statementHead?: true
   declaration?: true
   // Words before the first redirect when redirects appear between arguments.
@@ -193,6 +195,7 @@ type BashState = {
   wordStart: number
   wordEnd: number
   commandStart: number | undefined
+  executableStart: number | undefined
   redirectWordCount: number | undefined
   redirectPrefixEnd: number | undefined
   // Posix shells such as Dash read `&>` as `&` and `>`, so later words would start another command there.
@@ -290,7 +293,10 @@ function finishBashWord(state: BashState) {
   const repeatHeader = structure?.kind === "repeat" && structure.phase === "header"
   if (!state.redirectTarget && repeatHeader) structure.phase = "do"
   if (!state.redirectTarget && !repeatHeader) {
-    if (!state.assignmentWord && state.commandWordIndex < 0) state.commandWordIndex = state.words.length
+    if (!state.assignmentWord && state.commandWordIndex < 0) {
+      state.commandWordIndex = state.words.length
+      state.executableStart = state.wordStart
+    }
     state.commandStart ??= state.wordStart
     state.words.push(state.word)
     // Unquoted trailing continuations are ignored syntax, not part of the raw token.
@@ -384,10 +390,12 @@ function finishBashCommand(state: BashState, boundary = false, newline = false) 
   let owner: Command | undefined
   if (name >= 0 && !inHeader) {
     const resource = state.input.slice(state.commandStart, state.wordEnd).replace(/^[ \t\n]+|[ \t\n]+$/g, "")
+    const head = state.input.slice(state.commandStart, state.executableStart).replace(/^[ \t\n]+/, "")
     const command: Command = {
       resource,
       words: state.words.slice(name),
       rawWords: state.rawWords.slice(name),
+      ...(head ? { commandOffset: head.length } : {}),
       ...(name === 0 &&
       !state.hasRedirect &&
       BASH_DECLARATIONS.has(state.rawWords[0]) &&
@@ -478,6 +486,7 @@ function finishBashCommand(state: BashState, boundary = false, newline = false) 
   state.rawWords.length = 0
   state.commandWordIndex = -1
   state.commandStart = undefined
+  state.executableStart = undefined
   state.dupRedirect = false
   state.hasRedirect = false
   state.hasFileRedirect = false
@@ -515,6 +524,7 @@ function scanBash(
     wordStart: start,
     wordEnd: start,
     commandStart: undefined,
+    executableStart: undefined,
     redirectWordCount: undefined,
     redirectPrefixEnd: undefined,
     ampersandRedirectWords: undefined,

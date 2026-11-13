@@ -223,7 +223,9 @@ export function scan(command: string, shell: string, cwd: string): Effect.Effect
         if (directoryCommand === parts && resolved.complete) continue
       }
       const selected = prefix(words.slice(0, PREFIX_LENGTH))
-      const conventional = `${selected.join(" ")} *`
+      const head = item.resource.slice(0, item.commandOffset ?? 0)
+      // A * or ? in the head would turn into a wildcard and widen the grant, so it keeps the bare prefix.
+      const conventional = `${/[*?]/.test(head) ? "" : head}${selected.join(" ")} *`
       const end = item.wordEnds?.[selected.length - 1]
       // Keep existing grants stable unless normalized spacing loses the original source boundary.
       const save =
