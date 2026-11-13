@@ -113,7 +113,7 @@ error.
 
 ## Which binaries load
 
-A plugin binary carries its ABI version. The host, ABI 1.5, loads every 1.x binary:
+A plugin binary carries its ABI version. The host, ABI 1.6, loads every 1.x binary:
 
 | Built with | Loads | What the host sends it |
 | --- | --- | --- |
@@ -121,7 +121,17 @@ A plugin binary carries its ABI version. The host, ABI 1.5, loads every 1.x bina
 | The 1.1 to 1.3 SDK | yes | The requests of 1.0 to 1.3: fences, slots and routes draw styled rows |
 | The 1.4 SDK | yes; a 1.3 host refuses it, naming both versions | The 1.4 requests |
 | The 1.5 SDK | yes; a 1.3 host refuses it, and a 1.4 host loads it and offers what it has: `composer()` reads `None`, and `edit_composer`, `Dialog::Confirm` and `Dialog::Alert` do nothing | The 1.4 requests; 1.5 adds only what the plugin asks of the host |
+| The 1.6 SDK | yes; a 1.3 host refuses it. On a 1.4 or 1.5 host the reads and verbs of 1.6 answer their defaults (see below) | The 1.4 requests, and `Deltas` to a plugin with `on_deltas` |
 | A 2.x SDK | no: "plugin ABI 2.0 is not supported: … rebuild the plugin against opencode-plugin-abi 1" | — |
+
+ABI 1.6 adds the small reads and verbs: a claim's own size (`Setup::sized`), the streaming deltas (`Setup::on_deltas`),
+the model's variants, the session tabs, the keymap's state, the mouse selection, a program in the foreground, the
+terminal title, the theme, a link on a `Span`, and an `xlarge` panel ([`docs/P.4.md`](../../docs/P.4.md) lists each
+with its TS counterpart). A 1.6 plugin needs no new host: on an older one a read returns `None`, an empty list or
+`false`, a verb that answers a `bool` answers `false` and does nothing, `sized` claims get 0, a link is not drawn, and
+an `xlarge` panel shows `large`. Rebuilding a 1.4 plugin on the 1.6 SDK needs no change, except that `SlotInput`,
+`Span` and `Manifest` have new fields, so a struct literal of one needs `..Default::default()`, and a `SlotClaim`
+literal needs `size: false`.
 
 A binary of an older SDK keeps the safety of its own SDK. A 1.3 `Waker` is a raw pointer to the host, and so is
 the `Waker` of a 1.4 build from before `Waker` became `Clone`. Such a plugin must stop its threads before its state
