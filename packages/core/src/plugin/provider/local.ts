@@ -40,7 +40,8 @@ export function createLocalProviderPlugin<Discovered>(input: {
   readonly model: (item: NoInfer<Discovered>) => LocalModel
 }) {
   const discovery = new Map<string, { checked: number; apiKey?: string; models?: readonly Discovered[] }>()
-  const discoveryLock = Semaphore.makeUnsafe(1)
+  // One lock per endpoint, so an unresponsive host does not delay discovery of another.
+  const discoveryLocks = new Map<string, Semaphore.Semaphore>()
   const suffix = input.stripPathSuffix ?? /\/v1$/
 
   return function make(origin?: string, interval: Duration.Input = "30 seconds") {
@@ -106,7 +107,9 @@ export function createLocalProviderPlugin<Discovered>(input: {
         const discover = Effect.fn("LocalProviderPlugin.discover")(function* () {
           const current = source.current
           if (!current.endpoint) return undefined
-          return yield* discoveryLock.withPermit(
+          const lock = discoveryLocks.get(current.root) ?? Semaphore.makeUnsafe(1)
+          discoveryLocks.set(current.root, lock)
+          return yield* lock.withPermit(
             Effect.gen(function* () {
               // A key saved with /connect or set in the integration's env var wins over config, as it does for requests.
               const active = yield* activeCredential(ctx, input.providerID)
