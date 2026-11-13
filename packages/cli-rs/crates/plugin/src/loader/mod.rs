@@ -493,10 +493,9 @@ fn identity(file: &Path) -> Option<(u64, u64)> {
 pub fn has_native_build(config_dir: &Path, cwd: &Path, configured: &[&str]) -> bool {
     let discovered = discover(&plugin_directories(config_dir, cwd)).into_iter().map(Some);
     let configured = configured.iter().map(|target| local_source(target, config_dir));
-    discovered
-        .chain(configured)
-        .flatten()
-        .any(|local| Target { target: String::new(), local: Some(local), options: None }.library().is_some())
+    discovered.chain(configured).flatten().any(|local| {
+        Target { target: String::new(), local: Some(local), options: None, project: false }.library().is_some()
+    })
 }
 
 /// The `plugins` directories to search (TS `localPluginDirectories`): the global config directory's, then each
