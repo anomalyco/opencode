@@ -303,8 +303,8 @@ impl Host for Tui {
         if self.theme.borrow().selected() != name {
             self.theme.borrow_mut().config_name(name);
             self.theme_changed();
-            local_changed(self);
         }
+        // The settings write tells the claims with `local`, so they read the new theme.
         let name = Value::from(name);
         crate::dialogs::settings::update(self, move |draft| {
             crate::dialogs::settings::set_path(draft, &["theme", "name"], name)
