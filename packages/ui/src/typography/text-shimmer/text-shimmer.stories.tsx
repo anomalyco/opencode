@@ -1,5 +1,9 @@
 import { TextShimmer } from "./text-shimmer"
 
+type Args = { text: string; active: boolean; offset: number; as: "span" | "div" }
+
+const typography = { "font-size": "13px", "font-weight": "440", "font-family": "var(--font-family-sans)" }
+
 const docs = `### Overview
 Animated shimmer effect for loading text placeholders.
 
@@ -23,6 +27,16 @@ export default {
   id: "ui-text-shimmer",
   component: TextShimmer,
   tags: ["autodocs"],
+  args: { text: "Loading...", active: true, offset: 0, as: "span" },
+  argTypes: {
+    as: { control: "select", options: ["span", "div"] },
+    offset: { control: { type: "range", min: 0, max: 30, step: 1 } },
+  },
+  render: (args: Args) => (
+    <div style={typography}>
+      <TextShimmer {...args} />
+    </div>
+  ),
   parameters: {
     frameBackground: "#fff",
     layout: "padded",
@@ -34,37 +48,17 @@ export default {
   },
 }
 
-export const Active = {
-  render: () => (
-    <span style={{ "font-size": "13px", "font-weight": "440", "font-family": "Inter, system-ui, sans-serif" }}>
-      <TextShimmer text="Loading..." active={true} />
-    </span>
-  ),
-}
+export const Active = {}
 
-export const Inactive = {
-  render: () => (
-    <span style={{ "font-size": "13px", "font-weight": "440", "font-family": "Inter, system-ui, sans-serif" }}>
-      <TextShimmer text="Static text" active={false} />
-    </span>
-  ),
-}
+export const Inactive = { args: { text: "Static text", active: false } }
 
 export const WithOffset = {
-  render: () => (
-    <div
-      style={{
-        display: "flex",
-        "flex-direction": "column",
-        gap: "8px",
-        "font-size": "13px",
-        "font-weight": "440",
-        "font-family": "Inter, system-ui, sans-serif",
-      }}
-    >
-      <TextShimmer text="First line" active={true} offset={0} />
-      <TextShimmer text="Second line" active={true} offset={5} />
-      <TextShimmer text="Third line" active={true} offset={10} />
+  args: { text: "First line", offset: 5 },
+  render: (args: Args) => (
+    <div style={{ ...typography, display: "grid", gap: "8px" }}>
+      <TextShimmer {...args} offset={0} />
+      <TextShimmer {...args} text="Second line" />
+      <TextShimmer {...args} text="Third line" offset={args.offset * 2} />
     </div>
   ),
 }
