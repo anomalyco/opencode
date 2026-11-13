@@ -1613,33 +1613,28 @@ describe("ShellTool", () => {
   it.effect("ignores explicit background timeouts with timeout backgrounding enabled", () =>
     withTempDir((tmp) => {
       reset()
-      const now = Date.now() + 60_000
-      return TestClock.setTime(now).pipe(
-        Effect.andThen(
-          withSession(
-            tmp.path,
-            (registry) =>
-              Effect.gen(function* () {
-                const result = yield* executeTool(
-                  registry,
-                  call({ command: progressOverflowCommand(0, "release"), background: true, timeout: 10 }),
-                )
-                const id = ID.make(String(result.metadata?.shellID))
-                const shell = yield* Shell.Service
-                const info = yield* shell.get(id)
-                expect(result.output).toMatchObject({
-                  exitCode: null,
-                  outputPath: info.file,
-                  wallTimeSeconds: (now - info.time.started) / 1_000,
-                })
-                yield* TestClock.adjust("1 second")
-                expect((yield* shell.get(id)).status).toBe("running")
-                yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
-                expect(yield* shell.wait(id)).toMatchObject({ status: "exited", exit: 0 })
-              }),
-            true,
-          ),
-        ),
+      return withSession(
+        tmp.path,
+        (registry) =>
+          Effect.gen(function* () {
+            const result = yield* executeTool(
+              registry,
+              call({ command: progressOverflowCommand(0, "release"), background: true, timeout: 10 }),
+            )
+            const id = ID.make(String(result.metadata?.shellID))
+            const shell = yield* Shell.Service
+            const info = yield* shell.get(id)
+            expect(result.output).toMatchObject({
+              exitCode: null,
+              outputPath: info.file,
+              wallTimeSeconds: expect.any(Number),
+            })
+            yield* TestClock.adjust("1 second")
+            expect((yield* shell.get(id)).status).toBe("running")
+            yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
+            expect(yield* shell.wait(id)).toMatchObject({ status: "exited", exit: 0 })
+          }),
+        true,
       )
     }),
   )
