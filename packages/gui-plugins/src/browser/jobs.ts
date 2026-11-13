@@ -186,6 +186,11 @@ export function createProfileJobs(input: { readonly finished?: (finished: Finish
 
       return browser ? { text: ctx.t("signins.keychain", { browser }), error: false } : undefined
     },
+    /** Why sign-ins cannot be saved here, so the surface offers no import; undefined while they can or until main answers. */
+    unsaved: (): JobMessage | undefined =>
+      summary.latest?.persistent === false
+        ? { text: ctx.t(mac ? "signins.unsaved.mac" : "signins.unsaved"), error: true }
+        : undefined,
     /** Browsers to import from, the one used last first. Empty until main answers. */
     sources: (): readonly ProfileSource[] => sources.latest ?? [],
     /** Whether main has answered with the browsers once, so an empty list means none are installed. */

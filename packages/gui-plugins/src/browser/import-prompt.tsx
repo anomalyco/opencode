@@ -32,9 +32,9 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
   })
 
   const choices = createMemo(() => profileChoices(jobs.sources()))
-  const blocked = () => !jobs.available() || jobs.running() !== undefined
-  // What the Keychain prompt asks shows while it is open.
-  const message = () => jobs.notice() ?? jobs.describe(jobs.last())
+  // Sign-ins that cannot be saved are not offered; what the Keychain prompt asks shows while it is open.
+  const blocked = () => !jobs.available() || jobs.running() !== undefined || jobs.unsaved() !== undefined
+  const message = () => jobs.unsaved() ?? jobs.notice() ?? jobs.describe(jobs.last())
 
   // The import that brought cookies, with the browser's name, while its confirmation shows.
   const confirmed = createMemo(() => {

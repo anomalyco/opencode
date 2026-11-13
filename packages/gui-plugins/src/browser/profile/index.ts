@@ -6,6 +6,7 @@ import type { Log, Storage } from "@opencode/plugin/gui/main"
 import { fileURLWithin } from "../policy"
 import { extensionCompatibility } from "./compatibility"
 import { browserUserAgent, cookieDetails, parseCookieFile, type CookieRead } from "./cookie"
+import { snapshotDatabase } from "./database"
 import {
   displayName,
   extensionIcon,
@@ -44,6 +45,7 @@ export type Profile = Awaited<ReturnType<typeof createBrowserProfile>>
 export async function createBrowserProfile(input: { storage: Storage; log: Log; changed: () => void }) {
   const session = electron.session.fromPartition(PARTITION)
   session.setUserAgent(browserUserAgent(session.getUserAgent()))
+  const persistent = cookiesPersist(session)
   const stored = input.storage.store("extensions", { schema: Schema.Array(StoredExtension), initial: [] })
   const directory = path.join(app.getPath("userData"), "browser-extensions")
   const errors = new Map<string, string>()
@@ -145,6 +147,8 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
   }
 
   const importCookies = async (read: CookieRead): Promise<ImportResult> => {
+    // Imported sign-ins would be gone at the next start.
+    if (!(await persistent)) return { type: "failed", reason: "storage" }
     const now = Date.now() / 1000
     const writes = read.cookies.flatMap((cookie) => cookieDetails(cookie, now) ?? [])
 
@@ -217,9 +221,14 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
       return read ? importCookies(read) : { type: "failed", reason: "format" }
     },
     async summary() {
+      const saved = await persistent
       const cookies = await session.cookies.get({})
 
-      return { cookies: cookies.length, sites: new Set(cookies.map((cookie) => siteOf(cookie.domain ?? ""))).size }
+      return {
+        cookies: cookies.length,
+        sites: new Set(cookies.map((cookie) => siteOf(cookie.domain ?? ""))).size,
+        persistent: saved,
+      }
     },
     async clear() {
       await session.clearStorageData()
@@ -383,6 +392,45 @@ async function applicationIcons(files: readonly string[]) {
   )
 
   return new Map(read.flat())
+}
+
+/**
+ * Whether the profile's cookies reach its database. With cookie encryption on, Chromium writes no cookie at all while
+ * the system key store refuses its key: a denied Keychain prompt, or a locked keyring. Writes one short-lived cookie,
+ * flushes it and looks for it on disk. When the check itself cannot run, it says they do.
+ */
+async function cookiesPersist(session: Session) {
+  const probe = { url: "https://cookie-check.opencode.invalid/", name: "opencode_cookie_check" }
+
+  const written = await session.cookies
+    .set({ ...probe, value: "1", expirationDate: Date.now() / 1000 + 600 })
+    .then(() => session.cookies.flushStore())
+    .then(
+      () => true,
+      () => false,
+    )
+
+  if (!written || !session.storagePath) return true
+
+  const storage = session.storagePath
+
+  // Chromium keeps a partition's database under Network/ on some systems and beside it on others.
+  const counts = await Promise.all(
+    [path.join(storage, "Network", "Cookies"), path.join(storage, "Cookies")].map((file) =>
+      snapshotDatabase(file, (db) => db.prepare("SELECT count(*) AS count FROM cookies WHERE name = ?").get(probe.name))
+        .then((row) => Number(row?.count ?? 0))
+        .catch(() => undefined),
+    ),
+  )
+
+  await session.cookies
+    .remove(probe.url, probe.name)
+    .then(() => session.cookies.flushStore())
+    .catch(() => undefined)
+
+  const read = counts.filter((count) => count !== undefined)
+
+  return read.length === 0 || read.some((count) => count > 0)
 }
 
 function parseCrxSafely(data: Uint8Array) {

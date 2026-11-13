@@ -31,6 +31,8 @@ export default function BrowserSettings() {
 
   const choices = createMemo(() => profileChoices(jobs.sources()))
   const blocked = () => !jobs.available() || jobs.running() !== undefined
+  // Imported sign-ins that cannot be saved would be gone at the next start.
+  const unsaved = () => jobs.unsaved() !== undefined
 
   const importing = (choice: Choice) => {
     const job = jobs.running()
@@ -69,6 +71,20 @@ export default function BrowserSettings() {
         </ui.SettingsRow>
       </ui.SettingsSection>
       <ui.SettingsSection title={ctx.t("settings.import.title")} footer={<Note>{ctx.t("settings.import.note")}</Note>}>
+        <Show when={jobs.unsaved()}>
+          {(message) => (
+            <ui.SettingsRow
+              title={
+                <span
+                  role="alert"
+                  class="text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-state-fg-danger"
+                >
+                  {message().text}
+                </span>
+              }
+            />
+          )}
+        </Show>
         <For each={choices()}>
           {(choice, index) => (
             <ui.SettingsRow
@@ -87,7 +103,7 @@ export default function BrowserSettings() {
             >
               <ui.Button
                 size="small"
-                disabled={blocked()}
+                disabled={blocked() || unsaved()}
                 busy={importing(choice)}
                 onClick={() =>
                   jobs.start({ type: "import-browser", source: choice.source.id, profile: choice.profile.id })
@@ -113,7 +129,7 @@ export default function BrowserSettings() {
         >
           <ui.Button
             size="small"
-            disabled={blocked() || !desktop}
+            disabled={blocked() || unsaved() || !desktop}
             busy={jobs.running()?.type === "import-file"}
             onClick={() => void pickFile()}
           >

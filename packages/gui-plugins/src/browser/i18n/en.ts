@@ -121,10 +121,15 @@ export default {
     "{{browser}} keeps its cookies locked while it runs. Quit {{browser}}, then import again.",
   "signins.failed.read": "The profile could not be read. Close the browser and try again.",
   "signins.failed.format": "This file is not a cookie export.",
+  "signins.failed.storage": "OpenCode cannot save sign-ins on this computer, so nothing was imported.",
   "signins.keychain":
     'macOS asks for your password so OpenCode can read the key to {{browser}}\'s cookies. The request names "security", a macOS tool OpenCode uses for this. Choose Allow. Do not choose Always Allow: it lets any app on this Mac read the key without asking.',
   "signins.failed.keychain":
     "macOS did not give OpenCode the key to {{browser}}'s cookies. Import again and choose Allow when macOS asks. Do not choose Always Allow.",
+  "signins.unsaved":
+    "OpenCode cannot save sign-ins: the system did not give it the key that protects them. Sign-ins made here end when OpenCode quits, so importing is off.",
+  "signins.unsaved.mac":
+    "OpenCode cannot save sign-ins: macOS did not give it its Keychain key. Sign-ins made here end when OpenCode quits, so importing is off. Quit OpenCode, open it again, and choose Allow when macOS asks.",
   "settings.title": "Browser",
   "settings.description":
     "One browser for every session, project and server in this app. Sign-ins, site data and extensions stay on this device.",

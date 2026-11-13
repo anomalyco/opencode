@@ -98,7 +98,7 @@ export type ProfileSource = typeof ProfileSource.Type
  * - `failed`: nothing was read. `key`: the browser's key was not available, e.g. a denied Keychain prompt. `access`: the
  *   system denied access, e.g. Safari without Full Disk Access. `locked`: the browser runs and holds its cookies open,
  *   as Chromium does on Windows. `read`: the profile could not be read. `format`: the
- *   file is not a cookie export.
+ *   file is not a cookie export. `storage`: this profile cannot save cookies (see `summary`), so nothing was imported.
  */
 export const ImportResult = Schema.Union([
   Schema.Struct({
@@ -110,7 +110,7 @@ export const ImportResult = Schema.Union([
   }),
   Schema.Struct({
     type: Schema.Literal("failed"),
-    reason: Schema.Literals(["key", "access", "locked", "read", "format"]),
+    reason: Schema.Literals(["key", "access", "locked", "read", "format", "storage"]),
   }),
 ])
 
@@ -156,7 +156,11 @@ export const BrowserProfile = Ipc.define({
     importBrowser: { input: Schema.Struct(SourceProfile), output: ImportResult },
     /** A Netscape `cookies.txt`, a JSON cookie export or a Playwright storage state. */
     importFile: { input: Schema.Struct({ path: text(4096) }), output: ImportResult },
-    summary: { output: Schema.Struct({ cookies: Count, sites: Count }) },
+    /**
+     * The stored cookies and their sites. `persistent` is false when cookies never reach disk: with cookie encryption
+     * on, Chromium keeps them in memory only while the system key store refuses its key, so sign-ins end with the app.
+     */
+    summary: { output: Schema.Struct({ cookies: Count, sites: Count, persistent: Schema.Boolean }) },
     /** Signs out everywhere: deletes every cookie, cache and site's stored data. Extensions stay. */
     clear: {},
     /** The extensions a Chromium profile has installed. */
