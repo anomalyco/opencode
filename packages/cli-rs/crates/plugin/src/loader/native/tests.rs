@@ -1173,6 +1173,45 @@ fn the_1_6_reads_and_verbs_are_the_same_in_process_and_through_the_library() {
     assert_eq!(verbed(&host, &library), direct);
 }
 
+thread_local! {
+    /// The renders of `counted`'s route.
+    static ROUTE_RENDERS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// A route that counts its renders.
+fn counted(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.route("r", |_, _| {
+        ROUTE_RENDERS.set(ROUTE_RENDERS.get() + 1);
+        abi::Render::Show(abi::Node::text([abi::Span::new("counted route")]))
+    });
+    Ok(())
+}
+
+// Expected: a route renders once as it mounts and is laid out: it has no size of its own to read (1.6 `sized` is for
+// slot claims), so its layout renders nothing more. On both paths.
+#[test]
+fn a_route_renders_once_for_its_layout() {
+    let host = host();
+    let registries = [
+        Registry::define(vec![abi::Plugin { id: "counted", setup: counted }.into()], []),
+        loopback(&host, abi::export_plugin!(@loopback "counted", counted)),
+    ];
+    for registry in registries {
+        registry.activate(&dynamic(&host));
+        ROUTE_RENDERS.set(0);
+        let route = registry.route(&*host, "counted", "r").unwrap();
+        host.app().root().clear();
+        host.app().root().add(&route.root());
+        host.app.render();
+        host.app.advance(Duration::from_millis(1));
+        host.app.render();
+        assert!(host.app.text().contains("counted route"), "{}", host.app.text());
+        assert_eq!(ROUTE_RENDERS.get(), 1);
+        drop(route);
+        registry.set_active(&dynamic(&host), "counted", false);
+    }
+}
+
 /// A thread that wakes the host once its claim drew, a wake handler that counts the wakes it ran for and fetches each time, and
 /// a claim that shows the count.
 fn waking(setup: &mut abi::Setup) -> Result<(), String> {
