@@ -5,6 +5,7 @@ import { Option, Schema } from "effect"
 import type { Embeds } from "@opencode/plugin/gui/main"
 import { CAPTURE_DEADLINE_MS, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
+import { CodedError } from "./errors"
 import { createBrowserFiles } from "./files"
 import { createDiagnostics } from "./diagnostics"
 import { loadIcon } from "./icon"
@@ -859,7 +860,8 @@ export function createBrowserPage(
     const context = contexts.get((await cdp.send("Page.getFrameTree")).frameTree.frame.id)
 
     if (!context)
-      throw new Error(
+      throw new CodedError(
+        Browser.FailureCode.documentChanged,
         "The page's JavaScript context is unavailable; it may be loading. Wait for it with browser.wait({tabID}), then retry.",
       )
 
@@ -882,7 +884,8 @@ export function createBrowserPage(
       command.generation !== documentGeneration(documentState) &&
       !retainedOperations.includes(command.action.type)
     )
-      throw new Error(
+      throw new CodedError(
+        Browser.FailureCode.documentChanged,
         "The document changed before this operation ran. Call browser.tabs.list({}) to check its current URL, then browser.snapshot({tabID}) for fresh refs. Reconsider the action before retrying on the new page.",
       )
     abortError(signal)
@@ -1452,7 +1455,8 @@ export function createBrowserPage(
     const object = await cdp.send("DOM.resolveNode", { backendNodeId: element.backendID }, element.sessionID)
 
     if (!object.object.objectId)
-      throw new Error(
+      throw new CodedError(
+        Browser.FailureCode.staleRef,
         "Element is no longer available. Call browser.snapshot({tabID}) and use a fresh ref; the page may have replaced the element.",
       )
 
@@ -2083,8 +2087,8 @@ export function createBrowserPage(
     return name ? { ...labeled, name } : labeled
   }
 
-  // Wait until the compositor shows the picked highlight without the hover tooltip, so the
-  // renderer's still of the page includes it. A stalled page must not hold the comment back.
+  // Waits until the compositor drew a new frame: the picked highlight without its hover tooltip, a scroll before input
+  // is routed by position, or the page before a screenshot copies it. A stalled page must not hold any of them back.
   async function painted(sessionID?: string) {
     await Promise.race([
       cdp

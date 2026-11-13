@@ -1,22 +1,54 @@
-import type { Browser } from "@opencode/plugin-browser/rpc"
+import { Browser } from "@opencode/plugin-browser/rpc"
+import { CAPTURE_DEADLINE_MS } from "./capture"
+
+/** A failure the server acts on by its code, such as a wait whose condition never held. */
+export class CodedError extends Error {
+  constructor(
+    readonly code: (typeof Browser.FailureCode)[keyof typeof Browser.FailureCode],
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options)
+  }
+}
 
 export function protocolError(method: string, cause: unknown) {
   const detail = message(cause)
 
-  const recovery =
+  const kind =
     method === "DOM.setFileInputFiles" && /not.*file input/i.test(detail)
-      ? "Target is not a file input. Call browser.snapshot({tabID}) and choose an input[type=file] ref for browser.files.upload, or use browser.files.drop for a drop area."
+      ? "file-input"
       : method === "Runtime.callFunctionOn" && /not evaluate to a function/i.test(detail)
-        ? "With ref, browser.evaluate needs a function that receives the element, for example (element) => element.textContent."
+        ? "function"
         : /(?:node|object).*(?:not found|not exist)|(?:find|resolve).*(?:node|object)|detached/i.test(detail)
-          ? "The element may have detached. Call browser.snapshot({tabID}) and use a fresh ref from that tab."
+          ? "detached"
           : /context.*(?:destroyed|not found)|find.*context|session.*not found/i.test(detail)
-            ? "The document or frame changed. Call browser.frames({tabID}) and browser.snapshot({tabID}); use current frame IDs and refs."
+            ? "changed"
             : /wasn't found|method not found|not implemented|not allowed/i.test(detail)
-              ? "This Chromium target does not support or allow the operation. Check desktop/plugin compatibility and report it; do not retry unchanged or disable browser security."
-              : "Inspect browser.tabs.list({}) and the target tab before deciding to retry; a partially completed action is not automatically safe to repeat."
+              ? "unsupported"
+              : "other"
 
-  return new Error(`${recovery} Chromium command ${method} failed: ${detail}`, { cause })
+  const recovery = {
+    "file-input":
+      "Target is not a file input. Call browser.snapshot({tabID}) and choose an input[type=file] ref for browser.files.upload, or use browser.files.drop for a drop area.",
+    function:
+      "With ref, browser.evaluate needs a function that receives the element, for example (element) => element.textContent.",
+    detached: "The element may have detached. Call browser.snapshot({tabID}) and use a fresh ref from that tab.",
+    changed:
+      "The document or frame changed. Call browser.frames({tabID}) and browser.snapshot({tabID}); use current frame IDs and refs.",
+    unsupported:
+      "This Chromium target does not support or allow the operation. Check desktop/plugin compatibility and report it; do not retry unchanged or disable browser security.",
+    other:
+      "Inspect browser.tabs.list({}) and the target tab before deciding to retry; a partially completed action is not automatically safe to repeat.",
+  }[kind]
+
+  const text = `${recovery} Chromium command ${method} failed: ${detail}`
+
+  if (kind === "detached") return new CodedError(Browser.FailureCode.staleRef, text, { cause })
+
+  if (kind === "changed") return new CodedError(Browser.FailureCode.documentChanged, text, { cause })
+
+  return new Error(text, { cause })
 }
 
 export function browserFailure(action: Browser.Action, cause: unknown): Extract<Browser.Outcome, { type: "failure" }> {
@@ -36,12 +68,12 @@ export function browserFailure(action: Browser.Action, cause: unknown): Extract<
             : network
               ? "The site failed to load through the connected server. Check its URL/network and the OC2 connection before retrying; inspect the current tab first."
               : action.type === "screenshot" && /UnknownVizError|capture.*(?:failed|unavailable)/i.test(detail)
-                ? "Chromium had no rendered frame of this tab for 2 seconds; the page may be stuck in a long task or crashed. Check it with browser.evaluate({tabID}) or browser.reload({tabID}), then capture again. If it keeps failing, report the capture failure instead of repeating it unchanged."
+                ? `Chromium had no rendered frame of this tab for ${CAPTURE_DEADLINE_MS / 1000} seconds; the page may be stuck in a long task or crashed. Check it with browser.evaluate({tabID}) or browser.reload({tabID}), then capture again. If it keeps failing, report the capture failure instead of repeating it unchanged.`
                 : undefined
 
   return {
     type: "failure",
-    code: network ? "navigation_failed" : "operation_failed",
+    code: cause instanceof CodedError ? cause.code : network ? "navigation_failed" : "operation_failed",
     message: `browser.${action.type} failed. ${hint ? `${hint} Details: ${detail.slice(0, 400)}` : detail}`.slice(
       0,
       2_048,
@@ -49,7 +81,6 @@ export function browserFailure(action: Browser.Action, cause: unknown): Extract<
   }
 }
 
-// A thrown value need not be an Error; anything else reads as its string form.
 function message(cause: unknown, limit = 400) {
   return (cause instanceof Error ? cause.message : String(cause)).slice(0, limit)
 }
