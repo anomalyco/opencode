@@ -1,4 +1,4 @@
-import { cp, lstat, readFile, realpath, rename, rm } from "node:fs/promises"
+import { cp, lstat, readFile, realpath, rename, rm, stat } from "node:fs/promises"
 import path from "node:path"
 import electron, { app, type Session } from "electron"
 import { Schema } from "effect"
@@ -345,7 +345,9 @@ export async function createBrowserProfile(input: {
       return importCookies(read)
     },
     async importFile(file: string): Promise<ImportResult> {
-      const text = await readFile(file, "utf8").catch(() => undefined)
+      // A cookie export is a few megabytes at most; anything far larger is not one.
+      const size = await stat(file).then((info) => (info.isFile() ? info.size : Infinity), () => Infinity)
+      const text = size <= 32 * 1024 * 1024 ? await readFile(file, "utf8").catch(() => undefined) : undefined
 
       if (text === undefined) return { type: "failed", reason: "read" }
       const read = parseCookieFile(text)

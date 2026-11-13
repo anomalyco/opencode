@@ -1,8 +1,6 @@
-import { readFile } from "node:fs/promises"
-import path from "node:path"
 import { Option, Schema } from "effect"
 import electron, { type BrowserWindow, type Extension } from "electron"
-import { extensionPage } from "../extensions"
+import { closestIcon, extensionPage, readIcon } from "../extensions"
 import { method, none, optional, type ApiModule, type ApiNamespace, type Emit, type ExtensionContext } from "./api"
 import { tabInfo, type ExtensionTabs } from "./tabs"
 
@@ -45,7 +43,10 @@ const Tab = Schema.Struct({ tabId: optional(Schema.Number) })
 
 const Color = Schema.Union([Schema.String, Schema.Array(Schema.Number)])
 
-const Pixels = Schema.Struct({ width: Schema.Number, height: Schema.Number, data: Schema.Uint8Array })
+/** A toolbar icon's bitmap; Chrome draws them at most 38px, so 128 is generous. */
+const Side = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 128 }))
+
+const Pixels = Schema.Struct({ width: Side, height: Side, data: Schema.Uint8Array })
 
 const Sizes = <S extends Schema.Top>(schema: S) => Schema.Union([schema, Schema.Record(Schema.String, schema)])
 
@@ -84,11 +85,6 @@ const MEMBERS = [
   // No `openPopup`: a popup opens only from the user's click, so an extension cannot put a page over the app.
   "getUserSettings",
 ]
-
-/** The size closest to 32px of an icon given in several, by size. */
-function closest<T>(sizes: Readonly<Record<string, T>>) {
-  return Object.entries(sizes).toSorted((a, b) => Math.abs(Number(a[0]) - 32) - Math.abs(Number(b[0]) - 32))[0]?.[1]
-}
 
 export type ExtensionActions = ReturnType<typeof createActions>
 
@@ -133,31 +129,26 @@ export function createActions(input: {
 
   const icon = async (context: ExtensionContext, value: typeof Icon.Type) => {
     if (value.imageData) {
-      const pixels = Schema.is(Pixels)(value.imageData) ? value.imageData : closest(value.imageData)
+      const pixels = Schema.is(Pixels)(value.imageData) ? value.imageData : closestIcon(value.imageData)
 
-      if (!pixels) return undefined
+      // A bitmap is exactly its width times its height in 4-byte pixels; anything else is refused.
+      if (!pixels || pixels.data.byteLength !== pixels.width * pixels.height * 4) return undefined
       // Chromium's bitmaps are BGRA; ImageData is RGBA.
-      const data = Buffer.from(pixels.data)
+      const source = pixels.data
 
-      for (let index = 0; index < data.length; index += 4) {
-        const red = data[index] ?? 0
-        data[index] = data[index + 2] ?? 0
-        data[index + 2] = red
-      }
+      const data = Buffer.from(
+        source.map((byte, index) =>
+          index % 4 === 0 ? (source[index + 2] ?? 0) : index % 4 === 2 ? (source[index - 2] ?? 0) : byte,
+        ),
+      )
 
       return electron.nativeImage.createFromBitmap(data, { width: pixels.width, height: pixels.height }).toDataURL()
     }
 
-    const file = value.path == null || Schema.is(Schema.String)(value.path) ? value.path : closest(value.path)
+    const file = value.path == null || Schema.is(Schema.String)(value.path) ? value.path : closestIcon(value.path)
+    const bytes = file ? await readIcon(context.extension.path, file) : undefined
 
-    if (!file) return undefined
-    const root = path.resolve(context.extension.path)
-    const target = path.resolve(root, file.replace(/^\//, ""))
-
-    if (!target.startsWith(root + path.sep)) return undefined
-    const bytes = await readFile(target).catch(() => undefined)
-
-    return bytes && bytes.byteLength <= 65_536 ? electron.nativeImage.createFromBuffer(bytes).toDataURL() : undefined
+    return bytes ? electron.nativeImage.createFromBuffer(bytes).toDataURL() : undefined
   }
 
   const methods = (namespace: string) => ({
