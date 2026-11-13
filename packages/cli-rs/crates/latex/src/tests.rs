@@ -123,6 +123,18 @@ fn transcript_fences_match_typescript() {
     }
 }
 
+/// TS draws only fenced `latex` and `math` blocks: `$$…$$` and `$…$` stay text, so the client leaves the
+/// Markdown math extension (OpenTUI #2072) off even though this plugin renders `math`.
+#[test]
+fn dollar_math_stays_text() {
+    let (app, theme) = app(60, 8);
+    let text = markdown(&app, &theme, false).set_markdown("$$\\frac{1}{2}$$\n\nInline $\\frac{a}{b}$ too.");
+    app.root().add(&text);
+    let frame = app.render().text();
+    assert!(frame.contains("$$\\frac{1}{2}$$") && frame.contains("$\\frac{a}{b}$"), "{frame}");
+    assert!(!frame.contains("───"), "{frame}");
+}
+
 /// Streams `chunks` into one document, returning the frame text after each.
 fn stream(chunks: &[&str], stop: bool) -> Vec<String> {
     let (app, theme) = app(40, 10);
