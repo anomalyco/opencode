@@ -254,7 +254,12 @@ fn a_set_tells_the_completion_of_the_new_text() {
 /// The probe with the prompt fixture on `route`, answering `reads`, once the catalogs are read, so a submit that the
 /// host lets through would send.
 fn serving(route: Route, reads: Vec<(&str, serde_json::Value)>) -> Setup {
-    let setup = Setup::serving(route, reads);
+    serving_at(route, reads, 90)
+}
+
+/// [`serving`] on a terminal `width` columns wide.
+fn serving_at(route: Route, reads: Vec<(&str, serde_json::Value)>, width: u16) -> Setup {
+    let setup = Setup::serving(route, reads, width);
     add(&setup, Carrier::Linked);
     setup.wait("the catalog", || !setup.requests("GET", "/api/model").is_empty());
     setup.app.advance(std::time::Duration::from_millis(50));
@@ -319,7 +324,7 @@ fn a_disabled_composer_takes_no_submit() {
     setup.wait("the set", || setup.textarea().text() == "from the plugin");
     setup.app.advance(std::time::Duration::from_millis(100));
     assert!(setup.requests("POST", "/api/session").is_empty() && setup.requests("POST", "/prompt").is_empty());
-    // The diff viewer's pane takes the input.
+    // The diff viewer, docked beside the session at this width, takes the input; the composer still shows.
     let diff = serde_json::json!({
         "file": "src/main.rs", "patch": "@@ -1 +1 @@\n-old\n+new\n", "additions": 1, "deletions": 1, "status": "modified",
     });
@@ -328,11 +333,12 @@ fn a_disabled_composer_takes_no_submit() {
         ("/api/vcs/diff", support::list("/project", serde_json::json!([diff]))),
         ("/api/vcs/base", support::list("/project", serde_json::Value::Null)),
     ];
-    let setup = serving(session_route(), reads);
+    let setup = serving_at(session_route(), reads, 160);
     setup.app.type_text("unsent");
     setup.tui.keymap.dispatch("diff.open", None);
     setup.wait_for("src/main.rs");
     setup.wait("the right pane", || !setup.textarea().is_focused());
+    assert!(setup.textarea().is_shown(), "the diff viewer hides the composer:\n{}", setup.app.text());
     setup.tui.keymap.dispatch("p0a.submit", None);
     setup.app.advance(std::time::Duration::from_millis(100));
     assert_eq!(setup.textarea().text(), "unsent");
