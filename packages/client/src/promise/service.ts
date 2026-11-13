@@ -31,7 +31,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const deadline = Date.now() + timing.promiseTimeout
   const pool = contenderPool(timing)
   const hang = hangDetector(timing)
-  const recovery = recoveryLock(options.file ?? fallback())
+  const recovery = recoveryLock(options.file ?? fallback(), timing)
   let announced = false
 
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {

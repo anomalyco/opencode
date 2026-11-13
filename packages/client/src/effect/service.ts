@@ -51,7 +51,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
   const timing = ensureTiming(options)
   const pool = contenderPool(timing)
   const hang = hangDetector(timing)
-  const recovery = recoveryLock(options.file ?? fallback())
+  const recovery = recoveryLock(options.file ?? fallback(), timing)
   let announced = false
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>
     Effect.sync(() => {

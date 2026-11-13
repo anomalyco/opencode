@@ -1,4 +1,4 @@
-import { readFile, rm, writeFile } from "node:fs/promises"
+import { readFile, rm, stat, writeFile } from "node:fs/promises"
 import type { Info } from "./service.js"
 import type { EnsureTiming } from "./service-timing.js"
 import { probeHealth, same, type Health } from "./service-probe.js"
@@ -53,7 +53,7 @@ export function hangDetector(timing: EnsureTiming) {
  * client probes the same owner; without it each one kills the owner and starts its own contenders, which race for the
  * service slot on a machine that is likely already overloaded.
  */
-export function recoveryLock(registration: string) {
+export function recoveryLock(registration: string, timing: EnsureTiming) {
   const file = registration + ".recovery"
   let held = false
   return {
@@ -85,8 +85,11 @@ export function recoveryLock(registration: string) {
     )
   }
 
-  // A client that dies while recovering leaves its lock behind.
+  // A client that dies while recovering leaves its lock behind, and another process may later get its ID. No client
+  // holds the lock for longer than one `ensure()`, so an older lock is stale whoever has that ID now.
   async function holderAlive() {
+    const lock = await stat(file).catch(() => undefined)
+    if (lock === undefined || Date.now() - lock.mtimeMs >= timing.promiseTimeout) return false
     const pid = Number(await readFile(file, "utf8").catch(() => ""))
     return Number.isInteger(pid) && pid > 0 && alive(pid)
   }

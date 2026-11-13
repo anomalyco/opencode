@@ -1,5 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { expect, test } from "bun:test"
+import { utimes } from "node:fs/promises"
 import { Effect } from "effect"
 import { Service } from "../src/effect/service"
 import { ensure, stop } from "../src/promise/service"
@@ -212,6 +213,30 @@ for (const client of clients) {
     expect(await owner.exited).toBe(stoppedExitCode)
     expect(endpoint.url).toBe((await Bun.file(fixture.registration).json()).url)
     expect(await Bun.file(fixture.registration + ".recovery").exists()).toBe(false)
+  })
+
+  test(`${client.name} reconnect takes over a lock older than any client holds it`, async () => {
+    await using fixture = await serviceFixture()
+    const owner = fixture.spawn("busy")
+    await fixture.waitForFile()
+    await Bun.write(fixture.registration + ".stall", "")
+    await Bun.write(fixture.registration + ".health", JSON.stringify({ blocked: 600_000 }))
+    // The holder died long ago and an unrelated live process (this one) now has its ID.
+    const lock = fixture.registration + ".recovery"
+    await Bun.write(lock, String(process.pid))
+    const old = new Date(Date.now() - 3_600_000)
+    await utimes(lock, old, old)
+
+    const endpoint = await client.ensure({
+      file: fixture.registration,
+      version: "test",
+      command: fixture.command("delayed", "10"),
+    })
+    fixture.track((await Bun.file(fixture.registration).json()).pid)
+
+    expect(await owner.exited).toBe(stoppedExitCode)
+    expect(endpoint.url).toBe((await Bun.file(fixture.registration).json()).url)
+    expect(await Bun.file(lock).exists()).toBe(false)
   })
 
   test(`${client.name} reconnect says why it gave up on an owner it left running`, async () => {
