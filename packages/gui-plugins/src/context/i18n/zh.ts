@@ -5,6 +5,7 @@ export default {
   "usage.usage": "使用率",
   "usage.cost": "成本",
   "usage.view": "查看上下文用量",
+  "usage.toggle": "切换会话上下文",
   "systemPrompt.title": "系统提示词",
   "rawMessages.title": "原始消息",
   "export.session": "导出会话",

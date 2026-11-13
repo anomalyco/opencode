@@ -25,6 +25,7 @@ export default {
   "error.service": "SSH 已连接，但 OpenCode 服务器未准备就绪。",
   "error.host-key": "无法验证主机的身份。在更新 SSH 已知主机之前，请验证其指纹。",
   "error.ssh-missing": "未找到 OpenSSH。请安装 OpenSSH 客户端，并确保 ssh 可在 PATH 中使用。",
+  "error.unavailable": "SSH 不可用",
   "action.authenticate": "验证",
   "stage.connecting": "正在通过 SSH 连接…",
   "stage.authentication": "需要身份验证",
