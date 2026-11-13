@@ -579,10 +579,6 @@
   transform: scaleX(-1);
 }
 
-[data-component="dialog-v2"][data-variant="settings"] [data-slot="dialog-container"] {
-  background: var(--v2-background-bg-base);
-}
-
 [data-component="dialog-v2"][data-variant="settings"] [data-slot="dialog-body"] {
   padding: 0;
   overflow: hidden;
@@ -2162,14 +2158,6 @@
   .settings-workspaces-active {
     display: none;
   }
-}
-
-[data-component="dialog-v2"].settings-server-dialog [data-slot="dialog-container"] {
-  width: 480px;
-  max-width: calc(100vw - 32px);
-  height: auto;
-  border-radius: 8px;
-  align-items: stretch;
 }
 
 [data-component="dialog-v2"].settings-server-dialog [data-slot="dialog-content"] {
