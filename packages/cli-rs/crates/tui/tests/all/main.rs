@@ -36,6 +36,7 @@ mod plugin_model;
 mod plugin_p0a;
 mod plugin_reads;
 mod plugin_reconcile;
+mod plugin_surface;
 mod plugins;
 mod ports;
 mod prompt;

@@ -346,8 +346,9 @@ impl Tui {
         self.app.set_theme(app_theme(&theme));
         self.dialogs.set_theme(theme.clone());
         self.toasts.set_theme(theme);
-        // The route view restyles in place, as TS's does. A plugin route mounts again, and its focus would clear a
-        // half-typed sequence such as `<leader>l` that TS keeps, so wait for that to end.
+        // The route view restyles in place, as TS's does, and so does a plugin's route. The diff viewer's route mounts
+        // again, and its focus would clear a half-typed sequence such as `<leader>l` that TS keeps, so wait for that to
+        // end.
         if matches!(self.route(), Route::Plugin { .. }) && self.keymap.keymap().has_pending_sequence() {
             self.restyle.set(true);
             return;
