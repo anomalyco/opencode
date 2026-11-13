@@ -205,8 +205,13 @@ test.each([
     },
   })
   // The connect timeout is cleared before a disconnect is reported, so the next pending timer is the retry delay.
+  // Spinning on microtasks starves the test timeout, so give up after a bound instead of hanging the run.
   const retryScheduled = async (count: number) => {
-    while (disconnects < count || jest.getTimerCount() === 0) await Promise.resolve()
+    for (let spin = 0; spin < 10_000; spin++) {
+      if (disconnects >= count && jest.getTimerCount() > 0) return
+      await Promise.resolve()
+    }
+    throw new Error(`No retry was scheduled after disconnect ${count}`)
   }
 
   const start = Date.now()
