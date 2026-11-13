@@ -219,6 +219,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
                 },
               )
             }
+            if (sent.mode === "shell") input.footer.event({ type: "turn.end" })
             state.active = undefined
           }
         }

@@ -448,21 +448,29 @@ export class RunFooter implements FooterApi {
       this.setCurrentModel(next.selection)
     }
 
+    if (next.type === "turn.end") {
+      this.flush()
+      this.completeScrollback()
+      return
+    }
+
     if (next.type === "turn.duration") {
       this.finishStartup()
       const agent = this.turnAgent ?? this.currentAgent()
       this.turnAgent = undefined
-      if (this.miniSettings().turn_summary === "hide") return
+      const summary = this.miniSettings().turn_summary === "show"
       const current = this.currentModel()
       this.flush()
       this.flushing = this.flushing
-        .then(() =>
-          this.scrollback.writeTurnSummary({
-            agent,
-            model: current ? modelInfo(this.providers(), current).model : this.state().model,
-            duration: next.duration,
-          }),
-        )
+        .then(async () => {
+          if (summary)
+            await this.scrollback.writeTurnSummary({
+              agent,
+              model: current ? modelInfo(this.providers(), current).model : this.state().model,
+              duration: next.duration,
+            })
+          await this.scrollback.endTurn()
+        })
         .catch((error) => {
           this.flushError = error
         })
@@ -517,6 +525,8 @@ export class RunFooter implements FooterApi {
         patch.notice = ""
       }
       if (next.type === "turn.send") {
+        this.flush()
+        this.flushing = this.flushing.then(() => this.scrollback.beginTurn())
         this.turnAgent = this.currentAgent()
         this.clearInterruptTimer()
         this.clearExitTimer()
@@ -575,7 +585,10 @@ export class RunFooter implements FooterApi {
 
   private completeScrollback(): void {
     this.flushing = this.flushing
-      .then(() => this.scrollback.complete())
+      .then(async () => {
+        await this.scrollback.complete()
+        await this.scrollback.endTurn()
+      })
       .catch((error) => {
         this.flushError = error
       })
