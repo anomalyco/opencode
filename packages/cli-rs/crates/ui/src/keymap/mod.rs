@@ -270,6 +270,16 @@ pub struct Pending {
     pub token: Option<String>,
 }
 
+/// A key that does something now, formatted (`KeymapActive`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Active {
+    pub key: String,
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub group: Option<String>,
+    pub continues: bool,
+}
+
 /// The command `dispatch` runs and its input.
 type Invocation = (String, Option<String>);
 
@@ -639,6 +649,28 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
             .map(|part| Pending {
                 key: format_key_sequence(std::slice::from_ref(&part), &self.format),
                 token: part.token,
+            })
+            .collect()
+    }
+
+    /// The keys that do something now, at the root or after the pending sequence, formatted, with the title,
+    /// description and group of what each runs (`Keymap.useState().active` in `keymap.tsx`).
+    pub fn active(&self) -> Vec<Active> {
+        let options = opentui::keymap::ActiveKeyOptions { include_metadata: true, ..Default::default() };
+        self.keymap
+            .active_keys(options)
+            .into_iter()
+            .map(|key| {
+                let command = key.command_info.as_deref();
+                let part =
+                    opentui::keymap::KeySequencePart { stroke: key.stroke, display: key.display, token: key.token };
+                Active {
+                    key: format_key_sequence(std::slice::from_ref(&part), &self.format),
+                    title: command.and_then(|command| command.title.clone()),
+                    description: key.desc.or_else(|| command.and_then(|command| command.desc.clone())),
+                    group: command.and_then(|command| command.category.clone()).or(key.group),
+                    continues: key.continues,
+                }
             })
             .collect()
     }
