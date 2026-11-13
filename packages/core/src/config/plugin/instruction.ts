@@ -32,6 +32,7 @@ export const Plugin = define({
       const watcher = yield* Watcher.Service
       const changes = yield* PubSub.sliding<string>(1)
       const watches = yield* FiberMap.make<string>()
+      const targets = yield* FiberMap.make<string>()
       const lock = Semaphore.makeUnsafe(1)
       const start = yield* fs.resolve(location.directory)
       const root = yield* fs.resolve(location.project.directory)
@@ -88,6 +89,13 @@ export const Plugin = define({
           fs.resolve,
         )
         const discovered = new Set(walked.filter((file) => discovery.global || file !== globalFile))
+        // A symlinked AGENTS.md changes at its target, which the candidate watches never see. A target
+        // stays watched after the link moves on, so one that is deleted and recreated is still noticed.
+        for (const file of discovered) {
+          if (candidates.includes(file) || (yield* FiberMap.has(targets, file))) continue
+          const updates = yield* watcher.subscribe({ path: file, type: "file" })
+          yield* FiberMap.run(targets, file, updates.pipe(Stream.runForEach(publish)), { startImmediately: true })
+        }
         const files = yield* Effect.forEach(discovered, read, { concurrency: "unbounded" })
         if (files.some((file) => file === undefined)) return Instructions.unavailable
         return files.filter((file) => file instanceof InstructionDiscovery.File)
