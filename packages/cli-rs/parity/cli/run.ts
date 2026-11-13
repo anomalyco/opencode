@@ -4,12 +4,13 @@
 //   bun run parity/cli/run.ts [--sides ts,rs] [scenario.cli.ts ...]
 //
 // Without files it runs every `parity/scenarios/**/*.cli.ts`. `--sides ts,ts` checks that a case is
-// deterministic. Each side's record goes to `$TMPDIR/opencode-parity/cli/<name>.<n>-<side>.json`.
+// deterministic. Each side's record goes to `$TMPDIR/opencode-parity/cli/<name>.<n>-<side>.json`. Cases run
+// one per core at a time; PARITY_CLI_JOBS changes that number.
 
 import { parseArgs } from "node:util"
 import { Glob } from "bun"
 import path from "node:path"
-import { tmpdir } from "node:os"
+import { availableParallelism, tmpdir } from "node:os"
 import { rm } from "node:fs/promises"
 import { startFakeServer, type Logged, type Options } from "../lib/fake-server"
 import {
@@ -151,21 +152,28 @@ if (import.meta.main) {
     ? parsed.positionals.map((file) => path.resolve(file))
     : [...new Glob("scenarios/**/*.cli.ts").scanSync({ cwd: parityRoot, absolute: true })].toSorted()
   await buildRust(sides)
-  const results = await Promise.all(
-    files.map(async (file) => {
-      const value: CliCase = (await import(file)).default
-      const name = nameOf(file)
-      if (value.tsOnly && sides.includes("rs")) return { name, skipped: true, report: "" }
-      const records = await Promise.all(sides.map((side) => runCli(side, value)))
-      await Promise.all(
-        records.map((record, index) =>
-          Bun.write(
-            path.join(tmpdir(), "opencode-parity/cli", `${name}.${index}-${sides[index]}.json`),
-            JSON.stringify(record, null, 2) + "\n",
-          ),
+  const run = async (file: string) => {
+    const value: CliCase = (await import(file)).default
+    const name = nameOf(file)
+    if (value.tsOnly && sides.includes("rs")) return { name, skipped: true, report: "" }
+    const records = await Promise.all(sides.map((side) => runCli(side, value)))
+    await Promise.all(
+      records.map((record, index) =>
+        Bun.write(
+          path.join(tmpdir(), "opencode-parity/cli", `${name}.${index}-${sides[index]}.json`),
+          JSON.stringify(record, null, 2) + "\n",
         ),
-      )
-      return { name, skipped: false, report: diffRecords(records[0], records[1], sides) }
+      ),
+    )
+    return { name, skipped: false, report: diffRecords(records[0], records[1], sides) }
+  }
+  // A case's timeout bounds that case only if the cases do not all share the CPU: started at once, every case
+  // took as long as the whole run, and a TS client compiling the CLI from source under load passed its budget.
+  const results: Awaited<ReturnType<typeof run>>[] = []
+  const next = files.entries()
+  await Promise.all(
+    Array.from({ length: Number(process.env.PARITY_CLI_JOBS ?? availableParallelism()) }, async () => {
+      for (const [index, file] of next) results[index] = await run(file)
     }),
   )
   results.forEach((result) =>
