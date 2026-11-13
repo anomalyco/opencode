@@ -4,7 +4,6 @@ import {
   pluginIdAvailable,
   runsOn,
   shipsPluginGui,
-  type BridgeLayout,
   type BridgeMenubarItem,
   type Entry,
   type Scope,
@@ -1053,7 +1052,7 @@ export function createHost(input: {
         throw new PluginError("output", { cause, message: String(cause) })
       })
     },
-    embed: (window: number, id: string, layout?: BridgeLayout) => embeds.layout(window, id, layout),
+    embed: embeds.layout,
     capture: (window: number, id: string) =>
       embeds.capture(window, id).then((image) => (image ? new Uint8Array(image.toJPEG(90)) : undefined)),
     listMenubarItems,

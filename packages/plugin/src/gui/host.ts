@@ -335,6 +335,8 @@ export interface BridgeLayout {
     /** Height. */
     readonly height: number
   }
+  /** Visible portion of `bounds`, in the same window DIPs. Omit to show the full surface; an empty clip hides it. */
+  readonly clip?: NonNullable<BridgeLayout["bounds"]>
   /** The window's content size the bounds were measured against. */
   readonly viewport?: {
     /** Content width in window pixels. */
