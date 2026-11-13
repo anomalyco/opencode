@@ -337,9 +337,9 @@ export function createBrowserPage(
 
   const cdp = createCdp(contents)
   const documents = new Map<string, string>()
-  const sourceURLs = () => [...new Set([contents.getURL(), ...documents.values()])].sort()
+  const sourceURLs = () => [...new Set([state().url, ...documents.values()])].sort()
   const files = createBrowserFiles(sourceURLs)
-  const diagnostics = createDiagnostics(cdp)
+  const diagnostics = createDiagnostics(cdp, displayURL)
   const profiling = createProfiling(contents, cdp, files, sourceURLs, options.shared)
   const refs = new Map<string, Element>()
   // Elements the user picked. Their refs outlive later snapshots, so a comment keeps pointing at
@@ -388,7 +388,7 @@ export function createBrowserPage(
   const runs = new Map<number, { controller: AbortController; interrupted: Interrupted }>()
   let revision = 0
   cdp.on("Page.frameNavigated", ({ frame }) => {
-    documents.set(frame.id, frame.url)
+    documents.set(frame.id, displayURL(frame.url))
     revision++
   })
   cdp.on("Page.frameDetached", ({ frameId, reason }) => {
@@ -665,7 +665,7 @@ export function createBrowserPage(
   cdp.on("Page.javascriptDialogOpening", (event) =>
     dispatchDialog({
       type: "dialog.opened",
-      url: event.url,
+      url: displayURL(event.url),
       dialogType: event.type,
       message: event.message.slice(0, Browser.MAX_TEXT),
       defaultPrompt: event.defaultPrompt ?? "",
@@ -1305,7 +1305,7 @@ export function createBrowserPage(
   async function inspect(action: Browser.Action): Promise<Browser.Target> {
     // Most CDP queries cannot run while a JavaScript dialog blocks the renderer.
     if (action.type === "dialog")
-      return selectDialogTarget(dialogGate, documentGeneration(documentState), contents.getURL())
+      return selectDialogTarget(dialogGate, documentGeneration(documentState), state().url)
 
     const fileIDs =
       action.type === "heap.compare" ? [action.before, action.after] : "fileID" in action ? [action.fileID] : []
@@ -1343,7 +1343,7 @@ export function createBrowserPage(
               ? sourceURLs()
               : urls.length
                 ? urls
-                : [contents.getURL()],
+                : [state().url],
         ),
       ].sort(),
       key: JSON.stringify([documentGeneration(documentState), revision, selected]),
@@ -1378,7 +1378,7 @@ export function createBrowserPage(
   }
 
   async function frames() {
-    return agentFrames(await frameTrees())
+    return agentFrames(await frameTrees()).map((frame) => ({ ...frame, url: frame.parentID ? displayURL(frame.url) : state().url }))
   }
 
   async function frameTrees() {
@@ -1407,7 +1407,7 @@ export function createBrowserPage(
 
     if (access.type !== "frame") throw new Error(access.message)
 
-    return access.frame
+    return { ...access.frame, url: access.frame.parentID ? displayURL(access.frame.url) : state().url }
   }
 
   async function frameContext(frameID: string) {

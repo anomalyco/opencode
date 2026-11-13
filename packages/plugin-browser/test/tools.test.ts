@@ -42,7 +42,7 @@ test("URL normalization rejects filesystem paths instead of treating them as hos
     "~/report.html",
   ])
     expect(() => navigate(path)).toThrow(
-      `${JSON.stringify(path)} is a local file, not a web address, so the browser cannot open it. To show it to the user, call browser.preview({ path: ${JSON.stringify(path)} }) instead;`,
+      `${JSON.stringify(path)} is a local file, not a web address. Use browser.preview({ path })`,
     )
   expect(() => navigate("ftp://example.com/file")).toThrow(
     '"ftp://example.com/file" is not a browser URL. Use an http:// or https:// address',

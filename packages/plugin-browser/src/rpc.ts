@@ -242,7 +242,7 @@ export const Operations = [
   ),
   operation(
     "tabs.open",
-    "Open a browser tab at an http(s) address, show it in the Review pane, and select it. Defaults to about:blank. Website traffic uses the connected server's network; localhost reaches that server. A local file is not a web address: show it with browser.preview({ path }).",
+    "Open an HTTP(S) tab in the Review pane. Defaults to about:blank. Website traffic uses the connected server's network; localhost reaches that server. To open another workspace file, use browser.preview({ path }) with its workspace-relative path, not a file: or internal preview URL.",
     {
       url: optional(short.annotate({ description: "An http:// or https:// address, or about:blank." })),
       focus: optional(
@@ -269,12 +269,12 @@ export const Operations = [
   operation(
     "preview",
     'Show a file to the user. Opens the file in the Review pane and focuses its tab for viewing. Images and screenshots (PNG, JPEG, GIF, WebP, charts, plots, photos), SVG, audio, video (MP4, WebM), PDF documents, HTML pages, Markdown, Mermaid diagrams, CSV and TSV tables, and fonts render as a media preview; code and other text files display highlighted source. Use this to present an artifact, output, or result you created or changed instead of pasting its contents, describing it, or opening a file:// URL in a browser tab; it is the way to show a local HTML file. The path is server-local: relative to the workspace or absolute, for example preview({ path: "out/report.html" }). Fails when no file is there, or when no desktop app is connected (then tell the user the path).',
-    { path: short.annotate({ description: "Server-local path to the file, relative to the workspace or absolute." }) },
+    { path: short.annotate({ description: "Server-local path, relative to the workspace or absolute. Pass another workspace path to move to another file; do not pass a file: or oc-preview: URL." }) },
     Schema.Struct({ path: short }),
   ),
   operation(
     "navigate",
-    "Navigate this tab to an http(s) address or about:blank and wait for the document load. Element refs expire. A local file is not a web address: show it with browser.preview({ path }).",
+    "Navigate this tab to HTTP(S) or about:blank and wait for the document load. Element refs expire. In a workspace preview, click a relative link or call browser.preview({ path }) for another workspace file. Do not navigate to the file: display address or the isolated origin returned by page JavaScript.",
     { ...tab, url: short },
     Tab,
   ),

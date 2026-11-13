@@ -275,10 +275,11 @@ export function normalizeAction(action: Exclude<Browser.Input, { readonly type: 
   if (action.type !== "navigate" && action.type !== "tabs.open") return action
   if (action.type === "tabs.open" && action.url === undefined) return action
   const value = action.url?.trim() || "about:blank"
+  if (/^oc-preview:/i.test(value)) throw new Tool.Error({ message: "This is an internal preview address. Use browser.preview({ path }) with a workspace-relative path, or click a link in the preview tab." })
   // A filesystem path would otherwise gain a scheme and parse as a hostname: /tmp/x becomes https://tmp/x.
   if (/^(?:[\\/.~]|[a-zA-Z]:[\\/])/.test(value) || /^file:/i.test(value))
     throw new Tool.Error({
-      message: `${JSON.stringify(value)} is a local file, not a web address, so the browser cannot open it. To show it to the user, call browser.preview({ path: ${JSON.stringify(value)} }) instead; preview renders HTML pages, images, PDF, SVG, Markdown and other files in the Review pane. To script the page (click, evaluate, wait), serve its folder over HTTP on the server, for example with \`bunx serve <folder>\`, and open that http://localhost:<port>/ address.`,
+      message: `${JSON.stringify(value)} is a local file, not a web address. Use browser.preview({ path }) with its workspace-relative filesystem path, or click a link in the current preview.`,
     })
   // The desktop refuses these too (gui-plugins browser/policy.ts `agentRefusal`); this names the reason early.
   if (Browser.extensionOrigin(value)) throw new Tool.Error({ message: Browser.extensionPageRefusal(value) })
