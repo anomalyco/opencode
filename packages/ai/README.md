@@ -1105,9 +1105,9 @@ Provider notes:
   only cancels a queued task: Ark refuses it for a running one and deletes the record of a finished one. Video URLs
   expire 24 hours after the task finished.
 - **MiniMax** (`MiniMax.configure(...).video(id)`, or `@opencode/ai/providers/minimax/videos`) serves two APIs and picks
-  one by model family: Hailuo and `*-01` models use v1, everything else (H3) uses v2. Video takes the API host without
-  a version as `baseURL` (`https://api.minimax.io`, or `https://api.minimax.cn` for minimax-cn). On H3, `start`,
-  `end` and `references` become `content[]` items with `first_frame`, `last_frame` and `reference_image` /
+  one by model family: Hailuo and `*-01` models use v1, everything else (H3) uses v2. Video builds its `/v1` and `/v2`
+  paths on the API host, so a `baseURL` shared with images or chat (`https://api.minimax.cn/v1`) loses its trailing
+  `/v1`, and a bare host (`https://api.minimax.io`) works as is. On H3, `start`, `end` and `references` become `content[]` items with `first_frame`, `last_frame` and `reference_image` /
   `reference_video` / `reference_audio` roles, MiniMax file refs become `mm_file://` URLs, `aspect: "auto"` becomes
   `ratio: "adaptive"`, and `resolution` is uppercased (`480P`, `2K`). H3 requires `resolution` and `duration`, plus a
   `ratio` for text-only prompts; nothing is filled in, so MiniMax rejects a request without them. H3 always has sound,

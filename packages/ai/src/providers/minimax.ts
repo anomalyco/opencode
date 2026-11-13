@@ -133,9 +133,10 @@ export const configure = (input: Config = {}) => {
   const media = MediaRoute.deployment(input, defaults.auth)
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     MiniMaxImages.model({ ...media, id: modelID, providerOptions })
-  // Video routes take the API host without a version (`https://api.minimax.io`): H3 is under /v2 and Hailuo under /v1.
+  // H3 is under /v2 and Hailuo under /v1, so video drops the version a shared `baseURL` carries for the other APIs.
+  const videoBaseURL = media.baseURL?.replace(/(\/v1)?\/*$/, "")
   const video = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
-    MiniMaxVideo.model({ ...media, id: modelID, providerOptions })
+    MiniMaxVideo.model({ ...media, baseURL: videoBaseURL, id: modelID, providerOptions })
   return { id, model: messages, messages, chat, responses, image, video, configure }
 }
 

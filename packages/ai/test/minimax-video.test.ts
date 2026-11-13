@@ -185,6 +185,23 @@ describe("MiniMax Video / Hailuo start", () => {
     }),
   )
 
+  it.effect("drops the version from a baseURL shared with the other MiniMax APIs", () =>
+    Effect.gen(function* () {
+      const requests = yield* sent(
+        ["https://api.minimax.cn/v1", "https://api.minimax.cn/v1/", "https://api.minimax.cn/"].flatMap((baseURL) => {
+          const shared = MiniMax.configure({ apiKey: "test", baseURL })
+          return [{ model: shared.video("MiniMax-H3") }, { model: shared.video("MiniMax-Hailuo-2.3") }]
+        }),
+      )
+      expect(requests.map((request) => request.url)).toEqual(
+        Array.from({ length: 3 }).flatMap(() => [
+          "https://api.minimax.cn/v2/video_generation",
+          "https://api.minimax.cn/v1/video_generation",
+        ]),
+      )
+    }),
+  )
+
   it.effect("maps the shared fields onto v1's flat body", () =>
     Effect.gen(function* () {
       const requests = yield* sent([
