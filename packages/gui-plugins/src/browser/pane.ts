@@ -10,7 +10,7 @@ import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plug
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
-import { agentRefusal, destinationOrigin, fileURLWithin, refusal } from "./policy"
+import { agentRefusal, destinationOrigin, refusal } from "./policy"
 import type { Profile } from "./profile"
 import { createRefs } from "./refs"
 import type { PaneEvent } from "./ipc"
@@ -48,6 +48,7 @@ type Handle = {
   partition: string
   /** The pages browse in the desktop profile itself, with this machine's network; else in a linked partition. */
   shared: boolean
+  previewHost?: string
   abort: AbortController
   registered: ReturnType<typeof Promise.withResolvers<void>>
   cleanup: () => void
@@ -78,8 +79,7 @@ export function createBrowserPane(input: {
 }) {
   const machine: PaneMachine = { state: createPaneState() }
   const handles = new Map<string, Handle>()
-  // Each page of the profile's partition may load file: subresources inside its own session's workspace only, and is
-  // a tab its extensions see. The release of both, by page.
+  // Release each tab's registration with the profile's extensions.
   const grants = new WeakMap<BrowserPage, () => void>()
   const restore = createBrowserRestoreStore(input.storage)
   const shared: Shared = { ref: createRefs(input.refs) }
@@ -116,9 +116,8 @@ export function createBrowserPane(input: {
       // Navigation guards cover documents; subresources (img, script, fetch) also must not read
       // file: URLs outside the roots. One listener per partition covers every page in this attachment.
       const remote = shared ? undefined : electron.session.fromPartition(partition)
-      remote?.webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (details, callback) =>
-        callback({ cancel: !fileURLWithin(details.url, selectFileRoots(machine.state, binding)) }),
-      )
+      remote?.webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (_details, callback) => callback({ cancel: true }))
+      const preview = shared ? input.profile.previews.grant(() => selectFileRoots(machine.state, binding)) : undefined
       const unguard = remote ? guardSession(remote, downloads) : () => undefined
 
       const closed = () => dispatchBinding(binding, { type: "owner.closed" })
@@ -135,9 +134,11 @@ export function createBrowserPane(input: {
         win,
         partition,
         shared,
+        previewHost: preview?.host,
         abort: new AbortController(),
         registered: Promise.withResolvers(),
         cleanup: () => {
+          preview?.release()
           unguard()
 
           if (win.isDestroyed()) return
@@ -559,6 +560,7 @@ export function createBrowserPane(input: {
       restore: options.restore,
       popupOptions: options.popupOptions,
       fileRoots: () => selectFileRoots(machine.state, binding),
+      previewHost: handle.previewHost,
       extensions: () => extensions(binding),
       shared,
       embeds: input.embeds,
@@ -597,14 +599,7 @@ export function createBrowserPane(input: {
       },
     })
 
-    if (handle.shared) {
-      const files = input.profile.allowFiles(page.contents.id, () => selectFileRoots(machine.state, binding))
-      const tab = input.profile.extensionTabs.register(extensionTab(binding, id, page, win, focused))
-      grants.set(page, () => {
-        files()
-        tab()
-      })
-    }
+    if (handle.shared) grants.set(page, input.profile.extensionTabs.register(extensionTab(binding, id, page, win, focused)))
 
     handle.pages.set(attempt, page)
     downloads.set(page.contents.id, page.download)

@@ -3,7 +3,6 @@ import path from "node:path"
 import electron, { app, type Session } from "electron"
 import { Schema } from "effect"
 import type { Log, Storage } from "@opencode/plugin/gui/main"
-import { fileURLWithin } from "../policy"
 import { guardSession } from "../session-guard"
 import { extensionAccess, extensionCompatibility } from "./compatibility"
 import { browserUserAgent, cookieDetails, parseCookieFile, PROBE_COOKIE, type CookieRead } from "./cookie"
@@ -12,6 +11,7 @@ import { createFileGuard } from "./file-guard"
 import { clearStaging, download, stageExtension, swapIn } from "./install"
 import { createCookieMirror, type CookieMirror } from "./link"
 import { cookiesPersist } from "./probe"
+import { createPreviews } from "./previews"
 import {
   displayName,
   extensionIcon,
@@ -100,20 +100,12 @@ export async function createBrowserProfile(input: {
 
   const errors = new Map<string, string>()
   const details = new Map<string, ProfileExtension>()
-  const roots = new Map<number, () => readonly string[]>()
   // Browser icons by application path, read once; undefined for an application without one.
   const icons = new Map<string, string | undefined>()
 
-  // Documents are guarded by the page; subresources (img, script, fetch) must not read file: URLs outside the roots
-  // of the page that asked either. One guard serves every page, so each page registers its roots by id.
-  const stopFileGuard = createFileGuard({
-    session,
-    allowed: (request) => {
-      const allowed = request.webContentsId === undefined ? undefined : roots.get(request.webContentsId)
-
-      return fileURLWithin(request.url, allowed?.() ?? [])
-    },
-  })
+  const previews = createPreviews(session)
+  // Even a non-pane window must never commit a native file document in this session.
+  const stopFileGuard = createFileGuard({ session, allowed: () => false })
 
   // What each package's files show, read once per directory and version: describing runs after every change.
   const scans = new Map<string, Promise<ExtensionFiles>>()
@@ -164,7 +156,7 @@ export async function createBrowserProfile(input: {
     session.cookies.off("changed", cookiesChanged)
     clearTimeout(settling)
     stopFileGuard()
-    roots.clear()
+    previews.dispose()
   }
 
   const apis = await createExtensionApis({
@@ -328,12 +320,7 @@ export async function createBrowserProfile(input: {
     partition: PARTITION,
     /** Each tab's download handler by its web contents ID, which the profile's one `will-download` listener calls. */
     downloads,
-    /** Lets one page load file: subresources inside `fileRoots`; returns the release. */
-    allowFiles(webContentsId: number, fileRoots: () => readonly string[]) {
-      roots.set(webContentsId, fileRoots)
-
-      return () => void roots.delete(webContentsId)
-    },
+    previews,
     /** The pane's tabs and windows as extensions see them; the pane registers each tab of the profile. */
     extensionTabs: apis.tabs,
     /** Extensions loaded now, whose pages may open in a tab. */

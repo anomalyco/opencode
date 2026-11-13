@@ -8,6 +8,7 @@
   "exports": {
     "./renderer": "./src/renderer.ts",
     "./main": "./src/main.ts",
+    "./schemes": "./src/schemes.ts",
     "./terminal": "./src/terminal/index.ts",
     "./debug/options": "./src/debug/options.ts"
   },

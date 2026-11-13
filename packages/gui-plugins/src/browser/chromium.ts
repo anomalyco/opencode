@@ -57,6 +57,8 @@ import {
   type Policy,
 } from "./policy"
 import type { PaneElement } from "./ipc"
+import { previewAddress, previewFile } from "./preview"
+import { previewScheme } from "../schemes"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 
@@ -216,6 +218,8 @@ export function createBrowserPage(
     popupOptions?: Electron.BrowserWindowConstructorOptions
     /** Directories whose files may load as file:// documents; empty when the server is remote. */
     fileRoots?: () => ReadonlyArray<string>
+    /** This binding's non-local origin for workspace previews; absent for remote workspaces. */
+    previewHost?: string
     /** Extensions whose `chrome-extension://` pages may open, such as their popups and options. */
     extensions?: () => ReadonlyArray<string>
     shared: Shared
@@ -247,6 +251,7 @@ export function createBrowserPage(
   })
 
   const contents = view.webContents
+  const displayURL = (url: string) => previewFile(url, options.previewHost) ?? url
   const detachNetwork = options.network?.attach(contents)
   contents.on("before-mouse-event", (_event, mouse) => {
     // The agent's own input arrives while its command runs.
@@ -434,13 +439,13 @@ export function createBrowserPage(
   contents.on("did-start-navigation", (event) =>
     dispatch({
       type: "navigation.started",
-      url: event.url,
+      url: displayURL(event.url),
       isMainFrame: event.isMainFrame,
       isSameDocument: event.isSameDocument,
     }),
   )
   contents.on("did-navigate", (_event, url, status, statusText) =>
-    dispatch({ type: "navigation.committed", url, status, statusText, title: contents.getTitle() }),
+    dispatch({ type: "navigation.committed", url: displayURL(url), status, statusText, title: contents.getTitle() }),
   )
   // Only agent-driven tabs need fresh frames while hidden. A cross-site commit can replace the renderer
   // we woke on the first agent command, so wake its replacement too.
@@ -448,10 +453,10 @@ export function createBrowserPage(
     if (agentDriven) contents.setBackgroundThrottling(false)
   })
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
-    dispatch({ type: "navigation.failed", code, description, url, isMainFrame }),
+    dispatch({ type: "navigation.failed", code, description, url: displayURL(url), isMainFrame }),
   )
   contents.on("did-navigate-in-page", (_event, url, isMainFrame) =>
-    dispatch({ type: "navigation.in-page", url, title: contents.getTitle(), isMainFrame }),
+    dispatch({ type: "navigation.in-page", url: displayURL(url), title: contents.getTitle(), isMainFrame }),
   )
   contents.on("dom-ready", () => dispatch({ type: "document.ready" }))
   contents.on("page-title-updated", () => dispatch({ type: "title.updated", title: contents.getTitle() }))
@@ -472,9 +477,11 @@ export function createBrowserPage(
   const guard = (event: Electron.Event<{ url: string; isMainFrame: boolean }>) => {
     if (event.url === "about:blank") return
 
-    if (event.isMainFrame ? allowedDestination(event.url, policy) : !localFileURL(event.url)) return
+    const local = /^file:/i.test(event.url) || event.url.startsWith(`${previewScheme}:`)
 
-    if (!event.isMainFrame && fileURLWithin(event.url, policy.fileRoots ?? [])) return
+    if (local && fileURLWithin(previewFile(event.url, options.previewHost) ?? "", policy.fileRoots ?? [])) return
+
+    if (!local && (!event.isMainFrame || allowedDestination(event.url, policy))) return
     event.preventDefault()
     // The same reason a typed address gets, so a blocked link and a blocked address read alike.
     publish(refusal(event.url, policy) ?? "ERR_BLOCKED_BY_CLIENT")
@@ -484,7 +491,8 @@ export function createBrowserPage(
   contents.on("will-redirect", guard)
   // Links opened with Cmd or Ctrl arrive as background tabs, and stay behind the current one as in the system browser.
   contents.setWindowOpenHandler(({ url, disposition }) =>
-    url === "about:blank" || destinationOrigin(url) || extensionURL(url, policy.extensions ?? [])
+    url === "about:blank" || destinationOrigin(url) || extensionURL(url, policy.extensions ?? []) ||
+    fileURLWithin(previewFile(url, options.previewHost) ?? "", policy.fileRoots ?? [])
       ? {
           action: "allow",
           outlivesOpener: true,
@@ -645,6 +653,9 @@ export function createBrowserPage(
   })
 
   const load = (url: string) => {
+    const destination = localFileURL(url) ? previewAddress(url, options.previewHost, policy.fileRoots ?? []) : url
+
+    if (!destination) return Promise.reject(new Error("Workspace preview is unavailable."))
     let committed = false
 
     const commit = () => {
@@ -654,7 +665,7 @@ export function createBrowserPage(
     contents.once("did-navigate", commit)
 
     return contents
-      .loadURL(url)
+      .loadURL(destination)
       .catch((error: Error) => {
         if (!committedLoad(error, committed)) throw error
       })
