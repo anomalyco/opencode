@@ -1876,6 +1876,7 @@ test("the Windows titlebar menu swaps one submenu for the next as the pointer mo
 
   // Keep the hover delay from elapsing while Playwright moves the pointer and checks the old submenu.
   await holdClock(page)
+
   for (const [index, parent] of parents.entries()) {
     const box = (await parent.boundingBox())!
     // Down and to the left, away from the open submenu, so the pointer isn't heading for it.
