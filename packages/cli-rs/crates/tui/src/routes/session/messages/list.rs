@@ -1422,7 +1422,7 @@ impl Row {
                 if let Some(assistant) = cx.assistant(message)
                     && let Some(SessionMessageAssistantContentItem::Text(text)) = part.resolve(assistant)
                 {
-                    view.update(assistant, text);
+                    view.update(assistant, text, cx.conceal);
                 }
             }
             (Body::Reasoning(view), Spec::Part { message, part }) => {
