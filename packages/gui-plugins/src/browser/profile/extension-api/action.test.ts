@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { actionFor, badgeColor, initialAction, setAction } from "./action"
+import { extensionPage } from "../extensions"
 import { popupBounds } from "./popup"
 
 test("a tab's own values sit over the values for every tab", () => {
@@ -14,6 +15,35 @@ test("a tab's own values sit over the values for every tab", () => {
   expect(actionFor(state)).toEqual({ title: "Blocker", badgeText: "", popup: "popup.html" })
   expect(badgeColor([255, 0, 0, 255])).toBe("rgba(255, 0, 0, 1)")
   expect(badgeColor("#00f")).toBe("#00f")
+})
+
+test("a popup or options page is always a page of the extension's own package", () => {
+  const id = "nngceckbapebfimnlniiiahkandclblb"
+  const own = (file: string) => `chrome-extension://${id}/${file}`
+
+  expect(
+    [
+      "popup.html",
+      "/popup/index.html?x=1",
+      "https://evil.example/login",
+      "//evil.example/login",
+      "\\\\evil.example\\login",
+      "chrome-extension://aaaabbbbccccddddeeeeffffgggghhhh/popup.html",
+      "../../popup.html",
+      "",
+      undefined,
+    ].map((file) => extensionPage(id, file)),
+  ).toEqual([
+    own("popup.html"),
+    own("popup/index.html?x=1"),
+    own("https://evil.example/login"),
+    own("evil.example/login"),
+    own("evil.example\\login"),
+    own("chrome-extension://aaaabbbbccccddddeeeeffffgggghhhh/popup.html"),
+    own("popup.html"),
+    undefined,
+    undefined,
+  ])
 })
 
 test("a popup sits under its button within Chrome's size limits and the window", () => {

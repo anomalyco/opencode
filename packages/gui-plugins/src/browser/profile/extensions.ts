@@ -118,6 +118,20 @@ export async function displayName(directory: string, manifest: Manifest) {
   return entry?.[1].message ?? manifest.name
 }
 
+/**
+ * A page of the extension's own package, from a path in its manifest or a `setPopup` call. As in Chrome, the path is
+ * always read from the package's root, so an absolute or protocol-relative address names a file of the package and
+ * never another site. Undefined for an empty path.
+ */
+export function extensionPage(id: string, file: string | undefined) {
+  const text = `chrome-extension://${id}/${file?.replace(/^[/\\]+/, "") ?? ""}`
+
+  if (!file || !URL.canParse(text)) return undefined
+  const url = new URL(text)
+
+  return url.protocol === "chrome-extension:" && url.host === id ? url.href : undefined
+}
+
 /** The page the toolbar button opens, and the extension's options page, relative to its root. */
 export function extensionPages(manifest: Manifest) {
   return {

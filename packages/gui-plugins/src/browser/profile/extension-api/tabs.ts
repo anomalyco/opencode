@@ -386,9 +386,8 @@ export function createExtensionTabs(input: { emit: Emit; extensions: () => reado
       "windows.update": method(Schema.Tuple([Schema.Number, WindowChange]), (context, [id, change]) => {
         const win = windowFor(id === WINDOW_ID_CURRENT ? (currentWindow(context) ?? id) : id)
 
-        if (change.state === "minimized") win.minimize()
-
-        if (change.state === "maximized") win.maximize()
+        // App windows belong to the user: an extension may bring one forward, never minimize, resize or move it.
+        if (change.state && change.state !== "normal") throw new Error("Extensions cannot change the size of app windows.")
 
         if (change.focused || change.state === "normal") win.focus()
 
@@ -451,6 +450,8 @@ export function createExtensionTabs(input: { emit: Emit; extensions: () => reado
         }
 
         releases.forEach((release) => release())
+        // A closed tab has left the screen too, so a popup about it closes.
+        hiders.forEach((listener) => listener(id))
         input.emit("tabs.onRemoved", [id, { windowId: tab.window.id, isWindowClosing: tab.window.isDestroyed() }])
       }
     },

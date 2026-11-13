@@ -15,6 +15,7 @@ import {
   extensionIcon,
   extensionID,
   extensionFiles,
+  extensionPage,
   extensionPages,
   parseCrx,
   pinKey,
@@ -124,9 +125,7 @@ export async function createBrowserProfile(input: {
 
     if (!manifest) return undefined
     const pages = extensionPages(manifest)
-
-    const page = (file: string | undefined) =>
-      file === undefined ? undefined : new URL(file.replace(/^\//, ""), `chrome-extension://${record.id}/`).href
+    const page = (file: string | undefined) => extensionPage(record.id, file)
 
     return {
       id: record.id,

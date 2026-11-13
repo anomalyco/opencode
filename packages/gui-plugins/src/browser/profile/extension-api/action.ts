@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { Option, Schema } from "effect"
 import electron, { type BrowserWindow, type Extension } from "electron"
+import { extensionPage } from "../extensions"
 import { method, none, optional, type ApiModule, type ApiNamespace, type Emit, type ExtensionContext } from "./api"
 import { tabInfo, type ExtensionTabs } from "./tabs"
 
@@ -80,8 +81,8 @@ const MEMBERS = [
   "enable",
   "disable",
   "isEnabled",
+  // No `openPopup`: a popup opens only from the user's click, so an extension cannot put a page over the app.
   "getUserSettings",
-  "openPopup",
 ]
 
 /** The size closest to 32px of an icon given in several, by size. */
@@ -100,7 +101,7 @@ export function createActions(input: {
   tabs: ExtensionTabs
   emit: Emit
   changed: () => void
-  open: (window: BrowserWindow, url: string) => void
+  open: (window: BrowserWindow, extension: string, url: string) => void
 }) {
   const states = new Map<string, ActionState>()
 
@@ -129,9 +130,6 @@ export function createActions(input: {
   }
 
   const read = (context: ExtensionContext, tab?: number | null) => actionFor(stateOf(context.extension), tab)
-
-  const popupURL = (extension: string, popup: string | undefined) =>
-    popup ? new URL(popup.replace(/^\//, ""), `chrome-extension://${extension}/`).href : undefined
 
   const icon = async (context: ExtensionContext, value: typeof Icon.Type) => {
     if (value.imageData) {
@@ -177,10 +175,14 @@ export function createActions(input: {
     }),
     [`${namespace}.setPopup`]: method(
       Schema.Tuple([Schema.Struct({ popup: Schema.String, tabId: optional(Schema.Number) })]),
-      (context, [details]) => update(context, { popup: details.popup }, details.tabId),
+      (context, [details]) => {
+        if (details.popup && !extensionPage(context.extension.id, details.popup))
+          throw new Error("The popup must be a page of this extension.")
+        update(context, { popup: details.popup }, details.tabId)
+      },
     ),
     [`${namespace}.getPopup`]: method(Schema.Tuple([optional(Tab)]), (context, [details]) =>
-      popupURL(context.extension.id, read(context, details?.tabId).popup) ?? "",
+      extensionPage(context.extension.id, read(context, details?.tabId).popup) ?? "",
     ),
     [`${namespace}.setBadgeText`]: method(
       Schema.Tuple([Schema.Struct({ text: optional(Schema.String), tabId: optional(Schema.Number) })]),
@@ -219,13 +221,6 @@ export function createActions(input: {
       read(context, tab).enabled !== false,
     ),
     [`${namespace}.getUserSettings`]: method(none, () => ({ isOnToolbar: true })),
-    [`${namespace}.openPopup`]: method(none, (context) => {
-      const window = input.tabs.lastWindow()
-      const url = popupURL(context.extension.id, read(context, window ? input.tabs.activeTab(window)?.id : undefined).popup)
-
-      if (!window || !url) throw new Error("This extension has no popup to open.")
-      input.open(window, url)
-    }),
   })
 
   const namespace = (path: string, manifest: 2 | 3, members: readonly string[]): ApiNamespace => ({
@@ -271,10 +266,10 @@ export function createActions(input: {
       const values = actionFor(stateOf(extension), tab?.id)
 
       if (values.enabled === false) return true
-      const url = popupURL(extension.id, values.popup)
+      const url = extensionPage(extension.id, values.popup)
 
       if (url) {
-        input.open(window, url)
+        input.open(window, extension.id, url)
 
         return true
       }

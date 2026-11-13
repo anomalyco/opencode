@@ -41,7 +41,7 @@ export async function createExtensionApis(input: {
     tabs,
     emit,
     changed: input.changed,
-    open: (window, url) => popups.open(window, url),
+    open: (window, extension, url) => popups.open(window, extension, url),
   })
 
   await mkdir(input.directory, { recursive: true })
