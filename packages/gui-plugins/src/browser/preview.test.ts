@@ -16,6 +16,10 @@ test("a workspace address round-trips without ever loading a native file origin"
   expect(previewAddress(file, "first", [])).toBeUndefined()
 })
 
+test("a file path ending in a slash is not a regular file request on any platform", () => {
+  expect(previewResource(view.replace(".html?", ".html/?"), "first", undefined, roots)).toBeUndefined()
+})
+
 test("preview documents and workers can only request their own origin and workspace", () => {
   expect(previewResource(view, "first", undefined, roots)).toBe(file)
   expect(previewResource(view, "first", "oc-preview://first", roots)).toBe(file)

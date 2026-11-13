@@ -17,7 +17,7 @@ export function previewFile(address: string, host: string | undefined, roots: re
 
   const file = `file:///${address.slice(prefix.length)}`
 
-  return fileURLWithin(file, roots) ? file : undefined
+  return fileURLWithin(file, roots) && !new URL(file).pathname.endsWith("/") ? file : undefined
 }
 
 /** The browser may open a preview; only that preview's origin may request its resources, including from a worker. */
