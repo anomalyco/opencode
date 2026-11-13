@@ -393,7 +393,9 @@ fn bordered(view: &View, theme: &Theme, border: &abi::Border) {
     .border_sides(sides)
     .border_color(color(theme, border.color.as_ref()).unwrap_or(Color::rgb(255, 255, 255)));
     if let Some(title) = &border.title {
-        view.title(title.as_str()).title_alignment(match border.title_align {
+        // OpenTUI refuses a longer title with an error that ends the TUI; no title that long fits a row anyway.
+        let title = &title[..title.floor_char_boundary(opentui::sys::OT_BUFFER_TEXT_BYTES_MAX as usize)];
+        view.title(title).title_alignment(match border.title_align {
             abi::TitleAlign::Left => Alignment::Left,
             abi::TitleAlign::Center => Alignment::Center,
             abi::TitleAlign::Right => Alignment::Right,
@@ -728,6 +730,10 @@ mod tests {
         let rigid = || rows(2).into_iter().map(|row| row.layout(abi::Layout::default().shrink(false))).collect();
         assert_eq!(draw(abi::Node::column(rigid()).layout(low)).3, 2);
         assert_eq!(draw(abi::Node::column(rigid()).overflow(abi::Overflow::Hidden).layout(low)).3, 1);
+        // A title past OpenTUI's limit for a box's titles is cut, at a character, and the frame still renders.
+        let long = format!("{}é", "t".repeat(opentui::sys::OT_BUFFER_TEXT_BYTES_MAX as usize - 1));
+        let (_, _, corner, _) = draw(abi::Node::column(rows(1)).border(abi::Border::new().title(long)));
+        assert_eq!(corner.symbol.as_str(), "┌");
     }
 
     // Expected: a fence's key moves to the widget that replaces its block's widget, and goes once that widget is
