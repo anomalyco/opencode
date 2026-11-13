@@ -1,6 +1,6 @@
 export * as Media from "./media.js"
 
-import { Effect, FileSystem, Result, Schema, SchemaGetter } from "effect"
+import { Effect, FileSystem, Result, Schema, SchemaGetter, Stream } from "effect"
 import { Base64 } from "effect/encoding"
 import { HttpClientRequest } from "effect/http"
 import { ProviderID } from "./schema/ids.js"
@@ -156,6 +156,13 @@ export class Asset {
     })
   }
 
+  /** The payload as a byte stream; `url` sources stream from the network without being buffered or cached. */
+  stream(): Stream.Stream<Uint8Array, AIError, Service> {
+    const source = this.source
+    if (source.type !== "url" || this.#bytes !== undefined) return Stream.fromEffect(this.bytes())
+    return Stream.unwrap(downloadStream(source, this.headers))
+  }
+
   base64(): Effect.Effect<string, AIError, Service> {
     return Effect.suspend(() => {
       const source = this.source
@@ -255,6 +262,28 @@ const download = Effect.fn("Media.download")(function* (
   return new Uint8Array(buffer)
 })
 
+const downloadStream = Effect.fn("Media.downloadStream")(function* (
+  source: Extract<Source, { readonly type: "url" }>,
+  headers: Record<string, string> | undefined,
+) {
+  const executor = yield* Service
+  const response = yield* executor.execute(
+    HttpClientRequest.get(source.url).pipe(HttpClientRequest.setHeaders(headers ?? {})),
+  )
+  return response.stream.pipe(
+    Stream.mapError(
+      (cause) =>
+        new AIError({
+          reason: new InvalidProviderOutputError({
+            message: `Failed to read media from ${source.url}`,
+            http: responseHttp(response),
+            cause,
+          }),
+        }),
+    ),
+  )
+})
+
 // ---------------------------------------------------------------------------
 // Constructors
 // ---------------------------------------------------------------------------
@@ -344,12 +373,21 @@ export const file = (path: string, options?: AssetOptions): Effect.Effect<Asset,
     return bytes(data, fileMediaType(data, path), options)
   })
 
-/** Materialize an asset and write its bytes through `FileSystem`. */
+/**
+ * Stream an asset's bytes into a file through `FileSystem` without buffering `url` downloads. The bytes go to a temporary
+ * file next to `path` that replaces it only once the download finished, so a failed download leaves an existing file as
+ * it was.
+ */
 export const write = (asset: Asset, path: string): Effect.Effect<void, AIError, FileSystem.FileSystem | Service> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
-    const data = yield* asset.bytes()
-    yield* fs
-      .writeFile(path, data)
-      .pipe(Effect.mapError((cause) => invalid(`Failed to write media file ${path}`, cause)))
+    const temporary = `${path}.${crypto.randomUUID()}.tmp`
+    yield* asset.stream().pipe(
+      Stream.run(fs.sink(temporary)),
+      Effect.andThen(fs.rename(temporary, path)),
+      Effect.onError(() => fs.remove(temporary).pipe(Effect.ignore)),
+      Effect.mapError((cause) =>
+        cause instanceof AIError ? cause : invalid(`Failed to write media file ${path}`, cause),
+      ),
+    )
   })
