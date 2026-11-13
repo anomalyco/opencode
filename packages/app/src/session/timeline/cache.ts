@@ -4,7 +4,6 @@ import {
   createMemo,
   createRoot,
   getOwner,
-  on,
   onCleanup,
   untrack,
   type Accessor,
@@ -15,6 +14,7 @@ import { DataContext, useData } from "@opencode/session-ui/context"
 import { MarkdownContext, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { createScopedCache } from "@/runtime/server/scoped-cache"
 import { useWorkspaceLocation, WorkspaceLocationContext } from "@/workspaces/location"
+import { createTimelineCacheEntryState, transitionTimelineCacheEntry } from "./cache-machine"
 import type { TimelineSessionSource } from "./controller"
 
 export function createTimelineCache(
@@ -52,19 +52,26 @@ export function createTimelineCache(
           return () => held()!.value
         }
 
-        // Session retention evicts the transcripts of closed sessions. A detached view would still hold the old
-        // transcript and its DOM, so it goes too; reopening the session renders a new view. It goes in the same flush,
-        // before its effects run, so none of them reloads what was just evicted, such as a subagent's parent.
-        createComputed(
-          on(
-            () => !!id && transcript(id).length === 0,
-            (evicted, previous) => {
-              if (!evicted || previous !== false || untrack(active)) return
+        // Reopening an evicted session renders a new view. It goes in the same flush, before its effects run, so none of
+        // them reloads what was just evicted, such as a subagent's parent. Selection, not visibility, keeps it: a view
+        // hidden behind another narrow-screen view is still the one on screen once the conversation returns.
+        const selected = createMemo(() => session.identity.sessionKey() === key)
+        const hasTranscript = createMemo(() => !!id && transcript(id).length > 0)
 
-              if (cache.peek(key)?.dispose === dispose) cache.delete(key)
-            },
-          ),
-        )
+        let entryState = createTimelineCacheEntryState({
+          selected: untrack(selected),
+          hasTranscript: untrack(hasTranscript),
+        })
+
+        createComputed(() => {
+          entryState = transitionTimelineCacheEntry(entryState, {
+            type: "synced",
+            selected: selected(),
+            hasTranscript: hasTranscript(),
+          })
+
+          if (entryState.status === "evicted" && cache.peek(key)?.dispose === dispose) cache.delete(key)
+        })
 
         const store = select(() => data.store)
         const directory = select(() => data.directory)
@@ -74,6 +81,7 @@ export function createTimelineCache(
         const readImage = select(() => markdown?.readImage)
         const openSession = select(() => markdown?.openSession)
         const sessionTitle = select(() => markdown?.sessionTitle)
+        const sessionMenu = select(() => markdown?.sessionMenu)
         const turnDiff = select(() => data.turnDiff)
 
         // The Location's config is a query: read it in the reader and only while selected, so a pending config
@@ -124,6 +132,9 @@ export function createTimelineCache(
                 get agents() {
                   return agents()
                 },
+                get copyAlwaysVisible() {
+                  return data.copyAlwaysVisible
+                },
                 get backgroundCompaction() {
                   return backgroundCompaction()
                 },
@@ -152,6 +163,9 @@ export function createTimelineCache(
                     },
                     get sessionTitle() {
                       return sessionTitle()
+                    },
+                    get sessionMenu() {
+                      return sessionMenu()
                     },
                   },
                   view,

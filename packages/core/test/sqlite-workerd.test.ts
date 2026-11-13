@@ -93,5 +93,19 @@ describe("sqlite.workerd", () => {
       .map((row) => row.name)
     expect(names).toContain("migration")
     expect(names).toContain("session_v2")
+    expect(() => storage.sql.exec("PRAGMA foreign_keys = OFF")).toThrow("not authorized")
+
+    await run(
+      storage,
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient
+        yield* sql`CREATE TABLE _parent (id TEXT PRIMARY KEY)`
+        yield* sql`CREATE TABLE _child (parent_id TEXT NOT NULL REFERENCES _parent(id) ON DELETE CASCADE)`
+        yield* sql`INSERT INTO _parent (id) VALUES (${"p1"})`
+        yield* sql`INSERT INTO _child (parent_id) VALUES (${"p1"})`
+        yield* sql`DELETE FROM _parent WHERE id = ${"p1"}`
+        expect(yield* sql`SELECT * FROM _child`).toEqual([])
+      }),
+    )
   })
 })

@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import { Base64 } from "effect/encoding"
 import { Protocol } from "../route/protocol.js"
-import { LLMEvent, type LLMRequest, Message, ToolResultPart } from "../schema/index.js"
+import { AssistantMessage, LLMEvent, type LLMRequest, ToolResultPart } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
@@ -65,9 +65,9 @@ const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: L
     {
       ...request,
       messages: request.messages.map((message) =>
-        message.role === "system"
+        message.role !== "assistant"
           ? message
-          : Message.make({
+          : new AssistantMessage({
               ...message,
               content: message.content.map((part) => {
                 if (

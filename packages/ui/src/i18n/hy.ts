@@ -160,6 +160,7 @@ export const dict = {
   "ui.common.dismiss": "Փակել",
   "ui.common.close": "Փակել",
   "ui.common.next": "Հաջորդ",
+  "ui.common.continue": "Շարունակել",
   "ui.common.submit": "Ներկայացնել",
   "ui.common.showMore": "Ցույց տալ ավելին",
   "ui.permission.deny": "Մերժել",

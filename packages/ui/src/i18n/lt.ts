@@ -173,6 +173,7 @@ export const dict = {
   "ui.common.dismiss": "Atsisakyti",
   "ui.common.close": "Uždaryti",
   "ui.common.next": "Kitas",
+  "ui.common.continue": "Tęsti",
   "ui.common.submit": "Pateikti",
   "ui.common.showMore": "Rodyti daugiau",
   "ui.permission.deny": "Atmesti",

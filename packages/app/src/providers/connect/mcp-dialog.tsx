@@ -1,7 +1,5 @@
-import { Component, createEffect, createMemo, on, Show } from "solid-js"
-import { createStore } from "solid-js/store"
+import { Component, createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
 import fuzzysort from "fuzzysort"
-import { Predicate } from "effect"
 import type { McpServer } from "@opencode/client/promise"
 import { useData } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -13,7 +11,8 @@ import { SearchList } from "@opencode/ui/search-list"
 import { Switch } from "@opencode/ui/switch"
 import { TruncatedText } from "@opencode/ui/truncated-text"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useMcpToggle } from "@/providers/connect/mcp"
+import { type McpController, useMcpController } from "@/providers/connect/mcp"
+import { mcpDetailAttempt, mcpDetailView, mcpRowView } from "@/providers/connect/mcp-machine"
 import { usePlatform } from "@/runtime/platform/platform"
 import { showToast } from "@/shell/notifications/toast"
 import "@/shell/commands/dialog.css"
@@ -36,24 +35,15 @@ export const DialogSelectMcp: Component = () => {
 /** Lists the MCP servers of `directory`; `server` opens directly on that server's error. */
 export const DialogMcp: Component<{ directory: string; server?: string }> = (props) => {
   const data = useData()
-  const directory = () => props.directory
-  const toggle = useMcpToggle(directory)
+  const mcp = useMcpController(() => props.directory)
 
-  const target = () => {
-    const current = toggle.isPending ? toggle.variables : undefined
-
-    return Predicate.isString(current) ? current : current?.name
-  }
-
-  createEffect(() => void data.location.mcp.server.sync({ directory: directory() }).catch(() => undefined))
+  createEffect(() => void data.location.mcp.server.sync({ directory: props.directory }).catch(() => undefined))
 
   return (
     <McpDialog
-      servers={data.location.mcp.server.list({ directory: directory() })}
+      servers={data.location.mcp.server.list({ directory: props.directory })}
       server={props.server}
-      pending={toggle.isPending}
-      target={target()}
-      onToggle={(input) => toggle.mutate(input)}
+      mcp={mcp.controller()}
     />
   )
 }
@@ -61,21 +51,14 @@ export const DialogMcp: Component<{ directory: string; server?: string }> = (pro
 export function McpDialog(props: {
   servers: McpServer[] | undefined
   server?: string
-  pending: boolean
-  target?: string
-  onToggle: (input: string | { name: string; enabled: boolean }) => void
+  mcp: Pick<McpController, "state" | "dispatch" | "onFocus">
 }) {
   const language = useLanguage()
   const platform = usePlatform()
+  const [query, setQuery] = createSignal("")
 
-  const [store, setStore] = createStore<{ detail?: string; copied: boolean; query: string }>({
-    detail: props.server,
-    copied: false,
-    query: "",
-  })
-
-  const loaded = () => props.servers
-  const servers = createMemo(() => loaded() ?? [])
+  const servers = createMemo(() => props.servers ?? [])
+  const statusOf = (name: string) => servers().find((server) => server.name === name)?.status
 
   const items = createMemo(() =>
     servers()
@@ -84,40 +67,42 @@ export function McpDialog(props: {
   )
 
   const results = createMemo(() => {
-    const query = store.query.trim()
+    const current = query().trim()
 
-    if (!query) return items()
+    if (!current) return items()
 
     return fuzzysort
-      .go(query, items(), { keys: ["name", "status"] })
+      .go(current, items(), { keys: ["name", "status"] })
       .map((result) => result.obj)
       .sort((a, b) => a.name.localeCompare(b.name))
   })
 
-  // Like the TUI, a failed server's row opens its error; retrying and disabling happen there.
-  const failure = createMemo(() => {
-    const server = servers().find((item) => item.name === store.detail)
-
-    return server?.status.status === "failed" ? { name: server.name, error: server.status.error } : undefined
+  // The error view's server, by attempt, so its status follows the list while it shows.
+  const target = createMemo(() => mcpDetailAttempt(props.mcp.state()), undefined, {
+    equals: (previous, next) => previous?.attempt === next?.attempt,
   })
 
-  const toggleServer = (name: string) => {
-    const status = servers().find((server) => server.name === name)?.status.status
+  const detail = createMemo(() => {
+    const current = target()
 
-    if (!status || status === "pending" || props.pending) return
-    props.onToggle(name)
-  }
+    return mcpDetailView(props.mcp.state(), current ? statusOf(current.name)?.status : undefined)
+  })
 
+  const toggle = (name: string, enabled: boolean) =>
+    props.mcp.dispatch({ type: "toggle.requested", name, enabled, status: statusOf(name)?.status })
+
+  // Like the TUI, a failed server's row opens its error; retrying and disabling happen there.
   const select = (name: string) => {
-    if (servers().find((server) => server.name === name)?.status.status !== "failed") return toggleServer(name)
-    setStore({ detail: name, copied: false })
-    requestAnimationFrame(() => backRef?.focus())
+    const status = statusOf(name)
+
+    if (status?.status !== "failed") return toggle(name, status?.status !== "connected")
+    props.mcp.dispatch({ type: "detail.opened", name, loaded: true, status, focus: true })
   }
 
-  // The list stays mounted behind the error, so going back keeps the search, the highlight and the scroll.
   const back = () => {
-    setStore("detail", undefined)
-    requestAnimationFrame(() => listRef?.querySelector<HTMLInputElement>('[role="combobox"]')?.focus())
+    const current = detail()
+
+    if (current) props.mcp.dispatch({ type: "detail.dismissed", attempt: current.attempt })
   }
 
   const onDetailKeyDown = (event: KeyboardEvent) => {
@@ -127,18 +112,11 @@ export function McpDialog(props: {
     back()
   }
 
-  // A successful retry or a removed server leaves nothing to show, so return to the list.
-  createEffect(
-    on(failure, (current) => {
-      if (store.detail && loaded() && !current) back()
-    }),
-  )
-
-  const copy = (current: { name: string; error: string }) => {
+  const copy = (current: { attempt: number; name: string; error: string }) => {
     const details = language.t("dialog.mcp.error.details", { name: current.name, error: current.error })
 
     return (platform.writeClipboardText?.(details) ?? navigator.clipboard.writeText(details))
-      .then(() => setStore("copied", true))
+      .then(() => props.mcp.dispatch({ type: "detail.copied", attempt: current.attempt, error: current.error }))
       .catch((error) =>
         showToast({
           variant: "error",
@@ -151,11 +129,51 @@ export function McpDialog(props: {
   let listRef: HTMLDivElement | undefined
   let backRef: HTMLButtonElement | undefined
 
+  // Opens before the first render, so the dialog mounts on the error and its Back button takes the initial focus.
+  const initial = untrack(() => props.server)
+
+  if (initial)
+    props.mcp.dispatch({
+      type: "detail.opened",
+      name: initial,
+      loaded: untrack(() => props.servers) !== undefined,
+      status: untrack(() => statusOf(initial)),
+      focus: false,
+    })
+
+  // Follows the shown server's status, which changes here and anywhere else: a reconnect or a removal returns to the
+  // list, and a new failure replaces the error in place.
+  createEffect(() => {
+    const current = target()
+
+    if (!current) return
+    const synced = { loaded: props.servers !== undefined, status: statusOf(current.name) }
+    untrack(() => props.mcp.dispatch({ type: "server.synced", attempt: current.attempt, ...synced }))
+  })
+
+  // The list stays mounted behind the error, so going back keeps the search, the highlight and the scroll.
+  createEffect(() =>
+    onCleanup(
+      props.mcp.onFocus((effect) =>
+        requestAnimationFrame(() => {
+          if (effect.type === "focus-detail") return backRef?.focus()
+          listRef?.querySelector<HTMLInputElement>('[role="combobox"]')?.focus()
+        }),
+      ),
+    ),
+  )
+
+  onCleanup(() => {
+    const current = untrack(target)
+
+    if (current) props.mcp.dispatch({ type: "detail.closed", attempt: current.attempt })
+  })
+
   return (
     // Like the model picker and the TUI, the list has no visible header; the search field leads.
     <Dialog class="command-palette command-palette-compact search-list-dialog mcp-dialog" size="large" fit>
       <Show
-        when={failure()}
+        when={detail()}
         fallback={
           <div class="sr-only">
             <DialogTitle>{language.t("dialog.mcp.title")}</DialogTitle>
@@ -192,19 +210,15 @@ export function McpDialog(props: {
                 <Button
                   class="error-details-copy"
                   variant="ghost-muted"
-                  icon={store.copied ? "check" : "copy"}
+                  icon={current().copied ? "check" : "copy"}
                   onClick={() => void copy(current())}
                 >
-                  {language.t(store.copied ? "common.copied" : "dialog.mcp.error.copy")}
+                  {language.t(current().copied ? "common.copied" : "dialog.mcp.error.copy")}
                 </Button>
-                <Button
-                  variant="ghost"
-                  disabled={props.pending}
-                  onClick={() => props.onToggle({ name: current().name, enabled: false })}
-                >
+                <Button variant="ghost" disabled={current().busy} onClick={() => toggle(current().name, false)}>
                   {language.t("dialog.mcp.error.disable")}
                 </Button>
-                <Button variant="neutral" disabled={props.pending} onClick={() => toggleServer(current().name)}>
+                <Button variant="neutral" disabled={current().busy} onClick={() => toggle(current().name, true)}>
                   {language.t("common.retry")}
                 </Button>
               </ErrorDetails>
@@ -212,11 +226,11 @@ export function McpDialog(props: {
           </div>
         )}
       </Show>
-      <div class="contents" ref={listRef} style={{ display: failure() ? "none" : undefined }}>
+      <div class="contents" ref={listRef} style={{ display: detail() ? "none" : undefined }}>
         <DialogBody class="command-palette-body">
           <SearchList
-            query={store.query}
-            onQuery={(query) => setStore("query", query)}
+            query={query()}
+            onQuery={setQuery}
             placeholder={language.t("dialog.mcp.search.placeholder")}
             items={results()}
             key={(item) => item.name}
@@ -236,7 +250,8 @@ export function McpDialog(props: {
               // The switch would start sign-in anyway, so an auth-gated server shows that action instead.
               const signIn = () => status()?.status === "needs_auth" && !!server()?.integrationID
 
-              const busy = () => props.target === item().name
+              const view = () => mcpRowView(props.mcp.state(), item().name, status()?.status)
+              const busy = () => view().busy
 
               // The dot shows the status, as in the session's MCP list; the words stay for assistive technology.
               const label = () => {
@@ -258,7 +273,6 @@ export function McpDialog(props: {
                       <Button
                         size="small"
                         variant="ghost-muted"
-                        class="mcp-status-action"
                         aria-label={language.t("dialog.mcp.error.viewLabel", { name: item().name })}
                         onClick={() => select(item().name)}
                       >
@@ -270,13 +284,10 @@ export function McpDialog(props: {
                       fallback={
                         <Switch
                           checked={!!status() && status()?.status !== "disabled"}
-                          disabled={status()?.status === "pending" || busy()}
+                          disabled={view().pending}
                           description={label()}
                           class="[&_[data-slot=switch-description]]:sr-only"
-                          onChange={(enabled) => {
-                            if (props.pending) return
-                            props.onToggle({ name: item().name, enabled })
-                          }}
+                          onChange={(enabled) => toggle(item().name, enabled)}
                         >
                           <span class="sr-only">{item().name}</span>
                         </Switch>
@@ -285,11 +296,10 @@ export function McpDialog(props: {
                       <Button
                         size="small"
                         variant="ghost-muted"
-                        class="mcp-status-action"
                         disabled={busy()}
                         aria-busy={busy()}
                         aria-label={language.t("dialog.mcp.signIn.open", { name: item().name })}
-                        onClick={() => toggleServer(item().name)}
+                        onClick={() => toggle(item().name, true)}
                       >
                         {language.t(busy() ? "dialog.mcp.signingIn" : "dialog.mcp.signIn")}
                       </Button>

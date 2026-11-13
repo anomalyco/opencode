@@ -6,7 +6,8 @@ import {
   CompactionResponse,
   type LLMRequest,
   Message,
-  type ContentPart,
+  type MediaPart,
+  type TextPart,
   mergeJsonRecords,
 } from "../../schema/index.js"
 import type { CompactOperation } from "../../route/client.js"
@@ -174,7 +175,7 @@ function toMessage(item: (typeof Response.Type.output)[number], model: LLMReques
   return Message.make({
     role: item.role,
     providerMetadata: { [key]: { itemId: item.id, type: item.type, status: item.status, phase: item.phase } },
-    content: item.content.map((part): ContentPart => {
+    content: item.content.map((part): TextPart | MediaPart => {
       if (part.type === "input_text" || part.type === "output_text") return { type: "text", text: part.text }
       if (part.type === "input_image")
         return {

@@ -1,6 +1,7 @@
 import { Effect, Layer, ManagedRuntime, Schema, Stream } from "effect"
 import { AIClient } from "./ai-client.js"
 import { Decision, type DecisionModel, type DecisionQuestions, type DecisionRequestInput } from "./decision.js"
+import { Embedding, type EmbeddingModel, type EmbeddingRequestInput } from "./embedding.js"
 import type { AwaitOptions, Event, Generation, Snapshot } from "./generation.js"
 import { Image, type ImageModel, type ImageRequest, type ImageRequestInput } from "./image.js"
 import { LLM } from "./llm.js"
@@ -45,8 +46,8 @@ import { Video, type VideoModel, type VideoRequest, type VideoRequestInput } fro
 
 /**
  * Promise-first entrypoint for scripts and non-Effect callers. One `ManagedRuntime` hosts the LLM, image, video, speech,
- * transcription and decision clients over a request executor; every method runs the corresponding Effect API and rethrows
- * `AIError` unchanged. `file` and `write` load `node:fs/promises` on first use, so importing this module does not.
+ * transcription, decision and embedding clients over a request executor; every method runs the corresponding Effect API
+ * and rethrows `AIError` unchanged. `file` and `write` load `node:fs/promises` on first use, so importing this module does not.
  */
 export interface Options {
   /** Executor layer; defaults to `RequestExecutor.fetchLayer`. Inject a recorder or `RequestExecutor.middleware(fn)` here. */
@@ -248,6 +249,11 @@ export const make = (options: Options = {}) => {
         input: DecisionRequestInput<Model, Questions>,
         options?: RunOptions,
       ) => run(Decision.generate(input), options),
+    },
+    embedding: {
+      request: Embedding.request,
+      generate: <const Model extends EmbeddingModel>(input: EmbeddingRequestInput<Model>, options?: RunOptions) =>
+        run(Embedding.generate(input), options),
     },
     /** Experimental: may change without compatibility guarantees. */
     experimental: {

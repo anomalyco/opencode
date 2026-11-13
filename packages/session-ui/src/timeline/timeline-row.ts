@@ -18,7 +18,8 @@ export type PartGroup =
     }
   | {
       key: string
-      type: "file" | "read"
+      /** `events`: subagents and background shells counted in one row, in the New timeline. */
+      type: "file" | "read" | "events"
       refs: PartRef[]
     }
 
@@ -70,8 +71,12 @@ export namespace TimelineRow {
     resetAt?: number
   }> {}
 
+  /** The active turn waits to retry its step: `attempt` counts tries, `next` is when the next one starts. */
   export class Retry extends Data.TaggedClass("Retry")<{
     userMessageID: string
+    attempt: number
+    message: string
+    next: number
   }> {}
 
   /** A compaction the server has admitted but not started. */
@@ -93,6 +98,11 @@ export namespace TimelineRow {
     files: readonly string[]
   }> {}
 
+  /** How long a turn the user stopped worked, in the New timeline where the setting hides all the agent's activity. */
+  export class Worked extends Data.TaggedClass("Worked")<{
+    userMessageID: string
+  }> {}
+
   /** Where the host shows the active turn's live status when undelivered input waits below it. */
   export class Activity extends Data.TaggedClass("Activity")<{
     userMessageID: string
@@ -110,6 +120,7 @@ export namespace TimelineRow {
     | Retry
     | CompactionQueued
     | TurnDiff
+    | Worked
     | Activity
 
   export const key: (row: TimelineRow) => string = Match.typeTags<TimelineRow>()({
@@ -127,6 +138,7 @@ export namespace TimelineRow {
     Retry: (row) => `retry:${row.userMessageID}`,
     CompactionQueued: (row) => `compaction-queued:${row.inboxID}`,
     TurnDiff: (row) => `turn-diff:${row.messageID}`,
+    Worked: (row) => `worked:${row.userMessageID}`,
     // One live status exists at a time; it keeps its identity when the active turn changes.
     Activity: () => "activity",
   })
@@ -151,7 +163,11 @@ export namespace TimelineRow {
       other.text === row.text &&
       other.kind === row.kind &&
       other.resetAt === row.resetAt,
-    Retry: () => (other: TimelineRow) => Predicate.isTagged(other, "Retry"),
+    Retry: (row) => (other: TimelineRow) =>
+      Predicate.isTagged(other, "Retry") &&
+      other.attempt === row.attempt &&
+      other.message === row.message &&
+      other.next === row.next,
     CompactionQueued: (row) => (other: TimelineRow) =>
       Predicate.isTagged(other, "CompactionQueued") && other.inboxID === row.inboxID,
     TurnDiff: (row) => (other: TimelineRow) =>
@@ -160,6 +176,7 @@ export namespace TimelineRow {
       other.from === row.from &&
       other.files.length === row.files.length &&
       other.files.every((file, index) => file === row.files[index]),
+    Worked: () => (other: TimelineRow) => Predicate.isTagged(other, "Worked"),
     Activity: () => (other: TimelineRow) => Predicate.isTagged(other, "Activity"),
   })
 
@@ -201,7 +218,7 @@ export type TimelineRowMap = {
     spacing?: "tool" | "content"
   }
   Thinking: { userMessageID: string; ref: PartRef }
-  Retry: { userMessageID: string }
+  Retry: { userMessageID: string; attempt: number; message: string; next: number }
   Error: {
     userMessageID: string
     text: string
@@ -210,5 +227,6 @@ export type TimelineRowMap = {
   }
   CompactionQueued: { userMessageID: string; inboxID: string }
   TurnDiff: { userMessageID: string; messageID: string; from: string; files: readonly string[] }
+  Worked: { userMessageID: string }
   Activity: { userMessageID: string }
 }

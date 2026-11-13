@@ -9,7 +9,6 @@ import {
   ToolOutput,
   ToolResultPart,
   ToolResultValue,
-  type ContentPart,
 } from "./messages.js"
 import { ProviderMetadata } from "./options.js"
 import { Media } from "../media.js"
@@ -486,18 +485,20 @@ const appendEvent = (state: ResponseState, event: LLMEvent): ResponseState => {
 }
 
 type ContentKind = "text" | "reasoning"
+type AssistantPart = AssistantMessage["content"][number]
 
-const contentPart = (type: ContentKind, text: string, providerMetadata: ProviderMetadata | undefined): ContentPart =>
+const contentPart = (type: ContentKind, text: string, providerMetadata: ProviderMetadata | undefined): AssistantPart =>
   providerMetadata === undefined ? { type, text } : { type, text, providerMetadata }
 
-const contentWith = (state: ResponseState, content: ReadonlyArray<ContentPart>): ResponseState => ({
+const contentWith = (state: ResponseState, content: ReadonlyArray<AssistantPart>): ResponseState => ({
   ...state,
   message: Message.assistant(content),
 })
 
-const appendContent = (state: ResponseState, part: ContentPart) => contentWith(state, [...state.message.content, part])
+const appendContent = (state: ResponseState, part: AssistantPart) =>
+  contentWith(state, [...state.message.content, part])
 
-const replaceContent = (state: ResponseState, index: number, part: ContentPart) =>
+const replaceContent = (state: ResponseState, index: number, part: AssistantPart) =>
   contentWith(
     state,
     state.message.content.map((item, itemIndex) => (itemIndex === index ? part : item)),
@@ -600,7 +601,7 @@ const reduceToolInputEnd = (state: ResponseState, event: ToolInputEnd): Response
   }
 }
 
-const toolCallContent = (event: ToolCall): ContentPart =>
+const toolCallContent = (event: ToolCall): AssistantPart =>
   ToolCallPart.make({
     id: event.id,
     name: event.name,
@@ -610,7 +611,7 @@ const toolCallContent = (event: ToolCall): ContentPart =>
     ...(event.providerMetadata === undefined ? {} : { providerMetadata: event.providerMetadata }),
   })
 
-const toolResultContent = (event: ToolResult): ContentPart =>
+const toolResultContent = (event: ToolResult): AssistantPart =>
   ToolResultPart.make({
     id: event.id,
     name: event.name,

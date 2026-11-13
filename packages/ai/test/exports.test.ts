@@ -5,6 +5,7 @@ import {
   AIClient,
   AIError,
   DecisionClient,
+  EmbeddingClient,
   Generation,
   ImageClient,
   LanguageModel,
@@ -35,7 +36,6 @@ import {
   OpenAI,
   OpenAICompatible,
   OpenRouter,
-  Runway,
   TypeSafeAI,
   VercelAIGateway,
   XAI,
@@ -87,6 +87,9 @@ describe("public exports", () => {
     expect(ai.decision.generate).toBeFunction()
     expect(DecisionClient.layer).toBeDefined()
     expect(DecisionClient.fetchLayer).toBeDefined()
+    expect(ai.embedding.generate).toBeFunction()
+    expect(EmbeddingClient.layer).toBeDefined()
+    expect(AI.ai.embedding.generate).toBeFunction()
   })
 
   test("both entry points export the raw event type", () => {
@@ -112,6 +115,8 @@ describe("public exports", () => {
         yield* VideoClient.Service
         yield* SpeechClient.Service
         yield* TranscriptionClient.Service
+        yield* DecisionClient.Service
+        yield* EmbeddingClient.Service
         yield* RequestExecutor.Service
       }).pipe(Effect.provide(AIClient.layerWith(counting))),
     )
@@ -128,6 +133,7 @@ describe("public exports", () => {
     const { OpenAICompatibleResponses } = await import("@opencode/ai/providers")
 
     expect(OpenAI.model).toBeFunction()
+    expect(OpenAI.embedding).toBeFunction()
     expect(OpenAI.provider.responses).toBe(OpenAI.responses)
     expect(OpenAI.configure({ apiKey: "fixture" }).responses).toBeFunction()
     for (const provider of [Baseten, DeepSeek, Fireworks]) {
@@ -181,10 +187,6 @@ describe("public exports", () => {
     ).toBe("cloudflare-workers-ai-images")
     expect(XAI.configure({ apiKey: "fixture" }).video("grok-imagine-video-1.5").route.id).toBe("xai-video")
     expect(XAI.provider.video).toBe(XAI.video)
-    expect(Google.configure({ apiKey: "fixture" }).video("veo-3.1-generate-preview").route.id).toBe("google-video")
-    expect(Google.provider.video).toBe(Google.video)
-    expect(Runway.configure({ apiKey: "fixture" }).video("gen4.5").route.id).toBe("runway-video")
-    expect(Runway.provider.video).toBe(Runway.video)
     expect(OpenAI.configure({ apiKey: "fixture" }).speech("gpt-4o-mini-tts").route.id).toBe("openai-speech")
     expect(Google.configure({ apiKey: "fixture" }).speech("gemini-2.5-flash-preview-tts").route.id).toBe(
       "google-speech",

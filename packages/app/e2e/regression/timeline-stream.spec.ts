@@ -705,45 +705,6 @@ test("holds undelivered input still while live status above it comes and goes", 
   await expect.poll(lane).toBe(36)
 })
 
-test("jumps from a finished shell's notice to its call", async ({ page }) => {
-  await setupTimeline(page, {
-    settings: { timelineDetail: detailed },
-    sessionMessages: [
-      userMessage(),
-      assistantMessage([
-        ...searches(0, 2),
-        toolPart(
-          "prt_notice_shell",
-          "shell",
-          "completed",
-          { command: "bun serve.ts" },
-          { output: "listening", metadata: { shellID: "shell_notice" } },
-        ),
-        ...searches(2, 2),
-        textPart("prt_notice_notes", notes("Later", 80)),
-      ]),
-      {
-        id: "msg_shell_finished",
-        type: "synthetic",
-        text: '<shell id="shell_notice" state="completed" command="bun serve.ts">\nlistening\n</shell>',
-        description: "bun serve.ts",
-        metadata: { source: "shell", shellID: "shell_notice", state: "completed" },
-        time: { created: 1700000003000 },
-      },
-    ],
-  })
-
-  const notice = page.getByRole("button", { name: /^Shell finished/ })
-  const shellTrigger = page.locator('[data-timeline-part-id="prt_notice_shell"] [data-slot="collapsible-trigger"]')
-
-  await expect(notice).toBeInViewport()
-  await expect(shellTrigger).toHaveCount(0)
-  await notice.click()
-
-  await expect(shellTrigger).toHaveAttribute("aria-expanded", "true")
-  await expect(shellTrigger).toBeInViewport()
-})
-
 test.describe("Working", () => {
   test("shows Working between busy and reasoning states", async ({ page }) => {
     const timeline = await setupTimeline(page, {
@@ -1039,8 +1000,8 @@ test("grows a streaming row without a ResizeObserver loop error", async ({ page 
   expect(await page.evaluate(() => document.documentElement.dataset.resizeObserverLoops)).toBeUndefined()
 })
 
-test.describe("background shortcut", () => {
-  test("offers a standalone running subagent to the background with Ctrl+B", async ({ page }) => {
+test.describe("background work", () => {
+  test("does not offer a running subagent to the background", async ({ page }) => {
     await setupTimeline(page, {
       settings: { timelineDetail: { ...detailed, subagents: { placement: "separate" } } },
       sessionMessages: [user, runningSubagent()],
@@ -1050,19 +1011,8 @@ test.describe("background shortcut", () => {
     await expect(card).not.toContainText("(background)")
     await expect(page.getByText("Called `subagent`", { exact: false })).toHaveCount(0)
     await expect(page.locator('[data-component="background-tool-control"]')).toHaveCount(0)
-    const hint = backgroundHint(page)
-    await expect(hint).toBeVisible()
+    await expect(backgroundHint(page)).toHaveCount(0)
     await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
-    await expect
-      .poll(async () => {
-        const [cardBox, hintBox] = await Promise.all([card.boundingBox(), hint.boundingBox()])
-
-        if (!cardBox || !hintBox) return undefined
-
-        return { aligned: Math.abs(cardBox.x - hintBox.x) < 2, ordered: cardBox.y < hintBox.y }
-      })
-      .toEqual({ aligned: true, ordered: true })
-    await expectBackgroundRequest(page)
   })
 
   for (const name of ["read", "shell"] as const) {
@@ -1155,7 +1105,9 @@ test.describe("background shortcut", () => {
       const capsule = page.getByRole("button", { name: "1 shell", exact: true, includeHidden: true })
       const list = page.getByRole("menu", { name: "1 shell", exact: true })
       const closed = (await capsule.boundingBox())!
-      const inset = (await capsule.locator("svg").boundingBox())!.x - closed.x
+
+      const inset =
+        (await capsule.locator('[data-component="session-progress-indicator-v2"]').boundingBox())!.x - closed.x
 
       await capsule.click()
       // Right placement shares the capsule's end edge and mirrors its inset there; centre placement shares its centre.
@@ -1186,7 +1138,7 @@ test.describe("background shortcut", () => {
   }) => {
     const childID = "ses_background_stale_call"
 
-    // As after a lost completion notice: the call still reads running, while the child session has finished.
+    // The call records the launch; the child can finish without changing that metadata.
     const timeline = await setupTimeline(page, {
       settings: { timelineDetail: detailed },
       sessionMessages: [
@@ -1203,7 +1155,7 @@ test.describe("background shortcut", () => {
               name: "subagent",
               state: {
                 status: "completed",
-                input: { description: "Stale task", agent: "explore", background: true },
+                input: { description: "Stale task", agent: "explore" },
                 content: [{ type: "text", text: "working" }],
                 metadata: { sessionID: childID, status: "running" },
               },
@@ -1218,7 +1170,9 @@ test.describe("background shortcut", () => {
 
     const capsule = page.locator('[data-slot="session-activity-chip"]')
 
-    await expect(page.locator('[data-timeline-part-id="call_stale"]')).toContainText("Stale task (background)")
+    await expect(
+      page.locator('[data-timeline-part-id="call_stale"]').getByText("Stale task", { exact: true }),
+    ).toBeVisible()
     await expect(capsule).toHaveCount(0)
     await timeline.transport.send(status("busy", 1, childID))
     await expect(page.getByRole("button", { name: "1 subagent", exact: true })).toBeVisible()
@@ -1226,9 +1180,8 @@ test.describe("background shortcut", () => {
     await expect(capsule).toHaveCount(0)
   })
 
-  test("separates blocking and already-backgrounded work into two rows", async ({ page }) => {
+  test("shows the shortcut for a blocking shell and lists background work in the capsule", async ({ page }) => {
     const backgroundID = "ses_background_existing"
-    const blockingID = "ses_background_blocking"
 
     const timeline = await setupTimeline(page, {
       settings: { timelineDetail: detailed },
@@ -1242,18 +1195,6 @@ test.describe("background shortcut", () => {
           content: [
             {
               type: "tool",
-              id: "call_backgrounded",
-              name: "subagent",
-              state: {
-                status: "completed",
-                input: { description: "Background task", agent: "explore" },
-                content: [{ type: "text", text: "working" }],
-                metadata: { sessionID: backgroundID, status: "running" },
-              },
-              time: { created: 2, completed: 3 },
-            },
-            {
-              type: "tool",
               id: "call_shell_backgrounded",
               name: "shell",
               state: {
@@ -1261,6 +1202,18 @@ test.describe("background shortcut", () => {
                 input: { command: "sleep 120" },
                 content: [{ type: "text", text: "working" }],
                 metadata: { shellID: "shell_backgrounded", status: "running" },
+              },
+              time: { created: 2, completed: 3 },
+            },
+            {
+              type: "tool",
+              id: "call_backgrounded",
+              name: "subagent",
+              state: {
+                status: "completed",
+                input: { description: "Background task", agent: "explore" },
+                content: [{ type: "text", text: "working" }],
+                metadata: { sessionID: backgroundID, status: "running" },
               },
               time: { created: 2, completed: 3 },
             },
@@ -1276,12 +1229,8 @@ test.describe("background shortcut", () => {
             {
               type: "tool",
               id: "call_blocking",
-              name: "subagent",
-              state: {
-                status: "running",
-                input: { description: "Foreground task", agent: "build" },
-                metadata: { sessionID: blockingID },
-              },
+              name: "shell",
+              state: { status: "running", input: { command: "sleep 10" }, metadata: { shellID: "shell_blocking" } },
               time: { created: 4 },
             },
           ],
@@ -1291,39 +1240,28 @@ test.describe("background shortcut", () => {
       sessions: [
         session(),
         session({ id: backgroundID, parentID: sessionID, title: "Background task", agent: "explore" }),
-        session({ id: blockingID, parentID: sessionID, title: "Foreground task", agent: "build" }),
       ],
       sessionStatus: {
         [sessionID]: { type: "busy" },
         [backgroundID]: { type: "busy" },
-        [blockingID]: { type: "busy" },
       },
+      shellCommands: [
+        { id: "shell_backgrounded", command: "sleep 120" },
+        { id: "shell_blocking", command: "sleep 10" },
+      ].map((shell) => ({
+        ...shell,
+        status: "running" as const,
+        cwd: directory,
+        shell: "bash",
+        file: `/tmp/${shell.id}.out`,
+        metadata: { sessionID },
+        time: { started: 2 },
+      })),
     })
 
-    await timeline.transport.send({
-      id: "evt_background_shell_created",
-      created: 3,
-      type: "shell.created",
-      location: { directory },
-      data: {
-        info: {
-          id: "shell_backgrounded",
-          status: "running",
-          command: "sleep 120",
-          cwd: directory,
-          shell: "bash",
-          file: "/tmp/background.out",
-          metadata: { sessionID },
-          time: { started: 2 },
-        },
-      },
-    })
     const backgroundCard = page.locator('[data-timeline-part-id="call_backgrounded"]')
-    const blockingCard = page.locator('[data-timeline-part-id="call_blocking"]')
     await expect(backgroundHint(page)).toBeVisible()
-    await expect(backgroundCard).toContainText("Background task (background)")
-    await expect(blockingCard).toContainText("Foreground task")
-    await expect(blockingCard).not.toContainText("(background)")
+    await expect(backgroundCard).toContainText("Background task")
 
     const used = page
       .locator('[data-timeline-part-ids="call_shell_backgrounded"]')
@@ -1331,18 +1269,18 @@ test.describe("background shortcut", () => {
 
     await expect(used).toHaveText(/^Used\s*1\s*Shell$/)
     await expect(used).toHaveAttribute("aria-expanded", "false")
-    const activity = page.getByRole("button", { name: "2 subagents · 1 shell", exact: true })
-    const list = page.getByRole("menu", { name: "2 subagents · 1 shell", exact: true })
+    const summary = "1 subagent · 1 shell"
+    const list = page.getByRole("menu", { name: summary, exact: true })
     // The open menu hides the rest of the page from the accessibility tree, the capsule included.
-    const capsule = page.getByRole("button", { name: "2 subagents · 1 shell", exact: true, includeHidden: true })
-    const label = capsule.getByText("2 subagents · 1 shell", { exact: true })
-    const glyph = await capsule.locator("svg").boundingBox()
+    const capsule = page.getByRole("button", { name: summary, exact: true, includeHidden: true })
+    const label = capsule.getByText(summary, { exact: true })
+    const glyph = await capsule.locator('[data-component="session-progress-indicator-v2"]').boundingBox()
     const text = await label.boundingBox()
     const inset = glyph!.x - (await capsule.boundingBox())!.x
 
-    await activity.click()
+    await capsule.click()
     await expect(list.locator('[data-slot="menu-v2-group-label"], [data-slot="menu-v2-separator"]')).toHaveCount(0)
-    await expect(list.getByText("2 subagents · 1 shell", { exact: true })).toHaveCount(0)
+    await expect(list.getByText(summary, { exact: true })).toHaveCount(0)
     await expect(label).toBeVisible()
 
     // The panel opens above the capsule on its grid: row glyphs on the capsule's glyph, names and commands on its
@@ -1357,7 +1295,7 @@ test.describe("background shortcut", () => {
             const content = item.querySelector('[data-slot="menu-v2-item-content"]')
 
             return [
-              content?.querySelector(":scope > svg")?.getBoundingClientRect().left ?? NaN,
+              content?.querySelector(":scope > :first-child")?.getBoundingClientRect().left ?? NaN,
               content?.querySelector(":scope > span:not([data-slot])")?.getBoundingClientRect().left ?? NaN,
               item.querySelector('[data-slot="session-activity-elapsed"]')?.getBoundingClientRect().right ?? NaN,
             ]
@@ -1366,7 +1304,7 @@ test.describe("background shortcut", () => {
 
         return (
           panel!.y + panel!.height <= anchor!.y &&
-          rows.length === 3 &&
+          rows.length === 2 &&
           rows.every(
             ([left, start, end]) =>
               Math.abs(left - glyph!.x) < 0.5 &&
@@ -1378,7 +1316,6 @@ test.describe("background shortcut", () => {
       .toBe(true)
     await expect(list.getByRole("menuitem")).toHaveText([
       // The fixture starts every task near the epoch, so each row ends with an hours-long run time.
-      /^Build\s*Foreground task\d+h \d{2}m$/,
       /^Explore\s*Background task\d+h \d{2}m$/,
       /^sleep 120\d+h \d{2}m$/,
     ])
@@ -1390,69 +1327,85 @@ test.describe("background shortcut", () => {
 
     const interrupt = page.waitForRequest(
       (request) =>
-        request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${blockingID}/interrupt`,
+        request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${backgroundID}/interrupt`,
     )
 
-    const foreground = list.getByRole("menuitem", { name: /Foreground task/ })
+    const subagent = list.getByRole("menuitem", { name: /Background task/ })
 
-    await foreground.hover()
-    await foreground.getByRole("button", { name: "Interrupt subagent", exact: true }).click()
+    await subagent.hover()
+    await subagent.getByRole("button", { name: "Interrupt subagent", exact: true }).click()
     await interrupt
     await expect(list).toBeVisible()
 
-    const kill = page.waitForRequest(
-      (request) => request.method() === "DELETE" && new URL(request.url()).pathname === "/api/shell/shell_backgrounded",
-    )
+    const kill = await holdRoute(page, /\/api\/shell\/shell_backgrounded(\?|$)/, { method: "DELETE" })
+    const shellRow = list.getByRole("menuitem", { name: /sleep 120/ })
 
-    await list.getByRole("menuitem", { name: /sleep 120/ }).hover()
+    await shellRow.hover()
     await page.keyboard.press("Delete")
-    await kill
+    await kill.arrived
+    // A second Delete, or a click on the row's stop button, while the first stop runs sends nothing more.
+    const stopping = shellRow.getByRole("button", { name: "Kill shell command", exact: true })
+    await expect(stopping).toHaveAttribute("aria-busy", "true")
+    await page.keyboard.press("Delete")
+    // aria-disabled leaves a real click through, which Playwright's actionability check would refuse.
+    await stopping.click({ force: true })
+    await expect(stopping).toHaveAttribute("aria-busy", "true")
+    expect(kill.requests).toHaveLength(1)
+    kill.release()
+    await expect(stopping).not.toHaveAttribute("aria-busy")
+    expect(kill.requests).toHaveLength(1)
     await page.keyboard.press("Escape")
     await expect(list).toHaveCount(0)
-    await expect(backgroundCard).toContainText("Background task (background)")
     await expect(backgroundCard.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
     await used.click()
     await expect(
       page.locator('[data-timeline-part-id="call_shell_backgrounded"] [data-component="text-shimmer"]'),
     ).toHaveAttribute("data-active", "true")
 
-    // SAFETY: the transport forwards this payload unchanged, and the client marks a session idle from
-    // `type` and `data.sessionID` alone; the child session's event needs no durable metadata here.
-    await timeline.transport.send({
-      id: "evt_background_succeeded",
-      created: Date.now(),
-      type: "session.execution.succeeded",
-      data: { sessionID: backgroundID },
-    } as never)
+    await timeline.send(status("idle", 1, backgroundID))
     await expect(backgroundCard.locator('[data-component="session-progress-indicator-v2"]')).toHaveCount(0)
-    await expect(backgroundCard).toContainText("Background task (background)")
+    await expect(backgroundCard).toContainText("Background task")
   })
 
   for (const fixture of [
     { name: "from far below", before: 40, searches: 40, after: 80 },
     // The collapsed timeline fits the viewport, so it only becomes scrollable once the group opens.
-    { name: "that opens the last row", before: 0, searches: 40, after: 0 },
+    { name: "in an initially unscrollable timeline", before: 0, searches: 40, after: 0 },
     // Reaching the shell lands on the end of the timeline, which would otherwise follow new content again.
     { name: "at the end of the timeline", before: 40, searches: 0, after: 0 },
   ]) {
-    // A starting subagent call is the pill's row that reveals its call; grouping subagents puts it inside the group.
-    test(`holds a revealed call ${fixture.name} just under its stuck group header`, async ({ page }) => {
+    test(`holds the call revealed by a shell notice ${fixture.name} just under its stuck group header`, async ({
+      page,
+    }) => {
       const timeline = await setupTimeline(page, {
-        settings: { timelineDetail: { ...detailed, subagents: { placement: "grouped" } } },
-        sessionStatus: { [sessionID]: { type: "busy" } },
-        messages: [
+        settings: { timelineDetail: detailed },
+        sessionMessages: [
           userMessage(),
-          assistantMessage(
-            [
-              ...(fixture.before ? [textPart("prt_earlier", notes("Earlier", fixture.before))] : []),
-              ...searches(0, 42 - fixture.searches),
-              toolPart("prt_far_call", "subagent", "running", { description: "Map the far code", agent: "explore" }),
-              // The open group outgrows the viewport, so aligning the group instead of the call misses it.
-              ...searches(42 - fixture.searches, fixture.searches),
-              ...(fixture.after ? [textPart("prt_follow_up", notes("Follow-up", fixture.after))] : []),
-            ],
-            { completed: false },
-          ),
+          assistantMessage([
+            ...(fixture.before ? [textPart("prt_earlier", notes("Earlier", fixture.before))] : []),
+            ...searches(0, 42 - fixture.searches),
+            toolPart(
+              "prt_far_call",
+              "shell",
+              "completed",
+              { command: "bun serve.ts" },
+              {
+                output: "listening",
+                metadata: { shellID: "shell_notice", status: "running" },
+              },
+            ),
+            // The open group outgrows the viewport, so aligning the group instead of the call misses it.
+            ...searches(42 - fixture.searches, fixture.searches),
+            ...(fixture.after ? [textPart("prt_follow_up", notes("Follow-up", fixture.after))] : []),
+          ]),
+          {
+            id: "msg_1002_shell_finished",
+            type: "synthetic",
+            text: '<shell id="shell_notice" state="completed" command="bun serve.ts">\nlistening\n</shell>',
+            description: "bun serve.ts",
+            metadata: { source: "shell", shellID: "shell_notice", state: "completed" },
+            time: { created: 1700000003000 },
+          },
         ],
       })
 
@@ -1471,26 +1424,25 @@ test.describe("background shortcut", () => {
           })
           .toBe(0)
 
-      await expect(
-        fixture.after ? page.getByText(`Follow-up note ${fixture.after}.`, { exact: true }) : group,
-      ).toBeInViewport()
+      const notice = page.getByRole("button", { name: /^Shell finished/ })
+      await expect(notice).toBeInViewport()
       await expect(call).toHaveCount(0)
-      await page.getByRole("button", { name: "1 subagent", exact: true }).click()
-      await page
-        .getByRole("menu", { name: "1 subagent", exact: true })
-        .getByRole("menuitem", { name: /Map the far code/ })
-        .click()
+      await notice.click()
 
       await expect(group).toHaveAttribute("aria-expanded", "true")
-      await expect(call).toBeInViewport()
+      const trigger = call.locator('[data-slot="collapsible-trigger"]')
+      await expect(trigger).toHaveAttribute("aria-expanded", "true")
+      await expect(trigger).toBeInViewport()
 
       // A call at the very end cannot rise under the header until more content arrives below it.
       if (fixture.searches) await aligned()
       // Nothing covers the row, so it takes the next click.
-      await call.click({ trial: true })
+      await trigger.click({ trial: true })
 
       // The agent keeps writing below the call; the call stays where it was revealed.
-      await timeline.send(partUpdated(textPart("prt_late", notes("Late", 30))))
+      const late = assistantMessage([], { id: "msg_1003_late", completed: false, created: 1700000004000 })
+      await timeline.send(stepStarted(late))
+      await timeline.send(partUpdated({ id: "prt_late", messageID: late.id, type: "text", text: notes("Late", 30) }))
       await expect(page.getByText("Late note 30.", { exact: true })).toBeAttached()
       await aligned()
     })
@@ -2206,6 +2158,44 @@ test("a pending quote send hides mentions and keeps the comment read-only", asyn
   admission.release()
   await expect(popup).toHaveCount(0)
   await expect.poll(() => sent).toEqual(["queue"])
+})
+
+test("a double-clicked quote send sends once and keeps the popup open until it settles", async ({ page }) => {
+  const sent: string[] = []
+
+  await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([textPart("prt_quote_double", "Keep this quoted passage.")])],
+    onPrompt: (input) => void sent.push(String(input.body.delivery)),
+  })
+
+  const answer = page.locator(
+    `[data-timeline-part-id="${renderedPartID("prt_quote_double")}"] [data-slot="text-part-body"]`,
+  )
+
+  await expect(answer).toHaveText("Keep this quoted passage.")
+  await selectQuoteText(answer)
+  await page
+    .getByRole("toolbar", { name: "Quote selection" })
+    .getByRole("button", { name: "Quote", exact: true })
+    .click()
+  const popup = page.locator('[data-component="composer-quote-comment"]')
+
+  const chip = page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
+
+  const modifier = await page.evaluate(() => (/(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"))
+
+  await popup.locator("textarea").fill("Only once")
+  const admission = await holdRoute(page, new RegExp(`/api/session/${sessionID}/prompt(\\?|$)`), { method: "POST" })
+
+  await popup.locator('[data-slot="line-comment-v2-submit"]').dblclick({ modifiers: [modifier] })
+  await admission.arrived
+  // A click on the quote's chip while the send is in flight leaves the popup and its pending send alone.
+  await chip.click()
+  await expect(popup.locator('[data-component="loader-v2"]')).toBeVisible()
+  admission.release()
+  await expect(popup).toHaveCount(0)
+  await expect.poll(() => sent.length).toBe(1)
+  expect(admission.requests).toHaveLength(1)
 })
 
 function selectQuoteText(target: Locator) {
@@ -3213,6 +3203,8 @@ test("opens an optional comment beside the quote action and skips it with Alt-cl
   await page.keyboard.press("Enter")
   await expect(comment).toHaveCount(0)
   await expect(chips.nth(0)).toContainText("Why first?")
+  // The editor takes focus back a frame after the comment closes, and its caret would replace the next selection.
+  await expect(editor).toBeFocused()
 
   await select("The second sentence to quote.")
   await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
@@ -3317,6 +3309,16 @@ test("reaches the quote action from the keyboard and blocks a selection over the
   await expect(more).not.toBeFocused()
   expect(await page.evaluate(() => !!document.activeElement?.closest('[data-component="timeline-quote"]'))).toBe(false)
   await expect(composer).toHaveCount(1)
+
+  // A press that turns into a native drag of the selection ends with dragend, and no pointerup follows.
+  await page.evaluate(() => window.getSelection()?.removeAllRanges())
+  await expect(toolbar).toHaveCount(0)
+  await short.hover()
+  await page.mouse.down()
+  await page.evaluate(() => document.dispatchEvent(new Event("dragend")))
+  await short.evaluate((element) => window.getSelection()?.selectAllChildren(element))
+  await expect(toolbar).toBeVisible()
+  await page.mouse.up()
 })
 
 function pauseExitAnimations(locator: Locator) {

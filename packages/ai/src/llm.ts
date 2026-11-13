@@ -12,9 +12,9 @@ import {
   type TriggerCompactOptions,
 } from "./route/client.js"
 import {
-  GenerationOptions,
   InvalidProviderOutputError,
   InvalidRequestError,
+  mergeGeneration,
   AIError,
   LLMEvent,
   LLMResponse,
@@ -31,6 +31,7 @@ import {
   ToolEntry,
   Usage,
   type LanguageModelProviderOptions,
+  type GenerationOptionsFields,
   type LLMRequest,
   type ToolEntryInput,
   withPartial,
@@ -44,17 +45,17 @@ export type LLMRequestInput<Model extends LanguageModel = LanguageModel> = TextR
 
 /** Exactly one of `prompt`, a single user message, or `messages`, the full conversation. */
 export type PromptOrMessages =
-  | { readonly prompt: Message.ContentInput; readonly messages?: never }
+  | { readonly prompt: Message.UserContentInput; readonly messages?: never }
   | { readonly messages: ReadonlyArray<Message | Message.Input>; readonly prompt?: never }
 
 interface TextRequestFields<Model extends LanguageModel>
-  extends BaseRequest<Model, NoInfer<LanguageModelProviderOptions<Model>>> {
+  extends BaseRequest<Model, NoInfer<LanguageModelProviderOptions<Model>>>,
+    GenerationOptionsFields {
   readonly id?: string
   readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
   /** Sent in array order. Pass `tool(...)` values or wire entries such as hosted provider tools. */
   readonly tools?: ReadonlyArray<Tool | ToolEntryInput>
   readonly toolChoice?: ToolChoice.Input
-  readonly generation?: GenerationOptions.Input
   readonly cache?: CachePolicy
   /** Stable cache affinity for protocols that support provider-managed prompt caching. */
   readonly promptCacheKey?: string
@@ -300,7 +301,7 @@ export const request = <const Model extends LanguageModel>(input: LLMRequestInpu
     messages: input.prompt === undefined ? (input.messages ?? []).map(Message.make) : [Message.user(input.prompt)],
     tools: input.tools?.map((item) => ("_definition" in item ? item._definition : ToolEntry.make(item))) ?? [],
     toolChoice: input.toolChoice ? ToolChoice.make(input.toolChoice) : undefined,
-    generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
+    ...mergeGeneration(input),
     providerOptions: input.providerOptions,
     headers: input.headers,
     fetch: input.fetch,

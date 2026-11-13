@@ -5,7 +5,7 @@ import { Endpoint } from "./endpoint.js"
 import type { Interface } from "./executor-service.js"
 import { RequestExecutor } from "./executor.js"
 import { MediaProtocol } from "./media-protocol.js"
-import { Generation, isTerminal } from "../generation.js"
+import { Generation } from "../generation.js"
 import { isRetryable } from "../provider-error.js"
 import {
   AIError,
@@ -194,21 +194,17 @@ export const queued = <Request extends MediaRequest, Response, Token>(
     }) =>
       transport.call("GET", operation.path(token), exchange, execute).pipe(
         Effect.retry({ schedule: READ_RETRY, while: isRetryable }),
-        Effect.flatMap((sent) => operation.decode(sent.response, { token, auth: sent.auth })),
+        Effect.flatMap((sent) => operation.decode(sent.response, { token })),
       )
     const status = poll(protocol.status)
     const cancel = protocol.cancel
-    const send =
-      cancel === undefined
-        ? undefined
-        : transport.call(cancel.method, cancel.path(token), exchange, execute).pipe(Effect.asVoid)
     return {
       status,
       result: poll(protocol.result),
       cancel:
-        send !== undefined && cancel?.activeOnly
-          ? status.pipe(Effect.flatMap((snapshot) => (isTerminal(snapshot.status) ? Effect.void : send)))
-          : send,
+        cancel === undefined
+          ? undefined
+          : transport.call(cancel.method, cancel.path(token), exchange, execute).pipe(Effect.asVoid),
     }
   }
 
@@ -313,7 +309,6 @@ const makeTransport = <Request extends MediaRequest>(
 ) => {
   const authorize = Auth.toEffect(input.auth)
   const baseURL = (path: string) => new URL(`${Endpoint.trimBaseUrl(input.endpoint.baseURL ?? "")}${path}`)
-  /** `auth` is only what `Auth` added or changed, never untouched deployment headers. */
   const send = Effect.fn("MediaRoute.send")(function* (
     call: {
       readonly method: AuthInput["method"]
@@ -338,10 +333,7 @@ const makeTransport = <Request extends MediaRequest>(
       encoded.apply(HttpClientRequest.make(call.method)(url).pipe(HttpClientRequest.setHeaders(headers))),
       RequestExecutor.withFetch(fetch),
     )
-    return {
-      response,
-      auth: Object.fromEntries(Object.entries(headers).filter(([key, value]) => encoded.headers[key] !== value)),
-    }
+    return { response }
   })
   return {
     /** Route and model overlays; `start` additionally merges the request's own. */

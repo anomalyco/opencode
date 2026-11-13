@@ -2,14 +2,20 @@ export * as SessionModelRequest from "./model-request.js"
 
 import {
   ai,
-  GenerationOptions,
+  AssistantMessage,
+  type ContentPart,
+  GENERATION_KEYS,
   type GenerationOptionsFields,
   LanguageModel,
   type LLM,
   type LLMRequest,
   type Media,
+  type MediaPart,
   Message,
   SystemPart,
+  ToolMessage,
+  type ToolResultPart,
+  UserMessage,
 } from "@opencode/ai/effect"
 import type { StreamOptions } from "@opencode/ai/route"
 import type {
@@ -18,6 +24,7 @@ import type {
   SessionGenerate,
   SessionRequest,
   SessionRequestKind,
+  SessionRequestMessage,
   SessionTitle,
 } from "@opencode/plugin/effect/session"
 import type { Agent } from "@opencode/schema/agent"
@@ -44,7 +51,6 @@ const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
 const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
-const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
 // Used when the catalog has no output limit for the model.
 const OUTPUT_TOKEN_FALLBACK = 32_000
 // No reply needs more, however much the model allows.
@@ -78,7 +84,7 @@ export interface Input {
   readonly model: SessionRunnerModel.Resolved
   readonly tools?: Tool.Snapshot
   readonly system: Array<SystemPart>
-  readonly messages: Array<Message>
+  readonly messages: Array<SessionRequestMessage>
   readonly toolChoice?: LLM.LLMRequestInput["toolChoice"]
   /** Only the durable runner may use a stateful WebSocket. */
   readonly webSocket?: "session"
@@ -118,7 +124,15 @@ export const baseTranscript = (input: {
         metadata: { experimental: { instructions: input.initial } },
       },
     ].filter((part) => part.text.length > 0),
-    messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey),
+    // Hooks read each stored message's metadata on the messages built from it; `prepare` strips it before the request.
+    messages: input.messages.flatMap((message) =>
+      toLLMMessages([message], input.model.ref, providerMetadataKey).map(
+        (item): SessionRequestMessage =>
+          message.metadata === undefined || item.id !== message.id
+            ? item
+            : { ...item, metadata: message.metadata },
+      ),
+    ),
   }
 }
 
@@ -161,29 +175,46 @@ const mediaBytes = (media: Media.Asset) => {
 const replaceMedia = (
   messages: LLMRequest["messages"],
   replace: (media: { mime: string; name: string | undefined; bytes: () => number }) => string | undefined,
-) =>
-  messages.map((message) => {
-    if (message.role === "system") return message
-    const content = message.content.map((part) => {
-      if (part.type === "media") {
-        const text = replace({ mime: part.media.mediaType, name: part.filename, bytes: () => mediaBytes(part.media) })
-        return text === undefined ? part : Message.text(text)
-      }
-      if (part.type !== "tool-result" || part.result.type !== "content") return part
-      const result = part.result
-      const value = result.value.map((item): Content => {
-        if (item.type !== "file") return item
-        const text = replace({ mime: item.mime, name: item.name, bytes: () => item.uri.length })
-        return text === undefined ? item : { type: "text", text }
-      })
-      return value.every((item, index) => item === result.value[index])
-        ? part
-        : { ...part, result: { ...result, value } }
+) => {
+  const media = (part: MediaPart) => {
+    const text = replace({ mime: part.media.mediaType, name: part.filename, bytes: () => mediaBytes(part.media) })
+    return text === undefined ? part : Message.text(text)
+  }
+  const toolResult = (part: ToolResultPart) => {
+    if (part.result.type !== "content") return part
+    const result = part.result
+    const value = result.value.map((item): Content => {
+      if (item.type !== "file") return item
+      const text = replace({ mime: item.mime, name: item.name, bytes: () => item.uri.length })
+      return text === undefined ? item : { type: "text", text }
     })
-    return content.every((part, index) => part === message.content[index])
-      ? message
-      : Message.make({ ...message, content })
+    return value.every((item, index) => item === result.value[index]) ? part : { ...part, result: { ...result, value } }
+  }
+  return messages.map((message) => {
+    switch (message.role) {
+      case "system":
+        return message
+      case "user": {
+        const content = message.content.map((part) => (part.type === "media" ? media(part) : part))
+        return sameParts(content, message.content) ? message : new UserMessage({ ...message, content })
+      }
+      case "assistant": {
+        const content = message.content.map((part) => {
+          if (part.type === "media") return media(part)
+          return part.type === "tool-result" ? toolResult(part) : part
+        })
+        return sameParts(content, message.content) ? message : new AssistantMessage({ ...message, content })
+      }
+      case "tool": {
+        const content = message.content.map(toolResult)
+        return sameParts(content, message.content) ? message : new ToolMessage({ ...message, content })
+      }
+    }
   })
+}
+
+const sameParts = (next: ReadonlyArray<ContentPart>, previous: ReadonlyArray<ContentPart>) =>
+  next.every((part, index) => part === previous[index])
 
 export const unsupportedParts = (
   messages: LLMRequest["messages"],
@@ -238,7 +269,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const hooks = yield* PluginHooks.Service
     const transport = yield* SessionModelTransport.Service
-    const app = yield* App.Metadata
+    const app = yield* App.Service
     const prepare = Effect.fn("SessionModelRequest.prepare")(function* <
       S extends SessionRequest & { tools?: Definitions },
     >(kind: SessionRequestKind, input: Input, shape: (draft: SessionRequest, tools: Definitions) => Effect.Effect<S>) {
@@ -305,10 +336,24 @@ export const layer = Layer.effect(
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         cache: model.cache?.ttl === undefined ? undefined : { ttl: model.cache.ttl },
         system: shaped.system,
-        messages: boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider)),
-        tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
+        // Strip the stored metadata hooks could read, so it never reaches the provider.
+        messages: boundImages(
+          unsupportedParts(
+            shaped.messages.map((message) => {
+              const { metadata, ...rest } = message
+              return metadata === undefined ? message : Message.make(rest)
+            }),
+            model.capabilities,
+            model.model.provider,
+          ),
+        ),
+        tools: Array.from(hooked, ([name, t]) => ({
+          ...t,
+          name,
+          freeform: t.freeform && model.capabilities.freeform?.includes(t.freeform.type) ? t.freeform : undefined,
+        })),
         toolChoice: input.toolChoice,
-        generation: Object.keys(generation).length === 0 ? undefined : generation,
+        ...generation,
         providerOptions: Object.keys(providerOptions).length === 0 ? undefined : providerOptions,
       })
 

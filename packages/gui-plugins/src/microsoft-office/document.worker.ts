@@ -18,6 +18,13 @@ import { createYrsPositionProjection, createYrsSession, type YrsPositionProjecti
 import { wordFonts } from "./fonts"
 import { createBitmapImageResolver } from "./word-images"
 import { layerFont, type WordMethods, type WordPageSize, type WordSpan } from "./word-protocol"
+import {
+  createWorkerLayoutState,
+  stepBlocks,
+  transitionWorkerLayout,
+  workerLayoutComplete,
+  type WorkerLayoutState,
+} from "./word-layout-machine"
 import { pageText, positionTarget, type TextMeasure } from "./word-text"
 import { serveWorker, Transfer } from "./worker-rpc"
 
@@ -48,9 +55,6 @@ const decodeLayoutReply = Schema.decodeUnknownSync(
 /** Pages laid out and built before the first paint; later pages are built as they near the viewport. */
 const firstPages = 3
 
-/** How long one layout step may hold back a paint that waits behind it, in milliseconds. */
-const stepBudget = 24
-
 /**
  * How many pages either side of the page painted last stay built. A built page holds about 5 MB in the engine and
  * builds again in about 100 ms. This keeps every page near the viewport, which paints a viewport ahead in both
@@ -62,6 +66,9 @@ type Opened = Awaited<ReturnType<typeof open>>
 
 /** A value built on first use. */
 type Lazy<T> = { value: T | undefined }
+
+/** Where the region layout that finishes the document has got to. */
+type LayoutCursor = { state: WorkerLayoutState }
 
 /** The document this worker opened, once it has. */
 const opened: Lazy<Opened> = { value: undefined }
@@ -167,9 +174,8 @@ async function open(bytes: Uint8Array) {
 
   if (retained.frame.displayList.pages.length === 0) throw new Error("The document produced no pages")
 
-  // The region layout that finishes the document: begun on the first step, `cost` the running average milliseconds a
-  // body block takes.
-  const layout = { loading: decodeLayoutReply(prefix).provisional ?? false, begun: false, cost: 3 }
+  // The region layout that finishes the document, a step at a time.
+  const layout: LayoutCursor = { state: createWorkerLayoutState(decodeLayoutReply(prefix).provisional ?? false) }
 
   // Builds a page's content when it is needed and not built, the first time or again after `release`.
   const built = (index: number) => {
@@ -190,7 +196,7 @@ async function open(bytes: Uint8Array) {
   // when it is needed.
   const release = (painted: number) => {
     // The engine releases pages of the whole document's layout only, and few pages show before it.
-    if (layout.loading) return
+    if (!workerLayoutComplete(layout.state)) return
 
     const far = retained.frame.displayList.pages.flatMap((page, index) =>
       !page.unbuilt && Math.abs(painted - index) > keptAround ? [index] : [],
@@ -209,7 +215,7 @@ async function open(bytes: Uint8Array) {
     const before = retained.frame.displayList.pages
 
     retained.frame = display(retained.frame, reply)
-    layout.loading = false
+    layout.state = transitionWorkerLayout(layout.state, { type: "step.completed" })
 
     const pages = retained.frame.displayList.pages
 
@@ -234,34 +240,41 @@ async function open(bytes: Uint8Array) {
 
   return {
     pages: () => retained.frame.displayList.pages,
-    loading: () => layout.loading,
+    loading: () => !workerLayoutComplete(layout.state),
     built,
-    /**
-     * Lays out about `stepBudget` milliseconds more of the body. Blocks vary widely, and sizing a step by the last one
-     * alone overshoots after a run of cheap blocks.
-     */
+    /** Begins the region layout, or lays out about `WORD_STEP_BUDGET_MS` more of the body. */
     step: () => {
-      if (!layout.loading) {
+      const state = layout.state
+
+      if (state.status === "complete") {
         const pages = retained.frame.displayList.pages
 
         return { done: true as const, pages: pages.map(pageSize), kept: pages.map(() => true) }
       }
 
-      if (!layout.begun) {
-        layout.begun = true
-
-        const begun = session.beginRegionLayout(input)
-
-        return begun.layoutJson === undefined ? { done: false as const } : complete(begun.layoutJson)
-      }
-
-      const blocks = Math.min(8192, Math.max(1, Math.round(stepBudget / layout.cost)))
+      const blocks = state.status === "stepping" ? stepBlocks(state.cost) : 0
       const started = performance.now()
-      const progress = session.resumeRegionLayout(blocks)
 
-      layout.cost = layout.cost * 0.7 + ((performance.now() - started) / blocks) * 0.3
+      // A step that throws returns the cursor to the prefix, so the next step begins the region layout again rather
+      // than resuming a broken one.
+      try {
+        const progress =
+          state.status === "stepping" ? session.resumeRegionLayout(blocks) : session.beginRegionLayout(input)
 
-      return progress.layoutJson === undefined ? { done: false as const } : complete(progress.layoutJson)
+        if (progress.layoutJson !== undefined) return complete(progress.layoutJson)
+
+        layout.state = transitionWorkerLayout(state, {
+          type: "step.progressed",
+          elapsedMs: performance.now() - started,
+          blocks,
+        })
+
+        return { done: false as const }
+      } catch (error) {
+        layout.state = transitionWorkerLayout(layout.state, { type: "step.failed" })
+
+        throw error
+      }
     },
     paint: async (index: number, scale: number, ratio: number, signal: AbortSignal) => {
       // A page that scrolled away before its paint began, or while it rasterized, needs no bitmap.

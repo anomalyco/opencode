@@ -160,6 +160,7 @@ export const dict = {
   "ui.common.dismiss": "Отхвърляне",
   "ui.common.close": "затвори",
   "ui.common.next": "Следваща",
+  "ui.common.continue": "Продължи",
   "ui.common.submit": "Изпратете",
   "ui.common.showMore": "Покажи повече",
   "ui.permission.deny": "Откажи",
