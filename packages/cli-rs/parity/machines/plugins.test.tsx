@@ -1,18 +1,22 @@
 // The shared fixture of the plugin work (rich-plugins 4.14, O-124), TypeScript reader: the TS TUI is driven through
 // the life machine of plugins.json, with parity/plugins/life loaded as a local plugin, each path on a fresh app,
 // observing after every action. The Rust reader is crates/tui/tests/all/plugin_machines.rs; both read the file and
-// neither reads the other. Run it from packages/cli-rs: `bun test parity/machines`. It takes about two minutes, so
-// it is not part of packages/tui's suite.
+// neither reads the other. Run it from packages/cli-rs: `bun test parity/machines`. It takes a few minutes, so it is
+// not part of packages/tui's suite.
 import { InputRenderable } from "@opentui/core"
 import { expect, test } from "bun:test"
+import { mkdir, symlink } from "node:fs/promises"
 import path from "node:path"
 import { createAppFixture } from "../../../tui/test/fixture/app"
+import { tmpdir } from "../../../tui/test/fixture/fixture"
 import machines from "./plugins.json"
 
 type Fixture = Awaited<ReturnType<typeof createAppFixture>>
 type Machine = { initial: string; states: Record<string, [string, Record<string, string>]>; xfail: string[][] }
+// The app, and the copy of the plugin a reload rewrites.
+type App = { setup: Fixture; entry: string; builds: number }
 
-const plugin = path.join(import.meta.dir, "../plugins/life")
+const plugin = path.join(import.meta.dir, "../plugins/life/tui.tsx")
 // JSON gives each state as a mixed array; the file's shape is checked once here.
 const machine: Machine = {
   ...machines.machines.life,
@@ -25,15 +29,30 @@ const machine: Machine = {
 }
 let runs = 0
 
+// A fresh app with a copy of the plugin, which resolves packages/tui's dependencies (as `copyPlugin` does).
 async function open() {
+  const root = await tmpdir()
+  const directory = path.join(root.path, "life")
+  const entry = path.join(directory, "tui.tsx")
+  await mkdir(directory)
+  await symlink(path.join(import.meta.dir, "../../../tui/node_modules"), path.join(directory, "node_modules"))
+  await Bun.write(entry, Bun.file(plugin))
   const setup = await createAppFixture({
     width: 80,
     height: 24,
-    config: { animations: false, plugins: [{ package: plugin, options: { run: ++runs } }] },
+    config: { animations: false, plugins: [{ package: directory, options: { run: ++runs } }] },
   })
   await setup.ready
   await setup.waitForFrame((frame) => frame.includes("life plugin:"))
-  return setup
+  return {
+    setup,
+    entry,
+    builds: 1,
+    async [Symbol.asyncDispose]() {
+      await setup[Symbol.asyncDispose]()
+      await root[Symbol.asyncDispose]()
+    },
+  }
 }
 
 // A wall-clock wait on the frame, as `command-selection.test.tsx` polls: the plugin manager and the palette load
@@ -97,7 +116,8 @@ async function closeManager(setup: Fixture) {
   await until(setup, (frame) => row(frame) === undefined, "the plugin manager closing")
 }
 
-async function act(setup: Fixture, action: string) {
+async function act(app: App, action: string) {
+  const setup = app.setup
   if (action === "toggle") {
     const before = await manager(setup)
     setup.mockInput.pressEnter()
@@ -106,29 +126,44 @@ async function act(setup: Fixture, action: string) {
     await closeManager(setup)
     return
   }
+  if (action === "escape") {
+    setup.mockInput.pressEscape()
+    await until(setup, (frame) => !frame.includes("Life prompt"), "the prompt closing")
+    return
+  }
+  if (action === "reload") {
+    // A new build in place; the watcher reconciles. The line names the build, also under a dialog.
+    const source = await Bun.file(app.entry).text()
+    await Bun.write(app.entry, source.replace(/const build = \d+/, `const build = ${++app.builds}`))
+    await until(setup, (frame) => frame.includes(`build ${app.builds}`), `build ${app.builds}`)
+    return
+  }
   await palette(setup, `Life ${action}`, true)
   await setup.renderOnce()
 }
 
+// line/palette/row/dialog. While its prompt shows, the palette and the manager would replace it, so the first three
+// are not read.
 async function observe(setup: Fixture) {
   const frame = setup.captureCharFrame()
+  if (frame.includes("Life prompt")) return "?/?/?/open"
   const line = ["A", "B"].find((side) => frame.includes(`life plugin: ${side}`)) ?? "-"
   const listed = (await palette(setup, "Life flip", false)) ? "yes" : "no"
   const found = await manager(setup)
   await closeManager(setup)
   const status = found.includes("failed") ? "failed" : found.includes("inactive") ? "off" : "on"
-  return `${line}/${listed}/${status}`
+  return `${line}/${listed}/${status}/-`
 }
 
 // Replays `path` on a fresh app. An action a state has no edge for does nothing. The first difference that is not a
 // known row, or undefined; a known row ends the path.
 async function replay(path: string[], known: Set<string>, seen: Set<string>) {
-  await using setup = await open()
+  await using app = await open()
   let state = machine.initial
   for (const [index, action] of ["mount", ...path].entries()) {
     const next = index === 0 ? state : (machine.states[state][1][action] ?? state)
-    if (index > 0) await act(setup, action)
-    const [expected, actual] = [machine.states[next][0], await observe(setup)]
+    if (index > 0) await act(app, action)
+    const [expected, actual] = [machine.states[next][0], await observe(app.setup)]
     if (actual !== expected) {
       const key = `${state} ${action} ${actual}`
       if (known.has(key)) {
@@ -197,7 +232,7 @@ async function check(paths: string[][]) {
   return seen
 }
 
-// The budgets name the work: 73 paths of up to 4 actions, 8 walks of 12, and the fault trials, each on a fresh app.
+// The budgets name the work: 127 paths of up to 4 actions, 8 walks of 12, and the fault trials, each on a fresh app.
 test("the plugin life follows the shared fixture", async () => {
   const seen = await check(paths())
   expect([...known()].filter((row) => !seen.has(row))).toEqual([])
