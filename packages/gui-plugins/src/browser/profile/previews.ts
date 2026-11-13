@@ -6,7 +6,7 @@ import { workspaceFile } from "../workspace-file"
 export function createPreviews(session: Session) {
   const grants = new Map<string, () => readonly string[]>()
 
-  session.protocol.handle(previewScheme, async (request) => {
+  const serve = async (request: Request) => {
     const host = new URL(request.url).host
     const grant = grants.get(host)
     // Electron adds the Chromium initiator (not a renderer-supplied HTTP header) to protocol Requests.
@@ -31,7 +31,10 @@ export function createPreviews(session: Session) {
     headers.set("Cache-Control", "no-store")
 
     return new Response(response.body, { status: response.status, headers })
-  })
+  }
+
+  // File loaders reject for disappearing or unreadable files. Refuse the request without throwing into Electron.
+  session.protocol.handle(previewScheme, (request) => serve(request).catch(() => Response.error()))
 
   return {
     grant(roots: () => readonly string[]) {
