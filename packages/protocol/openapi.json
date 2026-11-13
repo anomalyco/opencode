@@ -15851,6 +15851,9 @@
           "system": {
             "type": "string"
           },
+          "instructions": {
+            "type": "string"
+          },
           "description": {
             "type": "string"
           },
