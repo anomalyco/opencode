@@ -551,6 +551,16 @@ const videos: ReadonlyArray<Case<VideoModel>> = [
     url: "https://api.minimax.cn/v1/video_generation",
     auth: ["authorization", "Bearer minimax-key"],
   },
+  {
+    name: "google",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/google/videos")
+      return model("gemini-omni-1.2-flash", { ...shared, apiKey: "google-key" })
+    },
+    url: "https://generativelanguage.googleapis.com/v1beta/interactions",
+    auth: ["x-goog-api-key", "google-key"],
+    provider: "google",
+  },
 ]
 
 describe("video entrypoints", () => {
