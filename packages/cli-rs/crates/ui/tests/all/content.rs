@@ -149,6 +149,14 @@ fn markdown_table_matches_typescript() {
     assert_parity(&markdown_app(corpus["table"].as_str().unwrap(), true).render(), "U.4c/markdown-table");
 }
 
+/// U.4c: thematic breaks, drawn as Core draws them: the `conceal` scope's color, else the text color.
+#[test]
+fn markdown_rules_match_typescript() {
+    // Also in parity/component/U.4c-markdown.tsx.
+    let rules = "Before the rules.\n\n- - -\n\nBetween them.\n\n***\n\nAfter the rules.";
+    assert_parity(&markdown_app(rules, true).render(), "U.4c/markdown-rules");
+}
+
 /// U.4c: a registered code-block renderer draws its fences, and streamed text ends as one parse of the whole text.
 #[test]
 fn markdown_renders_fences_and_streams() {

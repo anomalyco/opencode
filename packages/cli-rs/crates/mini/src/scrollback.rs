@@ -788,7 +788,10 @@ fn entry_markdown(app: &App, theme: &RunTheme, mono: bool, commit: &Commit, body
                 .style("markup.strikethrough", Style::new().fg(color)),
         )
     } else {
-        (MarkdownColors { text: color, ..theme.markdown }, theme.syntax.clone().unwrap_or_default())
+        let syntax = theme.syntax.clone().unwrap_or_default();
+        // Core's rule: the `conceal` scope's color, else the text color.
+        let rule = syntax.get("conceal").and_then(|style| style.fg).unwrap_or(color);
+        (MarkdownColors { text: color, rule, ..theme.markdown }, syntax)
     };
     let table = if mono {
         MarkdownTableOptions {
@@ -959,6 +962,26 @@ mod tests {
             let content = format!("{blocks}\n\nnext");
             assert_eq!(render(stable_prefix(&content), true), render(blocks, false), "{content:?}");
         }
+    }
+
+    /// Core draws a thematic break in the `conceal` scope's color, else the Markdown's own color: the entry's.
+    #[test]
+    fn rules_draw_in_the_entry_color() {
+        let theme = crate::theme::resolve(&crate::theme::ThemeInput {
+            name: None,
+            mode: None,
+            palette: None,
+            directories: Vec::new(),
+            mono: false,
+        });
+        let commit = assistant("", Phase::Final);
+        let app = opentui::testing::TestApp::new(10, 5);
+        let markdown = entry_markdown(app.app(), &theme, false, &commit, &Body::Markdown(String::new()), false);
+        app.app().root().add(&markdown);
+        markdown.set_markdown("a\n\n---\n\nb");
+        let capture = app.render();
+        assert_eq!(capture.cell(0, 2).unwrap().symbol, "─", "{}", capture.text());
+        assert_eq!(capture.cell(0, 2).unwrap().fg, entry_color(&commit, &theme));
     }
 
     /// TS mini on Core 0.8.4 hides the tildes of `~~x~~` and draws the text plain, in every theme and body.
