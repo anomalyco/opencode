@@ -58,6 +58,9 @@ const SsoRequired = Schema.Struct({
   orgId: Schema.String,
   connectionId: Schema.String,
 })
+// Console's 403 when the workspace or account itself is restricted; re-authenticating cannot help.
+const Forbidden = Schema.Struct({ _tag: Schema.Literal("Forbidden") })
+const ConsoleRejected = Schema.Union([SsoRequired, Forbidden])
 const InvalidGrant = Schema.Struct({ error: Schema.Literal("invalid_grant") })
 // Console's 401 when the session behind the access token was revoked or expired.
 const Unauthorized = Schema.Struct({ _tag: Schema.Literal("Unauthorized") })
@@ -80,6 +83,7 @@ type ConsoleConfig = NonNullable<Effect.Success<ReturnType<typeof fetchConfig>>>
   readonly skills: (typeof ConsoleSkills.Type)["skills"]
 }
 const signedOutMessage = "Reconnect OpenCode Console to continue"
+const restrictedMessage = "Your OpenCode Console workspace is restricted"
 const ssoMessage = (organization: string | undefined) =>
   `Sign in with SSO again to use ${organization ?? "your OpenCode Console organization"}`
 
@@ -96,6 +100,16 @@ class SsoRequiredError extends Schema.TaggedError<SsoRequiredError>()("OpencodeC
 class SignedOutError extends Schema.TaggedError<SignedOutError>()("OpencodeConsole.SignedOut", {}) {
   override get message() {
     return `${signedOutMessage}.`
+  }
+}
+
+// The Console rejected the workspace or account itself (HTTP 403 Forbidden); checking the workspace
+// is the only recovery, so the status carries the console URL.
+class WorkspaceRestrictedError extends Schema.TaggedError<WorkspaceRestrictedError>()("OpencodeConsole.WorkspaceRestricted", {
+  url: Schema.String,
+}) {
+  override get message() {
+    return `${restrictedMessage}.`
   }
 }
 
@@ -598,12 +612,15 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
             if (Option.isSome(body)) return yield* new SignedOutError()
           }
           if (response.status === 403) {
-            const body = yield* HttpClientResponse.schemaBodyJson(SsoRequired)(response).pipe(Effect.option)
-            if (Option.isSome(body))
-              return yield* new SsoRequiredError({
-                organization: organizationName(value),
-                url: yield* ssoUrl(ConsoleAccess.server(value), body.value.connectionId),
-              })
+            const body = yield* HttpClientResponse.schemaBodyJson(ConsoleRejected)(response).pipe(Effect.option)
+            if (Option.isSome(body)) {
+              if (body.value._tag === "SsoRequired")
+                return yield* new SsoRequiredError({
+                  organization: organizationName(value),
+                  url: yield* ssoUrl(ConsoleAccess.server(value), body.value.connectionId),
+                })
+              return yield* new WorkspaceRestrictedError({ url: yield* consoleUrl(ConsoleAccess.server(value)) })
+            }
           }
           const watches = response.headers[OpencodeWatches.header] !== undefined
           const lists = response.headers[listsHeader] !== undefined
@@ -660,6 +677,10 @@ function ssoUrl(server: string, connectionID: string) {
   )
 }
 
+function consoleUrl(server: string) {
+  return normalizeServer(server).pipe(Effect.map((base) => `${base}/console`))
+}
+
 function connectionStatus(cause: unknown): IntegrationConnection.Status | undefined {
   if (cause instanceof SsoRequiredError)
     return {
@@ -672,6 +693,13 @@ function connectionStatus(cause: unknown): IntegrationConnection.Status | undefi
     (cause instanceof Integration.AuthorizationError && cause.cause instanceof SignedOutError)
   )
     return { status: "needs_auth", message: signedOutMessage }
+  const restricted =
+    cause instanceof WorkspaceRestrictedError
+      ? cause
+      : cause instanceof Integration.AuthorizationError && cause.cause instanceof WorkspaceRestrictedError
+        ? cause.cause
+        : undefined
+  if (restricted) return { status: "restricted", message: restrictedMessage, url: restricted.url }
   return undefined
 }
 
