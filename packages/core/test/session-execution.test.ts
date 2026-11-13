@@ -893,17 +893,7 @@ describe("SessionRestart background recovery", () => {
           }
           while ((yield* notices).length < 1) yield* Effect.sleep(5)
           yield* Effect.sleep(50)
-          const finished = yield* shell.get(info.id)
-          if (finished.time.completed === undefined) throw new Error("missing recovered shell completion time")
-          expect(yield* notices).toMatchObject([
-            {
-              id: row?.notificationID,
-              metadata: {
-                shellID: info.id,
-                wallTimeSeconds: (finished.time.completed - info.time.started) / 1_000,
-              },
-            },
-          ])
+          expect(yield* notices).toMatchObject([{ id: row?.notificationID, metadata: { shellID: info.id } }])
           if (exited) expect(yield* notices).toMatchObject([{ text: expect.stringContaining("finished output") }])
           expect(yield* restarted.pendingBackground).toEqual([])
         }),
@@ -1005,7 +995,6 @@ describe("SessionRestart background recovery", () => {
           sessionID,
           shellID: "sh_completed",
           command: "exit 7",
-          wallTimeSeconds: 1.234,
         },
         run: Deferred.await(complete),
       })
@@ -1041,7 +1030,6 @@ describe("SessionRestart background recovery", () => {
         jobID: "call-completed-shell",
         shellID: "sh_completed",
         state: "completed",
-        wallTimeSeconds: 1.234,
       })
       expect(yield* restarted.pendingBackground).toEqual([])
     }),

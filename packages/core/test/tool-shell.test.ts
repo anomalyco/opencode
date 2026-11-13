@@ -1478,7 +1478,6 @@ describe("ShellTool", () => {
               exit: 0,
               pid: info.pid,
             })
-            if (finished.time.completed === undefined) throw new Error("missing shell completion time")
             expect(yield* Queue.take(notices)).toMatchObject({
               text: expect.stringContaining("xxxxxx"),
               metadata: {
@@ -1486,7 +1485,6 @@ describe("ShellTool", () => {
                 shellID: id,
                 state: "completed",
                 exit: 0,
-                wallTimeSeconds: (finished.time.completed - info.time.started) / 1_000,
               },
             })
             expect(yield* Queue.size(notices)).toBe(0)
@@ -2044,7 +2042,6 @@ describe("ShellTool", () => {
               id: settled.metadata?.shellID,
               status: "completed",
               output: "(no output)\n\nExit code: 7",
-              recovery: { wallTimeSeconds: expect.any(Number) },
             },
           ])
         }),

@@ -164,7 +164,6 @@ const notify = Effect.fnUntraced(function* (
         state: info.status,
         text,
         output,
-        wallTimeSeconds: output?.wallTimeSeconds,
       }),
     })
     .pipe(Effect.catchTag("Session.NotFoundError", () => Effect.void))
@@ -185,19 +184,18 @@ const startJob = Effect.fnUntraced(function* (
 ) {
   const info = input.info
   const settled = yield* Deferred.make<Output>()
-  const recovery = {
-    kind: "shell" as const,
-    sessionID: input.sessionID,
-    shellID: info.id,
-    command: info.command,
-  }
   const job = yield* jobs.start({
     // CodeMode children share a tool-call ID, but each shell must own its job.
     id: info.id,
     type: name,
     title: info.command,
     metadata: { sessionID: input.sessionID, shellID: info.id },
-    recovery,
+    recovery: {
+      kind: "shell",
+      sessionID: input.sessionID,
+      shellID: info.id,
+      command: info.command,
+    },
     ...(input.notificationID ? { notificationID: input.notificationID } : {}),
     background: input.background,
     run: Effect.gen(function* () {
@@ -212,10 +210,7 @@ const startJob = Effect.fnUntraced(function* (
       }
     }).pipe(
       Effect.tap((output) => Deferred.succeed(settled, output)),
-      Effect.map((output) => ({
-        output: resultMessages(output, input.timeout?.()).join("\n\n"),
-        recovery: { ...recovery, wallTimeSeconds: output.wallTimeSeconds },
-      })),
+      Effect.map((output) => resultMessages(output, input.timeout?.()).join("\n\n")),
       // Interrupting the job (its registry closing) stops the command too, unless the server is handing its daemon
       // over: then the command keeps running for the next server.
       Effect.onInterrupt(() =>

@@ -120,9 +120,6 @@ type BlockStart =
   | { type: "backgrounded"; info: Info }
   | { type: "wait"; wait: BlockWait }
 
-// A job can settle with the recovery record to persist alongside its final output.
-type RunResult = string | { output: string; recovery: Recovery }
-
 export type StartInput = {
   id: string
   type: string
@@ -131,7 +128,7 @@ export type StartInput = {
   recovery?: Recovery
   notificationID?: SessionMessage.ID
   background?: boolean
-  run: Effect.Effect<RunResult, unknown>
+  run: Effect.Effect<string, unknown>
   // Runs when the job is cancelled (`cancel`, `cancelSession`), before its work is interrupted. Teardown, such as
   // a server shutdown, interrupts the work without it.
   cancel?: Effect.Effect<void>
@@ -293,19 +290,17 @@ export const make = Effect.gen(function* () {
       .pipe(Effect.orDie)
   })
 
-  const settle = Effect.fnUntraced(function* (id: string, active: Active, exit: Exit.Exit<RunResult, unknown>) {
+  const settle = Effect.fnUntraced(function* (id: string, active: Active, exit: Exit.Exit<string, unknown>) {
     const completed_at = yield* Clock.currentTimeMillis
     const status: Exclude<Status, "running"> = Exit.isSuccess(exit)
       ? "completed"
       : Cause.hasInterruptsOnly(exit.cause)
         ? "cancelled"
         : "error"
-    const value = Exit.isSuccess(exit) ? exit.value : undefined
-    const output = typeof value === "object" ? value.output : value
+    const output = Exit.isSuccess(exit) ? exit.value : undefined
     const error = Exit.isFailure(exit) ? errorText(exit.cause) : undefined
     const terminal = (job: Active): Active => ({
       ...job,
-      recovery: typeof value === "object" ? value.recovery : job.recovery,
       blockingSessions: new Map<SessionSchema.ID, number>(),
       info: {
         ...job.info,
