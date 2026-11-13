@@ -152,8 +152,7 @@ dark), and touches nothing of the host; a plugin's own thread calls `wake`.
   whether it is on screen, busy, waits on the user or has unread activity or an error), `keymap_pending`,
   `keymap_active`, `keymap_commands` and `shortcuts(name)` as the TUI shows keys, `selection` (the text the mouse
   selected), `theme` (the selected theme's name) and `themes` (every name). Over the ABI each read is one
-  `HostRequest`, and `messages` hands the visitor the plugin's own copy. A C plugin can call the host table from a
-  render all the same; the host refuses every request there that is not a read, before it does anything.
+  `HostRequest`, and `messages` hands the visitor the plugin's own copy.
 - Every read of one plugin call, in a render or a handler, sees one store snapshot: a batch the store applies on
   another thread meanwhile waits until the call returns.
 - Setup, a command, and the handlers of events, replies, mounts, route mounts, wakes and disposal get a `Host`: the
@@ -162,7 +161,7 @@ dark), and touches nothing of the host; a plugin's own thread calls `wake`.
   host runs that queue before it routes its next message, so a store signal never overtakes an effect asked for
   while the one before it was handled. Over the ABI, a request into a plugin that is already running is dropped and
   logged; during a render request of 1.4 on (`RenderFence`, `Render`, `RenderRoute`) every effect request is refused
-  with an error, and a result the host cannot decode leaves no effect and puts back the storage it wrote. What a
+  with an error (the 1.6 verbs too), and a result the host cannot decode leaves no effect and puts back the storage it wrote. What a
   dispose callback that panics asked for is dropped (1.5 `Checkpoint` and `Rollback`, which the SDK sends around
   each); the other callbacks keep theirs.
 - The effects: `storage_set` and `storage_merge`; `dispatch(name, input)`, which runs any registered command, palette
