@@ -3,7 +3,8 @@
 // downloaded and joined as Core's DownloadUtils.fetchHighlightQueries does. Core's own grammars (JavaScript,
 // TypeScript, TSX, Markdown, Markdown inline, Zig) take the queries bundled in @opentui/core. Every query then gets
 // Core's #lua-match? rewrite, so the files hold what Core compiles. The manifest lists
-// each filetype with its aliases and sources; crates/ui/src/grammars checks its table against it.
+// each filetype with its aliases and sources; crates/ui/src/grammars checks its table against it. OCaml and F# are
+// left out: their parsers are too large to link (parity/deviations/H06-highlight-queries.md).
 import parsers from "../../../tui/src/parsers-config"
 
 const root = new URL("../../assets/queries/", import.meta.url).pathname
@@ -13,8 +14,9 @@ const cache = `${process.env.XDG_DATA_HOME || `${process.env.HOME}/.local/share`
 const bundled = ["javascript", "typescript", "typescriptreact", "markdown", "markdown_inline", "zig"]
 const coreVersion = (await Bun.file(`${core}package.json`).json()).version
 
+const linked = parsers.parsers.filter((parser) => !["ocaml", "fsharp"].includes(parser.filetype))
 const tui = await Promise.all(
-  parsers.parsers.map(async (parser) => ({
+  linked.map(async (parser) => ({
     filetype: parser.filetype,
     aliases: "aliases" in parser ? parser.aliases : [],
     sources: parser.queries.highlights,

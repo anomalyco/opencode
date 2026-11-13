@@ -4,13 +4,12 @@
 //! [`crate::code::syntax_theme`] colors the same tokens the same way.
 //!
 //! opentui-rust bundles JavaScript, TypeScript, TSX, Markdown, Zig, and Rust with each grammar crate's own query.
-//! [`register`] replaces those with Core's queries and adds the rest: the `grammars` feature (on by default) links the
-//! languages transcripts show most, and `grammars-all` the rest of `packages/tui/src/parsers-config.ts`. Kotlin and
-//! Swift are not linked (`parity/deviations/H06-highlight-queries.md`).
+//! [`register`] replaces those with Core's queries, and the `grammars` feature (on by default) adds the rest of
+//! `packages/tui/src/parsers-config.ts`. Kotlin, OCaml, F#, and Swift are not linked
+//! (`parity/deviations/H06-highlight-queries.md`).
 
-use opentui::syntax::tree_sitter::{Language, QueryErrorKind};
+use opentui::syntax::tree_sitter::Language;
 use opentui::syntax::{self, CompiledGrammar, Grammar, GrammarError};
-use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::sync::{Mutex, Once, PoisonError};
 use std::thread;
@@ -82,9 +81,6 @@ fn entries() -> Vec<Entry> {
         entry!("yaml", tree_sitter_yaml::LANGUAGE),
         entry!("css", tree_sitter_css::LANGUAGE),
         entry!("diff", tree_sitter_diff::LANGUAGE, ["udiff", "patch"]),
-    ]);
-    #[cfg(feature = "grammars-all")]
-    entries.extend([
         entry!("cpp", tree_sitter_cpp::LANGUAGE),
         entry!("csharp", tree_sitter_c_sharp::LANGUAGE),
         entry!("c", tree_sitter_c::LANGUAGE),
@@ -97,12 +93,10 @@ fn entries() -> Vec<Entry> {
         entry!("haskell", tree_sitter_haskell::LANGUAGE),
         entry!("julia", tree_sitter_julia::LANGUAGE),
         entry!("lua", tree_sitter_lua::LANGUAGE),
-        entry!("ocaml", tree_sitter_ocaml::LANGUAGE_OCAML),
         entry!("clojure", tree_sitter_clojure_orchard::LANGUAGE),
         entry!("toml", tree_sitter_toml_ng::LANGUAGE),
         entry!("nix", tree_sitter_nix::LANGUAGE),
         entry!("elixir", tree_sitter_elixir::LANGUAGE),
-        entry!("fsharp", tree_sitter_fsharp::LANGUAGE_FSHARP),
         entry!("r", tree_sitter_r::LANGUAGE),
         entry!("make", tree_sitter_make::LANGUAGE, ["makefile"]),
         entry!("vim", tree_sitter_vim::language()),
@@ -163,60 +157,8 @@ pub fn fence_languages(text: &str) -> impl Iterator<Item = &str> {
     })
 }
 
-/// Compiles one entry. tree-sitter 0.27 rejects a pattern it proves can never match, where Core's web-tree-sitter
-/// 0.25 compiles it; such a pattern is dropped, since it captures nothing in either.
 fn compile(entry: &Entry) -> Result<CompiledGrammar, GrammarError> {
-    let mut query = Cow::Borrowed(entry.query);
-    loop {
-        let grammar = Grammar::new((entry.language)(), query.clone()).injections(entry.injections).core_captures();
-        match grammar.compile() {
-            Err(GrammarError::Query(error)) if error.kind == QueryErrorKind::Structure => {
-                let Some(rest) = without_pattern(&query, error.offset) else { return Err(GrammarError::Query(error)) };
-                query = Cow::Owned(rest);
-            }
-            result => return result,
-        }
-    }
-}
-
-/// The query without the top-level pattern around byte `offset`, with the captures and predicates that follow it.
-fn without_pattern(query: &str, offset: usize) -> Option<String> {
-    let bytes = query.as_bytes();
-    let (mut depth, mut start, mut at) = (0usize, None, 0);
-    while at < bytes.len() {
-        match bytes[at] {
-            b';' => at += query[at..].find('\n').unwrap_or(query.len() - at),
-            b'"' => {
-                at += 1;
-                while at < bytes.len() && bytes[at] != b'"' {
-                    at += if bytes[at] == b'\\' { 2 } else { 1 };
-                }
-            }
-            b'(' | b'[' => {
-                if depth == 0 {
-                    start = Some(at);
-                }
-                depth += 1;
-            }
-            b')' | b']' => {
-                depth = depth.checked_sub(1)?;
-                if depth == 0 && start? <= offset && offset <= at {
-                    // A top-level pattern's own captures and quantifiers follow its closing bracket.
-                    let tail = &query[at + 1..];
-                    let line = tail.find('\n').unwrap_or(tail.len());
-                    let end = if tail[..line].trim_start().starts_with(['@', '?', '*', '+']) {
-                        at + 1 + line
-                    } else {
-                        at + 1
-                    };
-                    return Some(format!("{}{}", &query[..start?], &query[end..]));
-                }
-            }
-            _ => {}
-        }
-        at += 1;
-    }
-    None
+    Grammar::new((entry.language)(), entry.query).injections(entry.injections).core_captures().compile()
 }
 
 #[cfg(test)]
@@ -240,13 +182,8 @@ mod tests {
                 listed["aliases"].as_array().unwrap().iter().map(|alias| alias.as_str().unwrap()).collect();
             assert_eq!(aliases, entry.aliases, "{} aliases", entry.filetype);
         }
-        // Every filetype of the manifest but Kotlin and Swift with grammars-all; seven or fifteen otherwise.
-        let linked = match (cfg!(feature = "grammars"), cfg!(feature = "grammars-all")) {
-            (_, true) => manifest.len() - 2,
-            (true, false) => 15,
-            (false, false) => 7,
-        };
-        assert_eq!(entries.len(), linked);
+        // Every filetype of the manifest but Kotlin and Swift with grammars; seven otherwise.
+        assert_eq!(entries.len(), if cfg!(feature = "grammars") { manifest.len() - 2 } else { 7 });
     }
 
     #[test]
@@ -301,19 +238,6 @@ mod tests {
     fn fence_languages_reads_each_opening_fence() {
         let text = "a\n```rust\nfn main() {}\n```\n   ~~~~ ts title=x\nb\n~~~~\n    ```go\n``python\n```\n";
         assert_eq!(fence_languages(text).collect::<Vec<_>>(), ["rust", "ts"]);
-    }
-
-    #[test]
-    fn without_pattern_drops_the_pattern_and_its_captures() {
-        let query = "; a (comment)\n(a) @x\n\n((b\n  (c \")\") @y)\n  (#eq? @y \"z\"))\n[\"d\"] @w\n(e) @v\n";
-        let at = query.find("(c \"").unwrap();
-        assert_eq!(without_pattern(query, at).as_deref(), Some("; a (comment)\n(a) @x\n\n\n[\"d\"] @w\n(e) @v\n"));
-        let at = query.find("[\"d").unwrap();
-        assert_eq!(
-            without_pattern(query, at).as_deref(),
-            Some("; a (comment)\n(a) @x\n\n((b\n  (c \")\") @y)\n  (#eq? @y \"z\"))\n\n(e) @v\n")
-        );
-        assert_eq!(without_pattern("(a) @x", 99), None);
     }
 
     /// Core's TypeScript query: `import` is `keyword.import`, and comments add `spell`.

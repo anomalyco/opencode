@@ -100,18 +100,39 @@ tower-service
 tracing
 tracing-core
 tree-sitter build cc
+tree-sitter-agda build cc
 tree-sitter-bash build cc
+tree-sitter-c build cc
+tree-sitter-c-sharp build cc
+tree-sitter-clojure-orchard build cc
+tree-sitter-cpp build cc
 tree-sitter-css build cc
 tree-sitter-diff build cc
+tree-sitter-elixir build cc
 tree-sitter-go build cc
+tree-sitter-haskell build cc
+tree-sitter-hcl build cc git
 tree-sitter-html build cc
+tree-sitter-java build cc
 tree-sitter-javascript build cc
 tree-sitter-json build cc
+tree-sitter-julia build cc
 tree-sitter-language build
+tree-sitter-lua build cc
+tree-sitter-make build cc
 tree-sitter-md build cc
+tree-sitter-nix build cc
+tree-sitter-php build cc
 tree-sitter-python build cc
+tree-sitter-r build cc
+tree-sitter-ruby build cc
 tree-sitter-rust build cc
+tree-sitter-scala build cc
+tree-sitter-toml-ng build cc
 tree-sitter-typescript build cc
+tree-sitter-vim build cc
+tree-sitter-vue-next build cc
+tree-sitter-xml build cc
 tree-sitter-yaml build cc
 tree-sitter-zig build cc
 try-lock
@@ -135,28 +156,4 @@ zmij build
 
 [optional]
 # Third-party crates only non-default features bring in, over normal, build and dev edges of the whole workspace
-# with --all-features: the grammars of opencode-ui's `grammars-all`. The same rules apply.
-
-tree-sitter-agda build cc
-tree-sitter-c build cc
-tree-sitter-c-sharp build cc
-tree-sitter-clojure-orchard build cc
-tree-sitter-cpp build cc
-tree-sitter-elixir build cc
-tree-sitter-fsharp build cc
-tree-sitter-haskell build cc
-tree-sitter-hcl build cc git
-tree-sitter-java build cc
-tree-sitter-julia build cc
-tree-sitter-lua build cc
-tree-sitter-make build cc
-tree-sitter-nix build cc
-tree-sitter-ocaml build cc
-tree-sitter-php build cc
-tree-sitter-r build cc
-tree-sitter-ruby build cc
-tree-sitter-scala build cc
-tree-sitter-toml-ng build cc
-tree-sitter-vim build cc
-tree-sitter-vue-next build cc
-tree-sitter-xml build cc
+# with --all-features. The same rules apply. Empty: every feature's crates ship by default.
