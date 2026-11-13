@@ -1,7 +1,10 @@
 import { useI18n } from "~/context/i18n"
 import "./on-this-page.css"
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
+import { activeSection, keepInRail, markStuck } from "./contents-spy"
 import { Chevron } from "./icons"
+import { holdOpenMenu } from "./menu-hold"
+import { useVisible } from "./visible"
 
 type ContentsItem = {
   id: string
@@ -11,42 +14,43 @@ type ContentsItem = {
   status?: "chosen" | "review" | "progress"
 }
 
-/**
- * The section the reader is in: the last one whose heading has passed a third of the way down the
- * window. At the bottom of the page, where the last headings can't reach that line, the section the
- * address points to (a Contents link or a shared link) wins while its heading is in view, else the
- * last section in view.
- */
+/** The section the reader is in (contents-spy.ts), checked once a frame while the page scrolls. */
 function useActiveSection(items: () => ContentsItem[]) {
-  const [active, setActive] = createSignal<string>()
-
   onMount(() => {
-    const track = () => {
-      const list = items()
-      const headings = list.flatMap((item) => {
-        const heading = document.getElementById(item.id)
-        return heading ? [{ id: item.id, top: heading.getBoundingClientRect().top }] : []
-      })
-      const passed = headings.filter((heading) => heading.top <= window.innerHeight / 3)
-      const bottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2
-      const visible = headings.filter((heading) => heading.top >= 0 && heading.top < window.innerHeight)
-      const target = visible.find((heading) => `#${heading.id}` === decodeURIComponent(location.hash))
-      setActive(
-        bottom && (target ?? visible.at(-1)) ? (target ?? visible.at(-1))!.id : (passed.at(-1)?.id ?? list[0]?.id),
-      )
-    }
+    spy.items = items
     track()
-    window.addEventListener("scroll", track, { passive: true })
-    window.addEventListener("resize", track, { passive: true })
-    window.addEventListener("hashchange", track)
+    if (spy.users++ === 0) {
+      window.addEventListener("scroll", schedule, { passive: true })
+      window.addEventListener("resize", schedule, { passive: true })
+      window.addEventListener("hashchange", schedule)
+    }
     onCleanup(() => {
-      window.removeEventListener("scroll", track)
-      window.removeEventListener("resize", track)
-      window.removeEventListener("hashchange", track)
+      if (--spy.users) return
+      cancelAnimationFrame(spy.frame)
+      spy.frame = 0
+      window.removeEventListener("scroll", schedule)
+      window.removeEventListener("resize", schedule)
+      window.removeEventListener("hashchange", schedule)
     })
   })
-
   return [active, setActive] as const
+}
+
+// The aside's list and the phone menu show the page's same sections, so one spy, once a frame,
+// serves both.
+const [active, setActive] = createSignal<string>()
+const spy = { users: 0, frame: 0, items: (): ContentsItem[] => [] }
+
+function schedule() {
+  if (spy.frame) return
+  spy.frame = requestAnimationFrame(() => {
+    spy.frame = 0
+    track()
+  })
+}
+
+function track() {
+  setActive(activeSection(spy.items().map((item) => item.id)))
 }
 
 /**
@@ -58,19 +62,9 @@ export function OnThisPage(props: { items: ContentsItem[] }) {
   const i18n = useI18n()
   const [active, setActive] = useActiveSection(() => props.items)
   let nav: HTMLElement | undefined
-  // In the aside the rail scrolls on its own when the list is taller than the window (site.css):
-  // keep the current section in view, 24px from the edge it went past (legal and the docs share it).
+  // In the aside the rail keeps the current section in view (legal and the docs share it).
   createEffect(() => {
-    if (!active()) return
-    requestAnimationFrame(() => {
-      const link = nav?.querySelector("[aria-current='location']")
-      const box = nav?.closest("[data-component='aside'] > *")
-      if (!link || !box) return
-      const item = link.getBoundingClientRect()
-      const view = box.getBoundingClientRect()
-      if (item.top < view.top) box.scrollTop -= view.top - item.top + 24
-      if (item.bottom > view.bottom) box.scrollTop += item.bottom - view.bottom + 24
-    })
+    if (active()) requestAnimationFrame(() => keepInRail(nav?.querySelector("[aria-current='location']")))
   })
 
   return (
@@ -102,7 +96,8 @@ export function OnThisPage(props: { items: ContentsItem[] }) {
 /**
  * "Contents" folded up for phones, where the aside's list is hidden: put it above the first section of
  * any page that passes OnThisPage to <Site aside>. Hidden from 60rem up and in print. On phones it
- * sticks under the top bar (and any sticky bar the page adds above it).
+ * sticks under the top bar (and any sticky bar the page adds above it). The static pages drive the same
+ * markup with startContents (contents-spy.ts), and so do the docs (src/docs/client.ts).
  */
 export function ContentsMenu(props: { items: ContentsItem[] }) {
   const i18n = useI18n()
@@ -120,34 +115,37 @@ export function ContentsMenu(props: { items: ContentsItem[] }) {
       menu.open = false
       menu.querySelector("summary")?.focus()
     }
-    // Pinned (its top at its sticky offset, once the page has scrolled), the bar shows its lines
-    // (data-stuck, on-this-page.css). Measured on scroll, so it works where CSS scroll-state queries
-    // don't (WebKit).
+    document.addEventListener("pointerdown", outside)
+    document.addEventListener("keydown", escape)
+    onCleanup(() => {
+      document.removeEventListener("pointerdown", outside)
+      document.removeEventListener("keydown", escape)
+      document.documentElement.removeAttribute("data-menu-hold")
+    })
+  })
+
+  // Pinned under the top bar, the bar shows its lines (contents-spy.ts markStuck), measured on scroll
+  // only while it is near the screen: from 60rem up it is hidden.
+  const shown = useVisible(() => menu)
+  createEffect(() => {
+    if (!shown()) return
     let frame = 0
     const stuck = () => {
       cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => {
-        if (!menu) return
-        const top = parseFloat(getComputedStyle(menu).top)
-        menu.toggleAttribute("data-stuck", window.scrollY > 0 && menu.getBoundingClientRect().top <= top + 0.5)
-      })
+      frame = requestAnimationFrame(() => markStuck(menu))
     }
-    document.addEventListener("pointerdown", outside)
-    document.addEventListener("keydown", escape)
     window.addEventListener("scroll", stuck, { passive: true })
     window.addEventListener("resize", stuck)
     stuck()
     onCleanup(() => {
       cancelAnimationFrame(frame)
-      document.removeEventListener("pointerdown", outside)
-      document.removeEventListener("keydown", escape)
       window.removeEventListener("scroll", stuck)
       window.removeEventListener("resize", stuck)
     })
   })
 
   return (
-    <details ref={menu} data-component="contents-menu">
+    <details ref={menu} data-component="contents-menu" on:toggle={holdOpenMenu}>
       <summary>
         <span data-slot="label">{i18n.t("site.contents")}</span>
         <Chevron />
@@ -190,8 +188,8 @@ export function SectionHeading(props: { level?: 2 | 3; id: string; title: string
 /**
  * The inside of a heading: a button with the title that copies the section's address and puts it in
  * the address bar, then says "Link copied" for a moment (also to screen readers). `children` replaces
- * the plain title for headings with markup of their own. Pages that never hydrate (the docs) do the
- * same from a delegated listener keyed on `data-heading-id` (src/docs/client.ts).
+ * the plain title for headings with markup of their own. Pages that never hydrate (the static pages
+ * and the docs) do the same from a delegated listener keyed on `data-heading-id` (copy-feedback.ts).
  */
 export function HeadingLink(props: { id: string; title: string; children?: JSX.Element }) {
   const i18n = useI18n()

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Cause, Effect, Schema } from "effect"
-import { CodeMode, Extension, Tool, toolError } from "./lib/index.js"
+import { CodeMode, Extension, Tool, toolError } from "../src/index.js"
 
 const run = (tool: Tool.Tool<never>) =>
   Effect.runPromise(CodeMode.make({ tools: { host: { call: tool } } }).execute("return await tools.host.call({})"))
@@ -167,7 +167,8 @@ describe("CodeMode call hooks", () => {
   }
   // Every hook logs its event, so the order across tools and extensions is visible.
   const observe = (events: Array<string>): CodeMode.Hooks => ({
-    "tool.before": (call) => Effect.sync(() => void events.push(`tool.before ${JSON.stringify(call)}`)),
+    "tool.before": (call) =>
+      Effect.sync(() => void events.push(`tool.before ${JSON.stringify({ name: call.name, input: call.input })}`)),
     "tool.after": (call, result) => Effect.sync(() => void events.push(`tool.after ${call.name} ${ended(result)}`)),
     "extension.before": (call) => Effect.sync(() => void events.push(`extension.before ${JSON.stringify(call)}`)),
     "extension.after": (call, result) =>
@@ -788,6 +789,34 @@ describe("CodeMode public contract", () => {
     }
   })
 
+  test("a freeform tool takes its one string field directly and still accepts the object", async () => {
+    const input = Schema.Struct({ url: Schema.String.annotate({ description: "Page URL" }) })
+    const fetchPage = Tool.make({
+      description: "Fetch a page",
+      input,
+      freeform: true,
+      output: Schema.String,
+      execute: ({ url }) => Effect.succeed(url),
+    })
+    const plain = Tool.make({
+      description: "Fetch a page",
+      input,
+      output: Schema.String,
+      execute: ({ url }) => Effect.succeed(url),
+    })
+    const runtime = CodeMode.make({ tools: { fetchPage, plain } })
+    expect(runtime.catalog.map((tool) => tool.signature)).toEqual([
+      "tools.fetchPage(/** Page URL */ url: string): Promise<string>",
+      "tools.plain({\n  /** Page URL */\n  url: string,\n}): Promise<string>",
+    ])
+    expect(
+      await Effect.runPromise(
+        runtime.execute('return [await tools.fetchPage("a"), await tools.fetchPage({ url: "b" })]'),
+      ),
+    ).toMatchObject({ ok: true, value: ["a", "b"] })
+    expect(await Effect.runPromise(runtime.execute('return await tools.plain("a")'))).toMatchObject({ ok: false })
+  })
+
   test("renders equivalent catalogs identically regardless of tool insertion order", () => {
     const alpha = Tool.make({
       description: "Alpha tool",
@@ -928,7 +957,7 @@ describe("CodeMode public contract", () => {
     const result = await Effect.runPromise(limited.execute(`search({}); return search({})`))
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error.kind).toBe("ToolCallLimitExceeded")
-    expect(observed).toEqual([{ name: "search", input: {} }])
+    expect(observed).toEqual([{ name: "search", input: {}, key: expect.any(String) }])
   })
 
   test("search is an opaque, shadowable global like other built-ins", async () => {
@@ -1072,7 +1101,7 @@ describe("CodeMode public contract", () => {
     }
   })
 
-  test("a query term that is a whole word of the path outranks a substring of it", async () => {
+  test("a query term matches whole words, not substrings", async () => {
     const simple = (description: string) =>
       Tool.make({
         description,
@@ -1091,11 +1120,78 @@ describe("CodeMode public contract", () => {
     expect(ranked.ok).toBe(true)
     if (ranked.ok) {
       const value = ranked.value as { items: Array<{ path: string }> }
-      expect(value.items.map((item) => item.path)).toStrictEqual([
-        "tools.cloudflare.get_zones",
-        "tools.cloudflare.get_timezones",
-      ])
+      expect(value.items.map((item) => item.path)).toStrictEqual(["tools.cloudflare.get_zones"])
     }
+  })
+
+  test("search indexes are shared only between runtimes with the same tool text", async () => {
+    const simple = (description: string) =>
+      Tool.make({
+        description,
+        input: Schema.Struct({}),
+        output: Schema.String,
+        execute: () => Effect.succeed("ok"),
+      })
+    const top = async (runtime: ReturnType<typeof CodeMode.make>, query: string) => {
+      const result = await Effect.runPromise(runtime.execute(`return search({ query: ${JSON.stringify(query)} })`))
+      expect(result.ok).toBe(true)
+      return result.ok ? (result.value as { items: Array<{ path: string }> }).items[0]?.path : undefined
+    }
+    // Same tools registered in a different order index identically.
+    const first = CodeMode.make({ tools: { mail: { send: simple("Send an email"), archive: simple("Archive a thread") } } })
+    const reordered = CodeMode.make({ tools: { mail: { archive: simple("Archive a thread"), send: simple("Send an email") } } })
+    // Same paths and count, different descriptions: must not reuse the other index.
+    const changed = CodeMode.make({ tools: { mail: { send: simple("Archive a thread"), archive: simple("Send an email") } } })
+
+    expect(await top(first, "email")).toBe("tools.mail.send")
+    expect(await top(reordered, "email")).toBe("tools.mail.send")
+    expect(await top(changed, "email")).toBe("tools.mail.archive")
+    expect(await top(first, "archive thread")).toBe("tools.mail.archive")
+  })
+
+  test("search ranks by rare words, prefers short names and matches partial words", async () => {
+    const simple = (description: string) =>
+      Tool.make({
+        description,
+        input: Schema.Struct({}),
+        output: Schema.String,
+        execute: () => Effect.succeed("ok"),
+      })
+    const runtime = CodeMode.make({
+      tools: {
+        gmail: { list_labels: simple("List the labels in the mailbox"), list_messages: simple("List messages") },
+        slack: {
+          list_channels: simple("List channels"),
+          list_users: simple("List users"),
+          list_user_groups: simple("List user groups"),
+          get_schedules: simple("Get scheduled messages"),
+        },
+      },
+    })
+    const paths = async (query: Record<string, unknown>) => {
+      const result = await Effect.runPromise(runtime.execute(`return search(${JSON.stringify(query)})`))
+      expect(result.ok).toBe(true)
+      return result.ok ? (result.value as { items: Array<{ path: string }> }).items.map((item) => item.path) : []
+    }
+
+    // "list" is in every tool; "labels" decides.
+    expect((await paths({ query: "list gmail labels" }))[0]).toBe("tools.gmail.list_labels")
+    // Both match "users"; the shorter, more general name wins.
+    expect((await paths({ query: "users", namespace: "slack" }))[0]).toBe("tools.slack.list_users")
+    // A partial word of 4+ letters that matches nothing whole finds the words it starts with.
+    expect(await paths({ query: "schedu" })).toStrictEqual(["tools.slack.get_schedules"])
+    // Short plurals and stop-word-only queries still match.
+    const short = CodeMode.make({
+      tools: { cloud: { describe_vm: simple("Describe a virtual machine"), list_all_issues: simple("List issues") } },
+    })
+    const top = async (query: string) => {
+      const result = await Effect.runPromise(short.execute(`return search(${JSON.stringify({ query })})`))
+      return result.ok ? (result.value as { items: Array<{ path: string }> }).items.map((item) => item.path) : []
+    }
+    expect((await top("vms"))[0]).toBe("tools.cloud.describe_vm")
+    expect(await top("all")).toStrictEqual(["tools.cloud.list_all_issues"])
+    // A namespace filter is a hard filter.
+    expect(await paths({ query: "labels", namespace: "slack" })).toStrictEqual([])
   })
 
   test("a plural query term matches singular-only tool text", async () => {

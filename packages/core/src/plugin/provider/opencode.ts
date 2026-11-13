@@ -20,6 +20,7 @@ import { ConfigProviderPlugin } from "../../config/plugin/provider.js"
 import { SkillFile } from "../../config/plugin/skill-file.js"
 import { ConsoleAccess } from "../../console-access.js"
 import { Credential } from "../../credential.js"
+import { Flag } from "../../flag.js"
 import { InstructionDiscovery } from "../../instruction-discovery.js"
 import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
@@ -29,6 +30,7 @@ import { SharedCache } from "../../shared-cache.js"
 import { Skill } from "../../skill.js"
 import { SkillDiscovery } from "../../skill/discovery.js"
 import { WebSearch } from "../../websearch.js"
+import { OpencodeWatches } from "./opencode-watches.js"
 import { ProviderRefresh } from "./refresh.js"
 
 const clientID = "opencode-cli"
@@ -63,6 +65,8 @@ const Unauthorized = Schema.Struct({ _tag: Schema.Literal("Unauthorized") })
 const ConsoleInstructions = Schema.Struct({
   instructions: Schema.Array(Schema.Struct({ id: Schema.String, content: Schema.String })),
 })
+/** The `GET /api/v2/config` response header Console sends while the caller has workspace instructions and skills. */
+const listsHeader = "x-opencode-instructions-skills"
 const ConsoleSkills = Schema.Struct({
   skills: Schema.Array(Schema.Struct({ slug: Schema.String, version: Schema.String })),
 })
@@ -71,6 +75,10 @@ const SkillBundle = Schema.Struct({
   files: Schema.Array(Schema.Struct({ path: Schema.String, content: Schema.String })),
 })
 type ConsoleSkill = { readonly skill: Skill.Info; readonly files: Record<string, string> }
+type ConsoleConfig = NonNullable<Effect.Success<ReturnType<typeof fetchConfig>>> & {
+  readonly instructions: (typeof ConsoleInstructions.Type)["instructions"]
+  readonly skills: (typeof ConsoleSkills.Type)["skills"]
+}
 const signedOutMessage = "Reconnect OpenCode Console to continue"
 const ssoMessage = (organization: string | undefined) =>
   `Sign in with SSO again to use ${organization ?? "your OpenCode Console organization"}`
@@ -174,6 +182,7 @@ export const OpencodePlugin = define<
   | HttpClient.HttpClient
   | Bus.Service
   | Config.Service
+  | Flag.Service
   | InstructionDiscovery.Service
   | SharedCache.Service
   | Skill.Service
@@ -187,6 +196,7 @@ export const OpencodePlugin = define<
     // and whether it evaluates the policies it is being sent.
     const http = HttpClient.mapRequest(client, HttpClientRequest.setHeader("User-Agent", App.useragent(ctx.app)))
     const config = yield* Config.Service
+    const flags = yield* Flag.Service
     const discovery = yield* InstructionDiscovery.Service
     const skills = yield* Skill.Service
     const cache = yield* SharedCache.Service
@@ -195,7 +205,7 @@ export const OpencodePlugin = define<
     type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
     let snapshot: {
       // The Console's regular OpenCode config, merged as an integration config layer.
-      remote: Effect.Success<ReturnType<typeof fetchConfig>>
+      remote: ConsoleConfig | undefined
       connection: ActiveConnection
       organization: string | undefined
     } = { remote: undefined, connection: undefined, organization: undefined }
@@ -209,6 +219,7 @@ export const OpencodePlugin = define<
     // Status last reported for the active connection, so inference failures can name the fix.
     let reported: IntegrationConnection.Status | undefined
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
+    const watches = yield* OpencodeWatches.make(ctx, http)
 
     // Every project signed in to the same workspace shares one fetch, reused while it is younger than `maxAge`.
     const load = Effect.fn("OpencodePlugin.load")(function* (maxAge: Duration.Input = Duration.minutes(1)) {
@@ -225,9 +236,16 @@ export const OpencodePlugin = define<
         Effect.flatMap((credential) => {
           if (!credential || credential.type === "external")
             return Effect.succeed({ remote: undefined, connection, organization: undefined })
+          const workspace = workspaceKey(connection, credential)
+          // Each list has its own cache entry, so a failing or malformed one keeps its last copy, or none, and never
+          // holds back the config and its policies. `SharedCache` already logs the failure.
+          const list = <A>(name: string, load: Effect.Effect<ReadonlyArray<A>, unknown>) =>
+            cache
+              .get({ key: `opencode-console-${name}:${workspace}`, interval: maxAge, load })
+              .pipe(Effect.orElseSucceed((): ReadonlyArray<A> => []))
           return cache
             .get({
-              key: `opencode-console:${workspaceKey(connection, credential)}`,
+              key: `opencode-console:${workspace}`,
               interval: maxAge,
               // A sign-in error is Console's answer for this sign-in, so it is shared like a config rather than
               // replaced by the last config, as a network failure is.
@@ -241,6 +259,27 @@ export const OpencodePlugin = define<
             .pipe(
               Effect.flatMap((result) =>
                 "failed" in result ? Effect.fail(result.failed) : Effect.succeed(result.remote),
+              ),
+              Effect.flatMap((remote) =>
+                remote?.lists
+                  ? Effect.all(
+                      {
+                        instructions: list(
+                          "instructions",
+                          fetchList(http, credential, "/api/v2/instructions", ConsoleInstructions).pipe(
+                            Effect.map((body) => body?.instructions ?? []),
+                          ),
+                        ),
+                        skills: list(
+                          "skills",
+                          fetchList(http, credential, "/api/v2/skills", ConsoleSkills).pipe(
+                            Effect.map((body) => body?.skills ?? []),
+                          ),
+                        ),
+                      },
+                      { concurrency: 2 },
+                    ).pipe(Effect.map((lists): ConsoleConfig => ({ ...remote, ...lists })))
+                  : Effect.succeed(remote && { ...remote, instructions: [], skills: [] }),
               ),
               Effect.map((remote) => ({
                 remote,
@@ -292,13 +331,36 @@ export const OpencodePlugin = define<
           info: next.remote,
         })
       yield* integrate(document)
-      // Managed `integration.use: deny` makes config layer a policies-only copy, which withholds instructions and
-      // skills too. Config keeps the document it holds when handed a deep-equal one, so compare by content.
-      yield* syncInstructionsAndSkills(
-        next,
-        document !== undefined && (!config.integration || isDeepStrictEqual(integrated, document)),
-      )
+      // Managed `integration.use: deny` makes config layer a policies-only copy, which withholds instructions,
+      // skills and event watches too. Config keeps the document it holds when handed a deep-equal one, so compare by
+      // content.
+      const allowed = document !== undefined && (!config.integration || isDeepStrictEqual(integrated, document))
+      yield* syncInstructionsAndSkills(next, allowed)
+      const watching = allowed && next.remote?.watches === true && (yield* flags.enabled("console_watches"))
+      yield* syncWatches(watching ? next.connection : undefined)
     })
+    // Watching starts when the console_watches flag is on and the Console's config says the workspace has event watches,
+    // and stops when either no longer holds.
+    const syncWatches = Effect.fnUntraced(
+      function* (connection: ActiveConnection) {
+        const credential = connection && (yield* ctx.integration.connection.resolve(connection))
+        if (!connection || !credential || credential.type === "external") return yield* watches.sync(undefined)
+        yield* watches.sync({
+          key: workspaceKey(connection, credential),
+          server: yield* normalizeServer(ConsoleAccess.server(credential)),
+          headers: ctx.integration.connection
+            .resolve(connection)
+            .pipe(
+              Effect.flatMap((current) =>
+                current && current.type !== "external"
+                  ? Effect.succeed(ConsoleAccess.headers(current))
+                  : Effect.fail(new Error("OpenCode Console is not connected")),
+              ),
+            ),
+        })
+      },
+      Effect.catch((cause) => Effect.logWarning("failed to start Console event watches", { cause })),
+    )
     const syncInstructionsAndSkills = (next: typeof snapshot, allowed: boolean) => {
       const remote = allowed ? next.remote : undefined
       instructions = (remote?.instructions ?? []).map(
@@ -543,42 +605,47 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
                 url: yield* ssoUrl(ConsoleAccess.server(value), body.value.connectionId),
               })
           }
+          const watches = response.headers[OpencodeWatches.header] !== undefined
+          const lists = response.headers[listsHeader] !== undefined
           const body = yield* HttpClientResponse.filterStatusOk(response).pipe(Effect.flatMap((ok) => ok.json))
-          const remote = yield* Schema.decodeUnknownEffect(ConfigIntegration.Remote)(body)
-          // Instructions and skills have their own endpoints. A 404 (none in the workspace) or a 403 other than SSO
-          // (the sign-in may not read them) counts as empty; any other error fails the load, which keeps the last lists.
-          const list = <A>(path: string, schema: Schema.Decoder<A>) =>
-            HttpClient.withScope(http)
-              .execute(
-                HttpClientRequest.get(`${ConsoleAccess.server(value)}${path}`).pipe(
-                  HttpClientRequest.acceptJson,
-                  HttpClientRequest.setHeaders(ConsoleAccess.headers(value)),
-                ),
-              )
-              .pipe(
-                Effect.flatMap((response) =>
-                  Effect.gen(function* () {
-                    if (response.status === 404) return undefined
-                    if (
-                      response.status === 403 &&
-                      Option.isNone(yield* HttpClientResponse.schemaBodyJson(SsoRequired)(response).pipe(Effect.option))
-                    )
-                      return undefined
-                    const ok = yield* HttpClientResponse.filterStatusOk(response)
-                    return yield* HttpClientResponse.schemaBodyJson(schema)(ok).pipe(
-                      Effect.orElseSucceed(() => undefined),
-                    )
-                  }),
-                ),
-              )
-          const instructions = yield* list("/api/v2/instructions", ConsoleInstructions)
-          const skills = yield* list("/api/v2/skills", ConsoleSkills)
-          return { ...remote, instructions: instructions?.instructions ?? [], skills: skills?.skills ?? [] }
+          return { ...(yield* Schema.decodeUnknownEffect(ConfigIntegration.Remote)(body)), watches, lists }
         }),
       ),
       Effect.scoped,
       // A Console that accepts the connection but never answers would otherwise hold the load, including the one at
       // startup, indefinitely. A timeout is a transient failure, which `SharedCache` retries.
+      Effect.timeout(Duration.seconds(5)),
+    )
+}
+
+// A 404 (none in the workspace) or a 403 other than SSO (the sign-in may not read them) is an empty list. Any other
+// error, including a malformed body, fails so the caller keeps the last list.
+function fetchList<A>(
+  http: HttpClient.HttpClient,
+  value: Credential.Key | Credential.OAuth,
+  path: string,
+  schema: Schema.Decoder<A>,
+) {
+  return HttpClient.withScope(http)
+    .execute(
+      HttpClientRequest.get(`${ConsoleAccess.server(value)}${path}`).pipe(
+        HttpClientRequest.acceptJson,
+        HttpClientRequest.setHeaders(ConsoleAccess.headers(value)),
+      ),
+    )
+    .pipe(
+      Effect.flatMap((response) =>
+        Effect.gen(function* () {
+          if (response.status === 404) return undefined
+          if (
+            response.status === 403 &&
+            Option.isNone(yield* HttpClientResponse.schemaBodyJson(SsoRequired)(response).pipe(Effect.option))
+          )
+            return undefined
+          return yield* HttpClientResponse.schemaBodyJson(schema)(yield* HttpClientResponse.filterStatusOk(response))
+        }),
+      ),
+      Effect.scoped,
       Effect.timeout(Duration.seconds(5)),
     )
 }

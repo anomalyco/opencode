@@ -7,6 +7,7 @@ import { prefersReducedMotion } from "@opencode/ui/motion"
 import { Titlebar } from "@/shell/titlebar/titlebar"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ToastRegion } from "@/shell/notifications/toast"
+import { createTipToasts } from "@/tips/model"
 import { UploadToastHost } from "@/composer/attachments/uploads"
 import { useSettingsSurface } from "@/settings/surface"
 import { useSettings } from "@/settings/model"
@@ -43,6 +44,8 @@ export default function Layout(props: ParentProps) {
   const tabs = useTabs()
   const mobile = createMediaQuery("(max-width: 767px)")
 
+  createTipToasts()
+
   const [state, setState] = createStore<{
     tabsWidth: number
     tabsMount: HTMLElement | undefined
@@ -58,7 +61,7 @@ export default function Layout(props: ParentProps) {
   const verticalTabs = () => preferences.appearance.tabLayout() !== "horizontal" && !mobile()
 
   const organizedSidebar = () =>
-    preferences.appearance.tabLayout() === "vertical" && preferences.general.sidebarOrganize() === "projects"
+    preferences.appearance.tabLayout() === "vertical" && preferences.general.sidebarOrganize() !== "list"
 
   const toggleSidebar = () => preferences.appearance.setSidebarOpen(!preferences.appearance.sidebarOpen())
 

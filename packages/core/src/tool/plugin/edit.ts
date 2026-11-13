@@ -8,7 +8,6 @@ export * as EditTool from "./edit.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai/effect"
-import { FileDiff } from "@opencode/schema/file-diff"
 import { Effect, Schema } from "effect"
 import { toolFailure } from "../runtime.js"
 import { Environment } from "../../environment/index.js"
@@ -33,10 +32,7 @@ export const Input = Schema.Struct({
   }),
 })
 
-export const Output = Schema.Struct({
-  files: Schema.Array(FileDiff.Info),
-  replacements: Schema.Number,
-})
+export const Output = Schema.String
 export type Output = typeof Output.Type
 
 const crlf = "\r\n"
@@ -348,16 +344,11 @@ export const Plugin = {
               const formatted =
                 result.formatted ?? (yield* FileMutation.readText(environment.files, target.absolute)).text
               return {
-                files: [fileDiff(result.resource, source, formatted)],
-                replacements,
-              } satisfies Output
+                output: `Edited ${result.resource} (${replacements} replacement${replacements === 1 ? "" : "s"})`,
+                metadata: { files: [fileDiff(result.resource, source, formatted)] },
+              }
             }).pipe(
               fileMutation.withLock([FileAccess.resolvePath(location.directory, input.path)]),
-              Effect.map((output) => ({
-                output,
-                content: `Edited ${output.files[0]?.file} (${output.replacements} replacement${output.replacements === 1 ? "" : "s"})`,
-                metadata: { files: output.files },
-              })),
               Effect.mapError(toolFailure(`Unable to edit ${input.path}`)),
             )
           },

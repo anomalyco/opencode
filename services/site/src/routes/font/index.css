@@ -53,7 +53,8 @@
     /* No backing behind the logo: over a dark or light surface it takes that scheme's artwork
        instead (surface.ts, github-link.css). That artwork is the brand's transparent logo
        (public/brand/files/opencode-logo-transparent-*.svg): the ink at 20% (light) or 28% (dark)
-       for the inner square and 70% / 72% for the open letters, so they tint with what is behind. */
+       for the inner square and 70% / 72% for the open letters, so they tint with what is behind.
+       grey-ok: the brand's logo artwork */
     [data-slot="logo"] {
       [data-slot="inner"] {
         fill: light-dark(rgb(31 31 31 / 0.2), rgb(238 238 238 / 0.28));
@@ -63,6 +64,7 @@
         fill: light-dark(rgb(31 31 31 / 0.7), rgb(238 238 238 / 0.72));
       }
     }
+    /* grey-ok-end */
 
     [data-slot="bare-theme"] {
       position: fixed;
@@ -320,6 +322,16 @@
     @media (pointer: coarse) and (max-width: 40rem) {
       [data-slot="top-copy"] {
         display: none;
+      }
+
+      /* The buttons are drawn 4px taller than the 25px logo mark, overhanging it by 2px above and
+         below (1px lower than the bar's centre line, as the mark's centre is 28.5px).
+         tap-targets.css's ::after keeps each one a 44px target. */
+      [data-slot="tools"] [data-component="site-button"] {
+        height: 29px;
+        margin-top: 1px;
+        padding-inline: 10px;
+        gap: 6px;
       }
 
       .letter-output {
@@ -2112,6 +2124,7 @@
       border: 1px solid currentColor;
     }
 
+    /* grey-ok: the specimen's printed paper, ink and shade */
     [data-swatch="paper"] {
       background: light-dark(var(--bg), #fff);
     }
@@ -2127,6 +2140,7 @@
     [data-swatch="shade"] {
       background: #cecece;
     }
+    /* grey-ok-end */
 
     [data-anno] {
       margin-left: 1rem;
@@ -2287,9 +2301,9 @@
     --link: var(--link-dark);
     --glyph-ink: #fff;
     --shade-alpha: 30%;
-    --text-weak: hsl(0, 0%, 62%);
-    background: #0c0c0c;
-    color: hsl(0, 0%, 95%);
+    --text-weak: var(--fixed-dark-muted);
+    background: var(--fixed-dark);
+    color: var(--fixed-dark-text);
     border-top: 1px solid hsl(0 0% 100% / 0.12);
   }
 
@@ -2340,10 +2354,10 @@
     inset: 0;
     border-radius: 50%;
     background:
-      linear-gradient(#fff, #fff) center top / 1px 38% no-repeat,
-      linear-gradient(#fff, #fff) center bottom / 1px 38% no-repeat,
-      linear-gradient(#fff, #fff) left center / 38% 1px no-repeat,
-      linear-gradient(#fff, #fff) right center / 38% 1px no-repeat;
+      linear-gradient(var(--fixed-white), var(--fixed-white)) center top / 1px 38% no-repeat,
+      linear-gradient(var(--fixed-white), var(--fixed-white)) center bottom / 1px 38% no-repeat,
+      linear-gradient(var(--fixed-white), var(--fixed-white)) left center / 38% 1px no-repeat,
+      linear-gradient(var(--fixed-white), var(--fixed-white)) right center / 38% 1px no-repeat;
     opacity: 0.35;
   }
 
@@ -2354,7 +2368,7 @@
     transform: translateX(-50%);
     padding: 0.125rem 0.375rem;
     background: #3b5cf6;
-    color: #fff;
+    color: var(--on-accent);
     white-space: nowrap;
   }
 
@@ -2584,7 +2598,7 @@
     height: 100svh;
     padding: var(--story-top) var(--pad) 0;
     background: var(--universe-blue);
-    color: #fff;
+    color: var(--on-accent);
     overflow: hidden;
 
     @media (max-width: 40rem) {
@@ -2735,7 +2749,7 @@
     margin-inline: calc(-1 * var(--pad));
     padding: 2rem var(--pad) clamp(5rem, 10vw, 9rem);
     background: var(--universe-blue);
-    color: #fff;
+    color: var(--on-accent);
   }
 
   [data-slot="universe-working"] {

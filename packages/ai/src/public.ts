@@ -109,13 +109,26 @@ export type {
 } from "./schema/index.js"
 export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageResponse } from "./image.js"
 export type {
+  ImageJob,
   ImageModelOptions,
   ImageOptions,
   ImageRequest,
   ImageRequestInput,
   ImageResolution,
   ImageRoute,
+  ImageStatus,
 } from "./image.js"
+export { VideoAspectRatio, VideoDuration, VideoModel, VideoModelSchema, VideoResponse } from "./video.js"
+export type {
+  VideoJob,
+  VideoModelOptions,
+  VideoOptions,
+  VideoRequest,
+  VideoRequestInput,
+  VideoResolution,
+  VideoRoute,
+  VideoStatus,
+} from "./video.js"
 export {
   ChoiceAnswer,
   ChoiceQuestion,
@@ -152,6 +165,16 @@ export type {
   DecisionResponseFor,
   DecisionModelRoute,
 } from "./decision.js"
+export { EmbeddingModel, EmbeddingModelSchema, EmbeddingResponse, EmbeddingUsage, EmbeddingValue } from "./embedding.js"
+export type {
+  EmbeddingInputType,
+  EmbeddingModelOptions,
+  EmbeddingModelRoute,
+  EmbeddingOptions,
+  EmbeddingRequest,
+  EmbeddingRequestInput,
+  EmbeddingValueInput,
+} from "./embedding.js"
 export { Media } from "./media.js"
 export type {
   AwaitOptions as GenerationAwaitOptions,

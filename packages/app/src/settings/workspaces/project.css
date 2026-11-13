@@ -62,6 +62,14 @@
   white-space: nowrap;
 }
 
+/* The name, then where Console manages a server the user's config replaces, on one line. */
+.project-settings-extension-row-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
 .project-settings-extension-row-copy {
   display: flex;
   min-width: 0;

@@ -34,7 +34,7 @@
       /* Square corners, like every other surface on the site. On the dark page every tile (Hex's
          black icon too) gets a hairline edge, drawn over the artwork, so it doesn't vanish. */
       border-radius: 0;
-      outline: 1px solid light-dark(transparent, hsl(0, 0%, 26%));
+      outline: 1px solid light-dark(transparent, var(--border-strong));
       outline-offset: -1px;
       background: var(--bg-weaker);
       font-family: var(--font-mono);
@@ -44,8 +44,8 @@
       /* A blank tile (no icon yet) or a mark drawn in it: black on the light page; on the dark page a
          lifted grey with a hairline edge, since black would vanish into the background. */
       &:is([data-empty], [data-mark]) {
-        background: light-dark(#000, hsl(0, 0%, 15%));
-        color: #fff;
+        background: light-dark(var(--media-black), var(--bg-weaker));
+        color: var(--fixed-white);
       }
 
       /* The GitHub and GitLab marks, white in the tile. */
@@ -56,7 +56,7 @@
 
       /* Black behind a product's own icon, so its rounded corners fill out to the square tile. */
       &:has(img) {
-        background: #000;
+        background: var(--media-black);
       }
 
       img {
@@ -95,6 +95,62 @@
       min-width: 6.5rem;
       justify-content: center;
       margin-inline-start: var(--gutter);
+    }
+
+    /* From 40rem: the Press list's row model (doc-list.css). The row's content stays on the
+       column's edge with its padding outside it, and the whole row is the link (the button's cover
+       spans it): hover, press or keyboard focus fills it in the rows' grey and shows the bar at its
+       start edge, both bleeding past the edge. The gap keeps the items the same distance apart. */
+    @media (min-width: 40rem) {
+      row-gap: calc(var(--product-list-gap) - 2 * var(--doc-row-pad));
+
+      li {
+        padding: var(--doc-row-pad);
+        margin-inline: calc(-1 * var(--doc-row-pad));
+        transition: background-color 150ms ease;
+
+        &::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          inset-inline-start: 0;
+          width: 2px;
+          background: var(--doc-row-bar);
+          opacity: 0;
+          transition: opacity 150ms ease;
+        }
+
+        &:has([data-slot="get"]:is(:active, :focus-visible)) {
+          background: var(--doc-row-fill);
+
+          &::after {
+            opacity: 1;
+          }
+        }
+
+        @media (hover: hover) and (pointer: fine) {
+          &:hover {
+            background: var(--doc-row-fill);
+
+            &::after {
+              opacity: 1;
+            }
+          }
+        }
+      }
+
+      /* No press scale: a transform would make the button the box its cover is placed in, and a
+         click on the row would end outside it. */
+      [data-slot="get"] {
+        transform: none !important;
+      }
+
+      [data-slot="get"]::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+      }
     }
 
     /* The nav's corner arrow after an external item's name, as in the phone menu: 6px after the

@@ -50,8 +50,10 @@ export interface Interface {
   readonly remove: (origin: string) => Effect.Effect<void>
   /** Resolves and caches the configuration for a registered source. */
   readonly resolve: (entry: Entry, variables: Readonly<Record<string, string>>) => Effect.Effect<Config[], Error>
-  /** Returns the last configuration resolved for an origin, kept until the source is removed. */
+  /** Returns the last configuration resolved for an origin, kept until it is cleared or the source is removed. */
   readonly cached: (origin: string) => Effect.Effect<Config[]>
+  /** Drops the last configuration resolved for an origin while keeping the source registered. */
+  readonly clearCached: (origin: string) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/WellKnown") {}
@@ -209,6 +211,9 @@ const layer = Layer.effect(
       cached: Effect.fn("WellKnown.cached")(function* (origin) {
         const value = yield* kv.get(configKey(origin))
         return Schema.is(Configs)(value) ? [...value] : []
+      }),
+      clearCached: Effect.fn("WellKnown.clearCached")(function* (origin) {
+        yield* kv.remove(configKey(origin))
       }),
     })
   }),

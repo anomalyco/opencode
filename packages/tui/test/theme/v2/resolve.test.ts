@@ -10,7 +10,7 @@ import {
   type ResolvedTheme,
   type ThemeDefinition,
 } from "@opencode/theme/tui"
-import { getOpenCodeTheme, parseTheme, type ThemeDocumentSource } from "../../../src/theme"
+import { getOpenCode2Theme, getOpenCodeTheme, parseTheme, type ThemeDocumentSource } from "../../../src/theme"
 
 const opencodeLight = selectTheme(getOpenCodeTheme(), "light")
 const opencodeDark = selectTheme(getOpenCodeTheme(), "dark")
@@ -117,6 +117,24 @@ test("generates syntax with one categorical hue", () => {
   } finally {
     syntax.destroy()
     owner.destroy()
+  }
+})
+
+test("draws paste chip text dark in dark mode and light in light mode", () => {
+  for (const mode of ["dark", "light"] as const) {
+    const theme = resolveThemeDocument(getOpenCode2Theme(), mode)
+    const owner = new ResourceContext({ objectCapacity: 1, renderCellsMax: 1 })
+    const syntax = generateSyntax(theme, owner)
+    try {
+      const style = syntax.getStyle("extmark.paste")!
+      expect(style.bg!.equals(theme.text.feedback.warning.base)).toBeTrue()
+      const luminance = (color: RGBA) => 0.299 * color.r + 0.587 * color.g + 0.114 * color.b
+      if (mode === "dark") expect(luminance(style.fg!)).toBeLessThan(luminance(style.bg!))
+      else expect(luminance(style.fg!)).toBeGreaterThan(luminance(style.bg!))
+    } finally {
+      syntax.destroy()
+      owner.destroy()
+    }
   }
 })
 

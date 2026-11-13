@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Fiber } from "effect"
-import { CodeMode } from "./lib/index.js"
-import { MAX_ARRAY_LENGTH, MAX_PENDING_PROMISES, MAX_STRING_LENGTH } from "../src/interpreter/limits.js"
+import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect"
+import { CodeMode, Tool } from "../src/index.js"
+import { MAX_ARRAY_LENGTH, MAX_PENDING_PROMISES, MAX_STRING_LENGTH } from "../src/runtime/limits.js"
 
 const runtime = CodeMode.make({ tools: {} })
 
@@ -40,7 +40,7 @@ describe("one built-in cannot build an unbounded value", () => {
   })
 
   // split and matchAll share the same result check but must build ten million items first to reach it,
-  // which is too slow for CI.
+  // which is too slow for CI; flat() over MAX_ARRAY_LENGTH (10M) elements still needs a 15s budget on Windows.
   test("arrays: constructor, length, Array.from, concat, flat", async () => {
     expect(await value(`return Array(${A}).length`)).toBe(A)
     for (const code of [
@@ -54,7 +54,7 @@ describe("one built-in cannot build an unbounded value", () => {
         "RangeError: Invalid array length",
       )
     }
-  })
+  }, 15_000)
 
   test("promises: too many pending at once, while settled ones do not count", async () => {
     const n = MAX_PENDING_PROMISES
@@ -72,28 +72,36 @@ describe("one built-in cannot build an unbounded value", () => {
 
 describe("the host stays in control", () => {
   test("other host work keeps running while one long job runs", async () => {
-    let ticks = 0
-    const result = await Effect.runPromise(
+    // Once the loop starts, the runner yields to the host every millisecond, so the host takes its 20 turns within
+    // about 20 slices: at most about a million iterations on a fast machine, far short of the job's 30 million. A job
+    // that kept the thread would finish first. Counting turns instead of timing them keeps this independent of how
+    // fast the loop runs, and waiting for the start keeps a cold engine's setup out of the count.
+    const exit = await Effect.runPromise(
       Effect.gen(function* () {
-        const counter = yield* Effect.forkChild(
-          Effect.forever(
-            Effect.andThen(
-              Effect.yieldNow,
-              Effect.sync(() => {
-                ticks += 1
-              }),
-            ),
+        const started = yield* Deferred.make<void>()
+        const job = yield* Effect.forkChild(
+          CodeMode.make({
+            tools: {
+              host: {
+                started: Tool.make({
+                  description: "Mark the loop as started",
+                  input: Schema.Struct({}),
+                  output: Schema.Boolean,
+                  execute: () => Deferred.succeed(started, undefined),
+                }),
+              },
+            },
+          }).execute(
+            `await tools.host.started({}); let t = 0; for (let i = 0; i < 30_000_000; i++) t += i % 3; return t`,
           ),
         )
-        const result = yield* runtime.execute(`let t = 0; for (let i = 0; i < 1_000_000; i++) t += i % 3; return t`)
-        yield* Fiber.interrupt(counter)
-        return result
+        yield* Deferred.await(started)
+        for (let turn = 0; turn < 20; turn++) yield* Effect.yieldNow
+        yield* Fiber.interrupt(job)
+        return yield* Fiber.await(job)
       }),
     )
-    expect(result).toMatchObject({ ok: true, value: 999_999 })
-    // The loop takes well over 10 ms anywhere, and the runner yields to the host every millisecond; a job that kept
-    // the thread for its whole run would let the counter tick at most a couple of times around it.
-    expect(ticks).toBeGreaterThan(10)
+    expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
   })
 
   // Each case would run for seconds or forever; the timeout must still stop it promptly.

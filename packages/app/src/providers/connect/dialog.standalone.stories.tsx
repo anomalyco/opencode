@@ -1,7 +1,7 @@
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { onMount } from "solid-js"
-import { DialogStoryRuntime, STORY_DIRECTORY } from "@/components-lab/dialog-story-runtime"
+import { DialogStoryRuntime, STORY_DIRECTORY, STORY_LOCKED_SERVER } from "@/components-lab/dialog-story-runtime"
 import { DialogConnectProvider, useProviderConnectController } from "./dialog"
 
 function ConnectProviderDialogStory() {
@@ -68,4 +68,17 @@ export const ApiKey = {
 
 export const LoginMethods = {
   render: renderConnection("openai"),
+}
+
+export const ClaudeAgentSetup = { render: renderConnection("claude-agent") }
+
+export const AwaitingBrowser = { render: renderConnection("github-copilot") }
+
+// The fixture refuses requests to this server. Submitting a sample service key shows the real error and retry.
+export const LockedRemoteServer = {
+  render: () => (
+    <DialogStoryRuntime servers={[STORY_LOCKED_SERVER]}>
+      <ProviderConnectionDialogStory provider="opencode" />
+    </DialogStoryRuntime>
+  ),
 }
