@@ -47,6 +47,8 @@
 
 #![allow(unsafe_code)]
 
+pub mod v2;
+
 use std::borrow::Cow;
 use std::ffi::c_void;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -2900,6 +2902,12 @@ impl Setup<'_> {
         self.registered.manifest.deltas = true;
         self.registered.deltas.push(Rc::new(run));
     }
+
+    /// Registers a surface of contract 2.0 ([`v2`]): a route or a slot claim whose view returns a keyed tree, which
+    /// the host reconciles. In process only until the C ABI of 2.0; the host mounts no surface of an external plugin.
+    pub fn surface(&mut self, surface: v2::Surface) {
+        self.registered.surfaces.push(surface);
+    }
 }
 
 /// What a plugin registered, which the host keeps while the plugin is active; the plugin registers through a
@@ -2925,6 +2933,7 @@ pub struct Registered {
     fence_gone: Vec<FenceGoneFn>,
     deltas: Vec<DeltasFn>,
     disposers: Vec<DisposeFn>,
+    surfaces: Vec<v2::Surface>,
 }
 
 impl Registered {
@@ -3033,6 +3042,11 @@ impl Registered {
     /// The handlers of [`Setup::on_deltas`].
     pub fn deltas(&self) -> &[DeltasFn] {
         &self.deltas
+    }
+
+    /// The surfaces of [`Setup::surface`].
+    pub fn surfaces(&self) -> &[v2::Surface] {
+        &self.surfaces
     }
 
     /// The event handlers, with the types each takes.
