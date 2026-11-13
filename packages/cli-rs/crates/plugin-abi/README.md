@@ -129,18 +129,35 @@ drops; a 1.4 build of today's SDK cannot wake a host that is gone.
 
 ## Moving from the 1.4 SDK to 1.5
 
-A 1.4 plugin keeps working unbuilt, and builds on the 1.5 SDK unchanged unless it writes a `Node::Box` or a `Layout`
-as a struct literal: both have new fields, so such a literal needs `..` with a default (`Layout::default()`), or the
-builders (`Node::column`, `Node::row`, `.border(…)`, `.padding_sides(…)`). 1.5 adds:
+A 1.4 plugin keeps working unbuilt: the binary boundary and the JSON only grew. Rebuilding it on the 1.5 SDK is a
+one-time source migration where it spells out the types that grew:
+
+- A `Node::Box { … }` literal no longer compiles, and Rust has no `..Default::default()` for an enum variant: build
+  boxes with `Node::column`, `Node::row` and their setters (`.gap`, `.padding`, `.bg`, `.border`, `.padding_sides`, …).
+- A `Layout { … }` literal needs `..Layout::default()`, or the builders (`.width`, `.grow`, `.shrink`, `.height`, …).
+- A pattern that names every field of `Node::Box` or `Layout` needs `..`, and an exhaustive `match` on `Dialog` or
+  `HostRequest` needs the new variants or `_`.
+
+Before the contract freezes at 2.0 these types become `#[non_exhaustive]` or are hidden behind builders, which also
+forbids the literals; that is a decision for 2.0, not a change a later 1.x can make.
+
+1.5 adds:
 
 - `Dialog::Confirm` and `Dialog::Alert`, TS `dialog.confirm` and `dialog.alert`. A confirm runs its action with the
-  input `true` or `false`; an alert runs its action once it closes, however it closes.
+  input `true` or `false`; an alert runs its action once it closes, however it closes. A dialog answers the
+  activation that showed it only: it closes when the plugin is disabled, fails or reloads.
 - On a `Node::Box`: `border(Border)` (sides, style, color, a title and its alignment), `padding_sides(Edges)`,
   `flex_wrap()` and `overflow(Overflow::Hidden)`. On a `Layout`: `height`, `min_height`, `max_height` and
   `margin(Edges)`. A border without a color is white, as TS draws it; name a token such as `border.base` to follow the
   theme.
 - The composer: `Read::composer()` (its text, the cursor as a byte offset, and its focus) and
-  `Host::edit_composer(ComposerEdit::{Set, Insert, Submit})`, which go through the composer's own edit path.
+  `Host::edit_composer(ComposerEdit::{Set, Insert, Submit})`, which go through the composer's own edit path. They act
+  only on a composer that shows, and a submit only where the composer may submit (no home form, its pane has the
+  input).
+- `Read::abi_minor()`, the host's minor version, for a plugin that falls back on an older host; and
+  `export_plugin!("my.plugin", setup, requires_minor = 5)` for one that cannot, which a 1.4 host then refuses with a
+  message instead of running it with its 1.5 requests refused.
+- What a dispose callback that panics asked for is dropped, as for any call that panics; the others keep theirs.
 
 ## Moving from the 1.3 SDK to 1.4
 

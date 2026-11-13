@@ -1072,6 +1072,11 @@ impl Layout {
         Self { margin: Some(edges), ..self }
     }
 
+    /// The layout `width` wide.
+    pub fn width(self, width: Width) -> Self {
+        Self { width: Some(width), ..self }
+    }
+
     /// The layout that grows into the room left over.
     pub fn grow(self) -> Self {
         Self { grow: true, ..self }
@@ -1495,7 +1500,8 @@ pub enum ComposerEdit {
     Set { text: String },
     /// Inserts `text` at the cursor, in place of a selection, as typing it does.
     Insert { text: String },
-    /// Submits the composer as enter does, whether or not it has focus (TS `ref.submit`).
+    /// Submits the composer as enter does, whether or not it has focus (TS `ref.submit`); nothing while it may not
+    /// submit (a home form, another pane with the input), as TS's `submit` refuses a disabled prompt.
     Submit,
 }
 
@@ -1880,9 +1886,15 @@ pub trait Read {
     fn dialog_open(&self, _key: &str) -> bool {
         false
     }
-    /// 1.5: the composer on screen, on home or in a session; `None` without one, and from a 1.4 host.
+    /// 1.5: the composer on screen, on home or in a session; `None` without one, while the host hides it (for a
+    /// permission or a form, as TS unmounts it), and from a 1.4 host.
     fn composer(&self) -> Option<Composer> {
         None
+    }
+    /// 1.5: the host's ABI minor version, so a plugin can fall back where an older host lacks a request, such as a
+    /// [`Dialog::Select`] for a [`Dialog::Confirm`] below 5. In process it is this crate's [`ABI_MINOR`].
+    fn abi_minor(&self) -> u32 {
+        ABI_MINOR
     }
 }
 
@@ -1927,7 +1939,7 @@ pub trait Host: Read {
     fn dialog(&self, dialog: Dialog);
     /// Copies `text` to the clipboard, then runs `then` once it is copied; a toast says so when it fails.
     fn copy(&self, text: &str, then: Option<Action>);
-    /// 1.5: edits the composer on screen; without one, and on a 1.4 host, it does nothing.
+    /// 1.5: edits the composer on screen ([`Read::composer`]); without one, and on a 1.4 host, it does nothing.
     fn edit_composer(&self, _edit: ComposerEdit) {}
     /// Declares storage key `key` of the plugin, for [`Setup::storage_key`].
     #[doc(hidden)]
@@ -1989,7 +2001,9 @@ impl HostHandle {
         // SAFETY: the host keeps the table alive until it destroys the instance, and every table starts with `size`.
         let size = unsafe { std::ptr::addr_of!((*self.api).size).read() };
         // SAFETY: `size` covers the core, a prefix of the table.
-        (size >= size_of::<HostApiV1_1>()).then(|| unsafe { &*self.api.cast::<HostApiV1_1>() })
+        let core = (size >= size_of::<HostApiV1_1>()).then(|| unsafe { &*self.api.cast::<HostApiV1_1>() })?;
+        // A host of another major version is no host this SDK can talk to.
+        (core.major == ABI_MAJOR).then_some(core)
     }
 
     /// Whether the table's `size` covers the entry that ends at `end`.
@@ -2110,6 +2124,10 @@ impl Read for HostHandle {
 
     fn composer(&self) -> Option<Composer> {
         self.read(&HostRequest::Composer)
+    }
+
+    fn abi_minor(&self) -> u32 {
+        self.core().map_or(0, |core| core.minor)
     }
 }
 
@@ -2674,11 +2692,25 @@ pub struct Plugin {
 
 /// Exports a plugin: `export_plugin!("my.plugin", setup)` with `fn setup(setup: &mut Setup) -> Result<(), String>`.
 /// It exports the current [`PluginApi`], with the crate's version as its [`Metadata`]. It requires a 1.4 host, which
-/// sends the render requests [`Setup`] answers.
+/// sends the render requests [`Setup`] answers; an older host refuses it with a message naming both versions.
+///
+/// A plugin that cannot work without what a newer minor adds, such as the composer of 1.5, asks for that host instead,
+/// and an older host refuses it the same way rather than run it with its requests refused:
+///
+/// ```ignore
+/// export_plugin!("my.plugin", setup, requires_minor = 5);
+/// ```
+///
+/// Below 4 it requires 4. A plugin that can do without reads [`Read::abi_minor`] and falls back instead.
 #[macro_export]
 macro_rules! export_plugin {
     ($id:expr, $setup:path) => {
         $crate::export_plugin!(@version $crate::ABI_MAJOR, $crate::ABI_MINOR, 4, $id, $setup);
+    };
+    ($id:expr, $setup:path, requires_minor = $requires:expr) => {
+        $crate::export_plugin!(
+            @version $crate::ABI_MAJOR, $crate::ABI_MINOR, $crate::runtime::requires($requires), $id, $setup
+        );
     };
     // A plugin that pretends to be built against another version, for the loader's tests.
     (@version $major:expr, $minor:expr, $requires:expr, $id:expr, $setup:path) => {
@@ -2768,6 +2800,12 @@ pub mod runtime {
     /// std is the plugin's. It marks the hook silenced without touching it, so no `create` replaces it.
     pub fn keep_panic_hook() {
         QUIET.call_once(|| {});
+    }
+
+    /// The host minor a plugin of this SDK requires when it asks for `minor`: at least 4, whose render requests the
+    /// SDK answers.
+    pub const fn requires(minor: u32) -> u32 {
+        if minor < 4 { 4 } else { minor }
     }
 
     /// Runs `setup`. When it fails or panics, the dispose callbacks it registered run before this returns, while the
@@ -2931,6 +2969,41 @@ mod tests {
         unsafe { &*ctx.cast::<std::sync::atomic::AtomicUsize>() }.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         unsafe { *out = Owned::EMPTY };
         OK
+    }
+
+    // Expected (carbon-p0a-9): a table of another major version is no host: nothing is called and its minor reads 0;
+    // in process the host's minor is this crate's.
+    #[test]
+    fn a_host_of_another_major_is_no_host() {
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let ctx = std::ptr::from_ref(&calls).cast_mut().cast();
+        let api = HostApi {
+            size: size_of::<HostApi>(),
+            major: ABI_MAJOR + 1,
+            minor: 0,
+            ctx,
+            call: Some(answer),
+            free: Some(free),
+            theme_mode: Some(light),
+            wake: Some(wake),
+        };
+        let host = HostHandle { api: &api };
+        assert_eq!(host.request(&HostRequest::Route), Err("no host".to_owned()));
+        assert_eq!((host.abi_minor(), host.mode(), host.waker().is_none()), (0, None, true));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+        let current = HostHandle { api: &HostApi { major: ABI_MAJOR, minor: 5, ..api } };
+        assert_eq!(current.abi_minor(), 5);
+        struct InProcess;
+        impl Read for InProcess {
+            fn theme_mode(&self) -> ThemeMode {
+                ThemeMode::Dark
+            }
+            fn color(&self, _: &str) -> Option<Rgba> {
+                None
+            }
+        }
+        assert_eq!(InProcess.abi_minor(), ABI_MINOR);
+        assert_eq!((runtime::requires(0), runtime::requires(4), runtime::requires(5)), (4, 4, 5));
     }
 
     // Expected: a table whose `size` does not cover the 1.1 core, or a misaligned table, is no host: its `call` is
@@ -3686,6 +3759,7 @@ mod tests {
             wake: None,
         };
         let host = HostHandle { api: &api };
+        assert_eq!(host.abi_minor(), 4);
         assert_eq!(host.composer(), None);
         host.edit_composer(ComposerEdit::Submit);
         let action = Action::Command { name: "x.a".into(), input: None };

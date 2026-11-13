@@ -229,6 +229,14 @@ fn versions_follow_the_abi_rules() {
         "plugin needs host ABI 1.4 or newer, this opencode-native has 1.3; update opencode-native"
     );
 
+    // A plugin that asks for the 1.5 host with `requires_minor = 5` loads here and is refused by a 1.4 host.
+    let needs = build("requires-1-5");
+    assert!(Library::open(&needs, HOST_MINOR).is_ok());
+    assert_eq!(
+        Library::open(&needs, 4).err().unwrap(),
+        "plugin needs host ABI 1.5 or newer, this opencode-native has 1.4; update opencode-native"
+    );
+
     // A plugin built against a newer minor version loads and uses what this host offers.
     let newer = build("minor-newer");
     assert_eq!(Native.inspect(&newer).unwrap().minor, 99);
