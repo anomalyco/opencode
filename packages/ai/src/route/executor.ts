@@ -7,7 +7,7 @@ import {
   HttpClientRequest,
   HttpClientResponse,
 } from "effect/http"
-import { HttpContext, HttpRateLimitDetails, AIError, TransportError } from "../schema/index.js"
+import { HttpContext, HttpRateLimitDetails, AIError, TransportError, isStandardHttpStatus } from "../schema/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../provider-error.js"
 import { headerDetails, responseHttp, Service, type HttpMiddleware, type Interface } from "./executor-service.js"
 
@@ -116,9 +116,14 @@ export const httpFailure = (input: {
   const headers = normalizedHeaders(Headers.fromInput(input.responseHeaders))
   const retryAfter = retryAfterMs(headers)
   const rateLimit = rateLimitDetails(headers, retryAfter)
+  const standard = input.status !== undefined && isStandardHttpStatus(input.status)
+  const message =
+    input.status !== undefined && !standard && !input.message.includes(`HTTP ${input.status}`)
+      ? `${input.message} (nonstandard HTTP ${input.status})`
+      : input.message
   return new AIError({
     reason: classifyProviderFailure({
-      message: input.message,
+      message,
       status: input.status,
       data: input.data,
       rawBody: input.responseBody,
@@ -126,7 +131,7 @@ export const httpFailure = (input: {
       rateLimit,
       cause: input.cause,
       http:
-        input.status === undefined || input.url === undefined
+        input.status === undefined || input.url === undefined || !standard
           ? undefined
           : new HttpContext({ url: input.url, status: input.status, headers }),
     }),
