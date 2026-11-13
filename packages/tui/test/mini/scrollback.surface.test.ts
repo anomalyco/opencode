@@ -1,7 +1,9 @@
 import { afterEach, expect, test } from "bun:test"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
+import { Writable } from "node:stream"
 import {
   CliRenderEvents,
+  EmbeddedTerminalRenderable,
   MarkdownRenderable,
   ResourceContext,
   RGBA,
@@ -9,7 +11,7 @@ import {
   TextAttributes,
   TextRenderable,
 } from "@opentui/core"
-import { MockTreeSitterClient, createTestRenderer, type TestRenderer } from "@opentui/core/testing"
+import { ManualClock, MockTreeSitterClient, createTestRenderer, type TestRenderer } from "@opentui/core/testing"
 import { monoSnapshot } from "../../src/mini/mono"
 import { RunScrollbackStream } from "../../src/mini/scrollback.surface"
 import { entryLook } from "../../src/mini/scrollback.shared"
@@ -369,6 +371,90 @@ test("renders monochrome scrollback as ASCII markdown", async () => {
     out.scrollback.destroy()
     destroy(claim(out.renderer))
   }
+})
+
+// What a terminal shows: the renderer writes to a recorded stdout, and the bytes replay in a VT.
+class Stdout extends Writable {
+  readonly isTTY = true
+  readonly chunks: Buffer[] = []
+  constructor(
+    readonly columns: number,
+    readonly rows: number,
+  ) {
+    super()
+  }
+  override _write(chunk: Uint8Array, _encoding: BufferEncoding, done: () => void) {
+    this.chunks.push(Buffer.from(chunk))
+    done()
+  }
+  getColorDepth() {
+    return 24
+  }
+}
+
+async function terminalText(commits: StreamCommit[], width = 60) {
+  const stdout = new Stdout(width, 16)
+  const out = await createTestRenderer({
+    width,
+    height: 16,
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+    stdout: stdout as unknown as NodeJS.WriteStream,
+    bufferedOutput: "stdout",
+    remote: true,
+    clock: new ManualClock(),
+  })
+  active.push(out.renderer)
+  const driver = out.renderer.nativeScene.driver
+  const frame = async () => {
+    await out.renderOnce()
+    await driver.idle()
+  }
+  await out.renderer.setupTerminal()
+  await driver.idle()
+  out.renderer.stdin.emit("data", Buffer.from("\x1b[1;1R"))
+  await driver.idle()
+  stdout.chunks.length = 0
+  const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  treeSitterClient.setMockResult({ highlights: [] })
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, { treeSitterClient, wrote: false })
+  for (const commit of commits) {
+    await scrollback.append(commit)
+    await frame()
+  }
+  await scrollback.complete()
+  await frame()
+  scrollback.destroy()
+  const view = await createTestRenderer({ width, height: 16 })
+  active.push(view.renderer)
+  const vt = new EmbeddedTerminalRenderable(view.renderer, { cols: width, rows: 16 })
+  view.renderer.root.add(vt)
+  vt.write(Buffer.concat(stdout.chunks).toString())
+  await view.renderOnce()
+  return view
+    .captureCharFrame()
+    .split("\n")
+    .map((row) => row.trimEnd())
+    .join("\n")
+}
+
+test("markdown written in several commits keeps its blank rows on the terminal", async () => {
+  const subagent = toolCommit({
+    tool: "subagent",
+    phase: "final",
+    toolState: "completed",
+    state: {
+      status: "completed",
+      input: { description: "Inspect reducer", agent: "explore" },
+      content: [{ type: "text", text: "# Findings\n\n- stable" }],
+      metadata: { sessionID: "ses-child-1", status: "completed", output: "# Findings\n\n- stable" },
+    },
+  })
+  expect(await terminalText([subagent])).toContain("Findings\n\n- stable")
+  const streamed = await terminalText([assistant("A\n\n"), assistant("B\n\n"), assistant("C")])
+  expect(streamed).toContain("A\n\nB\n\nC")
 })
 
 test("renders completed subagent markdown in monochrome mode", async () => {

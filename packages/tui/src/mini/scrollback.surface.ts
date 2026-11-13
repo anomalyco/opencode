@@ -331,7 +331,8 @@ export class RunScrollbackStream {
         renderable,
         startBlock: active.committedBlocks,
         endBlockExclusive: targetBlockCount,
-        trailingNewline: done && targetBlockCount === blockCount ? trailingNewline : false,
+        // Committed blocks end their rows; the gap above the next block goes out with that block.
+        trailingNewline: done ? trailingNewline : true,
         beforeCommit: () => this.flushPendingSpacer(active),
       })
     ) {
