@@ -125,11 +125,14 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
 }
 
 /// The commands of the P-PTY scenarios `P.0b/*`: `/p0btitle` sets the title (`parity/plugins/title/tui.ts` in TS),
+/// `/p0blong` sets one of 6009 bytes,
 /// `/p0brun <shell command>` runs `sh -c <command>` in the foreground, twice with `/p0btwice`, and toasts how each
 /// ended and sets it as the title.
 fn pty(setup: &mut Setup) {
     let title = Command { slash: Some("p0btitle".to_owned()), ..command("p0b.title", "Set the title", None) };
     setup.command(title, |host, _| host.set_title("p0b title"));
+    let long = Command { slash: Some("p0blong".to_owned()), ..command("p0b.long", "Set a long title", None) };
+    setup.command(long, |host, _| host.set_title(&format!("p0b long {}", "é".repeat(3000))));
     let asked = Rc::new(std::cell::RefCell::new(Vec::new()));
     for (name, times) in [("p0brun", 1), ("p0btwice", 2)] {
         let run = Command {
