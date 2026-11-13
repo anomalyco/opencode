@@ -34,7 +34,7 @@
       /* Square corners, like every other surface on the site. On the dark page every tile (Hex's
          black icon too) gets a hairline edge, drawn over the artwork, so it doesn't vanish. */
       border-radius: 0;
-      outline: 1px solid light-dark(transparent, hsl(0, 0%, 26%));
+      outline: 1px solid light-dark(transparent, var(--border-strong));
       outline-offset: -1px;
       background: var(--bg-weaker);
       font-family: var(--font-mono);
@@ -44,8 +44,8 @@
       /* A blank tile (no icon yet) or a mark drawn in it: black on the light page; on the dark page a
          lifted grey with a hairline edge, since black would vanish into the background. */
       &:is([data-empty], [data-mark]) {
-        background: light-dark(#000, hsl(0, 0%, 15%));
-        color: #fff;
+        background: light-dark(var(--media-black), var(--bg-weaker));
+        color: var(--fixed-white);
       }
 
       /* The GitHub and GitLab marks, white in the tile. */
@@ -56,7 +56,7 @@
 
       /* Black behind a product's own icon, so its rounded corners fill out to the square tile. */
       &:has(img) {
-        background: #000;
+        background: var(--media-black);
       }
 
       img {

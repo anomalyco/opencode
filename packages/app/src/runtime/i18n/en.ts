@@ -613,6 +613,12 @@ export const dict = {
   "home.sessions.group.yesterday": "Yesterday",
   "home.sessions.group.older": "Older",
   "home.providerTip": "Connect to 75+ providers to use other models, including Claude, GPT, Gemini, etc",
+  "tips.browse.title": "Control your browser",
+  "tips.browse.description": "Let OpenCode work in your browser with your tabs, logins, and extensions.",
+  "tips.browse.install": "Install",
+  "tips.hex.title": "Use your voice",
+  "tips.hex.description": "Hold a key and speak your prompts. Runs locally and works across your whole computer.",
+  "tips.hex.install": "Install",
   "home.workspaceTip": "Start next session in a new workspace to keep changes isolated",
 
   "session.tab.session": "Session",

@@ -61,6 +61,14 @@ export const make = <const Globals extends Readonly<Record<string, unknown>>>(
 }
 
 const asyncGlobals = new WeakSet<Function>()
+
+/** A live fetch response whose I/O is owned by the host for the lifetime of the program. */
+export class StreamingResponse {
+  constructor(
+    readonly response: Response,
+    readonly redirected = response.redirected,
+  ) {}
+}
 const AsyncFunction = (async () => {}).constructor
 
 /** Marks a global that returns a Promise or an Effect, so a denied call rejects its promise instead of throwing. */

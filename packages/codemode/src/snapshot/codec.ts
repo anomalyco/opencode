@@ -225,7 +225,13 @@ const builtinSpecs = (): ReadonlyArray<ClassSpec> => [
   { name: "HeadersObj", ctor: HeadersObj, fields: ["headers"], obj: true, constants: { tag: "Headers" } },
   { name: "URLObj", ctor: URLObj, fields: ["searchParams", "url"], obj: true, constants: { tag: "URL" } },
   { name: "Bytes", ctor: Bytes, fields: ["bytes"], obj: true, constants: { tag: "Uint8Array" } },
-  { name: "TextDecoderObj", ctor: TextDecoderObj, fields: ["decoder"], obj: true, constants: { tag: "Object" } },
+  {
+    name: "TextDecoderObj",
+    ctor: TextDecoderObj,
+    fields: ["decoder", "ignoreBOM", "queued", "seen"],
+    obj: true,
+    constants: { tag: "Object" },
+  },
   {
     name: "AsyncFromSyncIterator",
     ctor: AsyncFromSyncIterator,

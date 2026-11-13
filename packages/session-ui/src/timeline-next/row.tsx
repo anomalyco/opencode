@@ -32,7 +32,7 @@ import { useSources } from "../context/sources"
 import { turnSources } from "../sources/sources"
 import { SessionReadToolGroup, SessionUserMessage } from "../message/current-message"
 import { SessionCompactionMessage, SessionCompactionQueued } from "../message/message-content"
-import { taskAgentName, type ContextGroupPart } from "../tools/tool-renderer"
+import { taskAgentName } from "../tools/tool-renderer"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
 import type { TimelineDetail } from "../timeline/detail"
@@ -57,7 +57,7 @@ import { contentOpens, diffOpens, goal as goalMessage, thoughtOpens, toolRule, u
 import { Separator } from "./separator"
 import { timelineGaps } from "./spacing"
 import { AssistantContent } from "./tools/assistant-content"
-import { ContextGroup } from "./tools/context-group"
+import { ContextGroup, type ActivityGroupPart } from "./tools/context-group"
 import { FileGroup } from "./tools/file-group"
 import { PatchTool } from "./tools/patch"
 import { ShellMessage } from "./tools/shell"
@@ -335,7 +335,7 @@ export function createNextTimelineRowRenderer(input: {
         const contents = indexGroupContents(group.refs)
         const streaming = phase(row().userMessageID).streamingReasoningRef
 
-        return group.refs.flatMap<ContextGroupPart>((ref) => {
+        return group.refs.flatMap<ActivityGroupPart>((ref) => {
           const content = contents.get(ref.messageID)?.get(ref.partID)
 
           if (content?.type === "tool") {
@@ -364,6 +364,9 @@ export function createNextTimelineRowRenderer(input: {
             ]
 
           if (ref.messageID !== ref.partID || !message) return []
+          const event = noticeEvent(message)
+
+          if (event) return [{ type: "event", id: ref.partID, event }]
 
           if (message.type !== "assistant" && message.type !== "user")
             return [{ type: "notice", id: ref.partID, render: () => <Notice messageID={ref.messageID} grouped /> }]
@@ -402,6 +405,7 @@ export function createNextTimelineRowRenderer(input: {
             open={input.disclosure.value(key()) === true}
             onOpenChange={(open) => input.disclosure.set(key(), open)}
             onSizeChange={onSizeChange}
+            onRevealShell={input.revealPart}
           />
         </div>
       )
@@ -460,6 +464,7 @@ export function createNextTimelineRowRenderer(input: {
       return (
         <SessionReadToolGroup
           tools={tools()}
+          names={2}
           open={input.disclosure.value(row().group.key)}
           onOpenChange={(open) => input.disclosure.set(row().group.key, open)}
           onSizeChange={onSizeChange}
