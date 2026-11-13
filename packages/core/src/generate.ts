@@ -31,8 +31,8 @@ export interface TextInput {
 export interface VideoInput {
   readonly model: Model.Ref
   readonly prompt: string
-  readonly start?: Media.Asset
-  readonly end?: Media.Asset
+  readonly start?: Media.ImageAsset
+  readonly end?: Media.ImageAsset
   readonly references?: readonly Media.Asset[]
   readonly duration?: number
   readonly aspect?: VideoAspectRatio

@@ -250,6 +250,17 @@ export const Plugin = {
       return asset
     })
 
+    // Frames are images; `Media.image` keeps a URL whose type it can't tell for the provider to check.
+    const readFrame = (value: string, context: FileAccess.Invocation) =>
+      readMedia(value, context, ["image"]).pipe(
+        Effect.flatMap((asset) =>
+          Effect.try({
+            try: () => Media.image(asset),
+            catch: () => new ToolFailure({ message: `${value} must be image.` }),
+          }),
+        ),
+      )
+
     const wanted = models.available(["video"]).pipe(Effect.map((available) => available.length > 0))
     let enabled = false
     const refresh = wanted.pipe(
@@ -303,8 +314,8 @@ export const Plugin = {
                   ...Permission.invocation(context),
                 })
               }
-              const start = input.start ? yield* readMedia(input.start, context, ["image"]) : undefined
-              const end = input.end ? yield* readMedia(input.end, context, ["image"]) : undefined
+              const start = input.start ? yield* readFrame(input.start, context) : undefined
+              const end = input.end ? yield* readFrame(input.end, context) : undefined
               const references = input.references
                 ? yield* Effect.forEach(input.references, (reference) =>
                     readMedia(reference, context, ["image", "video", "audio"]),
