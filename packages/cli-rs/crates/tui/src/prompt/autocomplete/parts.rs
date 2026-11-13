@@ -57,14 +57,13 @@ impl Kind {
 #[derive(Default)]
 pub struct Parts {
     marks: RefCell<Vec<(ExtmarkId, Kind, usize)>>,
-    /// Pastes whose marks an edit removed. TS keeps a paste's text on its extmark, which undo brings back; the
-    /// textarea here does not restore marks, so [`restore_pastes`] does after an undo or redo.
+    /// Pastes whose marks an edit removed. TS keeps a paste's text on its extmark; here [`sync`] keeps it by mark id
+    /// until undo or redo brings the mark back.
     dropped: RefCell<Vec<Dropped>>,
 }
 
 struct Dropped {
-    start: u32,
-    end: u32,
+    id: ExtmarkId,
     label: String,
     text: String,
 }
@@ -165,19 +164,35 @@ pub fn sync(prompt: &Inner) {
     let mut marks = prompt.textarea.extmarks();
     // Marks in creation order, as TS lists them.
     marks.sort_by_key(|mark| mark.id);
-    let mapped = prompt.parts.marks.borrow().clone();
+    let mut mapped = prompt.parts.marks.borrow().clone();
     let mut info = prompt.prompt.borrow_mut();
+    let mut dropped = prompt.parts.dropped.borrow_mut();
     let gone = mapped.iter().filter(|(id, kind, _)| *kind == Kind::Pasted && !marks.iter().any(|mark| mark.id == *id));
-    prompt.parts.dropped.borrow_mut().extend(gone.filter_map(|&(_, _, index)| {
+    dropped.extend(gone.filter_map(|&(id, _, index)| {
         let paste = &info[Kind::Pasted.key()][index];
-        let offset = |key: &str| paste["source"][key].as_u64().map(|offset| offset as u32);
         Some(Dropped {
-            start: offset("start")?,
-            end: offset("end")?,
+            id,
             label: paste["source"]["text"].as_str()?.to_owned(),
             text: paste["text"].as_str()?.to_owned(),
         })
     }));
+    // Undo and redo bring back a removed paste's mark with its id; it is the paste again while its label is there.
+    for mark in &marks {
+        let Some(at) = dropped.iter().position(|paste| paste.id == mark.id) else { continue };
+        if prompt.textarea.buffer().range(mark.start, mark.end).unwrap_or_default() != dropped[at].label {
+            continue;
+        }
+        let paste = dropped.remove(at);
+        if !info[Kind::Pasted.key()].is_array() {
+            info[Kind::Pasted.key()] = json!([]);
+        }
+        let Some(pasted) = info[Kind::Pasted.key()].as_array_mut() else { continue };
+        pasted.push(
+            json!({ "text": paste.text, "source": { "start": mark.start, "end": mark.end, "text": paste.label } }),
+        );
+        mapped.push((mark.id, Kind::Pasted, pasted.len() - 1));
+    }
+    drop(dropped);
     let mut lists: [Vec<(Option<ExtmarkId>, Value)>; 4] = Default::default();
     for mark in &marks {
         let Some(&(_, kind, index)) = mapped.iter().find(|(id, _, _)| *id == mark.id) else { continue };
@@ -220,30 +235,6 @@ pub fn sync(prompt: &Inner) {
         }
     }
     *prompt.parts.marks.borrow_mut() = next;
-}
-
-/// After an undo or redo, brings back each dropped paste whose label is again where its mark was, so a submit sends
-/// its text (#63265). A fragment of the label stays plain text.
-pub fn restore_pastes(prompt: &Inner) {
-    let textarea = &prompt.textarea;
-    let marks = textarea.extmarks();
-    let dropped = std::mem::take(&mut *prompt.parts.dropped.borrow_mut());
-    let (back, kept): (Vec<_>, Vec<_>) = dropped.into_iter().partition(|paste| {
-        textarea.buffer().range(paste.start, paste.end).unwrap_or_default() == paste.label
-            && !marks.iter().any(|mark| mark.start < paste.end && paste.start < mark.end)
-    });
-    *prompt.parts.dropped.borrow_mut() = kept;
-    let mut info = prompt.prompt.borrow_mut();
-    for paste in back {
-        let mark = textarea.add_extmark(paste.start..paste.end, options(prompt, Kind::Pasted));
-        if !info[Kind::Pasted.key()].is_array() {
-            info[Kind::Pasted.key()] = json!([]);
-        }
-        let Some(pasted) = info[Kind::Pasted.key()].as_array_mut() else { return };
-        let source = json!({ "start": paste.start, "end": paste.end, "text": paste.label });
-        pasted.push(json!({ "text": paste.text, "source": source }));
-        prompt.parts.track(mark, Kind::Pasted, pasted.len() - 1);
-    }
 }
 
 /// Whether the prompt has a `kind` part whose `field` is `value` (`hasSkill`).
