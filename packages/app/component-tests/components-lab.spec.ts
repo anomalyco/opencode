@@ -12,3 +12,13 @@ story("opens a component from the standalone catalog and previews its states", a
   await page.getByText("Queue Three", { exact: true }).click()
   await expect(page.getByText("Rename the Alpha export", { exact: true })).toBeVisible()
 })
+
+story("edits a story's state argument from the inspector", async ({ page }) => {
+  await page.goto("/?story=../../app/src/composer/composer-touch.stories.tsx")
+  await page
+    .getByRole("region", { name: "components-lab controls" })
+    .getByRole("button", { name: "state", exact: true })
+    .click()
+  await page.getByRole("menuitemradio", { name: "shell", exact: true }).click()
+  await expect(page.getByLabel("Composer state", { exact: true })).toHaveValue("shell")
+})

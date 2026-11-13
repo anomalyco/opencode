@@ -39,6 +39,7 @@ import {
   type LabStageEvent,
 } from "./machine"
 import { applyMotionPatch, motionFields, motionScopes, motionValues, sameMotion, storyMotion } from "./motion"
+import "./inspector.css"
 
 // How long Play holds each state at full speed. Slow motion doubles it while the motion itself runs 4× longer, so
 // a transition still finishes and Play keeps moving.
@@ -169,7 +170,7 @@ export function LabBrowser(props: {
         expanded={rows().map((row) => row.id)}
         selection={props.params.story ? [props.params.story] : []}
         // Digits pick the story's states.
-        typeahead={(key) => !/^[1-9]$/.test(key)}
+        typeahead={(key) => !/^[0-9]$/.test(key)}
         onReady={(tree) => {
           // Opens the folders down to the story in the address, and later ones picked from the palette.
           createEffect(() => props.params.story && tree.reveal(props.params.story))
@@ -364,8 +365,9 @@ function Stage(props: {
     first === undefined || rest.length === 0
       ? {}
       : {
-          state: choice(first, [first, ...rest], { variants: true }),
-          play: toolbar(
+          // Story args can themselves be named `state` (e.g. the touch composer) or `play`.
+          "lab.preset": choice(first, [first, ...rest], { variants: true }),
+          "lab.playback": toolbar(
             [
               {
                 id: "previous",
@@ -382,7 +384,7 @@ function Stage(props: {
                 run: () => dispatch({ type: "step", delta: 1 }),
               },
             ],
-            { labels: false },
+            { labels: false, label: language.t("lab.play") },
           ),
         }
 
@@ -412,13 +414,13 @@ function Stage(props: {
         onChange: (patch, values, meta) => {
           applyMotionPatch(motion, patch)
 
-          if (!("state" in patch)) {
+          if (!("lab.preset" in patch)) {
             if (meta.source !== "preset") dispatch({ type: "pause" })
 
             return setArgs(Object.fromEntries(Object.entries(patch).filter(([key]) => key in fields)))
           }
 
-          dispatch({ type: "panel.state", name: String(values.state), fromPreset: meta.source === "preset" })
+          dispatch({ type: "panel.state", name: String(values["lab.preset"]), fromPreset: meta.source === "preset" })
         },
       },
     )
@@ -433,6 +435,8 @@ function Stage(props: {
     onCleanup(
       store.mount(props.inspector, {
         theme: props.scheme,
+        // At some pane widths automatic sizing alternates between chips and a list on every frame.
+        presetDisplay: "chips",
         header: { title: false, buttons: ["undo", "redo", "reset"] },
         variants: false,
         session: false,
@@ -452,15 +456,9 @@ function Stage(props: {
   onCleanup(motionTuning.subscribe(() => dispatch({ type: "motion.changed" })))
   onCleanup(() => dispatch({ type: "disposed" }))
 
-  makeEventListener(window, "keydown", (event) => {
-    const digit = Number(event.key)
-
-    if (names.length < 2 || !Number.isInteger(digit) || digit < 1 || digit > Math.min(9, names.length)) return
-
-    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || typing(event.target)) return
-    event.preventDefault()
-    dispatch({ type: "select", index: digit - 1 })
-  })
+  if (names.length > 1) {
+    bindPresetNumbers(props.inspector, names.length, (number) => dispatch({ type: "select", index: number - 1 }))
+  }
 
   return (
     // Contained layout makes the canvas hold its stories' dialogs, which the provider below portals into it.
@@ -540,6 +538,13 @@ function Grid(props: {
   let element!: HTMLDivElement
 
   onMount(() => {
+    const visibility = new Map<Element, (visible: boolean) => void>()
+
+    const observer = new IntersectionObserver(
+      (entries) => batch(() => entries.forEach((entry) => visibility.get(entry.target)?.(entry.isIntersecting))),
+      { root: element },
+    )
+
     const board = canvas(element, {
       theme: props.scheme,
       label: language.t("lab.grid"),
@@ -556,7 +561,20 @@ function Grid(props: {
             h: size.h,
             render: (card: HTMLElement) =>
               createRoot((dispose) => {
-                insert(card, () => <Tile entry={entry} plugin={props.plugin} />)
+                // The shell keeps its size and hit target as previews enter and leave the viewport.
+                card.dataset.labStory = entry.file
+                const [visible, setVisible] = createSignal(false)
+                visibility.set(card, setVisible)
+                observer.observe(card)
+                insert(card, () => (
+                  <Show when={visible()}>
+                    <Tile entry={entry} plugin={props.plugin} />
+                  </Show>
+                ))
+                onCleanup(() => {
+                  observer.unobserve(card)
+                  visibility.delete(card)
+                })
 
                 return dispose
               }, owner ?? undefined),
@@ -584,6 +602,7 @@ function Grid(props: {
     onCleanup(() => {
       element.removeEventListener("pointerdown", down, true)
       window.removeEventListener("pointerup", up, true)
+      observer.disconnect()
       board.dispose()
     })
   })
@@ -595,12 +614,12 @@ function Grid(props: {
 function Tile(props: { entry: LabEntry; plugin: LabPlugin }) {
   const [canvas, setCanvas] = createSignal<HTMLDivElement>()
   const component = props.entry.component
-  const render = props.entry.states[0]?.render ?? props.entry.render
+  const render = props.entry.gridPreview ?? props.entry.states[0]?.render ?? props.entry.render
 
   return (
     <div
       ref={setCanvas}
-      data-lab-story={props.entry.file}
+      inert
       class="relative flex size-full cursor-pointer overflow-hidden bg-v2-background-bg-base [contain:layout]"
       classList={{
         "items-center justify-center p-4": !props.entry.fullscreen,
@@ -649,6 +668,71 @@ function folderOf(entry: LabEntry) {
 
 function typing(target: EventTarget | null) {
   return target instanceof HTMLElement && (target.isContentEditable || !!target.closest("input, textarea, select"))
+}
+
+function bindPresetNumbers(inspector: HTMLElement, count: number, select: (number: number) => void) {
+  let pending: { number: number; timer: ReturnType<typeof setTimeout> } | undefined
+
+  const clear = () => {
+    clearTimeout(pending?.timer)
+    pending = undefined
+  }
+
+  const keydown = (event: KeyboardEvent) => {
+    if (
+      event.defaultPrevented ||
+      event.isComposing ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.altKey ||
+      event.shiftKey ||
+      typing(event.target) ||
+      !/^[0-9]$/.test(event.key)
+    )
+      return clear()
+
+    if (!pending && (event.key === "0" || Number(event.key) > count)) return
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (event.repeat) return
+
+    const number = (pending?.number ?? 0) * 10 + Number(event.key)
+    clear()
+
+    if (number > count) return
+
+    if (number * 10 > count) return select(number)
+
+    // A prefix can be a preset on its own. Wait for the next digit before mounting a story that might take focus.
+    pending = {
+      number,
+      timer: setTimeout(() => {
+        pending = undefined
+        select(number)
+      }, 450),
+    }
+  }
+
+  // Knobs handles single digits on a focused preset strip before the event reaches the window.
+  makeEventListener(
+    inspector,
+    "keydown",
+    (event) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest(".knobs-presets") &&
+        !event.target.closest(".knobs-card")
+      )
+        keydown(event)
+    },
+    { capture: true },
+  )
+  makeEventListener(window, "keydown", keydown)
+  makeEventListener(window, "pointerdown", clear, { capture: true })
+  makeEventListener(window, "blur", clear)
+  onCleanup(clear)
 }
 
 function pane(content: () => JSX.Element) {

@@ -24,7 +24,7 @@ type StoryObject = {
   argTypes?: { [key: string]: ArgType }
   render?: StoryRender
   // `motion` names the Knobs (by id, group or card) the story uses, so the inspector shows them beside its args.
-  parameters?: { layout?: string; motion?: readonly string[] }
+  parameters?: { layout?: string; motion?: readonly string[]; gridPreview?: () => JSX.Element }
 }
 
 export type StoryModule = { [name: string]: StoryObject | StoryRender | string[] | undefined }
@@ -40,6 +40,7 @@ export type LabEntry = {
   argTypes: { [key: string]: ArgType }
   render?: StoryRender
   fullscreen: boolean
+  gridPreview?: () => JSX.Element
   motion: readonly string[]
   states: LabState[]
 }
@@ -104,6 +105,7 @@ export function labEntry(file: string, module: StoryModule, source: string): Lab
     },
     render: meta.render,
     fullscreen: meta.parameters?.layout === "fullscreen",
+    gridPreview: meta.parameters?.gridPreview,
     motion: meta.parameters?.motion ?? [],
     states,
   }
