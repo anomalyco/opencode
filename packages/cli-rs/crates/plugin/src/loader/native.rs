@@ -581,6 +581,13 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
         }
         HostRequest::Composer => return read(ctx, |read| serde_json::to_value(read.composer())),
         HostRequest::ComposerEdit { edit } => ctx.effects.push(Effect::Composer(edit)),
+        HostRequest::Checkpoint => return Ok(crate::mark(ctx.effects.len(), ctx.undo.len()).into()),
+        HostRequest::Rollback { mark } => {
+            let (effects, writes) = crate::marked(mark);
+            ctx.effects.truncate(effects);
+            let host = ctx.host.upgrade().ok_or("the host is gone")?;
+            ctx.undo.restore_after(&*host, writes);
+        }
     }
     Ok(serde_json::Value::Null)
 }
