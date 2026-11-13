@@ -1830,3 +1830,153 @@ fn a_host_call_from_another_thread_is_refused() {
     assert_eq!(toasts, ["from the UI thread"]);
     assert!(host.edits.borrow().is_empty());
 }
+
+/// The host table of the last `raw` instance, and how its render answers: 0 with `hide`, 1 with a result the host
+/// refuses, 2 with `hide` and no effects asked for.
+static RAW_HOST: std::sync::atomic::AtomicPtr<HostApi> = std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+static RAW_MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+/// The statuses the host answered the raw render's requests with.
+static RAW_STATUSES: Mutex<Vec<i32>> = Mutex::new(Vec::new());
+
+/// A plugin written against the C ABI without the SDK: one 1.4 slot claim and one storage key.
+unsafe extern "C" fn raw_create(host: *const HostApi, _: Bytes, instance: *mut *mut c_void, out: *mut Owned) -> i32 {
+    RAW_HOST.store(host.cast_mut(), Ordering::SeqCst);
+    let manifest = r#"{"id":"raw","commands":[],"fences":[],"slots":[{"kind":"append","path":"home.footer","render":true}],"routes":[],"storage":["k"],"render":2}"#;
+    // SAFETY: the loader passes valid pointers; the instance pointer is never read.
+    unsafe {
+        *instance = std::ptr::NonNull::<u8>::dangling().as_ptr().cast();
+        *out = Owned::from_vec(manifest.as_bytes().to_vec());
+    }
+    abi::OK
+}
+
+/// Answers a render after asking the host for a submit, a toast, an alert and a storage write, as a faulty binding
+/// might; any other request with `null`.
+unsafe extern "C" fn raw_call(_: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
+    // SAFETY: the loader passes the request for the call.
+    let request = String::from_utf8_lossy(unsafe { request.as_slice() }).into_owned();
+    let mode = RAW_MODE.load(Ordering::SeqCst);
+    // A 1.3 fence render, which may ask for effects: they apply with a result the host draws, not with one it refuses.
+    if request.contains(r#""type":"fence""#) {
+        let table = Table(RAW_HOST.load(Ordering::SeqCst));
+        table.call(r#"{"type":"toast","variant":"info","message":"from a fence"}"#);
+        table.call(r#"{"type":"storage-set","key":"k","value":"{\"a\":1}"}"#);
+        let answer = if mode == 1 { r#"{"nonsense":1}"# } else { "null" };
+        // SAFETY: `out` is valid for writes during the call.
+        unsafe { *out = Owned::from_vec(answer.as_bytes().to_vec()) };
+        return abi::OK;
+    }
+    let answer = match request.contains(r#""type":"render""#) {
+        true => {
+            if mode != 2 {
+                let table = Table(RAW_HOST.load(Ordering::SeqCst));
+                let asks = [
+                    r#"{"type":"composer-edit","edit":{"type":"submit"}}"#,
+                    r#"{"type":"toast","variant":"info","message":"from a render"}"#,
+                    r#"{"type":"dialog","dialog":{"type":"alert","title":"T","message":"M"}}"#,
+                    r#"{"type":"storage-set","key":"k","value":"{\"a\":1}"}"#,
+                ];
+                let statuses = asks.iter().map(|ask| table.call(ask).0);
+                RAW_STATUSES.lock().unwrap().extend(statuses);
+            }
+            if mode == 1 { r#"{"type":"nonsense"}"# } else { r#"{"type":"hide"}"# }
+        }
+        false => "null",
+    };
+    // SAFETY: `out` is valid for writes during the call.
+    unsafe { *out = Owned::from_vec(answer.as_bytes().to_vec()) };
+    abi::OK
+}
+
+// Expected (bigboi 8): a render of a plugin without the SDK that asks the host for effects gets an error for each, and
+// nothing of them happens, whether its answer is drawn or refused: the host equals one whose render asked for nothing.
+#[test]
+fn a_render_that_asks_for_effects_gets_none() {
+    let outcome = |mode: u8| {
+        RAW_MODE.store(mode, Ordering::SeqCst);
+        RAW_STATUSES.lock().unwrap().clear();
+        let host = host();
+        let api = PluginApi {
+            size: size_of::<PluginApi>(),
+            major: ABI_MAJOR,
+            minor: ABI_MINOR,
+            requires_minor: 4,
+            create: Some(raw_create),
+            call: Some(raw_call),
+            destroy: None,
+            free: Some(abi::runtime::free),
+            describe: None,
+        };
+        let (definition, error) =
+            define(&dynamic(&host), Library::from_table(&api, HOST_MINOR).unwrap(), None).unwrap();
+        let registry = Registry::define(Vec::new(), []);
+        registry.load(&dynamic(&host), definition.external("raw.so", error));
+        let parent = View::new(host.app());
+        let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+        host.app.advance(Duration::from_millis(1));
+        let statuses = std::mem::take(&mut *RAW_STATUSES.lock().unwrap());
+        let seen = (
+            host.edits.borrow().len(),
+            host.toasts.borrow().len(),
+            host.dialogs.borrow().len(),
+            host.storage.borrow().get("plugin.raw.k").cloned(),
+            entry(&registry.entries(), "raw.so").status.clone(),
+        );
+        (statuses, seen)
+    };
+    let quiet = outcome(2);
+    assert_eq!(quiet.1, (0, 0, 0, None, Status::Active));
+    for mode in [0, 1] {
+        let (statuses, seen) = outcome(mode);
+        assert_eq!(statuses, [abi::ERROR; 4], "mode {mode}");
+        assert_eq!(seen, quiet.1, "mode {mode}");
+    }
+}
+
+/// The raw plugin as a 1.3 plugin with one fence, `raw`.
+unsafe extern "C" fn raw_create_1_3(
+    host: *const HostApi,
+    _: Bytes,
+    instance: *mut *mut c_void,
+    out: *mut Owned,
+) -> i32 {
+    RAW_HOST.store(host.cast_mut(), Ordering::SeqCst);
+    let manifest = r#"{"id":"raw","commands":[],"fences":["raw"],"slots":[],"routes":[],"storage":["k"]}"#;
+    // SAFETY: the loader passes valid pointers; the instance pointer is never read.
+    unsafe {
+        *instance = std::ptr::NonNull::<u8>::dangling().as_ptr().cast();
+        *out = Owned::from_vec(manifest.as_bytes().to_vec());
+    }
+    abi::OK
+}
+
+// Expected (bigboi 8): a 1.3 fence render may ask for effects; they apply when the host draws its answer, and when it
+// refuses the answer nothing of them happens and the storage it wrote is put back.
+#[test]
+fn a_refused_render_result_leaves_no_effects() {
+    let outcome = |mode: u8| {
+        RAW_MODE.store(mode, Ordering::SeqCst);
+        let host = host();
+        let api = PluginApi {
+            size: size_of::<PluginApi>(),
+            major: ABI_MAJOR,
+            minor: 3,
+            requires_minor: 0,
+            create: Some(raw_create_1_3),
+            call: Some(raw_call),
+            destroy: None,
+            free: Some(abi::runtime::free),
+            describe: None,
+        };
+        let (definition, error) =
+            define(&dynamic(&host), Library::from_table(&api, HOST_MINOR).unwrap(), None).unwrap();
+        let registry = Registry::define(Vec::new(), []);
+        registry.load(&dynamic(&host), definition.external("raw.so", error));
+        markdown(&host, &registry, "```raw\nx\n```\n");
+        host.app.advance(Duration::from_millis(1));
+        let toasts: Vec<_> = host.toasts.borrow().iter().map(|toast| toast.message.clone()).collect();
+        (toasts, host.storage.borrow().get("plugin.raw.k").cloned())
+    };
+    assert_eq!(outcome(0), (vec!["from a fence".to_owned()], Some("{\"a\":1}".to_owned())));
+    assert_eq!(outcome(1), (Vec::new(), None));
+}
