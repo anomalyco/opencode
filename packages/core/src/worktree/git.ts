@@ -13,6 +13,7 @@ export const make = Effect.gen(function* () {
 
   return {
     id: Worktree.StrategyID.make("git"),
+    canForgetMissingDirectory: true,
     create: Effect.fn("Worktree.Git.create")(function* (input) {
       const repository = yield* git.repo.discover(input.sourceDirectory)
       if (!repository) return yield* new DirectoryUnavailableError({ directory: input.sourceDirectory })
