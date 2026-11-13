@@ -1,7 +1,7 @@
 import { createMemo, createSignal, For, Show, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createLatest, usePlugin, type IconName } from "@opencode/plugin/gui"
-import { choiceLabel, choiceValue, Glyph, profileChoices, type Choice } from "./choices"
+import { choiceLabel, choiceValue, Glyph, profileChoices } from "./choices"
 import type definition from "./index"
 import { createProfileJobs, type JobMessage } from "./jobs"
 import type { ExtensionCompatibility, ProfileExtension, ProfileSource } from "./profile/ipc"
@@ -34,12 +34,6 @@ export default function BrowserSettings() {
   const blocked = () => !jobs.available() || jobs.running() !== undefined
   // Imported sign-ins that cannot be saved would be gone at the next start.
   const unsaved = () => jobs.unsaved() !== undefined
-
-  const importing = (choice: Choice) => {
-    const job = jobs.running()
-
-    return job?.type === "import-browser" && job.source === choice.source.id && job.profile === choice.profile.id
-  }
 
   // The file import and the sign-out say how they ended in their own rows.
   const fileMessage = () => (jobs.last()?.job.type === "import-file" ? jobs.describe(jobs.last()) : undefined)
@@ -110,7 +104,7 @@ export default function BrowserSettings() {
                   name={choice.source.name}
                   detail={choice.source.profiles.length > 1 ? choice.profile.name : undefined}
                   message={
-                    importing(choice) ? jobs.notice() : results().get(resultKey(choice.source.id, choice.profile.id))
+                    jobs.importing(choice) ? jobs.notice() : results().get(resultKey(choice.source.id, choice.profile.id))
                   }
                 />
               }
@@ -118,7 +112,7 @@ export default function BrowserSettings() {
               <ui.Button
                 size="small"
                 disabled={blocked() || unsaved()}
-                busy={importing(choice)}
+                busy={jobs.importing(choice)}
                 onClick={() =>
                   jobs.start({ type: "import-browser", source: choice.source.id, profile: choice.profile.id })
                 }

@@ -101,6 +101,14 @@ export default {
   "signins.imported.other": "Imported {{count}} cookies.",
   "signins.imported.from.one": "Imported {{count}} cookie from {{browser}}",
   "signins.imported.from.other": "Imported {{count}} cookies from {{browser}}",
+  "signins.imported.partial.one":
+    "Imported {{count}} cookie. This browser encrypts {{protected}} more so that only it can read them: sign in to those sites here, or export them with a cookie extension and import the file.",
+  "signins.imported.partial.other":
+    "Imported {{count}} cookies. This browser encrypts {{protected}} more so that only it can read them: sign in to those sites here, or export them with a cookie extension and import the file.",
+  "signins.imported.partial.named.one":
+    "Imported {{count}} cookie. {{browser}} encrypts {{protected}} more so that only it can read them: sign in to those sites here, or export them with a cookie extension and import the file.",
+  "signins.imported.partial.named.other":
+    "Imported {{count}} cookies. {{browser}} encrypts {{protected}} more so that only it can read them: sign in to those sites here, or export them with a cookie extension and import the file.",
   "signins.protected":
     "This browser encrypts its cookies so that only it can read them. Sign in here, or export them with a cookie extension and import the file.",
   "signins.protected.named":

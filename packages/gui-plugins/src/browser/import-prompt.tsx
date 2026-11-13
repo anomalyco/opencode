@@ -42,11 +42,17 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
     const count = last ? importedCookies(last.outcome) : 0
 
     if (!last || count === 0 || last.job.type !== "import-browser") return undefined
-    const source = last.job.source
+    const job = last.job
+    const choice = choices().find((item) => item.source.id === job.source && item.profile.id === job.profile)
+    const outcome = last.outcome
+    // Cookies the browser keeps for itself alone stayed behind: the message says how many, and what to do.
+    const partial = outcome.type === "imported" && outcome.result.type === "imported" && outcome.result.protected > 0
 
     return {
-      count,
-      choice: choices().find((choice) => choice.source.id === source),
+      choice,
+      text: partial
+        ? (jobs.describe(last)?.text ?? "")
+        : ctx.plural("signins.imported.from", count, { browser: choice?.source.name ?? "" }),
     }
   })
 
@@ -55,12 +61,6 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
 
   const run = (choice: Choice) =>
     jobs.start({ type: "import-browser", source: choice.source.id, profile: choice.profile.id })
-
-  const importing = (choice: Choice) => {
-    const job = jobs.running()
-
-    return job?.type === "import-browser" && job.source === choice.source.id && job.profile === choice.profile.id
-  }
 
   return (
     <Show
@@ -84,7 +84,7 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
             <Glyph image={done().choice?.source.icon} fallback="outline-globe" />
             <Icon name="check" class="shrink-0 text-v2-state-fg-success" />
             <p class="min-w-0 flex-1 text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-base">
-              {ctx.plural("signins.imported.from", done().count, { browser: done().choice?.source.name ?? "" })}
+              {done().text}
             </p>
             <Tooltip placement="top" value={ctx.t("common.close")}>
               <IconButton
@@ -130,7 +130,7 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
                     <span class="min-w-0 flex-1 truncate text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
                       {choiceLabel(choice)}
                     </span>
-                    <ui.Button size="small" disabled={blocked()} busy={importing(choice)} onClick={() => run(choice)}>
+                    <ui.Button size="small" disabled={blocked()} busy={jobs.importing(choice)} onClick={() => run(choice)}>
                       {ctx.t("signins.action")}
                     </ui.Button>
                   </div>
@@ -188,7 +188,7 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
               size="small"
               variant="contrast"
               disabled={blocked()}
-              busy={importing(first())}
+              busy={jobs.importing(first())}
               onClick={() => run(first())}
             >
               {ctx.t("signins.import", { browser: choiceLabel(first()) })}

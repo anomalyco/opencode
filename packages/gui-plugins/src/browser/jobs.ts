@@ -1,5 +1,6 @@
 import { createSignal, onCleanup, untrack } from "solid-js"
 import { createKeyed, createLatest, usePlugin, type IpcClient } from "@opencode/plugin/gui"
+import type { Choice } from "./choices"
 import type definition from "./index"
 import { BrowserProfile, type ExtensionCompatibility, type ProfileSource } from "./profile/ipc"
 import {
@@ -181,6 +182,15 @@ export function createProfileJobs(
         error: true,
       }
 
+    // Chrome and Edge on Windows mix readable cookies with app-bound ones: say what was left behind and what to do.
+    if (result.protected > 0)
+      return {
+        text: browser
+          ? ctx.plural("signins.imported.partial.named", result.imported, { browser, protected: result.protected })
+          : ctx.plural("signins.imported.partial", result.imported, { protected: result.protected }),
+        error: false,
+      }
+
     return { text: ctx.plural("signins.imported", result.imported), error: result.imported === 0 }
   }
 
@@ -192,6 +202,12 @@ export function createProfileJobs(
     start: (job: Job) => dispatch({ type: "started", job }),
     dismiss: () => dispatch({ type: "dismissed" }),
     running: () => runningJob(state()),
+    /** Whether the running job imports from this browser profile. */
+    importing: (choice: Choice) => {
+      const job = runningJob(state())
+
+      return job?.type === "import-browser" && job.source === choice.source.id && job.profile === choice.profile.id
+    },
     last: () => lastFinished(state()),
     describe,
     /** What to say while a job runs: on macOS, what the Keychain prompt in front of the window asks, and how to answer. */
