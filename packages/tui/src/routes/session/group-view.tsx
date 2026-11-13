@@ -172,7 +172,7 @@ function GroupContent(props: GroupProps) {
                         theme.text.feedback.warning.base.r,
                         theme.text.feedback.warning.base.g,
                         theme.text.feedback.warning.base.b,
-                        0.6,
+                        theme.thinkingOpacity,
                       )
               }
               complete={props.completed}

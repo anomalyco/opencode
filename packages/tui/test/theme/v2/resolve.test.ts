@@ -372,6 +372,40 @@ test("dialog footer overrides layer on the dialog surface", () => {
   expect(plain.surface("dialog.footer")).toBe(plain.surface("dialog"))
 })
 
+test("resolves thinkingOpacity defaults, overrides, and bounds", () => {
+  for (const mode of ["light", "dark"] as const) {
+    expect(resolveThemeDocument(getOpenCodeTheme(), mode).thinkingOpacity).toBe(0.6)
+    expect(resolveThemeDocument(getOpenCode2Theme(), mode).thinkingOpacity).toBe(0.6)
+  }
+
+  const inherited = resolveSource(
+    {
+      base: { ...(complete("dark").base as Record<string, unknown>), thinkingOpacity: 1 },
+      light: { hue: light.hue },
+      dark: { hue: dark.hue, thinkingOpacity: 0.25, "@dialog": { background: { base: "$background.raised.base" } } },
+    },
+    "dark",
+  )
+  expect(inherited.thinkingOpacity).toBe(0.25)
+  expect(inherited.surface("dialog").thinkingOpacity).toBe(0.25)
+
+  const lightResolved = resolveSource(
+    {
+      base: { ...(complete("light").base as Record<string, unknown>), thinkingOpacity: 1 },
+      light: { hue: light.hue, "@dialog": { thinkingOpacity: 0.4 } },
+    },
+    "light",
+  )
+  expect(lightResolved.thinkingOpacity).toBe(1)
+  expect(lightResolved.surface("dialog").thinkingOpacity).toBe(0.4)
+
+  expect(() => resolveSource(complete("dark", { thinkingOpacity: -0.1 }))).toThrow("Invalid theme")
+  expect(() => resolveSource(complete("dark", { thinkingOpacity: 1.1 }))).toThrow("Invalid theme")
+  expect(() => resolveTheme(override(light, { thinkingOpacity: 0.5, text: { base: "$thinkingOpacity" } }))).toThrow(
+    'Theme reference "$thinkingOpacity" at "theme.text.base" is not a color',
+  )
+})
+
 test("rejects missing and circular references", () => {
   expect(() => resolveTheme(override(light, { text: { base: "$missing" } }))).toThrow(
     'Theme reference "$missing" was not found',

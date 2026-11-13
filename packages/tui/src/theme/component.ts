@@ -14,6 +14,9 @@ export function createComponentTheme(
     get categorical() {
       return view().categorical
     },
+    get thinkingOpacity() {
+      return view().thinkingOpacity
+    },
     get text() {
       return view().text
     },
