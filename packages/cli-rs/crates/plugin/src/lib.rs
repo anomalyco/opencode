@@ -126,6 +126,8 @@ pub trait Host: 'static {
     fn copy(&self, text: &str) -> bool {
         self.app().copy_to_clipboard(text)
     }
+    /// Edits the composer on screen ([`abi::Host::edit_composer`]). Called outside every plugin callback.
+    fn edit_composer(&self, _edit: abi::ComposerEdit) {}
     /// The widget of an [`abi::Node::Markdown`]. By default, Markdown in the page theme without plugin fences.
     fn markdown(&self, text: &str) -> AnyWidget {
         let theme = self.theme();
@@ -616,6 +618,10 @@ impl abi::Read for Scoped<'_> {
     fn dialog_open(&self, key: &str) -> bool {
         self.host.dialog_open(&self.scope.id, key)
     }
+
+    fn composer(&self) -> Option<abi::Composer> {
+        self.read.composer()
+    }
 }
 
 impl abi::Host for Scoped<'_> {
@@ -692,6 +698,10 @@ impl abi::Host for Scoped<'_> {
     fn copy(&self, text: &str, then: Option<abi::Action>) {
         let text = text.to_owned();
         self.defer(move |host| copy(host, &text, then));
+    }
+
+    fn edit_composer(&self, edit: abi::ComposerEdit) {
+        self.defer(move |host| host.edit_composer(edit));
     }
 
     fn declare_storage_key(&self, key: &str) {

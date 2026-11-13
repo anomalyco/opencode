@@ -526,6 +526,16 @@ impl Inner {
         self.parts_changed();
     }
 
+    /// `ref.set` with text alone: the history's place and the attachments go, the mode stays, and the cursor goes to
+    /// the end.
+    pub(crate) fn set_text(&self, text: &str) {
+        self.history.reset();
+        let mut prompt = empty_prompt();
+        prompt["text"] = Value::String(text.to_owned());
+        prompt["mode"] = Value::String(self.mode.get().as_str().to_owned());
+        self.restore(prompt);
+    }
+
     /// `resetComposer`.
     pub(crate) fn reset(&self) {
         self.history.reset();
