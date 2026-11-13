@@ -78,6 +78,12 @@ export interface QueuedRoute<Request extends MediaRequest, Response> {
     token: unknown,
     execute: Execute,
   ) => Effect.Effect<Generation<Response>, AIError>
+  /** The status, result and cancel operations for a persisted token, without reading its status first. */
+  readonly attach: (
+    model: MediaRequest["model"],
+    token: unknown,
+    execute: Execute,
+  ) => Effect.Effect<Generation<Response>["route"], AIError>
 }
 
 /** One request whose response parses into events; `generate` runs the same stream and collects it. */
@@ -219,12 +225,8 @@ export const queued = <Request extends MediaRequest, Response, Token>(
     return new Generation(route, encodeToken(started.token), started.snapshot)
   })
 
-  const resume = Effect.fn("MediaRoute.resume")(function* (
-    model: MediaRequest["model"],
-    raw: unknown,
-    execute: Execute,
-  ) {
-    const token = yield* decodeToken(raw).pipe(
+  const decode = (raw: unknown) =>
+    decodeToken(raw).pipe(
       Effect.mapError(
         (cause) =>
           new AIError({
@@ -235,11 +237,21 @@ export const queued = <Request extends MediaRequest, Response, Token>(
           }),
       ),
     )
+
+  const attach = (model: MediaRequest["model"], raw: unknown, execute: Execute) =>
+    decode(raw).pipe(Effect.map((token) => generationRoute(token, transport.exchange(model), execute)))
+
+  const resume = Effect.fn("MediaRoute.resume")(function* (
+    model: MediaRequest["model"],
+    raw: unknown,
+    execute: Execute,
+  ) {
+    const token = yield* decode(raw)
     const route = generationRoute(token, transport.exchange(model), execute)
     return new Generation(route, encodeToken(token), yield* route.status)
   })
 
-  return { kind: "queued", id: protocol.id, provider: protocol.provider, protocol: protocol.id, start, resume }
+  return { kind: "queued", id: protocol.id, provider: protocol.provider, protocol: protocol.id, start, resume, attach }
 }
 
 /** Compose a streaming media protocol; `generate` runs the same stream in `generate` mode and folds it with `collect`. */

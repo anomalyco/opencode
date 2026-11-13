@@ -310,4 +310,31 @@ describe("Media", () => {
       expect(missing.reason._tag).toBe("InvalidRequest")
     }).pipe(Effect.provide(NodeFileSystem.layer), Effect.provide(scriptedResponses(["unused"]))),
   )
+
+  it.effect("streams a URL download into place and leaves an existing file alone when the download fails", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem
+      const dir = yield* fs.makeTempDirectoryScoped()
+      const target = `${dir}/clip.mp4`
+
+      yield* Media.write(Media.url("https://cdn.example.test/ok.mp4"), target)
+      expect(yield* fs.readFile(target)).toEqual(Uint8Array.from([7, 8, 9]))
+
+      const error = yield* Media.write(Media.url("https://cdn.example.test/expired.mp4"), target).pipe(Effect.flip)
+      expect(error.reason.http?.status).toBe(404)
+      expect(yield* fs.readFile(target)).toEqual(Uint8Array.from([7, 8, 9]))
+      expect(yield* fs.readDirectory(dir)).toEqual(["clip.mp4"])
+    }).pipe(
+      Effect.provide(NodeFileSystem.layer),
+      Effect.provide(
+        dynamicResponse((input) =>
+          Effect.succeed(
+            input.request.url.endsWith("/ok.mp4")
+              ? input.respond(Uint8Array.from([7, 8, 9]), { headers: { "content-type": "video/mp4" } })
+              : input.respond("file expired", { status: 404 }),
+          ),
+        ),
+      ),
+    ),
+  )
 })

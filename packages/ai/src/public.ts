@@ -116,6 +116,17 @@ export type {
   ImageResolution,
   ImageRoute,
 } from "./image.js"
+export { VideoAspectRatio, VideoDuration, VideoModel, VideoModelSchema, VideoResponse } from "./video.js"
+export type {
+  VideoJob,
+  VideoModelOptions,
+  VideoOptions,
+  VideoRequest,
+  VideoRequestInput,
+  VideoResolution,
+  VideoRoute,
+  VideoStatus,
+} from "./video.js"
 export {
   ChoiceAnswer,
   ChoiceQuestion,
