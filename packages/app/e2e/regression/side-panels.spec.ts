@@ -387,3 +387,57 @@ test("the new tab view lists recently closed tabs, expands to the rest, and keep
   await expect(rows.first()).toContainText("closed-00.ts")
   await expect(recent).not.toContainText("README.md")
 })
+
+test("Mod+F finds in Markdown and HTML previews with the code view's find bar", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/PreviewFind"
+  const key = `local\u0000${base64Encode(directory)}/ses_previewfind`
+  const files: Record<string, string> = {
+    "notes.md": "# Needle notes\n\nOne needle here.\n\nAnother **needle** there.",
+    "page.html": "<!doctype html><title>Page</title><p>First needle</p><p style='margin-top:2000px'>Last needle</p>",
+  }
+
+  await openSession(page, {
+    name: "PreviewFind",
+    fileList: () => [],
+    fileContent: (path) => ({ type: "text", content: files[path.split("/").at(-1) ?? ""] ?? "" }),
+    seed: {
+      panes: { ses_previewfind: { review: true } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: { [key]: { all: ["file://notes.md", "file://page.html"], active: "file://notes.md" } },
+        },
+      },
+    },
+  })
+
+  const side = page.locator('[data-pane-content="side"]')
+  const find = page.getByRole("textbox", { name: "Find" })
+  const mod = await page.evaluate(() => (/(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"))
+  await side.getByText("One needle here.").click()
+  await page.keyboard.press(`${mod}+f`)
+  await expect(find).toBeFocused()
+  await find.fill("needle")
+  await expect(page.getByText("1/3", { exact: true })).toBeVisible()
+  await find.press("Enter")
+  await expect(page.getByText("2/3", { exact: true })).toBeVisible()
+  await find.press("Shift+Enter")
+  await find.press("Shift+Enter")
+  await expect(page.getByText("3/3", { exact: true })).toBeVisible()
+  await find.press("Escape")
+  await expect(find).toHaveCount(0)
+
+  // The HTML runs in a sandboxed frame; Mod+F pressed inside it still opens the bar.
+  await side.getByRole("tab", { name: "page.html", exact: true }).click()
+  const frame = side.frameLocator('iframe[data-file-find="frame"]')
+  await frame.getByText("First needle").click()
+  await page.keyboard.press(`${mod}+f`)
+  await expect(find).toBeFocused()
+  await find.fill("needle")
+  await expect(page.getByText("1/2", { exact: true })).toBeVisible()
+  await find.press("Enter")
+  await expect(page.getByText("2/2", { exact: true })).toBeVisible()
+  await expect(frame.getByText("Last needle")).toBeInViewport()
+  await find.press("Escape")
+  await expect(find).toHaveCount(0)
+})
