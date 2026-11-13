@@ -29,6 +29,12 @@ impl TextPart {
         &self.root
     }
 
+    /// Takes the theme of `cx` in place: the text and its code views stay.
+    pub fn restyle(&self, cx: &Context<'_>) {
+        let colors = opencode_ui::markdown::view_colors(cx.theme, cx.syntax);
+        opencode_ui::markdown::restyle(&self.markdown, colors, cx.syntax);
+    }
+
     pub fn update(&self, message: &SessionMessageAssistant, part: &SessionMessageAssistantText) {
         let text = part.text.trim();
         self.root.visible(!text.is_empty());

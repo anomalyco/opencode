@@ -20,7 +20,7 @@ pub(super) struct Inner {
     pub(super) tui: Weak<Tui>,
     pub(super) this: Weak<Inner>,
     pub(super) transcript: Transcript,
-    theme: Theme,
+    theme: RefCell<Theme>,
     latest: View,
     latest_text: Text,
     latest_hover: Cell<bool>,
@@ -53,7 +53,7 @@ impl Controls {
             tui: tui.weak(),
             this: this.clone(),
             transcript: transcript.clone(),
-            theme,
+            theme: RefCell::new(theme),
             latest,
             latest_text,
             latest_hover: Cell::new(false),
@@ -69,6 +69,12 @@ impl Controls {
         });
         inner.install(tui);
         Self(inner)
+    }
+
+    /// Takes the page theme in place.
+    pub fn restyle(&self, tui: &Tui) {
+        *self.0.theme.borrow_mut() = tui.page();
+        self.0.paint();
     }
 
     /// The prompt's `onSubmit` (`index.tsx:1650-1652`): back to the newest rows after a send, unless
@@ -132,8 +138,7 @@ impl Inner {
         let weak = self.this.clone();
         self.latest.on_hover(bind!(weak, |inner, _, hovered| {
             inner.latest_hover.set(hovered);
-            let action = &inner.theme.text.action.secondary;
-            inner.latest_text.fg(if hovered { action.hovered } else { action.base });
+            inner.paint();
         }));
         // The wheel and the content's growth move the view; the label follows after they settle.
         let weak = self.this.clone();
@@ -151,6 +156,14 @@ impl Inner {
         self.register(tui);
     }
 
+    /// "Jump to latest" and the scrollbar in the theme.
+    fn paint(&self) {
+        let theme = self.theme.borrow();
+        let action = &theme.text.action.secondary;
+        self.latest_text.fg(if self.latest_hover.get() { action.hovered } else { action.base });
+        self.transcript.scroll().scrollbar_colors(theme.border.base, theme.decrease(&theme.background.raised.base, 1));
+    }
+
     /// `session.scrollbar` and the `scroll` section.
     fn configure(&self, info: &Info) {
         let session = info.session.as_ref();
@@ -158,7 +171,7 @@ impl Inner {
         self.scrollbar.set(scrollbar);
         let scroll = self.transcript.scroll();
         scroll.scrollbars(scrollbar);
-        scroll.scrollbar_colors(self.theme.border.base, self.theme.decrease(&self.theme.background.raised.base, 1));
+        self.paint();
         // The viewport's and the bar's one-cell paddings (`viewportOptions`, `verticalScrollbarOptions`).
         // The wrapper's resizes the viewport, which shows or hides the bar right away.
         let padding = u16::from(scrollbar);
