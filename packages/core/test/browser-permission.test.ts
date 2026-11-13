@@ -1,7 +1,7 @@
-import { expect, test } from "bun:test"
+import { expect } from "bun:test"
 import { hostname } from "os"
 import path from "path"
-import { Context, Deferred, Effect, Fiber, Schedule, Stream } from "effect"
+import { Context, Deferred, Effect, Exit, Fiber, Schedule, Stream } from "effect"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -21,9 +21,7 @@ import { Rpc } from "@opencode/core/rpc"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
-import { Wildcard } from "@opencode/core/util/wildcard"
 import { BrowserConnection } from "../../plugin-browser/src/connection"
-import { BrowserMachine } from "../../plugin-browser/src/machine"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -397,38 +395,6 @@ it.live("a configured browser ask prompts for the call instead of being answered
     expect(browser.commands.count).toBe(1)
   }),
 )
-
-test("the plugin picks the same browser rule as core's permission evaluation", () => {
-  const patterns = [
-    "*",
-    "browser",
-    "brow*",
-    "b?owser",
-    "browser.*",
-    "Browser",
-    "files.*",
-    "tabs.list",
-    "b.owser",
-    "browser *",
-    "*.list",
-    "a\\b",
-  ]
-  const inputs = ["browser", "tabs.list", "files.upload", "evaluate", "browser.x", "a/b"]
-  for (const input of inputs)
-    for (const pattern of patterns) expect(BrowserMachine.match(input, pattern)).toBe(Wildcard.match(input, pattern))
-  // Each pattern once as an action (any resource) and once as a resource of `browser`, with varying effects.
-  const rules = patterns.flatMap((pattern, index) => [
-    rule("*", index % 3 === 0 ? "deny" : index % 3 === 1 ? "allow" : "ask", pattern),
-    rule(pattern, index % 2 === 0 ? "ask" : "deny"),
-  ])
-  for (const operation of inputs)
-    for (const end of rules.keys()) {
-      const slice = rules.slice(0, end + 1)
-      // Core returns the rule it picked, or a fresh default `ask` rule when none matches.
-      const picked = Permission.evaluate("browser", operation, slice)
-      expect(BrowserMachine.selectBrowserRule(slice, operation)).toBe(slice.includes(picked) ? picked : undefined)
-    }
-})
 
 // The pending permission request for `operation`, once the call has asked.
 const asked = (permissions: Permission.Interface, operation: string) =>

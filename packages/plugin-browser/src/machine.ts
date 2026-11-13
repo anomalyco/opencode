@@ -3,6 +3,7 @@ export * as BrowserMachine from "./machine.js"
 import type { Permission } from "@opencode/schema/permission"
 import type { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
+import { Wildcard } from "@opencode/schema/wildcard"
 import type { Browser } from "./rpc.js"
 import { BrowserSkill } from "./skill.js"
 
@@ -575,18 +576,11 @@ export function isGrant(rule: Permission.Rule) {
  * action and resource patterns both match. Undefined when none matches.
  */
 export function selectBrowserRule(rules: readonly Permission.Rule[], operation: string) {
-  return rules.findLast((rule) => match("browser", rule.action) && match(operation, rule.resource))
-}
-
-/** Core's `Wildcard.match`, which plugins cannot import. A core test checks the two agree. */
-export function match(input: string, pattern: string) {
-  const escaped = pattern
-    .replaceAll("\\", "/")
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-    .replace(/\*/g, ".*")
-    .replace(/\?/g, ".")
-  const source = escaped.endsWith(" .*") ? escaped.slice(0, -3) + "( .*)?" : escaped
-  return new RegExp("^" + source + "$", process.platform === "win32" ? "si" : "s").test(input.replaceAll("\\", "/"))
+  const ignoreCase = process.platform === "win32"
+  return rules.findLast(
+    (rule) =>
+      Wildcard.match("browser", rule.action, ignoreCase) && Wildcard.match(operation, rule.resource, ignoreCase),
+  )
 }
 
 export function isConnectionDisposed(state: ConnectionState) {
