@@ -54,7 +54,10 @@ fn markdown(host: &Rc<TestHost>, registry: &Registry, text: &str) -> String {
         host.app(),
         &host.theme(),
         &opencode_ui::code::syntax_theme(&host.theme()),
-        &registry.code_blocks(&host.theme()),
+        &registry.code_blocks({
+            let theme = host.theme();
+            Rc::new(move || theme.clone())
+        }),
         true,
         false,
     );
@@ -530,7 +533,17 @@ fn a_fence_that_stays_in_the_code_view_goes_once_on_both_paths() {
 fn stream(host: &Rc<TestHost>, registry: &Registry, chunks: &[&str]) -> Vec<Capture> {
     let theme = host.theme();
     let syntax = opencode_ui::code::syntax_theme(&theme);
-    let view = opencode_ui::markdown::view(host.app(), &theme, &syntax, &registry.code_blocks(&theme), true, true);
+    let view = opencode_ui::markdown::view(
+        host.app(),
+        &theme,
+        &syntax,
+        &registry.code_blocks({
+            let theme = theme.clone();
+            Rc::new(move || theme.clone())
+        }),
+        true,
+        true,
+    );
     host.app().root().clear();
     host.app().root().add(&view);
     chunks

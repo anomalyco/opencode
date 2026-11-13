@@ -802,9 +802,11 @@ pub fn route(tui: &Tui, id: &str, name: &str) -> Option<RouteMount> {
     tui.plugins.route(tui, id, name)
 }
 
-/// The plugins' Markdown code-block renderers in the page theme.
+/// The plugins' Markdown code-block renderers, in the page theme when they render.
 pub fn code_blocks(tui: &Tui) -> CodeBlockRenderers {
-    tui.plugins.code_blocks(&tui.page())
+    let (weak, last) = (tui.weak(), tui.page());
+    // A renderer outliving the TUI keeps the theme it was made in; nothing shows it by then.
+    tui.plugins.code_blocks(Rc::new(move || weak.upgrade().map_or_else(|| last.clone(), |tui| tui.page())))
 }
 
 /// An empty [`abi::Node::Markdown`] widget: Markdown in the page theme with the plugins' fences, markers hidden unless
