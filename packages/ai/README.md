@@ -1036,7 +1036,7 @@ The hosted result is represented as a provider-executed tool call and a tool res
 Video generation is a job: `start` submits it and returns at once, and the caller decides when to read its `status`,
 fetch its `result`, or `cancel` it. Nothing polls for you. Every call after `start` takes the model and the job's
 `token`, plain JSON you can store and read back from another process, so recovering after a restart is the same call
-as a normal status read. Models come from `.video(...)` selectors on the `XAI` facade.
+as a normal status read. Models come from `.video(...)` selectors on the `XAI` and `KlingAI` facades.
 
 ```ts
 import { Effect } from "effect"
@@ -1086,6 +1086,18 @@ Provider notes:
   `reference_audios`, and `sound` to `generate_audio`, and leaves `aspect: "auto"` out when a start frame sets the
   shape. It has no reference video input. `providerOptions.mode: "edit" | "extend"` sends a native `video: { url }`
   source to `/videos/edits` or `/videos/extensions`.
+- **Kling** picks the endpoint from the inputs: `/text-to-video/<model>` for a prompt alone, `/image-to-video/<model>`
+  when `start` or `end` is set, and `/omni-video/<model>` when there are references or the model only exists there
+  (`kling-3.0-omni`, `kling-video-o1`). models.dev's `kling-v2-6`, `kling-v2-5-turbo` and `kling-video-o1` map to the
+  `kling-2.6`, `kling-2.5-turbo` and `kling-o1` path segments. `start` and `end` become `first_frame` and `last_frame`,
+  image references `refer_image` (`@image_1`, ...) and video references `feature_video` (`@video_1`, ...) in
+  `contents`; `duration`, `aspect`, `resolution` go to `settings`, `aspect: "auto"` is `adaptive` (left out on
+  image-to-video, where the start frame sets the shape), and `sound` is `settings.audio` `native` or `off`. Inline
+  images go as bare base64. Reference audio, inline reference videos, and references on models without an Omni
+  endpoint (`kling-3.0`, `kling-3.0-turbo`, Kling 2.x) are rejected, as are frames or `providerOptions.contents` on an explicit text-to-video endpoint. `providerOptions.endpoint` overrides the
+  endpoint, `providerOptions.contents` adds native items (Elements, voices, `base_video`, `middle_frame`), and
+  `providerOptions.settings` / `options` merge into the native objects, for example `settings.audio: "original"` or
+  `options.callback_url`. Kling has no cancel endpoint, and its videos expire 30 days after the task was created.
 
 The promise client has the same calls, each accepting `{ signal }`:
 
