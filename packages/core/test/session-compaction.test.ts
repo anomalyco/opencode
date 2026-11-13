@@ -1504,7 +1504,7 @@ it.effect("a background summary starts a fixed lead before the threshold, not at
   }),
 )
 
-it.effect("a background summary starts on a window whose threshold is under 64k", () =>
+it.effect("a background summary uses current-model measurements on a window whose threshold is under 64k", () =>
   Effect.gen(function* () {
     requests = []
     const compaction = yield* enablePrecompute
@@ -1514,7 +1514,15 @@ it.effect("a background summary starts on a window whose threshold is under 64k"
       ...loaded(session, messages),
       model: { ...resolved, limit: { context: 64_000, output: 16_000 } },
     })
-    const early = [textUser("First question"), measured("First answer", 20_000), textUser("Second question")]
+    // Another model's 46k measurement must not move the background start from 34k to 47k.
+    const previous = measured("Previous model answer", 46_000)
+    const early = [
+      textUser("Previous model question"),
+      { ...previous, model: { ...previous.model, id: Model.ID.make("previous-model") } },
+      textUser("First question"),
+      measured("First answer", 20_000),
+      textUser("Second question"),
+    ]
     const before = [...early, measured("Second answer", 30_000)]
     const within = [...before, textUser("Third question"), measured("Third answer", 40_000)]
     const due = [...within, textUser("Fourth question"), measured("Fourth answer", 50_000)]

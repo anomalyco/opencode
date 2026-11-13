@@ -360,7 +360,7 @@ export const layer = Layer.effect(
       if (!Number.isFinite(ceiling)) return
       const estimate = given ?? estimatePrompt(context)
       if (due(context, ceiling, estimate)) return
-      const first = context.messages.find((message) => hasMeasuredPrompt(message, context.model.ref))
+      const first = context.messages.find((message) => hasMeasuredPrompt(message, context))
       const cycleStart = first?.type === "assistant" && first.tokens ? promptTokens(first.tokens) : 0
       if (total(estimate) < ceiling - Math.min(PRECOMPUTE_LEAD, (ceiling - cycleStart) / 2)) return
 
