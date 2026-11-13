@@ -569,14 +569,7 @@ terminal client startup migrates supported global `tui.json` settings and persis
 unchanged. Project-local client configuration is not migrated because V2 client configuration is global. See
 [CLI settings](/cli/config) for the current client settings reference.
 
-**Legacy `tui.json` migration clarification:**
-
-- The legacy `tui.json` file is only a **migration source**. It is read once when `cli.json` does not yet exist.
-- **Once `cli.json` exists, it is authoritative.** The files are not layered or merged. Subsequent changes to the legacy `tui.json` have no effect on CLI settings.
-- **Project-local `tui.json` is ignored.** Only the global `tui.json` at `~/.config/opencode/tui.json` is considered as a migration source.
-- **Global `tui.jsonc` is not picked up.** The migration reads `tui.json` (JSON format). JSONC files are not supported.
-- **Keeping the old global file is safe.** Your legacy `tui.json` is preserved after migration and can remain on disk without affecting `cli.json`.
-- **Deleting `cli.json` can trigger migration again.** If you remove `cli.json`, the next CLI startup will re-migrate supported settings from the legacy `tui.json` (at `~/.config/opencode/tui.json`) and `kv.json` (at `~/.local/state/opencode/kv.json`).
+**Legacy `tui.json` migration clarification:** Edits to the legacy `tui.json` file after `cli.json` exists are ignored; see the [CLI settings](/cli/config) reference for details.
 
 ## Plugins
 
