@@ -8,7 +8,8 @@ export default {
   "pair.unavailable": "当前无法配对。",
   "dialog.description": "使用另一台设备上的 OpenCode 应用扫描二维码，或复制链接。",
   "remote.title": "远程访问",
-  "remote.description": "已配对设备可通过互联网访问此计算机的 OpenCode 服务器。关闭后，这些设备将断开连接，直到你重新配对。",
+  "remote.description":
+    "已配对设备可通过互联网访问此计算机的 OpenCode 服务器。关闭后，这些设备将断开连接，直到你重新配对。",
   "remote.error": "无法更新远程访问设置。请重试。",
   "setup.title": "正在设置远程访问…",
   "setup.description": "这可能需要一分钟。",

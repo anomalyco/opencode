@@ -119,7 +119,6 @@ export const dict = {
 
   "command.input.focus": "聚焦输入框",
 
-
   "command.review.toggle": "切换审查",
 
   "command.message.previous": "上一条消息",
@@ -249,7 +248,8 @@ export const dict = {
   "provider.connect.console.openingBrowser": "正在打开浏览器…",
   "provider.connect.remote.title": "正在连接“{{server}}”",
   "provider.connect.remote.description": "你的 OpenCode 凭据将存储在此服务器上。模型将通过此服务器提供。",
-  "provider.connect.claudeAgent.description": "使用你的 Claude 套餐或其他 Claude Code 登录方式。请先安装 Claude Code 并登录。",
+  "provider.connect.claudeAgent.description":
+    "使用你的 Claude 套餐或其他 Claude Code 登录方式。请先安装 Claude Code 并登录。",
   "provider.connect.claudeAgent.install": "安装 Claude Code",
   "provider.connect.claudeAgent.signIn.command": "登录命令",
   "provider.connect.claudeAgent.connect": "连接",
@@ -409,7 +409,6 @@ export const dict = {
 
   "dialog.mcp.title": "MCP 服务器",
   "dialog.mcp.empty": "未配置 MCP 服务器",
-
 
   "dialog.fork.empty": "没有可用于创建新会话的消息",
 

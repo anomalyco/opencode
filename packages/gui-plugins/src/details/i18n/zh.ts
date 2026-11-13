@@ -32,8 +32,7 @@ export default {
   "setup.mcp.prompt":
     "帮我向全局 OpenCode 配置中添加一个 MCP 服务器。询问我想连接哪个服务，然后完成设置并确认可以连接。",
   "setup.plugins": "使用 OpenCode 添加插件",
-  "setup.plugins.prompt":
-    "帮我向全局 OpenCode 配置中添加一个插件。询问我希望它做什么，推荐一个插件，然后添加它。",
+  "setup.plugins.prompt": "帮我向全局 OpenCode 配置中添加一个插件。询问我希望它做什么，推荐一个插件，然后添加它。",
   "setup.skills": "使用 OpenCode 新建技能",
   "setup.skills.prompt": "帮我向全局配置中编写一个新的 OpenCode 技能。询问它应该教你什么，然后编写它的 SKILL.md。",
   loadingChanges: "正在加载更改…",
