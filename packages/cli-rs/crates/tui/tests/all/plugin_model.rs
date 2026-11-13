@@ -877,6 +877,33 @@ fn the_fixed_rows_pass_and_the_open_rows_still_fail() {
     }
 }
 
+/// Toggles the probe in the real plugin manager; returns what it reported.
+fn manager_toggle(world: &World) -> Vec<String> {
+    let (app, tui) = (&world.harness.app, &world.harness.tui);
+    tui.keymap.dispatch("plugins.list", None);
+    world.settle();
+    app.type_text("probe");
+    world.settle();
+    app.press("enter");
+    let reports = world.settle();
+    app.press("escape");
+    world.settle();
+    reports
+}
+
+// Expected (TS `plugins.tsx`): an enable in the plugin manager whose setup fails shows the setup's error and keeps the
+// row as the last load listed it; it does not list the plugin failed.
+#[test]
+fn a_failed_enable_shows_its_error_and_keeps_the_row() {
+    LOG.take();
+    let world = World::open(Some(1));
+    assert_eq!(manager_toggle(&world), Vec::<String>::new());
+    ARMED.set(Some(Fault::Setup));
+    assert_eq!(manager_toggle(&world), ["setup panicked: probe Setup fault"]);
+    assert_eq!(world.failure(), None);
+    ARMED.set(None);
+}
+
 // Expected: the oracles are not empty. While the probe is active the host differs from the twin, and a host on build
 // 2 differs from a fresh one on build 3; the reference refuses a command call while the probe is disabled.
 #[test]
