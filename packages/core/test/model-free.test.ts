@@ -89,3 +89,24 @@ for (const flag of [undefined, "0", "1", "true"]) {
       ),
     )
 }
+
+it.effect("does not fall back to another provider when the configured default's provider is missing", () =>
+  Effect.gen(function* () {
+    const providers = yield* Provider.Service
+    const models = yield* Model.Service
+    const resolver = yield* ModelResolver.Service
+    yield* providers.transform((editor) => {
+      editor.update(Provider.ID.opencode, () => {})
+      editor.models.update(Provider.ID.opencode, free, (model) => {
+        model.capabilities = { ...model.capabilities, input: ["text"], output: ["text"] }
+        model.package = "@opencode/ai/providers/openai-compatible"
+      })
+    })
+    // A provider entry rejected by the config schema is never registered, but `model` still names it.
+    yield* models.transform((editor) => editor.default.set(Provider.ID.make("probe"), Model.ID.make("probe-1")))
+
+    expect(yield* models.default()).toBeUndefined()
+    expect(yield* resolver.fallback()).toBeUndefined()
+    expect(yield* resolver.resolve()).toBeUndefined()
+  }).pipe(Effect.provide(layer)),
+)

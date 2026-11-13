@@ -302,7 +302,11 @@ const layer = Layer.effect(
       default: Effect.fn("Model.default")(function* () {
         const value = yield* read()
         const requested = value.data.defaultModel
-        const model = requested && value.byProvider.get(requested.providerID)?.get(requested.modelID)
+        if (!requested) return value.available.find(supportsText)
+        // A provider that was never registered (for example, its config entry failed the schema) resolves to nothing,
+        // so prompts never go to a provider the user did not choose. Registered but unavailable providers still fall back.
+        if (!(yield* providers.snapshot()).records.has(requested.providerID)) return undefined
+        const model = value.byProvider.get(requested.providerID)?.get(requested.modelID)
         return model?.enabled ? model : value.available.find(supportsText)
       }),
       small: Effect.fn("Model.small")(function* (providerID) {
