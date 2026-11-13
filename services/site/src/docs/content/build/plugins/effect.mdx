@@ -1289,6 +1289,9 @@ effect: (ctx) =>
   }),
 ```
 
+Messages in the `context`, `compaction`, and `generate` hooks carry their stored message's `metadata`, read-only
+(for example, what a `prompt` hook set). It is not sent to the model.
+
 The `system` part that holds OpenCode's instructions also lists each source in `metadata.experimental.instructions` as
 `{ key, text }`, such as `core/date` or `core/environment`, so a hook can tell the sources apart. The list is a copy:
 editing the part's `text` does not update it. This is experimental and may change.

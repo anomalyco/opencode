@@ -2030,7 +2030,6 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const turn = () => ({ index: ctx.messageIndex(props.message.id), legacy: ctx.legacyTurns() })
   const duration = createMemo(() => SessionTurn.duration(messages(), props.message, turn()))
   const tokensPerSecond = createMemo(() => SessionTurn.tokensPerSecond(messages(), props.message, turn()))
-  const timeToFirstToken = createMemo(() => SessionTurn.timeToFirstToken(messages(), props.message, turn()))
   const interrupted = createMemo(() => props.message.error?.message === "Step interrupted")
   const freeLimit = createMemo(() => props.message.error?.type === "provider.free-limit")
   const limitNotice = useLimitNotice(() => props.message)
@@ -2064,9 +2063,6 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           </Show>
           <Show when={config.data.session.tps && tokensPerSecond()}>
             {(value) => <span style={{ fg: theme.text.muted }}> · {value().toFixed(1)} tok/s</span>}
-          </Show>
-          <Show when={config.data.session.tps && ctx.terminal.width >= 36 && timeToFirstToken()}>
-            {(value) => <span style={{ fg: theme.text.muted }}> · {Locale.duration(value())} ttft</span>}
           </Show>
           <Show when={interrupted()}>
             <span style={{ fg: theme.text.muted }}> · interrupted</span>

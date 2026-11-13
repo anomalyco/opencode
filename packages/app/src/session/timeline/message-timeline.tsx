@@ -513,7 +513,7 @@ function MessageTimelineView(
   // The lane keeps its height while empty, so Working and the hint come and go without moving the rows around it.
   // The bottom lane also keeps its height while live status moves into the Activity row, so the tail the activity pill
   // floats in never closes and a pinned timeline does not shift when input waits.
-  const activity = (live: () => boolean) => (
+  const activity = (live: () => boolean, inRow = false) => (
     <div
       classList={{
         "min-w-0 w-full max-w-full": true,
@@ -538,6 +538,7 @@ function MessageTimelineView(
         <StatusLane
           class={turnPadding()}
           spacing={laneSpacing()}
+          inRow={inRow}
           label={live() && working() ? language.t(`session.timeline.status.${nextStatus() ?? "working"}`) : undefined}
           collapsed={live() && liveThought() && !working() && !backgroundHintPresence.present()}
         >
@@ -567,7 +568,7 @@ function MessageTimelineView(
             // row: Working hides and returns several times in one step, and each change would move that input 36px.
             const shown = createMemo((was) => was || working() || backgroundHintPresence.present(), false)
 
-            return <Show when={shown()}>{activity(() => true)}</Show>
+            return <Show when={shown()}>{activity(() => true, true)}</Show>
           }}
         </Show>
       )}

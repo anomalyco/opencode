@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { onMount } from "solid-js"
+import { onCleanup, onMount } from "solid-js"
 import * as mod from "./image-preview"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "../context/dialog"
@@ -39,6 +39,8 @@ export default {
   component: mod.ImagePreview,
   tags: ["autodocs"],
   parameters: {
+    // Opening the actual preview installs its window-wide pinch and zoom handlers.
+    gridPreview: () => <img src={poster(0.2)} alt="Garden open day poster" />,
     docs: {
       description: {
         component: docs,
@@ -50,7 +52,7 @@ export default {
 export const Basic = {
   render: () => {
     const dialog = useDialog()
-    const src = "https://placehold.co/640x360/png"
+    const src = poster()
 
     const open = () => dialog.show(() => <mod.ImagePreview src={src} alt="Preview" />)
 
@@ -130,6 +132,8 @@ export const FromVideo = {
       canvas.height = 400
       const ctx = canvas.getContext("2d")
 
+      let frame: number
+
       const draw = (time) => {
         ctx.fillStyle = "#1f2a44"
         ctx.fillRect(0, 0, 640, 400)
@@ -137,11 +141,17 @@ export const FromVideo = {
         ctx.beginPath()
         ctx.arc(320 + 200 * Math.sin(time / 700), 200, 60, 0, Math.PI * 2)
         ctx.fill()
-        requestAnimationFrame(draw)
+        frame = requestAnimationFrame(draw)
       }
 
-      requestAnimationFrame(draw)
-      video.srcObject = canvas.captureStream(30)
+      frame = requestAnimationFrame(draw)
+      const stream = canvas.captureStream(30)
+
+      video.srcObject = stream
+      onCleanup(() => {
+        cancelAnimationFrame(frame)
+        stream.getTracks().forEach((track) => track.stop())
+      })
     })
 
     const open = () => dialog.show(() => <mod.ImagePreview src="" alt="Orchard board tour" video={video} />)
@@ -167,11 +177,12 @@ export const FromVideo = {
 }
 
 // A bright, offline poster, so the image reads clearly against the dimmed page while it moves.
-function poster() {
+function poster(scale = 1) {
   const canvas = document.createElement("canvas")
-  canvas.width = 1600
-  canvas.height = 1000
+  canvas.width = 1600 * scale
+  canvas.height = 1000 * scale
   const ctx = canvas.getContext("2d")
+  ctx.scale(scale, scale)
   const sky = ctx.createLinearGradient(0, 0, 0, 1000)
   sky.addColorStop(0, "#ff8a5b")
   sky.addColorStop(1, "#ffd27a")

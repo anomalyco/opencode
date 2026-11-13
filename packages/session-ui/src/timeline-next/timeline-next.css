@@ -76,106 +76,12 @@
   }
 }
 
-/* Cut output shows its last lines, fading out at the top where it is cut. */
-[data-timeline="next"] [data-component="clamped-content"] {
-  &[data-clamped] {
-    max-height: var(--clamped-content-height, 96px);
-    overflow: hidden;
-  }
-
-  /* The fade is the code's own background, so the cut lines fade into the block rather than through it. */
-  &[data-overflow] {
-    position: relative;
-
-    &::after {
-      content: "";
-      position: absolute;
-      inset-inline: 0;
-      top: 0;
-      height: 20px;
-      background: linear-gradient(var(--clamped-content-fade), transparent);
-      pointer-events: none;
-    }
-  }
-}
-
-/* A command the user ran is its command and output, always showing, with the output cut to four lines. */
-[data-timeline="next"] [data-component="shell-tool"] {
-  [data-slot="shell-tool-writing"] {
-    display: block;
-    font-size: 13px;
-    line-height: var(--line-height-compact);
-    color: var(--v2-text-text-muted);
-  }
-
-  [data-component="bash-output"][data-clamp] {
-    [data-slot="bash-scroll"] {
-      max-height: none;
-    }
-
-    [data-component="clamped-content"] {
-      grid-area: 1 / 1;
-      /* The 12px top padding and four 20px lines of output, as a plain length the clamp can read back. */
-      --clamped-content-height: 92px;
-      --clamped-content-fade: var(--bash-section-background);
-    }
-  }
-}
-
-/* The output's toggle sits at the end of the command line, so neither block's text is a click target. */
-[data-timeline="next"] [data-component="shell-tool"] [data-slot="bash-command"] {
-  /* How the command ended and the output's toggle, above the command, which shares their grid cell and comes later,
-     so paints over it. The inset matches the file header's toggle. */
-  [data-slot="bash-actions"] {
-    position: relative;
-    z-index: 1;
-    grid-area: 1 / 1;
-    justify-self: end;
-    align-self: center;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-inline-end: 8px;
-  }
-
-  [data-slot="bash-outcome"] {
-    font-family: var(--v2-font-family-sans);
-    font-size: 13px;
-    font-weight: 440;
-    line-height: var(--line-height-compact);
-    letter-spacing: -0.04px;
-    white-space: nowrap;
-    color: var(--v2-text-text-muted);
-
-    &[data-tone="danger"] {
-      color: var(--v2-state-fg-danger);
-    }
-  }
-
-  [data-slot="bash-toggle-button"] {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: inherit;
-    cursor: default;
-
-    &:focus-visible {
-      outline: 1px solid var(--v2-text-text-accent);
-      outline-offset: 2px;
-      border-radius: 2px;
-    }
-  }
-
-  &:has([data-slot="bash-toggle"]) [data-slot="bash-pre"] {
-    padding-inline-end: 40px;
-  }
-
-  &:has([data-slot="bash-outcome"]) [data-slot="bash-pre"] {
-    padding-inline-end: 120px;
-  }
+/* A command the user ran is its command and output, always showing, as an agent's command shows once opened. */
+[data-timeline="next"] [data-component="shell-tool"] [data-slot="shell-tool-writing"] {
+  display: block;
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+  color: var(--v2-text-text-muted);
 }
 
 /* A file's change counts follow its name, showing only the side that changed; its change bars are quieter; and its
@@ -323,13 +229,15 @@
 }
 
 /* An event row opens to the subagents and shells it counts, each read like a nested row and leading to its session or
-   to the call that ran it. */
+   to the call that ran it. An opened activity group lists the ones it started or heard back from the same way. */
 [data-timeline="next"] [data-component="timeline-event-list"] {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding-top: 4px;
+}
 
+[data-timeline="next"] :is([data-component="timeline-event-list"], [data-slot="context-tool-group-item"]) {
   [data-slot="timeline-event-item"] {
     display: flex;
     align-items: center;
@@ -376,7 +284,7 @@
     color: var(--v2-text-text-base);
   }
 
-  [data-component="tag"] {
+  [data-slot="timeline-event-item"] [data-component="tag"] {
     flex-shrink: 0;
   }
 }
@@ -400,26 +308,6 @@
 
 [data-timeline="next"][data-timeline-gap="l"] {
   padding-top: var(--timeline-gap-l);
-}
-
-/* The user's message actions show in the large gap below it rather than adding to it, above the row that follows so
-   they stay reachable. */
-[data-timeline="next"][data-timeline-row="UserMessage"] {
-  position: relative;
-  z-index: 1;
-
-  [data-component="user-message"] {
-    position: relative;
-  }
-
-  [data-slot="user-message-copy-wrapper"] {
-    position: absolute;
-    inset-inline: 0;
-    top: 100%;
-    height: 28px;
-    margin-top: 0;
-    padding-top: 8px;
-  }
 }
 
 /* Rows are as tall as their text, so the gaps between them are the gaps that show. A row's 28px click area stays: 6px of
@@ -495,21 +383,6 @@
     text-box: trim-start text;
   }
 
-  /* The agent's last words in a turn keep their actions in the large gap below them, as the user's message does. The
-     gap above the actions is their own padding, so the pointer stays over the message while it crosses to them. */
-  [data-component="text-part"]:has(> [data-slot="text-part-copy-wrapper"]) {
-    position: relative;
-
-    > [data-slot="text-part-copy-wrapper"] {
-      position: absolute;
-      inset-inline: 0;
-      top: 100%;
-      height: 28px;
-      margin-top: 0;
-      padding-top: 8px;
-    }
-  }
-
   [data-component="context-tool-group-list"],
   [data-component="timeline-event-list"] {
     gap: var(--timeline-gap-s);
@@ -517,6 +390,7 @@
   }
 
   [data-component="context-tool-group-list"] [data-slot="context-tool-group-item"],
+  [data-component="context-tool-group-list"] [data-slot="timeline-event-item"],
   [data-component="timeline-event-list"] [data-slot="timeline-event-item"] {
     min-height: var(--line-height-compact);
   }
@@ -541,11 +415,43 @@
       height: calc(var(--line-height-compact) + 6px + var(--timeline-gap-s));
     }
   }
-}
 
-[data-timeline="next"][data-timeline-row="AssistantPart"]:has([data-slot="text-part-copy-wrapper"]) {
-  position: relative;
-  z-index: 1;
+  /* Answers are spaced by the row gaps and trimmed to their text, as the agent's text is. */
+  [data-component="question-answers"] {
+    gap: var(--timeline-gap-s);
+    padding: 0;
+    line-height: var(--line-height-base);
+
+    [data-slot="question-answer-item"] {
+      gap: 4px;
+    }
+
+    [data-slot="question-text"],
+    [data-slot="answer-text"] {
+      text-box: trim-both text;
+    }
+  }
+
+  /* A row's action is as tall as its line, so its button never makes the row taller. */
+  [data-slot="basic-tool-action"] {
+    height: var(--line-height-compact);
+
+    [data-component="icon-button-v2"] {
+      width: 20px;
+      height: 20px;
+    }
+  }
+
+  /* The quiet compaction draws the same line as the other dividers. */
+  [data-component="session-compaction-message"][data-quiet] {
+    [data-slot="session-compaction-line"]::before {
+      background: var(--v2-border-border-base);
+    }
+
+    [data-slot="session-compaction-summary"] {
+      padding-bottom: 0;
+    }
+  }
 }
 
 /* The live thought sits where the row it settles into will, which its frame spaces like any other row. */
@@ -581,9 +487,19 @@
     --timeline-status-space: var(--timeline-gap-l);
   }
 
+  /* The background hint's 24px button is centred on the 16px line and reaches 4px past it. A row clips at its own
+     height, so in a row the lane keeps that room below the line, whether or not the hint shows, so the input waiting
+     below does not move when it comes and goes. */
+  &[data-in-row] {
+    --timeline-status-hint-overflow: calc((24px - var(--line-height-compact)) / 2);
+    height: calc(var(--line-height-compact) + var(--timeline-status-space) + var(--timeline-status-hint-overflow));
+    padding-bottom: var(--timeline-status-hint-overflow);
+  }
+
   &[data-collapsed] {
     height: 0;
     padding-top: 0;
+    padding-bottom: 0;
     overflow: hidden;
   }
 

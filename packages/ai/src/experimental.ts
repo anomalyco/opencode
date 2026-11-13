@@ -1,14 +1,3 @@
-export { VideoClient } from "./video-client.js"
-export { VideoAspectRatio, VideoEvent, VideoFrames, VideoModel, VideoModelSchema, VideoResponse } from "./video.js"
-export type {
-  VideoModelOptions,
-  VideoOptions,
-  VideoRequest,
-  VideoRequestInput,
-  VideoResolution,
-  VideoRoute,
-} from "./video.js"
-export { Video } from "./video.js"
 export { SpeechClient } from "./speech-client.js"
 export { SpeechEvent, SpeechModel, SpeechModelSchema, SpeechResponse, SpeechTimestamp, SpeechVoice } from "./speech.js"
 export type {

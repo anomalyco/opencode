@@ -55,7 +55,6 @@ export interface Interface {
     domain: Domain,
     name: Name,
     event: Domains[Domain][Name],
-    afterEach?: (event: Domains[Domain][Name]) => void,
   ) => Effect.Effect<Domains[Domain][Name], Failures[Domain][Name]>
 }
 
@@ -86,12 +85,11 @@ const layer = Layer.effect(
       },
     )
 
-    const trigger: Interface["trigger"] = Effect.fnUntraced(function* (domain, name, event, afterEach) {
+    const trigger: Interface["trigger"] = Effect.fnUntraced(function* (domain, name, event) {
       for (const entry of callbacks.get(key(domain, name)) ?? []) {
         if (entry.options?.providerID !== undefined && entry.options.providerID !== eventProviderID(event)) continue
         const result: Effect.Effect<void, Failures[typeof domain][typeof name]> = entry.callback(event)
         yield* result
-        afterEach?.(event)
       }
       return event
     })

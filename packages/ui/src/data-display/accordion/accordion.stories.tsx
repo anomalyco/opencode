@@ -1,29 +1,24 @@
-// @ts-nocheck
-import { createEffect, createSignal } from "solid-js"
+import { createEffect, createSignal, Show } from "solid-js"
 import { Accordion } from "./accordion"
 
+const defaults = {
+  value: "first",
+  multiple: false,
+  collapsible: true,
+  secondItem: true,
+  disableSecond: false,
+  shouldFocusWrap: true,
+}
+
 const docs = `### Overview
-Accordion for collapsible content sections with optional multi-open behavior.
+Accordion for collapsible content sections with optional multi-open behavior. Use one trigger per item.
 
-Use one trigger per item; keep content concise.
+### API and behavior
+Compose Accordion.Item, Header, Trigger and Content. The root supports Kobalte's multiple and collapsible modes.
+Control expanded items with a string array and onChange; in this preview the value control sets the starting selection.
 
-### API
-- Root supports Kobalte Accordion props: \`value\`, \`multiple\`, \`collapsible\`, \`onChange\`.
-- Compose with \`Accordion.Item\`, \`Header\`, \`Trigger\`, \`Content\`.
-
-### Variants and states
-- Single or multiple open items.
-- Collapsible or fixed-open behavior.
-
-### Behavior
-- Controlled via \`value\`/\`onChange\` when provided.
-
-### Accessibility
-- Uses Kobalte Accordion keyboard and ARIA behavior.
-
-### Theming/tokens
-- Uses \`data-component="accordion"\` and slot data attributes.
-`
+### Accessibility and theming
+Kobalte supplies keyboard navigation and ARIA behavior. Use data-component="accordion" and its slot attributes for theming.`
 
 export default {
   title: "UI/Accordion",
@@ -31,28 +26,25 @@ export default {
   component: Accordion,
   tags: ["autodocs"],
   parameters: { docs: { description: { component: docs } } },
-}
+  args: defaults,
+  argTypes: { value: { control: "select", options: ["none", "first", "second", "both"] } },
+  render: (args: typeof defaults) => {
+    const [value, setValue] = createSignal<string[]>([])
 
-export const Basic = {
-  args: { collapsible: true, multiple: false, value: "first" },
-  argTypes: {
-    collapsible: { control: "boolean" },
-    multiple: { control: "boolean" },
-    value: { control: "select", options: ["first", "second", "none"], mapping: { none: undefined } },
-  },
-  render: (props) => {
-    const [value, setValue] = createSignal(props.value)
-    createEffect(() => setValue(props.value))
-
-    const current = () => {
-      if (props.multiple) return Array.isArray(value()) ? value() : value() ? [value()] : []
-
-      return Array.isArray(value()) ? value()[0] : value()
-    }
+    createEffect(() => {
+      if (args.value === "both") return setValue(args.multiple ? ["first", "second"] : ["first"])
+      setValue(args.value === "none" ? [] : [args.value])
+    })
 
     return (
-      <div style={{ display: "grid", gap: "8px", width: "420px" }}>
-        <Accordion collapsible={props.collapsible} multiple={props.multiple} value={current()} onChange={setValue}>
+      <div style={{ width: "min(420px, 100%)" }}>
+        <Accordion
+          collapsible={args.collapsible}
+          multiple={args.multiple}
+          shouldFocusWrap={args.shouldFocusWrap}
+          value={args.multiple ? value() : value().slice(0, 1)}
+          onChange={setValue}
+        >
           <Accordion.Item value="first">
             <Accordion.Header>
               <Accordion.Trigger>First</Accordion.Trigger>
@@ -61,48 +53,24 @@ export const Basic = {
               <div style={{ color: "var(--text-weak)", padding: "8px 0" }}>Accordion content.</div>
             </Accordion.Content>
           </Accordion.Item>
-          <Accordion.Item value="second">
-            <Accordion.Header>
-              <Accordion.Trigger>Second</Accordion.Trigger>
-            </Accordion.Header>
-            <Accordion.Content>
-              <div style={{ color: "var(--text-weak)", padding: "8px 0" }}>More content.</div>
-            </Accordion.Content>
-          </Accordion.Item>
+          <Show when={args.secondItem}>
+            <Accordion.Item value="second" disabled={args.disableSecond}>
+              <Accordion.Header>
+                <Accordion.Trigger>Second</Accordion.Trigger>
+              </Accordion.Header>
+              <Accordion.Content>
+                <div style={{ color: "var(--text-weak)", padding: "8px 0" }}>More content.</div>
+              </Accordion.Content>
+            </Accordion.Item>
+          </Show>
         </Accordion>
       </div>
     )
   },
 }
 
-export const Multiple = {
-  render: () => (
-    <Accordion multiple value={["first", "second"]}>
-      <Accordion.Item value="first">
-        <Accordion.Header>
-          <Accordion.Trigger>First</Accordion.Trigger>
-        </Accordion.Header>
-        <Accordion.Content>Accordion content.</Accordion.Content>
-      </Accordion.Item>
-      <Accordion.Item value="second">
-        <Accordion.Header>
-          <Accordion.Trigger>Second</Accordion.Trigger>
-        </Accordion.Header>
-        <Accordion.Content>More content.</Accordion.Content>
-      </Accordion.Item>
-    </Accordion>
-  ),
-}
+export const Basic = {}
 
-export const NonCollapsible = {
-  render: () => (
-    <Accordion value="first">
-      <Accordion.Item value="first">
-        <Accordion.Header>
-          <Accordion.Trigger>First</Accordion.Trigger>
-        </Accordion.Header>
-        <Accordion.Content>Accordion content.</Accordion.Content>
-      </Accordion.Item>
-    </Accordion>
-  ),
-}
+export const Multiple = { args: { multiple: true, collapsible: false, value: "both" } }
+
+export const NonCollapsible = { args: { collapsible: false, secondItem: false } }
