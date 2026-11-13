@@ -177,6 +177,16 @@ describe("ai.video.status / result / cancel", () => {
     }),
   )
 
+  it.effect("encodes the job ID into the request path", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      yield* ai.video
+        .status(model, "../files?x=1")
+        .pipe(Effect.provide(layer((input) => observe(calls, input).pipe(Effect.map(() => json(input, done))))))
+      expect(calls.map((call) => call.url)).toEqual(["https://xai.test/v1/videos/..%2Ffiles%3Fx%3D1"])
+    }),
+  )
+
   it.effect("keeps unknown statuses running, including inherited property names", () =>
     Effect.gen(function* () {
       const statuses = yield* Effect.forEach(["warming_up", "constructor"], (status) =>

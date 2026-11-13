@@ -1149,7 +1149,7 @@ Everything below is exported from `@opencode/ai/effect` unless noted.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
 - **`ai.image.request` / `generate` / `stream` / `start` / `resume`** — images over inline, streaming (partial previews), and queued routes through a provider-neutral request and response model.
 - **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
-- **`ai.video.request` / `start` / `status` / `result` / `cancel`** — video generation as a job addressed by a stored token; see [Video generation](#video-generation). `VideoClient` is its Effect service and layer.
+- **`ai.video.request` / `start` / `status` / `result` / `cancel`** — video generation as a job addressed by the provider's job ID; see [Video generation](#video-generation). `VideoClient` is its Effect service and layer.
 - **`Media`** — the shared asset type (`Media.Asset`, `Media.Source`) and constructors used by messages, tool results, and media requests.
 - **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
 - **`ai.decision.request` / `ai.decision.generate`** — typed predicate, choice, and score questions over text, JSON, and media input; `DecisionClient` is its Effect service and layer.

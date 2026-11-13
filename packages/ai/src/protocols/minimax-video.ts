@@ -362,10 +362,10 @@ const decodeHailuoResult = Effect.fn("MiniMaxHailuoVideo.decodeResult")(function
 export const protocol = MediaProtocol.queued<Request, VideoResponse, Token>(route, {
   token: Token,
   start: { body: { from: fromRequest }, decode: decodeStart },
-  status: { path: (token) => `${STATUS_PATH}/${token}`, decode: decodeStatus },
-  result: { path: (token) => `${STATUS_PATH}/${token}`, decode: decodeResult },
+  status: { path: (token) => `${STATUS_PATH}/${encodeURIComponent(token)}`, decode: decodeStatus },
+  result: { path: (token) => `${STATUS_PATH}/${encodeURIComponent(token)}`, decode: decodeResult },
   // Cancels a queued task; MiniMax rejects it once the task is running.
-  cancel: { method: "DELETE", path: (token) => `${PATH}/${token}` },
+  cancel: { method: "DELETE", path: (token) => `${PATH}/${encodeURIComponent(token)}` },
 })
 
 const hailuoStatusPath = (token: Token) => `${HAILUO_STATUS_PATH}?task_id=${encodeURIComponent(token)}`
@@ -379,11 +379,11 @@ export const hailuoProtocol = MediaProtocol.queued<Request, VideoResponse, Token
 
 /** H3 and later models on the v2 API. */
 export const h3Model = (input: MediaRoute.ModelInput) =>
-  VideoModel.fromRoute<MiniMaxVideoOptions, Token>({ protocol, baseURL: DEFAULT_BASE_URL, path: PATH }, input)
+  VideoModel.fromRoute<MiniMaxVideoOptions>({ protocol, baseURL: DEFAULT_BASE_URL, path: PATH }, input)
 
 /** Hailuo and the `*-01` models on the v1 API. */
 export const hailuoModel = (input: MediaRoute.ModelInput) =>
-  VideoModel.fromRoute<MiniMaxVideoOptions, Token>(
+  VideoModel.fromRoute<MiniMaxVideoOptions>(
     { protocol: hailuoProtocol, baseURL: DEFAULT_BASE_URL, path: HAILUO_PATH },
     input,
   )

@@ -251,7 +251,7 @@ const decodeResult = Effect.fn("GoogleInteractionsVideo.decodeResult")(function*
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-const interactionPath = (token: Token) => `${PATH}/${token}`
+const interactionPath = (token: Token) => `${PATH}/${encodeURIComponent(token)}`
 
 export const protocol = MediaProtocol.queued<Request, VideoResponse, Token>(route, {
   token: Token,
@@ -262,7 +262,7 @@ export const protocol = MediaProtocol.queued<Request, VideoResponse, Token>(rout
 })
 
 export const model = (input: MediaRoute.ModelInput) =>
-  VideoModel.fromRoute<GoogleVideoOptions, Token>({ protocol, baseURL: DEFAULT_BASE_URL, path: PATH }, input)
+  VideoModel.fromRoute<GoogleVideoOptions>({ protocol, baseURL: DEFAULT_BASE_URL, path: PATH }, input)
 
 export const GoogleInteractionsVideo = {
   protocol,

@@ -1,4 +1,4 @@
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { RequestExecutor } from "./route/executor.js"
 import { AIError, UnsupportedOperationError } from "./schema/index.js"
 import type { VideoJob, VideoModel, VideoRequest, VideoResponse, VideoStatus } from "./video.js"
@@ -14,6 +14,9 @@ export class VideoClientService extends Context.Service<VideoClientService, Inte
 export const Service = VideoClientService
 export type Service = VideoClientService
 
+// A video route whose token isn't a string is a programmer defect, not a provider error.
+const decodeID = (token: unknown) => Schema.decodeUnknownEffect(Schema.String)(token).pipe(Effect.orDie)
+
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -21,7 +24,11 @@ export const layer = Layer.effect(
     const attach = (model: VideoModel, id: string) => model.route.attach(model, id, executor.execute)
     return Service.of({
       start: (request) =>
-        request.model.route.start(request, executor.execute).pipe(Effect.map((generation) => ({ id: generation.id }))),
+        request.model.route.start(request, executor.execute).pipe(
+          // The token, not the snapshot id, is what `status` and `result` decode; `VideoModel.fromRoute` makes it a string.
+          Effect.flatMap((generation) => decodeID(generation.token)),
+          Effect.map((id) => ({ id })),
+        ),
       status: (model, id) =>
         attach(model, id).pipe(
           Effect.flatMap((route) => route.status),

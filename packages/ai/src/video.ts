@@ -25,8 +25,9 @@ export type VideoRoute = MediaRoute.QueuedRoute<VideoRequest, VideoResponse>
 export class VideoModel<Options extends VideoOptions = VideoOptions> extends MediaModel<VideoRoute, Options> {
   declare protected readonly _VideoModel: void
 
-  static fromRoute<Options extends VideoOptions, Token>(
-    route: MediaModel.QueuedRouteInput<VideoRequest<VideoModel<Options>>, VideoResponse, Token>,
+  /** A video route's token is the provider's job ID, so `VideoJob.id` is exactly what `status` and `result` take. */
+  static fromRoute<Options extends VideoOptions>(
+    route: MediaModel.QueuedRouteInput<VideoRequest<VideoModel<Options>>, VideoResponse, string>,
     input: MediaRoute.ModelInput,
   ) {
     return new VideoModel<Options>({

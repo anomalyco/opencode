@@ -272,7 +272,7 @@ const make = (provider: Provider) => {
     })
   })
 
-  const taskPath = (token: Token) => `${PATH}/${token}`
+  const taskPath = (token: Token) => `${PATH}/${encodeURIComponent(token)}`
 
   // DELETE cancels a queued task. Ark refuses it for a running task, and deletes the record of a finished one.
   const protocol = MediaProtocol.queued<Request, VideoResponse, Token>(route, {
@@ -284,7 +284,7 @@ const make = (provider: Provider) => {
   })
 
   const model = (input: MediaRoute.ModelInput) =>
-    VideoModel.fromRoute<SeedanceVideoOptions, Token>(
+    VideoModel.fromRoute<SeedanceVideoOptions>(
       {
         protocol,
         baseURL: provider === "volcengine" ? VOLCENGINE_BASE_URL : BYTEPLUS_BASE_URL,

@@ -208,7 +208,7 @@ export const protocol = MediaProtocol.queued<Request, VideoResponse, Token>(rout
 })
 
 export const model = (input: MediaRoute.ModelInput) =>
-  VideoModel.fromRoute<OpenRouterVideoOptions, Token>({ protocol, baseURL: DEFAULT_BASE_URL, path: PATH }, input)
+  VideoModel.fromRoute<OpenRouterVideoOptions>({ protocol, baseURL: DEFAULT_BASE_URL, path: PATH }, input)
 
 export const OpenRouterVideo = {
   protocol,

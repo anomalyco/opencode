@@ -198,7 +198,7 @@ const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-const statusPath = (token: Token) => `${STATUS_PATH}/${token}`
+const statusPath = (token: Token) => `${STATUS_PATH}/${encodeURIComponent(token)}`
 
 export const protocol = MediaProtocol.queued<Request, VideoResponse, Token>(route, {
   token: Token,
@@ -215,7 +215,7 @@ const startPath = (request: Request) => {
 }
 
 export const model = (input: MediaRoute.ModelInput) =>
-  VideoModel.fromRoute<XAIVideoOptions, Token>(
+  VideoModel.fromRoute<XAIVideoOptions>(
     {
       protocol,
       baseURL: DEFAULT_BASE_URL,
