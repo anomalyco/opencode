@@ -84,7 +84,8 @@ pub enum Node {
         label: String,
     },
     /// A box the host scrolls: the wheel, and its own keys while it has focus. Its offset is the host's and stays
-    /// across revisions while its id does. `height` in cells; without one it takes its layout's room.
+    /// across revisions while its id does. `height` in cells; without one it takes its layout's room, and with
+    /// [`Layout::grow`] the room its siblings leave, never more than its parent has.
     Scroll {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,
