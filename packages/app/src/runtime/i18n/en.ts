@@ -613,7 +613,11 @@ export const dict = {
   "home.sessions.group.yesterday": "Yesterday",
   "home.sessions.group.older": "Older",
   "home.providerTip": "Connect to 75+ providers to use other models, including Claude, GPT, Gemini, etc",
-  "home.sessionSearchTip": "Find a past conversation with session search",
+  "tips.browse.title": "Drive your real browser",
+  "tips.browse.description": "Use browse to let OpenCode work in Chrome with the sites you’re already signed in to.",
+  "tips.browse.install": "Install",
+  "tips.search.title": "Find a past conversation",
+  "tips.search.description": "Search your sessions to pick up where you left off.",
   "home.workspaceTip": "Start next session in a new workspace to keep changes isolated",
 
   "session.tab.session": "Session",

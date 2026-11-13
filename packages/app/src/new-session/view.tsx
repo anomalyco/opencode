@@ -31,8 +31,6 @@ import { NEW_SESSION_CONTENT_WIDTH } from "@/new-session/layout"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { useSettings } from "@/settings/model"
-import { createTipQueue } from "@/tips/model"
-import type { Tip } from "@/tips/queue"
 import type { NewSessionWorkspaceController } from "./workspace/controller"
 import {
   CHECKOUT_PLACEHOLDER_DELAY_MS,
@@ -184,7 +182,6 @@ export function NewSessionView(props: {
 
 function NewSessionTips(props: { selection: ComposerModel["model"]["selection"]; onDone: () => void }) {
   const language = useLanguage()
-  const command = useCommand()
   const dialog = useDialog()
   const sdk = useWorkspaceLocation()
   const providers = useProviders(() => sdk().directory)
@@ -202,46 +199,27 @@ function NewSessionTips(props: { selection: ComposerModel["model"]["selection"];
       Date.now() - providerState.dismissedAt >= providerTipDismissalDuration,
   )
 
-  const provider: Tip = {
-    id: "provider",
-    text: "home.providerTip",
-    when: () => providers.anyConnection() === false,
-    action: async () => {
-      const { DialogConnectProvider } = await import("@/providers/connect/dialog")
-      void dialog.show(() => (
-        <DialogConnectProvider directory={sdk().directory} selection={props.selection} onDone={props.onDone} />
-      ))
-    },
-  }
-  const enabled = () => sdk().current?.experimental?.tips_queue === true
-  const queue = createTipQueue(
-    [
-      provider,
-      { id: "session-search", text: "home.sessionSearchTip", action: () => command.trigger("sessions.search") },
-    ],
-    () => enabled() && providerReady() && providers.anyConnection() !== undefined,
-    () => providerState.dismissedAt,
-  )
-  const tip = () => (enabled() ? queue.tip() : sdk().current && providerVisible() ? provider : undefined)
-  // Keep the departing tip's contents for its exit animation.
-  const displayed = createMemo<Tip>((previous) => tip() ?? previous, provider)
+  const tip = providerVisible
   const [ref, setRef] = createSignal<HTMLDivElement>()
 
   const presence = createPresence({
-    show: () => !!tip(),
+    show: tip,
     element: () => ref() ?? null,
   })
 
   const open = () => {
-    const action = tip()?.action
-    if (!action) return
-    if (enabled()) queue.dismiss()
-    action()
+    if (!tip()) return
+
+    void import("@/providers/connect/dialog").then(({ DialogConnectProvider }) => {
+      void dialog.show(() => (
+        <DialogConnectProvider directory={sdk().directory} selection={props.selection} onDone={props.onDone} />
+      ))
+    })
   }
 
   const dismiss = () => {
     if (!tip()) return
-    if (enabled()) return queue.dismiss()
+
     setProviderState("dismissedAt", Date.now())
   }
 
@@ -251,27 +229,20 @@ function NewSessionTips(props: { selection: ComposerModel["model"]["selection"];
         <div
           ref={setRef}
           data-component="new-session-tip"
-          data-visible={!!tip()}
+          data-visible={tip()}
           class="group/new-session-tip pointer-events-auto relative flex h-6 max-w-full items-center transition-[opacity,transform] duration-[250ms] ease-[cubic-bezier(0.215,0.61,0.355,1)] motion-reduce:transition-none"
           classList={{ "data-[visible=false]:animate-out fade-out slide-out-to-bottom-4": true }}
         >
-          <Show
-            when={displayed().action}
-            fallback={
-              <span class="truncate px-1.5 text-[13px] text-v2-text-text-faint">{language.t(displayed().text)}</span>
-            }
+          <button
+            type="button"
+            class="flex h-6 min-w-0 items-center rounded-[4px] pl-1.5 text-[13px] leading-text-compact tracking-[-0.04px] text-v2-text-text-faint transition-[background-color,color] duration-150 ease-in-out hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-muted focus-visible:outline-none"
+            onClick={open}
           >
-            <button
-              type="button"
-              class="flex h-6 min-w-0 items-center rounded-[4px] pl-1.5 text-[13px] leading-text-compact tracking-[-0.04px] text-v2-text-text-faint transition-[background-color,color] duration-150 ease-in-out hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-muted focus-visible:outline-none"
-              onClick={open}
-            >
-              <span class="truncate">{language.t(displayed().text)}</span>
-              <span class="flex size-6 shrink-0 items-center justify-center" aria-hidden="true">
-                <Icon name="chevron-down" size="small" class="-rotate-90" />
-              </span>
-            </button>
-          </Show>
+            <span class="truncate">{language.t("home.providerTip")}</span>
+            <span class="flex size-6 shrink-0 items-center justify-center" aria-hidden="true">
+              <Icon name="chevron-down" size="small" class="-rotate-90" />
+            </span>
+          </button>
           <Tooltip
             class="hover-reveal absolute left-full top-0 flex h-6 w-7 items-center justify-end delay-0 duration-0 group-hover/new-session-tip:delay-[250ms] group-hover/new-session-tip:duration-150 group-hover/new-session-tip:opacity-100 focus-within:delay-0 focus-within:duration-0 focus-within:opacity-100"
             placement="top"

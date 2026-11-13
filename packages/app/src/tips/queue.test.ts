@@ -2,9 +2,13 @@ import { expect, test } from "bun:test"
 import { selectTip, type Tip } from "./queue"
 
 const fresh = { current: "", shownAt: 0, dismissed: [], dismissedAt: 0 }
-const first: Tip = { id: "first", text: "home.providerTip" }
-const second: Tip = { id: "second", text: "home.sessionSearchTip" }
+
+const first: Tip = { id: "first", title: "tips.browse.title", description: "tips.browse.description" }
+
+const second: Tip = { ...first, id: "second" }
+
 const tips = [first, second]
+
 const hours = 60 * 60 * 1000
 
 test("first eligible tip wins until it is handled or stops being eligible", () => {
@@ -13,10 +17,10 @@ test("first eligible tip wins until it is handled or stops being eligible", () =
   expect(selectTip(tips, { ...fresh, current: second.id, shownAt: 1 }, 24 * hours)).toBe(second)
 })
 
-test("handling starts a full three-hour wait and permanently skips that id", () => {
+test("handling starts a full day's wait and permanently skips that id", () => {
   const handled = { ...fresh, dismissedAt: hours, dismissed: [first.id] }
-  expect(selectTip(tips, handled, 4 * hours - 1)).toBeUndefined()
-  expect(selectTip(tips, handled, 4 * hours)).toBe(second)
+  expect(selectTip(tips, handled, 25 * hours - 1)).toBeUndefined()
+  expect(selectTip(tips, handled, 25 * hours)).toBe(second)
   expect(selectTip([first], handled, 365 * 24 * hours)).toBeUndefined()
 })
 
@@ -26,5 +30,5 @@ test("promo starts inclusively, expires even while shown, and cannot immediately
   expect(selectTip([promo], fresh, hours)).toBe(promo)
   const shown = { ...fresh, current: promo.id, shownAt: hours }
   expect(selectTip([promo, second], shown, hours + 1)).toBeUndefined()
-  expect(selectTip([promo, second], shown, 4 * hours)).toBe(second)
+  expect(selectTip([promo, second], shown, 25 * hours)).toBe(second)
 })

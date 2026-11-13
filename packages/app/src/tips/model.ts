@@ -1,8 +1,16 @@
+import { showToast, toaster } from "@opencode/ui/toast"
 import { Schema } from "effect"
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { useLanguage } from "@/runtime/i18n/language"
 import { Persistence } from "@/runtime/persistence/schema"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { usePlatform } from "@/runtime/platform/platform"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { useGlobal } from "@/runtime/server/runtime"
+import { useCommand } from "@/shell/commands/command"
 import { selectTip, TIP_INTERVAL_MS, type Tip } from "./queue"
+
+const STARTUP_DELAY = 2 * 60 * 1000
 
 const History = Persistence.struct({
   current: Schema.String,
@@ -11,56 +19,117 @@ const History = Persistence.struct({
   dismissedAt: Schema.Finite,
 })
 
-export function createTipQueue(tips: readonly Tip[], ready: () => boolean, providerDismissal: () => number) {
+export function createTipToasts() {
+  const global = useGlobal()
+  const servers = useServers()
+  const language = useLanguage()
+  const platform = usePlatform()
+  const command = useCommand()
+
+  const server = createMemo(() => {
+    const conn = servers.visible.find(servers.current) ?? servers.visible[0]
+
+    return conn && global.serverCtx(ServerConnection.key(conn))
+  })
+
+  const location = () => server()?.data.location
+  const [awake, setAwake] = createSignal(false)
+  const startup = setTimeout(() => setAwake(true), STARTUP_DELAY)
+  onCleanup(() => clearTimeout(startup))
+  createEffect(() => {
+    if (awake() && server()?.sdk.connection.status() === "connected")
+      void location()
+        ?.syncInfo()
+        .catch(() => undefined)
+  })
+
+  const tips: Tip[] = [
+    {
+      id: "browse",
+      title: "tips.browse.title",
+      description: "tips.browse.description",
+      when: () =>
+        !location()
+          ?.mcp.server.list()
+          ?.some((item) => item.name === "browse"),
+      action: {
+        label: "tips.browse.install",
+        run: () => platform.openExternal("https://chromewebstore.google.com/detail/mfnicocicmmlkpjnaffgihfjhdgjkdjg"),
+      },
+    },
+    {
+      id: "session-search",
+      title: "tips.search.title",
+      description: "tips.search.description",
+      action: { label: "command.session.search", run: () => command.trigger("sessions.search") },
+    },
+  ]
+
   const [history, setHistory, , loaded] = persisted({ ...Persist.global("tips.queue"), sync: true }, History, {
     current: "",
     shownAt: 0,
     dismissed: [],
     dismissedAt: 0,
   })
+
   const [tick, setTick] = createSignal(0)
-  const tip = createMemo(() => {
-    if (!loaded() || !ready()) return
-    tick()
-    const legacy = providerDismissal()
-    return selectTip(
-      tips,
-      legacy
-        ? {
-            ...history,
-            dismissed: [...history.dismissed, "provider"],
-            dismissedAt: Math.max(history.dismissedAt, legacy),
-          }
-        : history,
-      Date.now(),
-    )
+  const enabled = () => awake() && location()?.info()?.experimental?.tips_queue === true
+  createEffect(() => {
+    if (enabled())
+      void location()
+        ?.mcp.server.sync()
+        .catch(() => undefined)
   })
 
-  createEffect(() => {
-    const current = tip()
-    if (current && history.current !== current.id) setHistory({ current: current.id, shownAt: Date.now() })
-  })
-
-  createEffect(() => {
-    if (!loaded() || !ready()) return
+  const selected = createMemo(() => {
+    if (!enabled() || !loaded() || !location()?.mcp.server.list()) return
     tick()
     const now = Date.now()
-    const next = Math.min(
-      ...[
-        Math.max(history.shownAt, history.dismissedAt, providerDismissal()) + TIP_INTERVAL_MS,
-        ...tips.flatMap((tip) => [tip.start ?? 0, tip.end ?? 0]),
-      ].filter((time) => time > now),
-    )
-    if (!Number.isFinite(next)) return
-    const timer = setTimeout(() => setTick((value) => value + 1), Math.min(next - now, 2 ** 31 - 1))
-    onCleanup(() => clearTimeout(timer))
+
+    const times = [
+      Math.max(history.shownAt, history.dismissedAt) + TIP_INTERVAL_MS,
+      ...tips.flatMap((tip) => [tip.start ?? 0, tip.end ?? 0]),
+    ]
+
+    const next = Math.min(...times.filter((time) => time > now))
+
+    if (Number.isFinite(next)) {
+      const timer = setTimeout(() => setTick((n) => n + 1), Math.min(next - now, 2 ** 31 - 1))
+      onCleanup(() => clearTimeout(timer))
+    }
+
+    return selectTip(tips, history, now)
   })
 
-  return {
-    tip,
-    dismiss() {
-      const current = tip()
-      if (current) setHistory({ current: "", dismissed: [...history.dismissed, current.id], dismissedAt: Date.now() })
-    },
-  }
+  createEffect(() => {
+    const tip = selected()
+
+    if (!tip) return
+
+    const handled = () =>
+      setHistory({ current: "", dismissed: [...history.dismissed, tip.id], dismissedAt: Date.now() })
+
+    global.notifications.tip(() => {
+      if (history.current !== tip.id) setHistory({ current: tip.id, shownAt: Date.now() })
+      const action = tip.action
+
+      const id = showToast({
+        persistent: true,
+        title: language.t(tip.title),
+        description: language.t(tip.description),
+        onDismiss: handled,
+        actions: action && [
+          {
+            label: language.t(action.label),
+            onClick: () => {
+              handled()
+              action.run()
+            },
+          },
+        ],
+      })
+
+      return () => toaster.dismiss(id)
+    })
+  })
 }

@@ -1,11 +1,14 @@
 import type { useLanguage } from "@/runtime/i18n/language"
 
-export const TIP_INTERVAL_MS = 3 * 60 * 60 * 1000
+export const TIP_INTERVAL_MS = 24 * 60 * 60 * 1000
+
+type Text = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
 
 export type Tip = {
   id: string
-  text: Parameters<ReturnType<typeof useLanguage>["t"]>[0]
-  action?: () => void
+  title: Text
+  description: Text
+  action?: { label: Text; run: () => void }
   when?: () => boolean
   start?: number
   end?: number
@@ -27,9 +30,12 @@ export function selectTip(tips: readonly Tip[], history: TipHistory, now: number
     (tip.when?.() ?? true)
 
   const current = tips.find((tip) => tip.id === history.current && eligible(tip))
+
   if (current) return current
 
   const last = Math.max(history.shownAt, history.dismissedAt)
+
   if (last && now < last + TIP_INTERVAL_MS) return
+
   return tips.find(eligible)
 }
