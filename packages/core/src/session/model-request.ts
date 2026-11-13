@@ -34,6 +34,7 @@ import { Cause, Context, Effect, Layer, Result, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
+import { Flag } from "../flag.js"
 import { Instructions } from "../instructions/index.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
@@ -270,6 +271,7 @@ export const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const transport = yield* SessionModelTransport.Service
     const app = yield* App.Service
+    const flags = yield* Flag.Service
     const prepare = Effect.fn("SessionModelRequest.prepare")(function* <
       S extends SessionRequest & { tools?: Definitions },
     >(kind: SessionRequestKind, input: Input, shape: (draft: SessionRequest, tools: Definitions) => Effect.Effect<S>) {
@@ -315,6 +317,16 @@ export const layer = Layer.effect(
           return t ? [[name, { ...t, description: d.description, inputSchema: d.input }] as const] : []
         }),
       )
+      // Hooks can remove or rename execute. Check the resolved tool behind each advertised name.
+      if (
+        input.tools?.codeModeCatalog &&
+        Array.from(hooked.values()).some((tool) => tool.name === "execute") &&
+        (yield* flags.enabled("codemode_hide_webfetch"))
+      ) {
+        for (const [name, tool] of hooked) {
+          if (tool.name === "webfetch") hooked.delete(name)
+        }
+      }
       const entries = Object.entries(shaped.options)
       const generation = Object.fromEntries(entries.filter(([k]) => GENERATION_KEYS.has(k))) as GenerationOptionsFields
       const providerOptions = Object.fromEntries(entries.filter(([k]) => !GENERATION_KEYS.has(k)))
@@ -476,5 +488,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [PluginHooks.node, SessionModelTransport.node, App.node],
+  deps: [PluginHooks.node, SessionModelTransport.node, App.node, Flag.node],
 })

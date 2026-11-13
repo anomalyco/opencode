@@ -16656,6 +16656,9 @@
               "all_flags": {
                 "type": "boolean"
               },
+              "codemode_hide_webfetch": {
+                "type": "boolean"
+              },
               "todo": {
                 "type": "boolean"
               },

@@ -2584,6 +2584,7 @@ export type ConfigEntry =
           portable_shell_scanner?: boolean
           codemode_vm?: boolean
           all_flags?: boolean
+          codemode_hide_webfetch?: boolean
           todo?: boolean
           background_compaction?: boolean
           media_blob?: boolean
