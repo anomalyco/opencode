@@ -3,7 +3,7 @@
 //! Ports `ensure` (`packages/client/src/effect/service.ts:45-127`) with the policy of
 //! `docs/F.9.md`: reuse a service that answers, whatever its version; wait for one that is
 //! starting; start TypeScript contenders only when none is registered or the registered process is
-//! gone; never stop a service this call did not start.
+//! gone; never stop a running service this call did not start.
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -168,7 +168,9 @@ impl Run<'_> {
     }
 
     // A registered service that keeps timing out. TS stops it and starts another; the Rust client
-    // does that only for a process it started itself, and otherwise gives up (docs/F.9.md).
+    // does that only for a process it started itself or one that no longer runs (a stale
+    // registration: on Windows a killed service's closed port times out rather than refuses), and
+    // otherwise gives up (docs/F.9.md).
     async fn unresponsive(&mut self, info: &Registration) -> Result<(), Error> {
         let count = match &self.timeouts {
             Some((previous, count)) if previous.same(info) => count + 1,
@@ -178,7 +180,7 @@ impl Run<'_> {
         if count < UNRESPONSIVE {
             return Ok(());
         }
-        if !self.pool.owns(info.pid) {
+        if !self.pool.owns(info.pid) && stop::running(info.pid) {
             return Err(Error(format!(
                 "Background service at {} (pid {}) is not responding. Stop it with `opencode service stop`, or pass --server.",
                 info.url, info.pid

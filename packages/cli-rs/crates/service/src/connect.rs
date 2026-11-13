@@ -452,15 +452,17 @@ mod tests {
     // A registration of another channel whose service answers `replies` in order. The TS binary is
     // missing, so starting a service fails with "Failed to start server".
     async fn other_channel(replies: Vec<Reply>) -> Result<Connection, Error> {
+        registered(9, replies).await.0
+    }
+
+    // `other_channel` for the process `pid`; also whether the registration is still there afterwards.
+    async fn registered(pid: u32, replies: Vec<Reply>) -> (Result<Connection, Error>, bool) {
         let dir = opencode_util::temp::tempdir().unwrap();
         let paths = paths(dir.path());
-        std::fs::write(
-            paths.state.join("service-oc-x.json"),
-            r#"{"url":"http://127.0.0.1:4097","pid":9,"password":"p"}"#,
-        )
-        .unwrap();
+        let file = paths.state.join("service-oc-x.json");
+        std::fs::write(&file, format!(r#"{{"url":"http://127.0.0.1:4097","pid":{pid},"password":"p"}}"#)).unwrap();
         let server: Arc<dyn Transport> = Arc::new(Server::default().replies(OTHER, replies));
-        resolve(server, &paths, &missing_ts(), &options(None)).await
+        (resolve(server, &paths, &missing_ts(), &options(None)).await, file.exists())
     }
 
     #[tokio::test]
@@ -480,13 +482,35 @@ mod tests {
         );
     }
 
-    // Paused time: each probe times out at once.
+    // Paused time: each probe times out at once. The registered process is this one, so it runs.
     #[tokio::test(start_paused = true)]
     async fn an_unresponsive_service_of_another_channel_is_reported() {
+        let pid = std::process::id();
+        let (result, kept) = registered(pid, vec![Reply::Hang]).await;
         assert_eq!(
-            message(other_channel(vec![Reply::Hang]).await),
-            "Background service at http://127.0.0.1:4097 (pid 9) is not responding. Stop it with `opencode service stop`, or pass --server."
+            message(result),
+            format!(
+                "Background service at http://127.0.0.1:4097 (pid {pid}) is not responding. Stop it with `opencode service stop`, or pass --server."
+            )
         );
+        assert!(kept);
+    }
+
+    // A killed service leaves its registration. On Windows a closed localhost port is refused only after about 2 s,
+    // so its probes time out as a hung service's do. Its pid no longer runs, so the registration is stale: as TS does,
+    // it is removed and a service started.
+    #[tokio::test(start_paused = true)]
+    async fn an_unresponsive_registration_whose_process_is_gone_is_replaced() {
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("--list")
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        child.wait().unwrap();
+        let (result, kept) = registered(child.id(), vec![Reply::Hang]).await;
+        let text = message(result);
+        assert!(text.starts_with("Failed to start server: /nonexistent/opencode-ts: "), "{text}");
+        assert!(!kept);
     }
 
     #[tokio::test]
