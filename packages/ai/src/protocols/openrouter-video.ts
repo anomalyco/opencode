@@ -99,20 +99,13 @@ const referencePart = Effect.fn("OpenRouterVideo.referencePart")(function* (asse
 })
 
 const fromRequest = Effect.fn("OpenRouterVideo.fromRequest")(function* (request: Request) {
-  const references = request.references ?? []
-  // OpenRouter treats a request with frame images as image-to-video and drops `input_references` without an error.
-  if (references.length > 0 && (request.start !== undefined || request.end !== undefined))
-    return yield* route.unsupported(
-      "video.references",
-      `${route.name} ignores references when a start or end frame is set; send one or the other`,
-    )
   const frames = [
     ...(request.start === undefined
       ? []
       : [{ ...(yield* imagePart(request.start)), frame_type: "first_frame" as const }]),
     ...(request.end === undefined ? [] : [{ ...(yield* imagePart(request.end)), frame_type: "last_frame" as const }]),
   ]
-  const inputReferences = yield* Effect.forEach(references, referencePart)
+  const inputReferences = yield* Effect.forEach(request.references ?? [], referencePart)
   return MediaProtocol.json(
     mergeJsonRecords(
       {

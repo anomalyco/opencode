@@ -95,6 +95,28 @@ describe("ai.video.start / OpenRouter", () => {
     }),
   )
 
+  it.effect("sends a start frame and references together", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      yield* ai.video
+        .start({
+          model,
+          prompt: "x",
+          start: "https://example.test/first.png",
+          references: ["https://example.test/style.png"],
+        })
+        .pipe(Effect.provide(record(calls)))
+      expect(JSON.parse(calls[0].body)).toEqual({
+        model: "x-ai/grok-imagine-video-1.5-lite",
+        prompt: "x",
+        frame_images: [
+          { type: "image_url", image_url: { url: "https://example.test/first.png" }, frame_type: "first_frame" },
+        ],
+        input_references: [{ type: "image_url", image_url: { url: "https://example.test/style.png" } }],
+      })
+    }),
+  )
+
   it.effect("passes a previous job through to edit or extend it", () =>
     Effect.gen(function* () {
       const calls: Array<Call> = []
@@ -118,18 +140,6 @@ describe("ai.video.start / OpenRouter", () => {
         .pipe(Effect.flip)
       expect(audio.reason._tag).toBe("UnsupportedOperation")
       expect(audio.message).toContain("only takes reference audio as http(s) URLs")
-
-      // OpenRouter drops references when a frame is set, so sending both would silently lose them.
-      const mixed = yield* ai.video
-        .start({
-          model,
-          prompt: "x",
-          start: "https://example.test/first.png",
-          references: ["https://example.test/style.png"],
-        })
-        .pipe(Effect.flip)
-      expect(mixed.reason._tag).toBe("UnsupportedOperation")
-      expect(mixed.message).toContain("ignores references when a start or end frame is set")
     }).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network")))),
   )
 })

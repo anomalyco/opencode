@@ -1089,8 +1089,8 @@ Provider notes:
 - **OpenRouter** (`OpenRouter.configure(...).video("google/veo-3.1")`) maps `start` and `end` to `frame_images`,
   references to `input_references` by kind (`image_url`, `video_url`, `audio_url`), `sound` to `generate_audio`, and
   `resolution` to its spelling (`4k` → `4K`), and leaves `aspect: "auto"` out so models that can follow the input image do.
-  It rejects frames together with references, since OpenRouter silently drops the references, and reference videos or
-  audio that aren't http(s) URLs (inline images work). Routing and upstream parameters go under `providerOptions.provider` (`only`, `order`,
+  Frames and references are both sent; when both are present OpenRouter keeps the frames and drops the references. It
+  rejects reference videos or audio that aren't http(s) URLs (inline images work). Routing and upstream parameters go under `providerOptions.provider` (`only`, `order`,
   `options: { <slug>: {...} }`), and `providerOptions.previous_job_id` edits or extends a finished job. Results are
   OpenRouter content URLs that download with the API key, which the asset carries; there is no cancel endpoint.
 
