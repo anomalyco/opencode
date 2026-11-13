@@ -7,7 +7,7 @@ import { usePlugin } from "@opencode/plugin/gui"
 import { choiceLabel, Glyph, profileChoices, type Choice } from "./choices"
 import type definition from "./index"
 import { createProfileJobs } from "./jobs"
-import { importedCookies } from "./jobs-machine"
+import { importedCookies, importLoss } from "./jobs-machine"
 
 /**
  * The pane's offer to bring sign-ins from the browser the user already uses, until they import or decline once. A
@@ -45,8 +45,7 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
     const job = last.job
     const choice = choices().find((item) => item.source.id === job.source && item.profile.id === job.profile)
     const outcome = last.outcome
-    // Cookies the browser keeps for itself alone stayed behind: the message says how many, and what to do.
-    const partial = outcome.type === "imported" && outcome.result.type === "imported" && outcome.result.protected > 0
+    const partial = outcome.type === "imported" && outcome.result.type === "imported" && importLoss(outcome.result)
 
     return {
       choice,

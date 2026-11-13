@@ -105,6 +105,8 @@ export default {
   "signins.dismiss": "Not now",
   "signins.imported.one": "Imported {{count}} cookie.",
   "signins.imported.other": "Imported {{count}} cookies.",
+  "signins.imported.incomplete.one": "Imported {{count}} cookie. Not imported: {{omitted}}.",
+  "signins.imported.incomplete.other": "Imported {{count}} cookies. Not imported: {{omitted}}.",
   "signins.imported.from.one": "Imported {{count}} cookie from {{browser}}",
   "signins.imported.from.other": "Imported {{count}} cookies from {{browser}}",
   "signins.imported.partial.one":

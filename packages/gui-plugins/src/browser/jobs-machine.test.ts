@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import {
   importedCookies,
+  importLoss,
   initialJobsState,
   lastFinished,
   runningJob,
@@ -16,6 +17,14 @@ const imported = {
   type: "imported" as const,
   result: { type: "imported" as const, imported: 3, skipped: 0, protected: 1, failed: 0 },
 }
+
+test("a partial import counts every omitted row without blaming malformed or expired cookies on encryption", () => {
+  const result = imported.result
+  expect(importLoss({ ...result, protected: 0 })).toBeUndefined()
+  expect(importLoss(result)).toEqual({ reason: "protected", count: 1 })
+  expect(importLoss({ ...result, protected: 0, failed: 1 })).toEqual({ reason: "other", count: 1 })
+  expect(importLoss({ ...result, skipped: 2, failed: 3 })).toEqual({ reason: "other", count: 6 })
+})
 
 function replay(events: readonly JobsEvent[]) {
   return events.reduce(

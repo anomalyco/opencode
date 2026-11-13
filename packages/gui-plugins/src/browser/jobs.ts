@@ -5,6 +5,7 @@ import type definition from "./index"
 import { BrowserProfile, type ExtensionCompatibility, type ProfileSource } from "./profile/ipc"
 import {
   importedCookies,
+  importLoss,
   initialJobsState,
   lastFinished,
   runningJob,
@@ -190,14 +191,22 @@ export function createProfileJobs(
 
     if (result.type === "failed") return { text: ctx.t(`signins.failed.${result.reason}`), error: true }
 
-    if (result.imported === 0 && result.protected > 0)
+    const loss = importLoss(result)
+
+    if (loss?.reason === "other")
+      return {
+        text: ctx.plural("signins.imported.incomplete", result.imported, { omitted: loss.count }),
+        error: result.imported === 0,
+      }
+
+    if (result.imported === 0 && loss)
       return {
         text: browser ? ctx.t("signins.protected.named", { browser }) : ctx.t("signins.protected"),
         error: true,
       }
 
     // Chrome and Edge on Windows mix readable cookies with app-bound ones: say what was left behind and what to do.
-    if (result.protected > 0)
+    if (loss)
       return {
         text: browser
           ? ctx.plural("signins.imported.partial.named", result.imported, { browser, protected: result.protected })
