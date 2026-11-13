@@ -37,7 +37,7 @@ const UrlSource = Schema.Struct({
   expiresAt: Schema.optional(Schema.Number),
 })
 
-/** A provider-side handle: OpenAI `file_id`, Gemini file URI, `gs://`, `runway://`, or a prior generation id. */
+/** A provider-side handle: OpenAI `file_id`, Gemini file URI, `gs://`, or a prior generation id. */
 const RefSource = Schema.Struct({
   type: Schema.Literal("ref"),
   provider: ProviderID,
@@ -199,7 +199,7 @@ export namespace Asset {
     readonly info?: Info
     readonly providerMetadata?: ProviderMetadata
     /**
-     * Headers required to download a `url` source, such as the provider API key Veo demands for its file URIs.
+     * Headers required to download a `url` source, such as a provider API key.
      * They are runtime-only: never part of `source`, `toJSON()`, or `AssetSchema`, so a persisted asset cannot leak
      * credentials and cannot be downloaded again after a round-trip. Call `materialize()` before persisting.
      */

@@ -91,7 +91,7 @@ export interface Started<Token> {
 
 /**
  * A follow-up call's inputs: the decoded token and the auth headers the route sent, so a protocol can attach them
- * to output URLs that require the same credentials to download (Veo).
+ * to output URLs that require the same credentials to download.
  */
 export interface PollContext<Token> {
   readonly token: Token
@@ -102,7 +102,7 @@ export interface PollContext<Token> {
  * Submit, then poll. `start` posts the body to the route endpoint; `status`, `result`, and `cancel` are follow-up
  * calls addressed by the token. Paths are relative to the route base URL unless the provider hands back absolute
  * URLs, in which case they are used verbatim. `result` is always its own GET: providers that
- * return the output inside the status body (Veo, xAI, Runway) point `result.path` at the status path and decode the
+ * return the output inside the status body (xAI) point `result.path` at the status path and decode the
  * same document, so `Generation.await` and `Video.resume(...).await()` behave identically everywhere.
  */
 export interface Queued<Request, Response, Token> {
@@ -140,7 +140,7 @@ export interface Queued<Request, Response, Token> {
     readonly path: (token: Token) => string
     /**
      * Fetch a fresh status first and skip the call for terminal generations, for providers whose cancel endpoint
-     * destroys finished work (Runway's `DELETE /v1/tasks/{id}` deletes completed tasks and their outputs).
+     * destroys finished work.
      */
     readonly activeOnly?: boolean
   }
