@@ -169,7 +169,8 @@ export default function BrowserSettings() {
             <Show
               when={clearMessage()}
               fallback={
-                <Show when={jobs.summary()}>{(value) => ctx.plural("settings.cookies.count", value().cookies)}</Show>
+                // Show runs its children once; the count lives in an expression so a new summary updates it.
+                <Show when={jobs.summary()}>{(value) => <>{ctx.plural("settings.cookies.count", value().cookies)}</>}</Show>
               }
             >
               {(message) => message().text}
