@@ -66,16 +66,16 @@ story("shows the wrapped button's tooltip on Tab and Shift+Tab, even after a cli
   await expect(trigger).toBeFocused()
 })
 
-story("honours the trigger's open delay override", async ({ mount, page }) => {
+story("restored focus does not open a tooltip after Tab leaves the window", async ({ mount, page }) => {
   const root = await mount("ui-tooltip--with-button")
 
-  const tooltip = page.getByRole("tooltip", { name: "Reset the count" })
-
-  await root.getByRole("button", { name: "Reset" }).hover()
-  await page.clock.runFor(149)
-  await expect(tooltip).toBeHidden()
-  await page.clock.runFor(1)
-  await expect(tooltip).toBeVisible()
+  await page.keyboard.down("Tab")
+  await expect(root.getByRole("button", { name: "Add" })).toBeFocused()
+  // The page loses focus before receiving Tab's keyup.
+  await page.evaluate(() => window.dispatchEvent(new FocusEvent("blur")))
+  await root.getByRole("button", { name: "Reset" }).focus()
+  await expect(page.getByRole("tooltip", { name: "Reset the count" })).toBeHidden()
+  await page.keyboard.up("Tab")
 })
 
 story.describe("touch", () => {

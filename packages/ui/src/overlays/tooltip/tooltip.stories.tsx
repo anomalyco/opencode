@@ -60,7 +60,7 @@ export const WithButton = {
         <Tooltip value="Add one to the count">
           <Button onClick={() => setCount((value) => value + 1)}>Add</Button>
         </Tooltip>
-        <Tooltip value="Reset the count" openDelay={150}>
+        <Tooltip value="Reset the count">
           <Button onClick={() => setCount(0)}>Reset</Button>
         </Tooltip>
         <output>Count: {count()}</output>

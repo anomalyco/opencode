@@ -55,21 +55,29 @@ let triggers = 0
 
 let tabbing = false
 
-function trackTab(event: KeyboardEvent) {
-  tabbing = event.type === "keydown" && event.key === "Tab"
+function startTab(event: KeyboardEvent) {
+  tabbing = event.key === "Tab"
+}
+
+function endTab() {
+  tabbing = false
 }
 
 function listenForTab() {
   if (++triggers === 1) {
-    window.addEventListener("keydown", trackTab, true)
-    window.addEventListener("keyup", trackTab, true)
+    window.addEventListener("keydown", startTab, true)
+    window.addEventListener("keyup", endTab, true)
+    window.addEventListener("pointerdown", endTab, true)
+    window.addEventListener("blur", endTab)
   }
 
   onCleanup(() => {
     if (--triggers) return
-    window.removeEventListener("keydown", trackTab, true)
-    window.removeEventListener("keyup", trackTab, true)
-    tabbing = false
+    window.removeEventListener("keydown", startTab, true)
+    window.removeEventListener("keyup", endTab, true)
+    window.removeEventListener("pointerdown", endTab, true)
+    window.removeEventListener("blur", endTab)
+    endTab()
   })
 }
 
