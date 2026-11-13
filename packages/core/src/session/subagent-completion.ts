@@ -45,8 +45,8 @@ export function formatBody(
   const lines = background.map((item) => {
     if (item.kind === "shell")
       return `- shell (${item.shellID}${item.sessionID !== childSessionID ? `, in ${item.sessionID}` : ""}): ${clean(item.command)}`
-    if (item.kind === "image")
-      return `- image (${item.model}${item.sessionID !== childSessionID ? `, in ${item.sessionID}` : ""}): ${item.path}`
+    if (item.kind === "image" || item.kind === "video")
+      return `- ${item.kind} (${item.model}${item.sessionID !== childSessionID ? `, in ${item.sessionID}` : ""}): ${item.path}`
     return `- subagent (${item.agent}, sessionID: ${item.childSessionID}): ${clean(item.description)}`
   })
   return `${body}${STILL_RUNNING}${lines.join("\n")}`

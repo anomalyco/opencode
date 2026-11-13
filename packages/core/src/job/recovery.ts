@@ -21,6 +21,14 @@ export const RecoverySchema = Schema.Union([
     path: Schema.String,
     model: Schema.String,
   }),
+  Schema.Struct({
+    kind: Schema.Literal("video"),
+    sessionID: SessionSchema.ID,
+    path: Schema.String,
+    model: Schema.String,
+    /** The provider's job token, plain JSON, so a restarted server can keep reading the same job. */
+    token: Schema.Unknown,
+  }),
 ])
 
 export type Recovery = typeof RecoverySchema.Type

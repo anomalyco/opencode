@@ -721,7 +721,7 @@ describe("ModelsDev Service", () => {
       )
       const [beta] = yield* ModelsDev.Service.use((service) => service.get()).pipe(Effect.provide(layer))
       expect(urls).toEqual([
-        "https://mirror.example/experimental/v2.0/api.json?type=chat,decision,image",
+        "https://mirror.example/experimental/v2.0/api.json?type=chat,decision,image,video",
         "https://mirror.example/api.json",
       ])
       expect(beta?.models.map((model) => model.id)).toEqual([Model.ID.make("beta-1")])
@@ -802,7 +802,7 @@ describe("ModelsDev Service", () => {
         Effect.provide(buildLayer(state, cache, { url: "", fetch: true, snapshot: false })),
       )
       expect((yield* Ref.get(state)).calls[0]?.url).toBe(
-        "https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image",
+        "https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image,video",
       )
     }),
   )

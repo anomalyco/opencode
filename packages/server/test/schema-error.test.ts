@@ -14,6 +14,12 @@ const generate = makeLocationNode({
       text: () => Effect.succeed(42 as unknown as string),
       image: () => Effect.die("unused"),
       decisions: () => Effect.die("unused"),
+      video: {
+        start: () => Effect.die("unused"),
+        status: () => Effect.die("unused"),
+        result: () => Effect.die("unused"),
+        cancel: () => Effect.die("unused"),
+      },
     }),
   ),
   deps: [],

@@ -27,6 +27,12 @@ export type OutstandingItem =
       readonly path: string
     }
   | {
+      readonly kind: "video"
+      readonly sessionID: SessionSchema.ID
+      readonly model: string
+      readonly path: string
+    }
+  | {
       readonly kind: "subagent"
       readonly sessionID: SessionSchema.ID
       readonly childSessionID: SessionSchema.ID
@@ -70,6 +76,8 @@ export const outstanding = Effect.fnUntraced(function* (
       }
     if (recovery.kind === "image")
       return { kind: "image" as const, sessionID: recovery.sessionID, path: recovery.path, model: recovery.model }
+    if (recovery.kind === "video")
+      return { kind: "video" as const, sessionID: recovery.sessionID, path: recovery.path, model: recovery.model }
     return {
       kind: "subagent" as const,
       sessionID: recovery.parentSessionID,

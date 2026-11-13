@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { optional } from "./schema.js"
 import { SessionID } from "./session-id.js"
 
-export const Kind = Schema.Literals(["shell", "subagent", "image"]).annotate({ identifier: "Job.Kind" })
+export const Kind = Schema.Literals(["shell", "subagent", "image", "video"]).annotate({ identifier: "Job.Kind" })
 export type Kind = typeof Kind.Type
 
 export const Status = Schema.Literals(["running", "completed", "error", "cancelled"]).annotate({
@@ -53,7 +53,15 @@ export const Image = Schema.Struct({
   model: Schema.String,
 }).annotate({ identifier: "Job.Image" })
 
-export const Info = Schema.Union([Shell, Subagent, Image]).pipe(
+export interface Video extends Schema.Schema.Type<typeof Video> {}
+export const Video = Schema.Struct({
+  kind: Schema.tag("video"),
+  ...Base,
+  path: Schema.String,
+  model: Schema.String,
+}).annotate({ identifier: "Job.Video" })
+
+export const Info = Schema.Union([Shell, Subagent, Image, Video]).pipe(
   Schema.toTaggedUnion("kind"),
   Schema.annotate({ identifier: "Job.Info" }),
 )
