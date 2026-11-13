@@ -96,6 +96,8 @@ enum Entry {
         error: Option<String>,
         /// Has an activation, failed or not: Enter disables it.
         active: bool,
+        /// What its calls cost while it is slow (synthesis 4.4).
+        slow: Option<String>,
     },
     Server {
         key: String,
@@ -679,6 +681,7 @@ fn row(entry: opencode_plugin::Entry) -> Entry {
         status,
         error,
         active: entry.active,
+        slow: entry.slow,
     }
 }
 
@@ -721,6 +724,9 @@ fn footer(entry: &Entry) -> Option<String> {
     }
     if outdated(entry) {
         details.push("update available".to_owned());
+    }
+    if let Entry::Tui { slow: Some(slow), .. } = entry {
+        details.push(slow.clone());
     }
     (!details.is_empty()).then(|| details.join(", "))
 }
@@ -783,6 +789,7 @@ mod tests {
                 source: Source::External,
                 status,
                 active,
+                slow: None,
             })
         };
         assert!(Manager::active(&entry(Status::Failed("boom (previous version still active)".to_owned()), true)));
