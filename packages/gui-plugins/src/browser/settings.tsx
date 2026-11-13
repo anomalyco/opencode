@@ -512,7 +512,8 @@ function ChoiceRow(props: { image?: string; name: string; access: readonly Exten
         <span class="truncate text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-base">{props.name}</span>
         <Show when={props.access[0]}>
           {(first) => (
-            <span class="flex min-w-0">
+            // The tooltip wraps its trigger in an element of its own, which must shrink too for the line to truncate.
+            <span class="flex min-w-0 [&>*]:min-w-0">
               <ui.Tooltip value={<AccessDetails access={props.access} />}>
                 <span
                   tabIndex={0}
