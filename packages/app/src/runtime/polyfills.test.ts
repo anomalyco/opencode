@@ -4,7 +4,10 @@ const native = {
   groupBy: Map.groupBy,
   withResolvers: Promise.withResolvers,
   try: Promise.try,
-  any: "any" in AbortSignal ? (AbortSignal as unknown as { any: unknown }).any : undefined,
+  any:
+    typeof (AbortSignal as unknown as { any?: unknown }).any === "function"
+      ? (AbortSignal as unknown as { any: unknown }).any
+      : undefined,
 }
 
 const maps: Partial<typeof Map> = Map
@@ -17,7 +20,7 @@ beforeEach(async () => {
   delete maps.groupBy
   delete promises.withResolvers
   delete promises.try
-  delete signals.any
+  signals.any = undefined
   await import(`./polyfills?${Math.random()}`)
 })
 
@@ -25,11 +28,7 @@ afterEach(() => {
   Map.groupBy = native.groupBy
   Promise.withResolvers = native.withResolvers
   Promise.try = native.try
-  if (native.any) {
-    signals.any = native.any
-  } else {
-    delete signals.any
-  }
+  signals.any = native.any
 })
 
 test("Map.groupBy keeps first-seen key order and passes the index", () => {

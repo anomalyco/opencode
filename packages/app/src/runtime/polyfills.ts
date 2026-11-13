@@ -38,7 +38,7 @@ if (!Promise.try) {
   } as typeof Promise.try
 }
 
-if (!("any" in AbortSignal)) {
+if (typeof (AbortSignal as unknown as { any?: unknown }).any !== "function") {
   ;(AbortSignal as unknown as { any: (signals: Iterable<AbortSignal>) => AbortSignal }).any = function any(
     signals: Iterable<AbortSignal>,
   ) {
