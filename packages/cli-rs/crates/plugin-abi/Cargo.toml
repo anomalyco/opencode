@@ -12,3 +12,8 @@ publish.workspace = true
 opencode-api-types.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+schemars = { workspace = true, optional = true }
+
+[features]
+# The JSON Schema of contract 2.0 (`examples/schema.rs`); off in every build that ships.
+schema = ["dep:schemars"]
