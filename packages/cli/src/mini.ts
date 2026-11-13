@@ -1,6 +1,7 @@
 import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { ClientError, OpenCode, type OpenCodeClient } from "@opencode/client/promise"
 import type { MiniFrontendInput } from "@opencode/tui/mini"
+import { FSUtil } from "@opencode/util/fs-util"
 import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
 import { setTimeout } from "node:timers/promises"
 import { readStdin } from "./util/io"
@@ -202,7 +203,7 @@ function validate(input: MiniCommandInput) {
 }
 
 function localDirectory(): string {
-  const root = process.env.PWD ?? process.cwd()
+  const root = FSUtil.windowsPath(process.env.PWD ?? process.cwd())
   try {
     process.chdir(root)
     return process.cwd()

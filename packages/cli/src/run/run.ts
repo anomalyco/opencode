@@ -59,7 +59,7 @@ async function run(input: RunCommandInput, signal: AbortSignal) {
   if (input.fork && !input.continue && !input.session) fail("--fork requires --continue or --session")
   if (input.worktree !== undefined && (input.continue || input.session))
     fail("--worktree starts a new session and cannot be combined with --continue or --session")
-  const root = process.env.PWD ?? process.cwd()
+  const root = FSUtil.windowsPath(process.env.PWD ?? process.cwd())
   const directory = localDirectory(root)
   const argument = input.message.join(" ") || undefined
   // With a message argument, stdin is extra context: a shell pipe is read in full, but the open, silent
