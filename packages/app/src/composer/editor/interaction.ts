@@ -75,7 +75,7 @@ export type ComposerEditorView = {
       delivery: Accessor<ComposerDelivery | undefined>
       onSubmit: (key: string, comment: string) => Promise<boolean>
     }
-    onSubmit: (options?: { alternate?: boolean }) => void
+    onSubmit: (options?: { alternate?: boolean; first?: boolean }) => void
     onStop: () => void
   }
   shell?: {
@@ -287,9 +287,12 @@ export function createComposerEditor(input: {
   })
   onCleanup(() => dispatchMentionSearch({ type: "disposed" }))
 
+  const contextOpen = createMemo(() => state.popover.type === "context")
+  const fileRows = createMemo(() => selectMentionFiles(mentionSearch()))
+
   const contextList = useFilteredList<ComposerSuggestion>({
     items: (query) => {
-      if (state.popover.type !== "context") return []
+      if (!contextOpen()) return []
 
       const sessions = input.searchSessions?.(query) ?? []
 
@@ -301,12 +304,7 @@ export function createComposerEditor(input: {
 
       const seen = new Set(recent.map((item) => item.id))
 
-      return [
-        ...fixed,
-        ...sessions,
-        ...recent,
-        ...selectMentionFiles(mentionSearch()).filter((item) => !seen.has(item.id)),
-      ]
+      return [...fixed, ...sessions, ...recent, ...fileRows().filter((item) => !seen.has(item.id))]
     },
     key: (item) => item.id,
     filterKeys: ["label"],
@@ -467,6 +465,13 @@ export function createComposerEditor(input: {
   }
 
   const onKeyDown = (event: KeyboardEvent, height?: number) => {
+    // Escape, Enter and Tab cancel, confirm or cycle IME candidates; Safari can report them as keyCode 229.
+    if (
+      event.isComposing ||
+      (event.keyCode === 229 && (event.key === "Escape" || event.key === "Enter" || event.key === "Tab"))
+    )
+      return true
+
     flushFocus()
 
     if (
@@ -518,8 +523,7 @@ export function createComposerEditor(input: {
       !event.shiftKey &&
       !event.altKey &&
       !event.ctrlKey &&
-      !event.metaKey &&
-      !event.isComposing
+      !event.metaKey
     ) {
       event.preventDefault()
 
@@ -549,7 +553,6 @@ export function createComposerEditor(input: {
       !event.altKey &&
       !event.ctrlKey &&
       !event.metaKey &&
-      !event.isComposing &&
       (event.key === "ArrowUp" || event.key === "ArrowDown") &&
       (event.shiftKey
         ? event.key === "ArrowUp" && openHistory(height)
@@ -743,7 +746,7 @@ export function createComposerEditor(input: {
     openShell() {
       dispatch({ type: "mode.shell" })
     },
-    submit(options?: { alternate?: boolean }) {
+    submit(options?: { alternate?: boolean; first?: boolean }) {
       if (input.view.submit.available?.() === false) return
 
       if (input.view.draftOnly) return

@@ -1,5 +1,5 @@
-import { fn, methods } from "../interpreter/native.js"
-import { typeError } from "../interpreter/model.js"
+import { fn, methods } from "../runtime/native.js"
+import { typeError } from "../runtime/model.js"
 import {
   define,
   entries,
@@ -20,10 +20,10 @@ import {
   WeakSetObj,
   coerceToString,
   type Value,
-} from "../interpreter/objects.js"
-import { createErrorValue, isErrorType } from "../interpreter/intrinsics.js"
-import { describeValue } from "../interpreter/references.js"
-import type { Interpreter } from "../interpreter/interpreter.js"
+} from "../runtime/objects.js"
+import { createErrorValue, isErrorType } from "../runtime/intrinsics.js"
+import { describeValue } from "../runtime/references.js"
+import type { Interpreter } from "../runtime/interpreter.js"
 import { ToolReference } from "../tool-runtime.js"
 
 // WebIDL DOMString conversion: a missing argument is a TypeError, anything else stringifies. Invalid input is a
@@ -64,12 +64,12 @@ export const structuredCloneGlobal = <R>(ctx: Interpreter<R>) =>
       }
       if (value instanceof SetObj) {
         const copy = remember(new SetObj(builtins.Set))
-        for (const item of value.set) copy.set.add(clone(item))
+        for (const item of value.set.liveKeys()) copy.set.add(clone(item))
         return copy
       }
       if (value instanceof DateObj) return remember(new DateObj(builtins.Date, value.time))
       if (value instanceof RegExpObj) {
-        return remember(new RegExpObj(builtins.RegExp, value.regex.source, value.regex.flags))
+        return remember(new RegExpObj(builtins.RegExp, value.source, value.flags))
       }
       if (value instanceof Bytes) return remember(new Bytes(builtins.Uint8Array, new Uint8Array(value.bytes)))
       if (value instanceof ErrorObj) {

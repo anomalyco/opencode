@@ -69,13 +69,19 @@ test("a row's Stop sends once until it settles, and a stop that never settles gi
   ).toContainEqual(expect.objectContaining({ type: "stop.run", item: server }))
 })
 
-test("a subagent row stops only once its child session exists", () => {
-  const starting: SessionActivityItem = { key: "call_1", type: "subagent", target: "call_1", started: 1 }
-  const child: SessionActivityItem = { ...starting, key: "call_2", target: "call_2", sessionID: "ses_child" }
-  const running = work([], [starting, child])
+test("a subagent row can stop its child while it is listed", () => {
+  const child: SessionActivityItem = {
+    key: "ses_child",
+    type: "subagent",
+    target: "ses_child",
+    sessionID: "ses_child",
+    started: 1,
+  }
+
+  const running = work([], [child])
   const listed = replay([{ type: "menu.toggled", open: true, work: running }]).state
 
-  expect(transitionShellPanel(listed, { type: "stop.requested", item: starting, work: running }).state).toBe(listed)
+  expect(transitionShellPanel(listed, { type: "stop.requested", item: child, work: work([]) }).state).toBe(listed)
   expect(transitionShellPanel(listed, { type: "stop.requested", item: child, work: running }).effects).toContainEqual(
     expect.objectContaining({ type: "stop.run", item: child }),
   )

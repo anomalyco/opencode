@@ -1032,7 +1032,11 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
 // inclusive `inputTokens` the rest of the contract expects. Extended
 // thinking tokens are included in `output_tokens`; newer responses also
 // expose that subset through `output_tokens_details.thinking_tokens`.
-const mapUsage = (usage: AnthropicUsage | undefined, providerMetadataKey: string): Usage | undefined => {
+const mapUsage = (
+  usage: AnthropicUsage | undefined,
+  providerMetadataKey: string,
+  frame?: AnthropicEvent,
+): Usage | undefined => {
   if (!usage) return undefined
   const iterations = usage.iterations?.length ? usage.iterations : [usage]
   const last = usage.iterations?.at(-1)
@@ -1059,7 +1063,7 @@ const mapUsage = (usage: AnthropicUsage | undefined, providerMetadataKey: string
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: ProviderShared.sumTokens(...iterations.map((item) => item.output_tokens_details?.thinking_tokens)),
     totalTokens: ProviderShared.totalTokens(inputTokens, outputTokens, undefined),
-    ...ProviderShared.reportedBilling(usage),
+    ...ProviderShared.reportedBilling(usage, frame),
     providerMetadata: { [providerMetadataKey]: usage },
   })
 }
@@ -1331,7 +1335,11 @@ const onMessageDelta = (
   state: ParserState,
   event: AnthropicEvent & { readonly delta?: AnthropicStreamDelta },
 ): StepResult => {
-  const usage = mergeUsage(state.usage, mapUsage(event.usage, state.providerMetadataKey), state.providerMetadataKey)
+  const usage = mergeUsage(
+    state.usage,
+    mapUsage(event.usage, state.providerMetadataKey, event),
+    state.providerMetadataKey,
+  )
   const pendingFinish = (() => {
     const stopReason = event.delta?.stop_reason
     if (stopReason === null || stopReason === undefined) return state.pendingFinish

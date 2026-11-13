@@ -7,6 +7,7 @@ import {
   assistantMessage,
   historyMessages,
   messageUpdated,
+  partDelta,
   partUpdated,
   session,
   sessionID,
@@ -23,6 +24,108 @@ import { openSession } from "../utils/workspace"
 test.use({ serviceWorkers: "block" })
 
 test.describe("timeline history", () => {
+  test("jump to message searches offscreen history without moving the reader until selection", async ({ page }) => {
+    const target = userMessage([textPart("prt_dispatch_note", "Use the loading dock for delivery")], {
+      id: "msg_00000_dispatch",
+      created: 1680000000000,
+    })
+
+    const messages = [
+      target,
+      ...historyMessages(45),
+      userMessage(),
+      assistantMessage([textPart("prt_active", "Checking the route")], { completed: false }),
+    ]
+
+    const timeline = await setupTimeline(page, {
+      sessionMessages: messages,
+      pageMessages: (_, limit, before) => {
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - Math.min(16, limit))
+
+        return { items: messages.slice(start, end), cursor: start ? messages[start]!.id : undefined }
+      },
+    })
+
+    const scroller = timelineScroller(page)
+
+    const old = scroller.getByText(target.text, { exact: true })
+
+    await expect(scroller.getByText("Checking the route", { exact: true })).toBeInViewport()
+    await expect(old).toHaveCount(0)
+    const top = await scroller.evaluate((element) => element.scrollTop)
+
+    const mod = await page.evaluate(() => (/Mac/.test(navigator.platform) ? "Meta" : "Control"))
+
+    const search = page.getByRole("combobox", { name: "Jump to message" })
+
+    await page.keyboard.press(`${mod}+Alt+g`)
+    await expect(search).toBeFocused()
+    await search.fill("loading dock")
+    await expect(page.getByRole("option", { name: /Use the loading dock/ })).toBeVisible()
+    await search.press("Escape")
+    await expect(search).toBeHidden()
+    expect(await scroller.evaluate((element) => element.scrollTop)).toBe(top)
+    await expect(old).toHaveCount(0)
+
+    await page.keyboard.press(`${mod}+Shift+p`)
+    await page.getByRole("combobox").fill("sent prompts")
+    await page.getByRole("option", { name: /Jump to message/ }).click()
+    await expect(search).toBeFocused()
+    await search.fill("loading dock")
+    await expect(page.getByRole("option", { name: /Use the loading dock/ })).toBeVisible()
+    await search.press("Enter")
+    await expect(old).toBeInViewport()
+    await timeline.send(partDelta("prt_active", "\n\nThe route is ready."))
+    await expect(old).toBeInViewport()
+    await expect(page).toHaveURL(new RegExp(`#message-${target.id}$`))
+    await page.getByRole("button", { name: "Jump to latest" }).click()
+    await expect(scroller.getByText("The route is ready.", { exact: true })).toBeInViewport()
+  })
+
+  test("jump to message pages back only as far as the prompt", async ({ page }) => {
+    const target = userMessage([textPart("prt_dispatch_note", "Use the loading dock for delivery")], {
+      id: "msg_00100_dispatch",
+      created: 1690000000000,
+    })
+
+    const history = historyMessages(80)
+
+    const messages = [
+      ...history.slice(0, 100),
+      target,
+      ...history.slice(100),
+      userMessage(),
+      assistantMessage([textPart("prt_active", "Checking the route")], { completed: false }),
+    ]
+
+    let oldest = messages.length
+
+    await setupTimeline(page, {
+      sessionMessages: messages,
+      pageMessages: (_, limit, before) => {
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - Math.min(16, limit))
+
+        // The picker lists older prompts in pages of 200 without touching the timeline; the timeline pages by 20.
+        if (limit < 200) oldest = Math.min(oldest, start)
+
+        return { items: messages.slice(start, end), cursor: start ? messages[start]!.id : undefined }
+      },
+    })
+
+    const mod = await page.evaluate(() => (/Mac/.test(navigator.platform) ? "Meta" : "Control"))
+
+    const search = page.getByRole("combobox", { name: "Jump to message" })
+
+    await page.keyboard.press(`${mod}+Alt+g`)
+    await search.fill("loading dock")
+    await expect(page.getByRole("option", { name: /Use the loading dock/ })).toBeVisible()
+    await search.press("Enter")
+    await expect(timelineScroller(page).getByText(target.text, { exact: true })).toBeInViewport()
+    expect(oldest).toBeGreaterThan(0)
+  })
+
   test("restoring a paged transcript waits for another upward scroll before loading history", async ({ page }) => {
     const id = "ses_history_restore"
     const other = "ses_history_other"
@@ -40,7 +143,6 @@ test.describe("timeline history", () => {
     ]
 
     const requests: (string | undefined)[] = []
-    await page.clock.install()
     await openSession(page, {
       name: "HistoryRestore",
       sessions: [{ id }, { id: other, directory: "C:/OpenCode/HistoryOther" }],
@@ -68,6 +170,9 @@ test.describe("timeline history", () => {
 
     await page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(other)}"]`).click()
     await expect(page.getByText("Other session", { exact: true })).toBeVisible()
+    // Only the return needs controlled time. A fake clock from the start also runs the first mount's frames late,
+    // and a scroll to the end queued by one of them lands after the upward gesture.
+    await page.clock.install()
     await page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(id)}"]`).click()
     await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
     // Exhaust the delayed leading-turn enrichment without a real-time sleep.

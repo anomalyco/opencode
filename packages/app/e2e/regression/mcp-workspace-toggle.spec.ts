@@ -69,7 +69,9 @@ async function open(
     if (input.surface === "dialog") return page.keyboard.press("Control+;")
 
     if (input.surface === "settings") {
-      await page.keyboard.press("Control+,")
+      // Settings opens with the platform's command key, which the app reads from navigator.platform.
+      const mac = await page.evaluate(() => /(Mac|iPod|iPhone|iPad)/.test(navigator.platform))
+      await page.keyboard.press(mac ? "Meta+," : "Control+,")
 
       return panel.getByRole("tab", { name: "Extensions", exact: true }).click()
     }
@@ -479,6 +481,8 @@ test("toggling an MCP from the dialog keeps it highlighted", async ({ page }) =>
   const row = view.panel.getByRole("option").filter({ hasText: "figma-desktop" })
   const toggle = row.getByRole("switch", { name: "figma-desktop", exact: true })
 
+  // The dialog focuses its search a task after it opens; keys pressed before then go to the composer behind it.
+  await expect(view.panel.getByRole("combobox", { name: "Search MCPs", exact: true })).toBeFocused()
   // From the keyboard, Enter toggles the highlighted server and the highlight stays on it.
   await page.keyboard.press("ArrowDown")
   await expect(row).toHaveAttribute("aria-selected", "true")

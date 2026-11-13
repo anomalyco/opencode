@@ -476,7 +476,7 @@ it.effect("auto compaction estimates current content against the buffered prompt
       id: "call_read",
       name: "read",
       state: { status: "completed", input: {}, content: [{ type: "text", text: "x".repeat(4_000) }] },
-      time: { created: DateTime.makeUnsafe(0) },
+      time: { created: DateTime.makeUnsafe(0), ran: DateTime.makeUnsafe(0) },
     })
     const grown = { ...input(89_000, contextLimited), messages: [{ ...assistant, content: [tool] }] }
     expect(SessionCompaction.estimateContext(grown)).toBe(90_000)
@@ -792,7 +792,9 @@ it.effect("summary updates include the retained tail in compaction hooks and the
 
     expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
     expect(requests).toHaveLength(1)
-    expect(requests[0].messages.slice(0, -1)).toEqual(expected)
+    // Hooks read the checkpoint's stored metadata; the model request does not carry it.
+    expect(expected[0]?.metadata).toEqual({ recent: "[User]: Previous exact request" })
+    expect(requests[0].messages.slice(0, -1)).toEqual(expected.map((message) => Message.make({ ...message })))
     expect(requests[0].messages.at(-1)?.content).toEqual([{ type: "text", text: SessionCompaction.buildPrompt(true) }])
     const store = yield* SessionStore.Service
     expect(yield* store.context(session.id)).toMatchObject([

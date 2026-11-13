@@ -194,7 +194,7 @@
     ".roo/**",
     ".windsurf/**",
     "script/oxlint/anti-slop/**",
-    "services/www/site/public/arcade3d/basis/**",
-    "services/www/site/public/arcade3d/draco/**"
+    "services/site/public/arcade3d/basis/**",
+    "services/site/public/arcade3d/draco/**"
   ]
 }

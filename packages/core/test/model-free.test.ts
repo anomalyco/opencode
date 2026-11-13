@@ -1,3 +1,4 @@
+import { Agent } from "@opencode/core/agent"
 import { expect } from "bun:test"
 import { DateTime, Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -72,7 +73,7 @@ for (const flag of [undefined, "0", "1", "true"]) {
             time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
             location: ref,
           })
-          const failure = yield* runner.resolve(session, models.available).pipe(Effect.flip)
+          const failure = yield* runner.resolve(session, models.available, { kind: "primary", agent: Agent.ID.make("build") }).pipe(Effect.flip)
           expect(failure.message).toBe(`Model unavailable: ${providerID}/big-pickle`)
           expect(yield* resolver.resolve(Model.Ref.make({ providerID, id: free }))).toBeUndefined()
           // Later transforms cannot restore a free model, even when all paid models are removed.
