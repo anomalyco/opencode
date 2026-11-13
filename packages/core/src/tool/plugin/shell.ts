@@ -417,7 +417,15 @@ export const Plugin = {
                   if (yield* Deferred.isDone(stopped)) return yield* cancelled(info, job.id)
 
                   if (input.background === true) {
-                    yield* jobs.background(job.id)
+                    const moved = yield* jobs.background(job.id)
+                    // The command already settled, so it never left the foreground: report its own result instead of
+                    // a background handoff whose notice was already written.
+                    if (moved && moved.status !== "running") {
+                      if (moved.status === "error")
+                        return yield* Effect.fail(new Error(moved.error ?? "Command failed"))
+                      if (moved.status === "cancelled") return yield* Effect.fail(new Error("Command cancelled"))
+                      return yield* Deferred.await(settled)
+                    }
                     yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
                     return backgroundResult(info, yield* Clock.currentTimeMillis)
                   }

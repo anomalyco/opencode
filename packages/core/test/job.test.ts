@@ -361,7 +361,7 @@ describe("Job", () => {
     }),
   )
 
-  it.live("durably backgrounds recoverable work that has already failed", () =>
+  it.live("reports recoverable work that already failed as settled, not backgrounded", () =>
     Effect.gen(function* () {
       const jobs = yield* Job.Service
       const job = yield* jobs.start({
@@ -377,11 +377,11 @@ describe("Job", () => {
       })
       expect((yield* jobs.wait({ id: job.id })).info?.status).toBe("error")
 
+      // Its settlement already reported it, so the move has nothing left to do.
       const background = yield* jobs.background(job.id)
-      expect(background?.notificationID).toStartWith("msg_")
-      expect(yield* jobs.pendingBackground).toMatchObject([
-        { id: job.id, notificationID: background?.notificationID, status: "error", error: "shell failed" },
-      ])
+      expect(background).toMatchObject({ id: job.id, status: "error", error: "shell failed" })
+      expect(background?.notificationID).toBeUndefined()
+      expect(yield* jobs.pendingBackground).toEqual([])
     }),
   )
 
@@ -531,6 +531,7 @@ describe("Job", () => {
         run: Effect.succeed("kept"),
       })
       yield* jobs.background(owned.id)
+      // `other` settles before it can be moved, so it never becomes a pending background row.
       yield* jobs.background(other.id)
       yield* jobs.wait({ id: other.id })
 
@@ -539,9 +540,7 @@ describe("Job", () => {
       yield* Deferred.await(interrupted).pipe(Effect.timeout("1 second"))
 
       expect(yield* db.select().from(JobTable).where(eq(JobTable.session_id, sessionID)).all()).toEqual([])
-      const remaining = yield* jobs.pendingBackground
-      expect(remaining).toMatchObject([{ id: other.id, status: "completed", output: "kept" }])
-      if (remaining[0]) yield* jobs.completeBackground(remaining[0].notificationID)
+      expect(yield* jobs.pendingBackground).toEqual([])
     }),
   )
 
