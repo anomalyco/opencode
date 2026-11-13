@@ -257,17 +257,39 @@ impl Host for Tui {
         self.local.set(&opencode_local::model_pref::Model::new(provider, model), true);
     }
 
-    fn tab_allowed(&self, edit: &abi::TabEdit) -> bool {
+    fn tab_allowed(&self, edit: &abi::TabEdit, staged: &[abi::TabEdit]) -> bool {
         if !crate::tabs::Tabs::enabled(self) {
             return false;
         }
+        let root = |session: &str| self.data.read(|state| state.root(&SessionID(session.to_owned()))).0;
+        // The tabs as the call's earlier edits left them (TS `ui.tabs` acts on each in order).
+        let (mut open, mut current) = (self.tabs.open_ids(self), self.tabs.current(self));
+        for edit in staged {
+            match edit {
+                abi::TabEdit::Open { session } | abi::TabEdit::Focus { session } => {
+                    let root = root(session);
+                    if !open.contains(&root) {
+                        open.push(root.clone());
+                    }
+                    if matches!(edit, abi::TabEdit::Focus { .. }) {
+                        current = Some(root);
+                    }
+                }
+                abi::TabEdit::Move { .. } => {}
+                abi::TabEdit::Close { session } => {
+                    let closed = session.clone().or_else(|| current.clone());
+                    open.retain(|id| Some(id) != closed.as_ref());
+                    if current == closed {
+                        current = None;
+                    }
+                }
+            }
+        }
         match edit {
             abi::TabEdit::Open { .. } | abi::TabEdit::Focus { .. } => true,
-            abi::TabEdit::Move { session, .. } => self.tabs.is_open(self, session),
-            abi::TabEdit::Close { session } => session
-                .clone()
-                .or_else(|| self.tabs.current(self))
-                .is_some_and(|session| self.tabs.is_open(self, &session)),
+            // `move` takes any session of a tab's family; `close` only the tab's own ID, as in TS.
+            abi::TabEdit::Move { session, .. } => open.contains(&root(session)),
+            abi::TabEdit::Close { session } => session.clone().or(current).is_some_and(|id| open.contains(&id)),
         }
     }
 
@@ -302,7 +324,7 @@ impl Host for Tui {
     }
 
     fn install_theme(&self, name: &str, theme: Value) {
-        if !theme_name(name) {
+        if !opencode_plugin::theme_file_name(name) {
             log::warn!("a plugin installs a theme with a name that is not a file name: {name:?}");
             return;
         }
@@ -759,13 +781,6 @@ pub fn local_changed(tui: &Tui) {
     tui.reads.changed(tui);
 }
 
-/// Whether a theme name is safe as a file name in the themes directory.
-fn theme_name(name: &str) -> bool {
-    !name.is_empty()
-        && !name.starts_with('.')
-        && name.chars().all(|char| char.is_ascii_alphanumeric() || matches!(char, '-' | '_' | '.'))
-}
-
 fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
     match status {
         opencode_store::SessionStatus::Idle => abi::SessionStatus::Idle,
@@ -1063,7 +1078,7 @@ mod tests {
             ("a\\b", false),
             ("tôkyo", false),
         ] {
-            assert_eq!(theme_name(name), plain, "{name:?}");
+            assert_eq!(opencode_plugin::theme_file_name(name), plain, "{name:?}");
         }
     }
 

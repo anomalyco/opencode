@@ -249,6 +249,8 @@ struct Ctx {
     keys: Vec<String>,
     effects: Vec<Effect>,
     undo: Undo,
+    /// What the call's verbs staged for its later ones.
+    staged: crate::Staged,
     /// What it asks for is dropped.
     quiet: bool,
     /// The running call is a render, which reads and asks for no effect.
@@ -323,6 +325,7 @@ impl Instance {
             keys: Vec::new(),
             effects: Vec::new(),
             undo: Undo::default(),
+            staged: crate::Staged::default(),
             quiet,
             read_only: false,
         });
@@ -429,8 +432,9 @@ impl Shared {
 }
 
 impl Ctx {
-    /// What the calls asked for since it was last taken.
+    /// What the calls asked for since it was last taken; what they staged goes with it.
     fn take(&mut self) -> (Vec<Effect>, Undo) {
+        self.staged = crate::Staged::default();
         (std::mem::take(&mut self.effects), std::mem::take(&mut self.undo))
     }
 }
@@ -605,17 +609,26 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
         }
         HostRequest::Variants => return read(ctx, |read| serde_json::to_value(read.variants())),
         HostRequest::SetVariant { variant } => {
-            let known = read(ctx, |read| Ok(serde_json::Value::Bool(crate::variant_known(read, variant.as_deref()))))?;
+            let staged = &ctx.staged;
+            let known = read(ctx, |read| Ok(serde_json::Value::Bool(staged.variant_known(read, variant.as_deref()))))?;
             if known == serde_json::Value::Bool(true) {
                 ctx.effects.push(Effect::Variant(variant));
             }
             return Ok(known);
         }
-        HostRequest::SetModel { provider, model } => ctx.effects.push(Effect::Model(provider, model)),
+        HostRequest::SetModel { provider, model } => {
+            let mut staged = std::mem::take(&mut ctx.staged);
+            read(ctx, |read| {
+                staged.set_model(read, &provider, &model);
+                Ok(serde_json::Value::Null)
+            })?;
+            ctx.staged = staged;
+            ctx.effects.push(Effect::Model(provider, model));
+        }
         HostRequest::TabsEnabled => return read(ctx, |read| serde_json::to_value(read.tabs_enabled())),
         HostRequest::Tabs => return read(ctx, |read| serde_json::to_value(read.tabs())),
         HostRequest::Tab { edit } => {
-            let allowed = ctx.host.upgrade().is_some_and(|host| host.tab_allowed(&edit));
+            let allowed = ctx.host.upgrade().is_some_and(|host| ctx.staged.tab(&*host, &edit));
             if allowed {
                 ctx.effects.push(Effect::Tab(edit));
             }
@@ -636,13 +649,18 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
         HostRequest::Theme => return read(ctx, |read| serde_json::to_value(read.theme())),
         HostRequest::Themes => return read(ctx, |read| serde_json::to_value(read.themes())),
         HostRequest::SetTheme { name } => {
-            let known = read(ctx, |read| Ok(serde_json::Value::Bool(crate::theme_known(read, &name))))?;
+            let staged = &ctx.staged;
+            let known = read(ctx, |read| Ok(serde_json::Value::Bool(staged.theme_known(read, &name))))?;
             if known == serde_json::Value::Bool(true) {
                 ctx.effects.push(Effect::Theme(name));
             }
             return Ok(known);
         }
-        HostRequest::InstallTheme { name, theme } => ctx.effects.push(Effect::InstallTheme(name, theme)),
+        HostRequest::InstallTheme { name, theme } => {
+            if ctx.staged.install_theme(&name, &theme) {
+                ctx.effects.push(Effect::InstallTheme(name, theme));
+            }
+        }
     }
     Ok(serde_json::Value::Null)
 }

@@ -112,7 +112,7 @@ impl Catalog {
 }
 
 /// `isThemeSource`: an object with `theme` (V1) or `base` (V2).
-fn is_theme_source(source: &Value) -> bool {
+pub fn is_theme_source(source: &Value) -> bool {
     source.as_object().is_some_and(|object| object.contains_key("theme") || object.contains_key("base"))
 }
 
