@@ -1862,6 +1862,29 @@ test("the Windows titlebar menu pastes through the desktop edit action", async (
   await expect(page.getByRole("status", { name: "Desktop menu actions" })).toHaveText("edit.paste")
 })
 
+// #63095: hovering down the parent items used to leave every submenu open, stacked on top of each other.
+test("the Windows titlebar menu keeps one submenu open while hovering its parent items", async ({ page }) => {
+  await page.clock.install()
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+  const parents = ["File", "Edit", "View"].map((name) => page.getByRole("menuitem", { name, exact: true }))
+
+  for (const [index, parent] of parents.entries()) {
+    const box = (await parent.boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 })
+    // Let the grace period for reaching the previous submenu run out, then keep moving over this item.
+    await page.clock.runFor(400)
+    await page.mouse.move(box.x + box.width / 2 + 2, box.y + box.height / 2)
+    await page.clock.runFor(200)
+    await expect(parent).toHaveAttribute("aria-expanded", "true")
+
+    if (index > 0) await expect(parents[index - 1]).toHaveAttribute("aria-expanded", "false")
+  }
+
+  await expect(page.locator('[role="menu"].desktop-app-menu-sub')).toHaveCount(1)
+})
+
 test("the Windows menu shares the vertical sidebar's icon lane", async ({ page }) => {
   await mockWorkspace(page, {
     name: "WindowsMenu",

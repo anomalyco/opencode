@@ -1,9 +1,11 @@
 import { DropdownMenu, type DropdownMenuTriggerProps } from "@kobalte/core/dropdown-menu"
 import { ContextMenu } from "@kobalte/core/context-menu"
 import type { PolymorphicProps } from "@kobalte/core/polymorphic"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import {
   createComputed,
   createContext,
+  createEffect,
   createSignal,
   onCleanup,
   Show,
@@ -233,7 +235,7 @@ function MenuRadioItem(props: ParentProps<MenuRadioItemProps>) {
   )
 }
 
-export interface MenuSubTriggerProps extends ComponentProps<typeof DropdownMenu.SubTrigger> {
+export interface MenuSubTriggerProps extends Omit<ComponentProps<typeof DropdownMenu.SubTrigger>, "ref"> {
   shortcut?: JSX.Element | string
   badge?: JSX.Element | string
 }
@@ -254,17 +256,51 @@ export interface MenuSubProps extends ComponentProps<typeof DropdownMenu.Sub> {
     | "right-end"
 }
 
+const MenuSubTriggerRefContext = createContext<(element: HTMLElement) => void>()
+
 function MenuSub(props: MenuSubProps) {
-  return <DropdownMenu.Sub {...props} />
+  const [local, rest] = splitProps(props, ["open", "defaultOpen", "onOpenChange"])
+  const [uncontrolled, setUncontrolled] = createSignal(local.defaultOpen ?? false)
+  const open = () => local.open ?? uncontrolled()
+  let trigger: HTMLElement | undefined
+
+  const setOpen = (next: boolean) => {
+    setUncontrolled(next)
+    local.onOpenChange?.(next)
+  }
+
+  // Kobalte closes a submenu when focus moves outside it, but ignores focus that lands inside a top layer, and every
+  // menu is one so a modal dialog keeps it reachable. Focus moving to another item of the parent menu closes it here.
+  createEffect(() => {
+    if (!open()) return
+    makeEventListener(
+      document,
+      "focusin",
+      (event) => {
+        if (!(event.target instanceof Node) || !trigger || trigger.contains(event.target)) return
+
+        if (trigger.closest('[role="menu"]')?.contains(event.target)) setOpen(false)
+      },
+      { capture: true },
+    )
+  })
+
+  return (
+    <MenuSubTriggerRefContext.Provider value={(element) => (trigger = element)}>
+      <DropdownMenu.Sub {...rest} open={open()} onOpenChange={setOpen} />
+    </MenuSubTriggerRefContext.Provider>
+  )
 }
 
 function MenuSubTrigger(props: ParentProps<MenuSubTriggerProps>) {
   const ctx = useMenuContext()
+  const registerTrigger = useContext(MenuSubTriggerRefContext)
   const [s, r] = splitProps(props, ["class", "classList", "children", "shortcut", "badge"])
 
   return (
     <DropdownMenu.SubTrigger
       {...r}
+      ref={registerTrigger}
       data-component="menu-v2-item"
       data-appearance={ctx.appearance()}
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
