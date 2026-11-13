@@ -1755,3 +1755,78 @@ fn a_call_that_panics_has_no_effects() {
         }
     }
 }
+
+/// The host table the last `catching` instance got, as a C plugin keeps it.
+static CAUGHT: std::sync::atomic::AtomicPtr<HostApi> = std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+
+unsafe extern "C" fn catching(
+    host: *const HostApi,
+    options: Bytes,
+    instance: *mut *mut c_void,
+    out: *mut Owned,
+) -> i32 {
+    CAUGHT.store(host.cast_mut(), Ordering::SeqCst);
+    // SAFETY: the loader passes what `PluginApi::create` documents.
+    unsafe { abi::runtime::create("threads", |_| Ok(()), host, options, instance, out) }
+}
+
+/// A host table a test hands to another thread, as a C plugin may.
+#[derive(Clone, Copy)]
+struct Table(*const HostApi);
+
+// SAFETY: the test keeps the instance alive while the thread runs; what the host does with a call is under test.
+unsafe impl Send for Table {}
+
+impl Table {
+    /// Sends `request` through the table's `call`, and reads `theme_mode`: the status, the text written, the mode.
+    fn call(self, request: &str) -> (i32, String, u32) {
+        // SAFETY: the instance is alive, and `out` goes back to the host's `free`.
+        unsafe {
+            let api = &*self.0;
+            let mut out = Owned::EMPTY;
+            let status = api.call.unwrap()(api.ctx, Bytes::new(request.as_bytes()), &mut out);
+            let text = String::from_utf8_lossy(&out.to_vec()).into_owned();
+            api.free.unwrap()(out);
+            (status, text, api.theme_mode.unwrap()(api.ctx))
+        }
+    }
+}
+
+// Expected (carbon-p0a-2): a C plugin that calls the host's `call` or `theme_mode` from a thread of its own is refused
+// with an error, and gets dark, touching nothing of the host; its requests change nothing, and the same requests from
+// the UI thread are served. In process a `&dyn Host` cannot reach another thread (the doctest on `abi::Host`).
+#[test]
+fn a_host_call_from_another_thread_is_refused() {
+    let host = host();
+    host.mode.set(ThemeMode::Light);
+    let api = PluginApi {
+        size: size_of::<PluginApi>(),
+        major: ABI_MAJOR,
+        minor: ABI_MINOR,
+        requires_minor: 4,
+        create: Some(catching),
+        call: Some(abi::runtime::call),
+        destroy: Some(abi::runtime::destroy),
+        free: Some(abi::runtime::free),
+        describe: None,
+    };
+    let (definition, error) = define(&dynamic(&host), Library::from_table(&api, HOST_MINOR).unwrap(), None).unwrap();
+    let registry = Registry::define(Vec::new(), []);
+    registry.load(&dynamic(&host), definition.external("threads.so", error));
+    let table = Table(CAUGHT.load(Ordering::SeqCst));
+    let toast = |message: &str| format!(r#"{{"type":"toast","variant":"info","message":"{message}"}}"#);
+    let edit = r#"{"type":"composer-edit","edit":{"type":"submit"}}"#;
+    for request in [toast("from a thread"), edit.to_owned(), r#"{"type":"composer"}"#.to_owned()] {
+        let (status, text, mode) = std::thread::spawn(move || table.call(&request)).join().unwrap();
+        assert_eq!((status, mode), (abi::ERROR, abi::THEME_DARK), "{text}");
+        assert!(text.contains("UI thread"), "{text}");
+    }
+    let (status, _, mode) = table.call(&toast("from the UI thread"));
+    assert_eq!((status, mode), (abi::OK, abi::THEME_LIGHT));
+    // Disabling destroys the instance, which applies what it asked for: the UI thread's toast alone.
+    assert!(registry.set_active(&dynamic(&host), "threads", false));
+    host.app.advance(Duration::from_millis(1));
+    let toasts: Vec<_> = host.toasts.borrow().iter().map(|toast| toast.message.clone()).collect();
+    assert_eq!(toasts, ["from the UI thread"]);
+    assert!(host.edits.borrow().is_empty());
+}
