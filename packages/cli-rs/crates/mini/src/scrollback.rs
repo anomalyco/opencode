@@ -781,11 +781,7 @@ fn entry_markdown(app: &App, theme: &RunTheme, mono: bool, commit: &Commit, body
                 marker: color,
                 rule: color,
             },
-            // Without its own `markup.strikethrough` the widget strikes `~~x~~`, which Core 0.8.4 cannot draw.
-            SyntaxTheme::new()
-                .first_part_fallback()
-                .style("default", Style::new().fg(color))
-                .style("markup.strikethrough", Style::new().fg(color)),
+            SyntaxTheme::new().first_part_fallback().style("default", Style::new().fg(color)),
         )
     } else {
         let syntax = theme.syntax.clone().unwrap_or_default();
@@ -984,9 +980,11 @@ mod tests {
         assert_eq!(capture.cell(0, 2).unwrap().fg, entry_color(&commit, &theme));
     }
 
-    /// TS mini on Core 0.8.4 hides the tildes of `~~x~~` and draws the text plain, in every theme and body.
+    /// Mini hides the tildes of `~~x~~` and strikes the text through, in every theme and body: native code strikes
+    /// `markup.strikethrough` unless a style turns the bit off, which a Rust `Style` cannot. TS mini on Core 0.8.4
+    /// draws the text plain (`parity/deviations/OT2079-strikethrough.md`).
     #[test]
-    fn strikethrough_text_is_not_struck() {
+    fn strikethrough_text_is_struck() {
         let full = crate::theme::resolve(&crate::theme::ThemeInput {
             name: None,
             mode: None,
@@ -1007,7 +1005,7 @@ mod tests {
                 assert!(capture.text().starts_with("a gone b"), "{body:?}: {}", capture.text());
                 for x in 2..6 {
                     let attributes = capture.cell(x, 0).unwrap().attributes;
-                    assert!(!attributes.contains(Attributes::STRIKETHROUGH), "{body:?} at {x}: {attributes:?}");
+                    assert!(attributes.contains(Attributes::STRIKETHROUGH), "{body:?} at {x}: {attributes:?}");
                 }
             }
         }
