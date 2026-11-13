@@ -1,14 +1,15 @@
 import { Effect } from "effect"
-import { type Extension, isAsync } from "../extension.js"
+import { type Extension, isAsync, StreamingResponse } from "../extension.js"
 import { hooked } from "../tool-runtime.js"
 import { errorMessage, errorType } from "./errors.js"
 import type { Interpreter } from "./interpreter.js"
 import { createErrorValue } from "./intrinsics.js"
 import { MAX_ARRAY_LENGTH, MAX_VALUE_DEPTH } from "./limits.js"
-import { type AstNode, PendingThrow, rangeError, Throw, typeError } from "./model.js"
+import { type AstNode, AsyncIteratorSymbol, PendingThrow, rangeError, Throw, typeError } from "./model.js"
 import { native } from "./native.js"
 import {
   define,
+  defineAccessor,
   get,
   has,
   hidden,
@@ -112,6 +113,56 @@ export const extensionGlobals = <R>(
       // Nothing a host value hands back is kept: results are read as primitives or copied. Where the value's own
       // method could hand back host storage or an object (`getTime`, `slice`, `map`), its internal data is read.
       if (value instanceof Date) return new DateObj(builtins.Date, Date.prototype.getTime.call(value))
+      if (value instanceof StreamingResponse) {
+        const response = value.response
+        const body = response.body
+        const stream = new Obj(builtins.Object)
+        if (body) {
+          defineAccessor(stream, "locked", () => body.locked)
+          define(
+            stream,
+            "cancel",
+            next(async (reason?: unknown) => body.cancel(reason), `${label}.body.cancel`),
+          )
+          define(
+            stream,
+            "getReader",
+            next((options?: { mode?: string }) => {
+              if (options?.mode !== undefined) throw new TypeError("Only the default stream reader is supported.")
+              const reader = body.getReader()
+              return {
+                read: async () => reader.read(),
+                cancel: async (reason?: unknown) => reader.cancel(reason),
+                releaseLock: () => reader.releaseLock(),
+              }
+            }, `${label}.body.getReader`),
+          )
+          define(
+            stream,
+            AsyncIteratorSymbol,
+            next(() => {
+              const iterator = body.values()
+              return {
+                next: async () => iterator.next(),
+                return: async () => iterator.return!(),
+              }
+            }, `${label}.body[Symbol.asyncIterator]`),
+          )
+        }
+        const result = new Obj(builtins.Object)
+        for (const key of ["url", "status", "statusText", "ok", "headers"] as const)
+          define(result, key, next(response[key], `${label}.${key}`))
+        define(result, "redirected", value.redirected)
+        define(result, "body", body ? stream : null)
+        defineAccessor(result, "bodyUsed", () => response.bodyUsed)
+        for (const key of ["text", "json", "bytes", "arrayBuffer"] as const)
+          define(
+            result,
+            key,
+            next(async () => response[key](), `${label}.${key}`),
+          )
+        return result
+      }
       if (value instanceof RegExp) return new RegExpObj(builtins.RegExp, value.source, value.flags)
       if (value instanceof Uint8Array) return new Bytes(builtins.Uint8Array, new Uint8Array(value))
       if (value instanceof ArrayBuffer) {

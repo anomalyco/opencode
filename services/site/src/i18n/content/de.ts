@@ -351,7 +351,7 @@ export const content = {
     },
     colors: {
       title: "Farben",
-      body: "Logo und Wortmarke nutzen eine Farbe in drei Deckkräften, mit einer helleren Farbe für dunkle Hintergründe. Die Werte unten zeigen diese Farbe auf Weiß oder #0B0B0B, wie in den Standarddateien. Klick auf einen Wert, um ihn zu kopieren.",
+      body: "Logo und Wortmarke nutzen eine Farbe in drei Deckkräften, mit einer helleren Farbe für dunkle Hintergründe. Die Werte unten sind die Farben in den Standarddateien. Verwende sie nur für Logo und Wortmarke, nicht für anderen Text oder Hintergründe. Klick auf einen Wert, um ihn zu kopieren.",
       palettes: {
         light: {
           name: "Hell",

@@ -115,7 +115,6 @@
     "./providers/openrouter/embeddings": "./src/providers/openrouter/embeddings.ts",
     "./providers/openrouter/images": "./src/providers/openrouter/images.ts",
     "./providers/openrouter/responses": "./src/providers/openrouter/responses.ts",
-    "./providers/runway": "./src/providers/runway.ts",
     "./providers/togetherai": "./src/providers/togetherai.ts",
     "./providers/typesafe-ai": "./src/providers/typesafe-ai.ts",
     "./providers/typesafe-ai/decisions": "./src/providers/typesafe-ai/decisions.ts",
