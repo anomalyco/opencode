@@ -336,12 +336,13 @@ export const layer = Layer.effect(
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         cache: model.cache?.ttl === undefined ? undefined : { ttl: model.cache.ttl },
         system: shaped.system,
-        // Rebuilding a message drops the stored metadata hooks could read, so it never reaches the provider.
+        // Strip the stored metadata hooks could read, so it never reaches the provider.
         messages: boundImages(
           unsupportedParts(
-            shaped.messages.map((message) =>
-              Object.hasOwn(message, "metadata") ? Message.make({ ...message }) : message,
-            ),
+            shaped.messages.map((message) => {
+              const { metadata, ...rest } = message
+              return metadata === undefined ? message : Message.make(rest)
+            }),
             model.capabilities,
             model.model.provider,
           ),
