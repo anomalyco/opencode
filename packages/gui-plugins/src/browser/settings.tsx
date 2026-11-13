@@ -350,14 +350,27 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
               <Show
                 when={confirming()}
                 fallback={
-                  <p
-                    classList={{
-                      "text-v2-state-fg-danger": message().error,
-                      "text-v2-text-text-muted": !message().error,
-                    }}
+                  // An added extension's list of what does not work shows on hover, as in its row, so the list of
+                  // browsers' extensions below keeps its room.
+                  <Show
+                    when={message().compatibility}
+                    fallback={
+                      <p
+                        classList={{
+                          "text-v2-state-fg-danger": message().error,
+                          "text-v2-text-text-muted": !message().error,
+                        }}
+                      >
+                        {message().text}
+                      </p>
+                    }
                   >
-                    {message().text}
-                  </p>
+                    {(compatibility) => (
+                      <ui.Tooltip value={<CompatibilityDetails compatibility={compatibility()} />}>
+                        <p class="text-v2-text-text-muted">{message().text}</p>
+                      </ui.Tooltip>
+                    )}
+                  </Show>
                 }
               >
                 {(confirm) => (
@@ -374,7 +387,7 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                   </ChoiceRow>
                 )}
               </Show>
-              <Show when={message().compatibility}>
+              <Show when={confirming() ? message().compatibility : undefined}>
                 {(compatibility) => (
                   <span class="text-v2-text-text-muted">
                     <CompatibilityDetails compatibility={compatibility()} />
