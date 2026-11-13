@@ -17,5 +17,11 @@ export function content(prompt: LanguageModelV3Prompt, start = 0): ConvertToClau
     blocks.push({ type: "text", text: "</conversation-checkpoint>" })
   }
   blocks.push(...ConvertToClaudeMessage.content(missed.slice(end)))
-  return blocks
+  // The API looks back at most 20 blocks from a cache breakpoint, so a catch-up split into one block per part would
+  // miss the cached conversation before it. Only attachments need their own block.
+  return blocks.reduce<ConvertToClaudeMessage.ContentBlock[]>((result, block) => {
+    const last = result.at(-1)
+    if (block.type !== "text" || last?.type !== "text") return [...result, block]
+    return [...result.slice(0, -1), { type: "text", text: `${last.text}\n${block.text}` }]
+  }, [])
 }

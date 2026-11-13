@@ -167,8 +167,11 @@ describe("history reconciliation", () => {
     const text = JSON.stringify(blocks)
     expect(text).not.toContain("COPPER-OTTER")
     expect(text).toContain("LILAC-HERON")
-    expect(blocks.at(-2)).toEqual({ type: "text", text: "</conversation-checkpoint>" })
-    expect(blocks.at(-1)).toEqual({ type: "text", text: "What happened?" })
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]).toMatchObject({
+      type: "text",
+      text: expect.stringMatching(/<\/conversation-checkpoint>\nWhat happened\?$/),
+    })
     expect(CatchUp.content(prompt, 4)).toEqual([{ type: "text", text: "What happened?" }])
   })
 
@@ -206,8 +209,17 @@ describe("history reconciliation", () => {
     expect(JSON.stringify(blocks)).toContain("marker.txt")
     expect(JSON.stringify(blocks)).toContain("LEMON-IBIS")
     expect(JSON.stringify(blocks)).not.toContain("PRIVATE")
-    expect(blocks.some((block) => block.type === "image")).toBe(true)
-    expect(blocks.some((block) => block.type === "document")).toBe(true)
-    expect(blocks.at(-1)).toEqual({ type: "text", text: "Continue" })
+    expect(blocks.map((block) => block.type)).toEqual(["text", "image", "document", "text"])
+    expect(blocks.at(-1)).toMatchObject({ type: "text", text: expect.stringMatching(/\nContinue$/) })
+  })
+
+  test("catch-up merges text into one block so a long history stays within the cache lookback", () => {
+    const prompt: LanguageModelV3Prompt = Array.from({ length: 30 }, (_, index) => [
+      user(`Question ${index}`),
+      assistant(`Answer ${index}`),
+    ]).flat()
+    const blocks = CatchUp.content([...prompt, user("Next")])
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]).toMatchObject({ type: "text", text: expect.stringContaining("Answer 29\n</assistant>") })
   })
 })

@@ -266,7 +266,10 @@ describe("Claude tool steps", () => {
       const user = messages.filter((message) => message.type === "user").at(-1)
       expect(user.priority).toBeUndefined()
       expect(JSON.stringify(user.message.content)).toContain("Cancelled by user.")
-      expect(user.message.content.at(-1)).toEqual(prompt.at(-1)!.content[0])
+      expect(user.message.content).toHaveLength(1)
+      expect(user.message.content[0].text).toEndWith(
+        "</conversation-checkpoint>\nThe calls were cancelled. Do not call any more tools. Reply only with CONTINUED-OTTER.",
+      )
       yield* test.registry.close()
       claude.check()
     }),
