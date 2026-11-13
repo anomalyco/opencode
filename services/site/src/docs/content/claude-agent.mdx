@@ -27,6 +27,18 @@ OpenCode finds `claude` on your `PATH`. To use another copy, set `OPENCODE_CLAUD
 opencode service set env OPENCODE_CLAUDE_PATH /opt/claude/bin/claude
 ```
 
+## Windows
+
+npm installs `claude` as a batch file on Windows, and Windows cannot start a batch file without a shell. OpenCode runs
+that launcher through the command interpreter, so an npm install works as it is, including the copy Claude Code updates
+itself. A native install works too.
+
+If OpenCode cannot find Claude Code, set the launcher path explicitly.
+
+```powershell
+opencode service set env OPENCODE_CLAUDE_PATH "$env:APPDATA\npm\claude.cmd"
+```
+
 ## How it works
 
 Claude Code calls the model, and OpenCode does everything else.
