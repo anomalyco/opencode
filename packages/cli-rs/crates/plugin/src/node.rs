@@ -96,8 +96,19 @@ impl Mount {
         }
         self.root.clear();
         // TS's `<Slot>` is a fragment, so the node's own layout places it in the slot's parent: the root takes it, and
-        // the node fills the root, which stretches it across.
-        self.root.width(Length::Auto).grow(0.0).shrink(0.0).min_width(Length::Undefined);
+        // the node fills the root, which stretches it across. Each draw starts the root's layout over, so nothing of an
+        // earlier node's stays.
+        self.root
+            .width(Length::Auto)
+            .grow(0.0)
+            .shrink(0.0)
+            .min_width(Length::Undefined)
+            .height(Length::Auto)
+            .min_height(Length::Undefined)
+            .max_height(Length::Undefined);
+        [Edge::Top, Edge::Right, Edge::Bottom, Edge::Left]
+            .into_iter()
+            .for_each(|edge| drop(self.root.margin_edge(edge, 0)));
         let mut slots = Vec::new();
         let mut hovers = Vec::new();
         if let Some(node) = &node {
@@ -107,6 +118,18 @@ impl Mount {
                 layout.width = None;
                 layout.grow = false;
                 layout.margin = None;
+                // The root takes the heights too, so a percent is of the slot's parent once; the node fills the root's
+                // height, and with a maximum it may shrink below its content to the root's.
+                let (sized, capped) =
+                    (layout.height.is_some() || layout.min_height.is_some(), layout.max_height.is_some());
+                (layout.height, layout.min_height, layout.max_height) = (None, None, None);
+                if sized {
+                    layout.grow = true;
+                }
+                if capped {
+                    layout.shrink = Some(true);
+                    layout.min_height = Some(abi::Width::Cells(0));
+                }
             }
             let owner = self.owner.clone();
             let act: Act = Rc::new(move |action| act(&owner, action));

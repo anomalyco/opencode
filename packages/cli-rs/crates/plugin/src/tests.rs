@@ -694,3 +694,48 @@ fn a_failed_external_plugin_keeps_the_built_in_it_would_replace() {
     assert_eq!(entries.len(), 1);
     assert_eq!((entries[0].source, entries[0].status.clone()), (Source::External, Status::Active));
 }
+
+// Expected (bigboi 7, carbon-p0a-3): a claim drawn again with another root layout draws as that layout mounted fresh:
+// the heights, minimum, maximum and margins of an earlier node do not stay on the slot's root, also across a hidden
+// render; and a percent height is of the slot's parent once, the box painted on all of it.
+#[test]
+fn a_claim_root_takes_each_layout_as_mounted_fresh() {
+    use abi::{Edges, Layout, Node, Render, Span, Width};
+    let boxed = |layout: Layout| Node::column(vec![Node::text([Span::new("x")])]).bg("#ff0000").layout(layout);
+    let renders = [
+        Render::Show(boxed(Layout::default().height(Width::Cells(4)).margin(Edges::new(0, 0, 0, 7)))),
+        Render::Show(boxed(Layout::default())),
+        Render::Hide,
+        Render::Show(boxed(Layout::default().height(Width::Percent(50.0)).margin(Edges::new(1, 0, 0, 0)))),
+        Render::Show(boxed(Layout::default().min_height(Width::Cells(3)).margin(Edges::new(0, 2, 0, 0)))),
+        Render::Show(boxed(Layout::default().max_height(Width::Cells(1)))),
+    ];
+    // The cells of a 6-row column slot that shows `shown`, which the claim's render reads.
+    let mounted = |shown: &Rc<std::cell::RefCell<Render>>| {
+        let host = host();
+        let read = shown.clone();
+        let claim = rendering("sized", Placement::append(slot::SIDEBAR_CONTENT), move || read.borrow().clone());
+        let registry = Registry::define(vec![claim], []);
+        registry.activate(&dynamic(&host));
+        let parent = View::new(host.app()).column().height(6).width(20);
+        let mount = registry.mount(&*host, &parent, slot::SIDEBAR_CONTENT, &SlotInput::default(), |_| {});
+        host.app().root().add(&parent);
+        (host, mount)
+    };
+    let live = Rc::new(std::cell::RefCell::new(renders[0].clone()));
+    let (host, mount) = mounted(&live);
+    for render in &renders {
+        *live.borrow_mut() = render.clone();
+        mount.sync(&*host, Some(&abi::Changed::everything()));
+        let (fresh, _mount) = mounted(&Rc::new(std::cell::RefCell::new(render.clone())));
+        assert!(host.app.render().cells == fresh.app.render().cells, "{render:?}");
+    }
+    // The painted rows: 4 from the top; 50% of the 6 rows after a one-row margin; at least 3; at most 1.
+    for (index, painted) in [(0, vec![0, 1, 2, 3]), (3, vec![1, 2, 3]), (4, vec![0, 1, 2]), (5, vec![0])] {
+        *live.borrow_mut() = renders[index].clone();
+        mount.sync(&*host, Some(&abi::Changed::everything()));
+        let capture = host.app.render();
+        let red = |y: u32| (0..20).any(|x| capture.cell(x, y).is_some_and(|cell| cell.bg == Color::rgb(255, 0, 0)));
+        assert_eq!((0..6).filter(|y| red(*y)).collect::<Vec<_>>(), painted, "{index}");
+    }
+}
