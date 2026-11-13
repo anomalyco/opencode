@@ -82,6 +82,7 @@ export type FileContent = typeof FileContent.Type
 export class TextPage extends Schema.Class<TextPage>("ReadTool.TextPage")({
   type: Schema.Literal("text-page"),
   content: Schema.String,
+  lineCount: NonNegativeInt,
   mime: Schema.String,
   offset: PositiveInt,
   truncated: Schema.Boolean,
@@ -325,6 +326,7 @@ const textPage = Effect.fnUntraced(function* (
   return new TextPage({
     type: "text-page",
     content: entries.join("\n"),
+    lineCount: entries.length,
     mime: mimeType(input),
     offset: from,
     truncated: next !== undefined,

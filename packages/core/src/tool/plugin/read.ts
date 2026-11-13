@@ -348,7 +348,8 @@ export const toModelContent = (path: string, offset: number | undefined, output:
   const start = output.type === "text-page" ? output.offset : 1
   // Pages already join selected lines; a trailing newline represents a selected blank line.
   const text = output.type === "file" ? output.content.replace(/\n$/, "") : output.content
-  const lines = output.content === "" ? [] : text.split("\n")
+  const empty = output.type === "text-page" ? output.lineCount === 0 : output.content === ""
+  const lines = empty ? [] : text.split("\n")
   // A page that starts before the requested offset is the file's tail, returned for an offset past the end.
   const total = start + lines.length - 1
   const pastEnd = output.type === "text-page" && offset !== undefined && start < offset

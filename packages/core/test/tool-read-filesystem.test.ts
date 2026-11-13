@@ -90,8 +90,29 @@ describe("ReadTool text serialization", () => {
       name: "preserves empty-file page output",
       content: "",
       page: { limit: 2 },
-      output: { type: "text-page", content: "", offset: 1, truncated: false },
+      output: { type: "text-page", content: "", lineCount: 0, offset: 1, truncated: false },
       model: "Read file lines.txt, 0 lines",
+    },
+    {
+      name: "numbers the only blank line in a newline-only file",
+      content: "\n",
+      page: { limit: 1 },
+      output: { type: "text-page", content: "", lineCount: 1, offset: 1, truncated: false },
+      model: "Read file lines.txt, lines 1-1\n1: ",
+    },
+    {
+      name: "numbers a single blank line before continuation",
+      content: "alpha\n\nomega\n",
+      page: { offset: 2, limit: 1 },
+      output: { type: "text-page", content: "", lineCount: 1, offset: 2, truncated: true, next: 3 },
+      model: "Read file lines.txt, lines 2-2\n2: \n[Output truncated. Continue reading with offset: 3]",
+    },
+    {
+      name: "counts the last blank line when an offset is past EOF",
+      content: "alpha\n\n",
+      page: { offset: 9, limit: 1 },
+      output: { type: "text-page", content: "", lineCount: 1, offset: 2, truncated: false },
+      model: "Read file lines.txt, lines 2-2 (offset 9 is past the end; the file has 2 lines)\n2: ",
     },
   ]
 
@@ -105,7 +126,7 @@ describe("ReadTool text serialization", () => {
         const result = yield* ReadToolFileSystem.read(current.environment, file, "lines.txt", input.page)
 
         expect(result).toMatchObject(input.output)
-        expect(ReadTool.toModelContent("lines.txt", undefined, result)).toBe(input.model)
+        expect(ReadTool.toModelContent("lines.txt", input.page.offset, result)).toBe(input.model)
       }),
     )
   })
