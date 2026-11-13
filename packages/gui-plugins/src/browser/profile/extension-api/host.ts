@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises"
 import path from "node:path"
-import { app, webFrameMain, type Extension, type ServiceWorkerMain, type Session, type WebContents } from "electron"
+import { app, webContents, webFrameMain, type Extension, type ServiceWorkerMain, type Session, type WebContents } from "electron"
 import type { Log } from "@opencode/plugin/gui/main"
 import { Option, Schema } from "effect"
 import type { ApiModule, ApiNamespace, Emit, ExtensionContext, Wire } from "./api"
@@ -35,15 +35,26 @@ export async function createExtensionHost(input: {
   const workers = new Map<number, ServiceWorkerMain>()
   const file = path.join(input.directory, "extension-preload.js")
 
+  // The modules already listen (to cookies, tabs); a host that cannot start lets them go again.
   await writeFile(
     file,
     preloadSource.replace('"__NAMESPACES__"', JSON.stringify(JSON.stringify(namespaces))),
     "utf8",
-  )
+  ).catch((cause: unknown) => {
+    input.modules.forEach((module) => module.dispose?.())
+    throw cause
+  })
+
+  // Ids of this host alone, so a host of an earlier plugin instance that disposes late removes only its own.
+  const instance = crypto.randomUUID()
 
   const preloads = [
-    input.session.registerPreloadScript({ type: "frame", filePath: file, id: "opencode-extension-frame" }),
-    input.session.registerPreloadScript({ type: "service-worker", filePath: file, id: "opencode-extension-worker" }),
+    input.session.registerPreloadScript({ type: "frame", filePath: file, id: `opencode-extension-frame-${instance}` }),
+    input.session.registerPreloadScript({
+      type: "service-worker",
+      filePath: file,
+      id: `opencode-extension-worker-${instance}`,
+    }),
   ]
 
   const extensionOf = (url: string | undefined) => {
@@ -77,7 +88,11 @@ export async function createExtensionHost(input: {
     if (!extension || !allowed(extension, namespaceOf(namespaces, name))) return
     const byExtension = subscribers.get(name) ?? new Map<string, Subscriber[]>()
     const list = byExtension.get(extension.id) ?? []
-    const same = list.some((item) => JSON.stringify(item) === JSON.stringify(subscriber))
+    const same = list.some((item) =>
+      item.kind === "worker" || subscriber.kind === "worker"
+        ? item.kind === subscriber.kind
+        : item.process === subscriber.process && item.routing === subscriber.routing,
+    )
 
     if (!same) byExtension.set(extension.id, [...list, subscriber])
     subscribers.set(name, byExtension)
@@ -92,7 +107,14 @@ export async function createExtensionHost(input: {
     return { extension, contents: event.sender, frame }
   }
 
+  // Pages whose IPC this host answers, so disposing removes its handlers from pages that outlive it.
+  const pages = new Set<WebContents>()
+
   const watch = (contents: WebContents) => {
+    pages.add(contents)
+    contents.once("destroyed", () => pages.delete(contents))
+    contents.ipc.removeHandler("browser-extension:call")
+    contents.ipc.removeHandler("browser-extension:subscribe")
     contents.ipc.handle("browser-extension:call", (event, name: string, args: readonly Wire[]) =>
       call(frameContext(event), name, args),
     )
@@ -136,6 +158,10 @@ export async function createExtensionHost(input: {
 
   app.on("web-contents-created", created)
   input.session.serviceWorkers.on("running-status-changed", started)
+  // Pages already open, as after a plugin reload, are answered too.
+  webContents.getAllWebContents().forEach((contents) => {
+    if (contents.session === input.session) watch(contents)
+  })
 
   const deliver = (extension: string, subscriber: Subscriber, name: string, args: readonly Wire[]) => {
     if (subscriber.kind === "frame") {
@@ -194,6 +220,20 @@ export async function createExtensionHost(input: {
       app.off("web-contents-created", created)
       input.session.serviceWorkers.off("running-status-changed", started)
       preloads.forEach((id) => input.session.unregisterPreloadScript(id))
+
+      pages.forEach((contents) => {
+        if (contents.isDestroyed()) return
+        contents.ipc.removeHandler("browser-extension:call")
+        contents.ipc.removeHandler("browser-extension:subscribe")
+      })
+      pages.clear()
+
+      workers.forEach((worker) => {
+        worker.ipc.removeHandler("browser-extension:call")
+        worker.ipc.removeHandler("browser-extension:subscribe")
+      })
+      workers.clear()
+      subscribers.clear()
       input.modules.forEach((module) => module.dispose?.())
     },
   }

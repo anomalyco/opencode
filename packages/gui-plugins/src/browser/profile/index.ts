@@ -151,6 +151,15 @@ export async function createBrowserProfile(input: {
     input.changed()
   }
 
+  // What creation set up before its first await. A step that fails releases it at once, so the next request, which
+  // tries again, starts clean instead of stacking another cookie listener and file guard.
+  const release = () => {
+    session.cookies.off("changed", cookiesChanged)
+    clearTimeout(settling)
+    stopFileGuard()
+    roots.clear()
+  }
+
   const apis = await createExtensionApis({
     session,
     partition: PARTITION,
@@ -158,6 +167,9 @@ export async function createBrowserProfile(input: {
     storage: input.storage,
     log: input.log,
     changed: input.changed,
+  }).catch((cause: unknown) => {
+    release()
+    throw cause
   })
 
   const load = async (record: StoredExtension) => {
@@ -174,9 +186,18 @@ export async function createBrowserProfile(input: {
     if (loaded) errors.delete(record.id)
   }
 
+  const unload = () =>
+    session.extensions.getAllExtensions().forEach((extension) => session.extensions.removeExtension(extension.id))
+
   await clearStaging(directory)
-  await Promise.all(stored.value.filter((record) => record.enabled).map(load))
-  await refresh()
+    .then(() => Promise.all(stored.value.filter((record) => record.enabled).map(load)))
+    .then(refresh)
+    .catch((cause: unknown) => {
+      apis.dispose()
+      unload()
+      release()
+      throw cause
+    })
 
   /**
    * Loads a directory as a new extension and remembers it, or reports why it is not one. One that will not work here
@@ -493,12 +514,9 @@ export async function createBrowserProfile(input: {
     dispose() {
       links.forEach((_mirror, other) => void unmirror(other, false))
       links.clear()
-      session.cookies.off("changed", cookiesChanged)
-      clearTimeout(settling)
-      stopFileGuard()
       apis.dispose()
-      roots.clear()
-      session.extensions.getAllExtensions().forEach((extension) => session.extensions.removeExtension(extension.id))
+      unload()
+      release()
     },
   }
 }

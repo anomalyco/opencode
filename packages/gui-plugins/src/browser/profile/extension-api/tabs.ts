@@ -172,6 +172,8 @@ export function createExtensionTabs(input: { emit: Emit; extensions: () => reado
   const focus: Focus = {}
   const watchers = new Set<(tab: PaneTab) => (() => void) | void>()
   const hiders = new Set<(id: number) => void>()
+  // Removes the listeners `track` added to each window, for windows that outlive the profile.
+  const untrack = new Map<number, () => void>()
 
   const inWindow = (windowId: number) => [...tabs.values()].filter((tab) => tab.window.id === windowId)
 
@@ -278,14 +280,25 @@ export function createExtensionTabs(input: { emit: Emit; extensions: () => reado
       focus.last = id
     }
 
+    const closed = () => {
+      windows.delete(id)
+      activated.delete(id)
+      untrack.delete(id)
+      input.emit("windows.onRemoved", [id])
+    }
+
     win.on("focus", focused)
     win.on("blur", blurred)
     win.on("resized", bounds)
     win.on("moved", bounds)
-    win.once("closed", () => {
-      windows.delete(id)
-      activated.delete(id)
-      input.emit("windows.onRemoved", [id])
+    win.once("closed", closed)
+    untrack.set(id, () => {
+      if (win.isDestroyed()) return
+      win.off("focus", focused)
+      win.off("blur", blurred)
+      win.off("resized", bounds)
+      win.off("moved", bounds)
+      win.off("closed", closed)
     })
     input.extensions().forEach((extension) =>
       input.emit("windows.onCreated", [windowInfo(extension, win, false)], extension.id),
@@ -512,6 +525,12 @@ export function createExtensionTabs(input: { emit: Emit; extensions: () => reado
       const win = id === undefined ? undefined : windows.get(id)
 
       return win && !win.isDestroyed() ? win : undefined
+    },
+    /** Stops following the app's windows, as when the profile goes away. */
+    dispose() {
+      untrack.forEach((off) => off())
+      untrack.clear()
+      windows.clear()
     },
     /** Runs `watch` for every tab, present and future, until its returned release or the tab's removal. */
     watch(watch: (tab: PaneTab) => (() => void) | void) {

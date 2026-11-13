@@ -93,6 +93,7 @@ export async function createExtensionApis(input: {
     dispose() {
       popups.close()
       host.dispose()
+      tabs.dispose()
     },
   }
 }

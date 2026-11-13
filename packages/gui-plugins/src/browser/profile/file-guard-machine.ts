@@ -67,6 +67,15 @@ function apply(state: FileGuardState, event: FileGuardEvent): FileGuardState {
   }
 
   if (event.type === "loading.stopped") {
+    const known = state.frames.get(event.contents)
+
+    // Every page load ends here; one that changed nothing writes nothing.
+    if (
+      !state.pending.has(event.contents) &&
+      known?.length === event.frames.length &&
+      known.every((process, index) => event.frames[index] === process)
+    )
+      return state
     const pending = new Set(state.pending)
     pending.delete(event.contents)
 
@@ -80,6 +89,19 @@ function apply(state: FileGuardState, event: FileGuardEvent): FileGuardState {
   frames.delete(event.contents)
 
   return { ...state, pending, frames }
+}
+
+/**
+ * Whether the guard cancels one `file:` request, from the check of its roots. A check that throws, as on a path it
+ * cannot read, cancels: Chromium holds the request until the guard answers, and the guard fails closed.
+ */
+export function fileRequestCancelled(allowed: () => boolean) {
+  // The check's path parsing can throw on input a page controls; an answer must still come back.
+  try {
+    return !allowed()
+  } catch {
+    return true
+  }
 }
 
 function fileURL(url: string) {

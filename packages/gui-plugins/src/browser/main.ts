@@ -28,7 +28,9 @@ const setup: Plugin.MainSetup = (ctx) => {
   const profile = () => {
     if (ctx.signal.aborted) return Promise.reject(new Error("browser.pane.unavailable"))
 
-    const pending = (loaded.profile ??= import("./profile")
+    if (loaded.profile) return loaded.profile
+
+    const pending = import("./profile")
       .then((module) =>
         module.createBrowserProfile({
           storage: ctx.storage,
@@ -38,17 +40,20 @@ const setup: Plugin.MainSetup = (ctx) => {
         }),
       )
       .then((value) => {
-        // Cleanup ran while it loaded: unload what it loaded, as cleanup would have.
-        if (ctx.signal.aborted) value.dispose()
+        // Cleanup that started while it loaded awaits it and disposes it.
+        if (ctx.signal.aborted) return value
         loaded.value = value
         profiles.changed()
 
         return value
-      }))
+      })
 
+    loaded.profile = pending
+    // Logged and forgotten once per creation, not once per caller.
     pending.catch((cause: unknown) => {
       ctx.log.write("warn", "browser profile failed to load", { cause: String(cause) })
-      loaded.profile = undefined
+
+      if (loaded.profile === pending) loaded.profile = undefined
     })
 
     return pending
@@ -159,10 +164,13 @@ const setup: Plugin.MainSetup = (ctx) => {
   })
 
   // The host withdraws the Ipc before this runs, so windows hear nothing; they suspend on the Ipc going away.
+  // The profile holds the session's preloads, extensions and file guard. One still loading is awaited and disposed
+  // here, so the next instance of this plugin never starts beside it, and it never tears down the next one's.
   ctx.onCleanup(async () => {
     dispatch({ type: "disposed" })
     await disposing
-    loaded.value?.dispose()
+    const value = loaded.value ?? (await loaded.profile?.catch(() => undefined))
+    value?.dispose()
   })
 }
 
