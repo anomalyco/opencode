@@ -7,7 +7,7 @@ import type { ExtensionCompatibility, ExtensionFeature } from "./ipc"
  * `extension-api`: tabs and windows over the pane, toolbar popups, right-click menus, page navigation events, cookies
  * and notifications. Checked with a probe extension and with real store extensions.
  */
-const SUPPORTED = new Set([
+const SUPPORTED: readonly string[] = [
   "activeTab",
   "alarms",
   "background",
@@ -31,13 +31,13 @@ const SUPPORTED = new Set([
   "unlimitedStorage",
   "webNavigation",
   "webRequestBlocking",
-])
+]
 
 /**
  * Permissions whose API is missing here, or answers that there is nothing, by what the user would notice. A service
  * worker's `chrome.webRequest` listeners hear no request in Electron 44; a background page's do.
  */
-const MISSING = new Map<string, ExtensionFeature>([
+const MISSING: ReadonlyArray<readonly [permission: string, feature: ExtensionFeature]> = [
   ["webRequest", "network"],
   ["webRequestAuthProvider", "network"],
   ["nativeMessaging", "native"],
@@ -59,14 +59,14 @@ const MISSING = new Map<string, ExtensionFeature>([
   ["contentSettings", "settings"],
   ["browsingData", "settings"],
   ["userScripts", "userScripts"],
-])
+]
 
 /**
  * Missing APIs with events that the profile does not stand in for either. A background script registers its
  * listeners when it starts, as Manifest V3 requires, so reading one of these throws there and stops the script: a
  * service worker then never registers. Seen with Bitwarden and Vimium before `webNavigation` was added.
  */
-const STARTUP = new Set(["readingList", "tabGroups", "gcm", "declarativeContent", "debugger", "ttsEngine"])
+const STARTUP: readonly string[] = ["readingList", "tabGroups", "gcm", "declarativeContent", "debugger", "ttsEngine"]
 
 // Most noticeable first.
 const ORDER: readonly ExtensionFeature[] = [
@@ -90,7 +90,10 @@ const ORDER: readonly ExtensionFeature[] = [
  * Whether an extension works in this browser, from the permissions and keys its manifest declares, and from what its
  * files show: `pageSync` when its content scripts use `chrome.storage.sync`, which Electron gives no content script.
  */
-export function extensionCompatibility(manifest: Manifest, files: ExtensionFiles = { pageSync: false }): ExtensionCompatibility {
+export function extensionCompatibility(
+  manifest: Manifest,
+  files: ExtensionFiles = { pageSync: false },
+): ExtensionCompatibility {
   const required = (manifest.permissions ?? []).filter(Schema.is(Schema.String))
   const optional = (manifest.optional_permissions ?? []).filter(Schema.is(Schema.String))
 
@@ -118,15 +121,15 @@ export function extensionCompatibility(manifest: Manifest, files: ExtensionFiles
 
 /** Why an extension will not do its job here; only what it requires counts, not what it may ask for later. */
 function unsupportedCause(manifest: Manifest, required: readonly string[]) {
-  return manifest.background !== undefined && required.some((permission) => STARTUP.has(permission))
+  return manifest.background !== undefined && required.some((permission) => STARTUP.includes(permission))
     ? "startup"
     : undefined
 }
 
 /** A missing permission's feature; undefined for one that works here or a host pattern. */
 function permissionFeature(permission: string, manifestVersion: number): ExtensionFeature | undefined {
-  if (SUPPORTED.has(permission) || permission === "<all_urls>" || permission.includes("://")) return undefined
-  const feature = MISSING.get(permission) ?? "other"
+  if (SUPPORTED.includes(permission) || permission === "<all_urls>" || permission.includes("://")) return undefined
+  const feature = MISSING.find(([name]) => name === permission)?.[1] ?? "other"
 
   // A Manifest V2 background page hears `chrome.webRequest`.
   return feature === "network" && manifestVersion === 2 ? undefined : feature
