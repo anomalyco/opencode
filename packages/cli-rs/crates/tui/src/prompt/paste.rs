@@ -293,7 +293,7 @@ fn expand(prompt: &Inner, mark: opentui::widget::ExtmarkId) -> bool {
     let Some(extmark) = textarea.extmark(mark) else { return false };
     let Some((Kind::Pasted, index)) = prompt.parts.get(mark) else { return false };
     let Some(text) = prompt.prompt.borrow()["pasted"][index]["text"].as_str().map(str::to_owned) else { return false };
-    textarea.remove_extmark(mark);
+    // The edit removes the mark, so undo brings it back with the label.
     parts::replace(textarea, extmark.start, extmark.end, &text);
     true
 }

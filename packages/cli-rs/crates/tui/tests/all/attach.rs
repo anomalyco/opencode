@@ -174,6 +174,21 @@ fn undo_submits_the_restored_paste_and_a_fragment_as_text() {
         setup.wait_text(restored);
         assert_eq!(setup.submit()["text"], sent, "fragment: {fragment}");
     }
+    // An expanded paste comes back on undo as the paste.
+    let setup = Setup::new();
+    setup.app.paste("a\nb\nc");
+    setup.app.type_text("and ");
+    setup.app.paste("d\ne\nf");
+    setup.wait_text("[Pasted ~3 lines] and [Pasted ~3 lines] ");
+    let (x, y) = setup.find("[Pasted");
+    setup.app.click(x, y);
+    setup.wait_text("a\nb\nc and [Pasted ~3 lines] ");
+    // One undo for the inserted text, one for the deleted label.
+    setup.app.press("super+z");
+    setup.wait_text(" and [Pasted ~3 lines] ");
+    setup.app.press("super+z");
+    setup.wait_text("[Pasted ~3 lines] and [Pasted ~3 lines] ");
+    assert_eq!(setup.submit()["text"], "a\nb\nc and d\ne\nf ");
 }
 
 #[test]
