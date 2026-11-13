@@ -73,7 +73,7 @@ export function permissionPresentation(
   }
 
   if (action === "subagent") {
-    const agent = text(input.agent) || "general"
+    const agent = resources[0] || text(input.agent) || "general"
     const description = text(input.description)
     return {
       icon: "#",

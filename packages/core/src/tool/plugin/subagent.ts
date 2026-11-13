@@ -27,9 +27,9 @@ const backgroundResult = (sessionID: SessionSchema.ID) => ({
 })
 
 export const Input = Schema.Struct({
-  agent: Schema.String.annotate({
+  agent: Schema.optionalKey(Schema.String).annotate({
     description:
-      "The type of specialized agent to use for this task. If the user asks for a subagent by a name that is not one of the available subagents, they most likely mean a model: pick a suitable agent and pass the name through the model parameter instead.",
+      "Defaults to general for a new child. On follow-ups, omit this or pass the child's current agent. If the user asks for a subagent by a name that is not one of the available subagents, they most likely mean a model: pick a suitable agent and pass the name through the model parameter instead.",
   }),
   description: Schema.String.annotate({ description: "A short 3-5 word label for the task, displayed to the user" }),
   prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
@@ -52,7 +52,7 @@ export const description = [
   "Subagents always run in the background: the call returns immediately with a sessionID, and you receive a `<subagent>` message each time the child goes idle, including after later work.",
   "Keep working on non-overlapping tasks, or briefly tell the user what you launched and end your response. Do not sleep, poll, or proactively check on the child's progress.",
   "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
-  "Pass the returned sessionID to continue that specific child conversation. A follow-up to a running child joins its current run.",
+  "Pass the returned sessionID and omit agent to continue that child in its current role. A follow-up to a running child joins its current run.",
 ].join("\n")
 
 export const Plugin = {
@@ -131,19 +131,6 @@ export const Plugin = {
                 return yield* new ToolFailure({
                   message: `Subagent depth limit reached (${limit}). Increase "experimental.subagent_depth" to allow nested subagents.`,
                 })
-              const agent = yield* agents.resolve(input.agent)
-              if (agent === undefined) return yield* new ToolFailure({ message: `Unknown agent: ${input.agent}` })
-              if (agent.mode === "primary")
-                return yield* new ToolFailure({ message: `Agent ${input.agent} cannot run as a subagent` })
-              yield* permission
-                .assert({
-                  action: name,
-                  resources: [agent.id],
-                  save: [agent.id],
-                  ...Permission.invocation(context),
-                })
-                .pipe(Effect.mapError((error) => new ToolFailure({ message: `Subagent denied: ${agent.id}`, error })))
-
               const existing =
                 input.sessionID === undefined
                   ? undefined
@@ -159,20 +146,33 @@ export const Plugin = {
                 return yield* new ToolFailure({
                   message: `Session ${existing.id} is not a child of the current session`,
                 })
+              const agentID = existing ? (existing.agent ?? (yield* agents.select()).id) : (input.agent ?? "general")
+              if (existing && input.agent !== undefined && input.agent !== agentID)
+                return yield* new ToolFailure({
+                  message: `This child uses agent "${agentID}", not "${input.agent}". Omit agent to continue, or omit sessionID to start a new child with a different agent.`,
+                })
+              const agent = yield* agents.resolve(agentID)
+              if (agent === undefined) return yield* new ToolFailure({ message: `Unknown agent: ${agentID}` })
+              if (agent.mode === "primary")
+                return yield* new ToolFailure({ message: `Agent ${agent.id} cannot run as a subagent` })
+              yield* permission
+                .assert({
+                  action: name,
+                  resources: [agent.id],
+                  save: [agent.id],
+                  ...Permission.invocation(context),
+                })
+                .pipe(Effect.mapError((error) => new ToolFailure({ message: `Subagent denied: ${agent.id}`, error })))
+
               const override = input.model === undefined ? undefined : yield* resolveModel(input.model)
-              // Continuing with a different agent switches the child, mirroring create semantics
-              // where an explicit model wins over the agent's configured model, which wins over the inherited one.
-              if (existing !== undefined) {
-                const switched = existing.agent !== agent.id
-                const model = override ?? (switched ? agent.model : undefined)
-                yield* Effect.all([
-                  switched ? sessions.switchAgent({ sessionID: existing.id, agent: agent.id }) : Effect.void,
-                  model === undefined ? Effect.void : sessions.switchModel({ sessionID: existing.id, model }),
-                ]).pipe(
-                  Effect.mapError(
-                    (error) => new ToolFailure({ message: `Failed to switch subagent session: ${existing.id}`, error }),
-                  ),
-                )
+              if (existing && override) {
+                yield* sessions
+                  .switchModel({ sessionID: existing.id, model: override })
+                  .pipe(
+                    Effect.mapError(
+                      (error) => new ToolFailure({ message: `Failed to switch subagent model: ${existing.id}`, error }),
+                    ),
+                  )
               }
 
               const model = override ?? agent.model ?? parent.model
@@ -236,8 +236,9 @@ export const Plugin = {
     yield* ctx.tool.hook("execute.before", (event) =>
       Effect.sync(() => {
         if (event.tool !== name || !Predicate.isObject(event.input)) return
-        if (event.input.model !== "" && event.input.sessionID !== "") return
+        if (event.input.agent !== "" && event.input.model !== "" && event.input.sessionID !== "") return
         const input = { ...event.input }
+        if (input.agent === "") delete input.agent
         if (input.model === "") delete input.model
         if (input.sessionID === "") delete input.sessionID
         event.input = input

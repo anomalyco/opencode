@@ -208,8 +208,8 @@ creation, discovery, and loading rules.
 
 ### Subagent
 
-`subagent` starts a child session with a configured subagent. Supply the agent
-ID, a short `description`, and a complete `prompt`.
+`subagent` starts a child session. Supply a short `description` and a complete
+`prompt`. New children use `general` unless you specify an `agent`.
 
 ```text
 Ask the explore subagent to map the authentication flow and return the key files.
@@ -219,8 +219,12 @@ Subagents always run in the background. The call returns immediately with a
 `sessionID`, and the parent receives a `<subagent>` message when the child goes
 idle, and again after each later round of work, so it can keep working or end
 its turn without waiting. Pass the returned `sessionID` to continue that same
-child conversation; a follow-up to a running child joins its current run. Only
-subagent-mode agents can be used, and the default nesting depth is one.
+child conversation; a follow-up to a running child joins its current run.
+Omit `agent` on a follow-up or pass the child's current agent. A different agent
+is rejected without sending the prompt. To use another agent, start a new child
+by omitting `sessionID`.
+
+Primary-only agents cannot run as subagents. The default nesting depth is one.
 
 Permission: `subagent` with the selected agent ID as its resource.
 
