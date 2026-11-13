@@ -151,6 +151,19 @@ impl Host for Tui {
         self.reads.changed(self);
     }
 
+    fn slow(&self, id: &str, cost: &str) {
+        let options = ToastOptions::new(Variant::Warning, format!("{cost}. Run /plugins for details."))
+            .title(format!("Plugin is slow: {id}"));
+        let id = id.to_owned();
+        self.toasts.show(options.action(
+            "Disable",
+            bind!(self, |tui| {
+                tui.plugins.toggle(&host(&tui), &id, false);
+                tui.navigate(tui.route());
+            }),
+        ));
+    }
+
     fn revoked(&self, id: &str) {
         super::panel::close(self, id);
     }
@@ -890,6 +903,7 @@ pub fn install(tui: &Rc<Tui>) {
     // The budget sums a plugin's calls by painted frame (synthesis 4.4).
     let weak = tui.weak();
     tui.plugins.monitor().set_frames(move || weak.upgrade().map_or(0, |tui| tui.app.frame_number()));
+    super::contain::install(tui);
     tui.plugins.activate(&host(tui));
     // The plugins read the keymap (`keymap.pending()`, `keymap.active()`, `keymap.commands()`): the pending keys, and
     // the layers and focus that decide what a key reaches, as TS's keymap selectors follow its state.

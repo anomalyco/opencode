@@ -1,6 +1,7 @@
 //! Built-in feature plugins and the plugin host. Each file belongs to the step that names it.
 
 pub mod btw;
+pub mod contain;
 pub mod diffs;
 pub mod fetch;
 pub mod goal;

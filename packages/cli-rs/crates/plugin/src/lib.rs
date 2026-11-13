@@ -267,6 +267,8 @@ pub struct Definition {
     target: Option<String>,
     /// The failure of a plugin of the one API while it is active: a call that panicked.
     error: Option<ErrorFn>,
+    /// What tells an external plugin's build from another one: the loader's digest of its library and options.
+    digest: Option<String>,
 }
 
 impl Definition {
@@ -282,13 +284,19 @@ impl Definition {
         id: impl Into<String>,
         setup: impl Fn(&mut Setup<'_>) -> Result<(), String> + 'static,
     ) -> Self {
-        Self { id: id.into(), setup: Rc::new(setup), target: None, error: None }
+        Self { id: id.into(), setup: Rc::new(setup), target: None, error: None, digest: None }
     }
 
     /// Marks an external plugin loaded from `target`; `error` reports its failure while it is active.
     pub(crate) fn external(mut self, target: impl Into<String>, error: ErrorFn) -> Self {
         self.target = Some(target.into());
         self.error = Some(error);
+        self
+    }
+
+    /// Names the build of an external plugin.
+    pub(crate) fn digest(mut self, digest: u64) -> Self {
+        self.digest = Some(format!("{digest:016x}"));
         self
     }
 
@@ -1457,6 +1465,32 @@ pub struct SetupFailed {
     pub kept: bool,
 }
 
+/// An external plugin that crashed or hung the client (synthesis 4.5). It stays disabled, in the client's state and not
+/// in `cli.json`, until the user enables it again or its build changes.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Crashed {
+    pub id: String,
+    /// What the manager lists: "crashed the client in `render-slot` and is disabled".
+    pub reason: String,
+    /// The build that crashed ([`Definition::digest`]), once the plugin loaded after the crash.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub digest: Option<String>,
+}
+
+/// Why an external plugin does not start as it loads.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Blocked {
+    No,
+    /// It crashed the client: listed failed with the reason.
+    Crashed(String),
+    /// The client started in safe mode: listed inactive.
+    Safe,
+    /// It had crashed the client, and this is another build: it starts as the `plugins` entries say.
+    Cleared,
+}
+
+type SaveCrashed = Box<dyn Fn(&[Crashed])>;
+
 /// The host's plugins in enable order, and the configured entries it did not load.
 pub struct Registry {
     plugins: RefCell<Vec<Plugin>>,
@@ -1471,6 +1505,10 @@ pub struct Registry {
     /// The slot paths mounted now, which claims resolve against.
     live: Rc<slot::Live>,
     monitor: Rc<contain::Monitor>,
+    crashed: RefCell<Vec<Crashed>>,
+    save_crashed: RefCell<Option<SaveCrashed>>,
+    /// Every external plugin starts disabled: a second crash that named no plugin (synthesis 4.5).
+    safe: Cell<bool>,
 }
 
 impl Registry {
@@ -1508,12 +1546,62 @@ impl Registry {
             generations: Cell::new(0),
             live: Rc::default(),
             monitor: Rc::new(contain::Monitor::new(contain::Limits::from_env())),
+            crashed: RefCell::default(),
+            save_crashed: RefCell::default(),
+            safe: Cell::new(false),
         }
     }
 
     /// Times every plugin call and keeps the budget (synthesis 4.4).
     pub fn monitor(&self) -> &Rc<contain::Monitor> {
         &self.monitor
+    }
+
+    /// The external plugins that crashed the client, before any loads: each loads disabled and listed failed with its
+    /// reason. `save` keeps the list whenever it changes: a build learned, a build changed, an enable.
+    pub fn set_crashed(&self, crashed: Vec<Crashed>, save: impl Fn(&[Crashed]) + 'static) {
+        *self.crashed.borrow_mut() = crashed;
+        *self.save_crashed.borrow_mut() = Some(Box::new(save));
+    }
+
+    /// The plugins that crashed the client, as kept.
+    pub fn crashed(&self) -> Vec<Crashed> {
+        self.crashed.borrow().clone()
+    }
+
+    /// Starts every external plugin that loads from now on disabled, as after a second crash that named no plugin.
+    /// The user enables them one at a time; nothing of it is kept.
+    pub fn set_safe(&self) {
+        self.safe.set(true);
+    }
+
+    /// Whether `definition`, an external build, starts disabled. A crashed plugin learns its build at its first load;
+    /// another build ends the entry.
+    fn blocked(&self, definition: &Definition) -> Blocked {
+        let mut crashed = self.crashed.borrow_mut();
+        let Some(index) = crashed.iter().position(|entry| entry.id == definition.id) else {
+            return if self.safe.get() { Blocked::Safe } else { Blocked::No };
+        };
+        let blocked = match (crashed[index].digest.clone(), &definition.digest) {
+            (Some(seen), Some(build)) if seen != *build => {
+                crashed.remove(index);
+                Blocked::Cleared
+            }
+            (None, Some(build)) => {
+                crashed[index].digest = Some(build.clone());
+                Blocked::Crashed(crashed[index].reason.clone())
+            }
+            _ => return Blocked::Crashed(crashed[index].reason.clone()),
+        };
+        drop(crashed);
+        self.save_crashed();
+        blocked
+    }
+
+    fn save_crashed(&self) {
+        if let Some(save) = &*self.save_crashed.borrow() {
+            save(&self.crashed.borrow());
+        }
     }
 
     /// Applies the `plugins` entries of a changed `cli.json`, as TS reconciles on `config.data.plugins`: the
@@ -1605,6 +1693,8 @@ impl Registry {
             }
             return None;
         }
+        let blocked = self.blocked(&definition);
+        let free = matches!(blocked, Blocked::No | Blocked::Cleared);
         // Like TS (`context.tsx` restores the fallback), the replacement of an active built-in sets up before the
         // built-in stops, and a setup that fails leaves the built-in running.
         let builtin = self.with_target(&target, |_| ()).is_none().then(|| {
@@ -1615,25 +1705,36 @@ impl Registry {
                 .and_then(|builtin| builtin.active.as_ref().map(|(order, _)| *order))
         });
         let started = match builtin.flatten() {
-            Some(order) if self.enabled(&target, &definition.id) => match self.setup(host, &definition, Some(order)) {
-                Ok(started) => Some(started),
-                Err(error) => {
-                    let kept = format!("{error} (previous version still active)");
-                    self.set_unloaded(&target, Some(Status::Failed(kept)));
-                    return Some(SetupFailed { error, kept: false });
+            Some(order) if free && self.enabled(&target, &definition.id) => {
+                match self.setup(host, &definition, Some(order)) {
+                    Ok(started) => Some(started),
+                    Err(error) => {
+                        let kept = format!("{error} (previous version still active)");
+                        self.set_unloaded(&target, Some(Status::Failed(kept)));
+                        return Some(SetupFailed { error, kept: false });
+                    }
                 }
-            },
+            }
             _ => None,
         };
         let previous = {
             let mut plugins = self.plugins.borrow_mut();
+            let crashed = match &blocked {
+                Blocked::Crashed(reason) => Some(reason.clone()),
+                _ => None,
+            };
             match plugins.iter_mut().find(|plugin| plugin.definition.target() == Some(target.as_str())) {
                 Some(plugin) => {
-                    (plugin.definition, plugin.failed) = (definition, None);
+                    match &blocked {
+                        Blocked::Crashed(_) => plugin.enabled = false,
+                        Blocked::Cleared => plugin.enabled = self.enabled(&target, &definition.id),
+                        Blocked::No | Blocked::Safe => {}
+                    }
+                    (plugin.definition, plugin.failed) = (definition, crashed);
                     Some(plugin.active.take())
                 }
                 None => {
-                    let enabled = self.enabled(&target, &definition.id);
+                    let enabled = free && self.enabled(&target, &definition.id);
                     // Like TS, an external plugin with a built-in's ID replaces it, in its place.
                     match plugins
                         .iter_mut()
@@ -1643,14 +1744,16 @@ impl Registry {
                             builtin.place = builtin.active.as_ref().map(|(order, _)| *order).or(builtin.place);
                             let original = std::mem::replace(&mut builtin.definition, definition);
                             builtin.shadowed = Some((original, builtin.enabled, builtin.failed.take()));
-                            (builtin.source, builtin.enabled) = (Source::External, enabled);
+                            (builtin.source, builtin.enabled, builtin.failed) = (Source::External, enabled, crashed);
                             Some(match started {
                                 Some(started) => builtin.active.replace(started),
                                 None => builtin.active.take(),
                             })
                         }
                         None => {
-                            plugins.push(Plugin::new(definition, Source::External, enabled));
+                            let mut plugin = Plugin::new(definition, Source::External, enabled);
+                            plugin.failed = crashed;
+                            plugins.push(plugin);
                             None
                         }
                     }
@@ -1805,6 +1908,13 @@ impl Registry {
                 registration.dispose();
             }
             return Some(None);
+        }
+        // Enabling a plugin that crashed the client is the user's word that it may run again.
+        let crashed = self.crashed.borrow().iter().any(|crashed| crashed.id == id);
+        if crashed {
+            self.crashed.borrow_mut().retain(|crashed| crashed.id != id);
+            self.save_crashed();
+            self.with_plugin(id, |plugin| plugin.failed = None);
         }
         // Enabling a failed plugin restarts it with a fresh setup.
         let failed = self.with_plugin(id, |plugin| {

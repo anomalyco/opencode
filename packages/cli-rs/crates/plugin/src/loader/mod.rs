@@ -371,7 +371,7 @@ impl Loader {
             }),
             ..definition
         };
-        match registry.load(host, definition.external(name, failure)) {
+        match registry.load(host, definition.external(name, failure).digest(digest)) {
             Some(failed) if failed.kept => return self.fail(&**host, registry, &listed, name, digest, failed.error),
             // The plugin is listed as failed, and enabling it runs this build's setup again.
             Some(failed) => self.tell(&**host, registry, &listed, name, failed.error),
@@ -486,6 +486,17 @@ fn identity(file: &Path) -> Option<(u64, u64)> {
     {
         std::fs::canonicalize(file).ok().map(|_| (0, 0))
     }
+}
+
+/// Whether a native build is among the targets: the discovered directories and the `configured` entries, enabled or
+/// not. The client starts under a parent only then (synthesis 4.5, decision 5). It reads directories and no library.
+pub fn has_native_build(config_dir: &Path, cwd: &Path, configured: &[&str]) -> bool {
+    let discovered = discover(&plugin_directories(config_dir, cwd)).into_iter().map(Some);
+    let configured = configured.iter().map(|target| local_source(target, config_dir));
+    discovered
+        .chain(configured)
+        .flatten()
+        .any(|local| Target { target: String::new(), local: Some(local), options: None }.library().is_some())
 }
 
 /// The `plugins` directories to search (TS `localPluginDirectories`): the global config directory's, then each

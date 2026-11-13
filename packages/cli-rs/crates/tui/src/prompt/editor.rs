@@ -930,6 +930,9 @@ fn border_chars(vertical: char, bottom_left: char, horizontal: char) -> [char; 1
 fn connect(inner: &Rc<Inner>) {
     inner.textarea.on_change(bind!(inner, |prompt, _, text| {
         prompt.prompt.borrow_mut()["text"] = Value::String(text.to_owned());
+        if let Some(tui) = prompt.tui.upgrade() {
+            crate::plugins::contain::drafted(&tui, text);
+        }
         parts::sync(&prompt);
         prompt.parts_changed();
         if let Some(complete) = prompt.autocomplete.get() {

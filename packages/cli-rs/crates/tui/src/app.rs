@@ -208,6 +208,7 @@ impl Tui {
             view.root().detach();
         }
         *self.route.borrow_mut() = route.clone();
+        crate::plugins::contain::navigated(self, &route);
         // A remount (a theme change) keeps the home's location.
         if route == Route::Home && !remount {
             crate::features::location::home(self);
