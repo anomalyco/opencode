@@ -749,7 +749,8 @@ impl Undo {
 }
 
 /// Fails plugin `id` with `error` after a call of it panicked: it is not called again, its commands leave the keymap
-/// once the key that may have run the call is handled, the host says so, and its claims draw empty.
+/// once the key that may have run the call is handled, the host says so, and its claims draw empty. Its activation
+/// ends: a wake, a fetch it asked for in the same turn and a reply reach nothing.
 pub(crate) fn fail(
     host: &Weak<dyn Host>,
     id: &str,
@@ -770,7 +771,9 @@ pub(crate) fn fail(
         // The fences it drew fall back to the code view, as the ones it draws from now on do.
         host.remount();
     });
+    // The queued redraw still runs on a disposed activation, so the claims draw empty once.
     activation.invalidate();
+    activation.dispose();
 }
 
 /// Queues `effect` on the host's one effect queue, which both paths share: it runs in order with every other plugin

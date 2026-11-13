@@ -643,10 +643,11 @@ impl Guest {
         None
     }
 
-    /// Sends a request to a handler, then invalidates the claims, whose state it may have changed.
+    /// Sends a request to a handler, then, if it ran, invalidates the claims, whose state it may have changed.
     fn handle(self: &Rc<Self>, export: &str, request: &Request) {
-        self.request::<serde_json::Value>(export, request);
-        self.activation.invalidate();
+        if self.request::<serde_json::Value>(export, request).is_some() {
+            self.activation.invalidate();
+        }
     }
 
     /// What the instance asked for since it was last taken.
@@ -660,10 +661,12 @@ impl Guest {
         apply(&self.host, self.id.clone(), Rc::downgrade(self), effects);
     }
 
-    /// Sends `fetch` unless the instance is destroyed; its reply goes to the instance on the effect queue, unless the
-    /// instance is destroyed by then.
+    /// Sends `fetch` unless the instance is destroyed or its activation ended, as a call that panicked after the one
+    /// that asked for it ends it; its reply goes to the instance on the effect queue, unless the instance is destroyed
+    /// by then.
     fn fetch(guest: &Weak<Self>, host: &dyn Host, request: abi::RequestId, fetch: abi::Fetch) {
-        let Some(live) = guest.upgrade().filter(|guest| guest.instance.borrow().is_some()) else { return };
+        let live = guest.upgrade().filter(|guest| guest.instance.borrow().is_some() && !guest.activation.disposed());
+        let Some(live) = live else { return };
         let (guest, owner) = (guest.clone(), live.host.clone());
         host.fetch(
             fetch,
