@@ -590,9 +590,8 @@ impl abi::Read for Reader<'_> {
     fn composer(&self) -> Option<abi::Composer> {
         let prompt = self.tui.prompt.current.borrow().upgrade().filter(|prompt| prompt.shown())?;
         let text = prompt.textarea.text();
-        // The native buffer's own text up to the cursor, so the byte follows its widths: a tab takes the tab width.
-        let prefix = prompt.textarea.buffer().range(0, prompt.textarea.cursor_offset());
-        let cursor = prefix.map_or(0, |prefix| prefix.len()).min(text.len());
+        // The buffer converts the cursor's cells to a byte with its own widths: a tab takes the tab width.
+        let cursor = opencode_ui::prompt_input::index_at(&prompt.textarea, prompt.textarea.cursor_offset());
         Some(abi::Composer { text, cursor, focused: prompt.focused() })
     }
 }
