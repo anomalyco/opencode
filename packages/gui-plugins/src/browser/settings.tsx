@@ -49,6 +49,16 @@ export default function BrowserSettings() {
   const addExtension = () =>
     ctx.dialogs.open((dialog) => <AddExtension sources={jobs.sources()} close={() => dialog.close()} />)
 
+  // The browser pane, its profile and its extensions exist only in the desktop app, which is fixed for the page's life.
+  if (!desktop)
+    return (
+      <ui.SettingsLayout title={ctx.t("settings.title")}>
+        <ui.SettingsSection>
+          <ui.SettingsRow title={<Muted>{ctx.t("settings.unavailable")}</Muted>} />
+        </ui.SettingsSection>
+      </ui.SettingsLayout>
+    )
+
   return (
     <ui.SettingsLayout title={ctx.t("settings.title")} description={ctx.t("settings.description")}>
       <ui.SettingsSection>

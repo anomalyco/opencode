@@ -40,6 +40,7 @@ function install(namespaces, bridge) {
   const chrome = globalThis.chrome
   if (!chrome?.runtime?.getManifest) return
   const manifest = chrome.runtime.getManifest()
+  // Only hides namespaces the extension cannot use; main's `allowed` is the check that refuses a call.
   const declared = new Set([...(manifest.permissions ?? []), ...(manifest.host_permissions ?? [])])
   const listeners = new Map()
 

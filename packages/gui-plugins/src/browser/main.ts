@@ -133,18 +133,32 @@ const setup: Plugin.MainSetup = (ctx) => {
     close: async (input, caller) => (await pane()).close(caller.window, input.binding),
   })
 
+  // Jobs that write the profile run one after another, whichever window or surface started them: each surface runs
+  // one at a time, but the settings page, the Add extension dialog and every pane's offer are separate surfaces.
+  const writes = { last: Promise.resolve() }
+
+  const serial = <T>(run: () => Promise<T>) => {
+    const next = writes.last.then(run)
+    writes.last = next.then(
+      () => undefined,
+      () => undefined,
+    )
+
+    return next
+  }
+
   // Until a pane or the settings page loads the profile, windows list no extensions; loading pushes the real list.
   const profiles = ctx.provide(BrowserProfile, {
     state: () => ({ extensions: loaded.value?.extensions() ?? [], remoteSignIns: loaded.value?.remoteSignIns() }),
     shareSignIns: async (input) => (await profile()).shareSignIns(input.enabled),
     sources: async () => (await profile()).sources(),
-    importBrowser: async (input) => (await profile()).importBrowser(input.source, input.profile),
-    importFile: async (input) => (await profile()).importFile(input.path),
+    importBrowser: (input) => serial(async () => (await profile()).importBrowser(input.source, input.profile)),
+    importFile: (input) => serial(async () => (await profile()).importFile(input.path)),
     summary: async () => (await profile()).summary(),
-    clear: async () => (await profile()).clear(),
+    clear: () => serial(async () => (await profile()).clear()),
     browserExtensions: async (input) => (await profile()).browserExtensions(input.source, input.profile),
-    install: async (input) => (await profile()).install(input),
-    remove: async (input) => (await profile()).remove(input.id),
+    install: (input) => serial(async () => (await profile()).install(input)),
+    remove: (input) => serial(async () => (await profile()).remove(input.id)),
     click: async (input, caller) => {
       const win = ctx.windows.get(caller.window)
 
@@ -160,7 +174,7 @@ const setup: Plugin.MainSetup = (ctx) => {
         height: Math.round(anchor.height * zoom),
       })
     },
-    enable: async (input) => (await profile()).enable(input.id, input.enabled),
+    enable: (input) => serial(async () => (await profile()).enable(input.id, input.enabled)),
   })
 
   // The host withdraws the Ipc before this runs, so windows hear nothing; they suspend on the Ipc going away.

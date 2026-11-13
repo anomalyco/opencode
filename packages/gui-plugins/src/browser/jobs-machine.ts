@@ -32,7 +32,7 @@ export type Outcome =
 export type Finished = { readonly job: Job; readonly outcome: Outcome }
 
 /**
- * A surface runs one job at a time, so two imports never write the profile at once.
+ * A surface runs one job at a time; main runs the jobs of every surface one after another.
  * - `idle`: nothing runs; `last` is the previous job and its outcome, until the next one starts.
  * - `running`: `job` runs as `attempt`; a result of any other attempt is stale.
  */

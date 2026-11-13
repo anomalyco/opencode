@@ -14,10 +14,10 @@ type Subscriber = { readonly kind: "frame"; readonly process: number; readonly r
  * module's namespaces to the pages and service workers of installed extensions, answers their calls and delivers
  * events to the contexts that listen.
  *
- * Trust: only a frame whose document is a `chrome-extension://` page of an extension loaded in `session`, or that
- * extension's service worker, is answered, and only for a namespace its manifest declares the permission of. Web
- * pages get no preload API, content scripts run in worlds the preload never touches, and calls from anything else
- * are refused.
+ * Trust: a frame is answered only while its document is a `chrome-extension://` page of an extension loaded in
+ * `session`, and a service worker only when its scope is such an extension's root; either only for a namespace its
+ * manifest declares the permission of (`allowed`). Web pages get no preload API, content scripts run in worlds the
+ * preload never touches, and calls from any other frame are refused.
  */
 export async function createExtensionHost(input: {
   session: Session

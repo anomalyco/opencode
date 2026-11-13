@@ -64,7 +64,7 @@ const MISSING: ReadonlyArray<readonly [permission: string, feature: ExtensionFea
 /**
  * Missing APIs with events that the profile does not stand in for either. A background script registers its
  * listeners when it starts, as Manifest V3 requires, so reading one of these throws there and stops the script: a
- * service worker then never registers. Seen with Bitwarden and Vimium before `webNavigation` was added.
+ * service worker then never registers.
  */
 const STARTUP: readonly string[] = ["readingList", "tabGroups", "gcm", "declarativeContent", "debugger", "ttsEngine"]
 

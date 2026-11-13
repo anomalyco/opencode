@@ -137,6 +137,7 @@ export default {
     "OpenCode cannot save sign-ins: macOS did not give it its Keychain key. Sign-ins made here end when OpenCode quits, so importing is off. Quit OpenCode, open it again, and choose Allow when macOS asks.",
   "settings.title": "Browser",
   "settings.open": "Browser settings",
+  "settings.unavailable": "The browser is available in the desktop app.",
   "settings.description":
     "One browser for every session, project and server in this app. Sign-ins, site data and extensions stay on this device, unless you share sign-ins with remote servers.",
   "settings.links.title": "Open links in the browser pane",
