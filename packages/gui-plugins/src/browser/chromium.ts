@@ -1,3 +1,4 @@
+import { homedir } from "node:os"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
@@ -228,6 +229,7 @@ export function createBrowserPage(
   },
 ) {
   const policy: Policy = {
+    home: homedir(),
     get fileRoots() {
       return options.fileRoots?.() ?? []
     },

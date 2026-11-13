@@ -1,6 +1,7 @@
 // URL policy shared by the pane and page. Electron-free so it stays unit-testable under Bun.
 
 import { Browser } from "@opencode/plugin-browser/rpc"
+import { encodeFilePath } from "@opencode/util/path"
 
 export function destinationOrigin(input: string) {
   if (!URL.canParse(input)) return
@@ -273,7 +274,7 @@ export function agentFrame(trees: FrameTrees, frameID: string): AgentFrameAccess
   }
 }
 
-export type Policy = { readonly fileRoots?: ReadonlyArray<string>; readonly extensions?: ReadonlyArray<string> }
+export type Policy = { readonly fileRoots?: ReadonlyArray<string>; readonly extensions?: ReadonlyArray<string>; readonly home?: string }
 
 export function allowedDestination(input: string, policy?: Policy) {
   return (
@@ -284,7 +285,7 @@ export function allowedDestination(input: string, policy?: Policy) {
 }
 
 export function normalizeURL(input: string, policy?: Policy) {
-  const url = withScheme(input)
+  const url = withScheme(input, policy)
   const reason = refusal(url, policy)
 
   if (reason === "browser.address.credentials")
@@ -307,7 +308,7 @@ export function normalizeURL(input: string, policy?: Policy) {
  * - `browser.address.web`: anything but a web page, where no files open.
  */
 export function refusal(input: string, policy?: Policy) {
-  const url = withScheme(input)
+  const url = withScheme(input, policy)
 
   if (url === "about:blank" || allowedDestination(url, policy)) return
 
@@ -318,10 +319,30 @@ export function refusal(input: string, policy?: Policy) {
 }
 
 // The URL an address opens: a blank page for none, else the address with a scheme, `http` for this machine's names.
-function withScheme(input: string) {
+export function localAddress(value: string) {
+  return /^(?:file:|[a-z]:[\\/]|\\\\|~[\\/]|\.{1,2}[\\/]|\/(?!\/[^/\\]))/i.test(value)
+}
+
+function withScheme(input: string, policy?: Policy) {
   const value = input.trim()
 
   if (!value || /^about:blank$/i.test(value)) return "about:blank"
+
+  if (localAddress(value)) {
+    if (/^file:/i.test(value)) return localFileURL(value) ?? value
+
+    // Never resolve a UNC path on the network, even to check whether it exists.
+    if (value.startsWith("\\\\")) return value
+    const relative = /^(~|\.{1,2})[\\/]/.exec(value)
+    const base = relative?.[1] === "~" ? policy?.home : policy?.fileRoots?.[0]
+
+    if (relative && !base) return value
+    const path = relative ? `${base}/${relative[1] === "~" ? value.slice(2) : value}` : value
+
+    return new URL(`file://${encodeFilePath(path)}`).href
+  }
+
+  if (value.startsWith("//")) return `https:${value}`
 
   if (/^[a-z][a-z\d+.-]*:\/\//i.test(value)) return value
 

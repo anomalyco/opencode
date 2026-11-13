@@ -1,4 +1,4 @@
-import { destinationOrigin } from "./policy"
+import { destinationOrigin, localAddress } from "./policy"
 
 /** Where text that is not an address goes. Shared with the system browser's default so results look familiar. */
 const SEARCH = "https://www.google.com/search?q="
@@ -24,6 +24,8 @@ export function searches(input: string) {
   const value = input.trim()
 
   if (!value || /^about:\S*$/i.test(value)) return false
+
+  if (localAddress(value) || value.startsWith("//")) return false
 
   if (/^[a-z][a-z\d+.-]*:\/\//i.test(value)) return !URL.canParse(value)
 

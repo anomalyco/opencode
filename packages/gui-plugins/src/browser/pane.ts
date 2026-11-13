@@ -1,4 +1,5 @@
 import { NodeHttpClient } from "@effect/platform-node"
+import { homedir } from "node:os"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { OpenCode } from "@opencode/client/effect"
 import { SessionID } from "@opencode/schema/session-id"
@@ -376,7 +377,7 @@ export function createBrowserPane(input: {
       const reason =
         url === undefined
           ? undefined
-          : refusal(url, { fileRoots: selectFileRoots(machine.state, binding), extensions: extensions(binding) })
+          : refusal(url, { fileRoots: selectFileRoots(machine.state, binding), extensions: extensions(binding), home: homedir() })
 
       if (reason) throw new Error(reason)
       // A navigation that the next one replaced, such as a second submit or a redirect, rejects with ERR_ABORTED while
