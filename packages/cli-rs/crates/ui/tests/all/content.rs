@@ -186,6 +186,29 @@ fn markdown_renders_fences_and_streams() {
     assert_eq!(frame, whole.render().text());
 }
 
+/// A restyle equals a view built in the new theme, while it streams: text that arrives later, a table included,
+/// takes the new colors.
+#[test]
+fn markdown_restyles_as_built_in_the_new_theme() {
+    let (start, end) = ("Before.\n\n```rust\nlet x = \"a\"; // b\n```\n", "\n| a | b |\n|---|---|\n| 1 | 2 |\n");
+    let (app, old) = app(40, 12);
+    let new = theme("tokyonight", ThemeMode::Dark);
+    let renderers = markdown::CodeBlockRenderers::default();
+    let view = markdown::view(&app, &old, &code::syntax_theme(&old), &renderers, true, true).set_markdown(start);
+    app.root().add(&view);
+    app.render();
+    let syntax = code::syntax_theme(&new);
+    markdown::restyle(&view, markdown::view_colors(&new, &syntax), &syntax);
+    view.append(end);
+    let restyled = app.render();
+
+    let (fresh, _) = self::app(40, 12);
+    fresh
+        .root()
+        .add(&markdown::view(&fresh, &new, &syntax, &renderers, true, true).set_markdown(format!("{start}{end}")));
+    assert_eq!(restyled.cells, fresh.render().cells, "{}", restyled.text());
+}
+
 #[test]
 fn numbered_code_matches_typescript() {
     let (app, theme) = app(60, 10);

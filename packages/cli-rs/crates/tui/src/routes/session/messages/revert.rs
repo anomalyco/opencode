@@ -12,7 +12,7 @@ pub struct Banner(Rc<Inner>);
 
 struct Inner {
     app: App,
-    theme: Theme,
+    theme: RefCell<Theme>,
     tui: Weak<Tui>,
     root: View,
     body: View,
@@ -51,7 +51,7 @@ impl Banner {
             .child(&body);
         let inner = Rc::new(Inner {
             app: app.clone(),
-            theme: theme.clone(),
+            theme: RefCell::new(theme.clone()),
             tui: tui.weak(),
             root,
             body,
@@ -61,8 +61,7 @@ impl Banner {
         });
         inner.root.on_hover(bind!(inner, |inner, _, hovered| {
             inner.hover.set(hovered);
-            let raised = inner.theme.background.raised.base;
-            inner.body.bg(if hovered { inner.theme.decrease(&raised, 1) } else { raised });
+            inner.paint();
         }));
         inner.root.mouse_pointer(MousePointer::POINTER).on_click(bind!(inner, |inner, _, _| inner.clear()));
         Self(inner)
@@ -70,6 +69,14 @@ impl Banner {
 
     pub fn root(&self) -> &View {
         &self.0.root
+    }
+
+    /// Paints the banner in `theme`; its text paints again on the next update.
+    pub fn restyle(&self, theme: &Theme) {
+        *self.0.theme.borrow_mut() = theme.clone();
+        self.0.root.border_color(theme.background.raised.base);
+        self.0.paint();
+        *self.0.rendered.borrow_mut() = None;
     }
 
     /// `messages` is the whole list; the banner counts the user messages from the boundary on. `width` is the
@@ -102,9 +109,16 @@ impl Banner {
 }
 
 impl Inner {
+    /// The body's surface, darker under the pointer.
+    fn paint(&self) {
+        let theme = self.theme.borrow();
+        let raised = theme.background.raised.base;
+        self.body.bg(if self.hover.get() { theme.decrease(&raised, 1) } else { raised });
+    }
+
     fn render(&self, props: &Props) {
         let app = &self.app;
-        let theme = &self.theme;
+        let theme = &*self.theme.borrow();
         let muted = theme.text.muted;
         self.body.clear();
         let plural = if props.count == 1 { "" } else { "s" };

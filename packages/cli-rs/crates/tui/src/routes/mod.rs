@@ -24,6 +24,11 @@ pub trait RouteView {
     fn focus_target(&self) -> Option<AnyWidget> {
         None
     }
+    /// Takes the page theme after a theme switch, keeping what it can in place; [`Self::root`] may change. Returns
+    /// false, by default, when the view must mount again instead.
+    fn restyle(&self, _tui: &Tui) -> bool {
+        false
+    }
 }
 
 pub(crate) fn mount(tui: &Tui, route: &Route) -> Box<dyn RouteView> {
