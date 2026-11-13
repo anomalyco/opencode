@@ -1,0 +1,30 @@
+{
+  "about": "The life of a plugin as the user sees it (rich-plugins 4.14, O-124), written by hand and never captured. The plugin is parity/plugins/life (TS) and its Rust twin in crates/tui/tests/all/plugin_machines.rs. An observation is line/palette/row: the plugin's line in home.footer (A, B or -), whether the palette finds its commands (yes or no), and its row in the plugin manager (on, off or failed). Actions: toggle is enter on its row in the plugin manager; flip, throw and arm run its palette commands Life flip, Life throw and Life arm. Life arm makes its next setup throw. TS is the specification: an enable whose setup throws shows the error in a toast and leaves the row as it was. A row in xfail is a known difference, [client, deviation file or finding:<name>, 'state action observation']; a finding is open and named in steps/plugins-pt.md.",
+  "depth": 4,
+  "seeds": 8,
+  "steps": 12,
+  "machines": {
+    "life": {
+      "initial": "onA",
+      "states": {
+        "onA": ["A/yes/on", { "toggle": "off", "flip": "onB", "throw": "onA", "arm": "armedA" }],
+        "onB": ["B/yes/on", { "toggle": "off", "flip": "onA", "throw": "onB", "arm": "armedB" }],
+        "armedA": ["A/yes/on", { "toggle": "offArmed", "flip": "armedB" }],
+        "armedB": ["B/yes/on", { "toggle": "offArmed", "flip": "armedA" }],
+        "off": ["-/no/off", { "toggle": "onA" }],
+        "offArmed": ["-/no/off", { "toggle": "off" }]
+      },
+      "xfail": [
+        ["rust", "F16-plugin-panic-no-effects", "onA throw -/no/failed"],
+        ["rust", "F16-plugin-panic-no-effects", "onB throw -/no/failed"],
+        ["rust", "finding:an-enable-that-fails-is-listed-failed", "offArmed toggle -/no/failed"]
+      ]
+    }
+  },
+  "faults": {
+    "life": {
+      "cycles": ["toggle toggle", "flip flip", "arm toggle toggle toggle"],
+      "xfail": []
+    }
+  }
+}
