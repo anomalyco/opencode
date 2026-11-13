@@ -970,6 +970,12 @@ impl Plugin {
     fn new(definition: Definition, source: Source, enabled: bool) -> Self {
         Self { definition, source, enabled, active: None, shadowed: None, place: None, failed: None }
     }
+
+    /// Whether it is active and no call of the activation panicked. One that panicked stays active, so it is listed
+    /// failed and its instance is kept, but it contributes nothing and a reload or an enable starts it again.
+    fn running(&self) -> bool {
+        self.active.as_ref().is_some_and(|(_, registration)| !registration.panicked())
+    }
 }
 
 /// A setup that failed in [`Registry::load`].
@@ -1096,8 +1102,9 @@ impl Registry {
 
     /// Adds external plugin `definition`, or replaces the one loaded from the same target, and activates it
     /// unless a `plugins` entry or the plugin manager disabled it. A replacement keeps its place, so slot
-    /// order holds across a reload. A replacement of an active plugin starts before the active one stops: when its
-    /// setup fails, it is disposed and the active one keeps running (TS `context.tsx`); for an active built-in of its ID
+    /// order holds across a reload. A replacement of a running plugin starts before the running one stops: when its
+    /// setup fails, it is disposed and the running one keeps running (TS `context.tsx`); one that panicked is replaced
+    /// as an inactive one is, since nothing of it runs to keep; for an active built-in of its ID
     /// the target is listed as failed. Any other setup that fails leaves the plugin listed as failed and not active.
     pub fn load(&self, host: &Rc<dyn Host>, definition: Definition) -> Option<SetupFailed> {
         let target = definition.target()?.to_owned();
@@ -1106,7 +1113,7 @@ impl Registry {
         self.unloaded
             .borrow_mut()
             .retain(|(known, status)| !(matches!(status, Status::Skipped(_)) && matches(known, &definition.id)));
-        if let Some(Some(place)) = self.with_target(&target, |plugin| plugin.active.is_some().then_some(plugin.place)) {
+        if let Some(Some(place)) = self.with_target(&target, |plugin| plugin.running().then_some(plugin.place)) {
             let (order, registration) = match self.setup(host, &definition, place) {
                 Ok(active) => active,
                 Err(error) => return Some(SetupFailed { error, kept: true }),
@@ -1198,7 +1205,7 @@ impl Registry {
     pub fn failed_load(&self, target: &str, error: &str) -> bool {
         // Whether it keeps running, and the registration of a plugin that panicked, which goes.
         let outcome = self.with_target(target, |plugin| {
-            if plugin.active.is_some() && plugin.definition.failure().is_none() {
+            if plugin.running() {
                 return (true, None);
             }
             let broken = error.to_owned();
@@ -1324,8 +1331,7 @@ impl Registry {
         // Enabling a failed plugin restarts it with a fresh setup.
         let failed = self.with_plugin(id, |plugin| {
             plugin.enabled = true;
-            let failed = plugin.active.is_some() && plugin.definition.failure().is_some();
-            failed.then(|| plugin.active.take()).flatten()
+            (!plugin.running()).then(|| plugin.active.take()).flatten()
         });
         if let Some((_, registration)) = failed.flatten() {
             registration.dispose();
@@ -1433,7 +1439,7 @@ impl Registry {
     /// The route plugin `id` registers as `name`, rendered.
     pub fn route(&self, host: &dyn Host, id: &str, name: &str) -> Option<RouteMount> {
         let render = self.with_plugin(id, |plugin| {
-            let (_, registration) = plugin.active.as_ref()?;
+            let (_, registration) = plugin.active.as_ref().filter(|_| plugin.running())?;
             registration.routes.iter().find(|(route, _)| route == name).map(|(_, render)| render.clone())
         })??;
         Some(RouteMount(render(host)))
@@ -1523,7 +1529,9 @@ impl Registry {
     /// The `part` of every active registration in activation order, cloned so no borrow outlives the call.
     fn by_activation<T: Clone>(&self, part: impl Fn(&Registration) -> &Vec<T>) -> Vec<T> {
         let plugins = self.plugins.borrow();
-        let mut active: Vec<_> = plugins.iter().filter_map(|plugin| plugin.active.as_ref()).collect();
+        // A plugin that panicked contributes nothing (4.14): its claims give their slots back.
+        let mut active: Vec<_> =
+            plugins.iter().filter(|plugin| plugin.running()).filter_map(|plugin| plugin.active.as_ref()).collect();
         active.sort_by_key(|(order, _)| *order);
         active.into_iter().flat_map(|(_, registration)| part(registration).clone()).collect()
     }

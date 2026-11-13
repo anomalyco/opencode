@@ -1077,7 +1077,7 @@ fn collapse<'a>(calls: impl Iterator<Item = &'a Call>) -> Vec<Kind> {
 /// fail, so a fix fails the test until its row moves to [`FIXED`].
 const OPEN: &[(&str, &str, &[Command])] = &[
     // Review bigboi-1: a failed plugin's replacement of `home.footer` still wins the slot and hides the footer.
-    ("a-failed-slot-replacement-gives-the-slot-back", "ledger", &[Command::Arm(Fault::Command), Command::Run]),
+    ("a-failed-slot-replacement-gives-the-slot-back", "lifecycle", &[Command::Arm(Fault::Command), Command::Run]),
     // Review bigboi-5: a failure is told again once the manager stopped listing it.
     (
         "a-failure-is-told-again-after-the-row-cleared",
@@ -1097,16 +1097,10 @@ const OPEN: &[(&str, &str, &[Command])] = &[
         "lifecycle",
         &[Command::Toggle, Command::Arm(Fault::Setup), Command::Toggle, Command::Reload(2)],
     ),
-    // Review carbon-pt-3: a reload that fails after a panic wedges the plugin, and enabling it sets up nothing.
-    (
-        "a-failed-reload-of-a-failed-plugin-can-be-enabled",
-        "ledger",
-        &[Command::Arm(Fault::Command), Command::Run, Command::Reload(BAD), Command::Toggle],
-    ),
     // Review bigboi-6: dropping the TUI destroys a failed instance, which runs its dispose callback.
     (
         "a-failed-plugin-is-not-disposed-when-dropped",
-        "ledger",
+        "lifecycle",
         &[Command::Route, Command::Arm(Fault::Command), Command::Run],
     ),
 ];
@@ -1157,6 +1151,11 @@ const FIXED: &[(&str, &[Command])] = &[
     ("a-dialog-asked-for-before-a-reload-opens-no-dialog", &[Command::DialogThenReload(Dialog::Prompt, 2)]),
     // Review carbon-pt-1: the action of a prompt confirmed as a reload is queued reaches no new build.
     ("a-confirm-before-a-reload-reaches-no-new-build", &[Command::Dialog(Dialog::Prompt), Command::EnterThenReload(2)]),
+    // Review carbon-pt-3: a reload that fails after a panic does not wedge the plugin, and enabling it sets it up.
+    (
+        "a-failed-reload-of-a-failed-plugin-can-be-enabled",
+        &[Command::Arm(Fault::Command), Command::Run, Command::Reload(BAD), Command::Toggle],
+    ),
     // Review bigboi-2, the positive control: a candidate that passes keeps the prompt its setup asked for.
     ("a-passed-candidates-prompt-shows", &[Command::Dialog(Dialog::Panel), Command::Reload(PROMPTING)]),
 ];
