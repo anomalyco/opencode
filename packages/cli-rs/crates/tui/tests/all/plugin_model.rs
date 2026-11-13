@@ -343,6 +343,8 @@ impl World {
     /// Runs what the commands queued, and drains the toasts; returns their titles, or their messages.
     fn settle(&self) -> Vec<String> {
         let (app, tui) = (&self.harness.app, &self.harness.tui);
+        // A failure a frame reports shows once what the frame queued has run.
+        app.advance(Duration::from_millis(1));
         app.advance(Duration::from_millis(1));
         let mut toasts = Vec::new();
         while let Some(toast) = tui.toasts.current() {
@@ -518,7 +520,7 @@ struct Reference {
     page: Page,
     /// The failure the plugin manager lists.
     listed: Option<String>,
-    /// What the host reports before the next frame.
+    /// The toast on screen at the next frame, if any.
     reports: Vec<String>,
 }
 
@@ -644,7 +646,7 @@ impl Reference {
                     self.last = call.activation;
                     self.fault(Fault::Setup, call)?;
                     if !call.panicked && build == BAD {
-                        self.reports.push(BAD_TOAST.to_owned());
+                        self.report(BAD_TOAST);
                     }
                     let passed = !call.panicked && build != BAD;
                     let error = if call.panicked {
@@ -677,7 +679,7 @@ impl Reference {
                     // A load tells a failure the manager did not list before it (TS `context.tsx`).
                     let load = matches!(command, None | Some(Command::Reload(_)));
                     if load && self.listed.is_some() && self.listed != listed {
-                        self.reports.push(FAILED.to_owned());
+                        self.report(FAILED);
                     }
                 }
                 (Expect::Command(which, a), Kind::Command(ran)) if call.activation == a && ran == which => {
@@ -722,12 +724,28 @@ impl Reference {
         Ok(())
     }
 
+    /// Enter on the dialog on screen: a confirmed prompt or select runs `probe.run` once the frame comes. The panel has
+    /// no action and stays.
+    fn enter(&mut self) {
+        match self.dialog.take() {
+            Some((Dialog::Panel, a, build)) => self.dialog = Some((Dialog::Panel, a, build)),
+            Some((_, a, _)) => self.confirm = Some(a),
+            None => {}
+        }
+    }
+
+    /// Shows a toast. With none paused or queued, a toast replaces the one on screen (`opencode_ui::toast`), so the
+    /// frame shows the last; a failure is reported after what the failing call asked for.
+    fn report(&mut self, toast: &str) {
+        self.reports = vec![toast.to_owned()];
+    }
+
     /// A call of activation `a` panicked: it fails, the manager lists it, and the host reports it.
     fn fail(&mut self, a: u32, export: &str, fault: Fault) {
         self.life = Life::Failed(a);
         self.failed.push(a);
         self.listed = Some(format!("{export} panicked: probe {fault:?} fault"));
-        self.reports.push(FAILED.to_owned());
+        self.report(FAILED);
     }
 
     /// Checks that `call` panicked exactly when `fault` was armed for it, and spends the fault.
