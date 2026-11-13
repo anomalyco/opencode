@@ -219,7 +219,7 @@ export interface Interface {
     /** Overrides the Session's model, as compaction does with its agent's model. */
     model?: Model.Ref
     toolChoice?: "none"
-    /** `false` sends only the prompt: no system prompt, history or tools. */
+    /** `false` sends only the prompt: no system prompt, history, tools or session hooks. */
     transcript?: boolean
   }) => Effect.Effect<SessionGenerate.Result, NotFoundError | SessionGenerate.Error>
   readonly command: (input: {

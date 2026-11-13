@@ -38,7 +38,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
   /** Overrides the Session's model, as compaction does with its agent's model. */
   model?: Model.Ref
   toolChoice?: "none"
-  /** `false` sends only the prompt: no system prompt, history or tools. */
+  /** `false` sends only the prompt: no system prompt, history, tools or session hooks. */
   transcript?: boolean
 }) {
   const instances = yield* Instance.Service
@@ -82,6 +82,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
           ]
         : [Message.user(input.prompt)],
       toolChoice: input.toolChoice,
+      hooks: full,
     })
     yield* Effect.logInfo("sending session generation request", {
       sessionID: selection.session.id,

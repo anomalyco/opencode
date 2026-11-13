@@ -415,6 +415,10 @@ it.effect(
       resolvedSessions.length = 0
       const { db, session, instances } = yield* setup
       const override = Ref.make({ providerID: Provider.ID.make("other"), id: ID.make("other-model") })
+      // A prompt-only request carries nothing a plugin could add.
+      const hooks = yield* PluginHooks.Service
+      let generateHooks = 0
+      yield* hooks.register("session", "generate", () => Effect.sync(() => generateHooks++))
       const usageBefore = yield* usageState(db, sessionID)
 
       const result = yield* SessionGenerate.generate({
@@ -432,6 +436,7 @@ it.effect(
       expect(requests[0]?.system).toEqual([])
       expect(requests[0]?.messages).toHaveLength(1)
       expect(userTexts(requests[0])).toEqual(["Advise"])
+      expect(generateHooks).toBe(0)
       const usageAfter = yield* usageState(db, sessionID)
       expect(recordedUsage(usageBefore, usageAfter)).toEqual([
         {

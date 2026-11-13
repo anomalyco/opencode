@@ -26,17 +26,36 @@ const calls: GenerateInput[] = []
 let reply: (
   input: GenerateInput,
 ) => Effect.Effect<SessionGenerate.Result, SessionRunnerModel.ModelUnavailableError> = () => Effect.die("unused reply")
-let captured: { readonly set: (next: Advisor.State) => Effect.Effect<Advisor.State, unknown> } | undefined
+type Handlers = {
+  readonly get: (input: {}) => Effect.Effect<Advisor.State | null, unknown>
+  readonly set: (next: Advisor.State) => Effect.Effect<Advisor.State | null, unknown>
+}
+let captured: Handlers | undefined
+const rpc = () => (captured ? Effect.succeed(captured) : Effect.die("rpc was not registered"))
 
 const zeroUsage = SessionUsage.record(undefined, [])
-let contextHook:
-  | ((event: { tools: Record<string, unknown>; system: Array<{ text: string }> }) => Effect.Effect<void>)
-  | undefined
-const systemFor = (tools: Record<string, unknown>) =>
+type Request = {
+  tools: Record<string, { description: string; input: Record<string, unknown> }>
+  system: Array<{ text: string }>
+}
+let contextHook: ((event: Request) => Effect.Effect<void>) | undefined
+// Runs the context hook on a request carrying the registered tool, as the runner would.
+const request = (registry: Tool.Interface) =>
   Effect.gen(function* () {
-    const event = { tools, system: [] as Array<{ text: string }> }
+    const definition = yield* find(registry)
+    const event: Request = {
+      tools: definition
+        ? {
+            [definition.name]: {
+              description: definition.description,
+              input: structuredClone(definition.inputSchema) as Record<string, unknown>,
+            },
+          }
+        : {},
+      system: [],
+    }
     if (contextHook) yield* contextHook(event)
-    return event.system.map((part) => part.text)
+    return { tool: event.tools[AdvisorPlugin.name], system: event.system.map((part) => part.text) }
   })
 
 const sessions = Layer.mock(Session.Service)({
@@ -70,7 +89,7 @@ const setup = (experimental: ConfigExperimental.Info | undefined, initial: Advis
           throw new Error("unused rpc.client")
         },
         {
-          // SAFETY: the advisor plugin registers one RPC, whose `set` handler these tests call.
+          // SAFETY: the advisor plugin registers one RPC, whose `get` and `set` handlers these tests call.
           register: ((_definition: unknown, handlers: NonNullable<typeof captured>) =>
             Effect.sync(() => {
               captured = handlers
@@ -109,39 +128,47 @@ const run = (registry: Tool.Interface, input: Record<string, unknown>) =>
   })
 
 describe("AdvisorPlugin", () => {
-  it.effect("is absent unless the advisor flag is on", () =>
+  it.effect("is absent unless the advisor flag is on, and the RPC reports it disabled", () =>
     Effect.gen(function* () {
-      expect(yield* names((yield* setup(undefined, full)).registry)).not.toContain(AdvisorPlugin.name)
+      const { registry, map } = yield* setup(undefined, full)
+      expect(yield* names(registry)).not.toContain(AdvisorPlugin.name)
+      const handlers = yield* rpc()
+      expect(yield* Effect.orDie(handlers.get({}))).toBeNull()
+      expect(yield* Effect.orDie(handlers.set(secure))).toBeNull()
+      expect(map.get("state")).toEqual(full)
       expect(
         yield* names((yield* setup(new ConfigExperimental.Info({ advisor: false }), full)).registry),
       ).not.toContain(AdvisorPlugin.name)
     }),
   )
 
-  it.effect("is absent while the advisor is off", () =>
+  it.effect("off removes the tool and adds nothing to the request", () =>
     Effect.gen(function* () {
-      expect(
-        yield* names((yield* setup(new ConfigExperimental.Info({ advisor: true }), { mode: "off" })).registry),
-      ).not.toContain(AdvisorPlugin.name)
+      const { registry } = yield* setup(new ConfigExperimental.Info({ advisor: true }), { mode: "off" })
+      expect(yield* request(registry)).toMatchObject({ system: [] })
+      expect((yield* request(registry)).tool).toBeUndefined()
     }),
   )
 
-  it.effect("full mode consults with the session transcript and no tools of its own to choose", () =>
+  it.effect("full mode asks only for a question and sends the transcript", () =>
     Effect.gen(function* () {
       calls.length = 0
       reply = () => Effect.succeed({ text: "Solid advice.", ...zeroUsage })
       const { registry } = yield* setup(new ConfigExperimental.Info({ advisor: true }), full)
-      const definition = yield* find(registry)
-      expect(definition?.inputSchema).toHaveProperty("required", ["question"])
-      expect(definition?.description).toContain("p/m")
-      const result = yield* run(registry, { question: "Which approach?" })
+      const shown = yield* request(registry)
+      expect(shown.tool?.description).toContain("p/m")
+      expect(shown.tool?.input).toHaveProperty("required", ["question"])
+      expect(shown.tool?.input).not.toHaveProperty("properties.context")
+      expect(shown.system).toHaveLength(1)
+      expect(shown.system[0]).toContain("It sees this conversation")
+      const result = yield* run(registry, { question: "Is <x> safe?" })
       expect(calls).toHaveLength(1)
       expect(calls[0]?.toolChoice).toBe("none")
       expect(calls[0]?.transcript).toBe(true)
-      const ref = calls[0]?.model
-      expect(String(ref?.providerID)).toBe("p")
-      expect(String(ref?.id)).toBe("m")
+      expect(String(calls[0]?.model?.providerID)).toBe("p")
+      expect(String(calls[0]?.model?.id)).toBe("m")
       expect(calls[0]?.prompt).toContain("The conversation above")
+      expect(calls[0]?.prompt).toContain("<question>\nIs &lt;x&gt; safe?\n</question>")
       expect(calls[0]?.prompt).not.toContain("${situation}")
       expect(result.status).toBe("completed")
       expect(result.content).toEqual([{ type: "text", text: "Solid advice." }])
@@ -149,28 +176,19 @@ describe("AdvisorPlugin", () => {
     }),
   )
 
-  it.effect("full mode forwards the executor's escaped question", () =>
-    Effect.gen(function* () {
-      calls.length = 0
-      reply = () => Effect.succeed({ text: "Solid advice.", ...zeroUsage })
-      const { registry } = yield* setup(new ConfigExperimental.Info({ advisor: true }), full)
-      yield* run(registry, { question: "Is <x> safe?" })
-      expect(calls).toHaveLength(1)
-      expect(calls[0]?.prompt).toContain("<question>\nIs &lt;x&gt; safe?\n</question>")
-      expect(calls[0]?.prompt).not.toContain("<context>")
-    }),
-  )
-
-  it.effect("secure mode sends only the escaped brief", () =>
+  it.effect("secure mode asks for a brief and sends only that", () =>
     Effect.gen(function* () {
       calls.length = 0
       reply = () => Effect.succeed({ text: "Solid advice.", ...zeroUsage })
       const { registry } = yield* setup(new ConfigExperimental.Info({ advisor: true }), secure)
-      const definition = yield* find(registry)
-      expect(definition?.inputSchema).toHaveProperty("required", ["question", "context"])
+      const shown = yield* request(registry)
+      expect(shown.tool?.input).toHaveProperty("required", ["question", "context"])
+      expect(shown.system[0]).toContain("(p/m)")
+      expect(shown.system[0]).toContain("never sees this conversation")
       yield* run(registry, { question: "Q <b>", context: "C & D" })
       expect(calls).toHaveLength(1)
       expect(calls[0]?.transcript).toBe(false)
+      expect(calls[0]?.prompt).toContain("You cannot see the agent's conversation")
       expect(calls[0]?.prompt).toContain("Q &lt;b&gt;")
       expect(calls[0]?.prompt).toContain("C &amp; D")
     }),
@@ -204,44 +222,33 @@ describe("AdvisorPlugin", () => {
     }),
   )
 
-  it.effect("switches mode through the RPC and persists it", () =>
+  it.effect("a change saved anywhere applies to the next request and call", () =>
     Effect.gen(function* () {
-      const { registry, map } = yield* setup(new ConfigExperimental.Info({ advisor: true }), { mode: "off" })
-      const next: Advisor.State = { mode: "secure", model: { providerID: "p", id: "m" } }
-      const handler = captured
-      if (!handler) return yield* Effect.die("rpc.set was not captured")
-      const saved = yield* Effect.orDie(handler.set(next))
-      expect(saved).toEqual(next)
-      const definition = yield* find(registry)
-      expect(definition?.inputSchema).toHaveProperty("required", ["question", "context"])
-      expect(map.get("state")).toEqual(next)
+      calls.length = 0
+      reply = () => Effect.succeed({ text: "Solid advice.", ...zeroUsage })
+      const { registry, map } = yield* setup(new ConfigExperimental.Info({ advisor: true }), full)
+      // Another Location writes the shared storage; this copy of the plugin never sees its `set`.
+      map.set("state", secure)
+      expect((yield* request(registry)).tool?.input).toHaveProperty("required", ["question", "context"])
+      yield* run(registry, { question: "Q", context: "C" })
+      expect(calls[0]?.transcript).toBe(false)
+      map.set("state", { mode: "off" })
+      expect(yield* request(registry)).toMatchObject({ system: [] })
+      expect((yield* request(registry)).tool).toBeUndefined()
+      const result = yield* run(registry, { question: "Q" })
+      expect(result.status).toBe("error")
+      expect(result.error?.message).toBe("The advisor is off.")
+      expect(calls).toHaveLength(1)
     }),
   )
 
-  it.effect("turning the advisor off through the RPC removes the tool", () =>
+  it.effect("the RPC saves the setting and reads it back", () =>
     Effect.gen(function* () {
-      const { registry, map } = yield* setup(new ConfigExperimental.Info({ advisor: true }), full)
-      expect(yield* names(registry)).toContain(AdvisorPlugin.name)
-      const handler = captured
-      if (!handler) return yield* Effect.die("rpc.set was not captured")
-      yield* Effect.orDie(handler.set({ mode: "off" }))
-      expect(yield* names(registry)).not.toContain(AdvisorPlugin.name)
-      expect(map.get("state")).toEqual({ mode: "off" })
-    }),
-  )
-  it.effect("tells the model about the advisor only while the tool is in the request", () =>
-    Effect.gen(function* () {
-      yield* setup(new ConfigExperimental.Info({ advisor: true }), secure)
-      const system = yield* systemFor({ [AdvisorPlugin.name]: {} })
-      expect(system).toHaveLength(1)
-      expect(system[0]).toContain("# Advisor")
-      expect(system[0]).toContain("(p/m)")
-      expect(system[0]).toContain("never sees this conversation")
-      expect(yield* systemFor({})).toEqual([])
-      const handler = captured
-      if (!handler) return yield* Effect.die("rpc.set was not captured")
-      yield* Effect.orDie(handler.set({ mode: "off" }))
-      expect(yield* systemFor({ [AdvisorPlugin.name]: {} })).toEqual([])
+      const { map } = yield* setup(new ConfigExperimental.Info({ advisor: true }), { mode: "off" })
+      const handlers = yield* rpc()
+      expect(yield* Effect.orDie(handlers.set(secure))).toEqual(secure)
+      expect(map.get("state")).toEqual(secure)
+      expect(yield* Effect.orDie(handlers.get({}))).toEqual(secure)
     }),
   )
 })

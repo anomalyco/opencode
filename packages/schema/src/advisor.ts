@@ -13,14 +13,18 @@ export const State = Schema.Union([
 export type State = typeof State.Type
 
 /**
- * The advisor plugin's RPC: one setting for the whole server, kept in plugin storage so it survives restarts. Clients
- * read it with `get`, change it with `set`, and follow `changed`, which the plugin publishes on every `set`.
+ * The advisor plugin's RPC: one setting for the whole server, kept in plugin storage so it survives restarts and is
+ * shared by every Location. Clients read it with `get`, change it with `set`, and follow `changed`, which the plugin
+ * publishes on every `set`. Both answer `null` while the `advisor` flag is off, so clients hide the feature.
  */
 export const Definition = Rpc.define({
   id: "opencode.advisor",
   methods: {
-    get: { input: Schema.toStandardSchemaV1(Schema.Struct({})), output: Schema.toStandardSchemaV1(State) },
-    set: { input: Schema.toStandardSchemaV1(State), output: Schema.toStandardSchemaV1(State) },
+    get: {
+      input: Schema.toStandardSchemaV1(Schema.Struct({})),
+      output: Schema.toStandardSchemaV1(Schema.NullOr(State)),
+    },
+    set: { input: Schema.toStandardSchemaV1(State), output: Schema.toStandardSchemaV1(Schema.NullOr(State)) },
   },
   events: { changed: { schema: Schema.toStandardSchemaV1(State) } },
 })
