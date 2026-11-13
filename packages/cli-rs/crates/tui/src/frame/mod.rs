@@ -236,7 +236,12 @@ pub fn refresh(tui: &Tui) {
     tui.app.request_redraw();
 }
 
-/// Starts the pulses' ticks after this frame, for a pulse that began to move in a paint.
+/// Starts the tabs' ticks after this frame, for a pulse that began to move or a spinner that showed in a paint.
+///
+/// OpenTUI's event loop computes its poll deadline before it paints (`App::event_loop`), so the first tick, armed
+/// by a task deferred from a paint, waits for the loop's next wake-up; the store's next batch usually comes right
+/// after. Later ticks re-arm from their timer callbacks, which run before the deadline. OpenTUI is to recompute the
+/// deadline after it paints (native-hardening `fixes/oc-rust-animation-lag.md`, "OpenTUI finding").
 pub(crate) fn wake(tui: &Tui) {
     if !tui.frame.ticking.get() {
         tui.app.defer(bind!(tui.weak(), |tui, _| tick(&tui)));
@@ -254,7 +259,8 @@ pub(crate) fn wake_markers(tui: &Tui) {
     if tui.frame.markers.replace(true) {
         return;
     }
-    // Deferred like `wake`: a timer set while painting would wait for the loop's next wake-up.
+    // Deferred from a paint as `wake` is, and late the same way. Each step is armed by the paint before it, not by
+    // a timer, so every step waits for a wake-up until OpenTUI recomputes its deadline after it paints.
     tui.app.defer(bind!(tui.weak(), |tui, _| {
         tui.app.set_timeout(
             std::time::Duration::from_millis(16),
@@ -266,7 +272,9 @@ pub(crate) fn wake_markers(tui: &Tui) {
     }));
 }
 
-/// Runs the pulses at 20 fps while any moves.
+/// Runs the pulses at 20 fps while any moves, else repaints at each spinner step while the compact rail shows a
+/// running tab, which has no pulse: TS's `TabIndicator` spinner keeps its own 80 ms interval. Stops when neither
+/// needs frames.
 fn tick(tui: &Tui) {
     let frame = &tui.frame;
     let animations = opencode_ui::motion::enabled(tui.config().info.animations);
@@ -279,16 +287,29 @@ fn tick(tui: &Tui) {
     }
     strip::set_animations(&frame.strip, animations);
     rail::set_animations(&frame.rail, animations);
-    if frame.ticking.get() || !(strip::animating(&frame.strip) || rail::animating(&frame.rail)) {
+    let pulses = strip::animating(&frame.strip) || rail::animating(&frame.rail);
+    if frame.ticking.get() || !(pulses || rail::spinning(&frame.rail)) {
         return;
     }
+    // The next spinner step counts from the tabs' epoch, as the glyph does.
+    let delay = if pulses {
+        crate::tabs::pulse::FRAME
+    } else {
+        let step = opencode_ui::motion::SPINNER_INTERVAL;
+        let elapsed = tui.app.now().saturating_duration_since(tui.tabs.epoch());
+        step - Duration::from_nanos((elapsed.as_nanos() % step.as_nanos()) as u64)
+    };
     frame.ticking.set(true);
     tui.app.set_timeout(
-        crate::tabs::pulse::FRAME,
+        delay,
         bind!(tui, |tui, _| {
             tui.frame.ticking.set(false);
-            strip::tick(&tui.frame.strip, crate::tabs::pulse::FRAME);
-            rail::tick(&tui.frame.rail, crate::tabs::pulse::FRAME);
+            if pulses {
+                strip::tick(&tui.frame.strip, crate::tabs::pulse::FRAME);
+                rail::tick(&tui.frame.rail, crate::tabs::pulse::FRAME);
+            } else {
+                tui.app.request_redraw();
+            }
             tick(&tui);
         }),
     );
