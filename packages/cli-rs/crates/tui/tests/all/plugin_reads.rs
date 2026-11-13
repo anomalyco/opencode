@@ -1,6 +1,6 @@
 //! The small reads and verbs of ABI 1.6 (P0b) on the real TUI, each on both paths: in process and through the C
-//! ABI's byte shims (`Loopback`). A test plugin shows what it reads in a sized `home.footer` claim and toasts what each
-//! verb answers. The loader's tests compare the two paths on a test host
+//! ABI's byte shims (`Loopback`). A test plugin shows what it reads in a sized `app` claim, under every route, and
+//! toasts what each verb answers. The loader's tests compare the two paths on a test host
 //! (`the_1_6_reads_and_verbs_are_the_same_in_process_and_through_the_library`).
 
 use crate::support::{self, Harness};
@@ -15,13 +15,17 @@ use opencode_plugin::abi;
 use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
-/// Commands of one verb each, which toast what the verb answered, and a sized home claim that shows what it reads.
+/// Commands of one verb each, which toast what the verb answered, and a sized `app` claim that shows what it reads.
 fn reader(setup: &mut abi::Setup) -> Result<(), String> {
     let command = |name: &str| abi::Command { name: name.to_owned(), ..abi::Command::default() };
     let toast = |host: &dyn abi::Host, text: String| host.toast(abi::Toast::new(abi::Variant::Info, text));
     setup.command(command("p0b.open"), move |host, input| {
         let opened = host.edit_tab(abi::TabEdit::Open { session: input.unwrap_or_default().to_owned() });
         toast(host, format!("p0b open {opened}"));
+    });
+    setup.command(command("p0b.focus"), move |host, input| {
+        let focused = host.edit_tab(abi::TabEdit::Focus { session: input.unwrap_or_default().to_owned() });
+        toast(host, format!("p0b focus {focused}"));
     });
     setup.command(command("p0b.move"), move |host, input| {
         let moved = host.edit_tab(abi::TabEdit::Move { session: input.unwrap_or_default().to_owned(), index: 0 });
@@ -86,14 +90,20 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
             }
         }
     });
-    setup.slot(abi::Placement::append("home.footer"), move |read, input, _| {
-        let tabs: Vec<String> = read.tabs().into_iter().map(|tab| tab.session_id).collect();
+    setup.slot(abi::Placement::append("app"), move |read, input, _| {
+        let tabs: Vec<String> = read
+            .tabs()
+            .into_iter()
+            .map(|tab| format!("{}{}", tab.session_id, if tab.active { "*" } else { "" }))
+            .collect();
         let reachable = read.keymap_commands().iter().any(|command| command.id == "p0b.open");
         let pending: Vec<String> = read.keymap_pending().into_iter().map(|key| key.key).collect();
-        let continues = read.keymap_active().iter().filter(|key| key.continues).count();
+        let active = read.keymap_active();
+        let continues = active.iter().filter(|key| key.continues).count();
+        let described = active.iter().filter(|key| key.description.is_some()).count();
         let installed = read.themes().iter().any(|name| name == "p0b-theme");
         let text = format!(
-            "p0b w{} {} [{}] {} {reachable} {} {} d:{} x:{} c{} i:{installed}",
+            "p0b w{} {} [{}] {} {reachable} {} {} d:{} x:{} c{} ds{} i:{installed}",
             input.width,
             read.theme().unwrap_or_default(),
             tabs.join(","),
@@ -103,10 +113,11 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
             deltas.borrow(),
             exited.borrow(),
             continues.min(1),
+            described.min(1),
         );
         abi::Render::Show(abi::Node::text([abi::Span::new(text).link("https://opencode.ai/p0b")]))
     });
-    setup.sized(abi::Placement::append("home.footer"));
+    setup.sized(abi::Placement::append("app"));
     Ok(())
 }
 
@@ -162,13 +173,13 @@ fn a_claim_reads_its_width_the_theme_and_the_keymap() {
 }
 
 // Expected: the pending keys read as the TUI shows them, the active keys include one that continues a sequence (the
-// leader), and the claim renders again as the sequence starts and ends.
+// leader) and one with a description, and the claim renders again as the sequence starts and ends.
 #[test]
 fn a_claim_follows_the_pending_keys() {
     for loopback in [false, true] {
         let (h, _memory, _root) = home(loopback, 120, json!({}));
         h.wait_for("p0b w120 ");
-        h.wait_for(" c1");
+        h.wait_for(" c1 ds1 ");
         h.app.press("ctrl+x");
         h.wait_for("true ctrl+x 0");
         h.app.press("escape");
@@ -176,26 +187,32 @@ fn a_claim_follows_the_pending_keys() {
     }
 }
 
-// Expected (TS `ui.tabs`): with tabs on, `open` adds a tab without showing it, `move` reorders an open tab and refuses
-// one that is not open, and `close` closes a named tab and refuses with no tab on screen; the claim reads the tabs in
-// order after each change. With tabs off every verb is refused. On both paths.
+// Expected (TS `ui.tabs`): with tabs on, `close` with no tab on screen is refused, `open` adds a tab without showing
+// it, `move` reorders an open tab and refuses one that is not open, `focus` shows a tab, which reads as active, and
+// `close` closes a named tab; the claim reads the tabs in order after each change, also one the TUI itself makes. With
+// tabs off every verb is refused. On both paths.
 #[test]
 fn tabs_open_move_and_close_as_ts_does() {
     for loopback in [false, true] {
         let (h, _memory, _root) = home(loopback, 120, json!({ "tabs": { "enabled": true } }));
         h.wait_for("p0b w120 ");
+        h.tui.keymap.dispatch("p0b.close", None);
+        h.wait_for("p0b close false");
         h.tui.keymap.dispatch("p0b.open", Some("ses_a"));
         h.wait_for("p0b open true");
         h.wait_for("[ses_a]");
         assert!(matches!(h.tui.route(), Route::Home), "open showed the tab");
         h.tui.keymap.dispatch("p0b.open", Some("ses_b"));
         h.wait_for("[ses_a,ses_b]");
-        h.tui.keymap.dispatch("p0b.move", Some("ses_b"));
+        opencode_tui::tabs::reorder(&h.tui, "ses_b", 0);
         h.wait_for("[ses_b,ses_a]");
+        h.tui.keymap.dispatch("p0b.move", Some("ses_a"));
+        h.wait_for("[ses_a,ses_b]");
+        h.tui.keymap.dispatch("p0b.focus", Some("ses_b"));
+        h.wait_for("[ses_a,ses_b*]");
+        assert!(matches!(h.tui.route(), Route::Session { id } if id.0 == "ses_b"), "focus did not show the tab");
         h.tui.keymap.dispatch("p0b.close", Some("ses_b"));
-        h.wait_for("[ses_a]");
-        h.tui.keymap.dispatch("p0b.close", None);
-        h.wait_for("p0b close false");
+        h.wait_for("[ses_a*]");
         h.tui.keymap.dispatch("p0b.move", Some("ses_b"));
         h.wait_for("p0b move false");
 
@@ -246,7 +263,7 @@ fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
 }
 
 // Expected: the streaming deltas the store applies reach the plugin once a change batch, in order, which `on_event`
-// never gets. On both paths.
+// never gets; a sync with no delta calls nothing. On both paths.
 #[test]
 fn deltas_reach_the_plugin() {
     for loopback in [false, true] {
@@ -260,6 +277,9 @@ fn deltas_reach_the_plugin() {
             }));
         }
         h.wait_for("d:hello ");
+        opencode_tui::features::events::deltas(&h.tui);
+        h.app.wait_until(std::time::Duration::from_millis(50), || false);
+        assert!(h.app.text().contains("d:hello "), "loopback {loopback}: {}", h.app.text());
     }
 }
 
