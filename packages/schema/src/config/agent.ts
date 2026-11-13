@@ -8,8 +8,13 @@ import { ConfigProvider } from "./provider.js"
 
 export const Color = Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/u))
 
+export class Compaction extends Schema.Class<Compaction>("Config.Agent.Compaction")({
+  window: PositiveInt.pipe(optional),
+}) {}
+
 export class Info extends Schema.Class<Info>("Config.Agent")({
   model: ConfigModel.Selection.pipe(optional),
+  compaction: Compaction.pipe(optional),
   request: ConfigProvider.Request.pipe(optional),
   system: Schema.String.pipe(optional),
   description: Schema.String.pipe(optional),

@@ -16124,6 +16124,17 @@
               }
             ]
           },
+          "compaction": {
+            "type": "object",
+            "properties": {
+              "window": {
+                "type": "integer",
+                "maximum": 9007199254740991,
+                "exclusiveMinimum": 0
+              }
+            },
+            "additionalProperties": false
+          },
           "request": {
             "type": "object",
             "properties": {
@@ -16551,6 +16562,11 @@
                   }
                 },
                 "additionalProperties": false
+              },
+              "window": {
+                "type": "integer",
+                "maximum": 9007199254740991,
+                "exclusiveMinimum": 0
               },
               "buffer": {
                 "anyOf": [
@@ -21845,30 +21861,19 @@
         ]
       },
       "Provider.Compaction": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": ["summary"]
-              }
-            },
-            "required": ["type"],
-            "additionalProperties": false
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["summary", "native"]
           },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": ["native"]
-              }
-            },
-            "required": ["type"],
-            "additionalProperties": false
+          "window": {
+            "type": "integer",
+            "maximum": 9007199254740991,
+            "exclusiveMinimum": 0
           }
-        ]
+        },
+        "additionalProperties": false
       },
       "Provider.Compatibility": {
         "type": "object",
