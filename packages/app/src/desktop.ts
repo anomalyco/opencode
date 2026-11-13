@@ -21,3 +21,5 @@ export { createNamespaceStorage, type NamespaceStorage } from "./runtime/persist
 export { flushPersisted } from "./runtime/persistence/persist"
 
 export { usePluginServers } from "./runtime/plugin/servers"
+
+export { syncWhileBooting } from "./providers/catalog/providers"
