@@ -9,6 +9,7 @@ import {
 } from "@opencode/client"
 import type { Layout, Persisted, ServerRef, SessionRef, Storage, Toasts } from "@opencode/plugin/gui"
 import { createDispatch } from "./dispatch"
+import { persistentTerminal } from "./pty"
 import { defaultTitle, titleNumber } from "./title"
 import {
   initialState,
@@ -575,6 +576,7 @@ export function createTerminalModel(input: {
   }
 
   return {
+    pty: persistentTerminal,
     /** The server offers terminals. Servers that predate the capability count as offering them. */
     available,
     /** The session's terminals; the first load lists them from its server. */

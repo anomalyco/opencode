@@ -3,7 +3,7 @@ import { useTheme } from "@opencode/ui/theme/context"
 import { resolveThemeVariant } from "@opencode/ui/theme/resolve"
 import { resolveThemeVariantV2 } from "@opencode/ui/theme/v2/resolve"
 import type { HexColor, ResolvedV2Theme } from "@opencode/ui/theme/types"
-import { createPersistentPtyClient } from "@opencode/client/solid"
+import type { PtySocket } from "./pty"
 import type { FitAddon, Terminal as Term } from "ghostty-web"
 import { createMemo, createSignal, onCleanup, onMount, Show, untrack } from "solid-js"
 import { createKeyed, usePlugin } from "@opencode/plugin/gui"
@@ -59,7 +59,7 @@ type PaneHandles = {
   sizeTimer?: ReturnType<typeof setTimeout>
   focusTimer?: ReturnType<typeof setTimeout>
   connect?: AbortController
-  socket?: WebSocket
+  socket?: PtySocket
   fit?: FitAddon
   cleanups: VoidFunction[]
 }
@@ -160,8 +160,6 @@ export const Terminal = (props: TerminalProps) => {
   const theme = useTheme()
   let container!: HTMLDivElement
 
-  // Intentional mount-time capture: each surface attaches to one terminal.
-  const ptyID = props.ptyID
   const attachmentID = uuid()
   const handles: PaneHandles = { cleanups: [] }
   const [paneState, setPaneState] = createSignal<PaneState<Term>>(initialPaneState)
@@ -540,18 +538,13 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   async function connect(signal: AbortSignal) {
-    const server = props.server
-    const snapshot = await server.client.experimental.persistentPty.snapshot({ ptyID })
+    const pty = props.pty
+    const snapshot = await pty.snapshot()
 
     if (signal.aborted) return
     connection.restore({ size: snapshot.info.size, checkpoint: snapshot.checkpoint })
 
-    const socket = await createPersistentPtyClient(server.client, { url: server.url }).connect({
-      ptyID,
-      cursor: snapshot.info.output.tail,
-      attachmentID,
-      takeover: true,
-    })
+    const socket = await pty.connect(snapshot.info.output.tail, attachmentID)
 
     if (signal.aborted) {
       socket.close(1000)

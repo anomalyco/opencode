@@ -7,6 +7,7 @@ import type { Context, ServerRef } from "@opencode/plugin/gui"
 import en from "./i18n/en"
 import type { TerminalModel } from "./model"
 import { Terminal } from "./terminal"
+import { persistentTerminal } from "./pty"
 
 /**
  * One terminal pane attached to `ptyID` on the server at `url`, with the real ghostty-web and connection. Mounted by
@@ -56,8 +57,7 @@ export function mountTerminal(input: { url: string; ptyID: string }) {
         <PluginContext.Provider value={plugin}>
           <div data-failures={failures()} style={{ position: "relative", width: "100%", height: "100%" }}>
             <Terminal
-              ptyID={input.ptyID}
-              server={ref}
+              pty={persistentTerminal(ref, input.ptyID)}
               ghostty={ghostty}
               autoFocus
               onFailure={() => setFailures((value) => value + 1)}

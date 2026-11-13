@@ -163,27 +163,31 @@ export default function TerminalPanel(props: {
 
           return (
             <Show when={surfaceAt(surfaceState(), mount)}>
-              {(surface) => (
-                <div
-                  id={`terminal-wrapper-${surface().id}`}
-                  class="absolute inset-0"
-                  // Mod+W closes the selected terminal, so the one in use is selected when two panes show terminals.
-                  onFocusIn={() => terminal().select(surface().id)}
-                  onPointerDown={() => terminal().select(surface().id)}
-                  classList={{ hidden: !present() || !surfaceShown(surfaceState(), surface()) }}
-                >
-                  <Terminal
-                    ptyID={surface().id}
-                    server={session.server()}
-                    ghostty={props.model.ghostty}
-                    quote={quote}
-                    autoFocus={terminal().focusRequested(surface().id)}
-                    onAutoFocus={() => terminal().consumeFocus(surface().id)}
-                    onFailure={() => dispatch({ type: "surface.failed", mount })}
-                    class="!px-[14px]"
-                  />
-                </div>
-              )}
+              {(surface) => {
+                // Reconnect this mount to its original terminal, using the session's current server.
+                const ptyID = surface().id
+
+                return (
+                  <div
+                    id={`terminal-wrapper-${ptyID}`}
+                    class="absolute inset-0"
+                    // Mod+W closes the selected terminal, so the one in use is selected when two panes show terminals.
+                    onFocusIn={() => terminal().select(ptyID)}
+                    onPointerDown={() => terminal().select(ptyID)}
+                    classList={{ hidden: !present() || !surfaceShown(surfaceState(), surface()) }}
+                  >
+                    <Terminal
+                      pty={props.model.pty(session.server(), ptyID)}
+                      ghostty={props.model.ghostty}
+                      quote={quote}
+                      autoFocus={terminal().focusRequested(ptyID)}
+                      onAutoFocus={() => terminal().consumeFocus(ptyID)}
+                      onFailure={() => dispatch({ type: "surface.failed", mount })}
+                      class="!px-[14px]"
+                    />
+                  </div>
+                )
+              }}
             </Show>
           )
         }}

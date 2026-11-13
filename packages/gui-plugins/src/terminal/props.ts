@@ -1,10 +1,9 @@
-import type { ServerRef } from "@opencode/plugin/gui"
+import type { Pty } from "./pty"
 import type { TerminalModel } from "./model"
 import type { TerminalQuoteTarget } from "./quote"
 
 export type TerminalProps = {
-  ptyID: string
-  server: ServerRef
+  pty: Pty
   ghostty: TerminalModel["ghostty"]
   quote?: TerminalQuoteTarget
   autoFocus?: boolean

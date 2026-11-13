@@ -1,10 +1,10 @@
 import { describe, expect, jest, test } from "bun:test"
-import { createStore, produce } from "solid-js/store"
 import { ClientError, type PersistentPtyInfo } from "@opencode/client"
 import type { Layout, ServerRef, SessionRef, Storage, ToastOptions } from "@opencode/plugin/gui"
 import { PtyFeatureUnsupportedError, PtyNotFoundError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { TERMINAL_REQUEST_TIMEOUT_MS } from "./machine"
 import { createTerminalModel } from "./model"
+import { info, terminalStorage } from "./model.fixture"
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 
@@ -12,21 +12,6 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 const ticks = async () => {
   for (const _ of Array.from({ length: 20 })) await Promise.resolve()
 }
-
-const info = (id: string, title: string, sessionID = "ses_1"): PersistentPtyInfo => ({
-  id,
-  title,
-  userTitle: null,
-  command: "/bin/zsh",
-  args: [],
-  cwd: "/repo",
-  status: "running",
-  pid: 1,
-  sessionID,
-  foregroundProcess: null,
-  size: { cols: 80, rows: 24 },
-  output: { head: 0, tail: 0 },
-})
 
 // A server with persistent terminals: its own terminal list per session, and an event stream the test drives.
 function fakeServer(options: { capabilities?: { persistentPty?: boolean } } = {}) {
@@ -158,27 +143,6 @@ function setup(server: ReturnType<typeof fakeServer>) {
   const toasts: ToastOptions[] = []
   const removed: { key: string; options: Parameters<Storage["remove"]>[1] }[] = []
 
-  const storage = {
-    memory<T extends object>(_key: string, options: { initial: T }) {
-      const [value, set] = createStore(options.initial)
-
-      return [value, (mutate: (draft: T) => void) => set(produce(mutate))] as const
-    },
-    store<T extends object>(_key: string, options: { initial: T }) {
-      const [value, set] = createStore({ value: options.initial })
-
-      return {
-        get value() {
-          return value.value
-        },
-        ready: () => true,
-        set: (next: T) => set("value", next),
-        update: () => undefined,
-      }
-    },
-    remove: (key: string, options: Parameters<Storage["remove"]>[1]) => void removed.push({ key, options }),
-  }
-
   const layout: Pick<Layout, "open" | "stored"> = {
     stored: (session) => stored.get(session.key) ?? [],
     open(key, session, options) {
@@ -188,9 +152,7 @@ function setup(server: ReturnType<typeof fakeServer>) {
   }
 
   const model = createTerminalModel({
-    // SAFETY: the model opens only `memory`, `store` and `remove`, which these stand-ins implement.
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
-    storage: storage as unknown as Storage,
+    storage: terminalStorage((key, options) => void removed.push({ key, options })),
     layout,
     toast: { show: (options) => (toasts.push(options), { dismiss: () => undefined }) },
     t: (key) => key,
