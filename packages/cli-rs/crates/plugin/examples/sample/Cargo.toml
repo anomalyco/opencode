@@ -26,6 +26,7 @@ abi-1-0 = []
 minor-newer = []
 major-2 = []
 requires-future = []
+requires-1-5 = []
 # A 1.3 plugin (`src/v1_3.rs`) on the frozen 1.3 ABI crate, for the version tests.
 abi-1-3 = ["dep:abi-1-3"]
 # The same 1.3 plugin exported with the 1.0 table, without `describe`: the old wire behind the shortest table.
