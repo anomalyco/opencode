@@ -89,10 +89,9 @@ export function createBrowserPane(input: {
   const disposals = new WeakMap<BrowserPage, Promise<void>>()
   // Keep long-lived RPC requests off Chromium's shared HTTP connection pool.
   const runtime = ManagedRuntime.make(NodeHttpClient.layerNodeHttp)
-  // Each page's download handler by its web contents ID, which the one listener of its session hands downloads to.
-  const downloads = new Map<number, (item: Electron.DownloadItem) => void>()
-  // Every page of the profile shares one session, and so do its extensions' pages, before any tab exists.
-  const unguardProfile = guardSession(input.profile.session, downloads)
+  // Each page's download handler by its web contents ID. The profile guards its own session and owns this map; a remote
+  // server's partition gets its own guard at registration, handing downloads to the same map.
+  const downloads = input.profile.downloads
 
   return {
     async register(window: number, binding: string, target: Target) {
@@ -389,7 +388,6 @@ export function createBrowserPane(input: {
      */
     async dispose() {
       dispatch({ type: "disposed" })
-      unguardProfile()
       await Promise.all(releasing)
       await runtime.dispose()
     },

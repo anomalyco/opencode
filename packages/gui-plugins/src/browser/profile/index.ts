@@ -4,6 +4,7 @@ import electron, { app, type Session } from "electron"
 import { Schema } from "effect"
 import type { Log, Storage } from "@opencode/plugin/gui/main"
 import { fileURLWithin } from "../policy"
+import { guardSession } from "../session-guard"
 import { extensionAccess, extensionCompatibility } from "./compatibility"
 import { browserUserAgent, cookieDetails, parseCookieFile, PROBE_COOKIE, type CookieRead } from "./cookie"
 import { createExtensionApis } from "./extension-api"
@@ -58,8 +59,10 @@ export async function createBrowserProfile(input: {
 }) {
   const session = electron.session.fromPartition(PARTITION)
   session.setUserAgent(browserUserAgent(session.getUserAgent()))
-  // SEAM(guardSession): the session's one set of permission handlers and its one `will-download` listener belong
-  // here, before any extension loads, so the profile is guarded before the first pane exists.
+  // Each tab's download handler by its web contents ID; the pane fills it. Guarded before any extension loads or pane
+  // exists, so no page of the profile ever has Electron's default handlers, which grant every permission.
+  const downloads = new Map<number, (item: Electron.DownloadItem) => void>()
+  const unguard = guardSession(session, downloads)
   const persistent = cookiesPersist(session)
   let settling: ReturnType<typeof setTimeout> | undefined
 
@@ -157,6 +160,7 @@ export async function createBrowserProfile(input: {
   // What creation set up before its first await. A step that fails releases it at once, so the next request, which
   // tries again, starts clean instead of stacking another cookie listener and file guard.
   const release = () => {
+    unguard()
     session.cookies.off("changed", cookiesChanged)
     clearTimeout(settling)
     stopFileGuard()
@@ -322,6 +326,8 @@ export async function createBrowserProfile(input: {
   return {
     session,
     partition: PARTITION,
+    /** Each tab's download handler by its web contents ID, which the profile's one `will-download` listener calls. */
+    downloads,
     /** Lets one page load file: subresources inside `fileRoots`; returns the release. */
     allowFiles(webContentsId: number, fileRoots: () => readonly string[]) {
       roots.set(webContentsId, fileRoots)
@@ -373,7 +379,10 @@ export async function createBrowserProfile(input: {
     },
     async importFile(file: string): Promise<ImportResult> {
       // A cookie export is a few megabytes at most; anything far larger is not one.
-      const size = await stat(file).then((info) => (info.isFile() ? info.size : Infinity), () => Infinity)
+      const size = await stat(file).then(
+        (info) => (info.isFile() ? info.size : Infinity),
+        () => Infinity,
+      )
       const text = size <= 32 * 1024 * 1024 ? await readFile(file, "utf8").catch(() => undefined) : undefined
 
       if (text === undefined) return { type: "failed", reason: "read" }
@@ -438,8 +447,7 @@ export async function createBrowserProfile(input: {
         return replace(path.join(directory, request.id), "browser", request.force, (staging) =>
           cp(found.directory, staging, {
             recursive: true,
-            filter: async (item) =>
-              path.basename(item) !== "_metadata" && !(await lstat(item)).isSymbolicLink(),
+            filter: async (item) => path.basename(item) !== "_metadata" && !(await lstat(item)).isSymbolicLink(),
           }).then(() => true),
         )
       }
