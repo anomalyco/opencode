@@ -62,12 +62,6 @@ impl Footer {
         {
             spans.push(Span::styled(format!(" · {value:.1} tok/s"), muted));
         }
-        if cx.tps
-            && width >= 36
-            && let Some(value) = time_to_first_token(cx.messages, index, cx.legacy).filter(|value| *value > 0.0)
-        {
-            spans.push(Span::styled(format!(" · {} ttft", self::duration(value)), muted));
-        }
         if interrupted {
             spans.push(Span::styled(" · interrupted", muted));
         }
@@ -432,13 +426,6 @@ pub fn tokens_per_second(messages: &[SessionMessageInfo], index: Option<usize>, 
     Some(output / (total / 1000.0))
 }
 
-/// `SessionTurn.timeToFirstToken`: milliseconds from the dispatch of the turn's first step that
-/// recorded a first token to that token, or none until a step records one.
-pub fn time_to_first_token(messages: &[SessionMessageInfo], index: Option<usize>, legacy: bool) -> Option<f64> {
-    let step = turn_steps(messages, index, legacy).into_iter().find(|step| step.time.first_token.is_some())?;
-    Some((step.time.first_token? - step.time.created).max(0.0))
-}
-
 fn turn_steps(messages: &[SessionMessageInfo], index: Option<usize>, legacy: bool) -> Vec<&SessionMessageAssistant> {
     let end = index.map_or(messages.len(), |index| index + 1);
     let start = input_index(messages, end, legacy).map_or(0, |input| input + 1);
@@ -529,7 +516,6 @@ mod tests {
             step("a2", [Some(24_000.0), Some(25_000.0), Some(28_000.0), Some(31_000.0)], 30.0, 10.0),
         ];
         assert_eq!(tokens_per_second(&messages, Some(2), true), Some(13.0));
-        assert_eq!(time_to_first_token(&messages, Some(2), true), Some(2_000.0));
 
         let messages = [
             input(1_000.0),
@@ -537,7 +523,6 @@ mod tests {
             step("a2", [Some(24_000.0), Some(25_000.0), Some(28_000.0), Some(31_000.0)], 30.0, 10.0),
         ];
         assert_eq!(tokens_per_second(&messages, Some(2), true), Some(65.0 / 7.0));
-        assert_eq!(time_to_first_token(&messages, Some(2), true), Some(1_000.0));
 
         let messages = [
             input(1_000.0),
@@ -545,7 +530,6 @@ mod tests {
             step("a2", [Some(24_000.0), None, Some(30_000.0), Some(31_000.0)], 30.0, 10.0),
         ];
         assert_eq!(tokens_per_second(&messages, Some(2), true), Some(6.5));
-        assert_eq!(time_to_first_token(&messages, Some(2), true), None);
     }
 
     #[test]
