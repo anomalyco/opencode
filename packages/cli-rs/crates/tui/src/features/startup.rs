@@ -34,6 +34,8 @@ pub struct Args {
     pub auto: bool,
     /// The terminal's variables, uploaded to each session on a local server (TS `environment`, G13).
     pub environment: Option<IndexMap<String, String>>,
+    /// What the parent tells a client it starts after a plugin crash (P4c).
+    pub contain: crate::plugins::contain::Contain,
 }
 
 impl Default for Args {
@@ -50,6 +52,7 @@ impl Default for Args {
             managed: false,
             auto: false,
             environment: None,
+            contain: Default::default(),
         }
     }
 }
