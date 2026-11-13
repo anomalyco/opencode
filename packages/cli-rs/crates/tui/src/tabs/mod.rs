@@ -708,8 +708,6 @@ fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
     let revision = tui.tabs.writes.get() + 1;
     tui.tabs.writes.set(revision);
     changed(tui);
-    // The plugins read the tabs (`ui.tabs.list`).
-    crate::plugins::host::local_changed(tui);
     let Some(storage) = tui.storage() else { return };
     if let Ok(mut pending) = tui.tabs.pending.lock() {
         pending.push((revision, Arc::new(apply)));
@@ -745,6 +743,10 @@ fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
 fn changed(tui: &Tui) {
     crate::frame::refresh(tui);
     crate::features::attention::program_status::sync(tui);
+    // The plugins read the tabs (`ui.tabs.list`), also after another client's write; and a tab opened without being
+    // shown needs its session's title and status (TS `openTabSessions`).
+    crate::plugins::host::local_changed(tui);
+    prefetch(tui, &Changes::default());
 }
 
 /// `status` over a store snapshot.

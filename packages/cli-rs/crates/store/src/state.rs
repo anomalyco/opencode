@@ -436,7 +436,7 @@ impl Data {
 
     /// Receives the events of each type a [`Listening`] wants, for the views that handle one themselves (`tui.*`,
     /// `session.deleted`) and the plugins' `on_event`, after the store applied their batch. Streaming deltas are never
-    /// sent ([`Data::take_deltas`] has them). A receiver that falls behind skips the oldest.
+    /// sent ([`DeltaListening::take`] has them). A receiver that falls behind skips the oldest.
     pub fn signals(&self) -> broadcast::Receiver<Arc<opencode_api::generated::V2Event>> {
         self.inner.signals.subscribe()
     }
