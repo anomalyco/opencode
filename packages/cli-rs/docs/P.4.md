@@ -6,7 +6,7 @@ they load on Linux (`.so`), macOS (`.dylib`) and Windows (`.dll`). There is no s
 chose to run on their own machine. No cargo feature gates it.
 
 To write one, start with the quick start in [`crates/plugin-abi/README.md`](../crates/plugin-abi/README.md). It also
-lists which old binaries load and what changed from the 1.3 SDK. This document is the reference.
+lists which old binaries load and what changed from the 1.3 and 1.4 SDKs. This document is the reference.
 
 ## The ABI
 
@@ -32,19 +32,25 @@ implements the same structs and JSON.
 Versions only grow by appending:
 
 - A new entry goes at the end of a table and is optional. A reader treats entries past the other side's `size` as
-  absent, so a plugin built against ABI 1.0 loads on a 1.4 host.
+  absent, so a plugin built against ABI 1.0 loads on a 1.5 host.
 - JSON payloads only gain optional fields; readers ignore fields they do not know.
 - A plugin built against a newer minor version loads on an older host and uses what the host offers: the host
   answers a request it does not know with an error. A plugin that cannot work without a newer host sets
   `requires_minor`, and the host refuses it: "plugin needs host ABI 1.4 or newer, this opencode-native has 1.3; update
   opencode-native". `export_plugin!` sets `requires_minor` to 4, because only a 1.4 host sends the render requests the
-  SDK answers.
+  SDK answers. So a 1.5 plugin loads on a 1.4 host, which answers the 1.5 requests with an error: there `composer()`
+  reads `None`, and an `edit_composer`, a `Confirm` and an `Alert` do nothing. A 1.4 host draws a 1.5 box without its
+  1.5 properties, which it does not read.
 - 1.4 renders are opt-in on the wire. `Setup` sets `Manifest::render` to 2 (`RENDER`), and a 1.4 claim sets
   `SlotClaim::render`. The host sends `RenderFence`, `Render` and `RenderRoute` only to such a plugin and claim; every
   other plugin, and a `slot_lines` claim or `route_lines` route, gets the 1.3 requests `Fence`, `Slot` and `Route`,
   and answers with rows.
+- 1.5 adds data, not tables: the dialogs `Confirm` and `Alert`, the box properties (`Border`, `padding_sides`, `wrap`,
+  `overflow`, and `Layout`'s `height`, `min_height`, `max_height` and `margin`), and the composer's `HostRequest::Composer`
+  and `HostRequest::ComposerEdit`. Each new field is left out of the JSON while unset, so 1.4 JSON reads as before and
+  a 1.4 plugin's requests are unchanged.
 - Only a deliberate major-version break refuses a plugin. The host reads `major` before anything else, and the
-  plugin manager shows why: "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.4);
+  plugin manager shows why: "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.5);
   rebuild the plugin against opencode-plugin-abi 1".
 
 A Rust-ABI `dylib` was rejected because it breaks with every compiler or crate version.
@@ -70,6 +76,7 @@ registers the P.1 surface as data, because widgets and closures cannot cross the
 | a fence's cleanup | `on_fence_gone(run(key))` |
 | `on_dispose` | `on_dispose(run(&dyn Host))` |
 | `api.themeMode` | `Read::theme_mode()` |
+| the composer (`renderer.currentFocusedEditor`, the composer's `ref`) | `Read::composer()` and `Host::edit_composer(ComposerEdit)` (1.5) |
 
 `Setup::options()` holds the `options` of the plugin's `plugins` entry as JSON text. `Setup::host()` is the host
 while setup runs; no callback can keep it (a compile error).
@@ -83,8 +90,9 @@ sideways on a horizontal wheel, as LaTeX's formulas do; with `drag` it scrolls u
 horizontal wheel, as Mermaid's diagrams do.
 
 A slot render returns `Render::{Keep, Hide, Show(Node)}`. A `Node` is a `Box` (a column or a row, with gap, padding,
-justification, alignment and background) or a `Text` of spans (with wrapping, truncation and a hover color), each
-with a `Layout` (width, grow, shrink, minimum width 0) and an optional `Click`: on the press or the release of the
+justification, alignment and background, and since 1.5 a `Border`, padding per side, wrapping children and overflow)
+or a `Text` of spans (with wrapping, truncation and a hover color), each with a `Layout` (width, grow, shrink, minimum
+width 0, and since 1.5 a height with a minimum and a maximum, and margins) and an optional `Click`: on the press or the release of the
 left button, the host shows the hand and, once the event is handled, runs the click's `Action::Command { name, input
 }`, a command of the plugin's or of the host's (such as `mcp.list` with a server's name, or the hidden
 `workspace.directory` with a directory). `Markdown { text }` draws Markdown with the active fence renderers, and
@@ -118,7 +126,8 @@ Every call into a plugin runs on the UI thread, so a callback must return quickl
   `Changed::locations`. The reads are `session`, `family`, `messages`, `models`, `mcp_servers`, `integrations` and
   `vcs` per location, `model`, `limits`, `providers`, `info` (the version, the terminal size, where the TUI works,
   how many plugins failed), `route`, `interactive` (whether the session pane owns the input, TS `useInteractivity`),
-  `shortcut(name)` (a command's first key), `dialog_open(key)`, `storage_get`, `color` and `theme_mode`. Over the ABI
+  `shortcut(name)` (a command's first key), `dialog_open(key)`, `composer` (1.5), `storage_get`, `color` and
+  `theme_mode`. Over the ABI
   each read is one `HostRequest`, and `messages` hands the visitor the plugin's own copy.
 - Setup, a command, and the handlers of events, replies, mounts, route mounts, wakes and disposal get a `Host`: the
   reads, and effects. Effects wait until the outermost plugin callback returns and then run in the order they were
@@ -129,11 +138,21 @@ Every call into a plugin runs on the UI thread, so a callback must return quickl
   session's family is on screen (a toast without a title takes the session's); `attention(Attention { title, message,
   notify, sound })`, a notification and a sound as the user's `attention` settings allow; `open_route(name)` and
   `navigate(Route)` (home, a session, or a plugin's route); `dialog(Dialog)`; `copy(text, then)`, which copies and
-  runs `then` once copied; and `fetch`.
+  runs `then` once copied; `edit_composer(ComposerEdit)` (1.5); and `fetch`.
 - A `Dialog` is a `Prompt`, whose text goes to its action as the input; a `Select { title, placeholder, options,
   current, action }` (TS `dialog.select`), whose pick closes it and goes to its action as the input; a `Panel { key,
   size, title, subtitle, body, actions, binds, bleed, centered }`, which changes in place while its key is open and
-  keeps where its body is scrolled; or `Close { key }`, which closes that panel.
+  keeps where its body is scrolled; or `Close { key }`, which closes that panel. Since 1.5 it may also be a `Confirm
+  { title, message, label, action }` (TS `dialog.confirm`): `Confirm` runs the action with the input `true`, `Cancel`
+  and escape with `false`, and a dialog that replaces it runs nothing, as TS resolves `true`, `false` or `undefined`;
+  or an `Alert { title, message, action }` (TS `dialog.alert`), whose action runs once after it closes, by enter,
+  escape, or another dialog, as TS resolves its promise in each case.
+- The composer (1.5): `composer()` reads the composer on screen, on home or in a session: its text as it shows it (a
+  compact paste is its label), the cursor as a byte offset into that text, and whether it has focus; `None` without a
+  composer. `edit_composer` takes `Set { text }` (TS `ref.set`: the text and its attachments are replaced, the cursor
+  goes to the end, the mode stays), `Insert { text }` (at the cursor, in place of a selection, as typing it does) and
+  `Submit` (as enter does, with or without focus; TS `ref.submit`). The edits go through the composer's own edit path,
+  and like every effect they wait for the call to return, so a call that panics edits nothing.
 - A command of `Scope::Route(name)` runs while that route shows (`/stats`' escape); `description` and `arguments`
   (the slash command keeps its text and passes it as the input) show in the palette and the prompt.
 
@@ -267,11 +286,14 @@ saved, as in TS.
 
 `crates/plugin/examples/sample` is a small `cdylib` with its own workspace and `Cargo.lock`, so it is not a member of
 the client's workspace and the other crates build as before. Its features select variants: `v2` draws differently
-and `setup-fails` fails (the reload tests); `abi-1-0`, `minor-newer`, `major-2`, and `requires-future` pretend to
-target other ABI versions; `abi-1-3` is a plugin on the frozen 1.3 SDK (`sample/abi-1-3`), and `abi-1-0-wire` is that
-plugin behind the 1.0 table. The tests build each variant once per test run into `target/sample-plugin`: the
-loader's unit tests in `crates/plugin/src/loader/native/tests.rs`, and the TUI tests in
-`crates/tui/tests/all/plugins.rs`.
+and `setup-fails` fails (the reload tests); `abi-1-0`, `abi-1-4`, `minor-newer`, `major-2`, and `requires-future`
+pretend to target other ABI versions; `abi-1-3` is a plugin on the frozen 1.3 SDK (`sample/abi-1-3`), and
+`abi-1-0-wire` is that plugin behind the 1.0 table. `p0a` adds the 1.5 probe (`src/p0a.rs`): a confirm, an alert, the
+composer's read and edits, and a styled box. The tests build each variant once per test run into
+`target/sample-plugin`: the loader's unit tests in `crates/plugin/src/loader/native/tests.rs`, and the TUI tests in
+`crates/tui/tests/all/plugins.rs`. `crates/tui/tests/all/plugin_p0a.rs` runs the same probe linked, through the C
+ABI's byte shims, and as the library, and the P-APP scenarios `P.1/p0a-dialogs` and `P.1/p0a-composer` check its
+dialogs, its box and a composer edit against TS (`parity/plugins/p0a`).
 
 `crates/plugin/examples/hello` is the README's quick start. `crates/plugin-abi/tests/sdk.rs` checks that the README
 shows it as it is and that it builds on the SDK alone. The loader test
