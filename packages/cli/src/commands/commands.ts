@@ -11,6 +11,13 @@ export const PrintLogs = GlobalFlag.Setting("print-logs")({
   ),
 })
 
+export const AllowElevated = GlobalFlag.Setting("allow-elevated")({
+  flag: Flag.Boolean("allow-elevated").pipe(
+    Flag.withDescription("Allow the server and AI tools to run with administrator or root privileges"),
+    Flag.withDefault(false),
+  ),
+})
+
 export const Standalone = GlobalFlag.Setting("standalone")({
   flag: Flag.Boolean("standalone").pipe(
     Flag.withDescription("Run with a private server instead of the background service"),
