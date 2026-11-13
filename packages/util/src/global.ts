@@ -37,6 +37,8 @@ export interface Interface {
   readonly data: string
   readonly cache: string
   readonly config: string
+  /** Global config directories in priority order, primary first; equals `[config]` unless `configDirectory` adds one. */
+  readonly configDirs: readonly string[]
   readonly state: string
   readonly tmp: string
   readonly bin: string
@@ -44,13 +46,28 @@ export interface Interface {
   readonly repos: string
 }
 
+/**
+ * Global config locations for a configured directory: when it is the `OPENCODE_CONFIG_DIR` override, the
+ * XDG default stays active underneath it (opencode#28658, opencode#32825) — the override wins file lookups
+ * and config merges, but never replaces the default layer. Any other explicit directory (tests, embedded
+ * hosts) replaces it exactly as before.
+ */
+export const configDirectory = (value: string | undefined): Partial<Interface> =>
+  value && value === process.env.OPENCODE_CONFIG_DIR
+    ? { config: value, configDirs: [...new Set([value, Path.config])] }
+    : value
+      ? { config: value }
+      : {}
+
 export function make(input: Partial<Interface> = {}): Interface {
   // The acquired service canonicalizes default tmp; use it instead of Path.tmp for path comparisons.
+  const config = input.config ?? input.configDirs?.[0] ?? Path.config
   return {
     home: Path.home,
     data: Path.data,
     cache: Path.cache,
-    config: Path.config,
+    config,
+    configDirs: input.configDirs ?? [config],
     state: Path.state,
     tmp: input.tmp ?? Path.tmp,
     bin: Path.bin,
@@ -76,7 +93,7 @@ const acquire = (input: Partial<Interface>) =>
 
 const layer = Layer.effect(
   Service,
-  Effect.suspend(() => acquire({ config: process.env.OPENCODE_CONFIG_DIR ?? Path.config })),
+  Effect.suspend(() => acquire(configDirectory(process.env.OPENCODE_CONFIG_DIR))),
 )
 
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [] })

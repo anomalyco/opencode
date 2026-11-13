@@ -27,6 +27,7 @@ const it = testEffect(Layer.empty)
 
 const instructionLayer = (input: {
   config?: string
+  configDirs?: readonly string[]
   home?: string
   locationServiceLayer: Layer.Layer<Location.Service>
   filesystemLayer?: Layer.Layer<FSUtil.Service>
@@ -54,6 +55,7 @@ const instructionLayer = (input: {
           input.config || input.home
             ? Global.layerWith({
                 ...(input.config ? { config: input.config } : {}),
+                ...(input.configDirs ? { configDirs: input.configDirs } : {}),
                 ...(input.home ? { home: input.home } : {}),
               })
             : tempGlobalLayer,
@@ -280,6 +282,61 @@ describe("ConfigInstructionPlugin.Plugin", () => {
                 ),
               ),
             }),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("keeps the XDG AGENTS.md beneath an override directory and prefers the override file", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((tmp) => {
+        const primary = path.join(tmp.path, "config-override")
+        const xdg = path.join(tmp.path, "xdg-config")
+        const home = path.join(tmp.path, "home")
+        const project = path.join(home, "code", "repo")
+        const primaryFile = path.join(primary, "AGENTS.md")
+        const xdgFile = path.join(xdg, "AGENTS.md")
+        const layerFor = () =>
+          instructionLayer({
+            config: primary,
+            configDirs: [primary, xdg],
+            home,
+            locationServiceLayer: Layer.succeed(
+              Location.Service,
+              Location.Service.of(
+                location({ directory: AbsolutePath.make(project) }, { projectDirectory: AbsolutePath.make(project) }),
+              ),
+            ),
+          })
+        return Effect.promise(async () => {
+          await fs.mkdir(primary, { recursive: true })
+          await fs.mkdir(xdg, { recursive: true })
+          await fs.mkdir(project, { recursive: true })
+          await fs.writeFile(xdgFile, "xdg global")
+        }).pipe(
+          // The override carries no AGENTS.md, so the XDG default loads instead — before the fix
+          // the override directory replaced it and this file was never read.
+          Effect.andThen(
+            Effect.gen(function* () {
+              const discovery = yield* start()
+              const watcher = yield* Watcher.Test
+              // Both global files are watched, present or not, so a later write to either applies.
+              expect(yield* watcher.subscriptions()).toContainEqual({ path: primaryFile, type: "file" })
+              expect(yield* watcher.subscriptions()).toContainEqual({ path: xdgFile, type: "file" })
+              const initialized = yield* readInitial(yield* discovery.load())
+              expect(initialized.text).toBe(`Instructions from: ${xdgFile}\nxdg global`)
+            }).pipe(Effect.provide(layerFor())),
+          ),
+          // Once the override defines its own AGENTS.md, first match wins: it replaces the XDG file.
+          Effect.andThen(Effect.promise(() => fs.writeFile(primaryFile, "override global"))),
+          Effect.andThen(
+            Effect.gen(function* () {
+              const discovery = yield* start()
+              const initialized = yield* readInitial(yield* discovery.load())
+              expect(initialized.text).toBe(`Instructions from: ${primaryFile}\noverride global`)
+              expect(initialized.text).not.toContain("xdg global")
+            }).pipe(Effect.provide(layerFor())),
           ),
         )
       }),
