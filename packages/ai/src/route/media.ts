@@ -347,7 +347,7 @@ const makeTransport = <Request extends MediaRequest>(
       body: encoded.text,
       headers: encoded.headers,
     })
-    const response = yield* execute(
+    const response = yield* RequestExecutor.withTls(execute, call.request.http?.tls)(
       encoded.apply(HttpClientRequest.make(call.method)(url).pipe(HttpClientRequest.setHeaders(headers))),
       RequestExecutor.withFetch(fetch),
     )
@@ -375,9 +375,11 @@ const makeTransport = <Request extends MediaRequest>(
         protocol.prepare === undefined
           ? request
           : yield* protocol.prepare(request, (path, body) =>
-              send({ method: "POST", url: baseURL(path), headers, request, body }, request.fetch, execute).pipe(
-                Effect.map((sent) => sent.response),
-              ),
+              send(
+                { method: "POST", url: baseURL(path), headers, request: { ...request, http }, body },
+                request.fetch,
+                execute,
+              ).pipe(Effect.map((sent) => sent.response)),
             )
       // Sanitize after merging so model-level overlays are covered; the model value is restored, not sanitized.
       const resolved: Request = {

@@ -270,6 +270,14 @@ export function encoding(settings: Readonly<Record<string, unknown>>) {
   return Option.getOrUndefined(decodeEncoding(settings.encoding))
 }
 
+const decodeTls = Schema.decodeUnknownOption(Provider.Tls)
+
+/** Client certificate from provider settings. An empty `cert` or `key`, such as a missing `{file:}`, leaves it unset. */
+export function tls(settings: Readonly<Record<string, unknown>>) {
+  const value = Option.getOrUndefined(decodeTls(settings.tls))
+  return value?.cert && value.key ? value : undefined
+}
+
 export const Request = Provider.Request
 export type Request = Provider.Request
 

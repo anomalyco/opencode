@@ -260,7 +260,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
           ...runtime.options,
           ...mergeTransport(runtime.options, {
             timeout: { total: timeouts.timeout, headers: timeouts.headerTimeout, chunk: timeouts.chunkTimeout },
-            http: { encoding: Provider.encoding(configured) },
+            http: { encoding: Provider.encoding(configured), tls: Provider.tls(configured) },
           }),
         },
       })
@@ -315,7 +315,8 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
   credential?: Credential.Value,
   dependencies?: Dependencies,
 ) {
-  const { resolved, module, settings } = yield* loadCatalogPackage(model, credential, dependencies)
+  const { resolved, configured, module, settings } = yield* loadCatalogPackage(model, credential, dependencies)
+  const tls = Provider.tls(configured)
   const runtime: unknown = yield* Effect.try({
     try: () => module.model(resolved.modelID ?? resolved.id, settings),
     catch: (cause) => constructionError(resolved, cause),
@@ -330,7 +331,12 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
         })
       : runtime
   if (!is(adapted)) return yield* unsupported(resolved)
-  return adapted
+  if (!tls || !(adapted instanceof DecisionModel || adapted instanceof ImageModel)) return adapted
+  // Media and decision models are plain classes with readonly fields, so copy onto the same prototype.
+  const copy: Runtime = Object.assign(Object.create(Object.getPrototypeOf(adapted)), adapted, {
+    http: { ...adapted.http, tls },
+  })
+  return copy
 })
 
 const constructionError = (model: RuntimeInfo, cause: unknown) =>
@@ -504,7 +510,8 @@ export const layer = Layer.effect(
         limit: selected.limit,
         compaction: runtimeInfo.settings?.compaction,
         cache: runtimeInfo.settings?.cache,
-        transport: provider?.settings?.transport,
+        // The WebSocket transport can't present a client certificate, so `tls` keeps the model on HTTP.
+        transport: Provider.tls(provider?.settings ?? {}) ? "http" : provider?.settings?.transport,
         chunkTimeout: Provider.timeout(provider?.settings?.chunkTimeout),
       }
     })
