@@ -2512,17 +2512,17 @@ impl Host for HostHandle {
     }
 
     fn dialog(&self, dialog: Dialog) {
-        let request = HostRequest::Dialog { dialog };
-        if self.request(&request).is_ok() {
-            return;
-        }
-        // A host older than 1.6 does not know `xlarge` and refuses the whole dialog; it gets the largest it knows.
-        if let HostRequest::Dialog { dialog: Dialog::Panel(mut panel) } = request
-            && panel.size == PanelSize::XLarge
-        {
-            panel.size = PanelSize::Large;
-            let _ = self.request(&HostRequest::Dialog { dialog: Dialog::Panel(panel) });
-        }
+        // A host older than 1.6 does not know `xlarge` and would refuse the whole dialog: it gets the largest it knows.
+        let dialog = match dialog {
+            Dialog::Panel(mut panel)
+                if panel.size == PanelSize::XLarge && self.core().is_none_or(|core| core.minor < 6) =>
+            {
+                panel.size = PanelSize::Large;
+                Dialog::Panel(panel)
+            }
+            dialog => dialog,
+        };
+        let _ = self.request(&HostRequest::Dialog { dialog });
     }
 
     fn copy(&self, text: &str, then: Option<Action>) {
@@ -4290,14 +4290,19 @@ mod tests {
         assert_eq!(*seen.borrow(), [2]);
     }
 
-    /// A host that knows `known` requests: it answers them with `null`, a dialog's size included, counts them in the
-    /// `Vec` at `ctx`, and answers every other request, as a host older than it does, with an error.
+    /// A 1.4 host: it decodes a toast and a dialog of a size it knows and answers `null`, logs every request in the
+    /// `Vec` at `ctx`, and answers every other request, and a panel of a size it does not know, with an error.
     unsafe extern "C" fn host_before_1_6(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
         // SAFETY: the test passes a live log and the request's bytes.
         let (log, request) = unsafe { (&*ctx.cast::<std::sync::Mutex<Vec<String>>>(), request.as_slice()) };
         let text = String::from_utf8_lossy(request).into_owned();
-        let older = ["\"type\":\"toast\"", "\"type\":\"dialog\""];
-        let (status, reply) = match older.iter().any(|tag| text.contains(tag)) && !text.contains("xlarge") {
+        let json: serde_json::Value = serde_json::from_slice(request).unwrap();
+        let known = match json["type"].as_str() {
+            Some("toast") => true,
+            Some("dialog") => ["medium", "large"].contains(&json["dialog"]["size"].as_str().unwrap_or("medium")),
+            _ => false,
+        };
+        let (status, reply) = match known {
             true => (OK, b"null".to_vec()),
             false => (ERROR, b"unsupported host request (host ABI 1.4)".to_vec()),
         };
@@ -4351,12 +4356,30 @@ mod tests {
             centered: false,
         };
         host.dialog(Dialog::Panel(panel(PanelSize::XLarge)));
-        let log = log.lock().unwrap();
+        // A panel whose text says `xlarge` is not one (review bigboi-12).
+        host.dialog(Dialog::Panel(Panel { title: vec![Span::new("xlarge")], ..panel(PanelSize::Large) }));
+        let log = std::mem::take(&mut *log.lock().unwrap());
         let shown: Vec<&String> = log.iter().filter(|request| request.contains("\"type\":\"dialog\"")).collect();
+        // Each sent once, the xlarge one as large.
         assert_eq!(shown.len(), 2, "{log:?}");
-        assert!(shown[1].contains("\"size\":\"large\""), "{log:?}");
+        assert!(shown.iter().all(|shown| shown.contains("\"size\":\"large\"")), "{log:?}");
         assert_eq!(log.iter().filter(|request| request.contains("\"type\":\"toast\"")).count(), 1);
         // Every read and verb above asked once, and nothing more.
         assert_eq!(log.len(), 21, "{log:?}");
+
+        // A 1.6 host gets xlarge, once, also when it refuses the dialog for another reason.
+        let current = HostApi { minor: 6, ..api };
+        let host = HostHandle { api: &current };
+        host.dialog(Dialog::Panel(panel(PanelSize::XLarge)));
+        let log = log_of(&current);
+        assert_eq!(log.len(), 1, "{log:?}");
+        assert!(log[0].contains("\"size\":\"xlarge\""), "{log:?}");
+    }
+
+    /// What `api`'s host logged.
+    fn log_of(api: &HostApi) -> Vec<String> {
+        // SAFETY: the test's `ctx` is a live log.
+        let log = unsafe { &*api.ctx.cast::<std::sync::Mutex<Vec<String>>>() };
+        std::mem::take(&mut *log.lock().unwrap())
     }
 }
