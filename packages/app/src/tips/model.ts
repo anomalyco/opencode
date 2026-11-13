@@ -62,6 +62,12 @@ export function createTipToasts() {
       },
     },
     {
+      id: "hex",
+      title: "tips.hex.title",
+      description: "tips.hex.description",
+      action: { label: "tips.hex.install", run: () => platform.openExternal("https://anoma.ly/hex") },
+    },
+    {
       id: "session-search",
       title: "tips.search.title",
       description: "tips.search.description",
