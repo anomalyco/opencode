@@ -7,6 +7,7 @@ export const RecoverySchema = Schema.Union([
     sessionID: SessionSchema.ID,
     shellID: Schema.String,
     command: Schema.String,
+    wallTimeSeconds: Schema.optionalKey(Schema.Number),
   }),
   Schema.Struct({
     kind: Schema.Literal("subagent"),

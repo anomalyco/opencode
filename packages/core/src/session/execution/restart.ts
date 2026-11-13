@@ -135,6 +135,7 @@ export const layer = (options?: Options) =>
               command: recovery.command,
               state,
               text,
+              wallTimeSeconds: recovery.wallTimeSeconds,
             }),
           }
         }

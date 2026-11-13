@@ -79,6 +79,7 @@ export function notification(input: {
   state: "completed" | "cancelled" | "error"
   text: string
   output?: Output
+  wallTimeSeconds?: number
 }) {
   return {
     text: `<shell id="${input.jobID ?? input.shellID}" state="${input.state}" command="${input.command}">\n${input.text}\n</shell>`,
@@ -87,6 +88,7 @@ export function notification(input: {
       shellID: input.shellID,
       ...(input.jobID !== undefined ? { jobID: input.jobID } : {}),
       state: input.state,
+      ...(input.wallTimeSeconds !== undefined ? { wallTimeSeconds: input.wallTimeSeconds } : {}),
       ...(input.output ? metadata(input.output) : {}),
     },
   }
