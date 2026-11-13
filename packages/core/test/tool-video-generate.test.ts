@@ -29,8 +29,8 @@ const MP4 = Uint8Array.from([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 
 
 const fixture = {
   starts: [] as Generate.VideoInput[],
-  reads: [] as { model: Model.Ref; token: unknown }[],
-  cancels: [] as unknown[],
+  reads: [] as { model: Model.Ref; id: string }[],
+  cancels: [] as string[],
   assertions: [] as Permission.AssertInput[],
   status: { status: "completed" } as VideoStatus,
   failure: undefined as Generate.Error | undefined,
@@ -63,11 +63,11 @@ const it = testEffect(
           start: (input) =>
             Effect.suspend(() => {
               fixture.starts.push(input)
-              return fixture.failure ? Effect.fail(fixture.failure) : Effect.succeed({ id: "req_1", token: { id: 1 } })
+              return fixture.failure ? Effect.fail(fixture.failure) : Effect.succeed({ id: "req_1" })
             }),
-          status: (model, token) =>
+          status: (model, id) =>
             Effect.sync(() => {
-              fixture.reads.push({ model, token })
+              fixture.reads.push({ model, id })
               return fixture.status
             }),
           result: () =>
@@ -76,7 +76,7 @@ const it = testEffect(
                 ? Effect.fail(fixture.resultFailure)
                 : Effect.succeed({ data: MP4, mime: "video/mp4" }),
             ),
-          cancel: (_, token) => Effect.sync(() => void fixture.cancels.push(token)),
+          cancel: (_, id) => Effect.sync(() => void fixture.cancels.push(id)),
         },
       }),
     ),
@@ -165,7 +165,7 @@ describe("experimental_video_generate", () => {
     }),
   )
 
-  it.live("starts the job in the foreground, then reads it by token and saves the video", () =>
+  it.live("starts the job in the foreground, then reads it by job ID and saves the video", () =>
     Effect.gen(function* () {
       yield* videoModel("test", "director")
       const { run, notice, directory, session } = yield* setup()
@@ -203,11 +203,11 @@ describe("experimental_video_generate", () => {
       expect(start?.start?.source).toMatchObject({ type: "bytes", mediaType: "image/png" })
       expect(start?.end?.source).toEqual({ type: "url", url: "https://example.test/last.png" })
       expect(kinds(start?.references)).toEqual(["audio/mpeg", "video/mp4"])
-      // The status read uses the token start returned, as a restarted server would.
+      // The status read uses the job ID start returned, as a restarted server would.
       expect(fixture.reads).toEqual([
         {
           model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("director") }),
-          token: { id: 1 },
+          id: "req_1",
         },
       ])
       expect(fixture.assertions.map((item) => [item.action, item.resources])).toEqual([
@@ -276,7 +276,7 @@ describe("experimental_video_generate", () => {
       expect((yield* jobs.get(id))?.status).toBe("running")
       yield* jobs.cancel(id)
       expect(yield* notice(result)).toContain(`<video id="${id}" state="cancelled">`)
-      expect(fixture.cancels).toEqual([{ id: 1 }])
+      expect(fixture.cancels).toEqual(["req_1"])
     }),
   )
 

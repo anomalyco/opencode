@@ -40,10 +40,9 @@ export interface VideoInput {
   readonly sound?: boolean
 }
 
-/** A submitted video job. `token` is plain JSON: store it to read the job later, from any process. */
+/** A submitted video job. Store `id`, the provider's job ID, to read the job later from any process. */
 export interface VideoJob {
   readonly id: string
-  readonly token: unknown
 }
 
 export interface VideoFile {
@@ -107,14 +106,14 @@ export interface Interface {
   readonly text: (input: TextInput) => Effect.Effect<string, Error>
   readonly image: (input: ImageRequest) => Effect.Effect<ImageResult, Error>
   readonly decisions: (input: DecisionRequest) => Effect.Effect<DecisionResult, Error>
-  /** Video generation is a job: `start` submits it, and the caller reads it back by token until it settles. */
+  /** Video generation is a job: `start` submits it, and the caller reads it back by job ID until it settles. */
   readonly video: {
     readonly start: (input: VideoInput) => Effect.Effect<VideoJob, Error>
-    readonly status: (model: Model.Ref, token: unknown) => Effect.Effect<VideoStatus, Error>
+    readonly status: (model: Model.Ref, id: string) => Effect.Effect<VideoStatus, Error>
     /** The finished video, downloaded. Fails while the job is still running, or with the reason it failed. */
-    readonly result: (model: Model.Ref, token: unknown) => Effect.Effect<VideoFile, Error>
+    readonly result: (model: Model.Ref, id: string) => Effect.Effect<VideoFile, Error>
     /** Fails with `InvalidRequestError` when the provider has no way to cancel a job. */
-    readonly cancel: (model: Model.Ref, token: unknown) => Effect.Effect<void, Error>
+    readonly cancel: (model: Model.Ref, id: string) => Effect.Effect<void, Error>
   }
 }
 
@@ -292,17 +291,17 @@ export const layer = Layer.effect(
         )
     })
 
-    const videoStatus = Effect.fn("Generate.video.status")(function* (ref: Model.Ref, token: unknown) {
+    const videoStatus = Effect.fn("Generate.video.status")(function* (ref: Model.Ref, id: string) {
       const model = yield* videoModel(ref)
-      return yield* ai.video.status(model, token).pipe(
+      return yield* ai.video.status(model, id).pipe(
         Effect.provideService(VideoClient.Service, videos),
         Effect.mapError((error) => providerError(ref, error)),
       )
     })
 
-    const videoResult = Effect.fn("Generate.video.result")(function* (ref: Model.Ref, token: unknown) {
+    const videoResult = Effect.fn("Generate.video.result")(function* (ref: Model.Ref, id: string) {
       const model = yield* videoModel(ref)
-      const response = yield* ai.video.result(model, token).pipe(
+      const response = yield* ai.video.result(model, id).pipe(
         Effect.provideService(VideoClient.Service, videos),
         Effect.mapError((error) => providerError(ref, error)),
       )
@@ -321,9 +320,9 @@ export const layer = Layer.effect(
       return { data, mime: video.mediaType } satisfies VideoFile
     })
 
-    const videoCancel = Effect.fn("Generate.video.cancel")(function* (ref: Model.Ref, token: unknown) {
+    const videoCancel = Effect.fn("Generate.video.cancel")(function* (ref: Model.Ref, id: string) {
       const model = yield* videoModel(ref)
-      yield* ai.video.cancel(model, token).pipe(
+      yield* ai.video.cancel(model, id).pipe(
         Effect.provideService(VideoClient.Service, videos),
         Effect.mapError((error) => providerError(ref, error)),
       )
@@ -343,9 +342,9 @@ export const layer = Layer.effect(
       decisions: (input) => credentials(decisions(input)),
       video: {
         start: (input) => credentials(videoStart(input)),
-        status: (model, token) => credentials(videoStatus(model, token)),
-        result: (model, token) => credentials(videoResult(model, token)),
-        cancel: (model, token) => credentials(videoCancel(model, token)),
+        status: (model, id) => credentials(videoStatus(model, id)),
+        result: (model, id) => credentials(videoResult(model, id)),
+        cancel: (model, id) => credentials(videoCancel(model, id)),
       },
     })
   }),

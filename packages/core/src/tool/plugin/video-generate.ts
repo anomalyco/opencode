@@ -94,7 +94,7 @@ export function notice(input: { id: string; state: string; body: string }) {
 }
 
 /**
- * Poll a submitted video job by its token until it settles, then download and save it, as a background Job that a
+ * Poll a submitted video job by its provider job ID until it settles, then download and save it, as a background Job that a
  * restarted server can take over from the same recovery record.
  */
 export const track = Effect.fnUntraced(function* (input: {
@@ -107,13 +107,13 @@ export const track = Effect.fnUntraced(function* (input: {
   readonly notificationID: SessionMessage.ID
   readonly sessionID: SessionSchema.ID
   readonly model: string
-  readonly token: unknown
+  readonly providerJobID: string
   readonly path: string
   readonly title?: string
 }) {
   const ref = Model.Ref.parse(input.model)
   const run = Effect.gen(function* () {
-    yield* input.generate.video.status(ref, input.token).pipe(
+    yield* input.generate.video.status(ref, input.providerJobID).pipe(
       Effect.repeat({
         schedule: Schedule.spaced(POLL_INTERVAL),
         until: (status) => status.status !== "queued" && status.status !== "running",
@@ -124,7 +124,7 @@ export const track = Effect.fnUntraced(function* (input: {
       }),
     )
     // A failed, cancelled or expired job fails here with the provider's reason.
-    const video = yield* input.generate.video.result(ref, input.token)
+    const video = yield* input.generate.video.result(ref, input.providerJobID)
     yield* input.environment.files.write(input.path, video.data)
     return `Video request finished. Saved video: ${input.path} (${input.model}).`
   }).pipe(
@@ -142,12 +142,12 @@ export const track = Effect.fnUntraced(function* (input: {
       sessionID: input.sessionID,
       path: input.path,
       model: input.model,
-      token: input.token,
+      providerJobID: input.providerJobID,
     },
     background: true,
     run,
     // Best effort: some providers have no cancel call, and the paid job then runs to completion on their side.
-    cancel: input.generate.video.cancel(ref, input.token).pipe(Effect.ignore),
+    cancel: input.generate.video.cancel(ref, input.providerJobID).pipe(Effect.ignore),
   })
   yield* Effect.gen(function* () {
     const info = (yield* input.jobs.wait({ id: input.id })).info
@@ -333,7 +333,7 @@ export const Plugin = {
                 notificationID: SessionMessage.ID.create(),
                 sessionID: context.sessionID,
                 model: ref,
-                token: job.token,
+                providerJobID: job.id,
                 path: file,
                 title: input.prompt,
               })

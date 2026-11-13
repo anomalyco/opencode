@@ -1075,7 +1075,7 @@ describe("SessionRestart background recovery", () => {
     }),
   )
 
-  it.live("delivers a finished video outcome and reads a running video job again from its token", () =>
+  it.live("delivers a finished video outcome and reads a running video job again from its job ID", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
       const jobs = yield* Job.Service
@@ -1086,7 +1086,7 @@ describe("SessionRestart background recovery", () => {
         sessionID,
         path,
         model: "test/director",
-        token: { requestID: "req_1" },
+        providerJobID: "req_1",
       })
       yield* jobs.start({
         id: "video_done",
@@ -1107,7 +1107,7 @@ describe("SessionRestart background recovery", () => {
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
       const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
-      const reads: unknown[] = []
+      const reads: string[] = []
       const driver = Environment.makeMemoryDriver()
       const files = Environment.makeFiles(driver)
       const location = Layer.mergeAll(
@@ -1120,8 +1120,8 @@ describe("SessionRestart background recovery", () => {
             decisions: () => Effect.die("unused"),
             video: {
               start: () => Effect.die("a recovered job must not be submitted again"),
-              status: (_, token) =>
-                Effect.sync(() => void reads.push(token)).pipe(Effect.as({ status: "completed" as const })),
+              status: (_, id) =>
+                Effect.sync(() => void reads.push(id)).pipe(Effect.as({ status: "completed" as const })),
               result: () => Effect.succeed({ data: Uint8Array.from([1, 2, 3]), mime: "video/mp4" }),
               cancel: () => Effect.void,
             },
@@ -1131,7 +1131,7 @@ describe("SessionRestart background recovery", () => {
       const context = yield* buildExecution(scope, () => Effect.void, undefined, restarted, undefined, location)
       yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
 
-      // The running job is tracked again: it reads the provider job by its stored token and saves the video.
+      // The running job is tracked again: it reads the provider job by its stored ID and saves the video.
       yield* restarted.wait({ id: "video_running" })
       const texts = yield* SessionInbox.list(database.db, sessionID).pipe(
         Effect.map((inbox) => inbox.map((item) => (item.type === "synthetic" ? item.payload.text : ""))),
@@ -1142,7 +1142,7 @@ describe("SessionRestart background recovery", () => {
         '<video id="video_done" state="completed">\nVideo request finished. Saved video: /tmp/done.mp4 (test/director).\n</video>',
         '<video id="video_running" state="completed">\nVideo request finished. Saved video: /tmp/running.mp4 (test/director).\n</video>',
       ])
-      expect(reads).toEqual([{ requestID: "req_1" }])
+      expect(reads).toEqual(["req_1"])
       expect((yield* files.read("/tmp/running.mp4")).bytes).toEqual(Uint8Array.from([1, 2, 3]))
     }),
   )
