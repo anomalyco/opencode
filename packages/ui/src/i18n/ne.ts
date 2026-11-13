@@ -162,6 +162,7 @@ export const dict = {
   "ui.common.dismiss": "खारेज गर्नुहोस्",
   "ui.common.close": "बन्द गर्नुहोस्",
   "ui.common.next": "अर्को",
+  "ui.common.continue": "जारी राख्नुहोस्",
   "ui.common.submit": "पेश गर्नुहोस्",
   "ui.common.showMore": "थप देखाउनुहोस्",
   "ui.permission.deny": "अस्वीकार गर्नुहोस्",

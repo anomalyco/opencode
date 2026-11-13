@@ -180,7 +180,7 @@ export const copyVariants = {
     // "Normal" is also the page's own label now; it keeps its place so saved choices still match.
     options: ["All systems normal", "All good", "Online", "Normal", "Up", "Operational"],
   },
-  // Product page intros; the page's own text (product-data.ts) is the first option.
+  // Product page intros; the page's own text (product-details.ts) is the first option.
   "product.desktop.intro": {
     label: "Desktop intro",
     lines: 1,
@@ -332,27 +332,12 @@ export const copyVariants = {
     ],
   },
   // The products after the carousel's four, on /product and their own pages.
-  "card.ide.body": {
-    label: "IDE extensions card",
-    lines: 1,
-    options: [
-      "OpenCode in VS Code and its forks, and in any ACP editor.",
-      "Run opencode in your editor's terminal and the extension installs itself.",
-    ],
-  },
   "card.mini.body": {
     label: "Mini card",
     lines: 1,
     options: [
       "Run opencode mini: replies land in your terminal's own scrollback.",
       "The agent in your terminal, with only a prompt and a status line.",
-    ],
-  },
-  "product.ide.intro": {
-    label: "IDE extensions intro",
-    lines: 1,
-    options: [
-      "OpenCode beside your code. Open it in a split terminal with Cmd+Esc, share your selection, and insert file references, in VS Code and its forks or any editor that speaks ACP.",
     ],
   },
   "product.mini.intro": {

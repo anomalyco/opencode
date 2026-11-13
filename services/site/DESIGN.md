@@ -115,7 +115,7 @@ Motion decisions follow Emil Kowalski's skills ([emilkowalski/skills](https://gi
 - Show real product footage and screenshots only.
 - Ship no placeholders; hide a media slot until its real content exists, as on the changelog. → [Timeline](/dev/components#changelog-timeline)
 - Put heavy media (video, audio, zip, glb, wasm, anything over 256KB) on the CDN, not in git; SVGs, favicons, Open Graph images and small posters stay in git.
-- Give every video a poster; card videos rest on a still and play on hover. → [Product carousel](/dev/components#carousel)
+- Give every video a poster; card videos rest on a short loop, started from its still once the page has loaded, and play the demo on hover. → [Product carousel](/dev/components#carousel)
 - Caption videos that have speech.
 
 ## Accessibility

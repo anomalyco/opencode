@@ -318,7 +318,6 @@ it.effect("maps package-specific AI SDK provider option keys", () =>
     })
 
     const cases = [
-      ["@ai-sdk/github-copilot", "copilot", { reasoningEffort: "high" }],
       ["@ai-sdk/amazon-bedrock/mantle", "openai", { reasoningEffort: "high", forceReasoning: true }],
       ["@ai-sdk/openai-compatible", "test-provider", { reasoningEffort: "high" }],
       ["@jerome-benoit/sap-ai-provider-v2", "sap-ai", { reasoningEffort: "high" }],

@@ -18,7 +18,8 @@ import {
   type Letter,
 } from "~/lib/font-content"
 import { GlyphShape, Word } from "./glyph"
-import { Plate, useSeen, useVisible } from "./plate"
+import { useVisible } from "~/component/site/visible"
+import { Plate, useSeen } from "./plate"
 
 const topBigram = Object.entries(bigrams).sort((a, b) => b[1] - a[1])[0]
 const zeroBigrams = Object.values(bigrams).filter((count) => count === 0).length

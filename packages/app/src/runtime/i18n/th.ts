@@ -380,7 +380,6 @@ export const dict = {
   "session.new.project.search": "ค้นหาโปรเจกต์",
   "session.new.project.add": "เพิ่มโปรเจกต์",
   "session.new.workspace.runIn": "เรียกใช้เซสชันใน",
-  "session.new.workspace.triggerLocal": "ในเครื่อง",
   "session.new.workspace.local": "รีโพซิทอรีในเครื่อง",
   "session.new.workspace.local.tooltip": "ใช้ checkout ปัจจุบัน",
   "session.new.workspace.new.tooltip": "สร้าง checkout แยก",

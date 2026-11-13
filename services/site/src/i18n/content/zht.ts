@@ -14,11 +14,6 @@ export const content = {
       action: "安裝",
     },
     sdk: { name: "SDK", body: "從你自己的腳本、CI 工作和工具驅動 OpenCode。", action: "閱讀文件" },
-    ide: {
-      name: "IDE 擴充功能",
-      body: "在 VS Code、Cursor 和 Windsurf 中開啟 OpenCode，或透過 ACP 在 Zed 和 JetBrains IDE 中使用。",
-      action: "安裝",
-    },
     mini: {
       name: "Mini",
       body: "極簡的終端機介面，回覆直接輸出到捲動紀錄中，下方只有一個提示詞輸入框。",
@@ -127,23 +122,6 @@ export const content = {
           title: "打造自己的工具",
           body: "只要幾行程式碼，就能把 OpenCode 接入機器人、儀表板和工作流程。",
         },
-      },
-    },
-    ide: {
-      title: "OpenCode | 適用於 VS Code、Cursor、Zed 等的 IDE 擴充功能",
-      description:
-        "在編輯器中使用 OpenCode。VS Code、Cursor、Windsurf 和 VSCodium 有專用擴充功能，Zed、JetBrains IDE 和其他 ACP 編輯器可使用 opencode acp。",
-      intro:
-        "在編輯器中使用 OpenCode。在 VS Code、Cursor、Windsurf 和 VSCodium 中，於整合式終端機執行 opencode，擴充功能就會自動安裝。Zed、JetBrains IDE 以及其他支援 Agent Client Protocol 的編輯器可透過 opencode acp 執行 OpenCode。",
-      features: {
-        "quick-launch": { title: "快速啟動", body: "Cmd+Esc 或 Ctrl+Esc 在分割終端機中開啟 OpenCode。" },
-        "new-session": { title: "新工作階段", body: "Cmd+Shift+Esc 或 Ctrl+Shift+Esc 開啟另一個工作階段。" },
-        context: { title: "上下文", body: "將目前選取的內容或分頁分享給 OpenCode。" },
-        "file-references": { title: "檔案參照", body: "Cmd+Option+K 或 Alt+Ctrl+K 插入 @File#L37-42。" },
-        "installs-itself": { title: "自動安裝", body: "在整合式終端機中執行 opencode 即可加入。" },
-        "acp-editors": { title: "ACP 編輯器", body: "Zed、JetBrains IDE、Avante.nvim 和 CodeCompanion.nvim。" },
-        "open-vsx": { title: "Open VSX", body: "也在 Open VSX 上提供，適用於 Cursor、Windsurf 和 VSCodium。" },
-        "same-agent": { title: "同一個代理", body: "就是你在終端機中執行的 OpenCode，就在程式碼旁邊。" },
       },
     },
     mini: {
@@ -272,7 +250,7 @@ export const content = {
     },
     colors: {
       title: "色彩",
-      body: "Logo 和字標使用同一種墨色的三種不透明度，深色背景則使用較淺的墨色。下方數值是該墨色疊在白色或 #0B0B0B 上的效果，與標準檔案一致。點一下數值即可複製。",
+      body: "Logo 和字標使用同一種墨色的三種不透明度，深色背景則使用較淺的墨色。下方數值是標準檔案中的色彩。這些色彩僅用於 Logo 和字標，請勿用於其他文字或背景。點一下數值即可複製。",
       palettes: {
         light: {
           name: "淺色",
@@ -604,14 +582,6 @@ export const content = {
   productDownloads: {
     terminal: { commands: { curl: { name: "指令碼" } } },
     sdk: { more: { label: "閱讀 SDK 文件" } },
-    ide: {
-      links: {
-        "vs-code-marketplace": { label: "VS Code Marketplace" },
-        "open-vsx-cursor-windsurf-vscodium": { label: "Open VSX (Cursor, Windsurf, VSCodium)" },
-      },
-      lead: "在編輯器的整合式終端機中執行 opencode，擴充功能就會自動安裝，也可以手動安裝。",
-      more: { label: "設定 Zed、JetBrains IDE 和其他 ACP 編輯器" },
-    },
     mini: {
       commands: { curl: { name: "指令碼" } },
       lead: "Mini 隨 OpenCode CLI 一起提供。用以下任一方式安裝，然後執行 opencode mini。",

@@ -10,11 +10,9 @@ import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { WebFetchTool } from "@opencode/core/tool/plugin/webfetch"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Image } from "@opencode/core/image"
 import { testEffect } from "./lib/effect"
-import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodeReplacements } from "./lib/tool"
 
 const webFetchToolNode = makeLocationNode({
   name: "test/webfetch-tool-plugin",
@@ -56,8 +54,7 @@ const permission = permissionLayer({
 })
 const toolLayer = (replacements: LayerNode.Replacements = []) =>
   AppNodeBuilder.build(LayerNode.group([Tool.node, webFetchToolNode]), [
-    Permission.node.replace(permission),
-    Image.node.replace(imagePassthrough),
+    ...toolNodeReplacements(permission),
     ...replacements,
   ])
 const it = testEffect(toolLayer([LayerNodePlatform.httpClient.replace(http)]))

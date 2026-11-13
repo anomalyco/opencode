@@ -168,6 +168,7 @@ export const dict = {
   "ui.common.dismiss": "Închide",
   "ui.common.close": "Închide",
   "ui.common.next": "Următorul",
+  "ui.common.continue": "Continuă",
   "ui.common.submit": "Trimite",
   "ui.common.showMore": "Afișează mai mult",
   "ui.permission.deny": "Refuză",

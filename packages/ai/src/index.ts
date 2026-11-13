@@ -1,6 +1,7 @@
 import { Effect, Layer, ManagedRuntime, Schema, Stream } from "effect"
 import { AIClient } from "./ai-client.js"
 import { Decision, type DecisionModel, type DecisionQuestions, type DecisionRequestInput } from "./decision.js"
+import { Embedding, type EmbeddingModel, type EmbeddingRequestInput } from "./embedding.js"
 import type { AwaitOptions, Event, Generation, Snapshot } from "./generation.js"
 import { Image, type ImageModel, type ImageRequest, type ImageRequestInput } from "./image.js"
 import { LLM } from "./llm.js"
@@ -45,8 +46,8 @@ import { Video, type VideoModel, type VideoRequest, type VideoRequestInput } fro
 
 /**
  * Promise-first entrypoint for scripts and non-Effect callers. One `ManagedRuntime` hosts the LLM, image, video, speech,
- * transcription and decision clients over a request executor; every method runs the corresponding Effect API and rethrows
- * `AIError` unchanged. `file` and `write` load `node:fs/promises` on first use, so importing this module does not.
+ * transcription, decision and embedding clients over a request executor; every method runs the corresponding Effect API
+ * and rethrows `AIError` unchanged. `file` and `write` load `node:fs/promises` on first use, so importing this module does not.
  */
 export interface Options {
   /** Executor layer; defaults to `RequestExecutor.fetchLayer`. Inject a recorder or `RequestExecutor.middleware(fn)` here. */
@@ -203,20 +204,23 @@ export const make = (options: Options = {}) => {
         options,
       )
     },
-    /** Write an asset's bytes like `Media.write`, downloading `url` sources through the executor. */
+    /** Write an asset's bytes like `Media.write`: streamed through a temporary file that replaces `path` on success. */
     write: async (asset: Media.Asset, path: string, options?: RunOptions) => {
-      const { writeFile } = await import("node:fs/promises")
-      return run(
-        asset.bytes().pipe(
-          Effect.flatMap((data) =>
-            Effect.tryPromise({
-              try: (signal) => writeFile(path, data, { signal }),
-              catch: (cause) => fileError(`Failed to write media file ${path}`, cause),
-            }),
-          ),
-        ),
-        options,
-      )
+      const { open, rename, rm } = await import("node:fs/promises")
+      const temporary = `${path}.${crypto.randomUUID()}.tmp`
+      try {
+        const file = await open(temporary, "w")
+        try {
+          for await (const chunk of iterate(asset.stream(), options)) await file.write(chunk)
+        } finally {
+          await file.close()
+        }
+        await rename(temporary, path)
+      } catch (cause) {
+        await rm(temporary, { force: true })
+        if (cause instanceof AIError || cause === options?.signal?.reason) throw cause
+        throw fileError(`Failed to write media file ${path}`, cause)
+      }
     },
     request: LLM.request,
     generate,
@@ -249,6 +253,22 @@ export const make = (options: Options = {}) => {
         options?: RunOptions,
       ) => run(Decision.generate(input), options),
     },
+    embedding: {
+      request: Embedding.request,
+      generate: <const Model extends EmbeddingModel>(input: EmbeddingRequestInput<Model>, options?: RunOptions) =>
+        run(Embedding.generate(input), options),
+    },
+    video: {
+      request: Video.request,
+      /** Submit a generation and return its `{ id, token }` at once; nothing polls. */
+      start: <const Model extends VideoModel>(input: VideoRequestInput<Model> | VideoRequest, options?: RunOptions) =>
+        run(Video.start(input), options),
+      /** One status read for a stored token. */
+      status: (model: VideoModel, token: unknown, options?: RunOptions) => run(Video.status(model, token), options),
+      /** The finished videos; fails while the job is still running. */
+      result: (model: VideoModel, token: unknown, options?: RunOptions) => run(Video.result(model, token), options),
+      cancel: (model: VideoModel, token: unknown, options?: RunOptions) => run(Video.cancel(model, token), options),
+    },
     /** Experimental: may change without compatibility guarantees. */
     experimental: {
       speech: {
@@ -278,21 +298,6 @@ export const make = (options: Options = {}) => {
         ) => run(Transcription.start(input), options).then(handle),
         resume: (model: TranscriptionModel, token: unknown, options?: RunOptions) =>
           run(Transcription.resume(model, token), options).then(handle),
-      },
-      video: {
-        request: Video.request,
-        start: <const Model extends VideoModel>(input: VideoRequestInput<Model> | VideoRequest, options?: RunOptions) =>
-          run(Video.start(input), options).then(handle),
-        generate: <const Model extends VideoModel>(
-          input: VideoRequestInput<Model> | VideoRequest,
-          options?: AwaitOptions & RunOptions,
-        ) => run(Video.generate(input, { poll: options?.poll }), options),
-        resume: (model: VideoModel, token: unknown, options?: RunOptions) =>
-          run(Video.resume(model, token), options).then(handle),
-        stream: <const Model extends VideoModel>(
-          input: VideoRequestInput<Model> | VideoRequest,
-          options?: AwaitOptions & RunOptions,
-        ) => iterate(Video.stream(input, { poll: options?.poll }), options),
       },
     },
     dispose: () => runtime.dispose(),

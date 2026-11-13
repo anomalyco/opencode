@@ -345,16 +345,6 @@
                 }
               }
             }
-          },
-          "503": {
-            "description": "ServiceUnavailableError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
-                }
-              }
-            }
           }
         },
         "description": "Retrieve currently registered agents.",
@@ -1085,7 +1075,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Set parentID to create a subagent session at the parent's location; set agent to choose its agent (otherwise it uses the default) and start it with session.prompt. After each completed round, the child sends a `<subagent>` report to the parent's inbox and wakes the parent unless it has a staged revert."
                   },
                   "title": {
                     "anyOf": [
@@ -3800,7 +3791,7 @@
             }
           }
         },
-        "description": "Generate transient text from the current session context without mutating session history.",
+        "description": "Generate transient text from the current session context without mutating session history. Its tokens and cost count toward the session's totals.",
         "summary": "Generate text from session context",
         "requestBody": {
           "content": {
@@ -9955,16 +9946,6 @@
                 }
               }
             }
-          },
-          "503": {
-            "description": "ServiceUnavailableError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
-                }
-              }
-            }
           }
         },
         "description": "Retrieve currently registered skills.",
@@ -10138,6 +10119,7 @@
                     "session.shell.started",
                     "session.shell.ended",
                     "session.step.started",
+                    "session.step.first-token",
                     "session.step.streamed",
                     "session.step.ended",
                     "session.step.failed",
@@ -10198,7 +10180,8 @@
                     "installation.update-available",
                     "vcs.branch.updated",
                     "mcp.status.changed",
-                    "mcp.resources.changed"
+                    "mcp.resources.changed",
+                    "experimental.mcp.event"
                   ]
                 },
                 {
@@ -10247,6 +10230,7 @@
                           "session.shell.started",
                           "session.shell.ended",
                           "session.step.started",
+                          "session.step.first-token",
                           "session.step.streamed",
                           "session.step.ended",
                           "session.step.failed",
@@ -10307,7 +10291,8 @@
                           "installation.update-available",
                           "vcs.branch.updated",
                           "mcp.status.changed",
-                          "mcp.resources.changed"
+                          "mcp.resources.changed",
+                          "experimental.mcp.event"
                         ]
                       },
                       {
@@ -16665,6 +16650,9 @@
               "portable_shell_scanner": {
                 "type": "boolean"
               },
+              "codemode_vm": {
+                "type": "boolean"
+              },
               "all_flags": {
                 "type": "boolean"
               },
@@ -16683,7 +16671,13 @@
               "artifacts": {
                 "type": "boolean"
               },
-              "codemode_vm": {
+              "shell_timeout_background": {
+                "type": "boolean"
+              },
+              "console_watches": {
+                "type": "boolean"
+              },
+              "mcp_events": {
                 "type": "boolean"
               },
               "part_rows": {
@@ -16817,6 +16811,12 @@
         "properties": {
           "tools": {
             "type": "boolean"
+          },
+          "freeform": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tool.FreeformFormat"
+            }
           },
           "input": {
             "type": "array",
@@ -19059,6 +19059,18 @@
           },
           "instructions": {
             "type": "string"
+          },
+          "criteria": {
+            "type": "object",
+            "properties": {
+              "true": {
+                "type": "string"
+              },
+              "false": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
           }
         },
         "required": ["type", "name", "instructions"],
@@ -20516,6 +20528,12 @@
         "properties": {
           "tools": {
             "type": "boolean"
+          },
+          "freeform": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tool.FreeformFormat"
+            }
           },
           "input": {
             "type": "array",
@@ -22938,6 +22956,9 @@
             "$ref": "#/components/schemas/session.step.started"
           },
           {
+            "$ref": "#/components/schemas/session.step.first-token"
+          },
+          {
             "$ref": "#/components/schemas/session.step.streamed"
           },
           {
@@ -23480,6 +23501,9 @@
             "type": "object",
             "properties": {
               "created": {
+                "type": "number"
+              },
+              "firstToken": {
                 "type": "number"
               },
               "streamed": {
@@ -24420,9 +24444,15 @@
             "properties": {
               "text": {
                 "type": "string"
+              },
+              "tokens": {
+                "$ref": "#/components/schemas/TokenUsage.Info"
+              },
+              "cost": {
+                "$ref": "#/components/schemas/Money.USD"
               }
             },
-            "required": ["text"],
+            "required": ["text", "tokens", "cost"],
             "additionalProperties": false
           }
         },
@@ -25104,6 +25134,10 @@
         "required": ["type", "uri", "mime"],
         "additionalProperties": false
       },
+      "Tool.FreeformFormat": {
+        "type": "string",
+        "enum": ["text", "regex", "lark"]
+      },
       "Tool.TextContent": {
         "type": "object",
         "properties": {
@@ -25438,6 +25472,9 @@
             "$ref": "#/components/schemas/session.step.started"
           },
           {
+            "$ref": "#/components/schemas/session.step.first-token"
+          },
+          {
             "$ref": "#/components/schemas/session.step.streamed"
           },
           {
@@ -25619,6 +25656,9 @@
           },
           {
             "$ref": "#/components/schemas/mcp.resources.changed"
+          },
+          {
+            "$ref": "#/components/schemas/experimental.mcp.event"
           },
           {
             "$ref": "#/components/schemas/V2Event.rpc"
@@ -26316,9 +26356,83 @@
             "$ref": "#/components/schemas/Location.Ref"
           },
           "data": {
-            "not": {
-              "type": "null"
-            }
+            "type": "object",
+            "properties": {
+              "integrationID": {
+                "$ref": "#/components/schemas/Integration.ID"
+              },
+              "credentialID": {
+                "$ref": "#/components/schemas/Credential.ID"
+              }
+            },
+            "required": ["integrationID", "credentialID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.mcp.event": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.mcp.event"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "server": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "eventId": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "string"
+              },
+              "data": {},
+              "cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "truncated": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["id", "server", "name", "eventId", "timestamp", "data", "cursor"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "created", "type", "data"],
@@ -29299,6 +29413,58 @@
         "required": ["id", "created", "type", "durable", "data"],
         "additionalProperties": false
       },
+      "session.step.first-token": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.step.first-token"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "$ref": "#/components/schemas/Event.Seq"
+              },
+              "version": {
+                "$ref": "#/components/schemas/Event.VersionEncoded_c77c5abcb68d"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "$ref": "#/components/schemas/Session.ID"
+              },
+              "assistantMessageID": {
+                "$ref": "#/components/schemas/Session.Message.ID"
+              }
+            },
+            "required": ["sessionID", "assistantMessageID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "durable", "data"],
+        "additionalProperties": false
+      },
       "session.step.started": {
         "type": "object",
         "properties": {
@@ -30150,7 +30316,7 @@
               },
               "source": {
                 "type": "string",
-                "enum": ["title", "compaction"]
+                "enum": ["title", "compaction", "generate"]
               },
               "cost": {
                 "$ref": "#/components/schemas/Money.USD"

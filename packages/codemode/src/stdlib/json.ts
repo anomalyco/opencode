@@ -1,18 +1,17 @@
-import type { Eval } from "../interpreter/runner.js"
-import { methods } from "../interpreter/native.js"
-import { applyCollectionCallback } from "../interpreter/callback.js"
-import type { Interpreter } from "../interpreter/interpreter.js"
-import { checkStringLength } from "../interpreter/limits.js"
-import { syntaxError } from "../interpreter/model.js"
-import { typeofValue } from "../interpreter/references.js"
-import { fromJson, toJson } from "../data.js"
-import { get, keys, Arr, Obj, coerceToString, record, remove, set, type Value } from "../interpreter/objects.js"
+import { methods } from "../runtime/native.js"
+import { requireCallback } from "../runtime/callback.js"
+import type { Interpreter } from "../runtime/interpreter.js"
+import { syntaxError } from "../runtime/model.js"
+import { typeofValue } from "../runtime/references.js"
+import { fromJson } from "../data.js"
+import { Arr, Obj, coerceToString, record, type Value } from "../runtime/objects.js"
+import { Invoke, Push } from "../runtime/signals.js"
 
 export const jsonGlobal = <R>(ctx: Interpreter<R>) => {
   const json = new Obj(ctx.builtins.Object)
   methods(ctx.builtins, json, [
     ["parse", 2, (_, args) => parse(ctx, args)],
-    ["stringify", 3, (_, args) => stringify(ctx, args)],
+    ["stringify", 3, (_, args) => stringify(args)],
   ])
   return json
 }
@@ -28,23 +27,16 @@ const parse = <R>(ctx: Interpreter<R>, args: Array<Value>) => {
     }
   })()
   if (typeofValue(args[1]) !== "function") return parsed
-
-  const apply = applyCollectionCallback(ctx, args[1], "JSON.parse")
-  const visit = function* (holder: Obj, key: string): Eval<Value> {
-    const value = get(holder, key)
-    if (value instanceof Obj) {
-      for (const name of keys(value)) {
-        const revived = yield* visit(value, name)
-        if (revived === undefined) remove(value, name)
-        else set(value, name, revived)
-      }
-    }
-    return yield* apply([key, value], holder)
-  }
-  return visit(record(ctx.builtins.Object, { "": parsed }), "")
+  const reviver = requireCallback(args[1], "JSON.parse")
+  return new Invoke(
+    ctx.prelude.fn("revive"),
+    undefined,
+    [record(ctx.builtins.Object, { "": parsed }), "", reviver],
+    undefined,
+  )
 }
 
-function* stringify<R>(ctx: Interpreter<R>, args: Array<Value>): Eval<Value> {
+const stringify = (args: Array<Value>) => {
   const space = args[2]
   const indent = typeof space === "number" || typeof space === "string" ? space : undefined
   const replacer = args[1]
@@ -53,10 +45,7 @@ function* stringify<R>(ctx: Interpreter<R>, args: Array<Value>): Eval<Value> {
       ? replacer.items
           .filter((item): item is string | number => typeof item === "string" || typeof item === "number")
           .map(String)
-      : null
-  const callback =
-    typeofValue(replacer) === "function" ? applyCollectionCallback(ctx, replacer, "JSON.stringify") : undefined
-  const text = JSON.stringify(yield* toJson(ctx, args[0], callback), properties, indent)
-  if (text !== undefined) checkStringLength(text.length)
-  return text
+      : undefined
+  const callback = typeofValue(replacer) === "function" ? requireCallback(replacer, "JSON.stringify") : undefined
+  return new Push("JSON.stringify", [args[0], callback, properties, indent])
 }

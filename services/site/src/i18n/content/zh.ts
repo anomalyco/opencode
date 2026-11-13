@@ -10,11 +10,6 @@ export const content = {
     mobile: { name: "Mobile", body: "无论身在何处，都能在手机上启动、引导和批准会话。", action: "下载" },
     terminal: { name: "Terminal", body: "快速的终端界面，可在任意 shell、编辑器或远程服务器中使用。", action: "安装" },
     sdk: { name: "SDK", body: "在您自己的脚本、CI 任务和工具中驱动 OpenCode。", action: "阅读文档" },
-    ide: {
-      name: "IDE 扩展",
-      body: "在 VS Code、Cursor 和 Windsurf 中打开 OpenCode，或通过 ACP 在 Zed 和 JetBrains IDE 中使用。",
-      action: "安装",
-    },
     mini: {
       name: "Mini",
       body: "极简的终端界面，回复直接输出到滚动记录中，下方只有一个提示词输入框。",
@@ -123,23 +118,6 @@ export const content = {
           title: "构建自己的工具",
           body: "只需几行代码，就能把 OpenCode 接入机器人、仪表盘和工作流。",
         },
-      },
-    },
-    ide: {
-      title: "OpenCode | 适用于 VS Code、Cursor、Zed 等的 IDE 扩展",
-      description:
-        "在编辑器中使用 OpenCode。VS Code、Cursor、Windsurf 和 VSCodium 有专用扩展，Zed、JetBrains IDE 和其他 ACP 编辑器可使用 opencode acp。",
-      intro:
-        "在编辑器中使用 OpenCode。在 VS Code、Cursor、Windsurf 和 VSCodium 中，在集成终端里运行 opencode，扩展就会自动安装。Zed、JetBrains IDE 以及其他支持 Agent Client Protocol 的编辑器可通过 opencode acp 运行 OpenCode。",
-      features: {
-        "quick-launch": { title: "快速启动", body: "Cmd+Esc 或 Ctrl+Esc 在分屏终端中打开 OpenCode。" },
-        "new-session": { title: "新会话", body: "Cmd+Shift+Esc 或 Ctrl+Shift+Esc 开启另一个会话。" },
-        context: { title: "上下文", body: "将当前选中内容或标签页分享给 OpenCode。" },
-        "file-references": { title: "文件引用", body: "Cmd+Option+K 或 Alt+Ctrl+K 插入 @File#L37-42。" },
-        "installs-itself": { title: "自动安装", body: "在集成终端中运行 opencode 即可添加。" },
-        "acp-editors": { title: "ACP 编辑器", body: "Zed、JetBrains IDE、Avante.nvim 和 CodeCompanion.nvim。" },
-        "open-vsx": { title: "Open VSX", body: "也在 Open VSX 上提供，适用于 Cursor、Windsurf 和 VSCodium。" },
-        "same-agent": { title: "同一个代理", body: "就是您在终端中运行的 OpenCode，就在代码旁边。" },
       },
     },
     mini: {
@@ -268,7 +246,7 @@ export const content = {
     },
     colors: {
       title: "颜色",
-      body: "Logo 和文字标识使用同一种墨色的三种不透明度，深色背景则使用更浅的墨色。下方数值是该墨色叠加在白色或 #0B0B0B 上的效果，与标准文件一致。点击数值即可复制。",
+      body: "Logo 和文字标识使用同一种墨色的三种不透明度，深色背景则使用更浅的墨色。下方数值是标准文件中的颜色。它们仅用于 Logo 和文字标识，请勿用于其他文本或背景。点击数值即可复制。",
       palettes: {
         light: {
           name: "浅色",
@@ -600,14 +578,6 @@ export const content = {
   productDownloads: {
     terminal: { commands: { curl: { name: "脚本" } } },
     sdk: { more: { label: "阅读 SDK 文档" } },
-    ide: {
-      links: {
-        "vs-code-marketplace": { label: "VS Code 扩展市场" },
-        "open-vsx-cursor-windsurf-vscodium": { label: "Open VSX (Cursor, Windsurf, VSCodium)" },
-      },
-      lead: "在编辑器的集成终端中运行 opencode，扩展就会自动安装，也可以手动安装。",
-      more: { label: "设置 Zed、JetBrains IDE 和其他 ACP 编辑器" },
-    },
     mini: {
       commands: { curl: { name: "脚本" } },
       lead: "Mini 随 OpenCode CLI 一起提供。用以下任一方式安装，然后运行 opencode mini。",
