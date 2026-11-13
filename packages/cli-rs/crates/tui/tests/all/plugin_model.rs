@@ -47,14 +47,24 @@ pub enum Fault {
     Render,
 }
 
+/// The probe's dialogs. A prompt and a select run `probe.run` when they are confirmed; the panel has no action.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Dialog {
+    Panel,
+    Prompt,
+    Select,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Command {
     /// The plugin manager's action on the probe's row.
     Toggle,
     /// The probe's command `probe.run`, which counts.
     Run,
-    /// The probe's command `probe.panel`, which opens its panel.
-    Panel,
+    /// The probe's command that opens that dialog.
+    Dialog(Dialog),
+    /// Confirms the dialog that is open, if any.
+    Enter,
     Escape,
     Frame,
     Home,
@@ -92,8 +102,8 @@ thread_local! {
     static TOKENS: RefCell<Vec<(u32, Weak<()>)>> = const { RefCell::new(Vec::new()) };
 }
 
-/// The probe: a command that counts, a command that opens a panel, a line in `home.footer` and a route that show
-/// the build and the count, and a dispose callback. Each logs its call, and panics when its fault is armed.
+/// The probe: a command that counts, a command for each of its dialogs, a line in `home.footer` and a route that
+/// show the build and the count, and a dispose callback. Each logs its call, and panics when its fault is armed.
 fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
     let activation = ACTIVATIONS.with(|next| {
         next.set(next.get() + 1);
@@ -132,6 +142,25 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
             binds: Vec::new(),
             bleed: false,
             centered: false,
+        }));
+    });
+    let run = || abi::Action::Command { name: "probe.run".to_owned(), input: None };
+    let held = token.clone();
+    setup.command(command("probe.prompt", "Probe prompt"), move |host, _| {
+        let _ = &held;
+        called(activation, B, Kind::Command);
+        host.dialog(abi::Dialog::Prompt { title: format!("Probe prompt b{B}"), placeholder: None, action: run() });
+    });
+    let held = token.clone();
+    setup.command(command("probe.select", "Probe select"), move |host, _| {
+        let _ = &held;
+        called(activation, B, Kind::Command);
+        host.dialog(abi::Dialog::Select(abi::Select {
+            title: format!("Probe select b{B}"),
+            placeholder: None,
+            options: vec![abi::SelectOption::new("Probe option", "option")],
+            current: None,
+            action: run(),
         }));
     });
     let (held, counted) = (token.clone(), count.clone());
@@ -229,7 +258,11 @@ impl World {
                 }
             }
             Command::Run => reached = matches!(tui.keymap.dispatch("probe.run", None), RunResult::Ok),
-            Command::Panel => reached = matches!(tui.keymap.dispatch("probe.panel", None), RunResult::Ok),
+            Command::Dialog(dialog) => {
+                let name = format!("probe.{}", format!("{dialog:?}").to_lowercase());
+                reached = matches!(tui.keymap.dispatch(&name, None), RunResult::Ok);
+            }
+            Command::Enter => app.press("enter"),
             Command::Escape => app.press("escape"),
             Command::Frame => app.advance(Duration::from_millis(16)),
             Command::Home => tui.navigate(Route::Home),
@@ -410,11 +443,13 @@ struct Reference {
     /// Outside a strict run the open defect `a-failed-plugin-is-disposed` is expected: a failed plugin's dispose
     /// callbacks run as it leaves.
     strict: bool,
+    /// The probe's dialog on screen, and the activation that opened it.
+    dialog: Option<(Dialog, u32)>,
 }
 
 impl Reference {
     fn new(build: u8, strict: bool) -> Self {
-        Self { life: Life::Disabled, build, file: build, armed: None, last: 0, strict }
+        Self { life: Life::Disabled, build, file: build, armed: None, last: 0, strict, dialog: None }
     }
 
     /// Checks the calls the probe logged while `command` ran, and moves the machine. `reached` says whether one of
@@ -438,10 +473,20 @@ impl Reference {
                 Life::Disabled | Life::SetupFailed => expected.push(Expect::Setup(self.build)),
                 Life::Exited => unreachable!(),
             },
-            Some(Command::Run | Command::Panel) => match self.life {
+            Some(Command::Run | Command::Dialog(_)) => match self.life {
                 Life::Active(a, _) if reached => expected.push(Expect::Command(a)),
                 Life::Active(..) => {}
                 _ if reached => return Err(format!("a command ran while the plugin is {:?}", self.life)),
+                _ => {}
+            },
+            Some(Command::Escape) => self.dialog = None,
+            // A confirmed prompt or select runs `probe.run`, which reaches only the activation that opened it. The
+            // panel has no action and stays.
+            Some(Command::Enter) => match self.dialog.take() {
+                Some((Dialog::Panel, a)) => self.dialog = Some((Dialog::Panel, a)),
+                Some((_, a)) if matches!(self.life, Life::Active(live, _) if live == a) => {
+                    expected.push(Expect::Command(a))
+                }
                 _ => {}
             },
             Some(Command::Reload(build)) if build != self.file => {
@@ -503,8 +548,10 @@ impl Reference {
                 }
                 (Expect::Command(a), Kind::Command) if call.activation == a => {
                     self.fault(Fault::Command, call)?;
-                    if call.panicked {
-                        self.life = Life::Failed(a);
+                    match (call.panicked, command) {
+                        (true, _) => self.life = Life::Failed(a),
+                        (false, Some(Command::Dialog(dialog))) => self.dialog = Some((dialog, a)),
+                        _ => {}
                     }
                 }
                 (Expect::Dispose(a), Kind::Dispose) if call.activation == a && !call.panicked => {
@@ -563,10 +610,11 @@ impl Model for PluginModel {
         (0..steps)
             .map(|_| match rng.below(100) {
                 0..15 => Command::Toggle,
-                15..27 => Command::Run,
-                27..35 => Command::Panel,
-                35..43 => Command::Escape,
-                43..52 => Command::Frame,
+                15..25 => Command::Run,
+                25..35 => Command::Dialog(*rng.pick(&[Dialog::Panel, Dialog::Prompt, Dialog::Select])),
+                35..40 => Command::Enter,
+                40..46 => Command::Escape,
+                46..52 => Command::Frame,
                 52..58 => Command::Home,
                 58..64 => Command::Route,
                 64..82 => Command::Reload(*rng.pick(&[1, 2, 3, BAD])),
@@ -583,7 +631,8 @@ impl Model for PluginModel {
     fn simplify(&self, command: &Command) -> Vec<Command> {
         match command {
             Command::Reload(build) if *build != 1 && *build != BAD => vec![Command::Reload(1)],
-            Command::Panel => vec![Command::Run],
+            Command::Dialog(Dialog::Panel) => vec![Command::Run],
+            Command::Dialog(_) => vec![Command::Dialog(Dialog::Panel)],
             Command::Route => vec![Command::Home],
             _ => Vec::new(),
         }
@@ -621,14 +670,13 @@ fn run(commands: &[Command], strict: bool) -> Option<Failure> {
         if let Err(detail) = reference.step(Some(command), reached, &calls) {
             return fail("lifecycle", step, detail);
         }
-        // The open defect `a-panel-outlives-its-activation`: outside a strict run, the panel of an activation that
-        // ended is closed here, as the host would, so the search goes on past it.
-        let tui = &world.harness.tui;
-        let ended =
-            matches!((life, reference.life), (Life::Active(a, _), now) if !matches!(now, Life::Active(b, _) if b == a));
-        if !strict && ended && tui.dialogs.key().is_some_and(|key| key.starts_with(&format!("{ID}/"))) {
-            tui.dialogs.clear();
+        // The open finding `a-dialog-outlives-its-activation`: outside a strict run, the dialog of an activation that
+        // is no longer active is closed here, as 4.14 asks of the host, so the search goes on past it.
+        let stale = reference.dialog.is_some_and(|(_, a)| !matches!(reference.life, Life::Active(b, _) if b == a));
+        if !strict && stale {
+            world.harness.tui.dialogs.clear();
             world.settle();
+            reference.dialog = None;
         }
         if let Some(detail) = ledger(&world, &twin, &reference) {
             return fail("ledger", step, detail);
@@ -774,11 +822,15 @@ fn collapse<'a>(calls: impl Iterator<Item = &'a Call>) -> Vec<Kind> {
 
 /// Shrunk traces of defects the model found, each with the property it fails. Each must still fail in a strict run.
 const OPEN: &[(&str, &str, &[Command])] = &[
-    // A plugin's panel stays open, with focus, after its plugin failed, was disabled or was replaced by a reload.
-    // TS keeps a plugin's dialog on deactivation too; 4.14 revokes it.
-    ("a-panel-outlives-its-activation", "ledger", &[Command::Arm(Fault::Render), Command::Panel]),
-    ("a-panel-outlives-its-activation", "ledger", &[Command::Panel, Command::Toggle]),
-    ("a-panel-outlives-its-activation", "reload-fresh", &[Command::Panel, Command::Reload(2)]),
+    // A plugin's dialog (panel, prompt, select) stays open, with focus, after its plugin failed, was disabled or was
+    // replaced by a reload. TS keeps a plugin's dialog on deactivation and reload too (`plugin-keymap.test.tsx`, "a
+    // component layer ends with its activation on reload while the component stays mounted"); 4.14 revokes it.
+    ("a-dialog-outlives-its-activation", "ledger", &[Command::Arm(Fault::Render), Command::Dialog(Dialog::Panel)]),
+    ("a-dialog-outlives-its-activation", "ledger", &[Command::Dialog(Dialog::Panel), Command::Toggle]),
+    ("a-dialog-outlives-its-activation", "ledger", &[Command::Dialog(Dialog::Prompt), Command::Toggle]),
+    ("a-dialog-outlives-its-activation", "ledger", &[Command::Dialog(Dialog::Select), Command::Toggle]),
+    ("a-dialog-outlives-its-activation", "reload-fresh", &[Command::Dialog(Dialog::Panel), Command::Reload(2)]),
+    ("a-dialog-outlives-its-activation", "reload-fresh", &[Command::Dialog(Dialog::Prompt), Command::Reload(2)]),
     // A plugin that failed gets its dispose callbacks as it is disabled, replaced or the client exits: the C ABI's
     // `destroy` and the in-process `Scope::dispose` run them. 4.14: a failed plugin is called no more.
     ("a-failed-plugin-is-disposed", "lifecycle", &[Command::Arm(Fault::Command), Command::Run, Command::Toggle]),
