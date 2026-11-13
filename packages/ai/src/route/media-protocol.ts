@@ -94,7 +94,7 @@ export interface PollContext<Token> {
   readonly token: Token
   /**
    * The headers an authenticated GET of `url` would send (deployment headers plus auth), for result URLs that need
-   * the API key to download. Use them only for the provider's own URLs.
+   * the API key to download. URLs on another origin than the route's base URL get no headers.
    */
   readonly headers: (url: string) => Effect.Effect<Record<string, string>, AIError>
 }

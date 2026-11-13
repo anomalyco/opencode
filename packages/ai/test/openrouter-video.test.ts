@@ -186,6 +186,19 @@ describe("ai.video.status / result / cancel / OpenRouter", () => {
     }),
   )
 
+  it.effect("attaches no credentials to a result URL on another host", () =>
+    Effect.gen(function* () {
+      const response = yield* ai.video.result(model, token)
+      expect(response.video.headers).toEqual({})
+    }).pipe(
+      Effect.provide(
+        layer((input) =>
+          Effect.succeed(json(input, { ...completed, unsigned_urls: ["https://cdn.example.test/video.mp4"] })),
+        ),
+      ),
+    ),
+  )
+
   it.effect("fails a result read before the job finishes", () =>
     Effect.gen(function* () {
       const error = yield* ai.video.result(model, token).pipe(Effect.flip)

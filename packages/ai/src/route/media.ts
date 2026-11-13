@@ -391,15 +391,20 @@ const makeTransport = <Request extends MediaRequest>(
       const sent = yield* send({ method: "POST", url, headers, request: resolved, body }, request.fetch, execute)
       return { response: sent.response, context: { request: resolved, body }, exchange }
     }),
-    /** The headers a follow-up GET of `url` sends, for result URLs that only download with the same credentials. */
+    /**
+     * The headers a follow-up GET of `url` sends, for result URLs that only download with the same credentials. A URL
+     * on another origin than the route's base URL gets none, so credentials never leave the provider's host.
+     */
     headers: (url: string, exchange: Exchange) =>
-      authorize({
-        request: { http: exchange.http },
-        method: "GET",
-        url,
-        body: "",
-        headers: Headers.fromInput(exchange.headers),
-      }).pipe(Effect.map((headers) => ({ ...headers }))),
+      URL.canParse(url) && new URL(url).origin === baseURL("").origin
+        ? authorize({
+            request: { http: exchange.http },
+            method: "GET",
+            url,
+            body: "",
+            headers: Headers.fromInput(exchange.headers),
+          }).pipe(Effect.map((headers): Record<string, string> => ({ ...headers })))
+        : Effect.succeed({}),
     /** Bodiless follow-up call (status, result, cancel) with the same auth and headers as `submit`. */
     call: (method: AuthInput["method"], path: string, exchange: Exchange, execute: Execute) => {
       // Provider-issued absolute URLs are used as-is; everything else resolves against the base.
