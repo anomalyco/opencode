@@ -2,6 +2,7 @@
 //! [`Deps`], and the wait and screen helpers.
 
 pub mod ide;
+pub mod model;
 
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
