@@ -5,7 +5,8 @@ exports itself with `export_plugin!`. The host loads it at startup and again whe
 lifecycle and the callback rules are in [`docs/P.4.md`](../../docs/P.4.md). Every type is documented in the rustdoc
 (`cargo doc -p opencode-plugin-abi --open`).
 
-Plugins load on Linux and macOS. The host opens libraries with `dlopen`, so on Windows every plugin fails to load.
+Plugins load on Linux (`.so`), macOS (`.dylib`) and Windows (`.dll`). The host opens libraries with `dlopen`, and
+with `LoadLibraryW` on Windows.
 
 ## Quick start
 
@@ -75,11 +76,13 @@ storage keys. Build the library:
 cargo build --release
 ```
 
-The library is `target/release/libopencode_hello.so` (`.dylib` on macOS). Install it in one of these ways:
+The library is `target/release/libopencode_hello.so` (`.dylib` on macOS, `opencode_hello.dll` on Windows). Install it
+in one of these ways:
 
-- Copy it to `plugin.so` (`plugin.dylib` on macOS) in a directory of its own under a `plugins` directory. The
-  global one is `~/.config/opencode/plugins/` (`$OPENCODE_CONFIG_DIR/plugins/` when that is set). The project's is
-  `.opencode/plugins/` in the project root, or in any directory between the root and the working directory:
+- Copy it to `plugin.so` (`plugin.dylib` on macOS, `plugin.dll` on Windows) in a directory of its own under a
+  `plugins` directory. The global one is `~/.config/opencode/plugins/` (`$OPENCODE_CONFIG_DIR/plugins/` when that is
+  set). The project's is `.opencode/plugins/` in the project root, or in any directory between the root and the
+  working directory:
 
   ```sh
   mkdir -p ~/.config/opencode/plugins/hello
