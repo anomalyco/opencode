@@ -232,6 +232,34 @@ test("a web tab stays fully usable by the agent", () => {
   ).toBeUndefined()
 })
 
+test("workspace roots with %, #, ?, spaces and non-ASCII names match their files, and a URL that cannot be read never throws", () => {
+  // The address Chromium gives a file: every path segment percent-encoded.
+  const fileURL = (path: string) => `file://${path.split("/").map(encodeURIComponent).join("/")}`
+
+  for (const root of [
+    "/work/100%-done",
+    "/work/a#b",
+    "/work/what?",
+    "/work/my project",
+    "/work/日本語",
+    "/work/a%2fb",
+  ]) {
+    expect(fileURLWithin(fileURL(`${root}/index.html`), [root])).toBe(true)
+    expect(fileURLWithin(fileURL(`${root}-other/index.html`), [root])).toBe(false)
+  }
+
+  // Before, decoding the root threw URIError for "100%-done", before the request guard could answer.
+  expect(() => fileURLWithin("file:///elsewhere/x.html", ["/work/100%-done"])).not.toThrow()
+  // A folder named "a%2fb" is not the folder "a/b", and an escaped separator never counts as one.
+  expect(fileURLWithin("file:///work/a/b/x.html", ["/work/a%2fb"])).toBe(false)
+  expect(fileURLWithin("file:///work/a%2Fb/x.html", ["/work/a/b"])).toBe(false)
+  expect(fileURLWithin("file:///work/a/..%2F..%2Fsecret", ["/work/a"])).toBe(false)
+  // Escapes that do not decode are outside, not an exception.
+  expect(fileURLWithin("file:///work/bad%zz/x.html", ["/work/bad%zz"])).toBe(false)
+  expect(fileURLWithin("file:///work/bad%C3/x.html", ["/work"])).toBe(false)
+  expect(refusal("file:///work/bad%zz/x.html", { fileRoots: ["/work"] })).toBe("browser.address.workspace")
+})
+
 test("the user still opens extension pages the agent may not", () => {
   const extensions = ["nngceckbapebfimnlniiiahkandclblb"]
 

@@ -17,25 +17,44 @@ export function localFileURL(input: string) {
   return url.protocol === "file:" && !url.hostname ? url.href : undefined
 }
 
-/** Case-insensitive on Windows, where drive letters and paths compare that way. */
-function canonicalPath(input: string) {
-  const value = decodeURIComponent(input)
-    .replaceAll("\\", "/")
-    .replace(/^\/([A-Za-z]:\/)/, "$1")
+/** A filesystem path in the form paths compare in: slashes, no leading slash before a drive, any case on Windows. */
+function canonicalPath(path: string) {
+  const value = path.replaceAll("\\", "/").replace(/^\/([A-Za-z]:\/)/, "$1")
 
   return process.platform === "win32" ? value.toLowerCase() : value
+}
+
+/** The filesystem path a file URL names, or undefined when its escapes do not decode or could step out of a folder. */
+function filePath(url: URL) {
+  // An escaped separator or dot segment decodes into a path the URL parser never normalized.
+  if (/%(?:2f|5c)/i.test(url.pathname)) return undefined
+
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(url.pathname)
+    } catch {
+      return undefined
+    }
+  })()
+
+  if (decoded === undefined || decoded.split(/[\\/]/).some((part) => part === "." || part === "..")) return undefined
+
+  return canonicalPath(decoded)
 }
 
 /**
  * Whether a file URL points inside one of the allowed directories. The agent already has read
  * access to the session's workspace, so files there may be shown; anything else stays behind the
- * server's file permissions.
+ * server's file permissions. The roots are filesystem paths, compared as written; a URL whose path cannot be compared
+ * with them is outside.
  */
 export function fileURLWithin(input: string, roots: ReadonlyArray<string>) {
   const href = localFileURL(input)
 
   if (!href || roots.length === 0) return false
-  const path = canonicalPath(new URL(href).pathname)
+  const path = filePath(new URL(href))
+
+  if (path === undefined) return false
 
   return roots.some((root) => {
     const prefix = canonicalPath(root).replace(/\/+$/, "")
