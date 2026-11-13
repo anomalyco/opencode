@@ -35,25 +35,31 @@ pub(crate) fn commands(scoped: &[(String, TuiCommand)], name: &str) -> Vec<TuiCo
 
 pub(crate) struct View {
     root: opentui::prelude::View,
-    pub mount: Rc<Mount>,
+    content: Box<dyn Claimed>,
     layer: RefCell<Option<Disposer>>,
     app: App,
 }
 
 impl View {
+    /// The route of a render of ABI 1.x; also returns its mount, which its activation draws again.
     pub fn new(
         host: &dyn Host,
         owner: Weak<dyn Host>,
         render: SlotRender,
         commands: Vec<TuiCommand>,
         on_mount: Option<MountFn>,
-    ) -> Self {
+    ) -> (Self, Rc<Mount>) {
+        let mount = Mount::new(host, owner, "", &SlotInput::default(), render, on_mount, false);
+        (Self::wrap(host, Box::new(mount.clone()), commands), mount)
+    }
+
+    /// The route that shows `content`.
+    pub fn wrap(host: &dyn Host, content: Box<dyn Claimed>, commands: Vec<TuiCommand>) -> Self {
         let app = host.app();
         let theme = host.theme();
         let scroll = ScrollBox::new(app).scrollbars(false).grow(1.0);
         scroll.content_view().align_items(Align::Center).justify(Justify::Center).padding_y(1);
-        let mount = Mount::new(host, owner, "", &SlotInput::default(), render, on_mount, false);
-        scroll.add(&mount.root());
+        scroll.add(&content.root());
         let root = opentui::prelude::View::new(app)
             .width(Length::percent(100.0))
             .height(Length::percent(100.0))
@@ -62,7 +68,7 @@ impl View {
         let layer = (!commands.is_empty())
             .then(|| host.keymap().layer(KeymapLayer::<FocusId>::new(commands)))
             .and_then(|layer| layer.map_err(|error| log::error!("plugin route keymap layer: {error}")).ok());
-        Self { root, mount, layer: RefCell::new(layer), app: app.clone() }
+        Self { root, content, layer: RefCell::new(layer), app: app.clone() }
     }
 }
 
@@ -72,7 +78,12 @@ impl Claimed for View {
     }
 
     fn sync(&self, host: &dyn Host, changed: &abi::Changed) {
-        self.mount.sync(host, changed);
+        self.content.sync(host, changed);
+    }
+
+    fn restyle(&self, host: &dyn Host) -> bool {
+        self.root.bg(host.theme().background.base);
+        self.content.restyle(host)
     }
 }
 
