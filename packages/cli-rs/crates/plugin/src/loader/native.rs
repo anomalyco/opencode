@@ -100,24 +100,29 @@ fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Resul
         // That instance only tells the ID: nothing it asks for happens.
         None => Instance::create(&library, Rc::downgrade(host), "", options.as_deref(), true)?.1.id,
     };
-    // The failure of the running instance: a panic.
-    let failure: Rc<RefCell<Option<String>>> = Rc::default();
+    // The failure of the running instance, a panic, in a cell of each activation's own: a new activation leaves an old
+    // one's failure as it was.
+    let current: Rc<RefCell<Rc<RefCell<Option<String>>>>> = Rc::default();
     let definition = Definition::fallible(id, {
-        let failure = failure.clone();
+        let current = current.clone();
         move |setup: &mut Setup<'_>| {
             let host = Rc::downgrade(setup.host());
             let (instance, manifest) = Instance::create(&library, host.clone(), setup.id(), options.as_deref(), false)?;
             if manifest.id != setup.id() {
                 return Err(format!("setup returned plugin ID {}, not {}", manifest.id, setup.id()));
             }
-            *failure.borrow_mut() = None;
+            let failure: Rc<RefCell<Option<String>>> = Rc::default();
+            *current.borrow_mut() = failure.clone();
+            let failed = failure.clone();
+            setup.failure(Rc::new(move || failed.borrow().clone()));
             let activation = Activation::new(setup.host(), instance.shared.wake.clone());
             let guest = Rc::new(Guest {
                 instance: RefCell::new(Some(instance)),
                 busy: Cell::new(false),
-                failure: failure.clone(),
+                failure,
                 host,
                 id: setup.id().to_owned(),
+                generation: setup.generation(),
                 layer: RefCell::new(None),
                 activation,
             });
@@ -135,7 +140,7 @@ fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Resul
             Ok(())
         }
     });
-    let error: ErrorFn = Rc::new(move || failure.borrow().clone());
+    let error: ErrorFn = Rc::new(move || current.borrow().borrow().clone());
     Ok((definition, error))
 }
 
@@ -575,6 +580,8 @@ struct Guest {
     failure: Rc<RefCell<Option<String>>>,
     host: Weak<dyn Host>,
     id: String,
+    /// The activation ([`crate::Registry::live`]), which owns the dialogs it asks for.
+    generation: u64,
     /// The commands' keymap layer, until deactivation or a panic removes it.
     layer: RefCell<Option<Disposer>>,
     /// The mounted slot claims and routes, which a wake draws again.
@@ -668,7 +675,13 @@ fn apply(host: &Weak<dyn Host>, id: String, guest: Weak<Guest>, effects: Vec<Eff
                 Effect::Stored => host.storage_changed(),
                 Effect::Navigate(route) => host.navigate(&id, &route),
                 Effect::Fetch(request, fetch) => Guest::fetch(&guest, host, request, fetch),
-                Effect::Dialog(dialog) => host.dialog(&id, dialog),
+                // A dialog belongs to its activation. What a setup that failed or a dispose callback asked for has
+                // none, and shows nowhere.
+                Effect::Dialog(dialog) => {
+                    if let Some(guest) = guest.upgrade() {
+                        host.dialog(&id, guest.generation, dialog);
+                    }
+                }
                 Effect::Copy(text, then) => crate::copy(host, &text, then),
             }
         }

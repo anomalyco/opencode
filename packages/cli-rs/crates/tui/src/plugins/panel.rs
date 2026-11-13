@@ -12,7 +12,8 @@ use crate::prelude::*;
 /// The panel on screen, which a panel of the same key changes in place.
 pub struct Live {
     key: String,
-    plugin: String,
+    /// The plugin and activation that showed it, which its actions reach.
+    owner: Owner,
     cx: Rc<DialogCx>,
     title: View,
     content: View,
@@ -50,140 +51,155 @@ fn max_rows(app: &App) -> u32 {
     (u32::from(app.size().1) * 6 / 10).max(8)
 }
 
-/// Shows plugin `id`'s `dialog`.
-pub fn show(tui: &Tui, id: &str, dialog: abi::Dialog) {
+/// The plugin and the activation a dialog belongs to ([`opencode_plugin::Registry::live`]).
+type Owner = (String, u64);
+
+/// Shows `dialog` of activation `generation` of plugin `id`, which owns it from now on.
+pub fn show(tui: &Tui, id: &str, generation: u64, dialog: abi::Dialog) {
+    let owner = (id.to_owned(), generation);
     match dialog {
-        abi::Dialog::Prompt { title, placeholder, action } => ask(tui, id, title, placeholder, action),
-        abi::Dialog::Panel(panel) => self::panel(tui, id, panel),
+        abi::Dialog::Prompt { title, placeholder, action } => ask(tui, owner, title, placeholder, action),
+        abi::Dialog::Panel(panel) => self::panel(tui, owner, panel),
         abi::Dialog::Close { key } => {
             if open(tui, id, &key) {
                 tui.dialogs.clear();
             }
         }
-        abi::Dialog::Select(select) => pick(tui, id, select),
+        abi::Dialog::Select(select) => pick(tui, owner, select),
     }
 }
 
 /// Whether plugin `id`'s panel `key` is open.
 pub fn open(tui: &Tui, id: &str, key: &str) -> bool {
-    tui.dialogs.key().is_some_and(|open| open.strip_prefix(id).and_then(|rest| rest.strip_prefix('/')) == Some(key))
+    let mine = tui.reads.owner.borrow().as_ref().is_some_and(|(owner, _)| owner == id);
+    mine && tui.dialogs.key() == Some(format!("{id}/{key}"))
 }
 
-/// The key of plugin `id`'s dialogs that have none of their own (a prompt, a list): no panel key matches it in
-/// [`open`], since a panel's follows a `/`.
-fn owned(id: &str) -> String {
-    format!("{id}#")
-}
-
-/// Closes the dialog plugin `id` opened, if it shows: its activation ended (4.14, deviation
+/// Closes the dialog plugin `id` opened, if it shows and the activation that opened it ended (4.14, deviation
 /// `F16-plugin-dialog-ends-with-activation`). The dialogs replace each other, so the one on top is the only one.
 pub fn close(tui: &Tui, id: &str) {
-    let key = tui.dialogs.key();
-    let mine = key
-        .as_deref()
-        .is_some_and(|key| key == owned(id) || key.strip_prefix(id).is_some_and(|rest| rest.starts_with('/')));
-    if mine {
+    let owner = tui.reads.owner.borrow().clone();
+    if owner.is_some_and(|(owner, generation)| owner == id && !tui.plugins.live(id, generation)) {
         tui.dialogs.clear();
     }
 }
 
-fn ask(tui: &Tui, id: &str, title: String, placeholder: Option<String>, action: abi::Action) {
-    let options = DialogOptions::default().key(owned(id));
-    let (weak, clear, id) = (tui.weak(), tui.dialogs.clone(), id.to_owned());
-    tui.dialogs.replace(
-        move |cx| {
-            let (clear, id, action) = (clear.clone(), id.clone(), action.clone());
-            let on_confirm = bind!(weak, |tui, value: &str| {
-                tui.dialogs.clear();
-                run(&tui, &id, &action, Some(value));
-            });
-            let (view, _) = prompt(
-                cx,
-                PromptProps {
-                    title: title.clone(),
-                    placeholder: placeholder.clone(),
-                    on_confirm: Some(Rc::new(on_confirm)),
-                    on_cancel: Some(Rc::new(move || clear.clear())),
-                    ..PromptProps::default()
-                },
-            );
-            view
-        },
-        None,
-        options,
-    );
+/// Shows a dialog of `owner` with `replace`, which gets what the dialog runs as it closes, and records the owner
+/// once the dialog it replaced has closed.
+fn own(tui: &Tui, owner: Owner, replace: impl FnOnce(Box<dyn FnOnce()>)) {
+    let forgotten = owner.clone();
+    replace(Box::new(bind!(tui, |tui| {
+        let mut current = tui.reads.owner.borrow_mut();
+        if current.as_ref() == Some(&forgotten) {
+            current.take();
+        }
+    })));
+    *tui.reads.owner.borrow_mut() = Some(owner);
+}
+
+fn ask(tui: &Tui, owner: Owner, title: String, placeholder: Option<String>, action: abi::Action) {
+    let (weak, clear, confirmed) = (tui.weak(), tui.dialogs.clone(), owner.clone());
+    own(tui, owner, |on_close| {
+        tui.dialogs.replace(
+            move |cx| {
+                let (clear, owner, action) = (clear.clone(), confirmed.clone(), action.clone());
+                let on_confirm = bind!(weak, |tui, value: &str| {
+                    tui.dialogs.clear();
+                    run(&tui, &owner, &action, Some(value));
+                });
+                let (view, _) = prompt(
+                    cx,
+                    PromptProps {
+                        title: title.clone(),
+                        placeholder: placeholder.clone(),
+                        on_confirm: Some(Rc::new(on_confirm)),
+                        on_cancel: Some(Rc::new(move || clear.clear())),
+                        ..PromptProps::default()
+                    },
+                );
+                view
+            },
+            Some(on_close),
+            DialogOptions::default(),
+        )
+    });
 }
 
 /// TS `dialog.select`: picking an option closes the list, then runs the action with the option's value.
-fn pick(tui: &Tui, id: &str, select: abi::Select) {
-    let options = DialogOptions::default().key(owned(id));
-    let (weak, id) = (tui.weak(), id.to_owned());
-    tui.dialogs.replace(
-        move |cx| {
-            let options = select
-                .options
-                .iter()
-                .map(|option| {
-                    let mut item = SelectOption::new(option.title.clone(), option.value.clone());
-                    item.description = option.description.clone();
-                    item.footer = option.footer.clone();
-                    item.category = option.category.clone();
-                    item.disabled = option.disabled;
-                    item
-                })
-                .collect();
-            let mut props = SelectProps::new(select.title.clone(), options);
-            props.placeholder = select.placeholder.clone();
-            props.current = select.current.clone();
-            let (id, action) = (id.clone(), select.action.clone());
-            props.on_select = Some(Rc::new(bind!(weak, |tui, option: &SelectOption<String>| {
-                tui.dialogs.clear();
-                run(&tui, &id, &action, Some(&option.value));
-            })));
-            opencode_ui::select::select(cx, props).0
-        },
-        None,
-        options,
-    );
+fn pick(tui: &Tui, owner: Owner, select: abi::Select) {
+    let (weak, picked) = (tui.weak(), owner.clone());
+    own(tui, owner, |on_close| {
+        tui.dialogs.replace(
+            move |cx| {
+                let options = select
+                    .options
+                    .iter()
+                    .map(|option| {
+                        let mut item = SelectOption::new(option.title.clone(), option.value.clone());
+                        item.description = option.description.clone();
+                        item.footer = option.footer.clone();
+                        item.category = option.category.clone();
+                        item.disabled = option.disabled;
+                        item
+                    })
+                    .collect();
+                let mut props = SelectProps::new(select.title.clone(), options);
+                props.placeholder = select.placeholder.clone();
+                props.current = select.current.clone();
+                let (owner, action) = (picked.clone(), select.action.clone());
+                props.on_select = Some(Rc::new(bind!(weak, |tui, option: &SelectOption<String>| {
+                    tui.dialogs.clear();
+                    run(&tui, &owner, &action, Some(&option.value));
+                })));
+                opencode_ui::select::select(cx, props).0
+            },
+            Some(on_close),
+            DialogOptions::default(),
+        )
+    });
 }
 
-fn panel(tui: &Tui, id: &str, panel: abi::Panel) {
-    let key = format!("{id}/{}", panel.key);
+fn panel(tui: &Tui, owner: Owner, panel: abi::Panel) {
+    let key = format!("{}/{}", owner.0, panel.key);
     let centered = panel.centered;
     let size = match panel.size {
         abi::PanelSize::Medium => DialogSize::Medium,
         abi::PanelSize::Large => DialogSize::Large,
     };
-    if tui.dialogs.key().as_deref() == Some(key.as_str()) {
+    let mine = tui.reads.owner.borrow().as_ref().is_some_and(|(id, _)| *id == owner.0);
+    if mine && tui.dialogs.key().as_deref() == Some(key.as_str()) {
         let live = tui.reads.panel.borrow_mut().take();
         if let Some(live) = live.filter(|live| live.key == key) {
             live.update(tui, panel);
             tui.dialogs.set_size(size);
             tui.dialogs.set_centered(centered);
             *tui.reads.panel.borrow_mut() = Some(live);
+            *tui.reads.owner.borrow_mut() = Some(owner);
             tui.app.request_redraw();
             return;
         }
     }
-    let plugin = id.to_owned();
     let options = DialogOptions::new(size).key(key.clone());
-    tui.dialogs.replace(
-        bind!(tui, |tui, cx| {
-            // Built again in a new theme, the panel shows what the plugin sent last.
-            let live = tui.reads.panel.borrow_mut().take_if(|live| live.key == key);
-            let shown = live.as_ref().map_or_else(|| panel.clone(), |live| live.shown.borrow().clone());
-            tui.app.defer(move |_| drop(live));
-            let (view, live) = build(&tui, cx, key.clone(), plugin.clone(), shown);
-            *tui.reads.panel.borrow_mut() = Some(live);
-            view
-        }, else View::new(&cx.app)),
-        None,
-        options,
-    );
+    let built = owner.clone();
+    own(tui, owner, |on_close| {
+        tui.dialogs.replace(
+            bind!(tui, |tui, cx| {
+                // Built again in a new theme, the panel shows what the plugin sent last.
+                let live = tui.reads.panel.borrow_mut().take_if(|live| live.key == key);
+                let shown = live.as_ref().map_or_else(|| panel.clone(), |live| live.shown.borrow().clone());
+                tui.app.defer(move |_| drop(live));
+                let (view, live) = build(&tui, cx, key.clone(), built.clone(), shown);
+                *tui.reads.panel.borrow_mut() = Some(live);
+                view
+            }, else View::new(&cx.app)),
+            Some(on_close),
+            options,
+        )
+    });
     tui.dialogs.set_centered(centered);
 }
 
-fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, plugin: String, panel: abi::Panel) -> (View, Live) {
+fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Panel) -> (View, Live) {
     let app = &cx.app;
     let page = cx.theme.page();
     let title = View::new(app).row().gap(2).grow(1.0).min_width(0);
@@ -251,7 +267,7 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, plugin: String, panel: abi::
     }));
     let live = Live {
         key,
-        plugin,
+        owner,
         cx: cx.clone(),
         title,
         content,
@@ -311,12 +327,12 @@ impl Live {
                 let mut item = FooterAction::new(action.title);
                 item.key = action.key;
                 item.color = action.color.as_ref().and_then(|color| node::color_of(theme, color));
-                let (plugin, close, run_action) = (self.plugin.clone(), action.close, action.action);
+                let (owner, close, run_action) = (self.owner.clone(), action.close, action.action);
                 item.on_trigger(bind!(tui, |tui| {
                     if close {
                         tui.dialogs.clear();
                     }
-                    run(&tui, &plugin, &run_action, None);
+                    run(&tui, &owner, &run_action, None);
                 }))
             })
             .collect();
@@ -326,8 +342,8 @@ impl Live {
             .binds
             .into_iter()
             .map(|bind| {
-                let (plugin, action) = (self.plugin.clone(), bind.action);
-                TuiCommand::inline(bind.key, bind!(tui, |tui, _, _| run(&tui, &plugin, &action, None)))
+                let (owner, action) = (self.owner.clone(), bind.action);
+                TuiCommand::inline(bind.key, bind!(tui, |tui, _, _| run(&tui, &owner, &action, None)))
                     .title(bind.title)
                     .group("Dialog")
             })
@@ -353,7 +369,7 @@ impl Live {
             &mut hovers,
             &|text| {
                 // As in TS, of the plugins' Markdown only the `/btw` answer links sessions (`btw.tsx`).
-                if self.plugin != super::btw::ID {
+                if self.owner.0 != super::btw::ID {
                     return tui.markdown(text);
                 }
                 let markdown = super::host::markdown(tui);
@@ -377,17 +393,21 @@ impl Live {
     }
 
     fn act(&self, tui: &Tui) -> Act {
-        let plugin = self.plugin.clone();
-        Rc::new(bind!(tui, |tui, action| run(&tui, &plugin, action, None)))
+        let owner = self.owner.clone();
+        Rc::new(bind!(tui, |tui, action| run(&tui, &owner, action, None)))
     }
 }
 
-/// Runs plugin `id`'s `action` once the current event is handled; `value`, a prompt's text, is its input.
-fn run(tui: &Tui, _id: &str, action: &abi::Action, value: Option<&str>) {
+/// Runs `owner`'s `action` once the current event is handled; `value`, a prompt's text, is its input. An action whose
+/// activation ended before then reaches nothing, not the build that replaced it (review carbon-pt-1).
+fn run(tui: &Tui, owner: &Owner, action: &abi::Action, value: Option<&str>) {
     let abi::Action::Command { name, input } = action.clone();
     let input = value.map(str::to_owned).or(input);
+    let owner = owner.clone();
     tui.app.defer(bind!(tui, |tui, _| {
-        tui.keymap.dispatch(&name, input.as_deref());
+        if tui.plugins.live(&owner.0, owner.1) {
+            tui.keymap.dispatch(&name, input.as_deref());
+        }
     }));
 }
 

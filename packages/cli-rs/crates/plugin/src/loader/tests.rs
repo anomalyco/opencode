@@ -161,7 +161,7 @@ impl Host for TestHost {
         self.fetches.borrow_mut().push((fetch, reply));
     }
 
-    fn dialog(&self, id: &str, dialog: abi::Dialog) {
+    fn dialog(&self, id: &str, _: u64, dialog: abi::Dialog) {
         self.dialogs.borrow_mut().push((id.to_owned(), dialog));
     }
 }
