@@ -78,6 +78,7 @@ pub fn install(tui: &Tui) {
     // For the TUI's lifetime.
     std::mem::forget(tui.data.listen(HANDLED.iter().map(|(tag, _)| *tag)));
     tui.app.on_message(bind!(tui, |tui, _, Signal(event)| {
+        opencode_plugin::flush();
         if let Some(event) = Handled::of(event) {
             handle(&tui, &event);
         }
@@ -87,7 +88,20 @@ pub fn install(tui: &Tui) {
             subscriber(&tui, event);
         }
     }));
-    tui.app.on_message(bind!(tui, |tui, _, _: &Lagged| resync(&tui)));
+    tui.app.on_message(bind!(tui, |tui, _, _: &Lagged| {
+        opencode_plugin::flush();
+        resync(&tui);
+    }));
+}
+
+#[doc(hidden)]
+pub mod testing {
+    use super::*;
+
+    /// Posts `event` to the UI thread as the store's signal of it, as the event pump does.
+    pub fn signal(tui: &Tui, event: V2Event) {
+        let _ = tui.app.proxy().send(Signal(Arc::new(event)));
+    }
 }
 
 /// After skipped signals, as after a reconnect: reads the location again and syncs every view. The store applied

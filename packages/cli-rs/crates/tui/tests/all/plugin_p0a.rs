@@ -352,6 +352,44 @@ fn a_submit_behind_a_dialog_sends_and_leaves_the_dialog() {
     assert!(!setup.app.text().contains("alert closed"), "{}", setup.app.text());
 }
 
+/// A store signal of event `kind` in the fixture's directory, with `data`.
+fn event(kind: &str, data: serde_json::Value) -> opencode_api::generated::V2Event {
+    let id = format!("evt_{}", data.to_string().len());
+    let json = serde_json::json!({
+        "id": id, "created": 1, "type": kind, "location": { "directory": support::DIRECTORY }, "data": data,
+    });
+    serde_json::from_value(json).unwrap()
+}
+
+fn changed(file: &str) -> opencode_api::generated::V2Event {
+    event("filesystem.changed", serde_json::json!({ "file": file, "event": "change" }))
+}
+
+// Expected (bigboi 4): of two store signals the UI routes in one batch, the second sees the composer edit a plugin
+// asked for while the first was handled, and a route switch that the second makes does not carry the edit to the
+// next session's composer; on both carriers.
+#[test]
+fn a_composer_edit_is_not_overtaken_by_the_next_signal() {
+    for carrier in CARRIERS {
+        let setup = session(carrier);
+        opencode_tui::features::events::testing::signal(&setup.tui, changed("src/set.rs"));
+        opencode_tui::features::events::testing::signal(&setup.tui, changed("src/read.rs"));
+        setup.wait("the read", || !logged(&setup, "read").is_empty());
+        assert_eq!(logged(&setup, "read"), ["read from an event"], "{carrier:?}");
+
+        let setup = Setup::new(Route::Home);
+        add(&setup, carrier);
+        setup.ready();
+        opencode_tui::features::events::testing::signal(&setup.tui, changed("src/set.rs"));
+        let select = event("tui.session.select", serde_json::json!({ "sessionID": "ses_a" }));
+        opencode_tui::features::events::testing::signal(&setup.tui, select);
+        setup.wait("the session", || matches!(setup.tui.route(), Route::Session { .. }));
+        setup.app.advance(std::time::Duration::from_millis(100));
+        assert_eq!(setup.textarea().text(), "", "{carrier:?}");
+        assert!(setup.requests("POST", "/prompt").is_empty(), "{carrier:?}");
+    }
+}
+
 // Expected: a set starts the history over, as TS's `ref.set` does, so up then recalls the newest entry.
 #[test]
 fn a_set_starts_the_history_over() {
