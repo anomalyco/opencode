@@ -581,9 +581,19 @@
     --timeline-status-space: var(--timeline-gap-l);
   }
 
+  /* The background hint's 24px button is centred on the 16px line and reaches 4px past it. A row clips at its own
+     height, so in a row the lane keeps that room below the line, whether or not the hint shows, so the input waiting
+     below does not move when it comes and goes. */
+  &[data-in-row] {
+    --timeline-status-hint-overflow: calc((24px - var(--line-height-compact)) / 2);
+    height: calc(var(--line-height-compact) + var(--timeline-status-space) + var(--timeline-status-hint-overflow));
+    padding-bottom: var(--timeline-status-hint-overflow);
+  }
+
   &[data-collapsed] {
     height: 0;
     padding-top: 0;
+    padding-bottom: 0;
     overflow: hidden;
   }
 

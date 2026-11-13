@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
 import { Predicate } from "effect"
 import { createRoot } from "solid-js"
+import { subagentReport } from "../storybook/current-session-fixtures"
 import { timelinePresets } from "../timeline/detail"
 import { createNextTimelineProjection, workedDuration } from "./projection"
 import { replayScript, scenarios } from "./stories/session-replay"
@@ -86,6 +87,67 @@ describe("New timeline projection", () => {
     })
 
     expect(groups).toEqual(["first", "notice", "second"])
+  })
+
+  test("a subagent's report shows above the status line before the agent takes it, and the user's input below", () => {
+    const steer = { id: "steer", type: "user", text: "Also check the tests", time: { created: 2 } } as const
+
+    const messages: SessionMessageInfo[] = [
+      { id: "user", type: "user", text: "Go", time: { created: 0 } },
+      step("working", 1, {
+        content: [
+          {
+            id: "shell",
+            type: "tool",
+            name: "shell",
+            state: { status: "running", input: { command: "sleep 60" }, metadata: {} },
+            time: { created: 1 },
+          },
+        ],
+      }),
+      steer,
+      subagentReport("report", 3, {
+        childID: "child",
+        agent: "explore",
+        state: "completed",
+        description: "Trace the bug",
+        body: "Found it.",
+      }),
+    ]
+
+    const rows = (messages: SessionMessageInfo[], pending: ReadonlySet<string>) =>
+      createRoot((dispose) => {
+        const projection = createNextTimelineProjection({
+          sessionMessages: () => messages,
+          status: () => ({ type: "busy" }),
+          timelineDetail: () => detailed,
+          pendingInputIDs: () => pending,
+        })
+
+        const result = projection.rows().map((row) => {
+          if (!Predicate.isTagged(row, "AssistantPart")) return row._tag
+
+          return row.group.type === "part"
+            ? row.group.ref.messageID
+            : row.group.refs.map((ref) => ref.messageID).join("+")
+        })
+
+        dispose()
+
+        return result
+      })
+
+    const alone = messages.filter((message) => message !== steer)
+
+    expect(rows(alone, new Set(["report"]))).toEqual(["UserMessage", "working", "report"])
+    expect(rows(messages, new Set(["steer", "report"]))).toEqual([
+      "UserMessage",
+      "working",
+      "report",
+      "Activity",
+      "TurnGap",
+      "UserMessage",
+    ])
   })
 })
 

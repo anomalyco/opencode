@@ -460,6 +460,7 @@ export function createNextTimelineRowRenderer(input: {
       return (
         <SessionReadToolGroup
           tools={tools()}
+          names={2}
           open={input.disclosure.value(row().group.key)}
           onOpenChange={(open) => input.disclosure.set(row().group.key, open)}
           onSizeChange={onSizeChange}
