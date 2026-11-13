@@ -2161,6 +2161,15 @@ impl Registered {
         }
     }
 
+    /// Ends a plugin the host failed, which it calls no more: revokes its waker, waiting for the wakes in progress,
+    /// and drops its dispose callbacks without running them.
+    pub fn abandon(&mut self) {
+        if let Some(waker) = &self.waker {
+            waker.revoke();
+        }
+        self.disposers.clear();
+    }
+
     pub fn manifest(&self) -> &Manifest {
         &self.manifest
     }

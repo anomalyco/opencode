@@ -84,6 +84,9 @@ pub trait Host: 'static {
                 .title(format!("Plugin failed: {id}")),
         );
     }
+    /// Ends what the host shows for an activation of plugin `id` that ended (it was disabled, replaced, unloaded, or
+    /// failed): the dialogs it opened, so nothing of an old build can run (4.14). Called outside every plugin callback.
+    fn revoked(&self, _id: &str) {}
     /// Asks for the user's attention. Called outside every plugin callback.
     fn attention(&self, _attention: &abi::Attention) {}
     /// Calls `run` with each server event, after the host has applied it, until the disposer is dropped. `run` gets at
@@ -503,11 +506,17 @@ impl Scope {
         }
     }
 
-    /// Disposes the plugin's registrations `api` with the host, or without it once it is gone, also after it failed,
-    /// then the activation, so no reply or wake reaches the plugin after.
+    /// Disposes the plugin's registrations `api` with the host, or without it once it is gone, then the activation, so
+    /// no reply or wake reaches the plugin after. A plugin that failed is called no more, so its dispose callbacks do
+    /// not run (4.14; TS runs no plugin code after a failed setup either).
     fn dispose(self: &Rc<Self>, api: &mut abi::Registered) {
         if let Some(layer) = self.layer.take() {
             layer.dispose();
+        }
+        if self.failure.borrow().is_some() {
+            api.abandon();
+            self.activation.dispose();
+            return;
         }
         let host = self.host.upgrade();
         if host.and_then(|host| self.attempt(&*host, |host| api.dispose(Some(host)))).is_none() {
@@ -747,6 +756,7 @@ pub(crate) fn fail(
         if let Some(layer) = layer {
             layer.dispose();
         }
+        host.revoked(&id);
         host.failed(&id);
         // The fences it drew fall back to the code view, as the ones it draws from now on do.
         host.remount();
@@ -1433,6 +1443,17 @@ impl Registry {
             setup.registration.dispose();
             return Err(error);
         }
+        // Last of the disposal, however the activation ends: what the host shows for it goes. A setup that failed
+        // showed nothing, so a failed candidate leaves the running build's dialogs.
+        let (owner, id) = (Rc::downgrade(host), definition.id.clone());
+        setup.registration.cleanups.insert(
+            0,
+            Box::new(move || {
+                if let Some(host) = owner.upgrade() {
+                    host.revoked(&id);
+                }
+            }),
+        );
         let order = place.unwrap_or_else(|| {
             let order = self.activations.get();
             self.activations.set(order + 1);
