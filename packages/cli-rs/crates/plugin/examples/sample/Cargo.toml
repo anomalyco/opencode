@@ -21,6 +21,8 @@ app = []
 still = []
 # The ABI 1.5 probe of P0a (`src/p0a.rs`): dialogs, the composer and a styled box.
 p0a = []
+# Adds `/p0btitle`, which sets the terminal title, for the P-PTY scenarios `P.0b/title*`.
+title = []
 # Builds that pretend to target another ABI version, for the version tests.
 abi-1-0 = []
 minor-newer = []
