@@ -171,12 +171,16 @@ dark), and touches nothing of the host; a plugin's own thread calls `wake`.
 - The verbs of 1.6. Three answer at once whether they will act, as their TS counterparts return a boolean, and act
   once the call returns: `set_variant(variant)` (`false` without a model, or for a variant it lacks; `None` is the
   default), `edit_tab(TabEdit::{Open, Focus, Move, Close})` (`false` while tabs are off, `Move` of a tab that is not
-  open, `Close` with no tab matched; `Open` adds a tab without showing it, `Focus` shows it), and `set_theme(name)`
-  (`false` for a theme the TUI does not have; it saves `theme.name` as the theme dialog does). The rest act once the
+  open, `Close` with no tab matched; `Open` adds a tab without showing it, `Focus` shows it; `Move` takes any session
+  of the tab's family, `Close` the tab's own ID, as in TS), and `set_theme(name)` (`false` for a theme the TUI does
+  not have; it saves `theme.name` as the theme dialog does). Each answer counts what the same call did before, as
+  TS's verbs act in order: `set_variant` checks the model an earlier `set_model` picked, `edit_tab` the tabs earlier
+  edits opened and closed, `set_theme` the themes an earlier `install_theme` installed. The rest act once the
   call returns: `set_model(provider, model)` as the model dialog picks one (a model the TUI does not list is
   ignored), `clear_selection`, `set_title(title)` (also with `terminal.title: false`; the TUI sets its own title again
   with its next change, and clears a plugin's on exit), `install_theme(name, json)` (written as
-  `<config>/themes/<name>.json`, then listed; a name that is not a plain file name is refused), and
+  `<config>/themes/<name>.json`, then listed; a name that is not a plain file name, or a value without `theme` or
+  `base`, is refused), and
   `foreground(Foreground)`.
 - `foreground` gives the terminal to the program as the TUI does for `$EDITOR`: the TUI restores the terminal, waits
   for the program, and sets the terminal up again; input sent meanwhile is dropped. It runs in `cwd`, else where the

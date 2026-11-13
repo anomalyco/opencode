@@ -229,7 +229,7 @@ impl Host for TestHost {
         self.verb(format!("model {provider}/{model}"));
     }
 
-    fn tab_allowed(&self, edit: &abi::TabEdit) -> bool {
+    fn tab_allowed(&self, edit: &abi::TabEdit, _staged: &[abi::TabEdit]) -> bool {
         !matches!(edit, abi::TabEdit::Close { session: None })
     }
 

@@ -1627,7 +1627,8 @@ pub enum Unread {
 }
 
 /// 1.6: a change of the session tabs, for [`Host::edit_tab`] (TS `ui.tabs.open`, `focus`, `move` and `close`). A
-/// session is named by any session of its family: a tab is its root's.
+/// session is named by any session of its family, a tab being its root's, except in `Close`, which takes the tab's
+/// own ID as TS does. Each answer counts the edits the same call made before it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum TabEdit {
@@ -1637,7 +1638,8 @@ pub enum TabEdit {
     Focus { session: String },
     /// Moves an open tab to `index`. `false` while tabs are off or it is not open.
     Move { session: String, index: usize },
-    /// Closes an open tab, or the one on screen without a session. `false` while tabs are off or no tab matched.
+    /// Closes the open tab with ID `session` (a child's ID matches none), or the one on screen without a session.
+    /// `false` while tabs are off or no tab matched.
     Close {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session: Option<String>,
@@ -2234,7 +2236,8 @@ pub trait Host: Read {
         false
     }
     /// 1.6: writes `theme`, a theme's JSON, as `<config>/themes/<name>.json`, and lists it among the themes (TS 1.x
-    /// `api.theme.install`). It does not select it.
+    /// `api.theme.install`), at once for [`Host::set_theme`] in the same call. It does not select it. A name that is
+    /// not a plain file name, or a value without `theme` or `base`, installs nothing.
     fn install_theme(&self, _name: &str, _theme: serde_json::Value) {}
     /// Declares storage key `key` of the plugin, for [`Setup::storage_key`].
     #[doc(hidden)]
