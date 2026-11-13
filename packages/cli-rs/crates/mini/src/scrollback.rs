@@ -389,6 +389,46 @@ struct Active {
     rendered: bool,
 }
 
+impl Active {
+    /// Renders the content and copies the rows that can no longer change and are not committed yet, after the spacer
+    /// rows to write first. `None` when there is nothing new. Text and code keep their last row open while streaming.
+    /// The Markdown widget does not expose its block positions, so a streaming Markdown entry renders only the blocks
+    /// Core calls stable ([`stable_prefix`]) and commits those.
+    ///
+    /// A Markdown part before the end ends its last row, so the next part starts below it and a blank row at the
+    /// boundary stays: the committed rows equal the reply rendered whole. TS leaves the row open, and the next part
+    /// continues it, so the blank row there is lost (`parity/deviations/M06-mini-dropped-blank-row.md`).
+    fn commit(&mut self, done: bool, trailing_newline: bool) -> Result<Option<(u32, Option<SplitSnapshot>)>> {
+        let (target, whole_rows) = match &self.widget {
+            Stream::Text(text) => {
+                text.set_text(self.content.clone());
+                self.surface.render()?;
+                let height = self.surface.height();
+                (if done { height } else { self.committed_rows.max(height.saturating_sub(1)) }, false)
+            }
+            Stream::Markdown(markdown) => {
+                let content = if done { self.content.as_str() } else { stable_prefix(&self.content) };
+                if content.is_empty() {
+                    return Ok(None);
+                }
+                markdown.set_markdown(content);
+                markdown.streaming(!done);
+                self.surface.render()?;
+                (self.surface.height(), !done)
+            }
+        };
+        if target <= self.committed_rows {
+            return Ok(None);
+        }
+        let spacer = std::mem::take(&mut self.pending_spacer_rows);
+        let trailing = whole_rows || (done && target == self.surface.height() && trailing_newline);
+        let snapshot = self.surface.commit_rows(self.committed_rows, target, None, trailing)?;
+        self.committed_rows = target;
+        self.rendered = true;
+        Ok(Some((spacer, snapshot)))
+    }
+}
+
 /// `RunScrollbackStream`: appends commits to the scrollback.
 pub struct Writer {
     footer: SplitFooter,
@@ -660,42 +700,10 @@ impl Writer {
         })
     }
 
-    /// Commits the rows that can no longer change. Text and code keep their last row open while streaming. The
-    /// Markdown widget does not expose its block positions, so a streaming Markdown entry renders only the blocks Core
-    /// calls stable ([`stable_prefix`]) and commits those.
-    ///
-    /// A commit before the end leaves its last row open, and the next commit continues it, as in TS. A blank row at
-    /// that boundary is lost: TS's last row there is the empty gap, which the next block's first row fills; here the
-    /// next commit's first row is the gap, which adds nothing to the open row. The two clients lose the same row because
-    /// they place the boundary at the same block.
+    /// Commits the rows that can no longer change ([`Active::commit`]).
     fn flush_active(&mut self, done: bool, trailing_newline: bool) -> Result<bool> {
         let Some(active) = self.active.as_mut() else { return Ok(false) };
-        let target = match &active.widget {
-            Stream::Text(text) => {
-                text.set_text(active.content.clone());
-                active.surface.render()?;
-                let height = active.surface.height();
-                if done { height } else { active.committed_rows.max(height.saturating_sub(1)) }
-            }
-            Stream::Markdown(markdown) => {
-                let content = if done { active.content.as_str() } else { stable_prefix(&active.content) };
-                if content.is_empty() {
-                    return Ok(false);
-                }
-                markdown.set_markdown(content);
-                markdown.streaming(!done);
-                active.surface.render()?;
-                active.surface.height()
-            }
-        };
-        if target <= active.committed_rows {
-            return Ok(false);
-        }
-        let spacer = std::mem::take(&mut active.pending_spacer_rows);
-        let trailing = done && target == active.surface.height() && trailing_newline;
-        let snapshot = active.surface.commit_rows(active.committed_rows, target, None, trailing)?;
-        active.committed_rows = target;
-        active.rendered = true;
+        let Some((spacer, snapshot)) = active.commit(done, trailing_newline)? else { return Ok(false) };
         self.write_spacer(spacer)?;
         if let Some(snapshot) = snapshot {
             self.write(snapshot)?;
@@ -1069,6 +1077,84 @@ mod tests {
                 render(&format!("{blocks}\n\nnext"), false),
                 "{content:?}"
             );
+        }
+    }
+
+    /// Streamed equals whole: a Markdown reply committed in parts, at any split of its text, leaves the terminal with the
+    /// rows of the reply rendered whole, blank rows between blocks included. TS loses the blank row at each boundary
+    /// (`parity/deviations/M06-mini-dropped-blank-row.md`).
+    #[test]
+    fn a_streamed_reply_commits_the_rows_of_the_whole_reply() {
+        let theme = crate::theme::resolve(&crate::theme::ThemeInput {
+            name: None,
+            mode: None,
+            palette: None,
+            directories: Vec::new(),
+            mono: false,
+        });
+        let app = opentui::testing::TestApp::new(40, 10);
+        let scrollback = Scrollback::new(app.app()).unwrap();
+        let commit = assistant("", Phase::Progress);
+        let body = Body::Markdown(String::new());
+        let entry = || {
+            let markdown = entry_markdown(scrollback.app(), &theme, &commit, &body, true);
+            let surface = scrollback.surface(true).unwrap();
+            surface.root().add(&markdown);
+            Active {
+                commit: commit.clone(),
+                kind: std::mem::discriminant(&body),
+                surface,
+                widget: Stream::Markdown(markdown),
+                content: String::new(),
+                committed_rows: 0,
+                pending_spacer_rows: 0,
+                rendered: false,
+            }
+        };
+        // The rows a terminal shows after the snapshots: a snapshot that does not start on a new line continues the
+        // last row when the one before left it open (`tail_after` in OpenTUI's split footer).
+        let terminal = |snapshots: Vec<SplitSnapshot>| {
+            let mut rows: Vec<String> = Vec::new();
+            let mut open = false;
+            for snapshot in snapshots {
+                let text = snapshot.buffer.capture().unwrap().text();
+                for (index, row) in text.split('\n').enumerate() {
+                    match rows.last_mut() {
+                        Some(last) if index == 0 && open && !snapshot.start_on_new_line => last.push_str(row),
+                        _ => rows.push(row.to_owned()),
+                    }
+                }
+                open = !snapshot.trailing_newline;
+            }
+            rows
+        };
+        let replies = [
+            "Packing list:\n\n| Item | Qty |\n| --- | --- |\n| Tent | 1 |\n\nDone.",
+            "One.\n\nTwo.\n\nThree.",
+            "Intro:\n\n- a\n- b\n\nMiddle.\n\n1. x\n\n2. y\n\nEnd.",
+            "Code:\n\n```rust\nfn main() {}\n\nlet x = 1;\n```\n\nAfter.\n\n| a | b |\n| - | -: |\n| 1 | 2 |\n\n## Head\n\nLast.",
+        ];
+        for reply in replies {
+            let mut whole = entry();
+            whole.content = reply.to_owned();
+            let expected =
+                terminal(whole.commit(true, true).unwrap().and_then(|(_, snapshot)| snapshot).into_iter().collect());
+            // Splits: the whole text at once, at every line, and at every character.
+            let lines: Vec<usize> = reply.match_indices('\n').map(|(at, _)| at + 1).collect();
+            let chars: Vec<usize> = reply.char_indices().map(|(at, _)| at).skip(1).collect();
+            for (splits, name) in [(&Vec::new(), "once"), (&lines, "lines"), (&chars, "characters")] {
+                let mut streamed = entry();
+                let mut snapshots = Vec::new();
+                let mut from = 0;
+                // Each delta flushes while streaming, as `write_streaming` does; the end flushes once more.
+                for &to in splits.iter().chain([reply.len()].iter()) {
+                    streamed.content.push_str(&reply[from..to]);
+                    from = to;
+                    snapshots.extend(streamed.commit(false, true).unwrap().and_then(|(_, snapshot)| snapshot));
+                }
+                snapshots.extend(streamed.commit(true, true).unwrap().and_then(|(_, snapshot)| snapshot));
+                assert_eq!(terminal(snapshots), expected, "{reply:?} split at {name}");
+            }
         }
     }
 

@@ -1,7 +1,7 @@
-// Mini replays two replies of three blocks each: a paragraph, a left-aligned table and a paragraph, then three
-// paragraphs. Both clients commit a reply's leading blocks first and the last two at the end. The blank row at that
-// boundary is lost (`stable_prefix` in `crates/mini/src/scrollback.rs`), so the blank row before the table and the one
-// before `Two.` are missing on both sides.
+// M06 (parity/deviations/M06-mini-dropped-blank-row.md): mini replays two replies of three blocks each, a paragraph, a
+// left-aligned table and a paragraph, then three paragraphs. Both clients commit a reply's leading blocks first and
+// the last two at the end, where Core 0.8.4 cuts it. TS loses the blank row at that cut (before the table, before
+// `Three.`); Rust keeps it, as the replies rendered whole show.
 import { definePty } from "../../pty/run"
 import { assistant, config, server, statusMask, user } from "./fixture"
 
@@ -21,7 +21,13 @@ export default definePty({
   server: server({ messages }),
   setup: (root) => config(root),
   steps: [
-    { until: { screen: "Three." }, settle: 800, timeout: 30_000, checkpoint: "replayed" },
+    {
+      until: { screen: "Three." },
+      settle: 800,
+      timeout: 30_000,
+      checkpoint: "replayed",
+      deviation: { file: "M06-mini-dropped-blank-row", lines: 16 },
+    },
     { keys: "\x03", settle: 200 },
     { keys: "\x03", settle: 400 },
   ],
