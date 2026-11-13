@@ -114,6 +114,8 @@ impl Reasoning {
         let done = time.and_then(|time| time.completed).is_some() || message.time.completed.is_some();
         let end = time.and_then(|time| time.completed).or(message.time.completed);
         let start = time.map_or(message.time.created, |time| time.created);
+        // `session.markdown` changes in place; the code views stay.
+        self.0.markdown.conceal(cx.conceal);
         let mut state = self.0.state.borrow_mut();
         if state.content != content {
             self.0.markdown.set_markdown(content.as_str());

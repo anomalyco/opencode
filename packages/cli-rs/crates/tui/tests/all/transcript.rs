@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use opencode_api::generated::V2Event;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Bounded, Debug, Info, Scroll, Session, TurnTokens, Verbosity, Visibility};
+use opencode_local::cli_config::{Bounded, Debug, Info, Markdown, Scroll, Session, TurnTokens, Verbosity, Visibility};
 use opencode_tui::Deps;
 use serde_json::{Value, json};
 use tokio::sync::Semaphore;
@@ -505,6 +505,36 @@ fn a_theme_switch_restyles_the_transcript_in_place() {
         .flat_map(|y| (0..switched.width).map(move |x| (x, y)))
         .find(|&(x, y)| switched.cell(x, y) != expected.cell(x, y));
     assert_eq!(diff.map(|(x, y)| (x, y, switched.cell(x, y), expected.cell(x, y))), None, "{}", switched.text());
+}
+
+/// `session.markdown` reaches the text already shown, as TS's `conceal` prop follows `markdownMode()`
+/// (`message-parts.tsx:195`), and the fence keeps its widget.
+#[test]
+fn a_markdown_mode_change_shows_the_source_in_place() {
+    let text = "Some **bold** text.\n\n```rust\nlet x = 1;\n```";
+    let messages = || {
+        vec![
+            user("msg_1", 1000, "Show"),
+            assistant("msg_2", 1500, json!([{ "type": "text", "text": text }]), Some(4000)),
+        ]
+    };
+    let h = open(60, 20, "ses_c", messages(), support::still());
+    let screen = h.wait_for("let x = 1;");
+    assert!(screen.contains("Some bold text."), "{screen}");
+    let fence = Rc::new(());
+    support::mark_at(&h.app, "let x = 1;", 1, &fence);
+    opencode_tui::dialogs::settings::update(&h.tui, |draft| {
+        opencode_tui::dialogs::settings::set_path(draft, &["session", "markdown"], json!("source"))
+    });
+    let switched = h.app.render();
+    assert!(switched.text().contains("Some **bold** text."), "{}", switched.text());
+    assert_eq!(Rc::strong_count(&fence), 2, "the fence was built again");
+
+    let source =
+        Info { session: Some(Session { markdown: Some(Markdown::Source), ..Session::default() }), ..support::still() };
+    let fresh = open(60, 20, "ses_c", messages(), source);
+    fresh.wait_for("let x = 1;");
+    assert_eq!(switched.cells, fresh.app.render().cells, "{}", switched.text());
 }
 
 /// Groups and the turn's usage restyle in place: an open group and the open usage table stay open, and each cell
