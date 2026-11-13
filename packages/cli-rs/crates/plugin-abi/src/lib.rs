@@ -2396,6 +2396,16 @@ macro_rules! export_plugin {
 pub mod runtime {
     use super::*;
 
+    /// A plugin has its own copy of std and so its own panic hook. The default one prints to stderr, over the TUI; the
+    /// host shows the caught message instead, so the first `create` silences it.
+    static QUIET: std::sync::Once = std::sync::Once::new();
+
+    /// Keeps the process's panic hook: for a host that links these shims into its own process, as a test does, whose
+    /// std is the plugin's. It marks the hook silenced without touching it, so no `create` replaces it.
+    pub fn keep_panic_hook() {
+        QUIET.call_once(|| {});
+    }
+
     /// Runs `setup`. When it fails or panics, the dispose callbacks it registered run before this returns, while the
     /// host is still valid.
     ///
@@ -2409,9 +2419,6 @@ pub mod runtime {
         instance: *mut *mut c_void,
         out: *mut Owned,
     ) -> i32 {
-        // A plugin has its own copy of std and so its own panic hook. The default one prints to stderr, over the
-        // TUI; the host shows the caught message instead.
-        static QUIET: std::sync::Once = std::sync::Once::new();
         QUIET.call_once(|| std::panic::set_hook(Box::new(|_| {})));
         // SAFETY: the host passes valid pointers for the length of the call.
         let options = unsafe { options.as_slice() };
