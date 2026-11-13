@@ -445,8 +445,15 @@ export function createBrowserPage(
     return next.reply
   }
 
+  // Chromium uses the document URL as the title of untitled files; don't persist its internal origin as a title.
+  const pageTitle = (address = state().url) => {
+    const title = contents.getTitle()
+
+    return /^oc-preview:/i.test(title) ? address : title
+  }
+
   contents.on("did-start-loading", () => dispatch({ type: "loading.started" }))
-  contents.on("did-stop-loading", () => dispatch({ type: "loading.stopped", title: contents.getTitle() }))
+  contents.on("did-stop-loading", () => dispatch({ type: "loading.stopped", title: pageTitle() }))
   contents.on("did-start-navigation", (event) =>
     dispatch({
       type: "navigation.started",
@@ -456,7 +463,7 @@ export function createBrowserPage(
     }),
   )
   contents.on("did-navigate", (_event, url, status, statusText) =>
-    dispatch({ type: "navigation.committed", url: displayURL(url), status, statusText, title: contents.getTitle() }),
+    dispatch({ type: "navigation.committed", url: displayURL(url), status, statusText, title: pageTitle(displayURL(url)) }),
   )
   // Only agent-driven tabs need fresh frames while hidden. A cross-site commit can replace the renderer
   // we woke on the first agent command, so wake its replacement too.
@@ -468,7 +475,7 @@ export function createBrowserPage(
   )
   contents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
     if (!isMainFrame) return
-    const report = (address: string) => dispatch({ type: "navigation.in-page", url: address, title: contents.getTitle(), isMainFrame })
+    const report = (address: string) => dispatch({ type: "navigation.in-page", url: address, title: pageTitle(address), isMainFrame })
 
     if (!/^(?:oc-preview|file):/i.test(url)) return report(url)
     const file = preview(url)
@@ -480,7 +487,7 @@ export function createBrowserPage(
     })
   })
   contents.on("dom-ready", () => dispatch({ type: "document.ready" }))
-  contents.on("page-title-updated", () => dispatch({ type: "title.updated", title: contents.getTitle() }))
+  contents.on("page-title-updated", () => dispatch({ type: "title.updated", title: pageTitle() }))
   contents.on("page-favicon-updated", (_event, favicons) => dispatch({ type: "icon.updated", favicons }))
   contents.on("focus", () => {
     if (!closed()) options.focused?.()
