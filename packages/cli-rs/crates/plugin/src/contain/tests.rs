@@ -111,6 +111,27 @@ fn the_window_rolls_and_the_news_comes_once_a_session() {
     assert!(bench.frames(slot, 13, 1).is_empty());
     assert!(bench.monitor.is_slow("p"));
     assert!(!bench.monitor.is_slow("q"));
+    // The window is 120 frames exactly: 13 over, then 107 under, is slow; one more and the first over leaves it.
+    let bench = Bench::new();
+    let slot = bench.monitor.slot("p");
+    bench.frames(slot, 13, 107);
+    bench.frame(slot, &[US]);
+    assert!(bench.monitor.is_slow("p"));
+    bench.frame(slot, &[US]);
+    assert!(!bench.monitor.is_slow("p"));
+}
+
+// Expected: the record stamps a call with the monotonic clock, which the watchdog reads, also while a test injects the
+// budget's clock: a call that started now has run for no time, however far the injected clock is.
+#[test]
+fn the_record_keeps_the_watchdogs_clock() {
+    let bench = Bench::new();
+    let dir = opencode_util::temp::tempdir().unwrap();
+    let record = bench.monitor.attach_record(&dir.path().join("run")).unwrap();
+    bench.now.set(Duration::from_secs(3600));
+    let slot = bench.monitor.slot("p");
+    let (started, _) = bench.monitor.call(slot, "run-command", || record.running().map(|(_, _, started)| started));
+    assert!(started.is_some_and(|started| started < 60_000), "{started:?}");
 }
 
 // Expected (4.4): one call over 100 ms is an overrun, 100 ms is not. The first call after `setup` is exempt, as its
@@ -171,6 +192,10 @@ fn all_plugins_share_four_ms_a_frame() {
         bench.frame.set(2);
         bench.call(slots[0], "render-slot", US);
         assert_eq!(bench.monitor.frames_over_all(), over, "{each:?}");
+        // Each frame starts from nothing.
+        bench.frame.set(3);
+        bench.call(slots[0], "render-slot", US);
+        assert_eq!(bench.monitor.frames_over_all(), over, "{each:?}, a frame later");
     }
 }
 
