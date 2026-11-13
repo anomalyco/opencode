@@ -237,13 +237,15 @@ impl Host for Tui {
 
     fn edit_composer(&self, edit: abi::ComposerEdit) {
         let prompt = self.prompt.current.borrow().upgrade();
-        let Some(prompt) = prompt else { return };
+        let Some(prompt) = prompt.filter(|prompt| prompt.shown()) else { return };
         match edit {
             abi::ComposerEdit::Set { text } => prompt.set_text(&text),
             abi::ComposerEdit::Insert { text } => drop(prompt.textarea.insert(&text)),
-            abi::ComposerEdit::Submit => {
+            // An ordinary dialog over the composer stays open, and nothing answers it.
+            abi::ComposerEdit::Submit if prompt.submittable(self) => {
                 crate::prompt::submit::submit(&prompt, SessionInboxDelivery::Steer);
             }
+            abi::ComposerEdit::Submit => {}
         }
     }
 
@@ -586,7 +588,7 @@ impl abi::Read for Reader<'_> {
     }
 
     fn composer(&self) -> Option<abi::Composer> {
-        let prompt = self.tui.prompt.current.borrow().upgrade()?;
+        let prompt = self.tui.prompt.current.borrow().upgrade().filter(|prompt| prompt.shown())?;
         let text = prompt.textarea.text();
         // The native buffer's own text up to the cursor, so the byte follows its widths: a tab takes the tab width.
         let prefix = prompt.textarea.buffer().range(0, prompt.textarea.cursor_offset());

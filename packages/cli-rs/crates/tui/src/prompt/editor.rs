@@ -590,6 +590,18 @@ impl Inner {
         opencode_ui::prompt_input::end(&self.textarea)
     }
 
+    /// Whether the composer is on screen: shown with every ancestor. A session hides it for a permission, a form, a
+    /// missing location or the drawer, where TS unmounts it.
+    pub(crate) fn shown(&self) -> bool {
+        self.textarea.is_shown()
+    }
+
+    /// Whether a submit may run: the composer shows, no home form disables it, and its pane owns the input (TS
+    /// `disabled()` in `submit`).
+    pub(crate) fn submittable(&self, tui: &Tui) -> bool {
+        self.shown() && !self.disabled.get() && crate::frame::session_interactive(tui)
+    }
+
     pub(crate) fn focused(&self) -> bool {
         self.app.focused().is_some_and(|widget| widget.id() == self.textarea.id())
     }

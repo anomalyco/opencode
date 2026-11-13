@@ -26,6 +26,8 @@ struct Fixture {
     catalog: Arc<AtomicBool>,
     /// A create sent while this is set answers 400 once it is cleared again.
     reject: Arc<AtomicBool>,
+    /// GET paths it answers with a value of the test's, before any other answer.
+    reads: Vec<(String, Value)>,
 }
 
 fn missing(id: &str) -> (u16, Value) {
@@ -40,7 +42,9 @@ impl Transport for Fixture {
         self.seen.lock().unwrap().push((request.method.to_owned(), path.clone(), body.clone()));
         let created = (request.method == "POST" && path == "/api/session")
             .then(|| (self.created.clone(), body["id"].as_str().unwrap_or_default().to_owned()));
+        let read = self.reads.iter().find(|(known, _)| request.method == "GET" && *known == path);
         let (status, body) = match (request.method, path.as_str()) {
+            _ if let Some((_, value)) = read => (200, value.clone()),
             ("GET", "/api/session") => (200, json!({ "data": [session("ses_a")], "cursor": {} })),
             ("GET", "/api/session/ses_a") => (200, json!({ "data": session("ses_a") })),
             ("GET", "/api/session/ses_a/message") => (200, json!({ "data": [], "cursor": {} })),
@@ -144,12 +148,32 @@ impl Setup {
         Self::build(route, home, true)
     }
 
+    /// The fixture on `route`, answering each of `reads`' GET paths with its value.
+    pub(crate) fn serving(route: Route, reads: Vec<(&str, Value)>) -> Self {
+        let reads = reads.into_iter().map(|(path, value)| (path.to_owned(), value)).collect();
+        Self::build_with(route, opencode_util::temp::tempdir().unwrap(), true, reads)
+    }
+
     fn build(route: Route, home: opencode_util::temp::TempDir, catalog: bool) -> Self {
+        Self::build_with(route, home, catalog, Vec::new())
+    }
+
+    fn build_with(
+        route: Route,
+        home: opencode_util::temp::TempDir,
+        catalog: bool,
+        reads: Vec<(String, Value)>,
+    ) -> Self {
         let seen = Seen::default();
         let catalog = Arc::new(AtomicBool::new(catalog));
         let reject = Arc::new(AtomicBool::new(false));
-        let fixture =
-            Fixture { seen: seen.clone(), created: Arc::default(), catalog: catalog.clone(), reject: reject.clone() };
+        let fixture = Fixture {
+            seen: seen.clone(),
+            created: Arc::default(),
+            catalog: catalog.clone(),
+            reject: reject.clone(),
+            reads,
+        };
         let deps = Deps {
             roots: support::roots(support::paths(home.path()), "latest"),
             route,

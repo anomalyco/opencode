@@ -14,6 +14,7 @@ use std::sync::Arc;
 
 use opencode_plugin::abi;
 use opencode_tui::{Deps, Route};
+use opentui::prelude::Widget;
 
 #[path = "../../../plugin/examples/sample/src/p0a.rs"]
 pub(crate) mod probe;
@@ -235,6 +236,109 @@ fn a_set_tells_the_completion_of_the_new_text() {
     setup.app.advance(std::time::Duration::from_millis(50));
     assert_eq!(setup.textarea().text(), "/rev");
     assert!(setup.requests("POST", "/prompt").is_empty());
+}
+
+/// The probe with the prompt fixture on `route`, answering `reads`, once the catalogs are read, so a submit that the
+/// host lets through would send.
+fn serving(route: Route, reads: Vec<(&str, serde_json::Value)>) -> Setup {
+    let setup = Setup::serving(route, reads);
+    add(&setup, Carrier::Linked);
+    setup.wait("the catalog", || !setup.requests("GET", "/api/model").is_empty());
+    setup.app.advance(std::time::Duration::from_millis(50));
+    setup
+}
+
+/// Asserts that a set and a submit from the plugin leave the composer's text `draft` and send nothing.
+#[track_caller]
+fn refused(setup: &Setup, draft: &str) {
+    setup.tui.keymap.dispatch("p0a.send", Some("from the plugin"));
+    setup.app.advance(std::time::Duration::from_millis(100));
+    assert_eq!(setup.textarea().text(), draft);
+    assert!(setup.requests("POST", "/prompt").is_empty(), "{:?}", setup.requests("POST", "/prompt"));
+    assert!(setup.requests("POST", "/api/session").is_empty());
+}
+
+/// Asserts that the plugin reads no composer.
+#[track_caller]
+fn unread(setup: &Setup) {
+    setup.tui.keymap.dispatch("p0a.read", None);
+    setup.wait_for("no composer");
+}
+
+// Expected (bigboi 1, carbon-p0a-6): a composer that a session hides, where TS unmounts it, is no composer to a plugin:
+// for a form, a permission and the drawer it reads `None`, and a set and a submit change and send nothing.
+#[test]
+fn a_hidden_composer_is_not_read_or_edited() {
+    let field = serde_json::json!([{ "key": "ok", "type": "boolean", "title": "Continue?" }]);
+    let form = serde_json::json!({ "id": "frm_1", "sessionID": "ses_a", "title": "Deploy settings", "fields": field });
+    let permission = serde_json::json!({ "id": "per_1", "sessionID": "ses_a", "action": "shell", "resources": ["ls -la"], "save": [] });
+    let rows = [
+        ("/api/session/ses_a/form", serde_json::json!({ "data": [form] }), "Deploy settings"),
+        ("/api/session/ses_a/permission", serde_json::json!({ "data": [permission] }), "ls -la"),
+    ];
+    for (path, value, shown) in rows {
+        let setup = serving(session_route(), vec![(path, value)]);
+        setup.wait_for(shown);
+        setup.wait("the hidden prompt", || !setup.textarea().is_shown());
+        unread(&setup);
+        refused(&setup, "");
+    }
+    // The drawer hides the composer over a draft.
+    let setup = serving(session_route(), Vec::new());
+    setup.app.type_text("unsent");
+    setup.tui.keymap.dispatch("session.child.first", None);
+    setup.wait("the drawer", || !setup.textarea().is_shown());
+    unread(&setup);
+    refused(&setup, "unsent");
+}
+
+// Expected (bigboi 1, carbon-p0a-6): a composer that shows but may not submit, under a home form or while another
+// pane owns the input, takes a set but no submit from a plugin, as TS's `ref.set` sets and its `submit` refuses a
+// disabled prompt.
+#[test]
+fn a_disabled_composer_takes_no_submit() {
+    let field = serde_json::json!([{ "key": "token", "type": "string", "title": "Token" }]);
+    let form = serde_json::json!({ "id": "frm_g", "sessionID": "global", "title": "MCP server needs a token", "fields": field });
+    let setup = serving(Route::Home, vec![("/api/form", support::list("/project", serde_json::json!([form])))]);
+    setup.wait_for("MCP server needs a token");
+    // The set edits the composer, which shows; the submit in the same call sends nothing.
+    setup.tui.keymap.dispatch("p0a.send", Some("from the plugin"));
+    setup.wait("the set", || setup.textarea().text() == "from the plugin");
+    setup.app.advance(std::time::Duration::from_millis(100));
+    assert!(setup.requests("POST", "/api/session").is_empty() && setup.requests("POST", "/prompt").is_empty());
+    // The diff viewer's pane takes the input.
+    let diff = serde_json::json!({
+        "file": "src/main.rs", "patch": "@@ -1 +1 @@\n-old\n+new\n", "additions": 1, "deletions": 1, "status": "modified",
+    });
+    let reads = vec![
+        ("/api/session/ses_a/diff", serde_json::json!({ "data": [diff] })),
+        ("/api/vcs/diff", support::list("/project", serde_json::json!([diff]))),
+        ("/api/vcs/base", support::list("/project", serde_json::Value::Null)),
+    ];
+    let setup = serving(session_route(), reads);
+    setup.app.type_text("unsent");
+    setup.tui.keymap.dispatch("diff.open", None);
+    setup.wait_for("src/main.rs");
+    setup.wait("the right pane", || !setup.textarea().is_focused());
+    setup.tui.keymap.dispatch("p0a.submit", None);
+    setup.app.advance(std::time::Duration::from_millis(100));
+    assert_eq!(setup.textarea().text(), "unsent");
+    assert!(setup.requests("POST", "/prompt").is_empty());
+}
+
+// Expected (bigboi 1): behind an ordinary dialog the composer still shows, and a plugin's submit sends it; the dialog
+// stays open and nothing answers it.
+#[test]
+fn a_submit_behind_a_dialog_sends_and_leaves_the_dialog() {
+    let setup = session(Carrier::Linked);
+    setup.tui.keymap.dispatch("p0a.alert", None);
+    setup.wait_for("Heads up");
+    setup.tui.keymap.dispatch("p0a.send", Some("sent behind"));
+    let prompts = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
+    assert_eq!(prompts[0]["text"], "sent behind");
+    setup.app.advance(std::time::Duration::from_millis(100));
+    assert!(setup.tui.dialogs.is_open() && setup.app.text().contains("Heads up"), "{}", setup.app.text());
+    assert!(!setup.app.text().contains("alert closed"), "{}", setup.app.text());
 }
 
 // Expected: a set starts the history over, as TS's `ref.set` does, so up then recalls the newest entry.
