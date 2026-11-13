@@ -58,6 +58,8 @@ export async function createBrowserProfile(input: {
 }) {
   const session = electron.session.fromPartition(PARTITION)
   session.setUserAgent(browserUserAgent(session.getUserAgent()))
+  // SEAM(guardSession): the session's one set of permission handlers and its one `will-download` listener belong
+  // here, before any extension loads, so the profile is guarded before the first pane exists.
   const persistent = cookiesPersist(session)
   let settling: ReturnType<typeof setTimeout> | undefined
 
