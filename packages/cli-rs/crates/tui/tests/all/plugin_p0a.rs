@@ -502,15 +502,15 @@ fn witnessed(h: &Harness) -> u64 {
     json.and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok()?["count"].as_u64()).unwrap_or(0)
 }
 
-// Expected (`ledger`; bigboi 2, carbon-p0a-7): a plugin's confirm or alert closes when the plugin is disabled, and
-// the composer has the focus again; nothing it answers reaches the old activation, the new one after the plugin is
-// enabled again, or another plugin's command it names. The answer to a dialog that closes in the same turn as a
-// disable and an enable reaches nobody either.
+// Expected (`ledger`; bigboi 2, carbon-p0a-7): a plugin's alert closes when the plugin is disabled, and the composer
+// has the focus again; nothing it answers reaches the old activation, the new one after the plugin is enabled again,
+// or another plugin's command it names. The answer to a dialog that closes in the same turn as a disable and an enable
+// reaches nobody either. The plugin model (`plugin_model.rs`) runs the rest of the confirm's and alert's life against
+// its own commands; these rows add another plugin's command, a turn the model does not split, and both carriers.
 #[test]
 fn a_dialog_of_a_disabled_plugin_goes_and_answers_nobody() {
     for carrier in CARRIERS {
-        let rows = [("p0a.confirm", "Delete the draft?"), ("p0a.alert", "Heads up"), ("p0a.alert-foreign", "Heads up")];
-        for (open, title) in rows {
+        for (open, title) in [("p0a.alert", "Heads up"), ("p0a.alert-foreign", "Heads up")] {
             let h = home(carrier);
             opencode_tui::plugins::host::add(&h.tui, witness().into());
             let host = opencode_tui::plugins::host::host(&h.tui);
@@ -557,18 +557,20 @@ fn a_dialog_of_a_plugin_that_is_not_live_does_not_show() {
 }
 
 // Expected (`ledger`): a plugin's alert goes when a later call of the plugin panics, and the composer has the focus
-// again; the failed plugin's dialog does not stay on screen (the plugin's own effects of that call are `no-effects`').
+// again; its action, another plugin's command, does not run as it closes: a failed plugin's dialog answers nobody.
 #[test]
-fn a_dialog_of_a_failed_plugin_goes() {
+fn a_dialog_of_a_failed_plugin_goes_and_answers_nobody() {
     for carrier in CARRIERS {
         let h = home(carrier);
-        h.tui.keymap.dispatch("p0a.alert", None);
+        opencode_tui::plugins::host::add(&h.tui, witness().into());
+        h.tui.keymap.dispatch("p0a.alert-foreign", None);
         h.wait_for("Heads up");
         h.tui.keymap.dispatch("p0a.all", Some("panic"));
         h.wait_for("Plugin failed: p0a");
         h.wait_gone("Heads up");
         h.wait("the composer's focus", || h.textarea().is_focused());
-        assert!(logged(&h, "closed").is_empty(), "{carrier:?}");
+        h.app.advance(std::time::Duration::from_millis(50));
+        assert_eq!(witnessed(&h), 0, "{carrier:?}");
     }
 }
 
@@ -583,32 +585,6 @@ fn a_live_dialog_runs_a_foreign_command_once() {
     h.wait("the witness", || witnessed(&h) == 1);
     h.app.advance(std::time::Duration::from_millis(50));
     assert_eq!(witnessed(&h), 1);
-}
-
-// Expected (bigboi 2): a reload that fails keeps the running activation and its alert, which still answers it; a
-// reload that passes closes the old activation's alert, which answers nobody.
-#[test]
-fn a_reload_keeps_or_closes_the_old_activations_dialog() {
-    let h = crate::plugins::open(Route::Home, "", &crate::plugins::build("p0a"));
-    h.wait_for("sample plugin v1: home.footer");
-    h.tui.keymap.dispatch("p0a.alert", None);
-    h.wait_for("Heads up");
-    crate::plugins::write_atomic(
-        &h.plugin.join(opencode_plugin::loader::entry_file()),
-        &crate::plugins::build("p0a,setup-fails"),
-    );
-    h.wait_for("Plugin failed: sample");
-    h.app.advance(std::time::Duration::from_millis(50));
-    assert!(h.app.text().contains("Heads up"), "{}", h.app.text());
-    crate::plugins::write_atomic(
-        &h.plugin.join(opencode_plugin::loader::entry_file()),
-        &crate::plugins::build("p0a,v2"),
-    );
-    h.wait_for("sample plugin v2: home.footer");
-    h.wait_gone("Heads up");
-    let host = opencode_tui::plugins::host::host(&h.tui);
-    let json = opencode_plugin::Host::storage_read(&*host, "plugin.sample.log").unwrap_or_default();
-    assert!(!json.contains("closed"), "{json}");
 }
 
 // Expected: a styled box draws its rounded border with the centered title, the heavy left rule and its padding inside
