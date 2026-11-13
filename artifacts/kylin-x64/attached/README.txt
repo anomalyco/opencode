@@ -22,9 +22,12 @@ LINGXI CODE CLI - 企业内网离线版 v1.18.18
   OMO_DISABLE_POSTHOG           - 禁止 PostHog 追踪 (已设为 1)
   OPENCODE_SCAN_DIR_PLUGINS     - 加载二级目录插件，如OMO插件 (设置为1是加载)
   OPENCODE_USER_ID_ENABLED      - 启用用户 ID 查询（默认: true）
-  OPENCODE_ENABLE_TELEMETRY     - 启用 OpenTelemetry 插件（默认: true）
-  OPENCODE_OTLP_ENDPOINT        - OTLP 接收地址（默认: http://localhost:4317）
-  OPENCODE_OTLP_PROTOCOL        - OTLP 协议（默认: http/protobuf）
+  OPENCODE_ENABLE_TELEMETRY     - 启用 Observer 观测插件（默认: true）
+  OPENCODE_CAPTURE_CONTENT      - 采集请求/响应内容（默认: true）
+  OPENCODE_CAPTURE_HTTP_HEADERS - 采集 HTTP 请求头（默认: true）
+  OPENCODE_LLM_TIMING_MODE      - LLM 耗时统计方式（默认: fetch）
+  OPENCODE_OTLP_ENDPOINT        - OTLP 接收地址（默认: http://localhost:4318）
+  OPENCODE_OTLP_PROTOCOL        - OTLP 协议（默认: http/json）
   OPENCODE_DIFF_DETAIL_ENABLED  - 启用代码差异统计插件（默认: true）
   ENTERPRISE_API_KEY            - 内网 LLM 服务 API Key
 
@@ -35,7 +38,7 @@ bin/rg                 - ripgrep 搜索工具（供 grep/glob 使用）
 parsers/               - tree-sitter 离线解析器（外置备用）
 lingxicode.sh          - 快速启动脚本
 config/                - 配置目录（包含配置文件、插件、skills等）
-config/plugins/opencode-plugin-otel.js - 默认启用的 OpenTelemetry 插件
+config/plugins/opencode-observer.js - 默认启用的 Observer 观测插件
 config/plugins/opencode-diff-detail.js - 默认启用的代码差异统计插件
 
 日志
