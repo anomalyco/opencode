@@ -100,8 +100,8 @@ describe("ai.video.start / Google Interactions", () => {
       const { body } = yield* sent({
         model,
         prompt: "Morph",
-        start: Media.fromDataUrl("data:image/png;base64,AQID"),
-        end: Media.ref("google", "https://generativelanguage.googleapis.com/v1beta/files/last", "image/jpeg"),
+        start: Media.image(Media.fromDataUrl("data:image/png;base64,AQID")),
+        end: Media.image(Media.ref("google", "https://generativelanguage.googleapis.com/v1beta/files/last", "image/jpeg")),
       })
       expect(body.input).toEqual([
         { type: "image", data: "AQID", mime_type: "image/png" },

@@ -25,7 +25,7 @@ describe("ai.video.start / xAI", () => {
         .start({
           model,
           prompt: "Make the water crash down",
-          start: Media.fromDataUrl("data:image/png;base64,AQID"),
+          start: Media.image(Media.fromDataUrl("data:image/png;base64,AQID")),
           end: "https://example.test/last.png",
           references: [
             Media.ref("xai", "file_1"),
@@ -121,6 +121,35 @@ describe("ai.video.start / xAI", () => {
       expect(error.reason._tag).toBe("UnsupportedOperation")
       expect(error.message).toContain("reference video")
     }).pipe(Effect.provide(layer(() => Effect.die("an unsupported reference reached the network")))),
+  )
+
+  it.effect("rejects start and end frames that are known not to be images before sending", () =>
+    Effect.gen(function* () {
+      const video = yield* ai.video.start({ model, prompt: "x", start: "data:video/mp4;base64,AAAA" }).pipe(Effect.flip)
+      expect(video.reason._tag).toBe("InvalidRequest")
+      expect(video.message).toContain("expected an image, got video/mp4")
+      const audio = yield* ai.video
+        .start({ model, prompt: "x", end: Media.url("https://example.test/a.mp3", { mediaType: "audio/mpeg" }) })
+        .pipe(Effect.flip)
+      expect(audio.reason._tag).toBe("InvalidRequest")
+    }).pipe(Effect.provide(layer(() => Effect.die("a non-image frame reached the network")))),
+  )
+
+  it.effect("sends frames whose type it can't tell, like URLs and provider file references", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      yield* ai.video
+        .start({ model, prompt: "x", start: "https://example.test/frame?id=7", end: Media.ref("xai", "file_1") })
+        .pipe(
+          Effect.provide(
+            layer((input) => observe(calls, input).pipe(Effect.map(() => json(input, { request_id: "r" })))),
+          ),
+        )
+      expect(JSON.parse(calls[0].body)).toMatchObject({
+        image: { url: "https://example.test/frame?id=7" },
+        last_frame: { file_id: "file_1" },
+      })
+    }),
   )
 
   it.effect("rejects durations that aren't seconds before sending", () =>

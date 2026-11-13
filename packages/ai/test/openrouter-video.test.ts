@@ -36,7 +36,7 @@ describe("ai.video.start / OpenRouter", () => {
         .start({
           model,
           prompt: "A red balloon floats up",
-          start: Media.fromDataUrl("data:image/png;base64,AQID"),
+          start: Media.image(Media.fromDataUrl("data:image/png;base64,AQID")),
           end: "https://example.test/last.png",
           duration: "6 seconds",
           aspect: "16:9",

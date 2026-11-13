@@ -1073,6 +1073,10 @@ everything else is provider-specific and goes under `providerOptions`, typed fro
 fails before sending when its protocol has no way to express it, such as a reference video on xAI. Values the provider
 may reject, like an unsupported duration or too many references, go to the provider, and its error comes back typed.
 
+`start` and `end` are images. They take a URL, data URL, base64 string or bytes, or an asset built with
+`Media.image(...)`, which rejects assets known to be video, audio or documents; URLs and provider file references
+whose type isn't stated are sent and checked by the provider. `references` take any kind.
+
 `status` is one read; `result` fails with an `InvalidRequest` reason when the job hasn't finished, and with the
 provider's reason (and terminal document on `reason.body`) when it failed, was cancelled or expired. Moderation
 outcomes (xAI `respect_moderation`) fail with a `ContentPolicy` reason when no video comes back. Status and result reads

@@ -207,7 +207,7 @@ describe("MiniMax Video / Hailuo start", () => {
       const requests = yield* sent([
         {
           model: hailuo,
-          start: Media.fromDataUrl("data:image/png;base64,AQID"),
+          start: Media.image(Media.fromDataUrl("data:image/png;base64,AQID")),
           end: "https://example.test/last.png",
           references: ["https://example.test/face.png"],
           duration: "10 seconds",
