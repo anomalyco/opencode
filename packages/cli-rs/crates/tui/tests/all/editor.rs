@@ -141,9 +141,11 @@ fn ide_mentions_insert_file_parts_with_their_lines() {
     let marks = setup.textarea().extmarks();
     assert_eq!(marks.len(), 1);
     assert_eq!((marks[0].start, marks[0].end), (8, 25));
-    // One line, outside the project: an absolute path and no end.
+    // One line, outside the project: an absolute path and no end. `normalizeMentionPath` gives `path.resolve` with
+    // `/` separators, so on Windows the path takes the working directory's drive, `D:/elsewhere/a b.ts`.
     ide.notify("at_mentioned", json!({ "filePath": "/elsewhere/a b.ts", "lineStart": 4, "lineEnd": 4 }));
-    setup.wait("the second mention", || setup.textarea().text().ends_with("@/elsewhere/a b.ts#4 "));
+    let elsewhere = format!("{}#4", Flavor::NATIVE.resolve(&["/elsewhere/a b.ts"]).replace('\\', "/"));
+    setup.wait("the second mention", || setup.textarea().text().ends_with(&format!("@{elsewhere} ")));
     setup.app.press("return");
     setup.wait("the prompt", || setup.posts().iter().any(|(path, _)| path.ends_with("/prompt")));
     let prompt = setup.posts().into_iter().find(|(path, _)| path.ends_with("/prompt")).unwrap().1;
@@ -154,8 +156,8 @@ fn ide_mentions_insert_file_parts_with_their_lines() {
         json!([
             { "uri": format!("{}?start=12&end=20", url("/project/src/lib.rs")), "name": "src/lib.rs#12-20",
               "mention": { "start": 8, "end": 25, "text": "@src/lib.rs#12-20" } },
-            { "uri": format!("{}?start=4", url("/elsewhere/a b.ts")), "name": "/elsewhere/a b.ts#4",
-              "mention": { "start": 26, "end": 46, "text": "@/elsewhere/a b.ts#4" } },
+            { "uri": format!("{}?start=4", url("/elsewhere/a b.ts")), "name": elsewhere,
+              "mention": { "start": 26, "end": 27 + elsewhere.len(), "text": format!("@{elsewhere}") } },
         ])
     );
 }
