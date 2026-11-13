@@ -387,7 +387,10 @@ fn code_blocks_follow_activation_order() {
         host.app(),
         &host.theme(),
         &opencode_ui::code::syntax_theme(&host.theme()),
-        &registry.code_blocks(&host.theme()),
+        &registry.code_blocks({
+            let theme = host.theme();
+            Rc::new(move || theme.clone())
+        }),
         true,
         false,
     );
@@ -395,6 +398,49 @@ fn code_blocks_follow_activation_order() {
     host.app().root().add(&markdown);
     host.app.render();
     assert_eq!(languages.borrow().first(), Some(&("second", "x^2".to_owned())));
+}
+
+#[test]
+fn code_blocks_draw_in_the_theme_of_the_render() {
+    let host = host();
+    let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
+    let registry = Registry::define(
+        vec![Definition::new("math", {
+            let seen = seen.clone();
+            move |cx: &mut Setup<'_>| {
+                let seen = seen.clone();
+                cx.code_block("math", move |_, theme| {
+                    seen.borrow_mut().push(theme.background.base);
+                    None
+                });
+            }
+        })],
+        [],
+    );
+    registry.activate(&dynamic(&host));
+    let light = Catalog::default().load("opencode", ThemeMode::Light).unwrap().theme;
+    let current = Rc::new(std::cell::RefCell::new(host.theme()));
+    let renderers = registry.code_blocks({
+        let current = current.clone();
+        Rc::new(move || current.borrow().clone())
+    });
+    let markdown = opencode_ui::markdown::view(
+        host.app(),
+        &host.theme(),
+        &opencode_ui::code::syntax_theme(&host.theme()),
+        &renderers,
+        true,
+        false,
+    );
+    markdown.set_markdown("```math\nx^2\n```\n");
+    host.app().root().add(&markdown);
+    host.app.render();
+    // The renderers are made once; a later render reads the theme that is current then.
+    *current.borrow_mut() = light.clone();
+    markdown.set_markdown("```math\nx^3\n```\n");
+    host.app.render();
+    assert_eq!(*seen.borrow().first().unwrap(), host.theme().background.base);
+    assert_eq!(*seen.borrow().last().unwrap(), light.background.base);
 }
 
 #[test]
