@@ -51,20 +51,25 @@ const description = (shell?: string, autoBackground = false) =>
     "Background commands return immediately, and you will be notified when they complete.",
   ].join(" ")
 
-export const Input = Schema.Struct({
-  command: Schema.String.annotate({ description: "Shell command string to execute" }),
-  workdir: Schema.optionalKey(Schema.String).annotate({
-    description:
-      "Working directory to execute the command in. Defaults to the current working directory. When possible, avoid changing directories in the command and set the working directory here instead.",
-  }),
-  timeout: Schema.optionalKey(NonNegativeInt).annotate({
-    description: `Timeout in milliseconds. Set to 0 to disable the timeout. Defaults to ${DEFAULT_TIMEOUT_MS} for foreground commands. Background commands have no timeout by default.`,
-  }),
-  background: Schema.optionalKey(Schema.Boolean).annotate({
-    description:
-      "Run the command in the background and return immediately (useful for dev servers and long-running builds). You do not need to use '&' at the end of the command when using this parameter. You will be notified when it completes. DO NOT poll for completion.",
-  }),
-})
+const input = (autoBackground: boolean) =>
+  Schema.Struct({
+    command: Schema.String.annotate({ description: "Shell command string to execute" }),
+    workdir: Schema.optionalKey(Schema.String).annotate({
+      description:
+        "Working directory to execute the command in. Defaults to the current working directory. When possible, avoid changing directories in the command and set the working directory here instead.",
+    }),
+    timeout: Schema.optionalKey(NonNegativeInt).annotate({
+      description: autoBackground
+        ? `Optional timeout in milliseconds (default ${DEFAULT_TIMEOUT_MS}). When it expires, a foreground command moves to the background and a background command is stopped.`
+        : `Timeout in milliseconds. Set to 0 to disable the timeout. Defaults to ${DEFAULT_TIMEOUT_MS} for foreground commands. Background commands have no timeout by default.`,
+    }),
+    background: Schema.optionalKey(Schema.Boolean).annotate({
+      description:
+        "Run the command in the background and return immediately (useful for dev servers and long-running builds). You do not need to use '&' at the end of the command when using this parameter. You will be notified when it completes. DO NOT poll for completion.",
+    }),
+  })
+
+export const Input = input(false)
 
 const StructuredOutput = Schema.Struct({
   output: Schema.String,
@@ -351,10 +356,15 @@ export const Plugin = {
           name,
           options: { codemode: false },
           description: description(undefined, autoBackground),
-          input: Input,
+          input: input(autoBackground),
           output: StructuredOutput,
           execute: (input, context) => {
-            const timeout = input.background === true ? (input.timeout ?? 0) : (input.timeout ?? DEFAULT_TIMEOUT_MS)
+            // With timeout backgrounding, a foreground timeout of 0 falls back to the default so a call can't block
+            // until the command exits.
+            const foreground = autoBackground
+              ? input.timeout || DEFAULT_TIMEOUT_MS
+              : (input.timeout ?? DEFAULT_TIMEOUT_MS)
+            const timeout = input.background === true ? (input.timeout ?? 0) : foreground
             let finalTimeout = timeout
             // Uninterruptible from spawning to blocking, so an interrupt cannot orphan a started command.
             return Effect.uninterruptibleMask((restore) =>
@@ -403,7 +413,8 @@ export const Plugin = {
                             ),
                           ),
                         )
-                        if (autoBackground) invocation.timeout = 0
+                        // A foreground timeout moves the command to the background instead of stopping it.
+                        if (autoBackground && input.background !== true) invocation.timeout = 0
                       }),
                   )
                   yield* context.progress({ shellID: info.id })
