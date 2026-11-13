@@ -400,7 +400,7 @@ html:has(ul[data-sortable] > li[data-nav-lifted]) {
       button[type="submit"] {
         justify-content: center;
         padding: 0.375rem;
-        color: #fff;
+        color: var(--on-accent);
         background: var(--link);
       }
     }

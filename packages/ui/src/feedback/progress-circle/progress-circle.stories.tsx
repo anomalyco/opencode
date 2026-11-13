@@ -1,5 +1,5 @@
 import { For } from "solid-js"
-import { ProgressCircle } from "./progress-circle"
+import { ProgressCircle, type ProgressCircleProps } from "./progress-circle"
 
 export default {
   title: "UI/ProgressCircle",
@@ -8,6 +8,7 @@ export default {
   tags: ["autodocs"],
   args: {
     percentage: 60,
+    appearance: "compact",
   },
   argTypes: {
     percentage: { control: { type: "range", min: 0, max: 100, step: 1 } },
@@ -18,28 +19,31 @@ export default {
 export const Playground = {}
 
 export const Progress = {
-  render: () => (
+  args: { percentage: 50 },
+  render: (props: ProgressCircleProps) => (
     <div style={{ display: "flex", gap: "16px", "align-items": "center" }}>
-      <For each={[0, 25, 50, 75, 100]}>{(percentage) => <ProgressCircle percentage={percentage} />}</For>
+      <For each={[0, 25, props.percentage, 75, 100]}>
+        {(percentage) => <ProgressCircle appearance={props.appearance} percentage={percentage} />}
+      </For>
     </div>
   ),
 }
 
 export const Sizes = {
-  render: () => (
+  render: (props: ProgressCircleProps) => (
     <div style={{ display: "flex", gap: "16px", "align-items": "center" }}>
-      <ProgressCircle percentage={60} size={12} />
-      <ProgressCircle percentage={60} />
-      <ProgressCircle percentage={60} size={20} strokeWidth={2} />
+      <ProgressCircle {...props} size={12} />
+      <ProgressCircle {...props} />
+      <ProgressCircle {...props} size={20} strokeWidth={2} />
     </div>
   ),
 }
 
 export const Indicator = {
-  render: () => (
+  args: { appearance: "indicator" },
+  render: (props: ProgressCircleProps) => (
     <ProgressCircle
-      appearance="indicator"
-      percentage={60}
+      {...props}
       size={16}
       strokeWidth={2}
       style={{

@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { createSignal, onMount } from "solid-js"
+import { createEffect, createSignal, onMount } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
 import { useSpring } from "./motion-spring"
@@ -198,6 +197,9 @@ export default {
   title: "UI/Text Strikethrough",
   id: "components-text-strikethrough",
   tags: ["autodocs"],
+  component: TextStrikethrough,
+  args: { active: false, text: TEXT_SHORT, visualDuration: 0.35 },
+  argTypes: { visualDuration: { control: { type: "range", min: 0.05, max: 1.5, step: 0.05 } } },
   parameters: {
     docs: {
       description: {
@@ -213,8 +215,9 @@ export default {
 }
 
 export const Playground = {
-  render: () => {
-    const [active, setActive] = createSignal(false)
+  render: (args: { active: boolean; text: string; visualDuration: number }) => {
+    const [active, setActive] = createSignal(args.active)
+    createEffect(() => setActive(args.active))
     const toggle = () => setActive((v) => !v)
 
     return (
@@ -227,7 +230,8 @@ export const Playground = {
           <div style={heading}>F — grid stacking + clip mapped to text width (THE COMPONENT)</div>
           <TextStrikethrough
             active={active()}
-            text={TEXT_SHORT}
+            text={args.text}
+            visualDuration={args.visualDuration}
             style={{
               color: active() ? "var(--text-weak, #888)" : "var(--text-strong, #eee)",
               transition: "color 220ms ease",
@@ -237,6 +241,7 @@ export const Playground = {
           <TextStrikethrough
             active={active()}
             text={TEXT_MED}
+            visualDuration={args.visualDuration}
             style={{
               color: active() ? "var(--text-weak, #888)" : "var(--text-strong, #eee)",
               transition: "color 220ms ease",
@@ -246,6 +251,7 @@ export const Playground = {
           <TextStrikethrough
             active={active()}
             text={TEXT_LONG}
+            visualDuration={args.visualDuration}
             style={{
               color: active() ? "var(--text-weak, #888)" : "var(--text-strong, #eee)",
               transition: "color 220ms ease",
@@ -255,7 +261,7 @@ export const Playground = {
 
         <div style={card}>
           <div style={heading}>F (inline) — same but just inline variants</div>
-          <VariantF active={active()} text={TEXT_SHORT} />
+          <VariantF active={active()} text={args.text} />
           <div style={{ "margin-top": "12px" }} />
           <VariantF active={active()} text={TEXT_MED} />
           <div style={{ "margin-top": "12px" }} />
@@ -264,7 +270,7 @@ export const Playground = {
 
         <div style={card}>
           <div style={heading}>E — grid stacking + clip-path (container %)</div>
-          <VariantE active={active()} text={TEXT_SHORT} />
+          <VariantE active={active()} text={args.text} />
           <div style={{ "margin-top": "12px" }} />
           <VariantE active={active()} text={TEXT_MED} />
           <div style={{ "margin-top": "12px" }} />
@@ -273,14 +279,14 @@ export const Playground = {
 
         <div style={card}>
           <div style={heading}>A — scaleX line at 50%</div>
-          <VariantA active={active()} text={TEXT_SHORT} />
+          <VariantA active={active()} text={args.text} />
           <div style={{ "margin-top": "12px" }} />
           <VariantA active={active()} text={TEXT_LONG} />
         </div>
 
         <div style={card}>
           <div style={heading}>D — background-image line</div>
-          <VariantD active={active()} text={TEXT_SHORT} />
+          <VariantD active={active()} text={args.text} />
           <div style={{ "margin-top": "12px" }} />
           <VariantD active={active()} text={TEXT_LONG} />
         </div>

@@ -1,7 +1,6 @@
-// @ts-nocheck
-import { createSignal } from "solid-js"
+import { createEffect, createSignal } from "solid-js"
 import { Field } from "@opencode/ui/field"
-import { Select } from "./select"
+import { Select, type SelectProps } from "./select"
 
 const fruits = ["Apple", "Banana", "Cherry", "Date", "Elderberry"]
 
@@ -29,10 +28,54 @@ Single-select built on Kobalte with current menu styling. The trigger is inline 
 - \`invalid\`, \`disabled\`, \`numeric\`: match text input conventions.
 `
 
+type Controls = Pick<
+  SelectProps<string>,
+  | "appearance"
+  | "surface"
+  | "invalid"
+  | "disabled"
+  | "numeric"
+  | "placeholder"
+  | "open"
+  | "placement"
+  | "gutter"
+  | "sameWidth"
+  | "closeOnSelection"
+  | "slide"
+  | "flip"
+  | "fitViewport"
+>
+
+function Sample<T>(props: SelectProps<T>) {
+  const [current, setCurrent] = createSignal<T | undefined>(props.current)
+
+  const [open, setOpen] = createSignal(false)
+
+  createEffect(() => setOpen(!!props.open))
+
+  return (
+    <Select
+      {...props}
+      current={current()}
+      open={open()}
+      onOpenChange={setOpen}
+      onSelect={(value) => {
+        setCurrent(() => value ?? undefined)
+        props.onSelect?.(value)
+      }}
+    />
+  )
+}
+
+function FruitSelect(props: Controls) {
+  return <Sample {...props} options={fruits} />
+}
+
 export default {
   title: "UI/Select",
   id: "ui-select",
   component: Select,
+  render: FruitSelect,
   tags: ["autodocs"],
   parameters: {
     frameHeight: "420px",
@@ -47,135 +90,92 @@ export default {
     placeholder: "Pick a fruit",
     invalid: false,
     disabled: false,
-  },
+    numeric: false,
+    appearance: "inline",
+    surface: "base",
+    open: false,
+    placement: "bottom-end",
+    gutter: 4,
+    sameWidth: false,
+    closeOnSelection: true,
+    slide: true,
+    flip: true,
+    fitViewport: false,
+  } satisfies Controls,
   argTypes: {
-    placeholder: {
-      control: "text",
+    appearance: { options: ["inline", "small", "base", "large"] },
+    surface: { options: ["base", "layer-1", "invisible"] },
+    placement: {
+      options: [
+        "top",
+        "top-start",
+        "top-end",
+        "right",
+        "right-start",
+        "right-end",
+        "bottom",
+        "bottom-start",
+        "bottom-end",
+        "left",
+        "left-start",
+        "left-end",
+      ],
     },
-    invalid: {
-      control: "boolean",
-    },
-    disabled: {
-      control: "boolean",
-    },
+    gutter: { control: { type: "range", min: 0, max: 24, step: 1 } },
   },
 }
 
-export const Playground = {
-  render: (args) => {
-    const [current, setCurrent] = createSignal(undefined)
-
-    return (
-      <Select
-        placeholder={args.placeholder}
-        invalid={args.invalid}
-        disabled={args.disabled}
-        options={fruits}
-        current={current()}
-        onSelect={(v) => setCurrent(v === null ? undefined : v)}
-      />
-    )
-  },
-}
+export const Playground = {}
 
 export const Grouped = {
-  render: (args) => {
-    const [current, setCurrent] = createSignal(undefined)
-
-    return (
-      <Select<(typeof cities)[0]>
-        placeholder={args.placeholder}
-        invalid={args.invalid}
-        disabled={args.disabled}
-        options={cities}
-        current={current()}
-        onSelect={(v) => setCurrent(v === null ? undefined : v)}
-        value={(x) => x.city}
-        label={(x) => x.city}
-        groupBy={(x) => x.region}
-      />
-    )
-  },
-}
-
-export const Invalid = {
-  render: (args) => {
-    const [current, setCurrent] = createSignal(undefined)
-
-    return (
-      <Select
-        placeholder={args.placeholder}
-        invalid
-        disabled={args.disabled}
-        options={fruits}
-        current={current()}
-        onSelect={(v) => setCurrent(v === null ? undefined : v)}
-      />
-    )
-  },
-}
-
-export const Disabled = {
-  render: (args) => (
-    <Select
-      placeholder={args.placeholder}
-      invalid={args.invalid}
-      disabled
-      options={fruits}
-      current="Cherry"
-      onSelect={() => {}}
-    />
+  render: (args: Controls) => (
+    <Sample {...args} options={cities} value={(x) => x.city} label={(x) => x.city} groupBy={(x) => x.region} />
   ),
 }
 
+export const Invalid = { args: { invalid: true } }
+
+export const Disabled = {
+  args: { disabled: true },
+  render: (args: Controls) => <Sample {...args} options={fruits} current="Cherry" />,
+}
+
 export const Appearances = {
-  render: () => (
+  args: { appearance: "small", placeholder: "Small (24px)" },
+  render: (args: Controls) => (
     <div style={{ display: "grid", gap: "20px", width: "280px" }}>
-      <Select appearance="small" placeholder="Small (24px)" options={fruits} onSelect={() => {}} />
-      <Select appearance="base" placeholder="Base (28px)" options={fruits} current="Banana" onSelect={() => {}} />
-      <Select appearance="large" placeholder="Large (32px)" options={fruits} current="Cherry" onSelect={() => {}} />
-      <Select placeholder="Inline (default)" options={fruits} current="Date" onSelect={() => {}} />
+      <FruitSelect {...args} />
+      <Sample appearance="base" placeholder="Base (28px)" options={fruits} current="Banana" />
+      <Sample appearance="large" placeholder="Large (32px)" options={fruits} current="Cherry" />
+      <Sample placeholder="Inline (default)" options={fruits} current="Date" />
     </div>
   ),
 }
 
 export const Surfaces = {
-  render: () => (
+  args: { appearance: "base", placeholder: "Base (default)" },
+  render: (args: Controls) => (
     <div style={{ display: "grid", gap: "20px", width: "280px" }}>
-      <Select appearance="base" placeholder="Base (default)" options={fruits} onSelect={() => {}} />
-      <Select appearance="base" surface="layer-1" placeholder="Layer 1" options={fruits} onSelect={() => {}} />
-      <Select appearance="base" surface="invisible" placeholder="Invisible" options={fruits} onSelect={() => {}} />
-      <Select
-        appearance="base"
-        surface="invisible"
-        placeholder="Invisible, invalid"
-        options={fruits}
-        invalid
-        onSelect={() => {}}
-      />
-      <Select
-        appearance="base"
-        surface="invisible"
-        placeholder="Invisible, disabled"
-        options={fruits}
-        disabled
-        onSelect={() => {}}
-      />
+      <FruitSelect {...args} />
+      <Sample appearance="base" surface="layer-1" placeholder="Layer 1" options={fruits} />
+      <Sample appearance="base" surface="invisible" placeholder="Invisible" options={fruits} />
+      <Sample appearance="base" surface="invisible" placeholder="Invisible, invalid" options={fruits} invalid />
+      <Sample appearance="base" surface="invisible" placeholder="Invisible, disabled" options={fruits} disabled />
     </div>
   ),
 }
 
 export const HighlightPreview = {
-  render: () => {
-    const [current, setCurrent] = createSignal("Apple")
-    const [shown, setShown] = createSignal("Apple")
+  args: { appearance: "base", placeholder: "" },
+  render: (args: Controls) => {
+    const [shown, setShown] = createSignal<string | undefined>("Apple")
 
     return (
       <div style={{ display: "grid", gap: "12px", width: "280px" }}>
-        <Select
-          appearance="base"
+        <Sample
+          {...args}
           options={fruits}
-          current={current()}
+          current="Apple"
           onHighlight={(value) => {
             const previous = shown()
             setShown(value)
@@ -184,7 +184,6 @@ export const HighlightPreview = {
           }}
           onSelect={(value) => {
             if (!value) return
-            setCurrent(value)
             setShown(value)
           }}
         />
@@ -196,25 +195,14 @@ export const HighlightPreview = {
 
 export const WithField = {
   parameters: { frameHeight: "500px" },
-  render: (args) => {
-    const [current, setCurrent] = createSignal(undefined)
-
-    return (
-      <div style={{ width: "280px" }}>
-        <Field>
-          <Field.Label tooltip="Choose one of the available options.">Fruit</Field.Label>
-          <Field.Prefix>Optional helper</Field.Prefix>
-          <Select
-            placeholder={args.placeholder}
-            invalid={args.invalid}
-            disabled={args.disabled}
-            options={fruits}
-            current={current()}
-            onSelect={(v) => setCurrent(v === null ? undefined : v)}
-          />
-          <Field.Suffix>After selection</Field.Suffix>
-        </Field>
-      </div>
-    )
-  },
+  render: (args: Controls) => (
+    <div style={{ width: "280px" }}>
+      <Field>
+        <Field.Label tooltip="Choose one of the available options.">Fruit</Field.Label>
+        <Field.Prefix>Optional helper</Field.Prefix>
+        <FruitSelect {...args} />
+        <Field.Suffix>After selection</Field.Suffix>
+      </Field>
+    </div>
+  ),
 }
