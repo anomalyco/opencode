@@ -80,6 +80,17 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
             panic!("p0a panicked after its effects");
         }
     });
+    // A file change of `src/set.rs` sets the composer, and one of `src/read.rs` logs what the composer holds.
+    setup.on_event(&["filesystem.changed"], |host, event| {
+        let event = serde_json::to_value(event).unwrap_or_default();
+        match event["data"]["file"].as_str() {
+            Some("src/set.rs") => host.edit_composer(ComposerEdit::Set { text: "from an event".to_owned() }),
+            Some("src/read.rs") => {
+                append(host, format!("read {}", host.composer().map(|it| it.text).unwrap_or_default()))
+            }
+            _ => {}
+        }
+    });
     setup.slot(Placement::append("home.footer"), |_, _, _| Render::Show(styled()));
     Ok(())
 }

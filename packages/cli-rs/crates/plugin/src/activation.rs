@@ -45,6 +45,7 @@ impl Activation {
         Rc::new_cyclic(|this: &Weak<Self>| {
             let (this, id) = (this.clone(), wake.id);
             let handler = host.app().on_message(move |_, message: &Woken| {
+                crate::flush();
                 if let Some(activation) = this.upgrade().filter(|_| message.0 == id) {
                     activation.woken();
                 }
