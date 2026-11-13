@@ -33,11 +33,13 @@ impl Rng {
     }
 }
 
-/// A property that failed, the command after which it did, and what differed.
+/// A check that failed: its property, its check site, the command after which it did, and what differed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Failure {
-    /// The check that failed: one name per check site.
+    /// The property, the same name in every client and the fixture.
     pub property: &'static str,
+    /// The check site within the property; the shrinker keeps a candidate only when it fails the same one.
+    pub site: &'static str,
     pub step: usize,
     pub detail: String,
 }
@@ -47,10 +49,11 @@ pub trait Model {
 
     fn generate(&self, rng: &mut Rng, steps: usize) -> Vec<Self::Command>;
 
-    /// Runs the commands from a fresh start; the first property that fails, if any.
+    /// Runs the commands from a fresh start; the first check that fails, if any. A model asks [`skipped`] at each
+    /// check site, so a property that is turned off does not hide the checks after it.
     fn run(&self, commands: &[Self::Command]) -> Option<Failure>;
 
-    /// Smaller versions of a command to try while shrinking.
+    /// Smaller versions of a command to try while shrinking. None may lead back to the command.
     fn simplify(&self, _command: &Self::Command) -> Vec<Self::Command> {
         Vec::new()
     }
@@ -60,11 +63,19 @@ fn environment(key: &str) -> Option<String> {
     std::env::var(key).ok().filter(|value| !value.is_empty())
 }
 
-/// Runs `seeds` seeds of `steps` commands (or the environment's), and panics with the shrunk trace of a failure.
+/// Whether `MODEL_SKIP` turns `property` off.
+pub fn skipped(property: &str) -> bool {
+    static SKIP: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    SKIP.get_or_init(|| environment("MODEL_SKIP").unwrap_or_default().split(',').map(str::to_owned).collect())
+        .iter()
+        .any(|name| name == property)
+}
+
+/// Runs `seeds` seeds of `steps` commands (or the environment's), and panics with the original and the shrunk trace of
+/// a failure.
 pub fn check<M: Model>(model: &M, seeds: u64, steps: usize) {
     let seed_value = environment("MODEL_SEED").map(|text| text.parse::<u64>().expect("MODEL_SEED is a number"));
     let seeds = environment("MODEL_SEEDS").map_or(seeds, |text| text.parse().expect("MODEL_SEEDS is a number"));
-    let skip = environment("MODEL_SKIP").unwrap_or_default();
     let range = match seed_value {
         Some(seed) => seed..seed + 1,
         None => 0..seeds,
@@ -72,17 +83,23 @@ pub fn check<M: Model>(model: &M, seeds: u64, steps: usize) {
     for seed in range {
         let commands = model.generate(&mut Rng::new(seed), steps);
         let Some(failure) = model.run(&commands) else { continue };
-        if skip.split(',').any(|name| name == failure.property) {
-            continue;
-        }
-        let shrunk = shrink(model, commands, failure.property);
+        let original = format!(
+            "seed {seed}: {} at {} after step {} of {}: {}",
+            failure.property,
+            failure.site,
+            failure.step,
+            commands.len(),
+            failure.detail
+        );
+        let shrunk = shrink(model, commands, &failure);
         let last = model.run(&shrunk).unwrap_or(failure);
         let trace: Vec<String> = shrunk.iter().map(|command| format!("  {command:?}")).collect();
         let report = format!(
-            "model failure: seed {seed}, property {}, step {}, shrunk to {} commands:\n{}\n{}",
-            last.property,
-            last.step,
+            "model failure, {original}\nshrunk to {} commands, {} at {} after step {}:\n{}\n{}",
             shrunk.len(),
+            last.property,
+            last.site,
+            last.step,
             trace.join("\n"),
             last.detail
         );
@@ -92,47 +109,90 @@ pub fn check<M: Model>(model: &M, seeds: u64, steps: usize) {
     }
 }
 
-/// The shrinker keeps a candidate only when it fails the same property: a model names each check site with its own
-/// property, so a candidate that fails another check (another bug) is not taken for this one.
-fn fails_with<M: Model>(model: &M, commands: &[M::Command], property: &str) -> bool {
-    model.run(commands).is_some_and(|failure| failure.property == property)
+/// The shrinker keeps a candidate only when it fails the same check site: two checks of one property can fail for two
+/// different defects.
+fn fails_like<M: Model>(model: &M, commands: &[M::Command], failure: &Failure) -> bool {
+    model.run(commands).is_some_and(|other| other.property == failure.property && other.site == failure.site)
 }
 
-fn shrink<M: Model>(model: &M, initial: Vec<M::Command>, property: &str) -> Vec<M::Command> {
+/// Drops chunks of n/2 down to 1, then simplifies each command, and repeats both until neither changes the trace. The
+/// result is locally irreducible: no command can be dropped or simplified and keep the failure. It is not always the
+/// shortest trace.
+fn shrink<M: Model>(model: &M, initial: Vec<M::Command>, failure: &Failure) -> Vec<M::Command> {
     let mut current = initial;
-    let mut chunk = (current.len() / 2).max(1);
     loop {
-        let mut start = 0;
-        let mut removed_any = false;
-        while start < current.len() {
-            let end = current.len().min(start + chunk);
-            let candidate: Vec<M::Command> = current[..start].iter().chain(&current[end..]).cloned().collect();
-            if fails_with(model, &candidate, property) {
-                current = candidate;
-                removed_any = true;
-            } else {
-                start = end;
-            }
-        }
-        if chunk == 1 && !removed_any {
-            break;
-        }
-        if !removed_any {
-            chunk /= 2;
-        }
-    }
-    // Simplify each command while the failure stays: the first smaller command that keeps it.
-    for index in 0..current.len() {
-        'simpler: loop {
-            for candidate in model.simplify(&current[index]) {
-                let saved = std::mem::replace(&mut current[index], candidate);
-                if fails_with(model, &current, property) {
-                    continue 'simpler;
+        let mut changed = false;
+        let mut chunk = (current.len() / 2).max(1);
+        loop {
+            let mut start = 0;
+            let mut removed_any = false;
+            while start < current.len() {
+                let end = current.len().min(start + chunk);
+                let candidate: Vec<M::Command> = current[..start].iter().chain(&current[end..]).cloned().collect();
+                if fails_like(model, &candidate, failure) {
+                    current = candidate;
+                    (removed_any, changed) = (true, true);
+                } else {
+                    start = end;
                 }
-                current[index] = saved;
             }
-            break;
+            if chunk == 1 && !removed_any {
+                break;
+            }
+            if !removed_any {
+                chunk /= 2;
+            }
+        }
+        // Simplify each command while the failure stays: the first smaller command that keeps it.
+        for index in 0..current.len() {
+            'simpler: loop {
+                for candidate in model.simplify(&current[index]) {
+                    let saved = std::mem::replace(&mut current[index], candidate);
+                    if fails_like(model, &current, failure) {
+                        changed = true;
+                        continue 'simpler;
+                    }
+                    current[index] = saved;
+                }
+                break;
+            }
+        }
+        if !changed {
+            return current;
         }
     }
-    current
+}
+
+/// A model of numbers. It fails `p` at site `x` when the trace holds 1 and 2, or 3, and at site `four` when it holds
+/// 4; 2 simplifies to 3.
+struct Toy;
+
+impl Model for Toy {
+    type Command = u8;
+
+    fn generate(&self, _: &mut Rng, _: usize) -> Vec<u8> {
+        vec![1, 2]
+    }
+
+    fn run(&self, commands: &[u8]) -> Option<Failure> {
+        let failure = |site| Some(Failure { property: "p", site, step: commands.len(), detail: String::new() });
+        if (commands.contains(&1) && commands.contains(&2)) || commands.contains(&3) {
+            return failure("x");
+        }
+        commands.contains(&4).then(|| failure("four")).flatten()
+    }
+
+    fn simplify(&self, command: &u8) -> Vec<u8> {
+        if *command == 2 { vec![3] } else { Vec::new() }
+    }
+}
+
+// Expected (review bigboi-10): the shrinker deletes again after a simplification, to a fixed point, and it keeps the
+// check site, so it does not take a failure at another site of the same property for this one.
+#[test]
+fn the_shrinker_keeps_the_site_and_reaches_a_fixed_point() {
+    let x = Failure { property: "p", site: "x", step: 2, detail: String::new() };
+    assert_eq!(shrink(&Toy, vec![1, 2], &x), vec![3]);
+    let four = Failure { property: "p", site: "four", step: 3, detail: String::new() };
+    assert_eq!(shrink(&Toy, vec![4, 1, 2], &four), vec![4]);
 }
