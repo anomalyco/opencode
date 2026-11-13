@@ -245,7 +245,8 @@ mod tests {
         record.leave();
         let left = read(&record.bytes()).unwrap();
         assert_eq!((left.plugin, left.call, record.running()), (None, None, None));
-        let long = "é".repeat(SIZE);
+        // The field ends on an even byte, so one ASCII byte first puts a two-byte character across its end.
+        let long = format!("a{}", "é".repeat(SIZE));
         record.set_draft(&long);
         let draft = read(&record.bytes()).unwrap().draft.unwrap();
         assert!(long.starts_with(&draft) && draft.len() >= SIZE - DRAFT - 5, "{}", draft.len());
