@@ -16,6 +16,19 @@ use opencode_plugin::abi;
 use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
+thread_local! {
+    /// What `p0b.pair` runs between its reads of `ses_a` and `ses_b`.
+    static BETWEEN: RefCell<Option<Box<dyn Fn()>>> = const { RefCell::new(None) };
+    /// The costs of `ses_a` and `ses_b` that `p0b.pair` read.
+    static PAIR: Cell<Option<(f64, f64)>> = const { Cell::new(None) };
+    /// The tabs `p0b.tabs` read.
+    static TABS: RefCell<Vec<abi::Tab>> = const { RefCell::new(Vec::new()) };
+    /// The pending keys, active keys and commands `p0b.keys` read.
+    static KEYS: RefCell<Keys> = RefCell::default();
+}
+
+type Keys = (Vec<abi::KeymapPending>, Vec<abi::KeymapActive>, Vec<abi::KeymapCommand>);
+
 /// The built-in theme `aura`'s document, which loads as a custom theme.
 fn aura() -> Value {
     let themes: Value = serde_json::from_str(include_str!("../../../ui/src/theme/generated/themes.json")).unwrap();
@@ -48,6 +61,16 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
     });
     setup.command(command("p0b.install"), |host, input| {
         host.install_theme(input.unwrap_or_default(), json!({ "theme": {} }));
+    });
+    setup.command(command("p0b.tabs"), |host, _| TABS.set(host.tabs()));
+    setup.command(command("p0b.keys"), |host, _| {
+        KEYS.set((host.keymap_pending(), host.keymap_active(), host.keymap_commands()));
+    });
+    setup.command(command("p0b.pair"), |host, _| {
+        let cost = |id: &str| host.session(id).map_or(-1.0, |session| session.info.cost);
+        let a = cost("ses_a");
+        BETWEEN.with_borrow(|between| between.iter().for_each(|between| between()));
+        PAIR.set(Some((a, cost("ses_b"))));
     });
     // Several verbs in one call, `;`-separated, such as `open ses_a;close ses_a`: what each answered, `-` for none,
     // after the number of the script.
@@ -149,7 +172,7 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
         let described = active.iter().filter(|key| key.description.is_some()).count();
         let installed = read.themes().iter().any(|name| name == "p0b-theme");
         let text = format!(
-            "p0b w{} {} [{}] {} {reachable} {} {} d:{} x:{} c{} ds{} i:{installed} n:{}",
+            "p0b w{} {} [{}] {} {reachable} {} {} d:{} x:{} c{} ds{} i:{installed} n:{} a:{}",
             input.width,
             read.theme().unwrap_or_default(),
             tabs.join(","),
@@ -161,6 +184,7 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
             continues.min(1),
             described.min(1),
             calls.get(),
+            active.len(),
         );
         abi::Render::Show(abi::Node::text([abi::Span::new(text).link("https://opencode.ai/p0b")]))
     });
@@ -413,6 +437,210 @@ fn installs_land_in_order_and_select_at_once() {
     assert!(h.tui.theme.borrow().names().iter().any(|name| name == "p0b-mem"));
     assert_eq!(h.tui.theme.borrow().selected(), "p0b-mem");
     assert!(h.tui.theme.borrow_mut().take_error().is_none(), "the theme does not load");
+}
+
+// Expected (reviews bigboi-9, carbon-8): a claim reads a change of the tabs, the keymap and the selected theme in the
+// first frame after it, also when another client reordered the tabs on disk, when a dialog changed what the keys
+// reach while no key is pending, and when a preview selected a theme of the same palette. On both paths.
+#[test]
+fn a_claim_hears_of_tabs_keymap_and_theme_changes() {
+    for loopback in [false, true] {
+        let (h, _memory, root) = home(loopback, 160, json!({ "tabs": { "enabled": true } }));
+        h.wait_for("p0b w160 ");
+        h.tui.keymap.dispatch("p0b.script", Some("open ses_a;open ses_b"));
+        h.wait_for("[ses_a,ses_b]");
+        let file = || walk(root.path()).into_iter().find(|path| path.ends_with("tabs.json"));
+        let written = h.app.wait_until(WAIT, || file().is_some_and(|file| read(&file).to_string().contains("ses_b")));
+        assert!(written, "loopback {loopback}");
+        let mut tabs = read(&file().unwrap());
+        reverse_tabs(&mut tabs);
+        std::fs::write(file().unwrap(), tabs.to_string()).unwrap();
+        let ids = || h.tui.tabs.tabs(&h.tui).into_iter().map(|tab| tab.session_id).collect::<Vec<_>>();
+        assert!(h.app.wait_until(WAIT, || ids() == ["ses_b", "ses_a"]), "{:?}", ids());
+        let first = h.app.render().text();
+        assert!(first.contains("[ses_b,ses_a]"), "loopback {loopback}:\n{first}");
+
+        let keys = |screen: &str| {
+            screen.split(" a:").nth(1).and_then(|rest| rest.split_whitespace().next()).map(str::to_owned)
+        };
+        let before = keys(&h.app.render().text());
+        assert!(h.tui.keymap.pending().is_empty());
+        h.tui.keymap.dispatch("command.palette.show", None);
+        let first = h.app.render().text();
+        assert_ne!(keys(&first), before, "loopback {loopback}:\n{first}");
+
+        h.tui.dialogs.clear();
+        h.app.render();
+        h.tui.theme.borrow_mut().config_name("system");
+        h.tui.theme_changed();
+        let first = h.app.render().text();
+        assert!(first.contains("p0b w160 system"), "loopback {loopback}:\n{first}");
+    }
+}
+
+// Expected (review bigboi-14): every read of one plugin call sees one store snapshot. A batch that changes two
+// sessions, applied on another thread between the call's reads of them, shows in neither, and in both after. On
+// both paths.
+#[test]
+fn a_call_reads_one_snapshot() {
+    for loopback in [false, true] {
+        let (h, _memory, _root) = home(loopback, 160, json!({ "tabs": { "enabled": true } }));
+        h.wait_for("p0b w160 ");
+        h.tui.keymap.dispatch("p0b.script", Some("open ses_a;open ses_b"));
+        let loaded = |id: &str| h.tui.data.read(|state| state.session(&SessionID(id.to_owned())).is_some());
+        assert!(h.app.wait_until(WAIT, || loaded("ses_a") && loaded("ses_b")), "loopback {loopback}");
+        let usage = |id: &str| -> opencode_api::generated::V2Event {
+            serde_json::from_value(json!({
+                "id": format!("evt_usage_{id}"), "created": 2, "type": "session.usage.updated",
+                "durable": { "aggregateID": id, "seq": 100, "version": 1 },
+                "location": { "directory": support::DIRECTORY },
+                "data": { "sessionID": id, "cost": 5.0,
+                          "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } } },
+            }))
+            .unwrap()
+        };
+        let batch = [usage("ses_a"), usage("ses_b")];
+        let (go, started) = std::sync::mpsc::channel::<()>();
+        let data = h.tui.data.clone();
+        let writer = std::thread::spawn(move || {
+            started.recv().unwrap();
+            data.apply(&batch);
+        });
+        BETWEEN.set(Some(Box::new(move || {
+            go.send(()).unwrap();
+            // Long enough for the writer to apply, unless the call holds the store.
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        })));
+        h.tui.keymap.dispatch("p0b.pair", None);
+        BETWEEN.set(None);
+        assert_eq!(PAIR.take(), Some((0.0, 0.0)), "loopback {loopback}");
+        writer.join().unwrap();
+        h.tui.keymap.dispatch("p0b.pair", None);
+        assert_eq!(PAIR.take(), Some((5.0, 5.0)), "loopback {loopback}");
+    }
+}
+
+// Expected (review carbon-9): a tab reads its session's title, also one opened without being shown, which the TUI
+// reads for it (carbon-8), whether the session runs, a permission waits, and what is unread. On both paths.
+#[test]
+fn tabs_read_their_metadata() {
+    let routes = || {
+        let failed = support::merge(
+            support::test_session("ses_b", "Write the docs"),
+            json!({ "time": { "created": 1, "updated": 1, "idle": 5 }, "outcome": "failed" }),
+        );
+        vec![
+            MemoryRoute::json(
+                "GET",
+                "/api/session/active",
+                200,
+                &json!({ "data": { "ses_a": { "type": "running" } } }),
+            ),
+            MemoryRoute::json("GET", "/api/session/ses_b", 200, &json!({ "data": failed })),
+        ]
+    };
+    for loopback in [false, true] {
+        let (h, memory, _root) = home_on(loopback, 160, json!({ "tabs": { "enabled": true } }), routes());
+        h.wait_for("p0b w160 ");
+        h.tui.keymap.dispatch("p0b.script", Some("open ses_a;open ses_b"));
+        // Read for the tabs it opens, with the store otherwise quiet.
+        let titled = h.app.wait_until(WAIT, || {
+            h.tui.keymap.dispatch("p0b.tabs", None);
+            TABS.with_borrow(|tabs| tabs.iter().all(|tab| tab.title.is_some()) && tabs.len() == 2)
+        });
+        assert!(titled, "loopback {loopback}: {:?}", TABS.take());
+        memory.emit(&json!({
+            "id": "evt_asked", "created": 1, "type": "permission.asked",
+            "location": { "directory": support::DIRECTORY },
+            "data": { "id": "per_1", "sessionID": "ses_a", "action": "shell", "resources": ["ls"], "save": [] },
+        }));
+        let tab = |id: &str, title: &str| abi::Tab {
+            session_id: id.to_owned(),
+            title: Some(title.to_owned()),
+            active: false,
+            busy: false,
+            attention: false,
+            unread: None,
+        };
+        let want = [
+            abi::Tab { busy: true, attention: true, ..tab("ses_a", "Fix the parser") },
+            abi::Tab { unread: Some(abi::Unread::Error), ..tab("ses_b", "Write the docs") },
+        ];
+        let read = h.app.wait_until(WAIT, || {
+            h.tui.keymap.dispatch("p0b.tabs", None);
+            TABS.with_borrow(|tabs| tabs == &want)
+        });
+        assert!(read, "loopback {loopback}: {:?}", TABS.take());
+    }
+}
+
+// Expected (review carbon-9): the keymap reads have every field: a pending key's token, an active key's key, title,
+// description and group, and a command's title, description, group, and whether it is enabled, in the palette, a
+// slash command or suggested. On both paths.
+#[test]
+fn keymap_reads_have_every_field() {
+    for loopback in [false, true] {
+        let (h, _memory, _root) = home(loopback, 160, json!({}));
+        h.wait_for("p0b w160 ");
+        h.app.press("ctrl+x");
+        h.wait_for(" ctrl+x ");
+        h.tui.keymap.dispatch("p0b.keys", None);
+        h.app.press("escape");
+        let (pending, active, commands) = KEYS.take();
+        assert_eq!(pending, [abi::KeymapPending { key: "ctrl+x".into(), token: Some("leader".into()) }]);
+        let editor = abi::KeymapActive {
+            key: "e".into(),
+            title: Some("Open editor".into()),
+            description: Some("Open external editor".into()),
+            group: Some("Session".into()),
+            continues: false,
+        };
+        assert!(active.contains(&editor), "loopback {loopback}: {active:?}");
+        let command = |id: &str| commands.iter().find(|command| command.id == id).cloned();
+        let slash =
+            |name: &str, arguments| Some(abi::KeymapSlash { name: name.into(), aliases: Vec::new(), arguments });
+        let aside = abi::KeymapCommand {
+            id: "session.aside".into(),
+            title: Some("Ask a side question".into()),
+            description: Some("One-shot answer from the session's context without adding to the conversation".into()),
+            group: Some("Session".into()),
+            enabled: true,
+            palette: true,
+            slash: slash("btw", true),
+            suggested: false,
+        };
+        assert_eq!(command("session.aside"), Some(aside), "loopback {loopback}");
+        let connect = abi::KeymapCommand {
+            id: "provider.connect".into(),
+            title: Some("Connect an integration".into()),
+            description: None,
+            group: Some("Integration".into()),
+            enabled: true,
+            palette: true,
+            slash: slash("connect", false),
+            suggested: true,
+        };
+        assert_eq!(command("provider.connect"), Some(connect), "loopback {loopback}");
+    }
+}
+
+const WAIT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// The JSON in `path`.
+fn read(path: &std::path::Path) -> Value {
+    serde_json::from_slice(&std::fs::read(path).unwrap_or_default()).unwrap_or_default()
+}
+
+/// Reverses every `tabs` list in a tabs file.
+fn reverse_tabs(value: &mut Value) {
+    match value {
+        Value::Object(object) => object.iter_mut().for_each(|(key, value)| match value {
+            Value::Array(tabs) if key == "tabs" => tabs.reverse(),
+            value => reverse_tabs(value),
+        }),
+        Value::Array(items) => items.iter_mut().for_each(reverse_tabs),
+        _ => {}
+    }
 }
 
 /// Every file under `dir`.
