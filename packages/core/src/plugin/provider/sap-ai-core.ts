@@ -13,7 +13,8 @@ export const SapAICorePlugin = define({
       Effect.fn(function* (evt) {
         const serviceKey =
           process.env.AICORE_SERVICE_KEY ??
-          (typeof evt.options.serviceKey === "string" ? evt.options.serviceKey : undefined)
+          (typeof evt.options.serviceKey === "string" ? evt.options.serviceKey : undefined) ??
+          (typeof evt.options.apiKey === "string" ? evt.options.apiKey : undefined)
         if (serviceKey && !process.env.AICORE_SERVICE_KEY) process.env.AICORE_SERVICE_KEY = serviceKey
 
         const factory = yield* loadSDKFactory(npm, evt.package)
