@@ -1230,13 +1230,14 @@ impl Registry {
         Some(RouteMount(render(host)))
     }
 
-    /// The code-block renderers of the active plugins, drawing in `theme`. At one language the plugin
-    /// last in activation order wins; a plugin keeps its place.
-    pub fn code_blocks(&self, theme: &Theme) -> CodeBlockRenderers {
+    /// The code-block renderers of the active plugins, drawing in the theme `theme` returns when they render, so a
+    /// Markdown restyled for a new theme draws its fences in it. At one language the plugin last in activation order
+    /// wins; a plugin keeps its place.
+    pub fn code_blocks(&self, theme: Rc<dyn Fn() -> Theme>) -> CodeBlockRenderers {
         let mut renderers = CodeBlockRenderers::default();
         for (language, render) in self.by_activation(|registration| &registration.code_blocks) {
             let theme = theme.clone();
-            renderers.register(language, Rc::new(move |block| render(block, &theme)));
+            renderers.register(language, Rc::new(move |block| render(block, &theme())));
         }
         renderers
     }
