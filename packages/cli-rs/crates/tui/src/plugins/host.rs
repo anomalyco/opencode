@@ -324,17 +324,25 @@ impl Host for Tui {
     }
 
     fn install_theme(&self, name: &str, theme: Value) {
-        if !opencode_plugin::theme_file_name(name) {
-            log::warn!("a plugin installs a theme with a name that is not a file name: {name:?}");
+        if !opencode_plugin::theme_file_name(name) || !opencode_ui::theme::is_theme_source(&theme) {
+            log::warn!("a plugin installs a theme that is not one, or not as a plain file name: {name:?}");
             return;
         }
+        // Listed at once, so a `set_theme` queued after it finds it; the scan after the write lists it from disk.
+        self.theme.borrow_mut().add_custom(name, theme.clone());
+        self.theme_changed();
+        local_changed(self);
         let file = format!("{name}.json");
         crate::app::discover_themes(self, move |config| {
             let themes = config.join("themes");
-            let written = std::fs::create_dir_all(&themes).and_then(|()| {
-                std::fs::write(themes.join(&file), serde_json::to_vec_pretty(&theme).unwrap_or_default())
-            });
+            // Written beside it and renamed over it: a scan never reads half a file, a failed write keeps the old
+            // one, and a symlink there is replaced, not followed.
+            let temporary = themes.join(format!(".{file}.tmp"));
+            let written = std::fs::create_dir_all(&themes)
+                .and_then(|()| std::fs::write(&temporary, serde_json::to_vec_pretty(&theme).unwrap_or_default()))
+                .and_then(|()| std::fs::rename(&temporary, themes.join(&file)));
             if let Err(error) = written {
+                let _ = std::fs::remove_file(&temporary);
                 log::error!("Failed to install theme {file}: {error}");
             }
         });

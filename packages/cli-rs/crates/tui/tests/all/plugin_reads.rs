@@ -16,6 +16,13 @@ use opencode_plugin::abi;
 use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
+/// The built-in theme `aura`'s document, which loads as a custom theme.
+fn aura() -> Value {
+    let themes: Value = serde_json::from_str(include_str!("../../../ui/src/theme/generated/themes.json")).unwrap();
+    let themes = themes["themes"].as_array().unwrap();
+    themes.iter().find(|theme| theme["name"] == "aura").unwrap()["document"].clone()
+}
+
 /// Commands of one verb each, which toast what the verb answered, and a sized `app` claim that shows what it reads.
 fn reader(setup: &mut abi::Setup) -> Result<(), String> {
     let command = |name: &str| abi::Command { name: name.to_owned(), ..abi::Command::default() };
@@ -66,7 +73,7 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
                         return "-".to_owned();
                     }
                     "install" | "installbad" => {
-                        let theme = if verb == "install" { json!({ "theme": {} }) } else { json!({ "x": 1 }) };
+                        let theme = if verb == "install" { aura() } else { json!({ "x": 1 }) };
                         host.install_theme(arg, theme);
                         return "-".to_owned();
                     }
@@ -363,6 +370,49 @@ fn a_plugin_installs_a_theme() {
         assert_eq!(written.len(), 1, "loopback {loopback}: {written:?}");
         assert!(written[0].parent().is_some_and(|dir| dir.ends_with("themes")), "{written:?}");
     }
+}
+
+// Expected (reviews bigboi-11, carbon-4): a theme installed in a call can be selected in the same call, from both
+// paths; writes land in the order asked, two names both stay listed, and a value that is not a theme leaves the file
+// and the listed theme as they were.
+#[test]
+fn installs_land_in_order_and_select_at_once() {
+    for loopback in [false, true] {
+        let (h, _memory, _root) = home(loopback, 140, json!({}));
+        h.wait_for("p0b w140 opencode");
+        h.tui.keymap.dispatch("p0b.script", Some("install p0b-new;theme p0b-new;installbad p0b-bad;theme p0b-bad"));
+        h.wait_for("p0b script1 -,true,-,false");
+        h.wait_for("p0b w140 p0b-new");
+        assert_eq!(h.tui.theme.borrow().selected(), "p0b-new", "loopback {loopback}");
+    }
+    let (h, _memory, root) = home(false, 140, json!({}));
+    h.wait_for("p0b w140 opencode");
+    let install = |name: &str, theme: Value| opencode_plugin::Host::install_theme(&*h.tui, name, theme);
+    install("p0b-x", json!({ "theme": { "n": 1 } }));
+    install("p0b-x", json!({ "theme": { "n": 2 } }));
+    install("p0b-y", json!({ "theme": {} }));
+    install("p0b-x", json!({ "not": "a theme" }));
+    let file = |name: &str| walk(root.path()).into_iter().find(|path| path.ends_with(format!("{name}.json")));
+    let listed =
+        || ["p0b-x", "p0b-y"].iter().all(|name| h.tui.theme.borrow().names().iter().any(|known| known == name));
+    let settled = h.app.wait_until(std::time::Duration::from_secs(10), || file("p0b-y").is_some() && listed());
+    assert!(settled, "{:?}", h.tui.theme.borrow().names());
+    // The last scan has applied: wait until no write or scan is pending, then read the bytes.
+    h.app.wait_until(std::time::Duration::from_millis(200), || false);
+    assert!(listed(), "{:?}", h.tui.theme.borrow().names());
+    let written: Value = serde_json::from_slice(&std::fs::read(file("p0b-x").unwrap()).unwrap()).unwrap();
+    assert_eq!(written, json!({ "theme": { "n": 2 } }));
+    let leftovers: Vec<_> =
+        walk(root.path()).into_iter().filter(|path| path.to_string_lossy().ends_with(".tmp")).collect();
+    assert!(leftovers.is_empty(), "{leftovers:?}");
+
+    // Listed and selectable as it is installed, before any scan: here there is none, without config files.
+    let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    opencode_plugin::Host::install_theme(&*h.tui, "p0b-mem", aura());
+    opencode_plugin::Host::set_theme(&*h.tui, "p0b-mem");
+    assert!(h.tui.theme.borrow().names().iter().any(|name| name == "p0b-mem"));
+    assert_eq!(h.tui.theme.borrow().selected(), "p0b-mem");
+    assert!(h.tui.theme.borrow_mut().take_error().is_none(), "the theme does not load");
 }
 
 /// Every file under `dir`.

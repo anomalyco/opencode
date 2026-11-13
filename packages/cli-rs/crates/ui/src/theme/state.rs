@@ -226,6 +226,12 @@ impl ThemeState {
         self.reload();
     }
 
+    /// A custom theme installed before discovery lists it from disk.
+    pub fn add_custom(&mut self, name: &str, source: Value) {
+        self.catalog.add_custom(name, source);
+        self.reload();
+    }
+
     /// Custom theme discovery failed: TypeScript falls back to `opencode` without a toast.
     pub fn discovery_failed(&mut self) {
         self.active = "opencode".to_owned();

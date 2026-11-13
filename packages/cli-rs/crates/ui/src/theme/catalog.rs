@@ -70,6 +70,13 @@ impl Catalog {
         self.custom = themes.into_iter().filter(|(_, source)| is_theme_source(source)).collect();
     }
 
+    /// Adds or replaces custom theme `name`, when `source` is a theme document.
+    pub fn add_custom(&mut self, name: &str, source: Value) {
+        if is_theme_source(&source) {
+            self.custom.insert(name.to_owned(), source);
+        }
+    }
+
     /// The generated `system` theme, or `None` to fall back to a custom `system` theme or `opencode`.
     pub fn set_system(&mut self, source: Option<Value>) {
         self.system = source;

@@ -87,6 +87,8 @@ pub struct Tui {
     pub(crate) title: crate::features::title::Title,
     /// The one pending release of the terminal to another program.
     pub(crate) foreground: crate::features::foreground::Foreground,
+    /// The custom-theme scans asked for so far; only the last one's result applies ([`discover_themes`]).
+    theme_scans: Cell<u64>,
     /// Markdown documents that link session IDs (#63224).
     pub(crate) session_links: crate::features::session_links::Registry,
     pub(crate) events: crate::features::events::Events,
@@ -461,6 +463,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         overlays: Default::default(),
         title: Default::default(),
         foreground: Default::default(),
+        theme_scans: Cell::new(0),
         session_links: Default::default(),
         events: Default::default(),
         attention: Default::default(),
@@ -710,25 +713,29 @@ fn install_theme(tui: &Rc<Tui>) {
 }
 
 /// Reads the custom themes from disk off the UI thread, after `prepare` ran there with the global config directory,
-/// then applies them.
+/// then applies them. One worker runs every `prepare` (a theme's write) and scan in the order asked, and only the
+/// last scan asked for applies, so an earlier one that finishes later does not drop a theme a later write added.
 pub(crate) fn discover_themes(tui: &Tui, prepare: impl FnOnce(&std::path::Path) + Send + 'static) {
+    static WORKER: std::sync::OnceLock<opencode_local::serial::Serial> = std::sync::OnceLock::new();
     let Some(files) = &tui.files else {
         tui.theme_changed();
         return;
     };
     let config = files.config.path().parent().unwrap_or(files.config.path()).to_path_buf();
     let directories = opencode_ui::theme::config_directories(&config, std::path::Path::new(&tui.directory));
+    let scan = tui.theme_scans.get() + 1;
+    tui.theme_scans.set(scan);
+    let (send, scanned) = tokio::sync::oneshot::channel();
+    WORKER.get_or_init(|| opencode_local::serial::Serial::new("themes")).run(move || {
+        prepare(&config);
+        let _ = send.send(opencode_ui::theme::discover(&directories).ok());
+    });
     tui.app.spawn(
-        async move {
-            tokio::task::spawn_blocking(move || {
-                prepare(&config);
-                opencode_ui::theme::discover(&directories)
-            })
-            .await
-            .ok()
-            .and_then(Result::ok)
-        },
+        async move { scanned.await.ok().flatten() },
         bind!(tui, |tui, _, themes| {
+            if tui.theme_scans.get() != scan {
+                return;
+            }
             match themes {
                 Some(themes) => tui.theme.borrow_mut().custom_themes(themes),
                 None => tui.theme.borrow_mut().discovery_failed(),
