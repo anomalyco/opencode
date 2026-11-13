@@ -11,7 +11,7 @@ const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
 const minimax = MiniMax.configure({ apiKey: "test", baseURL: "https://minimax.test" })
 const h3 = minimax.video("MiniMax-H3-Lite")
 const hailuo = minimax.video("MiniMax-Hailuo-02")
-const token = { taskID: "task_1" }
+const id = "task_1"
 
 const task = (fields: Record<string, unknown>) => ({ task: { id: "task_1", model: "MiniMax-H3-Lite", ...fields } })
 const succeeded = task({
@@ -83,7 +83,7 @@ describe("MiniMax Video / H3 start", () => {
             ),
           ),
         )
-      expect(job).toEqual({ id: "task_1", token })
+      expect(job).toEqual({ id: "task_1" })
       expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([
         "POST https://minimax.test/v2/video_generation?trace=1",
       ])
@@ -207,7 +207,7 @@ describe("MiniMax Video / Hailuo start", () => {
       const requests = yield* sent([
         {
           model: hailuo,
-          start: Media.fromDataUrl("data:image/png;base64,AQID"),
+          start: Media.image(Media.fromDataUrl("data:image/png;base64,AQID")),
           end: "https://example.test/last.png",
           references: ["https://example.test/face.png"],
           duration: "10 seconds",
@@ -280,7 +280,7 @@ describe("MiniMax Video / H3 status, result and cancel", () => {
   it.effect("reads statuses from a JSON round-tripped token and keeps unknown ones running", () =>
     Effect.gen(function* () {
       const calls: Array<Call> = []
-      const raw: unknown = JSON.parse(JSON.stringify(token))
+      const raw: unknown = id
       const statuses = yield* Effect.forEach(
         ["queued", "running", "succeeded", "failed", "cancelled", "warming_up", "constructor"],
         (status) =>
@@ -307,7 +307,7 @@ describe("MiniMax Video / H3 status, result and cancel", () => {
 
   it.effect("returns the finished video with duration, usage and metadata", () =>
     Effect.gen(function* () {
-      const response = yield* ai.video.result(h3, token)
+      const response = yield* ai.video.result(h3, id)
       expect(response.video.source).toEqual({
         type: "url",
         url: "https://cdn.minimax.test/out.mp4",
@@ -329,14 +329,14 @@ describe("MiniMax Video / H3 status, result and cancel", () => {
 
   it.effect("reads the flat response format too", () =>
     Effect.gen(function* () {
-      const response = yield* ai.video.result(h3, token)
+      const response = yield* ai.video.result(h3, id)
       expect(response.video.source).toMatchObject({ url: "https://cdn.minimax.test/out.mp4" })
     }).pipe(Effect.provide(layer((input) => Effect.succeed(json(input, succeeded.task))))),
   )
 
   it.effect("fails a result read before the task finishes", () =>
     Effect.gen(function* () {
-      const error = yield* ai.video.result(h3, token).pipe(Effect.flip)
+      const error = yield* ai.video.result(h3, id).pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
       expect(error.message).toContain("has not finished")
     }).pipe(Effect.provide(layer((input) => Effect.succeed(json(input, task({ status: "running" })))))),
@@ -384,7 +384,7 @@ describe("MiniMax Video / H3 status, result and cancel", () => {
   ]) {
     it.effect(`fails the result of ${terminal.message} with the provider body`, () =>
       Effect.gen(function* () {
-        const error = yield* ai.video.result(h3, token).pipe(Effect.flip)
+        const error = yield* ai.video.result(h3, id).pipe(Effect.flip)
         expect(error.reason._tag).toBe(terminal.tag)
         expect(error.message).toBe(terminal.message)
         expect(error.reason.body).toBe(JSON.stringify(terminal.body))
@@ -396,7 +396,7 @@ describe("MiniMax Video / H3 status, result and cancel", () => {
     Effect.gen(function* () {
       const calls: Array<Call> = []
       yield* ai.video
-        .cancel(h3, token)
+        .cancel(h3, id)
         .pipe(
           Effect.provide(
             layer((input) =>
@@ -423,7 +423,7 @@ describe("MiniMax Video / Hailuo status, result and cancel", () => {
         ["Preparing", "Queueing", "Processing", "Success", "Fail", "Warming"],
         (status) =>
           ai.video
-            .status(hailuo, token)
+            .status(hailuo, id)
             .pipe(
               Effect.provide(
                 layer((input) => observe(calls, input).pipe(Effect.map(() => json(input, hailuoTask({ status }))))),
@@ -444,7 +444,7 @@ describe("MiniMax Video / Hailuo status, result and cancel", () => {
 
   it.effect("fails a status read that v1 answers with a non-zero base_resp", () =>
     Effect.gen(function* () {
-      const error = yield* ai.video.status(hailuo, token).pipe(Effect.flip)
+      const error = yield* ai.video.status(hailuo, id).pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
       expect(error.message).toContain("This task_id does not exist")
     }).pipe(
@@ -468,7 +468,7 @@ describe("MiniMax Video / Hailuo status, result and cancel", () => {
   it.effect("looks up the file's download URL, which expires after one hour", () =>
     Effect.gen(function* () {
       const calls: Array<Call> = []
-      const response = yield* ai.video.result(hailuo, token).pipe(
+      const response = yield* ai.video.result(hailuo, id).pipe(
         Effect.provide(
           layer((input) =>
             Effect.gen(function* () {
@@ -526,7 +526,7 @@ describe("MiniMax Video / Hailuo status, result and cancel", () => {
   ]) {
     it.effect(`fails the result with "${terminal.message}"`, () =>
       Effect.gen(function* () {
-        const error = yield* ai.video.result(hailuo, token).pipe(Effect.flip)
+        const error = yield* ai.video.result(hailuo, id).pipe(Effect.flip)
         expect(error.reason._tag).toBe(terminal.tag)
         expect(error.message).toBe(terminal.message)
         expect(error.reason.body).toBe(JSON.stringify(terminal.body))
@@ -536,7 +536,7 @@ describe("MiniMax Video / Hailuo status, result and cancel", () => {
 
   it.effect("fails cancel as unsupported without sending a request, since v1 has no cancel endpoint", () =>
     Effect.gen(function* () {
-      const error = yield* ai.video.cancel(hailuo, token).pipe(Effect.flip)
+      const error = yield* ai.video.cancel(hailuo, id).pipe(Effect.flip)
       expect(error.reason._tag).toBe("UnsupportedOperation")
       expect(error.message).toContain("cancel")
     }).pipe(Effect.provide(layer(() => Effect.die("cancel reached the network")))),

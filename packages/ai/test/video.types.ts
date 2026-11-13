@@ -31,7 +31,7 @@ void invalidCustomOptions
 ai.video.start({
   model: custom,
   prompt: "A kitten",
-  start: Media.bytes(Uint8Array.from([1]), "image/png"),
+  start: Media.image(Media.bytes(Uint8Array.from([1]), "image/png")),
   end: "data:image/png;base64,AQID",
   references: [Media.bytes(Uint8Array.from([1]), "image/png"), "https://example.com/voice.mp3"],
   duration: "8 seconds",
@@ -65,6 +65,10 @@ ai.video.start({ model: custom, prompt: "A kitten", providerOptions: { personGen
 ai.video.start({ model: Anthropic.configure({ apiKey: "test" }).model("claude-sonnet-4-5"), prompt: "A kitten" })
 // @ts-expect-error Image models cannot be used for video requests.
 ai.video.start({ model: OpenAI.configure({ apiKey: "test" }).image("gpt-image-2"), prompt: "A kitten" })
+
+// @ts-expect-error Start and end frames are images; a plain asset of any kind needs `Media.image(...)`.
+ai.video.start({ model: xai, prompt: "A kitten", start: Media.bytes(Uint8Array.from([1]), "video/mp4") })
+ai.video.start({ model: xai, prompt: "A kitten", start: Media.image("https://example.com/first.png") })
 
 // @ts-expect-error Aspect ratios are `${w}:${h}` strings or "auto".
 ai.video.start({ model: xai, prompt: "A kitten", aspect: "wide" })

@@ -29,7 +29,7 @@ describe("xAI Video recorded", () => {
           duration: "2 seconds",
         })
         const observed: Array<VideoStatus> = []
-        yield* ai.video.status(model, job.token).pipe(
+        yield* ai.video.status(model, job.id).pipe(
           Effect.tap((status) => Effect.sync(() => observed.push(status))),
           Effect.repeat({
             schedule: Schedule.spaced(queuedPoll.interval ?? "10 millis"),
@@ -43,7 +43,7 @@ describe("xAI Video recorded", () => {
         expect(progress).toEqual([...progress].sort((a, b) => a - b))
         expect(observed.at(-1)?.status).toBe("completed")
 
-        const response = yield* ai.video.result(model, job.token)
+        const response = yield* ai.video.result(model, job.id)
         expect(response.videos).toHaveLength(1)
         expect(response.video.source.type).toBe("url")
         expect(response.video.info?.durationSeconds).toBe(2)

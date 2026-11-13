@@ -14,10 +14,10 @@ const recorded = recordedTests({
   requires: ["MINIMAX_API_KEY"],
 })
 
-const settle = (model: VideoModel, token: unknown) =>
+const settle = (model: VideoModel, id: string) =>
   Effect.gen(function* () {
     const observed: Array<VideoStatus> = []
-    yield* ai.video.status(model, token).pipe(
+    yield* ai.video.status(model, id).pipe(
       Effect.tap((status) => Effect.sync(() => observed.push(status))),
       Effect.repeat({
         schedule: Schedule.spaced(queuedPoll.interval ?? "10 millis"),
@@ -41,10 +41,10 @@ describe("MiniMax Video recorded", () => {
           resolution: "480p",
           duration: "4 seconds",
         })
-        const observed = yield* settle(model, job.token)
+        const observed = yield* settle(model, job.id)
         expect(observed.at(-1)?.status).toBe("completed")
 
-        const response = yield* ai.video.result(model, job.token)
+        const response = yield* ai.video.result(model, job.id)
         expect(response.videos).toHaveLength(1)
         expect(response.video.source.type).toBe("url")
         expect(response.video.info?.durationSeconds).toBe(4)
@@ -68,11 +68,11 @@ describe("MiniMax Video recorded", () => {
           resolution: "512p",
           duration: "6 seconds",
         })
-        const observed = yield* settle(model, job.token)
+        const observed = yield* settle(model, job.id)
         expect(observed.at(-1)?.status).toBe("completed")
 
         // The task names a file; the result looks up its one-hour download URL.
-        const response = yield* ai.video.result(model, job.token)
+        const response = yield* ai.video.result(model, job.id)
         expect(response.videos).toHaveLength(1)
         expect(response.video.source.type).toBe("url")
         expect(response.video.expiresAt).toBeGreaterThan(0)

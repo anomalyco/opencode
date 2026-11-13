@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
-import { Media, VideoClient, ai } from "../src/effect.js"
+import { AIError, Media, VideoClient, ai } from "../src/effect.js"
 import { XAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json, observe, settle, type Call, type HandlerInput } from "./lib/http.js"
@@ -25,7 +25,7 @@ describe("ai.video.start / xAI", () => {
         .start({
           model,
           prompt: "Make the water crash down",
-          start: Media.fromDataUrl("data:image/png;base64,AQID"),
+          start: Media.image(Media.fromDataUrl("data:image/png;base64,AQID")),
           end: "https://example.test/last.png",
           references: [
             Media.ref("xai", "file_1"),
@@ -51,7 +51,7 @@ describe("ai.video.start / xAI", () => {
             ),
           ),
         )
-      expect(job).toEqual({ id: "req_1", token: { requestID: "req_1" } })
+      expect(job).toEqual({ id: "req_1" })
       expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([
         "POST https://xai.test/v1/videos/generations?trace=1",
       ])
@@ -123,6 +123,42 @@ describe("ai.video.start / xAI", () => {
     }).pipe(Effect.provide(layer(() => Effect.die("an unsupported reference reached the network")))),
   )
 
+  it.effect("rejects start and end frames that are known not to be images before sending", () =>
+    Effect.gen(function* () {
+      const video = yield* ai.video.start({ model, prompt: "x", start: "data:video/mp4;base64,AAAA" }).pipe(Effect.flip)
+      expect(video.reason._tag).toBe("InvalidRequest")
+      expect(video.message).toContain("expected an image, got video/mp4")
+      const audio = yield* ai.video
+        .start({ model, prompt: "x", end: Media.url("https://example.test/a.mp3", { mediaType: "audio/mpeg" }) })
+        .pipe(Effect.flip)
+      expect(audio.reason._tag).toBe("InvalidRequest")
+    }).pipe(Effect.provide(layer(() => Effect.die("a non-image frame reached the network")))),
+  )
+
+  it.effect("Media.image throws a typed AIError for a known non-image", () =>
+    Effect.sync(() => {
+      expect(() => Media.image("data:video/mp4;base64,AAAA")).toThrow(AIError)
+      expect(() => Media.image("data:video/mp4;base64,AAAA")).toThrow("expected an image, got video/mp4")
+    }),
+  )
+
+  it.effect("sends frames whose type it can't tell, like URLs and provider file references", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      yield* ai.video
+        .start({ model, prompt: "x", start: "https://example.test/frame?id=7", end: Media.ref("xai", "file_1") })
+        .pipe(
+          Effect.provide(
+            layer((input) => observe(calls, input).pipe(Effect.map(() => json(input, { request_id: "r" })))),
+          ),
+        )
+      expect(JSON.parse(calls[0].body)).toMatchObject({
+        image: { url: "https://example.test/frame?id=7" },
+        last_frame: { file_id: "file_1" },
+      })
+    }),
+  )
+
   it.effect("rejects durations that aren't seconds before sending", () =>
     Effect.gen(function* () {
       // @ts-expect-error Durations are Effect duration strings in seconds.
@@ -151,13 +187,12 @@ describe("ai.video.start / xAI", () => {
 // ---------------------------------------------------------------------------
 
 describe("ai.video.status / result / cancel", () => {
-  it.effect("reads one status per call from a JSON round-tripped token", () =>
+  it.effect("reads one status per call by job ID", () =>
     Effect.gen(function* () {
       const calls: Array<Call> = []
       const statuses = yield* Effect.gen(function* () {
         const job = yield* ai.video.start({ model, prompt: "x" })
-        const token: unknown = JSON.parse(JSON.stringify(job.token))
-        return [yield* ai.video.status(model, token), yield* ai.video.status(model, token)]
+        return [yield* ai.video.status(model, job.id), yield* ai.video.status(model, job.id)]
       }).pipe(
         Effect.provide(
           layer((input) =>
@@ -178,28 +213,28 @@ describe("ai.video.status / result / cancel", () => {
     }),
   )
 
+  it.effect("encodes the job ID into the request path", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      yield* ai.video
+        .status(model, "../files?x=1")
+        .pipe(Effect.provide(layer((input) => observe(calls, input).pipe(Effect.map(() => json(input, done))))))
+      expect(calls.map((call) => call.url)).toEqual(["https://xai.test/v1/videos/..%2Ffiles%3Fx%3D1"])
+    }),
+  )
+
   it.effect("keeps unknown statuses running, including inherited property names", () =>
     Effect.gen(function* () {
       const statuses = yield* Effect.forEach(["warming_up", "constructor"], (status) =>
-        ai.video
-          .status(model, { requestID: "req_1" })
-          .pipe(Effect.provide(layer((input) => Effect.succeed(json(input, { status }))))),
+        ai.video.status(model, "req_1").pipe(Effect.provide(layer((input) => Effect.succeed(json(input, { status }))))),
       )
       expect(statuses.map((value) => value.status)).toEqual(["running", "running"])
     }),
   )
 
-  it.effect("rejects a token from another provider", () =>
-    Effect.gen(function* () {
-      const error = yield* ai.video.status(model, { operation: "models/x/operations/y" }).pipe(Effect.flip)
-      expect(error.reason._tag).toBe("InvalidRequest")
-      expect(error.message).toContain("cannot resume")
-    }).pipe(Effect.provide(layer(() => Effect.die("a foreign token reached the network")))),
-  )
-
   it.effect("returns the finished video as an expiring URL with xAI metadata", () =>
     Effect.gen(function* () {
-      const response = yield* ai.video.result(model, { requestID: "req_1" })
+      const response = yield* ai.video.result(model, "req_1")
       expect(response.video.source).toEqual({ type: "url", url: "https://vidgen.x.ai/out.mp4", mediaType: "video/mp4" })
       expect(response.video.info).toEqual({ durationSeconds: 10 })
       expect(response.providerMetadata).toEqual({
@@ -222,7 +257,7 @@ describe("ai.video.status / result / cancel", () => {
 
   it.effect("fails a result read before the job finishes", () =>
     Effect.gen(function* () {
-      const error = yield* ai.video.result(model, { requestID: "req_1" }).pipe(Effect.flip)
+      const error = yield* ai.video.result(model, "req_1").pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
       expect(error.message).toBe("xAI Video generation req_1 has not finished; await it before reading the result")
       expect(error.reason.body).toBe(JSON.stringify({ status: "pending", progress: 40 }))
@@ -261,7 +296,7 @@ describe("ai.video.status / result / cancel", () => {
       `fails the result of ${terminal.body.error?.code ?? terminal.body.status} jobs with the provider body`,
       () =>
         Effect.gen(function* () {
-          const error = yield* ai.video.result(model, { requestID: "req_1" }).pipe(Effect.flip)
+          const error = yield* ai.video.result(model, "req_1").pipe(Effect.flip)
           expect(error.reason._tag).toBe(terminal.tag)
           expect(error.message).toBe(terminal.message)
           expect(error.reason.body).toBe(JSON.stringify(terminal.body))
@@ -272,7 +307,7 @@ describe("ai.video.status / result / cancel", () => {
   it.effect("returns moderated results and fails withheld videos as a content policy failure", () =>
     Effect.gen(function* () {
       const flagged = yield* ai.video
-        .result(model, { requestID: "req_1" })
+        .result(model, "req_1")
         .pipe(
           Effect.provide(
             layer((input) =>
@@ -284,7 +319,7 @@ describe("ai.video.status / result / cancel", () => {
         )
       expect(flagged.providerMetadata).toEqual({ xai: { requestId: "req_1", respectModeration: false } })
       const withheld = yield* ai.video
-        .result(model, { requestID: "req_1" })
+        .result(model, "req_1")
         .pipe(
           Effect.flip,
           Effect.provide(
@@ -297,7 +332,7 @@ describe("ai.video.status / result / cancel", () => {
 
   it.effect("fails cancel as unsupported without sending a request, since xAI has no cancel endpoint", () =>
     Effect.gen(function* () {
-      const error = yield* ai.video.cancel(model, { requestID: "req_1" }).pipe(Effect.flip)
+      const error = yield* ai.video.cancel(model, "req_1").pipe(Effect.flip)
       expect(error.reason._tag).toBe("UnsupportedOperation")
       expect(error.message).toContain("cancel")
     }).pipe(Effect.provide(layer(() => Effect.die("cancel reached the network")))),
@@ -317,8 +352,8 @@ describe("ai.video / transient read failures", () => {
       const calls: Array<Call> = []
       const response = yield* settle(
         Effect.gen(function* () {
-          expect(yield* ai.video.status(model, { requestID: "req_1" })).toEqual({ status: "completed" })
-          return yield* ai.video.result(model, { requestID: "req_1" })
+          expect(yield* ai.video.status(model, "req_1")).toEqual({ status: "completed" })
+          return yield* ai.video.result(model, "req_1")
         }),
         5,
       ).pipe(
@@ -341,7 +376,7 @@ describe("ai.video / transient read failures", () => {
     Effect.gen(function* () {
       const calls: Array<Call> = []
       const fiber = yield* Effect.forkChild(
-        ai.video.status(model, { requestID: "req_1" }).pipe(
+        ai.video.status(model, "req_1").pipe(
           Effect.provide(
             layer((input) =>
               Effect.gen(function* () {
@@ -364,7 +399,7 @@ describe("ai.video / transient read failures", () => {
     Effect.gen(function* () {
       const calls: Array<Call> = []
       const error = yield* ai.video
-        .status(model, { requestID: "req_1" })
+        .status(model, "req_1")
         .pipe(
           Effect.flip,
           Effect.provide(layer((input) => observe(calls, input).pipe(Effect.map(() => failure(input, 400))))),

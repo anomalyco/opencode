@@ -11,7 +11,7 @@ const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
 const model = Volcengine.configure({ apiKey: "test", baseURL: "https://ark.test/api/v3" }).video(
   "doubao-seedance-2-0-260128",
 )
-const token = { taskID: "cgt-1" }
+const id = "cgt-1"
 const succeeded = {
   id: "cgt-1",
   model: "doubao-seedance-2-0-260128",
@@ -44,7 +44,7 @@ describe("ai.video.start / Seedance", () => {
         .start({
           model,
           prompt: "The kitten yawns at the camera",
-          start: Media.fromDataUrl("data:image/png;base64,AQID"),
+          start: Media.image(Media.fromDataUrl("data:image/png;base64,AQID")),
           end: "https://example.test/last.png",
           duration: "5 seconds",
           aspect: "16:9",
@@ -66,7 +66,7 @@ describe("ai.video.start / Seedance", () => {
             ),
           ),
         )
-      expect(job).toEqual({ id: "cgt-1", token: { taskID: "cgt-1" } })
+      expect(job).toEqual({ id: "cgt-1" })
       expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([
         "POST https://ark.test/api/v3/contents/generations/tasks?trace=1",
       ])
@@ -213,7 +213,7 @@ describe("ai.video.status / result / cancel / Seedance", () => {
       const calls: Array<Call> = []
       const statuses = yield* Effect.gen(function* () {
         const job = yield* ai.video.start({ model, prompt: "x" })
-        const restored: unknown = JSON.parse(JSON.stringify(job.token))
+        const restored: unknown = job.id
         return yield* Effect.forEach([1, 2, 3], () => ai.video.status(model, restored))
       }).pipe(
         Effect.provide(
@@ -242,7 +242,7 @@ describe("ai.video.status / result / cancel / Seedance", () => {
     Effect.gen(function* () {
       const raw = ["queued", "running", "succeeded", "failed", "cancelled", "expired", "paused", "constructor"]
       const statuses = yield* Effect.forEach(raw, (status) =>
-        ai.video.status(model, token).pipe(Effect.provide(reply({ id: "cgt-1", status }))),
+        ai.video.status(model, id).pipe(Effect.provide(reply({ id: "cgt-1", status }))),
       )
       expect(statuses.map((value) => value.status)).toEqual([
         "queued",
@@ -259,7 +259,7 @@ describe("ai.video.status / result / cancel / Seedance", () => {
 
   it.effect("returns the video as a URL that expires 24 hours after the task finished, with usage and metadata", () =>
     Effect.gen(function* () {
-      const response = yield* ai.video.result(model, token).pipe(Effect.provide(reply(succeeded)))
+      const response = yield* ai.video.result(model, id).pipe(Effect.provide(reply(succeeded)))
       expect(response.video.source).toEqual({
         type: "url",
         url: "https://ark-content.test/out.mp4",
@@ -287,7 +287,7 @@ describe("ai.video.status / result / cancel / Seedance", () => {
 
   it.effect("derives duration from frames, types mov output and keeps the last frame URL", () =>
     Effect.gen(function* () {
-      const response = yield* ai.video.result(model, token).pipe(
+      const response = yield* ai.video.result(model, id).pipe(
         Effect.provide(
           reply({
             status: "succeeded",
@@ -315,7 +315,7 @@ describe("ai.video.status / result / cancel / Seedance", () => {
   it.effect("fails a result read before the task finishes", () =>
     Effect.gen(function* () {
       const errors = yield* Effect.forEach(["queued", "running"], (status) =>
-        ai.video.result(model, token).pipe(Effect.flip, Effect.provide(reply({ id: "cgt-1", status }))),
+        ai.video.result(model, id).pipe(Effect.flip, Effect.provide(reply({ id: "cgt-1", status }))),
       )
       expect(errors.map((error) => error.reason._tag)).toEqual(["InvalidRequest", "InvalidRequest"])
       expect(errors[0].message).toBe(
@@ -380,7 +380,7 @@ describe("ai.video.status / result / cancel / Seedance", () => {
   ]) {
     it.effect(`fails the result of ${terminal.body.error?.code ?? terminal.body.status} tasks with the body`, () =>
       Effect.gen(function* () {
-        const error = yield* ai.video.result(model, token).pipe(Effect.flip, Effect.provide(reply(terminal.body)))
+        const error = yield* ai.video.result(model, id).pipe(Effect.flip, Effect.provide(reply(terminal.body)))
         expect(error.reason._tag).toBe(terminal.tag)
         expect(error.message).toContain(terminal.message)
         expect(error.reason.body).toBe(JSON.stringify(terminal.body))
@@ -392,10 +392,10 @@ describe("ai.video.status / result / cancel / Seedance", () => {
     Effect.gen(function* () {
       const calls: Array<Call> = []
       yield* ai.video
-        .cancel(model, token)
+        .cancel(model, id)
         .pipe(Effect.provide(layer((input) => observe(calls, input).pipe(Effect.map(() => json(input, {}))))))
       const refused = yield* ai.video
-        .cancel(model, token)
+        .cancel(model, id)
         .pipe(
           Effect.flip,
           Effect.provide(
@@ -414,13 +414,5 @@ describe("ai.video.status / result / cancel / Seedance", () => {
         "DELETE https://ark.test/api/v3/contents/generations/tasks/cgt-1",
       ])
     }),
-  )
-
-  it.effect("rejects a token from another provider without a request", () =>
-    Effect.gen(function* () {
-      const error = yield* ai.video.status(model, { requestID: "req_1" }).pipe(Effect.flip)
-      expect(error.reason._tag).toBe("InvalidRequest")
-      expect(error.message).toContain("cannot resume")
-    }).pipe(Effect.provide(layer(() => Effect.die("a foreign token reached the network")))),
   )
 })

@@ -19,14 +19,15 @@ import { VideoClient, Service } from "./video-client.js"
 
 export type VideoOptions = MediaModel.Options
 
-/** Video generation is always a queued job: submit, then read its status and result by token. */
+/** Video generation is always a queued job: submit, then read its status and result by the provider's job ID. */
 export type VideoRoute = MediaRoute.QueuedRoute<VideoRequest, VideoResponse>
 
 export class VideoModel<Options extends VideoOptions = VideoOptions> extends MediaModel<VideoRoute, Options> {
   declare protected readonly _VideoModel: void
 
-  static fromRoute<Options extends VideoOptions, Token>(
-    route: MediaModel.QueuedRouteInput<VideoRequest<VideoModel<Options>>, VideoResponse, Token>,
+  /** A video route's token is the provider's job ID, so `VideoJob.id` is exactly what `status` and `result` take. */
+  static fromRoute<Options extends VideoOptions>(
+    route: MediaModel.QueuedRouteInput<VideoRequest<VideoModel<Options>>, VideoResponse, string>,
     input: MediaRoute.ModelInput,
   ) {
     return new VideoModel<Options>({
@@ -65,9 +66,9 @@ const VideoRequestSchema = Schema.Struct({
   model: VideoModelSchema,
   prompt: Schema.String,
   /** Image the video starts on exactly. */
-  start: Schema.optional(Media.AssetSchema),
+  start: Schema.optional(Media.ImageAssetSchema),
   /** Image the video ends on exactly. */
-  end: Schema.optional(Media.AssetSchema),
+  end: Schema.optional(Media.ImageAssetSchema),
   /** Images, videos or audio that guide the subject or style without pinning a frame. */
   references: Schema.optional(Schema.Array(Media.AssetSchema)),
   duration: Schema.optional(VideoDuration),
@@ -92,8 +93,9 @@ export type VideoRequestInput<Model extends VideoModel = VideoModel> = Omit<
   VideoRequest<Model>,
   "start" | "end" | "references" | "providerOptions"
 > & {
-  readonly start?: Media.Input
-  readonly end?: Media.Input
+  /** An image: `Media.image(...)`, or a URL, data URL, base64 string or bytes, which must not be a known non-image. */
+  readonly start?: Media.ImageAsset | Media.Data
+  readonly end?: Media.ImageAsset | Media.Data
   readonly references?: ReadonlyArray<Media.Input>
   readonly providerOptions?: NoInfer<VideoModelOptions<Model>>
 }
@@ -105,10 +107,10 @@ export const seconds = (duration: VideoDuration) => Duration.toSeconds(Duration.
 // Job, status and response
 // ---------------------------------------------------------------------------
 
-/** A submitted generation. Store `token` (plain JSON) with the model to read the job later, from any process. */
+/** A submitted generation. Store `id` with the model to read the job later, from any process. */
 export interface VideoJob {
+  /** The provider's job ID. */
   readonly id: string
-  readonly token: unknown
 }
 
 export interface VideoStatus {
@@ -134,8 +136,8 @@ export class VideoResponse extends Schema.Class<VideoResponse>("Video.Response")
 /** Normalize video request input into a plain `VideoRequest`. */
 export const request = <const Model extends VideoModel>(input: VideoRequestInput<Model>): VideoRequest<Model> => ({
   ...input,
-  start: input.start === undefined ? undefined : Media.make(input.start),
-  end: input.end === undefined ? undefined : Media.make(input.end),
+  start: input.start === undefined ? undefined : Media.image(input.start),
+  end: input.end === undefined ? undefined : Media.image(input.end),
   references: input.references?.map((reference) => Media.make(reference)),
 })
 
@@ -156,17 +158,17 @@ export function start(input: VideoRequestInput) {
   return requestEffect(input).pipe(Effect.flatMap((request) => VideoClient.start(request)))
 }
 
-/** One status read for a stored token. */
-export const status = (model: VideoModel, token: unknown): Effect.Effect<VideoStatus, AIError, Service> =>
-  VideoClient.status(model, token)
+/** One status read for a job ID. */
+export const status = (model: VideoModel, id: string): Effect.Effect<VideoStatus, AIError, Service> =>
+  VideoClient.status(model, id)
 
 /** The finished videos; fails while the job is still running, or with the provider's reason when it failed. */
-export const result = (model: VideoModel, token: unknown): Effect.Effect<VideoResponse, AIError, Service> =>
-  VideoClient.result(model, token)
+export const result = (model: VideoModel, id: string): Effect.Effect<VideoResponse, AIError, Service> =>
+  VideoClient.result(model, id)
 
 /** Ask the provider to stop the job; fails with `UnsupportedOperation` when the provider has no cancel call. */
-export const cancel = (model: VideoModel, token: unknown): Effect.Effect<void, AIError, Service> =>
-  VideoClient.cancel(model, token)
+export const cancel = (model: VideoModel, id: string): Effect.Effect<void, AIError, Service> =>
+  VideoClient.cancel(model, id)
 
 export const Video = {
   request,
