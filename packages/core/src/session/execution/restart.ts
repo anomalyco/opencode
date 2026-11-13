@@ -344,7 +344,13 @@ export const layer = (options?: Options) =>
           return false
         }
 
-        if (yield* execution.isActive(recovery.childSessionID)) return false
+        if (yield* execution.isActive(recovery.childSessionID)) {
+          yield* Effect.logInfo("Restart recovery: subagent child already active; relying on its settled turn for the notice", {
+            parentSessionID: recovery.parentSessionID,
+            childSessionID: recovery.childSessionID,
+          })
+          return false
+        }
         // prepareResume publishes Execution.Failed directly on the bus outside the
         // coordinator, so the settle hook never reports an exhausted child.
         if (!(yield* prepareResume(recovery.childSessionID))) {
@@ -471,12 +477,25 @@ export const layer = (options?: Options) =>
           yield* Effect.forEach(
             resumable,
             Effect.fnUntraced(function* ({ background, recovery }) {
-              yield* SubagentJob.start(jobs, execution, recovery, background.notificationID)
+              yield* SubagentJob.start(jobs, execution, recovery, background.notificationID).pipe(
+                Effect.catchAll((error) =>
+                  Effect.logError("Failed to resume background subagent during restart recovery", {
+                    parentSessionID: recovery.parentSessionID,
+                    childSessionID: recovery.childSessionID,
+                    error,
+                  }),
+                ),
+              )
               suspended.delete(recovery.childSessionID)
             }),
             { discard: true },
           )
-        }).pipe(Effect.scoped),
+        }).pipe(
+          Effect.scoped,
+          Effect.catchAll((error) =>
+            Effect.logError("Restart recovery sweep failed", { error }),
+          ),
+        ),
       })
     }),
   )
