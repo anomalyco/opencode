@@ -61,12 +61,22 @@ export function ModelDetail(props: {
     if (!cost) return ""
     return `$${dollars(cost.input)}/$${dollars(cost.output)}`
   }
+  const priceFacts = () => {
+    const value = price()
+    return value ? [value === "Free" ? value : `${value} per 1M`] : []
+  }
+  const modalityRows = () =>
+    props.model.capabilities.input
+      .map(modality)
+      .flatMap((_value, index, values) => (index % 3 === 0 ? [values.slice(index, index + 3)] : []))
+      .map((row) => row.join(", "))
   const facts = () =>
-    [
-      props.model.capabilities.input.map(modality).join(", "),
-      tokens(props.model.limit.context),
-      ...(props.model.variants.length > 0 ? ["Reasoning"] : []),
-    ].filter(Boolean)
+    [tokens(props.model.limit.context), ...(props.model.variants.length > 0 ? ["Reasoning"] : [])].filter(Boolean)
+  const detailRows = () => {
+    const rows = modalityRows()
+    if (rows.length < 2) return [[rows[0], ...facts()].filter(Boolean)]
+    return [...rows.map((row) => [row]), facts()]
+  }
   const list = (items: string[]) => (
     <text fg={theme.text.muted} wrapMode="none" flexShrink={0}>
       <For each={items}>
@@ -83,22 +93,36 @@ export function ModelDetail(props: {
     <Show
       when={props.usage}
       fallback={
-        <box flexDirection="row" justifyContent={props.price === false ? "flex-start" : "space-between"} gap={2}>
-          <Show when={props.price !== false}>
-            <text fg={theme.text.muted} wrapMode="none">
-              {price()}
-            </text>
-          </Show>
-          {list(facts())}
+        <box flexDirection="column">
+          <For each={detailRows()}>
+            {(row, index) => (
+              <box flexDirection="row" justifyContent={props.price === false ? "flex-start" : "space-between"} gap={2}>
+                <Show when={props.price !== false && index() === 0}>
+                  <text fg={theme.text.muted} wrapMode="none">
+                    {price()}
+                  </text>
+                </Show>
+                {list(row)}
+              </box>
+            )}
+          </For>
         </box>
       }
     >
       {(usage) => (
-        <box flexDirection="row" justifyContent="space-between" gap={2}>
-          <text fg={usage().danger ? theme.text.feedback.error.base : theme.text.muted} wrapMode="none">
-            {usage().text}
-          </text>
-          {list([...(price() && price() !== "Free" ? [`${price()} per 1M`] : [price()]), ...facts()].filter(Boolean))}
+        <box flexDirection="column">
+          <For each={detailRows()}>
+            {(row, index) => (
+              <box flexDirection="row" justifyContent="space-between" gap={2}>
+                <Show when={index() === 0}>
+                  <text fg={usage().danger ? theme.text.feedback.error.base : theme.text.muted} wrapMode="none">
+                    {usage().text}
+                  </text>
+                </Show>
+                {list(index() === 0 ? [...priceFacts(), ...row] : row)}
+              </box>
+            )}
+          </For>
         </box>
       )}
     </Show>
