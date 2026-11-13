@@ -71,10 +71,11 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       const probedAt = Date.now()
       const registration = await registered(options.file, timing.requestTimeout)
       lastTimedOut = registration.timedOut
-      const expired = unresponsive.observe(registration.timedOut ? registration.info : undefined, probedAt, Date.now())
+      const owner = registration.timedOut ? registration.info : undefined
+      const diskSleep = owner !== undefined && (await isUninterruptibleDiskSleep(owner.pid))
+      const expired = unresponsive.observe(owner, probedAt, Date.now(), diskSleep)
       let evicted = false
-      // A process in disk sleep cannot act on a signal yet, so postpone eviction until a later probe finds it running.
-      if (expired !== undefined && !(await isUninterruptibleDiskSleep(expired.pid))) {
+      if (expired !== undefined) {
         announce("missing")
         console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
         await PtyHandoff.clear(options.file ?? fallback())

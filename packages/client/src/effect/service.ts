@@ -93,14 +93,11 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     const info = registration.info
     const service = registration.service
     lastTimedOut = registration.timedOut
-    const expired = unresponsive.observe(
-      registration.timedOut ? info : undefined,
-      probedAt,
-      yield* Clock.currentTimeMillis,
-    )
+    const owner = registration.timedOut ? info : undefined
+    const diskSleep = owner !== undefined && (yield* Effect.promise(() => isUninterruptibleDiskSleep(owner.pid)))
+    const expired = unresponsive.observe(owner, probedAt, yield* Clock.currentTimeMillis, diskSleep)
     let evicted = false
-    // A process in disk sleep cannot act on a signal yet, so postpone eviction until a later probe finds it running.
-    if (expired !== undefined && !(yield* Effect.promise(() => isUninterruptibleDiskSleep(expired.pid)))) {
+    if (expired !== undefined) {
       yield* announce("missing")
       yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
       yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))

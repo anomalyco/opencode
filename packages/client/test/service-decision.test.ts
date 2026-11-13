@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { decide, parseLinuxProcStatState, type LocalService } from "../src/service-probe"
+import { decide, parseLinuxProcStatState, unresponsiveOwner, type LocalService } from "../src/service-probe"
 
 const protocolError =
   "Background service uses an incompatible health protocol. Update this client or explicitly restart the service."
@@ -60,4 +60,27 @@ test("parseLinuxProcStatState reads the task state after any parenthesized comma
   expect(parseLinuxProcStatState("42 (opencode) Z 1 42 42 0 -1")).toBe("Z")
   expect(parseLinuxProcStatState("42 (opencode)")).toBeUndefined()
   expect(parseLinuxProcStatState("malformed")).toBeUndefined()
+})
+
+const owner = { url: "http://127.0.0.1:4096", pid: 4242, version: "2.0.0" }
+
+test("disk sleep pauses the unresponsive budget, so an owner is not evicted the moment the disk catches up", () => {
+  const unresponsive = unresponsiveOwner(3_000)
+  // In disk sleep for 15s: none of it counts.
+  for (let at = 0; at < 15_000; at += 500) expect(unresponsive.observe(owner, at, at + 500, true)).toBeUndefined()
+  // The probe in flight when the disk caught up times out with the process running again.
+  expect(unresponsive.observe(owner, 15_000, 15_500, false)).toBeUndefined()
+  // Running but silent for the whole budget is a hang.
+  expect(unresponsive.observe(owner, 15_500, 18_500, false)).toBe(owner)
+})
+
+test("an unresponsive owner holds the startup deadline until a probe sees its budget pass, even in disk sleep", () => {
+  const unresponsive = unresponsiveOwner(3_000)
+  expect(unresponsive.waiting()).toBe(false)
+  unresponsive.observe(owner, 0, 2_000, true)
+  expect(unresponsive.waiting()).toBe(true)
+  unresponsive.observe(owner, 2_000, 4_000, true)
+  expect(unresponsive.waiting()).toBe(false)
+  unresponsive.observe(undefined, 4_000, 4_100, false)
+  expect(unresponsive.waiting()).toBe(false)
 })

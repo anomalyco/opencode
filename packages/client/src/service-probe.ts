@@ -118,28 +118,50 @@ export function parseLinuxProcStatState(stat: string) {
 
 /**
  * Tracks how long one registered owner has accepted connections without answering its health probe.
- * An owner that answers, or a different owner, starts the clock over.
+ * An owner that answers, or a different owner, starts the clock over. Time the owner spends in disk sleep
+ * does not count: it is waiting for the disk, not hung, and a check only at the end of the budget would
+ * evict it the moment the disk catches up.
  */
 export function unresponsiveOwner(budget: number) {
-  let current: { readonly info: Info; readonly since: number; readonly expired: boolean } | undefined
+  let current:
+    | {
+        readonly info: Info
+        readonly since: number
+        readonly last: number
+        readonly counted: number
+        readonly past: boolean
+      }
+    | undefined
   return {
-    /** Records a probe that began at `probedAt`. Returns the owner once it has been unresponsive for the budget. */
-    observe(info: Info | undefined, probedAt: number, now: number) {
+    /**
+     * Records a probe that began at `probedAt`, timed out for `info` (or answered, when `info` is undefined), and
+     * whether the owner was then in disk sleep. Returns the owner once its counted time reaches the budget.
+     */
+    observe(info: Info | undefined, probedAt: number, now: number, diskSleep: boolean) {
       if (info === undefined) {
         current = undefined
         return undefined
       }
-      if (current === undefined || !same(current.info, info)) current = { info, since: probedAt, expired: false }
-      if (now - current.since < budget) return undefined
-      current = { ...current, expired: true }
-      return info
+      const previous =
+        current !== undefined && same(current.info, info)
+          ? current
+          : { info, since: probedAt, last: probedAt, counted: 0, past: false }
+      const counted = previous.counted + (diskSleep ? 0 : now - previous.last)
+      current = {
+        info,
+        since: previous.since,
+        last: now,
+        counted,
+        past: counted >= budget || now - previous.since >= budget,
+      }
+      return counted >= budget ? info : undefined
     },
     /**
-     * Whether an unresponsive owner has not yet been seen past its budget, so the startup deadline waits for
-     * the probe that may evict it.
+     * Whether no probe has yet seen the owner past its budget, so the startup deadline waits for the probe that may
+     * evict it. Wall time also ends the wait, so an owner that stays in disk sleep cannot hold the deadline forever.
      */
     waiting() {
-      return current !== undefined && !current.expired
+      return current !== undefined && !current.past
     },
     forget() {
       current = undefined
@@ -148,9 +170,8 @@ export function unresponsiveOwner(budget: number) {
 }
 
 /**
- * Whether `pid` is currently in Linux uninterruptible disk sleep (`state D`).
- * Signals cannot take effect until kernel I/O returns, so automatic eviction postpones a `D`-state
- * server instead of queueing a kill. It is one sample: the process can still enter `D` right after.
+ * Whether `pid` is currently in Linux uninterruptible disk sleep (`state D`). Always false elsewhere.
+ * It is one sample per probe, so the time it excludes from an unresponsive budget is an estimate.
  */
 export async function isUninterruptibleDiskSleep(pid: number) {
   if (process.platform !== "linux") return false
