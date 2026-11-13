@@ -31,6 +31,7 @@ import {
   ElevenLabs,
   Fireworks,
   Google,
+  KlingAI,
   Meta,
   MiniMax,
   OpenCode,
@@ -191,6 +192,8 @@ describe("public exports", () => {
     ).toBe("cloudflare-workers-ai-images")
     expect(XAI.configure({ apiKey: "fixture" }).video("grok-imagine-video-1.5").route.id).toBe("xai-video")
     expect(XAI.provider.video).toBe(XAI.video)
+    expect(KlingAI.configure({ apiKey: "fixture" }).video("kling-3.0").route.id).toBe("klingai-video")
+    expect(KlingAI.provider.video).toBe(KlingAI.video)
     expect(OpenAI.configure({ apiKey: "fixture" }).speech("gpt-4o-mini-tts").route.id).toBe("openai-speech")
     expect(Google.configure({ apiKey: "fixture" }).speech("gemini-2.5-flash-preview-tts").route.id).toBe(
       "google-speech",
