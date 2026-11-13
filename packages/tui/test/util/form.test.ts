@@ -62,6 +62,7 @@ test("validates every supported field constraint", () => {
   validate(string({ pattern: "^a+$" }), "bbb", "Must match pattern: ^a+$")
   validate(string({ pattern: "[" }), "value", "Invalid pattern: [")
   validate(string({ format: "email" }), "invalid", "Expected an email address")
+  validate(string({ format: "email" }), "a@b.", "Expected an email address")
   validate(string({ format: "uri" }), "not a URL", "Expected a URL")
   validate(string({ format: "date" }), "2025-02-29", "Expected a date (YYYY-MM-DD)")
   validate(string({ format: "date-time" }), "not a date", "Expected a date and time")
