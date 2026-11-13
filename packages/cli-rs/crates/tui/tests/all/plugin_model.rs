@@ -1,19 +1,25 @@
 //! The plugin model (O-124, phase Pt): the real TUI in a `TestApp` with one external plugin, `model.probe`, loaded by
 //! the real `Loader` and driven through the C ABI's byte shims. The commands are what a user and a build can do to a
-//! plugin today: toggle it in the plugin manager, run its commands, open and close its panel, navigate to home and to
-//! its route, reload it with another build, arm a fault in its next `setup`, command or render, and exit.
+//! plugin today: toggle it in the plugin manager, run its commands, open, confirm and close its dialogs, navigate to
+//! home and to its route, reload it with another build, arm a fault in its next `setup`, command or render, run a
+//! command and a reload in one batch, and exit. The probe also acts after it registered: build 9 shows a toast and
+//! asks for a prompt before its `setup` fails, build 3 asks for a prompt as it sets up, and every dispose callback asks
+//! for one.
 //!
-//! The machines are in `steps/plugins-pt.md` (opendocs). Three properties are checked after every command, each
-//! with an oracle that shares no code with the host:
+//! The machines are in `steps/plugins-pt.md` (opendocs). After every command the host is checked against
+//! [`Reference`], the plugin machine as code, which predicts from the commands alone what the probe gets, what the
+//! host shows of it and what it reports; no expectation is read from the host:
 //!
-//! - `lifecycle`: the probe writes its own call log; [`Reference`] is the plugin machine as code, fed the same
-//!   commands, and says which calls the log may hold.
-//! - `ledger`: while the probe is not active, the host equals a twin TUI that ran the same commands without it:
-//!   the reachable commands, the dialogs, focus and the widgets, read from the host, and the frame once it is
-//!   disabled. Each activation holds a token that only its registrations hold: once it ended, the token is gone.
-//! - `reload-fresh`: after a reload that passed, the host equals a fresh TUI that loaded the new build on the same
-//!   route, with the call log from `setup` on; after one that failed, it equals itself before the reload, plus one
-//!   report.
+//! - `lifecycle`: the probe's own call log holds exactly the calls the reference expects, each with its command or
+//!   surface; a command of the probe runs from the keymap exactly while it is active; after the run, dropping the TUI
+//!   destroys an active instance once and a failed one not at all.
+//! - `ledger`: the dialog on screen is the one the reference says is open, the manager lists the status it says, and
+//!   no ended activation is held. While the probe is not active, the host equals a twin TUI that ran the same commands
+//!   without it: commands, dialogs, focus and route, and the frame, which may differ only in the failure count.
+//! - `reload-fresh`: after a reload that passed, the host is on the route the user chose and equals a fresh TUI that
+//!   loaded the new build there, with the call log from `setup` on; after one that failed, it equals itself before.
+//! - `reported-once`: the toasts are exactly the ones the reference expects: one per failure the manager did not list
+//!   before, and the toasts the plugin asked for that may show.
 //!
 //! [`OPEN`] holds the shrunk traces of what the model found that is not fixed: each must still fail with its
 //! property, so a fix fails the test until its row moves to [`FIXED`].
@@ -22,14 +28,14 @@ use crate::support::model::{self, Failure, Model, Rng};
 use crate::support::{self, Harness};
 
 use std::cell::{Cell, RefCell};
+use std::collections::VecDeque;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::time::Duration;
 
-use opencode_plugin::abi;
 use opencode_plugin::loader::native::loopback_described;
 use opencode_plugin::loader::{Backend, Loader, entry_file};
-use opencode_plugin::{Definition, ErrorFn, Host};
+use opencode_plugin::{Definition, ErrorFn, Host, Status, abi};
 use opencode_tui::plugins::host::host;
 use opencode_tui::{Deps, Route};
 use opentui::keymap::RunResult;
@@ -37,8 +43,14 @@ use opentui::prelude::*;
 use opentui::testing::Capture;
 
 const ID: &str = "model.probe";
-/// The build whose `setup` returns a failure.
+/// The build whose `setup` shows a toast, asks for a prompt, and returns a failure.
 const BAD: u8 = 9;
+/// The build whose `setup` asks for its own prompt.
+const PROMPTING: u8 = 3;
+/// The report of a failure.
+const FAILED: &str = "Plugin failed: model.probe";
+/// The toast build 9 shows before its `setup` fails.
+const BAD_TOAST: &str = "probe b9 setup";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fault {
@@ -74,14 +86,34 @@ pub enum Command {
     Reload(u8),
     /// Makes the probe's next call of that kind panic.
     Arm(Fault),
+    /// The command that opens that dialog, then a reload, with no frame between: the dialog's effect waits.
+    DialogThenReload(Dialog, u8),
+    /// Enter on the open dialog, then a reload, with no frame between: the dialog's action waits.
+    EnterThenReload(u8),
     Exit,
+}
+
+/// Which of the probe's commands ran.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Which {
+    Run,
+    Panel,
+    Prompt,
+    Select,
+}
+
+/// Where the probe rendered.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Surface {
+    Slot,
+    Route,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     Setup,
-    Command,
-    Render,
+    Command(Which),
+    Render(Surface),
     Dispose,
 }
 
@@ -102,8 +134,9 @@ thread_local! {
     static TOKENS: RefCell<Vec<(u32, Weak<()>)>> = const { RefCell::new(Vec::new()) };
 }
 
-/// The probe: a command that counts, a command for each of its dialogs, a line in `home.footer` and a route that
-/// show the build and the count, and a dispose callback. Each logs its call, and panics when its fault is armed.
+/// The probe: a command that counts, a command for each of its dialogs, a replacement of `home.footer` and a route
+/// that show the build and the count, and a dispose callback that asks for a prompt. Each logs its call, and panics
+/// when its fault is armed. Build 9 shows a toast and asks for a prompt, then fails; build 3 asks for a prompt.
 fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
     let activation = ACTIVATIONS.with(|next| {
         next.set(next.get() + 1);
@@ -113,6 +146,8 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
     TOKENS.with_borrow_mut(|tokens| tokens.push((activation, Rc::downgrade(&token))));
     called(activation, B, Kind::Setup);
     if B == BAD {
+        setup.host().toast(abi::Toast::new(abi::Variant::Info, BAD_TOAST));
+        setup.host().dialog(prompt(B));
         return Err(format!("probe build {B} fails its setup"));
     }
     let count = Rc::new(Cell::new(0));
@@ -125,13 +160,13 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
     let (held, counted) = (token.clone(), count.clone());
     setup.command(command("probe.run", "Probe run"), move |_, _| {
         let _ = &held;
-        called(activation, B, Kind::Command);
+        called(activation, B, Kind::Command(Which::Run));
         counted.set(counted.get() + 1);
     });
     let held = token.clone();
     setup.command(command("probe.panel", "Probe panel"), move |host, _| {
         let _ = &held;
-        called(activation, B, Kind::Command);
+        called(activation, B, Kind::Command(Which::Panel));
         host.dialog(abi::Dialog::Panel(abi::Panel {
             key: "panel".to_owned(),
             size: abi::PanelSize::Medium,
@@ -144,50 +179,66 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
             centered: false,
         }));
     });
-    let run = || abi::Action::Command { name: "probe.run".to_owned(), input: None };
     let held = token.clone();
     setup.command(command("probe.prompt", "Probe prompt"), move |host, _| {
         let _ = &held;
-        called(activation, B, Kind::Command);
-        host.dialog(abi::Dialog::Prompt { title: format!("Probe prompt b{B}"), placeholder: None, action: run() });
+        called(activation, B, Kind::Command(Which::Prompt));
+        host.dialog(prompt(B));
     });
     let held = token.clone();
     setup.command(command("probe.select", "Probe select"), move |host, _| {
         let _ = &held;
-        called(activation, B, Kind::Command);
+        called(activation, B, Kind::Command(Which::Select));
         host.dialog(abi::Dialog::Select(abi::Select {
             title: format!("Probe select b{B}"),
             placeholder: None,
             options: vec![abi::SelectOption::new("Probe option", "option")],
             current: None,
-            action: run(),
+            action: confirmed(),
         }));
     });
     let (held, counted) = (token.clone(), count.clone());
-    setup.slot(abi::Placement::append("home.footer"), move |_, _, _| {
+    setup.slot(abi::Placement::new(abi::SlotKind::Replace, "home.footer"), move |_, _, _| {
         let _ = &held;
-        called(activation, B, Kind::Render);
+        called(activation, B, Kind::Render(Surface::Slot));
         abi::Render::Show(abi::Node::text([abi::Span::new(format!("probe b{B} n{}", counted.get()))]))
     });
     let held = token.clone();
     setup.route("probe", move |_, _| {
         let _ = &held;
-        called(activation, B, Kind::Render);
+        called(activation, B, Kind::Render(Surface::Route));
         abi::Render::Show(abi::Node::text([abi::Span::new(format!("probe route b{B} n{}", count.get()))]))
     });
-    setup.on_dispose(move |_| {
+    setup.on_dispose(move |host| {
         let _ = &token;
         called(activation, B, Kind::Dispose);
+        host.dialog(abi::Dialog::Prompt {
+            title: format!("Probe disposed b{B}"),
+            placeholder: None,
+            action: confirmed(),
+        });
     });
+    if B == PROMPTING {
+        setup.host().dialog(prompt(B));
+    }
     Ok(())
+}
+
+/// What a confirmed prompt or select runs.
+fn confirmed() -> abi::Action {
+    abi::Action::Command { name: "probe.run".to_owned(), input: None }
+}
+
+fn prompt(build: u8) -> abi::Dialog {
+    abi::Dialog::Prompt { title: format!("Probe prompt b{build}"), placeholder: None, action: confirmed() }
 }
 
 /// Logs a call, then panics if its fault is armed; the fault is spent.
 fn called(activation: u32, build: u8, kind: Kind) {
     let fault = match kind {
         Kind::Setup => Some(Fault::Setup),
-        Kind::Command => Some(Fault::Command),
-        Kind::Render => Some(Fault::Render),
+        Kind::Command(_) => Some(Fault::Command),
+        Kind::Render(_) => Some(Fault::Render),
         Kind::Dispose => None,
     };
     let panicked = fault.is_some() && ARMED.get() == fault;
@@ -195,8 +246,8 @@ fn called(activation: u32, build: u8, kind: Kind) {
         ARMED.set(None);
     }
     LOG.with_borrow_mut(|log| log.push(Call { activation, build, kind, panicked }));
-    if panicked {
-        panic!("probe {kind:?} fault");
+    if let (true, Some(fault)) = (panicked, fault) {
+        panic!("probe {fault:?} fault");
     }
 }
 
@@ -208,7 +259,7 @@ impl Backend for Builds {
         match library {
             [1] => loopback_described(host, abi::export_plugin!(@loopback_described ID, probe::<1>)),
             [2] => loopback_described(host, abi::export_plugin!(@loopback_described ID, probe::<2>)),
-            [3] => loopback_described(host, abi::export_plugin!(@loopback_described ID, probe::<3>)),
+            [PROMPTING] => loopback_described(host, abi::export_plugin!(@loopback_described ID, probe::<PROMPTING>)),
             [BAD] => loopback_described(host, abi::export_plugin!(@loopback_described ID, probe::<BAD>)),
             _ => Err("not a probe build".to_owned()),
         }
@@ -223,11 +274,14 @@ struct World {
 }
 
 impl World {
+    /// The TUI, not yet settled: the first [`World::settle`] drains what the load asked for.
     fn open(build: Option<u8>) -> Self {
         let deps = Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) };
         let harness = support::mount(80, 24, deps);
         let probe = build.map(|build| {
             let root = opencode_util::temp::tempdir().unwrap();
+            // The project root, so the loader looks for plugins in this directory and none above it.
+            std::fs::create_dir(root.path().join(".git")).unwrap();
             let config = root.path().join("config");
             let dir = config.join("plugins").join("probe");
             std::fs::create_dir_all(&dir).unwrap();
@@ -236,34 +290,30 @@ impl World {
             loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
             (loader, dir, root)
         });
-        let world = Self { harness, probe, exited: false };
-        world.settle();
-        world
+        Self { harness, probe, exited: false }
     }
 
-    /// Runs `command` as the user or a build would. Returns whether a command of the probe ran from the keymap.
-    fn apply(&mut self, command: Command) -> bool {
+    /// Runs `command` as the user or a build would, without the frame after it. Returns, for a command of the probe,
+    /// whether it ran from the keymap.
+    fn apply(&mut self, command: Command) -> Option<bool> {
         let (app, tui) = (&self.harness.app, &self.harness.tui);
         if self.exited {
             app.advance(Duration::from_millis(16));
-            return false;
+            return None;
         }
-        let mut reached = false;
         match command {
             Command::Toggle => {
-                // What the plugin manager's action does (`dialogs/plugins.rs`, `Manager::toggle`).
+                // What the plugin manager's action does (`dialogs/plugins.rs`, `Manager::toggle`); its toast of a
+                // failed enable is `a_failed_enable_shows_its_error_and_keeps_the_row`'s.
                 let active = tui.plugins.entries().iter().any(|entry| entry.id == ID && entry.active);
-                if let Some(toggled) = tui.plugins.toggle(&host(tui), ID, !active) {
-                    if let Err(error) = toggled {
-                        tui.toasts.error(error);
-                    }
+                if tui.plugins.toggle(&host(tui), ID, !active).is_some() {
                     tui.navigate(tui.route());
                 }
             }
-            Command::Run => reached = matches!(tui.keymap.dispatch("probe.run", None), RunResult::Ok),
+            Command::Run => return Some(matches!(tui.keymap.dispatch("probe.run", None), RunResult::Ok)),
             Command::Dialog(dialog) => {
                 let name = format!("probe.{}", format!("{dialog:?}").to_lowercase());
-                reached = matches!(tui.keymap.dispatch(&name, None), RunResult::Ok);
+                return Some(matches!(tui.keymap.dispatch(&name, None), RunResult::Ok));
             }
             Command::Enter => app.press("enter"),
             Command::Escape => app.press("escape"),
@@ -281,15 +331,16 @@ impl World {
                     ARMED.set(Some(fault));
                 }
             }
+            Command::DialogThenReload(..) | Command::EnterThenReload(_) => unreachable!("run splits a batch"),
             Command::Exit => {
                 tui.plugins.deactivate_all();
                 self.exited = true;
             }
         }
-        reached
+        None
     }
 
-    /// Runs what the command queued, and drains the toasts; returns their titles.
+    /// Runs what the commands queued, and drains the toasts; returns their titles, or their messages.
     fn settle(&self) -> Vec<String> {
         let (app, tui) = (&self.harness.app, &self.harness.tui);
         app.advance(Duration::from_millis(1));
@@ -325,14 +376,9 @@ impl World {
         }
     }
 
-    /// The probe's failure, as the plugin manager lists it.
-    fn failure(&self) -> Option<String> {
-        self.harness.tui.plugins.entries().into_iter().find(|entry| entry.id == ID).and_then(|entry| {
-            match entry.status {
-                opencode_plugin::Status::Failed(error) => Some(error),
-                _ => None,
-            }
-        })
+    /// The probe's row, as the plugin manager lists it.
+    fn status(&self) -> Option<Status> {
+        self.harness.tui.plugins.entries().into_iter().find(|entry| entry.id == ID).map(|entry| entry.status)
     }
 
     fn frame(&self) -> Capture {
@@ -406,13 +452,14 @@ fn frame_diff(
     allowed: impl Fn(&str) -> bool,
 ) -> Option<String> {
     let masked = |x: u32, y: u32| mask.is_some_and(|(mx, my, mw, mh)| x >= mx && x < mx + mw && y >= my && y < my + mh);
-    let row = |frame: &Capture, y: u32| {
-        (0..frame.width).filter_map(|x| frame.cell(x, y)).map(|cell| cell.symbol.as_str()).collect::<String>()
-    };
     (0..a.height.max(b.height)).find_map(|y| {
         let differs = (0..a.width.max(b.width)).any(|x| !masked(x, y) && a.cell(x, y) != b.cell(x, y));
         (differs && !allowed(&row(b, y))).then(|| format!("row {y}:\n  {:?}\n  {:?}", row(a, y), row(b, y)))
     })
+}
+
+fn row(frame: &Capture, y: u32) -> String {
+    (0..frame.width).filter_map(|x| frame.cell(x, y)).map(|cell| cell.symbol.as_str()).collect()
 }
 
 /// The plugin machine of `steps/plugins-pt.md` as code.
@@ -420,18 +467,36 @@ fn frame_diff(
 enum Life {
     Active(u32, u8),
     Failed(u32),
+    /// Enabled, and its last `setup` failed.
     SetupFailed,
-    Broken,
     Disabled,
     Exited,
+}
+
+/// The page the user chose.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Page {
+    Home,
+    Probe,
+}
+
+impl Page {
+    fn route(self) -> Route {
+        match self {
+            Page::Home => Route::Home,
+            Page::Probe => Route::Plugin { id: ID.to_owned(), name: "probe".to_owned() },
+        }
+    }
 }
 
 /// A call the reference expects, other than a render.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Expect {
     Setup(u8),
-    Command(u32),
+    Command(Which, u32),
     Dispose(u32),
+    /// The action of a prompt or select of that activation, which reaches it only if it is still active.
+    Confirm(u32),
 }
 
 struct Reference {
@@ -446,142 +511,223 @@ struct Reference {
     /// The activations that failed. The host keeps their instances, as it keeps a failed plugin's library (4.5): the
     /// C ABI's `destroy` would run their dispose callbacks.
     failed: Vec<u32>,
-    /// The probe's dialog on screen, and the activation that opened it.
-    dialog: Option<(Dialog, u32)>,
+    /// The probe's dialog on screen: its kind, and the activation and build that opened it.
+    dialog: Option<(Dialog, u32, u8)>,
+    /// A confirmed prompt or select whose action waits for the frame.
+    confirm: Option<u32>,
+    page: Page,
+    /// The failure the plugin manager lists.
+    listed: Option<String>,
+    /// What the host reports before the next frame.
+    reports: Vec<String>,
 }
 
 impl Reference {
     fn new(build: u8) -> Self {
-        Self { life: Life::Disabled, build, file: build, armed: None, last: 0, failed: Vec::new(), dialog: None }
+        Self {
+            life: Life::Disabled,
+            build,
+            file: build,
+            armed: None,
+            last: 0,
+            failed: Vec::new(),
+            dialog: None,
+            confirm: None,
+            page: Page::Home,
+            listed: None,
+            reports: Vec::new(),
+        }
     }
 
-    /// Checks the calls the probe logged while `command` ran, and moves the machine. `reached` says whether one of
-    /// its commands ran from the keymap.
-    fn step(&mut self, command: Option<Command>, reached: bool, calls: &[Call]) -> Result<(), String> {
+    fn active(&self) -> Option<u32> {
+        match self.life {
+            Life::Active(a, _) => Some(a),
+            _ => None,
+        }
+    }
+
+    /// Checks the calls the probe logged while `command` ran, and moves the machine. `reached` says whether a command
+    /// of the probe ran from the keymap; `settled` that the frame after it ran, so a waiting action did too.
+    fn step(
+        &mut self,
+        command: Option<Command>,
+        reached: Option<bool>,
+        settled: bool,
+        calls: &[Call],
+    ) -> Result<(), String> {
         if self.life == Life::Exited {
             return match calls {
                 [] => Ok(()),
                 _ => Err(format!("a call after the exit started: {calls:?}")),
             };
         }
-        let mut expected: Vec<Expect> = Vec::new();
-        // Where the life goes once a `setup` passed; `None` when the calls decide it.
+        let (before, listed) = (self.life, self.listed.clone());
+        let mut expected: VecDeque<Expect> = VecDeque::new();
         match command {
             // The first load: the plugin is enabled.
-            None => expected.push(Expect::Setup(self.build)),
+            None => expected.push_back(Expect::Setup(self.build)),
             Some(Command::Toggle) => match self.life {
-                Life::Active(a, _) => expected.push(Expect::Dispose(a)),
-                Life::Failed(_) | Life::Broken => {}
-                Life::Disabled | Life::SetupFailed => expected.push(Expect::Setup(self.build)),
+                Life::Active(a, _) => expected.push_back(Expect::Dispose(a)),
+                Life::Failed(_) => {}
+                Life::Disabled | Life::SetupFailed => expected.push_back(Expect::Setup(self.build)),
                 Life::Exited => unreachable!(),
             },
-            Some(Command::Run | Command::Dialog(_)) => match self.life {
-                Life::Active(a, _) if reached => expected.push(Expect::Command(a)),
-                Life::Active(..) => {}
-                _ if reached => return Err(format!("a command ran while the plugin is {:?}", self.life)),
-                _ => {}
-            },
-            Some(Command::Escape) => self.dialog = None,
-            // A confirmed prompt or select runs `probe.run`, which reaches only the activation that opened it. The
-            // panel has no action and stays.
-            Some(Command::Enter) => match self.dialog.take() {
-                Some((Dialog::Panel, a)) => self.dialog = Some((Dialog::Panel, a)),
-                Some((_, a)) if matches!(self.life, Life::Active(live, _) if live == a) => {
-                    expected.push(Expect::Command(a))
+            Some(Command::Run | Command::Dialog(_)) => {
+                let which = match command {
+                    Some(Command::Dialog(Dialog::Panel)) => Which::Panel,
+                    Some(Command::Dialog(Dialog::Prompt)) => Which::Prompt,
+                    Some(Command::Dialog(Dialog::Select)) => Which::Select,
+                    _ => Which::Run,
+                };
+                // A command of the probe runs from the keymap exactly while the probe is active.
+                if reached != Some(self.active().is_some()) {
+                    return Err(format!(
+                        "{which:?} ran from the keymap: {reached:?}, while the plugin is {:?}",
+                        self.life
+                    ));
                 }
-                _ => {}
+                if let Some(a) = self.active() {
+                    expected.push_back(Expect::Command(which, a));
+                }
+            }
+            Some(Command::Escape) => self.dialog = None,
+            // A confirmed prompt or select runs `probe.run` once the frame comes. The panel has no action and stays.
+            Some(Command::Enter) => match self.dialog.take() {
+                Some((Dialog::Panel, a, build)) => self.dialog = Some((Dialog::Panel, a, build)),
+                Some((_, a, _)) => self.confirm = Some(a),
+                None => {}
             },
+            Some(Command::Home) => self.page = Page::Home,
+            Some(Command::Route) => self.page = Page::Probe,
             Some(Command::Reload(build)) if build != self.file => {
                 self.file = build;
                 match self.life {
-                    Life::Active(..) | Life::Failed(_) | Life::SetupFailed | Life::Broken => {
-                        expected.push(Expect::Setup(build))
-                    }
-                    Life::Disabled => self.build = build,
+                    Life::Active(..) | Life::Failed(_) | Life::SetupFailed => expected.push_back(Expect::Setup(build)),
+                    Life::Disabled => (self.build, self.listed) = (build, None),
                     Life::Exited => unreachable!(),
                 }
             }
             Some(Command::Arm(fault)) => self.armed = Some(fault),
             Some(Command::Exit) => {
-                if let Life::Active(a, _) = self.life {
-                    expected.push(Expect::Dispose(a));
+                if let Some(a) = self.active() {
+                    expected.push_back(Expect::Dispose(a));
                 }
             }
             Some(_) => {}
         }
-        let before = self.life;
-        let mut expected = expected.into_iter();
+        if settled && let Some(a) = self.confirm.take() {
+            expected.push_back(Expect::Confirm(a));
+        }
         for call in calls {
-            if call.kind == Kind::Render {
-                let live = matches!(self.life, Life::Active(a, _) if a == call.activation);
-                if !live {
+            if let Kind::Render(surface) = call.kind {
+                if self.active() != Some(call.activation) {
                     return Err(format!("a render while the plugin is {:?}: {call:?}", self.life));
                 }
                 self.fault(Fault::Render, call)?;
                 if call.panicked {
-                    self.life = Life::Failed(call.activation);
-                    self.failed.push(call.activation);
+                    let export = if surface == Surface::Slot { "render-slot" } else { "render-route" };
+                    self.fail(call.activation, export, Fault::Render);
                 }
                 continue;
             }
-            let Some(next) = expected.next() else {
+            // A waiting action of an activation that ended reaches nothing.
+            while let Some(Expect::Confirm(a)) = expected.front()
+                && self.active() != Some(*a)
+            {
+                expected.pop_front();
+            }
+            let Some(next) = expected.pop_front() else {
                 return Err(format!("an unexpected call while the plugin is {:?}: {call:?}", self.life));
             };
             match (next, call.kind) {
                 (Expect::Setup(build), Kind::Setup) if call.build == build && call.activation > self.last => {
                     self.last = call.activation;
                     self.fault(Fault::Setup, call)?;
+                    if !call.panicked && build == BAD {
+                        self.reports.push(BAD_TOAST.to_owned());
+                    }
                     let passed = !call.panicked && build != BAD;
+                    let error = if call.panicked {
+                        "setup panicked: probe Setup fault".to_owned()
+                    } else {
+                        format!("probe build {build} fails its setup")
+                    };
                     match (before, command) {
-                        // A candidate that fails leaves the running build; it replaces a failed one with its error.
-                        (Life::Active(..), Some(Command::Reload(_))) if !passed => {}
-                        (Life::Failed(_), Some(Command::Reload(_))) if !passed => self.life = Life::Broken,
-                        (Life::Active(old, _), Some(Command::Reload(_))) => {
-                            self.life = Life::Active(call.activation, build);
-                            self.build = build;
-                            expected =
-                                vec![Expect::Dispose(old)].into_iter().chain(expected).collect::<Vec<_>>().into_iter();
+                        (Life::Active(old, _), Some(Command::Reload(_))) if passed => {
+                            (self.life, self.build, self.listed) = (Life::Active(call.activation, build), build, None);
+                            expected.push_front(Expect::Dispose(old));
                         }
+                        // A candidate that fails leaves the running build, which the manager lists with the error.
+                        (Life::Active(..), Some(Command::Reload(_))) => {
+                            self.listed = Some(format!("{error} (previous version still active)"))
+                        }
+                        // The manager's enable that fails leaves the plugin as it was (TS `plugins.tsx`).
+                        (_, Some(Command::Toggle)) if !passed => {}
                         _ => {
                             self.build = build;
-                            self.life = if passed { Life::Active(call.activation, build) } else { Life::SetupFailed };
+                            (self.life, self.listed) = match passed {
+                                true => (Life::Active(call.activation, build), None),
+                                false => (Life::SetupFailed, Some(error)),
+                            };
                         }
                     }
+                    if passed && build == PROMPTING {
+                        self.dialog = Some((Dialog::Prompt, call.activation, build));
+                    }
+                    // A load tells a failure the manager did not list before it (TS `context.tsx`).
+                    let load = matches!(command, None | Some(Command::Reload(_)));
+                    if load && self.listed.is_some() && self.listed != listed {
+                        self.reports.push(FAILED.to_owned());
+                    }
                 }
-                (Expect::Command(a), Kind::Command) if call.activation == a => {
+                (Expect::Command(which, a), Kind::Command(ran)) if call.activation == a && ran == which => {
                     self.fault(Fault::Command, call)?;
                     match (call.panicked, command) {
-                        (true, _) => {
-                            self.life = Life::Failed(a);
-                            self.failed.push(a);
-                        }
-                        (false, Some(Command::Dialog(dialog))) => self.dialog = Some((dialog, a)),
+                        (true, _) => self.fail(a, "run-command", Fault::Command),
+                        (false, Some(Command::Dialog(dialog))) => self.dialog = Some((dialog, a, self.build)),
                         _ => {}
+                    }
+                }
+                (Expect::Confirm(a), Kind::Command(Which::Run)) if call.activation == a => {
+                    self.fault(Fault::Command, call)?;
+                    if call.panicked {
+                        self.fail(a, "run-command", Fault::Command);
                     }
                 }
                 (Expect::Dispose(a), Kind::Dispose) if call.activation == a && !call.panicked => {
                     // A disposed activation gets no render after it.
-                    if matches!(self.life, Life::Active(live, _) if live == a) {
+                    if self.active() == Some(a) {
                         self.life = Life::Disabled;
                     }
                 }
                 _ => return Err(format!("expected {next:?} while the plugin is {before:?}, got {call:?}")),
             }
         }
-        if let Some(next) = expected.next() {
+        expected.retain(|next| !matches!(next, Expect::Confirm(a) if self.active() != Some(*a)));
+        if let Some(next) = expected.front() {
             return Err(format!("expected {next:?} while the plugin is {before:?}, got {calls:?}"));
         }
         // What a command leaves behind once its calls are in.
         match command {
-            Some(Command::Toggle) if matches!(before, Life::Failed(_)) => self.life = Life::Disabled,
+            Some(Command::Toggle) if matches!(before, Life::Active(..) | Life::Failed(_)) => {
+                (self.life, self.listed) = (Life::Disabled, None)
+            }
             Some(Command::Exit) => self.life = Life::Exited,
             _ => {}
         }
         // A dialog ends with the activation that opened it (4.14; deviation F16-plugin-dialog-ends-with-activation).
-        if self.dialog.is_some_and(|(_, a)| !matches!(self.life, Life::Active(live, _) if live == a)) {
+        if self.dialog.is_some_and(|(_, a, _)| self.active() != Some(a)) {
             self.dialog = None;
         }
         Ok(())
+    }
+
+    /// A call of activation `a` panicked: it fails, the manager lists it, and the host reports it.
+    fn fail(&mut self, a: u32, export: &str, fault: Fault) {
+        self.life = Life::Failed(a);
+        self.failed.push(a);
+        self.listed = Some(format!("{export} panicked: probe {fault:?} fault"));
+        self.reports.push(FAILED.to_owned());
     }
 
     /// Checks that `call` panicked exactly when `fault` was armed for it, and spends the fault.
@@ -598,7 +744,26 @@ impl Reference {
 
     /// Whether the host may hold activation `a`: it is active, or it failed and its instance is kept.
     fn holds(&self, a: u32) -> bool {
-        matches!(self.life, Life::Active(live, _) if live == a) || self.failed.contains(&a)
+        self.active() == Some(a) || self.failed.contains(&a)
+    }
+
+    /// The probe's row in the plugin manager.
+    fn status(&self) -> Option<Status> {
+        let failed = self.listed.clone().map(Status::Failed);
+        match self.life {
+            Life::Active(..) | Life::Failed(_) => Some(failed.unwrap_or(Status::Active)),
+            Life::SetupFailed | Life::Disabled => Some(failed.unwrap_or(Status::Inactive)),
+            Life::Exited => None,
+        }
+    }
+
+    /// The text of the dialog the reference says is open.
+    fn dialog_text(&self) -> Option<String> {
+        self.dialog.map(|(dialog, _, build)| match dialog {
+            Dialog::Panel => format!("probe panel b{build}"),
+            Dialog::Prompt => format!("Probe prompt b{build}"),
+            Dialog::Select => format!("Probe select b{build}"),
+        })
     }
 }
 
@@ -609,25 +774,37 @@ fn take_calls() -> Vec<Call> {
 
 pub struct PluginModel;
 
+/// One command of the generator, without the exit.
+fn pick(rng: &mut Rng) -> Command {
+    let dialog = |rng: &mut Rng| *rng.pick(&[Dialog::Panel, Dialog::Prompt, Dialog::Select]);
+    let build = |rng: &mut Rng| *rng.pick(&[1, 2, PROMPTING, BAD]);
+    match rng.below(100) {
+        0..14 => Command::Toggle,
+        14..23 => Command::Run,
+        23..33 => Command::Dialog(dialog(rng)),
+        33..38 => Command::Enter,
+        38..43 => Command::Escape,
+        43..48 => Command::Frame,
+        48..53 => Command::Home,
+        53..59 => Command::Route,
+        59..76 => Command::Reload(build(rng)),
+        76..92 => Command::Arm(*rng.pick(&[Fault::Setup, Fault::Command, Fault::Render])),
+        92..96 => Command::DialogThenReload(dialog(rng), build(rng)),
+        _ => Command::EnterThenReload(build(rng)),
+    }
+}
+
 impl Model for PluginModel {
     type Command = Command;
 
+    /// `steps` commands; half the seeds end with the exit and one frame after it.
     fn generate(&self, rng: &mut Rng, steps: usize) -> Vec<Command> {
-        (0..steps)
-            .map(|_| match rng.below(100) {
-                0..15 => Command::Toggle,
-                15..25 => Command::Run,
-                25..35 => Command::Dialog(*rng.pick(&[Dialog::Panel, Dialog::Prompt, Dialog::Select])),
-                35..40 => Command::Enter,
-                40..46 => Command::Escape,
-                46..52 => Command::Frame,
-                52..58 => Command::Home,
-                58..64 => Command::Route,
-                64..82 => Command::Reload(*rng.pick(&[1, 2, 3, BAD])),
-                82..98 => Command::Arm(*rng.pick(&[Fault::Setup, Fault::Command, Fault::Render])),
-                _ => Command::Exit,
-            })
-            .collect()
+        let mut commands: Vec<Command> = (0..steps.saturating_sub(2)).map(|_| pick(rng)).collect();
+        match rng.below(2) {
+            0 => commands.extend([Command::Exit, Command::Frame]),
+            _ => commands.extend([pick(rng), pick(rng)]),
+        }
+        commands
     }
 
     fn run(&self, commands: &[Command]) -> Option<Failure> {
@@ -635,21 +812,26 @@ impl Model for PluginModel {
     }
 
     fn simplify(&self, command: &Command) -> Vec<Command> {
-        match command {
-            Command::Reload(build) if *build != 1 && *build != BAD => vec![Command::Reload(1)],
+        match *command {
+            Command::Reload(build) if build != 1 && build != BAD => vec![Command::Reload(1)],
             Command::Dialog(Dialog::Panel) => vec![Command::Run],
             Command::Dialog(_) => vec![Command::Dialog(Dialog::Panel)],
             Command::Route => vec![Command::Home],
+            Command::DialogThenReload(dialog, build) => vec![Command::Dialog(dialog), Command::Reload(build)],
+            Command::EnterThenReload(build) => vec![Command::Enter, Command::Reload(build)],
             _ => Vec::new(),
         }
     }
 }
 
-fn fail(property: &'static str, step: usize, detail: String) -> Option<Failure> {
-    Some(Failure { property, step, detail })
+/// A failure of `property` at check site `site`, unless `MODEL_SKIP` turns the property off.
+fn check(property: &'static str, site: &'static str, step: usize, detail: Option<String>) -> Option<Failure> {
+    let detail = detail?;
+    (!model::skipped(property)).then_some(Failure { property, site, step, detail })
 }
 
-/// Runs `commands` on the host and its twin, and checks the three properties after each.
+/// Runs `commands` on the host and its twin, and checks the properties after each. A batch runs its two commands
+/// with no frame between, and is checked once after both.
 fn run(commands: &[Command]) -> Option<Failure> {
     LOG.take();
     ARMED.set(None);
@@ -657,107 +839,149 @@ fn run(commands: &[Command]) -> Option<Failure> {
     let mut world = World::open(Some(1));
     let mut twin = World::open(None);
     let mut reference = Reference::new(1);
-    if let Err(detail) = reference.step(None, false, &take_calls()) {
-        return fail("lifecycle", 0, detail);
+    let reports = world.settle();
+    twin.settle();
+    let first = reference.step(None, None, true, &take_calls()).err();
+    if let Some(failure) = check("lifecycle", "calls", 0, first) {
+        return Some(failure);
     }
-    // The failure the last reload that changed the build left, which the loader does not report twice (as TS's
-    // reconcile, `context.tsx`: "repeated reconciles stay silent").
-    let mut told: Option<String> = None;
+    if let Some(failure) = check("reported-once", "reports", 0, reported(&mut reference, reports)) {
+        return Some(failure);
+    }
     for (step, &command) in commands.iter().enumerate() {
-        let life = reference.life;
-        let reload = matches!(command, Command::Reload(build) if build != reference.file);
-        let before = reload.then(|| (world.observe(false), world.frame(), life, told.clone()));
-        let reached = world.apply(command);
-        let reports = world.settle();
-        twin.apply(command);
-        twin.settle();
-        let calls = take_calls();
-        if let Err(detail) = reference.step(Some(command), reached, &calls) {
-            return fail("lifecycle", step, detail);
-        }
-        if let Some(detail) = ledger(&world, &twin, &reference) {
-            return fail("ledger", step, detail);
-        }
-        if let Some(before) = before {
-            if let Some(detail) = reload_fresh(&world, before, &reference, &calls, &reports) {
-                return fail("reload-fresh", step, detail);
+        let parts = match command {
+            Command::DialogThenReload(dialog, build) => vec![Command::Dialog(dialog), Command::Reload(build)],
+            Command::EnterThenReload(build) => vec![Command::Enter, Command::Reload(build)],
+            command => vec![command],
+        };
+        let (life, last) = (reference.life, parts.len() - 1);
+        let reload = parts.iter().any(|part| matches!(part, Command::Reload(build) if *build != reference.file));
+        let before = reload.then(|| (world.observe(false), world.frame(), life));
+        let (mut calls, mut reports) = (Vec::new(), Vec::new());
+        for (index, &part) in parts.iter().enumerate() {
+            let reached = world.apply(part);
+            twin.apply(part);
+            if index == last {
+                reports = world.settle();
+                twin.settle();
             }
-            told = world.failure();
+            let logged = take_calls();
+            let stepped = reference.step(Some(part), reached, index == last, &logged).err();
+            if let Some(failure) = check("lifecycle", "calls", step, stepped) {
+                return Some(failure);
+            }
+            calls.extend(logged);
+        }
+        if let Some(failure) = check("reported-once", "reports", step, reported(&mut reference, reports)) {
+            return Some(failure);
+        }
+        for (site, detail) in ledger(&world, &twin, &reference) {
+            if let Some(failure) = check("ledger", site, step, Some(detail)) {
+                return Some(failure);
+            }
+        }
+        if let Some(before) = before
+            && let Some((site, detail)) = reload_fresh(&world, before, &reference, &calls)
+            && let Some(failure) = check("reload-fresh", site, step, Some(detail))
+        {
+            return Some(failure);
         }
     }
-    None
+    // Dropping the TUI releases the plugin: an active instance is destroyed once, a failed one not at all.
+    take_calls();
+    let expected: Vec<Kind> = reference.active().filter(|_| !world.exited).map(|_| Kind::Dispose).into_iter().collect();
+    drop(world);
+    let dropped: Vec<Kind> = take_calls().iter().map(|call| call.kind).collect();
+    let detail = (dropped != expected).then(|| format!("dropped while {:?}: {dropped:?}", reference.life));
+    check("lifecycle", "drop", commands.len(), detail)
 }
 
-/// `ledger`: no ended activation is held, and while the probe is not active the host equals the twin.
-fn ledger(world: &World, twin: &World, reference: &Reference) -> Option<String> {
+/// `reported-once`: the toasts of a frame, against the ones the reference expects, in any order.
+fn reported(reference: &mut Reference, mut reports: Vec<String>) -> Option<String> {
+    let mut expected = std::mem::take(&mut reference.reports);
+    reports.sort();
+    expected.sort();
+    (reports != expected).then(|| format!("reported {reports:?}, expected {expected:?}"))
+}
+
+/// `ledger`: the dialog and the row are the reference's, no ended activation is held, and while the probe is not active
+/// the host equals the twin. Each difference with its check site.
+fn ledger(world: &World, twin: &World, reference: &Reference) -> Vec<(&'static str, String)> {
+    let mut differences = Vec::new();
+    if world.exited {
+        return differences;
+    }
     let held: Vec<u32> = TOKENS.with_borrow(|tokens| {
         tokens.iter().filter(|(a, token)| !reference.holds(*a) && token.strong_count() > 0).map(|(a, _)| *a).collect()
     });
     if !held.is_empty() {
-        return Some(format!(
-            "activations {held:?} ended while the plugin is {:?}, and the host holds them",
-            reference.life
-        ));
+        differences.push(("token", format!("activations {held:?} ended while the plugin is {:?}", reference.life)));
     }
-    if matches!(reference.life, Life::Active(..) | Life::Exited) {
-        return None;
+    let (open, screen) = (world.harness.tui.dialogs.is_open(), world.frame());
+    let text = (0..screen.height).map(|y| row(&screen, y)).collect::<Vec<_>>().join("\n");
+    let shown = match reference.dialog_text() {
+        Some(expected) => open && text.contains(&expected),
+        None => !open,
+    };
+    if !shown {
+        let expected = reference.dialog_text();
+        differences.push(("dialog", format!("expected the dialog {expected:?}, the host shows {open}:\n{text}")));
     }
-    // A failed plugin is reported in the home footer, so its widgets and frame are not the twin's.
-    let disabled = reference.life == Life::Disabled;
-    if let Some(difference) = world.observe(disabled).diff(&twin.observe(disabled), disabled) {
-        return Some(format!("the plugin is {:?}; host and twin: {difference}", reference.life));
+    if world.status() != reference.status() {
+        let (status, expected) = (world.status(), reference.status());
+        differences.push(("row", format!("the manager lists {status:?}, expected {expected:?}")));
     }
-    if !disabled {
-        return None;
+    if !differences.is_empty() || reference.active().is_some() {
+        return differences;
     }
-    frame_diff(&twin.frame(), &world.frame(), world.mask(), |_| false)
-        .map(|row| format!("the plugin is disabled; the frames differ at {row}"))
+    // A failure the manager lists shows as a count in the home footer, so the widgets differ and the frame may differ
+    // in that row only.
+    let listed = reference.listed.is_some();
+    if let Some(difference) = world.observe(!listed).diff(&twin.observe(!listed), !listed) {
+        differences.push(("twin", format!("the plugin is {:?}; host and twin: {difference}", reference.life)));
+        return differences;
+    }
+    let allowed = |row: &str| listed && row.contains("plugin failed");
+    if let Some(row) = frame_diff(&twin.frame(), &world.frame(), world.mask(), allowed) {
+        differences.push(("frame", format!("the plugin is {:?}; the frames differ at {row}", reference.life)));
+    }
+    differences
 }
 
-/// `reload-fresh`: a reload that passed equals a fresh host with the new build on the same route; one that failed
-/// equals the host before it, plus one report.
+/// `reload-fresh`: a reload that passed leaves the user's route and equals a fresh host with the new build there; one
+/// that failed while a build ran equals the host before it, but for the failure it lists.
 fn reload_fresh(
     world: &World,
-    (observed, frame, life, told): (Observed, Capture, Life, Option<String>),
+    (observed, frame, life): (Observed, Capture, Life),
     reference: &Reference,
     calls: &[Call],
-    reports: &[String],
-) -> Option<String> {
-    let failed = reports.iter().filter(|title| *title == &format!("Plugin failed: {ID}")).count();
+) -> Option<(&'static str, String)> {
     match (life, reference.life) {
         // A reload that passed: the fresh twin, with the log from its `setup` on.
         (_, Life::Active(a, build)) if Some(a) != life_activation(life) => {
-            if failed != 0 {
-                return Some(format!("a reload that passed reported {reports:?}"));
+            let route = reference.page.route();
+            if world.harness.tui.route() != route {
+                return Some(("route", format!("after a reload the route is {:?}", world.harness.tui.route())));
             }
             let log: Vec<Kind> = collapse(calls.iter().filter(|call| call.activation == a));
             let (ours, frame) = (world.observe(true), world.frame());
-            let (theirs, fresh_frame, fresh_log) = fresh(build, world.harness.tui.route());
+            let (theirs, fresh_frame, fresh_log) = fresh(build, route);
             if log != fresh_log {
-                return Some(format!("the call log from setup on: host {log:?}, fresh {fresh_log:?}"));
+                return Some(("log", format!("the call log from setup on: host {log:?}, fresh {fresh_log:?}")));
             }
             if let Some(difference) = ours.diff(&theirs, true) {
-                return Some(format!("after a reload to build {build}, host and fresh: {difference}"));
+                return Some(("fresh", format!("after a reload to build {build}, host and fresh: {difference}")));
             }
             frame_diff(&fresh_frame, &frame, world.mask(), |_| false)
-                .map(|row| format!("after a reload to build {build}, the frames differ at {row}"))
+                .map(|row| ("frame", format!("after a reload to build {build}, the frames differ at {row}")))
         }
-        // A reload that failed while a build ran: that build, plus one report.
+        // A reload that failed while a build ran: that build, and the failure it lists.
         (Life::Active(a, _), Life::Active(b, _)) if a == b && calls.iter().any(|call| call.kind == Kind::Setup) => {
-            let failure = world.failure();
-            let expected = usize::from(failure != told);
-            if failure.as_deref().is_none_or(|failure| !failure.ends_with("(previous version still active)")) {
-                return Some(format!("a failed reload left the status {failure:?}"));
-            }
-            if failed != expected {
-                return Some(format!("a failed reload reported {reports:?}, after {told:?}"));
-            }
-            // The report adds the footer's count, so the widgets are not compared.
             if let Some(difference) = observed.diff(&world.observe(false), false) {
-                return Some(format!("after a failed reload, before and after: {difference}"));
+                return Some(("kept", format!("after a failed reload, before and after: {difference}")));
             }
             frame_diff(&frame, &world.frame(), world.mask(), |row| row.contains("plugin failed"))
-                .map(|row| format!("after a failed reload, the frames differ at {row}"))
+                .map(|row| ("frame", format!("after a failed reload, the frames differ at {row}")))
         }
         _ => None,
     }
@@ -802,11 +1026,11 @@ fn life_activation(life: Life) -> Option<u32> {
     }
 }
 
-/// The kinds of `calls`, with each run of renders as one.
+/// The kinds of `calls`, with each run of renders of one surface as one.
 fn collapse<'a>(calls: impl Iterator<Item = &'a Call>) -> Vec<Kind> {
     let mut kinds: Vec<Kind> = Vec::new();
     for call in calls {
-        if !(call.kind == Kind::Render && kinds.last() == Some(&Kind::Render)) {
+        if !(matches!(call.kind, Kind::Render(_)) && kinds.last() == Some(&call.kind)) {
             kinds.push(call.kind);
         }
     }
@@ -815,19 +1039,67 @@ fn collapse<'a>(calls: impl Iterator<Item = &'a Call>) -> Vec<Kind> {
 
 /// Shrunk traces of defects the model found and that are not fixed, each with the property it fails. Each must still
 /// fail, so a fix fails the test until its row moves to [`FIXED`].
-const OPEN: &[(&str, &str, &[Command])] = &[];
+const OPEN: &[(&str, &str, &[Command])] = &[
+    // Review bigboi-1: a failed plugin's replacement of `home.footer` still wins the slot and hides the footer.
+    ("a-failed-slot-replacement-gives-the-slot-back", "ledger", &[Command::Arm(Fault::Command), Command::Run]),
+    // Review bigboi-2 and carbon-pt-1: a dialog asked for by an activation that ended, or by a setup that failed, opens.
+    ("a-dispose-opens-no-dialog-on-a-reload", "ledger", &[Command::Reload(2)]),
+    ("a-dispose-opens-no-dialog-on-a-disable", "ledger", &[Command::Toggle]),
+    (
+        "a-failed-candidate-keeps-the-running-dialog",
+        "reported-once",
+        &[Command::Dialog(Dialog::Panel), Command::Reload(BAD)],
+    ),
+    ("a-failed-setup-opens-no-dialog", "ledger", &[Command::Toggle, Command::Reload(BAD), Command::Toggle]),
+    ("a-dialog-asked-for-before-a-reload-opens-no-dialog", "ledger", &[Command::DialogThenReload(Dialog::Prompt, 2)]),
+    // Review carbon-pt-1: a prompt confirmed before a reload runs the new build's command.
+    (
+        "a-confirm-before-a-reload-reaches-no-new-build",
+        "lifecycle",
+        &[Command::Dialog(Dialog::Prompt), Command::EnterThenReload(2)],
+    ),
+    // Review bigboi-5: a failure is told again once the manager stopped listing it.
+    (
+        "a-failure-is-told-again-after-the-row-cleared",
+        "ledger",
+        &[
+            Command::Arm(Fault::Setup),
+            Command::Reload(2),
+            Command::Toggle,
+            Command::Toggle,
+            Command::Arm(Fault::Setup),
+            Command::Reload(PROMPTING),
+        ],
+    ),
+    // Review carbon-pt-2: an enable that failed leaves the plugin enabled, so a reload starts it.
+    (
+        "a-failed-enable-leaves-the-plugin-disabled",
+        "ledger",
+        &[Command::Toggle, Command::Arm(Fault::Setup), Command::Toggle, Command::Reload(2)],
+    ),
+    // Review carbon-pt-3: a reload that fails after a panic wedges the plugin, and enabling it sets up nothing.
+    (
+        "a-failed-reload-of-a-failed-plugin-can-be-enabled",
+        "ledger",
+        &[Command::Arm(Fault::Command), Command::Run, Command::Reload(BAD), Command::Toggle],
+    ),
+    // Review bigboi-6: dropping the TUI destroys a failed instance, which runs its dispose callback.
+    (
+        "a-failed-plugin-is-not-disposed-when-dropped",
+        "ledger",
+        &[Command::Route, Command::Arm(Fault::Command), Command::Run],
+    ),
+];
 
 /// Shrunk traces that failed once and pass now.
 const FIXED: &[(&str, &[Command])] = &[
-    // Seed 34 of the first search: a second reload that fails with the same error is not told again, as in TS. The
-    // oracle had asked for a report each time.
+    // Seed 34 of the first search: a second reload that fails with the same error is not told again, as in TS.
     (
         "a-repeated-reload-failure-is-told-once",
         &[Command::Arm(Fault::Setup), Command::Reload(3), Command::Arm(Fault::Setup), Command::Reload(2)],
     ),
-    // Seed 319 of the deep run: a reload that failed while the plugin ran was not told when the last failure the
-    // loader told had the same error without "(previous version still active)". TS compares what it lists and tells
-    // it; the loader now does too.
+    // Seed 319 of the deep run: a reload that failed while the plugin ran is told after a setup failure with the same
+    // error without "(previous version still active)".
     (
         "a-kept-reload-failure-is-told-after-a-setup-failure",
         &[
@@ -841,9 +1113,8 @@ const FIXED: &[(&str, &[Command])] = &[
             Command::Reload(1),
         ],
     ),
-    // A plugin's dialog stayed open, with focus, after its plugin failed, was disabled or was replaced by a reload,
-    // and after a reload its prompt or select ran the new build's command. TS keeps them (deviation
-    // F16-plugin-dialog-ends-with-activation); 4.14 ends them with the activation.
+    // A plugin's dialog ends with its activation: after a failure, a disable or a reload, and a stale prompt or select
+    // runs no new build's command.
     ("a-dialog-ends-with-a-failure", &[Command::Arm(Fault::Render), Command::Dialog(Dialog::Panel)]),
     ("a-dialog-ends-with-a-disable", &[Command::Dialog(Dialog::Panel), Command::Toggle]),
     ("a-prompt-ends-with-a-disable", &[Command::Dialog(Dialog::Prompt), Command::Toggle]),
@@ -851,16 +1122,19 @@ const FIXED: &[(&str, &[Command])] = &[
     ("a-dialog-ends-with-a-reload", &[Command::Dialog(Dialog::Panel), Command::Reload(2)]),
     ("a-stale-prompt-reaches-no-new-build", &[Command::Dialog(Dialog::Prompt), Command::Reload(2), Command::Enter]),
     ("a-stale-select-reaches-no-new-build", &[Command::Dialog(Dialog::Select), Command::Reload(2), Command::Enter]),
-    // A failed plugin got its dispose callbacks as it was disabled, replaced, or the client exited. 4.14 and TS call no
-    // plugin code after a failure.
+    // A failed plugin gets no dispose callback as it is disabled, replaced, or the client exits.
     ("a-failed-plugin-is-not-disposed-on-disable", &[Command::Arm(Fault::Command), Command::Run, Command::Toggle]),
     ("a-failed-plugin-is-not-disposed-on-reload", &[Command::Arm(Fault::Render), Command::Run, Command::Reload(2)]),
     ("a-failed-plugin-is-not-disposed-on-exit", &[Command::Arm(Fault::Command), Command::Run, Command::Exit]),
+    // Review bigboi-4: a reload on the plugin's route leaves the user there, on the new build's route.
+    ("a-reload-keeps-the-plugin-route", &[Command::Route, Command::Reload(2)]),
+    // Review bigboi-2, the positive control: a candidate that passes keeps the prompt its setup asked for.
+    ("a-passed-candidates-prompt-shows", &[Command::Dialog(Dialog::Panel), Command::Reload(PROMPTING)]),
 ];
 
-// Expected (O-124, Pt): `lifecycle`, `ledger` and `reload-fresh` hold for 40 seeds of 64 commands. 4.14 asks for
-// 256 seeds within about 3 s; a seed costs about 70 ms in a debug build (two TUIs stepped per command), so the seeds
-// went down and the commands stayed. `MODEL_SEEDS` runs more.
+// Expected (O-124, Pt): every property holds for 40 seeds of 64 commands. 4.14 asks for 256 seeds within about 3 s; a
+// seed costs about 70 ms in a debug build (two TUIs stepped per command), so the seeds went down and the commands
+// stayed. `MODEL_SEEDS` runs more.
 #[test]
 fn the_plugin_life_holds_its_properties() {
     model::check(&PluginModel, 40, 64);
@@ -897,43 +1171,43 @@ fn manager_toggle(world: &World) -> Vec<String> {
 fn a_failed_enable_shows_its_error_and_keeps_the_row() {
     LOG.take();
     let world = World::open(Some(1));
+    world.settle();
     assert_eq!(manager_toggle(&world), Vec::<String>::new());
     ARMED.set(Some(Fault::Setup));
     assert_eq!(manager_toggle(&world), ["setup panicked: probe Setup fault"]);
-    assert_eq!(world.failure(), None);
+    assert_eq!(world.status(), Some(Status::Inactive));
     ARMED.set(None);
 }
 
-// Expected: a revoke closes its own plugin's dialog only, not one of a plugin whose ID it begins.
-#[test]
-fn a_revoke_closes_only_its_own_plugins_dialog() {
-    LOG.take();
-    for dialog in [Dialog::Panel, Dialog::Prompt, Dialog::Select] {
-        let mut world = World::open(Some(1));
-        world.apply(Command::Dialog(dialog));
-        world.settle();
-        let tui = &world.harness.tui;
-        host(tui).revoked("model.prob");
-        assert!(tui.dialogs.is_open(), "{dialog:?}");
-        host(tui).revoked(ID);
-        assert!(!tui.dialogs.is_open(), "{dialog:?}");
-    }
-}
-
 // Expected: the oracles are not empty. While the probe is active the host differs from the twin, and a host on build
-// 2 differs from a fresh one on build 3; the reference refuses a command call while the probe is disabled.
+// 2 differs from a fresh one on build 3; the reference refuses a command that did not run while the probe is active,
+// and one that ran while it is disabled.
 #[test]
 fn the_oracles_can_fail() {
     LOG.take();
     let world = World::open(Some(1));
     let twin = World::open(None);
+    world.settle();
+    twin.settle();
     assert_ne!(world.observe(true), twin.observe(true));
     assert!(frame_diff(&twin.frame(), &world.frame(), world.mask(), |_| false).is_some());
     let two = World::open(Some(2));
     let three = World::open(Some(3));
+    two.settle();
+    three.settle();
     assert!(frame_diff(&two.frame(), &three.frame(), two.mask(), |_| false).is_some());
     let mut reference = Reference::new(1);
+    reference.life = Life::Active(1, 1);
+    assert!(reference.step(Some(Command::Run), Some(false), true, &[]).is_err());
     reference.life = Life::Disabled;
-    let call = Call { activation: 1, build: 1, kind: Kind::Command, panicked: false };
-    assert!(reference.step(Some(Command::Run), true, &[call]).is_err());
+    let call = Call { activation: 1, build: 1, kind: Kind::Command(Which::Run), panicked: false };
+    assert!(reference.step(Some(Command::Run), Some(true), true, &[call]).is_err());
+}
+
+// Expected: a property that `MODEL_SKIP` turns off does not fail, and the others still do.
+#[test]
+fn a_skipped_property_is_checked_no_more() {
+    assert!(check("lifecycle", "calls", 0, None).is_none());
+    let failure = check("lifecycle", "calls", 3, Some("wrong".to_owned()));
+    assert_eq!(failure.map(|failure| (failure.site, failure.step)), Some(("calls", 3)));
 }
