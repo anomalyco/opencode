@@ -192,3 +192,18 @@ fn a_fault_is_a_crash_and_a_request_is_an_end() {
         assert_eq!(sys::end(status), expected, "{status:#x}");
     }
 }
+
+// Expected: a client that dies of a crash after the parent was asked to end (SIGTERM, or the terminal hung up) is not
+// restarted: the parent ends with its code.
+#[cfg(unix)]
+#[test]
+fn a_parent_asked_to_end_restarts_nothing() {
+    use std::sync::atomic::Ordering;
+    // A kill is a crash, and leaves no core file.
+    let killed = || std::process::Command::new("sh").args(["-c", "kill -KILL $$"]).spawn().unwrap().id() as i32;
+    assert_eq!(sys::wait(killed()), End::Crash(137));
+    sys::ENDING.store(true, Ordering::Relaxed);
+    let ending = sys::wait(killed());
+    sys::ENDING.store(false, Ordering::Relaxed);
+    assert_eq!(ending, End::Exit(137));
+}
