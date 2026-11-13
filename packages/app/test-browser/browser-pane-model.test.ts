@@ -45,6 +45,7 @@ function fixture() {
     inspect: async () => undefined,
     highlight: async () => undefined,
     zoom: async () => undefined,
+    setViewport: async () => undefined,
     site: async () => ({ cookies: 0 }),
     clearSite: async () => undefined,
     close: async () => undefined,
@@ -77,18 +78,49 @@ function fixture() {
   const ctx = fake as unknown as SetupContext<typeof definition>
   const owned = createRoot((dispose) => ({ model: createModel(ctx), dispose }))
 
-  const emit = (session: string, state: Browser.State) => {
+  const report = (session: string, event: PaneEvent) => {
     const binding = bindings.get(session)
 
-    if (binding) listeners.forEach((listener) => listener({ binding, event: { type: "state", state } }))
+    if (binding) listeners.forEach((listener) => listener({ binding, event }))
   }
+
+  const emit = (session: string, state: Browser.State) => report(session, { type: "state", state })
 
   // SAFETY: the model reads only the listed fields of a session ref.
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   const sessions = refs.map((ref) => ref as unknown as SessionRef)
 
-  return { ...owned, sessions, route: setCurrent, refs, emit }
+  return { ...owned, sessions, route: setCurrent, refs, emit, report }
 }
+
+test("drops page details when a tab closes or its binding is suspended", () => {
+  const app = fixture()
+
+  const session = app.sessions[0]
+
+  const closed = tab("a")
+
+  const retained = tab("b")
+
+  const viewport = { mode: "fixed", width: 390, height: 844 } as const
+
+  try {
+    app.emit(session.id, { tabs: [closed, retained], focusedTabID: closed.id })
+
+    for (const tab of [closed, retained]) app.report(session.id, { type: "page", tabID: tab.id, zoom: 1, viewport })
+    expect(app.model.page(session, closed.id)?.viewport).toEqual(viewport)
+    const remaining = { tabs: [retained], focusedTabID: retained.id }
+    app.emit(session.id, remaining)
+    expect(app.model.page(session, closed.id)).toBeUndefined()
+    expect(app.model.page(session, retained.id)?.viewport).toEqual(viewport)
+
+    app.report(session.id, { type: "state", state: remaining, error: "browser.pane.suspended" })
+    expect(app.model.tab(session, retained.id)?.url).toBe(retained.url)
+    expect(app.model.page(session, retained.id)).toBeUndefined()
+  } finally {
+    app.dispose()
+  }
+})
 
 test("one session's transitions leave another session's attachment as it was", async () => {
   const app = fixture()
