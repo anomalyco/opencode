@@ -262,11 +262,9 @@ test("preview paths resolve the way the Review pane resolves them", async () => 
       directory: false,
     })
     expect(await locate(join(directory, "nowhere", "x.png"))).toMatchObject({ found: false })
-    expect(await locate("site/docs")).toEqual({
-      absolute: join(directory, "site", "docs"),
-      found: false,
-      directory: true,
-    })
+    // A backslash is a separator on every server, as it is in the pane.
+    for (const path of ["site/docs", "site\\docs"])
+      expect(await locate(path)).toEqual({ absolute: join(directory, "site", "docs"), found: false, directory: true })
     for (const path of ["https://example.com/report.html", "skill://browser/SKILL.md"])
       expect(await locate(path)).toBeUndefined()
   } finally {

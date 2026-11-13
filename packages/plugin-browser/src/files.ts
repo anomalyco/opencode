@@ -57,15 +57,20 @@ export const locate = Effect.fn("BrowserFiles.locate")(function* (path: string, 
     const { fileURLToPath } = await import("node:url")
     const local = /^file:/i.test(value) ? (URL.canParse(value) ? fileURLToPath(new URL(value)) : value) : value
     const plain = local.replace(/(?:#L\d+(?:C\d+)?(?:-L?\d+(?:C\d+)?)?|:\d+(?::\d+)?(?:-\d+(?::\d+)?)?:?)$/i, "")
+    // A model whose user is on Windows writes site\index.html to a server on any system; the pane reads a backslash as
+    // a separator everywhere, so this does too once the path as written names nothing.
+    const slashed = plain.replaceAll("\\", "/")
+    const candidates = [local, plain, slashed]
     const kinds = await Promise.all(
-      [local, plain].map((candidate) =>
+      candidates.map((candidate) =>
         stat(resolve(directory, candidate)).then(
           (info) => (info.isFile() ? "file" : info.isDirectory() ? "directory" : "other"),
           () => undefined,
         ),
       ),
     )
-    const absolute = resolve(directory, kinds[0] ? local : plain)
+    const index = [kinds.indexOf("file"), kinds.indexOf("directory"), kinds.indexOf("other")].find((at) => at >= 0)
+    const absolute = resolve(directory, candidates[index ?? 2] ?? slashed)
     if (kinds.includes("file")) return { absolute, found: true, directory: false }
     if (kinds.includes("directory")) return { absolute, found: false, directory: true }
     if (isAbsolute(plain)) return { absolute, found: false, directory: false }
