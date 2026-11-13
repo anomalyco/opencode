@@ -4,72 +4,117 @@ import type { JSX } from "solid-js"
 import { usePlugin, type IpcClient } from "../../../plugin/src/gui/index"
 import { PluginContext } from "../../../plugin/src/gui/internal"
 import type { Pairing } from "../../../gui-plugins/src/pairing/contract"
+import { REMOTE_READ_RETRIES } from "../../../gui-plugins/src/pairing/machine"
 import type { PairingServer } from "../../../gui-plugins/src/pairing/page"
 // The pairing page renders inside the app's settings page, which brings these styles.
 import "@/settings/settings.css"
 
-/**
- * A local server and pairing main entry. Remote access starts on or off; turning it on takes a moment, after which
- * the server advertises its tunnel, as the background service does once OpenTunnel attaches. `fails` makes turning
- * it on fail, as when the tunnel cannot be created. `screenFails` makes the page's first read of the display sleep
- * setting and its three retries fail; later reads and changes work.
- */
-export function pairingRemote(input: { enabled: boolean; fails?: boolean; screenFails?: boolean }) {
-  const state = { enabled: input.enabled, screen: false, screenFailures: input.screenFails ? 4 : 0 }
+export const pairingResponses = [
+  "Normal",
+  "Remote read fails",
+  "Remote change fails",
+  "Screen read fails",
+  "Screen change fails",
+  "Tunnel connects slowly",
+  "Code request fails",
+  "Copy fails",
+] as const
+
+type Response = (typeof pairingResponses)[number]
+
+/** In-memory settings, tunnel discovery, codes and clipboard, scoped to one story instance. */
+export function pairingRemote(input: {
+  enabled: boolean
+  screenActive?: boolean
+  response?: Response
+  expiresIn?: number
+}) {
+  const state = {
+    enabled: input.enabled,
+    screen: input.screenActive ?? false,
+    issued: 0,
+    tunnelPolls: input.response === "Tunnel connects slowly" ? 3 : 0,
+    // Exhaust the automatic read retries. A manual retry (or the next write, request or copy) can then succeed.
+    failures:
+      input.response === "Remote read fails" || input.response === "Screen read fails" ? REMOTE_READ_RETRIES + 1 : 1,
+  }
+
+  const fail = (operation: Response) => {
+    if (input.response !== operation || state.failures === 0) return
+
+    state.failures -= 1
+    throw new Error(operation)
+  }
+
   const server: PairingServer = {
     client: {
       server: {
-        info: async () => ({
-          urls: [
-            "http://127.0.0.1:49374",
-            ...(state.enabled ? ["https://cbf8424f2044b16d.vcybm3xt4hhu.opentunnel.xyz"] : []),
-          ],
-        }),
-        pair: async () => ({ code: pairingCode(), expires_in: 300 }),
+        info: async () => {
+          const urls = ["http://localhost.invalid"]
+
+          if (state.enabled && state.tunnelPolls === 0) urls.push("https://pairing.invalid")
+          if (state.tunnelPolls > 0) state.tunnelPolls -= 1
+
+          return { urls }
+        },
+        pair: async () => {
+          fail("Code request fails")
+          state.issued += 1
+          // As with server codes, encode 16 bytes. A new fixture replays the same sequence of QR codes.
+          const code = btoa(`story:${String(state.issued).padStart(10, "0")}`).replace(/=+$/, "")
+
+          return { code, expires_in: input.expiresIn ?? 300 }
+        },
       },
     },
   }
-  const client: IpcClient<typeof Pairing.spec> = {
-    remote: async () => state.enabled,
-    setRemote: async (enabled) => {
-      await new Promise((resolve) => setTimeout(resolve, 2000))
 
-      if (input.fails) throw new Error("Timed out creating the remote access tunnel")
+  const client: IpcClient<typeof Pairing.spec> = {
+    remote: async () => {
+      fail("Remote read fails")
+
+      return state.enabled
+    },
+    setRemote: async (enabled, options) => {
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      options?.signal?.throwIfAborted()
+      fail("Remote change fails")
       state.enabled = enabled
     },
     screenActive: async () => {
-      if (state.screenFailures > 0) {
-        state.screenFailures -= 1
-        throw new Error("The display sleep setting could not be read")
-      }
+      fail("Screen read fails")
 
       return state.screen
     },
     setScreenActive: async (enabled) => {
+      fail("Screen change fails")
       state.screen = enabled
     },
     state: () => undefined,
     on: () => () => undefined,
   }
 
-  return { server, client }
+  return { server, client, copy: async () => fail("Copy fails") }
 }
 
 /**
  * Stands in for the HostApis the pairing page reads that plugin stories do not provide: dialogs through the app's
- * dialog stack, and a clipboard that accepts every copy.
+ * dialog stack, and a fixture clipboard.
  */
-export function PairingHost(props: { children: JSX.Element }) {
+export function PairingHost(props: { children: JSX.Element; copy?: () => Promise<void> }) {
   const base = usePlugin()
+
   const dialog = useDialog()
+
   const client = new QueryClient()
+
   // Dialogs render in the app's dialog stack, outside this subtree, so they get the context again as the host does.
   const scoped = (render: () => JSX.Element) => (
     <QueryClientProvider client={client}>
       <PluginContext.Provider value={context}>{render()}</PluginContext.Provider>
     </QueryClientProvider>
   )
-  const context = Object.create(base, {
+  const context: typeof base = Object.create(base, {
     dialogs: {
       value: {
         open: (render: () => JSX.Element) => {
@@ -78,7 +123,7 @@ export function PairingHost(props: { children: JSX.Element }) {
         },
       },
     },
-    system: { value: { copy: async () => undefined } },
+    system: { value: { copy: props.copy ?? (async () => undefined) } },
   })
 
   return scoped(() => (
@@ -86,13 +131,4 @@ export function PairingHost(props: { children: JSX.Element }) {
       {props.children}
     </div>
   ))
-}
-
-// The server's codes are 16 random bytes in base64url.
-function pairingCode() {
-  const bytes = crypto.getRandomValues(new Uint8Array(16))
-  return btoa(String.fromCharCode(...bytes))
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replace(/=+$/, "")
 }

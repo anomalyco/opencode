@@ -77,6 +77,15 @@ export interface HttpOptions {
    * supplies the request path and must use `http:`; its host and port are ignored.
    */
   readonly socketPath?: string
+  /** Client certificate presented to HTTPS endpoints that request one (mutual TLS). */
+  readonly tls?: ClientTls
+}
+
+/** PEM client certificate and private key, with the passphrase of an encrypted key. */
+export interface ClientTls {
+  readonly cert: string
+  readonly key: string
+  readonly passphrase?: string
 }
 
 /** Per-phase time limits in milliseconds. */
@@ -133,6 +142,7 @@ export const mergeTransport = (...items: ReadonlyArray<TransportOptions | undefi
       body: mergeJsonRecords(...http.map((item) => item?.body)),
       encoding: last(http.map((item) => item?.encoding)),
       socketPath: last(http.map((item) => item?.socketPath)),
+      tls: last(http.map((item) => item?.tls)),
     }),
   }
 }

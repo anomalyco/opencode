@@ -2,6 +2,8 @@
 
 Production Solid components are tested through their existing `*.stories.tsx` stories without booting the app, configuring a server, seeding browser storage, or navigating unrelated routes.
 
+To browse the full components lab in a browser, run `bun run --cwd packages/stories dev` from the repo root and open <http://localhost:6006/> (or the port Vite prints). The tree, grid, and inspector use the same story fixtures as the individual `/?id=…` pages.
+
 Keep each spec in the package that owns its production component:
 
 - `packages/session-ui/component-tests/` owns timeline, tool, notice, reasoning, lifecycle, and review coverage.

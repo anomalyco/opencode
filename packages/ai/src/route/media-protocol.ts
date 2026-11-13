@@ -92,6 +92,16 @@ export interface Started<Token> {
 /** A follow-up call's inputs: the decoded token. */
 export interface PollContext<Token> {
   readonly token: Token
+  /**
+   * The headers an authenticated GET of `url` would send (deployment headers plus auth), for result URLs that need
+   * the API key to download. URLs on another origin than the route's base URL get no headers.
+   */
+  readonly headers: (url: string) => Effect.Effect<Record<string, string>, AIError>
+  /**
+   * A further GET with the same auth and headers, retried like the poll itself, for providers whose result needs a
+   * second lookup (MiniMax v1 answers with a file id that resolves to a download URL).
+   */
+  readonly get: (path: string) => Effect.Effect<HttpClientResponse.HttpClientResponse, AIError>
 }
 
 /**

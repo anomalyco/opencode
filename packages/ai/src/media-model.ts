@@ -84,9 +84,15 @@ export const composeRoute = <Request extends MediaRoute.MediaRequest, Event, Res
   collect: (events: ReadonlyArray<Event>) => Effect.Effect<Response, AIError>,
 ): MediaRoute.AnyRoute<Request, Event, Response> => {
   if (isStreamInput(route)) return MediaRoute.stream({ ...composition(route, input), collect })
-  if (isQueuedInput(route)) return MediaRoute.queued(composition(route, input))
+  if (isQueuedInput(route)) return composeQueuedRoute(route, input)
   return MediaRoute.inline(composition(route, input))
 }
+
+/** Compose a queued protocol route input with one deployment through `MediaRoute.queued`. */
+export const composeQueuedRoute = <Request extends MediaRoute.MediaRequest, Response, Token>(
+  route: MediaModel.QueuedRouteInput<Request, Response, Token>,
+  input: MediaRoute.ModelInput,
+) => MediaRoute.queued(composition(route, input))
 
 const composition = <Request extends MediaRoute.MediaRequest, Protocol>(
   route: MediaModel.RouteInput<Request, Protocol>,

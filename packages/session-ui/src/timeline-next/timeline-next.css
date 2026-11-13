@@ -323,13 +323,15 @@
 }
 
 /* An event row opens to the subagents and shells it counts, each read like a nested row and leading to its session or
-   to the call that ran it. */
+   to the call that ran it. An opened activity group lists the ones it started or heard back from the same way. */
 [data-timeline="next"] [data-component="timeline-event-list"] {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding-top: 4px;
+}
 
+[data-timeline="next"] :is([data-component="timeline-event-list"], [data-slot="context-tool-group-item"]) {
   [data-slot="timeline-event-item"] {
     display: flex;
     align-items: center;
@@ -376,7 +378,7 @@
     color: var(--v2-text-text-base);
   }
 
-  [data-component="tag"] {
+  [data-slot="timeline-event-item"] [data-component="tag"] {
     flex-shrink: 0;
   }
 }
@@ -400,26 +402,6 @@
 
 [data-timeline="next"][data-timeline-gap="l"] {
   padding-top: var(--timeline-gap-l);
-}
-
-/* The user's message actions show in the large gap below it rather than adding to it, above the row that follows so
-   they stay reachable. */
-[data-timeline="next"][data-timeline-row="UserMessage"] {
-  position: relative;
-  z-index: 1;
-
-  [data-component="user-message"] {
-    position: relative;
-  }
-
-  [data-slot="user-message-copy-wrapper"] {
-    position: absolute;
-    inset-inline: 0;
-    top: 100%;
-    height: 28px;
-    margin-top: 0;
-    padding-top: 8px;
-  }
 }
 
 /* Rows are as tall as their text, so the gaps between them are the gaps that show. A row's 28px click area stays: 6px of
@@ -495,21 +477,6 @@
     text-box: trim-start text;
   }
 
-  /* The agent's last words in a turn keep their actions in the large gap below them, as the user's message does. The
-     gap above the actions is their own padding, so the pointer stays over the message while it crosses to them. */
-  [data-component="text-part"]:has(> [data-slot="text-part-copy-wrapper"]) {
-    position: relative;
-
-    > [data-slot="text-part-copy-wrapper"] {
-      position: absolute;
-      inset-inline: 0;
-      top: 100%;
-      height: 28px;
-      margin-top: 0;
-      padding-top: 8px;
-    }
-  }
-
   [data-component="context-tool-group-list"],
   [data-component="timeline-event-list"] {
     gap: var(--timeline-gap-s);
@@ -517,6 +484,7 @@
   }
 
   [data-component="context-tool-group-list"] [data-slot="context-tool-group-item"],
+  [data-component="context-tool-group-list"] [data-slot="timeline-event-item"],
   [data-component="timeline-event-list"] [data-slot="timeline-event-item"] {
     min-height: var(--line-height-compact);
   }
@@ -541,11 +509,6 @@
       height: calc(var(--line-height-compact) + 6px + var(--timeline-gap-s));
     }
   }
-}
-
-[data-timeline="next"][data-timeline-row="AssistantPart"]:has([data-slot="text-part-copy-wrapper"]) {
-  position: relative;
-  z-index: 1;
 }
 
 /* The live thought sits where the row it settles into will, which its frame spaces like any other row. */
@@ -581,9 +544,19 @@
     --timeline-status-space: var(--timeline-gap-l);
   }
 
+  /* The background hint's 24px button is centred on the 16px line and reaches 4px past it. A row clips at its own
+     height, so in a row the lane keeps that room below the line, whether or not the hint shows, so the input waiting
+     below does not move when it comes and goes. */
+  &[data-in-row] {
+    --timeline-status-hint-overflow: calc((24px - var(--line-height-compact)) / 2);
+    height: calc(var(--line-height-compact) + var(--timeline-status-space) + var(--timeline-status-hint-overflow));
+    padding-bottom: var(--timeline-status-hint-overflow);
+  }
+
   &[data-collapsed] {
     height: 0;
     padding-top: 0;
+    padding-bottom: 0;
     overflow: hidden;
   }
 

@@ -260,7 +260,11 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
           ...runtime.options,
           ...mergeTransport(runtime.options, {
             timeout: { total: timeouts.timeout, headers: timeouts.headerTimeout, chunk: timeouts.chunkTimeout },
-            http: { encoding: Provider.encoding(configured), socketPath: Provider.socketPath(configured) },
+            http: {
+              encoding: Provider.encoding(configured),
+              socketPath: Provider.socketPath(configured),
+              tls: Provider.tls(configured),
+            },
           }),
         },
       })
@@ -316,6 +320,7 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
   dependencies?: Dependencies,
 ) {
   const { resolved, configured, module, settings } = yield* loadCatalogPackage(model, credential, dependencies)
+  const tls = Provider.tls(configured)
   const runtime: unknown = yield* Effect.try({
     try: () => module.model(resolved.modelID ?? resolved.id, settings),
     catch: (cause) => constructionError(resolved, cause),
@@ -331,11 +336,15 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
       : runtime
   if (!is(adapted)) return yield* unsupported(resolved)
   const socketPath = Provider.socketPath(configured)
-  if (socketPath === undefined) return adapted
-  if (adapted instanceof DecisionModel)
-    return new DecisionModel({ ...adapted, http: { ...adapted.http, socketPath } }) as Runtime
-  if (adapted instanceof ImageModel) return new ImageModel({ ...adapted, http: { ...adapted.http, socketPath } }) as Runtime
-  return adapted
+  if (socketPath === undefined && tls === undefined) return adapted
+  if (!(adapted instanceof DecisionModel || adapted instanceof ImageModel)) return adapted
+  const http = {
+    ...adapted.http,
+    ...(socketPath === undefined ? {} : { socketPath }),
+    ...(tls === undefined ? {} : { tls }),
+  }
+  if (adapted instanceof DecisionModel) return new DecisionModel({ ...adapted, http }) as Runtime
+  return new ImageModel({ ...adapted, http }) as Runtime
 })
 
 const constructionError = (model: RuntimeInfo, cause: unknown) =>
@@ -509,9 +518,12 @@ export const layer = Layer.effect(
         limit: selected.limit,
         compaction: runtimeInfo.settings?.compaction,
         cache: runtimeInfo.settings?.cache,
-        // A WebSocket transport would dial the base URL's host over TCP, so a socket keeps the model on HTTP.
+        // A WebSocket transport can neither dial a Unix socket nor present a client certificate, so either keeps the
+        // model on HTTP.
         transport:
-          Provider.socketPath(runtimeInfo.settings ?? {}) === undefined ? provider?.settings?.transport : "http",
+          Provider.socketPath(runtimeInfo.settings ?? {}) !== undefined || Provider.tls(runtimeInfo.settings ?? {})
+            ? "http"
+            : provider?.settings?.transport,
         chunkTimeout: Provider.timeout(provider?.settings?.chunkTimeout),
       }
     })

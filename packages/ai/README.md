@@ -1,7 +1,7 @@
 # @opencode/ai
 
-Schema-first APIs for text, images, decisions, and embeddings, built with Effect. Video, speech, transcription, extraction, and
-realtime voice are [experimental](#experimental).
+Schema-first APIs for text, images, video, decisions, and embeddings, built with Effect. Speech, transcription,
+extraction, and realtime voice are [experimental](#experimental).
 
 `@opencode/ai` is the Promise API: one managed runtime behind the LLM and media methods, plus asset helpers. `ai.file`
 and `ai.write` load `node:fs/promises` on first use, so no Effect `FileSystem` is needed:
@@ -211,7 +211,7 @@ Raw usage is preserved in `usage.providerMetadata.google`. `inputTokens` follows
 `contextTokens` uses its full `raw_prompt_token` count when supplied. These can differ substantially with server-side
 continuation. Explicit caches, hosted tools, and generated media are not supported by this initial protocol.
 
-The same configured facade names image models (and the experimental video, speech, and transcription models).
+The same configured facade names image and video models (and the experimental speech and transcription models).
 `ai.image.generate` resolves the provider's image route from the model and returns `Media.Asset`s with lazily decoded bytes:
 
 ```ts
@@ -1031,6 +1031,132 @@ const program = Effect.gen(function* () {
 
 The hosted result is represented as a provider-executed tool call and a tool result whose content carries the generated image as a file. Gemini image-capable models instead emit a first-class `media` `LLMEvent` for inline image output (`response.message` then carries a `media` part). Retaining `response.message` preserves the generated image for continuation on both routes.
 
+### Image jobs
+
+`ai.image.generate` and `ai.image.stream` poll a queued image route for you. To manage the job yourself, use the same
+calls as video: `start` submits it and returns `{ id }` at once, the provider's job ID as a string you can store and
+read back from another process, and `status`, `result` and `cancel` take the model and that `id`. `status` is one read;
+`result` fails with an `InvalidRequest` reason while the job is still running; `cancel` fails with an
+`UnsupportedOperation` reason when the provider has no cancel endpoint. No shipped image route is queued yet, so on
+every image model today all four fail with an `UnsupportedOperation` reason before sending anything.
+
+```ts
+const program = Effect.gen(function* () {
+  const job = yield* ai.image.start({ model, prompt: "A lighthouse" })
+  const status = yield* ai.image.status(model, job.id) // { status, progress? }
+  if (status.status === "completed") return yield* ai.image.result(model, job.id)
+})
+```
+
+## Video generation
+
+Video generation is a job: `start` submits it and returns at once, and the caller decides when to read its `status`,
+fetch its `result`, or `cancel` it. Nothing polls for you. Every call after `start` takes the model and the job's
+`id`, the provider's job ID as a string you can store and read back from another process, so recovering after a restart
+is the same call as a normal status read. Models come from `.video(...)` selectors on the `XAI`, `OpenRouter`, `Volcengine`,
+`BytePlus`, `MiniMax` and `Google` facades.
+
+```ts
+import { Effect } from "effect"
+import { ai, Media } from "@opencode/ai/effect"
+import { XAI } from "@opencode/ai/providers"
+
+const model = XAI.configure({ apiKey: process.env.XAI_API_KEY }).video("grok-imagine-video-1.5")
+
+const program = Effect.gen(function* () {
+  const job = yield* ai.video.start({
+    model,
+    prompt: "Panning wide shot of a calico kitten sleeping in the sunshine",
+    start: "https://example.com/first-frame.png", // exact first frame; `end` pins the last one
+    references: [], // images, videos or audio that guide subject or style
+    duration: "8 seconds",
+    aspect: "16:9", // or "auto" to follow the start image
+    resolution: "720p", // 480p | 720p | 1080p | 4k, or any provider value
+    sound: false,
+  })
+  job.id // the provider's job ID: store it with the provider and model ID
+
+  const status = yield* ai.video.status(model, job.id)
+  status.status // "queued" | "running" | "completed" | "failed" | "cancelled" | "expired"
+  status.progress // 0..1, only when the provider reports it
+
+  const response = yield* ai.video.result(model, job.id)
+  yield* Media.write(response.video, "./kitten.mp4") // streams the download to disk
+})
+```
+
+The shared fields are `prompt`, `start`, `end`, `references`, `duration`, `aspect`, `resolution` and `sound`;
+everything else is provider-specific and goes under `providerOptions`, typed from the selected model. A request only
+fails before sending when its protocol has no way to express it, such as a reference video on xAI. Values the provider
+may reject, like an unsupported duration or too many references, go to the provider, and its error comes back typed.
+
+`start` and `end` are images. They take a URL, data URL, base64 string or bytes, or an asset built with
+`Media.image(...)`, which rejects assets known to be video, audio or documents; URLs and provider file references
+whose type isn't stated are sent and checked by the provider. `references` take any kind.
+
+`status` is one read; `result` fails with an `InvalidRequest` reason when the job hasn't finished, and with the
+provider's reason (and terminal document on `reason.body`) when it failed, was cancelled or expired. Moderation
+outcomes (xAI `respect_moderation`) fail with a `ContentPolicy` reason when no video comes back. Status and result reads
+retry transient failures (rate limits, provider 5xx, network errors) with backoff that honors `retry-after`; `start`
+and `cancel` never retry. `cancel` fails with an `UnsupportedOperation` reason on providers without a cancel endpoint,
+such as xAI, where the job keeps running and billing. Finished videos are usually URLs that expire (`expiresAt` when the
+provider documents it): download them with `Media.write`, `asset.stream()` or `materialize()` before then.
+
+Provider notes:
+
+- **xAI** maps `start` to `image`, `end` to `last_frame`, image references to `reference_images`, audio references to
+  `reference_audios`, and `sound` to `generate_audio`, and leaves `aspect: "auto"` out when a start frame sets the
+  shape. It has no reference video input. `providerOptions.mode: "edit" | "extend"` sends a native `video: { url }`
+  source to `/videos/edits` or `/videos/extensions`.
+- **OpenRouter** (`OpenRouter.configure(...).video("google/veo-3.1")`) maps `start` and `end` to `frame_images`,
+  references to `input_references` by kind (`image_url`, `video_url`, `audio_url`), `sound` to `generate_audio`, and
+  `resolution` to its spelling (`4k` → `4K`), and leaves `aspect: "auto"` out so models that can follow the input image do.
+  Frames and references are both sent; when both are present OpenRouter keeps the frames and drops the references. It
+  rejects reference videos or audio that aren't http(s) URLs (inline images work). Routing and upstream parameters go under `providerOptions.provider` (`only`, `order`,
+  `options: { <slug>: {...} }`), and `providerOptions.previous_job_id` edits or extends a finished job. Results are
+  OpenRouter content URLs that download with the API key, which the asset carries; there is no cancel endpoint.
+- **Seedance** (`Volcengine.configure(...).video(...)` with `ARK_API_KEY`, `BytePlus.configure(...).video(...)` with
+  `BYTEPLUS_API_KEY`) builds Ark's `content[]`: the prompt as a `text` item, `start` and `end` as `image_url` items
+  with roles `first_frame` and `last_frame`, and references as `reference_image`, `reference_video` or
+  `reference_audio` by kind. Your own `Media.ref(...)` assets go as `asset://<id>`. `duration` goes to `duration`,
+  `aspect` to `ratio` (`auto` becomes `adaptive`), `resolution` to `resolution` and `sound` to `generate_audio`. Ark
+  doesn't allow frames and references in one task; that combination is sent and the provider's error comes back.
+  `providerOptions.draft_task: { id }` adds a `draft_task` item; `frames`, `seed`, `watermark`, `output_format`,
+  `omni_reference_task_type`, `return_last_frame` and the rest go into the body as-is. `cancel` sends `DELETE`, which
+  only cancels a queued task: Ark refuses it for a running one and deletes the record of a finished one. Video URLs
+  expire 24 hours after the task finished.
+- **MiniMax** (`MiniMax.configure(...).video(id)`, or `@opencode/ai/providers/minimax/videos`) serves two APIs and picks
+  one by model family: Hailuo and `*-01` models use v1, everything else (H3) uses v2. Video builds its `/v1` and `/v2`
+  paths on the API host, so a `baseURL` shared with images or chat (`https://api.minimax.cn/v1`) loses its trailing
+  `/v1`, and a bare host (`https://api.minimax.io`) works as is. On H3, `start`, `end` and `references` become `content[]` items with `first_frame`, `last_frame` and `reference_image` /
+  `reference_video` / `reference_audio` roles, MiniMax file refs become `mm_file://` URLs, `aspect: "auto"` becomes
+  `ratio: "adaptive"`, and `resolution` is uppercased (`480P`, `2K`). H3 requires `resolution` and `duration`, plus a
+  `ratio` for text-only prompts; nothing is filled in, so MiniMax rejects a request without them. H3 always has sound,
+  so `sound: false` fails before sending. On Hailuo, `start` and `end` map to `first_frame_image` and
+  `last_frame_image`, image references to `subject_reference`, and the result looks up the file's download URL, which
+  expires after one hour. Hailuo is silent and has no aspect field, so `sound: true`, an explicit `aspect`, and video
+  or audio references fail before sending. Cancel works on H3 (only while queued); Hailuo has no cancel. Native fields
+  such as `extra.prompt_expansion_mode` (H3), `prompt_optimizer` (Hailuo) and `callback_url` go under `providerOptions`.
+- **Google** (`Google.video("gemini-omni-1.2-flash")`) starts a background Gemini Omni interaction. Omni has no
+  role field for media, so `start`, `end` and `references` go into `input` in that order (images, plus video
+  references), and `generation_config.video_config.task` is set to `image_to_video` for frames only or
+  `reference_to_video` for references only; with both, the prompt decides. `duration` becomes
+  `response_format.duration` (`"3s"`), and `aspect` and `resolution` go to `response_format` as is (resolution
+  lowercased); `aspect: "auto"` leaves the ratio out. It rejects `end` without `start` (a lone image reads as the
+  first frame) and `sound: false` (Omni always generates audio). Videos come back as inline bytes. `cancel` posts to
+  `/interactions/{id}/cancel`. `providerOptions` takes native Interactions fields, such as `previous_interaction_id`
+  to edit or extend a generated video, `generation_config.video_config.task`, `service_tier` and `webhook_config`.
+
+The promise client has the same calls, each accepting `{ signal }`:
+
+```ts
+import { ai } from "@opencode/ai"
+
+const job = await ai.video.start({ model, prompt })
+const status = await ai.video.status(model, job.id)
+if (status.status === "completed") await ai.write((await ai.video.result(model, job.id)).video, "./kite.mp4")
+```
+
 ## Public API
 
 Everything below is exported from `@opencode/ai/effect` unless noted.
@@ -1042,109 +1168,31 @@ Everything below is exported from `@opencode/ai/effect` unless noted.
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
 - **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
-- **`ai.image.request` / `generate` / `stream` / `start` / `resume`** — images over inline, streaming (partial previews), and queued routes through a provider-neutral request and response model.
+- **`ai.image.request` / `generate` / `stream` / `start` / `status` / `result` / `cancel`** — images over inline, streaming (partial previews), and queued routes through a provider-neutral request and response model. `start`, `status`, `result` and `cancel` address a queued job by the provider's job ID, like video; see [Image jobs](#image-jobs).
 - **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
+- **`ai.video.request` / `start` / `status` / `result` / `cancel`** — video generation as a job addressed by the provider's job ID; see [Video generation](#video-generation). `VideoClient` is its Effect service and layer.
 - **`Media`** — the shared asset type (`Media.Asset`, `Media.Source`) and constructors used by messages, tool results, and media requests.
 - **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
 - **`ai.decision.request` / `ai.decision.generate`** — typed predicate, choice, and score questions over text, JSON, and media input; `DecisionClient` is its Effect service and layer.
 - **`ai.embedding.request` / `ai.embedding.generate`** — one vector per text or media value, with optional `dimensions` and `inputType`; `EmbeddingClient` is its Effect service and layer.
 - **`AIClient.layer` / `AIClient.layerWith(executor)`** — every modality client plus the request executor in one layer.
-- **`@opencode/ai`** (Promise root) — a default `ai` with the text calls (`request`, `generate`, `stream`, `loop`, `compact`, `canCompact`) at the top level plus `image`, `decision` and `embedding` (plus `experimental.video`, `experimental.speech`, and `experimental.transcription`) as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets. `AI.make({ layer? })` builds a client over a custom executor. The same `ai` from `@opencode/ai/effect` returns `Effect` and `Stream`.
-- **`@opencode/ai/experimental`** — APIs that may change without compatibility guarantees: `Video`, `Speech`, `Transcription`, `Extraction`, and `Realtime`. See [Experimental](#experimental).
+- **`@opencode/ai`** (Promise root) — a default `ai` with the text calls (`request`, `generate`, `stream`, `loop`, `compact`, `canCompact`) at the top level plus `image`, `decision`, `embedding` and `video` (plus `experimental.speech` and `experimental.transcription`) as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets. `AI.make({ layer? })` builds a client over a custom executor. The same `ai` from `@opencode/ai/effect` returns `Effect` and `Stream`.
+- **`@opencode/ai/experimental`** — APIs that may change without compatibility guarantees: `Speech`, `Transcription`, `Extraction`, and `Realtime`. See [Experimental](#experimental).
 
 ## Experimental
 
 These APIs may change without compatibility guarantees. The Effect API is exported from `@opencode/ai/experimental`,
 and the Promise client exposes it under `ai.experimental`.
 
-- **`Video`**, **`Speech`**, and **`Transcription`** — media generation and speech-to-text, with `VideoClient`,
-  `SpeechClient`, and `TranscriptionClient` as their Effect services. Promise: `ai.experimental.video`, `.speech`, and
-  `.transcription`.
+- **`Speech`** and **`Transcription`** — speech generation and speech-to-text, with `SpeechClient` and
+  `TranscriptionClient` as their Effect services. Promise: `ai.experimental.speech` and `.transcription`.
 - **`Extraction`** — typed values read out of text.
 - **`Realtime`** — `Realtime.connect` starts an OpenAI, xAI, or Gemini voice session and returns a WebRTC answer SDP or
   a short-lived WebSocket URL and token.
 
-The provider selectors for these modalities (`.video(...)`, `.speech(...)`, `.transcription(...)`,
+The provider selectors for these modalities (`.speech(...)`, `.transcription(...)`,
 `.experimental.extraction(...)`) and their protocol entrypoints (such as `@opencode/ai/protocols/openai-speech`) are
 part of the same experimental surface.
-
-### Video generation
-
-Video mirrors `Image` with one difference: every provider is asynchronous, so the route is a submit-then-poll
-`Generation`. Models come from `.video(...)` selectors on the `XAI` facade.
-Common fields (`frames`, `references`, `video`, `durationSeconds`, `aspect`, `resolution`, `audio`, `n`, `seed`,
-`negativePrompt`) lower natively or fail with a typed `AIError` before any network call; provider-native controls live
-under `providerOptions`, inferred from the selected model.
-
-```ts
-import { Video } from "@opencode/ai/experimental"
-import { XAI } from "@opencode/ai/providers"
-
-const xai = XAI.configure({ apiKey: process.env.XAI_API_KEY })
-
-// Simple: submit and wait.
-const program = Effect.gen(function* () {
-  const response = yield* Video.generate(
-    {
-      model: xai.video("grok-imagine-video-1.5"),
-      prompt: "Panning wide shot of a calico kitten sleeping in the sunshine",
-      aspect: "16:9",
-      resolution: "720p",
-      durationSeconds: 10,
-    },
-    { poll: { interval: "10 seconds", timeout: "10 minutes" } },
-  )
-  // xAI returns a temporary URL: materialize before persisting, or the persisted URL may stop working.
-  return yield* response.video.materialize()
-})
-
-// Explicit control: keep the handle, persist the token, resume elsewhere.
-const controlled = Effect.gen(function* () {
-  const generation = yield* Video.start({ model: xai.video("grok-imagine-video-1.5"), prompt })
-  generation.id // provider request id
-  generation.status // "queued" | "running" | "completed" | "failed" | "cancelled" | "expired"
-  generation.token // route-owned JSON, `{ requestID }` for xAI
-  // The token carries no route identity: persist the provider and model ID alongside it, since `resume` needs the model.
-  const saved = JSON.stringify(generation.token)
-
-  const resumed = yield* Video.resume(xai.video("grok-imagine-video-1.5"), JSON.parse(saved))
-  return yield* resumed.await({ poll: { interval: "10 seconds" } })
-})
-
-// Progress as a stream: generation-queued | generation-progress | video | finish.
-const events = Video.stream({ model: xai.video("grok-imagine-video-1.5"), prompt }, { poll })
-```
-
-Status polls, result fetches, and cancels all run through the same request executor with the route's
-auth. `Generation.await` and `Generation.events` fail with a
-`Timeout` reason when `poll.timeout` (default 10 minutes) elapses. Status polls and result fetches retry transient
-failures (rate limits, provider 5xx, network errors) with backoff that honors `retry-after`, always within
-`poll.timeout`; submits and cancels never retry. Interrupting a wait (or aborting its `signal`) does not cancel the
-provider job, which keeps running and billing: call `cancel()` to stop it on providers with a cancel endpoint (xAI has
-none, so `cancel()` sends nothing there). Failed, cancelled, and expired generations fail typed with the provider's
-terminal document on `reason.body`; moderation outcomes (xAI `respect_moderation`) fail with a `ContentPolicy` reason
-when no video comes back; when one still does, the raw outcome stays in `providerMetadata`.
-
-Provider notes:
-
-- **xAI** sends a `video` input to `/videos/edits`, or `/videos/extensions` with `providerOptions.mode: "extend"`.
-  `seed` and `negativePrompt` are not supported.
-
-The promise client exposes the same surface: `ai.experimental.video.start(...)` resolves to a handle with `await`, `events`,
-`result`, `refresh`, `cancel`, and `token`; `ai.experimental.video.generate`, `ai.experimental.video.resume(model, token)`, and
-`ai.experimental.video.stream` mirror the Effect API. The handle's `status` and `progress` are a snapshot from when it was
-created; `refresh()` resolves to a new handle. Every promise method and stream accepts `{ signal }`: like `fetch`,
-aborting rejects the Promise or throws from the `for await` loop with `signal.reason` (an `AbortError` `DOMException`
-unless `abort(reason)` passed one), while `break` stops a stream without throwing.
-
-```ts
-import { ai } from "@opencode/ai"
-
-const generation = await ai.experimental.video.start({ model, prompt })
-for await (const event of generation.events({ poll: { interval: 10_000 } })) console.log(event.type)
-const video = await generation.result({ signal })
-await ai.write(video.video, "./kite.mp4")
-```
 
 ### Speech generation
 

@@ -1,14 +1,16 @@
 import { Effect } from "effect"
-import { Generation, Media } from "../src/effect.js"
 import {
-  Video,
+  Media,
   VideoClient,
   VideoModel,
   VideoResponse,
+  ai,
+  type VideoJob,
   type VideoModelOptions,
   type VideoOptions,
   type VideoRequest,
-} from "../src/experimental.js"
+  type VideoStatus,
+} from "../src/effect.js"
 import type { Service } from "../src/video-client.js"
 import { Anthropic, OpenAI, XAI } from "../src/providers.js"
 
@@ -26,70 +28,83 @@ declare const custom: VideoModel<CustomOptions>
 const invalidCustomOptions: VideoModelOptions<typeof custom> = { personGeneration: "everyone" }
 void invalidCustomOptions
 
-Video.generate(
-  {
-    model: custom,
-    prompt: "A kitten",
-    frames: {
-      first: Media.bytes(Uint8Array.from([1]), "image/png"),
-      last: Media.fromDataUrl("data:image/png;base64,AQID"),
-    },
-    references: [Media.bytes(Uint8Array.from([1]), "image/png")],
-    durationSeconds: 8,
-    aspect: "16:9",
-    resolution: "1080p",
-    audio: true,
-    seed: 7,
-    negativePrompt: "text",
-    providerOptions: { personGeneration: "allow_adult", futureOption: true },
-  },
-  { poll: { interval: "10 seconds", timeout: "10 minutes" } },
-)
+ai.video.start({
+  model: custom,
+  prompt: "A kitten",
+  start: Media.image(Media.bytes(Uint8Array.from([1]), "image/png")),
+  end: "data:image/png;base64,AQID",
+  references: [Media.bytes(Uint8Array.from([1]), "image/png"), "https://example.com/voice.mp3"],
+  duration: "8 seconds",
+  aspect: "16:9",
+  resolution: "1080p",
+  sound: true,
+  providerOptions: { personGeneration: "allow_adult", futureOption: true },
+})
+ai.video.start({ model: custom, prompt: "A kitten", duration: "1 second", aspect: "auto", resolution: "2k" })
 
 const xai = XAI.configure({ apiKey: "test" }).video("grok-imagine-video-1.5")
-Video.start({
+ai.video.start({
   model: xai,
   prompt: "Waves",
-  video: Media.url("https://example.com/in.mp4"),
-  providerOptions: { mode: "extend", reference_audios: [{ voice_id: "eve" }], future_option: true },
+  providerOptions: {
+    mode: "extend",
+    video: { url: "https://example.com/in.mp4" },
+    reference_audios: [{ voice_id: "eve" }],
+    future_option: true,
+  },
 })
 // @ts-expect-error xAI modes are a closed set because the route selects an endpoint from them.
-Video.start({ model: xai, prompt: "Waves", providerOptions: { mode: "remix" } })
+ai.video.start({ model: xai, prompt: "Waves", providerOptions: { mode: "remix" } })
 // @ts-expect-error Known xAI nested options retain their value kind.
-Video.start({ model: xai, prompt: "Waves", providerOptions: { reference_audios: [{ voice_id: 1 }] } })
-Video.generate({ model: xai, prompt: "Waves", resolution: "future-resolution" })
+ai.video.start({ model: xai, prompt: "Waves", providerOptions: { reference_audios: [{ voice_id: 1 }] } })
 
 // @ts-expect-error Known custom options are inferred from the selected model.
-Video.generate({ model: custom, prompt: "A kitten", providerOptions: { personGeneration: "everyone" } })
+ai.video.start({ model: custom, prompt: "A kitten", providerOptions: { personGeneration: "everyone" } })
 
 // @ts-expect-error Language models cannot be used for video requests.
-Video.generate({ model: Anthropic.configure({ apiKey: "test" }).model("claude-sonnet-4-5"), prompt: "A kitten" })
+ai.video.start({ model: Anthropic.configure({ apiKey: "test" }).model("claude-sonnet-4-5"), prompt: "A kitten" })
 // @ts-expect-error Image models cannot be used for video requests.
-Video.generate({ model: OpenAI.configure({ apiKey: "test" }).image("gpt-image-2"), prompt: "A kitten" })
+ai.video.start({ model: OpenAI.configure({ apiKey: "test" }).image("gpt-image-2"), prompt: "A kitten" })
 
-// @ts-expect-error Frames are media assets, not strings.
-Video.generate({ model: xai, prompt: "A kitten", frames: { first: "https://example.com/first.png" } })
-// @ts-expect-error Aspect ratios are `${w}:${h}` strings.
-Video.generate({ model: xai, prompt: "A kitten", aspect: "wide" })
-// @ts-expect-error Durations are numbers of seconds.
-Video.generate({ model: xai, prompt: "A kitten", durationSeconds: "8s" })
-// @ts-expect-error Provider-native controls live under `providerOptions`.
-Video.generate({ model: xai, prompt: "A kitten", options: { mode: "extend" } })
+// @ts-expect-error Start and end frames are images; a plain asset of any kind needs `Media.image(...)`.
+ai.video.start({ model: xai, prompt: "A kitten", start: Media.bytes(Uint8Array.from([1]), "video/mp4") })
+ai.video.start({ model: xai, prompt: "A kitten", start: Media.image("https://example.com/first.png") })
+
+// @ts-expect-error Aspect ratios are `${w}:${h}` strings or "auto".
+ai.video.start({ model: xai, prompt: "A kitten", aspect: "wide" })
+// @ts-expect-error Durations are Effect duration strings in seconds, not numbers.
+ai.video.start({ model: xai, prompt: "A kitten", duration: 8 })
+// @ts-expect-error Durations are seconds for now.
+ai.video.start({ model: xai, prompt: "A kitten", duration: "1 minute" })
+// @ts-expect-error Sound is on or off.
+ai.video.start({ model: xai, prompt: "A kitten", sound: "native" })
+// @ts-expect-error The shared request has no seed; it lives under `providerOptions`.
+ai.video.start({ model: xai, prompt: "A kitten", seed: 7 })
+// @ts-expect-error Start and end replace `frames`.
+ai.video.start({ model: xai, prompt: "A kitten", frames: { first: "https://example.com/first.png" } })
 
 declare const generic: VideoModel<VideoOptions>
 const widenVideo = <Options extends VideoOptions>(model: VideoModel<Options>): VideoModel => model
 void widenVideo
-Video.generate({ model: generic, prompt: "A kitten", providerOptions: { arbitrary: true } })
+ai.video.start({ model: generic, prompt: "A kitten", providerOptions: { arbitrary: true } })
 
-const request = Video.request({ model: custom, prompt: "A kitten", providerOptions: { personGeneration: "allow_all" } })
+const request = ai.video.request({
+  model: custom,
+  prompt: "A kitten",
+  providerOptions: { personGeneration: "allow_all" },
+})
 const typedRequest: VideoRequest<VideoModel<CustomOptions>> = request
 void typedRequest
+
 const started = VideoClient.start(request)
 type StartRequirements = Assert<Equal<Requirements<typeof started>, Service>>
-type StartSuccess = Assert<Equal<Success<typeof started>, Generation<VideoResponse>>>
+type StartSuccess = Assert<Equal<Success<typeof started>, VideoJob>>
 void (true satisfies StartRequirements)
 void (true satisfies StartSuccess)
 
-const resumed = Video.resume(xai, { requestID: "req_1" })
-type ResumeSuccess = Assert<Equal<Success<typeof resumed>, Generation<VideoResponse>>>
-void (true satisfies ResumeSuccess)
+type StatusSuccess = Assert<Equal<Success<ReturnType<typeof ai.video.status>>, VideoStatus>>
+type ResultSuccess = Assert<Equal<Success<ReturnType<typeof ai.video.result>>, VideoResponse>>
+type CancelSuccess = Assert<Equal<Success<ReturnType<typeof ai.video.cancel>>, void>>
+void (true satisfies StatusSuccess)
+void (true satisfies ResultSuccess)
+void (true satisfies CancelSuccess)

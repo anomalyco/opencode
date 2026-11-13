@@ -16,7 +16,9 @@ run-name: "${{ format('release {0}{1}', inputs.bump, inputs.version) }}"
 
 on:
   push:
-    branches: [dev, beta]
+    branches: [beta]
+  schedule:
+    - cron: "17 */6 * * *"
   workflow_dispatch:
     inputs:
       bump:
@@ -83,8 +85,8 @@ jobs:
 
   # release.yml does not wait for the check-test push run on the same commit, so a stable release would publish
   # whatever that run later says. This gate runs the whole suite — unit tests on both OSes, the compiled builds and
-  # the Linux browser suites — before any publish job below. Continuous dev and beta builds skip it: they publish
-  # their own channel from a dev push, whose check-test run covers the same commit.
+  # the Linux browser suites — before any publish job below. Dev and beta builds skip it: check-test already
+  # runs on pushes to those branches.
   verify:
     needs: plan
     if: needs.plan.outputs.channel == 'latest'

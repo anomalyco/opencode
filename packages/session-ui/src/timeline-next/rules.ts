@@ -208,7 +208,7 @@ export function echoesUserShell(message: SessionMessageInfo, userShellIDs: Reado
 
 /**
  * Where a notice shows. What the user did and what changed the session always stands on its own. Background work
- * reports its outcome as its own row, following the setting its launch follows: a subagent's the subagent setting, a
+ * reports its outcome as an event, following the setting its launch follows: a subagent's the subagent setting, a
  * shell's the shell setting.
  */
 export function noticePlacement(detail: TimelineDetail, message: SessionMessageInfo): TimelinePlacement {
