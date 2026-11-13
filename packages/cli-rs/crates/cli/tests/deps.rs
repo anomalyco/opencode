@@ -26,14 +26,16 @@ fn allow_list_matches_the_graph() {
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let manifest = workspace.join("Cargo.toml");
     // Another host has not downloaded the crates only `TARGET` builds (`errno`, say), whose manifests the graph
-    // reads: fetch them, online. Linux has them from its own build.
+    // reads: fetch them, online. Linux has them from its own build. `cargo metadata` also wants crates reached by a
+    // host edge and then a `TARGET` edge (`notify`, then its Linux `inotify`), which `cargo fetch --target TARGET`
+    // skips, so fetch every platform's.
     if !cfg!(target_os = "linux") {
         let status = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
-            .args(["fetch", "--locked", "--target", TARGET, "--manifest-path"])
+            .args(["fetch", "--locked", "--manifest-path"])
             .arg(&manifest)
             .status()
             .expect("cargo runs");
-        assert!(status.success(), "cargo fetch --target {TARGET} failed");
+        assert!(status.success(), "cargo fetch failed");
     }
     // Features do not change a package's targets or declared dependencies, so one all-features metadata serves the
     // three graphs.
