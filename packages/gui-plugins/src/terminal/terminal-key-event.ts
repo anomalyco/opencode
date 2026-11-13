@@ -32,3 +32,16 @@ export function consumeTerminalMetaKey(
 
   return event.key.length === 1
 }
+
+/**
+ * Where a click on a terminal link goes: nowhere without Ctrl, Cmd or Shift; a web link to the app's links (such as
+ * the browser pane); anything else, and any link clicked with Shift, to the system, as Shift does for links elsewhere.
+ */
+export function terminalLinkTarget(
+  event: Pick<MouseEvent, "shiftKey" | "ctrlKey" | "metaKey" | "altKey" | "button">,
+  text: string | undefined,
+) {
+  if ((!event.shiftKey && !event.ctrlKey && !event.metaKey) || event.altKey || event.button !== 0 || !text) return
+
+  return !event.shiftKey && /^https?:\/\//i.test(text) ? "app" : "system"
+}
