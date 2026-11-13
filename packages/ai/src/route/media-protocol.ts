@@ -92,6 +92,11 @@ export interface Started<Token> {
 /** A follow-up call's inputs: the decoded token. */
 export interface PollContext<Token> {
   readonly token: Token
+  /**
+   * The headers an authenticated GET of `url` would send (deployment headers plus auth), for result URLs that need
+   * the API key to download. Use them only for the provider's own URLs.
+   */
+  readonly headers: (url: string) => Effect.Effect<Record<string, string>, AIError>
 }
 
 /**

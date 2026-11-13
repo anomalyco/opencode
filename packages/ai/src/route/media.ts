@@ -200,7 +200,9 @@ export const queued = <Request extends MediaRequest, Response, Token>(
     }) =>
       transport.call("GET", operation.path(token), exchange, execute).pipe(
         Effect.retry({ schedule: READ_RETRY, while: isRetryable }),
-        Effect.flatMap((sent) => operation.decode(sent.response, { token })),
+        Effect.flatMap((sent) =>
+          operation.decode(sent.response, { token, headers: (url) => transport.headers(url, exchange) }),
+        ),
       )
     const status = poll(protocol.status)
     const cancel = protocol.cancel
@@ -389,6 +391,15 @@ const makeTransport = <Request extends MediaRequest>(
       const sent = yield* send({ method: "POST", url, headers, request: resolved, body }, request.fetch, execute)
       return { response: sent.response, context: { request: resolved, body }, exchange }
     }),
+    /** The headers a follow-up GET of `url` sends, for result URLs that only download with the same credentials. */
+    headers: (url: string, exchange: Exchange) =>
+      authorize({
+        request: { http: exchange.http },
+        method: "GET",
+        url,
+        body: "",
+        headers: Headers.fromInput(exchange.headers),
+      }).pipe(Effect.map((headers) => ({ ...headers }))),
     /** Bodiless follow-up call (status, result, cancel) with the same auth and headers as `submit`. */
     call: (method: AuthInput["method"], path: string, exchange: Exchange, execute: Execute) => {
       // Provider-issued absolute URLs are used as-is; everything else resolves against the base.
