@@ -619,8 +619,6 @@ export const dict = {
   "tips.hex.title": "Use your voice",
   "tips.hex.description": "Hold a key and speak your prompts. Runs entirely locally and works across your whole computer.",
   "tips.hex.install": "Install",
-  "tips.search.title": "Find a past conversation",
-  "tips.search.description": "Search your sessions to pick up where you left off.",
   "home.workspaceTip": "Start next session in a new workspace to keep changes isolated",
 
   "session.tab.session": "Session",
