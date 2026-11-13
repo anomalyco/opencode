@@ -229,9 +229,9 @@ impl Generator<'_> {
             3 => v2::Node::Spinner { id: self.id(), label: (*self.rng.pick(&["wait", "load"])).to_owned() },
             5 => v2::Node::Scroll {
                 id: self.id(),
-                height: Some(1 + self.rng.below(3) as u16),
-                follow: false,
-                layout: abi::Layout::default(),
+                height: (!self.chance(30)).then(|| 1 + self.rng.below(3) as u16),
+                follow: self.chance(20),
+                layout: self.layout(),
                 children: (0..self.rng.below(4)).map(|_| self.node(depth + 1)).collect(),
             },
             _ => v2::Node::Markdown {
@@ -688,4 +688,42 @@ fn a_refused_tree_changes_nothing() {
     // The guard: the same change without the fault differs.
     apply(&host, &mut tree, &parent, &cards(4, &[1], false)).unwrap();
     assert_ne!(host.app.render(), frame);
+}
+
+/// A column of a title and a scroll that grows, of `rows` rows; row `changed` says so.
+fn scrolling(id: &str, rows: usize, changed: Option<usize>) -> Vec<v2::Node> {
+    let lines = (0..rows)
+        .map(|row| {
+            let text = if changed == Some(row) { format!("row {row} changed") } else { format!("row {row}") };
+            v2::Node::text(vec![abi::Span::new(text)])
+        })
+        .collect();
+    let scroll = v2::Node::scroll(lines).with_id(id).layout(abi::Layout::default().grow());
+    vec![
+        v2::Node::column(vec![v2::Node::text(vec![abi::Span::new("title")]), scroll])
+            .layout(abi::Layout::default().grow()),
+    ]
+}
+
+// Expected: a scroll that grows takes the room its parent leaves, not its content's height, and the host scrolls
+// it: the wheel moves it, a revision of its rows keeps its offset, and a scroll under a new id starts at the top.
+#[test]
+fn the_host_scrolls_a_scroll_and_keeps_its_offset_by_id() {
+    let host = host(0);
+    let parent = root(&host);
+    let mut tree = Tree::default();
+    apply(&host, &mut tree, &parent, &scrolling("list", 40, None)).unwrap();
+    let screen = host.app.render().text();
+    let rows: Vec<&str> = screen.lines().filter(|line| line.starts_with("row ")).collect();
+    assert_eq!(rows.len(), usize::from(HEIGHT) - 1, "{screen}");
+    for _ in 0..3 {
+        host.app.scroll(2, 5, true);
+    }
+    let top = |host: &TestHost| host.app.render().text().lines().nth(1).unwrap().trim_end().to_owned();
+    let scrolled = top(&host);
+    assert_ne!(scrolled, "row 0", "the wheel moves the scroll");
+    apply(&host, &mut tree, &parent, &scrolling("list", 40, Some(30))).unwrap();
+    assert_eq!(top(&host), scrolled, "a revision keeps the offset");
+    apply(&host, &mut tree, &parent, &scrolling("other", 40, Some(30))).unwrap();
+    assert_eq!(top(&host), "row 0", "a new id starts at the top");
 }
