@@ -233,7 +233,7 @@ export async function createBrowserProfile(input: {
     return {
       type: "imported",
       imported,
-      skipped: read.cookies.length - writes.length,
+      skipped: (read.skipped ?? 0) + read.cookies.length - writes.length,
       protected: read.protected,
       failed: read.failed + writes.length - imported,
     }

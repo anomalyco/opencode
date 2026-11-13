@@ -118,6 +118,8 @@ test("reads a profile's cookie database from a copy and leaves partitioned cooki
       ],
       protected: 1,
       failed: 0,
+      // The partitioned (CHIPS) row stays behind and is counted.
+      skipped: 1,
     })
   } finally {
     db.close()

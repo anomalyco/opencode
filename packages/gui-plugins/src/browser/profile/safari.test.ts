@@ -70,5 +70,30 @@ test("reads Safari's binary cookie file, with its flags and 2001-based expiry", 
     protected: 0,
     failed: 0,
   })
-  expect(() => parseBinaryCookies(Buffer.from("not a cookie file"))).toThrow()
+  expect(parseBinaryCookies(Buffer.from("not a cookie file"))).toBeUndefined()
+})
+
+test("a truncated or hostile file costs no more than its size and never throws", () => {
+  const one = page([record({ host: "a.test", name: "n", path: "/", value: "v", flags: 0, expiry: 0 })])
+
+  const file = (sizes: number[], ...pages: Buffer[]) => {
+    const header = Buffer.alloc(8 + sizes.length * 4)
+    header.write("cook", 0, "latin1")
+    header.writeUInt32BE(sizes.length, 4)
+    sizes.forEach((size, index) => header.writeUInt32BE(size, 8 + index * 4))
+
+    return Buffer.concat([header, ...pages])
+  }
+
+  // A page that claims four billion records.
+  const greedy = Buffer.from(one)
+  greedy.writeUInt32LE(0xffffffff, 4)
+  // A page table that claims four billion pages, in a 12-byte file.
+  const pages = Buffer.from("cook\xff\xff\xff\xff\0\0\0\0", "latin1")
+
+  expect(parseBinaryCookies(pages)).toBeUndefined()
+  expect(parseBinaryCookies(file([one.length], one.subarray(0, 20)))).toEqual({ cookies: [], protected: 0, failed: 1 })
+  expect(parseBinaryCookies(file([one.length + 1000, 0xffffffff], one))?.cookies).toHaveLength(1)
+  expect(parseBinaryCookies(file([greedy.length], greedy))).toEqual({ cookies: [], protected: 0, failed: 1 })
+  expect(parseBinaryCookies(file([0xffffffff]))).toEqual({ cookies: [], protected: 0, failed: 1 })
 })

@@ -28,6 +28,8 @@ export type CookieRead = {
   readonly protected: number
   /** Values that failed to decrypt or parse. */
   readonly failed: number
+  /** Rows left behind on purpose: Chromium's partitioned cookies, whose partition Electron cannot write. */
+  readonly skipped?: number
 }
 
 /** Seconds between 1601-01-01 (Chromium's and Windows' epoch) and 1970-01-01. */

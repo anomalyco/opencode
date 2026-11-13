@@ -91,7 +91,7 @@ export const ProfileSource = Schema.Struct({
   engine: Schema.Literals(["chromium", "firefox", "safari"]),
   /** The browser's own icon as a data URL, where its application was found. */
   icon: Schema.optional(Schema.String.check(Schema.isStartingWith("data:image/"))),
-  profiles: Schema.Array(Schema.Struct({ id: text(512), name: Schema.String })),
+  profiles: Schema.Array(Schema.Struct({ id: text(4096), name: Schema.String })),
 })
 
 export type ProfileSource = typeof ProfileSource.Type
@@ -147,7 +147,7 @@ export const InstallResult = Schema.Union([
 
 export type InstallResult = typeof InstallResult.Type
 
-const SourceProfile = { source: text(64), profile: text(512) }
+const SourceProfile = { source: text(64), profile: text(4096) }
 
 /**
  * The desktop browser's profile: one set of cookies, site data and extensions for every session, project and server

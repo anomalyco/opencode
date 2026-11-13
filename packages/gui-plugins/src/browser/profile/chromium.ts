@@ -30,7 +30,9 @@ export function decryptChromium(encrypted: Uint8Array, key: ChromiumKey, host: s
 
   if (version === "v20") return { error: "protected" }
 
-  if (version !== "v10" && version !== "v11") return { error: "failed" }
+  // A GCM value carries a 12-byte nonce and a 16-byte tag around its text.
+  if ((version !== "v10" && version !== "v11") || (key.type === "gcm" && buffer.length < 3 + 12 + 16))
+    return { error: "failed" }
   const bytes = attempt(() => decipher(buffer, version, key))
 
   if (!bytes) return { error: "failed" }
@@ -59,7 +61,8 @@ function decipher(buffer: Buffer, version: "v10" | "v11", key: ChromiumKey) {
   return Buffer.concat([cbc.update(buffer.subarray(3)), cbc.final()])
 }
 
-// A wrong key or a corrupt value throws from the decipher or the UTF-8 decoder; either is one failed cookie.
+// A wrong key or a corrupt value throws from the decipher or the UTF-8 decoder, which have no non-throwing form;
+// either is one failed cookie.
 function attempt<T>(run: () => T) {
   try {
     return run()
@@ -89,7 +92,7 @@ type Row = {
  * Reads a Chromium profile's cookie database from a copy, so the running browser keeps its lock. Partitioned cookies
  * (CHIPS) stay behind: Electron cannot write a cookie's partition.
  */
-export async function readChromiumCookies(database: string, key: ChromiumKey | undefined): Promise<CookieRead> {
+export async function readChromiumCookies(database: string, key: ChromiumKey): Promise<CookieRead> {
   const rows = await snapshotDatabase(database, (db) => {
     const query = db.prepare(
       "SELECT host_key, name, value, encrypted_value, path, expires_utc, has_expires, is_secure, is_httponly, samesite, top_frame_site_key FROM cookies",
@@ -102,9 +105,13 @@ export async function readChromiumCookies(database: string, key: ChromiumKey | u
     return query.all() as Row[]
   })
 
-  return rows.reduce<{ cookies: ImportedCookie[]; protected: number; failed: number }>(
+  return rows.reduce<{ cookies: ImportedCookie[]; protected: number; failed: number; skipped: number }>(
     (result, row) => {
-      if (row.top_frame_site_key) return result
+      if (row.top_frame_site_key) {
+        result.skipped++
+
+        return result
+      }
       const decrypted = rowValue(row, key)
 
       if ("error" in decrypted) {
@@ -126,14 +133,12 @@ export async function readChromiumCookies(database: string, key: ChromiumKey | u
 
       return result
     },
-    { cookies: [], protected: 0, failed: 0 },
+    { cookies: [], protected: 0, failed: 0, skipped: 0 },
   )
 }
 
-function rowValue(row: Row, key: ChromiumKey | undefined): Decrypted {
+function rowValue(row: Row, key: ChromiumKey): Decrypted {
   if (row.value || !row.encrypted_value.length) return { value: row.value }
-
-  if (!key) return { error: "failed" }
 
   return decryptChromium(row.encrypted_value, key, row.host_key)
 }
