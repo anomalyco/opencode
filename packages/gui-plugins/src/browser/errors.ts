@@ -1,7 +1,7 @@
 import type { Browser } from "@opencode/plugin-browser/rpc"
 
-export function protocolError(method: string, error: unknown) {
-  const detail = message(error)
+export function protocolError(method: string, cause: unknown) {
+  const detail = message(cause)
 
   const recovery =
     method === "DOM.setFileInputFiles" && /not.*file input/i.test(detail)
@@ -16,11 +16,11 @@ export function protocolError(method: string, error: unknown) {
               ? "This Chromium target does not support or allow the operation. Check desktop/plugin compatibility and report it; do not retry unchanged or disable browser security."
               : "Inspect browser.tabs.list({}) and the target tab before deciding to retry; a partially completed action is not automatically safe to repeat."
 
-  return new Error(`${recovery} Chromium command ${method} failed: ${detail}`, { cause: error })
+  return new Error(`${recovery} Chromium command ${method} failed: ${detail}`, { cause })
 }
 
-export function browserFailure(action: Browser.Action, error: unknown): Extract<Browser.Outcome, { type: "failure" }> {
-  const detail = message(error, 1_700)
+export function browserFailure(action: Browser.Action, cause: unknown): Extract<Browser.Outcome, { type: "failure" }> {
+  const detail = message(cause, 1_700)
   const navigation = ["tabs.open", "navigate", "back", "forward", "reload"].includes(action.type)
   const network = navigation ? detail.match(/\bERR_[A-Z_]+\b/)?.[0] : undefined
 
@@ -49,6 +49,7 @@ export function browserFailure(action: Browser.Action, error: unknown): Extract<
   }
 }
 
-function message(error: unknown, limit = 400) {
-  return (error instanceof Error ? error.message : String(error)).slice(0, limit)
+// A thrown value need not be an Error; anything else reads as its string form.
+function message(cause: unknown, limit = 400) {
+  return (cause instanceof Error ? cause.message : String(cause)).slice(0, limit)
 }
