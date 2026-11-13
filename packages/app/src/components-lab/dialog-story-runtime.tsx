@@ -353,9 +353,10 @@ function findMatchingPaths(root: string, query: string, type: string | null) {
 
 type DialogStoryRuntimeOptions = {
   servers?: ServerConnection.Any[]
+  platform?: Platform
 }
 
-function createStoryFetch(): typeof fetch {
+export function createStoryFetch(): typeof fetch {
   const encoder = new TextEncoder()
 
   const handler = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -541,7 +542,7 @@ function createStoryFetch(): typeof fetch {
   return Object.assign(handler, { preconnect: globalThis.fetch.preconnect })
 }
 
-function createMemoryStorage() {
+export function createMemoryStorage() {
   const namespaces = new Map<string, Map<string, string>>()
 
   const bucket = (name = "default") => {
@@ -574,14 +575,12 @@ function createMemoryStorage() {
 export function DialogStoryRuntime(props: ParentProps<DialogStoryRuntimeOptions>) {
   const servers = () => props.servers ?? [STORY_SERVER]
 
-  const storage = createMemoryStorage()
-
-  const platform: Platform = {
+  const platform: Platform = props.platform ?? {
     platform: "web",
     openExternal() {},
     restart: async () => {},
     notify: async () => {},
-    storage,
+    storage: createMemoryStorage(),
     fetch: createStoryFetch(),
   }
 

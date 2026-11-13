@@ -9,8 +9,7 @@ import {
   subagentReport,
 } from "@opencode/session-ui/storybook"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
-import { createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js"
 import { SessionPreview } from "@/session/story-model"
 import type { SessionActivityItem } from "./activity-chips"
 
@@ -188,16 +187,26 @@ function liveDocument(stage: Stage): SessionDocument {
 }
 
 // Scripted with `activity-story-stage` events on `document` so a recording can step through the work.
-function LiveActivity() {
-  const [story, setStory] = createStore({ stage: 0 })
-  const stage = createMemo(() => stages[story.stage])
-  const value = createMemo(() => liveDocument(stage()))
+function LiveActivity(props: PreviewArgs) {
+  const [recorded, setRecorded] = createSignal<Stage>()
+  const value = createMemo(() => liveDocument(recorded() ?? stages[props.stage] ?? stages[0]))
+
+  createEffect(
+    on(
+      () => [props.stage, props.subagents, props.shells],
+      () => setRecorded(undefined),
+      { defer: true },
+    ),
+  )
 
   onMount(() => {
     const step = (event: Event) => {
       if (!(event instanceof CustomEvent)) return
 
-      setStory("stage", Number(event.detail))
+      const stage = stages[Number(event.detail)]
+
+      if (!stage) return
+      setRecorded(stage)
       pin("smooth")
     }
 
@@ -213,12 +222,12 @@ function LiveActivity() {
       document={value()}
       timelineDetail={timelineDetail}
       activity={{
-        subagents: subagents
-          .slice(stage().finished, stage().started)
-          .map((_, index) => subagentItem(index + stage().finished)),
-        shells: shells
-          .slice(stage().finishedShells, stage().shells)
-          .map((_, index) => shellItem(index + stage().finishedShells)),
+        subagents: Array.from({ length: recorded()?.started ?? props.subagents }, (_, index) =>
+          subagentItem(index),
+        ).slice(recorded()?.finished ?? 0),
+        shells: Array.from({ length: recorded()?.shells ?? props.shells }, (_, index) => shellItem(index)).slice(
+          recorded()?.finishedShells ?? 0,
+        ),
         onOpen: (item) => {
           // The preview has no child route, so show the launch in its timeline.
           const part = document.querySelector(
@@ -268,4 +277,4 @@ export const SubagentsAndShells = { args: { stage: 4, subagents: 2, shells: 2 } 
 
 export const ManySubagents = { args: { stage: 4, subagents: 12, shells: 2 } }
 
-export const Live = { render: () => <LiveActivity /> }
+export const Live = { render: (args: PreviewArgs) => <LiveActivity {...args} /> }
