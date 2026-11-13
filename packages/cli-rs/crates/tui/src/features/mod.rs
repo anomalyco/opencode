@@ -7,6 +7,7 @@ pub mod devtools;
 pub mod drive;
 pub mod epilogue;
 pub mod events;
+pub mod foreground;
 pub mod highlights;
 pub mod home_forms;
 pub mod links;
