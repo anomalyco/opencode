@@ -88,6 +88,7 @@ fn run(recording: &Recording) -> (bool, String) {
     match recording.env.get("OPENCODE_PARITY_PLUGIN").map(String::as_str) {
         Some("slot") => opencode_tui::plugins::host::add(&tui, slot_plugin().into()),
         Some("app") => opencode_tui::plugins::host::add(&tui, app_plugin().into()),
+        Some("p0a") => opencode_tui::plugins::host::add(&tui, p0a_plugin().into()),
         _ => {}
     }
     // The editor context's sources (E.5): the fake IDE server and the Zed database the TS side had.
@@ -326,6 +327,46 @@ fn app_plugin() -> abi::Plugin {
         Ok(())
     }
     abi::Plugin { id: "parity.app", setup }
+}
+
+/// `parity/plugins/p0a/tui.tsx`: F6 asks a confirm, F7 shows an alert, F8 inserts into the composer, and the probe's
+/// styled box is appended to `home.footer`.
+fn p0a_plugin() -> abi::Plugin {
+    fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+        let command = |name: &str, key: Option<&str>| abi::Command {
+            name: name.to_owned(),
+            keybind: key.map(str::to_owned),
+            ..abi::Command::default()
+        };
+        let then = |name: &str| abi::Action::Command { name: name.to_owned(), input: None };
+        setup.command(command("parity.p0a.confirm", Some("f6")), move |host, _| {
+            host.dialog(abi::Dialog::Confirm(abi::Confirm {
+                title: "Delete the draft?".to_owned(),
+                message: "It cannot be undone.".to_owned(),
+                label: abi::ConfirmLabel { confirm: Some("delete".to_owned()), cancel: None },
+                action: then("parity.p0a.answered"),
+            }));
+        });
+        setup.command(command("parity.p0a.answered", None), |host, input| {
+            host.toast(abi::Toast::new(abi::Variant::Info, format!("answered {}", input.unwrap_or_default())));
+        });
+        setup.command(command("parity.p0a.alert", Some("f7")), move |host, _| {
+            host.dialog(abi::Dialog::Alert(abi::Alert {
+                title: "Heads up".to_owned(),
+                message: "The plugin says hello.".to_owned(),
+                action: Some(then("parity.p0a.closed")),
+            }));
+        });
+        setup.command(command("parity.p0a.closed", None), |host, _| {
+            host.toast(abi::Toast::new(abi::Variant::Info, "alert closed"));
+        });
+        setup.command(command("parity.p0a.insert", Some("f8")), |host, _| {
+            host.edit_composer(abi::ComposerEdit::Insert { text: "inserted".to_owned() });
+        });
+        setup.slot(Placement::append(slot::HOME_FOOTER), |_, _, _| Render::Show(crate::plugin_p0a::probe::styled()));
+        Ok(())
+    }
+    abi::Plugin { id: "parity.p0a", setup }
 }
 
 /// The scenario routes first, then each recorded read by its exact query, then by path alone.

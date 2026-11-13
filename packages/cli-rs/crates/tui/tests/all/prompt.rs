@@ -118,7 +118,7 @@ fn session(id: &str) -> Value {
     support::merge(support::catalog_session(), json!({ "id": id }))
 }
 
-struct Setup {
+pub(crate) struct Setup {
     harness: Harness,
     seen: Seen,
     /// Lets the agent and model reads answer.
@@ -130,7 +130,7 @@ struct Setup {
 deref_harness!(Setup);
 
 impl Setup {
-    fn new(route: Route) -> Self {
+    pub(crate) fn new(route: Route) -> Self {
         let home = opencode_util::temp::tempdir().unwrap();
         Self::with_home(route, home)
     }
@@ -159,11 +159,11 @@ impl Setup {
     }
 
     /// Waits for the catalog, which shows the agent and model under the prompt.
-    fn ready(&self) {
+    pub(crate) fn ready(&self) {
         self.wait_for("Model M");
     }
 
-    fn requests(&self, method: &str, suffix: &str) -> Vec<Value> {
+    pub(crate) fn requests(&self, method: &str, suffix: &str) -> Vec<Value> {
         self.seen
             .lock()
             .unwrap()
@@ -173,7 +173,7 @@ impl Setup {
             .collect()
     }
 
-    fn wait_request(&self, method: &str, suffix: &str, count: usize) -> Vec<Value> {
+    pub(crate) fn wait_request(&self, method: &str, suffix: &str, count: usize) -> Vec<Value> {
         let found = self.app.wait_until(WAIT, || self.requests(method, suffix).len() >= count);
         assert!(found, "no {method} …{suffix}: {:?}", self.seen.lock().unwrap());
         self.requests(method, suffix)
@@ -190,7 +190,7 @@ impl Setup {
     }
 }
 
-fn session_route() -> Route {
+pub(crate) fn session_route() -> Route {
     support::session_route("ses_a")
 }
 
