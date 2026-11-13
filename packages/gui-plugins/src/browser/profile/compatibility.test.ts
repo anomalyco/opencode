@@ -15,7 +15,7 @@ test.each([
     expected: { level: "supported", missing: [] },
   },
   {
-    // Its worker starts and pages turn dark; the popup, opened as a tab, finds no page to theme.
+    // Its popup toggles the page's dark theme; shortcuts are not bound and it gets no optional permission.
     name: "Dark Reader",
     manifest: manifest({
       background: worker,
@@ -24,10 +24,10 @@ test.each([
       commands: {},
       action: { default_popup: "ui/popup/index.html" },
     }),
-    expected: { level: "partial", missing: ["popup", "menus", "shortcuts", "settings", "access"] },
+    expected: { level: "partial", missing: ["shortcuts", "settings", "access"] },
   },
   {
-    // Its worker reads `chrome.webNavigation` at start and never registers.
+    // Its worker starts and its popup shows the sign-in screen; a worker's webRequest listeners hear nothing.
     name: "Bitwarden",
     manifest: manifest({
       background: worker,
@@ -37,25 +37,10 @@ test.each([
       side_panel: {},
       commands: {},
     }),
-    expected: {
-      level: "unsupported",
-      cause: "startup",
-      missing: [
-        "native",
-        "popup",
-        "menus",
-        "shortcuts",
-        "sidePanel",
-        "notifications",
-        "network",
-        "navigation",
-        "settings",
-        "access",
-      ],
-    },
+    expected: { level: "partial", missing: ["native", "shortcuts", "sidePanel", "network", "settings", "access"] },
   },
   {
-    // Its manifest's rulesets block requests even while its worker does not start.
+    // Its rulesets block and redirect requests; custom filters need user scripts.
     name: "uBlock Origin Lite",
     manifest: manifest({
       background: worker,
@@ -64,18 +49,18 @@ test.each([
       action: { default_popup: "popup.html" },
       commands: {},
     }),
-    expected: { level: "partial", missing: ["popup", "shortcuts", "userScripts"] },
+    expected: { level: "partial", missing: ["shortcuts", "userScripts"] },
   },
   {
-    // Manifest V2: its background page stops at `chrome.browserAction`.
+    // Manifest V2: its background page blocks through chrome.webRequest and shows its count on the button.
     name: "uBlock Origin",
     manifest: manifest({
       manifest_version: 2,
       background: { page: "background.html" },
-      permissions: ["storage", "tabs", "webRequest", "webRequestBlocking", "<all_urls>"],
+      permissions: ["storage", "tabs", "webRequest", "webRequestBlocking", "contextMenus", "webNavigation", "<all_urls>"],
       browser_action: { default_popup: "popup-fenix.html" },
     }),
-    expected: { level: "unsupported", cause: "startup", missing: ["popup"] },
+    expected: { level: "supported", missing: [] },
   },
   {
     // A developer tools extension, and the pane opens no developer tools.
@@ -86,18 +71,19 @@ test.each([
       devtools_page: "main.html",
       action: { default_popup: "popups/disabled.html" },
     }),
-    expected: { level: "partial", missing: ["popup", "devtools"] },
+    expected: { level: "partial", missing: ["devtools"] },
   },
   {
-    // Built around the desktop app; content scripts alone cannot fill in a password.
-    name: "a password manager without a background",
-    manifest: manifest({ permissions: ["nativeMessaging", "storage", "https://*/*"] }),
-    expected: { level: "unsupported", cause: "native", missing: ["native"] },
+    // Built for the desktop app; this browser reaches no app on the computer.
+    name: "a password manager that connects to its desktop app",
+    manifest: manifest({ background: worker, permissions: ["nativeMessaging", "storage", "https://*/*"] }),
+    expected: { level: "partial", missing: ["native"] },
   },
   {
-    name: "an extension that asks for a permission this list does not know",
-    manifest: manifest({ permissions: ["tts", "storage"], action: {} }),
-    expected: { level: "partial", missing: ["toolbar", "other"] },
+    // `tabGroups` has events and nothing stands in for it here, so a worker that listens stops as it starts.
+    name: "an extension whose worker listens to an API this browser lacks",
+    manifest: manifest({ background: worker, permissions: ["tabGroups", "tts"] }),
+    expected: { level: "unsupported", cause: "startup", missing: ["browserData", "other"] },
   },
 ])("$name", (row) => {
   expect(extensionCompatibility(row.manifest)).toEqual(row.expected)

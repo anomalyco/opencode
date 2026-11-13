@@ -8,27 +8,18 @@ const text = (maximum: number) => Schema.String.check(Schema.isMinLength(1), Sch
 /**
  * A part of an extension that does not work in this browser, by what the user would notice.
  * - `network`: watching requests (`webRequest`) from a service worker.
- * - `toolbar`: a toolbar button without a popup, which only tells the extension it was clicked.
- * - `popup`: a toolbar popup about the current page; here it opens as a tab of its own.
- * - `menus`: right-click menu items. `shortcuts`: keyboard shortcuts. `native`: an app on the computer.
- * - `signin`: signing in with a browser account. `sidePanel`: a side panel. `notifications`: system notifications.
- * - `navigation`: following page navigation. `cookies`: reading and changing cookies.
+ * - `shortcuts`: keyboard shortcuts. `native`: an app on the computer.
+ * - `signin`: signing in with a browser account. `sidePanel`: a side panel.
  * - `browserData`: history, bookmarks, sessions and downloads. `settings`: browser settings such as privacy or fonts.
  * - `addressBar`: an address bar keyword. `newTab`: replacing the new tab page. `devtools`: a developer tools panel.
  * - `access`: asking for more access after install. `userScripts`: user scripts. `other`: any other missing API.
  */
 export const ExtensionFeature = Schema.Literals([
   "network",
-  "toolbar",
-  "popup",
-  "menus",
   "shortcuts",
   "native",
   "signin",
   "sidePanel",
-  "notifications",
-  "navigation",
-  "cookies",
   "browserData",
   "settings",
   "addressBar",
@@ -46,11 +37,11 @@ export type ExtensionFeature = typeof ExtensionFeature.Type
  * - `supported`: everything it declares works here.
  * - `partial`: it runs, but `missing` does not work.
  * - `unsupported`: it will not do its job here, for `cause`: `startup`, its background script needs an API this
- *   browser lacks and stops when it starts; `native`, it needs an app on the computer.
+ *   browser lacks and stops when it starts.
  */
 export const ExtensionCompatibility = Schema.Struct({
   level: Schema.Literals(["supported", "partial", "unsupported"]),
-  cause: Schema.optional(Schema.Literals(["startup", "native"])),
+  cause: Schema.optional(Schema.Literals(["startup"])),
   missing: Schema.Array(ExtensionFeature),
 })
 
