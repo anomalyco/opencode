@@ -191,6 +191,37 @@ fn undo_submits_the_restored_paste_and_a_fragment_as_text() {
     assert_eq!(setup.submit()["text"], "a\nb\nc and d\ne\nf ");
 }
 
+// gh-triage-2012: the editor counts a tab as two cells and the text indexes bytes, so the prompt converts through the
+// buffer. A paste after a tab expands where its label is (a width count gave `\t[A\nB\nCZ`), and so after a wide
+// character and a joined emoji.
+#[test]
+fn a_paste_after_a_tab_or_wide_text_expands_in_place() {
+    for prefix in ["\t", "界", "👩‍💻"] {
+        let setup = Setup::new();
+        setup.app.paste(prefix);
+        setup.app.paste("A\nB\nC");
+        setup.wait_text(&format!("{prefix}[Pasted ~3 lines] "));
+        setup.app.type_text("Z");
+        assert_eq!(setup.submit()["text"], format!("{prefix}A\nB\nC Z"), "after {prefix:?}");
+    }
+}
+
+// gh-triage-2012: Down on the last line moves to the end of the text, so typing appends. A width count took the end
+// for `d`'s start and left the cursor there: `ab\tcXd`.
+#[test]
+fn down_on_the_last_line_moves_to_the_end_after_a_tab_or_wide_text() {
+    for middle in ["\t", "界", "👩‍💻"] {
+        let setup = Setup::new();
+        let text = format!("ab{middle}cd");
+        setup.app.paste(&text);
+        setup.wait_text(&text);
+        setup.app.press("left");
+        setup.app.press("down");
+        setup.app.type_text("X");
+        setup.wait_text(&format!("{text}X"));
+    }
+}
+
 #[test]
 fn copying_a_selection_over_a_paste_copies_its_text() {
     let capture = testing::capture();
