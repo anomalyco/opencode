@@ -1851,7 +1851,7 @@ fn leak(host: &dyn abi::Host, at: &str) {
     host.foreground(abi::Foreground { command: "leaked".into(), ..abi::Foreground::default() });
     host.set_title("leaked");
     host.set_theme("nord");
-    host.install_theme("leaked", serde_json::json!({}));
+    host.install_theme("leaked", serde_json::json!({ "theme": {} }));
     assert!(!panics, "boom");
 }
 

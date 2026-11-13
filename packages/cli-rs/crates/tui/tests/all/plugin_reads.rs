@@ -10,6 +10,7 @@ use std::ffi::c_void;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use opencode_api::generated::SessionID;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_plugin::abi;
 use opencode_tui::{Deps, Route};
@@ -40,6 +41,41 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
     });
     setup.command(command("p0b.install"), |host, input| {
         host.install_theme(input.unwrap_or_default(), json!({ "theme": {} }));
+    });
+    // Several verbs in one call, `;`-separated, such as `open ses_a;close ses_a`: what each answered, `-` for none,
+    // after the number of the script.
+    let scripts = Cell::new(0);
+    setup.command(command("p0b.script"), move |host, input| {
+        scripts.set(scripts.get() + 1);
+        let answers: Vec<String> = input
+            .unwrap_or_default()
+            .split(';')
+            .map(|verb| {
+                let (verb, arg) = verb.split_once(' ').unwrap_or((verb, ""));
+                let session = arg.to_owned();
+                let answer = match verb {
+                    "open" => host.edit_tab(abi::TabEdit::Open { session }),
+                    "focus" => host.edit_tab(abi::TabEdit::Focus { session }),
+                    "move" => host.edit_tab(abi::TabEdit::Move { session, index: 0 }),
+                    "close" => host.edit_tab(abi::TabEdit::Close { session: Some(session).filter(|s| !s.is_empty()) }),
+                    "variant" => host.set_variant(Some(arg).filter(|arg| !arg.is_empty())),
+                    "theme" => host.set_theme(arg),
+                    "model" => {
+                        let (provider, model) = arg.split_once('/').unwrap_or_default();
+                        host.set_model(provider, model);
+                        return "-".to_owned();
+                    }
+                    "install" | "installbad" => {
+                        let theme = if verb == "install" { json!({ "theme": {} }) } else { json!({ "x": 1 }) };
+                        host.install_theme(arg, theme);
+                        return "-".to_owned();
+                    }
+                    other => panic!("no verb {other}"),
+                };
+                answer.to_string()
+            })
+            .collect();
+        toast(host, format!("p0b script{} {}", scripts.get(), answers.join(",")));
     });
     setup.command(command("p0b.variant"), move |host, _| {
         let (high, default) = (host.set_variant(Some("high")), host.set_variant(None));
@@ -125,16 +161,28 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// The TUI's home with `reader` active, in process or through the byte shims, on a server of two sessions, with
-/// `config`; and the server.
+/// The TUI's home with `reader` active, in process or through the byte shims, on a server of two sessions and a child
+/// `ses_c` of `ses_a`, with `config`; and the server.
 fn home(loopback: bool, width: u16, config: Value) -> (Harness, Memory, opencode_util::temp::TempDir) {
+    home_on(loopback, width, config, Vec::new())
+}
+
+/// [`home`] on a server that also answers `routes`.
+fn home_on(
+    loopback: bool,
+    width: u16,
+    config: Value,
+    mut routes: Vec<MemoryRoute>,
+) -> (Harness, Memory, opencode_util::temp::TempDir) {
     let root = opencode_util::temp::tempdir().unwrap();
     let paths = support::home_paths(root.path());
     std::fs::create_dir_all(&paths.state).unwrap();
-    let mut routes: Vec<MemoryRoute> = [("ses_a", "Fix the parser"), ("ses_b", "Write the docs")]
-        .iter()
-        .flat_map(|(id, title)| support::session_routes(&support::test_session(id, title)))
-        .collect();
+    let child = support::merge(support::test_session("ses_c", "A child"), json!({ "parentID": "ses_a" }));
+    routes.extend(
+        [support::test_session("ses_a", "Fix the parser"), support::test_session("ses_b", "Write the docs"), child]
+            .iter()
+            .flat_map(support::session_routes),
+    );
     routes.push(MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })));
     let memory = Memory::new(routes);
     let deps = Deps {
@@ -226,6 +274,61 @@ fn tabs_open_move_and_close_as_ts_does() {
         h.wait_for("p0b w120 ");
         h.tui.keymap.dispatch("p0b.open", Some("ses_a"));
         h.wait_for("p0b open false");
+    }
+}
+
+// Expected (reviews bigboi-8, carbon-7): a verb answers for the state the same call's earlier verbs left, as TS's act
+// in order: a variant is checked against the model the call selected, and a tab against the tabs it opened and closed.
+// On both paths.
+#[test]
+fn verbs_in_one_call_see_the_earlier_ones() {
+    let catalog = || {
+        let model = |id: &str, variant: &str| {
+            support::merge(support::model("p", id, id), json!({ "variants": [{ "id": variant }] }))
+        };
+        let list = |data: Value| json!({ "location": { "directory": support::DIRECTORY }, "data": data });
+        vec![
+            MemoryRoute::json("GET", "/api/agent", 200, &list(json!([support::agent("build", "primary", false)]))),
+            MemoryRoute::json("GET", "/api/model", 200, &list(json!([model("a", "low"), model("b", "high")]))),
+            MemoryRoute::json("GET", "/api/provider", 200, &list(json!([]))),
+        ]
+    };
+    for loopback in [false, true] {
+        let (h, _memory, _root) = home_on(loopback, 160, json!({ "tabs": { "enabled": true } }), catalog());
+        h.wait_for("p0b w160 ");
+        let selected = || h.tui.local.selection().map(|selection| (selection.model.model_id, selection.variant));
+        h.tui.keymap.dispatch("p0b.script", Some("model p/a"));
+        h.wait_for("p0b script1 -");
+        assert_eq!(selected(), Some(("a".to_owned(), None)), "loopback {loopback}");
+        h.tui.keymap.dispatch("p0b.script", Some("model p/b;variant high"));
+        h.wait_for("p0b script2 -,true");
+        assert_eq!(selected(), Some(("b".to_owned(), Some("high".to_owned()))), "loopback {loopback}");
+        h.tui.keymap.dispatch("p0b.script", Some("model p/a;variant high"));
+        h.wait_for("p0b script3 -,false");
+        assert_eq!(selected().map(|selected| selected.0), Some("a".to_owned()), "loopback {loopback}");
+
+        h.tui.keymap.dispatch("p0b.script", Some("open ses_a;close ses_a;close ses_a"));
+        h.wait_for("p0b script4 true,true,false");
+        assert!(h.tui.tabs.open_ids(&h.tui).is_empty(), "loopback {loopback}");
+        h.tui.keymap.dispatch("p0b.script", Some("open ses_b;move ses_b;focus ses_a;close"));
+        h.wait_for("p0b script5 true,true,true,true");
+        h.wait_for("[ses_b");
+        assert_eq!(h.tui.tabs.open_ids(&h.tui), ["ses_b"], "loopback {loopback}");
+    }
+}
+
+// Expected (review bigboi-10, TS `ui.tabs`): `move` takes any session of an open tab's family, `close` only the tab's
+// own ID, so a child's ID closes nothing. On both paths.
+#[test]
+fn close_takes_the_tab_id_and_move_a_child() {
+    for loopback in [false, true] {
+        let (h, _memory, _root) = home(loopback, 120, json!({ "tabs": { "enabled": true } }));
+        h.wait_for("p0b w120 ");
+        h.tui.navigate(Route::Session { id: SessionID("ses_c".to_owned()) });
+        h.wait_for("[ses_a*]");
+        h.tui.keymap.dispatch("p0b.script", Some("close ses_c;move ses_c"));
+        h.wait_for("p0b script1 false,true");
+        h.wait_for("[ses_a*]");
     }
 }
 

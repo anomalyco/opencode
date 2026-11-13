@@ -128,13 +128,14 @@ pub trait Host: 'static {
     }
     /// Edits the composer on screen ([`abi::Host::edit_composer`]). Called outside every plugin callback.
     fn edit_composer(&self, _edit: abi::ComposerEdit) {}
-    /// Selects `variant` of the model the next prompt uses ([`abi::Host::set_variant`]), once [`variant_known`] allowed
+    /// Selects `variant` of the model the next prompt uses ([`abi::Host::set_variant`]), once [`Staged::variant_known`] allowed
     /// it. Called outside every plugin callback.
     fn set_variant(&self, _variant: Option<&str>) {}
     /// Selects a model for the next prompt ([`abi::Host::set_model`]). Called outside every plugin callback.
     fn set_model(&self, _provider: &str, _model: &str) {}
-    /// Whether `edit` would change the session tabs now ([`abi::Host::edit_tab`]).
-    fn tab_allowed(&self, _edit: &abi::TabEdit) -> bool {
+    /// Whether `edit` would change the session tabs ([`abi::Host::edit_tab`]) once `staged`, the edits the same call
+    /// made before it, which the host allowed, changed them.
+    fn tab_allowed(&self, _edit: &abi::TabEdit, _staged: &[abi::TabEdit]) -> bool {
         false
     }
     /// Changes the session tabs, once [`Host::tab_allowed`] allowed it. Called outside every plugin callback.
@@ -154,7 +155,7 @@ pub trait Host: 'static {
         // A title OpenTUI refuses would end the app.
         self.app().set_title(&opencode_ui::terminal_title(title));
     }
-    /// Selects theme `name`, once [`theme_known`] allowed it ([`abi::Host::set_theme`]). Called outside every plugin
+    /// Selects theme `name`, once [`Staged::theme_known`] allowed it ([`abi::Host::set_theme`]). Called outside every plugin
     /// callback.
     fn set_theme(&self, _name: &str) {}
     /// Installs theme `name` ([`abi::Host::install_theme`]). Called outside every plugin callback.
@@ -491,11 +492,13 @@ struct Scope {
     revoked: RefCell<Vec<Disposer>>,
 }
 
-/// What one call of an in-process plugin asked for: the effects that wait for it to return, and the storage it wrote.
+/// What one call of an in-process plugin asked for: the effects that wait for it to return, the storage it wrote, and
+/// what its verbs staged.
 #[derive(Default)]
 struct Call {
     effects: Vec<Effect>,
     undo: Undo,
+    staged: Staged,
 }
 
 type Effect = Box<dyn FnOnce(&dyn Host)>;
@@ -530,7 +533,9 @@ impl Scope {
     /// returns; when it panics, that is dropped, the storage it wrote is put back, and the panic's message returned.
     /// `None` when the host never read.
     fn attempt<R>(self: &Rc<Self>, host: &dyn Host, f: impl FnOnce(&Scoped<'_>) -> R) -> Option<Result<R, String>> {
-        let outer = self.call.replace(Some(Call::default()));
+        // A call within a call sees what the outer one staged.
+        let staged = self.call.borrow().as_ref().map(|call| call.staged.clone()).unwrap_or_default();
+        let outer = self.call.replace(Some(Call { staged, ..Call::default() }));
         let (mut f, mut out) = (Some(f), None);
         host.read(&mut |read| {
             if let Some(f) = f.take() {
@@ -545,6 +550,7 @@ impl Scope {
             (_, Some(outer)) => {
                 outer.effects.extend(call.effects);
                 outer.undo.0.extend(call.undo.0);
+                outer.staged = call.staged;
             }
             (_, None) => call.effects.into_iter().for_each(|effect| defer(&self.host, effect)),
         }
@@ -786,7 +792,7 @@ impl abi::Host for Scoped<'_> {
     }
 
     fn set_variant(&self, variant: Option<&str>) -> bool {
-        let known = variant_known(self.read, variant);
+        let known = self.staged(|staged| staged.variant_known(self.read, variant));
         if known {
             let variant = variant.map(str::to_owned);
             self.defer(move |host| host.set_variant(variant.as_deref()));
@@ -795,12 +801,13 @@ impl abi::Host for Scoped<'_> {
     }
 
     fn set_model(&self, provider: &str, model: &str) {
+        self.staged(|staged| staged.set_model(self.read, provider, model));
         let (provider, model) = (provider.to_owned(), model.to_owned());
         self.defer(move |host| host.set_model(&provider, &model));
     }
 
     fn edit_tab(&self, edit: abi::TabEdit) -> bool {
-        let allowed = self.host.tab_allowed(&edit);
+        let allowed = self.staged(|staged| staged.tab(self.host, &edit));
         if allowed {
             self.defer(move |host| host.edit_tab(edit));
         }
@@ -826,7 +833,7 @@ impl abi::Host for Scoped<'_> {
     }
 
     fn set_theme(&self, name: &str) -> bool {
-        let known = theme_known(self.read, name);
+        let known = self.staged(|staged| staged.theme_known(self.read, name));
         if known {
             let name = name.to_owned();
             self.defer(move |host| host.set_theme(&name));
@@ -835,8 +842,10 @@ impl abi::Host for Scoped<'_> {
     }
 
     fn install_theme(&self, name: &str, theme: serde_json::Value) {
-        let name = name.to_owned();
-        self.defer(move |host| host.install_theme(&name, theme));
+        if self.staged(|staged| staged.install_theme(name, &theme)) {
+            let name = name.to_owned();
+            self.defer(move |host| host.install_theme(&name, theme));
+        }
     }
 
     fn declare_storage_key(&self, key: &str) {
@@ -854,15 +863,74 @@ pub(crate) fn copy(host: &dyn Host, text: &str, then: Option<abi::Action>) {
     }
 }
 
-/// Whether [`abi::Host::set_variant`] selects `variant`: a model is selected, and it has `variant` (TS
-/// `ui.model.variant.set`).
-pub(crate) fn variant_known(read: &dyn abi::Read, variant: Option<&str>) -> bool {
-    read.model().is_some() && variant.is_none_or(|variant| read.variants().iter().any(|known| known == variant))
+/// What the verbs of one call changed that a later verb of the same call checks, as TS acts on each verb in order:
+/// the model it selected, the tab edits it made and the themes it installed. It goes with the call's effects, so a
+/// call that panics leaves nothing staged.
+#[derive(Clone, Default)]
+pub(crate) struct Staged {
+    /// The model [`abi::Host::set_model`] selected, when the host lists it.
+    model: Option<(String, String)>,
+    tabs: Vec<abi::TabEdit>,
+    themes: Vec<String>,
 }
 
-/// Whether [`abi::Host::set_theme`] selects theme `name`: the host has it.
-pub(crate) fn theme_known(read: &dyn abi::Read, name: &str) -> bool {
-    read.themes().iter().any(|known| known == name)
+impl Staged {
+    /// [`abi::Host::set_model`]: a model the host lists is the selected one for the rest of the call.
+    pub(crate) fn set_model(&mut self, read: &dyn abi::Read, provider: &str, model: &str) {
+        if listed(read, provider, model).is_some() {
+            self.model = Some((provider.to_owned(), model.to_owned()));
+        }
+    }
+
+    /// Whether [`abi::Host::set_variant`] selects `variant`: a model is selected, and it has `variant` (TS
+    /// `ui.model.variant.set`).
+    pub(crate) fn variant_known(&self, read: &dyn abi::Read, variant: Option<&str>) -> bool {
+        let Some((provider, model)) = &self.model else {
+            return read.model().is_some()
+                && variant.is_none_or(|variant| read.variants().iter().any(|known| known == variant));
+        };
+        let variants = listed(read, provider, model).map(|info| info.variants).unwrap_or_default();
+        variant.is_none_or(|variant| variants.iter().any(|known| known.id == variant))
+    }
+
+    /// Whether [`abi::Host::edit_tab`] does `edit`, after the call's earlier edits; one it does is staged.
+    pub(crate) fn tab(&mut self, host: &dyn Host, edit: &abi::TabEdit) -> bool {
+        let allowed = host.tab_allowed(edit, &self.tabs);
+        if allowed {
+            self.tabs.push(edit.clone());
+        }
+        allowed
+    }
+
+    /// Whether [`abi::Host::set_theme`] selects theme `name`: the host has it, or the call installed it.
+    pub(crate) fn theme_known(&self, read: &dyn abi::Read, name: &str) -> bool {
+        self.themes.iter().any(|known| known == name) || read.themes().iter().any(|known| known == name)
+    }
+
+    /// Whether [`abi::Host::install_theme`] installs `theme` as `name`: a name that is a plain file name, and a theme
+    /// document (one the TUI's theme catalog would keep). One it installs is staged.
+    pub(crate) fn install_theme(&mut self, name: &str, theme: &serde_json::Value) -> bool {
+        let valid = theme_file_name(name) && opencode_ui::theme::is_theme_source(theme);
+        if !valid {
+            log::warn!("a plugin installs a theme that is not one, or not as a plain file name: {name:?}");
+        } else if !self.themes.iter().any(|known| known == name) {
+            self.themes.push(name.to_owned());
+        }
+        valid
+    }
+}
+
+/// Model `model` of provider `provider`, when the host lists it.
+fn listed(read: &dyn abi::Read, provider: &str, model: &str) -> Option<abi::types::ModelInfo> {
+    let models = read.models(None)?;
+    models.into_iter().find(|info| info.provider_id.0 == provider && info.id == model)
+}
+
+/// Whether a theme name is safe as a file name in a themes directory: no path, and no hidden file.
+pub fn theme_file_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.starts_with('.')
+        && name.chars().all(|char| char.is_ascii_alphanumeric() || matches!(char, '-' | '_' | '.'))
 }
 
 /// A fresh [`abi::RequestId`], unique in the process.
@@ -902,6 +970,14 @@ impl Scoped<'_> {
         match &mut *self.scope.call.borrow_mut() {
             Some(call) => call.effects.push(Box::new(effect)),
             None => defer(&self.scope.host, effect),
+        }
+    }
+
+    /// Runs `f` with what the running call staged.
+    fn staged<R>(&self, f: impl FnOnce(&mut Staged) -> R) -> R {
+        match &mut *self.scope.call.borrow_mut() {
+            Some(call) => f(&mut call.staged),
+            None => f(&mut Staged::default()),
         }
     }
 

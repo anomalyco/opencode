@@ -23,7 +23,7 @@ use std::rc::Rc;
 use opentui::style::Color;
 pub use opentui::theme::ThemeMode;
 
-pub use catalog::{Catalog, Loaded, ThemeSource};
+pub use catalog::{Catalog, Loaded, ThemeSource, is_theme_source};
 pub(crate) use color::contrast;
 pub use color::{from_hex, tint};
 pub use discovery::{config_directories, discover};
