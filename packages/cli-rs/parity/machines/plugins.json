@@ -1,5 +1,5 @@
 {
-  "about": "The life of a plugin as the user sees it (rich-plugins 4.14, O-124), written by hand and never captured. The plugin is parity/plugins/life (TS) and its Rust twin in crates/tui/tests/all/plugin_machines.rs. An observation is line/palette/row: the plugin's line in home.footer (A, B or -), whether the palette finds its commands (yes or no), and its row in the plugin manager (on, off or failed). Actions: toggle is enter on its row in the plugin manager; flip, throw and arm run its palette commands Life flip, Life throw and Life arm. Life arm makes its next setup throw. TS is the specification: an enable whose setup throws shows the error in a toast and leaves the row as it was. A row in xfail is a known difference, [client, deviation file or finding:<name>, 'state action observation']; a finding is open and named in steps/plugins-pt.md.",
+  "about": "The life of a plugin as the user sees it (rich-plugins 4.14, O-124), written by hand and never captured. The plugin is parity/plugins/life (TS) and its Rust twin in crates/tui/tests/all/plugin_machines.rs. An observation is line/palette/row/dialog: the plugin's line in home.footer (A, B or -), whether the palette finds its commands (yes or no), its row in the plugin manager (on, off or failed), and whether its prompt shows (open or -). While the prompt shows, the readers open neither the palette nor the manager, which would replace it, so the first three are ?. Actions: toggle is enter on its row in the plugin manager; flip, throw, arm and dialog run its palette commands Life flip, Life throw, Life arm (the next setup throws) and Life dialog (opens its prompt); escape closes a dialog; reload puts a new build of the plugin in place. TS is the specification: an enable whose setup throws shows the error in a toast and leaves the row as it was, and a plugin's dialog stays open when it reloads. A row in xfail is a known difference, [client, deviation file or finding:<name>, 'state action observation'].",
   "depth": 4,
   "seeds": 8,
   "steps": 12,
@@ -7,16 +7,23 @@
     "life": {
       "initial": "onA",
       "states": {
-        "onA": ["A/yes/on", { "toggle": "off", "flip": "onB", "throw": "onA", "arm": "armedA" }],
-        "onB": ["B/yes/on", { "toggle": "off", "flip": "onA", "throw": "onB", "arm": "armedB" }],
-        "armedA": ["A/yes/on", { "toggle": "offArmed", "flip": "armedB" }],
-        "armedB": ["B/yes/on", { "toggle": "offArmed", "flip": "armedA" }],
-        "off": ["-/no/off", { "toggle": "onA" }],
-        "offArmed": ["-/no/off", { "toggle": "off" }]
+        "onA": ["A/yes/on/-", { "toggle": "off", "flip": "onB", "throw": "onA", "arm": "armedA", "dialog": "dialogA" }],
+        "onB": [
+          "B/yes/on/-",
+          { "toggle": "off", "flip": "onA", "arm": "armedB", "dialog": "dialogB", "reload": "onA" }
+        ],
+        "armedA": ["A/yes/on/-", { "toggle": "offArmed", "flip": "armedB" }],
+        "armedB": ["B/yes/on/-", { "toggle": "offArmed", "flip": "armedA" }],
+        "off": ["-/no/off/-", { "toggle": "onA" }],
+        "offArmed": ["-/no/off/-", { "toggle": "off" }],
+        "dialogA": ["?/?/?/open", { "escape": "onA", "reload": "dialogReloaded" }],
+        "dialogB": ["?/?/?/open", { "escape": "onB", "reload": "dialogReloaded" }],
+        "dialogReloaded": ["?/?/?/open", { "escape": "onA" }]
       },
       "xfail": [
-        ["rust", "F16-plugin-panic-no-effects", "onA throw -/no/failed"],
-        ["rust", "F16-plugin-panic-no-effects", "onB throw -/no/failed"]
+        ["rust", "F16-plugin-panic-no-effects", "onA throw -/no/failed/-"],
+        ["rust", "F16-plugin-dialog-ends-with-activation", "dialogA reload A/yes/on/-"],
+        ["rust", "F16-plugin-dialog-ends-with-activation", "dialogB reload A/yes/on/-"]
       ]
     }
   },

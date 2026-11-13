@@ -678,11 +678,15 @@ fn apply(host: &Weak<dyn Host>, id: String, guest: Weak<Guest>, effects: Vec<Eff
 /// Registers what the manifest lists, each calling into `guest`.
 fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
     // Registered first, so it runs last: the instance is destroyed now, on deactivation, unload and reload, even while
-    // a route, a claim or a dialog's fences of it are still mounted, which then draw nothing.
+    // a route, a claim or a dialog's fences of it are still mounted, which then draw nothing. A failed plugin is called
+    // no more (4.14), and `destroy` runs its dispose callbacks, so its instance is kept, as its library is (4.5).
     let disposed = guest.clone();
     setup.on_dispose(move || {
         let instance = disposed.instance.borrow_mut().take();
-        drop(instance);
+        match disposed.failure.borrow().is_some() {
+            true => std::mem::forget(instance),
+            false => drop(instance),
+        }
         disposed.activation.dispose();
     });
     let commands: Vec<(abi::Scope, TuiCommand)> = manifest
