@@ -1,5 +1,5 @@
-//! U.4b proof. P-COMP: `code::view` against the TypeScript `<code>` with the TUI's parsers, for each grammar of the
-//! default build (`parity/component/U.4b-grammars.tsx`, corpus `parity/fixtures/U.4b/corpus.json`). Every cell
+//! U.4b proof. P-COMP: `code::view` against the TypeScript `<code>` with the TUI's parsers, for each grammar
+//! transcripts show most (`parity/component/U.4b-grammars.tsx`, corpus `parity/fixtures/U.4b/corpus.json`). Every cell
 //! matches: text, colors, and attributes. Regenerate with `bun run fixtures`.
 
 use opencode_parity::{Fixture, compare, fixtures_dir};

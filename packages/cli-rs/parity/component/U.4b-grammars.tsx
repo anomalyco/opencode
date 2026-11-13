@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-// P-COMP fixtures of highlighted code, one per grammar of the default build: each snippet of
+// P-COMP fixtures of highlighted code, one per grammar transcripts show most: each snippet of
 // parity/fixtures/U.4b/corpus.json in <code conceal={false} fg={text.base}>, with the TUI's parsers registered as
 // routes/session/index.tsx registers them. crates/ui/tests/all/grammars.rs compares opencode_ui::code::view with them.
 import { addDefaultParsers } from "@opentui/core"
