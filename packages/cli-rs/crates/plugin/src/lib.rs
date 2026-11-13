@@ -1443,17 +1443,14 @@ impl Registry {
             setup.registration.dispose();
             return Err(error);
         }
-        // Last of the disposal, however the activation ends: what the host shows for it goes. A setup that failed
-        // showed nothing, so a failed candidate leaves the running build's dialogs.
+        // However the activation ends, what the host shows for it goes. A setup that failed showed nothing, so a failed
+        // candidate leaves the running build's dialogs.
         let (owner, id) = (Rc::downgrade(host), definition.id.clone());
-        setup.registration.cleanups.insert(
-            0,
-            Box::new(move || {
-                if let Some(host) = owner.upgrade() {
-                    host.revoked(&id);
-                }
-            }),
-        );
+        setup.on_dispose(move || {
+            if let Some(host) = owner.upgrade() {
+                host.revoked(&id);
+            }
+        });
         let order = place.unwrap_or_else(|| {
             let order = self.activations.get();
             self.activations.set(order + 1);
