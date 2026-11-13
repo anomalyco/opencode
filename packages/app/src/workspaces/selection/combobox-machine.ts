@@ -55,7 +55,7 @@ export type PickerComboboxEffect =
   | { readonly type: "search.start"; readonly attempt: number; readonly query: string; readonly timeoutMs: number }
   | { readonly type: "search.cancel" }
   | { readonly type: "selection.clear" }
-  | { readonly type: "choose.directory"; readonly path: string }
+  | { readonly type: "choose.directory"; readonly path: string; readonly resolved: boolean }
   | { readonly type: "choose.file"; readonly absolute: string }
 
 export type PickerComboboxTransition = {
@@ -217,7 +217,7 @@ function key(
   return handled(
     result(close(state, displayInputDirectory(value, context.home)), [
       ...cancel(state),
-      { type: "choose.directory", path: state.input },
+      { type: "choose.directory", path: state.input, resolved: false },
     ]),
   )
 }
@@ -230,13 +230,13 @@ function choose(state: LiveCombobox, item: PickerSuggestion, context: PickerComb
     ])
   }
 
-  const value = resolve(item.absolute, context)
+  const value = resolve(item.absolute, context, true)
 
   if (!value) return unchanged(state)
 
   return result(close(state, displayInputDirectory(value, context.home)), [
     ...cancel(state),
-    { type: "choose.directory", path: item.absolute },
+    { type: "choose.directory", path: item.absolute, resolved: true },
   ])
 }
 
@@ -267,8 +267,10 @@ function step(state: OpenCombobox, delta: -1 | 1): OpenCombobox {
   return { ...state, active: nextSuggestionIndex(effectiveActiveIndex(state), delta, state.items.length) }
 }
 
-function resolve(path: string, context: PickerComboboxContext) {
-  return resolvePickerTarget(context.policy, path, context.home, context.root || context.fallback)
+function resolve(path: string, context: PickerComboboxContext, preserveWhitespace = false) {
+  return resolvePickerTarget(context.policy, path, context.home, context.root || context.fallback, {
+    preserveWhitespace,
+  })
 }
 
 function close(state: LiveCombobox, input: string): PickerComboboxState {

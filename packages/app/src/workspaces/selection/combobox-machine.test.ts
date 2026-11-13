@@ -54,7 +54,10 @@ test("Enter while the next query searches submits the typed path, not the previo
   expect(typed.state.status).toBe("loading")
   expect(pickerComboboxView(typed.state).items).toEqual([])
   expect(entered.preventDefault).toBeTrue()
-  expect(entered.effects).toEqual([{ type: "search.cancel" }, { type: "choose.directory", path: "/projects/new" }])
+  expect(entered.effects).toEqual([
+    { type: "search.cancel" },
+    { type: "choose.directory", path: "/projects/new", resolved: false },
+  ])
   expect(entered.state).toEqual({ status: "closed", attempt: attempt(typed.state), input: "/projects/new/" })
 })
 
@@ -96,6 +99,7 @@ test.each([
   expect(entered.effects.at(-1)).toEqual({
     type: "choose.directory",
     path: active === 0 ? "/home/luke/opencode" : input,
+    resolved: active === 0,
   })
   expect(pickerComboboxView(run([key("ArrowDown")], state).state).active).toBe(active === 0 ? 1 : 0)
 })
@@ -178,7 +182,15 @@ test("clicking a folder suggestion chooses it and shows it as the input", () => 
   const clicked = run([{ type: "item.clicked", index: 0 }], state)
 
   expect(clicked.state).toMatchObject({ status: "closed", input: "~/opencode/" })
-  expect(clicked.effects).toEqual([{ type: "choose.directory", path: "/home/luke/opencode" }])
+  expect(clicked.effects).toEqual([{ type: "choose.directory", path: "/home/luke/opencode", resolved: true }])
+})
+
+test("a folder suggestion keeps a trailing space in its resolved path", () => {
+  const state = opened("~/op", [directory("/home/luke/opencode ")])
+  const clicked = run([{ type: "item.clicked", index: 0 }], state)
+
+  expect(clicked.state).toMatchObject({ status: "closed", input: "~/opencode /" })
+  expect(clicked.effects).toEqual([{ type: "choose.directory", path: "/home/luke/opencode ", resolved: true }])
 })
 
 test("input typed before the location resolves searches once the location arrives", () => {
