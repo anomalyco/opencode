@@ -26,6 +26,8 @@ export const Info = Schema.Struct({
   model: Model.Ref.pipe(optional),
   request: Provider.Request,
   system: Schema.String.pipe(optional),
+  /** Added to the default prompt while the agent is selected, without replacing it like `system`. */
+  instructions: Schema.String.pipe(optional),
   description: Schema.String.pipe(optional),
   mode: Schema.Literals(["subagent", "primary", "all"]),
   hidden: Schema.Boolean,

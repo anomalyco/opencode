@@ -10,6 +10,7 @@ import { Database } from "../database/database.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Instructions } from "../instructions/index.js"
+import { AgentInstructions } from "../instructions/agent.js"
 import { InstructionBuiltIns } from "../instructions/builtins.js"
 import { Location } from "../location.js"
 import { McpInstructions } from "../mcp/instructions.js"
@@ -170,6 +171,8 @@ const layer = Layer.effect(
           loaded.discovery,
           loaded.builtins,
           loaded.entries,
+          // Last: it changes whenever the user switches agents, so the sources above stay cached.
+          AgentInstructions.make(agent.info),
         ]),
         tools: loaded.tools,
       }
