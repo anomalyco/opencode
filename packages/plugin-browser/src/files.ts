@@ -3,6 +3,7 @@ export * as BrowserFiles from "./files.js"
 import { Browser } from "./rpc.js"
 import { Tool } from "@opencode/schema/tool"
 import { Effect } from "effect"
+import { workspaceTarget } from "./workspace.js"
 
 // Files cross machines as bytes. Only this endpoint interprets its local paths.
 export const read = Effect.fn("BrowserFiles.read")((paths: readonly string[], directory: string) =>
@@ -71,13 +72,19 @@ export const locate = Effect.fn("BrowserFiles.locate")(function* (path: string, 
     )
     const index = [kinds.indexOf("file"), kinds.indexOf("directory"), kinds.indexOf("other")].find((at) => at >= 0)
     const absolute = resolve(directory, candidates[index ?? 2] ?? slashed)
+    if (index !== undefined && !(await workspaceTarget(absolute, [directory])))
+      return { absolute, found: false, directory: false, outside: true }
     if (kinds.includes("file")) return { absolute, found: true, directory: false }
     if (kinds.includes("directory")) return { absolute, found: false, directory: true }
     if (isAbsolute(plain)) return { absolute, found: false, directory: false }
-    return { absolute, found: await findBySuffix(directory, plain), directory: false }
+    const match = await findBySuffix(directory, plain)
+    if (typeof match !== "string") return { absolute, found: match, directory: false }
+    const matched = resolve(directory, match)
+    return await workspaceTarget(matched, [directory])
+      ? { absolute: matched, found: true, directory: false }
+      : { absolute: matched, found: false, directory: false, outside: true }
   }).pipe(
-    // A path this server cannot even parse is left for the pane to judge, as before.
-    Effect.orElseSucceed(() => undefined),
+    Effect.mapError(() => new Tool.Error({ message: "browser.preview could not resolve this file inside the workspace." })),
   )
 })
 
@@ -86,7 +93,7 @@ export function address(path: string) {
   return /^[a-z][a-z\d+.-]+:/i.test(path.trim())
 }
 
-type Located = { readonly absolute: string; readonly found: boolean | undefined; readonly directory: boolean }
+type Located = { readonly absolute: string; readonly found: boolean | undefined; readonly directory: boolean; readonly outside?: true }
 
 // The pane's search index skips ignored files; skipping dependency and VCS folders keeps this walk small too.
 async function findBySuffix(directory: string, relative: string) {
@@ -101,8 +108,8 @@ async function findBySuffix(directory: string, relative: string) {
     budget.entries -= entries.length
     if (budget.entries < 0) return undefined
     const files = entries.map((entry) => ({ entry, path: folder ? `${folder}/${entry.name}` : entry.name }))
-    if (files.some((file) => file.entry.isFile() && (file.path === target || file.path.endsWith(`/${target}`))))
-      return true
+    const match = files.find((file) => file.entry.isFile() && (file.path === target || file.path.endsWith(`/${target}`)))
+    if (match) return match.path
     queue.push(
       ...files
         .filter(

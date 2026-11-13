@@ -1,4 +1,5 @@
-import { realpath, stat } from "node:fs/promises"
+import { stat } from "node:fs/promises"
+import { workspaceTarget } from "@opencode/plugin-browser/workspace"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { fileURLWithin } from "./policy"
 import { previewResource } from "./preview"
@@ -24,15 +25,13 @@ export async function workspaceFile(file: string, roots: readonly string[]) {
   if (!fileURLWithin(file, roots)) return
 
   try {
-    const [target, directories] = await Promise.all([realpath(fileURLToPath(file)), Promise.all(roots.map((root) => realpath(root)))])
-    const href = pathToFileURL(target).href
+    const target = await workspaceTarget(fileURLToPath(file), roots)
 
-    // Exact filesystem spelling matters even on Windows: individual NTFS directories can be case sensitive.
-    if (!directories.some((root) => href.startsWith(`${pathToFileURL(root).href.replace(/\/$/, "")}/`))) return
+    if (!target) return
     const info = await stat(target)
 
     // Hard links are regular workspace entries (also used by package managers); do not reject by link count.
-    return info.isFile() ? { path: target, href, size: info.size } : undefined
+    return info.isFile() ? { path: target, href: pathToFileURL(target).href, size: info.size } : undefined
   } catch {
     // Missing, unreadable, malformed or replaced between lookups: no file grant.
     return undefined

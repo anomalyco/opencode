@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mkdir, mkdtemp, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { basename, dirname, join } from "node:path"
 import { pathToFileURL } from "node:url"
@@ -264,6 +264,10 @@ test("preview paths resolve the way the Review pane resolves them", async () => 
     await Bun.write(join(directory, "site", "index.html"), "<h1>hi</h1>")
     const locate = (path: string) => Effect.runPromise(BrowserFiles.locate(path, directory))
     const page = join(directory, "site", "index.html")
+    const narrower = (path: string) => Effect.runPromise(BrowserFiles.locate(path, join(directory, "site", "docs")))
+    await symlink(directory, join(directory, "site", "docs", "other"), process.platform === "win32" ? "junction" : "dir")
+    for (const path of [page, "../index.html", "other/site/index.html"])
+      expect(await narrower(path)).toMatchObject({ outside: true })
     for (const path of [
       "site/index.html",
       "./site/index.html",

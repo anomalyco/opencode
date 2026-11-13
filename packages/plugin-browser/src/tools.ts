@@ -118,6 +118,10 @@ export const register = Effect.fn("BrowserTools.register")(function* (
   // The desktop acknowledges a preview before the pane opens it, so a missing file used to report success (#61625).
   const previewable = Effect.fn("BrowserTools.previewable")(function* (path: string) {
     const located = yield* BrowserFiles.locate(path, ctx.location.directory)
+    if (located?.outside)
+      return yield* new Tool.Error({ message: "browser.preview cannot show a file outside this session's workspace. Choose a file inside the workspace." })
+    if (located && located.found === undefined)
+      return yield* new Tool.Error({ message: "browser.preview could not verify the file. Pass its exact workspace-relative path." })
     if (located?.directory)
       return yield* new Tool.Error({
         message: `${located.absolute} is a folder. browser.preview shows one file: pass the path of a file in it.`,
