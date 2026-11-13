@@ -257,6 +257,19 @@ struct Ctx {
 struct Shared {
     ctx: RefCell<Ctx>,
     wake: Arc<Wake>,
+    /// The thread that created the instance, the only one `call` and `theme_mode` serve. Written before the plugin has
+    /// the table and never after, so any thread may read it.
+    ui: std::thread::ThreadId,
+}
+
+/// Whether the caller of a host callback with `ctx`, a `Shared` or null, runs on the instance's UI thread. Nothing of
+/// `Shared` but `ui` is read before that holds: its `RefCell` and the host's `Rc` are the UI thread's alone.
+///
+/// # Safety
+/// `ctx` is null or the `Shared` of a live instance.
+unsafe fn on_ui_thread(ctx: *mut c_void) -> bool {
+    // SAFETY: as documented; `ui` is immutable.
+    !ctx.is_null() && unsafe { std::ptr::addr_of!((*ctx.cast::<Shared>()).ui).read() } == std::thread::current().id()
 }
 
 enum Effect {
@@ -301,7 +314,7 @@ impl Instance {
             undo: Undo::default(),
             quiet,
         });
-        let shared = Box::new(Shared { ctx, wake });
+        let shared = Box::new(Shared { ctx, wake, ui: std::thread::current().id() });
         let api = Box::new(HostApi {
             size: size_of::<HostApi>(),
             major: ABI_MAJOR,
@@ -415,6 +428,13 @@ unsafe extern "C" fn host_call(ctx: *mut c_void, request: Bytes, out: *mut Owned
     if out.is_null() {
         return abi::ERROR;
     }
+    // SAFETY: `ctx` is the `Shared` this instance was created with, or null.
+    if !ctx.is_null() && !unsafe { on_ui_thread(ctx) } {
+        let error = "a host request must come from the UI thread; another thread may only call HostApi::wake";
+        // SAFETY: `out` is valid for writes during the call.
+        unsafe { *out = Owned::from_vec(error.as_bytes().to_vec()) };
+        return abi::ERROR;
+    }
     // SAFETY: `ctx` is the `Shared` this instance was created with, or null; `request` is valid for the call.
     let (ctx, request) = unsafe { (ctx.cast::<Shared>().as_ref().map(|shared| &shared.ctx), request.as_slice()) };
     let result = catch_unwind(AssertUnwindSafe(|| {
@@ -436,6 +456,11 @@ unsafe extern "C" fn host_call(ctx: *mut c_void, request: Bytes, out: *mut Owned
 
 /// The host's side of [`HostApi::theme_mode`]. A host that is gone or panics answers dark.
 unsafe extern "C" fn host_theme_mode(ctx: *mut c_void) -> u32 {
+    // SAFETY: `ctx` is the `Shared` this instance was created with, or null. Another thread gets dark, as from a host
+    // that is gone.
+    if !unsafe { on_ui_thread(ctx) } {
+        return abi::THEME_DARK;
+    }
     // SAFETY: `ctx` is the `Shared` this instance was created with, or null.
     let ctx = unsafe { ctx.cast::<Shared>().as_ref().map(|shared| &shared.ctx) };
     let host = ctx.and_then(|ctx| ctx.try_borrow().ok()).and_then(|ctx| ctx.host.upgrade());
