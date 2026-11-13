@@ -1,6 +1,7 @@
 //! Shared libraries opened at run time: `dlopen`, `dlsym` and `dlclose` with `RTLD_LAZY | RTLD_LOCAL` on Unix,
-//! `LoadLibraryW`, `GetProcAddress` and `FreeLibrary` on Windows. Errors are the loader's own message, with the path
-//! or symbol on Windows. Elsewhere opening fails.
+//! `LoadLibraryExW` (without the current directory and `PATH` in its search, `win::load_library`), `GetProcAddress`
+//! and `FreeLibrary` on Windows. Errors are the loader's own message, with the path or symbol on Windows. Elsewhere
+//! opening fails.
 
 #![allow(unsafe_code)]
 
