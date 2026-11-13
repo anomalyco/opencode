@@ -1458,6 +1458,36 @@ pub enum HostRequest {
         key: String,
         fields: serde_json::Map<String, serde_json::Value>,
     },
+    /// 1.5: [`Read::composer`].
+    Composer,
+    /// 1.5: [`Host::edit_composer`], once the current call returns.
+    ComposerEdit {
+        edit: ComposerEdit,
+    },
+}
+
+/// 1.5: the composer on screen, from [`Read::composer`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Composer {
+    /// The text as the composer shows it: a compact paste is its label, such as `[Pasted ~3 lines]`.
+    pub text: String,
+    /// The cursor, as a byte offset into `text`.
+    pub cursor: usize,
+    /// The composer has the keyboard focus.
+    pub focused: bool,
+}
+
+/// 1.5: an edit of the composer, for [`Host::edit_composer`]. It goes through the composer's own edit path, as typed
+/// input and the TS composer's `ref` do.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum ComposerEdit {
+    /// Replaces the text and its attachments, and puts the cursor at the end (TS `ref.set`). The mode stays.
+    Set { text: String },
+    /// Inserts `text` at the cursor, in place of a selection, as typing it does.
+    Insert { text: String },
+    /// Submits the composer as enter does, whether or not it has focus (TS `ref.submit`).
+    Submit,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1841,6 +1871,10 @@ pub trait Read {
     fn dialog_open(&self, _key: &str) -> bool {
         false
     }
+    /// 1.5: the composer on screen, on home or in a session; `None` without one, and from a 1.4 host.
+    fn composer(&self) -> Option<Composer> {
+        None
+    }
 }
 
 /// What a command or an event handler reads and asks of the host. An effect waits until the outermost plugin
@@ -1873,6 +1907,8 @@ pub trait Host: Read {
     fn dialog(&self, dialog: Dialog);
     /// Copies `text` to the clipboard, then runs `then` once it is copied; a toast says so when it fails.
     fn copy(&self, text: &str, then: Option<Action>);
+    /// 1.5: edits the composer on screen; without one, and on a 1.4 host, it does nothing.
+    fn edit_composer(&self, _edit: ComposerEdit) {}
     /// Declares storage key `key` of the plugin, for [`Setup::storage_key`].
     #[doc(hidden)]
     fn declare_storage_key(&self, _key: &str) {}
@@ -2043,6 +2079,10 @@ impl Read for HostHandle {
     fn dialog_open(&self, key: &str) -> bool {
         self.read(&HostRequest::DialogOpen { key: key.to_owned() }).unwrap_or(false)
     }
+
+    fn composer(&self) -> Option<Composer> {
+        self.read(&HostRequest::Composer)
+    }
 }
 
 impl Host for HostHandle {
@@ -2093,6 +2133,10 @@ impl Host for HostHandle {
 
     fn copy(&self, text: &str, then: Option<Action>) {
         let _ = self.request(&HostRequest::Copy { text: text.to_owned(), then });
+    }
+
+    fn edit_composer(&self, edit: ComposerEdit) {
+        let _ = self.request(&HostRequest::ComposerEdit { edit });
     }
 
     fn declare_storage_key(&self, key: &str) {
