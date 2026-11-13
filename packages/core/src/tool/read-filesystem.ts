@@ -155,13 +155,20 @@ export const read = Effect.fn("ReadTool.read")(function* (
   const paged = first.info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
   if (!paged) {
     if (first.bytes.includes(0)) return yield* new BinaryFileError({ resource })
-    return {
-      type: "file" as const,
-      uri: virtual ? resource : pathToFileURL(input).href,
-      name: virtual ? path.posix.basename(input) : path.basename(input),
-      content: new TextDecoder().decode(first.bytes).split("\n").map(clampLine).join("\n"),
-      encoding: "utf8" as const,
-      mime: mimeType(input),
+    const lines = new TextDecoder().decode(first.bytes).split("\n")
+    // A final separator ends the last physical line; keep it in whole-file content.
+    const count = lines.at(-1) === "" ? lines.length - 1 : lines.length
+    if (count <= MAX_READ_LINES) {
+      const content = lines.map(clampLine).join("\n")
+      if (Buffer.byteLength(content) <= MAX_READ_BYTES)
+        return {
+          type: "file" as const,
+          uri: virtual ? resource : pathToFileURL(input).href,
+          name: virtual ? path.posix.basename(input) : path.basename(input),
+          content,
+          encoding: "utf8" as const,
+          mime: mimeType(input),
+        }
     }
   }
 

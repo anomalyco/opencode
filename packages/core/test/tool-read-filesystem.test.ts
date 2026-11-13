@@ -112,6 +112,50 @@ describe("ReadTool text serialization", () => {
 })
 
 describe("ReadToolFileSystem", () => {
+  it.live("applies the default line limit to small files at physical line boundaries", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = absolute(path.join(directory, "dense.txt"))
+      const read = (page?: ReadToolFileSystem.PageInput) => ReadToolFileSystem.read(environment, file, "dense.txt", page)
+      const prefix = "x\r\n".repeat(1_999)
+      for (const ending of ["last", "last\n", "last\r\n", "\n"]) {
+        const content = prefix + ending
+        yield* files.writeFileString(file, content)
+        expect(yield* read()).toMatchObject({ type: "file", content })
+      }
+
+      yield* files.writeFileString(file, prefix + "\r\nlast")
+      const page = yield* read()
+      expect(page.type).toBe("text-page")
+      if (page.type !== "text-page") return
+      expect(page).toMatchObject({ content: "x\n".repeat(1_999), offset: 1, next: 2_001, truncated: true })
+      expect(ReadTool.toModelContent("dense.txt", undefined, page)).toEndWith(
+        "2000: \n[Output truncated. Continue reading with offset: 2001]",
+      )
+      expect(yield* read({ offset: page.next })).toMatchObject({ content: "last", offset: 2_001, truncated: false })
+    }),
+  )
+
+  it.live("applies the byte limit to the returned content of small files", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = absolute(path.join(directory, "bytes.txt"))
+      const read = () => ReadToolFileSystem.read(environment, file, "bytes.txt")
+      const exact = ("é".repeat(799) + "x\n").repeat(32)
+      yield* files.writeFileString(file, exact)
+      expect(yield* read()).toMatchObject({ type: "file", content: exact })
+
+      // Each truncation marker takes more bytes than the one character it replaces.
+      yield* files.writeFileString(file, ("x".repeat(2_001) + "\n").repeat(25) + "é".repeat(500))
+      const page = yield* read()
+      expect(page.type).toBe("text-page")
+      if (page.type !== "text-page") return
+      expect(page).toMatchObject({ offset: 1, next: 26, truncated: true })
+      expect(page.content.split("\n")).toHaveLength(25)
+      expect(Buffer.byteLength(page.content)).toBeLessThanOrEqual(50 * 1024)
+    }),
+  )
+
   it.effect("preserves the environment not-found error", () =>
     Effect.gen(function* () {
       const { environment, directory } = yield* fixture
