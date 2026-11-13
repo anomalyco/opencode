@@ -127,6 +127,10 @@ fn an_overrun_is_one_call_over_100_ms_and_a_cold_first_call_is_exempt() {
     assert!(!bench.call(slot, "render-slot", Duration::from_millis(500)).overrun);
     assert!(bench.call(slot, "render-slot", long + NS).overrun);
     assert!(!bench.call(slot, "dispose", Duration::from_secs(1)).overrun);
+    // The exemption is the first call's, fast or not.
+    bench.call(slot, "setup", US);
+    assert!(!bench.call(slot, "render-slot", US).overrun);
+    assert!(bench.call(slot, "run-command", long + NS).overrun);
     // `setup` and `dispose` put nothing in a frame.
     let fresh = Bench::new();
     let slot = fresh.monitor.slot("p");

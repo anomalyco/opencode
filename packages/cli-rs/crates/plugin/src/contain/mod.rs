@@ -120,6 +120,8 @@ pub struct Timed {
 pub struct Monitor {
     limits: Cell<Limits>,
     clock: RefCell<Rc<dyn Fn() -> Instant>>,
+    /// A test set the clock: the record still takes the monotonic clock, which the watchdog reads.
+    injected: Cell<bool>,
     frame: RefCell<Rc<dyn Fn() -> u64>>,
     plugins: RefCell<Vec<Stats>>,
     /// The frame all plugins' calls are summed in, and their sum.
@@ -166,6 +168,7 @@ impl Monitor {
         Self {
             limits: Cell::new(limits),
             clock: RefCell::new(Rc::new(Instant::now)),
+            injected: Cell::new(false),
             frame: RefCell::new(Rc::new(|| 0)),
             plugins: RefCell::default(),
             all: Cell::default(),
@@ -186,6 +189,7 @@ impl Monitor {
     /// Reads time from `clock`, which tests inject.
     pub fn set_clock(&self, clock: impl Fn() -> Instant + 'static) {
         *self.clock.borrow_mut() = Rc::new(clock);
+        self.injected.set(true);
     }
 
     /// Counts frames with `frame`: the host's painted frames.
@@ -197,8 +201,7 @@ impl Monitor {
     /// plugins known so far and those that come later.
     pub fn attach_record(&self, path: &std::path::Path) -> std::io::Result<Arc<Record>> {
         let record = Arc::new(Record::create(path)?);
-        let epoch = (self.clock.borrow())();
-        if self.record.set((record.clone(), epoch)).is_err() {
+        if self.record.set((record.clone(), Instant::now())).is_err() {
             return Err(std::io::Error::other("a record is attached already"));
         }
         for (slot, stats) in self.plugins.borrow().iter().enumerate() {
@@ -241,7 +244,8 @@ impl Monitor {
         let clock = self.clock.borrow().clone();
         let start = clock();
         if let Some((record, epoch)) = self.record.get() {
-            record.enter(slot.0, record::kind(kind), start.saturating_duration_since(*epoch).as_millis() as u64);
+            let now = if self.injected.get() { Instant::now() } else { start };
+            record.enter(slot.0, record::kind(kind), now.saturating_duration_since(*epoch).as_millis() as u64);
         }
         self.depth.set(1);
         let value = f();
@@ -280,7 +284,8 @@ impl Monitor {
         }
         samples.recent.push_back(took);
         samples.worst = samples.worst.max(took);
-        let overrun = took > limits.overrun && !std::mem::take(&mut stats.cold);
+        let cold = std::mem::take(&mut stats.cold);
+        let overrun = took > limits.overrun && !cold;
         let slow = stats.add(frame, took, &limits);
         let (all, sum) = self.all.get();
         if all != frame {
