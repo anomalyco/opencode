@@ -27,6 +27,7 @@ mod more_tools;
 mod navigate;
 mod permission;
 mod plugin_fetch;
+mod plugin_model;
 mod plugins;
 mod ports;
 mod prompt;
