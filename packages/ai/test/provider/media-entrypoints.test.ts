@@ -561,6 +561,15 @@ const videos: ReadonlyArray<Case<VideoModel>> = [
     auth: ["x-goog-api-key", "google-key"],
     provider: "google",
   },
+  {
+    name: "xai",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/xai/videos")
+      return model("grok-imagine-video-1.5", { ...shared, apiKey: "xai-key" })
+    },
+    url: "https://api.x.ai/v1/videos/generations",
+    auth: ["authorization", "Bearer xai-key"],
+  },
 ]
 
 describe("video entrypoints", () => {
@@ -569,6 +578,21 @@ describe("video entrypoints", () => {
       Effect.gen(function* () {
         const model = yield* Effect.promise(entry.load)
         expectRequest(yield* sentVideo(model), model, entry)
+      }),
+    )
+})
+
+describe("video entrypoint model options", () => {
+  // Model-level options from settings (as models.dev or config set them) become defaults on every request.
+  for (const entry of [
+    { name: "xai", modelID: "grok-imagine-video-1.5", load: () => import("@opencode/ai/providers/xai/videos") },
+    { name: "google", modelID: "gemini-omni-1.2-flash", load: () => import("@opencode/ai/providers/google/videos") },
+  ])
+    it.effect(`providers/${entry.name}/videos keeps provider options from settings`, () =>
+      Effect.gen(function* () {
+        const { model } = yield* Effect.promise(entry.load)
+        const calls = yield* sentVideo(model(entry.modelID, { apiKey: "key", future_option: true }))
+        expect(JSON.parse(calls[0].body).future_option).toBe(true)
       }),
     )
 })
