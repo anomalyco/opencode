@@ -68,7 +68,7 @@ url = "2"
 # Win32 calls, for opencode-util's `win` module only (DW1); each use adds its features there.
 windows-sys = "0.61"
 
-# Tree-sitter grammars for opencode-ui's `grammars` and `grammars-all` features (crates/ui/src/grammars), pinned to
+# Tree-sitter grammars for opencode-ui's `grammars` feature (crates/ui/src/grammars), pinned to
 # the WASM releases packages/tui/src/parsers-config.ts loads where crates.io has them. The five opentui bundles take
 # its versions.
 tree-sitter-javascript = "0.25"
@@ -90,7 +90,6 @@ tree-sitter-c-sharp = "=0.23.1"
 tree-sitter-clojure-orchard = "0.2.9"
 tree-sitter-cpp = "=0.23.4"
 tree-sitter-elixir = "=0.3.5"
-tree-sitter-fsharp = "=0.3.0"
 tree-sitter-haskell = "=0.23.1"
 tree-sitter-hcl = { git = "https://github.com/tree-sitter-grammars/tree-sitter-hcl", tag = "v1.2.0" }
 tree-sitter-java = "=0.23.5"
@@ -98,7 +97,6 @@ tree-sitter-julia = "=0.23.1"
 tree-sitter-lua = "=0.5.0"
 tree-sitter-make = "=1.1.1"
 tree-sitter-nix = "0.3.0"
-tree-sitter-ocaml = "=0.24.2"
 tree-sitter-php = "=0.24.2"
 tree-sitter-r = "=1.2.0"
 tree-sitter-ruby = "=0.23.1"
