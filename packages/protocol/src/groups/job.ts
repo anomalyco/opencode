@@ -16,7 +16,7 @@ export const ListQuery = Schema.Struct({
     description: "Filter to background jobs owned by this session.",
   }),
   kind: Schema.optional(Job.Kind).annotate({
-    description: "Filter by background job kind (shell, subagent, or image).",
+    description: "Filter by background job kind (shell, subagent, image, or video).",
   }),
   status: Schema.optional(Job.Status).annotate({
     description: "Filter by job status (running, completed, error, or cancelled).",

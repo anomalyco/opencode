@@ -13389,7 +13389,7 @@
                   "$ref": "#/components/schemas/Job.Kind"
                 }
               ],
-              "description": "Filter by background job kind (shell, subagent, or image)."
+              "description": "Filter by background job kind (shell, subagent, image, or video)."
             },
             "required": false
           },
