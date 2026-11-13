@@ -35,6 +35,7 @@ export const Plugin = define({
               ...input.prompt,
               sessionID: input.sessionID,
               text: append(PROMPT_INITIALIZE.replace("${path}", location.project.directory), input.prompt.text),
+              metadata: { command: { name: "init", arguments: input.prompt.text } },
               delivery: input.delivery,
             })
             .pipe(Effect.asVoid),
@@ -48,13 +49,15 @@ export const Plugin = define({
               ...input.prompt,
               sessionID: input.sessionID,
               text: append(PROMPT_REVIEW.replace("${path}", location.project.directory), input.prompt.text),
+              metadata: { command: { name: "review", arguments: input.prompt.text } },
               delivery: input.delivery,
             })
             .pipe(Effect.asVoid),
       })
       for (const prompt of loaded.prompts) {
+        const name = mcpCommandName(prompt.server, prompt.name)
         editor.add({
-          name: mcpCommandName(prompt.server, prompt.name),
+          name,
           description: prompt.description,
           execute: (input) =>
             Effect.gen(function* () {
@@ -74,6 +77,7 @@ export const Plugin = define({
                   .map((message) => promptMessageText(message.content))
                   .join("\n")
                   .trim(),
+                metadata: { command: { name, arguments: input.prompt.text } },
                 delivery: input.delivery,
               })
             }).pipe(Effect.asVoid),

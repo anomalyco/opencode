@@ -109,7 +109,7 @@ describe("ConfigCommandPlugin.Plugin", () => {
     it.live(`interpolates ${JSON.stringify(item.template)} with literal input ${JSON.stringify(item.input)}`, () =>
       Effect.gen(function* () {
         const command = yield* Command.Service
-        const prompts: { text: string; delivery?: string }[] = []
+        const prompts: { text: string; metadata?: { readonly [key: string]: unknown }; delivery?: string }[] = []
         yield* ConfigCommandPlugin.Plugin.effect(
           host({
             command: {
@@ -120,7 +120,7 @@ describe("ConfigCommandPlugin.Plugin", () => {
             session: {
               prompt: (input) =>
                 Effect.sync(() => {
-                  prompts.push({ text: input.text, delivery: input.delivery })
+                  prompts.push({ text: input.text, metadata: input.metadata, delivery: input.delivery })
                   return SessionInbox.User.make({
                     id: SessionMessage.ID.make("msg_test"),
                     sessionID: input.sessionID,
@@ -150,7 +150,13 @@ describe("ConfigCommandPlugin.Plugin", () => {
             delivery: "queue",
           },
         })
-        expect(prompts).toEqual([{ text: item.expected, delivery: "queue" }])
+        expect(prompts).toEqual([
+          {
+            text: item.expected,
+            metadata: { command: { name: "explain", arguments: item.input } },
+            delivery: "queue",
+          },
+        ])
       }),
     )
   }
