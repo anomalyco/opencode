@@ -7,6 +7,7 @@ import { Provider } from "@opencode/schema/provider"
 import { Context, Effect, Layer, Schema } from "effect"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { Agent } from "../../agent.js"
+import { ModelAvailability } from "../../model-availability.js"
 import { ModelResolver } from "../../model-resolver.js"
 import { PluginHooks } from "../../plugin/hooks.js"
 import { SessionSchema } from "../schema.js"
@@ -32,7 +33,22 @@ export class ModelUnavailableError extends Schema.TaggedError<ModelUnavailableEr
     return `Model unavailable: ${this.providerID}/${this.modelID}`
   }
 }
-export type Error = ModelNotSelectedError | ModelUnavailableError | ModelResolver.Error
+
+/** A time window in the model's `availability` config currently blocks it and no usable fallback is configured. */
+export class ModelBlockedByAvailabilityError extends Schema.TaggedError<ModelBlockedByAvailabilityError>()(
+  "SessionRunnerModel.ModelBlockedByAvailabilityError",
+  { providerID: Provider.ID, modelID: Model.ID },
+) {
+  override get message() {
+    return `Model ${this.providerID}/${this.modelID} is outside its availability window and no usable fallback model is configured`
+  }
+}
+export type Error =
+  | ModelNotSelectedError
+  | ModelUnavailableError
+  | ModelBlockedByAvailabilityError
+  | ModelAvailability.TimezoneError
+  | ModelResolver.Error
 export type Resolved = ModelResolver.Resolved
 
 export interface Interface {
@@ -71,13 +87,45 @@ export const resolved = (
   transport: options.transport,
 })
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const resolver = yield* ModelResolver.Service
     const agents = yield* Agent.Service
     const hooks = yield* PluginHooks.Service
     // Location plugins populate and filter the catalog asynchronously during layer startup.
+    type Selection = { readonly info: Model.Info; readonly variant: Model.VariantID | undefined }
+    type SelectionError = ModelBlockedByAvailabilityError | ModelAvailability.TimezoneError
+    // Resolves a model, substituting its configured fallback while an availability window blocks it.
+    // Fallback chains are followed transitively (a fallback may itself be blocked) up to a fixed depth.
+    const pick =
+      (find: (ref: Model.Ref) => Effect.Effect<Model.Info | undefined>) =>
+      (
+        info: Model.Info,
+        variant: Model.VariantID | undefined,
+        depth = 0,
+      ): Effect.Effect<Selection, SelectionError> =>
+        Effect.gen(function* () {
+          if (yield* ModelAvailability.check(info)) return { info, variant }
+          const fallback = info.availability?.fallback
+          if (fallback === undefined || depth >= 3)
+            return yield* new ModelBlockedByAvailabilityError({ providerID: info.providerID, modelID: info.id })
+          yield* Effect.logInfo("model blocked by availability window, using fallback", {
+            provider: info.providerID,
+            model: info.id,
+            fallback,
+          })
+          // Catalog-injected models bypass config decoding, so a malformed fallback ref is a
+          // config error, not a defect: surface the blocked-model error instead of throwing.
+          const ref = yield* Effect.try({
+            try: () => Model.Ref.parse(fallback),
+            catch: () => new ModelBlockedByAvailabilityError({ providerID: info.providerID, modelID: info.id }),
+          })
+          const next = ref === undefined ? undefined : yield* find(ref)
+          if (next === undefined)
+            return yield* new ModelBlockedByAvailabilityError({ providerID: info.providerID, modelID: info.id })
+          return yield* pick(find)(next, ref.variant, depth + 1)
+        })
     const select = Effect.fn("SessionRunnerModel.select")(function* (
       session: SessionSchema.Info,
       available: () => Effect.Effect<ReadonlyArray<Model.Info>>,
@@ -86,16 +134,17 @@ const layer = Layer.effect(
         available().pipe(
           Effect.map((models) => models.find((model) => model.providerID === ref.providerID && model.id === ref.id)),
         )
+      const choose = pick(find)
       if (session.model) {
         const info = yield* find(session.model)
-        if (info) return { info, variant: session.model.variant }
+        if (info) return yield* choose(info, session.model.variant)
         return yield* new ModelUnavailableError({ providerID: session.model.providerID, modelID: session.model.id })
       }
       const agent = (yield* agents.select(session.agent)).info?.model
       const preferred = agent && (yield* find(agent))
-      if (preferred) return { info: preferred, variant: agent.variant }
+      if (preferred) return yield* choose(preferred, agent!.variant)
       const info = yield* resolver.fallback()
-      if (info) return { info, variant: undefined }
+      if (info) return yield* choose(info, undefined)
       return yield* new ModelNotSelectedError({ sessionID: session.id })
     })
     return Service.of({

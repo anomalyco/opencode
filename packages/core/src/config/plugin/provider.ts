@@ -270,5 +270,13 @@ function overlay(
       }))
     }
     if (config.disabled !== undefined) model.enabled = !config.disabled
+    if (config.availability !== undefined) {
+      model.availability = {
+        ...(config.availability.mode === undefined ? {} : { mode: config.availability.mode }),
+        windows: config.availability.windows.map((window) => ({ ...window, days: window.days ? [...window.days] : undefined })),
+        ...(config.availability.timezone === undefined ? {} : { timezone: config.availability.timezone }),
+        ...(config.availability.fallback === undefined ? {} : { fallback: config.availability.fallback }),
+      }
+    }
   })
 }

@@ -113,6 +113,27 @@ export const Variant = Schema.Struct({
   settings: VariantSettings.pipe(optional),
 }).annotate({ identifier: "Model.Variant" })
 
+/** Time windows when a model may be used, from the model's `availability` config. */
+export interface Availability extends Schema.Schema.Type<typeof Availability> {}
+export const Availability = Schema.Struct({
+  /** `block` treats the windows as times the model may NOT be used; `allow` as the only times it may. */
+  mode: Schema.Literals(["block", "allow"]).pipe(optional),
+  windows: Schema.Array(
+    Schema.Struct({
+      /** Days the window applies to, `mon` to `sun`; every day when omitted. */
+      days: Schema.Literals(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]).pipe(Schema.Array, optional),
+      /** Inclusive start, HH:mm in the window's timezone; mirrored validated by the config schema. */
+      start: Schema.String,
+      /** Inclusive end; earlier than `start` wraps past midnight. */
+      end: Schema.String,
+    }),
+  ),
+  /** IANA timezone for window times; `UTC` when omitted. Invalid names fail model selection with a config error. */
+  timezone: Schema.String.pipe(optional),
+  /** Model used instead while a window blocks this one, as `provider/model` or `provider/model#variant`. */
+  fallback: Schema.String.pipe(optional),
+}).annotate({ identifier: "Model.Availability" })
+
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
@@ -133,6 +154,7 @@ export const Info = Schema.Struct({
   cost: Schema.Array(Cost),
   status: Schema.Literals(["alpha", "beta", "deprecated", "active"]),
   enabled: Schema.Boolean,
+  availability: Availability.pipe(optional),
   limit: Schema.Struct({
     context: Schema.Int,
     input: Schema.Int.pipe(optional),
