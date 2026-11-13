@@ -24,6 +24,9 @@ export function configureApplication() {
 
   app.setName(APP_NAME)
   app.setAppUserModelId(APP_ID)
+  // Force the renderer's accessibility tree on even when no assistive technology is running, so
+  // screen readers that attach after startup still get the full tree.
+  app.commandLine.appendSwitch("force-renderer-accessibility")
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
   const features = app.commandLine.getSwitchValue("enable-features")
   app.commandLine.appendSwitch("enable-features", features ? `${jsCallStackFeature},${features}` : jsCallStackFeature)

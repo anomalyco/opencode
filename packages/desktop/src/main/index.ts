@@ -20,11 +20,6 @@ if (acquireApplicationLock()) {
   // module graph evaluates on the same thread Chromium needs to finish initialising.
   void app.whenReady().then(async () => {
     marks.ready = Date.now()
-    // Always expose the renderer's accessibility tree so screen readers (NVDA, Narrator, JAWS,
-    // VoiceOver) announce the UI reliably. Chromium otherwise enables it only when it detects an
-    // assistive technology, which can miss a reader that attaches after startup. Set after ready,
-    // before the window: forcing it in configureApplication prevented the renderer from loading.
-    app.accessibilitySupportEnabled = true
     registerStorageSnapshotHandler()
     createEarlyWindow()
     marks.window = Date.now()
