@@ -190,7 +190,8 @@ export function createBrowserPane(input: {
 
             if (!shared) {
               handle.network = yield* createBrowserNetwork({ rpc, attachment, location: options.location, partition })
-              // Sign-ins carry over both ways, so a page of a remote server is signed in where the profile is.
+              // Only when the user chose to share sign-ins with remote servers do they carry over, both ways, so a page
+              // of a remote server is signed in where the profile is; otherwise `link` leaves the partition apart.
               yield* Effect.acquireRelease(
                 Effect.promise(() => input.profile.link(electron.session.fromPartition(partition))),
                 (unlink) => Effect.sync(unlink),
