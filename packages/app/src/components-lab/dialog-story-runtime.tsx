@@ -508,6 +508,7 @@ export function createStoryFetch(overrides: IntegrationInfo[] = []): typeof fetc
     ...overrides,
     ...fixtureIntegrations.filter((item) => !overrides.some((override) => override.id === item.id)),
   ]
+
   const encoder = new TextEncoder()
 
   const handler = async (input: RequestInfo | URL, init?: RequestInit) => {

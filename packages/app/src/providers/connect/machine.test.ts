@@ -396,6 +396,7 @@ test("the paste field keeps the user's choice to show it, and stays shown once a
     attempt: waiting.attempt,
     error: "x",
   })
+
   expect(selectProviderConnectView(rejected.state).paste).toMatchObject({ open: true, locked: false })
 })
 

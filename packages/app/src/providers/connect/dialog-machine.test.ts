@@ -628,6 +628,7 @@ test("a standalone dialog has no way back to the provider list", () => {
   ])
   expect(replay([goBack(entering.state)], entering.state).state).toBe(entering.state)
 })
+
 test("the Console sign-in link copy result belongs to its attempt", () => {
   const opened = replay([selected("opencode", false)])
   const choosing = replay([loaded(opened.state, [oauth, key])], opened.state)

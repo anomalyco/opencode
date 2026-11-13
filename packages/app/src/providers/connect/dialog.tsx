@@ -299,14 +299,12 @@ const STEP_CLASS =
 const methodLabel = (language: ReturnType<typeof useLanguage>, value: ProviderConnectMethod) =>
   value.type === "key" ? (value.label ?? language.t("provider.connect.method.apiKey")) : value.label
 
-const methodIcon = (value: ProviderConnectMethod) =>
-  value.type === "key"
-    ? "keyboard"
-    : value.type === "command"
-      ? "terminal"
-      : value.type === "external"
-        ? "server"
-        : "window-cursor"
+const METHOD_ICON = {
+  oauth: "window-cursor",
+  key: "keyboard",
+  command: "terminal",
+  external: "server",
+} as const satisfies Record<ProviderConnectMethod["type"], string>
 
 // The TUI's integration groups and order, with connected integrations pulled up into their own group first.
 const POPULAR = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "google"]
@@ -524,6 +522,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
       })
     showToast({ variant: "error", title: language.t("provider.connect.copyFailed") })
   }
+
   const name = props.controller.providerName
 
   const code = createMemo(() => {
@@ -851,7 +850,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
               class="group flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
               onClick={() => props.controller.input({ type: "method.selected", index: index() })}
             >
-              <Icon name={methodIcon(item)} size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              <Icon name={METHOD_ICON[item.type]} size="small" class="shrink-0 text-v2-icon-icon-muted" />
               <span class="min-w-0 flex-1 truncate font-[530] text-v2-text-text-base">
                 {methodLabel(language, item)}
               </span>
