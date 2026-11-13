@@ -224,7 +224,11 @@ saved, as in TS.
   starts nothing. A plugin without `describe` (ABI 1.0) tells its ID only from setup, so its setup runs once at load
   and that instance is destroyed at once; what it asks for, including storage writes, is dropped.
 - Destroying an instance revokes its waker, then runs its `on_dispose` callbacks, last registered first, each even when
-  another panics, while the host is still valid. Their effects run, except a fetch, which is not sent.
+  another panics, while the host is still valid. Their effects run, except a fetch, which is not sent, and a dialog,
+  which belongs to an activation that is no longer live and shows nowhere.
+- An instance whose call panicked is never destroyed, however it goes: on deactivation, unload, reload, exit, or when
+  the host drops the registry. Its `on_dispose` callbacks never run, since a failed plugin is called no more; the
+  instance is kept, as its library is.
 - A setup that returns `Err` or panics runs the `on_dispose` callbacks it registered, and the plugin is `failed`
   and inactive, with a toast. Enabling it in the plugin manager runs setup again.
 - `Loader::reconcile` loads new and changed builds (by content digest), unloads removed ones, and remounts the route
