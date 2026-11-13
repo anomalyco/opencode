@@ -1023,10 +1023,13 @@ export function createBrowserPage(
             if (action.condition === "load") return !contents.isLoading()
             const context = frameID ? contexts.get(frameID) : undefined
 
-            if (frameID && (!context || extensionFrames.has(frameID)))
+            if (frameID && (!context || extensionFrames.has(frameID))) {
+              // Names an extension's document by what it is, when that is why the context went.
+              await agentFrameOf(frameID)
               throw new Error(
                 "Frame context is unavailable. Call browser.frames({tabID}) and use a frameID from this tab.",
               )
+            }
 
             const value = await cdp.send(
               "Runtime.evaluate",
