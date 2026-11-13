@@ -97,6 +97,21 @@ test("a settings page survives refresh", async ({ page }) => {
   await expect(page).toHaveURL("/settings?tab=appearance")
 })
 
+test("the theme list keeps keyboard focus when a theme finishes loading", async ({ page }) => {
+  const nord = await holdRoute(page, /\/(?:_assets\/nord-[\w-]+\.js|themes\/nord\.json)(?:\?|$)/)
+  const { settings } = await open(page, { seed: { theme: { id: "nord", scheme: "dark" } } })
+  await settings.getByRole("tab", { name: "Appearance", exact: true }).click()
+  await settings.locator('[data-action="settings-theme"]').click()
+  const listbox = page.getByRole("listbox")
+  await expect(listbox.getByRole("option", { name: "Nord", selected: true })).toBeFocused()
+  await nord.arrived
+
+  nord.release()
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "nord")
+  await page.keyboard.press("ArrowDown")
+  await expect(listbox.getByRole("option", { name: "One Dark", exact: true })).toBeFocused()
+})
+
 // The Arabic dictionary chunks: built (`_assets/ar-<hash>.js`) and dev (`.../i18n/ar.ts`), for the app and the UI.
 const arabic = /\/(?:_assets\/ar-[\w-]+\.js|i18n\/ar\.ts)(?:\?|$)/
 
