@@ -207,9 +207,20 @@ export const Plugin = {
                   Effect.gen(function* () {
                     const moveTarget = change.type === "update" ? change.moveTarget : undefined
                     const target = moveTarget ?? change.target
-                    // A move that only changes case is the same file on macOS and Windows, where writing the new name
-                    // and removing the old one deletes it, so it is written in place and renamed.
-                    const recased = moveTarget?.absolute.toLowerCase() === change.target.absolute.toLowerCase()
+                    // On macOS and Windows a move that only changes case targets the same file, so the new name already
+                    // exists, and writing it then removing the old one would delete the file. Such a move writes in
+                    // place and renames. Symlinks keep the write-and-remove path, which leaves their target alone.
+                    const recased =
+                      moveTarget !== undefined &&
+                      moveTarget.absolute.toLowerCase() === change.target.absolute.toLowerCase() &&
+                      (yield* environment.files.stat(change.target.absolute).pipe(
+                        Effect.map((info) => info.type === "file"),
+                        Effect.orElseSucceed(() => false),
+                      )) &&
+                      (yield* environment.files.stat(moveTarget.absolute).pipe(
+                        Effect.as(true),
+                        Effect.orElseSucceed(() => false),
+                      ))
                     if (change.type === "delete")
                       yield* environment.files
                         .remove(change.target.absolute)
