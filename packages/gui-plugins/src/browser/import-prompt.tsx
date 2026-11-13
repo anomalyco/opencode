@@ -2,7 +2,7 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createMemo, For, Show, type Accessor } from "solid-js"
+import { createMemo, For, onCleanup, Show, type Accessor } from "solid-js"
 import { usePlugin } from "@opencode/plugin/gui"
 import { choiceLabel, Glyph, profileChoices, type Choice } from "./choices"
 import type definition from "./index"
@@ -54,6 +54,13 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
         ? (jobs.describe(last)?.text ?? "")
         : ctx.plural("signins.imported.from", count, { browser: choice?.source.name ?? "" }),
     }
+  })
+
+  // The pane shows the bar over a page and the card on the new tab page, each its own offer: one that goes while it
+  // confirms an import, as when the user opens a page instead of closing it, ends the confirmation, so the pane does
+  // not keep waiting for a close that can no longer come.
+  onCleanup(() => {
+    if (confirmed()) props.closed()
   })
 
   const decline = () => preferences.set({ ...preferences.value, welcomed: true })

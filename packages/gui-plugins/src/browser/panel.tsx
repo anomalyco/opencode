@@ -839,7 +839,7 @@ export default function SessionBrowserPane(props: {
       >
         <div ref={box} aria-hidden="true" class="pointer-events-none absolute inset-0" />
         <Show when={empty() && !failed() && !suspended()}>
-          <div dir="auto" class="size-full overflow-y-auto">
+          <div dir="auto" data-scrollable class="size-full overflow-y-auto">
             <Show when={offering()}>
               <SignInOffer variant="card" imported={imported} closed={() => setConfirming(false)} />
             </Show>
