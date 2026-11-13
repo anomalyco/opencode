@@ -222,7 +222,11 @@ export const unsupportedParts = (
   provider?: string,
 ) => replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, provider))
 
-export const boundImages = (messages: LLMRequest["messages"]) => {
+export const boundImages = (messages: LLMRequest["messages"], provider?: string) => {
+  // Claude Agent keeps the history, images included, in its own Claude Code session and sends only what is new. A
+  // replaced image changes history that session already holds, so it branches before it and replays everything after,
+  // rewriting the prompt cache.
+  if (provider === "claude-agent") return messages
   const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
   const sizes = messages.flatMap((message) =>
     message.content.flatMap((part) => {
@@ -346,6 +350,7 @@ export const layer = Layer.effect(
             model.capabilities,
             model.model.provider,
           ),
+          model.model.provider,
         ),
         tools: Array.from(hooked, ([name, t]) => ({
           ...t,

@@ -219,6 +219,18 @@ describe("SessionModelRequest.boundImages", () => {
     expect(removed(boundImages([...history, ...Array.from({ length: 4 }, (_, i) => image(`${9 + i}.png`))]))).toBe(8)
   })
 
+  test("keeps every image for Claude Agent, whose Claude Code session already holds them", () => {
+    const messages = Array.from({ length: 9 }, (_, i) =>
+      Message.user({
+        type: "media",
+        media: Media.base64("a".repeat(3 * 1024 * 1024), "image/png"),
+        filename: `${i}.png`,
+      }),
+    )
+    expect(boundImages(messages, "claude-agent")).toBe(messages)
+    expect(boundImages(messages, "anthropic")).not.toBe(messages)
+  })
+
   test("replaces images nested in tool results", () => {
     const image = "a".repeat(13 * 1024 * 1024)
     const result = boundImages([
