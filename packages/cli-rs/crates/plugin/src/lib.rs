@@ -458,9 +458,10 @@ impl Scope {
         None
     }
 
-    /// Calls `f` as one call of the plugin, `export`, unless it failed: a panic fails it.
+    /// Calls `f` as one call of the plugin, `export`, unless it failed or its activation ended, as a claim still mounted
+    /// after a disable may ask: a panic fails it.
     fn call<R>(self: &Rc<Self>, export: &str, host: &dyn Host, f: impl FnOnce(&Scoped<'_>) -> R) -> Option<R> {
-        if self.failure.borrow().is_some() {
+        if self.failure.borrow().is_some() || self.activation.disposed() {
             return None;
         }
         match self.attempt(host, f)? {
@@ -514,23 +515,23 @@ impl Scope {
         }
     }
 
-    /// Disposes the plugin's registrations `api` with the host, or without it once it is gone, then the activation, so
-    /// no reply or wake reaches the plugin after. A plugin that failed is called no more, so its dispose callbacks do
-    /// not run (4.14; TS runs no plugin code after a failed setup either).
+    /// Ends the activation, so no call, reply or wake reaches the plugin after, then disposes its registrations `api`
+    /// with the host, or without it once it is gone. A plugin that failed is called no more, so its dispose callbacks
+    /// do not run (4.14; TS runs no plugin code after a failed setup either).
     fn dispose(self: &Rc<Self>, api: &mut abi::Registered) {
         if let Some(layer) = self.layer.take() {
             layer.dispose();
         }
+        // First, so nothing the dispose callbacks set off calls the plugin back.
+        self.activation.dispose();
         if self.failure.borrow().is_some() {
             api.abandon();
-            self.activation.dispose();
             return;
         }
         let host = self.host.upgrade();
         if host.and_then(|host| self.attempt(&*host, |host| api.dispose(Some(host)))).is_none() {
             api.dispose(None);
         }
-        self.activation.dispose();
     }
 }
 
