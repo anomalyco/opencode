@@ -2,7 +2,6 @@
 //! parent stops restarting, and the second-crash rule. `restart` with real processes is in the P-PTY scenarios.
 
 use std::ffi::OsString;
-use std::path::Path;
 use std::time::{Duration, Instant};
 
 use opencode_plugin::contain::{Left, Record, record};
@@ -22,21 +21,15 @@ fn named(id: &str, session: Option<&str>) -> Left {
     }
 }
 
-// Expected: the next client opens the record's session, gets no `--prompt` (the first client sent it), no `--continue`
-// and no other `--session`, and a `--skip-plugin` for each plugin a crash named; what follows `--` stays last.
+// Expected: the next client opens the record's session, and gets no `--prompt` (the first client sent it), no
+// `--continue` and no other `--session`; what follows `--` stays last.
 #[test]
-fn the_next_client_resumes_the_session_and_skips_the_named_plugins() {
+fn the_next_client_resumes_the_session_and_sends_no_prompt_again() {
     let raw = os(&["opencode-native", "--prompt", "hi", "-c", "/work", "--session=ses_old", "--auto", "-s", "ses_x"]);
-    assert_eq!(
-        arguments(&raw, &["a.one".into()], Some("ses_1")),
-        os(&["opencode-native", "/work", "--auto", "--session", "ses_1", "--skip-plugin", "a.one"])
-    );
-    let raw = os(&["opencode-native", "--skip-plugin", "a.one", "--prompt=hello", "--", "--prompt"]);
-    assert_eq!(
-        arguments(&raw, &["a.one".into(), "*".into()], None),
-        os(&["opencode-native", "--skip-plugin", "a.one", "--skip-plugin", "*", "--", "--prompt"])
-    );
-    assert_eq!(arguments(&os(&["opencode-native", "--continue"]), &[], None), os(&["opencode-native"]));
+    assert_eq!(arguments(&raw, Some("ses_1")), os(&["opencode-native", "/work", "--auto", "--session", "ses_1"]));
+    let raw = os(&["opencode-native", "--prompt=hello", "--", "--prompt"]);
+    assert_eq!(arguments(&raw, None), os(&["opencode-native", "--", "--prompt"]));
+    assert_eq!(arguments(&os(&["opencode-native", "--continue"]), None), os(&["opencode-native"]));
 }
 
 // Expected (4.5): at most 2 automatic restarts in 60 s; a third crash in that time stops the parent, and a crash
@@ -66,8 +59,8 @@ fn a_second_unnamed_crash_in_ten_minutes_turns_every_external_plugin_off() {
     let raw = os(&["opencode-native"]);
     let start = Instant::now();
     let skips = |policy: &mut Policy, at: Duration| {
-        let args = policy.next(start + at, &raw, &Left::default()).unwrap();
-        args.iter().filter(|arg| *arg == "*").count()
+        policy.next(start + at, &raw, &Left::default()).unwrap();
+        policy.skip.iter().filter(|id| *id == "*").count()
     };
     let mut policy = Policy::default();
     assert_eq!(skips(&mut policy, Duration::ZERO), 0);
@@ -84,7 +77,7 @@ fn a_second_unnamed_crash_in_ten_minutes_turns_every_external_plugin_off() {
 /// A client the fake loop starts: it writes a record as a client would, then ends with `end`.
 struct Script {
     ends: Vec<(End, Option<Left>)>,
-    spawned: Vec<(Vec<OsString>, Option<std::path::PathBuf>)>,
+    spawned: Vec<(Vec<OsString>, Resume)>,
     restored: usize,
 }
 
@@ -96,7 +89,7 @@ fn run(raw: &[OsString], base: u32, ends: Vec<(End, Option<Left>)>) -> (Result<V
         raw,
         |args, resume| {
             let mut script = script.borrow_mut();
-            script.spawned.push((args.to_vec(), resume.map(Path::to_path_buf)));
+            script.spawned.push((args.to_vec(), resume.clone()));
             Spawned::Started(base + script.spawned.len() as u32)
         },
         |pid| {
@@ -131,11 +124,11 @@ fn the_parent_restarts_after_a_crash_and_ends_with_the_client() {
     assert_eq!(result, Err(ExitCode::from(7)));
     assert_eq!(script.restored, 1);
     assert_eq!(script.spawned.len(), 2);
-    assert_eq!(script.spawned[0], (raw.clone(), None));
-    assert_eq!(script.spawned[1].0, os(&["opencode-native", "--session", "ses_1", "--skip-plugin", "a.one"]));
-    let resume = script.spawned[1].1.clone().unwrap();
-    assert_eq!(resume, record::path(3_900_000_001));
-    assert!(!resume.exists() && !record::path(3_900_000_002).exists());
+    assert_eq!(script.spawned[0], (raw.clone(), Resume::default()));
+    assert_eq!(script.spawned[1].0, os(&["opencode-native", "--session", "ses_1"]));
+    let resume = script.spawned[1].1.clone();
+    assert_eq!(resume, Resume { record: Some(record::path(3_900_000_001)), skip: vec!["a.one".to_owned()] });
+    assert!(!record::path(3_900_000_001).exists() && !record::path(3_900_000_002).exists());
 }
 
 // Expected: after the limit of restarts the parent ends with the crash's code and starts nothing more; a client that
@@ -147,7 +140,7 @@ fn the_parent_stops_with_the_crash_code() {
     let (result, script) = run(&raw, 3_900_000_200, vec![crash(), crash(), crash()]);
     assert_eq!(result, Err(ExitCode::from(134)));
     assert_eq!((script.spawned.len(), script.restored), (3, 3));
-    assert!(script.spawned[2].0.contains(&OsString::from("*")));
+    assert_eq!(script.spawned[2].1.skip, ["*"]);
 }
 
 // Expected: a parent that cannot start its first client runs it itself; one that cannot start a later one fails.
