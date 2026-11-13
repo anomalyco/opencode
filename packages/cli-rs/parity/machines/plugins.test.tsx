@@ -136,9 +136,12 @@ async function act(app: App, action: string) {
     await closeManager(setup)
     return
   }
-  if (action === "escape") {
-    setup.mockInput.pressEscape()
-    await until(setup, (frame) => !frame.includes("Life prompt"), "the prompt closing")
+  if (action === "escape" || action === "enter") {
+    if (action === "escape") setup.mockInput.pressEscape()
+    else setup.mockInput.pressEnter()
+    await until(setup, (frame) => dialog(frame) === undefined, "the dialog closing")
+    // The answer's promise flips the line after the close.
+    await setup.renderOnce()
     return
   }
   if (action === "reload") {
@@ -152,11 +155,22 @@ async function act(app: App, action: string) {
   await setup.renderOnce()
 }
 
-// line/palette/row/dialog. While its prompt shows, the palette and the manager would replace it, so the first three
+// The plugin's dialog on screen, by its title.
+function dialog(frame: string) {
+  const dialogs = [
+    ["Life prompt", "prompt"],
+    ["Life asks", "confirm"],
+    ["Life says", "alert"],
+  ]
+  return dialogs.find(([title]) => frame.includes(title))?.[1]
+}
+
+// line/palette/row/dialog. While its dialog shows, the palette and the manager would replace it, so the first three
 // are not read.
 async function observe(setup: Fixture) {
   const frame = setup.captureCharFrame()
-  if (frame.includes("Life prompt")) return "?/?/?/open"
+  const shown = dialog(frame)
+  if (shown) return `?/?/?/${shown}`
   const line = ["A", "B"].find((side) => frame.includes(`life plugin: ${side}`)) ?? "-"
   const listed = (await palette(setup, "Life flip", false)) ? "yes" : "no"
   const found = await manager(setup)
@@ -260,7 +274,7 @@ async function check(paths: string[][], rows: Set<string>) {
   return seen
 }
 
-// The budgets name the work, each path on a fresh app: 17 edges or 127 paths of up to 4 actions, 8 walks of 12, and
+// The budgets name the work, each path on a fresh app: 37 edges or 323 paths of up to 4 actions, 8 walks of 12, and
 // the fault trials. Every edge is on some path, so either set meets every known row.
 test("the plugin life follows the shared fixture", async () => {
   const rows = known(machine.xfail)
