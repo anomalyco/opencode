@@ -282,8 +282,8 @@ impl Transcript {
         &self.0.groups
     }
 
-    /// Takes the page theme in place, as TS's rows follow it: Markdown keeps its text and code views, the other rows
-    /// build again in their places, and the window, the scroll position and the selection stay.
+    /// Takes the page theme in place, as TS's rows follow it: every row keeps its widgets and their state, Markdown
+    /// keeps its code views, and the window, the scroll position and the selection stay.
     pub fn restyle(&self, tui: &Tui) {
         self.0.restyle(tui);
     }
@@ -651,9 +651,9 @@ impl Inner {
             let positions = self.positions.borrow();
             let cx = self.context(tui, state, &visible, &keys, &positions, &paint);
             let specs = self.specs.borrow();
-            let mut rows = self.rows.borrow_mut();
+            let rows = self.rows.borrow();
             for spec in specs.iter() {
-                if let Some(row) = rows.get_mut(&spec.key()) {
+                if let Some(row) = rows.get(&spec.key()) {
                     row.restyle(&cx, spec);
                 }
             }
@@ -1365,18 +1365,28 @@ impl Row {
         Self { wrapper, body }
     }
 
-    /// Takes the theme of `cx`: text and reasoning restyle in place, so their code is not parsed again; other rows
-    /// take their colors when they are built, so they build again inside the same wrapper.
-    fn restyle(&mut self, cx: &Context<'_>, spec: &Spec) {
+    /// Takes the theme of `cx` in place: the widgets stay, with their state (an open tool, a running spinner), and
+    /// code is not parsed again.
+    fn restyle(&self, cx: &Context<'_>, spec: &Spec) {
+        self.restyle_body(cx);
+        self.update(cx, spec);
+    }
+
+    /// [`Self::restyle`] without the update that paints what the body left to it; a group updates its rows itself.
+    pub(crate) fn restyle_body(&self, cx: &Context<'_>) {
         match &self.body {
+            Body::Group(view) => view.restyle(cx),
+            Body::User(view) => view.restyle(cx),
             Body::Text(view) => view.restyle(cx),
             Body::Reasoning(view) => view.restyle(cx),
-            _ => {
-                self.wrapper.clear();
-                self.body = Body::new(cx, spec);
-                self.wrapper.add(self.body.root());
-                self.update(cx, spec);
-            }
+            Body::Tool(view) => view.restyle(cx),
+            Body::Footer(view) => view.restyle(cx),
+            Body::Usage(view) => view.restyle(),
+            Body::Notice(view) => view.restyle(),
+            Body::Shell(view) => view.restyle(),
+            Body::Compaction(view) => view.restyle(cx),
+            Body::Queued(view) => view.restyle(cx),
+            Body::Error(view) => view.restyle(cx),
         }
     }
 

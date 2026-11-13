@@ -15,13 +15,30 @@ pub struct LocationMissing {
     session: SessionID,
     root: View,
     active: Cell<bool>,
+    /// The missing directory the view names, while it shows.
+    directory: RefCell<Option<String>>,
     layer: RefCell<Option<Disposer>>,
 }
 
 impl LocationMissing {
     pub fn new(tui: &Tui, session: &SessionID) -> Self {
         let root = View::new(&tui.app).column().shrink(0.0).max_height(15).visible(false);
-        Self { tui: tui.weak(), session: session.clone(), root, active: Cell::new(false), layer: RefCell::new(None) }
+        Self {
+            tui: tui.weak(),
+            session: session.clone(),
+            root,
+            active: Cell::new(false),
+            directory: RefCell::default(),
+            layer: RefCell::new(None),
+        }
+    }
+
+    /// Draws the view in the page theme again; it holds no state of its own.
+    pub fn restyle(&self, tui: &Tui) {
+        if let Some(directory) = &*self.directory.borrow() {
+            self.root.clear();
+            self.root.add(&view(tui, &self.session, directory));
+        }
     }
 
     pub fn root(&self) -> &View {
@@ -43,6 +60,7 @@ impl LocationMissing {
             return;
         }
         self.active.set(missing.is_some());
+        self.directory.replace(missing.clone());
         self.root.clear();
         dispose(tui, self.layer.take());
         let Some(directory) = missing else {

@@ -34,6 +34,10 @@ impl Subagent {
         self.inline.root()
     }
 
+    pub fn restyle(&self, _cx: &Context<'_>) {
+        self.inline.restyle();
+    }
+
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
         let status = props.status();
         let text = |key: &str| props.metadata.get(key).and_then(Value::as_str);

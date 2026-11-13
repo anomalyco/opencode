@@ -34,6 +34,13 @@ impl Footer {
         &self.root
     }
 
+    /// Takes the theme of `cx`; the next update paints the line again.
+    pub fn restyle(&self, cx: &Context<'_>) {
+        self.error.restyle(cx);
+        self.line.fg(cx.theme.text.base);
+        self.rendered.take();
+    }
+
     pub fn update(&self, cx: &Context<'_>, message: &SessionMessageAssistant) {
         let theme = cx.theme;
         let muted = Style::new().fg(theme.text.muted);
@@ -78,7 +85,7 @@ pub struct TurnUsage(Rc<UsageInner>);
 
 struct UsageInner {
     app: App,
-    theme: Theme,
+    theme: Live,
     root: View,
     summary: Text,
     table: View,
@@ -119,7 +126,7 @@ impl TurnUsage {
         let root = View::new(cx.app).column().padding_edge(Edge::Left, 3).shrink(0.0).child(&header).child(&table);
         let inner = Rc::new(UsageInner {
             app: cx.app.clone(),
-            theme: cx.theme.clone(),
+            theme: cx.tui.live_theme(),
             root,
             summary,
             table,
@@ -142,6 +149,11 @@ impl TurnUsage {
 
     pub fn root(&self) -> &View {
         &self.0.root
+    }
+
+    /// Paints in the live theme again.
+    pub fn restyle(&self) {
+        self.0.render();
     }
 
     pub fn update(&self, cx: &Context<'_>, messages: &[String], previous: Option<&CacheUsage>) {
@@ -198,7 +210,7 @@ impl UsageInner {
     fn render(&self) {
         let steps = self.steps.borrow();
         self.root.visible(!steps.is_empty());
-        let theme = &self.theme;
+        let theme = &self.theme.get();
         let latest = steps.last();
         let drops = steps.iter().filter(|step| step.reuse_drop.is_some()).count();
         // TS asks for a bold "Tokens" and bold new-token counts through a span `attributes` style, which

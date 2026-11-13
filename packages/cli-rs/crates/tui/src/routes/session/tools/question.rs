@@ -26,6 +26,13 @@ impl Question {
         &self.root
     }
 
+    /// The update that follows lists the entries again in the new theme.
+    pub fn restyle(&self, _cx: &Context<'_>) {
+        self.inline.restyle();
+        self.block.restyle();
+        self.shown.take();
+    }
+
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
         let questions = questions(props.input.get("questions"));
         let answers = answers(props.metadata.get("answers"));

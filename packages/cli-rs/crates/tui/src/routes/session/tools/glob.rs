@@ -14,6 +14,10 @@ impl Glob {
         self.0.root()
     }
 
+    pub fn restyle(&self, _cx: &Context<'_>) {
+        self.0.restyle();
+    }
+
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
         let count = finite(props.metadata.get("count"));
         self.0.set(search(cx, props, "Glob", "Finding files…", count));

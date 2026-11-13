@@ -510,6 +510,59 @@ fn a_theme_switch_restyles_the_transcript_in_place() {
     assert_eq!(diff.map(|(x, y)| (x, y, switched.cell(x, y), expected.cell(x, y))), None, "{}", switched.text());
 }
 
+/// Groups and the turn's usage restyle in place: an open group and the open usage table stay open, and each cell
+/// equals the rows mounted in the new theme.
+#[test]
+fn a_theme_switch_restyles_groups_in_place() {
+    let read = |id: &str, path: &str| {
+        json!({
+            "type": "tool", "id": id, "name": "read", "time": { "created": 1600, "completed": 1700 },
+            "state": { "status": "completed", "input": { "path": path }, "content": [{ "type": "text", "text": "x" }] },
+        })
+    };
+    let messages = vec![
+        user("msg_1", 1000, "Explore"),
+        assistant(
+            "msg_2",
+            1500,
+            json!([
+                { "type": "reasoning", "text": "**Reading**\n\nLook at `a`.\n\n```rust\nlet a = 1;\n```",
+                  "time": { "created": 1500, "completed": 1600 } },
+                read("call_1", "/project/a.rs"),
+                read("call_2", "/project/b.rs"),
+                { "type": "reasoning", "text": "Then `b`.", "time": { "created": 1700, "completed": 1800 } },
+                read("call_3", "/project/c.rs"),
+                { "type": "text", "text": "Done." },
+            ]),
+            Some(4000),
+        ),
+    ];
+    let info = Info {
+        debug: Some(Debug { turn_tokens: Some(TurnTokens::Enabled(true)), ..Debug::default() }),
+        ..support::still()
+    };
+    support::assert_restyles_in_place(
+        || open(80, 40, "ses_g", messages.clone(), info.clone()),
+        |h| {
+            let screen = h.wait_for_all(&["Done.", "+ Tokens"]);
+            let row = |text: &str| screen.lines().position(|line| line.contains(text)).unwrap() as u16;
+            h.app.click(8, row("+ Tokens"));
+            // Apart, so no two clicks make a double click.
+            let click = |text: &str| {
+                h.app.advance(Duration::from_secs(1));
+                let screen = h.app.text();
+                let row = screen.lines().position(|line| line.contains(text)).unwrap() as u16;
+                h.app.click(8, row);
+                h.app.advance(Duration::from_millis(1));
+            };
+            click("2 thoughts, 3 reads");
+            click("+ Thought: Reading");
+            click("Explored: 2 reads");
+        },
+        |screen| screen.contains("- Tokens") && screen.contains("let a = 1;") && screen.contains("Read b.rs"),
+    );
+}
+
 #[test]
 fn latex_fences_render_as_math() {
     let text = "The roots:\n\n```latex\nx = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}\n```";

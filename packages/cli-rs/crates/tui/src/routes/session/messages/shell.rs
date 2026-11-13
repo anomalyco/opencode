@@ -25,7 +25,7 @@ pub struct Shell(Rc<Inner>);
 
 struct Inner {
     app: App,
-    theme: Theme,
+    theme: Live,
     data: Data,
     root: View,
     header: View,
@@ -35,6 +35,7 @@ struct Inner {
     props: RefCell<Option<Props>>,
     /// The header shows a spinner: the command is running.
     spinning: Cell<Option<bool>>,
+    spinner: RefCell<Option<Spinner>>,
     expanded: Cell<bool>,
     hover: Cell<bool>,
     expandable: Cell<bool>,
@@ -173,7 +174,7 @@ impl Shell {
             .child(&error);
         let inner = Rc::new_cyclic(|this| Inner {
             app: cx.app.clone(),
-            theme: theme.clone(),
+            theme: cx.tui.live_theme(),
             data: cx.tui.data.clone(),
             root,
             header,
@@ -182,6 +183,7 @@ impl Shell {
             error,
             props: RefCell::default(),
             spinning: Cell::new(None),
+            spinner: RefCell::default(),
             expanded: Cell::new(false),
             hover: Cell::new(false),
             expandable: Cell::new(false),
@@ -210,6 +212,20 @@ impl Shell {
 
     pub fn root(&self) -> &View {
         &self.0.root
+    }
+
+    /// Paints in the live theme again; a running spinner keeps its frame.
+    pub fn restyle(&self) {
+        let inner = &self.0;
+        let theme = inner.theme.get();
+        inner.command.fg(theme.text.base);
+        inner.output.fg(theme.text.muted);
+        inner.error.fg(theme.text.feedback.error.base);
+        inner.root.border_color(theme.background.base);
+        if let Some(spinner) = &*inner.spinner.borrow() {
+            spinner.set_color(theme.text.base);
+        }
+        inner.paint_background();
     }
 
     pub fn update(&self, cx: &Context<'_>, message: &SessionMessageShell) {
@@ -300,7 +316,7 @@ impl Inner {
 
     fn render(&self) {
         let Some(props) = self.props.borrow().clone() else { return };
-        let theme = &self.theme;
+        let theme = &self.theme.get();
         let running = props.running || props.background;
         let expanded = self.expanded.get();
         let output = {
@@ -326,13 +342,16 @@ impl Inner {
 
         if self.spinning.replace(Some(running)) != Some(running) {
             self.header.clear();
+            self.spinner.take();
             if running {
+                let spinner = Spinner::new(&self.app).color(theme.text.base);
                 let row = View::new(&self.app)
                     .row()
                     .gap(1)
-                    .child(&Spinner::new(&self.app).color(theme.text.base))
+                    .child(&spinner)
                     .child(&self.command.clone().grow(1.0).min_width(0));
                 self.header.add(&row);
+                *self.spinner.borrow_mut() = Some(spinner);
             } else {
                 self.header.add(&self.command);
             }
@@ -353,8 +372,12 @@ impl Inner {
     }
 
     fn paint_background(&self) {
-        let raised = self.theme.background.raised.base;
-        self.root.bg(if self.hover.get() && self.expandable.get() { self.theme.decrease(&raised, 1) } else { raised });
+        let raised = self.theme.get().background.raised.base;
+        self.root.bg(if self.hover.get() && self.expandable.get() {
+            self.theme.get().decrease(&raised, 1)
+        } else {
+            raised
+        });
     }
 }
 
