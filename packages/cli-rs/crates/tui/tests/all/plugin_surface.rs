@@ -18,6 +18,7 @@ use opencode_plugin::abi::{self, v2};
 use opencode_plugin::reconcile;
 use opencode_plugin::surface::{self, Ledger};
 use opencode_tui::{Deps, Route};
+use opentui::widget::Widget;
 
 const ID: &str = "test.board";
 const ITEMS: usize = 6;
@@ -279,6 +280,16 @@ fn surface_mounts_hold_their_properties() {
     model::check(&Surfaces, 40, 32);
 }
 
+/// The cells of the route after `commands`, with a plugin that reads the palette or not.
+fn frame_cells(commands: &[Command], palette: bool) -> Vec<opentui::testing::Cell> {
+    board(|board| *board = Board { values: vec![0; ITEMS], palette, ..Board::default() });
+    let harness = open_tui();
+    for command in commands {
+        apply(&harness, *command);
+    }
+    harness.app.render().cells
+}
+
 /// The frame of the route after `commands`.
 fn frame_after(commands: &[Command]) -> String {
     board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
@@ -321,13 +332,17 @@ fn a_second_refusal_in_a_row_fails_the_plugin() {
 }
 
 // Expected (`work`, a theme change): a surface that names its colors by token gets no call on a theme switch and its
-// widgets take the theme in place; one that reads the palette gets one view, with the new palette.
+// widgets take the theme in place, kept cards included; one that reads the palette gets one view, with the new
+// palette. Either way the route draws as one opened in the new theme.
 #[test]
 fn a_theme_change_calls_only_a_surface_that_reads_the_palette() {
     for palette in [false, true] {
+        let fresh = frame_cells(&[Command::Theme(1), Command::Open, Command::Bump(2)], palette);
         board(|board| *board = Board { values: vec![0; ITEMS], palette, ..Board::default() });
         let harness = open_tui();
         apply(&harness, Command::Open);
+        // The last tree keeps every card but one.
+        apply(&harness, Command::Bump(2));
         let (calls, palettes) = board(|board| (board.calls.len(), board.palettes.len()));
         let before = harness.app.render();
         let work = reconcile::work();
@@ -337,6 +352,7 @@ fn a_theme_change_calls_only_a_surface_that_reads_the_palette() {
         assert_eq!(after - calls, usize::from(palette), "palette={palette}");
         assert_eq!((done.created, done.removed, done.parses), (0, 0, 0), "{done:?}");
         assert_ne!(harness.app.render(), before);
+        assert_eq!(harness.app.render().cells, fresh, "the switched route differs from one opened in the theme");
         if palette {
             let seen = board(|board| board.palettes.clone());
             assert_eq!(seen.len(), palettes + 1);
@@ -395,4 +411,34 @@ fn a_part_output_shows_the_transcripts_own_text() {
     let screen = harness.wait_for("tool said fn parse");
     let lines: Vec<&str> = screen.lines().map(str::trim).filter(|line| !line.is_empty()).collect();
     assert_eq!(lines, ["tool said fn parse", "end"], "{screen}");
+}
+
+/// A plugin of ABI 1.x whose route shows one text in the theme's muted color.
+fn plain(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.route("plain", |_, _| abi::Render::Show(abi::Node::text([abi::Span::new("plain words").fg("text.muted")])));
+    Ok(())
+}
+
+// Expected: a theme switch on a plugin's route of ABI 1.x paints the route in the new theme in place: its text in the
+// new muted color and its page in the new background, with the same widgets.
+#[test]
+fn a_route_of_abi_1_takes_a_new_theme_in_place() {
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![abi::Plugin { id: "test.plain", setup: plain }.into()],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount(80, 24, deps);
+    harness.tui.navigate(Route::Plugin { id: "test.plain".into(), name: "plain".into() });
+    let screen = harness.wait_for("plain words");
+    let (y, line) = screen.lines().enumerate().find(|(_, line)| line.contains("plain words")).unwrap();
+    let x = line.find("plain").unwrap() as u16;
+    let widget = harness.app.widget_at(x, y as u16).unwrap().id();
+    apply(&harness, Command::Theme(1));
+    let theme = harness.tui.page();
+    let frame = harness.app.render();
+    let cell = &frame.cells[y * frame.width as usize + usize::from(x)];
+    assert_eq!(cell.fg, theme.text.muted);
+    assert_eq!(frame.cells[0].bg, theme.background.base);
+    assert_eq!(harness.app.widget_at(x, y as u16).unwrap().id(), widget, "the text was built again");
 }
