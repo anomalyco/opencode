@@ -2162,6 +2162,7 @@ export type EventSubscribeInput = {
         | "tui.session.select"
         | "installation.updated"
         | "installation.update-available"
+        | "storage.failed"
         | "vcs.branch.updated"
         | "mcp.status.changed"
         | "mcp.resources.changed"

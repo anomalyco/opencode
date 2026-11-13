@@ -2098,6 +2098,15 @@ export type InstallationUpdateAvailable = {
   data: { version: string }
 }
 
+export type StorageFailed = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "storage.failed"
+  location?: LocationRef
+  data: { message: string }
+}
+
 export type VcsBranchUpdated = {
   id: EventID
   created: number
@@ -2981,6 +2990,7 @@ export type V2Event =
   | TuiSessionSelect
   | InstallationUpdated
   | InstallationUpdateAvailable
+  | StorageFailed
   | VcsBranchUpdated
   | McpStatusChanged
   | McpResourcesChanged
@@ -4480,6 +4490,7 @@ export type EventSubscribeInput = {
         | "tui.session.select"
         | "installation.updated"
         | "installation.update-available"
+        | "storage.failed"
         | "vcs.branch.updated"
         | "mcp.status.changed"
         | "mcp.resources.changed"

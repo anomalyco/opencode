@@ -12,6 +12,7 @@ import { FileSystem } from "./filesystem.js"
 import { FileSystemV1 } from "./filesystem-v1.js"
 import { Form } from "./form.js"
 import { InstallationEvent } from "./installation-event.js"
+import { StorageEvent } from "./storage-event.js"
 import { Integration } from "./integration.js"
 import { LegacyEventV1 } from "./legacy-event.js"
 import { LspEvent } from "./lsp-event.js"
@@ -76,6 +77,7 @@ export const ServerDefinitions = Event.inventory(
   ...SessionStatusEvent.Definitions,
   ...TuiEvent.Definitions,
   ...InstallationEvent.Definitions,
+  ...StorageEvent.Definitions,
   ...VcsEvent.Definitions,
   McpEvent.StatusChanged,
   McpEvent.ResourcesChanged,
@@ -88,6 +90,7 @@ export const isServer = (event: { readonly type: string }): event is ServerEvent
 export const Definitions = Event.inventory(
   ...foundationDefinitions,
   ...InstallationEvent.Definitions,
+  ...StorageEvent.Definitions,
   ...featureDefinitions,
   ...LspEvent.Definitions,
   ...TuiEvent.Definitions,
