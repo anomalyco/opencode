@@ -19,6 +19,8 @@ pub struct Compaction {
     markdown: Markdown,
     _links: Rc<Links>,
     rendered: RefCell<Option<Rendered>>,
+    /// The theme changed since the label was painted.
+    stale: Cell<bool>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -46,11 +48,28 @@ impl Compaction {
             View::new(cx.app).padding_edge(Edge::Top, 1).padding_edge(Edge::Left, 3).visible(false).child(&markdown);
         let line = View::new(cx.app).row().align_items(Align::Center).child(&left).child(&label).child(&right);
         let root = View::new(cx.app).column().shrink(0.0).child(&line).child(&body);
-        Self { root, left, label, right, body, markdown, _links: links, rendered: RefCell::default() }
+        Self {
+            root,
+            left,
+            label,
+            right,
+            body,
+            markdown,
+            _links: links,
+            rendered: RefCell::default(),
+            stale: Cell::new(false),
+        }
     }
 
     pub fn root(&self) -> &View {
         &self.root
+    }
+
+    /// Takes the theme of `cx`: the summary restyles in place, and the next update paints the label again.
+    pub fn restyle(&self, cx: &Context<'_>) {
+        let colors = opencode_ui::markdown::view_colors(cx.theme, cx.syntax);
+        opencode_ui::markdown::restyle(&self.markdown, colors, cx.syntax);
+        self.stale.set(true);
     }
 
     pub fn update(&self, cx: &Context<'_>, message: &SessionMessageCompaction) {
@@ -77,7 +96,7 @@ impl Compaction {
             usage: (status != Status::Running).then(|| tokens.and_then(usage)).flatten(),
             content: text.trim().to_owned(),
         };
-        if self.rendered.borrow().as_ref() == Some(&rendered) {
+        if !self.stale.replace(false) && self.rendered.borrow().as_ref() == Some(&rendered) {
             return;
         }
         let theme = cx.theme;
@@ -113,20 +132,31 @@ impl Compaction {
 /// A compaction waiting in the inbox: `◇ Compaction queued` on a rule in the border color.
 pub struct Queued {
     root: View,
+    rules: [View; 2],
+    texts: [Text; 2],
 }
 
 impl Queued {
     pub fn new(cx: &Context<'_>) -> Self {
         let (left, label, right) = rule(cx);
-        let border = cx.theme.border.base;
-        left.border_color(border);
-        right.border_color(border);
-        let muted = cx.theme.text.muted;
-        label.add(&Text::new(cx.app, "◇").fg(muted));
-        label.add(&Text::new(cx.app, "Compaction queued").fg(muted));
+        let texts = [Text::new(cx.app, "◇"), Text::new(cx.app, "Compaction queued")];
+        texts.iter().for_each(|text| {
+            label.add(text);
+        });
         let root =
             View::new(cx.app).row().shrink(0.0).align_items(Align::Center).child(&left).child(&label).child(&right);
-        Self { root }
+        let queued = Self { root, rules: [left, right], texts };
+        queued.restyle(cx);
+        queued
+    }
+
+    pub fn restyle(&self, cx: &Context<'_>) {
+        self.rules.iter().for_each(|rule| {
+            rule.border_color(cx.theme.border.base);
+        });
+        self.texts.iter().for_each(|text| {
+            text.fg(cx.theme.text.muted);
+        });
     }
 
     pub fn root(&self) -> &View {

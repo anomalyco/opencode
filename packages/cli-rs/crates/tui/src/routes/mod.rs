@@ -24,8 +24,8 @@ pub trait RouteView {
     fn focus_target(&self) -> Option<AnyWidget> {
         None
     }
-    /// Takes the page theme after a theme switch, keeping what it can in place; [`Self::root`] may change. Returns
-    /// false, by default, when the view must mount again instead.
+    /// Takes the page theme after a theme switch in place, as TS's views follow their theme: every widget keeps its
+    /// state, the focus and the scroll positions. Returns false, by default, when the view must mount again instead.
     fn restyle(&self, _tui: &Tui) -> bool {
         false
     }

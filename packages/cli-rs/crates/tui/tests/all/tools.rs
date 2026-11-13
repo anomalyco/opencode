@@ -292,6 +292,65 @@ fn write_and_edit_blocks_show_the_file_and_the_diff() {
     assert_eq!(added, removed + 1, "{screen}");
 }
 
+/// A theme switch restyles every tool row in place: open output and errors stay open, the diff and the written file
+/// keep their code, and each cell equals the rows mounted in the new theme.
+#[test]
+fn a_theme_switch_restyles_the_tool_rows_in_place() {
+    let patch = "--- src/a.rs\n+++ src/a.rs\n@@ -1,3 +1,3 @@\n fn main() {\n-    old();\n+    new();\n }\n@@ -9,2 +9,2 @@\n x\n-y\n+z\n";
+    let lines: Vec<String> = (1..=20).map(|line| format!("line {line}")).collect();
+    let messages = turn(vec![
+        tool("call_1", "read", running(json!({ "path": "/project/src/a.rs" }), json!({}))),
+        tool(
+            "call_2",
+            "read",
+            completed(json!({ "path": "/project/b.rs" }), "b", json!({ "loaded": ["/project/c.md"] })),
+        ),
+        tool("call_3", "glob", failed(json!({ "pattern": "*.md" }), "No such directory")),
+        tool("call_4", "grep", failed(json!({ "pattern": "secret" }), "The user rejected permission to use this tool")),
+        tool("call_5", "shell", running(json!({ "command": "npm test" }), json!({}))),
+        tool("call_6", "shell", completed(json!({ "command": "seq 20" }), &lines.join("\n"), json!({}))),
+        tool("call_7", "mcp_fetch", completed(json!({ "url": "https://example.com" }), "fetched", json!({}))),
+        tool(
+            "call_8",
+            "write",
+            completed(
+                json!({ "path": "/project/src/new.rs", "content": "fn main() {\n    let x = \"a\"; // b\n}" }),
+                "Wrote",
+                json!({ "diagnostics": { "/project/src/new.rs": [
+                    { "severity": 1, "message": "expected item", "range": { "start": { "line": 1, "character": 3 } } },
+                ] } }),
+            ),
+        ),
+        tool(
+            "call_9",
+            "edit",
+            completed(
+                json!({ "path": "/project/src/a.rs" }),
+                "Edited",
+                json!({ "files": [{
+                    "file": "src/a.rs", "filePath": "/project/src/a.rs", "type": "update",
+                    "patch": patch, "additions": 2, "deletions": 2,
+                }] }),
+            ),
+        ),
+    ]);
+    support::assert_restyles_in_place(
+        || open(100, 100, messages.clone(), Vec::new()),
+        |h| {
+            h.wait_for_all(&["Glob \"*.md\"", "$ seq 20", "mcp_fetch", "Error [2:4] expected item", "+     new();"]);
+            h.click("Glob \"*.md\"");
+            h.click("$ seq 20");
+            h.app.advance(Duration::from_secs(1));
+            h.click("mcp_fetch");
+        },
+        |screen| {
+            ["No such directory", "line 1\n", "url: https://example.com", "Loaded c.md"]
+                .iter()
+                .all(|text| screen.contains(text))
+        },
+    );
+}
+
 #[test]
 fn the_edit_diff_splits_in_a_session_pane_above_120_columns() {
     let patch = "--- src/a.rs\n+++ src/a.rs\n@@ -1,3 +1,3 @@\n fn main() {\n-    old();\n+    new();\n }\n";
@@ -374,6 +433,30 @@ fn a_call_waiting_on_permission_takes_the_warning_color() {
     // Only the first request's call is waiting.
     assert_eq!(h.fg("rm -rf build"), theme.text.feedback.warning.base, "{screen}");
     assert_eq!(h.fg("Grep \"TODO\""), theme.text.muted);
+}
+
+/// The permission prompt over a call restyles in place: the chosen option stays chosen, and each cell equals the
+/// prompt mounted in the new theme, its diff included.
+#[test]
+fn a_theme_switch_restyles_the_permission_prompt_in_place() {
+    let patch = "--- src/a.rs\n+++ src/a.rs\n@@ -1,3 +1,3 @@\n fn main() {\n-    old();\n+    new();\n }\n";
+    let metadata = json!({ "files": [{
+        "file": "src/a.rs", "filePath": "/project/src/a.rs", "type": "update", "patch": patch,
+        "additions": 1, "deletions": 1,
+    }] });
+    let messages = turn(vec![tool("call_1", "edit", running(json!({ "path": "/project/src/a.rs" }), metadata))]);
+    let request = json!({
+        "id": "per_1", "sessionID": "ses_t", "action": "edit", "resources": ["/project/src/a.rs"], "save": ["*"],
+        "source": { "type": "tool", "messageID": "msg_2", "id": "call_1" },
+    });
+    support::assert_restyles_in_place(
+        || open(100, 40, messages.clone(), vec![request.clone()]),
+        |h| {
+            h.wait_for_all(&["Permission required", "+     new();"]);
+            h.app.press("right");
+        },
+        |screen| screen.contains("This will always allow"),
+    );
 }
 
 #[test]

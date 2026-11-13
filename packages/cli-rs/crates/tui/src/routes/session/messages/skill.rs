@@ -14,7 +14,7 @@ pub struct Notice(Rc<Inner>);
 
 struct Inner {
     app: App,
-    theme: Theme,
+    theme: Live,
     tui: Weak<Tui>,
     root: View,
     rendered: RefCell<Option<Line>>,
@@ -41,7 +41,7 @@ impl Notice {
         let root = View::new(cx.app).column().shrink(0.0).padding_edge(Edge::Left, 3);
         let inner = Rc::new(Inner {
             app: cx.app.clone(),
-            theme: cx.theme.clone(),
+            theme: cx.tui.live_theme(),
             tui: cx.tui.weak(),
             root,
             rendered: RefCell::default(),
@@ -70,12 +70,17 @@ impl Notice {
         &self.0.root
     }
 
+    /// The next update paints the line in the live theme.
+    pub fn restyle(&self) {
+        self.0.rendered.take();
+    }
+
     pub fn update(&self, cx: &Context<'_>, message: &SessionMessageInfo) {
         let line = line(message, cx.models, cx.content_width());
         if self.0.rendered.borrow().as_ref() == Some(&line) {
             return;
         }
-        let theme = &self.0.theme;
+        let theme = &self.0.theme.get();
         let app = &self.0.app;
         let muted = theme.text.muted;
         self.0.root.clear();
@@ -115,7 +120,7 @@ impl Notice {
 impl Inner {
     fn paint(&self) {
         let Some(Line::Completion { heading, suffix, state, child }) = &*self.rendered.borrow() else { return };
-        let theme = &self.theme;
+        let theme = &self.theme.get();
         let color = match state.as_deref() {
             Some("error") => theme.text.feedback.error.base,
             Some("cancelled") => theme.text.feedback.warning.base,

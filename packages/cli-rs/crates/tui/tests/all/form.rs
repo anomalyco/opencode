@@ -207,6 +207,32 @@ fn every_field_kind_fills_in_and_submits_from_the_review() {
     );
 }
 
+/// A theme switch restyles the form in place, keeping its answers and the editor's text: each cell equals the form
+/// mounted in the new theme and filled in the same way.
+#[test]
+fn a_theme_switch_keeps_the_answers_and_the_editor() {
+    let fields = json!([
+        { "key": "name", "type": "string", "required": true },
+        { "key": "targets", "type": "multiselect", "custom": true,
+          "options": [{ "value": "a", "label": "A" }, { "value": "b", "label": "B" }] },
+    ]);
+    support::assert_restyles_in_place(
+        || session_form(fields.clone()),
+        |harness| {
+            harness.wait_for("Type your answer");
+            harness.app.type_text("Ada");
+            harness.wait_for("Ada");
+            harness.app.press("tab");
+            harness.wait_for("3. [ ] Type your own answer");
+            harness.app.press("space");
+            harness.app.press("down");
+            harness.app.press("down");
+            harness.app.type_text("ze");
+        },
+        |screen| screen.contains("[✓] A") && screen.contains("ze"),
+    );
+}
+
 #[test]
 fn a_required_answer_blocks_submitting() {
     let harness = session_form(json!([

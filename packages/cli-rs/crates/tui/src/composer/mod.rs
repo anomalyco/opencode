@@ -55,6 +55,8 @@ struct Inner {
     tui: Weak<Tui>,
     session: SessionID,
     root: View,
+    /// The raised panel with its split border.
+    panel: View,
     header: View,
     body: View,
     footer: View,
@@ -90,8 +92,6 @@ impl Composer {
             .column()
             .border_sides(Sides::LEFT)
             .border_chars(Some(split_border()))
-            .border_color(theme.border.base)
-            .bg(theme.background.raised.base)
             .padding_edge(Edge::Left, 1)
             .padding_edge(Edge::Right, 2)
             .padding_edge(Edge::Top, 1)
@@ -102,6 +102,7 @@ impl Composer {
             tui: tui.weak(),
             session: session.clone(),
             root,
+            panel,
             header,
             body,
             footer,
@@ -121,6 +122,7 @@ impl Composer {
             mode: RefCell::default(),
             layers: RefCell::default(),
         });
+        inner.paint(&theme);
         inner.register(tui);
         tui.terminals.set_picker(Some(Rc::new(bind!(inner, |inner, tui| inner.show(tui, Some(Tab::Terminals))))));
         tui.terminals.set_listener(Some(Rc::new(bind!(inner, |inner, tui| inner.refresh(tui)))));
@@ -134,6 +136,14 @@ impl Composer {
     /// Whether the composer shows, in place of the permission, form, and prompt.
     pub fn open(&self) -> bool {
         self.0.open.get()
+    }
+
+    /// Paints in the page theme again; an open composer draws again, keeping its tab and selection.
+    pub fn restyle(&self, tui: &Tui) {
+        self.0.paint(&tui.page());
+        if self.0.open.get() {
+            self.0.draw(tui);
+        }
     }
 
     /// Follows the session (`parentID`), its forms, its subagents and shells. `forms` is whether the session has a
@@ -163,6 +173,10 @@ impl Drop for Composer {
 }
 
 impl Inner {
+    fn paint(&self, theme: &Theme) {
+        self.panel.border_color(theme.border.base).bg(theme.background.raised.base);
+    }
+
     fn register(self: &Rc<Self>, tui: &Tui) {
         let open = self.condition(|inner| inner.open.get());
         let run = |action: fn(&Rc<Inner>, &Tui)| {

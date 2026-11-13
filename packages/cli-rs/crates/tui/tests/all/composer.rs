@@ -398,6 +398,41 @@ fn the_subagents_tab_interrupts_a_running_subagent_and_hides_the_queued_dock() {
     assert!(!harness.app.text().contains("Subagents"));
 }
 
+impl support::Mounted for Harness {
+    fn app(&self) -> &TestApp {
+        &self.app
+    }
+
+    fn tui(&self) -> &Rc<Tui> {
+        &self.tui
+    }
+}
+
+/// A theme switch restyles the queued dock, the open composer, and a shown terminal in place: the composer keeps
+/// its tab and the terminal its connection, and each cell equals them mounted in the new theme.
+#[test]
+fn a_theme_switch_restyles_the_dock_the_composer_and_the_terminal_in_place() {
+    support::assert_restyles_in_place(mount, |_| {}, |screen| screen.contains("1 queued"));
+    support::assert_restyles_in_place(
+        mount,
+        |harness| {
+            harness.tui.keymap.dispatch("session.child.first", None);
+        },
+        |screen| screen.contains("Explore: Scan ()"),
+    );
+    support::assert_restyles_in_place(
+        mount,
+        |harness| {
+            harness.tui.keymap.dispatch("terminal.select", None);
+            support::wait_for_all(&harness.app, &["+ New terminal", "vim"]);
+            harness.app.press("down");
+            harness.app.press("enter");
+            assert!(harness.wait(|harness| harness.selection()["sessions"]["ses_a"] == "pty_1"));
+        },
+        |screen| !screen.contains("+ New terminal"),
+    );
+}
+
 #[test]
 fn terminal_select_opens_the_terminal_list_and_enter_shows_the_terminal() {
     let harness = mount();

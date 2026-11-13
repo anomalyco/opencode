@@ -28,6 +28,8 @@ pub struct Images {
     rendered: RefCell<Option<(Vec<String>, u16)>>,
     /// Bytes read for `media:` refs, by URI, shared by the row's images.
     media: Rc<RefCell<HashMap<String, Vec<u8>>>>,
+    /// The texts in the app theme's foreground: `+N more` and `No preview`.
+    texts: Rc<RefCell<Vec<Text>>>,
 }
 
 impl Images {
@@ -49,11 +51,19 @@ impl Images {
             root,
             rendered: RefCell::default(),
             media: Rc::default(),
+            texts: Rc::default(),
         }
     }
 
     pub fn root(&self) -> &View {
         &self.root
+    }
+
+    /// Takes the new app theme's foreground in place; the images stay.
+    pub fn restyle(&self, theme: &Theme) {
+        for text in self.texts.borrow().iter() {
+            text.fg(theme.text.base);
+        }
     }
 
     pub fn update(&self, cx: &Context<'_>, uris: Vec<String>) {
@@ -66,6 +76,7 @@ impl Images {
         }
         let (uris, height) = &next;
         self.root.clear();
+        self.texts.borrow_mut().clear();
         self.root.visible(!uris.is_empty());
         for (index, uri) in uris.iter().take(VISIBLE).enumerate() {
             let cell = View::new(&self.app)
@@ -89,6 +100,7 @@ impl Images {
             self.root.add(&cell);
         }
         if uris.len() > VISIBLE {
+            let more = Text::new(&self.app, format!("+{} more", uris.len() - VISIBLE)).wrap(WrapMode::None);
             self.root.add(
                 &View::new(&self.app)
                     .width(8)
@@ -96,8 +108,9 @@ impl Images {
                     .shrink(1.0)
                     .align_items(Align::Center)
                     .justify(Justify::Center)
-                    .child(&Text::new(&self.app, format!("+{} more", uris.len() - VISIBLE)).wrap(WrapMode::None)),
+                    .child(&more),
             );
+            self.texts.borrow_mut().push(more);
         }
         *self.rendered.borrow_mut() = Some(next);
     }
@@ -106,31 +119,39 @@ impl Images {
     fn show(&self, cell: &View, uri: &str) {
         if let Some(hash) = media_hash(uri) {
             if let Some(bytes) = self.media.borrow().get(uri) {
-                place(&self.app, cell, Some(bytes));
+                place(&self.app, cell, Some(bytes), &self.texts);
                 return;
             }
             let client = self.data.client().clone();
             let input = ExperimentalMediaGetInput { hash: MediaHash(hash.to_owned()) };
             let (cell, media, uri, app) = (cell.clone(), self.media.clone(), uri.to_owned(), self.app.clone());
+            let texts = self.texts.clone();
             self.app.spawn(async move { client.experimental_media_get(&input).await }, move |_, result| {
                 let bytes = result.ok().map(|bytes| bytes.to_vec());
-                place(&app, &cell, bytes.as_deref());
+                place(&app, &cell, bytes.as_deref(), &texts);
                 if let Some(bytes) = bytes {
                     media.borrow_mut().insert(uri, bytes);
                 }
             });
             return;
         }
-        place(&self.app, cell, data_uri(uri).as_deref());
+        place(&self.app, cell, data_uri(uri).as_deref(), &self.texts);
     }
 }
 
-fn place(app: &App, cell: &View, bytes: Option<&[u8]>) {
+/// `texts` keeps a `No preview` placeholder for [`Images::restyle`].
+fn place(app: &App, cell: &View, bytes: Option<&[u8]>, texts: &RefCell<Vec<Text>>) {
     cell.clear();
     let image = ImageView::new(app).fit(ImageFit::Cover).width(Length::Percent(100.0)).height(Length::Percent(100.0));
     match bytes.map(|bytes| image.load(bytes)) {
-        Some(Ok(image)) => cell.add(&image),
-        _ => cell.add(&Text::new(app, "No preview")),
+        Some(Ok(image)) => {
+            cell.add(&image);
+        }
+        _ => {
+            let text = Text::new(app, "No preview");
+            cell.add(&text);
+            texts.borrow_mut().push(text);
+        }
     };
 }
 

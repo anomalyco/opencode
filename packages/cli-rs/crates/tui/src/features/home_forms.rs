@@ -31,6 +31,10 @@ pub fn mount(tui: &Tui, home: &View) -> HomeForms {
 }
 
 impl HomeForms {
+    pub fn restyle(&self) {
+        self.host.restyle();
+    }
+
     /// Whether a form shows; the home prompt is disabled meanwhile.
     pub fn active(&self) -> bool {
         self.host.active()

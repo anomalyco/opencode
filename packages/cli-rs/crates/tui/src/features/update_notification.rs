@@ -82,6 +82,8 @@ pub struct Updates {
     /// The notice row its hover handler restyles. The handler holds it weakly: a widget whose handler holds the
     /// widget is never freed.
     row: RefCell<Option<Rc<View>>>,
+    /// The row's texts, each fading in, and whether it is the command.
+    parts: RefCell<Vec<(FadeInText, bool)>>,
     hovered: Cell<bool>,
     /// Redraws the open update dialog.
     pub(crate) dialog: RefCell<Option<Weak<dyn Fn()>>>,
@@ -307,6 +309,23 @@ pub fn open(tui: &Tui, origin: Origin) {
     crate::dialogs::update::show(tui, checks);
 }
 
+/// Paints the home's notice in the page theme in place, so its texts keep fading in where they are.
+pub fn restyle(tui: &Tui) {
+    let theme = tui.page();
+    let hovered = tui.updates.hovered.get();
+    if let Some(row) = &*tui.updates.row.borrow()
+        && hovered
+    {
+        row.bg(theme.background.action.primary.hovered);
+    }
+    let backdrop = if hovered { theme.background.action.primary.hovered } else { theme.background.base };
+    for (part, command) in tui.updates.parts.borrow().iter() {
+        part.clone()
+            .fg(if *command { theme.text.action.primary.selected } else { theme.text.muted })
+            .backdrop(backdrop);
+    }
+}
+
 /// Mounts the notice into the home's row (`UpdateNotification`). The row is drawn again on each change.
 pub fn mount(tui: &Tui, home: &View) {
     *tui.updates.slot.borrow_mut() = Some(home.clone());
@@ -318,6 +337,7 @@ fn render(tui: &Tui) {
     let Some(slot) = tui.updates.slot.borrow().clone() else { return };
     slot.clear();
     tui.updates.row.take();
+    tui.updates.parts.borrow_mut().clear();
     let Some(notice) = tui.updates.notification.borrow().clone() else { return };
     let remote = notice.remote();
     if remote && notice.kind != Kind::Available {
@@ -359,6 +379,8 @@ fn render(tui: &Tui) {
     for part in &parts {
         text.add(&part.clone().backdrop(backdrop));
     }
+    *tui.updates.parts.borrow_mut() =
+        parts.iter().enumerate().map(|(index, part)| (part.clone(), !remote && index == 0)).collect();
     row.add(&text);
     let row = Rc::new(row);
     let (weak, styled) = (tui.weak(), Rc::downgrade(&row));

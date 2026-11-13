@@ -153,8 +153,13 @@ pub struct Inner {
     pub(crate) textarea: Textarea,
     root: View,
     frame: View,
+    /// The raised box around the textarea, and the half-line under it in the same color.
+    body: View,
+    edge: View,
     bottom: View,
     metadata: Row,
+    /// The page theme the prompt last painted in, which its marks' styles came from.
+    theme: RefCell<Theme>,
     footer: Text,
     /// The editor context's file, on the footer's right (`prompt.footer.file`, E.5).
     editor_file: Text,
@@ -225,6 +230,23 @@ impl Prompt {
         Rc::downgrade(&self.inner)
     }
 
+    /// Paints in the page theme in place, as TS's prompt follows it: the text, cursor, undo history, mentions and
+    /// focus stay. The footer's plugin claims take the theme when they render, so they render again.
+    pub fn restyle(&self, tui: &Tui) {
+        let inner = &self.inner;
+        let theme = tui.page();
+        paint(&theme, &inner.textarea, &inner.body, &inner.edge);
+        inner.metadata.root().fg(theme.text.base);
+        let old = inner.theme.replace(theme.clone());
+        parts::restyle(inner, &old, &theme);
+        inner.previews.restyle(&theme);
+        inner.footer_slots.borrow_mut().0 = None;
+        inner.refresh(tui);
+        if let Some(complete) = inner.autocomplete.get() {
+            complete.restyle(tui);
+        }
+    }
+
     pub fn sync(&self, tui: &Tui, changes: &Changes) {
         if changes.location(&self.inner.location(tui)) {
             self.inner.read_catalog(tui);
@@ -283,12 +305,22 @@ impl Drop for Prompt {
     }
 }
 
+/// The textarea on the box's surface, `theme.decrease(theme.background.raised.base)`, with the half-line under it.
+fn paint(theme: &Theme, textarea: &Textarea, body: &View, edge: &View) {
+    let background = theme.decrease(&theme.background.raised.base, 1);
+    textarea
+        .colors(theme.text.base, background)
+        .focused_colors(theme.text.base, background)
+        .placeholder_color(theme.text.muted)
+        .cursor_color(theme.text.base);
+    body.bg(background);
+    edge.border_color(background);
+}
+
 /// Mounts a prompt for `session`, or for a new session on home.
 pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
     let app = &tui.app;
     let theme = tui.page();
-    // `theme.decrease(theme.background.raised.base)`.
-    let background = theme.decrease(&theme.background.raised.base, 1);
     let (width, height) = app.size();
     let padding = if width < 44 { 1 } else { 2 };
     let cursor = crate::features::system_commands::cursor(&tui.config());
@@ -296,10 +328,6 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         // Core's textarea sets no pointer shape, so the TS TUI keeps the default pointer everywhere.
         .mouse_pointer(MousePointer::DEFAULT)
         .set_keymap(Keymap::new())
-        .colors(theme.text.base, background)
-        .focused_colors(theme.text.base, background)
-        .placeholder_color(theme.text.muted)
-        .cursor_color(theme.text.base)
         // `useCursorStyle` (E.20).
         .cursor_style(cursor.0, cursor.1)
         .min_height(1)
@@ -317,7 +345,6 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .padding_edge(Edge::Left, padding)
         .padding_edge(Edge::Right, padding)
         .padding_edge(Edge::Top, 1)
-        .bg(background)
         .child(previews.root())
         .child(&textarea)
         .child(&meta);
@@ -334,8 +361,8 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .grow(1.0)
         .basis(Length::Auto)
         .border_sides(Sides::BOTTOM)
-        .border_chars(Some(border_chars(' ', ' ', '▀')))
-        .border_color(background);
+        .border_chars(Some(border_chars(' ', ' ', '▀')));
+    paint(&theme, &textarea, &body, &edge);
     let bottom = View::new(app)
         .row()
         .height(1)
@@ -369,8 +396,11 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         textarea,
         root,
         frame,
+        body,
+        edge,
         bottom,
         metadata,
+        theme: RefCell::new(theme),
         footer,
         editor_file,
         dismissed: RefCell::new(None),

@@ -8,7 +8,7 @@ use opencode_api::generated::ShellID;
 use opencode_ui::motion::Spinner;
 use opencode_ui::prompt_input::paste::strip_ansi;
 
-use super::dispatch::{Block, BlockTool, Header, Props, Status, content_width, format_path, status_badge};
+use super::dispatch::{Block, BlockTool, Header, Props, Status, content_width, format_path, paint_badge, status_badge};
 use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 use crate::routes::session::messages::shell::{Output, collapse_shell_output};
@@ -21,8 +21,10 @@ pub struct Shell(Rc<Inner>);
 struct Inner {
     tui: Weak<Tui>,
     app: App,
-    theme: Theme,
+    theme: Live,
     block: BlockTool,
+    /// Restyles the body in place, so a running spinner keeps its frame.
+    paints: Paints,
     body: View,
     call: RefCell<Option<Call>>,
     expanded: Cell<bool>,
@@ -62,7 +64,8 @@ struct Paint {
     input: String,
     output: String,
     background: bool,
-    color: Color,
+    /// The spinner and command take the warning color.
+    permission: bool,
 }
 
 impl Shell {
@@ -74,8 +77,9 @@ impl Shell {
         let inner = Rc::new(Inner {
             tui: cx.tui.weak(),
             app: cx.app.clone(),
-            theme: cx.theme.clone(),
+            theme: cx.tui.live_theme(),
             block,
+            paints: Paints::default(),
             body,
             call: RefCell::default(),
             expanded: Cell::new(false),
@@ -100,6 +104,11 @@ impl Shell {
 
     pub fn root(&self) -> &View {
         self.0.block.root()
+    }
+
+    pub fn restyle(&self, cx: &Context<'_>) {
+        self.0.block.restyle();
+        self.0.paints.restyle(cx.theme);
     }
 
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
@@ -232,7 +241,7 @@ impl Inner {
     fn paint(&self) {
         let call = self.call.borrow();
         let Some(call) = call.as_ref() else { return };
-        let theme = &self.theme;
+        let theme = &self.theme.get();
         let expanded = self.expanded.get();
         let running = call.status == Status::Running || self.background_running();
         let output = self.output_text(call, expanded);
@@ -265,7 +274,7 @@ impl Inner {
             input: if expanded { input } else { collapsed.input },
             output: if expanded { output } else { collapsed.output },
             background: call.background,
-            color: if call.permission { theme.text.feedback.warning.base } else { theme.text.base },
+            permission: call.permission,
         };
         if self.painted.borrow().as_ref() == Some(&paint) {
             return;
@@ -273,28 +282,49 @@ impl Inner {
         let app = &self.app;
         let body = &self.body;
         body.clear();
+        self.paints.clear();
         let wrap = if expanded { WrapMode::Word } else { WrapMode::Char };
         let limit = |text: Text| if expanded { text } else { text.max_height(2) };
+        let permission = paint.permission;
+        let color = move |theme: &Theme| if permission { theme.text.feedback.warning.base } else { theme.text.base };
+        let spinner = |spinner: Spinner| {
+            let painted = spinner.clone();
+            self.paints.add(theme, move |theme| painted.set_color(color(theme)));
+            spinner
+        };
+        let text = |text: Text, fg: fn(&Theme) -> Color| {
+            let painted = text.clone();
+            self.paints.add(theme, move |theme| {
+                painted.fg(fg(theme));
+            });
+            text
+        };
         if !paint.command {
             if paint.running || paint.streaming {
-                body.add(&Spinner::new(app).color(paint.color).label("Writing command…"));
+                body.add(&spinner(Spinner::new(app).label("Writing command…")));
             } else {
-                body.add(&Text::new(app, "Writing command…").fg(theme.text.muted));
+                body.add(&text(Text::new(app, "Writing command…"), |theme| theme.text.muted));
             }
         } else {
             if paint.running {
-                let spinner = Spinner::new(app).color(paint.color);
-                let text = limit(Text::new(app, paint.input.clone()).fg(paint.color).wrap(wrap).grow(1.0).min_width(0));
-                body.add(&View::new(app).row().gap(1).child(&spinner).child(&text));
+                let spinner = spinner(Spinner::new(app));
+                let input = limit(Text::new(app, paint.input.clone()).wrap(wrap).grow(1.0).min_width(0));
+                let painted = input.clone();
+                self.paints.add(theme, move |theme| {
+                    painted.fg(color(theme));
+                });
+                body.add(&View::new(app).row().gap(1).child(&spinner).child(&input));
             } else {
-                body.add(&limit(Text::new(app, paint.input.clone()).fg(theme.text.base).wrap(wrap)));
+                body.add(&text(limit(Text::new(app, paint.input.clone()).wrap(wrap)), |theme| theme.text.base));
             }
             if !paint.output.is_empty() {
-                body.add(&Text::new(app, paint.output.clone()).fg(theme.text.muted));
+                body.add(&text(Text::new(app, paint.output.clone()), |theme| theme.text.muted));
             }
         }
         if paint.background {
-            body.add(&status_badge(app, theme, "Background", true));
+            let badge = status_badge(app, theme, "Background", true);
+            body.add(&badge);
+            self.paints.keep(move |theme| paint_badge(&badge, theme, true));
         }
         *self.painted.borrow_mut() = Some(paint);
     }
