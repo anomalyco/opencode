@@ -434,6 +434,14 @@ test("Mod+F finds in Markdown and HTML previews with the code view's find bar", 
   await find.press("Escape")
   await expect(find).toHaveCount(0)
 
+  // A closed side panel keeps its preview mounted out of sight, so Mod+F opens no bar there.
+  const toggle = page.getByRole("button", { name: "Toggle review" })
+  await toggle.click()
+  await expect(side).toBeHidden()
+  await page.keyboard.press(`${mod}+f`)
+  await expect(find).toHaveCount(0)
+  await toggle.click()
+
   // Mermaid keeps its source in a hidden code block; only the drawn labels count.
   await side.getByRole("tab", { name: "diagram.mmd", exact: true }).click()
   await side.locator("svg").getByText("First needle").click()

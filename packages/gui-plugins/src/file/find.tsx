@@ -82,7 +82,8 @@ export function createPreviewFind(input: { root: () => HTMLElement | undefined; 
   const open = () => {
     const el = input.root()?.querySelector<HTMLElement>("[data-file-find]")
 
-    if (!el) return false
+    // A closed side panel keeps its preview mounted but hidden; the bar would open off screen.
+    if (!el?.checkVisibility()) return false
     const current = untrack(state)
 
     if (current?.target !== el) {
