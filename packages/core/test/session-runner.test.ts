@@ -1219,6 +1219,23 @@ describe("SessionRunnerLLM", () => {
     expect(JSON.stringify(compiled.body)).not.toContain('"metadata"')
   })
 
+  scenario("keeps context hook edits to messages without stored metadata", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        for (const message of event.messages) {
+          if (message.role !== "user" || message.metadata !== undefined) continue
+          ;(message.content as Array<UserMessage["content"][number]>).unshift(Message.text("EDITED"))
+        }
+      }),
+    )
+    yield* s.llm.push(TestLLM.text("Done", "text-done"))
+
+    yield* s.runPrompt("Start")
+
+    expect(s.requests[0]?.messages.at(-1)?.content).toEqual([Message.text("EDITED"), Message.text("Start")])
+  })
+
   for (const resume of [false, true]) {
     scenario(
       `continues instead of going idle when a session idle hook admits input (resume: ${resume})`,

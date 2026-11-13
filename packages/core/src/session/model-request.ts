@@ -130,7 +130,7 @@ export const baseTranscript = (input: {
         (item): SessionRequestMessage =>
           message.metadata === undefined || item.id !== message.id
             ? item
-            : Object.assign(item, { metadata: message.metadata }),
+            : { ...item, metadata: message.metadata },
       ),
     ),
   }
