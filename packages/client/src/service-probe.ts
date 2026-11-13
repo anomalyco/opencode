@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { DiscoverOptions, Endpoint, Info } from "./service.js"
@@ -48,10 +47,7 @@ export function same(left: Info, right: Info) {
 
 /** Ask a registered owner for its health and classify the answer. */
 export async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTimeout) {
-  const endpoint = {
-    url: info.url,
-    auth: info.password === undefined ? undefined : { type: "basic", username: "opencode", password: info.password },
-  } satisfies Endpoint
+  const endpoint = endpointOf(info)
   const signal = AbortSignal.timeout(timeout)
   const result = await fetch(new URL("/api/info", info.url), { headers: headers(endpoint), signal })
     .then(async (response) => ({
@@ -90,14 +86,34 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
   }
 }
 
+/** What a service's health thread reports about its main thread (`ServerHealth` in the server package). */
+export type Health = {
+  /** Milliseconds since the main thread last ran, measured by the service itself. */
+  readonly blocked: number
+  /** Whether the main thread was seen waiting on disk during that block. Linux only. */
+  readonly disk: boolean
+}
+
 /**
- * Whether `pid` is blocked in uninterruptible IO (Linux state `D`). Such a process is busy, not hung: no
- * signal, not even SIGKILL, lands before its IO returns. Always false where `/proc` is missing.
+ * Ask a registered owner's health thread about its main thread. That thread answers even while the main thread,
+ * which serves `/api/info`, is blocked. Undefined when the owner has none (an older service) or it does not answer.
  */
-export async function blockedOnDisk(pid: number) {
-  const stat = await readFile(`/proc/${pid}/stat`, "utf8").catch(() => undefined)
-  // The state follows the command name, which is in parentheses and may contain ") " itself.
-  return stat?.split(") ").at(-1)?.startsWith("D") === true
+export async function probeHealth(info: Info, timeout = defaultEnsureTiming.requestTimeout) {
+  if (info.health === undefined) return undefined
+  const body = await fetch(info.health, { headers: headers(endpointOf(info)), signal: AbortSignal.timeout(timeout) })
+    .then((response) => (response.ok ? (response.json() as Promise<unknown>) : undefined))
+    .catch(() => undefined)
+  if (typeof body !== "object" || body === null) return
+  if (!("pid" in body) || body.pid !== info.pid) return
+  if (!("blocked" in body) || typeof body.blocked !== "number") return
+  return { blocked: body.blocked, disk: "disk" in body && body.disk === true } satisfies Health
+}
+
+function endpointOf(info: Info) {
+  return {
+    url: info.url,
+    auth: info.password === undefined ? undefined : { type: "basic", username: "opencode", password: info.password },
+  } satisfies Endpoint
 }
 
 /** Create HTTP authentication headers for a service endpoint. */

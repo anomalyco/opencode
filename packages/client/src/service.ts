@@ -54,4 +54,6 @@ export type Info = {
   readonly pid: number
   /** Private service password, when authentication is enabled. */
   readonly password?: string
+  /** URL of the thread that reports how long the service's main thread has been blocked. */
+  readonly health?: string
 }

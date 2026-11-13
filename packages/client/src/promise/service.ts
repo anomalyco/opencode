@@ -4,7 +4,8 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { blockedOnDisk, decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { hangDetector, recoveryLock } from "../service-recovery.js"
 
 export * from "../service.js"
 export { fallback, headers }
@@ -29,7 +30,8 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const timing = ensureTiming(options)
   const deadline = Date.now() + timing.promiseTimeout
   const pool = contenderPool(timing)
-  let unresponsive: { readonly info: Info; readonly since: number } | undefined
+  const hang = hangDetector(timing)
+  const recovery = recoveryLock(options.file ?? fallback())
   let announced = false
 
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {
@@ -50,27 +52,19 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   try {
     while (true) {
       if (Date.now() >= deadline)
-        throw pool.failure() ?? new Error("Timed out waiting for the background service to start")
+        throw pool.failure() ?? hang.stuck() ?? new Error("Timed out waiting for the background service to start")
       const registration = await registered(options.file, timing.requestTimeout)
       if (registration.timedOut && registration.info !== undefined) {
-        // A process blocked on disk IO restarts the clock: SIGKILL cannot land until the IO returns, and a
-        // replacement would block on the same disk.
-        unresponsive =
-          unresponsive !== undefined &&
-          same(unresponsive.info, registration.info) &&
-          !(await blockedOnDisk(registration.info.pid))
-            ? unresponsive
-            : { info: registration.info, since: Date.now() }
-        if (Date.now() - unresponsive.since >= timing.unresponsiveTimeout) {
+        if ((await hang.hung(registration.info)) && (await recovery.acquire())) {
           announce("missing")
           console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
           await PtyHandoff.clear(options.file ?? fallback())
           await terminate(registration.info, options, timing)
           pool.evict(registration.info.pid)
           pool.recruitNow()
-          unresponsive = undefined
+          hang.answered()
         }
-      } else unresponsive = undefined
+      } else hang.answered()
 
       if (registration.service !== undefined) {
         pool.serviceAnswered()
@@ -92,7 +86,8 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         const failed = pool.reap()
         if (failed !== undefined) throw failed
         // A timed-out probe reached an owner that still holds the service port, so a contender could not bind it.
-        if (!registration.timedOut && pool.shouldRecruit(registration.info !== undefined)) {
+        // While another client replaces the owner, its contenders are the ones to wait for.
+        if (!registration.timedOut && !(await recovery.busy()) && pool.shouldRecruit(registration.info !== undefined)) {
           announce("missing")
           pool.add(await spawnContender())
         }
@@ -101,6 +96,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
     }
   } finally {
     pool.releaseAll()
+    await recovery.release()
   }
 }
 

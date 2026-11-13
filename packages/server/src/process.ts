@@ -15,6 +15,7 @@ import { HttpMiddleware, HttpRouter, HttpServerRequest, HttpServerResponse } fro
 import { NetAddress } from "effect/net"
 import { createServer } from "node:http"
 import { ServerAuth } from "./auth"
+import { ServerHealth } from "./health"
 import { isAllowedCorsOrigin } from "./cors"
 import { authorizedRequest, unauthorizedResponse } from "./middleware/authorization"
 import { withoutParentSpan } from "./request-tracing"
@@ -28,6 +29,8 @@ export interface Lifecycle<E = never, R = never> {
   readonly onListen: (
     address: NetAddress.SocketAddress,
     shutdown: Effect.Effect<void>,
+    /** The URL of the thread that reports whether this process is busy or hung (see `ServerHealth`). */
+    health: string,
   ) => Effect.Effect<Effect.Effect<void>, E, R>
 }
 
@@ -81,12 +84,14 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     )
     .pipe(Effect.provide(NodeHttpServer.layerHttpServices), withoutParentSpan)
   if (lifecycle)
-    yield* lifecycle.onListen(bound.http.address, shutdown.open.pipe(Effect.asVoid)).pipe(
-      Effect.flatMap((cleanup) =>
-        Effect.addFinalizer(() => Scope.close(bound.scope, Exit.void).pipe(Effect.andThen(cleanup))),
-      ),
-      Effect.uninterruptible,
-    )
+    yield* lifecycle
+      .onListen(bound.http.address, shutdown.open.pipe(Effect.asVoid), yield* ServerHealth.start(password))
+      .pipe(
+        Effect.flatMap((cleanup) =>
+          Effect.addFinalizer(() => Scope.close(bound.scope, Exit.void).pipe(Effect.andThen(cleanup))),
+        ),
+        Effect.uninterruptible,
+      )
 
   const parentScope = yield* Scope.Scope
   const applicationScope = yield* Scope.fork(parentScope)

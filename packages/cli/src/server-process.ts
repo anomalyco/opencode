@@ -146,7 +146,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         serviceOptions === undefined
           ? undefined
           : {
-              onListen: (address, shutdown) =>
+              onListen: (address, shutdown, health) =>
                 Effect.gen(function* () {
                   if (!config.password) yield* ServiceConfig.password(password)
                   return yield* ServiceRegistration.register({
@@ -155,6 +155,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
                     id: instanceID,
                     file: serviceOptions.file,
                     shutdown,
+                    health,
                   })
                 }),
             },

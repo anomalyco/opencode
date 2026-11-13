@@ -76,7 +76,8 @@ const server = Bun.serve({
     requests += 1
     if (mode === "starting") await writeFile(registration + ".status-request", "")
     // A live owner that stops answering while the test holds `.stall`, then carries on, like one blocked on a slow disk.
-    if (mode === "stalling") {
+    // A `busy` one also has a health thread, which reports what the test writes to `.health`.
+    if (mode === "stalling" || mode === "busy") {
       await appendFile(registration + ".requests", process.pid + "\n")
       while (await Bun.file(registration + ".stall").exists()) await Bun.sleep(5)
     }
@@ -108,6 +109,21 @@ const server = Bun.serve({
   },
 })
 
+const health =
+  mode === "busy"
+    ? Bun.serve({
+        port: 0,
+        async fetch(request) {
+          if (request.headers.get("authorization") !== "Basic " + btoa("opencode:private"))
+            return new Response(null, { status: 401 })
+          const report = await Bun.file(registration + ".health")
+            .json()
+            .catch(() => ({}))
+          return Response.json({ pid: process.pid, blocked: 0, disk: false, ...report })
+        },
+      })
+    : undefined
+
 // Install handlers before publishing: a test may signal as soon as the registration appears.
 if (controlled !== "hang") {
   process.on("SIGTERM", () => void shutdown("SIGTERM"))
@@ -122,6 +138,7 @@ await writeFile(
     url: server.url.toString(),
     pid: process.pid,
     password: "private",
+    health: health === undefined ? undefined : new URL("/health", health.url).toString(),
   }),
   { mode: 0o600 },
 )
@@ -136,5 +153,6 @@ async function shutdown(signal?: NodeJS.Signals) {
     await Bun.sleep(Number(delay))
   }
   server.stop(true)
+  health?.stop(true)
   process.exit()
 }
