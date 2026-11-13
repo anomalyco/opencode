@@ -1109,8 +1109,10 @@ fn verbed(host: &Rc<TestHost>, registry: &Registry) -> Verbed {
         host.app.advance(Duration::from_millis(1));
         host.app().root().clear();
         host.app().root().add(parent);
-        host.app.render();
-        host.app.text().lines().find(|line| line.contains("sample reads:")).unwrap_or_default().trim().to_owned()
+        // One frame: the claim shows what it renders for its size in the frame that lays it out (reviews bigboi-3,
+        // carbon-2).
+        let text = host.app.render().text();
+        text.lines().find(|line| line.contains("sample reads:")).unwrap_or_default().trim().to_owned()
     };
     let parent = View::new(host.app()).column();
     let mounted = registry.mount(&**host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
@@ -1141,7 +1143,7 @@ fn the_1_6_reads_and_verbs_are_the_same_in_process_and_through_the_library() {
     assert_eq!(
         direct.0,
         [
-            // The frame that first laid the claim out settles with its size.
+            // The frame that first lays the claim out shows it at its size.
             format!("sample reads: 240x1 resized, {read}, deltas 0, exit -"),
             format!("sample reads: 240x1 resized, {read}, deltas 0, exit -"),
             format!("sample reads: 240x1, {read}, deltas 2, exit -"),
@@ -1171,6 +1173,82 @@ fn the_1_6_reads_and_verbs_are_the_same_in_process_and_through_the_library() {
     library.load(&dynamic(&host), definition.external("sample.so", error));
     assert_eq!(status(&library), Status::Active);
     assert_eq!(verbed(&host, &library), direct);
+}
+
+thread_local! {
+    /// The renders of `flipping`'s claim.
+    static FLIPS: Cell<u32> = const { Cell::new(0) };
+}
+
+/// A sized claim one row tall at height 2 and two rows tall at any other: each layout changes its height again.
+fn flipping(setup: &mut abi::Setup) -> Result<(), String> {
+    let at = || abi::Placement::append("home.footer");
+    setup.slot(at(), |_, input, _| {
+        FLIPS.set(FLIPS.get() + 1);
+        let rows = if input.height == 2 { 1 } else { 2 };
+        abi::Render::Show(abi::Node::column((0..rows).map(|_| abi::Node::text([abi::Span::new("flip")])).collect()))
+    });
+    setup.sized(at());
+    Ok(())
+}
+
+// Expected (reviews bigboi-3, carbon-2): a claim renders for a new size in the frame that laid it out, at most twice
+// a frame. One whose size changes with each render does not fail the frame (OpenTUI lays a frame out at most 8 times);
+// it renders again after each frame, from a timer, until it settles or goes. On both paths.
+#[test]
+fn a_claim_that_resizes_itself_renders_twice_a_frame() {
+    let host = host();
+    let registries = [
+        Registry::define(vec![abi::Plugin { id: "flipping", setup: flipping }.into()], []),
+        loopback(&host, abi::export_plugin!(@loopback "flipping", flipping)),
+    ];
+    for registry in registries {
+        registry.activate(&dynamic(&host));
+        let parent = View::new(host.app()).column();
+        let mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+        host.app().root().clear();
+        host.app().root().add(&parent);
+        for frame in 0..3 {
+            let before = FLIPS.get();
+            host.app.render();
+            assert_eq!(FLIPS.get() - before, 2, "renders in frame {frame}");
+            // The timer renders it once more, for the next frame.
+            host.app.advance(Duration::ZERO);
+            assert_eq!(FLIPS.get() - before, 3, "renders after frame {frame}");
+        }
+        drop(mounted);
+        registry.set_active(&dynamic(&host), "flipping", false);
+    }
+}
+
+/// A sized claim that shows an empty column below 100 cells, and its width from 100.
+fn narrow(setup: &mut abi::Setup) -> Result<(), String> {
+    let at = || abi::Placement::append("home.footer");
+    setup.slot(at(), |_, input, _| match input.width {
+        width if width < 100 => abi::Render::Show(abi::Node::column(Vec::new())),
+        width => abi::Render::Show(abi::Node::text([abi::Span::new(format!("wide {width}"))])),
+    });
+    setup.sized(at());
+    Ok(())
+}
+
+// Expected (review bigboi-3): a claim that shows nothing while narrow, as an empty column, still has a width, and
+// shows its node in the first frame that is wide enough. (A hidden claim has none, as in TS.)
+#[test]
+fn a_claim_empty_while_narrow_shows_once_wide() {
+    let host = host();
+    let registry = Registry::define(vec![abi::Plugin { id: "narrow", setup: narrow }.into()], []);
+    registry.activate(&dynamic(&host));
+    let parent = View::new(host.app()).column();
+    let mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    host.app().root().clear();
+    host.app().root().add(&parent);
+    host.app.resize(80, 10);
+    assert!(!host.app.render().text().contains("wide"));
+    host.app.resize(120, 10);
+    assert!(host.app.render().text().contains("wide 120"), "{}", host.app.text());
+    drop(mounted);
+    registry.set_active(&dynamic(&host), "narrow", false);
 }
 
 /// A command that asks for a program in the foreground, and one that asks and then panics.

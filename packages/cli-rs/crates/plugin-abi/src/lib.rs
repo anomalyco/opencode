@@ -1162,7 +1162,11 @@ pub struct SlotInput {
     pub prompt: Option<PromptInput>,
     /// 1.6: the width in cells a frame laid out a claim of [`Setup::sized`] at, the last time it changed (TS
     /// `onSizeChange`); 0 before its first layout, so also as it mounts, and for any other claim. When it changes,
-    /// the claim renders again with [`Changed::size`] in the same frame; it does not mount again. A route has the
+    /// the claim renders again with [`Changed::size`] in the same frame, so that frame shows what it renders for the
+    /// size; it does not mount again. A claim whose node changes its size with each render renders at most twice a
+    /// frame, then again after it. A hidden claim ([`Render::Hide`]) has no size, as in TS a claim that renders nothing
+    /// has no box: one that follows the width while showing nothing returns an empty [`Node::column`]. A
+    /// [`Changed::size`] for a terminal resize may come before the layout, with the old width. A route has the
     /// terminal's size in [`Info::size`].
     #[serde(default, skip_serializing_if = "is_zero_u16")]
     pub width: u16,
