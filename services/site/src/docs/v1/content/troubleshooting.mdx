@@ -66,6 +66,31 @@ Desktop logs are stored in timestamped directories under `logs/` in the [desktop
 
 ---
 
+### Intermittent freezes and missing messages
+
+If the window stops updating, record the action and timestamp before restarting or resetting storage. A frozen view alone does not show whether the server stopped working, so avoid resending a prompt just to test the connection.
+
+The following patterns were observed on Windows with Electron Desktop 1.19.5. They are diagnostic leads for V1, not confirmed defects in V2.
+
+| Trigger                                         | Evidence to include in a bug report                                                                                                                                                              |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Opening the Git review panel while files change | Repository size, approximate untracked-file count, and whether repeated `/vcs/diff` requests overlap.                                                                                            |
+| Restoring many tabs or switching sessions       | Tab and project counts, and whether session reads wait for connections occupied by `/mcp`, `/experimental/resource`, or `/command`. Distinguish connection queue time from server response time. |
+| Reverting and immediately sending again         | Start and completion times for `/session/{id}/revert` and `/session/{id}/prompt_async`. A send can be accepted before the earlier revert finishes.                                               |
+
+For nested projects, check which repository owns the opened directory. A parent repository's `.gitignore` does not disable an independent child repository's diff calculation.
+
+```sh
+git -C <project-directory> rev-parse --show-toplevel
+git -C <project-directory> status --short
+```
+
+Report `0xC0000005` crashes and `ResizeObserver` warnings separately, with timestamps. Their presence alone does not establish the cause of a freeze or show that a request-ordering fix resolves them.
+
+Include the exact app version and whether it has local modifications. Share sanitized request timings and relevant log excerpts rather than raw network captures, credentials, conversation content, or private project paths.
+
+---
+
 ### Disable plugins
 
 If the desktop app is crashing on launch, hanging, or behaving strangely, start by disabling plugins.
