@@ -863,6 +863,27 @@ pub fn loopback(
     host: &Rc<dyn Host>,
     create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
 ) -> Result<(Definition, ErrorFn), String> {
+    loopback_with(host, create, None)
+}
+
+/// [`loopback`] for a plugin that describes itself (`export_plugin!(@loopback_described ..)`), as every library
+/// built against ABI 1.1 or newer does: the host learns its ID without a `setup`.
+#[doc(hidden)]
+pub fn loopback_described(
+    host: &Rc<dyn Host>,
+    (create, describe): (
+        unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
+        unsafe extern "C" fn(*mut Owned) -> i32,
+    ),
+) -> Result<(Definition, ErrorFn), String> {
+    loopback_with(host, create, Some(describe))
+}
+
+fn loopback_with(
+    host: &Rc<dyn Host>,
+    create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
+    describe: Option<unsafe extern "C" fn(*mut Owned) -> i32>,
+) -> Result<(Definition, ErrorFn), String> {
     let api = PluginApi {
         size: size_of::<PluginApi>(),
         major: ABI_MAJOR,
@@ -872,10 +893,18 @@ pub fn loopback(
         call: Some(abi::runtime::call),
         destroy: Some(abi::runtime::destroy),
         free: Some(abi::runtime::free),
-        describe: None,
+        describe,
     };
-    // The shims silence the process's panic hook, as a plugin's own; the process here keeps its own.
+    // The shims silence the process's panic hook on their first `create`, as a plugin's own std does; the process
+    // here keeps its own. A `create` without an instance does only that, so it happens here, where the hook is put
+    // back, also for a plugin whose first real `create` comes later.
     let hook = std::panic::take_hook();
+    let mut out = Owned::EMPTY;
+    // SAFETY: `out` is valid for writes; a null instance pointer makes `create` return before it reads the rest.
+    unsafe {
+        create(std::ptr::null(), Bytes::new(&[]), std::ptr::null_mut(), &mut out);
+        abi::runtime::free(out);
+    }
     let defined = Library::from_table(&api, HOST_MINOR).and_then(|library| define(host, library, None));
     std::panic::set_hook(hook);
     defined
