@@ -2623,7 +2623,7 @@ test("Go usage limit restores the prompt and explains the limit with its reset t
   expect(frame).not.toContain("Free limit reached")
 })
 
-test("free usage limit modal manages live animation FPS and adapts to 44x24 and 60x12 terminals", async () => {
+test("free usage limit modal manages animation FPS and adapts to 44x24 and 60x12 terminals", async () => {
   const session = {
     id: "ses_free_limit_anim",
     projectID: "proj_test",
@@ -2695,20 +2695,19 @@ test("free usage limit modal manages live animation FPS and adapts to 44x24 and 
   await anim.waitForFrame((frame) => frame.includes("Free limit reached"))
   const art = findArt(anim.renderer.root)
   expect(art).toBeDefined()
-  expect(art!.live).toBe(true)
+  expect(art!.animationFps).toBe(30)
   expect(art!.isDestroyed).toBe(false)
   expect(anim.renderer.targetFps).toBe(30)
   expect(anim.renderer.maxFps).toBe(30)
-  // Toggling animate off disables live updates; toggling back on re-enables them.
+  // Toggling animate off stops the art's ticks; toggling back on restarts them.
   art!.animate = false
-  expect(art!.live).toBe(false)
+  expect(art!.animationFps).toBeUndefined()
   art!.animate = true
-  expect(art!.live).toBe(true)
+  expect(art!.animationFps).toBe(30)
   // Closing the modal destroys the art renderable and restores FPS.
   anim.mockInput.pressEscape()
   await anim.waitForFrame((frame) => !frame.includes("Free limit reached"))
   expect(art!.isDestroyed).toBe(true)
-  expect(art!.live).toBe(false)
   expect(findArt(anim.renderer.root)).toBeUndefined()
   expect(anim.renderer.liveRequestCount).toBe(initialLive)
   expect(anim.renderer.targetFps).toBe(initialTargetFps)
