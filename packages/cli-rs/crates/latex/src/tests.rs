@@ -164,7 +164,7 @@ fn streaming_keeps_the_last_formula_that_parsed() {
 /// `markdown.test.ts`: "discards an incomplete preview when the stream ends: close". The document still streams.
 #[test]
 fn closing_the_fence_drops_a_retained_preview() {
-    let frames = stream(&["```latex\nx^2", " + \\frac{1}{", "\n```"], false);
+    let frames = stream(&["```latex\nx^2", " + \\frac{1}{", "\n```\n"], false);
     assert!(frames[1].contains("x²") && !frames[1].contains('\\'), "{}", frames[1]);
     assert!(frames[2].contains("x^2 + \\frac{1}{"), "{}", frames[2]);
 }
@@ -177,7 +177,7 @@ fn stopping_drops_a_retained_preview() {
     assert!(frames[1].contains("x²") && !frames[1].contains('\\'), "{}", frames[1]);
     assert!(frames[2].contains("x^2 + \\frac{1}{"), "{}", frames[2]);
     // The closing fence arrives with the broken math, so the source shows before the stream ends too.
-    let frames = stream(&["```latex\nx^2", " + \\unsupported{x}\n```"], true);
+    let frames = stream(&["```latex\nx^2", " + \\unsupported{x}\n```\n"], true);
     assert!(frames[1].contains("x^2 + \\unsupported{x}"), "{}", frames[1]);
     assert!(frames[2].contains("x^2 + \\unsupported{x}"), "{}", frames[2]);
 }
