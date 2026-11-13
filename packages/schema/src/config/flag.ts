@@ -21,6 +21,6 @@ export const registry = {
   mcp_events:
     "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
   nearby_pairing:
-    "Let the desktop app announce itself on the local network so the OpenCode mobile app can list it and pair by comparing a code. The desktop reads this flag from OPENCODE_FLAGS and its build channel, not from config.",
+    "Let the desktop app announce itself on the local network so the OpenCode mobile app can list it and pair by comparing a code. The desktop reads this flag from OPENCODE_FLAGS and its build channel, not from config, and turns it on in beta builds too.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry

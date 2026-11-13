@@ -235,8 +235,9 @@ export function createNearby(
 }
 
 /**
- * The `nearby_pairing` flag as Core resolves it, from what main can see: `OPENCODE_FLAGS`, then on for local and dev
- * builds. Main has no Location config, so `experimental.nearby_pairing` in config does not reach it.
+ * The `nearby_pairing` flag from what main can see: `OPENCODE_FLAGS`, then on for local, dev and beta builds. Unlike
+ * other flags it also ships on to beta, to try with the mobile app; releases keep it off. Main has no Location config,
+ * so `experimental.nearby_pairing` in config does not reach it.
  */
 function flagEnabled(channel: string) {
   const overrides = new Map(
@@ -249,7 +250,7 @@ function flagEnabled(channel: string) {
 
   return (
     overrides.get("nearby_pairing") ??
-    (overrides.get(ConfigFlag.wildcard) === true ? true : channel === "local" || channel === "dev")
+    (overrides.get(ConfigFlag.wildcard) === true ? true : ["local", "dev", "beta"].includes(channel))
   )
 }
 
