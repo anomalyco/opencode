@@ -323,13 +323,15 @@
 }
 
 /* An event row opens to the subagents and shells it counts, each read like a nested row and leading to its session or
-   to the call that ran it. */
+   to the call that ran it. An opened activity group lists the ones it started or heard back from the same way. */
 [data-timeline="next"] [data-component="timeline-event-list"] {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding-top: 4px;
+}
 
+[data-timeline="next"] :is([data-component="timeline-event-list"], [data-slot="context-tool-group-item"]) {
   [data-slot="timeline-event-item"] {
     display: flex;
     align-items: center;
@@ -376,7 +378,7 @@
     color: var(--v2-text-text-base);
   }
 
-  [data-component="tag"] {
+  [data-slot="timeline-event-item"] [data-component="tag"] {
     flex-shrink: 0;
   }
 }
@@ -517,6 +519,7 @@
   }
 
   [data-component="context-tool-group-list"] [data-slot="context-tool-group-item"],
+  [data-component="context-tool-group-list"] [data-slot="timeline-event-item"],
   [data-component="timeline-event-list"] [data-slot="timeline-event-item"] {
     min-height: var(--line-height-compact);
   }
