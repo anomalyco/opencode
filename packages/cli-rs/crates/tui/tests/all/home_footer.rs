@@ -59,7 +59,8 @@ fn started(h: &Harness, session: &str) {
 }
 
 // Expected: a status claim nested in the home footer renders a store batch the footer itself keeps, so only the
-// status claim's text is built again, and it stays after a resize rebuilds the footer around it.
+// status claim's text changes, written in place with no widget built, and it stays after a resize rebuilds the footer
+// around it.
 #[test]
 fn a_status_claim_updates_while_the_footer_keeps_its_node() {
     let h = mount(100, &[], vec![abi::Plugin { id: "test.status", setup: status }.into()]);
@@ -69,8 +70,8 @@ fn a_status_claim_updates_while_the_footer_keeps_its_node() {
     let before = View::new(&h.app).id();
     started(&h, "ses_x");
     h.wait_for("status ses_x");
-    // The probe view, and the status claim's text.
-    assert_eq!(View::new(&h.app).id(), before + 2, "{}", h.app.text());
+    // The probe view only.
+    assert_eq!(View::new(&h.app).id(), before + 1, "{}", h.app.text());
     let screen = h.app.text();
     let line = screen.lines().find(|line| line.contains("2 MCP")).unwrap();
     assert!(line.contains("status ses_x") && line.trim_end().ends_with("local"), "{screen}");

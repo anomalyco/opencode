@@ -597,8 +597,10 @@ mod sample_slot;
 
 /// The frames of `registry`'s `sidebar.content` claims for `ses_1`: as mounted, after a message arrives and the host
 /// syncs them, with the pointer over the click count, and after two clicks on it, which the claim reads back from
-/// storage when the host syncs it again.
+/// storage when the host syncs it again. The pointer starts off the claim: a claim keeps its widgets across a sync,
+/// so one under the pointer stays hovered.
 fn sidebar(host: &Rc<TestHost>, registry: &Registry) -> Vec<Capture> {
+    host.app.hover(59, 9);
     host.messages.borrow_mut().clear();
     host.storage.borrow_mut().clear();
     let parent = View::new(host.app()).column();
