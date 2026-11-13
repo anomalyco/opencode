@@ -384,6 +384,13 @@ fn a_composer_edit_is_not_overtaken_by_the_next_signal() {
         opencode_tui::features::events::testing::signal(&setup.tui, changed("src/read.rs"));
         setup.wait("the read", || !logged(&setup, "read").is_empty());
         assert_eq!(logged(&setup, "read"), ["read from an event"], "{carrier:?}");
+        // A wake in the same batch as the signal that set the composer: the wake handler reads the new text.
+        setup.tui.keymap.dispatch("p0a.set", Some(""));
+        setup.wait("the clear", || setup.textarea().text().is_empty());
+        opencode_tui::features::events::testing::signal(&setup.tui, changed("src/set.rs"));
+        setup.tui.keymap.dispatch("p0a.wake", None);
+        setup.wait("the wake", || !logged(&setup, "woke").is_empty());
+        assert_eq!(logged(&setup, "woke"), ["woke from an event"], "{carrier:?}");
 
         let setup = Setup::new(Route::Home);
         add(&setup, carrier);
@@ -466,6 +473,7 @@ fn a_dispose_callback_that_panics_leaves_no_effects() {
         assert!(setup.requests("POST", "/prompt").is_empty(), "{carrier:?}");
         assert!(!setup.tui.dialogs.is_open(), "{carrier:?}: {}", setup.app.text());
         assert_eq!(logged(&setup, "disposed"), ["disposed last @1", "disposed first @1"], "{carrier:?}");
+        assert!(logged(&setup, "teardown wrote").is_empty(), "{carrier:?}");
     }
 }
 
