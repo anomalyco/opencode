@@ -1,5 +1,5 @@
 // A finished turn: a user message with chips, collapsed reasoning, Markdown text, the footer with tokens per
-// second, and the turn's token usage (V01 to V04, V12).
+// second counted from the first token and no time to it (#63759), and the turn's token usage (V01 to V04, V12).
 import { defineApp, session } from "../../lib/app"
 
 export default defineApp({
@@ -29,7 +29,7 @@ export default defineApp({
             ],
             finish: "stop",
             tokens: { input: 1200, output: 50, reasoning: 0, cache: { read: 3000, write: 0 } },
-            time: { created: 1500, streamed: 3000, completed: 4000 },
+            time: { created: 1500, firstToken: 2000, streamed: 3000, completed: 4000 },
           },
           {
             id: "msg_1",
