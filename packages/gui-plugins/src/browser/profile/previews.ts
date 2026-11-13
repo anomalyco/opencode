@@ -1,5 +1,5 @@
 import { net, type Session } from "electron"
-import { previewScheme } from "@opencode/gui-plugins/schemes"
+import { previewScheme } from "../scheme"
 import { previewResource } from "../preview"
 import { workspaceFile } from "../workspace-file"
 import { previewRange } from "./range"

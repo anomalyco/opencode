@@ -58,7 +58,7 @@ import {
 } from "./policy"
 import type { PaneElement } from "./ipc"
 import { previewAddress, previewFile } from "./preview"
-import { previewScheme } from "../schemes"
+import { previewScheme } from "./scheme"
 import { workspaceFile } from "./workspace-file"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }

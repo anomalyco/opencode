@@ -1,4 +1,4 @@
-import { previewScheme } from "../schemes"
+import { previewScheme } from "./scheme"
 import { fileURLWithin, localFileURL } from "./policy"
 
 /** A file: address is for display and restore only. Never hand Chromium a native file origin, even briefly. */
