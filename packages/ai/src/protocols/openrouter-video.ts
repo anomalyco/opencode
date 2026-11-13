@@ -86,9 +86,12 @@ const imagePart = (asset: Media.Asset) =>
   )
 
 const referencePart = Effect.fn("OpenRouterVideo.referencePart")(function* (asset: Media.Asset) {
-  // OpenRouter rejects inline video (verified live) and its Files API doesn't take video, so it needs a URL.
-  if (asset.kind === "video" && asset.source.type !== "url")
-    return yield* route.unsupported("video.references", `${route.name} only takes reference videos as http(s) URLs`)
+  // OpenRouter rejects inline video and audio ("Only HTTPS URLs are allowed", verified live); inline images work.
+  if ((asset.kind === "video" || asset.kind === "audio") && asset.source.type !== "url")
+    return yield* route.unsupported(
+      "video.references",
+      `${route.name} only takes reference ${asset.kind} as http(s) URLs`,
+    )
   const reference = yield* ProviderShared.mediaReference(asset, undefined, route.name)
   if (asset.kind === "video") return { type: "video_url", video_url: { url: reference.value } }
   if (asset.kind === "audio") return { type: "audio_url", audio_url: { url: reference.value } }

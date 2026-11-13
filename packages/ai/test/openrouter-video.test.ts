@@ -111,7 +111,13 @@ describe("ai.video.start / OpenRouter", () => {
         .start({ model, prompt: "x", references: [Media.bytes(Uint8Array.from([0, 0, 0]), "video/mp4")] })
         .pipe(Effect.flip)
       expect(inline.reason._tag).toBe("UnsupportedOperation")
-      expect(inline.message).toContain("only takes reference videos as http(s) URLs")
+      expect(inline.message).toContain("only takes reference video as http(s) URLs")
+
+      const audio = yield* ai.video
+        .start({ model, prompt: "x", references: [Media.bytes(Uint8Array.from([0x49, 0x44, 0x33]), "audio/mpeg")] })
+        .pipe(Effect.flip)
+      expect(audio.reason._tag).toBe("UnsupportedOperation")
+      expect(audio.message).toContain("only takes reference audio as http(s) URLs")
 
       // OpenRouter drops references when a frame is set, so sending both would silently lose them.
       const mixed = yield* ai.video
