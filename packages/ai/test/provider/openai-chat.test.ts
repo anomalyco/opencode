@@ -421,11 +421,13 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("omits the prompt cache key when caching is disabled", () =>
+  it.effect("omits the prompt cache key when caching is disabled, even with the compatibility flag set", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model,
+          model: OpenAIChat.route
+            .with({ endpoint: { baseURL: "https://api.compatible.test/v1" }, auth: Auth.bearer("test") })
+            .model({ id: "compatible-model", capabilities: { promptCacheKey: true } }),
           prompt: "Hello",
           promptCacheKey: "session_123",
           cache: "none",
@@ -433,6 +435,21 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(prepared.body).not.toHaveProperty("prompt_cache_key")
+    }),
+  )
+
+  it.effect("clamps the prompt cache key to 64 characters without splitting a character", () =>
+    Effect.gen(function* () {
+      const optIn = OpenAIChat.route
+        .with({ endpoint: { baseURL: "https://api.compatible.test/v1" }, auth: Auth.bearer("test") })
+        .model({ id: "compatible-model", capabilities: { promptCacheKey: true } })
+      const long = yield* compileRequest(ai.request({ model: optIn, prompt: "Hello", promptCacheKey: "k".repeat(80) }))
+      const astral = yield* compileRequest(
+        ai.request({ model: optIn, prompt: "Hello", promptCacheKey: "🔑".repeat(80) }),
+      )
+
+      expect(long.body.prompt_cache_key).toBe("k".repeat(64))
+      expect(astral.body.prompt_cache_key).toBe("🔑".repeat(64))
     }),
   )
 
