@@ -629,7 +629,7 @@ test("a variant picked on a worktree draft stays with the session it starts, eve
   })
 
   const composer = page.locator('[data-component="composer"]')
-  const variant = composer.getByRole("button", { name: "Choose model variant", exact: true })
+  const variant = composer.locator('[data-action="composer-variant"]')
 
   // The Default variant control shows only while the pointer is over the composer.
   await composer.hover()

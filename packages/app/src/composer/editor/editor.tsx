@@ -489,6 +489,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                     title={i18n.t("ui.promptInput.chooseAgent")}
                     keybind={["Mod", "."]}
                     control={control}
+                    dataAction="composer-agent"
                   />
                 )}
               </Show>
@@ -502,6 +503,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                         title={i18n.t("ui.promptInput.chooseVariant")}
                         keybind={["Shift", "Mod", "D"]}
                         control={control}
+                        dataAction="composer-variant"
                         class={control.current() === "default" ? "composer-variant-default" : undefined}
                       />
                     </Show>
@@ -1071,6 +1073,7 @@ function ComposerEditorConfiguredSelect(props: {
   control: ComposerSelectControl
   model?: boolean
   class?: string
+  dataAction?: string
 }) {
   const current = () => props.control.current()
   const providerID = () => props.control.options().find((option) => option.id === current())?.providerID
@@ -1081,6 +1084,7 @@ function ComposerEditorConfiguredSelect(props: {
       fitMenuToOptions={props.fitMenuToOptions}
       title={props.title}
       class={props.class}
+      dataAction={props.dataAction}
       keybind={props.control.keybind?.() ?? props.keybind}
       options={props.control.options()}
       current={current()}
@@ -1104,6 +1108,7 @@ function ComposerEditorSelect(props: {
   current: string
   currentIcon?: JSX.Element
   class?: string
+  dataAction?: string
   onOpenChange?: (open: boolean) => void
   onSelect: (id: string) => void
 }) {
@@ -1156,7 +1161,7 @@ function ComposerEditorSelect(props: {
               variant="ghost-muted"
               size="normal"
               class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
-              aria-label={props.title}
+              data-action={props.dataAction}
             >
               {content()}
             </Menu.Trigger>
@@ -1190,7 +1195,7 @@ function ComposerEditorSelect(props: {
           variant="ghost-muted"
           size="normal"
           class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
-          aria-label={props.title}
+          data-action={props.dataAction}
           aria-haspopup="dialog"
           aria-expanded={store.open}
           onClick={() => setOpen(true)}

@@ -13,7 +13,7 @@ for (const direction of ["ltr", "rtl"] as const) {
       await page.setViewportSize({ width: 390, height: 844 })
       await openPickerSession(page, direction, paid)
       const composer = page.locator('[data-component="composer"]')
-      const variant = composer.getByRole("button", { name: "Choose model variant", exact: true })
+      const variant = composer.locator('[data-action="composer-variant"]')
       await expect(variant).toHaveText("balanced")
       await variant.click()
       const variants = page.getByRole("dialog", { name: "Choose model variant", exact: true })
@@ -312,7 +312,7 @@ test.describe("touch composer pickers", () => {
     await openPickerSession(page, "ltr", true)
     expect(await page.evaluate(() => matchMedia("(hover: none)").matches)).toBe(true)
     const composer = page.locator('[data-component="composer"]')
-    const variant = composer.getByRole("button", { name: "Choose model variant", exact: true })
+    const variant = composer.locator('[data-action="composer-variant"]')
     await variant.tap()
     const variants = page.getByRole("dialog", { name: "Choose model variant", exact: true })
     await variants.getByRole("button", { name: "default", exact: true }).tap()
@@ -347,7 +347,7 @@ async function openDesktopPicker(page: Page, direction: "ltr" | "rtl") {
   return {
     composer,
     model: composer.locator('[data-action="composer-model"]'),
-    variant: composer.getByRole("button", { name: "Choose model variant", exact: true }),
+    variant: composer.locator('[data-action="composer-variant"]'),
     dialog: page.getByRole("dialog", { name: "Select model", exact: true }),
   }
 }

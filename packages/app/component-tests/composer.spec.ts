@@ -341,8 +341,8 @@ for (const direction of ["ltr", "rtl"]) {
       const actions = component.locator('[data-slot="composer-actions"]')
       const submit = component.locator('[data-action="composer-submit"]')
       const add = component.locator('[data-action="composer-attach"]')
-      const agent = controls.getByRole("button", { name: "Choose agent" })
-      const variant = controls.getByRole("button", { name: "Choose model variant" })
+      const agent = controls.locator('[data-action="composer-agent"]')
+      const variant = controls.locator('[data-action="composer-variant"]')
       await expect(controls).toHaveCSS("overflow-x", "auto")
       await expect(controls).toHaveCSS("overscroll-behavior-x", "contain")
       await expect(controls).toHaveCSS("direction", direction)
@@ -471,13 +471,13 @@ story("does not mask or pad controls when they fit", async ({ mount }) => {
 story("keeps toolbar focus rings whole and keyboard-only", async ({ mount, page }) => {
   const component = await mount("opencode-composer-flow--toolbar-overflow", { args: { alternate: "none" } })
   const controls = component.locator('[data-slot="composer-controls"]')
-  const agent = controls.getByRole("button", { name: "Choose agent" })
-  const variant = controls.getByRole("button", { name: "Choose model variant" })
+  const agent = controls.locator('[data-action="composer-agent"]')
+  const variant = controls.locator('[data-action="composer-variant"]')
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
 
   // Arriving from the keyboard on a control parked half under the edge scrolls all of it, ring included, into view.
   await controls.evaluate((element) => {
-    const control = element.querySelector('[aria-label="Choose agent"]')!.getBoundingClientRect()
+    const control = element.querySelector('[data-action="composer-agent"]')!.getBoundingClientRect()
     element.scrollLeft = control.width / 2
   })
   await page.keyboard.press("Shift")
@@ -719,7 +719,7 @@ story("shows thinking on composer hover or when a non-default variant is selecte
   const component = await mount("opencode-composer-flow--model-and-variant")
   const composer = component.locator('[data-component="composer"]')
   const input = composer.getByRole("textbox", { name: "Prompt", exact: true })
-  const control = composer.getByRole("button", { name: "Choose model variant" })
+  const control = composer.locator('[data-action="composer-variant"]')
 
   await component.getByRole("status").click()
   await page.mouse.move(0, 0)
@@ -763,7 +763,7 @@ story("shows thinking on composer hover or when a non-default variant is selecte
 story("keeps default thinking accessible by keyboard without composer hover", async ({ mount, page }) => {
   const component = await mount("opencode-composer-flow--model-and-variant")
   const input = component.getByRole("textbox", { name: "Prompt", exact: true })
-  const control = component.getByRole("button", { name: "Choose model variant" })
+  const control = component.locator('[data-action="composer-variant"]')
 
   await control.click()
   await page.getByRole("menuitemradio", { name: "default", exact: true }).click()
@@ -811,7 +811,7 @@ story.describe("mobile variant drawer", () => {
   for (const moment of ["before", "as"] as const) {
     story(`closes and restores focus when dismissed ${moment} it starts opening`, async ({ mount, page }) => {
       const component = await mount("opencode-composer-flow--model-and-variant")
-      const variant = component.getByRole("button", { name: "Choose model variant" })
+      const variant = component.locator('[data-action="composer-variant"]')
       const drawer = page.getByRole("dialog", { name: "Choose model variant", exact: true })
       const high = drawer.getByRole("button", { name: "high", exact: true })
 

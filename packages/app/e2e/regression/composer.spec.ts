@@ -548,7 +548,7 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
     },
   ])
   await expect(control).toHaveText("Alpha")
-  await expect(page.getByRole("button", { name: "Choose model variant", exact: true })).toHaveText("high")
+  await expect(page.locator('[data-action="composer-variant"]')).toHaveText("high")
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(1)
   // The session already runs Alpha high, so the send has no switch to make.
@@ -706,7 +706,7 @@ test("an opened session in another Location names its model from a loaded catalo
     await page.locator(`[data-slot="vertical-tabs"] a[href="${sessionHref("ses_warm_there", SERVER)}"]`).click()
     await held.arrived
     await expect(control).toHaveText("Beta")
-    await expect(page.getByRole("button", { name: "Choose model variant" })).toHaveText("high")
+    await expect(page.locator('[data-action="composer-variant"]')).toHaveText("high")
     const painted = await control.elementHandle()
 
     const loaded = ["/api/agent", "/api/config"].map((path) =>
@@ -1604,7 +1604,7 @@ test("shows thinking on hover or a non-default selection while preserving keyboa
   })
 
   const composer = page.locator('[data-component="composer"]')
-  const control = composer.getByRole("button", { name: "Choose model variant" })
+  const control = composer.locator('[data-action="composer-variant"]')
   const option = (name: string) => page.getByRole("menuitemradio", { name, exact: true })
 
   await page.mouse.move(0, 0)
@@ -1639,7 +1639,7 @@ test("shows thinking on hover or a non-default selection while preserving keyboa
   await page.keyboard.press("Tab")
   await expect(composer.getByRole("button", { name: "Add images and files" })).toBeFocused()
   await page.keyboard.press("Tab")
-  await expect(composer.getByRole("button", { name: "Choose agent" })).toBeFocused()
+  await expect(composer.locator('[data-action="composer-agent"]')).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(composer.getByRole("button", { name: "Thinking Model" })).toBeFocused()
   await page.keyboard.press("Tab")
