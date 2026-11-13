@@ -80,8 +80,8 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
   ]
   // The attachment's grant is a session rule, evaluated after every agent rule, so core resolves every browser call to
   // allow. The rules from config, the agent's definition and the session itself decide instead: a deny refuses the
-  // call, and an ask makes the permission check prompt as it would without the grant. No matching rule leaves it
-  // allowed.
+  // call, and an ask makes the permission check prompt as it would without the grant, unless the user already saved
+  // "always" for it. No matching rule leaves it allowed.
   yield* ctx.permission.hook("evaluate", (event) =>
     event.action !== "browser" || event.effect === "deny"
       ? Effect.void
@@ -95,6 +95,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
               return
             }
             if (
+              !event.experimental?.approved &&
               event.resources.some((operation) => BrowserMachine.selectBrowserRule(rules, operation)?.effect === "ask")
             )
               event.effect = "ask"

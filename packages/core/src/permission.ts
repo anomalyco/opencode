@@ -196,13 +196,10 @@ const layer = Layer.effect(
         metadata: input.metadata,
         source: input.source,
         effect,
+        experimental: {
+          approved: input.resources.every((resource) => evaluate(input.action, resource, saved).effect === "allow"),
+        },
       })
-      // A saved approval is the user's own "always" for this request, so it also answers an ask a hook raised.
-      if (
-        event.effect === "ask" &&
-        input.resources.every((resource) => evaluate(input.action, resource, saved).effect === "allow")
-      )
-        return { effect: "allow" as const, rules: all }
       const unattended = yield* Unattended
       if (event.effect !== "ask" || unattended === undefined)
         return { effect: event.effect, message: event.message, rules: all }
