@@ -217,6 +217,7 @@ fn panel(tui: &Tui, owner: Owner, panel: abi::Panel) {
     let size = match panel.size {
         abi::PanelSize::Medium => DialogSize::Medium,
         abi::PanelSize::Large => DialogSize::Large,
+        abi::PanelSize::XLarge => DialogSize::XLarge,
     };
     let mine = tui.reads.owner.borrow().as_ref().is_some_and(|(id, _)| *id == owner.0);
     if mine && tui.dialogs.key().as_deref() == Some(key.as_str()) {

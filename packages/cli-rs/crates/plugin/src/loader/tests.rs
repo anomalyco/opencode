@@ -42,6 +42,12 @@ pub(super) struct TestHost {
     pub interactive: Cell<bool>,
     /// The composer edits applied.
     pub edits: RefCell<Vec<abi::ComposerEdit>>,
+    /// The verbs of ABI 1.6 the plugins asked for, as text, in the order the host ran them.
+    pub verbs: RefCell<Vec<String>>,
+    /// The handlers of [`Host::on_deltas`], which [`TestHost::emit_deltas`] calls.
+    pub deltas: Rc<RefCell<Vec<crate::Deltas>>>,
+    /// The replies of the programs run in the foreground, which [`TestHost::exit`] delivers.
+    pub programs: RefCell<Vec<Reply>>,
 }
 
 /// A fetch's reply.
@@ -84,6 +90,47 @@ impl abi::Read for Fixture<'_> {
 
     fn shortcut(&self, name: &str) -> Option<String> {
         (name == "command.palette.show").then(|| "ctrl+p".to_owned())
+    }
+
+    fn variants(&self) -> Vec<String> {
+        vec!["low".to_owned(), "high".to_owned()]
+    }
+
+    fn tabs_enabled(&self) -> bool {
+        true
+    }
+
+    fn tabs(&self) -> Vec<abi::Tab> {
+        let tab = |id: &str, active| abi::Tab { session_id: id.to_owned(), active, ..abi::Tab::default() };
+        vec![tab("ses_1", true), tab("ses_2", false)]
+    }
+
+    fn keymap_pending(&self) -> Vec<abi::KeymapPending> {
+        vec![abi::KeymapPending { key: "ctrl+x".to_owned(), token: Some("leader".to_owned()) }]
+    }
+
+    fn keymap_active(&self) -> Vec<abi::KeymapActive> {
+        vec![abi::KeymapActive { key: "n".to_owned(), ..abi::KeymapActive::default() }; 3]
+    }
+
+    fn keymap_commands(&self) -> Vec<abi::KeymapCommand> {
+        vec![abi::KeymapCommand { id: "command.palette.show".to_owned(), ..abi::KeymapCommand::default() }]
+    }
+
+    fn shortcuts(&self, name: &str) -> Vec<String> {
+        self.shortcut(name).into_iter().chain((name == "command.palette.show").then(|| "f1".to_owned())).collect()
+    }
+
+    fn selection(&self) -> Option<String> {
+        Some("picked".to_owned())
+    }
+
+    fn theme(&self) -> Option<String> {
+        Some("opencode".to_owned())
+    }
+
+    fn themes(&self) -> Vec<String> {
+        vec!["opencode".to_owned(), "nord".to_owned()]
     }
 }
 
@@ -170,6 +217,53 @@ impl Host for TestHost {
     fn edit_composer(&self, edit: abi::ComposerEdit) {
         self.edits.borrow_mut().push(edit);
     }
+
+    fn set_variant(&self, variant: Option<&str>) {
+        self.verb(format!("variant {variant:?}"));
+    }
+
+    fn set_model(&self, provider: &str, model: &str) {
+        self.verb(format!("model {provider}/{model}"));
+    }
+
+    fn tab_allowed(&self, edit: &abi::TabEdit) -> bool {
+        !matches!(edit, abi::TabEdit::Close { session: None })
+    }
+
+    fn edit_tab(&self, edit: abi::TabEdit) {
+        self.verb(format!("tab {edit:?}"));
+    }
+
+    fn clear_selection(&self) {
+        self.verb("clear selection".to_owned());
+    }
+
+    fn foreground(&self, program: abi::Foreground, reply: Reply) {
+        self.verb(format!("foreground {} {:?}", program.command, program.args));
+        self.programs.borrow_mut().push(reply);
+    }
+
+    fn set_title(&self, title: &str) {
+        self.verb(format!("title {title}"));
+    }
+
+    fn set_theme(&self, name: &str) {
+        self.verb(format!("theme {name}"));
+    }
+
+    fn install_theme(&self, name: &str, theme: serde_json::Value) {
+        self.verb(format!("install {name} {theme}"));
+    }
+
+    fn on_deltas(&self, run: crate::Deltas) -> Option<opentui::keymap::Disposer> {
+        self.deltas.borrow_mut().push(run.clone());
+        let deltas = Rc::downgrade(&self.deltas);
+        Some(opentui::keymap::Disposer::new(move || {
+            if let Some(deltas) = deltas.upgrade() {
+                deltas.borrow_mut().retain(|known| !Rc::ptr_eq(known, &run));
+            }
+        }))
+    }
 }
 
 impl TestHost {
@@ -177,6 +271,22 @@ impl TestHost {
     pub fn emit(&self, event: &abi::types::V2Event) {
         let handlers = self.events.borrow().clone();
         handlers.iter().for_each(|handler| handler(event));
+    }
+
+    /// Calls the delta handlers with `events`, as the host does once a change batch.
+    pub fn emit_deltas(&self, events: &[abi::types::V2Event]) {
+        let handlers = self.deltas.borrow().clone();
+        handlers.iter().for_each(|handler| handler(events));
+    }
+
+    fn verb(&self, verb: String) {
+        self.verbs.borrow_mut().push(verb);
+    }
+
+    /// Ends every program run in the foreground so far, with exit code 0.
+    pub fn exit(&self) {
+        let programs = std::mem::take(&mut *self.programs.borrow_mut());
+        programs.into_iter().for_each(|reply| reply(Ok(serde_json::json!({ "code": 0 }))));
     }
 
     /// Answers every fetch sent so far with `{"name": <its path>}`, as the server would.
@@ -205,6 +315,9 @@ pub(super) fn host() -> Rc<TestHost> {
         dialogs: RefCell::default(),
         interactive: Cell::new(true),
         edits: RefCell::default(),
+        verbs: RefCell::default(),
+        deltas: Rc::default(),
+        programs: RefCell::default(),
     })
 }
 

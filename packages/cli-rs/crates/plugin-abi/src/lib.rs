@@ -72,8 +72,11 @@ pub const ABI_MAJOR: u32 = 1;
 /// [`HostRequest::DialogOpen`]), [`Dialog::Select`], [`Request::Wake`], [`Request::RouteMount`],
 /// [`HostRequest::StorageMerge`] and [`Request::FenceGone`]. 1.5 adds [`Dialog::Confirm`] and [`Dialog::Alert`], the
 /// box styling of [`Node::Box`] ([`Border`], [`Edges`], [`Overflow`]) and [`Layout`]'s heights and margins, and the
-/// composer: [`HostRequest::Composer`] and [`HostRequest::ComposerEdit`].
-pub const ABI_MINOR: u32 = 5;
+/// composer: [`HostRequest::Composer`] and [`HostRequest::ComposerEdit`]. 1.6 adds the small reads and verbs: a claim's
+/// size in [`SlotInput`], the streaming deltas ([`Setup::on_deltas`]), the model's variants, the session tabs, the
+/// keymap's state, the mouse selection, a program in the foreground, a link on a [`Span`], the terminal title, the
+/// theme, and [`PanelSize::XLarge`] (see [`HostRequest`] from [`HostRequest::Variants`] on).
+pub const ABI_MINOR: u32 = 6;
 
 /// The symbol every plugin exports, of type [`EntryFn`].
 pub const ENTRY: &str = "opencode_plugin_v1";
@@ -296,6 +299,9 @@ pub struct Manifest {
     /// The plugin has [`Setup::on_fence_gone`] handlers, which [`Request::FenceGone`] runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub fence_gone: bool,
+    /// 1.6: the plugin has [`Setup::on_deltas`] handlers, which [`Request::Deltas`] runs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub deltas: bool,
 }
 
 /// What [`Manifest::render`] is for the render requests of ABI 1.4.
@@ -361,6 +367,9 @@ pub struct SlotClaim {
     /// 1.4: the claim has a [`Setup::on_mount`] handler, which [`Request::Mount`] runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub mount: bool,
+    /// 1.6: the claim reads its size ([`Setup::sized`]).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub size: bool,
 }
 
 /// Where a slot claim of [`Setup::slot`] goes.
@@ -469,6 +478,10 @@ pub struct Span {
     pub dim: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub strikethrough: bool,
+    /// 1.6: an OSC 8 hyperlink to this URL (TS `<a href>`); a terminal without OSC 8 shows the text alone. An older
+    /// host draws the text without it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
 }
 
 impl Span {
@@ -483,6 +496,12 @@ impl Span {
 
     pub fn bold(mut self) -> Self {
         self.bold = true;
+        self
+    }
+
+    /// The span as a hyperlink to `url` (1.6).
+    pub fn link(mut self, url: impl Into<String>) -> Self {
+        self.link = Some(url.into());
         self
     }
 }
@@ -1141,6 +1160,15 @@ pub struct SlotInput {
     /// `prompt.footer*`: the prompt's mode and whether its details show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt: Option<PromptInput>,
+    /// 1.6: the width in cells a frame laid out a claim of [`Setup::sized`] at, the last time it changed (TS
+    /// `onSizeChange`); 0 before its first layout, so also as it mounts, and for any other claim. When it changes,
+    /// the claim renders again with [`Changed::size`] in the same frame; it does not mount again. A route has the
+    /// terminal's size in [`Info::size`].
+    #[serde(default, skip_serializing_if = "is_zero_u16")]
+    pub width: u16,
+    /// 1.6: the claim's height in rows, as `width`.
+    #[serde(default, skip_serializing_if = "is_zero_u16")]
+    pub height: u16,
 }
 
 /// What the prompt passes to the claims of `prompt.footer*`.
@@ -1171,10 +1199,11 @@ pub struct Changed {
     /// Locations whose info or catalogs changed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub locations: Vec<LocationRef>,
-    /// The host's own state changed: the selected model, the usage limits, the settings, the plugins' storage.
+    /// The host's own state changed: the selected model, the usage limits, the settings, the plugins' storage, and
+    /// (1.6) the session tabs, the pending keys and the themes.
     #[serde(default, skip_serializing_if = "is_false")]
     pub local: bool,
-    /// The terminal changed size.
+    /// The terminal changed size, or (1.6) the claim did: [`SlotInput::width`] and [`SlotInput::height`].
     #[serde(default, skip_serializing_if = "is_false")]
     pub size: bool,
     /// The plugin woke the host.
@@ -1333,6 +1362,11 @@ pub enum Request {
     FenceGone {
         key: u64,
     },
+    /// 1.6: runs the [`Setup::on_deltas`] handlers with the streaming deltas that arrived since the last time, oldest
+    /// first. The host sends it only when [`Manifest::deltas`] is set.
+    Deltas {
+        events: Vec<V2Event>,
+    },
 }
 
 /// A fence for the render of [`Setup::code_block`] that [`Manifest::fences`] names by `index`. The host matches a fence
@@ -1478,6 +1512,61 @@ pub enum HostRequest {
     Rollback {
         mark: u64,
     },
+    // 1.6: the small reads and verbs. A host older than 1.6 answers each with an error, so a read returns its
+    // default and a verb does nothing and returns `false`.
+    /// 1.6: [`Read::variants`].
+    Variants,
+    /// 1.6: [`Host::set_variant`]; answers whether it will.
+    SetVariant {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        variant: Option<String>,
+    },
+    /// 1.6: [`Host::set_model`], once the current call returns.
+    SetModel {
+        provider: String,
+        model: String,
+    },
+    /// 1.6: [`Read::tabs_enabled`].
+    TabsEnabled,
+    /// 1.6: [`Read::tabs`].
+    Tabs,
+    /// 1.6: [`Host::edit_tab`]; answers whether it will.
+    Tab {
+        edit: TabEdit,
+    },
+    /// 1.6: [`Read::keymap_pending`].
+    KeymapPending,
+    /// 1.6: [`Read::keymap_active`].
+    KeymapActive,
+    /// 1.6: [`Read::keymap_commands`].
+    KeymapCommands,
+    /// 1.6: [`Read::shortcuts`].
+    Shortcuts {
+        name: String,
+    },
+    /// 1.6: [`Read::selection`].
+    Selection,
+    /// 1.6: [`Host::clear_selection`], once the current call returns.
+    ClearSelection,
+    /// 1.6: [`Host::foreground`], once the current call returns; answers the [`RequestId`].
+    Foreground(Foreground),
+    /// 1.6: [`Host::set_title`], once the current call returns.
+    Title {
+        title: String,
+    },
+    /// 1.6: [`Read::theme`].
+    Theme,
+    /// 1.6: [`Read::themes`].
+    Themes,
+    /// 1.6: [`Host::set_theme`]; answers whether it will.
+    SetTheme {
+        name: String,
+    },
+    /// 1.6: [`Host::install_theme`], once the current call returns.
+    InstallTheme {
+        name: String,
+        theme: serde_json::Value,
+    },
 }
 
 /// 1.5: the composer on screen, from [`Read::composer`].
@@ -1503,6 +1592,124 @@ pub enum ComposerEdit {
     /// Submits the composer as enter does, whether or not it has focus (TS `ref.submit`); nothing while it may not
     /// submit (a home form, another pane with the input), as TS's `submit` refuses a disabled prompt.
     Submit,
+}
+
+/// 1.6: a session tab, from [`Read::tabs`] (TS `ui.tabs.list()`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Tab {
+    /// The root session the tab shows.
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// The tab is the one on screen.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub active: bool,
+    /// The session runs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub busy: bool,
+    /// A permission or a question waits on the user.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub attention: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unread: Option<Unread>,
+}
+
+/// 1.6: what a [`Tab`] has that the user has not seen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Unread {
+    Activity,
+    Error,
+}
+
+/// 1.6: a change of the session tabs, for [`Host::edit_tab`] (TS `ui.tabs.open`, `focus`, `move` and `close`). A
+/// session is named by any session of its family: a tab is its root's.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum TabEdit {
+    /// Opens a tab for the session without showing it. `false` while tabs are off.
+    Open { session: String },
+    /// Opens a tab when needed and shows it. `false` while tabs are off.
+    Focus { session: String },
+    /// Moves an open tab to `index`. `false` while tabs are off or it is not open.
+    Move { session: String, index: usize },
+    /// Closes an open tab, or the one on screen without a session. `false` while tabs are off or no tab matched.
+    Close {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<String>,
+    },
+}
+
+/// 1.6: one stroke of the pending key sequence, from [`Read::keymap_pending`] (TS `keymap.pending()`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeymapPending {
+    /// As the host shows keys, such as `ctrl+x`.
+    pub key: String,
+    /// The token the stroke matched, such as `leader`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
+}
+
+/// 1.6: a key that does something now, from [`Read::keymap_active`] (TS `keymap.active()`): at the root, or one that
+/// continues the pending sequence.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeymapActive {
+    pub key: String,
+    /// The title of the command it runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    /// More keys follow before something runs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub continues: bool,
+}
+
+/// 1.6: a command that can be reached now, from [`Read::keymap_commands`] (TS `keymap.commands()`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeymapCommand {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    pub enabled: bool,
+    /// It is in the command palette.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub palette: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slash: Option<KeymapSlash>,
+    /// The palette promotes it.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub suggested: bool,
+}
+
+/// 1.6: the slash command of a [`KeymapCommand`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeymapSlash {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
+    /// `/name` keeps its text after the name and passes it as the input.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub arguments: bool,
+}
+
+/// 1.6: a program to run in the foreground, for [`Host::foreground`] (TS `renderer.suspend()`, then the program, then
+/// `renderer.resume()`): the host gives it the terminal and waits, as it does for `$EDITOR`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Foreground {
+    /// The program, found on `PATH` when it has no directory.
+    pub command: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+    /// Where it runs; where the TUI works without one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1780,6 +1987,9 @@ pub enum PanelSize {
     #[default]
     Medium,
     Large,
+    /// 1.6: the widest (TS `xlarge`). An older host shows it [`PanelSize::Large`].
+    #[serde(rename = "xlarge")]
+    XLarge,
 }
 
 /// A footer action of a [`Panel`].
@@ -1896,6 +2106,51 @@ pub trait Read {
     fn abi_minor(&self) -> u32 {
         ABI_MINOR
     }
+    /// 1.6: the variant IDs of the model the next prompt uses (TS `ui.model.variant.list()`); its variant is
+    /// [`Read::model`]'s.
+    fn variants(&self) -> Vec<String> {
+        Vec::new()
+    }
+    /// 1.6: whether session tabs are on (TS `ui.tabs.enabled()`).
+    fn tabs_enabled(&self) -> bool {
+        false
+    }
+    /// 1.6: the open session tabs, in order (TS `ui.tabs.list()`). Claims render again with [`Changed::local`] when
+    /// tabs open, close or move, and with the change batch when a tab's session changes.
+    fn tabs(&self) -> Vec<Tab> {
+        Vec::new()
+    }
+    /// 1.6: the pending key sequence, one entry a stroke (TS `keymap.pending()`). Claims render again with
+    /// [`Changed::local`] when it changes, so they can show [`Read::keymap_active`] too.
+    fn keymap_pending(&self) -> Vec<KeymapPending> {
+        Vec::new()
+    }
+    /// 1.6: the keys that do something now (TS `keymap.active()`).
+    fn keymap_active(&self) -> Vec<KeymapActive> {
+        Vec::new()
+    }
+    /// 1.6: the commands that can be reached now, the plugins' and the host's (TS `keymap.commands()`).
+    fn keymap_commands(&self) -> Vec<KeymapCommand> {
+        Vec::new()
+    }
+    /// 1.6: every key of command `name`, as the host shows keys (TS `keymap.shortcuts(id)`); [`Read::shortcut`] is the
+    /// first.
+    fn shortcuts(&self, _name: &str) -> Vec<String> {
+        Vec::new()
+    }
+    /// 1.6: the text the mouse selected, if any (TS `renderer.getSelection()?.getSelectedText()`). A plugin can clear
+    /// the selection ([`Host::clear_selection`]) but not set it.
+    fn selection(&self) -> Option<String> {
+        None
+    }
+    /// 1.6: the name of the selected theme (TS 1.x `api.theme.selected`).
+    fn theme(&self) -> Option<String> {
+        None
+    }
+    /// 1.6: the names of the themes the host has, built in and installed (TS 1.x `api.theme.has(name)`).
+    fn themes(&self) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 /// What a command or an event handler reads and asks of the host. An effect waits until the outermost plugin
@@ -1941,6 +2196,37 @@ pub trait Host: Read {
     fn copy(&self, text: &str, then: Option<Action>);
     /// 1.5: edits the composer on screen ([`Read::composer`]); without one, and on a 1.4 host, it does nothing.
     fn edit_composer(&self, _edit: ComposerEdit) {}
+    /// 1.6: selects `variant` of the model the next prompt uses, or its default for `None` (TS
+    /// `ui.model.variant.set`). `false`, and nothing happens, when no model is selected or it has no such variant.
+    fn set_variant(&self, _variant: Option<&str>) -> bool {
+        false
+    }
+    /// 1.6: selects model `model` of provider `provider` for the next prompt and adds it to the recent models, as the
+    /// model dialog does. A model the host does not list is ignored.
+    fn set_model(&self, _provider: &str, _model: &str) {}
+    /// 1.6: opens, shows, moves or closes a session tab (TS `ui.tabs.*`); whether it will.
+    fn edit_tab(&self, _edit: TabEdit) -> bool {
+        false
+    }
+    /// 1.6: clears the mouse selection (TS `renderer.clearSelection()`).
+    fn clear_selection(&self) {}
+    /// 1.6: gives the terminal to `program` until it exits, then takes it back, as the host does for `$EDITOR`.
+    /// [`Setup::on_reply`] gets `{ "code": <exit code or null> }` with the ID this returns, or the error when it did
+    /// not start. A plugin disposed before it starts runs nothing; an older host never replies.
+    fn foreground(&self, _program: Foreground) -> RequestId {
+        RequestId(0)
+    }
+    /// 1.6: sets the terminal title (TS `renderer.setTerminalTitle`). The host sets its own again with its next
+    /// change, such as a route change.
+    fn set_title(&self, _title: &str) {}
+    /// 1.6: selects theme `name` and saves it as the user's choice, as the theme dialog does (TS 1.x
+    /// `api.theme.set`). `false`, and nothing happens, for a theme the host does not have.
+    fn set_theme(&self, _name: &str) -> bool {
+        false
+    }
+    /// 1.6: writes `theme`, a theme's JSON, as `<config>/themes/<name>.json`, and lists it among the themes (TS 1.x
+    /// `api.theme.install`). It does not select it.
+    fn install_theme(&self, _name: &str, _theme: serde_json::Value) {}
     /// Declares storage key `key` of the plugin, for [`Setup::storage_key`].
     #[doc(hidden)]
     fn declare_storage_key(&self, _key: &str) {}
@@ -2129,6 +2415,46 @@ impl Read for HostHandle {
     fn abi_minor(&self) -> u32 {
         self.core().map_or(0, |core| core.minor)
     }
+
+    fn variants(&self) -> Vec<String> {
+        self.read(&HostRequest::Variants).unwrap_or_default()
+    }
+
+    fn tabs_enabled(&self) -> bool {
+        self.read(&HostRequest::TabsEnabled).unwrap_or(false)
+    }
+
+    fn tabs(&self) -> Vec<Tab> {
+        self.read(&HostRequest::Tabs).unwrap_or_default()
+    }
+
+    fn keymap_pending(&self) -> Vec<KeymapPending> {
+        self.read(&HostRequest::KeymapPending).unwrap_or_default()
+    }
+
+    fn keymap_active(&self) -> Vec<KeymapActive> {
+        self.read(&HostRequest::KeymapActive).unwrap_or_default()
+    }
+
+    fn keymap_commands(&self) -> Vec<KeymapCommand> {
+        self.read(&HostRequest::KeymapCommands).unwrap_or_default()
+    }
+
+    fn shortcuts(&self, name: &str) -> Vec<String> {
+        self.read(&HostRequest::Shortcuts { name: name.to_owned() }).unwrap_or_default()
+    }
+
+    fn selection(&self) -> Option<String> {
+        self.read(&HostRequest::Selection)
+    }
+
+    fn theme(&self) -> Option<String> {
+        self.read(&HostRequest::Theme)
+    }
+
+    fn themes(&self) -> Vec<String> {
+        self.read(&HostRequest::Themes).unwrap_or_default()
+    }
 }
 
 impl Host for HostHandle {
@@ -2174,7 +2500,17 @@ impl Host for HostHandle {
     }
 
     fn dialog(&self, dialog: Dialog) {
-        let _ = self.request(&HostRequest::Dialog { dialog });
+        let request = HostRequest::Dialog { dialog };
+        if self.request(&request).is_ok() {
+            return;
+        }
+        // A host older than 1.6 does not know `xlarge` and refuses the whole dialog; it gets the largest it knows.
+        if let HostRequest::Dialog { dialog: Dialog::Panel(mut panel) } = request
+            && panel.size == PanelSize::XLarge
+        {
+            panel.size = PanelSize::Large;
+            let _ = self.request(&HostRequest::Dialog { dialog: Dialog::Panel(panel) });
+        }
     }
 
     fn copy(&self, text: &str, then: Option<Action>) {
@@ -2191,6 +2527,39 @@ impl Host for HostHandle {
 
     fn rollback(&self, mark: u64) {
         let _ = self.request(&HostRequest::Rollback { mark });
+    }
+
+    fn set_variant(&self, variant: Option<&str>) -> bool {
+        self.read(&HostRequest::SetVariant { variant: variant.map(str::to_owned) }).unwrap_or(false)
+    }
+
+    fn set_model(&self, provider: &str, model: &str) {
+        let _ = self.request(&HostRequest::SetModel { provider: provider.to_owned(), model: model.to_owned() });
+    }
+
+    fn edit_tab(&self, edit: TabEdit) -> bool {
+        self.read(&HostRequest::Tab { edit }).unwrap_or(false)
+    }
+
+    fn clear_selection(&self) {
+        let _ = self.request(&HostRequest::ClearSelection);
+    }
+
+    fn foreground(&self, program: Foreground) -> RequestId {
+        // As `fetch`: a host without it never replies.
+        self.read(&HostRequest::Foreground(program)).unwrap_or(RequestId(0))
+    }
+
+    fn set_title(&self, title: &str) {
+        let _ = self.request(&HostRequest::Title { title: title.to_owned() });
+    }
+
+    fn set_theme(&self, name: &str) -> bool {
+        self.read(&HostRequest::SetTheme { name: name.to_owned() }).unwrap_or(false)
+    }
+
+    fn install_theme(&self, name: &str, theme: serde_json::Value) {
+        let _ = self.request(&HostRequest::InstallTheme { name: name.to_owned(), theme });
     }
 
     fn declare_storage_key(&self, key: &str) {
@@ -2283,6 +2652,8 @@ pub type RouteMountFn = Rc<dyn Fn(&dyn Host, bool)>;
 pub type WakeFn = Rc<dyn Fn(&dyn Host)>;
 /// A handler of [`Setup::on_fence_gone`].
 pub type FenceGoneFn = Rc<dyn Fn(u64)>;
+/// A handler of [`Setup::on_deltas`].
+pub type DeltasFn = Rc<dyn Fn(&dyn Host, &[V2Event])>;
 /// A registered dispose callback.
 pub type DisposeFn = Box<dyn FnOnce(&dyn Host)>;
 
@@ -2396,8 +2767,20 @@ impl Setup<'_> {
     /// state, each wake, and after each of the plugin's commands and event, reply, mount and wake handlers (with
     /// [`Changed::woken`]).
     pub fn slot(&mut self, at: Placement, render: impl Fn(&dyn Read, &SlotInput, &Changed) -> Render + 'static) {
-        self.registered.manifest.slots.push(SlotClaim { kind: at.kind, path: at.path, render: true, mount: false });
+        let claim = SlotClaim { kind: at.kind, path: at.path, render: true, mount: false, size: false };
+        self.registered.manifest.slots.push(claim);
         self.registered.slots.push(SlotFn::Render(Rc::new(render)));
+    }
+
+    /// 1.6: gives the claim registered last at `at` (by [`Setup::slot`]) its laid-out size in [`SlotInput::width`] and
+    /// [`SlotInput::height`], and renders it again with [`Changed::size`] when that changes (TS `onSizeChange`). Other
+    /// claims get 0, so a size they do not read costs them no render. Without a claim at `at`, it does nothing. An
+    /// older host gives 0.
+    pub fn sized(&mut self, at: Placement) {
+        let claims = self.registered.manifest.slots.iter_mut();
+        if let Some(claim) = claims.rev().find(|claim| claim.render && claim.kind == at.kind && claim.path == at.path) {
+            claim.size = true;
+        }
     }
 
     /// Calls `run` for each mount of the claim registered last at `at` (by [`Setup::slot`]): with `true` and the slot's
@@ -2425,7 +2808,8 @@ impl Setup<'_> {
     /// Claims a place in the slot tree with rows, as ABI 1.3 did; `render` receives the slot's session ID, if it
     /// has one.
     pub fn slot_lines(&mut self, kind: SlotKind, path: &str, render: impl Fn(Option<&str>) -> Vec<Line> + 'static) {
-        self.registered.manifest.slots.push(SlotClaim { kind, path: path.to_owned(), render: false, mount: false });
+        let claim = SlotClaim { kind, path: path.to_owned(), render: false, mount: false, size: false };
+        self.registered.manifest.slots.push(claim);
         self.registered.slots.push(SlotFn::Lines(Box::new(render)));
     }
 
@@ -2475,6 +2859,15 @@ impl Setup<'_> {
     pub fn on_reply(&mut self, run: impl Fn(&dyn Host, RequestId, Result<serde_json::Value, String>) + 'static) {
         self.registered.replies.push(Rc::new(run));
     }
+
+    /// 1.6: calls `run` with the streaming deltas (`session.text.delta`, `session.reasoning.delta`,
+    /// `session.tool.input.delta`, `session.compaction.delta`), which [`Setup::on_event`] never gets: the deltas the
+    /// host applied since the last call, oldest first, once a change batch, never empty (TS `data.on(type)` once an
+    /// event). The host keeps at most 4096 between calls and drops the oldest past that. An older host never calls it.
+    pub fn on_deltas(&mut self, run: impl Fn(&dyn Host, &[V2Event]) + 'static) {
+        self.registered.manifest.deltas = true;
+        self.registered.deltas.push(Rc::new(run));
+    }
 }
 
 /// What a plugin registered, which the host keeps while the plugin is active; the plugin registers through a
@@ -2498,6 +2891,7 @@ pub struct Registered {
     route_mounts: Vec<(String, RouteMountFn)>,
     wakes: Vec<WakeFn>,
     fence_gone: Vec<FenceGoneFn>,
+    deltas: Vec<DeltasFn>,
     disposers: Vec<DisposeFn>,
 }
 
@@ -2604,6 +2998,11 @@ impl Registered {
         &self.replies
     }
 
+    /// The handlers of [`Setup::on_deltas`].
+    pub fn deltas(&self) -> &[DeltasFn] {
+        &self.deltas
+    }
+
     /// The event handlers, with the types each takes.
     pub fn events(&self) -> impl Iterator<Item = (&[String], &EventFn)> {
         self.manifest.events.iter().map(Vec::as_slice).zip(&self.events)
@@ -2677,6 +3076,10 @@ impl Registered {
             }
             Request::FenceGone { key } => {
                 self.fence_gone.iter().for_each(|run| run(key));
+                Ok(serde_json::Value::Null)
+            }
+            Request::Deltas { events } => {
+                self.deltas.iter().for_each(|run| run(&self.host, &events));
                 Ok(serde_json::Value::Null)
             }
         }
@@ -3179,7 +3582,8 @@ mod tests {
         assert_eq!(serde_json::to_string(&render).unwrap(), json);
         assert_eq!(serde_json::from_str::<Render>(json).unwrap(), render);
         assert_eq!(serde_json::to_string(&Render::Keep).unwrap(), r#"{"type":"keep"}"#);
-        let old = SlotClaim { kind: SlotKind::Append, path: "home.footer".into(), render: false, mount: false };
+        let old =
+            SlotClaim { kind: SlotKind::Append, path: "home.footer".into(), render: false, mount: false, size: false };
         assert_eq!(serde_json::to_string(&old).unwrap(), r#"{"kind":"append","path":"home.footer"}"#);
         assert_eq!(serde_json::to_string(&HostRequest::Model).unwrap(), r#"{"type":"model"}"#);
 
@@ -3582,6 +3986,7 @@ mod tests {
         let input = SlotInput {
             session_id: Some("ses_1".into()),
             prompt: Some(PromptInput { shell: false, show_details: true }),
+            ..SlotInput::default()
         };
         let json = r#"{"type":"mount","claim":0,"input":{"session_id":"ses_1","prompt":{"shell":false,"show_details":true}},"mounted":true}"#;
         let request = Request::Mount { claim: 0, input: input.clone(), mounted: true };
@@ -3771,5 +4176,174 @@ mod tests {
         host.dialog(Dialog::Prompt { title: "T".into(), placeholder: None, action });
         host.toast(Toast::new(Variant::Info, "a"));
         assert_eq!(known.load(std::sync::atomic::Ordering::SeqCst), 2);
+    }
+
+    /// A text delta of message `msg_1` in `ses_1`.
+    fn text_delta(delta: &str) -> V2Event {
+        serde_json::from_value(serde_json::json!({
+            "id": "evt_1",
+            "created": 1,
+            "type": "session.text.delta",
+            "data": { "sessionID": "ses_1", "assistantMessageID": "msg_1", "ordinal": 0, "delta": delta },
+        }))
+        .unwrap()
+    }
+
+    // Expected: what 1.6 adds reads back as written and leaves out what is unset, so a 1.4 span, slot input, panel and
+    // manifest keep their JSON byte for byte.
+    #[test]
+    fn the_1_6_additions_round_trip_and_keep_the_older_wire() {
+        let rows: [(&str, serde_json::Value); 12] = [
+            (r#"{"text":"a"}"#, serde_json::to_value(Span::new("a")).unwrap()),
+            (
+                r#"{"text":"a","link":"https://x.dev"}"#,
+                serde_json::to_value(Span::new("a").link("https://x.dev")).unwrap(),
+            ),
+            (r#"{}"#, serde_json::to_value(SlotInput::default()).unwrap()),
+            (
+                r#"{"session_id":"s","width":40,"height":3}"#,
+                serde_json::to_value(SlotInput { session_id: Some("s".into()), width: 40, height: 3, prompt: None })
+                    .unwrap(),
+            ),
+            (r#""xlarge""#, serde_json::to_value(PanelSize::XLarge).unwrap()),
+            (r#"{"type":"set-variant"}"#, serde_json::to_value(HostRequest::SetVariant { variant: None }).unwrap()),
+            (
+                r#"{"type":"tab","edit":{"type":"move","session":"ses_1","index":2}}"#,
+                serde_json::to_value(HostRequest::Tab { edit: TabEdit::Move { session: "ses_1".into(), index: 2 } })
+                    .unwrap(),
+            ),
+            (
+                r#"{"type":"tab","edit":{"type":"close"}}"#,
+                serde_json::to_value(HostRequest::Tab { edit: TabEdit::Close { session: None } }).unwrap(),
+            ),
+            (
+                r#"{"type":"foreground","command":"less","args":["a.txt"]}"#,
+                serde_json::to_value(HostRequest::Foreground(Foreground {
+                    command: "less".into(),
+                    args: vec!["a.txt".into()],
+                    cwd: None,
+                }))
+                .unwrap(),
+            ),
+            (
+                r#"{"session_id":"ses_1","active":true,"unread":"error"}"#,
+                serde_json::to_value(Tab {
+                    session_id: "ses_1".into(),
+                    active: true,
+                    unread: Some(Unread::Error),
+                    ..Tab::default()
+                })
+                .unwrap(),
+            ),
+            (
+                r#"{"id":"x.a","enabled":true,"slash":{"name":"a"}}"#,
+                serde_json::to_value(KeymapCommand {
+                    id: "x.a".into(),
+                    enabled: true,
+                    slash: Some(KeymapSlash { name: "a".into(), ..KeymapSlash::default() }),
+                    ..KeymapCommand::default()
+                })
+                .unwrap(),
+            ),
+            (
+                r#"{"key":"ctrl+x","continues":true}"#,
+                serde_json::to_value(KeymapActive { key: "ctrl+x".into(), continues: true, ..KeymapActive::default() })
+                    .unwrap(),
+            ),
+        ];
+        for (json, value) in &rows {
+            assert_eq!(value.to_string(), *json);
+        }
+        assert_eq!(serde_json::from_str::<Span>(rows[1].0).unwrap(), Span::new("a").link("https://x.dev"));
+        let input: SlotInput = serde_json::from_str(rows[3].0).unwrap();
+        assert_eq!((input.width, input.height), (40, 3));
+        let edit: HostRequest = serde_json::from_str(rows[6].0).unwrap();
+        assert_eq!(edit, HostRequest::Tab { edit: TabEdit::Move { session: "ses_1".into(), index: 2 } });
+        assert_eq!(serde_json::from_str::<PanelSize>(r#""xlarge""#).unwrap(), PanelSize::XLarge);
+
+        // Deltas: the manifest says so only with a handler, and the request runs each handler with the events.
+        let mut registered = Registered::new("new", None);
+        let mut setup = registered.setup();
+        assert!(!serde_json::to_string(setup.manifest()).unwrap().contains("deltas"));
+        let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
+        let into = seen.clone();
+        setup.on_deltas(move |_, events| into.borrow_mut().push(events.len()));
+        assert!(setup.manifest().deltas);
+        let request = Request::Deltas { events: vec![text_delta("a"), text_delta("b")] };
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.starts_with(r#"{"type":"deltas","events":[{"#), "{json}");
+        assert_eq!(serde_json::from_str::<Request>(&json).unwrap(), request);
+        assert_eq!(setup.handle(request).unwrap(), serde_json::Value::Null);
+        assert_eq!(*seen.borrow(), [2]);
+    }
+
+    /// A host that knows `known` requests: it answers them with `null`, a dialog's size included, counts them in the
+    /// `Vec` at `ctx`, and answers every other request, as a host older than it does, with an error.
+    unsafe extern "C" fn host_before_1_6(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
+        // SAFETY: the test passes a live log and the request's bytes.
+        let (log, request) = unsafe { (&*ctx.cast::<std::sync::Mutex<Vec<String>>>(), request.as_slice()) };
+        let text = String::from_utf8_lossy(request).into_owned();
+        let older = ["\"type\":\"toast\"", "\"type\":\"dialog\""];
+        let (status, reply) = match older.iter().any(|tag| text.contains(tag)) && !text.contains("xlarge") {
+            true => (OK, b"null".to_vec()),
+            false => (ERROR, b"unsupported host request (host ABI 1.4)".to_vec()),
+        };
+        log.lock().unwrap().push(text);
+        unsafe { *out = Owned::from_vec(reply) };
+        status
+    }
+
+    unsafe extern "C" fn free_buffer(owned: Owned) {
+        drop(unsafe { owned.into_vec() });
+    }
+
+    // Expected: a 1.6 plugin on an older host gets what that host offers: every read its default, every verb `false`
+    // or nothing, and an xlarge panel shown large, while the older requests still go through.
+    #[test]
+    fn a_1_6_plugin_on_an_older_host_gets_what_the_host_offers() {
+        let log = std::sync::Mutex::new(Vec::<String>::new());
+        let api = HostApi {
+            size: size_of::<HostApi>(),
+            major: 1,
+            minor: 4,
+            ctx: std::ptr::from_ref(&log).cast_mut().cast(),
+            call: Some(host_before_1_6),
+            free: Some(free_buffer),
+            theme_mode: None,
+            wake: None,
+        };
+        let host = HostHandle { api: &api };
+        assert_eq!((host.variants(), host.tabs_enabled(), host.tabs()), (Vec::new(), false, Vec::new()));
+        assert_eq!((host.keymap_pending(), host.keymap_active()), (Vec::new(), Vec::new()));
+        assert_eq!((host.keymap_commands(), host.shortcuts("x")), (Vec::new(), Vec::<String>::new()));
+        assert_eq!((host.selection(), host.theme(), host.themes()), (None, None, Vec::<String>::new()));
+        assert!(!host.set_variant(Some("high")));
+        assert!(!host.edit_tab(TabEdit::Focus { session: "ses_1".into() }));
+        assert!(!host.set_theme("nord"));
+        assert_eq!(host.foreground(Foreground { command: "less".into(), ..Foreground::default() }), RequestId(0));
+        host.set_model("p", "m");
+        host.clear_selection();
+        host.set_title("t");
+        host.install_theme("t", serde_json::json!({}));
+        host.toast(Toast::new(Variant::Info, "a"));
+        let panel = |size| Panel {
+            key: "k".into(),
+            size,
+            title: Vec::new(),
+            subtitle: None,
+            body: Node::column(Vec::new()),
+            actions: Vec::new(),
+            binds: Vec::new(),
+            bleed: false,
+            centered: false,
+        };
+        host.dialog(Dialog::Panel(panel(PanelSize::XLarge)));
+        let log = log.lock().unwrap();
+        let shown: Vec<&String> = log.iter().filter(|request| request.contains("\"type\":\"dialog\"")).collect();
+        assert_eq!(shown.len(), 2, "{log:?}");
+        assert!(shown[1].contains("\"size\":\"large\""), "{log:?}");
+        assert_eq!(log.iter().filter(|request| request.contains("\"type\":\"toast\"")).count(), 1);
+        // Every read and verb above asked once, and nothing more.
+        assert_eq!(log.len(), 21, "{log:?}");
     }
 }

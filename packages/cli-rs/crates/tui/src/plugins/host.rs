@@ -249,6 +249,89 @@ impl Host for Tui {
         }
     }
 
+    fn set_variant(&self, variant: Option<&str>) {
+        self.local.set_variant(variant);
+    }
+
+    fn set_model(&self, provider: &str, model: &str) {
+        self.local.set(&opencode_local::model_pref::Model::new(provider, model), true);
+    }
+
+    fn tab_allowed(&self, edit: &abi::TabEdit) -> bool {
+        if !crate::tabs::Tabs::enabled(self) {
+            return false;
+        }
+        match edit {
+            abi::TabEdit::Open { .. } | abi::TabEdit::Focus { .. } => true,
+            abi::TabEdit::Move { session, .. } => self.tabs.is_open(self, session),
+            abi::TabEdit::Close { session } => session
+                .clone()
+                .or_else(|| self.tabs.current(self))
+                .is_some_and(|session| self.tabs.is_open(self, &session)),
+        }
+    }
+
+    fn edit_tab(&self, edit: abi::TabEdit) {
+        match edit {
+            abi::TabEdit::Open { session } => crate::tabs::open(self, &session),
+            abi::TabEdit::Focus { session } => crate::tabs::select(self, &session),
+            abi::TabEdit::Move { session, index } => crate::tabs::reorder(self, &session, index),
+            abi::TabEdit::Close { session } => crate::tabs::close(self, session.as_deref()),
+        }
+    }
+
+    fn foreground(&self, program: abi::Foreground, reply: opencode_plugin::Reply) {
+        let cwd = program.cwd.clone().unwrap_or_else(|| self.directory.clone());
+        let app = self.app.clone();
+        // As `$EDITOR` runs (`prompt/external_editor.rs`): the UI waits while the program has the terminal.
+        self.app.release_terminal(move |_| {
+            let status = std::process::Command::new(&program.command).args(&program.args).current_dir(&cwd).status();
+            reply(match status {
+                Ok(status) => Ok(serde_json::json!({ "code": status.code() })),
+                Err(error) => Err(format!("{}: {error}", program.command)),
+            });
+            app.request_redraw();
+        });
+    }
+
+    fn set_title(&self, title: &str) {
+        crate::features::title::set_by_plugin(self, title);
+    }
+
+    fn set_theme(&self, name: &str) {
+        // As the theme dialog picks one (`dialogs/theme_list.rs`).
+        if self.theme.borrow().selected() != name {
+            self.theme.borrow_mut().config_name(name);
+            self.theme_changed();
+            local_changed(self);
+        }
+        let name = Value::from(name);
+        crate::dialogs::settings::update(self, move |draft| {
+            crate::dialogs::settings::set_path(draft, &["theme", "name"], name)
+        });
+    }
+
+    fn install_theme(&self, name: &str, theme: Value) {
+        if !theme_name(name) {
+            log::warn!("a plugin installs a theme with a name that is not a file name: {name:?}");
+            return;
+        }
+        let file = format!("{name}.json");
+        crate::app::discover_themes(self, move |config| {
+            let themes = config.join("themes");
+            let written = std::fs::create_dir_all(&themes).and_then(|()| {
+                std::fs::write(themes.join(&file), serde_json::to_vec_pretty(&theme).unwrap_or_default())
+            });
+            if let Err(error) = written {
+                log::error!("Failed to install theme {file}: {error}");
+            }
+        });
+    }
+
+    fn on_deltas(&self, run: opencode_plugin::Deltas) -> Option<Disposer> {
+        Some(crate::features::events::subscribe_deltas(self, move |events| run(events)))
+    }
+
     fn markdown(&self, text: &str) -> AnyWidget {
         markdown(self).set_markdown(text).as_any()
     }
@@ -594,6 +677,103 @@ impl abi::Read for Reader<'_> {
         let cursor = opencode_ui::prompt_input::index_at(&prompt.textarea, prompt.textarea.cursor_offset());
         Some(abi::Composer { text, cursor, focused: prompt.focused() })
     }
+
+    fn variants(&self) -> Vec<String> {
+        self.tui.local.variants()
+    }
+
+    fn tabs_enabled(&self) -> bool {
+        crate::tabs::Tabs::enabled(self.tui)
+    }
+
+    fn tabs(&self) -> Vec<abi::Tab> {
+        let tabs = &self.tui.tabs;
+        let current = tabs.current(self.tui);
+        tabs.tabs(self.tui)
+            .into_iter()
+            .map(|tab| {
+                let status = tabs.status(self.tui, &tab.session_id);
+                abi::Tab {
+                    active: current.as_deref() == Some(tab.session_id.as_str()),
+                    busy: status.busy,
+                    attention: status.attention.is_some(),
+                    unread: status.unread.map(|unread| match unread {
+                        crate::tabs::model::Unread::Activity => abi::Unread::Activity,
+                        crate::tabs::model::Unread::Error => abi::Unread::Error,
+                    }),
+                    session_id: tab.session_id,
+                    title: tab.title,
+                }
+            })
+            .collect()
+    }
+
+    fn keymap_pending(&self) -> Vec<abi::KeymapPending> {
+        let pending = self.tui.keymap.pending().into_iter();
+        pending.map(|pending| abi::KeymapPending { key: pending.key, token: pending.token }).collect()
+    }
+
+    fn keymap_active(&self) -> Vec<abi::KeymapActive> {
+        let active = self.tui.keymap.active().into_iter();
+        active
+            .map(|key| abi::KeymapActive {
+                key: key.key,
+                title: key.title,
+                description: key.description,
+                group: key.group,
+                continues: key.continues,
+            })
+            .collect()
+    }
+
+    fn keymap_commands(&self) -> Vec<abi::KeymapCommand> {
+        let commands = self.tui.keymap.commands().into_iter();
+        commands
+            .map(|command| abi::KeymapCommand {
+                id: command.id,
+                title: command.title,
+                description: command.description,
+                group: command.group,
+                enabled: command.enabled,
+                palette: command.palette,
+                slash: command.slash.map(|slash| abi::KeymapSlash {
+                    name: slash.name,
+                    aliases: slash.aliases,
+                    arguments: slash.arguments,
+                }),
+                suggested: command.suggested,
+            })
+            .collect()
+    }
+
+    fn shortcuts(&self, name: &str) -> Vec<String> {
+        self.tui.keymap.shortcuts(name)
+    }
+
+    fn selection(&self) -> Option<String> {
+        self.tui.app.selected_text()
+    }
+
+    fn theme(&self) -> Option<String> {
+        Some(self.tui.theme.borrow().selected().to_owned())
+    }
+
+    fn themes(&self) -> Vec<String> {
+        self.tui.theme.borrow().names()
+    }
+}
+
+/// Tells the mounted claims that the TUI's own state the plugins read changed ([`abi::Changed::local`]), such as the
+/// session tabs, once the current event is handled.
+pub fn local_changed(tui: &Tui) {
+    tui.reads.changed(tui);
+}
+
+/// Whether a theme name is safe as a file name in the themes directory.
+fn theme_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.starts_with('.')
+        && name.chars().all(|char| char.is_ascii_alphanumeric() || matches!(char, '-' | '_' | '.'))
 }
 
 fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
@@ -665,6 +845,9 @@ pub fn host(tui: &Rc<Tui>) -> Rc<dyn Host> {
 pub fn install(tui: &Rc<Tui>) {
     let _ = tui.plugins.tui.set(tui.weak());
     tui.plugins.activate(&host(tui));
+    // The plugins read the pending keys (`keymap.pending()`, `keymap.active()`).
+    let pending = tui.keymap.keymap().on_pending_sequence(bind!(tui, |tui, _| local_changed(&tui)));
+    tui.layers.borrow_mut().push(pending);
     crate::features::events::subscribe(tui, ["plugin.updated", "server.connected"], |tui, event| {
         if matches!(event, V2Event::PluginUpdated(_) | V2Event::ServerConnected(_)) {
             sync_server_plugins(tui);

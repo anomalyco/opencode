@@ -189,7 +189,8 @@ impl Tabs {
         };
     }
 
-    fn is_open(&self, tui: &Tui, session: &str) -> bool {
+    /// Whether the tab of `session`'s root is open.
+    pub(crate) fn is_open(&self, tui: &Tui, session: &str) -> bool {
         let root = tui.data.read(|state| state.root(&SessionID(session.to_owned()))).0;
         self.tabs(tui).iter().any(|tab| tab.session_id == root)
     }
@@ -587,6 +588,24 @@ pub fn select(tui: &Tui, session: &str) {
     tui.navigate(Route::Session { id: root });
 }
 
+/// `open`: a tab for the session's root, without showing it.
+pub fn open(tui: &Tui, session: &str) {
+    if !Tabs::enabled(tui) {
+        return;
+    }
+    let root = tui.data.read(|state| state.root(&SessionID(session.to_owned()))).0;
+    if tui.tabs.tabs(tui).iter().any(|tab| tab.session_id == root) {
+        return;
+    }
+    tui.tabs.cancelled.borrow_mut().remove(&root);
+    let title = title_of(tui, &root, None, None);
+    update(tui, move |scope| {
+        if let Some(tabs) = model::open(&scope.tabs, Tab::new(root.clone(), title.clone())) {
+            scope.tabs = tabs;
+        }
+    });
+}
+
 /// `add`: the new-session page, in the location `session.new_location` picks.
 pub fn add(tui: &Tui) {
     if !Tabs::enabled(tui) {
@@ -689,6 +708,8 @@ fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
     let revision = tui.tabs.writes.get() + 1;
     tui.tabs.writes.set(revision);
     changed(tui);
+    // The plugins read the tabs (`ui.tabs.list`).
+    crate::plugins::host::local_changed(tui);
     let Some(storage) = tui.storage() else { return };
     if let Ok(mut pending) = tui.tabs.pending.lock() {
         pending.push((revision, Arc::new(apply)));

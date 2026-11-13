@@ -18,12 +18,14 @@ use opencode_api::generated::{McpServerStatus, SessionArchivedData, SessionDelet
 use crate::prelude::*;
 
 type Subscribers = Rc<RefCell<Vec<(u64, Rc<dyn Fn(&Tui, &V2Event)>)>>>;
+type DeltaSubscribers = Rc<RefCell<Vec<(u64, Rc<dyn Fn(&[V2Event])>)>>>;
 
-/// The last status each MCP server was alerted for, and the signal subscribers.
+/// The last status each MCP server was alerted for, and the signal and delta subscribers.
 #[derive(Default)]
 pub struct Events {
     alerted: RefCell<HashMap<String, &'static str>>,
     subscribers: Subscribers,
+    deltas: DeltaSubscribers,
     next: Cell<u64>,
 }
 
@@ -142,6 +144,37 @@ pub fn subscribe<S: Into<String>>(
             subscribers.borrow_mut().retain(|(other, _)| *other != id);
         }
     })
+}
+
+/// Calls `subscriber` with the streaming deltas the store applied since the last sync, once a sync that has any, until
+/// the disposer drops (the plugins' `on_deltas`).
+pub fn subscribe_deltas(tui: &Tui, subscriber: impl Fn(&[V2Event]) + 'static) -> Disposer {
+    let id = tui.events.next.get();
+    tui.events.next.set(id + 1);
+    tui.events.deltas.borrow_mut().push((id, Rc::new(subscriber)));
+    let subscribers = Rc::downgrade(&tui.events.deltas);
+    let listening = tui.data.listen_deltas();
+    Disposer::new(move || {
+        drop(listening);
+        if let Some(subscribers) = subscribers.upgrade() {
+            subscribers.borrow_mut().retain(|(other, _)| *other != id);
+        }
+    })
+}
+
+/// Hands the deltas the store applied since the last sync to the delta subscribers.
+pub fn deltas(tui: &Tui) {
+    if tui.events.deltas.borrow().is_empty() {
+        return;
+    }
+    let events = tui.data.take_deltas();
+    if events.is_empty() {
+        return;
+    }
+    let subscribers: Vec<_> = tui.events.deltas.borrow().iter().map(|(_, subscriber)| subscriber.clone()).collect();
+    for subscriber in subscribers {
+        subscriber(&events);
+    }
 }
 
 pub fn sync(tui: &Tui, changes: &Changes) {
