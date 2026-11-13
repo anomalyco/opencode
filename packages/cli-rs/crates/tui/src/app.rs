@@ -89,6 +89,8 @@ pub struct Tui {
     pub(crate) foreground: crate::features::foreground::Foreground,
     /// The custom-theme scans asked for so far; only the last one's result applies ([`discover_themes`]).
     theme_scans: Cell<u64>,
+    /// The selected theme's name as the plugins last heard of it.
+    theme_selected: RefCell<String>,
     /// Markdown documents that link session IDs (#63224).
     pub(crate) session_links: crate::features::session_links::Registry,
     pub(crate) events: crate::features::events::Events,
@@ -329,6 +331,13 @@ impl Tui {
                 self.app.runtime().spawn_blocking(move || persist(&files, effects));
             }
         }
+        // The plugins read the selected theme's name, which can change with the palette the same (`opencode` and
+        // `system` without a terminal palette), so it is not a repaint that tells them.
+        let selected = self.theme.borrow().selected().to_owned();
+        if *self.theme_selected.borrow() != selected {
+            *self.theme_selected.borrow_mut() = selected;
+            crate::plugins::host::local_changed(self);
+        }
         let theme = self.page();
         if self.painted.get() == theme {
             return;
@@ -464,6 +473,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         title: Default::default(),
         foreground: Default::default(),
         theme_scans: Cell::new(0),
+        theme_selected: RefCell::default(),
         session_links: Default::default(),
         events: Default::default(),
         attention: Default::default(),

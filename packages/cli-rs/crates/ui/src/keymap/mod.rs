@@ -656,6 +656,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
     /// The keys that do something now, at the root or after the pending sequence, formatted, with the title,
     /// description and group of what each runs (`Keymap.useState().active` in `keymap.tsx`).
     pub fn active(&self) -> Vec<Active> {
+        self.sync_mode();
         let options = opentui::keymap::ActiveKeyOptions { include_metadata: true, ..Default::default() };
         self.keymap
             .active_keys(options)

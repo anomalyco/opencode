@@ -152,6 +152,32 @@ fn modes_gate_layers_and_dispatch_passes_input() {
     assert!(tui.commands().iter().any(|command| command.id == "session.new"));
 }
 
+// Expected (review carbon-8): the active keys follow a mode whose condition changed, without a key or another query
+// publishing it first, as `commands` does.
+#[test]
+fn active_keys_follow_a_mode_condition() {
+    let tui = TuiKeymap::<u32>::new(Keybinds::defaults(), Options::default());
+    tui.layer(KeymapLayer {
+        mode: Some("modal".to_owned()),
+        commands: vec![TuiCommand::inline("x", |_, _| ()).title("Modal x")],
+        ..KeymapLayer::default()
+    })
+    .unwrap()
+    .forget();
+    let active = Rc::new(Cell::new(false));
+    let _pop = tui.push_mode(
+        "modal",
+        Condition::when({
+            let active = active.clone();
+            move || active.get()
+        }),
+    );
+    let reaches = |tui: &TuiKeymap<u32>| tui.active().iter().any(|key| key.key == "x");
+    assert!(!reaches(&tui));
+    active.set(true);
+    assert!(reaches(&tui), "{:?}", tui.active());
+}
+
 #[test]
 fn layer_rejects_the_command_shapes_typescript_rejects() {
     let tui = TuiKeymap::<u32>::new(Keybinds::defaults(), Options::default());
