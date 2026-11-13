@@ -168,6 +168,24 @@ describe("Ripgrep", () => {
       }),
     ),
   )
+
+  const posixOnly = process.platform === "win32" ? it.live.skip : it.live
+
+  posixOnly("keeps literal backslashes in Unix file names", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const file = "actual\\name.txt"
+        yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, file), "needle\n"))
+
+        const ripgrep = yield* Ripgrep.Service
+        const files = yield* ripgrep.glob({ cwd: tmp.path, pattern: "*.txt", limit: 10 })
+        expect(files.map((item) => item.path)).toEqual([RelativePath.make(file)])
+
+        const matches = yield* ripgrep.grep({ cwd: tmp.path, pattern: "needle", limit: 10 })
+        expect(matches.map((item) => item.entry.path)).toEqual([RelativePath.make(file)])
+      }),
+    ),
+  )
 })
 
 describe("RipgrepBinary.verify", () => {
