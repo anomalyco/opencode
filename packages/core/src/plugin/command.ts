@@ -3,6 +3,7 @@ export * as CommandPlugin from "./command.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
+import { Command } from "../command.js"
 import { Location } from "../location.js"
 import { Mcp } from "../mcp/index.js"
 import PROMPT_INITIALIZE from "./command/initialize.txt"
@@ -14,18 +15,19 @@ export const Plugin = define({
     const location = yield* Location.Service
     const mcp = yield* Mcp.Service
     const bus = yield* Bus.Service
+    const commands = yield* Command.Service
     const loaded = { prompts: [] as Mcp.Prompt[] }
     yield* bus.subscribe(Mcp.PromptsChanged).pipe(
       Stream.runForEach(() =>
         mcp.prompts().pipe(
           Effect.tap((prompts) => Effect.sync(() => (loaded.prompts = prompts))),
-          Effect.andThen(ctx.command.reload()),
+          Effect.andThen(commands.reload()),
         ),
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
     loaded.prompts = yield* mcp.prompts()
-    yield* ctx.command.transform((editor) => {
+    yield* commands.transform((editor) => {
       editor.add({
         name: "init",
         description: "guided AGENTS.md setup",
