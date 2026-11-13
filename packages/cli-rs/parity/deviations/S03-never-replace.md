@@ -7,8 +7,8 @@ and stops a registered service that times out three probes in a row before it st
 **Rust.** `ensure` (`crates/service/src/ensure.rs`) passes no version requirement, so a service of
 any version is used. A service that keeps timing out is left running, and `ensure` fails with
 "Background service at <url> (pid <pid>) is not responding. Stop it with `opencode service stop`,
-or pass --server." Only an unresponsive contender this `ensure` call started itself is stopped, as
-TS does. The service is started only when discovery finds none (`docs/F.9.md`).
+or pass --server." Only an unresponsive contender this `ensure` call started itself, or a
+registration whose pid no longer runs, is stopped and replaced, as TS does. The service is started only when discovery finds none (`docs/F.9.md`).
 
 **Reason.** User decisions Q2 ("this is a client we build and ship, not a server") and Q3 ("it
 should work with the running server"), and the run notes of F.9: the client never replaces or stops
