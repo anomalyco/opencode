@@ -173,7 +173,9 @@
       "name": "@opencode/cli-rs",
       "devDependencies": {
         "@opencode/httpapi-codegen": "workspace:*",
+        "@opencode/plugin": "workspace:*",
         "@opencode/protocol": "workspace:*",
+        "@opencode/tui": "workspace:*",
         "@opentui/core": "catalog:",
         "@opentui/solid": "catalog:",
         "@tsconfig/bun": "catalog:",
