@@ -30,6 +30,10 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         host.edit_composer(ComposerEdit::Insert { text: input.unwrap_or_default().to_owned() });
     });
     setup.command(hidden("p0a.submit"), |host, _| host.edit_composer(ComposerEdit::Submit));
+    setup.command(hidden("p0a.send"), |host, input| {
+        host.edit_composer(ComposerEdit::Set { text: input.unwrap_or_default().to_owned() });
+        host.edit_composer(ComposerEdit::Submit);
+    });
     // Every effect 1.5 adds, in one call; with the input `panic` the call panics after them, so none may happen.
     setup.command(hidden("p0a.all"), |host, input| {
         host.edit_composer(ComposerEdit::Set { text: "all".to_owned() });

@@ -214,6 +214,29 @@ fn the_cursor_read_is_where_an_insert_goes() {
     }
 }
 
+// Expected (bigboi 5, carbon-p0a-4): a set closes the completion popup of the text it replaces, as TS's `setText`
+// tells it, so a set and a submit in one call send exactly the new text from a `/` or an `@` popup. A set whose text
+// starts a completion opens its popup, and the submit then sends nothing, as enter does with a popup open.
+#[test]
+fn a_set_tells_the_completion_of_the_new_text() {
+    for (typed, popup) in [("/", "Switch agent"), ("@", "@general")] {
+        let setup = session(Carrier::Linked);
+        setup.app.type_text(typed);
+        setup.wait_for(popup);
+        setup.tui.keymap.dispatch("p0a.send", Some("plain words"));
+        let prompts = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
+        assert_eq!(prompts[0]["text"], "plain words", "{typed}");
+        setup.wait("the clear", || setup.textarea().text().is_empty());
+        setup.wait_gone(popup);
+    }
+    let setup = session(Carrier::Linked);
+    setup.tui.keymap.dispatch("p0a.send", Some("/rev"));
+    setup.wait_for("/review");
+    setup.app.advance(std::time::Duration::from_millis(50));
+    assert_eq!(setup.textarea().text(), "/rev");
+    assert!(setup.requests("POST", "/prompt").is_empty());
+}
+
 // Expected: a set starts the history over, as TS's `ref.set` does, so up then recalls the newest entry.
 #[test]
 fn a_set_starts_the_history_over() {
