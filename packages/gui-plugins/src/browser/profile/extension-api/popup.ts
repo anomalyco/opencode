@@ -73,9 +73,7 @@ export function createPopups(input: { partition: string; tabs: ExtensionTabs }) 
       const about = input.tabs.activeTab(window)?.id
 
       // The popup is about the tab under it; once another tab or a preview takes its place, it would show a stale tab.
-      const leave = input.tabs.onHidden((id) => {
-        if (id === about) dismiss()
-      })
+      const leave = input.tabs.watchPopupTab(window.id, about, () => dismiss())
 
       const place = (size: { width: number; height: number }) => {
         if (!window.isDestroyed()) view.setBounds(popupBounds(anchor, size, window.getContentBounds()))

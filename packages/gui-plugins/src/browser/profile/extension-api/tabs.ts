@@ -3,6 +3,7 @@ import type { BrowserWindow, Extension, WebContents } from "electron"
 import { method, none, optional, type ApiModule, type Emit, type ExtensionContext, type Wire } from "./api"
 import type { Manifests } from "./manifest"
 import { globMatch, matchesHost } from "./match-pattern"
+import { createTabActivity } from "./tab-activity"
 
 /** A tab of a pane in the profile, as the pane hands it to extensions, and what extensions may do with it. */
 export type PaneTab = {
@@ -162,7 +163,7 @@ export function createExtensionTabs(input: {
   const activated = new Map<number, number>()
   const focus: Focus = {}
   const watchers = new Set<(tab: PaneTab) => (() => void) | void>()
-  const hiders = new Set<(id: number) => void>()
+  const activity = createTabActivity()
   // Removes the listeners `track` added to each window, for windows that outlive the profile.
   const untrack = new Map<number, () => void>()
 
@@ -423,6 +424,7 @@ export function createExtensionTabs(input: {
 
     if (!tab || activated.get(tab.window.id) === id) return
     activated.set(tab.window.id, id)
+    activity.activated(tab.window.id, id)
     input.emit("tabs.onActivated", [{ tabId: id, windowId: tab.window.id }])
   }
 
@@ -470,22 +472,16 @@ export function createExtensionTabs(input: {
 
         releases.forEach((release) => release())
         // A closed tab has left the screen too, so a popup about it closes.
-        hiders.forEach((listener) => listener(id))
+        activity.hidden(id)
         input.emit("tabs.onRemoved", [id, { windowId: tab.window.id, isWindowClosing: tab.window.isDestroyed() }])
       }
     },
     /** The pane focused a tab, or the user clicked into it. */
     activated: activate,
     /** The tab left the screen, as when the pane shows another tab or a preview in its place. */
-    hidden(id: number) {
-      hiders.forEach((listener) => listener(id))
-    },
-    /** Hears each tab that leaves the screen, until the returned release. */
-    onHidden(listener: (id: number) => void) {
-      hiders.add(listener)
-
-      return () => void hiders.delete(listener)
-    },
+    hidden: activity.hidden,
+    /** Dismisses a popup when its window changes tabs or the tab it is about leaves the screen. */
+    watchPopupTab: activity.watch,
     /** A popup opened over `window`: its current window is that one. Returns the release. */
     popup(contents: WebContents, window: BrowserWindow) {
       track(window)
