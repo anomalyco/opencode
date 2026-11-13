@@ -165,7 +165,17 @@ function filenameFromUri(uri: string | undefined): string | undefined {
   if (!uri || uri.startsWith("data:")) return undefined
   if (URL.canParse(uri)) {
     const url = new URL(uri)
-    return path.basename((url.protocol === "zed:" && url.searchParams.get("path")) || url.pathname) || undefined
+    if (url.protocol === "file:") {
+      const pathname = Result.try(() => fileURLToPath(url)).pipe(Result.getOrUndefined)
+      if (pathname) return path.basename(pathname) || undefined
+    }
+    const zed = url.protocol === "zed:" ? url.searchParams.get("path") : undefined
+    if (zed) return path.basename(zed) || undefined
+    return path.win32.basename(decodePathSegment(url.pathname)) || undefined
   }
   return path.basename(uri) || undefined
+}
+
+function decodePathSegment(value: string): string {
+  return Result.try(() => decodeURIComponent(value)).pipe(Result.getOrUndefined) ?? value
 }
