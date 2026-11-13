@@ -16,7 +16,12 @@ the paragraphs).
 Rust: mini cuts the reply at the same block (`stable_prefix`) and ends each part before the end with a newline
 (`Active::commit` in `crates/mini/src/scrollback.rs`). The next part then starts on its own row, and the committed rows
 equal the reply rendered whole. The checkpoint has blank rows before the table and before `Three.`, and the rows below
-each move down, 16 lines in all. Test `scrollback::a_streamed_reply_commits_the_rows_of_the_whole_reply` checks that
+each move down, 16 lines in all. `parity/scenarios/M.1/fence-wrap.pty.ts` replays a reply cut before `Done.`: Rust
+keeps the blank row there (12 lines with the scrollback, 2 after exit).
+
+The shared mini history (`parity/scenarios/M.1/fixture.ts`) puts its list right under `Second answer:` with no blank
+line. That reply is two of marked's tokens and is committed in one part, so the other mini scenarios do not cross a
+cut. Test `scrollback::a_streamed_reply_commits_the_rows_of_the_whole_reply` checks that
 streamed equals whole over paragraph, table, list, fence and heading boundaries, with the text cut once, at every
 line and at every character. Ending the parts without the newline gives TS's rows.
 
