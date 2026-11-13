@@ -22,7 +22,12 @@ export default definePty({
     },
     { keys: "\x1b", settle: 300 },
     ...palette("Fault on a thread: segv"),
-    { until: { screen: "opencode-native crashed twice" }, settle: 500, checkpoint: "second", timeout: 20_000 },
+    {
+      until: { screen: /^(?![\s\S]*fault plugin)[\s\S]*opencode-native crashed twice/ },
+      settle: 500,
+      checkpoint: "second",
+      timeout: 20_000,
+    },
   ],
   osc: [],
 })

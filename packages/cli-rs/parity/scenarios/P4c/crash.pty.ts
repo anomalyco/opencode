@@ -17,14 +17,14 @@ export default definePty({
     ...palette("Fault in render: segv"),
     // The new client: the session, the draft, the notice, and no line of the plugin.
     {
-      until: { screen: /Plugin failed: example\.fault[\s\S]*keep this draft|keep this draft[\s\S]*Plugin failed/ },
+      until: { screen: /^(?![\s\S]*fault plugin)(?=[\s\S]*crashed the client in `render-slot`)[\s\S]*keep this draft/ },
       settle: 500,
       checkpoint: "restarted",
       timeout: 20_000,
     },
     { keys: "\x10", until: { screen: "Search commands" }, settle: 300 },
     { keys: "plugins", settle: 300 },
-    { keys: "\r", until: { screen: "example.fault" }, settle: 500, checkpoint: "manager" },
+    { keys: "\r", until: { screen: /x example\.fault +failed/ }, settle: 500, checkpoint: "manager" },
   ],
   osc: [],
 })

@@ -273,7 +273,7 @@ mod sys {
     /// The client, for the signals the parent passes on.
     static CLIENT: AtomicI32 = AtomicI32::new(0);
     /// The parent was asked to end: however the client ends now, it is not restarted.
-    static ENDING: AtomicBool = AtomicBool::new(false);
+    pub(super) static ENDING: AtomicBool = AtomicBool::new(false);
 
     pub fn supervise(raw: Vec<OsString>) -> Result<Vec<OsString>, ExitCode> {
         // SAFETY: fd 0 stays open for the life of the process.
@@ -340,7 +340,7 @@ mod sys {
 
     /// Waits for the client. When it stops (Ctrl+Z), the parent stops too, so the shell takes the terminal back, and
     /// continues it once it is continued.
-    fn wait(pid: i32) -> End {
+    pub(super) fn wait(pid: i32) -> End {
         loop {
             let mut status = 0;
             // SAFETY: waits for this process's own child.

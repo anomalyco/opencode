@@ -19,7 +19,9 @@ export default definePty({
     // Typed into the frozen client: dropped, so it neither reaches the new one nor sends the draft.
     { keys: "lost\r" },
     {
-      until: { screen: /hung the client in `run-command`[\s\S]*keep this draft|keep this draft[\s\S]*hung the client/ },
+      until: {
+        screen: /^(?![\s\S]*(fault plugin|lost))(?=[\s\S]*hung the client in `run-command`)[\s\S]*keep this draft/,
+      },
       settle: 500,
       checkpoint: "restarted",
       timeout: 20_000,
