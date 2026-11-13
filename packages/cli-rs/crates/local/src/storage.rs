@@ -72,6 +72,15 @@ impl Storage {
         })?
     }
 
+    /// Removes `key` under the lock, so it reads as never stored.
+    pub fn remove(&self, key: &str) -> Result<(), Error> {
+        let file = self.file(key)?;
+        lock::with_lock(&self.locks, &file.to_string_lossy(), &self.lock, || match fs::remove_file(&file) {
+            Err(error) if error.kind() != io::ErrorKind::NotFound => Err(Error::Io(error)),
+            _ => Ok(()),
+        })?
+    }
+
     /// Calls `on_change` after the storage directory changes, debounced by 50 ms; callers reload the
     /// keys they hold.
     pub fn watch(&self, on_change: impl FnMut() + Send + 'static) -> Option<Watch> {
