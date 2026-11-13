@@ -561,6 +561,7 @@ test("listing a folder passes the abort signal to the request", async () => {
 
 test("wraps autocomplete keyboard navigation", () => {
   expect(nextSuggestionIndex(-1, 1, 4)).toBe(0)
+  expect(nextSuggestionIndex(-1, -1, 4)).toBe(3)
   expect(nextSuggestionIndex(3, 1, 4)).toBe(0)
   expect(nextSuggestionIndex(0, -1, 4)).toBe(3)
   expect(nextSuggestionIndex(0, 1, 0)).toBe(-1)
