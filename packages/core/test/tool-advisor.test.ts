@@ -3,7 +3,6 @@ import { Effect, Layer, Schema, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Flag } from "@opencode/core/flag"
 import { AdvisorPlugin } from "@opencode/core/plugin/advisor"
-import type { Context } from "@opencode/plugin/effect/plugin"
 import { Session } from "@opencode/core/session"
 import { SessionGenerate } from "@opencode/core/session/generate"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
@@ -40,22 +39,6 @@ const systemFor = (tools: Record<string, unknown>) =>
     return event.system.map((part) => part.text)
   })
 
-const rpcMock = Object.assign(
-  () => {
-    throw new Error("unused rpc.client")
-  },
-  {
-    register: (
-      _definition: unknown,
-      handlers: { readonly set: (next: Advisor.State) => Effect.Effect<Advisor.State, unknown> },
-    ) =>
-      Effect.sync(() => {
-        captured = handlers
-        return { dispose: Effect.void, events: { emit: () => Effect.void } }
-      }),
-  },
-)
-
 const sessions = Layer.mock(Session.Service)({
   generate: (input) =>
     Effect.suspend(() => {
@@ -82,14 +65,26 @@ const setup = (experimental: ConfigExperimental.Info | undefined, initial: Advis
         remove: (key) => Effect.sync(() => void map.delete(key)),
         scan: () => Effect.succeed({ entries: [] }),
       },
-      rpc: rpcMock as unknown as Context["rpc"],
+      rpc: Object.assign(
+        () => {
+          throw new Error("unused rpc.client")
+        },
+        {
+          // SAFETY: the advisor plugin registers one RPC, whose `set` handler these tests call.
+          register: ((_definition: unknown, handlers: NonNullable<typeof captured>) =>
+            Effect.sync(() => {
+              captured = handlers
+              return { dispose: Effect.void, events: { emit: () => Effect.void } }
+            })) as never,
+        },
+      ),
       session: {
-        hook: (name: string, handler: unknown) =>
+        hook: (name, callback) =>
           Effect.sync(() => {
-            if (name === "context") contextHook = handler as typeof contextHook
+            if (name === "context") contextHook = callback as typeof contextHook
             return { dispose: Effect.void }
           }),
-      } as unknown as Context["session"],
+      },
     }).pipe(
       Effect.provide(Flag.testLayer([document(experimental)])),
       Effect.provide(permissionLayer({ assert: () => Effect.void })),
