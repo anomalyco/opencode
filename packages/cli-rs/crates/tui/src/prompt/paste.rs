@@ -76,15 +76,17 @@ pub fn connect(inner: &Rc<Inner>) {
             return;
         }
         // After the textarea moved its cursor to the click.
-        cx.app().defer(bind!(weak, |prompt, _| {
+        cx.app().defer(bind!(weak, |prompt, cx| {
             let cursor = prompt.textarea.cursor_offset();
             let mark = prompt
                 .textarea
                 .extmarks_at(cursor)
                 .into_iter()
                 .find(|mark| matches!(prompt.parts.get(mark.id), Some((Kind::Pasted, _))));
-            if let Some(mark) = mark {
-                expand(&prompt, mark.id);
+            // TS prevents the press's default, so the click selects nothing. The press already started a selection
+            // here; without ending it, the release would select across the expanded text.
+            if mark.is_some_and(|mark| expand(&prompt, mark.id)) {
+                cx.app().clear_selection();
             }
         }));
     });
