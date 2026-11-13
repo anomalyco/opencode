@@ -80,11 +80,24 @@ test.each([
     expected: { level: "partial", missing: ["native"] },
   },
   {
+    // Its worker and popup run, but its keys in web pages do nothing: the page scripts read their settings from
+    // chrome.storage.sync, which content scripts do not have here.
+    name: "Vimium",
+    manifest: manifest({
+      background: worker,
+      permissions: ["tabs", "bookmarks", "history", "storage", "sessions", "notifications", "scripting", "webNavigation", "search", "favicon"],
+      content_scripts: [{ js: ["lib/settings.js", "content_scripts/link_hints.js"], all_frames: true }],
+      action: { default_popup: "pages/action.html" },
+    }),
+    files: { pageSync: true },
+    expected: { level: "partial", missing: ["pageSync", "browserData", "other"] },
+  },
+  {
     // `tabGroups` has events and nothing stands in for it here, so a worker that listens stops as it starts.
     name: "an extension whose worker listens to an API this browser lacks",
     manifest: manifest({ background: worker, permissions: ["tabGroups", "tts"] }),
     expected: { level: "unsupported", cause: "startup", missing: ["browserData", "other"] },
   },
 ])("$name", (row) => {
-  expect(extensionCompatibility(row.manifest)).toEqual(row.expected)
+  expect(extensionCompatibility(row.manifest, row.files)).toEqual(row.expected)
 })

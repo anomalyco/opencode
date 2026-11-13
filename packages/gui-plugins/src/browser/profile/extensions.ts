@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { inflateRawSync } from "node:zlib"
 import { Option, Schema } from "effect"
@@ -31,7 +31,57 @@ const Manifest = Schema.Struct({
   chrome_url_overrides: Schema.optional(Schema.Unknown),
   chrome_settings_overrides: Schema.optional(Schema.Unknown),
   declarative_net_request: Schema.optional(Schema.Unknown),
+  content_scripts: Schema.optional(Schema.Array(Schema.Unknown)),
 })
+
+const ContentScript = Schema.Struct({ js: Schema.optional(Schema.Array(Schema.Unknown)) })
+
+/** What an extension's files show about whether it works here, beyond what its manifest declares. */
+export type ExtensionFiles = { readonly pageSync: boolean }
+
+// A text search over what a content script ships, so a bundle that calls the API through a variable is missed.
+const SYNC = /storage\s*\.\s*sync\b|storage\s*\[\s*["']sync["']\s*\]/
+
+/** Bounds on what the scan reads, so a large or hostile package costs little: files, bytes per file, bytes in all. */
+const SCAN = { files: 64, file: 2 * 1024 * 1024, total: 8 * 1024 * 1024 }
+
+/**
+ * What the extension's files show: whether the scripts it runs in web pages use `chrome.storage.sync`. Electron's
+ * content scripts have no `sync` area, so those scripts fail where they read their settings. Searches the declared
+ * content-script files as text, within `SCAN`; a file outside the extension's directory is never read.
+ */
+export async function extensionFiles(directory: string, manifest: Manifest): Promise<ExtensionFiles> {
+  const files = [
+    ...new Set(
+      (manifest.content_scripts ?? [])
+        .filter(Schema.is(ContentScript))
+        .flatMap((script) => (script.js ?? []).filter(Schema.is(Schema.String))),
+    ),
+  ]
+    .flatMap((entry) => {
+      const file = path.resolve(directory, entry.replace(/^\//, ""))
+      const relative = path.relative(path.resolve(directory), file)
+
+      return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative) ? [file] : []
+    })
+    .slice(0, SCAN.files)
+
+  const budget = { left: SCAN.total }
+
+  for (const file of files) {
+    const size = await stat(file).then(
+      (info) => info.size,
+      () => Infinity,
+    )
+
+    if (size > SCAN.file || size > budget.left) continue
+    budget.left -= size
+
+    if (SYNC.test(await readFile(file, "utf8").catch(() => ""))) return { pageSync: true }
+  }
+
+  return { pageSync: false }
+}
 
 export type Manifest = typeof Manifest.Type
 

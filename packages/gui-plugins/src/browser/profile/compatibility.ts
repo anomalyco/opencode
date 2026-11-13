@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import type { Manifest } from "./extensions"
+import type { ExtensionFiles, Manifest } from "./extensions"
 import type { ExtensionCompatibility, ExtensionFeature } from "./ipc"
 
 /**
@@ -71,6 +71,7 @@ const STARTUP = new Set(["readingList", "tabGroups", "gcm", "declarativeContent"
 // Most noticeable first.
 const ORDER: readonly ExtensionFeature[] = [
   "native",
+  "pageSync",
   "shortcuts",
   "sidePanel",
   "devtools",
@@ -85,8 +86,11 @@ const ORDER: readonly ExtensionFeature[] = [
   "other",
 ]
 
-/** Whether an extension works in this browser, from the permissions and keys its manifest declares. */
-export function extensionCompatibility(manifest: Manifest): ExtensionCompatibility {
+/**
+ * Whether an extension works in this browser, from the permissions and keys its manifest declares, and from what its
+ * files show: `pageSync` when its content scripts use `chrome.storage.sync`, which Electron gives no content script.
+ */
+export function extensionCompatibility(manifest: Manifest, files: ExtensionFiles = { pageSync: false }): ExtensionCompatibility {
   const required = (manifest.permissions ?? []).filter(Schema.is(Schema.String))
   const optional = (manifest.optional_permissions ?? []).filter(Schema.is(Schema.String))
 
@@ -101,6 +105,7 @@ export function extensionCompatibility(manifest: Manifest): ExtensionCompatibili
     manifest.chrome_settings_overrides === undefined ? undefined : "settings",
     // `chrome.permissions` grants nothing it may ask for later.
     optional.length > 0 || (manifest.optional_host_permissions?.length ?? 0) > 0 ? "access" : undefined,
+    files.pageSync ? "pageSync" : undefined,
   ]
 
   const missing = ORDER.filter((feature) => declared.includes(feature))

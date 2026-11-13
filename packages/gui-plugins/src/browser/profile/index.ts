@@ -13,6 +13,7 @@ import {
   displayName,
   extensionIcon,
   extensionID,
+  extensionFiles,
   extensionPages,
   parseCrx,
   pinKey,
@@ -20,6 +21,8 @@ import {
   storeDownloadURL,
   storeTarget,
   unzip,
+  type ExtensionFiles,
+  type Manifest,
 } from "./extensions"
 import type { ImportResult, InstallResult, ProfileExtension } from "./ipc"
 import { chromiumProfileDirectory, listSources, profileExtensions, readSource, windowsIcons } from "./sources"
@@ -83,6 +86,17 @@ export async function createBrowserProfile(input: {
     },
   })
 
+  // What each package's files show, read once per directory and version: describing runs after every change.
+  const scans = new Map<string, Promise<ExtensionFiles>>()
+
+  const compatibilityOf = async (folder: string, manifest: Manifest) => {
+    const key = `${folder}\n${manifest.version}`
+    const scan = scans.get(key) ?? extensionFiles(folder, manifest)
+    scans.set(key, scan)
+
+    return extensionCompatibility(manifest, await scan)
+  }
+
   const describe = async (record: StoredExtension): Promise<ProfileExtension | undefined> => {
     const manifest = await readManifest(record.directory)
 
@@ -102,7 +116,7 @@ export async function createBrowserProfile(input: {
       popup: page(pages.popup),
       options: page(pages.options),
       error: errors.get(record.id),
-      compatibility: extensionCompatibility(manifest),
+      compatibility: await compatibilityOf(record.directory, manifest),
     }
   }
 
@@ -149,7 +163,7 @@ export async function createBrowserProfile(input: {
     const manifest = await readManifest(folder)
 
     if (!manifest || manifest.theme !== undefined) return { type: "failed", reason: "manifest" }
-    const compatibility = extensionCompatibility(manifest)
+    const compatibility = await compatibilityOf(folder, manifest)
     // Installing one again, such as an update, keeps it, as the user added it before.
     const known = stored.value.some((record) => record.directory === folder)
 
@@ -295,7 +309,7 @@ export async function createBrowserProfile(input: {
               version: manifest.version,
               icon: await extensionIcon(item.directory, manifest),
               installed: stored.value.some((record) => record.id === item.id),
-              compatibility: extensionCompatibility(manifest),
+              compatibility: await compatibilityOf(item.directory, manifest),
             },
           ]
         }),

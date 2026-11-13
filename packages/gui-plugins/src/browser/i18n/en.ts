@@ -74,6 +74,7 @@ export default {
   "extensions.compat.feature.network": "Watching network requests",
   "extensions.compat.feature.shortcuts": "Keyboard shortcuts",
   "extensions.compat.feature.native": "Connecting to an app on your computer",
+  "extensions.compat.feature.pageSync": "Its features in web pages, which read synced settings",
   "extensions.compat.feature.signin": "Signing in with a browser account",
   "extensions.compat.feature.sidePanel": "Side panel",
   "extensions.compat.feature.browserData": "History, bookmarks, and downloads",

@@ -9,6 +9,8 @@ const text = (maximum: number) => Schema.String.check(Schema.isMinLength(1), Sch
  * A part of an extension that does not work in this browser, by what the user would notice.
  * - `network`: watching requests (`webRequest`) from a service worker.
  * - `shortcuts`: keyboard shortcuts. `native`: an app on the computer.
+ * - `pageSync`: what its scripts in web pages do with settings they read from `chrome.storage.sync`, which those
+ *   scripts cannot reach here.
  * - `signin`: signing in with a browser account. `sidePanel`: a side panel.
  * - `browserData`: history, bookmarks, sessions and downloads. `settings`: browser settings such as privacy or fonts.
  * - `addressBar`: an address bar keyword. `newTab`: replacing the new tab page. `devtools`: a developer tools panel.
@@ -18,6 +20,7 @@ export const ExtensionFeature = Schema.Literals([
   "network",
   "shortcuts",
   "native",
+  "pageSync",
   "signin",
   "sidePanel",
   "browserData",

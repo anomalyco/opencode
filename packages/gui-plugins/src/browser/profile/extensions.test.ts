@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test"
 import { createHash, generateKeyPairSync } from "node:crypto"
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { parseCrx, storeTarget, unzip } from "./extensions"
+import { extensionFiles, parseCrx, storeTarget, unzip, type Manifest } from "./extensions"
 
 const field = (number: number, value: Uint8Array) => {
   const tag = varint(number * 8 + 2)
@@ -130,5 +130,40 @@ test("unpacks an extension archive and refuses one whose entries would land outs
     await expect(unzip(archive({ "../escape.txt": "x" }), path.join(directory, "bad"))).rejects.toThrow("unsafe path")
   } finally {
     await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("finds page scripts that read synced settings, and reads nothing outside the extension's folder", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "extension-files-"))
+  const vimium = path.join(root, "vimium")
+  const plain = path.join(root, "plain")
+
+  const write = async (file: string, text: string) => {
+    await mkdir(path.dirname(file), { recursive: true })
+    await writeFile(file, text)
+  }
+
+  const manifest = (js: unknown[]): Manifest => ({
+    manifest_version: 3,
+    name: "x",
+    version: "1",
+    content_scripts: [{ js, all_frames: true }, { css: ["page.css"] }],
+  })
+
+  try {
+    // Vimium's shape: many page scripts, one of which loads the settings from the sync area.
+    await write(path.join(vimium, "lib", "utils.js"), "export const x = chrome.storage.local")
+    await write(path.join(vimium, "lib", "settings.js"), "let result = await chrome.storage.sync.get(null);")
+    // Another extension keeps its settings locally, and points one entry at a file outside its folder.
+    await write(path.join(plain, "content.js"), "chrome.storage.local.get('theme')")
+    await write(path.join(root, "outside.js"), "chrome.storage.sync.get()")
+
+    expect(await extensionFiles(vimium, manifest(["lib/utils.js", "/lib/settings.js", 7]))).toEqual({ pageSync: true })
+    expect(await extensionFiles(plain, manifest(["content.js", "../outside.js", "missing.js"]))).toEqual({
+      pageSync: false,
+    })
+    expect(await extensionFiles(plain, { manifest_version: 3, name: "x", version: "1" })).toEqual({ pageSync: false })
+  } finally {
+    await rm(root, { recursive: true, force: true })
   }
 })
