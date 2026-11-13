@@ -29,6 +29,7 @@ import {
   echoesUserShell,
   hidesActivity,
   liveThinkingShows,
+  movedInPlace,
   noticePlacement,
   textShows,
   toolRule,
@@ -374,7 +375,7 @@ function constructTurns(input: Input) {
   }
 
   input.messages.forEach((message) => {
-    if (echoesUserShell(message, userShellIDs)) return
+    if (echoesUserShell(message, userShellIDs) || movedInPlace(message)) return
 
     if (isNotice(message)) {
       // A notice still waiting for delivery, such as a subagent reporting back, already happened, so it joins the
