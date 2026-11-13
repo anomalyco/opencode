@@ -306,6 +306,31 @@ fn agent_mentions_are_one_unit_and_are_sent_as_parts() {
     assert_eq!((marks[0].start, marks[0].end), (11, 19));
 }
 
+// Undo brings a deleted mention's mark back with its id, but not its part: TS maps parts by mark id and forgets the
+// id with the part (`syncExtmarksWithPromptParts`), so the mention is sent as text.
+#[test]
+fn undo_brings_a_mention_back_as_text() {
+    let setup = Setup::new();
+    setup.app.type_text("ask @gen");
+    setup.wait_for("@general");
+    setup.app.press("return");
+    let mark = setup.textarea().extmarks()[0];
+    setup.app.press("backspace");
+    setup.app.press("backspace");
+    assert_eq!(setup.text(), "ask ");
+    setup.app.press("super+z");
+    assert_eq!(setup.text(), "ask @general");
+    assert_eq!(setup.textarea().extmarks(), [mark]);
+    // The space too, which closes the completion the restored mention opened.
+    setup.app.press("super+z");
+    assert_eq!(setup.text(), "ask @general ");
+    setup.wait_gone("@explore");
+    setup.app.press("return");
+    let sent = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
+    assert_eq!(sent[0].1["text"], "ask @general ");
+    assert_eq!(sent[0].1["agents"], json!([]));
+}
+
 #[test]
 fn file_mentions_search_record_frecency_and_carry_line_ranges() {
     let setup = Setup::new();
