@@ -1,6 +1,7 @@
 //! The terminal title (E.1, row T09, `app.tsx:636-662`): "OpenCode" on home and for a session without a
 //! real title, "OC | <title>" for a session, and "OC | <name>" for a plugin route. `terminal.title: false`
-//! leaves the title alone. Quitting clears it (`util/renderer.ts` `destroyRenderer`).
+//! leaves the title alone until quitting, which clears it whatever the setting (`util/renderer.ts`
+//! `destroyRenderer`).
 //!
 //! `app::mount` calls [`install`] once, `Tui::navigate` calls [`route_changed`], and `Tui::sync` calls
 //! [`sync`] with what changed.
@@ -71,11 +72,10 @@ pub fn set_by_plugin(tui: &Tui, title: &str) {
     tui.title.set(tui, title.to_owned());
 }
 
-/// Clears the title before the terminal is released, as `destroyRenderer` does: the TUI's own, and a plugin's.
+/// Clears the title before the terminal is released, as `destroyRenderer` does whatever `terminal.title` says: the
+/// TUI's own, a plugin's, or the one the terminal had.
 pub fn clear(tui: &Tui) {
-    if enabled(tui) || tui.title.sent.borrow().as_deref().is_some_and(|sent| !sent.is_empty()) {
-        tui.title.set(tui, String::new());
-    }
+    tui.title.set(tui, String::new());
 }
 
 /// `terminal.title` as the last settings write left it, so `terminal.title.toggle` (E.20) takes effect.
