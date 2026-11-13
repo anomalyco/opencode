@@ -47,7 +47,8 @@ export type Request = VideoRequest<VideoModel<SeedanceVideoOptions>>
 // 2. Token and response schemas
 // ---------------------------------------------------------------------------
 
-export const Token = Schema.Struct({ taskID: Schema.String })
+/** The provider's job ID; it is all a later status, result or cancel call needs. */
+export const Token = Schema.String
 export type Token = Schema.Schema.Type<typeof Token>
 
 const StartResponse = Schema.Struct({ id: Schema.String })
@@ -194,7 +195,7 @@ const make = (provider: Provider) => {
   })
 
   const decodeStart = route.decodeStarted(StartResponse, (value) => ({
-    token: { taskID: value.id },
+    token: value.id,
     snapshot: { id: value.id, status: "queued" },
   }))
 
@@ -205,7 +206,7 @@ const make = (provider: Provider) => {
     context: MediaProtocol.PollContext<Token>,
   ) {
     const output = yield* decodeTask(response)
-    return { id: context.token.taskID, status: MediaProtocol.status(STATUS, output.value.status) }
+    return { id: context.token, status: MediaProtocol.status(STATUS, output.value.status) }
   })
 
   const decodeResult = Effect.fn("SeedanceVideo.decodeResult")(function* (
@@ -215,7 +216,7 @@ const make = (provider: Provider) => {
     const output = yield* decodeTask(response)
     const task = output.value
     const status = MediaProtocol.status(STATUS, task.status)
-    if (status === "queued" || status === "running") return yield* output.pending(context.token.taskID)
+    if (status === "queued" || status === "running") return yield* output.pending(context.token)
     if (status === "failed") {
       const code = task.error?.code ?? undefined
       const detail = task.error?.message ?? undefined
@@ -224,9 +225,8 @@ const make = (provider: Provider) => {
       return yield* output.ended("failed", message, MediaProtocol.failure(FAILURE, code?.split(".")[0]))
     }
     if (status === "cancelled")
-      return yield* output.ended("cancelled", `${route.name} task ${context.token.taskID} was cancelled`)
-    if (status === "expired")
-      return yield* output.ended("expired", `${route.name} task ${context.token.taskID} expired`)
+      return yield* output.ended("cancelled", `${route.name} task ${context.token} was cancelled`)
+    if (status === "expired") return yield* output.ended("expired", `${route.name} task ${context.token} expired`)
     const videoURL = task.content?.video_url ?? undefined
     if (videoURL === undefined) return yield* output.invalid(`${route.name} completed without a video URL`)
     const duration = durationSeconds(task)
@@ -254,7 +254,7 @@ const make = (provider: Provider) => {
             },
       providerMetadata: {
         [provider]: {
-          taskId: context.token.taskID,
+          taskId: context.token,
           model: task.model ?? undefined,
           seed: task.seed ?? undefined,
           ratio: task.ratio ?? undefined,
@@ -272,7 +272,7 @@ const make = (provider: Provider) => {
     })
   })
 
-  const taskPath = (token: Token) => `${PATH}/${token.taskID}`
+  const taskPath = (token: Token) => `${PATH}/${encodeURIComponent(token)}`
 
   // DELETE cancels a queued task. Ark refuses it for a running task, and deletes the record of a finished one.
   const protocol = MediaProtocol.queued<Request, VideoResponse, Token>(route, {
@@ -284,7 +284,7 @@ const make = (provider: Provider) => {
   })
 
   const model = (input: MediaRoute.ModelInput) =>
-    VideoModel.fromRoute<SeedanceVideoOptions, Token>(
+    VideoModel.fromRoute<SeedanceVideoOptions>(
       {
         protocol,
         baseURL: provider === "volcengine" ? VOLCENGINE_BASE_URL : BYTEPLUS_BASE_URL,

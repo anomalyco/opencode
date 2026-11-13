@@ -43,7 +43,8 @@ export type Request = VideoRequest<VideoModel<OpenRouterVideoOptions>>
 // 2. Token and response schemas
 // ---------------------------------------------------------------------------
 
-export const Token = Schema.Struct({ id: Schema.String })
+/** The provider's job ID; it is all a later status, result or cancel call needs. */
+export const Token = Schema.String
 export type Token = Schema.Schema.Type<typeof Token>
 
 const StartResponse = Schema.Struct({ id: Schema.String, status: optionalNull(Schema.String) })
@@ -133,7 +134,7 @@ const resolution = (value: string) => (/^\dk$/.test(value) ? value.toUpperCase()
 // ---------------------------------------------------------------------------
 
 const decodeStart = route.decodeStarted(StartResponse, (value) => ({
-  token: { id: value.id },
+  token: value.id,
   snapshot: { id: value.id, status: MediaProtocol.status(STATUS, value.status ?? "pending") },
 }))
 
@@ -144,7 +145,7 @@ const decodeStatus = Effect.fn("OpenRouterVideo.decodeStatus")(function* (
   context: MediaProtocol.PollContext<Token>,
 ) {
   const output = yield* decodeJob(response)
-  return { id: context.token.id, status: MediaProtocol.status(STATUS, output.value.status) }
+  return { id: context.token, status: MediaProtocol.status(STATUS, output.value.status) }
 })
 
 const decodeResult = Effect.fn("OpenRouterVideo.decodeResult")(function* (
@@ -154,7 +155,7 @@ const decodeResult = Effect.fn("OpenRouterVideo.decodeResult")(function* (
   const output = yield* decodeJob(response)
   const job = output.value
   const status = MediaProtocol.status(STATUS, job.status)
-  if (status === "queued" || status === "running") return yield* output.pending(context.token.id)
+  if (status === "queued" || status === "running") return yield* output.pending(context.token)
   if (status === "failed") {
     const message = `${route.name} generation failed${job.error ? `: ${job.error}` : ""}`
     if (job.error && /content policy|moderat/i.test(job.error)) return yield* output.contentPolicy(message)
@@ -163,7 +164,7 @@ const decodeResult = Effect.fn("OpenRouterVideo.decodeResult")(function* (
   if (status !== "completed")
     return yield* output.ended(
       status,
-      `${route.name} job ${context.token.id} ${status}${job.error ? `: ${job.error}` : ""}`,
+      `${route.name} job ${context.token} ${status}${job.error ? `: ${job.error}` : ""}`,
     )
   const urls = job.unsigned_urls ?? []
   if (urls.length === 0) return yield* output.invalid(`${route.name} completed without a video URL`)
@@ -183,7 +184,7 @@ const decodeResult = Effect.fn("OpenRouterVideo.decodeResult")(function* (
     videos,
     providerMetadata: {
       openrouter: {
-        id: context.token.id,
+        id: context.token,
         generationId: job.generation_id ?? undefined,
         cost: job.usage?.cost ?? undefined,
         isByok: job.usage?.is_byok ?? undefined,
@@ -196,7 +197,7 @@ const decodeResult = Effect.fn("OpenRouterVideo.decodeResult")(function* (
 // 6. Protocol and route
 // ---------------------------------------------------------------------------
 
-const jobPath = (token: Token) => `${PATH}/${encodeURIComponent(token.id)}`
+const jobPath = (token: Token) => `${PATH}/${encodeURIComponent(token)}`
 
 // OpenRouter has no cancel endpoint; `cancelled` only appears when it stops a job itself.
 export const protocol = MediaProtocol.queued<Request, VideoResponse, Token>(route, {
@@ -207,7 +208,7 @@ export const protocol = MediaProtocol.queued<Request, VideoResponse, Token>(rout
 })
 
 export const model = (input: MediaRoute.ModelInput) =>
-  VideoModel.fromRoute<OpenRouterVideoOptions, Token>({ protocol, baseURL: DEFAULT_BASE_URL, path: PATH }, input)
+  VideoModel.fromRoute<OpenRouterVideoOptions>({ protocol, baseURL: DEFAULT_BASE_URL, path: PATH }, input)
 
 export const OpenRouterVideo = {
   protocol,

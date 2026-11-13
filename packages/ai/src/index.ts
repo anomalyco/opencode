@@ -260,14 +260,14 @@ export const make = (options: Options = {}) => {
     },
     video: {
       request: Video.request,
-      /** Submit a generation and return its `{ id, token }` at once; nothing polls. */
+      /** Submit a generation and return its `{ id }` at once; nothing polls. */
       start: <const Model extends VideoModel>(input: VideoRequestInput<Model> | VideoRequest, options?: RunOptions) =>
         run(Video.start(input), options),
-      /** One status read for a stored token. */
-      status: (model: VideoModel, token: unknown, options?: RunOptions) => run(Video.status(model, token), options),
+      /** One status read for a job ID. */
+      status: (model: VideoModel, id: string, options?: RunOptions) => run(Video.status(model, id), options),
       /** The finished videos; fails while the job is still running. */
-      result: (model: VideoModel, token: unknown, options?: RunOptions) => run(Video.result(model, token), options),
-      cancel: (model: VideoModel, token: unknown, options?: RunOptions) => run(Video.cancel(model, token), options),
+      result: (model: VideoModel, id: string, options?: RunOptions) => run(Video.result(model, id), options),
+      cancel: (model: VideoModel, id: string, options?: RunOptions) => run(Video.cancel(model, id), options),
     },
     /** Experimental: may change without compatibility guarantees. */
     experimental: {

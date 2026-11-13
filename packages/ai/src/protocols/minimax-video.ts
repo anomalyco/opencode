@@ -47,7 +47,8 @@ export type Request = VideoRequest<VideoModel<MiniMaxVideoOptions>>
 // 2. Token and response schemas
 // ---------------------------------------------------------------------------
 
-export const Token = Schema.Struct({ taskID: Schema.String })
+/** The provider's job ID; it is all a later status, result or cancel call needs. */
+export const Token = Schema.String
 export type Token = Schema.Schema.Type<typeof Token>
 
 const BaseResp = optionalNull(
@@ -241,7 +242,7 @@ const hailuoFromRequest = Effect.fn("MiniMaxHailuoVideo.fromRequest")(function* 
 // ---------------------------------------------------------------------------
 
 const decodeStart = route.decodeStarted(StartResponse, (value) => ({
-  token: { taskID: value.task_id },
+  token: value.task_id,
   snapshot: { id: value.task_id, status: "queued" },
 }))
 
@@ -253,7 +254,7 @@ const decodeStatus = Effect.fn("MiniMaxVideo.decodeStatus")(function* (
 ) {
   const output = yield* decodeTask(response)
   const task = output.value.task ?? output.value
-  return { id: context.token.taskID, status: MediaProtocol.status(STATUS, task.status ?? "") }
+  return { id: context.token, status: MediaProtocol.status(STATUS, task.status ?? "") }
 })
 
 const decodeResult = Effect.fn("MiniMaxVideo.decodeResult")(function* (
@@ -263,11 +264,11 @@ const decodeResult = Effect.fn("MiniMaxVideo.decodeResult")(function* (
   const output = yield* decodeTask(response)
   const task = output.value.task ?? output.value
   const status = MediaProtocol.status(STATUS, task.status ?? "")
-  if (status === "queued" || status === "running") return yield* output.pending(context.token.taskID)
+  if (status === "queued" || status === "running") return yield* output.pending(context.token)
   if (status === "failed")
     return yield* failed(output, route.name, task.error?.code ?? undefined, task.error?.message ?? undefined)
   if (status !== "completed")
-    return yield* output.ended("cancelled", `${route.name} task ${context.token.taskID} was cancelled`)
+    return yield* output.ended("cancelled", `${route.name} task ${context.token} was cancelled`)
   const url = task.content?.url ?? undefined
   if (url === undefined) return yield* output.invalid(`${route.name} completed without a video URL`)
   const duration = task.duration ?? undefined
@@ -283,7 +284,7 @@ const decodeResult = Effect.fn("MiniMaxVideo.decodeResult")(function* (
     usage: typeof total === "number" ? { type: "seconds", seconds: total } : undefined,
     providerMetadata: {
       minimax: {
-        taskId: context.token.taskID,
+        taskId: context.token,
         model: task.model ?? undefined,
         resolution: task.resolution ?? undefined,
         ratio: task.ratio ?? undefined,
@@ -301,7 +302,7 @@ const decodeHailuoStart = Effect.fn("MiniMaxHailuoVideo.decodeStart")(function* 
   if (error) return yield* error
   const taskID = output.value.task_id ?? ""
   if (taskID === "") return yield* output.invalid(`${hailuoRoute.name} returned no task_id`)
-  return { token: { taskID }, snapshot: { id: taskID, status: "queued" as const } }
+  return { token: taskID, snapshot: { id: taskID, status: "queued" as const } }
 })
 
 const decodeHailuoTask = hailuoRoute.decodeJson(HailuoTask)
@@ -315,7 +316,7 @@ const decodeHailuoStatus = Effect.fn("MiniMaxHailuoVideo.decodeStatus")(function
   // A failed task also carries its reason in `base_resp`; any other non-zero code is a failed read.
   const error = status === "failed" ? undefined : baseError(output, output.value.base_resp)
   if (error) return yield* error
-  return { id: context.token.taskID, status }
+  return { id: context.token, status }
 })
 
 const decodeHailuoFile = hailuoRoute.decodeJson(HailuoFile)
@@ -330,7 +331,7 @@ const decodeHailuoResult = Effect.fn("MiniMaxHailuoVideo.decodeResult")(function
   const error = baseError(output, task.base_resp)
   if (status === "failed") return yield* error ?? failed(output, hailuoRoute.name, undefined, undefined)
   if (error) return yield* error
-  if (status !== "completed") return yield* output.pending(context.token.taskID)
+  if (status !== "completed") return yield* output.pending(context.token)
   const fileID = task.file_id ?? ""
   if (fileID === "") return yield* output.invalid(`${hailuoRoute.name} completed without a file_id`)
   // The task names a file; its download URL takes a second lookup and is valid for one hour.
@@ -349,7 +350,7 @@ const decodeHailuoResult = Effect.fn("MiniMaxHailuoVideo.decodeResult")(function
       }),
     ],
     providerMetadata: {
-      minimax: { taskId: context.token.taskID, fileId: fileID },
+      minimax: { taskId: context.token, fileId: fileID },
     },
   })
 })
@@ -361,13 +362,13 @@ const decodeHailuoResult = Effect.fn("MiniMaxHailuoVideo.decodeResult")(function
 export const protocol = MediaProtocol.queued<Request, VideoResponse, Token>(route, {
   token: Token,
   start: { body: { from: fromRequest }, decode: decodeStart },
-  status: { path: (token) => `${STATUS_PATH}/${token.taskID}`, decode: decodeStatus },
-  result: { path: (token) => `${STATUS_PATH}/${token.taskID}`, decode: decodeResult },
+  status: { path: (token) => `${STATUS_PATH}/${encodeURIComponent(token)}`, decode: decodeStatus },
+  result: { path: (token) => `${STATUS_PATH}/${encodeURIComponent(token)}`, decode: decodeResult },
   // Cancels a queued task; MiniMax rejects it once the task is running.
-  cancel: { method: "DELETE", path: (token) => `${PATH}/${token.taskID}` },
+  cancel: { method: "DELETE", path: (token) => `${PATH}/${encodeURIComponent(token)}` },
 })
 
-const hailuoStatusPath = (token: Token) => `${HAILUO_STATUS_PATH}?task_id=${encodeURIComponent(token.taskID)}`
+const hailuoStatusPath = (token: Token) => `${HAILUO_STATUS_PATH}?task_id=${encodeURIComponent(token)}`
 
 export const hailuoProtocol = MediaProtocol.queued<Request, VideoResponse, Token>(hailuoRoute, {
   token: Token,
@@ -378,11 +379,11 @@ export const hailuoProtocol = MediaProtocol.queued<Request, VideoResponse, Token
 
 /** H3 and later models on the v2 API. */
 export const h3Model = (input: MediaRoute.ModelInput) =>
-  VideoModel.fromRoute<MiniMaxVideoOptions, Token>({ protocol, baseURL: DEFAULT_BASE_URL, path: PATH }, input)
+  VideoModel.fromRoute<MiniMaxVideoOptions>({ protocol, baseURL: DEFAULT_BASE_URL, path: PATH }, input)
 
 /** Hailuo and the `*-01` models on the v1 API. */
 export const hailuoModel = (input: MediaRoute.ModelInput) =>
-  VideoModel.fromRoute<MiniMaxVideoOptions, Token>(
+  VideoModel.fromRoute<MiniMaxVideoOptions>(
     { protocol: hailuoProtocol, baseURL: DEFAULT_BASE_URL, path: HAILUO_PATH },
     input,
   )

@@ -1035,8 +1035,8 @@ The hosted result is represented as a provider-executed tool call and a tool res
 
 Video generation is a job: `start` submits it and returns at once, and the caller decides when to read its `status`,
 fetch its `result`, or `cancel` it. Nothing polls for you. Every call after `start` takes the model and the job's
-`token`, plain JSON you can store and read back from another process, so recovering after a restart is the same call
-as a normal status read. Models come from `.video(...)` selectors on the `XAI`, `OpenRouter`, `Volcengine`,
+`id`, the provider's job ID as a string you can store and read back from another process, so recovering after a restart
+is the same call as a normal status read. Models come from `.video(...)` selectors on the `XAI`, `OpenRouter`, `Volcengine`,
 `BytePlus`, `MiniMax` and `Google` facades.
 
 ```ts
@@ -1057,13 +1057,13 @@ const program = Effect.gen(function* () {
     resolution: "720p", // 480p | 720p | 1080p | 4k, or any provider value
     sound: false,
   })
-  job.token // `{ requestID }` for xAI: store it with the provider and model ID
+  job.id // the provider's job ID: store it with the provider and model ID
 
-  const status = yield* ai.video.status(model, job.token)
+  const status = yield* ai.video.status(model, job.id)
   status.status // "queued" | "running" | "completed" | "failed" | "cancelled" | "expired"
   status.progress // 0..1, only when the provider reports it
 
-  const response = yield* ai.video.result(model, job.token)
+  const response = yield* ai.video.result(model, job.id)
   yield* Media.write(response.video, "./kitten.mp4") // streams the download to disk
 })
 ```
@@ -1132,8 +1132,8 @@ The promise client has the same calls, each accepting `{ signal }`:
 import { ai } from "@opencode/ai"
 
 const job = await ai.video.start({ model, prompt })
-const status = await ai.video.status(model, job.token)
-if (status.status === "completed") await ai.write((await ai.video.result(model, job.token)).video, "./kite.mp4")
+const status = await ai.video.status(model, job.id)
+if (status.status === "completed") await ai.write((await ai.video.result(model, job.id)).video, "./kite.mp4")
 ```
 
 ## Public API
@@ -1149,7 +1149,7 @@ Everything below is exported from `@opencode/ai/effect` unless noted.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
 - **`ai.image.request` / `generate` / `stream` / `start` / `resume`** — images over inline, streaming (partial previews), and queued routes through a provider-neutral request and response model.
 - **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
-- **`ai.video.request` / `start` / `status` / `result` / `cancel`** — video generation as a job addressed by a stored token; see [Video generation](#video-generation). `VideoClient` is its Effect service and layer.
+- **`ai.video.request` / `start` / `status` / `result` / `cancel`** — video generation as a job addressed by the provider's job ID; see [Video generation](#video-generation). `VideoClient` is its Effect service and layer.
 - **`Media`** — the shared asset type (`Media.Asset`, `Media.Source`) and constructors used by messages, tool results, and media requests.
 - **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
 - **`ai.decision.request` / `ai.decision.generate`** — typed predicate, choice, and score questions over text, JSON, and media input; `DecisionClient` is its Effect service and layer.
