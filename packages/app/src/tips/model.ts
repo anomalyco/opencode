@@ -58,14 +58,21 @@ export function createTipToasts() {
           ?.some((item) => item.name === "browse"),
       action: {
         label: "tips.browse.install",
-        run: () => platform.openExternal("https://chromewebstore.google.com/detail/mfnicocicmmlkpjnaffgihfjhdgjkdjg"),
+        run: () => platform.openExternal(
+            "https://chromewebstore.google.com/detail/mfnicocicmmlkpjnaffgihfjhdgjkdjg?utm_source=opencode-desktop&utm_medium=tip&utm_campaign=tip-browse",
+          ),
       },
     },
     {
       id: "hex",
       title: "tips.hex.title",
       description: "tips.hex.description",
-      action: { label: "tips.hex.install", run: () => platform.openExternal("https://anoma.ly/hex") },
+      action: {
+        label: "tips.hex.install",
+        // anoma.ly/hex 404s with a query string; the trailing slash is required.
+        run: () =>
+          platform.openExternal("https://anoma.ly/hex/?utm_source=opencode-desktop&utm_medium=tip&utm_campaign=tip-hex"),
+      },
     },
     {
       id: "session-search",
