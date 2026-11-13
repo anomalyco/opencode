@@ -179,6 +179,25 @@ test("copy-on-select does not treat output selection as editor selection when an
   }
 })
 
+test("Cmd+X cuts on a non-Latin layout through the base-layout key", async () => {
+  const app = await setup()
+  const editor = new TextareaRenderable(app.renderer, { width: 24, height: 3, initialValue: "draft" })
+  app.renderer.root.add(editor)
+  editor.focus()
+  try {
+    await app.renderOnce()
+    app.mockInput.pressKey("END")
+    app.mockInput.pressArrow("left", { shift: true })
+    app.mockInput.pressArrow("left", { shift: true })
+    // Cyrillic "х" (1093) with Latin "x" (120) as the base-layout key, plus super.
+    app.mockInput.pressKey("\x1b[1093::120;9u")
+    expect(editor.plainText).toBe("dra")
+    expect(app.writes).toEqual(["ft"])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test.each(["manual", "select"].flatMap((mode) => ["textarea", "input"].map((kind) => ({ mode, kind }))))(
   "Cmd+X cuts $kind selections in $mode mode",
   async (input) => {

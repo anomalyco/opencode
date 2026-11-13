@@ -97,7 +97,7 @@ export function handleSelectionKey(
   }
 
   // Terminals have no native cut, so Cmd+X reaches the app as super+x.
-  if (focus && editing && event.super && event.name === "x") {
+  if (focus && editing && event.super && (event.name === "x" || event.baseCode === 120 || event.baseCode === 88)) {
     copy(renderer, toast, clipboard, "Cut to clipboard")
     focus.deleteSelection()
     event.preventDefault()
