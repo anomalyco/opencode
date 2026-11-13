@@ -14,7 +14,7 @@ pub struct Reasoning(Rc<Inner>);
 
 struct Inner {
     app: App,
-    theme: Theme,
+    theme: RefCell<Theme>,
     root: View,
     header: View,
     body: View,
@@ -53,15 +53,11 @@ enum Painted {
 
 impl Reasoning {
     pub fn new(cx: &Context<'_>) -> Self {
-        let border = cx.theme.decrease(&cx.theme.background.base, 1);
+        let border = border(cx.theme);
         let header = View::new(cx.app).border(BorderStyle::Heavy).border_sides(Sides::NONE).border_color(border);
         let markdown =
-            opencode_ui::markdown::view(cx.app, cx.theme, cx.thinking_syntax, cx.renderers, cx.conceal, true).colors(
-                opentui::widget::MarkdownColors {
-                    text: cx.theme.text.muted,
-                    ..opencode_ui::markdown::colors(cx.theme)
-                },
-            );
+            opencode_ui::markdown::view(cx.app, cx.theme, cx.thinking_syntax, cx.renderers, cx.conceal, true)
+                .colors(colors(cx.theme));
         let body = View::new(cx.app)
             .margin_edge(Edge::Top, 1)
             .border(BorderStyle::Heavy)
@@ -71,7 +67,7 @@ impl Reasoning {
         let root = View::new(cx.app).column().padding_edge(Edge::Left, 3).shrink(0.0).child(&header).child(&body);
         let inner = Rc::new(Inner {
             app: cx.app.clone(),
-            theme: cx.theme.clone(),
+            theme: RefCell::new(cx.theme.clone()),
             root,
             header,
             body,
@@ -98,6 +94,18 @@ impl Reasoning {
 
     pub fn root(&self) -> &View {
         &self.0.root
+    }
+
+    /// Takes the theme of `cx` in place: the text and its code views stay.
+    pub fn restyle(&self, cx: &Context<'_>) {
+        let inner = &self.0;
+        *inner.theme.borrow_mut() = cx.theme.clone();
+        let border = border(cx.theme);
+        inner.header.border_color(border);
+        inner.body.border_color(border);
+        opencode_ui::markdown::restyle(&inner.markdown, colors(cx.theme), cx.thinking_syntax);
+        // The header recolors as on a hover, so a running spinner keeps its frame.
+        inner.layout();
     }
 
     pub fn update(&self, cx: &Context<'_>, message: &SessionMessageAssistant, part: &SessionMessageAssistantReasoning) {
@@ -137,14 +145,15 @@ impl Inner {
             title: (state.hide && !self.expanded.get()).then(|| summary(&state.content)).flatten(),
             duration: state.duration.clone(),
         };
-        let warning = self.theme.text.feedback.warning.base;
+        let theme = self.theme.borrow();
+        let warning = theme.text.feedback.warning.base;
         // `RGBA.fromValues(…, 0.6)`: an open block's header, and in hide mode a collapsed one that is not
         // hovered. Hide mode takes the reasoning group's colors (`group-view.tsx:166-177`), since TS
         // groups every reasoning part there.
         let dim = warning.with_alpha(153);
         let fg = match (header.toggleable, header.done) {
             (false, _) => dim,
-            (true, false) => self.theme.text.base,
+            (true, false) => theme.text.base,
             (true, true) if self.hover.get() || header.open => warning,
             (true, true) => dim,
         };
@@ -197,6 +206,16 @@ impl Inner {
         }
         state.header = Some(header);
     }
+}
+
+/// The bars beside an open block and its header.
+fn border(theme: &Theme) -> Color {
+    theme.decrease(&theme.background.base, 1)
+}
+
+/// Reasoning's Markdown colors: the text muted, and the rule in the theme's rule color (no `conceal` scope).
+fn colors(theme: &Theme) -> opentui::widget::MarkdownColors {
+    opentui::widget::MarkdownColors { text: theme.text.muted, ..opencode_ui::markdown::colors(theme) }
 }
 
 /// `reasoningContent`: the text without OpenRouter's first `[REDACTED]` placeholder, trimmed.

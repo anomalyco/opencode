@@ -82,9 +82,8 @@ struct Inner {
     limits: errors::LimitWatch,
     tui: Weak<Tui>,
     this: Weak<Inner>,
-    theme: Theme,
-    syntax: SyntaxTheme,
-    thinking_syntax: SyntaxTheme,
+    /// The theme the rows show in; a theme switch replaces it and restyles them.
+    paint: RefCell<Rc<Paint>>,
     renderers: CodeBlockRenderers,
     /// The `session` and `debug` settings the rows show with, as the config has them now.
     view: Cell<RowSettings>,
@@ -137,6 +136,20 @@ fn dispose(tui: &Tui, layer: Option<Disposer>) {
     }
 }
 
+/// A theme and the syntax themes the rows take from it.
+struct Paint {
+    theme: Theme,
+    syntax: SyntaxTheme,
+    thinking_syntax: SyntaxTheme,
+}
+
+impl Paint {
+    fn new(theme: Theme) -> Self {
+        let syntax = opencode_ui::code::syntax_theme(&theme);
+        Self { thinking_syntax: thinking_syntax(&syntax, theme.text.muted), syntax, theme }
+    }
+}
+
 /// The content height before rows mounted above, and the frame it is from.
 struct Pin {
     height: f32,
@@ -175,7 +188,6 @@ impl Transcript {
         let revert = revert::Banner::new(tui, &theme);
         scroll.add(background.root());
         scroll.add(revert.root());
-        let syntax = opencode_ui::code::syntax_theme(&theme);
         let inner = Rc::new_cyclic(|this| Inner {
             root,
             scroll,
@@ -186,9 +198,7 @@ impl Transcript {
             limits: errors::LimitWatch::default(),
             tui: tui.weak(),
             this: this.clone(),
-            thinking_syntax: thinking_syntax(&syntax, theme.text.muted),
-            syntax,
-            theme,
+            paint: RefCell::new(Rc::new(Paint::new(theme))),
             renderers: crate::plugins::host::code_blocks(tui),
             view: Cell::new(RowSettings::read(&tui.config())),
             groups: grouping::Settings::new(&tui.settings.info()),
@@ -270,6 +280,12 @@ impl Transcript {
 
     pub fn groups(&self) -> &Rc<grouping::Settings> {
         &self.0.groups
+    }
+
+    /// Takes the page theme in place, as TS's rows follow it: Markdown keeps its text and code views, the other rows
+    /// build again in their places, and the window, the scroll position and the selection stay.
+    pub fn restyle(&self, tui: &Tui) {
+        self.0.restyle(tui);
     }
 
     /// Re-renders every row, after a grouping setting changed.
@@ -568,7 +584,8 @@ impl Inner {
             }));
             self.remember(messages);
             let positions = self.positions.borrow();
-            let cx = self.context(tui, state, &visible, &keys, &positions);
+            let paint = self.paint.borrow().clone();
+            let cx = self.context(tui, state, &visible, &keys, &positions, &paint);
             *self.weights.borrow_mut() = specs.iter().map(|spec| self.groups.weight(spec, cx.hide_thinking)).collect();
             self.mount(&cx, &specs, changed);
             *self.specs.borrow_mut() = specs;
@@ -603,7 +620,8 @@ impl Inner {
             if !same {
                 return false;
             }
-            let cx = self.context(tui, state, &visible, &keys, &positions);
+            let paint = self.paint.borrow().clone();
+            let cx = self.context(tui, state, &visible, &keys, &positions, &paint);
             let (specs, rows, refs) = (self.specs.borrow(), self.rows.borrow(), self.refs.borrow());
             let mut stale: Vec<usize> =
                 changed.iter().filter_map(|id| refs.get(id.as_str())).flatten().copied().collect();
@@ -617,6 +635,31 @@ impl Inner {
             self.trailing(tui, &visible, &keys);
             true
         })
+    }
+
+    /// [`Transcript::restyle`]. The rows outside the window are not built, so they mount in the new theme.
+    fn restyle(&self, tui: &Tui) {
+        let paint = Rc::new(Paint::new(tui.page()));
+        *self.paint.borrow_mut() = paint.clone();
+        self.hint.fg(paint.theme.text.feedback.info.base);
+        self.background.restyle(&paint.theme);
+        self.revert.restyle(&paint.theme);
+        let Some(session) = self.session.borrow().clone() else { return };
+        let keys = Keys::read(tui);
+        tui.data.read(|state| {
+            let visible = Visible::of(state, &session);
+            let positions = self.positions.borrow();
+            let cx = self.context(tui, state, &visible, &keys, &positions, &paint);
+            let specs = self.specs.borrow();
+            let mut rows = self.rows.borrow_mut();
+            for spec in specs.iter() {
+                if let Some(row) = rows.get_mut(&spec.key()) {
+                    row.restyle(&cx, spec);
+                }
+            }
+            drop(rows);
+            self.trailing(tui, &visible, &keys);
+        });
     }
 
     /// Keeps each visible message's position and shape for [`Self::patch`].
@@ -657,6 +700,7 @@ impl Inner {
         visible: &Visible<'a>,
         keys: &'a Keys,
         index: &'a HashMap<String, usize>,
+        paint: &'a Paint,
     ) -> Context<'a> {
         let view = self.view.get();
         let info = visible.info;
@@ -676,9 +720,9 @@ impl Inner {
                 .collect(),
             models: catalogs.and_then(|data| data.model.as_deref()).unwrap_or_default(),
             app: &tui.app,
-            theme: &self.theme,
-            syntax: &self.syntax,
-            thinking_syntax: &self.thinking_syntax,
+            theme: &paint.theme,
+            syntax: &paint.syntax,
+            thinking_syntax: &paint.thinking_syntax,
             renderers: &self.renderers,
             conceal: view.conceal,
             hide_thinking: view.hide_thinking,
@@ -1316,40 +1360,24 @@ enum Body {
 impl Row {
     pub(crate) fn new(cx: &Context<'_>, spec: &Spec) -> Self {
         let wrapper = View::new(cx.app).column().shrink(0.0).margin_edge(Edge::Top, 1);
-        let body = match spec {
-            Spec::Message(id) => match cx.message(id) {
-                Some(SessionMessageInfo::User(_)) => Body::User(user::User::new(cx)),
-                Some(SessionMessageInfo::Shell(_)) => Body::Shell(shell::Shell::new(cx)),
-                Some(SessionMessageInfo::Compaction(_)) => Body::Compaction(compaction::Compaction::new(cx)),
-                Some(SessionMessageInfo::Idle(_)) => Body::Error(errors::ExecutionError::new(cx)),
-                _ => Body::Notice(skill::Notice::new(cx)),
-            },
-            Spec::CompactionQueued(_) => Body::Queued(compaction::Queued::new(cx)),
-            Spec::Part { part, .. } => match part {
-                Part::Text(_) => Body::Text(assistant::TextPart::new(cx)),
-                Part::Reasoning(_) => Body::Reasoning(reasoning::Reasoning::new(cx)),
-                Part::Tool(_) => Body::Tool(tools::dispatch::Tool::new(cx)),
-            },
-            Spec::Footer(_) => Body::Footer(footer::Footer::new(cx)),
-            Spec::TurnUsage { .. } => Body::Usage(footer::TurnUsage::new(cx)),
-            Spec::Group(_) => Body::Group(grouping::GroupView::new(cx, cx.groups, 0)),
-        };
-        let root = match &body {
-            Body::Group(view) => view.root(),
-            Body::User(view) => view.root(),
-            Body::Text(view) => view.root(),
-            Body::Reasoning(view) => view.root(),
-            Body::Tool(view) => view.root(),
-            Body::Footer(view) => view.root(),
-            Body::Usage(view) => view.root(),
-            Body::Notice(view) => view.root(),
-            Body::Shell(view) => view.root(),
-            Body::Compaction(view) => view.root(),
-            Body::Queued(view) => view.root(),
-            Body::Error(view) => view.root(),
-        };
-        wrapper.add(root);
+        let body = Body::new(cx, spec);
+        wrapper.add(body.root());
         Self { wrapper, body }
+    }
+
+    /// Takes the theme of `cx`: text and reasoning restyle in place, so their code is not parsed again; other rows
+    /// take their colors when they are built, so they build again inside the same wrapper.
+    fn restyle(&mut self, cx: &Context<'_>, spec: &Spec) {
+        match &self.body {
+            Body::Text(view) => view.restyle(cx),
+            Body::Reasoning(view) => view.restyle(cx),
+            _ => {
+                self.wrapper.clear();
+                self.body = Body::new(cx, spec);
+                self.wrapper.add(self.body.root());
+                self.update(cx, spec);
+            }
+        }
     }
 
     pub(crate) fn update(&self, cx: &Context<'_>, spec: &Spec) {
@@ -1410,6 +1438,46 @@ impl Row {
                 view.update(cx, messages, previous.as_ref());
             }
             _ => {}
+        }
+    }
+}
+
+impl Body {
+    fn new(cx: &Context<'_>, spec: &Spec) -> Self {
+        match spec {
+            Spec::Message(id) => match cx.message(id) {
+                Some(SessionMessageInfo::User(_)) => Body::User(user::User::new(cx)),
+                Some(SessionMessageInfo::Shell(_)) => Body::Shell(shell::Shell::new(cx)),
+                Some(SessionMessageInfo::Compaction(_)) => Body::Compaction(compaction::Compaction::new(cx)),
+                Some(SessionMessageInfo::Idle(_)) => Body::Error(errors::ExecutionError::new(cx)),
+                _ => Body::Notice(skill::Notice::new(cx)),
+            },
+            Spec::CompactionQueued(_) => Body::Queued(compaction::Queued::new(cx)),
+            Spec::Part { part, .. } => match part {
+                Part::Text(_) => Body::Text(assistant::TextPart::new(cx)),
+                Part::Reasoning(_) => Body::Reasoning(reasoning::Reasoning::new(cx)),
+                Part::Tool(_) => Body::Tool(tools::dispatch::Tool::new(cx)),
+            },
+            Spec::Footer(_) => Body::Footer(footer::Footer::new(cx)),
+            Spec::TurnUsage { .. } => Body::Usage(footer::TurnUsage::new(cx)),
+            Spec::Group(_) => Body::Group(grouping::GroupView::new(cx, cx.groups, 0)),
+        }
+    }
+
+    fn root(&self) -> &View {
+        match self {
+            Body::Group(view) => view.root(),
+            Body::User(view) => view.root(),
+            Body::Text(view) => view.root(),
+            Body::Reasoning(view) => view.root(),
+            Body::Tool(view) => view.root(),
+            Body::Footer(view) => view.root(),
+            Body::Usage(view) => view.root(),
+            Body::Notice(view) => view.root(),
+            Body::Shell(view) => view.root(),
+            Body::Compaction(view) => view.root(),
+            Body::Queued(view) => view.root(),
+            Body::Error(view) => view.root(),
         }
     }
 }

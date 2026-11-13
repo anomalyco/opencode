@@ -14,7 +14,7 @@ pub struct Hint(Rc<Inner>);
 
 struct Inner {
     app: App,
-    theme: Theme,
+    theme: RefCell<Theme>,
     root: View,
     text: Text,
     /// The call the hint is for: `<message>:<call>` and when it started running.
@@ -36,7 +36,7 @@ impl Hint {
             .child(&text);
         Self(Rc::new_cyclic(|this| Inner {
             app: app.clone(),
-            theme: theme.clone(),
+            theme: RefCell::new(theme.clone()),
             root,
             text,
             running: RefCell::default(),
@@ -49,6 +49,13 @@ impl Hint {
 
     pub fn root(&self) -> &View {
         &self.0.root
+    }
+
+    /// Paints the hint in `theme`.
+    pub fn restyle(&self, theme: &Theme) {
+        *self.0.theme.borrow_mut() = theme.clone();
+        self.0.text.fg(theme.text.muted);
+        self.0.paint();
     }
 
     /// `shortcut` is `session.background`'s key; without one there is no hint.
@@ -98,10 +105,11 @@ impl Inner {
         let visible = self.shown.get() && shortcut.is_some();
         self.root.visible(visible);
         if let Some(key) = shortcut.filter(|_| visible) {
-            let muted = Style::new().fg(self.theme.text.muted);
+            let theme = self.theme.borrow();
+            let muted = Style::new().fg(theme.text.muted);
             self.text.set_text(vec![
                 Span::styled("Press ", muted),
-                Span::styled(key, Style::new().fg(self.theme.text.base)),
+                Span::styled(key, Style::new().fg(theme.text.base)),
                 Span::styled(" to move running work to the background", muted),
             ]);
         }

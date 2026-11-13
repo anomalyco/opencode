@@ -4,6 +4,7 @@
 use crate::support::{self, Harness, WAIT, deref_harness};
 
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -453,6 +454,60 @@ fn mermaid_fences_render_as_diagrams() {
     let h = open(60, 20, "ses_m", messages, Info::default());
     let screen = h.wait_for("│ Idea ├───▶│ Parse │");
     assert!(!screen.contains("flowchart LR"), "{screen}");
+}
+
+/// A theme switch restyles the transcript in place, as TS's rows follow the theme: the fences keep their widgets, the
+/// reader's position stays, and the screen equals the transcript mounted in the new theme.
+#[test]
+fn a_theme_switch_restyles_the_transcript_in_place() {
+    let text = "The fix:\n\n```rust\nfn main() {\n    let x = \"value\"; // note\n}\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```mermaid\nflowchart LR\n  A[Idea] --> B[Parse]\n```\n\nDone.";
+    let messages = || {
+        vec![
+            user("msg_1", 1000, "Fix it"),
+            assistant(
+                "msg_2",
+                1500,
+                json!([
+                    { "type": "reasoning", "text": "Check the `main` body.\n\n```rust\nlet y = 1;\n```",
+                      "time": { "created": 1500, "completed": 3000 } },
+                    { "type": "text", "text": text },
+                ]),
+                Some(4000),
+            ),
+            user("msg_3", 5000, "And the script?"),
+            assistant(
+                "msg_4",
+                5500,
+                json!([{ "type": "text", "text": "```python\ndef run():\n    return 1  # one\n```" }]),
+                Some(8000),
+            ),
+        ]
+    };
+    let info = |theme: &str| Info {
+        session: Some(Session { thinking: Some(Visibility::Show), ..medium() }),
+        theme: support::decode(&format!(r#"{{ "theme": {{ "name": "{theme}", "mode": "dark" }} }}"#)).theme,
+        ..support::still()
+    };
+    let h = open(70, 60, "ses_t", messages(), info("opencode"));
+    h.wait_for_all(&["return 1", "│ Idea ├───▶│ Parse │", "let y = 1;"]);
+    let fence = Rc::new(());
+    support::mark_at(&h.app, "fn main()", 1, &fence);
+    let script = Rc::new(());
+    support::mark_at(&h.app, "def run()", 1, &script);
+
+    assert!(h.tui.theme.borrow_mut().set("tokyonight"));
+    h.tui.theme_changed();
+    let switched = h.app.render();
+    assert_eq!(Rc::strong_count(&fence), 2, "the Rust fence was built again");
+    assert_eq!(Rc::strong_count(&script), 2, "the Python fence was built again");
+
+    let fresh = open(70, 60, "ses_t", messages(), info("tokyonight"));
+    fresh.wait_for_all(&["return 1", "│ Idea ├───▶│ Parse │", "let y = 1;"]);
+    let expected = fresh.app.render();
+    let diff = (0..switched.height)
+        .flat_map(|y| (0..switched.width).map(move |x| (x, y)))
+        .find(|&(x, y)| switched.cell(x, y) != expected.cell(x, y));
+    assert_eq!(diff.map(|(x, y)| (x, y, switched.cell(x, y), expected.cell(x, y))), None, "{}", switched.text());
 }
 
 #[test]

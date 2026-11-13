@@ -33,11 +33,17 @@ use crate::prelude::*;
 
 pub struct Session {
     id: SessionID,
+    transcript: messages::list::Transcript,
+    scroll: scroll::Controls,
+    _actions: actions::Actions,
+    /// Built again around the transcript on a theme switch; `None` only while that runs.
+    parts: RefCell<Option<Parts>>,
+}
+
+/// What a theme switch builds again: everything but the transcript, its scrolling, and the session's commands.
+struct Parts {
     frame: crate::frame::SessionFrame,
     sidebar: sidebar::Sidebar,
-    transcript: messages::list::Transcript,
-    _scroll: scroll::Controls,
-    _actions: actions::Actions,
     queued: queued::Queued,
     /// The `session.composer.top` slot's plugin claims (P.1).
     slot: opencode_plugin::SlotMount,
@@ -50,16 +56,41 @@ pub struct Session {
 
 impl Session {
     pub fn new(tui: &Tui, id: SessionID) -> Self {
-        let app = &tui.app;
         let transcript = messages::list::Transcript::new(tui);
         let scroll = scroll::Controls::new(tui, &transcript);
         let actions = actions::Actions::new(tui, &id, &scroll);
-        let permission = permission::Permission::new(tui, &id);
-        let form = form::SessionForms::new(tui, &id);
-        let location = crate::routes::location_missing::LocationMissing::new(tui, &id);
-        let prompt = crate::prompt::editor::mount(tui, Some(&id));
+        let parts = Parts::new(tui, &id, &transcript, &scroll);
+        let synced = (tui.data.session_sync(&id, true), tui.data.message_sync(&id));
+        missing(tui, &id, synced.0.clone());
+        load(tui, synced.1.clone());
+        prewarm(tui, &id, synced.1.clone());
+        // `restoreScrollPosition` waits for the first sync (`synced`, `rowsSynced`).
+        tui.app.spawn(
+            async move { futures_util::future::join(synced.0, synced.1).await },
+            bind!(scroll.0, |inner, _, (session, messages)| {
+                let (Ok(()), Ok(())) = (session, messages) else { return };
+                if let Some(tui) = inner.tui.upgrade() {
+                    scroll::Controls(inner).restore(&tui);
+                }
+            }),
+        );
+        Self { id, transcript, scroll, _actions: actions, parts: RefCell::new(Some(parts)) }
+    }
+
+    fn parts(&self) -> std::cell::Ref<'_, Parts> {
+        std::cell::Ref::map(self.parts.borrow(), |parts| parts.as_ref().expect("the session view's parts"))
+    }
+}
+
+impl Parts {
+    fn new(tui: &Tui, id: &SessionID, transcript: &messages::list::Transcript, scroll: &scroll::Controls) -> Self {
+        let app = &tui.app;
+        let permission = permission::Permission::new(tui, id);
+        let form = form::SessionForms::new(tui, id);
+        let location = crate::routes::location_missing::LocationMissing::new(tui, id);
+        let prompt = crate::prompt::editor::mount(tui, Some(id));
         scroll.follow_submits(&prompt);
-        let queued = queued::Queued::new(tui, &id, prompt.weak());
+        let queued = queued::Queued::new(tui, id, prompt.weak());
         // `<Switch>`: the permission, the form, the missing location, or the prompt.
         let rest = View::new(app)
             .column()
@@ -68,7 +99,7 @@ impl Session {
             .child(form.root())
             .child(location.root())
             .child(prompt.root());
-        let composer = crate::composer::Composer::new(tui, &id, {
+        let composer = crate::composer::Composer::new(tui, id, {
             let (rest, textarea) = (rest.clone(), prompt.textarea().clone());
             let prompt_root = prompt.root().clone();
             Rc::new(move |tui: &Tui, open: bool| {
@@ -109,46 +140,33 @@ impl Session {
             .child(&composer_top)
             .child(composer.root())
             .child(&rest);
-        let frame = crate::frame::SessionFrame::new(tui, &id, &column);
-        let sidebar = sidebar::mount(tui, &frame.root(), &id);
-        let synced = (tui.data.session_sync(&id, true), tui.data.message_sync(&id));
-        missing(tui, &id, synced.0.clone());
-        load(tui, synced.1.clone());
-        prewarm(tui, &id, synced.1.clone());
-        // `restoreScrollPosition` waits for the first sync (`synced`, `rowsSynced`).
-        tui.app.spawn(
-            async move { futures_util::future::join(synced.0, synced.1).await },
-            bind!(scroll.0, |inner, _, (session, messages)| {
-                let (Ok(()), Ok(())) = (session, messages) else { return };
-                if let Some(tui) = inner.tui.upgrade() {
-                    scroll::Controls(inner).restore(&tui);
-                }
-            }),
-        );
-        Self {
-            id,
-            frame,
-            sidebar,
-            transcript,
-            _scroll: scroll,
-            _actions: actions,
-            queued,
-            slot,
-            composer,
-            permission,
-            form,
-            location,
-            prompt,
-        }
+        let frame = crate::frame::SessionFrame::new(tui, id, &column);
+        let sidebar = sidebar::mount(tui, &frame.root(), id);
+        Self { frame, sidebar, queued, slot, composer, permission, form, location, prompt }
     }
 }
 
 impl RouteView for Session {
     fn root(&self) -> View {
-        self.frame.root()
+        self.parts().frame.root()
+    }
+
+    /// The transcript and its scrolling restyle in place, so the rows, their code, the scroll position and the
+    /// selection stay. The rest takes its colors when it is built, so it builds again around them, as a remount does.
+    fn restyle(&self, tui: &Tui) -> bool {
+        self.transcript.restyle(tui);
+        self.scroll.restyle(tui);
+        // The old parts go first: the new prompt takes the draft the old one saves.
+        self.transcript.root().detach();
+        drop(self.parts.borrow_mut().take());
+        let parts = Parts::new(tui, &self.id, &self.transcript, &self.scroll);
+        *self.parts.borrow_mut() = Some(parts);
+        true
     }
 
     fn sync(&self, tui: &Tui, changes: &Changes) {
+        let parts = self.parts();
+        let Parts { frame, sidebar, queued, slot, composer, permission, form, location, prompt } = &*parts;
         // A full sync (a reconnect) reads again what the store invalidated, as TS does when the connection
         // turns connected (`routes/session/index.tsx:339-347`, `routes/session/rows.ts:123-129`): events
         // lost with the old stream would otherwise stay missing. Reads still valid return at once.
@@ -161,33 +179,34 @@ impl RouteView for Session {
             crate::features::location::session(tui, &self.id);
         }
         self.transcript.sync(tui, &self.id, changes);
-        let prompting = self.permission.active() || self.form.active() || self.location.active();
-        self.permission.sync(tui, changes);
-        self.form.sync(tui, changes, self.permission.active());
-        self.location.sync(tui);
-        self.composer.sync(tui, self.form.active(), !self.frame.session_active());
-        let blocked = self.permission.active() || self.form.active() || self.composer.open();
-        self.queued.sync(tui, changes, blocked);
-        crate::plugins::host::changed(tui, changes, |changed| self.slot.sync(tui, changed));
-        if (self.permission.active() || self.form.active() || self.location.active()) != prompting {
-            self.prompt.root().visible(prompting);
+        let prompting = permission.active() || form.active() || location.active();
+        permission.sync(tui, changes);
+        form.sync(tui, changes, permission.active());
+        location.sync(tui);
+        composer.sync(tui, form.active(), !frame.session_active());
+        let blocked = permission.active() || form.active() || composer.open();
+        queued.sync(tui, changes, blocked);
+        crate::plugins::host::changed(tui, changes, |changed| slot.sync(tui, changed));
+        if (permission.active() || form.active() || location.active()) != prompting {
+            prompt.root().visible(prompting);
             // An open dialog keeps the keys; the prompt takes them when it closes.
             if prompting && tui.dialogs.is_open() {
-                tui.dialogs.refocus(self.prompt.textarea());
-            } else if prompting && !self.composer.open() {
-                self.prompt.focus(tui);
+                tui.dialogs.refocus(prompt.textarea());
+            } else if prompting && !composer.open() {
+                prompt.focus(tui);
             }
         }
-        self.prompt.sync(tui, changes);
-        self.sidebar.sync(tui, changes);
+        prompt.sync(tui, changes);
+        sidebar.sync(tui, changes);
     }
 
     fn focus_target(&self) -> Option<AnyWidget> {
-        if self.form.active() {
-            return self.form.editor().map(|textarea| textarea.as_any());
+        let parts = self.parts();
+        if parts.form.active() {
+            return parts.form.editor().map(|textarea| textarea.as_any());
         }
-        (!self.permission.active() && !self.location.active() && !self.composer.open())
-            .then(|| self.prompt.textarea().as_any())
+        (!parts.permission.active() && !parts.location.active() && !parts.composer.open())
+            .then(|| parts.prompt.textarea().as_any())
     }
 }
 
