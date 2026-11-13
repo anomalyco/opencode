@@ -1192,6 +1192,55 @@ fn a_claim_mounted_past_a_disable_calls_the_plugin_no_more() {
     GUARDED.take();
 }
 
+/// A command that fetches, and one that panics.
+fn fetching(setup: &mut abi::Setup) -> Result<(), String> {
+    let command = |name: &str| abi::Command { name: name.to_owned(), ..abi::Command::default() };
+    setup.command(command("fetching.fetch"), |host, _| {
+        host.fetch(abi::Fetch { method: "GET".into(), path: "/fetched".into(), ..abi::Fetch::default() });
+    });
+    setup.command(command("fetching.panic"), |_, _| panic!("fetching panicked"));
+    Ok(())
+}
+
+// Expected (review carbon-pt-6): a fetch that a call asked for is not sent when a later call in the same turn panics,
+// which ends the activation before the effect queue runs; the same in process and through the C ABI.
+#[test]
+fn a_panic_drops_a_fetch_asked_for_in_the_same_turn() {
+    let host = host();
+    let registries = [
+        Registry::define(vec![abi::Plugin { id: "fetching", setup: fetching }.into()], []),
+        loopback(&host, abi::export_plugin!(@loopback "fetching", fetching)),
+    ];
+    for registry in registries {
+        host.fetches.borrow_mut().clear();
+        registry.activate(&dynamic(&host));
+        host.keymap().dispatch("fetching.fetch", None);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(host.fetches.borrow().len(), 1, "a fetch of a running plugin was not sent");
+        host.keymap().dispatch("fetching.fetch", None);
+        host.keymap().dispatch("fetching.panic", None);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(host.fetches.borrow().len(), 1, "a fetch was sent after its plugin failed");
+        registry.set_active(&dynamic(&host), "fetching", false);
+    }
+}
+
+// Expected (review carbon-pt-6): a wake from a plugin's thread after its activation ended, by a disposal or a failure,
+// posts nothing to the UI thread. A failed C ABI instance is kept, so its own waker is never revoked.
+#[test]
+fn a_wake_after_the_activation_ended_posts_nothing() {
+    let host = host();
+    let wake = Arc::new(crate::activation::Wake::new(Some(host.app().proxy())));
+    let activation = crate::activation::Activation::new(&dynamic(&host), wake.clone());
+    let waker = activation.waker();
+    waker.wake();
+    assert!(wake.pending(), "a wake of a live activation posted nothing");
+    host.app.advance(Duration::from_millis(1));
+    activation.dispose();
+    waker.wake();
+    assert!(!wake.pending(), "a wake after the activation ended posted");
+}
+
 thread_local! {
     /// How often a `lifecycle` dispose callback ran, whatever host it ran with.
     static LIFECYCLE_DISPOSED: Cell<usize> = const { Cell::new(0) };

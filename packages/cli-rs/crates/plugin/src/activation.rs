@@ -68,8 +68,10 @@ impl Activation {
         abi::Waker::new(move || wake.post())
     }
 
+    /// Ends the activation: a wake from the plugin's threads posts nothing from now on, and nothing of it is called.
     pub fn dispose(&self) {
         self.disposed.set(true);
+        self.wake.revoked.store(true, Ordering::Release);
         // The wake handlers hold what holds the activation.
         self.on_wake.borrow_mut().take();
     }
@@ -140,6 +142,9 @@ impl Drop for Activation {
 pub(crate) struct Wake {
     id: u64,
     pending: AtomicBool,
+    /// The activation ended or failed: a wake posts nothing. A failed C ABI instance is kept, not destroyed, so its
+    /// own waker is never revoked; this is.
+    revoked: AtomicBool,
     proxy: Option<AppProxy>,
 }
 
@@ -162,13 +167,20 @@ struct Woken(u64);
 impl Wake {
     pub fn new(proxy: Option<AppProxy>) -> Self {
         static WAKES: AtomicU64 = AtomicU64::new(0);
-        Self { id: WAKES.fetch_add(1, Ordering::Relaxed), pending: AtomicBool::new(false), proxy }
+        let id = WAKES.fetch_add(1, Ordering::Relaxed);
+        Self { id, pending: AtomicBool::new(false), revoked: AtomicBool::new(false), proxy }
     }
 
-    /// Posts one [`Woken`] until the UI thread handles it. Catches its own panics.
+    /// Whether a [`Woken`] waits for the UI thread.
+    #[cfg(test)]
+    pub(crate) fn pending(&self) -> bool {
+        self.pending.load(Ordering::Acquire)
+    }
+
+    /// Posts one [`Woken`] until the UI thread handles it, unless the activation ended. Catches its own panics.
     pub fn post(&self) {
         let _ = catch_unwind(AssertUnwindSafe(|| {
-            if self.pending.swap(true, Ordering::AcqRel) {
+            if self.revoked.load(Ordering::Acquire) || self.pending.swap(true, Ordering::AcqRel) {
                 return;
             }
             let Some(proxy) = &self.proxy else {
