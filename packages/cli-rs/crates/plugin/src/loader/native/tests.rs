@@ -1192,6 +1192,35 @@ fn a_claim_mounted_past_a_disable_calls_the_plugin_no_more() {
     GUARDED.take();
 }
 
+thread_local! {
+    /// The waker the `keeping` plugin keeps past its activation, as a thread of it would.
+    static KEPT: std::cell::RefCell<Option<abi::Waker>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Keeps its waker in [`KEPT`]; its command panics.
+fn keeping(setup: &mut abi::Setup) -> Result<(), String> {
+    KEPT.set(Some(setup.waker().ok_or("no waker")?));
+    let panic = abi::Command { name: "keeping.panic".to_owned(), ..abi::Command::default() };
+    setup.command(panic, |_, _| panic!("keeping command panicked"));
+    Ok(())
+}
+
+// Expected (review carbon-pt-7, mutant A): a failed plugin in process is disposed without its callbacks, and its waker,
+// which the plugin keeps, lets go of the host's wake as it is disabled.
+#[test]
+fn a_failed_plugins_waker_lets_go_of_the_host() {
+    let host = host();
+    let registry = Registry::define(vec![abi::Plugin { id: "keeping", setup: keeping }.into()], []);
+    registry.activate(&dynamic(&host));
+    host.keymap().dispatch("keeping.panic", None);
+    host.app.advance(Duration::from_millis(1));
+    let freed = crate::activation::FREED.get();
+    assert!(registry.set_active(&dynamic(&host), "keeping", false));
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(crate::activation::FREED.get(), freed + 1, "the kept waker holds the host's wake");
+    KEPT.take().unwrap().wake();
+}
+
 /// A command that fetches, and one that panics.
 fn fetching(setup: &mut abi::Setup) -> Result<(), String> {
     let command = |name: &str| abi::Command { name: name.to_owned(), ..abi::Command::default() };
