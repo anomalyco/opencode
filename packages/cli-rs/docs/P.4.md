@@ -357,6 +357,9 @@ dialogs, its box and a composer edit against TS (`parity/plugins/p0a`).
 With the option `"reads": true` the sample also uses the reads and verbs of 1.6
 (`sample/src/reads.rs`), which the loader test `the_1_6_reads_and_verbs_are_the_same_in_process_and_through_the_library`
 runs in process and from the library; `crates/tui/tests/all/plugin_reads.rs` runs them in the TUI on both paths.
+The `title` feature adds `/p0btitle`, which sets the terminal title: the P-PTY scenarios `P.0b/title` and
+`P.0b/title-off` install that build beside its TS twin (`parity/plugins/title/tui.ts`) in one `plugins` directory and
+compare the title log of both clients, with titles on and off.
 
 `crates/plugin/examples/hello` is the README's quick start. `crates/plugin-abi/tests/sdk.rs` checks that the README
 shows it as it is and that it builds on the SDK alone. The loader test

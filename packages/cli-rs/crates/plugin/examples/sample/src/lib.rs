@@ -86,6 +86,11 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     if has(setup, "\"reads\":true") {
         reads::setup(setup)?;
     }
+    // `parity/plugins/title/tui.ts` in TS.
+    if cfg!(feature = "title") {
+        let title = Command { slash: Some("p0btitle".to_owned()), ..command("p0b.title", "Set the title", None) };
+        setup.command(title, |host, _| host.set_title("p0b title"));
+    }
     if cfg!(feature = "app") {
         setup.slot(Placement::append("app"), |_, _, _| {
             Render::Show(Node::text([Span::new("sample app: under the route")]))
