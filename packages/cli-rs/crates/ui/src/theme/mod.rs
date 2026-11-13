@@ -107,6 +107,58 @@ impl std::fmt::Debug for Theme {
     }
 }
 
+/// The theme a view paints in, shared with whoever switches it: views that keep one read it when they paint, so a
+/// theme switch reaches them in place. Cloning shares it.
+#[derive(Clone)]
+pub struct Live(Rc<std::cell::RefCell<Theme>>);
+
+impl Live {
+    pub fn new(theme: Theme) -> Self {
+        Self(Rc::new(std::cell::RefCell::new(theme)))
+    }
+
+    /// The current theme. Cheap: a theme clone shares its tokens.
+    pub fn get(&self) -> Theme {
+        self.0.borrow().clone()
+    }
+
+    pub fn set(&self, theme: Theme) {
+        *self.0.borrow_mut() = theme;
+    }
+}
+
+/// What a view paints from the theme, kept so a theme switch paints it again in place: each entry sets a widget's
+/// colors and holds that widget, not the view. Cloning shares the list.
+#[derive(Clone, Default)]
+pub struct Paints(Rc<std::cell::RefCell<Vec<Paint>>>);
+
+/// One [`Paints`] entry.
+type Paint = Box<dyn Fn(&Theme)>;
+
+impl Paints {
+    /// Paints with `paint` in `theme` now, and again in the theme of each [`Self::restyle`].
+    pub fn add(&self, theme: &Theme, paint: impl Fn(&Theme) + 'static) {
+        paint(theme);
+        self.0.borrow_mut().push(Box::new(paint));
+    }
+
+    /// Paints with `paint` in the theme of each [`Self::restyle`], for a widget built in the current theme already.
+    pub fn keep(&self, paint: impl Fn(&Theme) + 'static) {
+        self.0.borrow_mut().push(Box::new(paint));
+    }
+
+    /// Forgets every entry, for widgets that are gone.
+    pub fn clear(&self) {
+        self.0.borrow_mut().clear();
+    }
+
+    pub fn restyle(&self, theme: &Theme) {
+        for paint in self.0.borrow().iter() {
+            paint(theme);
+        }
+    }
+}
+
 impl Theme {
     fn new(views: Views) -> Self {
         Self { views: Rc::new(views), surface: 0 }
