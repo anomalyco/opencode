@@ -10,7 +10,7 @@ opentui-rust's `tree-sitter` feature already links JavaScript, TypeScript and TS
 (`opentui/Cargo.toml`). `opencode-ui` depends on those crates at the same versions and reuses them, so none links twice.
 It registers them again with Core's queries instead of the crate queries.
 
-The default `grammars` feature adds the languages transcripts show most:
+The default `grammars` feature adds the rest. These are the languages transcripts show most:
 
 | Filetype | Crate | TS WASM |
 | --- | --- | --- |
@@ -23,17 +23,16 @@ The default `grammars` feature adds the languages transcripts show most:
 | css | `tree-sitter-css` 0.25.0 | 0.25.0 |
 | diff (`udiff`, `patch`) | `tree-sitter-diff` 0.1.0 | 0.1.0 |
 
-`grammars-all` adds the rest. These crates are pinned to the TS WASM release where crates.io has it: agda 1.3.3, c
-0.24.1, c-sharp 0.23.1, cpp 0.23.4, elixir 0.3.5, fsharp 0.3.0, haskell 0.23.1, java 0.23.5, julia 0.23.1, lua 0.5.0,
-make 1.1.1 (`makefile`), ocaml 0.24.2, php 0.24.2 (`LANGUAGE_PHP_ONLY`), r 1.2.0, ruby 0.23.1, scala 0.24.0, toml-ng
-0.7.0, and xml 0.7.0. hcl 1.2.0 comes from its git tag. Four use substitutes, because the pinned crate needs an older
-tree-sitter or is not on crates.io: `tree-sitter-vue-next` 0.1.0, `tree-sitter-clojure-orchard` 0.2.9,
-`tree-sitter-vim` 0.4.0, and `tree-sitter-nix` 0.3.0. Kotlin and Swift are not linked:
-`parity/deviations/H06-highlight-queries.md` gives the reasons.
+The others are pinned to the TS WASM release where crates.io has it: agda 1.3.3, c 0.24.1, c-sharp 0.23.1, cpp 0.23.4,
+elixir 0.3.5, haskell 0.23.1, java 0.23.5, julia 0.23.1, lua 0.5.0, make 1.1.1 (`makefile`), php 0.24.2
+(`LANGUAGE_PHP_ONLY`), r 1.2.0, ruby 0.23.1, scala 0.24.0, toml-ng 0.7.0, and xml 0.7.0. hcl 1.2.0 comes from its git
+tag. Four use substitutes, because the pinned crate needs an older tree-sitter or is not on crates.io:
+`tree-sitter-vue-next` 0.1.0, `tree-sitter-clojure-orchard` 0.2.9, `tree-sitter-vim` 0.4.0, and `tree-sitter-nix`
+0.3.0. Kotlin, OCaml, F#, and Swift are not linked: `parity/deviations/H06-highlight-queries.md` gives the reasons.
 
 ## Build time
 
-This is the extra cost of the `grammars` feature over the `oc-rust` tip. It was measured once with `nice -n 10 cargo
+This is the extra cost of the first eight grammars of the `grammars` feature over the `oc-rust` tip. It was measured once with `nice -n 10 cargo
 build -p opencode-ui`, in the dev profile, on this shared machine. The baseline first built everything without the
 feature (`--no-default-features`).
 
@@ -42,9 +41,8 @@ feature (`--no-default-features`).
 | Cold: the eight grammar crates and `opencode-ui` | 3.3 s | 5.4 s |
 | Warm: nothing changed | 0.08 s | 0.06 s |
 
-The grammar crates never rebuild after the first build: a change in the client only relinks. `cargo check
---features grammars-all` compiles the other 23 crates' C parsers in 24.6 s wall (86 s CPU). A cold `cargo build` of
-`grammars-all` was not measured.
+The grammar crates never rebuild after the first build: a change in the client only relinks. The other 23 crates'
+C parsers (OCaml and F# among them, since dropped) compiled in 24.6 s wall (86 s CPU) in `cargo check`.
 
 ## Queries
 
@@ -65,9 +63,7 @@ Core's (see H06).
 
 `opencode_ui::grammars::register()` runs once per process. `code::view`, `markdown::view`, and `diff::view` call it.
 Each grammar is registered with `Grammar::core_captures()`. A grammar whose query fails to compile is logged and
-skipped, as Core skips it. A pattern that tree-sitter 0.27 proves can never match is dropped first, and the query is
-compiled again: tree-sitter 0.27 rejects such a pattern where web-tree-sitter 0.25 accepts it. Only F# has such
-patterns.
+skipped, as Core skips it.
 
 ## Capture semantics (opentui-rust)
 
@@ -82,10 +78,10 @@ Core's queries assume Core's capture handling, which opentui-rust did not have. 
 
 ## Proof
 
-- `crates/ui/tests/all/grammars.rs` (P-COMP): one snippet per grammar of the default build except TypeScript
+- `crates/ui/tests/all/grammars.rs` (P-COMP): one snippet per grammar transcripts show most (the eight above and opentui's) except TypeScript
   (`parity/fixtures/U.4b/corpus.json`). Each is rendered by `parity/component/U.4b-grammars.tsx` in `<code>` with
   the TUI's parsers registered, and by `code::view`. Every cell is equal, colors and attributes included.
 - `crates/ui/tests/all/content.rs`: the U.4a fixtures (TypeScript code, diff, Markdown fences) now match with no
   exemptions.
-- `grammars::tests`: every query compiles under `grammars-all`, the table matches the manifest, and TypeScript
+- `grammars::tests`: every query compiles, the table matches the manifest, and TypeScript
   captures `keyword.import` and `spell`.
