@@ -11,4 +11,11 @@ test("an extension holds the permissions and origins its manifest requires, and 
   expect(holds(granted, { origins: ["https://example.com/*"] })).toBe(true)
   expect(holds(granted, { origins: ["<all_urls>"] })).toBe(false)
   expect(holds({ permissions: [], hosts: ["<all_urls>"] }, { origins: ["<all_urls>"] })).toBe(true)
+  expect(holds({ permissions: [], hosts: ["<all_urls>"] }, { origins: ["*://example.com/*"] })).toBe(true)
+  // A narrow host never stands for a wildcard one.
+  expect(holds({ permissions: [], hosts: ["https://x.com/x"] }, { origins: ["https://*.com/*"] })).toBe(false)
+  expect(holds({ permissions: [], hosts: ["https://example.com/docs/*"] }, { origins: ["https://example.com/*"] })).toBe(
+    false,
+  )
+  expect(holds({ permissions: [], hosts: ["*://*/*"] }, { origins: ["file:///*"] })).toBe(false)
 })

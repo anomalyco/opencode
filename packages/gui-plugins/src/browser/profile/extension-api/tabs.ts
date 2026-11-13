@@ -1,7 +1,7 @@
 import { Option, Schema } from "effect"
 import type { BrowserWindow, Extension, WebContents } from "electron"
 import { method, none, optional, type ApiModule, type Emit, type ExtensionContext, type Wire } from "./api"
-import { matchesHost } from "./match-pattern"
+import { globMatch, matchesHost } from "./match-pattern"
 
 /** A tab of a pane in the profile, as the pane hands it to extensions, and what extensions may do with it. */
 export type PaneTab = {
@@ -86,7 +86,7 @@ export function matchesQuery(
     (windowId == null || windowId === tab.windowId) &&
     (query.index == null || query.index === tab.index) &&
     (urls.length === 0 || matchesHost(urls, tab.url)) &&
-    (query.title == null || wildcard(query.title).test(tab.title)) &&
+    (query.title == null || globMatch(query.title, tab.title)) &&
     (query.status == null || query.status === tab.status) &&
     (query.audible == null || query.audible === tab.audible) &&
     (query.muted == null || query.muted === tab.muted)
@@ -135,8 +135,22 @@ export function declared(extension: Pick<Extension, "manifest">) {
   return { permissions, hosts: [...hosts, ...permissions.filter((item) => item.includes("://") || item === "<all_urls>")] }
 }
 
-function wildcard(pattern: string) {
-  return new RegExp(`^${pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`)
+/**
+ * What `chrome.tabs.query` answers: each tab that matches, as the extension may see it. As in Chrome, the `url` and
+ * `title` filters are ignored for a tab whose address and title the extension may not read, so they reveal nothing.
+ */
+export function answerQuery(
+  tabs: readonly TabSnapshot[],
+  query: TabQuery,
+  windows: { readonly current?: number; readonly lastFocused?: number },
+  access: { readonly permissions: readonly string[]; readonly hosts: readonly string[] },
+) {
+  return tabs.flatMap((tab) => {
+    const revealed = reveals(access, tab.url)
+    const filter = revealed ? query : { ...query, url: undefined, title: undefined }
+
+    return matchesQuery(tab, filter, windows) ? [tabInfo(tab, revealed)] : []
+  })
 }
 
 export type ExtensionTabs = ReturnType<typeof createExtensionTabs>
@@ -280,12 +294,12 @@ export function createExtensionTabs(input: { emit: Emit; extensions: () => reado
 
   const create = async (context: ExtensionContext, options: typeof TabCreate.Type) => {
     const windowId = options.windowId == null || options.windowId === WINDOW_ID_CURRENT ? currentWindow(context) : options.windowId
+    // Only the caller's window: a pane of another window may belong to another project and session.
     const anchor = windowId === undefined ? undefined : (activeOf(windowId) ?? inWindow(windowId)[0])
-    const fallback = anchor ?? [...tabs.values()][0]
 
-    if (!fallback) throw new Error("No browser pane is open to add a tab to.")
+    if (!anchor) throw new Error("No browser pane is open in this window.")
     const url = new URL(options.url ?? "about:blank", `chrome-extension://${context.extension.id}/`).href
-    const contents = await fallback.open(url, options.active ?? true)
+    const contents = await anchor.open(url, options.active ?? true)
     const tab = tabs.get(contents.id)
 
     return tab ? infoFor(context.extension, tab) : undefined
@@ -307,13 +321,14 @@ export function createExtensionTabs(input: { emit: Emit; extensions: () => reado
       },
     ],
     methods: {
-      "tabs.query": method(Schema.Tuple([optional(TabQuery)]), (context, [query]) => {
-        const windows = { current: currentWindow(context), lastFocused: focus.last }
-
-        return [...tabs.values()].flatMap((tab) =>
-          matchesQuery(snapshot(tab), query ?? {}, windows) ? [infoFor(context.extension, tab)] : [],
-        )
-      }),
+      "tabs.query": method(Schema.Tuple([optional(TabQuery)]), (context, [query]) =>
+        answerQuery(
+          [...tabs.values()].map(snapshot),
+          query ?? {},
+          { current: currentWindow(context), lastFocused: focus.last },
+          declared(context.extension),
+        ),
+      ),
       "tabs.get": method(Schema.Tuple([Schema.Number]), (context, [id]) => infoFor(context.extension, tabFor(id))),
       "tabs.getCurrent": method(none, (context) => {
         const tab = context.contents ? tabs.get(context.contents.id) : undefined

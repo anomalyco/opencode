@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { declared, matchesQuery, reveals, tabInfo, type TabSnapshot } from "./tabs"
+import { answerQuery, declared, matchesQuery, reveals, tabInfo, type TabSnapshot } from "./tabs"
 
 const tab = (fields: Partial<TabSnapshot>): TabSnapshot => ({
   id: 2,
@@ -36,6 +36,25 @@ test("an extension sees a tab's address only with the tabs permission or host ac
   expect(reveals({ permissions: ["tabs"], hosts: [] }, value.url)).toBe(true)
   expect(reveals({ permissions: [], hosts: ["https://example.com/*"] }, value.url)).toBe(true)
   expect(reveals({ permissions: ["storage"], hosts: ["https://other.com/*"] }, value.url)).toBe(false)
+})
+
+test("url and title filters reveal nothing about tabs the extension may not read", () => {
+  const tabs = [tab({ id: 2, url: "https://mail.example.com/inbox", title: "Inbox (3)" }), tab({ id: 3, url: "https://docs.test/" })]
+  const windows = { current: 1, lastFocused: 1 }
+  const none: Parameters<typeof answerQuery>[3] = { permissions: [], hosts: [] }
+  const ids = (query: Parameters<typeof matchesQuery>[1], access = none) =>
+    answerQuery(tabs, query, windows, access).map((item) => item.id)
+
+  // Without access the filters are ignored, as Chrome ignores them: every probe answers the same.
+  expect(ids({ url: "https://mail.example.com/*" })).toEqual([2, 3])
+  expect(ids({ url: "https://nothing.test/*" })).toEqual([2, 3])
+  expect(ids({ title: "Inbox*" })).toEqual([2, 3])
+  expect(answerQuery(tabs, {}, windows, none)[0]).not.toHaveProperty("url")
+  // With host access to one site, the filters apply there.
+  expect(ids({ url: "https://mail.example.com/*" }, { permissions: [], hosts: ["https://mail.example.com/*"] })).toEqual([
+    2, 3,
+  ])
+  expect(ids({ url: "https://docs.test/*" }, { permissions: ["tabs"], hosts: [] })).toEqual([3])
 })
 
 test("Manifest V2 host patterns among permissions count as hosts", () => {

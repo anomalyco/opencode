@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { method, none, type ApiModule } from "./api"
-import { matchesHost } from "./match-pattern"
+import { coversPattern } from "./match-pattern"
 import { declared } from "./tabs"
 
 const Permissions = Schema.Struct({
@@ -15,9 +15,7 @@ export function holds(
 ) {
   return (
     (request.permissions ?? []).every((permission) => granted.permissions.includes(permission)) &&
-    (request.origins ?? []).every(
-      (origin) => granted.hosts.includes(origin) || matchesHost(granted.hosts, origin.replaceAll("*", "x")),
-    )
+    (request.origins ?? []).every((origin) => granted.hosts.some((host) => coversPattern(host, origin)))
   )
 }
 
