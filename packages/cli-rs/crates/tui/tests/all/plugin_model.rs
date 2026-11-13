@@ -916,7 +916,8 @@ fn run(commands: &[Command]) -> Option<Failure> {
             }
         }
         if let Some(before) = before
-            && let Some((site, detail)) = reload_fresh(&world, before, &reference, &calls)
+            && let Some((site, detail)) =
+                reload_fresh(&world, before, &reference, &calls, matches!(command, Command::Reload(_)))
             && let Some(failure) = check("reload-fresh", site, step, Some(detail))
         {
             return Some(failure);
@@ -992,6 +993,7 @@ fn reload_fresh(
     (observed, frame, life): (Observed, Capture, Life),
     reference: &Reference,
     calls: &[Call],
+    plain: bool,
 ) -> Option<(&'static str, String)> {
     match (life, reference.life) {
         // A reload that passed: the fresh twin, with the log from its `setup` on.
@@ -1012,8 +1014,11 @@ fn reload_fresh(
             frame_diff(&fresh_frame, &frame, world.mask(), |_| false)
                 .map(|row| ("frame", format!("after a reload to build {build}, the frames differ at {row}")))
         }
-        // A reload that failed while a build ran: that build, and the failure it lists.
-        (Life::Active(a, _), Life::Active(b, _)) if a == b && calls.iter().any(|call| call.kind == Kind::Setup) => {
+        // A reload that failed while a build ran: that build, and the failure it lists. A batch also opened or
+        // confirmed a dialog, which the ledger checks.
+        (Life::Active(a, _), Life::Active(b, _))
+            if plain && a == b && calls.iter().any(|call| call.kind == Kind::Setup) =>
+        {
             if let Some(difference) = observed.diff(&world.observe(false), false) {
                 return Some(("kept", format!("after a failed reload, before and after: {difference}")));
             }
