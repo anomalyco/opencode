@@ -16,8 +16,7 @@
       },
       "xfail": [
         ["rust", "F16-plugin-panic-no-effects", "onA throw -/no/failed"],
-        ["rust", "F16-plugin-panic-no-effects", "onB throw -/no/failed"],
-        ["rust", "finding:an-enable-that-fails-is-listed-failed", "offArmed toggle -/no/failed"]
+        ["rust", "F16-plugin-panic-no-effects", "onB throw -/no/failed"]
       ]
     }
   },

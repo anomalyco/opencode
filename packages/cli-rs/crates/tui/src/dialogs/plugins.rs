@@ -409,9 +409,14 @@ impl Manager {
         // Deactivating disposes the plugin's keymap layers, so it waits until the key that asked for it is done.
         tui.app.defer(move |_| {
             let Some(tui) = manager.tui.upgrade() else { return };
-            if !tui.plugins.set_active(&crate::plugins::host::host(&tui), &id, !active) {
-                tui.toasts.error(format!("Failed to update plugin {id}"));
-                return;
+            match tui.plugins.toggle(&crate::plugins::host::host(&tui), &id, !active) {
+                None => {
+                    tui.toasts.error(format!("Failed to update plugin {id}"));
+                    return;
+                }
+                // TS shows why the setup failed, and the row stays as the last load listed it.
+                Some(Err(error)) => tui.toasts.error(error),
+                Some(Ok(())) => {}
             }
             // Slots and routes mount again with the plugin's claims.
             tui.navigate(tui.route());
