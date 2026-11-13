@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Effect, Layer, Schema } from "effect"
@@ -266,6 +266,14 @@ describe("AI promise client", () => {
       expect(asset.mediaType).toBe("image/png")
       await ai.write(asset, join(dir, "copy.png"))
       expect(await ai.bytes(await ai.file(join(dir, "copy.png")))).toEqual(png)
+
+      // A failed download leaves the existing file as it was and cleans up its temporary file.
+      const failed = await ai
+        .write(Media.url("https://cdn.test/expired.png"), join(dir, "copy.png"))
+        .catch((error: unknown) => error)
+      expect(failed instanceof AIError && failed.reason.http?.status).toBe(404)
+      expect(await ai.bytes(await ai.file(join(dir, "copy.png")))).toEqual(png)
+      expect((await readdir(dir)).sort()).toEqual(["copy.png", "source.bin"])
     } finally {
       await rm(dir, { recursive: true })
       await ai.dispose()

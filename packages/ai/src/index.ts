@@ -204,19 +204,22 @@ export const make = (options: Options = {}) => {
         options,
       )
     },
-    /** Write an asset's bytes like `Media.write`, streaming `url` sources into the file instead of buffering them. */
+    /** Write an asset's bytes like `Media.write`: streamed through a temporary file that replaces `path` on success. */
     write: async (asset: Media.Asset, path: string, options?: RunOptions) => {
-      const { open } = await import("node:fs/promises")
-      const file = await open(path, "w").catch((cause) => {
-        throw fileError(`Failed to write media file ${path}`, cause)
-      })
+      const { open, rename, rm } = await import("node:fs/promises")
+      const temporary = `${path}.${crypto.randomUUID()}.tmp`
       try {
-        for await (const chunk of iterate(asset.stream(), options))
-          await file.write(chunk).catch((cause) => {
-            throw fileError(`Failed to write media file ${path}`, cause)
-          })
-      } finally {
-        await file.close()
+        const file = await open(temporary, "w")
+        try {
+          for await (const chunk of iterate(asset.stream(), options)) await file.write(chunk)
+        } finally {
+          await file.close()
+        }
+        await rename(temporary, path)
+      } catch (cause) {
+        await rm(temporary, { force: true })
+        if (cause instanceof AIError || cause === options?.signal?.reason) throw cause
+        throw fileError(`Failed to write media file ${path}`, cause)
       }
     },
     request: LLM.request,

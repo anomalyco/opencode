@@ -373,12 +373,19 @@ export const file = (path: string, options?: AssetOptions): Effect.Effect<Asset,
     return bytes(data, fileMediaType(data, path), options)
   })
 
-/** Stream an asset's bytes into a file through `FileSystem`, without buffering `url` downloads. */
+/**
+ * Stream an asset's bytes into a file through `FileSystem` without buffering `url` downloads. The bytes go to a temporary
+ * file next to `path` that replaces it only once the download finished, so a failed download leaves an existing file as
+ * it was.
+ */
 export const write = (asset: Asset, path: string): Effect.Effect<void, AIError, FileSystem.FileSystem | Service> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
+    const temporary = `${path}.${crypto.randomUUID()}.tmp`
     yield* asset.stream().pipe(
-      Stream.run(fs.sink(path)),
+      Stream.run(fs.sink(temporary)),
+      Effect.andThen(fs.rename(temporary, path)),
+      Effect.onError(() => fs.remove(temporary).pipe(Effect.ignore)),
       Effect.mapError((cause) =>
         cause instanceof AIError ? cause : invalid(`Failed to write media file ${path}`, cause),
       ),
