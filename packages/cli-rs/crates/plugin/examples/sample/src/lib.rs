@@ -5,7 +5,8 @@
 //!
 //! The fences ([`fence`]), the sidebar claim ([`slot`]), the home claims with their event handler ([`home`]), a
 //! server request with a live panel ([`fetch`]), and a prompt footer claim whose mounts fetch ([`prompt`]) are on
-//! the one API of ABI 1.4; the slot rows and the route are still the 1.3 surface. Callbacks reach the host only
+//! the one API of ABI 1.4; with the `reads` option, the small reads and verbs of ABI 1.6 ([`reads`]). The slot rows
+//! and the route are still the 1.3 surface. Callbacks reach the host only
 //! through the host they are called with. The `abi-1-3` feature builds [`v1_3`] instead: a plugin written against ABI
 //! 1.3, on a frozen copy of that crate; `abi-1-0-wire` exports it with the 1.0 table. The `abi-1-4` feature builds
 //! [`v1_4`], a plugin written against ABI 1.4 on a frozen copy of that crate.
@@ -18,6 +19,7 @@ mod home;
 #[cfg(feature = "p0a")]
 mod p0a;
 mod prompt;
+mod reads;
 mod slot;
 #[cfg(feature = "abi-1-3")]
 mod v1_3;
@@ -81,6 +83,9 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     prompt::setup(setup)?;
     #[cfg(feature = "p0a")]
     p0a::setup(setup)?;
+    if has(setup, "\"reads\":true") {
+        reads::setup(setup)?;
+    }
     if cfg!(feature = "app") {
         setup.slot(Placement::append("app"), |_, _, _| {
             Render::Show(Node::text([Span::new("sample app: under the route")]))

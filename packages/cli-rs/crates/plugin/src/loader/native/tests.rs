@@ -163,9 +163,9 @@ fn a_panicking_command_fails_the_plugin() {
 #[test]
 fn versions_follow_the_abi_rules() {
     let load = |library: &[u8], options: Option<&str>| Native.load(&dynamic(&host()), library, options).err();
-    // The current build is 1.5; a 1.0 build has the shorter table and still loads and works on this 1.5 host.
+    // The current build is 1.6; a 1.0 build has the shorter table and still loads and works on this 1.6 host.
     let current = build("");
-    assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 1, minor: 5, version: Some("0.1.0".to_owned()) });
+    assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 1, minor: 6, version: Some("0.1.0".to_owned()) });
     // A plugin built on the frozen 1.4 crate, from before 1.5, draws its fence and its slot and runs its command.
     let v1_4 = build("abi-1-4");
     assert_eq!(Native.inspect(&v1_4).unwrap(), Inspected { major: 1, minor: 4, version: Some("0.1.0".to_owned()) });
@@ -247,12 +247,12 @@ fn versions_follow_the_abi_rules() {
     // Only a major mismatch, or a plugin that needs a newer host, is refused, with a clear reason.
     assert_eq!(
         load(&build("major-2"), None).unwrap(),
-        "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.5); rebuild the \
+        "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.6); rebuild the \
          plugin against opencode-plugin-abi 1"
     );
     assert_eq!(
         load(&build("requires-future"), None).unwrap(),
-        "plugin needs host ABI 1.99 or newer, this opencode-native has 1.5; update opencode-native"
+        "plugin needs host ABI 1.99 or newer, this opencode-native has 1.6; update opencode-native"
     );
     assert!(load(b"not a library", None).unwrap().starts_with("cannot load the library"));
     // Setup runs on activation, so a setup that fails fails the plugin there.
@@ -1084,6 +1084,95 @@ fn the_sample_prompt_mounts_fetch_and_read_the_same_in_process_and_through_the_l
     assert_eq!(prompted(&host, &library), direct);
 }
 
+/// The sample's reads and verbs of ABI 1.6, compiled in rather than loaded.
+#[path = "../../../examples/sample/src/reads.rs"]
+mod sample_reads;
+
+/// A text delta, as the server streams one.
+fn text_delta(delta: &str) -> abi::types::V2Event {
+    serde_json::from_value(serde_json::json!({
+        "id": "evt_1",
+        "created": 1,
+        "type": "session.text.delta",
+        "data": { "sessionID": "ses_1", "assistantMessageID": "msg_1", "ordinal": 0, "delta": delta },
+    }))
+    .unwrap()
+}
+
+/// What 1.6 shows and asks for through `registry`: the sample's reads row in `home.footer` as it mounts, once a frame
+/// laid it out, after two deltas, and after its verbs command; then the verbs the host ran, the toasts and the dialogs.
+type Verbed = (Vec<String>, Vec<String>, Vec<String>, Vec<(String, abi::Dialog)>);
+
+fn verbed(host: &Rc<TestHost>, registry: &Registry) -> Verbed {
+    host.app.resize(240, 10);
+    let row = |host: &TestHost, parent: &View| {
+        host.app.advance(Duration::from_millis(1));
+        host.app().root().clear();
+        host.app().root().add(parent);
+        host.app.render();
+        host.app.text().lines().find(|line| line.contains("sample reads:")).unwrap_or_default().trim().to_owned()
+    };
+    let parent = View::new(host.app()).column();
+    let mounted = registry.mount(&**host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    let mut rows = vec![row(host, &parent), row(host, &parent)];
+    host.emit_deltas(&[text_delta("a"), text_delta("b")]);
+    rows.push(row(host, &parent));
+    host.keymap().dispatch("sample.verbs", None);
+    host.app.advance(Duration::from_millis(1));
+    host.exit();
+    rows.push(row(host, &parent));
+    drop(mounted);
+    let toasts = host.toasts.borrow_mut().drain(..).map(|toast| toast.message).collect();
+    let dialogs = host.dialogs.borrow_mut().drain(..).collect();
+    (rows, host.verbs.borrow_mut().drain(..).collect(), toasts, dialogs)
+}
+
+// Expected: a claim reads its own laid-out size (renders again with `size` once a frame laid it out), the
+// variants, the tabs, the keymap, the selection and the themes; it gets the deltas, once a batch; a command's verbs
+// run once it returns, in order, those that answer `false` not at all, and a program's exit code comes back as a
+// reply. The same in process and from the library, where every read and verb crosses the C ABI.
+#[test]
+fn the_1_6_reads_and_verbs_are_the_same_in_process_and_through_the_library() {
+    let host = host();
+    let in_process = Registry::define(vec![abi::Plugin { id: "sample", setup: sample_reads::setup }.into()], []);
+    in_process.activate(&dynamic(&host));
+    let direct = verbed(&host, &in_process);
+    let read = "default low+high, tabs true ses_1*,ses_2, keys ctrl+p,f1 [ctrl+x] 3 1, sel picked, theme opencode of 2";
+    assert_eq!(
+        direct.0,
+        [
+            // The frame that first laid the claim out settles with its size.
+            format!("sample reads: 240x1 resized, {read}, deltas 0, exit -"),
+            format!("sample reads: 240x1 resized, {read}, deltas 0, exit -"),
+            format!("sample reads: 240x1, {read}, deltas 2, exit -"),
+            format!("sample reads: 240x1, {read}, deltas 2, exit 0"),
+        ]
+    );
+    assert_eq!(
+        direct.1,
+        [
+            r#"variant Some("high")"#,
+            r#"tab Focus { session: "ses_1" }"#,
+            "theme nord",
+            "model opencode/small",
+            "clear selection",
+            "title sample title",
+            r#"install sample {"theme":{}}"#,
+            r#"foreground true ["a"]"#,
+        ]
+    );
+    assert_eq!(direct.2, ["sample verbs: true false true false true false"]);
+    let [(_, abi::Dialog::Panel(panel))] = direct.3.as_slice() else { panic!("{:?}", direct.3) };
+    assert_eq!(panel.size, abi::PanelSize::XLarge);
+    in_process.set_active(&dynamic(&host), "sample", false);
+
+    let (definition, error) = Native.load(&dynamic(&host), &build("still"), Some(r#"{"reads":true}"#)).unwrap();
+    let library = Registry::define(Vec::new(), []);
+    library.load(&dynamic(&host), definition.external("sample.so", error));
+    assert_eq!(status(&library), Status::Active);
+    assert_eq!(verbed(&host, &library), direct);
+}
+
 /// A thread that wakes the host once its claim drew, a wake handler that counts the wakes it ran for and fetches each time, and
 /// a claim that shows the count.
 fn waking(setup: &mut abi::Setup) -> Result<(), String> {
@@ -1442,7 +1531,7 @@ fn configured(options: &str, directives: &[&str]) -> (opencode_util::temp::TempD
     (root, target, registry, loader)
 }
 
-const MAJOR_2: &str = "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.5); rebuild \
+const MAJOR_2: &str = "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.6); rebuild \
                        the plugin against opencode-plugin-abi 1";
 
 // Expected (carbon-2): an external plugin whose setup fails says so in a toast that opens the plugin manager, as a
@@ -1593,6 +1682,15 @@ fn leak(host: &dyn abi::Host, at: &str) {
     host.open_route("r");
     host.fetch(abi::Fetch { method: "GET".into(), path: "/leaked".into(), ..abi::Fetch::default() });
     host.dialog(abi::Dialog::Close { key: "leaked".into() });
+    // 1.6
+    host.set_variant(Some("high"));
+    host.set_model("opencode", "small");
+    host.edit_tab(abi::TabEdit::Focus { session: "ses_1".into() });
+    host.clear_selection();
+    host.foreground(abi::Foreground { command: "leaked".into(), ..abi::Foreground::default() });
+    host.set_title("leaked");
+    host.set_theme("nord");
+    host.install_theme("leaked", serde_json::json!({}));
     assert!(!panics, "boom");
 }
 
@@ -1620,6 +1718,7 @@ fn panicky(setup: &mut abi::Setup) -> Result<(), String> {
     });
     setup.on_reply(|host, _, _| leak(host, "reply"));
     setup.on_event(&["session.execution.succeeded"], |host, _| leak(host, "event"));
+    setup.on_deltas(|host, _| leak(host, "deltas"));
     setup.on_wake(|host| {
         WOKEN.set(WOKEN.get() + 1);
         leak(host, "wake");
@@ -1678,9 +1777,9 @@ fn panicking(host: &Rc<TestHost>, through: bool) -> Rc<Registry> {
     registry
 }
 
-/// What a host saw of the plugin's effects, without the failure toast: toasts, attention, routes, fetches, dialogs
-/// and storage.
-type Seen = (Vec<String>, usize, Vec<(String, String)>, Vec<String>, usize, Vec<(String, String)>);
+/// What a host saw of the plugin's effects, without the failure toast: toasts, attention, routes, fetches, dialogs,
+/// storage, and the verbs of 1.6.
+type Seen = (Vec<String>, usize, Vec<(String, String)>, Vec<String>, usize, Vec<(String, String)>, Vec<String>);
 
 /// What the host lists of the plugin, how many failure toasts it showed, and whether the plugin's command still runs.
 type Listed = (Entry, usize, bool);
@@ -1698,6 +1797,7 @@ fn panicky_run(at: &'static str, leak: (&'static str, bool), through: bool) -> (
     match at {
         "command" => drop(host.keymap().dispatch("x.panic", None)),
         "event" => host.emit(&succeeded("ses_1")),
+        "deltas" => host.emit_deltas(&[text_delta("a")]),
         "reply" => {
             host.keymap().dispatch("x.fetch", None);
             host.app.advance(Duration::from_millis(1));
@@ -1732,8 +1832,24 @@ fn panicky_run(at: &'static str, leak: (&'static str, bool), through: bool) -> (
         host.fetches.borrow().iter().map(|(fetch, _)| fetch.path.clone()).collect(),
         host.dialogs.borrow().len(),
         storage,
+        host.verbs.borrow().clone(),
     );
     (seen, (entry, failed, command))
+}
+
+// Expected (property `ledger`, a 1.6 registration): a plugin's deltas handler is held while it is active and gone once
+// it is disabled, on both paths, and it hears no delta after.
+#[test]
+fn a_deltas_handler_goes_with_its_plugin() {
+    for through in [false, true] {
+        let host = host();
+        LEAK_AT.set(("", false));
+        let registry = panicking(&host, through);
+        assert_eq!(host.deltas.borrow().len(), 1, "through the C ABI: {through}");
+        registry.set_active(&dynamic(&host), "panicky", false);
+        assert_eq!(host.deltas.borrow().len(), 0, "through the C ABI: {through}");
+        host.emit_deltas(&[text_delta("a")]);
+    }
 }
 
 // Expected (spike SC, property "a call that panics has no effects"): through every entry point and on both paths, a
@@ -1748,6 +1864,7 @@ fn a_call_that_panics_has_no_effects() {
         ("setup", "setup", true),
         ("command", "run-command", true),
         ("event", "on-event", true),
+        ("deltas", "on-deltas", true),
         ("reply", "on-reply", true),
         ("wake", "on-wake", true),
         ("mount", "on-mount", true),
