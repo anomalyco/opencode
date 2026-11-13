@@ -2370,6 +2370,15 @@ macro_rules! export_plugin {
         }
         create
     }};
+    // The `create` and `describe` of `$setup`, for `loader::native::loopback_described`.
+    (@loopback_described $id:expr, $setup:expr) => {{
+        #[allow(unsafe_code)]
+        unsafe extern "C" fn describe(out: *mut $crate::Owned) -> i32 {
+            // SAFETY: the loader passes what `PluginApi::describe` documents.
+            unsafe { $crate::runtime::describe($id, env!("CARGO_PKG_VERSION"), out) }
+        }
+        ($crate::export_plugin!(@loopback $id, $setup), describe)
+    }};
 }
 
 /// The shims [`export_plugin!`] wires into [`PluginApi`]. Each catches panics, so none unwinds into the host.
