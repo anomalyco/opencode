@@ -145,16 +145,20 @@ export function createLocalProviderPlugin<Discovered>(input: {
 
         // Keep the last successful inventory through transient outages instead of flickering model availability.
         // Only a configured endpoint is expected to answer, and it is reported once per outage.
-        const attempt = refresh().pipe(
-          Effect.catch((cause) => {
-            if (!source.current.explicit || loaded.failing) return Effect.void
-            loaded.failing = true
-            return Effect.logWarning(`failed to discover ${input.name} models`, {
-              baseURL: source.current.baseURL,
-              cause,
-            })
-          }),
-        )
+        // A reload doesn't wait for the attempt in flight, so a failure for a replaced source is dropped.
+        const attempt = Effect.suspend(() => {
+          const current = source.current
+          return refresh().pipe(
+            Effect.catch((cause) => {
+              if (current !== source.current || !current.explicit || loaded.failing) return Effect.void
+              loaded.failing = true
+              return Effect.logWarning(`failed to discover ${input.name} models`, {
+                baseURL: current.baseURL,
+                cause,
+              })
+            }),
+          )
+        })
         yield* attempt.pipe(Effect.repeat(Schedule.spaced(interval)), Effect.forkScoped)
         // Event handlers start discovery without waiting on it, so a slow endpoint doesn't hold up the next event.
         const background = yield* FiberSet.make()
@@ -197,7 +201,8 @@ function createClient(
   return {
     root,
     apiKey,
-    get: (path: string) => http.execute(auth(HttpClientRequest.get(endpoint(path)))).pipe(Effect.timeout(requestTimeout)),
+    get: (path: string) =>
+      http.execute(auth(HttpClientRequest.get(endpoint(path)))).pipe(Effect.timeout(requestTimeout)),
     getJson: <A, I>(path: string, schema: Schema.Codec<A, I>) =>
       http
         .execute(auth(HttpClientRequest.get(endpoint(path))))
