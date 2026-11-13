@@ -26,3 +26,11 @@ export function previewResource(address: string, host: string, initiator: string
 
   return previewFile(address, host, roots)
 }
+
+/** A History API route without a corresponding file keeps the last validated address in the bar. Reload that file. */
+export function reloadAddress(actual: string, shown: string, host: string | undefined, roots: readonly string[]) {
+  if (!host || !actual.startsWith(`${previewScheme}://${host}/`)) return
+  const destination = previewAddress(shown, host, roots)
+
+  return destination && destination !== actual ? shown : undefined
+}

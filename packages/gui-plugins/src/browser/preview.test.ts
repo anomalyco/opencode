@@ -1,11 +1,17 @@
 import { expect, test } from "bun:test"
-import { previewAddress, previewFile, previewResource } from "./preview"
+import { previewAddress, previewFile, previewResource, reloadAddress } from "./preview"
 
 const roots = ["/work/repo #1"]
 
 const file = "file:///work/repo%20%231/index.html?q=1#anchor"
 
 const view = "oc-preview://first/work/repo%20%231/index.html?q=1#anchor"
+
+test("reload chooses the shown preview file for a virtual route, otherwise lets Chromium reload", () => {
+  expect(reloadAddress(view.replace("index.html", "virtual"), file, "first", roots)).toBe(file)
+  expect(reloadAddress(view, file, "first", roots)).toBeUndefined()
+  expect(reloadAddress("https://example.com", file, "first", roots)).toBeUndefined()
+})
 
 test("a workspace address round-trips without ever loading a native file origin", () => {
   expect(previewAddress(file, "first", roots)).toBe(view)

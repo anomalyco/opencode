@@ -58,7 +58,7 @@ import {
   type Policy,
 } from "./policy"
 import type { PaneElement } from "./ipc"
-import { previewAddress, previewFile } from "./preview"
+import { previewAddress, previewFile, reloadAddress } from "./preview"
 import { previewScheme } from "./scheme"
 import { workspaceFile } from "./workspace-file"
 
@@ -268,7 +268,7 @@ export function createBrowserPage(
 
     if (pageReload(input, process.platform === "darwin")) {
       event.preventDefault()
-      contents.reload()
+      void reload().catch((error: Error) => publish(error.message))
 
       return
     }
@@ -696,6 +696,13 @@ export function createBrowserPage(
       .finally(() => contents.off("did-navigate", commit))
   }
 
+  const reload = async () => {
+    const address = reloadAddress(contents.getURL(), state().url, options.previewHost, policy.fileRoots ?? [])
+
+    if (address) return void await load(address)
+    contents.reload()
+  }
+
   const ready = Promise.all([
     files.ready,
     ...(options.initialize === false
@@ -934,7 +941,7 @@ export function createBrowserPage(
         if (action.type === "forward" && contents.navigationHistory.canGoForward())
           contents.navigationHistory.goForward()
 
-        if (action.type === "reload") contents.reload()
+        if (action.type === "reload") await reload()
 
         if (action.type === "stop") contents.stop()
 
