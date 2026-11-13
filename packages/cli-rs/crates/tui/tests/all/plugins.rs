@@ -75,7 +75,7 @@ fn messages(text: &str) -> Value {
 
 pub(crate) struct Plugins {
     harness: Harness,
-    plugin: std::path::PathBuf,
+    pub(crate) plugin: std::path::PathBuf,
     _root: opencode_util::temp::TempDir,
 }
 
@@ -260,7 +260,7 @@ fn a_plugin_that_fails_to_load_shows_a_toast_and_the_footer_counts_it() {
 }
 
 /// Replaces `path` as editors and build tools do: a new file renamed over the old one.
-fn write_atomic(path: &Path, bytes: &[u8]) {
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) {
     let next = path.with_extension("next");
     std::fs::write(&next, bytes).unwrap();
     std::fs::rename(next, path).unwrap();

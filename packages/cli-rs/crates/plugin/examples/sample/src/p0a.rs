@@ -2,18 +2,52 @@
 //! edits, and a home footer claim in a styled box. The TUI's tests run this one file linked, through the C ABI's
 //! byte shims, and in the sample library (`--features p0a`), so the three carriers run the same source. Every
 //! command is hidden: a test or a click dispatches it.
+//!
+//! The probe keeps its own log in its storage key `log`, which only grows: each activation numbers itself (`setup N`)
+//! and tags what it hears with that number, so a test tells an old activation's answer from a new one's.
 
 use super::abi::{
     Action, Alert, Border, BorderStyle, Command, ComposerEdit, Confirm, ConfirmLabel, Dialog, Edges, Host, Layout,
-    Node, Overflow, Placement, Render, Setup, Sides, Span, TitleAlign, Toast, Variant, Width,
+    Node, Overflow, Placement, Read, Render, Setup, Sides, Span, TitleAlign, Toast, Variant, Width,
 };
 
 pub fn setup(setup: &mut Setup) -> Result<(), String> {
+    setup.storage_key("log");
+    let activation = {
+        let host = setup.host();
+        let started = log(host).iter().filter(|entry| entry.starts_with("setup ")).count() + 1;
+        append(host, format!("setup {started}"));
+        started
+    };
     let hidden = |name: &str| Command { name: name.to_owned(), ..Command::default() };
     setup.command(hidden("p0a.confirm"), |host, _| confirm(host));
-    setup.command(hidden("p0a.alert"), |host, _| alert(host));
-    setup.command(hidden("p0a.answered"), |host, input| toast(host, format!("answered {}", input.unwrap_or("-"))));
-    setup.command(hidden("p0a.closed"), |host, _| toast(host, "alert closed".to_owned()));
+    setup.command(hidden("p0a.alert"), |host, _| alert(host, "p0a.closed"));
+    // An alert whose action is another plugin's command.
+    setup.command(hidden("p0a.alert-foreign"), |host, _| alert(host, "witness.ran"));
+    setup.command(hidden("p0a.answered"), move |host, input| {
+        append(host, format!("answered {} @{activation}", input.unwrap_or("-")));
+        toast(host, format!("answered {}", input.unwrap_or("-")));
+    });
+    setup.command(hidden("p0a.closed"), move |host, _| {
+        append(host, format!("closed @{activation}"));
+        toast(host, "alert closed".to_owned());
+    });
+    // Disposal: two callbacks that log, around one that queues a set, a submit and an alert and then panics, once
+    // `p0a.teardown` armed it. Disposers run last first.
+    setup.command(hidden("p0a.teardown"), |host, _| append(host, "teardown armed".to_owned()));
+    setup.on_dispose(move |host| append(host, format!("disposed first @{activation}")));
+    setup.on_dispose(|host| {
+        // Armed in this activation: after its own `setup` entry.
+        let log = log(host);
+        let armed = log.iter().rposition(|entry| entry == "teardown armed");
+        if armed > log.iter().rposition(|entry| entry.starts_with("setup ")) {
+            host.edit_composer(ComposerEdit::Set { text: "teardown edit".to_owned() });
+            host.edit_composer(ComposerEdit::Submit);
+            alert(host, "p0a.closed");
+            panic!("p0a's disposer panicked");
+        }
+    });
+    setup.on_dispose(move |host| append(host, format!("disposed last @{activation}")));
     setup.command(hidden("p0a.read"), |host, _| {
         let read = match host.composer() {
             Some(composer) => {
@@ -34,13 +68,14 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         host.edit_composer(ComposerEdit::Set { text: input.unwrap_or_default().to_owned() });
         host.edit_composer(ComposerEdit::Submit);
     });
-    // Every effect 1.5 adds, in one call; with the input `panic` the call panics after them, so none may happen.
+    // Every effect 1.5 adds, in one call; with the input `panic` the call panics after them, so none may happen. The
+    // confirm replaces the alert, whose action then runs: both effects show without the panic.
     setup.command(hidden("p0a.all"), |host, input| {
         host.edit_composer(ComposerEdit::Set { text: "all".to_owned() });
         host.edit_composer(ComposerEdit::Insert { text: " of it".to_owned() });
         host.edit_composer(ComposerEdit::Submit);
+        alert(host, "p0a.closed");
         confirm(host);
-        alert(host);
         if input == Some("panic") {
             panic!("p0a panicked after its effects");
         }
@@ -58,12 +93,24 @@ fn confirm(host: &dyn Host) {
     }));
 }
 
-fn alert(host: &dyn Host) {
+fn alert(host: &dyn Host, then: &str) {
     host.dialog(Dialog::Alert(Alert {
         title: "Heads up".to_owned(),
         message: "The plugin says hello.".to_owned(),
-        action: Some(Action::Command { name: "p0a.closed".to_owned(), input: None }),
+        action: Some(Action::Command { name: then.to_owned(), input: None }),
     }));
+}
+
+/// The probe's log.
+pub fn log(host: &dyn Read) -> Vec<String> {
+    let log = host.storage_get("log").and_then(|log| serde_json::from_value(log).ok());
+    log.unwrap_or_default()
+}
+
+fn append(host: &dyn Host, entry: String) {
+    let mut log = log(host);
+    log.push(entry);
+    host.storage_set("log", serde_json::json!(log));
 }
 
 fn toast(host: &dyn Host, message: String) {
