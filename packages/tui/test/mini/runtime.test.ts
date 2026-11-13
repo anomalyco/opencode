@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { OpenCode } from "@opencode/client/promise"
+import { OpenCode, type AgentListOutput } from "@opencode/client/promise"
 import { runInteractiveDeferredMode } from "../../src/mini/runtime"
 import type { LifecycleInput } from "../../src/mini/runtime.lifecycle"
 import type { FooterEvent, MiniHost } from "../../src/mini/types"
@@ -35,7 +35,8 @@ function host(): MiniHost {
     startup: { showTiming: false, now: () => 0 },
     diagnostics: {},
     preferences: {
-      resolveVariant: async () => undefined,
+      recentModels: async () => [],
+      variant: async () => undefined,
       saveVariant: async () => {},
     },
   }
@@ -165,6 +166,662 @@ describe("run interactive runtime", () => {
     expect(turnModel).toEqual({ providerID: "test", modelID: "resolved" })
     await task
   })
+
+  test.each([false, true])("uses recent preferences for prompts unless --model is explicit (%s)", async (explicit) => {
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const ui = createFooterApiFixture()
+    const recent = { providerID: "test", modelID: "recent" }
+    const requested = explicit ? { providerID: "test", modelID: "explicit" } : undefined
+    const inputHost = host()
+    inputHost.preferences.recentModels = async () => [recent]
+    stubCatalogLists(sdk, {
+      providers: [catalogProvider("test", "Test")],
+      models: [
+        catalogModel({ id: "recent", providerID: "test" }),
+        catalogModel({ id: "explicit", providerID: "test" }),
+      ],
+    })
+    let submitted: unknown
+    const task = runInteractiveDeferredMode(
+      {
+        host: inputHost,
+        sdk,
+        directory: "/tmp",
+        target: async () => ({
+          sessionID: "ses_root",
+          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
+          agent: "build",
+          model: requested,
+          variant: undefined,
+          resume: false,
+        }),
+        agent: "build",
+        model: requested,
+        variant: undefined,
+        files: [],
+      },
+      {
+        createRuntimeLifecycle: async () => ({
+          footer: ui.api,
+          onResize: () => () => {},
+          refreshTheme() {},
+          setTitle() {},
+          resetForReplay: async () => {},
+          close: async () => {},
+        }),
+        streamTransport: Promise.resolve({
+          createSessionTransport: async () => ({
+            runPromptTurn: async (input) => {
+              submitted = input.model
+              ui.api.close()
+            },
+            admitPromptTurn: async () => {},
+            waitForIdle: async () => {},
+            interruptActiveTurn: async () => {},
+            selectSubagent() {},
+            replayOnResize: async () => false,
+            close: async () => {},
+          }),
+          formatUnknownError: String,
+        }),
+      },
+    )
+    await ui.promptReady
+    ui.submit("hello")
+    await task
+    expect(submitted).toEqual(requested ?? recent)
+    expect(ui.commits.some((commit) => commit.text.includes("unavailable"))).toBe(false)
+  })
+
+  test.each(["startup", "switch", "explicit", "manual", "default-agent", "same-manual-model", "fallback"] as const)(
+    "resolves agent model preferences while preserving explicit selections (%s)",
+    async (selection) => {
+      const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+      const ui = createFooterApiFixture()
+      const override = { providerID: "test", modelID: "override" }
+      const requested = selection === "explicit" ? override : undefined
+      const initialAgent = selection === "default-agent" ? undefined : "build"
+      const inputHost = host()
+      inputHost.preferences.recentModels = async () =>
+        selection === "fallback" ? [] : [{ providerID: "test", modelID: "recent" }]
+      inputHost.preferences.variant = async (model) => (model?.modelID === "override" ? "high" : undefined)
+      stubCatalogLists(sdk, {
+        providers: [catalogProvider("test", "Test")],
+        models: ["build", "review", "global", "override", "recent"].map((id) =>
+          catalogModel({ id, providerID: "test", variants: ["low", "medium", "high"] }),
+        ),
+        agents: [
+          {
+            id: "build",
+            name: "Build",
+            model: { providerID: "test", id: "build", variant: "high" },
+            request: { settings: {}, headers: {}, body: {} },
+            mode: "primary",
+            hidden: false,
+            permissions: [],
+          },
+          {
+            id: "review",
+            name: "Review",
+            model: selection === "fallback" ? undefined : { providerID: "test", id: "review", variant: "low" },
+            request: { settings: {}, headers: {}, body: {} },
+            mode: "primary",
+            hidden: false,
+            permissions: [],
+          },
+        ],
+        config: selection === "fallback" ? [] : [{ type: "document", info: { model: "test/global#medium" } }],
+      })
+      spyOn(sdk.model, "default").mockResolvedValue({
+        location: { directory: "/tmp" },
+        data: catalogModel({ id: "global", providerID: "test", variants: ["low", "medium", "high"] }),
+      })
+      let lifecycle!: LifecycleInput
+      let submitted: unknown
+      const task = runInteractiveDeferredMode(
+        {
+          host: inputHost,
+          sdk,
+          directory: "/tmp",
+          target: async () => ({
+            sessionID: "ses_root",
+            location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
+            agent: initialAgent,
+            model: requested,
+            variant: requested ? "high" : undefined,
+            resume: false,
+          }),
+          agent: initialAgent,
+          model: requested,
+          variant: requested ? "high" : undefined,
+          files: [],
+        },
+        {
+          createRuntimeLifecycle: async (input) => {
+            lifecycle = input
+            return {
+              footer: ui.api,
+              onResize: () => () => {},
+              refreshTheme() {},
+              setTitle() {},
+              resetForReplay: async () => {},
+              close: async () => {},
+            }
+          },
+          streamTransport: Promise.resolve({
+            createSessionTransport: async () => ({
+              runPromptTurn: async (turn) => {
+                submitted = { agent: turn.agent, model: turn.model, variant: turn.variant }
+                ui.api.close()
+              },
+              admitPromptTurn: async () => {},
+              waitForIdle: async () => {},
+              interruptActiveTurn: async () => {},
+              selectSubagent() {},
+              replayOnResize: async () => false,
+              close: async () => {},
+            }),
+            formatUnknownError: String,
+          }),
+        },
+      )
+      try {
+        await ui.promptReady
+        if (selection === "manual") await lifecycle.onModelSelect?.(override)
+        if (selection === "same-manual-model") await lifecycle.onModelSelect?.({ providerID: "test", modelID: "build" })
+        if (selection !== "startup" && selection !== "default-agent") await lifecycle.onAgentSelect?.("review")
+        ui.submit("hello")
+        await task
+        expect(submitted).toEqual({
+          agent: selection === "default-agent" ? undefined : selection === "startup" ? "build" : "review",
+          model:
+            selection === "manual" || selection === "explicit"
+              ? override
+              : {
+                  providerID: "test",
+                  modelID: selection === "fallback" ? "global" : selection === "switch" ? "review" : "build",
+                },
+          variant: selection === "fallback" ? undefined : selection === "switch" ? "low" : "high",
+        })
+        if (selection === "fallback")
+          expect(ui.events).toContainEqual({
+            type: "model",
+            model: "global · Test",
+            selection: { providerID: "test", modelID: "global" },
+          })
+      } finally {
+        ui.api.close()
+        await task
+      }
+    },
+  )
+
+  test("explains a skipped configured model in the footer", async () => {
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const ui = createFooterApiFixture()
+    const recent = { providerID: "test", modelID: "recent" }
+    const inputHost = host()
+    inputHost.preferences.recentModels = async () => [recent]
+    stubCatalogLists(sdk, {
+      providers: [catalogProvider("test", "Test")],
+      models: [catalogModel({ id: "recent", providerID: "test" })],
+      config: [{ type: "document", info: { model: "missing/model" } }],
+    })
+    const emit = ui.api.event.bind(ui.api)
+    const modelsLoaded = defer<void>()
+    ui.api.event = (event) => {
+      emit(event)
+      if (event.type === "models") modelsLoaded.resolve()
+    }
+
+    const task = runInteractiveDeferredMode(
+      {
+        host: inputHost,
+        sdk,
+        directory: "/tmp",
+        target: async () => ({
+          sessionID: "ses_root",
+          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
+          agent: "build",
+          model: undefined,
+          variant: undefined,
+          resume: false,
+        }),
+        agent: "build",
+        model: undefined,
+        variant: undefined,
+        files: [],
+      },
+      {
+        createRuntimeLifecycle: async () => ({
+          footer: ui.api,
+          onResize: () => () => {},
+          refreshTheme() {},
+          setTitle() {},
+          resetForReplay: async () => {},
+          close: async () => {},
+        }),
+        streamTransport: Promise.resolve({
+          createSessionTransport: async () => ({
+            runPromptTurn: async () => {},
+            admitPromptTurn: async () => {},
+            waitForIdle: async () => {},
+            interruptActiveTurn: async () => {},
+            selectSubagent() {},
+            replayOnResize: async () => false,
+            close: async () => {},
+          }),
+          formatUnknownError: String,
+        }),
+      },
+    )
+    await modelsLoaded.promise
+    const warning = ui.commits.find((commit) => commit.kind === "system")
+    expect(warning?.text).toContain("Configured model missing/model")
+    expect(warning?.text).toContain("Falling back to test/recent")
+    ui.api.close()
+    await task
+  })
+
+  test("keeps the saved variant over the configured one", async () => {
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const ui = createFooterApiFixture()
+    const inputHost = host()
+    inputHost.preferences.variant = async () => "low"
+    stubCatalogLists(sdk, {
+      providers: [catalogProvider("test", "Test")],
+      models: [catalogModel({ id: "recent", providerID: "test", variants: ["low", "high"] })],
+      config: [{ type: "document", info: { model: "test/recent#high" } }],
+    })
+    const modelShown = defer<void>()
+    const emit = ui.api.event.bind(ui.api)
+    ui.api.event = (event) => {
+      emit(event)
+      if (event.type === "model") modelShown.resolve()
+    }
+    let submittedVariant: string | undefined
+    const task = runInteractiveDeferredMode(
+      {
+        host: inputHost,
+        sdk,
+        directory: "/tmp",
+        target: async () => ({
+          sessionID: "ses_root",
+          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
+          agent: "build",
+          model: undefined,
+          variant: undefined,
+          resume: false,
+        }),
+        agent: "build",
+        model: undefined,
+        variant: undefined,
+        files: [],
+      },
+      {
+        createRuntimeLifecycle: async () => ({
+          footer: ui.api,
+          onResize: () => () => {},
+          refreshTheme() {},
+          setTitle() {},
+          resetForReplay: async () => {},
+          close: async () => {},
+        }),
+        streamTransport: Promise.resolve({
+          createSessionTransport: async () => ({
+            runPromptTurn: async (input) => {
+              submittedVariant = input.variant
+              ui.api.close()
+            },
+            admitPromptTurn: async () => {},
+            waitForIdle: async () => {},
+            interruptActiveTurn: async () => {},
+            selectSubagent() {},
+            replayOnResize: async () => false,
+            close: async () => {},
+          }),
+          formatUnknownError: String,
+        }),
+      },
+    )
+    await modelShown.promise
+    await ui.promptReady
+    ui.submit("hello")
+    await task
+    expect(submittedVariant).toBe("low")
+  })
+
+  test("keeps an explicit default variant over the configured one", async () => {
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const ui = createFooterApiFixture()
+    const inputHost = host()
+    inputHost.preferences.variant = async () => "default"
+    stubCatalogLists(sdk, {
+      providers: [catalogProvider("test", "Test")],
+      models: [catalogModel({ id: "recent", providerID: "test", variants: ["low", "high"] })],
+      config: [{ type: "document", info: { model: "test/recent#high" } }],
+    })
+    const modelShown = defer<void>()
+    const emit = ui.api.event.bind(ui.api)
+    ui.api.event = (event) => {
+      emit(event)
+      if (event.type === "model") modelShown.resolve()
+    }
+    let submittedVariant: string | undefined = "unset"
+    const task = runInteractiveDeferredMode(
+      {
+        host: inputHost,
+        sdk,
+        directory: "/tmp",
+        target: async () => ({
+          sessionID: "ses_root",
+          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
+          agent: "build",
+          model: undefined,
+          variant: undefined,
+          resume: false,
+        }),
+        agent: "build",
+        model: undefined,
+        variant: undefined,
+        files: [],
+      },
+      {
+        createRuntimeLifecycle: async () => ({
+          footer: ui.api,
+          onResize: () => () => {},
+          refreshTheme() {},
+          setTitle() {},
+          resetForReplay: async () => {},
+          close: async () => {},
+        }),
+        streamTransport: Promise.resolve({
+          createSessionTransport: async () => ({
+            runPromptTurn: async (input) => {
+              submittedVariant = input.variant
+              ui.api.close()
+            },
+            admitPromptTurn: async () => {},
+            waitForIdle: async () => {},
+            interruptActiveTurn: async () => {},
+            selectSubagent() {},
+            replayOnResize: async () => false,
+            close: async () => {},
+          }),
+          formatUnknownError: String,
+        }),
+      },
+    )
+    await modelShown.promise
+    await ui.promptReady
+    ui.submit("hello")
+    await task
+    expect(submittedVariant).toBeUndefined()
+  })
+
+  test("derives the model again once an unavailable catalog recovers", async () => {
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const events: FooterEvent[] = []
+    const ui = createFooterApiFixture({ events })
+    const recent = { providerID: "test", modelID: "recent" }
+    const inputHost = host()
+    inputHost.preferences.recentModels = async () => [recent]
+    const lists = stubCatalogLists(sdk, {
+      providers: [catalogProvider("test", "Test")],
+      models: [catalogModel({ id: "recent", providerID: "test" })],
+    })
+    lists.provider.mockRejectedValueOnce(new Error("offline"))
+    lists.model.mockRejectedValueOnce(new Error("offline"))
+    spyOn(sdk.model, "default").mockRejectedValue(new Error("offline"))
+    let refreshCatalog: (() => Promise<unknown>) | undefined
+    let submitted: unknown
+    const task = runInteractiveDeferredMode(
+      {
+        host: inputHost,
+        sdk,
+        directory: "/tmp",
+        target: async () => ({
+          sessionID: "ses_root",
+          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
+          agent: "build",
+          model: undefined,
+          variant: undefined,
+          resume: false,
+        }),
+        agent: "build",
+        model: undefined,
+        variant: undefined,
+        files: [],
+      },
+      {
+        createRuntimeLifecycle: async () => ({
+          footer: ui.api,
+          onResize: () => () => {},
+          refreshTheme() {},
+          setTitle() {},
+          resetForReplay: async () => {},
+          close: async () => {},
+        }),
+        streamTransport: Promise.resolve({
+          createSessionTransport: async (input) => {
+            refreshCatalog = () => Promise.resolve(input.onCatalogRefresh?.())
+            return {
+              runPromptTurn: async (turn) => {
+                submitted = turn.model
+                ui.api.close()
+              },
+              admitPromptTurn: async () => {},
+              waitForIdle: async () => {},
+              interruptActiveTurn: async () => {},
+              selectSubagent() {},
+              replayOnResize: async () => false,
+              close: async () => {},
+            }
+          },
+          formatUnknownError: String,
+        }),
+      },
+    )
+    await ui.promptReady
+    expect(ui.commits.some((commit) => commit.text.includes("unavailable"))).toBe(false)
+    await refreshCatalog?.()
+    expect(events.some((event) => event.type === "model" && event.selection?.modelID === "recent")).toBe(true)
+    ui.submit("hello")
+    await task
+    expect(submitted).toEqual(recent)
+  })
+
+  test.each([false, true])(
+    "preserves configured model priority when a config read fails (refresh=%s)",
+    async (refresh) => {
+      const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+      const ui = createFooterApiFixture()
+      const configured = { providerID: "test", modelID: "configured" }
+      const recent = { providerID: "test", modelID: "recent" }
+      const inputHost = host()
+      inputHost.preferences.recentModels = async () => [recent]
+      const model = catalogModel({ id: configured.modelID, providerID: configured.providerID })
+      stubCatalogLists(sdk, {
+        providers: [catalogProvider("test", "Test")],
+        models: [model, catalogModel({ id: recent.modelID, providerID: recent.providerID })],
+        config: [{ type: "document", info: { model: "test/configured" } }],
+      })
+      spyOn(sdk.config, "get").mockRejectedValueOnce(new Error("offline"))
+      spyOn(sdk.model, "default").mockResolvedValue({ location: { directory: "/tmp" }, data: model })
+      let refreshCatalog: (() => Promise<unknown>) | undefined
+      let submitted: unknown
+      const task = runInteractiveDeferredMode(
+        {
+          host: inputHost,
+          sdk,
+          directory: "/tmp",
+          target: async () => ({
+            sessionID: "ses_root",
+            location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
+            agent: "build",
+            model: undefined,
+            variant: undefined,
+            resume: false,
+          }),
+          agent: "build",
+          model: undefined,
+          variant: undefined,
+          files: [],
+        },
+        {
+          createRuntimeLifecycle: async () => ({
+            footer: ui.api,
+            onResize: () => () => {},
+            refreshTheme() {},
+            setTitle() {},
+            resetForReplay: async () => {},
+            close: async () => {},
+          }),
+          streamTransport: Promise.resolve({
+            createSessionTransport: async (input) => {
+              refreshCatalog = () => Promise.resolve(input.onCatalogRefresh?.())
+              return {
+                runPromptTurn: async (turn) => {
+                  submitted = turn.model
+                  ui.api.close()
+                },
+                admitPromptTurn: async () => {},
+                waitForIdle: async () => {},
+                interruptActiveTurn: async () => {},
+                selectSubagent() {},
+                replayOnResize: async () => false,
+                close: async () => {},
+              }
+            },
+            formatUnknownError: String,
+          }),
+        },
+      )
+      try {
+        await ui.promptReady
+        if (refresh) await refreshCatalog?.()
+        ui.submit("hello")
+        await task
+        expect(submitted).toEqual(refresh ? configured : undefined)
+      } finally {
+        ui.api.close()
+        await task
+      }
+    },
+  )
+
+  test.each(["config", "agent"] as const)(
+    "retries preferred models after %s reads recover with a saved default variant",
+    async (failure) => {
+      const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+      const ui = createFooterApiFixture()
+      const inputHost = host()
+      inputHost.preferences.variant = async (model) => (model?.modelID === "default" ? "medium" : undefined)
+      const agents = [
+        {
+          id: "build",
+          name: "Build",
+          model: failure === "agent" ? { providerID: "test", id: "agent", variant: "low" } : undefined,
+          request: { settings: {}, headers: {}, body: {} },
+          mode: "primary",
+          hidden: false,
+          permissions: [],
+        },
+      ] satisfies AgentListOutput["data"]
+      const lists = stubCatalogLists(sdk, {
+        providers: [catalogProvider("test", "Test")],
+        models: ["default", "configured", "agent"].map((id) =>
+          catalogModel({ id, providerID: "test", variants: ["low", "medium", "high"] }),
+        ),
+        agents,
+        config: [{ type: "document", info: { model: "test/configured#high" } }],
+      })
+      const config = spyOn(sdk.config, "get")
+      if (failure === "config") config.mockRejectedValue(new Error("offline"))
+      if (failure === "agent") lists.agent.mockRejectedValue(new Error("offline"))
+      spyOn(sdk.model, "default").mockResolvedValue({
+        location: { directory: "/tmp" },
+        data: catalogModel({ id: "default", providerID: "test", variants: ["low", "medium", "high"] }),
+      })
+      const defaultShown = defer<void>()
+      const emit = ui.api.event.bind(ui.api)
+      ui.api.event = (event) => {
+        emit(event)
+        if (event.type === "model" && event.selection?.modelID === "default") defaultShown.resolve()
+      }
+      let refreshCatalog: (() => Promise<unknown>) | undefined
+      let submitted: unknown
+      const task = runInteractiveDeferredMode(
+        {
+          host: inputHost,
+          sdk,
+          directory: "/tmp",
+          target: async () => ({
+            sessionID: "ses_root",
+            location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
+            agent: "build",
+            model: undefined,
+            variant: undefined,
+            resume: false,
+          }),
+          agent: "build",
+          model: undefined,
+          variant: undefined,
+          files: [],
+        },
+        {
+          createRuntimeLifecycle: async () => ({
+            footer: ui.api,
+            onResize: () => () => {},
+            refreshTheme() {},
+            setTitle() {},
+            resetForReplay: async () => {},
+            close: async () => {},
+          }),
+          streamTransport: Promise.resolve({
+            createSessionTransport: async (input) => {
+              refreshCatalog = () => Promise.resolve(input.onCatalogRefresh?.())
+              return {
+                runPromptTurn: async (turn) => {
+                  submitted = { model: turn.model, variant: turn.variant }
+                  ui.api.close()
+                },
+                admitPromptTurn: async () => {},
+                waitForIdle: async () => {},
+                interruptActiveTurn: async () => {},
+                selectSubagent() {},
+                replayOnResize: async () => false,
+                close: async () => {},
+              }
+            },
+            formatUnknownError: String,
+          }),
+        },
+      )
+      try {
+        await ui.promptReady
+        await refreshCatalog?.()
+        await defaultShown.promise
+        config.mockResolvedValue([{ type: "document", info: { model: "test/configured#high" } }])
+        lists.agent.mockResolvedValue({ location: { directory: "/tmp" }, data: agents })
+        await refreshCatalog?.()
+        ui.submit("hello")
+        await task
+        expect(ui.events).toContainEqual({
+          type: "model",
+          model: "default · Test · medium",
+          selection: { providerID: "test", modelID: "default" },
+        })
+        expect(submitted).toEqual({
+          model: { providerID: "test", modelID: failure === "agent" ? "agent" : "configured" },
+          variant: failure === "agent" ? "low" : "high",
+        })
+      } finally {
+        ui.api.close()
+        await task
+      }
+    },
+  )
 
   test("routes form responses to their owners with global location and local settlement", async () => {
     const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
