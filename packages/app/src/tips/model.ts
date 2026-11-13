@@ -7,7 +7,6 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
-import { useCommand } from "@/shell/commands/command"
 import { selectTip, TIP_INTERVAL_MS, type Tip } from "./queue"
 
 const STARTUP_DELAY = 2 * 60 * 1000
@@ -24,7 +23,6 @@ export function createTipToasts() {
   const servers = useServers()
   const language = useLanguage()
   const platform = usePlatform()
-  const command = useCommand()
 
   const server = createMemo(() => {
     const conn = servers.visible.find(servers.current) ?? servers.visible[0]
@@ -73,12 +71,6 @@ export function createTipToasts() {
         run: () =>
           platform.openExternal("https://anoma.ly/hex/?utm_source=opencode-desktop&utm_campaign=tip-hex"),
       },
-    },
-    {
-      id: "session-search",
-      title: "tips.search.title",
-      description: "tips.search.description",
-      action: { label: "command.session.search", run: () => command.trigger("sessions.search") },
     },
   ]
 
