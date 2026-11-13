@@ -1,8 +1,10 @@
-//! The plugins' dialogs ([`abi::Dialog`]): a prompt, a list to pick from, and a live panel, which changes in place while its key is open
+//! The plugins' dialogs ([`abi::Dialog`]): a prompt, a list to pick from, a confirm, an alert, and a live panel, which changes in place while its key is open
 //! (TS `/btw`'s `Answer`: the header, a body that scrolls, at most 60% of the screen high, and footer actions).
 
 use opencode_plugin::abi;
 use opencode_plugin::node::{self, Act};
+use opencode_ui::alert::AlertProps;
+use opencode_ui::confirm::ConfirmProps;
 use opencode_ui::dialog::{self, DIALOG_INSET, DialogCx, FooterAction, FooterProps, MODAL_MODE};
 use opencode_ui::prompt::{PromptProps, prompt};
 
@@ -66,6 +68,8 @@ pub fn show(tui: &Tui, id: &str, generation: u64, dialog: abi::Dialog) {
             }
         }
         abi::Dialog::Select(select) => pick(tui, owner, select),
+        abi::Dialog::Confirm(confirm) => ask_yes(tui, owner, confirm),
+        abi::Dialog::Alert(alert) => tell(tui, owner, alert),
     }
 }
 
@@ -153,6 +157,54 @@ fn pick(tui: &Tui, owner: Owner, select: abi::Select) {
                 })));
                 opencode_ui::select::select(cx, props).0
             },
+            Some(on_close),
+            DialogOptions::default(),
+        )
+    });
+}
+
+/// TS `dialog.confirm`: `Confirm` runs the action with `true`, `Cancel` and escape with `false`; a dialog that replaces
+/// it runs nothing.
+fn ask_yes(tui: &Tui, owner: Owner, confirm: abi::Confirm) {
+    let (weak, answered) = (tui.weak(), owner.clone());
+    own(tui, owner, |on_close| {
+        tui.dialogs.replace(
+            move |cx| {
+                let answer = |value: &'static str| -> Rc<dyn Fn()> {
+                    let (owner, action) = (answered.clone(), confirm.action.clone());
+                    Rc::new(bind!(weak, |tui| run(&tui, &owner, &action, Some(value))))
+                };
+                opencode_ui::confirm::confirm(
+                    cx,
+                    ConfirmProps {
+                        title: confirm.title.clone(),
+                        message: confirm.message.clone(),
+                        on_confirm: Some(answer("true")),
+                        on_cancel: Some(answer("false")),
+                        confirm_label: confirm.label.confirm.clone(),
+                        cancel_label: confirm.label.cancel.clone(),
+                    },
+                )
+            },
+            Some(on_close),
+            DialogOptions::default(),
+        )
+    });
+}
+
+/// TS `dialog.alert`: however the alert closes, its action runs once after.
+fn tell(tui: &Tui, owner: Owner, alert: abi::Alert) {
+    let props = AlertProps { title: alert.title, message: alert.message, on_confirm: None };
+    let (weak, closed) = (tui.weak(), owner.clone());
+    own(tui, owner, |on_close| {
+        let on_close = Box::new(move || {
+            on_close();
+            if let (Some(tui), Some(action)) = (weak.upgrade(), &alert.action) {
+                run(&tui, &closed, action, None);
+            }
+        });
+        tui.dialogs.replace(
+            move |cx| opencode_ui::alert::alert(cx, props.clone()),
             Some(on_close),
             DialogOptions::default(),
         )
