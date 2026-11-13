@@ -503,7 +503,11 @@ function settleRequest(
   return [
     settle({
       ok: false,
-      error: new Tool.Error({ message: `[browser.${event.outcome.code}] ${event.outcome.message}` }),
+      // The code stays readable apart from the message, so the server acts on it without parsing text.
+      error: new Tool.Error({
+        message: `[browser.${event.outcome.code}] ${event.outcome.message}`,
+        metadata: { code: event.outcome.code },
+      }),
     }),
   ]
 }

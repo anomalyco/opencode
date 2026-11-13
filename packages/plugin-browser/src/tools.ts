@@ -18,13 +18,15 @@ export const register = Effect.fn("BrowserTools.register")(function* (
   // Load and text waits run on the desktop; the rest poll from here with actions every desktop already supports.
   const wait = Effect.fn("BrowserTools.wait")(function* (tabID: Browser.TabID, plan: WaitPlan, tool: Tool.Context) {
     const started = yield* Clock.currentTimeMillis
-    const current = connection.target(tool.sessionID, { type: "tabs.focus", tabID }).pipe(
-      Effect.flatMap((target) =>
-        target.tab
-          ? Effect.succeed(target.tab)
-          : Effect.fail(new Tool.Error({ message: "Browser tab is unavailable. Call browser.tabs.list({})." })),
-      ),
-    )
+    const current = connection
+      .target(tool.sessionID, { type: "tabs.focus", tabID })
+      .pipe(
+        Effect.flatMap((target) =>
+          target.tab
+            ? Effect.succeed(target.tab)
+            : Effect.fail(new Tool.Error({ message: "Browser tab is unavailable. Call browser.tabs.list({})." })),
+        ),
+      )
     const finish = (tab: Browser.Tab, met: boolean, observed?: string) =>
       Clock.currentTimeMillis.pipe(
         Effect.flatMap((now) =>
@@ -54,14 +56,14 @@ export const register = Effect.fn("BrowserTools.register")(function* (
         Effect.flatMap((response) => Effect.fromResult(decodeResult({ name: "wait", output: Browser.Tab }, response))),
         Effect.flatMap((tab) => finish(tab, true)),
         Effect.catchIf(
-          (error) => /Condition was not met within \d+ ms/.test(error.message),
+          (error) => failureCode(error) === Browser.FailureCode.unmet,
           () => Effect.flatMap(current, (tab) => finish(tab, false, unmet(plan.action))),
         ),
       )
     }
 
     if (plan.kind === "url") {
-      const result = yield* until(current, (tab) => matchesURL(tab.url, plan.url), deadline)
+      const result = yield* until(current, (tab) => matchesURL(tab.url, plan.url), deadline, current)
       return yield* finish(
         result.seen,
         result.met,
@@ -78,27 +80,28 @@ export const register = Effect.fn("BrowserTools.register")(function* (
             ...(plan.frameID === undefined ? {} : { frameID: plan.frameID }),
             script: selectorVisibility(plan.element.selector),
           }
+    // No count yet: the page is navigating, or it did not answer in time.
+    const unanswered = Effect.map(current, (tab): Seen => ({ tab, count: undefined, visible: undefined }))
     const observe = connection.target(tool.sessionID, probe).pipe(
       Effect.flatMap((target) => target.request([])),
       Effect.flatMap((response) => Effect.fromResult(decodeResult({ name: "wait", output: Visibility }, response))),
-      Effect.map((seen) => ({ tab: seen.tab, count: seen.value.count, visible: seen.value.visible })),
+      Effect.map((seen): Seen => ({ tab: seen.tab, count: seen.value.count, visible: seen.value.visible })),
       // A navigation between checks is not an answer yet; a ref whose element left the page is gone.
       Effect.catchIf(
         (error) =>
-          /document changed before this operation ran|document or frame changed/.test(error.message) ||
-          (plan.gone && /ref is stale|may have detached/.test(error.message)),
+          failureCode(error) === Browser.FailureCode.documentChanged ||
+          (plan.gone && failureCode(error) === Browser.FailureCode.staleRef),
         (error) =>
-          Effect.map(current, (tab) =>
-            /ref is stale|may have detached/.test(error.message)
-              ? { tab, count: 0, visible: 0 }
-              : { tab, count: undefined, visible: undefined },
-          ),
+          failureCode(error) === Browser.FailureCode.staleRef
+            ? Effect.map(current, (tab): Seen => ({ tab, count: 0, visible: 0 }))
+            : unanswered,
       ),
     )
     const result = yield* until(
       observe,
       (seen) => seen.visible !== undefined && (plan.gone ? seen.visible === 0 : seen.visible > 0),
       deadline,
+      unanswered,
     )
     const name = "ref" in plan.element ? `ref ${plan.element.ref}` : `"${plan.element.selector}"`
     return yield* finish(
@@ -107,7 +110,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
       result.met
         ? undefined
         : result.seen.count === undefined
-          ? `The page was still navigating after ${plan.timeoutMs} ms.`
+          ? `The page was still navigating, or too busy to answer, after ${plan.timeoutMs} ms.`
           : `${result.seen.count} element(s) matched ${name}, ${result.seen.visible} visible, after ${plan.timeoutMs} ms.`,
     )
   })
@@ -412,22 +415,31 @@ export function waitPlan(input: WaitInput): WaitPlan {
   }
 }
 
+/**
+ * Observes until `met` holds or the deadline passes. A probe still running at the deadline is cancelled, so a busy page
+ * ends the wait on time as unmet; `unanswered` is then what was seen, unless an earlier probe answered.
+ */
 function until<A>(
   observe: Effect.Effect<A, Tool.Error>,
   met: (seen: A) => boolean,
   deadline: number,
+  unanswered: Effect.Effect<A, Tool.Error>,
+  last?: A,
 ): Effect.Effect<{ readonly seen: A; readonly met: boolean }, Tool.Error> {
-  return observe.pipe(
-    Effect.flatMap((seen) =>
-      met(seen)
-        ? Effect.succeed({ seen, met: true })
-        : Effect.flatMap(Clock.currentTimeMillis, (now) =>
-            now >= deadline
-              ? Effect.succeed({ seen, met: false })
-              : Effect.sleep(Duration.millis(Math.min(100, deadline - now))).pipe(
-                  Effect.andThen(until(observe, met, deadline)),
-                ),
-          ),
+  return Clock.currentTimeMillis.pipe(
+    Effect.flatMap((now) => Effect.timeoutOption(observe, Duration.millis(Math.max(1, deadline - now)))),
+    Effect.flatMap((answer) =>
+      Option.isNone(answer)
+        ? Effect.map(last === undefined ? unanswered : Effect.succeed(last), (seen) => ({ seen, met: false }))
+        : met(answer.value)
+          ? Effect.succeed({ seen: answer.value, met: true })
+          : Effect.flatMap(Clock.currentTimeMillis, (now) =>
+              now >= deadline
+                ? Effect.succeed({ seen: answer.value, met: false })
+                : Effect.sleep(Duration.millis(Math.min(100, deadline - now))).pipe(
+                    Effect.andThen(until(observe, met, deadline, unanswered, answer.value)),
+                  ),
+            ),
     ),
   )
 }
@@ -448,6 +460,9 @@ export function matchesURL(url: string, pattern: string) {
     .join(".*")
   return new RegExp(`^${source}$`).test(url)
 }
+
+/** What one element probe saw; no count while the page navigated or did not answer. */
+type Seen = { readonly tab: Browser.Tab; readonly count: number | undefined; readonly visible: number | undefined }
 
 const Visibility = Schema.Struct({
   tab: Browser.Tab,
@@ -475,10 +490,13 @@ function evaluateAction(input: Extract<Browser.Input, { readonly type: "evaluate
 }
 
 // The page runs a script as a classic script, where a top-level return or await is a SyntaxError. A script that fails
-// to compile that way but compiles as an async function body runs as one, so its return value is the result. Every
-// script that compiles today is sent unchanged.
+// to compile that way runs in an async function: as its returned expression when it is one (`await fetch(x)`), so its
+// value is the result, else as its body, which returns with `return`. Every script that compiles today is sent
+// unchanged.
 export function asyncBody(script: string) {
   if (!/\b(?:return|await)\b/.test(script) || compiles(script)) return script
+  const expression = `(async () => (\n${script.trim().replace(/;$/, "")}\n))()`
+  if (expression.length <= Browser.MAX_TEXT && compiles(expression)) return expression
   const body = `(async () => {\n${script}\n})()`
   return body.length <= Browser.MAX_TEXT && compiles(body) ? body : script
 }

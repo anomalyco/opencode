@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { basename, dirname, join } from "node:path"
 import { pathToFileURL } from "node:url"
+import { runInNewContext } from "node:vm"
 import { Effect } from "effect"
 import { Browser } from "../src/rpc.js"
 import { BrowserFiles } from "../src/files.js"
@@ -70,7 +71,7 @@ test("evaluate takes expression and code as script", () => {
   )
 })
 
-test("evaluate runs a script with a top-level return or await as an async function body", () => {
+test("evaluate runs a script with a top-level return or await in an async function, returning its value", async () => {
   const wrapped = (script: string) => `(async () => {\n${script}\n})()`
   expect(BrowserTools.asyncBody("return document.title")).toBe(wrapped("return document.title"))
   expect(BrowserTools.asyncBody('const r = await fetch("/x"); return r.status')).toBe(
@@ -196,8 +197,19 @@ describe("wait reads the condition from the keys models write", () => {
       timeoutMs: 10_000,
     })
     const ref = Browser.Ref.make("e4")
-    expect(plan({ ref })).toEqual({ kind: "element", waited: "element", element: { ref }, gone: false, timeoutMs: 10_000 })
-    expect(plan({ url: "**/dashboard" })).toEqual({ kind: "url", waited: "url", url: "**/dashboard", timeoutMs: 10_000 })
+    expect(plan({ ref })).toEqual({
+      kind: "element",
+      waited: "element",
+      element: { ref },
+      gone: false,
+      timeoutMs: 10_000,
+    })
+    expect(plan({ url: "**/dashboard" })).toEqual({
+      kind: "url",
+      waited: "url",
+      url: "**/dashboard",
+      timeoutMs: 10_000,
+    })
   })
 
   test("time, ms and delayMs pause", () => {
