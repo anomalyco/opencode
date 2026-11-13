@@ -37,10 +37,14 @@ export function createTipToasts() {
   const startup = setTimeout(() => setAwake(true), STARTUP_DELAY)
   onCleanup(() => clearTimeout(startup))
   createEffect(() => {
-    if (awake() && server()?.sdk.connection.status() === "connected")
-      void location()
-        ?.syncInfo()
-        .catch(() => undefined)
+    const ctx = server()
+
+    if (!awake() || ctx?.sdk.connection.status() !== "connected") return
+    const location = ctx.data.location
+    void location
+      .syncInfo()
+      .then(() => location.mcp.server.sync())
+      .catch(() => undefined)
   })
 
   const tips: Tip[] = [
@@ -73,16 +77,9 @@ export function createTipToasts() {
   })
 
   const [tick, setTick] = createSignal(0)
-  const enabled = () => awake() && location()?.info()?.experimental?.tips_queue === true
-  createEffect(() => {
-    if (enabled())
-      void location()
-        ?.mcp.server.sync()
-        .catch(() => undefined)
-  })
 
   const selected = createMemo(() => {
-    if (!enabled() || !loaded() || !location()?.mcp.server.list()) return
+    if (!awake() || !loaded() || !location()?.mcp.server.list()) return
     tick()
     const now = Date.now()
 

@@ -393,7 +393,6 @@ export type WorktreeInfo = { directory: AbsolutePath }
 export type LocationPublicInfo = {
   directory: AbsolutePath
   project: { id: ProjectID; directory: AbsolutePath; canonical: AbsolutePath }
-  experimental?: { tips_queue: boolean }
 }
 
 export type ModelRef = { id: string; providerID: ProviderID; variant?: string }
@@ -2585,7 +2584,6 @@ export type ConfigEntry =
           portable_shell_scanner?: boolean
           codemode_vm?: boolean
           all_flags?: boolean
-          tips_queue?: boolean
           todo?: boolean
           background_compaction?: boolean
           media_blob?: boolean
