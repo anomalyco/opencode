@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { basename, dirname, join } from "node:path"
 import { pathToFileURL } from "node:url"
+import { runInNewContext } from "node:vm"
 import { Effect } from "effect"
 import { Browser } from "../src/rpc.js"
 import { BrowserFiles } from "../src/files.js"
@@ -20,8 +21,9 @@ test("URL normalization refuses extension pages, which would run with the extens
   for (const url of [
     "chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html",
     "moz-extension://x/popup.html",
+    "blob:chrome-extension://abcdefghijklmnopabcdefghijklmnop/0b6f7c2e",
   ]) {
-    expect(() => navigate(url)).toThrow(`Agent browser tools cannot open extension pages such as ${url}`)
+    expect(() => navigate(url)).toThrow(Browser.extensionPageRefusal(url))
     expect(() => BrowserTools.normalizeAction({ type: "tabs.open", url })).toThrow(
       "Agent browser tools cannot open extension pages",
     )
@@ -48,6 +50,8 @@ test("URL normalization rejects filesystem paths instead of treating them as hos
   expect(() => navigate("https://user:secret@example.com")).toThrow("is not a browser URL")
   expect(navigate("example.com/docs")).toEqual({ type: "navigate", tabID, url: "https://example.com/docs" })
   expect(navigate("localhost:8000")).toEqual({ type: "navigate", tabID, url: "http://localhost:8000/" })
+  // A subdomain of localhost is this machine too, as the pane's address bar reads it.
+  expect(navigate("app.localhost:3000")).toEqual({ type: "navigate", tabID, url: "http://app.localhost:3000/" })
   expect(BrowserTools.normalizeAction({ type: "tabs.open" })).toEqual({ type: "tabs.open" })
   expect(BrowserTools.normalizeAction({ type: "tabs.open", url: " " })).toEqual({
     type: "tabs.open",
@@ -70,15 +74,17 @@ test("evaluate takes expression and code as script", () => {
   )
 })
 
-test("evaluate runs a script with a top-level return or await as an async function body", () => {
+test("evaluate runs a script with a top-level return or await in an async function, returning its value", async () => {
   const wrapped = (script: string) => `(async () => {\n${script}\n})()`
   expect(BrowserTools.asyncBody("return document.title")).toBe(wrapped("return document.title"))
   expect(BrowserTools.asyncBody('const r = await fetch("/x"); return r.status')).toBe(
     wrapped('const r = await fetch("/x"); return r.status'),
   )
-  expect(BrowserTools.asyncBody("await new Promise((resolve) => resolve(1))")).toBe(
-    wrapped("await new Promise((resolve) => resolve(1))"),
-  )
+  // An awaited expression is the result, as in a DevTools console; before, it ran as a body and returned null.
+  const run = (script: string) => runInNewContext(BrowserTools.asyncBody(script))
+  expect(await run("await new Promise((resolve) => resolve(1))")).toBe(1)
+  expect(await run("await Promise.resolve(2).then((value) => value + 1);")).toBe(3)
+  expect(await run("const a = await Promise.resolve(4); return a + 1")).toBe(5)
   // Scripts that compile today keep their completion value: expressions, statement lists, nested returns, async IIFEs.
   for (const script of [
     "document.title",
@@ -143,6 +149,7 @@ describe("wait reads the condition from the keys models write", () => {
     text?: string,
   ): BrowserTools.WaitPlan => ({
     kind: "desktop",
+    waited: condition,
     timeoutMs,
     action: { type: "wait", tabID, condition, ...(text === undefined ? {} : { text }), timeoutMs },
   })
@@ -179,38 +186,51 @@ describe("wait reads the condition from the keys models write", () => {
     // 24 calls: { selector, timeout }.
     expect(plan({ selector: "#app .ready", timeout: 8_000 })).toEqual({
       kind: "element",
+      waited: "element",
       element: { selector: "#app .ready" },
       gone: false,
       timeoutMs: 8_000,
     })
     expect(plan({ selector: ".spinner", state: "hidden", frameID: "frame" })).toEqual({
       kind: "element",
+      waited: "elementGone",
       element: { selector: ".spinner" },
       gone: true,
       frameID: "frame",
       timeoutMs: 10_000,
     })
     const ref = Browser.Ref.make("e4")
-    expect(plan({ ref })).toEqual({ kind: "element", element: { ref }, gone: false, timeoutMs: 10_000 })
-    expect(plan({ url: "**/dashboard" })).toEqual({ kind: "url", url: "**/dashboard", timeoutMs: 10_000 })
+    expect(plan({ ref })).toEqual({
+      kind: "element",
+      waited: "element",
+      element: { ref },
+      gone: false,
+      timeoutMs: 10_000,
+    })
+    expect(plan({ url: "**/dashboard" })).toEqual({
+      kind: "url",
+      waited: "url",
+      url: "**/dashboard",
+      timeoutMs: 10_000,
+    })
   })
 
   test("time, ms and delayMs pause", () => {
     // 29 calls { time } in milliseconds and 3 in seconds (Playwright MCP); 4 { ms }.
-    expect(plan({ time: 3_000 })).toEqual({ kind: "delay", timeoutMs: 3_000 })
-    expect(plan({ time: 6 })).toEqual({ kind: "delay", timeoutMs: 6_000 })
-    expect(plan({ ms: 1_200 })).toEqual({ kind: "delay", timeoutMs: 1_200 })
-    expect(plan({ delayMs: 500 })).toEqual({ kind: "delay", timeoutMs: 500 })
-    expect(plan({ delayMs: 90_000 })).toEqual({ kind: "delay", timeoutMs: 30_000 })
-    expect(plan({ condition: "delay", timeout: 2_000 })).toEqual({ kind: "delay", timeoutMs: 2_000 })
+    expect(plan({ time: 3_000 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 3_000 })
+    expect(plan({ time: 6 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 6_000 })
+    expect(plan({ ms: 1_200 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 1_200 })
+    expect(plan({ delayMs: 500 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 500 })
+    expect(plan({ delayMs: 90_000 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 30_000 })
+    expect(plan({ condition: "delay", timeout: 2_000 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 2_000 })
   })
 
   test("a lone timeout pauses for it, up to the maximum", () => {
     // 21 calls { timeout } or { timeoutMs } with no condition: attempted pauses. A load wait on a loaded page returns
     // at once.
-    expect(plan({ timeout: 5_000 })).toEqual({ kind: "delay", timeoutMs: 5_000 })
-    expect(plan({ timeoutMs: 1_500 })).toEqual({ kind: "delay", timeoutMs: 1_500 })
-    expect(plan({ timeout: 120_000 })).toEqual({ kind: "delay", timeoutMs: 30_000 })
+    expect(plan({ timeout: 5_000 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 5_000 })
+    expect(plan({ timeoutMs: 1_500 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 1_500 })
+    expect(plan({ timeout: 120_000 })).toEqual({ kind: "delay", waited: "delay", timeoutMs: 30_000 })
   })
 
   test("an ambiguous or incomplete wait fails with one corrective example", () => {

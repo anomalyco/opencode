@@ -9,6 +9,7 @@ import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
 import { PermissionTable } from "@opencode/core/permission/sql"
 import { PermissionSaved } from "@opencode/core/permission/saved"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -26,7 +27,15 @@ const current = Layer.succeed(
 )
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionStore.node, PermissionSaved.node, Agent.node, Permission.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionStore.node,
+      PermissionSaved.node,
+      Agent.node,
+      PluginHooks.node,
+      Permission.node,
+    ]),
     [Location.node.replace(current)],
   ),
 )
@@ -302,6 +311,33 @@ describe("Permission", () => {
         id: Permission.ID.create("per_test"),
         effect: "deny",
       })
+    }),
+  )
+
+  it.effect("a hook's ask prompts even when a saved approval covers the request, and sees that approval", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const saved = yield* PermissionSaved.Service
+      yield* saved.add({ projectID: Project.ID.global, action: "bash", resources: ["git push --force"] })
+      const hooks = yield* PluginHooks.Service
+      const approved: (boolean | undefined)[] = []
+      yield* hooks.register("permission", "evaluate", (event) =>
+        Effect.sync(() => {
+          approved.push(event.experimental?.approved)
+          if (event.resources.includes("git push --force")) {
+            event.effect = "ask"
+            event.message = "Force-pushing rewrites shared history."
+          }
+        }),
+      )
+      const { service, request } = yield* waitForRequest({ action: "bash", resources: ["git push --force"] })
+      expect(request.message).toBe("Force-pushing rewrites shared history.")
+      expect(approved).toEqual([true])
+      yield* service.reply({ requestID: request.id, reply: "once" })
+      expect(
+        yield* service.ask(assertion({ id: Permission.ID.create("per_other"), action: "bash", resources: ["pwd"] })),
+      ).toMatchObject({ effect: "ask" })
+      expect(approved).toEqual([true, false])
     }),
   )
 

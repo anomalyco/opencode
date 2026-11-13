@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { join } from "node:path"
-import { Context, Deferred, Effect, Schema, Stream } from "effect"
+import { Context, Deferred, Effect, Schedule, Schema, Stream } from "effect"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { Agent } from "@opencode/schema/agent"
 import { SessionMessage } from "@opencode/schema/session-message"
@@ -9,6 +9,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
+import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Plugin } from "@opencode/core/plugin"
@@ -25,6 +26,8 @@ const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, Session.node, LocationServiceMap.node]), [
     Global.node.replace(tempGlobalLayer),
     offlineModels,
+    // The browser never reads the watcher; a live one subscribes to the OS for every Location these tests boot.
+    Watcher.node.replace(Watcher.configured({ enabled: false })),
   ]),
 )
 
@@ -39,7 +42,8 @@ const tab = {
   generation: 1,
 }
 
-type Respond = (action: Browser.Action) => typeof Browser.Outcome.Encoded
+// Undefined leaves the command unanswered, as a page stuck in a long task does.
+type Respond = (action: Browser.Action) => typeof Browser.Outcome.Encoded | undefined
 
 const success = (value: typeof Schema.Json.Type): typeof Browser.Outcome.Encoded => ({
   type: "success",
@@ -64,6 +68,7 @@ const setup = (respond: Respond, options: { readonly attach?: boolean } = {}) =>
     const attachment = { sessionID: session.id, connectionID: `conn_${crypto.randomUUID()}` }
     const ready = yield* Deferred.make<void>()
     const commands: Browser.Action[] = []
+    const cancelled: string[] = []
     yield* rpc.events.subscribe("control").pipe(
       Stream.runForEach((event) =>
         Effect.gen(function* () {
@@ -73,11 +78,15 @@ const setup = (respond: Respond, options: { readonly attach?: boolean } = {}) =>
             yield* Deferred.succeed(ready, undefined)
             return
           }
-          if (event.data.type !== "command") return
+          if (event.data.type === "cancel") {
+            cancelled.push(event.data.requestID)
+            return
+          }
           const request = { ...attachment, requestID: event.data.requestID }
           const command = yield* rpc.command(request)
           commands.push(command.action)
-          yield* rpc.result({ ...request, outcome: respond(command.action) })
+          const outcome = respond(command.action)
+          if (outcome) yield* rpc.result({ ...request, outcome })
         }),
       ),
       Effect.forkScoped({ startImmediately: true }),
@@ -96,12 +105,12 @@ const setup = (respond: Respond, options: { readonly attach?: boolean } = {}) =>
       })
       return (result.output as { readonly output: string }).output
     })
-    return { directory: dir.path, commands, run }
+    return { directory: dir.path, commands, cancelled, run }
   })
 
 const evaluated = (value: typeof Schema.Json.Type) => success({ tab, value })
 
-it.live("an unknown browser parameter fails with the valid parameters and sends nothing", () =>
+it.live("an unknown parameter fails with the valid ones; evaluate takes expression or code, return and await", () =>
   Effect.gen(function* () {
     const browser = yield* setup(() => evaluated("ran"))
     const output = yield* browser.run(
@@ -117,27 +126,25 @@ it.live("an unknown browser parameter fails with the valid parameters and sends 
     expect(yield* browser.run(`return (await tools.browser.evaluate({ tabID: "${tabID}", script: "1" })).value`)).toBe(
       "ran",
     )
-  }),
-)
+    browser.commands.length = 0
 
-it.live("evaluate takes expression or code and runs a top-level return or await", () =>
-  Effect.gen(function* () {
-    const browser = yield* setup(() => evaluated("Example"))
     // The parameter shapes models wrote that failed with "script: Missing key".
     yield* browser.run(`return await tools.browser.evaluate({ tabID: "${tabID}", expression: "document.title" })`)
     yield* browser.run(`return await tools.browser.evaluate({ tabID: "${tabID}", code: "document.title" })`)
     yield* browser.run(`return await tools.browser.evaluate({ tabID: "${tabID}", script: "return document.title" })`)
+    yield* browser.run(`return await tools.browser.evaluate({ tabID: "${tabID}", script: "await fetch('/x')" })`)
     expect(browser.commands).toEqual([
       { type: "evaluate", tabID, script: "document.title" },
       { type: "evaluate", tabID, script: "document.title" },
       { type: "evaluate", tabID, script: "(async () => {\nreturn document.title\n})()" },
+      { type: "evaluate", tabID, script: "(async () => (\nawait fetch('/x')\n))()" },
     ])
   }),
 )
 
-const failure = (message: string): typeof Browser.Outcome.Encoded => ({
+const failure = (message: string, code = "operation_failed"): typeof Browser.Outcome.Encoded => ({
   type: "failure",
-  code: "operation_failed",
+  code,
   message,
 })
 const waited = (code: string) => `return await tools.browser.wait({ tabID: "${tabID}", ${code} })`
@@ -146,12 +153,13 @@ it.live("wait infers its condition and reports an unmet one as met: false", () =
   Effect.gen(function* () {
     const browser = yield* setup((action) =>
       action.type === "wait" && action.text === "Never"
-        ? // The message the desktop sends when its wait times out.
-          failure(
-            `browser.wait failed. browser.wait failed for condition "text" (timeoutMs: ${action.timeoutMs}). Inspect browser.snapshot({tabID}) and check text/frameID before retrying; timeoutMs can be increased up to 30000 for a genuinely slow page. Details: Condition was not met within ${action.timeoutMs} ms.`,
-          )
+        ? // What the desktop sends when its wait times out: the server reads the code, not the words.
+          failure("browser.wait failed. The text never appeared.", Browser.FailureCode.unmet)
         : action.type === "wait" && action.text === "Broken"
-          ? failure("browser.wait failed. Frame context is unavailable. Call browser.frames({tabID}).")
+          ? // Before, the server read "Condition was not met within N ms" in any message as a timeout.
+            failure(
+              "browser.wait failed. Frame context is unavailable. Details: Condition was not met within 10000 ms.",
+            )
           : success(tab),
     )
     // The most common failing shape: text with timeout, no condition.
@@ -202,12 +210,10 @@ it.live("wait pauses, and polls for an element or an address", () =>
       seen.checks++
       return evaluated(seen.checks < 2 ? { count: 0, visible: 0 } : { count: 1, visible: 1 })
     })
-    expect(JSON.parse(yield* browser.run(waited(`delayMs: 20`)))).toMatchObject({ ...tab, met: true, waited: "pause" })
-    expect(JSON.parse(yield* browser.run(waited(`time: 0.02`)))).toMatchObject({ met: true, waited: "pause" })
+    expect(JSON.parse(yield* browser.run(waited(`delayMs: 20`)))).toMatchObject({ ...tab, met: true, waited: "delay" })
+    expect(JSON.parse(yield* browser.run(waited(`time: 0.02`)))).toMatchObject({ met: true, waited: "delay" })
     // A lone timeout is a pause for that long, not a load wait that returns at once on a loaded page.
-    const paused = JSON.parse(yield* browser.run(waited(`timeout: 50`)))
-    expect(paused).toMatchObject({ met: true, waited: "pause" })
-    expect(paused.elapsedMs).toBeGreaterThanOrEqual(45)
+    expect(JSON.parse(yield* browser.run(waited(`timeout: 50`)))).toMatchObject({ met: true, waited: "delay" })
     expect(browser.commands).toEqual([])
     expect(JSON.parse(yield* browser.run(`return await tools.browser.wait({ tabID: "${tabID}" })`))).toMatchObject({
       met: true,
@@ -232,6 +238,39 @@ it.live("wait pauses, and polls for an element or an address", () =>
       met: false,
       observed: "The address was https://example.test/ after 150 ms.",
     })
+  }),
+)
+
+it.live("an element wait reads the desktop's codes, and ends on time when the page does not answer", () =>
+  Effect.gen(function* () {
+    const seen = { checks: 0 }
+    const browser = yield* setup((action) => {
+      if (action.type !== "evaluate") return success(tab)
+      if (action.ref) return failure("Element ref is stale.", Browser.FailureCode.staleRef)
+      if (action.script.includes("#busy")) return undefined
+      seen.checks++
+      return seen.checks === 1
+        ? failure("The document changed before this operation ran.", Browser.FailureCode.documentChanged)
+        : evaluated({ count: 1, visible: 1 })
+    })
+    // A navigation between checks is not an answer: the wait checks again.
+    expect(JSON.parse(yield* browser.run(waited(`selector: "#ready", timeout: 5000`)))).toMatchObject({ met: true })
+    expect(seen.checks).toBe(2)
+    // A ref whose element left the page is gone.
+    expect(JSON.parse(yield* browser.run(waited(`ref: "e1", state: "hidden"`)))).toMatchObject({
+      met: true,
+      waited: "elementGone",
+    })
+    // A page stuck in a long task answers no probe; the wait ends at its timeout instead of the request's 60 s.
+    expect(JSON.parse(yield* browser.run(waited(`selector: "#busy", timeout: 300`)))).toMatchObject({
+      met: false,
+      observed: "The page was still navigating, or too busy to answer, after 300 ms.",
+    })
+    // The unanswered probe is cancelled on the desktop.
+    yield* Effect.suspend(() => (browser.cancelled.length ? Effect.void : Effect.fail("not cancelled yet"))).pipe(
+      Effect.retry(Schedule.spaced("10 millis")),
+      Effect.timeout("5 seconds"),
+    )
   }),
 )
 

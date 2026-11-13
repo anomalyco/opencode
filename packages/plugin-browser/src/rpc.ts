@@ -5,6 +5,45 @@ import { Rpc } from "@opencode/schema/rpc"
 import { Session } from "@opencode/schema/session"
 import { optional } from "@opencode/schema/schema"
 
+/**
+ * Codes of the failures the server acts on, beside the general ones (`operation_failed`, `navigation_failed`,
+ * `unsupported`). An older desktop sends `operation_failed` for these.
+ */
+export const FailureCode = {
+  /** A wait's condition did not hold before its timeout. */
+  unmet: "condition_unmet",
+  /** The document or frame changed before or while the operation ran. */
+  documentChanged: "document_changed",
+  /** An element ref names no element any more: it is stale, or its element left the page. */
+  staleRef: "stale_ref",
+} as const
+
+/**
+ * Whether a URL or origin belongs to an extension: its pages, frames and the blob: URLs it makes. Such a document runs
+ * with the extension's `chrome.*` access, which the agent must never gain.
+ */
+export function extensionOrigin(input: string) {
+  if (!URL.canParse(input)) return false
+  const url = new URL(input)
+  const protocol =
+    url.protocol === "blob:" && URL.canParse(url.pathname) ? new URL(url.pathname).protocol : url.protocol
+
+  return /^(?:chrome|moz|safari-web|ms-browser)-extension:$|^extension:$/.test(protocol)
+}
+
+/** Why the agent may not open `url`, an extension's page. The server and the desktop both refuse with it. */
+export function extensionPageRefusal(url: string) {
+  return `Agent browser tools cannot open extension pages such as ${url}: an extension page runs with that extension's privileges. Ask the user to open it from the extensions menu.`
+}
+
+/**
+ * Whether an address without a scheme names this machine (`localhost` and its subdomains, 127.x.x.x, [::1]), which
+ * opens over http; any other opens over https.
+ */
+export function loopbackAddress(value: string) {
+  return /^(?:(?:[a-z\d-]+\.)*localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(value)
+}
+
 export const MAX_FILE_BYTES = 5 * 1024 * 1024
 export const TUNNEL_CHUNK_BYTES = 64 * 1024
 export const MAX_TEXT = 100_000
@@ -152,8 +191,9 @@ const recording = Schema.Struct({ ...page, recording: Schema.Boolean })
 export const Waited = Schema.Struct({
   ...Tab.fields,
   met: Schema.Boolean.annotate({ description: "False when the condition did not hold before the timeout." }),
-  waited: Schema.Literals(["load", "text", "textGone", "element", "elementGone", "url", "pause"]).annotate({
-    description: "What the call waited for; pause means it slept for elapsedMs.",
+  waited: Schema.Literals(["load", "text", "textGone", "element", "elementGone", "url", "delay"]).annotate({
+    description:
+      "What the call waited for: the condition it was given or implied; delay means it paused for elapsedMs.",
   }),
   elapsedMs: count,
   observed: optional(text.annotate({ description: "What the page showed when an unmet wait ended." })),

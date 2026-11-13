@@ -3,6 +3,7 @@ export * as BrowserMachine from "./machine.js"
 import type { Permission } from "@opencode/schema/permission"
 import type { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
+import { Wildcard } from "@opencode/schema/wildcard"
 import type { Browser } from "./rpc.js"
 import { BrowserSkill } from "./skill.js"
 
@@ -502,7 +503,11 @@ function settleRequest(
   return [
     settle({
       ok: false,
-      error: new Tool.Error({ message: `[browser.${event.outcome.code}] ${event.outcome.message}` }),
+      // The code stays readable apart from the message, so the server acts on it without parsing text.
+      error: new Tool.Error({
+        message: `[browser.${event.outcome.code}] ${event.outcome.message}`,
+        metadata: { code: event.outcome.code },
+      }),
     }),
   ]
 }
@@ -575,18 +580,11 @@ export function isGrant(rule: Permission.Rule) {
  * action and resource patterns both match. Undefined when none matches.
  */
 export function selectBrowserRule(rules: readonly Permission.Rule[], operation: string) {
-  return rules.findLast((rule) => match("browser", rule.action) && match(operation, rule.resource))
-}
-
-/** Core's `Wildcard.match`, which plugins cannot import. A core test checks the two agree. */
-export function match(input: string, pattern: string) {
-  const escaped = pattern
-    .replaceAll("\\", "/")
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-    .replace(/\*/g, ".*")
-    .replace(/\?/g, ".")
-  const source = escaped.endsWith(" .*") ? escaped.slice(0, -3) + "( .*)?" : escaped
-  return new RegExp("^" + source + "$", process.platform === "win32" ? "si" : "s").test(input.replaceAll("\\", "/"))
+  const ignoreCase = process.platform === "win32"
+  return rules.findLast(
+    (rule) =>
+      Wildcard.match("browser", rule.action, ignoreCase) && Wildcard.match(operation, rule.resource, ignoreCase),
+  )
 }
 
 export function isConnectionDisposed(state: ConnectionState) {
@@ -634,13 +632,15 @@ export function selectPendingCommand(
   return entry.pending.get(requestID)
 }
 
-/** The attachment and tab a browser tool call targets, or the error the tool returns. */
-export function selectTarget(
+/**
+ * The session's attached connection, or the error a tool call returns while it has none. Reads nothing about its tabs,
+ * so it may answer before the call is authorized.
+ */
+export function selectConnection(
   state: ConnectionState,
   sessionID: Session.ID,
-  action: Browser.Action,
 ):
-  | { readonly ok: true; readonly connectionID: string; readonly tab: Browser.Tab | undefined }
+  | { readonly ok: true; readonly connectionID: string; readonly tabs: readonly Browser.Tab[] }
   | { readonly ok: false; readonly error: Tool.Error } {
   const entry = state.status === "active" ? state.sessions.get(sessionID) : undefined
 
@@ -661,11 +661,29 @@ export function selectTarget(
           "[browser.disconnected] The desktop browser is still connecting to this session; no action ran. Call browser.tabs.list({}) once it finishes connecting.",
       }),
     }
-  const tab = "tabID" in action ? entry.browserState.tabs.find((tab) => tab.id === action.tabID) : undefined
 
-  if ("tabID" in action && !tab) return { ok: false, error: tabUnavailable(action.tabID, entry.browserState.tabs) }
+  return { ok: true, connectionID: entry.connectionID, tabs: entry.browserState.tabs }
+}
 
-  return { ok: true, connectionID: entry.connectionID, tab }
+/**
+ * The attachment and tab a browser tool call targets, or the error the tool returns. The error for an unknown tab lists
+ * the session's tabs, so this runs only once the call is authorized.
+ */
+export function selectTarget(
+  state: ConnectionState,
+  sessionID: Session.ID,
+  action: Browser.Action,
+):
+  | { readonly ok: true; readonly connectionID: string; readonly tab: Browser.Tab | undefined }
+  | { readonly ok: false; readonly error: Tool.Error } {
+  const connection = selectConnection(state, sessionID)
+
+  if (!connection.ok) return connection
+  const tab = "tabID" in action ? connection.tabs.find((tab) => tab.id === action.tabID) : undefined
+
+  if ("tabID" in action && !tab) return { ok: false, error: tabUnavailable(action.tabID, connection.tabs) }
+
+  return { ok: true, connectionID: connection.connectionID, tab }
 }
 
 /** Whether a desktop is attached to the session or attaching to it. */
