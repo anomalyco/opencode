@@ -262,6 +262,9 @@ const DANGEROUSLY: Param = Param::Flag(boolean("dangerously-skip-permissions", "
 const CONTINUE: Param = Param::Flag(boolean("continue", "Continue the last session").alias(&["c"]));
 const SESSION: Param = Param::Flag(string("session", SESSION_TEXT).alias(&["s"]));
 const PROMPT: Param = Param::Flag(string("prompt", "Prompt to use"));
+/// The parent's restart after a plugin crash (P4c): keep plugin `id` disabled, or every external plugin with `*`.
+const SKIP_PLUGIN: Param =
+    Param::Flag(string("skip-plugin", "").hidden().count(Count::Repeated { min: None, max: None, optional: true }));
 const AGENT: Param = Param::Flag(string("agent", "Agent to use"));
 const FORMAT: Param = Param::Flag(
     choice("format", "Output format", OutputFormat::CHOICES).count(Count::Default(Default::Text("default"))),
@@ -286,6 +289,7 @@ pub static ROOT: Spec = Spec::new("opencode", "OpenCode command line interface")
         CONTINUE,
         SESSION,
         PROMPT,
+        SKIP_PLUGIN,
     ])
     .commands(&[
         Spec::new("upgrade", "Upgrade OpenCode to the latest or a specific version").alias("update").params(&[
@@ -562,6 +566,7 @@ pub struct RootArgs {
     pub continue_: bool,
     pub session: Option<String>,
     pub prompt: Option<String>,
+    pub skip_plugins: Vec<String>,
 }
 
 /// `--standalone` and `--server` on a command that declares them; they apply to its subcommands too.
@@ -907,6 +912,7 @@ impl Cli {
                 continue_: values.flag("continue"),
                 session: values.string("session"),
                 prompt: values.string("prompt"),
+                skip_plugins: values.list("skip-plugin"),
             },
             _ => RootArgs::default(),
         };
