@@ -22,7 +22,7 @@ import {
   type TurnThinkingPlacement,
 } from "../timeline/turn-phase-machine"
 import { errorInfo } from "./errors"
-import { noticeEvent } from "./events"
+import { noticeEvent, toolEvent, workKey, type TimelineEvent } from "./events"
 import {
   contentGroup,
   contentShows,
@@ -31,6 +31,7 @@ import {
   liveThinkingShows,
   noticePlacement,
   textShows,
+  toolRule,
 } from "./rules"
 
 type Notice = Exclude<SessionMessageInfo, { type: "user" | "assistant" | "shell" | "idle" }>
@@ -651,6 +652,25 @@ function groupNotices(
     // Live status renders nothing while other feedback shows, so a group below it spaces from the content above it.
     const above = Predicate.isTagged(previous, "Activity") ? result.at(-2) : previous
     const message = Predicate.isTagged(row, "Notice") ? messageByID.get(row.messageID) : undefined
+    const event = message && noticeEvent(message)
+
+    // Work that reports back right after the activity group that started it, with nothing between, finishes there.
+    if (
+      event &&
+      !event.failed &&
+      Predicate.isTagged(previous, "AssistantPart") &&
+      previous.group.type === "context" &&
+      previous.userMessageID === row.userMessageID &&
+      launches(previous.group, event, messageByID)
+    ) {
+      result[result.length - 1] = new TimelineRow.AssistantPart({
+        ...previous,
+        group: { ...previous.group, refs: [...previous.group.refs, { messageID: message.id, partID: message.id }] },
+      })
+
+      return result
+    }
+
     const type = message ? noticeGroup(detail, message) : undefined
 
     const current =
@@ -708,6 +728,25 @@ function joins(
     return !((notices(previous) && thoughts(current)) || (thoughts(previous) && notices(current)))
 
   return previous.type === "events" && current.type === "events" && notices(previous) && notices(current)
+}
+
+// Whether an activity group started the work an event is about.
+function launches(
+  group: Exclude<PartGroup, { type: "part" }>,
+  event: TimelineEvent,
+  messageByID: ReadonlyMap<string, SessionMessageInfo>,
+) {
+  const key = workKey(event)
+
+  return (
+    key !== undefined &&
+    group.refs.some((ref) => {
+      const content = resolveContent(messageByID.get(ref.messageID), ref.partID)
+      const launch = content?.type === "tool" && toolRule(content).layout === "event" ? toolEvent(content) : undefined
+
+      return launch !== undefined && workKey(launch) === key
+    })
+  )
 }
 
 function noticeGroup(detail: TimelineDetail, message: SessionMessageInfo) {

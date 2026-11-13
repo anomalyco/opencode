@@ -3,7 +3,7 @@ import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } 
 import { Predicate } from "effect"
 import { createRoot } from "solid-js"
 import { subagentReport } from "../storybook/current-session-fixtures"
-import { timelinePresets } from "../timeline/detail"
+import { timelinePresets, type TimelineDetail } from "../timeline/detail"
 import { createNextTimelineProjection, workedDuration } from "./projection"
 import { replayScript, scenarios } from "./stories/session-replay"
 
@@ -148,6 +148,71 @@ describe("New timeline projection", () => {
       "TurnGap",
       "UserMessage",
     ])
+  })
+
+  test("a subagent finishes in the group that started it only when nothing comes between; otherwise it reports in its own row", () => {
+    const launched: SessionMessageInfo[] = [
+      { id: "user", type: "user", text: "Go", time: { created: 0 } },
+      step("launch", 1, {
+        finish: "tool-calls",
+        content: [
+          {
+            id: "call",
+            type: "tool",
+            name: "subagent",
+            state: {
+              status: "completed",
+              input: { description: "Review the diff", agent: "review" },
+              content: [{ type: "text", text: "" }],
+              metadata: { sessionID: "child", status: "running" },
+            },
+            time: { created: 1, completed: 2 },
+          },
+        ],
+        time: { created: 1, completed: 2 },
+      }),
+    ]
+
+    const report = subagentReport("report", 4, {
+      childID: "child",
+      agent: "review",
+      state: "completed",
+      description: "Review the diff",
+      body: "Looks good.",
+    })
+
+    const said = step("said", 3, {
+      finish: "stop",
+      content: [{ type: "text", text: "Started a review." }],
+      time: { created: 3, completed: 3 },
+    })
+
+    const groups = (messages: SessionMessageInfo[], detail: TimelineDetail) =>
+      createRoot((dispose) => {
+        const projection = createNextTimelineProjection({
+          sessionMessages: () => messages,
+          status: () => ({ type: "idle" }),
+          timelineDetail: () => detail,
+        })
+
+        const result = projection
+          .rows()
+          .flatMap((row) =>
+            Predicate.isTagged(row, "AssistantPart") && row.group.type !== "part"
+              ? [`${row.group.type}:${row.group.refs.map((ref) => ref.messageID).join("+")}`]
+              : [],
+          )
+
+        dispose()
+
+        return result
+      })
+
+    const grouped = { ...detailed, subagents: { placement: "grouped" as const } }
+
+    expect(groups([...launched, report], grouped)).toEqual(["context:launch+report"])
+    expect(groups([...launched, said, report], grouped)).toEqual(["context:launch", "events:report"])
+    expect(groups([...launched, report], detailed)).toEqual(["events:launch", "events:report"])
   })
 })
 
