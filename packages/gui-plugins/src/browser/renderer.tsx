@@ -163,6 +163,23 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     }
   })
 
+  ctx.add(Command, (): Command | undefined => {
+    const pane = model()?.pane()
+
+    if (!pane) return undefined
+
+    return {
+      id: "toggleToolbar",
+      title: ctx.t("command.toggleToolbar"),
+      group: ctx.t("command.category.view"),
+      bind: "mod+shift+m",
+      // Browser menus and popovers take keyboard focus in a portal outside the panel.
+      scope: "#browser-panel, [data-browser-popup]",
+      enabled: pane.visible() && pane.inspectable(),
+      run: pane.toggleToolbar,
+    }
+  })
+
   // Blank pages have no focused native view, so the app must claim close inside the pane too.
   ctx.add(BuiltinCommand, (): BuiltinCommand | undefined => {
     const pane = model()?.pane()

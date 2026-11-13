@@ -12,7 +12,20 @@ import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createMemo, createSignal, For, onCleanup, Show, untrack, type Accessor, type JSX } from "solid-js"
+import { debounce } from "@solid-primitives/scheduled"
+import {
+  createMemo,
+  createSignal,
+  createUniqueId,
+  For,
+  onCleanup,
+  onMount,
+  Show,
+  untrack,
+  type Accessor,
+  type JSX,
+  type ParentProps,
+} from "solid-js"
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import {
   createKeyed,
@@ -47,6 +60,15 @@ import {
   type OverlayEvent,
 } from "./overlay-machine"
 import { PageIcon } from "./page-icon"
+import { ViewportControls } from "./viewport-controls"
+import {
+  initialViewportToolbar,
+  transitionViewportToolbar,
+  viewportToolbarView,
+  type ViewportToolbarEvent,
+} from "./viewport-toolbar-machine"
+import { viewportLayout } from "./viewport-layout"
+import { ViewportHandles } from "./viewport-handles"
 import {
   initialSiteState,
   SITE_CLEAR_TIMEOUT_MS,
@@ -85,7 +107,10 @@ export default function SessionBrowserPane(props: {
   }
 
   const [addressState, setAddressState] = createSignal(initialAddressState)
-  const [size, setSize] = createSignal({ width: 0, height: 0 })
+  const [available, setAvailable] = createSignal({ width: 0, height: 0 })
+  const [toolbar, setToolbar] = createSignal(initialViewportToolbar)
+  const [resizingViewport, setResizingViewport] = createSignal(false)
+  const viewportID = createUniqueId()
   const [overlay, setOverlay] = createSignal(initialOverlayState)
 
   // The page's reports, counted; a submitted address in the field ends at the next one.
@@ -128,13 +153,69 @@ export default function SessionBrowserPane(props: {
   }
 
   let root: HTMLElement | undefined
-  let box: HTMLDivElement | undefined
+  let toolbarToggle: HTMLButtonElement | undefined
   let input: HTMLInputElement | undefined
   let anchor: HTMLFormElement | undefined
 
   const error = () => props.model.error(props.session)
 
   const inspectable = () => !!address() && !failed() && !suspended()
+  const windowZoom = () => desktop?.zoom() ?? 1
+
+  const fixedViewport = () => {
+    const viewport = page()?.viewport
+
+    return inspectable() && viewport?.mode === "fixed" ? viewport : undefined
+  }
+
+  const fit = createMemo(() => {
+    const viewport = fixedViewport()
+    const area = available()
+
+    if (!viewport || area.width <= 0 || area.height <= 0) return
+
+    return viewportLayout(viewport, area, windowZoom())
+  })
+
+  const size = () => fit() ?? available()
+  const tabID = createMemo(() => state()?.id)
+
+  // A new visit to the same tab must not receive the old visit's failure toast.
+  const toolbarTarget = createMemo(() => {
+    const id = tabID()
+
+    return id ? { sessionKey: props.session.key, tabID: id } : undefined
+  })
+
+  const toolbarContext = () => ({ target: toolbarTarget(), available: visible() && inspectable(), page: page() })
+  const toolbarView = createMemo(() => viewportToolbarView(toolbar(), toolbarContext()))
+  const toolbarVisible = () => toolbarView().visible
+  const notice = () => toolbarView().notice
+
+  const toggleTimeout = debounce(
+    (attempt: number) => dispatchToolbar({ type: "timeout", attempt, context: toolbarContext() }),
+    10_000,
+  )
+
+  const dispatchToolbar = (event: ViewportToolbarEvent) => {
+    const next = transitionViewportToolbar(untrack(toolbar), event)
+    setToolbar(next.state)
+    const effect = next.effect
+
+    if (!effect) return
+
+    if (effect.type === "notify-failed") return showToast({ title: plugin.t("viewport.error") })
+    const { attempt, target, open } = effect
+    toggleTimeout(attempt)
+    void props.model.toggleViewport({ key: target.sessionKey }, target.tabID, open).then(
+      () => dispatchToolbar({ type: "succeeded", attempt }),
+      () => dispatchToolbar({ type: "failed", attempt, context: toolbarContext() }),
+    )
+  }
+
+  const toggleToolbar = () => dispatchToolbar({ type: "toggled", context: toolbarContext() })
+  onCleanup(() => dispatchToolbar({ type: "disposed" }))
+
   const overlayed = createMemo(() => overlayView(overlay(), props.session.key, state()?.id))
   const picking = () => overlayed().picking
   const comment = createMemo(() => overlayComment(overlay(), props.session.key, state()?.id))
@@ -225,6 +306,22 @@ export default function SessionBrowserPane(props: {
 
   const zoomed = () => !!address() && (page()?.zoom ?? 1) !== 1
 
+  // Keep the grip gutters in the measured layout while an annotation freezes the page.
+  const resizable = () => toolbarVisible() && !zoomed() && embed()
+
+  const dimensions = () => ({
+    width: Math.round((available().width * windowZoom()) / (page()?.zoom ?? 1)),
+    height: Math.round((available().height * windowZoom()) / (page()?.zoom ?? 1)),
+  })
+
+  const viewportMessage = () => {
+    if (notice() === "failed") return plugin.t("viewport.fitFailed")
+
+    if (notice() === "zoom") return plugin.t("viewport.zoomExit")
+
+    if (zoomed()) return plugin.t("viewport.zoomPrompt")
+  }
+
   const zoomPage = (direction: "in" | "out" | "reset") => {
     const tab = state()
 
@@ -241,38 +338,77 @@ export default function SessionBrowserPane(props: {
     )
   }
 
-  // The picked element in surface pixels, and the editor anchored below it, above it, or over it.
-  const spotlight = () => {
-    const rect = comment()?.element.rect
+  // Snapshot the surface in native DIPs at pick time so the spotlight scales with the still.
+  const pickedRect = createMemo(() => comment()?.element.rect)
+
+  const capture = createMemo(() => {
+    const rect = pickedRect()
 
     if (!rect) return
-    const zoom = desktop?.zoom() ?? 1
+    const surface = untrack(size)
+    const zoom = untrack(windowZoom)
 
-    return { x: rect.x / zoom, y: rect.y / zoom, width: rect.width / zoom, height: rect.height / zoom }
+    return { rect, width: surface.width * zoom, height: surface.height * zoom }
+  })
+
+  const spotlight = () => {
+    const original = capture()
+
+    if (!original?.width || !original.height) return
+    const rect = original.rect
+    const x = size().width / original.width
+    const y = size().height / original.height
+
+    return { x: rect.x * x, y: rect.y * y, width: rect.width * x, height: rect.height * y }
+  }
+
+  let preview: HTMLDivElement | undefined
+  let backdrop: HTMLDivElement | undefined
+  const [origin, setOrigin] = createSignal({ x: 0, y: 0 })
+
+  // The spotlight scrolls with the still. Translate its page coordinates to the visible pane for the editor.
+  const trackPage = (surface: HTMLDivElement) => {
+    const port = preview
+
+    if (!port) return
+
+    const measure = () => {
+      if (!backdrop) return
+      const page = surface.getBoundingClientRect()
+      const pane = backdrop.getBoundingClientRect()
+
+      setOrigin({ x: page.left - pane.left, y: page.top - pane.top })
+    }
+
+    onMount(measure)
+    createResizeObserver([surface, port], measure)
+    createEventListener(port, "scroll", measure, { passive: true })
   }
 
   const placement = () => {
     const rect = spotlight()
 
     if (!rect) return
+    const pane = available()
     const gap = 8
-    const width = Math.max(0, Math.min(320, size().width - gap * 2))
+    const width = Math.max(0, Math.min(320, pane.width - gap * 2))
     // The editor scrolls rather than growing past the surface, so its actions stay reachable.
-    const surfaceHeight = Math.max(0, size().height - gap * 2)
+    const surfaceHeight = Math.max(0, pane.height - gap * 2)
     // Pick the opening side from its first measurement, then grow upward from that bottom edge.
     const initialHeight = Math.min(comment()?.editorInitialHeight || 80, surfaceHeight)
-    const left = Math.min(Math.max(gap, rect.x), Math.max(gap, size().width - width - gap))
-    const below = rect.y + rect.height + gap
-    const above = rect.y - gap - initialHeight
+    const y = origin().y + rect.y
+    const left = Math.min(Math.max(gap, origin().x + rect.x), Math.max(gap, pane.width - width - gap))
+    const below = Math.max(gap, y + rect.height + gap)
+    const above = y - gap - initialHeight
 
     const openingTop =
-      below + initialHeight <= size().height - gap
+      below + initialHeight <= pane.height - gap
         ? below
         : above >= gap
           ? above
-          : Math.max(gap, size().height - initialHeight - gap)
+          : Math.max(gap, pane.height - initialHeight - gap)
 
-    const bottom = Math.min(openingTop + initialHeight, size().height - gap)
+    const bottom = Math.min(openingTop + initialHeight, pane.height - gap)
     const maxHeight = Math.max(0, bottom - gap)
     const height = Math.min(comment()?.editorHeight || initialHeight, maxHeight)
     const top = Math.max(gap, bottom - height)
@@ -296,6 +432,10 @@ export default function SessionBrowserPane(props: {
       },
       inspectable,
       inspect: toggleInspect,
+      toggleToolbar: () => {
+        toggleToolbar()
+        toolbarToggle?.focus({ preventScroll: true })
+      },
       focusAddress,
       // Dispatched inside the pane, so keybinds scoped to it, such as closing the browser tab, apply.
       press: (event) => {
@@ -371,9 +511,51 @@ export default function SessionBrowserPane(props: {
     },
     { capture: true },
   )
+
   createResizeObserver(
-    () => box,
-    (rect) => setSize({ width: rect.width, height: rect.height }),
+    () => preview,
+    (rect) => setAvailable({ width: rect.width, height: rect.height }),
+  )
+
+  // The outer box anchors the editors while the preview grid scrolls underneath.
+  const Preview = (view: ParentProps) => (
+    <div class="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={preview}
+        data-component="browser-preview"
+        data-fixed={fixedViewport() ? "" : undefined}
+        data-resizable={resizable() ? "" : undefined}
+        data-manual={fixedViewport()?.scale ? "" : undefined}
+        data-embed-clip={fixedViewport()?.scale ? "" : undefined}
+        style={{
+          "grid-template-columns": fit() ? `${size().width}px` : "minmax(0, 1fr)",
+          "grid-template-rows": fit() ? `${size().height}px` : "minmax(0, 1fr)",
+        }}
+      >
+        {view.children}
+        <Show when={resizable()} keyed>
+          {(id) => (
+            <ViewportHandles
+              disabled={overlayed().frozen}
+              size={fixedViewport() ?? dimensions()}
+              ratio={windowZoom() / (fit()?.scale ?? 1)}
+              centered={{ width: size().width <= available().width, height: size().height <= available().height }}
+              dragging={setResizingViewport}
+              resize={({ width, height }) => {
+                const tab = state()
+
+                if (!tab || embed() !== id) return
+                void props.model
+                  .setViewport(props.session, tab.id, { mode: "fixed", width, height, scale: fixedViewport()?.scale })
+                  .catch(() => {
+                    if (embed() === id && !page()?.viewportNotice) showToast({ title: plugin.t("viewport.error") })
+                  })
+              }}
+            />
+          )}
+        </Show>
+      </div>
+    </div>
   )
 
   // A restored tab has no page until the pane first shows it.
@@ -626,6 +808,7 @@ export default function SessionBrowserPane(props: {
           <Popover.Portal>
             <Popover.Content
               data-component="browser-suggestions"
+              data-browser-popup
               onOpenAutoFocus={(event) => event.preventDefault()}
               onCloseAutoFocus={(event) => event.preventDefault()}
             >
@@ -660,6 +843,30 @@ export default function SessionBrowserPane(props: {
               icon={<Icon name="outline-browser-annotate" />}
             />
           </Tooltip>
+          <Tooltip
+            placement="top"
+            value={tip(plugin.t("command.toggleToolbar"), keybinds.keybind("browser.toggleToolbar"))}
+          >
+            <IconButton
+              ref={toolbarToggle}
+              variant="ghost-muted"
+              size="large"
+              aria-label={plugin.t("command.toggleToolbar")}
+              aria-expanded={toolbarVisible()}
+              aria-controls={toolbarVisible() ? viewportID : undefined}
+              disabled={!inspectable()}
+              state={toolbarVisible() ? "pressed" : undefined}
+              onClick={toggleToolbar}
+              icon={
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path
+                    d="M1 12.5H8M13.5 4V2.5H3.49997V12M14.5 5.5H9.5C9.5 8.0362 9.5 10.9638 9.5 13.5H14.5C14.5 10.9638 14.5 8.0362 14.5 5.5Z"
+                    stroke="currentColor"
+                  />
+                </svg>
+              }
+            />
+          </Tooltip>
           <Menu gutter={4} modal={false} placement="bottom-end">
             <Tooltip placement="top" value={plugin.t("options")}>
               <Menu.Trigger
@@ -672,7 +879,7 @@ export default function SessionBrowserPane(props: {
               />
             </Tooltip>
             <Menu.Portal>
-              <Menu.Content class="w-[172px]">
+              <Menu.Content class="w-[172px]" data-browser-popup>
                 {/* Zooming closes the menu: the page stays a still while the menu covers it, so a zoom would show
                     only once it closed. The address field shows any zoom but 100% afterwards. */}
                 <Menu.Group>
@@ -719,89 +926,139 @@ export default function SessionBrowserPane(props: {
           {error()}
         </div>
       </Show>
-      <embeds.View
-        id={embed()}
-        visible={shown()}
-        frozen={overlayed().frozen}
-        // A navigation, in-page or not, or a reload starting is another page.
-        page={JSON.stringify([state()?.id, state()?.generation, state()?.url, !!state()?.loading])}
-        radius={10}
-        class="relative min-h-0 flex-1 bg-v2-background-bg-base flex items-center justify-center"
-      >
-        <div ref={box} aria-hidden="true" class="pointer-events-none absolute inset-0" />
-        <Show when={empty() && !failed() && !suspended()}>
-          <div dir="auto" class="size-full overflow-y-auto">
-            <Show
-              when={recent().length > 0}
-              fallback={
-                <div class="mx-auto flex max-w-[360px] flex-col items-center gap-4 px-6 pt-20 text-center">
-                  <Icon name="outline-globe" size="large" class="text-v2-icon-icon-muted" />
-                  <div class="flex flex-col gap-2">
-                    <div class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
-                      {plugin.t("home.title")}
-                    </div>
-                    <div class="text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
-                      {plugin.t("home.description")}
+      <Show when={toolbarVisible()}>
+        <section id={viewportID} data-component="browser-viewport" aria-label={plugin.t("viewport.label")}>
+          <Show when={state()?.id} keyed>
+            {(tabID) => (
+              <Show when={props.session.key} keyed>
+                <ViewportControls
+                  viewport={page()?.viewport}
+                  autoWidth={dimensions().width}
+                  autoHeight={dimensions().height}
+                  effectiveScale={fit()?.scale ?? 1}
+                  zoomed={zoomed()}
+                  apply={(viewport) => props.model.setViewport(props.session, tabID, viewport)}
+                />
+              </Show>
+            )}
+          </Show>
+          <Show when={viewportMessage()}>
+            <div data-slot="browser-viewport-message" role="status">
+              {viewportMessage()}
+              <Show when={zoomed()}>
+                <Button size="small" variant="ghost" onClick={() => zoomPage("reset")}>
+                  {plugin.t("zoom.reset")}
+                </Button>
+              </Show>
+              <Show when={notice()}>
+                <Button
+                  size="small"
+                  variant="ghost-muted"
+                  onClick={() => dispatchToolbar({ type: "notice.dismissed", context: toolbarContext() })}
+                >
+                  {plugin.t("common.dismiss")}
+                </Button>
+              </Show>
+            </div>
+          </Show>
+        </section>
+      </Show>
+      <Preview>
+        <embeds.View
+          id={embed()}
+          visible={shown() && (!fixedViewport() || !!fit())}
+          frozen={overlayed().frozen || resizingViewport()}
+          // A navigation, reload or layout viewport change invalidates stills of the previous page.
+          page={JSON.stringify([
+            state()?.id,
+            state()?.generation,
+            state()?.url,
+            !!state()?.loading,
+            fixedViewport()?.width,
+            fixedViewport()?.height,
+            fixedViewport()?.scale,
+          ])}
+          radius={fixedViewport() ? 0 : 10}
+          class="relative min-h-0 min-w-0 overflow-hidden bg-v2-background-bg-base flex items-center justify-center"
+        >
+          <Show when={empty() && !failed() && !suspended()}>
+            <div dir="auto" class="size-full overflow-y-auto">
+              <Show
+                when={recent().length > 0}
+                fallback={
+                  <div class="mx-auto flex max-w-[360px] flex-col items-center gap-4 px-6 pt-20 text-center">
+                    <Icon name="outline-globe" size="large" class="text-v2-icon-icon-muted" />
+                    <div class="flex flex-col gap-2">
+                      <div class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
+                        {plugin.t("home.title")}
+                      </div>
+                      <div class="text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
+                        {plugin.t("home.description")}
+                      </div>
                     </div>
                   </div>
+                }
+              >
+                {/* The pages the browser showed last; the side panel's new tab view offers the other tabs. One visit is
+                    enough to list; the list stops at a handful. */}
+                <div class="mx-auto flex w-full max-w-[608px] flex-col gap-4 px-6 pt-12 pb-10">
+                  <div class="text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
+                    {plugin.t("home.recent")}
+                  </div>
+                  <div class="flex flex-col gap-2">
+                    <For each={recent()}>{(visit) => <PageRow visit={visit} onClick={() => go(visit.url)} />}</For>
+                  </div>
                 </div>
-              }
-            >
-              {/* The pages the browser showed last; the side panel's new tab view offers the other tabs. One visit is
-                  enough to list; the list stops at a handful. */}
-              <div class="mx-auto flex w-full max-w-[608px] flex-col gap-4 px-6 pt-12 pb-10">
-                <div class="text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
-                  {plugin.t("home.recent")}
-                </div>
-                <div class="flex flex-col gap-2">
-                  <For each={recent()}>{(visit) => <PageRow visit={visit} onClick={() => go(visit.url)} />}</For>
-                </div>
-              </div>
-            </Show>
-          </div>
-        </Show>
-        <Show when={failed() && !suspended()}>
-          {/* Add the 40px toolbar to the file empty state's 160px bottom padding to align their centers. */}
-          <div
-            dir="auto"
-            class="flex size-full flex-col items-center justify-center gap-2 p-6 pb-[200px] text-center text-text-weak"
-          >
-            <Icon name="globe" size="large" class="mb-2 shrink-0" />
-            <div class="text-[13px] font-medium leading-[var(--line-height-compact)] text-text-strong">
-              {plugin.t("failed.title")}
+              </Show>
             </div>
-            <div class="text-13-regular leading-[var(--line-height-base)]">{plugin.t("failed.description")}</div>
-          </div>
-        </Show>
-        <Show when={suspended()}>
-          <p class="px-6 text-center text-13-regular text-v2-text-text-subtle" role="status">
-            {plugin.t("suspended")}
-          </p>
-        </Show>
+          </Show>
+          <Show when={failed() && !suspended()}>
+            {/* Add the 40px toolbar to the file empty state's 160px bottom padding to align their centers. */}
+            <div
+              dir="auto"
+              class="flex size-full flex-col items-center justify-center gap-2 p-6 pb-[200px] text-center text-text-weak"
+            >
+              <Icon name="globe" size="large" class="mb-2 shrink-0" />
+              <div class="text-[13px] font-medium leading-[var(--line-height-compact)] text-text-strong">
+                {plugin.t("failed.title")}
+              </div>
+              <div class="text-13-regular leading-[var(--line-height-base)]">{plugin.t("failed.description")}</div>
+            </div>
+          </Show>
+          <Show when={suspended()}>
+            <p class="px-6 text-center text-13-regular text-v2-text-text-subtle" role="status">
+              {plugin.t("suspended")}
+            </p>
+          </Show>
+          <Show when={spotlight()}>
+            {(rect) => (
+              <div ref={trackPage} class="pointer-events-none absolute inset-0 overflow-hidden">
+                <div
+                  data-slot="browser-comment-spotlight"
+                  class="absolute rounded-[2px]"
+                  style={{
+                    left: `${rect().x}px`,
+                    top: `${rect().y}px`,
+                    width: `${rect().width}px`,
+                    height: `${rect().height}px`,
+                  }}
+                />
+              </div>
+            )}
+          </Show>
+        </embeds.View>
         <Show when={comment()}>
           {(current) => (
             <div
+              ref={backdrop}
               data-component="browser-comment"
-              class="absolute inset-0 z-10"
+              class="absolute start-0 top-0 z-10"
+              style={{ width: `${available().width}px`, height: `${available().height}px` }}
               onPointerDown={(event) => {
                 // A click beside the editor dismisses it unless it would discard a draft.
                 if (event.target === event.currentTarget) dispatchOverlay({ type: "backdrop.pressed" })
               }}
             >
-              <Show when={spotlight()}>
-                {(rect) => (
-                  <div
-                    data-slot="browser-comment-spotlight"
-                    class="pointer-events-none absolute rounded-[2px]"
-                    style={{
-                      left: `${rect().x}px`,
-                      top: `${rect().y}px`,
-                      width: `${rect().width}px`,
-                      height: `${rect().height}px`,
-                    }}
-                  />
-                )}
-              </Show>
               <Show when={placement()}>
                 {(position) => (
                   <div
@@ -882,7 +1139,8 @@ export default function SessionBrowserPane(props: {
           {(current) => (
             <div
               data-component="browser-comment"
-              class="absolute inset-0 z-10"
+              class="absolute start-0 top-0 z-10"
+              style={{ width: `${available().width}px`, height: `${available().height}px` }}
               onPointerDown={(event) => {
                 if (event.target === event.currentTarget) dispatchOverlay({ type: "backdrop.pressed" })
               }}
@@ -893,8 +1151,8 @@ export default function SessionBrowserPane(props: {
                 data-prevent-autofocus
                 class="absolute end-2 top-2 flex flex-col overflow-hidden rounded-[6px] shadow-[var(--v2-elevation-raised)]"
                 style={{
-                  width: `${Math.max(0, Math.min(400, size().width - 16))}px`,
-                  "max-height": `${Math.max(0, size().height - 16)}px`,
+                  width: "min(400px, calc(100% - 16px))",
+                  "max-height": "calc(100% - 16px)",
                 }}
               >
                 <MenuScroll class="min-h-0">
@@ -921,7 +1179,7 @@ export default function SessionBrowserPane(props: {
             </div>
           )}
         </Show>
-      </embeds.View>
+      </Preview>
       <p class="sr-only" role="status" aria-live="polite">
         {picking() ? plugin.t("inspect.active") : ""}
       </p>
@@ -1107,6 +1365,7 @@ function SiteInformation(props: {
       <Popover.Portal>
         <Popover.Content
           data-component="browser-site"
+          data-browser-popup
           // The panel takes focus itself rather than its close button, so a pointer opening shows no focus ring there.
           onOpenAutoFocus={(event: Event) => {
             event.preventDefault()
