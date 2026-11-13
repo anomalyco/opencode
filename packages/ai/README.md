@@ -1115,7 +1115,7 @@ const controlled = Effect.gen(function* () {
 const events = Video.stream({ model: xai.video("grok-imagine-video-1.5"), prompt }, { poll })
 ```
 
-Status polls, result fetches, cancels, and asset downloads all run through the same request executor with the route's
+Status polls, result fetches, and cancels all run through the same request executor with the route's
 auth. `Generation.await` and `Generation.events` fail with a
 `Timeout` reason when `poll.timeout` (default 10 minutes) elapses. Status polls and result fetches retry transient
 failures (rate limits, provider 5xx, network errors) with backoff that honors `retry-after`, always within

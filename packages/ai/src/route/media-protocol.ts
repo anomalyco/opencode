@@ -89,13 +89,9 @@ export interface Started<Token> {
   readonly snapshot: Snapshot
 }
 
-/**
- * A follow-up call's inputs: the decoded token and the auth headers the route sent, so a protocol can attach them
- * to output URLs that require the same credentials to download.
- */
+/** A follow-up call's inputs: the decoded token. */
 export interface PollContext<Token> {
   readonly token: Token
-  readonly auth: Record<string, string>
 }
 
 /**
@@ -138,11 +134,6 @@ export interface Queued<Request, Response, Token> {
   readonly cancel?: {
     readonly method: AuthInput["method"]
     readonly path: (token: Token) => string
-    /**
-     * Fetch a fresh status first and skip the call for terminal generations, for providers whose cancel endpoint
-     * destroys finished work.
-     */
-    readonly activeOnly?: boolean
   }
 }
 
