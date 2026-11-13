@@ -129,11 +129,6 @@ const task = (request: Request) => {
 const fromRequest = Effect.fn("GoogleInteractionsVideo.fromRequest")(function* (request: Request) {
   if (request.end !== undefined && request.start === undefined)
     return yield* route.unsupported("video.end", `${route.name} reads a lone image as the start frame; send start too`)
-  if (request.sound === false)
-    return yield* route.unsupported(
-      "video.sound",
-      `${route.name} always generates audio and has no option to turn it off`,
-    )
   const media = yield* Effect.forEach(
     [request.start, request.end, ...(request.references ?? [])].filter(
       (asset): asset is Media.Asset => asset !== undefined,
