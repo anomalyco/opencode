@@ -625,7 +625,8 @@ export function createBrowserPage(
     // An extension's frame, such as an autofill overlay, stays out of `sessions`: no frame list, snapshot, picker or
     // diagnostics reaches it. Site isolation gives it a process, and so a target, of its own. The context its first
     // document had in the embedding page's process is dropped, so its frameID cannot reach that page instead.
-    if (Browser.extensionOrigin(targetInfo.url) || (parentSessionID && extensionTargets.has(parentSessionID))) {
+    if (Browser.extensionOrigin(targetInfo.url) || (parentSessionID && extensionTargets.has(parentSessionID)) ||
+      (targetInfo.parentFrameId && extensionContexts.has(targetInfo.parentFrameId))) {
       extensionTargets.set(sessionId, targetInfo.targetId)
       contexts.delete(targetInfo.targetId)
       // Descendant iframe targets are excluded even if their own document is a web page. Do not enable diagnostics.
