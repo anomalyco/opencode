@@ -478,6 +478,11 @@ fn witness() -> abi::Plugin {
             let ran = host.storage_get("ran").and_then(|ran| ran["count"].as_u64()).unwrap_or(0);
             host.storage_set("ran", serde_json::json!({ "count": ran + 1 }));
         });
+        let alert = abi::Command { name: "witness.alert".to_owned(), ..abi::Command::default() };
+        setup.command(alert, |host, _| {
+            let message = "A dialog of another plugin.".to_owned();
+            host.dialog(abi::Dialog::Alert(abi::Alert { title: "Witness says".to_owned(), message, action: None }));
+        });
         Ok(())
     }
     abi::Plugin { id: "witness", setup }
@@ -523,6 +528,39 @@ fn a_dialog_of_a_disabled_plugin_goes_and_answers_nobody() {
             assert!(answers.iter().all(|entry| entry.starts_with("disposed ")), "{carrier:?} {open}: {answers:?}");
             assert_eq!(witnessed(&h), 0, "{carrier:?} {open}");
         }
+    }
+}
+
+// Expected (bigboi 2): a dialog that a plugin asked for and that arrives after the plugin was disabled does not show,
+// so it does not replace the dialog the user has open.
+#[test]
+fn a_dialog_of_a_plugin_that_is_not_live_does_not_show() {
+    for carrier in CARRIERS {
+        let h = home(carrier);
+        opencode_tui::plugins::host::add(&h.tui, witness().into());
+        h.tui.keymap.dispatch("witness.alert", None);
+        h.wait_for("Witness says");
+        h.tui.keymap.dispatch("p0a.alert", None);
+        assert!(h.tui.plugins.set_active(&opencode_tui::plugins::host::host(&h.tui), "p0a", false));
+        h.app.advance(std::time::Duration::from_millis(50));
+        let screen = h.app.text();
+        assert!(screen.contains("Witness says") && !screen.contains("Heads up"), "{carrier:?}: {screen}");
+    }
+}
+
+// Expected (`ledger`): a plugin's alert goes when a later call of the plugin panics, and the composer has the focus
+// again; the failed plugin's dialog does not stay on screen (the plugin's own effects of that call are `no-effects`').
+#[test]
+fn a_dialog_of_a_failed_plugin_goes() {
+    for carrier in CARRIERS {
+        let h = home(carrier);
+        h.tui.keymap.dispatch("p0a.alert", None);
+        h.wait_for("Heads up");
+        h.tui.keymap.dispatch("p0a.all", Some("panic"));
+        h.wait_for("Plugin failed: p0a");
+        h.wait_gone("Heads up");
+        h.wait("the composer's focus", || h.textarea().is_focused());
+        assert!(logged(&h, "closed").is_empty(), "{carrier:?}");
     }
 }
 
