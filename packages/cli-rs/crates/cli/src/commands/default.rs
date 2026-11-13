@@ -86,6 +86,11 @@ pub fn run(context: &Context, args: &RootArgs) -> error::Result<()> {
         managed: matches!(connection.source, Source::Service { .. }),
         auto: args.permissions.auto(),
         environment: local.then(opencode_store::environment::session_environment),
+        contain: opencode_tui::plugins::contain::Contain {
+            record: crate::contain::record(),
+            skip: args.skip_plugins.clone(),
+            resume: crate::contain::resume(),
+        },
         ..Args::default()
     };
     let plugins = External { config_dir: paths.config.clone(), cwd: directory.clone() };

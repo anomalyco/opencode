@@ -26,8 +26,9 @@ use windows_sys::Win32::Storage::FileSystem::{
 use windows_sys::Win32::System::Console::{
     CONSOLE_SCREEN_BUFFER_INFO, CTRL_BREAK_EVENT, CTRL_C_EVENT, ENABLE_ECHO_INPUT, ENABLE_LINE_INPUT,
     ENABLE_MOUSE_INPUT, ENABLE_PROCESSED_INPUT, ENABLE_PROCESSED_OUTPUT, ENABLE_VIRTUAL_TERMINAL_INPUT,
-    ENABLE_VIRTUAL_TERMINAL_PROCESSING, ENABLE_WINDOW_INPUT, GetConsoleMode, GetConsoleScreenBufferInfo, GetStdHandle,
-    STD_ERROR_HANDLE, STD_INPUT_HANDLE, SetConsoleCtrlHandler, SetConsoleMode, SetStdHandle,
+    ENABLE_VIRTUAL_TERMINAL_PROCESSING, ENABLE_WINDOW_INPUT, FlushConsoleInputBuffer, GetConsoleMode,
+    GetConsoleScreenBufferInfo, GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, SetConsoleCtrlHandler,
+    SetConsoleMode, SetStdHandle,
 };
 use windows_sys::Win32::System::LibraryLoader::{
     GetProcAddress, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LOAD_LIBRARY_SEARCH_SYSTEM32,
@@ -289,6 +290,31 @@ pub fn set_console_mode(handle: impl AsHandle, mode: u32) -> io::Result<()> {
         return Err(io::Error::last_os_error());
     }
     Ok(())
+}
+
+/// The console modes of standard input and output, saved so a parent can put them back after a child that changed
+/// them died.
+pub struct ConsoleModes {
+    input: Option<u32>,
+    output: Option<u32>,
+}
+
+impl ConsoleModes {
+    pub fn save() -> ConsoleModes {
+        ConsoleModes { input: console_mode(io::stdin()), output: console_mode(io::stdout()) }
+    }
+
+    /// Puts both modes back and drops the input the console holds: keys typed for a client that is gone.
+    pub fn restore(&self) {
+        if let Some(mode) = self.input {
+            let _ = set_console_mode(io::stdin(), mode);
+            // SAFETY: plain call on the standard input handle; a non-console handle makes it fail.
+            unsafe { FlushConsoleInputBuffer(io::stdin().as_handle().as_raw_handle()) };
+        }
+        if let Some(mode) = self.output {
+            let _ = set_console_mode(io::stdout(), mode);
+        }
+    }
 }
 
 /// The raw input mode from a saved one, as libuv's `UV_TTY_MODE_RAW` takes it but with the console turning keys
