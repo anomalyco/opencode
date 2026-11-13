@@ -1071,73 +1071,64 @@ part of the same experimental surface.
 ### Video generation
 
 Video mirrors `Image` with one difference: every provider is asynchronous, so the route is a submit-then-poll
-`Generation`. Models come from `.video(...)` selectors on the `Google` (Veo), `XAI`, and `Runway` facades.
+`Generation`. Models come from `.video(...)` selectors on the `XAI` facade.
 Common fields (`frames`, `references`, `video`, `durationSeconds`, `aspect`, `resolution`, `audio`, `n`, `seed`,
 `negativePrompt`) lower natively or fail with a typed `AIError` before any network call; provider-native controls live
 under `providerOptions`, inferred from the selected model.
 
 ```ts
 import { Video } from "@opencode/ai/experimental"
-import { Google, Runway } from "@opencode/ai/providers"
+import { XAI } from "@opencode/ai/providers"
 
-const google = Google.configure({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY })
+const xai = XAI.configure({ apiKey: process.env.XAI_API_KEY })
 
 // Simple: submit and wait.
 const program = Effect.gen(function* () {
   const response = yield* Video.generate(
     {
-      model: google.video("veo-3.1-generate-preview"),
+      model: xai.video("grok-imagine-video-1.5"),
       prompt: "Panning wide shot of a calico kitten sleeping in the sunshine",
       aspect: "16:9",
-      resolution: "1080p",
-      durationSeconds: 8,
-      providerOptions: { personGeneration: "allow_adult" },
+      resolution: "720p",
+      durationSeconds: 10,
     },
     { poll: { interval: "10 seconds", timeout: "10 minutes" } },
   )
-  // Veo serves files for two days behind the API key. The asset knows the deadline (`expiresAt`) and carries the
-  // download credentials only on the live instance (`asset.headers`), never in `source` or JSON: materialize
-  // before persisting, or the persisted URL cannot be fetched again.
+  // xAI returns a temporary URL: materialize before persisting, or the persisted URL may stop working.
   return yield* response.video.materialize()
 })
 
 // Explicit control: keep the handle, persist the token, resume elsewhere.
 const controlled = Effect.gen(function* () {
-  const generation = yield* Video.start({ model: google.video("veo-3.1-generate-preview"), prompt })
-  generation.id // provider operation / task / request id
+  const generation = yield* Video.start({ model: xai.video("grok-imagine-video-1.5"), prompt })
+  generation.id // provider request id
   generation.status // "queued" | "running" | "completed" | "failed" | "cancelled" | "expired"
-  generation.token // route-owned JSON: `{ operation }`, `{ requestID }`, or `{ taskID }`
+  generation.token // route-owned JSON, `{ requestID }` for xAI
   // The token carries no route identity: persist the provider and model ID alongside it, since `resume` needs the model.
   const saved = JSON.stringify(generation.token)
 
-  const resumed = yield* Video.resume(google.video("veo-3.1-generate-preview"), JSON.parse(saved))
+  const resumed = yield* Video.resume(xai.video("grok-imagine-video-1.5"), JSON.parse(saved))
   return yield* resumed.await({ poll: { interval: "10 seconds" } })
 })
 
 // Progress as a stream: generation-queued | generation-progress | video | finish.
-const events = Video.stream({ model: Runway.configure({ apiKey }).video("gen4.5"), prompt }, { poll })
+const events = Video.stream({ model: xai.video("grok-imagine-video-1.5"), prompt }, { poll })
 ```
 
-Status polls, result fetches, cancels, and asset downloads all run through the same request executor with the route's
+Status polls, result fetches, and cancels all run through the same request executor with the route's
 auth. `Generation.await` and `Generation.events` fail with a
 `Timeout` reason when `poll.timeout` (default 10 minutes) elapses. Status polls and result fetches retry transient
 failures (rate limits, provider 5xx, network errors) with backoff that honors `retry-after`, always within
 `poll.timeout`; submits and cancels never retry. Interrupting a wait (or aborting its `signal`) does not cancel the
-provider job, which keeps running and billing: call `cancel()` to stop it. Failed,
-cancelled, and expired generations fail typed with the provider's terminal document on `reason.body`; moderation
-outcomes (Veo `raiMediaFilteredReasons`, xAI `respect_moderation`, Runway `SAFETY.*` codes) fail with a
-`ContentPolicy` reason when no video comes back; when one still does, Veo and xAI keep the raw outcome in
-`providerMetadata`.
+provider job, which keeps running and billing: call `cancel()` to stop it on providers with a cancel endpoint (xAI has
+none, so `cancel()` sends nothing there). Failed, cancelled, and expired generations fail typed with the provider's
+terminal document on `reason.body`; moderation outcomes (xAI `respect_moderation`) fail with a `ContentPolicy` reason
+when no video comes back; when one still does, the raw outcome stays in `providerMetadata`.
 
 Provider notes:
 
-- **Google Veo** takes inline bytes only (materialize `url` assets first); `frames.last` requires `frames.first`;
-  audio is always on, so `audio: false` fails typed; one video per request. Output URLs need the API key to
-  download, which the returned asset holds transiently (see above).
 - **xAI** sends a `video` input to `/videos/edits`, or `/videos/extensions` with `providerOptions.mode: "extend"`.
   `seed` and `negativePrompt` are not supported.
-- **Runway** expects pixel ratios in `aspect` for most models (`"1280:720"`), pins `X-Runway-Version`, reports
-  `usage: { type: "credits" }`, and its output URLs expire after 24–48 hours.
 
 The promise client exposes the same surface: `ai.experimental.video.start(...)` resolves to a handle with `await`, `events`,
 `result`, `refresh`, `cancel`, and `token`; `ai.experimental.video.generate`, `ai.experimental.video.resume(model, token)`, and

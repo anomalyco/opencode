@@ -36,7 +36,6 @@ import {
   OpenAI,
   OpenAICompatible,
   OpenRouter,
-  Runway,
   TypeSafeAI,
   VercelAIGateway,
   XAI,
@@ -188,10 +187,6 @@ describe("public exports", () => {
     ).toBe("cloudflare-workers-ai-images")
     expect(XAI.configure({ apiKey: "fixture" }).video("grok-imagine-video-1.5").route.id).toBe("xai-video")
     expect(XAI.provider.video).toBe(XAI.video)
-    expect(Google.configure({ apiKey: "fixture" }).video("veo-3.1-generate-preview").route.id).toBe("google-video")
-    expect(Google.provider.video).toBe(Google.video)
-    expect(Runway.configure({ apiKey: "fixture" }).video("gen4.5").route.id).toBe("runway-video")
-    expect(Runway.provider.video).toBe(Runway.video)
     expect(OpenAI.configure({ apiKey: "fixture" }).speech("gpt-4o-mini-tts").route.id).toBe("openai-speech")
     expect(Google.configure({ apiKey: "fixture" }).speech("gemini-2.5-flash-preview-tts").route.id).toBe(
       "google-speech",

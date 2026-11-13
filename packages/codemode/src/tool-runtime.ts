@@ -1,5 +1,5 @@
 import { Cause, Effect, Exit, Formatter, Schema } from "effect"
-import type { Json } from "./vm/data.js"
+import type { Json } from "./data.js"
 import type { DiagnosticKind } from "./codemode.js"
 import { toolError } from "./tool-error.js"
 import {
