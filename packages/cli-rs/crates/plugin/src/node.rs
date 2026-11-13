@@ -101,6 +101,7 @@ impl Mount {
             let size = (rect.width.max(0.0) as u16, rect.height.max(0.0) as u16);
             {
                 let mut input = mount.input.borrow_mut();
+                // A fractional size, such as a percent width, can change and round to the same cells.
                 if (input.width, input.height) == size {
                     return;
                 }
