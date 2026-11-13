@@ -49,12 +49,14 @@ fn home(carrier: Carrier) -> Harness {
     h
 }
 
-/// The cells on screen without the composer's row, whose placeholder example is random on each mount.
+/// The cells on screen without the composer's placeholder example, which is random on each mount: its row from the
+/// example's column on, while no dialog covers it (`parity/scenarios/P.1/p0a-dialogs.app.ts` masks the same).
 fn cells(h: &Harness) -> Vec<opentui::testing::Cell> {
     let capture = h.app.render();
-    let row = h.app.text().lines().position(|line| line.contains("Ask")).unwrap_or(usize::MAX);
+    let row = h.app.text().lines().position(|line| line.contains("Ask anything")).filter(|_| !h.tui.dialogs.is_open());
     let width = capture.width as usize;
-    capture.cells.into_iter().enumerate().filter(|(index, _)| index / width != row).map(|(_, cell)| cell).collect()
+    let example = |index: usize| Some(index / width) == row && index % width >= 16;
+    capture.cells.into_iter().enumerate().filter(|(index, _)| !example(*index)).map(|(_, cell)| cell).collect()
 }
 
 /// The probe's log, from its storage.
@@ -91,7 +93,7 @@ fn a_confirm_answers_true_false_or_nothing_on_both_carriers() {
             h.tui.keymap.dispatch("p0a.confirm", None);
             let screen = h.wait_for("Delete the draft?");
             assert!(screen.contains("It cannot be undone.") && screen.contains("Delete"), "{carrier:?}: {screen}");
-            assert!(screen.contains("Cancel"), "{carrier:?}: {screen}");
+            assert!(screen.contains("Keep") && !screen.contains("Cancel"), "{carrier:?}: {screen}");
             if keys == ["return"] {
                 drawn.push(cells(&h));
             }

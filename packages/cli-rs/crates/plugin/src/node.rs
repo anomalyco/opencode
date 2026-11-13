@@ -759,6 +759,67 @@ mod tests {
         assert_eq!(corner.symbol.as_str(), "┌");
     }
 
+    // Expected (carbon-p0a-8): each side of a box's padding and margin moves what it should, padding per side wins over
+    // `padding`, each border style draws its corner, and a title sits where its alignment says; read from the cells and
+    // rects of a fresh layout.
+    #[test]
+    fn a_box_draws_each_side_style_and_title_alignment() {
+        let app = TestApp::new(40, 16);
+        let theme = Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme;
+        // The capture, the outer column's rect, the box's, and where the box's `x` is.
+        let draw = |node: abi::Node| {
+            let parent = View::new(app.app()).column();
+            add(
+                app.app(),
+                &theme,
+                &parent,
+                &node,
+                &(Rc::new(|_: &abi::Action| {}) as Act),
+                &mut Vec::new(),
+                &|_| View::new(app.app()).as_any(),
+                &mut |_, _| {},
+            );
+            let outer = View::new(app.app()).row().child(&parent);
+            app.app().root().clear();
+            app.app().root().add(&outer);
+            let capture = app.render();
+            let boxed = parent.children()[0].rect();
+            let x = (0..capture.height)
+                .flat_map(|y| (0..capture.width).map(move |x| (x, y)))
+                .find(|(x, y)| capture.cell(*x, *y).is_some_and(|cell| cell.symbol == "x"));
+            (capture, parent.rect(), boxed, x.unwrap())
+        };
+        let content = || abi::Node::column(vec![abi::Node::text([abi::Span::new("x")])]);
+        let (_, _, plain, _) = draw(content());
+        // Padding: top 1, right 2, bottom 3, left 4; `padding` (5, 5) is ignored beside it.
+        let (_, _, padded, x) = draw(content().padding(5, 5).padding_sides(abi::Edges::new(1, 2, 3, 4)));
+        assert_eq!(x, (4, 1));
+        assert_eq!((padded.width, padded.height), (plain.width + 6.0, plain.height + 4.0));
+        // Margin: top 1, right 2, bottom 3, left 4, which the parent grows by.
+        let margin = abi::Layout::default().margin(abi::Edges::new(1, 2, 3, 4));
+        let (_, parent, boxed, x) = draw(content().layout(margin));
+        assert_eq!(x, (4, 1));
+        assert_eq!((boxed.width, boxed.height), (plain.width, plain.height));
+        assert_eq!((parent.width, parent.height), (plain.width + 6.0, plain.height + 4.0));
+        for (style, corner) in [
+            (abi::BorderStyle::Single, "┌"),
+            (abi::BorderStyle::Double, "╔"),
+            (abi::BorderStyle::Rounded, "╭"),
+            (abi::BorderStyle::Heavy, "┏"),
+        ] {
+            let (capture, _, _, _) = draw(content().border(abi::Border::new().style(style)));
+            assert_eq!(capture.cell(0, 0).unwrap().symbol, corner, "{style:?}");
+        }
+        // A title `T` on a box ten cells wide: a cell in from the left corner, in the middle, a cell in from the right.
+        let wide = abi::Layout { width: Some(abi::Width::Cells(10)), ..abi::Layout::default() };
+        for (align, at) in [(abi::TitleAlign::Left, 2), (abi::TitleAlign::Center, 4), (abi::TitleAlign::Right, 7)] {
+            let border = abi::Border::new().title("T").title_align(align);
+            let (capture, _, _, _) = draw(content().border(border).layout(wide));
+            let row: String = (0..10).map(|x| capture.cell(x, 0).unwrap().symbol.clone()).collect();
+            assert_eq!(row.chars().position(|symbol| symbol == 'T'), Some(at), "{align:?}: {row}");
+        }
+    }
+
     // Expected: a fence's key moves to the widget that replaces its block's widget, and goes once that widget is
     // freed, as when its Markdown is destroyed, or once the block falls back to the code view; the plugin hears of
     // each key that goes, once.
