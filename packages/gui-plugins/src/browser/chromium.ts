@@ -3,6 +3,7 @@ import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
 import type { Embeds } from "@opencode/plugin/gui/main"
+import { CAPTURE_DEADLINE_MS, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
 import { createBrowserFiles } from "./files"
 import { createDiagnostics } from "./diagnostics"
@@ -975,6 +976,15 @@ export function createBrowserPage(
           throw new Error(
             "Choose either ref for an element screenshot or fullPage:true for the whole page. Remove the other argument before retrying.",
           )
+
+        const blocked = undrawable({
+          platform: process.platform,
+          minimized: win.isMinimized(),
+          visible: win.isVisible(),
+          appHidden: process.platform === "darwin" && electron.app.isHidden(),
+        })
+
+        if (blocked) throw new Error(undrawableMessage(blocked))
         // Capture the document a navigation in flight lands on, not the one it leaves. One that is still going after
         // the wait leaves the current document in place, which is then what the tab shows.
         await waitFor(() => !isNavigationPending(documentState), signal, 10_000).catch(() => abortError(signal))
@@ -1387,21 +1397,29 @@ export function createBrowserPage(
   }
 
   // Right after a document commits, Chromium has no frame of it for a few frames and rejects the copy, so it retries.
+  // A window that draws nothing never answers the copy at all, so every attempt shares one deadline.
   async function surface(
     area: Electron.Rectangle | undefined,
     signal: AbortSignal,
-    attempt = 1,
+    deadline = performance.now() + CAPTURE_DEADLINE_MS,
   ): Promise<Electron.NativeImage> {
-    const image = await contents.capturePage(area, { stayHidden: true }).catch((error: Error) => error)
+    const expired = AbortSignal.timeout(Math.max(1, Math.round(deadline - performance.now())))
 
-    if (!(image instanceof Error) && !image.isEmpty()) return image
+    const image = await Promise.race([
+      contents.capturePage(area, { stayHidden: true }).catch((error: Error) => error),
+      new Promise<undefined>((resolve) => expired.addEventListener("abort", () => resolve(undefined), { once: true })),
+    ])
+
+    if (image && !(image instanceof Error) && !image.isEmpty()) return image
     abortError(signal)
 
-    if (attempt >= 20)
+    if (!image) throw new Error(undrawableMessage("stalled"))
+
+    if (performance.now() + 100 >= deadline)
       throw new Error(`Capture failed: ${image instanceof Error ? image.message : "Chromium returned an empty frame"}`)
     await new Promise((resolve) => setTimeout(resolve, 100))
 
-    return surface(area, signal, attempt + 1)
+    return surface(area, signal, deadline)
   }
 
   async function point(element: Element) {

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
+import { undrawableMessage } from "./capture"
 import { browserFailure, protocolError } from "./errors"
 
 const tabID = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
@@ -34,6 +35,8 @@ test("native protocol errors keep the cause and give a valid recovery operation"
   expect(failure.message).not.toContain("browser.tabs.focus")
   expect(failure.message).toContain("browser.reload({tabID})")
   expect(failure.message).toContain("report the capture failure")
+  const minimized = browserFailure({ type: "screenshot", tabID }, new Error(undrawableMessage("minimized")))
+  expect(minimized.message).not.toContain("stuck")
 })
 
 test("long page errors retain the operation context without classifying script text as a navigation error", () => {

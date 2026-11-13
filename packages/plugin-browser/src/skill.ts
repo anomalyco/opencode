@@ -36,7 +36,7 @@ export const info = Skill.Info.make({
     "- `tools.browser.preview({ path })` opens a file you made, such as an image, HTML page, PDF, Markdown, Mermaid diagram, CSV or video, in the Review pane. Use it instead of pasting or describing the file. It fails if no file is at the path.",
     "- `tabs.open` and `navigate` take http(s) addresses only. To show a local HTML file use `preview`; to script one, serve its folder over HTTP on the server and open `http://localhost:<port>/`.",
     "- New tabs open in front by default so the user can watch. Pass `focus: false` only when the user asked you to work in the background.",
-    "- `screenshot` works on a hidden tab; only `fullPage: true` needs the tab on screen in the Review pane. It returns the image for you to look at and a server-local file path.",
+    "- `screenshot` works on a hidden tab; only `fullPage: true` needs the tab on screen in the Review pane, and on macOS no screenshot works while the OpenCode window is minimized or hidden. It returns the image for you to look at and a server-local file path.",
     "",
     "## Recipes",
     "",
