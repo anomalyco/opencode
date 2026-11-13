@@ -1535,14 +1535,10 @@ fn option_row<T>(
     if let Some(description) = description {
         spans.push(format!(" {description}").fg(secondary));
     }
+    // TS gives the title `paddingLeft={3}`, which Core 0.8.4 lays out but does not paint (anomalyco/opentui#2054). The
+    // row grows into the same width without it, so leaving it out draws the title where TS does.
     row.add(
-        &Text::new(app, spans)
-            .grow(1.0)
-            .basis(Length::Auto)
-            .fg(text)
-            .overflow(Overflow::Hidden)
-            .wrap(WrapMode::None)
-            .padding_edge(Edge::Left, 3),
+        &Text::new(app, spans).grow(1.0).basis(Length::Auto).fg(text).overflow(Overflow::Hidden).wrap(WrapMode::None),
     );
     let footer = match &option.choice {
         Some(choice) => {
