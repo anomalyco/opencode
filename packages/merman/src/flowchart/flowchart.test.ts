@@ -1337,6 +1337,18 @@ flowchart TD
     ])
   })
 
+  test("parses inline edge labels written without spaces", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  A--yes-->B
+  B==done==>C[Done]`)
+
+    expect(diagram.nodes.map((node) => node.id)).toEqual(["A", "B", "C"])
+    expect(diagram.edges).toEqual([
+      { from: "A", to: "B", label: "yes" },
+      { from: "B", to: "C", label: "done", style: "thick" },
+    ])
+  })
+
   test("expands & node groups into fan-in and fan-out edges", () => {
     const diagram = parseMermaidFlowchartDiagram(`flowchart LR
   N[Native] & M[Mapped] & O --> LM["LanguageModel"]

@@ -31,7 +31,7 @@ const EXPLICIT_NODE_SHAPE_RE = new RegExp(`^${ID_RE}(?:\\[|\\(|\\{)`)
 const CIRCLE_NODE_RE = new RegExp(`^${ID_RE}\\(\\(.+\\)\\)$`)
 const MAX_FLOWCHART_LINE_LENGTH = 10_000
 const EDGE_OPERATOR_RE =
-  /(-\.(?!->)(.+?)\.(?:->|-))|(--|==|-\.)\s+(.+?)\s+(-->|==>|\.->|-\.->|\.-)|(<-->|-->|==>|-\.->|---|~~~)\s*(?:\|([^|]*)\|\s*)?/dg
+  /(-\.(?!->)(.+?)\.(?:->|-))|(?<![-=.<])(--|==|-\.)(?![-.=>])\s*(.+?)\s*(-->|==>|\.->|-\.->|\.-)|(<-->|-->|==>|-\.->|---|~~~)\s*(?:\|([^|]*)\|\s*)?/dg
 
 function normalizeDirection(value?: string): FlowchartDirection {
   const upper = value?.toUpperCase()
