@@ -272,7 +272,10 @@ describe("PluginSupervisor reload", () => {
         yield* bus.publish(Event.Updated, {})
         const failure = yield* failed(plugins)
 
-        expect(failure).toMatchObject({ source: { type: "local", path: file }, state: { status: "failed" } })
+        expect(failure).toMatchObject({
+          source: { type: "local", path: file },
+          state: { status: "failed", error: expect.stringContaining(`${file}:1:`) },
+        })
         // The broken revision never produced a generation, so the previous one keeps running.
         expect(yield* commands.get("greet-v1")).toBeDefined()
         expect(yield* plugins.list()).toContainEqual(
