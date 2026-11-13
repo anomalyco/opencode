@@ -473,7 +473,7 @@ export function createBrowserPage(
     if (agentDriven) contents.setBackgroundThrottling(false)
   })
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
-    dispatch({ type: "navigation.failed", code, description, url: /^(?:oc-preview|file):/i.test(url) ? state().url : url, isMainFrame }),
+    dispatch({ type: "navigation.failed", code, description, url, isMainFrame }),
   )
   contents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
     if (!isMainFrame) return

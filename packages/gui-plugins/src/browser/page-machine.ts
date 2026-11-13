@@ -258,12 +258,14 @@ function failed(state: Open, event: Extract<DocumentEvent, { type: "navigation.f
   // A failure with a navigation in flight commits an error page in place of the document. One without, after the
   // document committed, fails that document, which keeps its generation.
   const replaced = state.pending !== undefined || state.status === "restoring"
+  // A failed preview never supplied a validated file. The error document has no external destination.
+  const local = /^(?:oc-preview|file):/i.test(event.url)
 
   const next: Open = {
     status: "failed",
     generation: replaced && state.status !== "restoring" ? state.generation + 1 : state.generation,
-    url: event.url,
-    title: state.title,
+    url: local ? "about:blank" : event.url,
+    title: local ? "" : state.title,
     origin: state.origin,
     icon: state.icon,
     iconAttempt: state.iconAttempt,

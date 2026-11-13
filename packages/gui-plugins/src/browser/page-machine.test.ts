@@ -46,6 +46,11 @@ const shown = () =>
     { type: "icon.loaded", attempt: 3, icon: "data:image/png;base64,AA" },
   ]).state
 
+test("a failed local history entry has no address to open, not the previous HTTP document", () => {
+  const event = { type: "navigation.failed", url: "oc-preview://host/virtual", code: -2, description: "ERR_FAILED", isMainFrame: true } as const
+  expect(documentTab(replay([event], shown()).state, history)).toMatchObject({ url: "about:blank", loadError: "ERR_FAILED" })
+})
+
 describe("uncommitted navigations keep the document", () => {
   test("a download keeps the generation, refs and the shown page", () => {
     const start = shown()
