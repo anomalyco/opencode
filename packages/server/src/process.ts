@@ -2,7 +2,6 @@ export * as ServerProcess from "./process"
 
 import { NodeHttpServer } from "@effect/platform-node"
 import { Bus } from "@opencode/core/bus"
-import { Database } from "@opencode/core/database/database"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { Schedule } from "@opencode/core/schedule"
 import { InstallationEvent } from "@opencode/schema/installation-event"
@@ -120,15 +119,6 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     yield* Effect.forkIn(Context.get(context, Schedule.Service).run, applicationScope)
     yield* Ref.set(application, Option.some(Context.get(context, HttpRouter.HttpRouter).asHttpEffect()))
     yield* status.ready
-    // Defer passive WAL checkpointing past boot so synchronous SQLite I/O cannot block `/api/info`
-    // health probes right after a newly registered service binds its port.
-    yield* Effect.forkIn(
-      Effect.sleep("30 seconds").pipe(
-        Effect.andThen(Database.checkpoint()),
-        Effect.provideService(Database.Service, Context.get(context, Database.Service)),
-      ),
-      applicationScope,
-    )
     const bus = Context.get(context, Bus.Service)
     return {
       address: bound.http.address,

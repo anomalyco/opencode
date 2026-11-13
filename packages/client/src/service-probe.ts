@@ -117,9 +117,35 @@ export function parseLinuxProcStatState(stat: string) {
 }
 
 /**
+ * Tracks how long one registered owner has accepted connections without answering its health probe.
+ * An owner that answers, or a different owner, starts the clock over.
+ */
+export function unresponsiveOwner(budget: number) {
+  let current: { readonly info: Info; readonly since: number } | undefined
+  return {
+    /** Records a probe that began at `probedAt`. Returns the owner once it has been unresponsive for the budget. */
+    observe(info: Info | undefined, probedAt: number, now: number) {
+      if (info === undefined) {
+        current = undefined
+        return undefined
+      }
+      if (current === undefined || !same(current.info, info)) current = { info, since: probedAt }
+      return now - current.since >= budget ? info : undefined
+    },
+    /** Whether an unresponsive owner is still within its budget, so the startup deadline waits for it. */
+    waiting(now: number) {
+      return current !== undefined && now - current.since < budget
+    },
+    forget() {
+      current = undefined
+    },
+  }
+}
+
+/**
  * Whether `pid` is currently in Linux uninterruptible disk sleep (`state D`).
- * Signals cannot take effect until kernel I/O returns, so automatic eviction skips `D`-state
- * servers instead of killing them once their disk operation completes.
+ * Signals cannot take effect until kernel I/O returns, so automatic eviction postpones a `D`-state
+ * server instead of queueing a kill. It is one sample: the process can still enter `D` right after.
  */
 export async function isUninterruptibleDiskSleep(pid: number) {
   if (process.platform !== "linux") return false

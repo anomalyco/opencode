@@ -56,10 +56,7 @@ export default Runtime.handler(Commands, (input) =>
       session !== undefined &&
       (yield* Effect.tryPromise({
         try: () =>
-          findSession(
-            OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) }),
-            session,
-          ),
+          findSession(OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) }), session),
         catch: (cause) => new Error(errorMessage(cause)),
       })) !== undefined
     const updater = yield* Updater.Service

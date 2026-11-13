@@ -62,7 +62,7 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
     setup.client.Service.ensure({
       file: setup.file,
       version,
-      unresponsive: mode === "reconnect" ? "wait" : "evict",
+      unresponsiveTimeout: mode === "reconnect" ? setup.client.reconnectUnresponsiveTimeout : undefined,
       // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
       // services could boot against the same database.
       command: [

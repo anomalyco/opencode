@@ -93,7 +93,7 @@ for (const client of clients) {
     expect(await Bun.file(fixture.registration).exists()).toBe(false)
   })
 
-  test(`${client.name} wait policy preserves a slow owner without spawning contenders until it answers`, async () => {
+  test(`${client.name} keeps a slow owner within its unresponsive budget without spawning contenders`, async () => {
     await using fixture = await serviceFixture()
     const owner = fixture.spawn("hanging")
     await fixture.waitForFile()
@@ -103,7 +103,7 @@ for (const client of clients) {
     const pending = client.ensure({
       file: fixture.registration,
       command: fixture.command("record-start"),
-      unresponsive: "wait",
+      unresponsiveTimeout: 60_000,
       onStart: (reason) => starts.push(reason),
     })
 
@@ -133,32 +133,29 @@ for (const client of clients) {
     expect(owner.exitCode).toBe(null)
   })
 
-  test(`${client.name} wait policy reports an unresponsive timeout without killing the owner`, async () => {
+  test(`${client.name} evicts a hung owner once a budget longer than the startup deadline runs out`, async () => {
     await using fixture = await serviceFixture()
     const owner = fixture.spawn("hanging")
     await fixture.waitForFile()
+    const original = await Bun.file(fixture.registration).json()
     const options = withEnsureTiming(
       {
         file: fixture.registration,
-        command: fixture.command("record-start"),
-        unresponsive: "wait" as const,
+        command: fixture.command("delayed", "10"),
+        unresponsiveTimeout: 700,
       },
-      {
-        pollInterval: 20,
-        requestTimeout: 80,
-        unresponsiveAttempts: 2,
-        spawnDelay: 100,
-        promiseTimeout: 250,
-      },
+      { pollInterval: 20, requestTimeout: 80, spawnDelay: 100, promiseTimeout: 250 },
     )
-    const raw =
-      client.name === "Promise"
-        ? ensure(options)
-        : Effect.runPromise(Service.ensure(options).pipe(Effect.provide(NodeFileSystem.layer)))
+    const started = Date.now()
+    const endpoint = await (client.name === "Promise"
+      ? ensure(options)
+      : Effect.runPromise(Service.ensure(options).pipe(Effect.provide(NodeFileSystem.layer))))
+    const replacement = await Bun.file(fixture.registration).json()
+    fixture.track(replacement.pid)
 
-    await expect(raw).rejects.toThrow("Timed out waiting for the background service to respond")
-    expect(owner.exitCode).toBe(null)
-    expect(await Bun.file(fixture.registration + ".signal").exists()).toBe(false)
-    expect(await Bun.file(fixture.registration + ".started").exists()).toBe(false)
+    expect(Date.now() - started).toBeGreaterThanOrEqual(700)
+    expect(await owner.exited).toBe(stoppedExitCode)
+    expect(replacement.pid).not.toBe(original.pid)
+    expect(endpoint.url).toBe(replacement.url)
   })
 }

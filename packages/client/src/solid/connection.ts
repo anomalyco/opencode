@@ -179,8 +179,7 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
         forced = false
         continue
       }
-      const delay = Math.min(reconnectDelay * 2 ** Math.min(Math.max(0, attempt - 1), 10), maxReconnectDelay)
-      await wait(delay, controller.signal)
+      await wait(Math.min(reconnectDelay * 2 ** (attempt - 1), maxReconnectDelay), controller.signal)
     }
   }
 
