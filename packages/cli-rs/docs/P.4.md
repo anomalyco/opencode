@@ -211,7 +211,7 @@ The same targets as TS (`plugin/discovery.ts`, `plugin/context.tsx` reconcile):
    names, by ID; `*` and `prefix.*` select several.
 
 Targets merge by local path; a later entry replaces an earlier one in its place. A target has a native build when it
-is a shared library, or a directory with `plugin.so` (`plugin.dylib`). Every other target is a TypeScript plugin and
+is a shared library, or a directory with `plugin.so` (`plugin.dylib`, `plugin.dll`). Every other target is a TypeScript plugin and
 is listed as skipped (F16). Server-side TUI plugins (`GET /api/plugin` with `features.tui`) are TypeScript packages
 and are not loaded. The `plugins` entries after a plugin's own entry (all of them, for a discovered plugin) decide
 whether it starts enabled. A toggle in `/plugins` lasts until the TUI exits, also across hot reloads; it is not
