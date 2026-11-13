@@ -486,11 +486,12 @@
           "type": "string"
         },
         "part": {
-          "type": "string"
+          "type": "string",
+          "description": "The call's id, as the transcript has it (`call_…`)."
         }
       },
       "required": ["session", "part"],
-      "description": "A part of a session's transcript: its text, or a tool's output."
+      "description": "A part of a session's transcript by its id: a tool call, whose output it names."
     },
     "DiffView": {
       "type": "string",
