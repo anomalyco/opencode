@@ -59,9 +59,9 @@ pub(crate) trait Viewer {
     fn draws(&self) -> bool {
         false
     }
-    /// One call of the draw for `canvas` of `mount` at `frame`.
-    fn draw(&self, _host: &dyn Host, _mount: &v2::MountId, _canvas: &str, _frame: v2::Frame) -> canvas::Drawn {
-        canvas::Drawn::Failed
+    /// One call of the draw for `canvas` of `mount` at `frame`: the list's bytes, or `None` to keep the list.
+    fn draw(&self, _host: &dyn Host, _mount: &v2::MountId, _canvas: &str, _frame: v2::Frame) -> Option<Vec<u8>> {
+        None
     }
     /// The mount ended.
     fn forget(&self, _host: &dyn Host, _mount: &v2::MountId) {}
@@ -118,17 +118,13 @@ impl Viewer for Linked {
         self.draw.is_some()
     }
 
-    fn draw(&self, host: &dyn Host, mount: &v2::MountId, canvas: &str, frame: v2::Frame) -> canvas::Drawn {
-        let Some(draw) = &self.draw else { return canvas::Drawn::Failed };
+    fn draw(&self, host: &dyn Host, mount: &v2::MountId, canvas: &str, frame: v2::Frame) -> Option<Vec<u8>> {
+        let draw = self.draw.as_ref()?;
         let mut list = None;
         let called = (self.call)("draw", host, &mut |read| {
             list = draw(&mut v2::Draw { read, mount, canvas, frame });
         });
-        match (called, list) {
-            (false, _) => canvas::Drawn::Failed,
-            (true, None) => canvas::Drawn::Kept,
-            (true, Some(list)) => canvas::Drawn::List(list.into_bytes()),
-        }
+        list.filter(|_| called).map(abi::canvas::List::into_bytes)
     }
 }
 
@@ -264,9 +260,7 @@ impl Surface {
         if mounted.viewer.draws() {
             let (weak, fail) = (Rc::downgrade(&mounted), mounted.fail.clone());
             let drawer = canvas::Drawer {
-                draw: Box::new(move |id, frame| {
-                    weak.upgrade().map_or(canvas::Drawn::Failed, |mounted| mounted.draw_canvas(id, frame))
-                }),
+                draw: Box::new(move |id, frame| weak.upgrade()?.draw_canvas(id, frame)),
                 fail: Box::new(move |error| fail(error)),
             };
             let _ = mounted.drawer.set(Rc::new(drawer));
@@ -531,10 +525,9 @@ impl Surface {
         Ok(())
     }
 
-    /// One call of the surface's draw for canvas `id` at `frame`.
-    fn draw_canvas(&self, id: &str, frame: v2::Frame) -> canvas::Drawn {
-        let Some(host) = self.owner.upgrade() else { return canvas::Drawn::Failed };
-        self.viewer.draw(&*host, &self.id, id, frame)
+    /// One call of the surface's draw for canvas `id` at `frame`: the list's bytes, or `None` to keep the list.
+    fn draw_canvas(&self, id: &str, frame: v2::Frame) -> Option<Vec<u8>> {
+        self.viewer.draw(&*self.owner.upgrade()?, &self.id, id, frame)
     }
 
     /// The palette of `theme`, kept while the theme stays.
