@@ -610,8 +610,9 @@ impl Surface {
                     None
                 }
                 Scroll::Page { percent } => {
-                    let rows = (state.viewport * i32::from(*percent) / 100).max(1).max(-state.viewport);
-                    let rows = if *percent < 0 { -rows.abs().max(1) } else { rows };
+                    // At least a row in the direction asked, as a page of a tiny viewport.
+                    let rows = state.viewport * i32::from(*percent) / 100;
+                    let rows = if rows == 0 { i32::from(percent.signum()) } else { rows };
                     scrolled.widget.scroll_by(0.0, f64::from(rows));
                     None
                 }
