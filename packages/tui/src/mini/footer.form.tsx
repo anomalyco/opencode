@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { measureEditText, type BoxRenderable, type ScrollBoxRenderable, type TextareaRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { keypadKeyName } from "../util/keypad"
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import {
   createFormBodyState,
@@ -240,40 +241,35 @@ export function RunFormBody(props: {
   }
 
   useKeyboard((event) => {
+    const name = keypadKeyName(event.name)
     if (state().submitting) {
       event.preventDefault()
       return
     }
-    if (event.name === "escape") {
+    if (name === "escape") {
       void cancel()
       event.preventDefault()
       return
     }
-    if (event.name === "pageup" || event.name === "pagedown") {
-      scroll?.scrollBy(event.name === "pageup" ? -1 : 1, "viewport")
+    if (name === "pageup" || name === "pagedown") {
+      scroll?.scrollBy(name === "pageup" ? -1 : 1, "viewport")
       event.preventDefault()
       return
     }
     if (unsupported()) return
     if (state().editing) return
-    if (
-      event.name === "tab" ||
-      event.name === "left" ||
-      event.name === "right" ||
-      event.name === "h" ||
-      event.name === "l"
-    ) {
-      const direction = event.shift || event.name === "left" || event.name === "h" ? -1 : 1
+    if (name === "tab" || name === "left" || name === "right" || name === "h" || name === "l") {
+      const direction = event.shift || name === "left" || name === "h" ? -1 : 1
       moveField(direction)
       event.preventDefault()
       return
     }
-    if (confirm() && event.name === "return") {
+    if (confirm() && name === "return") {
       submit()
       event.preventDefault()
       return
     }
-    if (current()?.type === "external" && event.name === "return") {
+    if (current()?.type === "external" && name === "return") {
       void external()
       event.preventDefault()
       return
@@ -285,17 +281,17 @@ export function RunFormBody(props: {
       event.preventDefault()
       return
     }
-    if (event.name === "up" || event.name === "k") {
+    if (name === "up" || name === "k") {
       setState((previous) => formMove(previous, props.request, -1))
       event.preventDefault()
       return
     }
-    if (event.name === "down" || event.name === "j") {
+    if (name === "down" || name === "j") {
       setState((previous) => formMove(previous, props.request, 1))
       event.preventDefault()
       return
     }
-    if (event.name === "return") {
+    if (name === "return") {
       choose()
       event.preventDefault()
     }

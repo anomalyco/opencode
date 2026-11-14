@@ -7,6 +7,7 @@ import { Keymap } from "../context/keymap"
 import { useLocation } from "../context/location"
 import { useRoute } from "../context/route"
 import { getScrollAcceleration } from "../util/scroll"
+import { keypadKeyName } from "../util/keypad"
 import { useTheme } from "../context/theme"
 import { emptyPrompt } from "../prompt/history"
 import { DIALOG_INSET, DialogFooter, DialogHeader, DialogLayout, dialogWidth, useDialog } from "../ui/dialog"
@@ -69,12 +70,13 @@ export function DialogErrorDetails(props: {
   ]
 
   useKeyboard((event) => {
-    if (event.name === "up") return scroll?.scrollBy(-1)
-    if (event.name === "down") return scroll?.scrollBy(1)
-    if (event.name === "pageup") return scroll?.scrollBy(-20)
-    if (event.name === "pagedown") return scroll?.scrollBy(20)
-    if (event.name === "home") return scroll?.scrollTo(0)
-    if (event.name === "end" && scroll) return scroll.scrollTo(scroll.scrollHeight)
+    const name = keypadKeyName(event.name)
+    if (name === "up") return scroll?.scrollBy(-1)
+    if (name === "down") return scroll?.scrollBy(1)
+    if (name === "pageup") return scroll?.scrollBy(-20)
+    if (name === "pagedown") return scroll?.scrollBy(20)
+    if (name === "home") return scroll?.scrollTo(0)
+    if (name === "end" && scroll) return scroll.scrollTo(scroll.scrollHeight)
   })
 
   return (

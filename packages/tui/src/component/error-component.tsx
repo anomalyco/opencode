@@ -1,5 +1,6 @@
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
+import { keypadKeyName } from "../util/keypad"
 import { createSignal, For, Show } from "solid-js"
 import { getScrollAcceleration } from "../util/scroll"
 import { useClipboard } from "../context/clipboard"
@@ -67,37 +68,38 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
   let scroll: ScrollBoxRenderable | undefined
 
   useKeyboard((evt) => {
-    if (evt.ctrl && evt.name === "c") return exit()
-    if (evt.name === "return") {
+    const name = keypadKeyName(evt.name)
+    if (evt.ctrl && name === "c") return exit()
+    if (name === "return") {
       evt.preventDefault()
       evt.stopPropagation()
       return actions[selected()].onUse()
     }
-    if (evt.name === "left") {
+    if (name === "left") {
       evt.preventDefault()
       evt.stopPropagation()
       return move(-1)
     }
-    if (evt.name === "right") {
+    if (name === "right") {
       evt.preventDefault()
       evt.stopPropagation()
       return move(1)
     }
-    if (evt.name === "tab") {
+    if (name === "tab") {
       evt.preventDefault()
       evt.stopPropagation()
       return move(evt.shift ? -1 : 1)
     }
     // Vertical keys scroll the stack trace; buttons navigate horizontally.
-    if (evt.name === "up") return scroll?.scrollBy(-1)
-    if (evt.name === "down") return scroll?.scrollBy(1)
-    if (evt.name === "pageup" && scroll) return scroll.scrollBy(-scroll.height)
-    if (evt.name === "pagedown" && scroll) return scroll.scrollBy(scroll.height)
-    if (evt.name === "home" && scroll) return scroll.scrollTo(0)
-    if (evt.name === "end" && scroll) return scroll.scrollTo(scroll.scrollHeight)
-    if (evt.name === "q") return exit()
-    if (evt.name === "c") return copyReport()
-    if (evt.name === "r") return props.reset()
+    if (name === "up") return scroll?.scrollBy(-1)
+    if (name === "down") return scroll?.scrollBy(1)
+    if (name === "pageup" && scroll) return scroll.scrollBy(-scroll.height)
+    if (name === "pagedown" && scroll) return scroll.scrollBy(scroll.height)
+    if (name === "home" && scroll) return scroll.scrollTo(0)
+    if (name === "end" && scroll) return scroll.scrollTo(scroll.scrollHeight)
+    if (name === "q") return exit()
+    if (name === "c") return copyReport()
+    if (name === "r") return props.reset()
   })
 
   // Responsive thresholds.
