@@ -296,32 +296,42 @@ session on screen (or over the whole screen) and whose view gets `SurfaceInput::
 screen and whether it has the input); and `Place::Overlay(name)`, which `Host::overlay` shows over everything but the
 host's dialogs, at a cell, under a node of the opening mount, against a screen edge, or inside another surface of the
 plugin that shows (a panel, a slot) against one of its edges; anchored to one that does not show, it does not open.
-An overlay takes the focus; escape and a press outside it close it, and its opener's handler gets `Event::Closed`.
+An overlay takes the focus; escape (in any of its modes) and a press outside it close it, and its opener's handler
+gets `Event::Closed`; the focus goes to the overlay below it, else back to where it was opened from. While a host
+dialog is open, no overlay opens and `Host::focus` does nothing.
 
 `Surface::on(handler)` and `Surface::layers(layers)` give a surface its input: each mount registers the layers, and a
 layer's scope is the surface (the panel, the overlay, or a route while it shows), one of its nodes, the composer, or
-everywhere. A bind's key calls the handler with `Event::Key`; `Handled::Pass` lets the key go on down the host's order,
-by priority. A layer with `any` hears every key before any layer, and one with `paste` may take a paste in its scope.
-A global layer's `paste` hears one in the composer or in a panel or overlay before the host, and one that lands
-elsewhere once no host widget took it: a host dialog's input keeps its paste (TS offers every paste to a global
-listener first).
+everywhere; a route's while no host dialog or overlay is over it. A bind's key calls the handler with `Event::Key`;
+`Handled::Pass` lets the key go on down the host's order, by priority. A layer with `any` hears every key before any
+layer, and one with `paste` may take a paste in its scope, in a panel, an overlay, a route or a slot claim; pastes
+reach these listeners by priority, the newest first among equals, as keys do. A global layer's `paste` hears one in
+the composer or in a plugin's surface before the host, and one that lands elsewhere once no host widget took it: a
+host dialog's input keeps its paste (TS offers every paste to a global listener first).
 `Setup::layer` registers a layer of the plugin's own, for the composer or everywhere. `Host::set_mode` puts the caller's
-mount (or the plugin) in a mode, which only its layers of that mode hold in; the mode ends when the focus leaves its
-scope, when its owner ends, and on `ctrl+c`, which no layer can bind. A bind with `hold` buffers the keys after it
-until `Host::release_keys` or 50 ms. What a handler asks for applies before the next event of the same read. A box's
+mount (or the plugin) in a mode, which only its layers of that mode hold in, and never over a host dialog; the mode
+ends when the focus moves out of its scope (also out and back within one call), when its owner ends, and on `ctrl+c`.
+`ctrl+c`, however it is spelled, is no plugin's key: before the host's selection and every layer, it ends every plugin
+mode, drops what a hold kept (as a terminal's interrupt drops typed-ahead input), and stops the plugins' layers where
+the focus is until it moves; then it goes on to the host. A bind with `hold` keeps the keys and pastes after it, at
+most 256, until its owner calls `Host::release_keys`, its own 50 ms pass or the limit is reached; then they are routed
+in order, and those meant for a focus that a press or a command moved since are dropped. A press is not kept: OpenTUI
+gives it to its widget first. What a handler asks for applies before the next event of the same read. A box's
 `Interact` makes it focusable (`Host::focus`, `Host::blur`), gives `Event::Pointer` for press, release, drag after a
 consumed press, wheel and drop, and a hover background with no call, or `Event::Hover`; a text with an id and
-`hover_events` gives `Event::Hover` too. A capture ends with the release, the node, the focus, a host dialog or a
-resize. A drop says where the drag started (`Pointer::from`): a node of any mount of the plugin; a drag from a host
+`hover_events` gives `Event::Hover` too. A capture ends with the release, the node leaving the tree, a move of the
+focus, a host dialog or a resize. On a box with a click of its own, a press the handler consumes runs no click. A drop says where the drag started (`Pointer::from`): a node of any mount of the plugin; a drag from a host
 widget or another plugin's node drops nothing. `Read::rect`, `Read::focused`
-and `Read::mode` read the running call's mount; a command reads the plugin's mount that holds the node or the focus.
+and `Read::mode` read the running call's mount; a command reads, and `Host::focus` and `Host::blur` act on, the
+plugin's mount that holds the node or the focus.
 Everything a mount registers ends with it, and everything a plugin registers ends when it leaves `active`.
 
 `Dialog::Select` with a `key` is the rich select: shown again under its key while it is open, it changes in place and
 keeps its filter and selection, and picking a row does not close it. A row may have its own action, a footer color, a
-gutter (the host's spinner, or a span), or `toggle`, a plugin the host enables or disables when the row is picked,
-labelled from that plugin's state; a row cannot toggle its own plugin or the plugin manager. `actions` and `binds` run
-with the selected row's value. A select that names a search of `Setup::search` lists, for the query as it is typed
+gutter (the host's spinner, or a span), or `toggle`, a plugin the host enables or disables when the user picks the row
+with a key or a click (never a run of the select's command by name), labelled from that plugin's state and named in
+the hint; a row cannot toggle its own plugin or the plugin manager. `actions` and `binds` run with the selected row's
+value; shown again with others, the select is built again with its filter and selection. Neither may be `ctrl+c`. A select that names a search of `Setup::search` lists, for the query as it is typed
 and the empty one as it opens, the rows the search returns from the enabled ones, in its order and flat (TS
 `search`). `Dialog::ErrorDetails` shows an error in the host's own error view.
 
