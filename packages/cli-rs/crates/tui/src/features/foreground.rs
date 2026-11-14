@@ -90,6 +90,8 @@ pub fn run(tui: &Tui, program: abi::Foreground, alive: Box<dyn Fn() -> bool>, re
 
 /// The reply of an exit `status`.
 fn exit(status: std::process::ExitStatus) -> Value {
+    // Only Unix adds the signal.
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut reply = json!({ "code": status.code() });
     #[cfg(unix)]
     if let Some(signal) = std::os::unix::process::ExitStatusExt::signal(&status) {
