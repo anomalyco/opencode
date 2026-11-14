@@ -1210,7 +1210,12 @@ struct PluginsChanged;
 /// Loads the external native plugins (P.4): the discovered `plugins` directories and the `cli.json` entries that name no
 /// built-in. Each change in a watched directory reconciles them again (hot reload), debounced by 100 ms as in TS.
 pub fn external(tui: &Rc<Tui>, external: External) {
-    let scripts = opencode_plugin::pipe::Config::from_env().map(|config| opencode_plugin::pipe::Config {
+    let args = &tui.startup.args;
+    let server = match args.local {
+        true => opencode_plugin::pipe::Server::Local(args.server_executable.clone()),
+        false => opencode_plugin::pipe::Server::Remote,
+    };
+    let scripts = opencode_plugin::pipe::Config::from_env(&server).map(|config| opencode_plugin::pipe::Config {
         version: crate::dialogs::debug::VERSION.to_owned(),
         channel: opencode_local::channel::Channels::from_env().channel,
         ..config

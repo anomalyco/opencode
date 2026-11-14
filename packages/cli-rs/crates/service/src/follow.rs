@@ -348,7 +348,7 @@ mod tests {
         let connection = Connection {
             endpoint: Endpoint::new(url, None),
             version: String::new(),
-            source: Source::Service { channel: "oc-x".to_owned(), file },
+            source: Source::Service { channel: "oc-x".to_owned(), file, pid: 9 },
             warning: None,
         };
         let Err(ApiError::Transport(message)) = client(server.clone(), &connection, &paths, &Env::default()) else {

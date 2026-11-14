@@ -107,10 +107,23 @@ pub struct Connection {
 pub enum Source {
     /// `--server`.
     Server,
-    /// A registered background service, found or started.
-    Service { channel: String, file: PathBuf },
+    /// A registered background service, found or started, and the process it answered from.
+    Service { channel: String, file: PathBuf, pid: u32 },
     /// A private server for this client; dropping the last handle stops it.
     Standalone(Arc<standalone::Server>),
+}
+
+impl Connection {
+    /// The executable the server's process runs, for a service or a standalone server, which run on this machine; not
+    /// for `--server`, which may be on another. `None` where the platform does not tell
+    /// ([`discover::process_executable`]).
+    pub fn executable(&self) -> Option<PathBuf> {
+        match &self.source {
+            Source::Server => None,
+            Source::Service { pid, .. } => discover::process_executable(*pid),
+            Source::Standalone(server) => discover::process_executable(server.pid),
+        }
+    }
 }
 
 /// A connection failure, with the TypeScript client's text.
@@ -180,10 +193,11 @@ pub async fn resolve(
     if let Some(warning) = mismatch(&found.service.endpoint, &version, options) {
         log::warn!("{warning}");
     }
+    let pid = found.service.registration.pid;
     Ok(Connection {
         endpoint: found.service.endpoint,
         version,
-        source: Source::Service { channel: found.channel, file: found.file },
+        source: Source::Service { channel: found.channel, file: found.file, pid },
         warning: None,
     })
 }
@@ -378,6 +392,19 @@ mod tests {
         assert_eq!(message(result), "--server and --standalone cannot be combined");
     }
 
+    // Expected (js-host-runtime): a service's executable is its process's, as Linux tells it; `--server` has none.
+    #[test]
+    fn a_services_executable_is_its_processs() {
+        let connection =
+            |source| Connection { endpoint: Endpoint::new(URL, None), version: String::new(), source, warning: None };
+        assert_eq!(connection(Source::Server).executable(), None);
+        let service = Source::Service { channel: "oc-x".to_owned(), file: PathBuf::new(), pid: std::process::id() };
+        let found = connection(service).executable();
+        if cfg!(target_os = "linux") {
+            assert_eq!(found, Some(std::env::current_exe().unwrap()));
+        }
+    }
+
     #[tokio::test]
     async fn a_registered_service_is_used_without_flags() {
         let dir = opencode_util::temp::tempdir().unwrap();
@@ -392,7 +419,7 @@ mod tests {
         assert_eq!(connection.version, "2.0.0");
         assert_eq!(
             connection.source,
-            Source::Service { channel: "oc-x".to_owned(), file: paths.state.join("service-oc-x.json") }
+            Source::Service { channel: "oc-x".to_owned(), file: paths.state.join("service-oc-x.json"), pid: 9 }
         );
         // Versions differ (2.0.0 against 1.0.0), but a discovered service's mismatch is only
         // logged (O-22).
