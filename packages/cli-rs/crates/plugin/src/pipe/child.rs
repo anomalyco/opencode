@@ -717,9 +717,19 @@ mod tests {
     fn an_acknowledged_handler_that_never_answers_is_late() {
         let limits = Limits { ack: Duration::from_millis(100), ..Limits::default() };
         for (wait, late) in [(Wait::Ack, false), (Wait::Answer, true)] {
-            let mut frames = hello();
-            frames.extend(control(&Up::Ack { seq: 1 }));
-            let (child, _dir) = fake(&frames, limits);
+            // The child acknowledges once it read the event, never before it was sent.
+            let dir = opencode_util::temp::tempdir().unwrap();
+            let (hello_file, ack_file) = (dir.path().join("hello"), dir.path().join("ack"));
+            std::fs::write(&hello_file, hello()).unwrap();
+            std::fs::write(&ack_file, control(&Up::Ack { seq: 1 })).unwrap();
+            let script = format!(
+                "cat '{}'; head -c 7 > /dev/null; cat '{}'; cat > /dev/null",
+                hello_file.display(),
+                ack_file.display()
+            );
+            let mut command = Command::new("sh");
+            command.arg("-c").arg(script);
+            let child = Child::spawn(command, limits, || {}).unwrap();
             child.send(wire::CONTROL, b"{}", Some(1), wait).unwrap();
             let events = take_until(&child, |events| events.iter().any(|event| matches!(event, Event::Hung { .. })));
             let hung = events.iter().any(|event| matches!(event, Event::Hung { seq: 1 }));

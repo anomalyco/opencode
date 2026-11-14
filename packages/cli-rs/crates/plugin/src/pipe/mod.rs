@@ -192,6 +192,16 @@ pub enum Fault {
     Swap,
 }
 
+/// A fault the next revision from the JS host suffers, for the tests.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tamper {
+    /// It is kept, so [`Scripts::replay`] can deliver it again later, when it is stale.
+    Keep,
+    /// Its tree is a keep of a key the host does not hold.
+    UnknownKeep,
+}
+
 /// Posted by a reader thread: the JS host of `Scripts` sent something.
 struct Woken(u64);
 
@@ -223,6 +233,8 @@ pub struct Scripts {
     /// The fault armed for the next handler's message, and a message a swap holds back.
     fault: Cell<Option<Fault>>,
     swapped: RefCell<Option<Down>>,
+    tamper: Cell<Option<Tamper>>,
+    kept: RefCell<Option<Box<proto::Revision>>>,
     _handler: Cell<Option<HandlerId>>,
     _intercepts: RefCell<Vec<Disposer>>,
 }
@@ -265,6 +277,8 @@ impl Scripts {
             hold: RefCell::default(),
             fault: Cell::new(None),
             swapped: RefCell::default(),
+            tamper: Cell::new(None),
+            kept: RefCell::default(),
             _handler: Cell::new(None),
             _intercepts: RefCell::default(),
         });
@@ -324,6 +338,24 @@ impl Scripts {
     #[doc(hidden)]
     pub fn fault(&self, fault: Fault) {
         self.fault.set(Some(fault));
+    }
+
+    /// Arms `tamper` for the next revision.
+    #[doc(hidden)]
+    pub fn tamper(&self, tamper: Tamper) {
+        self.tamper.set(Some(tamper));
+    }
+
+    /// Delivers again the revision [`Tamper::Keep`] kept.
+    #[doc(hidden)]
+    pub fn replay(&self) {
+        let kept = self.kept.borrow_mut().take();
+        if let Some(tree) = kept {
+            match self.guest(&tree.id) {
+                Some(guest) => guest.tree(tree),
+                None => count(|crossed| crossed.dropped += 1),
+            }
+        }
     }
 
     /// Ends the JS host as a crash would, for tests of what follows.
@@ -502,7 +534,14 @@ impl Scripts {
                     count(|crossed| crossed.received += 1);
                     self.up(*up);
                 }
-                child::Event::Tree(tree) => {
+                child::Event::Tree(mut tree) => {
+                    match self.tamper.take() {
+                        Some(Tamper::Keep) => *self.kept.borrow_mut() = Some(tree.clone()),
+                        Some(Tamper::UnknownKeep) => {
+                            tree.node = serde_json::json!({ "type": "keep", "key": "no-such" })
+                        }
+                        None => {}
+                    }
                     count(|crossed| {
                         crossed.received += 1;
                         crossed.trees += 1;

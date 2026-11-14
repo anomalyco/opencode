@@ -205,6 +205,13 @@ fn twin_script(pipe: Option<Config>) -> Vec<(&'static str, Seen)> {
         settle();
     }
     seen.push(("bumped", observe(&harness, twin::ID)));
+    // A burst: the JS host views after each, and sends the next tree once the last was adopted.
+    for card in ["0", "1", "3", "4"] {
+        tui.keymap.dispatch("twin.bump", Some(card));
+        harness.app.advance(Duration::from_millis(1));
+    }
+    settle();
+    seen.push(("burst", observe(&harness, twin::ID)));
     tui.theme.borrow_mut().set("tokyonight");
     tui.theme_changed();
     settle();
@@ -574,10 +581,15 @@ fn rows_do_not_move_once_the_first_tree_arrived() {
     harness.tui.keymap.dispatch("probe.rows", Some("3"));
     watch("a revision of the same size");
     pipe.settle();
-    // Away and back: the home footer mounts again, under the same key.
+    // Away and back: the home footer mounts again, under the same key, while the JS host is busy, so its placeholder
+    // shows for a while.
     harness.tui.navigate(Route::Plugin { id: twin::ID.to_owned(), name: "twin".to_owned() });
     pipe.settle();
+    harness.tui.keymap.dispatch("probe.hold", Some("400"));
+    harness.app.advance(Duration::from_millis(60));
     harness.tui.navigate(Route::Home);
+    harness.app.advance(Duration::from_millis(1));
+    assert!(!harness.app.text().contains("probe line"), "the guard: no placeholder showed\n{}", harness.app.text());
     watch("a new mount");
     pipe.settle();
     assert_eq!(prompt_row(harness), Some(row));
@@ -800,4 +812,83 @@ fn a_revision_crosses_bytes_that_follow_the_change() {
     let themed = pipe::crossed();
     // The settle's own ping and pong cross; nothing else does.
     assert_eq!((themed.sent - quiet.sent, themed.trees - quiet.trees), (1, 0), "a theme change crossed to the plugin");
+}
+
+/// The twin alone on the JS host, its route open and settled.
+fn twin_alone(config: Config) -> Pipe {
+    let pipe = open(&[("twin", None)], config, (80, 30));
+    pipe.active(twin::ID);
+    pipe.harness.tui.navigate(Route::Plugin { id: twin::ID.to_owned(), name: "twin".to_owned() });
+    pipe.settle();
+    pipe
+}
+
+// Expected (the pipe's fault operator "repeat one message", from the JS host): a revision delivered again once a newer
+// one was adopted builds on what the host no longer shows; it is dropped, and the newer one stays on screen.
+#[test]
+fn a_stale_revision_is_dropped() {
+    let Some(config) = config() else { return };
+    let pipe = twin_alone(config);
+    let tui = &pipe.harness.tui;
+    pipe.scripts().tamper(pipe::Tamper::Keep);
+    tui.keymap.dispatch("twin.bump", Some("1"));
+    pipe.settle();
+    tui.keymap.dispatch("twin.bump", Some("1"));
+    pipe.settle();
+    assert!(pipe.harness.app.text().contains("twin 2"));
+    let dropped = pipe::crossed().dropped;
+    pipe.scripts().replay();
+    pipe.settle();
+    assert!(pipe.harness.app.text().contains("twin 2"), "{}", pipe.harness.app.text());
+    assert_eq!(pipe::crossed().dropped, dropped + 1);
+    assert_eq!(pipe.status(twin::ID), Some(Status::Active));
+}
+
+// Expected (`keep-full` over the pipe): a revision the host refuses for a keep it does not hold changes nothing; the
+// host says so, the JS host sends a whole tree, which is adopted, and the plugin stays active and goes on.
+#[test]
+fn a_refused_revision_is_mended_by_a_whole_one() {
+    let Some(config) = config() else { return };
+    let pipe = twin_alone(config);
+    let tui = &pipe.harness.tui;
+    let refused = pipe::crossed().refused;
+    pipe.scripts().tamper(pipe::Tamper::UnknownKeep);
+    tui.keymap.dispatch("twin.bump", Some("1"));
+    pipe.settle();
+    assert_eq!(pipe::crossed().refused, refused + 1);
+    assert!(pipe.harness.app.text().contains("twin 1"), "{}", pipe.harness.app.text());
+    tui.keymap.dispatch("twin.bump", Some("2"));
+    pipe.settle();
+    assert!(pipe.harness.app.text().contains("card 2: 1"), "{}", pipe.harness.app.text());
+    assert_eq!(pipe.status(twin::ID), Some(Status::Active));
+}
+
+// Expected (`reload-fresh` over the pipe): a changed module loads again on the JS host; the running build stays active
+// and on screen until the new one answered, which then replaces it as a fresh load would.
+#[test]
+fn a_changed_module_reloads_and_the_running_one_stays_meanwhile() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe_and_twin(config, false);
+    let harness = &pipe.harness;
+    twin_open(&pipe);
+    // The JS host is busy, so the new build's setup waits.
+    harness.tui.keymap.dispatch("probe.hold", Some("600"));
+    let file = pipe.root.path().join("config/plugins/twin/tui.ts");
+    let source = std::fs::read_to_string(&file).unwrap();
+    std::fs::write(&file, format!("{source}\n// changed\n")).unwrap();
+    let begun = Instant::now();
+    let mut reloaded = false;
+    while begun.elapsed() < Duration::from_secs(10) && !reloaded {
+        harness.app.advance(Duration::from_millis(1));
+        std::thread::sleep(Duration::from_millis(2));
+        assert_eq!(pipe.status(twin::ID), Some(Status::Active), "the running build left while the new one loaded");
+        let text = harness.app.text();
+        reloaded = text.contains("twin 0");
+        assert!(reloaded || text.contains("twin 1"), "{text}");
+    }
+    assert!(reloaded, "the changed module did not load: {}", harness.app.text());
+    pipe.settle();
+    harness.tui.keymap.dispatch("twin.bump", Some("2"));
+    pipe.settle();
+    assert!(harness.app.text().contains("card 2: 1"), "{}", harness.app.text());
 }
