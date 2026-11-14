@@ -5,6 +5,7 @@ import { Global } from "@opencode/util/global"
 import type { SessionMessageInfo } from "@opencode/client"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
+import { waitForHighlightedFrame } from "./fixture/frame"
 
 // Regression: a thought group mounted by tail-first backfill (older rows revealed
 // after scrolling to the top) must still toggle when its disclosure is clicked.
@@ -79,8 +80,7 @@ test("clicking a backfilled thought group toggles it", async () => {
     const row = lines.findIndex((line) => line.includes("+ Thought: Turn 0"))
     expect(row).toBeGreaterThan(0)
     await setup.mockMouse.click(6, row)
-    await setup.waitForVisualIdle({ quietFrames: 3 })
-    expect(setup.captureCharFrame()).toContain("A fixed thought.")
+    await waitForHighlightedFrame(setup, (frame) => frame.includes("A fixed thought."))
   } finally {
     setup.renderer.destroy()
     await task
