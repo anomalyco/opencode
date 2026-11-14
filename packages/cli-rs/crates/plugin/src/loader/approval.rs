@@ -89,12 +89,42 @@ impl Artifact {
         if !path.is_dir() {
             return Err(format!("{}: not a directory", path.display()));
         }
-        let mut context = ring::digest::Context::new(&ring::digest::SHA256);
-        context.update(b"opencode-ts-plugin\0");
-        let mut total = 0;
-        walk(&path, Path::new(""), &mut context, &mut total, 0)?;
-        let sha256 = context.finish().as_ref().iter().map(|byte| format!("{byte:02x}")).collect();
+        let sha256 = tree_sha256(&path, None)?;
         Ok(Self { target: target.to_path_buf(), path, sha256, script: true })
+    }
+
+    /// The tree [`Artifact::tree`] hashed, as a copy under `root` named by its hash, which the JS host imports instead
+    /// of the directory (bigboi P8-1): a save between the approval and the import changes the directory, not the copy.
+    /// The copy is written from the bytes its hash is taken of as they are copied, and kept only if that hash is the
+    /// one approved; else the directory changed since, and nothing of it runs. A copy made before is used again.
+    pub fn stage(&self, root: &Path) -> Result<PathBuf, String> {
+        let staged = root.join(&self.sha256);
+        if staged.is_dir() {
+            return Ok(staged);
+        }
+        let error = |error: std::io::Error| format!("{}: {error}", root.display());
+        std::fs::create_dir_all(root).map_err(error)?;
+        let partial = root.join(format!(
+            ".{}.{}.{}",
+            self.sha256,
+            std::process::id(),
+            STAGES.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        let _ = std::fs::remove_dir_all(&partial);
+        std::fs::create_dir(&partial).map_err(error)?;
+        let copied = tree_sha256(&self.path, Some(&partial));
+        if copied.as_deref() != Ok(self.sha256.as_str()) {
+            let _ = std::fs::remove_dir_all(&partial);
+            return Err(match copied {
+                Ok(_) => format!("{}: changed since it was approved", self.path.display()),
+                Err(error) => error,
+            });
+        }
+        // Another client may have staged the same tree meanwhile: its copy holds the same bytes.
+        if std::fs::rename(&partial, &staged).is_err() && staged.is_dir() {
+            let _ = std::fs::remove_dir_all(&partial);
+        }
+        staged.is_dir().then_some(staged).ok_or_else(|| format!("{}: cannot be staged", self.path.display()))
     }
 
     /// The bytes of `handle`, the file [`Artifact::open`] hashed, once they are checked to be the ones it hashed: what
@@ -116,14 +146,28 @@ impl Artifact {
     }
 }
 
+/// Names each copy [`Artifact::stage`] starts apart.
+static STAGES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The hash of the plugin directory `path`, copied under `copy` as it is read when there is one.
+fn tree_sha256(path: &Path, copy: Option<&Path>) -> Result<String, String> {
+    let mut context = ring::digest::Context::new(&ring::digest::SHA256);
+    context.update(b"opencode-ts-plugin\0");
+    let mut total = 0;
+    walk(path, Path::new(""), &mut context, &mut total, 0, copy)?;
+    Ok(context.finish().as_ref().iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
 /// Hashes the entries of `dir` (at `relative` in the plugin) into `context`; `total` counts the bytes read, refused past
-/// [`LIMIT`]. A link is followed (Bun follows it) to a depth of 32, past which the tree is refused.
+/// [`LIMIT`]. A link is followed (Bun follows it) to a depth of 32, past which the tree is refused. With `copy`, each
+/// file is written there, at its place in the plugin, from the bytes that are hashed.
 fn walk(
     dir: &Path,
     relative: &Path,
     context: &mut ring::digest::Context,
     total: &mut u64,
     depth: usize,
+    copy: Option<&Path>,
 ) -> Result<(), String> {
     if depth > 32 {
         return Err(format!("{}: nested too deep", dir.display()));
@@ -137,18 +181,42 @@ fn walk(
         let metadata = std::fs::metadata(&path).map_err(error)?;
         context.update(encode(&inner).as_bytes());
         context.update(b"\0");
+        let to = copy.map(|copy| copy.join(&name));
         if metadata.is_dir() {
-            walk(&path, &inner, context, total, depth + 1)?;
+            if let Some(to) = &to {
+                std::fs::create_dir(to).map_err(error)?;
+            }
+            walk(&path, &inner, context, total, depth + 1, to.as_deref())?;
         } else if metadata.is_file() {
             *total += metadata.len();
             if *total > LIMIT {
                 return Err(format!("{}: larger than {} MiB", dir.display(), LIMIT / 1024 / 1024));
             }
             let mut file = File::open(&path).map_err(error)?;
-            context.update(sha256(&mut file)?.as_bytes());
+            let digest = match &to {
+                Some(to) => {
+                    let mut out = std::io::BufWriter::new(File::create_new(to).map_err(error)?);
+                    let digest = sha256(&mut Tee(&mut file, &mut out))?;
+                    std::io::Write::flush(&mut out).map_err(error)?;
+                    digest
+                }
+                None => sha256(&mut file)?,
+            };
+            context.update(digest.as_bytes());
         }
     }
     Ok(())
+}
+
+/// A reader that writes what it reads to `.1`: a copy of exactly the bytes hashed.
+struct Tee<'a, R, W>(&'a mut R, &'a mut W);
+
+impl<R: Read, W: std::io::Write> Read for Tee<'_, R, W> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let read = self.0.read(buffer)?;
+        self.1.write_all(&buffer[..read])?;
+        Ok(read)
+    }
 }
 
 #[cfg(test)]
@@ -223,6 +291,8 @@ fn encode(path: &Path) -> String {
 /// The user's decisions, at most one for a plugin directory and library path: the last.
 pub struct Approvals {
     store: Store,
+    /// Where [`Artifact::stage`] copies approved trees when decisions are not saved: a private directory of this client.
+    scratch: RefCell<Option<opencode_util::temp::TempDir>>,
 }
 
 enum Store {
@@ -234,7 +304,7 @@ enum Store {
 impl Default for Approvals {
     /// In memory, as a TUI without real roots keeps them.
     fn default() -> Self {
-        Self { store: Store::Memory(RefCell::default(), None) }
+        Self { store: Store::Memory(RefCell::default(), None), scratch: RefCell::default() }
     }
 }
 
@@ -243,12 +313,27 @@ impl Approvals {
     /// directory (bigboi-2): then they last as long as the client, and [`Approvals::unsaved`] says why.
     pub fn open(file: PathBuf, project: &Path) -> Self {
         match trusted(&file, project) {
-            Ok(()) => Self { store: Store::File(file) },
+            Ok(()) => Self { store: Store::File(file), scratch: RefCell::default() },
             Err(reason) => {
                 log::warn!("plugin approvals are not saved: {reason}");
-                Self { store: Store::Memory(RefCell::default(), Some(reason)) }
+                Self { store: Store::Memory(RefCell::default(), Some(reason)), scratch: RefCell::default() }
             }
         }
+    }
+
+    /// Where approved TypeScript trees are staged ([`Artifact::stage`]): beside the decisions when they are saved, in
+    /// the private state directory a project cannot reach; else in a private directory that lasts as long as the client.
+    pub fn staging(&self) -> Result<PathBuf, String> {
+        if let Store::File(file) = &self.store
+            && let Some(directory) = file.parent()
+        {
+            return Ok(directory.join("plugin-staged"));
+        }
+        let mut scratch = self.scratch.borrow_mut();
+        if scratch.is_none() {
+            *scratch = Some(opencode_util::temp::tempdir().map_err(|error| error.to_string())?);
+        }
+        Ok(scratch.as_ref().map(|scratch| scratch.path().to_path_buf()).unwrap_or_default())
     }
 
     /// Why decisions are not saved, when a store was asked for and refused.
