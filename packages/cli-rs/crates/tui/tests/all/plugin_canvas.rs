@@ -698,7 +698,7 @@ impl Model for Canvases {
 // frame, `ledger` for lists, and `lifecycle` for draws: a draw only for the mount that shows, at the canvas's size.
 #[test]
 fn canvases_hold_their_properties() {
-    model::check(&Canvases, 24, 24);
+    model::check(&Canvases, 64, 24);
 }
 
 /// The cells of a canvas by a rasterizer of this test's own, for opaque fills, text and cells under clips: a second
@@ -1121,6 +1121,8 @@ struct Full {
     /// The plugin's own time to build each list, and the last list's bytes.
     built: Vec<Duration>,
     last: Vec<u8>,
+    /// Keys of the route that asked for a new screen.
+    version: u64,
 }
 
 thread_local! {
@@ -1128,9 +1130,17 @@ thread_local! {
 }
 
 fn full_setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let key = abi::Command {
+        name: "full.next".into(),
+        keybind: Some("k".into()),
+        scope: abi::Scope::Route("full".into()),
+        ..abi::Command::default()
+    };
+    setup.command(key, |_, _| FULL.with(|full| full.borrow_mut().version += 1));
     let view = |_: &mut v2::View<'_>| {
-        let mode = FULL.with(|full| full.borrow().mode);
+        let (mode, version) = FULL.with(|full| (full.borrow().mode, full.borrow().version));
         let canvas = v2::Node::canvas("screen")
+            .version(version)
             .animate(matches!(mode, Mode::Animate | Mode::Same))
             .layout(abi::Layout { grow: true, shrink: Some(false), ..abi::Layout::default() });
         v2::Node::column(vec![canvas]).layout(abi::Layout { grow: true, ..abi::Layout::default() }).with_id("full")
@@ -1191,7 +1201,8 @@ fn timed(harness: &Harness, frames: usize) -> (Vec<Duration>, Vec<Duration>) {
 // `--ignored plugin_canvas::a_full_screen_canvas --nocapture` and prints, in µs, p50 and p99 of: the whole frame
 // animating a new screen each frame, the plugin's own build of its list, the same for a screen that does not change
 // (the frame then writes nothing to the terminal), the frame replaying a kept list, the frame of a canvas with no
-// list, and the host's check of one list.
+// list, a key of the route to the frame whose cells show the screen it asked for (with the frame's copy of its
+// cells), and the host's check of one list.
 #[test]
 #[ignore]
 fn a_full_screen_canvas_at_60_fps() {
@@ -1220,6 +1231,24 @@ fn a_full_screen_canvas_at_60_fps() {
         let (mut replayed, _) = timed(&harness, FRAMES);
         let still = host::work().since(work);
         assert_eq!((still.draws, still.replays), (0, FRAMES as u64), "a still canvas is replayed, not drawn");
+        // A key of the route asks for a new screen: from the key to the frame that shows it, the cells read back.
+        let mut keyed: Vec<Duration> = (0..FRAMES / 4)
+            .map(|_| {
+                harness.app.advance(Duration::from_millis(16));
+                let started = std::time::Instant::now();
+                harness.app.press("k");
+                let frame = harness.app.render();
+                let took = started.elapsed();
+                let shown = FULL.with(|full| full.borrow().last.clone());
+                let first = list::ops(&shown).find_map(|op| match op {
+                    list::Op::Cells { cells, .. } => cells.iter().next(),
+                    _ => None,
+                });
+                let cell = frame.cell(0, 0).unwrap();
+                assert_eq!(cell.symbol.chars().next(), first.map(|(_, char)| char), "the key's screen is on screen");
+                took
+            })
+            .collect();
         FULL.with(|full| full.borrow_mut().mode = Mode::Empty);
         harness.tui.navigate(Route::Home);
         harness.tui.navigate(route);
@@ -1236,7 +1265,7 @@ fn a_full_screen_canvas_at_60_fps() {
             format!("{name} {:.1} {:.1}", percentile(samples, 0.5), percentile(samples, 0.99))
         };
         eprintln!(
-            "canvas-gate {width}x{height} bytes={} | {} | {} | {} | {} | {} | {} | {}",
+            "canvas-gate {width}x{height} bytes={} | {} | {} | {} | {} | {} | {} | {} | {}",
             bytes.len(),
             line("animated", &mut animated),
             line("built", &mut built),
@@ -1244,6 +1273,7 @@ fn a_full_screen_canvas_at_60_fps() {
             line("same-built", &mut same_built),
             line("replayed", &mut replayed),
             line("empty", &mut empty),
+            line("key", &mut keyed),
             line("check", &mut checks),
         );
     }
