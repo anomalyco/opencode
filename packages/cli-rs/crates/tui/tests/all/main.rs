@@ -42,6 +42,7 @@ mod plugin_machines;
 mod plugin_mail;
 mod plugin_model;
 mod plugin_p0a;
+mod plugin_pipe;
 mod plugin_reads;
 mod plugin_reconcile;
 mod plugin_routing;
