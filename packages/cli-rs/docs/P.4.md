@@ -342,7 +342,9 @@ the mode ends when the focus moves out of its scope (also out and back within on
 `ctrl+c`, however it is spelled, is no plugin's key: before the host's selection and every layer, it ends every plugin
 mode, drops what a hold kept (as a terminal's interrupt drops typed-ahead input), and stops the plugins' layers where
 the focus is until it moves, so no list, sequence or spelling of it in a bind runs; then it goes on to the host, in
-the base mode, so the composer clears and the app exits as they would. A bind with `hold` keeps the keys and pastes after it, at
+the base mode, so the composer clears and the app exits as they would. On a plugin's route the host takes it to go home
+instead (TS's diff viewer binds `app.exit`, whose chord it is, to close itself); a focused plugin panel is left as it
+was, so there it exits. A bind with `hold` keeps the keys and pastes after it, at
 most 256, until its owner calls `Host::release_keys`, its own 50 ms pass or the limit is reached; then they are routed
 in order, and those meant for a focus that a press or a command moved since are dropped. A press is not kept: OpenTUI
 gives it to its widget first. What a handler asks for applies before the next event of the same read. A box's
@@ -429,7 +431,8 @@ of its surface, its file menu an overlay, and its source, branch and help dialog
 to the contract, for any plugin:
 
 - `Bind::command` names the user's keybind a bind takes, such as `diff.next_hunk`: the config's keys for that name,
-  else its default. `Read::shortcut` of the name shows them. Its `ctrl+c` stays the host's.
+  else its default. `Read::shortcut` of the name shows them. Its `ctrl+c` stays the host's, which leaves a plugin's
+  route for home.
 - `Read::setting` and `Host::set_setting` read and save the host's named settings (`abi::SETTINGS`: the `diffs.*` keys
   of the TUI config). A value the setting does not take is not saved. Over the C ABI: the read `setting` and the
   request `set-setting`.

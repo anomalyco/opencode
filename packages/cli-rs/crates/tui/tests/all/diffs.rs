@@ -534,18 +534,16 @@ fn the_docked_panel_takes_the_keys_only_with_the_focus() {
     h.wait_for("0/1");
 }
 
-// Expected (deviation F15-diff-viewer-ctrl-c): the reserved chord is the host's in the viewer, so it exits the app as
-// `app.exit` does on home; escape closes the viewer.
+// Expected (TS binds `app.exit` to close the viewer; big-boi's review of P6c): the reserved chord, which no plugin sees,
+// takes the viewer's route back home; there, with an empty prompt, it exits the app.
 #[test]
-fn ctrl_c_in_the_viewer_is_the_hosts() {
+fn ctrl_c_closes_the_viewer_and_exits_elsewhere() {
     let h = route(1, 4, 120, 30);
-    h.keys(&["escape"]);
-    h.wait("escape did not close the viewer", || h.tui.route() == Route::Home);
-    h.tui.keymap.dispatch("diff.open", None);
-    h.wait_for("≡ f0000.rs");
+    h.keys(&["ctrl+c"]);
+    h.wait("ctrl+c did not leave the route", || h.tui.route() == Route::Home);
     assert!(!h.app.app().is_quitting());
     h.keys(&["ctrl+c"]);
-    assert!(h.app.app().is_quitting(), "ctrl+c did not exit:\n{}", h.app.text());
+    assert!(h.app.app().is_quitting(), "ctrl+c on home did not exit:\n{}", h.app.text());
 }
 
 /// The viewer's settings as the TUI config holds them now.

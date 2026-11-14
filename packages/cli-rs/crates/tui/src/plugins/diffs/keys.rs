@@ -33,7 +33,8 @@ pub enum Action {
 }
 
 /// The viewer's commands in TS order. `app.exit` closes the viewer while it has the input; the specific bindings
-/// win over its `ctrl+d`. Its `ctrl+c` is the host's: no plugin layer takes the reserved chord (P2).
+/// win over its `ctrl+d`. Its `ctrl+c` is the host's: no plugin layer takes the reserved chord (P2), and the host
+/// takes a plugin's route home on it, as `app.exit` closes the route's viewer in TS.
 pub const COMMANDS: [(&str, &str, Action); 21] = [
     ("diff.close", "Close diff viewer", Action::Close),
     ("diff.down", "Move diff viewer down", Action::Down),
