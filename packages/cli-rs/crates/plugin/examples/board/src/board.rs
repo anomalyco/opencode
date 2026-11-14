@@ -29,9 +29,9 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     })?;
     let bumped = board.clone();
     setup.command(command("board.bump"), move |_, input| bumped.borrow_mut().values[number(input) % CARDS] += 1);
-    let spawner = setup.spawner();
+    let (spawner, flood) = (setup.spawner(), sender.clone());
     setup.command(command("board.flood"), move |_, input| {
-        let (sender, count) = (sender.clone(), number(input));
+        let (sender, count) = (flood.clone(), number(input));
         let _ = spawner.spawn("flood", move |stop| {
             for index in 0..count {
                 let mut card = index % CARDS;
@@ -47,6 +47,12 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
                 }
             }
         });
+    });
+    // At most the mailbox's bound, sent at once and never waited on: what arrives does not depend on when the UI drains.
+    let spawner = setup.spawner();
+    setup.command(command("board.burst"), move |_, input| {
+        let (sender, count) = (sender.clone(), number(input));
+        let _ = spawner.spawn("burst", move |_| (0..count).for_each(|index| drop(sender.send(index % CARDS))));
     });
     let spawner = setup.spawner();
     setup.command(command("board.thread-panic"), move |_, _| {
