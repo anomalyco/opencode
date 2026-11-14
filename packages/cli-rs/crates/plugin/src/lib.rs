@@ -1173,8 +1173,6 @@ pub(crate) fn fail(
     }
     log::error!("plugin {id} failed: {error}");
     *failure.borrow_mut() = Some(error);
-    // Its threads are told to end, and what they sent is dropped (4.14: a wake for a plugin that is not active).
-    activation.mailbox.close();
     let id = id.to_owned();
     defer(host, move |host| {
         revoked.into_iter().for_each(Disposer::dispose);
@@ -1183,7 +1181,8 @@ pub(crate) fn fail(
         // The fences it drew fall back to the code view, as the ones it draws from now on do.
         host.remount();
     });
-    // The queued redraw still runs on a disposed activation, so the claims draw empty once.
+    // The queued redraw still runs on a disposed activation, so the claims draw empty once. Disposing tells its threads
+    // to end and drops what they sent (4.14: a wake for a plugin that is not active).
     activation.invalidate();
     activation.dispose();
 }

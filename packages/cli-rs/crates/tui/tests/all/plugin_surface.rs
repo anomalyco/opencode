@@ -1314,10 +1314,10 @@ fn a_duplicate_id_fails_the_plugin_without_a_retry() {
     }
 }
 
-// Expected (review bigboi-7): a route opened from a page with no prompt shows after one view, on both carriers: the
-// TUI's sync of the route it has just mounted calls none, nor does the keymap layer of the route's own commands, which
-// is there before the first view. (From Home a second view follows when the prompt's keymap layer goes, a turn later:
-// the keymap is host state a plugin reads.)
+// Expected (review bigboi-7): a route opened from a page with no keymap layer of its own shows after one view, on both
+// carriers: the TUI's sync of the route it has just mounted calls none, nor does the keymap layer of the route's own
+// commands, which is there before the first view. (From Home, or from a route with commands, a second view follows a
+// turn later, when the layer of the page left goes: the keymap is host state a plugin reads.)
 #[test]
 fn a_route_opens_with_one_view() {
     for carrier in CARRIERS {
