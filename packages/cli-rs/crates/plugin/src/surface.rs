@@ -24,6 +24,12 @@ use crate::{Claimed, Host, SlotInput, slot};
 pub(crate) type Call = Rc<dyn Fn(&dyn Host, &mut dyn FnMut(&dyn abi::Read)) -> bool>;
 /// Fails the plugin with the error.
 pub(crate) type Fail = Rc<dyn Fn(String)>;
+/// A route's commands, bound to one mount: what they ask for ends with the mount.
+pub(crate) type Commands = Rc<dyn Fn(&Weak<()>) -> Vec<opencode_ui::keymap::TuiCommand>>;
+
+/// The content handles of every mount: a handle is never given twice, so one a closed mount gave names nothing in
+/// another, also one opened again under the same key.
+static CONTENT: AtomicU64 = AtomicU64::new(1);
 
 /// What the mounts of 2.0 surfaces hold now, counted per thread outside any mount.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -63,6 +69,8 @@ pub(crate) struct Surface {
     slot_input: SlotInput,
     palette: bool,
     id: v2::MountId,
+    /// Lives as long as the mount; what its route's commands asked for checks it before it arrives.
+    alive: Rc<()>,
     state: RefCell<State>,
     live: RefCell<Option<Rc<slot::Live>>>,
     watch: RefCell<Option<Disposer>>,
@@ -74,7 +82,6 @@ struct State {
     memo: v2::Memo,
     /// The content handles, each with the revision it was given in.
     content: HashMap<ContentRef, (Rc<str>, u64)>,
-    next: u64,
     /// The last accepted tree, keeps as they came.
     last: Option<Vec<Node>>,
     revision: u64,
@@ -112,6 +119,7 @@ impl Surface {
             slot_input: slot_input.clone(),
             palette: surface.palette,
             id,
+            alive: Rc::new(()),
             state: RefCell::default(),
             live: RefCell::new(None),
             watch: RefCell::new(None),
@@ -127,6 +135,11 @@ impl Surface {
         *mounted.watch.borrow_mut() = watch;
         mounted.draw(host);
         mounted
+    }
+
+    /// What stands for the mount while it lives.
+    pub fn alive(&self) -> Weak<()> {
+        Rc::downgrade(&self.alive)
     }
 
     /// Calls the view and adopts its tree; on a refusal, once more for a whole tree.
@@ -189,17 +202,13 @@ impl Surface {
         let input = v2::SurfaceInput { width, height, palette, full };
         let mut memo = std::mem::take(&mut self.state.borrow_mut().memo);
         let held = memo.len() as i64;
-        let (mut next, revision) = {
-            let state = self.state.borrow();
-            (state.next, state.revision)
-        };
+        let revision = self.state.borrow().revision;
         let mut given: Vec<(ContentRef, Rc<str>)> = Vec::new();
         let mut node = None;
         let view = self.view.clone();
         let called = (self.call)(host, &mut |read| {
             let mut content = |bytes: Vec<u8>| {
-                next += 1;
-                let handle = ContentRef(next);
+                let handle = ContentRef(CONTENT.fetch_add(1, Ordering::Relaxed));
                 given.push((handle, Rc::from(String::from_utf8_lossy(&bytes).as_ref())));
                 handle
             };
@@ -212,7 +221,6 @@ impl Surface {
         if !called {
             return None;
         }
-        state.next = next;
         for (handle, text) in given {
             book(|ledger| {
                 ledger.content += 1;
