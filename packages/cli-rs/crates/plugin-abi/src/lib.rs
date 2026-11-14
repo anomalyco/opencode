@@ -28,7 +28,7 @@
 //! # 2.0
 //!
 //! ABI 2.0 is ABI 1.4 with the contract 2.0 of the rich-plugin design on the C ABI: keyed surfaces ([`v2`],
-//! [`Request::View`]), and threads that send messages to the UI thread through a bounded mailbox ([`mail`],
+//! [`Request::View`]), renderer claims of tool calls and fences ([`claim`], [`Request::Claim`]), and threads that send messages to the UI thread through a bounded mailbox ([`mail`],
 //! [`HostApi::send`]). Every 1.4 request and entry is still there. The host loads 1.x libraries as before, through
 //! [`ENTRY_V1`], and serves them ABI 1.4; they get no surfaces and no mailbox.
 //!
@@ -84,8 +84,8 @@ use types::{
 /// plugin.
 pub const ABI_MAJOR: u32 = 2;
 /// The minor version of [`ABI_MAJOR`]. 2.0 adds [`HostApi::send`], [`HostApi::report`], [`HostApi::stopped`] and
-/// [`HostApi::features`], [`Metadata::requires`], [`Manifest::surfaces`] and [`Manifest::messages`], and
-/// [`Request::View`], [`Request::Unmount`] and [`Request::Message`].
+/// [`HostApi::features`], [`Metadata::requires`], [`Manifest::surfaces`], [`Manifest::claims`] and
+/// [`Manifest::messages`], and [`Request::View`], [`Request::Claim`], [`Request::Unmount`] and [`Request::Message`].
 pub const ABI_MINOR: u32 = 0;
 
 /// The symbol every 2.x plugin exports, of type [`EntryFn`].
@@ -359,6 +359,9 @@ pub struct Manifest {
     /// 2.0: the surfaces of [`Setup::surface`], in order; [`Request::View`] names one by index.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub surfaces: Vec<SurfaceClaim>,
+    /// 2.0: the renderer claims of [`Setup::claim`], in order; [`Request::Claim`] names one by index.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub claims: Vec<claim::Entry>,
     /// 2.0: the plugin has a [`Setup::messages`] handler, which [`Request::Message`] runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub messages: bool,
@@ -1522,7 +1525,17 @@ pub enum Request {
         canvas: String,
         frame: v2::Frame,
     },
-    /// 2.0: `mount` ended; the plugin drops what it kept for it, such as its [`v2::Memo`] table.
+    /// 2.0: runs the view of the claim [`Manifest::claims`] names by index on `part`, for the part's `mount`, with
+    /// `input`. The content it gives the host is numbered after `next`. Result: [`claim::Reply`].
+    Claim {
+        claim: usize,
+        mount: v2::MountId,
+        input: v2::SurfaceInput,
+        part: claim::Part,
+        next: u64,
+    },
+    /// 2.0: `mount` (a surface's or a claimed part's) ended; the plugin drops what it kept for it, such as its
+    /// [`v2::Memo`] table.
     Unmount {
         mount: v2::MountId,
     },
@@ -3582,8 +3595,9 @@ impl Setup<'_> {
 
     /// Registers a renderer claim of contract 2.0 ([`claim`]): the tool calls of one tool, or the fences of one
     /// language, drawn in the transcript with a keyed tree, and the host's own row where the claim declines. At one
-    /// tool or language the plugin last in activation order wins. In process only until the C ABI of 2.0.
+    /// tool or language the plugin last in activation order wins.
     pub fn claim(&mut self, claim: claim::Claim) {
+        self.registered.manifest.claims.push((&claim).into());
         self.registered.claims.push(claim);
     }
 }
@@ -3880,6 +3894,29 @@ impl Registered {
                 json(serde_json::to_value(reply))
             }
             Request::Draw { .. } => Err("a draw answers with the list's bytes, not JSON".to_owned()),
+            Request::Claim { claim, mount, input, part, next } => {
+                let claim = self.claims.get(claim).ok_or("no such claim")?;
+                let mut memo = self.memos.borrow_mut().remove(&mount.generation).unwrap_or_default();
+                let (mut next, mut content, mut released) = (next, Vec::new(), Vec::new());
+                let mut give = |bytes: Vec<u8>| {
+                    next += 1;
+                    content.push((v2::ContentRef(next), Blob(bytes)));
+                    v2::ContentRef(next)
+                };
+                let mut release = |handle| released.push(handle);
+                let node = (claim.view)(
+                    &mut v2::View::new(&self.host, &input, &mount, &mut memo, &mut give, &mut release),
+                    &part,
+                );
+                // A declined part keeps its table: the host asks for a whole tree when it next shows the part.
+                match &node {
+                    Some(node) => memo.finish(std::slice::from_ref(node)),
+                    None => memo.discard(),
+                }
+                let reply = claim::Reply { node, content, released, memo: memo.len() };
+                self.memos.borrow_mut().insert(mount.generation, memo);
+                json(serde_json::to_value(reply))
+            }
             Request::Unmount { mount } => {
                 self.memos.borrow_mut().remove(&mount.generation);
                 Ok(serde_json::Value::Null)

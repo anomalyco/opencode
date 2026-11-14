@@ -149,7 +149,7 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
 /*
  * The message schema. Every message is a JSON object; a request is tagged by "type". Fields with a default may be
  * left out, and a reader ignores fields it does not know. The Rust types in `crates/plugin-abi/src/lib.rs` and
- * `src/v2.rs` are the reference.
+ * `src/v2.rs` and `src/claim.rs` are the reference.
  *
  * Manifest (what `create` returns):
  *   {"id", "commands": [{"name", "title", "group", "slash", "keybind", "palette", "description"?, "arguments"?,
@@ -159,6 +159,7 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *    "surfaces"?: [{"name", "place": {"type": "route", "name"} | {"type": "slot", "kind", "path"}
  *      | {"type": "panel", "name"} | {"type": "overlay", "name"}, "palette"?, "draw"?: bool, "notify"?: [notify],
  *      "layout"?: bool, "handler"?: bool, "layers"?: [layer]}],
+ *    "claims"?: [{"target": {"type": "tool" | "fence", "name"}, "palette"?}],
  *    "messages"?: bool, "layers"?: [layer], "searches"?: [name]}
  *   A layer is {"scope": "surface" | {"node": id} | "composer" | "global", "priority"?, "mode"?,
  *    "keys"?: [{"key", "name", "title"?, "hold"?}], "any"?, "paste"?}.
@@ -190,6 +191,12 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *      list's format is in `crates/plugin-abi/src/canvas.rs`: a version byte (1), then records of an operation byte, a
  *      little-endian u32 payload length and the payload. One the host cannot read fails the plugin; one over a limit
  *      shows a placeholder.
+ *   {"type": "claim", "claim": index, "mount", "input", "part", "next": n}
+ *                                     -> {"node": tree | null, "content"?, "released"?, "memo"?}
+ *      A renderer claim's view of one part: a tool call {"type": "tool", "session", "message", "state": "pending" |
+ *      "running" | "completed" | "error", "permission", "tool": the transcript's tool part}, or a fence
+ *      {"type": "fence", "language", "info", "code", "streaming", "closed"}. A null node leaves the part to the
+ *      host's own row. The rest is as for "view"; each part is a mount of its own.
  *   {"type": "unmount", "mount"}                               -> null
  *   {"type": "message", "message": "<json text>"}              -> null
  *   2.0 (P3), for a surface the manifest says has them:
@@ -226,8 +233,8 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   "focused", "input-mode" (none of them during `create`, which has no input yet). Effects wait
  *   until the plugin's call returns. A call that panics, or whose answer the host refuses (it cannot decode it, the
  *   tree breaks the contract, a handler answers anything but null), has none, and fails the plugin. A call that
- *   answers OPENCODE_ERROR keeps them (see above). A render, a view, a draw or a layout ("fence", "slot", "route",
- *   "render-fence", "render", "render-route", "view", "draw", "layout") reads only: the host answers OPENCODE_ERROR
+ *   answers OPENCODE_ERROR keeps them (see above). A render, a view, a claim's view, a draw or a layout ("fence", "slot",
+ *   "route", "render-fence", "render", "render-route", "view", "claim", "draw", "layout") reads only: the host answers OPENCODE_ERROR
  *   to any request of it that asks for something. A "scroll" of the transcript is taken only from a call that
  *   answers the user's input (a key, a click, an edit, the palette, the user's scroll): the host answers
  *   OPENCODE_ERROR to any other.
