@@ -88,8 +88,11 @@ pub fn show(tui: &Tui, id: &str, generation: u64, dialog: abi::Dialog) {
                 .into_iter()
                 .map(|image| (format!("data:application/octet-stream;base64,{}", image.data), image.name))
                 .collect();
+            // The plugin's preview ends with its activation, as its other dialogs do (F16); the host's own do not.
             if !shown.is_empty() {
-                crate::dialogs::image_preview::show(tui, shown, images.index);
+                own(tui, owner, |on_close| {
+                    crate::dialogs::image_preview::show_closing(tui, shown, images.index, Some(on_close))
+                });
             }
         }
     }
