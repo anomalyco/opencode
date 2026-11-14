@@ -438,6 +438,7 @@ impl Generator<'_> {
                 hover_fg: self.chance(20).then(|| self.color()),
                 layout: self.layout(),
                 on_click: self.click(),
+                hover_events: self.chance(20),
             },
             3 => v2::Node::Spinner { id: self.id(), label: (*self.rng.pick(&["wait", "load"])).to_owned() },
             7 => v2::Node::Diff {

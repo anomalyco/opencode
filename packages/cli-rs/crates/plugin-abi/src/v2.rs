@@ -96,6 +96,10 @@ pub enum Node {
         layout: Layout,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_click: Option<Click>,
+        /// The pointer entering and leaving the text come as [`crate::interact::Event::Hover`], as on a box with
+        /// [`Interact::hover_events`] (TS `onMouseOver` and `onMouseOut` on a `text`); it needs an id.
+        #[serde(default, skip_serializing_if = "is_false")]
+        hover_events: bool,
     },
     /// The claims of a published slot inside the surface's own, in place.
     Slot { path: String },
@@ -687,7 +691,16 @@ impl Node {
             hover_fg: None,
             layout: Layout::default(),
             on_click: None,
+            hover_events: false,
         }
+    }
+
+    /// A text whose hover comes as events ([`Node::Text`]'s `hover_events`); anything else is unchanged.
+    pub fn hover_events(mut self) -> Self {
+        if let Node::Text { hover_events, .. } = &mut self {
+            *hover_events = true;
+        }
+        self
     }
 
     /// A scroll box of `children`.
@@ -926,9 +939,18 @@ impl From<crate::Node> for Node {
                 split: None,
                 interact: Interact::default(),
             },
-            crate::Node::Text { spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click } => {
-                Node::Text { id: None, spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click }
-            }
+            crate::Node::Text { spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click } => Node::Text {
+                id: None,
+                spans,
+                fg,
+                wrap,
+                truncate,
+                selectable,
+                hover_fg,
+                layout,
+                on_click,
+                hover_events: false,
+            },
             crate::Node::Slot { path } => Node::Slot { path },
             crate::Node::Markdown { text } => Node::Markdown { id: None, source: Source::Text(text) },
             crate::Node::Spinner { label } => Node::Spinner { id: None, label },

@@ -2233,6 +2233,11 @@ pub struct Select {
     /// 2.0: keys that run an action with the selected row's value as its input, or none without a row.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub binds: Vec<PanelBind>,
+    /// 2.0: the plugin's search of this name ([`Setup::search`]) lists the rows for the query instead of the host's
+    /// filter, in its order and flat, as TS's `search` does; the host calls it as the query changes, and for the empty
+    /// query as the select opens.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search: Option<String>,
 }
 
 impl Select {
@@ -2248,6 +2253,7 @@ impl Select {
             key: None,
             actions: Vec::new(),
             binds: Vec::new(),
+            search: None,
         }
     }
 }
@@ -3447,6 +3453,13 @@ impl Setup<'_> {
         &self.registered.features
     }
 
+    /// 2.0: a search a [`Select`] names (`search`): with the host's reads, the query and the select's enabled options,
+    /// it returns the values of the options to list, in order (TS `dialog.select`'s `search`). It runs as one call of
+    /// the plugin, with no effects, while the user types. In process only, as surfaces are.
+    pub fn search(&mut self, name: &str, search: impl Fn(&dyn Read, &str, &[SelectOption]) -> Vec<String> + 'static) {
+        self.registered.searches.push((name.to_owned(), Rc::new(search)));
+    }
+
     /// 2.0: keys the plugin takes while `layer`'s scope holds ([`interact::Layer`]): of the composer, or global. They
     /// are the plugin's until it leaves `active`. A layer of a surface's own scope belongs on [`v2::Surface::layers`].
     /// In process only, as surfaces are.
@@ -3491,10 +3504,13 @@ pub struct Registered {
     /// The [`v2::Memo`] table of each mount, by generation, for the views of [`Request::View`].
     memos: std::cell::RefCell<std::collections::HashMap<u64, v2::Memo>>,
     layers: Vec<(interact::Layer, interact::HandlerFn)>,
+    searches: Vec<(String, SearchFn)>,
 }
 
 /// A registered handler of [`Setup::messages`].
 pub type MessageFn = Rc<dyn Fn(&dyn Host, mail::Message)>;
+/// A search of [`Setup::search`].
+pub type SearchFn = Rc<dyn Fn(&dyn Read, &str, &[SelectOption]) -> Vec<String>>;
 
 impl Registered {
     /// The registrations of a plugin the host runs in process: without an ABI host, so a [`Setup`] of its own
@@ -3620,6 +3636,11 @@ impl Registered {
     /// The surfaces of [`Setup::surface`].
     pub fn surfaces(&self) -> &[v2::Surface] {
         &self.surfaces
+    }
+
+    /// The searches of [`Setup::search`], by name.
+    pub fn searches(&self) -> &[(String, SearchFn)] {
+        &self.searches
     }
 
     /// The layers of [`Setup::layer`], with their handlers.
@@ -4460,6 +4481,7 @@ mod tests {
                     key: None,
                     actions: Vec::new(),
                     binds: Vec::new(),
+                    search: None,
                 }),
             },
         ];
@@ -4746,6 +4768,7 @@ mod tests {
             key: None,
             actions: Vec::new(),
             binds: Vec::new(),
+            search: None,
         });
         let json = r#"{"type":"select","title":"Subagents","options":[{"title":"Child","value":"ses_1","description":"running"}],"action":{"type":"command","name":"x.open"}}"#;
         assert_eq!(serde_json::to_string(&select).unwrap(), json);

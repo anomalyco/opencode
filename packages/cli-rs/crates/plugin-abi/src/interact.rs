@@ -71,6 +71,17 @@ pub struct Pointer {
     pub y: i32,
     pub screen_x: u16,
     pub screen_y: u16,
+    /// For a [`PointerKind::Drop`]: the node of the plugin the drag started on, in this mount or another of the
+    /// plugin's. A drag from another plugin's node or a host widget drops nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<Dragged>,
+}
+
+/// Where a dropped drag started: a node of one of the plugin's mounts.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Dragged {
+    pub surface: String,
+    pub node: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -82,7 +93,7 @@ pub enum PointerKind {
     Drag,
     WheelUp,
     WheelDown,
-    /// A drag that started on another node of the plugin ended on this one.
+    /// A drag that started on a node of the plugin, in this mount or another, ended on this one ([`Pointer::from`]).
     Drop,
 }
 
@@ -243,6 +254,9 @@ pub enum Anchor {
     Node { node: String },
     /// Against an edge of the screen, at its middle.
     Edge(Edge),
+    /// Inside another surface of the plugin that shows (a panel, a slot), against its edge, at its middle. A surface
+    /// of the host, such as the transcript, is not one: what a plugin may know of it is its published viewport.
+    Surface { surface: String, edge: Edge },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

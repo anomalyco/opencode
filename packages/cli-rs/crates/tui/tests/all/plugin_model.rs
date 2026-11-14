@@ -207,6 +207,7 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
             key: None,
             actions: Vec::new(),
             binds: Vec::new(),
+            search: None,
         }));
     });
     let held = token.clone();

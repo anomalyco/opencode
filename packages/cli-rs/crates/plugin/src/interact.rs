@@ -43,6 +43,8 @@ pub(crate) type Lookup = Rc<dyn Fn(&str) -> Option<AnyWidget>>;
 /// What one owner holds of the input.
 pub struct Owner {
     plugin: String,
+    /// The surface a mount shows; empty for an activation.
+    surface: String,
     host: Weak<dyn Host>,
     /// The mount's handler, which its nodes' pointer and hover and its overlays' closes reach; `None` for an
     /// activation, whose layers each have their own.
@@ -153,24 +155,26 @@ pub fn ledger(host: &dyn Host) -> Ledger {
 }
 
 impl Owner {
-    /// A mount's owner: its surface root, its tree's lookup and its handler.
+    /// A mount's owner: its surface, its root, its tree's lookup and its handler.
     pub(crate) fn mount(
         plugin: &str,
+        surface: &str,
         host: Weak<dyn Host>,
         root: View,
         lookup: Lookup,
         deliver: Option<Deliver>,
     ) -> Rc<Self> {
-        Rc::new(Self::new(plugin, host, Some(root), Some(lookup), deliver))
+        Rc::new(Self::new(plugin, surface, host, Some(root), Some(lookup), deliver))
     }
 
     /// An activation's owner, which has no surface.
     pub(crate) fn activation(plugin: &str, host: Weak<dyn Host>) -> Rc<Self> {
-        Rc::new(Self::new(plugin, host, None, None, None))
+        Rc::new(Self::new(plugin, "", host, None, None, None))
     }
 
     fn new(
         plugin: &str,
+        surface: &str,
         host: Weak<dyn Host>,
         root: Option<View>,
         lookup: Option<Lookup>,
@@ -178,6 +182,7 @@ impl Owner {
     ) -> Self {
         Self {
             plugin: plugin.to_owned(),
+            surface: surface.to_owned(),
             host,
             deliver,
             held: RefCell::new(root.clone().map_or(Held::Route, Held::Within)),
@@ -205,7 +210,7 @@ impl Owner {
         view.on_paste(move |cx, text| {
             if let Some(host) = host.upgrade()
                 && let Some(router) = host.router()
-                && router.paste(&*host, text, false)
+                && router.paste(&*host, text, Pasted::Surface)
             {
                 cx.prevent_default();
                 cx.stop_propagation();
@@ -510,15 +515,35 @@ impl Router {
         if self.intercept.borrow().is_some() {
             return;
         }
-        let weak = weak.clone();
+        let keyed = weak.clone();
         let disposer = host.keymap().keymap().intercept_key(i32::MAX, false, move |context| {
-            let Some(host) = weak.upgrade() else { return };
+            let Some(host) = keyed.upgrade() else { return };
             let Some(router) = host.router() else { return };
             if router.intercept(&*host, &context.event, &context.stroke) {
                 context.consume();
             }
         });
         *self.intercept.borrow_mut() = Some(disposer);
+        // A resize ends the capture: it may squeeze the node off the screen or under another, which no cheap read of
+        // the layout tells from a node that shows.
+        let resized = weak.clone();
+        host.app().on_resize(move |_, _, _| {
+            if let Some(host) = resized.upgrade()
+                && let Some(router) = host.router()
+            {
+                router.capture.borrow_mut().take();
+            }
+        });
+        let weak = weak.clone();
+        host.app().on_paste(move |cx, text| {
+            if let Some(host) = weak.upgrade()
+                && let Some(router) = host.router()
+                && router.paste(&*host, text, Pasted::Elsewhere)
+            {
+                cx.prevent_default();
+                cx.stop_propagation();
+            }
+        });
     }
 
     /// What the intercept does with a key: whether it is taken.
@@ -613,16 +638,29 @@ impl Router {
         });
     }
 
-    /// Offers `text` to the paste listeners of the composer (`composer`), or of the focused surfaces, that hold now,
-    /// the newest first; whether one took it. Its effects apply before the paste returns.
-    pub fn paste(&self, host: &dyn Host, text: &str, composer: bool) -> bool {
+    /// Offers `text`, pasted at `at`, to the paste listeners that hold there now, the newest first; whether one took
+    /// it. Its effects apply before the paste returns. A global layer hears a paste wherever it lands: in the composer
+    /// and in the plugins' surfaces before the host, as in TS, and elsewhere only once no host widget took it
+    /// (`Pasted::Elsewhere`), since OpenTUI routes a paste to the focused widget before anything else.
+    pub fn paste(&self, host: &dyn Host, text: &str, at: Pasted) -> bool {
+        if at == Pasted::Elsewhere && self.offered(host) {
+            return false;
+        }
         let current = host.keymap().mode();
         let listeners: Vec<(Rc<Owner>, Deliver)> = self
             .listeners
             .borrow()
             .iter()
             .rev()
-            .filter(|listener| listener.layer.paste && (listener.layer.scope == LayerScope::Composer) == composer)
+            .filter(|listener| {
+                listener.layer.paste
+                    && match (at, &listener.layer.scope) {
+                        (_, LayerScope::Global) => true,
+                        (Pasted::Composer, scope) => *scope == LayerScope::Composer,
+                        (Pasted::Surface, scope) => *scope != LayerScope::Composer,
+                        (Pasted::Elsewhere, _) => false,
+                    }
+            })
             .filter_map(|listener| {
                 let owner = listener.owner.upgrade()?;
                 let mode = owner.mode_key(listener.layer.mode.as_deref());
@@ -633,6 +671,50 @@ impl Router {
         let taken = listeners.into_iter().any(|(owner, deliver)| deliver(host, &owner, &event) == Handled::Consume);
         crate::flush();
         taken
+    }
+
+    /// Whether a paste with the focus where it is now was offered already, in a plugin's panel or overlay. One in the
+    /// composer never gets this far: the composer takes every paste.
+    fn offered(&self, host: &dyn Host) -> bool {
+        self.owners
+            .borrow()
+            .iter()
+            .filter_map(Weak::upgrade)
+            .filter(|owner| owner.alive())
+            .filter_map(|owner| owner.within())
+            .any(|view| focus_within(host.app(), view.id()))
+    }
+
+    /// The plugin's node a drag from `source` started on, if it is one of `plugin`'s mounts'.
+    fn dragged(&self, plugin: &str, source: &AnyWidget) -> Option<input::Dragged> {
+        let path: Vec<u32> =
+            std::iter::successors(Some(source.clone()), |widget| widget.parent()).map(|widget| widget.id()).collect();
+        let owners: Vec<Rc<Owner>> = self.owners.borrow().iter().filter_map(Weak::upgrade).collect();
+        owners.into_iter().filter(|owner| owner.alive() && owner.plugin == plugin).find_map(|owner| {
+            let lookup = owner.lookup.as_ref()?;
+            let node = owner
+                .ids
+                .borrow()
+                .iter()
+                .filter_map(|id| {
+                    let widget = lookup(id)?.id();
+                    Some((path.iter().position(|step| *step == widget)?, id.clone()))
+                })
+                .min_by_key(|(at, _)| *at)
+                .map(|(_, id)| id)?;
+            Some(input::Dragged { surface: owner.surface.clone(), node })
+        })
+    }
+
+    /// The area of `plugin`'s surface `surface` on the screen, if it shows.
+    fn area(&self, plugin: &str, surface: &str) -> Option<(u16, u16, u16, u16)> {
+        let owners: Vec<Rc<Owner>> = self.owners.borrow().iter().filter_map(Weak::upgrade).collect();
+        let owner =
+            owners.into_iter().find(|owner| owner.alive() && owner.plugin == plugin && owner.surface == surface)?;
+        let view = owner.within().or_else(|| owner.root.clone())?;
+        let rect = view.rect();
+        let clamp = |value: f64| value.max(0.0).min(f64::from(u16::MAX)) as u16;
+        Some((clamp(rect.screen_x), clamp(rect.screen_y), clamp(f64::from(rect.width)), clamp(f64::from(rect.height))))
     }
 
     /// Drops the modes the host ended, before the next key is routed.
@@ -680,6 +762,19 @@ impl Router {
             Anchor::Edge(input::Edge::Bottom) => (width.saturating_sub(w) / 2, height.saturating_sub(h)),
             Anchor::Edge(input::Edge::Left) => (0, height.saturating_sub(h) / 2),
             Anchor::Edge(input::Edge::Right) => (width.saturating_sub(w), height.saturating_sub(h) / 2),
+            Anchor::Surface { surface, edge } => {
+                let Some((left, top, across, down)) = self.area(plugin, surface) else {
+                    log::warn!("plugin {plugin}: its overlay is anchored to {surface:?}, which does not show");
+                    return;
+                };
+                let (middle_x, middle_y) = (left + across.saturating_sub(w) / 2, top + down.saturating_sub(h) / 2);
+                match edge {
+                    input::Edge::Top => (middle_x, top),
+                    input::Edge::Bottom => (middle_x, (top + down).saturating_sub(h)),
+                    input::Edge::Left => (left, middle_y),
+                    input::Edge::Right => ((left + across).saturating_sub(w), middle_y),
+                }
+            }
         };
         let (x, y) = (x.min(width.saturating_sub(w)), y.min(height.saturating_sub(h)));
         let backdrop = View::new(app).absolute().width(Length::percent(100.0)).height(Length::percent(100.0));
@@ -784,7 +879,7 @@ impl Router {
 
 /// Ends the modes whose scope `view` was when it loses the focus, before any key comes: a focus that leaves a mode's
 /// scope and comes back between two keys does not bring the mode back.
-fn blurs(view: &View, host: &Weak<dyn Host>) {
+fn blurs(view: &impl Widget, host: &Weak<dyn Host>) {
     let host = host.clone();
     view.on_focus(move |_, focused| {
         if !focused
@@ -794,6 +889,17 @@ fn blurs(view: &View, host: &Weak<dyn Host>) {
             router.prune();
         }
     });
+}
+
+/// Where a paste landed, which decides the paste listeners it is offered to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pasted {
+    /// The composer, before its own route.
+    Composer,
+    /// A plugin's panel or overlay, before the host's route.
+    Surface,
+    /// Anywhere else, once no widget took it.
+    Elsewhere,
 }
 
 /// Whether the focus is in the widget with id `id`.
@@ -808,8 +914,8 @@ fn same_key(a: &str, b: &str) -> bool {
 
 /// A wired box's colors off and under the pointer, and whether the pointer is over it.
 pub(crate) struct Wired {
-    /// The box, which its handlers reach weakly, so it drops with its node.
-    view: Rc<View>,
+    /// The widget, which its handlers reach weakly, so it drops with its node.
+    _widget: Rc<dyn Any>,
     pub base: Cell<Color>,
     pub hover: Cell<Option<Color>>,
     pub over: Cell<bool>,
@@ -825,22 +931,21 @@ impl Wired {
     }
 }
 
-/// Wires box `view`, with id `id`, for `interact`: focus on a press, pointer events, the hover color and its events,
-/// all reaching `owner`'s handler.
-pub(crate) fn wire(
-    view: &View,
+/// Wires `view`, a box or a text with id `id`, for `interact`: focus on a press, pointer events, the hover background
+/// (`paint` sets it) and its events, all reaching `owner`'s handler.
+pub(crate) fn wire<W: Widget + Clone + 'static>(
+    view: &W,
+    paint: fn(&W, Color),
     id: Option<&str>,
     interact: &Interact,
     owner: Option<&Weak<Owner>>,
     base: Color,
     hover: Option<Color>,
 ) -> Rc<Wired> {
-    let wired = Rc::new(Wired {
-        view: Rc::new(view.clone()),
-        base: Cell::new(base),
-        hover: Cell::new(hover),
-        over: Cell::new(false),
-    });
+    let widget = Rc::new(view.clone());
+    let this = Rc::downgrade(&widget);
+    let wired =
+        Rc::new(Wired { _widget: widget, base: Cell::new(base), hover: Cell::new(hover), over: Cell::new(false) });
     let node = id.map(str::to_owned);
     if interact.focusable && node.is_some() {
         view.focusable(true);
@@ -849,14 +954,13 @@ pub(crate) fn wire(
         }
     }
     if interact.hover.is_some() || interact.hover_events {
-        let (state, this, owner, node) =
-            (Rc::downgrade(&wired), Rc::downgrade(&wired.view), owner.cloned(), node.clone());
+        let (state, this, owner, node) = (Rc::downgrade(&wired), this.clone(), owner.cloned(), node.clone());
         let events = interact.hover_events;
         view.on_hover(move |cx, inside| {
             let Some(state) = state.upgrade() else { return };
             state.over.set(inside);
             if let (Some(_), Some(this)) = (state.hover.get(), this.upgrade()) {
-                this.bg(state.shown());
+                paint(&this, state.shown());
                 cx.app().request_redraw();
             }
             let owner = owner.as_ref().and_then(Weak::upgrade);
@@ -871,14 +975,14 @@ pub(crate) fn wire(
     let (Some(owner), Some(node)) = (owner.cloned(), node) else { return wired };
     if interact.pointer || interact.focusable {
         let (pointer, focusable, this, owner, node) =
-            (interact.pointer, interact.focusable, Rc::downgrade(&wired.view), owner.clone(), node.clone());
+            (interact.pointer, interact.focusable, this, owner.clone(), node.clone());
         view.on_mouse(move |cx, event| {
             let Some(owner) = owner.upgrade().filter(|owner| owner.alive()) else { return };
             let (Some(host), Some(this)) = (owner.host.upgrade(), this.upgrade()) else { return };
             if focusable && matches!(event.kind, MouseEventKind::Down(_)) {
                 cx.app().focus(&*this);
             }
-            if pointer && pointed(&*host, &owner, &node, &this, event) == Handled::Consume {
+            if pointer && pointed(&*host, &owner, &node, &*this, event) == Handled::Consume {
                 cx.stop_propagation();
                 cx.prevent_default();
             }
@@ -888,11 +992,8 @@ pub(crate) fn wire(
         view.on_drop(move |cx, source, event| {
             let Some(owner) = owner.upgrade().filter(|owner| owner.alive()) else { return };
             let Some(host) = owner.host.upgrade() else { return };
-            // A drop counts only from a node of the same mount.
-            let root = owner.root.as_ref().map(View::id);
-            if !std::iter::successors(Some(source.clone()), |widget| widget.parent()).any(|w| Some(w.id()) == root) {
-                return;
-            }
+            // A drop counts only from a node of the plugin's, in this mount or another of its mounts.
+            let Some(from) = host.router().and_then(|router| router.dragged(&owner.plugin, source)) else { return };
             let rect = owner.rect(&node).unwrap_or_default();
             let event = Event::Pointer(Pointer {
                 node: node.clone(),
@@ -902,6 +1003,7 @@ pub(crate) fn wire(
                 y: i32::from(event.y) - rect.y,
                 screen_x: event.x,
                 screen_y: event.y,
+                from: Some(from),
             });
             if owner.send(&*host, &event) == Handled::Consume {
                 cx.stop_propagation();
@@ -913,7 +1015,7 @@ pub(crate) fn wire(
 }
 
 /// Routes a mouse event on node `node` of `owner`; drags reach it only while it holds the capture.
-fn pointed(host: &dyn Host, owner: &Rc<Owner>, node: &str, view: &View, event: &MouseEvent) -> Handled {
+fn pointed(host: &dyn Host, owner: &Rc<Owner>, node: &str, view: &impl Widget, event: &MouseEvent) -> Handled {
     let Some(router) = host.router() else { return Handled::Pass };
     router.prune_capture(host);
     let me = Rc::downgrade(owner);
@@ -941,6 +1043,7 @@ fn pointed(host: &dyn Host, owner: &Rc<Owner>, node: &str, view: &View, event: &
         y: i32::from(event.y) - rect.screen_y as i32,
         screen_x: event.x,
         screen_y: event.y,
+        from: None,
     };
     let handled = owner.send(host, &Event::Pointer(pointer));
     match kind {

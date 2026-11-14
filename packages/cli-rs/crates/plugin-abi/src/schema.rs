@@ -92,7 +92,7 @@ pub fn schema() -> Value {
         Text { spans: array(reference("Span")) } { id: nullable(string()), fg: nullable(reference("Color")),
             wrap: reference("Wrap"), truncate: boolean(), selectable: boolean(),
             hover_fg: nullable(reference("Color")), layout: reference("Layout"),
-            on_click: nullable(reference("Click")) },
+            on_click: nullable(reference("Click")), hover_events: boolean() },
         Slot { path: string() } { },
         Markdown { source: reference("Source") } { id: nullable(string()) },
         Spinner { label: string() } { id: nullable(string()) },
@@ -617,6 +617,7 @@ mod tests {
                 hover_fg: Some(Color::from("text.muted")),
                 layout,
                 on_click: Some(click),
+                hover_events: true,
             },
             Node::Slot { path: "home.footer".into() },
             Node::Markdown {
