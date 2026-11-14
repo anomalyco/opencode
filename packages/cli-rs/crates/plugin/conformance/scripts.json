@@ -102,6 +102,34 @@
     ]
   },
   {
+    "transcript": "interact",
+    "about": "input and surfaces (P2): every verb and read of a command (focus, the focus read, a rect, a mode and its read, held keys released, a blur, a panel and an overlay opened and closed), with a key layer of setup in the manifest",
+    "library": 2,
+    "script": [
+      { "do": "load" },
+      { "do": "open", "route": "rows" },
+      { "do": "command", "name": "conf.ui" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "close" },
+      { "do": "advance" }
+    ]
+  },
+  {
+    "transcript": "claim",
+    "about": "a renderer claim (Pr): a tool call shown through the plugin's claim of its tool, its view, and the part's unmount",
+    "library": 2,
+    "script": [
+      { "do": "load" },
+      { "do": "claim", "tool": "conf-tool" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "close" },
+      { "do": "advance" },
+      { "do": "observe" }
+    ]
+  },
+  {
     "transcript": "panic",
     "about": "a command that asks for a toast and panics: nothing it asked for happens, the plugin fails once, its commands go, and it is never called again, not even destroyed",
     "library": 2,

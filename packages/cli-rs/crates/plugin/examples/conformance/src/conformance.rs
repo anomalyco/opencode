@@ -8,7 +8,9 @@
 //!   wakes the host, whose wake toasts "woken"; `conf.panic` toasts "before panic" and panics with "boom"; `conf.dup`
 //!   makes the next view hold the id `count` twice; `conf.read` toasts "read", the theme mode and whether the host is
 //!   interactive; `conf.pad` moves the canvas `pad` to its next version; `conf.down` scrolls `items` by 2 rows,
-//!   `conf.step` steps it to the next anchor of `items`, and `conf.where` toasts where it is (P3).
+//!   `conf.step` steps it to the next anchor of `items`, and `conf.where` toasts where it is (P3); `conf.ui` makes
+//!   each verb and read of P2 once (focus, the focus read, a rect, a mode and its read, releasing held keys, a blur,
+//!   a panel and an overlay opened and closed) and toasts what the reads answered.
 //! - A route surface `conf`: a column `root` of a text `count`, "views N, messages M" (the views run and the messages
 //!   arrived, in this instance), and a Markdown node `fixed` of the content "# fixed", memoized: built once a mount and
 //!   kept after.
@@ -17,14 +19,18 @@
 //!   instance, and why the host asked.
 //! - A route surface `rows` (P3): a column `rows-root` of a text `where` and a scroll `items`, 3 rows high, of six boxes
 //!   `i0` to `i5`, each an anchor of group `items` holding "item N". Its `layout` is told of `items`, and paints
-//!   `where` on `#203040` while `items` is scrolled down; its scroll handler toasts "landed ID" where a step landed.
+//!   `where` on `#203040` while `items` is scrolled down; its handler (P2) toasts "landed ID" where a step landed, and
+//!   passes every event on.
+//! - A key layer of setup (P2): `ctrl+g` as `conf`, everywhere; its handler passes every key on.
+//! - A renderer claim (Pr) of the calls of tool `conf-tool`: "claimed N", the views it ran.
 //! - Options that hold `fail-setup` make setup fail with "setup refused", before it registers anything.
 
 use std::cell::Cell;
 use std::rc::Rc;
 
 use opencode_plugin_abi::canvas::{List, Style};
-use opencode_plugin_abi::{Command, Host, Layout, Setup, Span, ThemeMode, Toast, Variant, Width, v2};
+use opencode_plugin_abi::interact::{self, Anchor, Bind, Edge, Handled, LayerScope, OpenPanel, Overlay};
+use opencode_plugin_abi::{Command, Host, Layout, Setup, Span, ThemeMode, Toast, Variant, Width, claim, v2};
 
 #[derive(Default)]
 struct State {
@@ -33,6 +39,7 @@ struct State {
     dup: Cell<bool>,
     pads: Cell<u64>,
     draws: Cell<u32>,
+    claimed: Cell<u32>,
 }
 
 pub fn setup(setup: &mut Setup) -> Result<(), String> {
@@ -87,6 +94,33 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         let place = place.map_or("nowhere".to_owned(), |state| format!("offset {} of {}", state.offset, state.extent));
         host.toast(Toast::new(Variant::Info, place));
     });
+    setup.command(command("conf.ui"), |host, _| {
+        host.focus("i2");
+        let focused = host.focused();
+        let rect = host.rect("where");
+        host.set_mode(Some("nav"));
+        let mode = host.mode();
+        host.release_keys();
+        host.blur();
+        host.open_panel(OpenPanel { surface: "rows".to_owned(), session: None, fullscreen: false });
+        host.close_panel("rows");
+        let anchor = Anchor::Edge(Edge::Top);
+        host.overlay(Overlay { surface: "rows".to_owned(), anchor, width: 10, height: 3 });
+        host.close_overlay("rows");
+        let mode = mode.unwrap_or_else(|| "none".to_owned());
+        host.toast(Toast::new(Variant::Info, format!("ui {} {} {mode}", focused.surface, rect.is_some())));
+    });
+    let layer = interact::Layer {
+        scope: LayerScope::Global,
+        keys: vec![Bind::new("ctrl+g", "conf")],
+        ..interact::Layer::default()
+    };
+    setup.layer(layer, |_, _| Handled::Pass);
+    let claims = state.clone();
+    setup.claim(claim::Claim::tool("conf-tool", move |_, _| {
+        claims.claimed.set(claims.claimed.get() + 1);
+        Some(v2::Node::text(vec![Span::new(format!("claimed {}", claims.claimed.get()))]).with_id("claim"))
+    }));
     setup.on_wake(|host| host.toast(Toast::new(Variant::Info, "woken")));
     setup.surface(v2::Surface::new("conf", v2::Place::Route("conf".to_owned()), move |view| {
         state.views.set(state.views.get() + 1);
@@ -146,9 +180,10 @@ fn rows() -> v2::Surface {
             };
             v2::LayoutReply { paints, again: false }
         })
-        .on_scroll(|host: &dyn Host, event| {
-            if let v2::ScrollEvent::Landed { anchor, .. } = event {
+        .on(|host: &dyn Host, event| {
+            if let interact::Event::Scroll { event: v2::ScrollEvent::Landed { anchor, .. } } = event {
                 host.toast(Toast::new(Variant::Info, format!("landed {}", anchor.id)));
             }
+            Handled::Pass
         })
 }
