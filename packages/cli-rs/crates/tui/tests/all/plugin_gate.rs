@@ -1,8 +1,9 @@
 //! P1's gate probe on the production route (synthesis 4.14; bigboi's review, 6). Ignored: a release build runs it
 //! with `GATE_OUT=<file.jsonl>` and `--ignored plugin_gate::`, and writes JSON lines, one an action or a frame:
 //!
-//! - `today`: today's diff viewer (host code), from the dispatch that opens it to its first usable frame, the data
-//!   load included; then hunk jumps, mark reviewed, view toggles, wheel steps and a resize.
+//! - `today`: the diff viewer (host code until P6c, the plugin `opencode.diffs` since), from the dispatch that opens it
+//!   to its first usable frame, the data load included; then hunk jumps, mark reviewed, view toggles, wheel steps and a
+//!   resize. `today-narrow` (P6c) runs it at 48 by 28 cells, resized to 24 columns, over the files of `narrow`.
 //! - `route`: the same cards from a linked plugin through `Setup::surface` on its route: open by navigation, the
 //!   route's own commands through the keymap, wheel steps over its scroll, and a resize. The view, the host's
 //!   dispatch and adoption, and each frame are timed apart, with the reconcile's counts.
@@ -106,17 +107,20 @@ fn frames(app: &support::Harness, since: Instant, usable: &dyn Fn(&str) -> bool)
 
 // Today's viewer.
 
-fn today(count: usize) {
+fn today(count: usize, narrow: bool) {
     const DIRECTORY: &str = "/project";
     let location =
         json!({ "directory": DIRECTORY, "project": { "id": "proj", "directory": DIRECTORY, "canonical": DIRECTORY } });
     let list = |data: Value| json!({ "location": location, "data": data });
+    let patch = |file: usize| if narrow { patch_of(file, [30, 1, 5, 2, 12][file % 5]) } else { patch(file) };
     let diff: Vec<Value> = (0..count)
         .map(|file| {
             json!({ "file": format!("src/f{file:04}.rs"), "patch": patch(file), "additions": 40, "deletions": 40,
                 "status": "modified" })
         })
         .collect();
+    let part = if narrow { "today-narrow" } else { "today" };
+    let (width, height, resized, wheel) = if narrow { (48, 28, 24, (20, 14)) } else { (WIDTH, HEIGHT, 140, (120, 30)) };
     let memory = Memory::new(vec![
         MemoryRoute::json("GET", "/api/location", 200, &location),
         MemoryRoute::json("GET", "/api/agent", 200, &list(json!([]))),
@@ -132,7 +136,7 @@ fn today(count: usize) {
         events: true,
         ..support::deps(Arc::new(memory.clone()))
     };
-    let harness = mount(WIDTH, HEIGHT, deps);
+    let harness = mount(width, height, deps);
     harness.wait_for("/project");
     frames(&harness, Instant::now(), &|_| false);
     // The open: the dispatch, the load and the first frame that shows the first file, all timed.
@@ -154,14 +158,14 @@ fn today(count: usize) {
         }
     }
     let usable = usable.expect("the open never showed the first file");
-    write(json!({ "part": "today", "files": count, "action": "open", "step": 0, "dispatch_us": dispatch_us,
+    write(json!({ "part": part, "files": count, "action": "open", "step": 0, "dispatch_us": dispatch_us,
         "usable_us": usable, "frames": all }));
     let action = |name: &str, step: usize, run: &dyn Fn()| {
         let started = Instant::now();
         run();
         let dispatch_us = micros(started);
         let (frames, _, _) = frames(&harness, started, &|_| false);
-        write(json!({ "part": "today", "files": count, "action": name, "step": step, "dispatch_us": dispatch_us,
+        write(json!({ "part": part, "files": count, "action": name, "step": step, "dispatch_us": dispatch_us,
             "frames": frames }));
     };
     for step in 0..5 {
@@ -180,9 +184,9 @@ fn today(count: usize) {
         });
     }
     for step in 0..30 {
-        action("wheel", step, &|| harness.app.scroll(120, 30, true));
+        action("wheel", step, &|| harness.app.scroll(wheel.0, wheel.1, true));
     }
-    action("resize", 0, &|| harness.app.resize(140, HEIGHT));
+    action("resize", 0, &|| harness.app.resize(resized, height));
 }
 
 // The plugin's route.
@@ -423,20 +427,24 @@ fn gate_probe() {
         .map(|size| size.parse().unwrap())
         .collect();
     let parts_wanted = std::env::var("GATE_PARTS").unwrap_or_else(|_| "today,route,parts".into());
+    let wanted = |part: &str| parts_wanted.split(',').any(|wanted| wanted == part);
     for &size in &sizes {
-        if parts_wanted.contains("route") {
+        if wanted("route") {
             route(size, false, false);
         }
-        if parts_wanted.contains("list") {
+        if wanted("list") {
             route(size, true, false);
         }
-        if parts_wanted.contains("narrow") {
+        if wanted("narrow") {
             route(size, true, true);
         }
-        if parts_wanted.contains("today") {
-            today(size);
+        if wanted("today") {
+            today(size, false);
         }
-        if parts_wanted.contains("parts") {
+        if wanted("today-narrow") {
+            today(size, true);
+        }
+        if wanted("parts") {
             parts(size);
         }
     }
