@@ -10,8 +10,10 @@ lists which old binaries load and what changed from the 1.3 and 1.4 SDKs. This d
 
 ## The ABI
 
-`crates/plugin-abi` (`opencode-plugin-abi`) is the contract, and the only crate a plugin depends on. A plugin
-exports one symbol, `opencode_plugin_v1`, that returns a `#[repr(C)]` table, `PluginApi`:
+`crates/plugin-abi` (`opencode-plugin-abi`) is the contract, and the only crate a plugin depends on. The ABI is 2.0
+(phase P4 of the rich-plugin design). A plugin exports one symbol, `opencode_plugin_v2`, that returns a `#[repr(C)]`
+table, `PluginApi`; a plugin in C uses `crates/plugin-abi/include/opencode_plugin.h`, which declares the same tables
+and describes the messages (`crates/plugin/examples/c` is one, which the loader's tests build and load):
 
 | Entry | Since | Purpose |
 | --- | --- | --- |
@@ -23,8 +25,9 @@ exports one symbol, `opencode_plugin_v1`, that returns a `#[repr(C)]` table, `Pl
 | `describe(&out)` | 1.1 | Optional (nullable): the plugin's ID and version, read before any setup |
 
 The host passes a `HostApi` table of the same shape: `size`, `major`, `minor`, `ctx`, `call`, `free`, since 1.2 the
-nullable `theme_mode(ctx)` (dark or light), and since 1.3 the nullable `wake(ctx)`, callable from any thread until
-`destroy` returns. Past the tables, everything crosses as JSON in byte buffers: the `Manifest`, a `Request` from the
+nullable `theme_mode(ctx)` (dark or light), since 1.3 the nullable `wake(ctx)`, and since 2.0 `send(ctx, key,
+message)`, `report(ctx, message)`, `stopped(ctx)` and `features`. `wake`, `send`, `report` and `stopped` are callable
+from any thread until `destroy` returns. Past the tables, everything crosses as JSON in byte buffers: the `Manifest`, a `Request` from the
 host, and a `HostRequest` from the plugin. Each side frees the buffers it allocated, so each keeps its own allocator.
 The rustdoc of `Request` and `HostRequest` lists every request and what it answers; a plugin in another language
 implements the same structs and JSON.
@@ -50,21 +53,32 @@ Versions only grow by appending:
   `overflow`, and `Layout`'s `height`, `min_height`, `max_height` and `margin`), and the composer's `HostRequest::Composer`
   and `HostRequest::ComposerEdit`. Each new field is left out of the JSON while unset, so 1.4 JSON reads as before and
   a 1.4 plugin's requests are unchanged.
-- Only a deliberate major-version break refuses a plugin. The host reads `major` before anything else, and the
-  plugin manager shows why: "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.6);
-  rebuild the plugin against opencode-plugin-abi 1".
+- The host serves two majors. A library that exports `opencode_plugin_v2` is served 2.0; one that exports only
+  `opencode_plugin_v1` (every 1.x build) loads as before and is served 1.6, with no surfaces and no mailbox. 2.0 has
+  every 1.6 entry and request, so a 1.x plugin rebuilt against this crate needs no change. Any other major is
+  refused, and the plugin manager shows why: "plugin ABI 3.0 is not supported: this opencode-native loads ABI 2.x
+  plugins (up to 2.0) and ABI 1.x plugins (up to 1.6); rebuild the plugin against opencode-plugin-abi 2".
+- Nothing is removed from the ABI inside a major; an alias stays until 3.0 (O-125 (6)). A plugin that needs an
+  optional host feature lists it in `Metadata::requires` (`plugin!(id = .., requires = ["feature"], setup)`); a host
+  without it refuses the plugin at load and names it. A 2.0 host has no optional features yet.
+- What the host takes from a plugin is decoded before anything of the call applies. An answer it cannot decode (cut
+  short, not JSON, a node kind it does not know) fails the plugin and leaves no effect, as a panic does.
+- On macOS, when the system refuses a library for its code signature or for quarantine, the plugin manager says so
+  and what to do.
 - 1.5 is P0a's (dialogs, box styling, the composer). 1.6 adds the small reads and verbs (below), as new
-  `HostRequest`s, one `Request` (`Deltas`) and optional fields, and no table entry. `export_plugin!` still requires
-  1.4: on an older host a 1.6 read returns its default (`None`, empty, `false`), a verb does nothing and answers
-  `false`, `Setup::sized` gives 0, `on_deltas` is never called, a span's link is dropped, and an `xlarge` panel is sent
-  again as `large`.
+  `HostRequest`s, one `Request` (`Deltas`) and optional fields, and no table entry. A 1.x plugin
+  (`export_plugin!(.., requires_minor = N)`) requires 1.4: on an older host a 1.6 read returns its default (`None`,
+  empty, `false`), a verb does nothing and answers `false`, `Setup::sized` gives 0, `on_deltas` is never called, a
+  span's link is dropped, and an `xlarge` panel is sent again as `large`.
 
 A Rust-ABI `dylib` was rejected because it breaks with every compiler or crate version.
 
 ## Writing a plugin
 
-A Rust plugin is a `cdylib` that calls `export_plugin!("my.plugin", setup)`, with `fn setup(setup: &mut Setup) ->
-Result<(), String>`. The macro generates the table, `describe` (the ID and the crate's version) and the shims. Setup
+A Rust plugin is a `cdylib` that calls `plugin!(setup)` (the crate's package name is the plugin's ID) or
+`plugin!(id = "my.plugin", setup)`, with `fn setup(setup: &mut Setup) -> Result<(), String>`. `export_plugin!("my.plugin",
+setup)` is the same. The macro generates the table, `describe` (the ID and the crate's version) and the shims, and holds
+every `unsafe`; a plugin built with `panic = "abort"` does not compile. Setup
 registers the P.1 surface as data, because widgets and closures cannot cross the boundary:
 
 | P.1 (TS `api.*`) | ABI (`opencode_plugin_abi::Setup`) |
@@ -251,7 +265,7 @@ switch renders a route's and a slot's claims again in place. `Keep` keeps everyt
 shows is unaffected returns at once; it still takes a new theme. A node that nests more than 64 layout levels, or has
 a size in percent that is not a finite number of 0 or more, is not drawn, and the claim keeps what it showed.
 
-### Contract 2.0 surfaces (P1, in process only)
+### Contract 2.0 surfaces
 
 `Setup::surface(v2::Surface)` registers a surface of the rich-plugin contract (`opencode_plugin_abi::v2`), shown as
 a route, which fills the page, or a slot claim, which takes its root node's layout. Its view returns a keyed tree: a
@@ -269,8 +283,10 @@ nothing), and a second refusal in a row fails the plugin. The view runs again wh
 theme switch restyles the widgets in place with no call, unless the surface reads the palette (`Surface::palette`).
 A `Diff` or `Markdown` may name a tool call's output (`Source::PartOutput`) instead of carrying it; the host shows
 the call's output as the transcript does, once it arrives. The schema is `crates/plugin-abi/schema/v2.json`,
-generated from the types in the crate (its root is a `Node`). Surfaces of an external plugin are not mounted until
-the C ABI of 2.0.
+generated from the types in the crate (its root is a `Node`). Over the C ABI (P4) the host runs a surface's view as the request `View` with the mount, the input and
+the content handle to number from; the plugin answers the tree, the content it gave and released, and the size of its
+memo table, and `Unmount` drops that table when the mount ends. Only a surface that declares it reads the palette gets
+the palette, on either carrier.
 
 ### Storage
 
@@ -316,6 +332,18 @@ falls back to the code view, on the UI thread after the event that freed it. A b
 sends nothing. The host sends `FenceGone` only to a plugin that registered a handler.
 
 ### Threads and the waker
+
+From 2.0 a plugin's threads send messages. `Setup::messages(run)` registers the handler, which the host runs on the UI
+thread as the plugin's `update`, one call a message, then renders the plugin's claims and surfaces again; it returns a
+`Sender`, which is `Clone` and `Send`. The host holds one mailbox of 256 entries a plugin (`BOUND`). `send` never
+blocks: it puts the message at the end, or hands it back at once as `Full`, or as `Closed` once the plugin has left
+`active` (disabled, failed, replaced), and what waited is then dropped. `replace(key, message)` takes the place of the
+message that waits under `key`, so a flood of progress holds one entry. `Setup::spawner()` starts named threads
+(`<id>:<name>`) with a `Stop` flag, set when the plugin leaves `active`, and catches a panic on them: the host fails
+the plugin and says so once. A thread cannot be killed. Over the C ABI messages are JSON; in process they are the
+values. `crate::mailbox::stats` reports what a mailbox held at most and how many sends were refused.
+
+The 1.3 waker stays:
 
 Slow work, such as a timer or network I/O, runs on the plugin's own thread, which calls `Waker::wake` (from
 `Setup::waker()`; `None` from a host older than 1.3) when it has something to show. A wake is a redraw hint, not a
@@ -429,8 +457,8 @@ to it): a project cannot write them.
 
 `crates/plugin/examples/sample` is a small `cdylib` with its own workspace and `Cargo.lock`, so it is not a member of
 the client's workspace and the other crates build as before. Its features select variants: `v2` draws differently
-and `setup-fails` fails (the reload tests); `abi-1-0`, `minor-newer`, `major-2`, and `requires-future` pretend to
-target other ABI versions; `abi-1-3` is a plugin on the frozen 1.3 SDK (`sample/abi-1-3`), and
+and `setup-fails` fails (the reload tests); `abi-1-0`, `minor-newer`, `major-3`, `requires-future` and `requires-feature`
+pretend to target other ABI versions or features; `abi-1-6` exports this crate's plugin as one of ABI 1.6; `abi-1-3` is a plugin on the frozen 1.3 SDK (`sample/abi-1-3`), and
 `abi-1-0-wire` is that plugin behind the 1.0 table; `abi-1-4` is a plugin on the frozen 1.4 SDK (`sample/abi-1-4`),
 whose types the loader's tests also use as a 1.4 host's decoder of the 1.5 sample, and `requires-1-5` asks for a 1.5
 host. `p0a` adds the 1.5 probe (`src/p0a.rs`): a confirm, an alert, the
@@ -456,3 +484,18 @@ Three real TS TUI plugins are ported the same way, on `opencode-plugin-abi` alon
 (`opencode-subagents-sidebar`), `force-input` (`@mynameistito/opencode-force-input`) and `session-usage`
 (`opencode-session-usage`). `crates/tui/tests/all/ports.rs` builds each into `target/sample-plugin`, loads it from a
 `plugins` directory into the TUI, and checks what it draws and sends.
+
+`crates/plugin/examples/board` is a plugin of contract 2.0: a route of memoized cards, and a thread that floods its
+mailbox. `crates/tui/tests/all/plugin_carriers.rs` links its `src/board.rs`, runs it through the byte shims of the
+C ABI in process (`Builtin::Abi`), and loads its `cdylib`, and compares frames, toasts and status at every step
+(`carrier-equal`). `plugin_surface.rs` runs P1's surface model on both in-process carriers, and `plugin_mail.rs`
+holds the mailbox to its rule (`backlog`). `crates/plugin/examples/c` is a plugin in C on the header alone.
+
+## Authoring
+
+`opencode-native plugin dev <dir>` builds the plugin crate in `<dir>`, runs the TUI with its library as one more
+`plugins` entry, and builds it again when `<dir>` or `<dir>/src` changes; the hot reload above takes the new
+library, and a failed build leaves the running one, with its output in `<dir>/target/opencode-dev/build.log`.
+`opencode-native plugin test <library or crate dir> [--route NAME] [--size WxH] [--command NAME[=INPUT]]...` loads the
+plugin into the TUI on the headless renderer, with no server, and prints text frames. Neither command is in the
+TypeScript CLI (deviation `D01-plugin-dev-test`).

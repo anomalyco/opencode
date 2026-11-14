@@ -2935,3 +2935,20 @@ fn a_plugin_written_in_c_against_the_header_runs() {
     host.app.render();
     assert!(host.app.text().contains("drawn in C, 1 messages"), "{}", host.app.text());
 }
+
+// Expected (4.5, review F12): on macOS a library the system refuses for its code signature, or for the quarantine of a
+// download, gets a message that says so in plain words and what to do; elsewhere, and for any other error, the
+// system's words alone.
+#[test]
+fn a_library_macos_refuses_says_why() {
+    let signature = "dlopen(/tmp/x/plugin.dylib, 0x0005): code signature in <ABC> '/tmp/x/plugin.dylib' not valid for \
+                     use in process: mapping process and mapped file (non-platform) have different Team IDs";
+    let explained = explain_refusal(signature, true);
+    assert!(explained.starts_with(&format!("cannot load the library: {signature}. macOS refused")), "{explained}");
+    assert!(explained.contains("codesign --sign"), "{explained}");
+    assert_eq!(explain_refusal(signature, false), format!("cannot load the library: {signature}"));
+    let quarantine = "dlopen(/tmp/x/plugin.dylib): the file is in quarantine and was not verified";
+    assert!(explain_refusal(quarantine, true).contains("xattr -d com.apple.quarantine"));
+    let missing = "dlopen(/tmp/x/plugin.dylib): image not found";
+    assert_eq!(explain_refusal(missing, true), format!("cannot load the library: {missing}"));
+}

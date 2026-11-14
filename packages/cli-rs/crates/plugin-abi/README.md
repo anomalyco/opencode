@@ -1,7 +1,7 @@
 # opencode-plugin-abi
 
 The SDK of native TUI plugins for `opencode-native`. A plugin is a shared library that depends on this crate alone and
-exports itself with `export_plugin!`. The host loads it at startup and again when it changes. The design, the
+exports itself with `plugin!`, which holds every `unsafe` the C ABI needs. The host loads it at startup and again when it changes. The design, the
 lifecycle and the callback rules are in [`docs/P.4.md`](../../docs/P.4.md). Every type is documented in the rustdoc
 (`cargo doc -p opencode-plugin-abi --open`).
 
@@ -44,7 +44,7 @@ or newer. Keep the default `panic = "unwind"`: the SDK catches a plugin's panics
 `src/lib.rs`:
 
 ```rust
-use opencode_plugin_abi::{Click, Command, Node, Placement, Render, Setup, Span, Toast, Variant, export_plugin};
+use opencode_plugin_abi::{Click, Command, Node, Placement, Render, Setup, Span, Toast, Variant, plugin};
 
 fn setup(setup: &mut Setup) -> Result<(), String> {
     // A command in the palette and as `/hello`.
@@ -66,10 +66,10 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     Ok(())
 }
 
-export_plugin!("example.hello", setup);
+plugin!(id = "example.hello", setup);
 ```
 
-`"example.hello"` is the plugin's ID. It names the plugin in `/plugins` and in `cli.json`, and it scopes the plugin's
+`"example.hello"` is the plugin's ID; `plugin!(setup)` takes the crate's package name instead. It names the plugin in `/plugins` and in `cli.json`, and it scopes the plugin's
 storage keys. Build the library:
 
 ```sh
@@ -105,6 +105,11 @@ in one of these ways:
 Start `opencode-native`. The home screen's footer ends in `hello`, and `/hello` or the palette's "Say hello" shows the
 toast. While the TUI runs, a new build copied over the installed one replaces the running plugin.
 
+While you work on it, `opencode-native plugin dev <crate dir>` does the build, the install and the reload for you: it
+runs the TUI with the plugin and builds it again on each change. `opencode-native plugin test <crate dir or library>
+[--route NAME] [--command NAME[=INPUT]]...` prints the screen as text, with no server, for a test or a quick look.
+A plugin in C uses `include/opencode_plugin.h` instead of this crate.
+
 Open `/plugins` to see the plugin's state. External plugins are listed under TUI, built-ins only after `ctrl+a`.
 Enter disables or enables the selected plugin. A plugin that failed has an `x`, `failed` in its row, and a toast
 "Plugin failed: example.hello" with "Open plugins". Space on its row ("view error") shows the error, such as a
@@ -114,7 +119,7 @@ error.
 
 ## Which binaries load
 
-A plugin binary carries its ABI version. The host, ABI 1.6, loads every 1.x binary:
+A plugin binary carries its ABI version. The host is ABI 2.0, and loads every 1.x binary too, which it serves 1.6:
 
 | Built with | Loads | What the host sends it |
 | --- | --- | --- |
@@ -123,7 +128,11 @@ A plugin binary carries its ABI version. The host, ABI 1.6, loads every 1.x bina
 | The 1.4 SDK | yes; a 1.3 host refuses it, naming both versions | The 1.4 requests |
 | The 1.5 SDK | yes; a 1.3 host refuses it, and a 1.4 host loads it and offers what it has: `composer()` reads `None`, and `edit_composer`, `Dialog::Confirm` and `Dialog::Alert` do nothing | The 1.4 requests; 1.5 adds only what the plugin asks of the host |
 | The 1.6 SDK | yes; a 1.3 host refuses it. On a 1.4 or 1.5 host the reads and verbs of 1.6 answer their defaults (see below) | The 1.4 requests, and `Deltas` to a plugin with `on_deltas` |
-| A 2.x SDK | no: "plugin ABI 2.0 is not supported: … rebuild the plugin against opencode-plugin-abi 1" | — |
+| The 2.0 SDK, this crate | yes | The requests of 1.6, and the 2.0 ones: surfaces (`View`, `Unmount`) and messages (`Message`) |
+| A 3.x SDK | no: "plugin ABI 3.0 is not supported: … rebuild the plugin against opencode-plugin-abi 2" | — |
+
+A plugin of 1.6 rebuilt on the 2.0 SDK needs no change: 2.0 keeps every entry and request of 1.6, and keeps them until
+3.0. What 2.0 adds is in `docs/P.4.md`: surfaces of contract 2.0 over the C ABI, and threads that send messages.
 
 ABI 1.6 adds the small reads and verbs: a claim's own size (`Setup::sized`), the streaming deltas (`Setup::on_deltas`),
 the model's variants, the session tabs, the keymap's state, the mouse selection, a program in the foreground, the
