@@ -182,8 +182,6 @@ pub struct Viewer {
     pub previews: HashMap<String, Preview>,
     /// The file whose menu is open (`fileMenu`); new files close it.
     pub menu: Option<usize>,
-    /// The session's status last seen in `turn` mode, for the refetch when a turn ends.
-    pub turn_status: Option<abi::SessionStatus>,
     /// The tree's selected row and its rows when they last scrolled it: the selection scrolls into view only when
     /// they change, as TS's effect does.
     pub tree_mark: (Option<usize>, usize),
@@ -230,7 +228,6 @@ impl Viewer {
             exhausted: None,
             previews: HashMap::new(),
             menu: None,
-            turn_status: None,
             tree_mark: (None, 0),
             contents: Contents::default(),
             drawn: false,
@@ -622,19 +619,15 @@ impl Viewer {
         self.forget(host);
     }
 
-    /// Reads the session's status in `turn` mode and loads again on running to idle; other modes forget it (the
-    /// `createEffect` on `session.status`).
-    pub fn observe(&mut self, host: &dyn Host, diffs: &Diffs) {
-        let Some(session) = self.session().map(str::to_owned) else { return };
-        if self.mode != Mode::Turn {
-            self.turn_status = None;
-            return;
-        }
-        let status = host.session(&session).map_or(abi::SessionStatus::Idle, |session| session.status);
-        let previous = self.turn_status.replace(status);
-        if previous == Some(abi::SessionStatus::Running) && status == abi::SessionStatus::Idle {
+    /// A turn of `session` ended: in `turn` mode the viewer of that session loads again, and says whether it did (TS's
+    /// `createEffect` on `session.status`, running to idle). It hears the end itself: the status read when the UI hears
+    /// of an event may already be idle again, for a turn that started and ended before then (`steps/flakes-8.md`).
+    pub fn turn_ended(&mut self, host: &dyn Host, diffs: &Diffs, session: &str) -> bool {
+        let ended = self.mode == Mode::Turn && self.session() == Some(session);
+        if ended {
             self.load(host, diffs);
         }
+        ended
     }
 
     /// `onSwitchSource`: remembers the source and loads it, unless it is the one shown.
@@ -644,7 +637,6 @@ impl Viewer {
             self.mode = mode;
             self.load(host, diffs);
         }
-        self.observe(host, diffs);
     }
 }
 
