@@ -1067,6 +1067,7 @@ export type ProviderSettings = {
   cache?: ProviderCache
   transport?: ProviderTransport
   encoding?: ProviderEncoding
+  socketPath?: string
   tls?: ProviderTls
 } & { [x: string]: any }
 
@@ -1082,6 +1083,7 @@ export type ConfigProviderSettings = {
   cache?: ProviderCache
   transport?: ProviderTransport
   encoding?: ProviderEncoding
+  socketPath?: string
   tls?: ProviderTls
 } & { [x: string]: JsonValue | null }
 

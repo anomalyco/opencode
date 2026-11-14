@@ -204,6 +204,30 @@ providers and gateways reject compressed bodies. OpenAI defaults to `"zstd"` whe
 }
 ```
 
+## Unix sockets
+
+Set `settings.socketPath` to dial a Unix domain socket instead of the base URL's host and port. Use an `http://` base URL, because the socket is unencrypted and the URL supplies only the request path; a local OpenAI-compatible server on `/run/llm.sock` is called as `http://localhost/v1`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "local": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "http://localhost/v1",
+        "socketPath": "/run/llm.sock",
+      },
+      "models": {
+        "local-model": {},
+      },
+    },
+  },
+}
+```
+
+The socket must be connectable by the OpenCode process: on Linux that needs write permission on the socket file, so a socket that is only readable refuses the connection. Traffic stays on the socket as plain HTTP: no TCP port is opened or reached, and no TLS encryption or decryption is performed. This applies to explicitly configured providers and models; the built-in Ollama, vLLM and LM Studio discovery only probes HTTP URLs.
+
 ## Packages
 
 The `package` field selects the runtime that communicates with a provider. Use the compatible runtime for APIs that

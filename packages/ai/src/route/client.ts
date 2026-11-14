@@ -402,7 +402,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           endpoint: routeInput.endpoint,
           auth: routeInput.auth ?? Auth.none,
           encodeBody: ProviderShared.encodeJson,
-          middleware: RequestExecutor.withFetch(request.fetch, options?.http),
+          middleware: RequestExecutor.withTransport(request.http?.socketPath, request.fetch, options?.http),
           webSocket: options?.webSocket,
         }),
       streamPrepared: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime, options?: StreamOptions) => {
