@@ -368,6 +368,12 @@ thread_local! {
     };
     /// The next [`open`] loads the [`minimap`] plugin.
     static PLUGGED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// The [`minimap`] has a surface whose `layout` is told about the transcript.
+    static MAPPED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// What that `layout` was told.
+    static TOLD: std::cell::RefCell<Vec<opencode_plugin::abi::v2::TranscriptView>> = const {
+        std::cell::RefCell::new(Vec::new())
+    };
 }
 
 /// A plugin whose commands read the published transcript and move it to its top.
@@ -379,7 +385,87 @@ fn minimap(setup: &mut opencode_plugin::abi::Setup) -> Result<(), String> {
     setup.command(Command { name: "mini.top".into(), ..Command::default() }, |host, _| {
         host.scroll(v2::Target::Transcript, v2::Scroll::Edge { edge: v2::Edge::Top });
     });
+    setup.command(Command { name: "mini.up".into(), ..Command::default() }, |host, _| {
+        host.scroll(v2::Target::Transcript, v2::Scroll::By { rows: -5 });
+    });
+    if MAPPED.with(std::cell::Cell::get) {
+        let map = v2::Surface::new("map", v2::Place::Slot(opencode_plugin::abi::Placement::append("app")), |_| {
+            v2::Node::text(Vec::new())
+        });
+        setup.surface(map.layout(vec![v2::Notify::Transcript], |geometry| {
+            TOLD.with(|told| told.borrow_mut().extend(geometry.transcript.clone()));
+            v2::LayoutReply::default()
+        }));
+    }
     Ok(())
+}
+
+/// The transcript with the [`minimap`], `mapped` with its surface, at its newest rows.
+fn mapped(mapped: bool) -> View {
+    PLUGGED.with(|plugged| plugged.set(true));
+    MAPPED.with(|cell| cell.set(mapped));
+    TOLD.with(|told| told.borrow_mut().clear());
+    let h = long_session();
+    h.wait_for("Answer 50 part 3");
+    h.app.render();
+    h
+}
+
+fn mini(h: &View, command: &str) -> String {
+    let _ = h.tui.keymap.dispatch(command, None);
+    h.app.advance(Duration::from_millis(1));
+    h.app.render().text()
+}
+
+// Expected (review big-boi 7): a plugin's move takes the wheel's whole path: away from the bottom, "Jump to latest"
+// shows, as after a wheel step.
+#[test]
+fn a_plugins_move_shows_the_way_back_to_the_latest() {
+    let h = mapped(false);
+    let screen = mini(&h, "mini.up");
+    assert!(screen.contains("Jump to latest"), "{screen}");
+}
+
+// Expected (review big-boi 7, carbon-7): a jump to the top asked for again at the top goes on up, as the wheel does: it
+// reveals older rows or asks for an older page each time.
+#[test]
+fn a_plugins_jump_to_the_top_backfills_each_time() {
+    let h = mapped(false);
+    let read = |h: &View| {
+        let _ = h.tui.keymap.dispatch("mini.read", None);
+        h.app.advance(Duration::from_millis(1));
+        let above = SEEN.with(|seen| seen.borrow().last().map(|view| view.above)).expect("the transcript is published");
+        (above, h.older.load(Ordering::SeqCst))
+    };
+    mini(&h, "mini.top");
+    let first = read(&h);
+    mini(&h, "mini.top");
+    let second = read(&h);
+    assert!(second.0 < first.0 || second.1 > first.1, "the second jump revealed nothing: {first:?}, {second:?}");
+}
+
+// Expected (review carbon-7): a pointer that moves over the transcript, without the wheel, runs no behaviors.
+#[test]
+fn a_pointer_over_the_transcript_runs_no_behaviors() {
+    let h = mapped(true);
+    let before = opencode_plugin::behave::counts();
+    for x in 5..15 {
+        h.app.hover(x, 5);
+    }
+    h.app.render();
+    assert_eq!(opencode_plugin::behave::counts().since(before).arms, 0);
+}
+
+// Expected (review big-boi 7, carbon-7): a surface told about the transcript hears a plugin's move in its frame.
+#[test]
+fn a_subscriber_hears_a_plugins_move_in_its_frame() {
+    let h = mapped(true);
+    mini(&h, "mini.up");
+    let _ = h.tui.keymap.dispatch("mini.read", None);
+    h.app.advance(Duration::from_millis(1));
+    let offset = SEEN.with(|seen| seen.borrow().last().map(|view| view.offset));
+    let told = TOLD.with(|told| told.borrow().last().map(|view| view.offset));
+    assert_eq!(told, offset);
 }
 
 // Expected (rich plugins P3, decision 8): the transcript publishes its offset and mounted rows, and a plugin's verb on
