@@ -80,6 +80,24 @@ fn on_both(row: impl Fn()) {
     ABI.with(|cell| cell.set(false));
 }
 
+/// [`mount_with`] over one file, with `config` merged over the rows' own.
+fn mount_config(route: Route, config: Value) -> Diffs {
+    let memory = Memory::new(routes(json!([hunk_file(0, 4)])));
+    let mut merged = json!({ "animations": false, "session": { "sidebar": "hide" }, "diffs": { "source": "turn" } });
+    merged.as_object_mut().unwrap().extend(config.as_object().unwrap().clone());
+    let deps = Deps {
+        config: support::config(support::decode(&merged.to_string())),
+        route,
+        events: true,
+        abi_builtins: ABI.with(Cell::get),
+        ..support::deps(Arc::new(memory.clone()))
+    };
+    let harness = support::mount(120, 30, deps);
+    let now = std::time::Instant::now();
+    harness.tui.plugins.monitor().set_clock(move || now);
+    Diffs { harness, memory, turns: Cell::new(0) }
+}
+
 /// [`mount_with`], with the built-ins on the C ABI's byte shims when `abi`.
 fn mount_on(route: Route, diff: Value, width: u16, height: u16, abi: bool) -> Diffs {
     let memory = Memory::new(routes(diff));
@@ -575,16 +593,54 @@ fn the_docked_panel_takes_the_keys_only_with_the_focus() {
     });
 }
 
-// Expected (TS binds `app.exit` to close the viewer; big-boi's review of P6c): the reserved chord, which no plugin sees,
-// takes the viewer's route back home; there, with an empty prompt, it exits the app.
+// Expected (TS binds `app.exit` to close the viewer, one level; carbon's review of P6c, 2): the reserved chord, which no
+// plugin sees, closes the viewer's surface that has the input and no more: an open file menu alone, then the route,
+// back to the route it came from; a focused docked panel, keeping the composer's draft. With `app.exit` rebound it
+// does the same, so the route traps nobody. On home with an empty prompt it is `app.exit`'s. On both carriers.
 #[test]
-fn ctrl_c_closes_the_viewer_and_exits_elsewhere() {
-    let h = route(1, 4, 120, 30);
-    h.keys(&["ctrl+c"]);
-    h.wait("ctrl+c did not leave the route", || h.tui.route() == Route::Home);
-    assert!(!h.app.app().is_quitting());
-    h.keys(&["ctrl+c"]);
-    assert!(h.app.app().is_quitting(), "ctrl+c on home did not exit:\n{}", h.app.text());
+fn ctrl_c_closes_one_level_of_the_viewer() {
+    let stats = Route::Plugin { id: "opencode.stats".into(), name: "stats".into() };
+    let diff = Route::Plugin { id: "opencode.diffs".into(), name: "diff".into() };
+    for rebound in [false, true] {
+        on_both(|| {
+            let h = match rebound {
+                false => mount_with(Route::Home, json!([hunk_file(0, 4)]), 120, 30),
+                true => mount_config(Route::Home, json!({ "keybinds": { "app.exit": "ctrl+q" } })),
+            };
+            h.wait_for("/project");
+            h.tui.navigate(stats.clone());
+            h.wait("stats did not show", || h.tui.route() == stats);
+            h.tui.keymap.dispatch("diff.open", None);
+            h.wait_for("≡ f0000.rs");
+            let (x, y) = h.find("src/f0000.rs");
+            h.app.mouse(MouseEventKind::Down(MouseButton::Right), x, y);
+            h.wait_for("Mark complete");
+            h.keys(&["ctrl+c"]);
+            h.assert_menu_closed();
+            assert_eq!(h.tui.route(), diff, "the chord closed more than the menu");
+            h.keys(&["ctrl+c"]);
+            h.wait("ctrl+c did not go back to stats", || h.tui.route() == stats);
+            h.keys(&["ctrl+c"]);
+            h.wait("ctrl+c did not go home", || h.tui.route() == Route::Home);
+            assert!(!h.app.app().is_quitting());
+            if !rebound {
+                h.keys(&["ctrl+c"]);
+                assert!(h.app.app().is_quitting(), "ctrl+c on home is app.exit's");
+            }
+        });
+    }
+    on_both(|| {
+        let h = mount(support::session_route("ses_a"));
+        h.wait_for("Review");
+        h.dispatch("pane.focus.left");
+        h.app.type_text("draft");
+        h.tui.keymap.dispatch("diff.open", None);
+        h.wait_for("focus prompt");
+        h.keys(&["ctrl+c"]);
+        h.wait("ctrl+c did not close the panel", || h.tui.panels.current().is_none());
+        assert!(!h.app.app().is_quitting());
+        assert_eq!(h.text(), "draft", "the chord lost the composer's draft");
+    });
 }
 
 /// The viewer's settings as the TUI config holds them now.
@@ -1028,5 +1084,27 @@ fn the_docked_file_menu_takes_the_input() {
         h.app.click(4, 6);
         h.keys(&["x"]);
         assert_eq!(h.text(), "x", "the click on the session did not give the composer the input");
+    });
+}
+
+// Expected (decision 2; carbon's review of P6c, 4): a remount of the viewer's route (a plugin toggled in `/plugins`,
+// a theme change) keeps the viewer: its marks, and the route `q` goes back to, here stats. On both carriers.
+#[test]
+fn a_remount_keeps_the_viewer_and_its_way_back() {
+    let stats = Route::Plugin { id: "opencode.stats".into(), name: "stats".into() };
+    on_both(|| {
+        let h = mount_with(Route::Home, json!([hunk_file(0, 4)]), 120, 30);
+        h.wait_for("/project");
+        h.tui.navigate(stats.clone());
+        h.wait("stats did not show", || h.tui.route() == stats);
+        h.tui.keymap.dispatch("diff.open", None);
+        h.wait_for("≡ f0000.rs");
+        h.keys(&["m"]);
+        h.wait_for("1/1");
+        opencode_plugin::Host::remount(&*h.tui);
+        h.wait_for("≡ f0000.rs");
+        assert!(h.settle().contains("1/1"), "the remount lost the mark:\n{}", h.app.text());
+        h.keys(&["q"]);
+        h.wait("q did not go back to stats", || h.tui.route() == stats);
     });
 }

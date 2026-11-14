@@ -1063,6 +1063,9 @@ fn the_reserved_chord_and_an_uncaptured_drag_reach_no_plugin() {
     harness.app.press("ctrl+c");
     settle(&harness);
     assert!(!taken().iter().any(|line| line.contains("key c")));
+    // The host closes the plugin's panel that had the input (review carbon-2 of P6c); it opens again.
+    assert!(harness.tui.panels.current().is_none(), "the chord left the focused panel open");
+    run(&harness, "input.panel", None);
     let (x, y) = support::at(&harness.app.text(), "AAAA").unwrap();
     harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), x + 1, y);
     settle(&harness);
@@ -1486,6 +1489,9 @@ fn the_reserved_chord_escapes_every_plugin_hold_spelling_and_listener() {
     let ledger = interact::ledger(&*harness.tui);
     assert!(!ledger.holding && ledger.held == 0 && ledger.timers == 0, "{ledger:?}");
     assert_eq!(taken(), ["side: key x [-]"], "a plugin key took the reserved chord");
+    // The host closes the plugin's panel that had the input (review carbon-2 of P6c); it opens again.
+    assert!(harness.tui.panels.current().is_none(), "the chord left the focused panel open");
+    run(&harness, "input.panel", None);
     // The plugin's layers hold again once the focus moves. A mode, then a selection that copies on the chord: the mode
     // still ends.
     run(&harness, "input.focus", Some("a"));
@@ -1788,6 +1794,9 @@ fn no_spelling_list_or_sequence_takes_the_reserved_chord() {
     taken();
     harness.app.press("ctrl+c");
     settle(&harness);
+    // The host closes the plugin's panel that had the input (review carbon-2 of P6c); it opens again.
+    assert!(harness.tui.panels.current().is_none(), "the chord left the focused panel open");
+    run(&harness, "input.panel", None);
     run(&harness, "input.focus", Some("side"));
     harness.app.press("x");
     settle(&harness);
