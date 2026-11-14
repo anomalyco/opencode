@@ -525,26 +525,27 @@ fn layout_hears_the_top_card_and_paints_the_edge_in_the_same_frame() {
     assert_eq!(edge(&app.render()), base, "the edge did not take its color back");
 }
 
-/// What each of six wheel steps down cost: views, `layout` calls, widgets touched, scroll events.
-fn wheel_work(cards: usize, list: bool, quiet: bool) -> Vec<(usize, usize, u64, usize)> {
+/// What each of six wheel steps down cost: views, `layout` calls, widgets touched, scroll events, behavior rounds.
+fn wheel_work(cards: usize, list: bool, quiet: bool) -> Vec<(usize, usize, u64, usize, u64)> {
     board(|board| board.quiet = quiet);
     let board_view = mount(cards, 60, 16, list);
     let app = &board_view.harness.app;
     (0..6)
         .map(|_| {
             let (views, layouts, scrolls) = board(|board| (board.views, board.layouts, board.user_scrolls));
-            let work = reconcile::work();
+            let (work, counts) = (reconcile::work(), behave::counts());
             app.scroll(10, 5, true);
             app.advance(Duration::ZERO);
             board_view.settle();
             let touched = reconcile::work().since(work).touched();
-            board(|board| (board.views - views, board.layouts - layouts, touched, board.user_scrolls - scrolls))
+            let rounds = behave::counts().since(counts).resolves;
+            board(|board| (board.views - views, board.layouts - layouts, touched, board.user_scrolls - scrolls, rounds))
         })
         .collect()
 }
 
-// Expected (`work`, synthesis 4.14): a wheel step calls at most one `layout` and touches no widget of a scroll's tree;
-// a list mounts the items that come near the view. A scroll that asks for the user's scroll events hears one a step,
+// Expected (`work`, synthesis 4.14): a wheel step calls at most one `layout`, touches no widget of a scroll's tree, and
+// runs the behaviors once; a list mounts the items that come near the view, in one more round. A scroll that asks for the user's scroll events hears one a step,
 // a handler, which one view of keeps follows (P1's rule: a view runs after the plugin's own handlers); one that does
 // not runs no plugin code but `layout`. The counts are equal at 40 and at 410 cards.
 #[test]
@@ -552,10 +553,12 @@ fn a_wheel_step_does_the_same_work_at_any_size() {
     for (list, quiet) in [(false, false), (false, true), (true, false), (true, true)] {
         let small = wheel_work(40, list, quiet);
         let calls = usize::from(!quiet);
-        for (views, layouts, touched, scrolls) in &small {
+        for (views, layouts, touched, scrolls, rounds) in &small {
             assert_eq!((*views, *scrolls), (calls, calls), "list {list}, quiet {quiet}: {small:?}");
             assert!(*layouts <= 1, "list {list}: {small:?}");
             assert!(list || *touched == 0, "list {list}: {small:?}");
+            // One round, and one more when the step moves the list's window.
+            assert!(*rounds <= 1 + u64::from(list), "list {list}: {small:?}");
         }
         assert_eq!(wheel_work(410, list, quiet), small, "list {list}, quiet {quiet}");
     }
