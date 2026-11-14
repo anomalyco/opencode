@@ -913,6 +913,8 @@ struct MailRun {
     in_flight: Vec<usize>,
     /// What was applied: an injection whose step never came (no wake ran) was not.
     applied: Vec<MailOp>,
+    /// The last number accepted before a failing update was: none accepted after it may arrive.
+    failed_after: Option<u32>,
 }
 
 thread_local! {
@@ -948,7 +950,11 @@ fn mail_op(run: &mut MailRun, op: MailOp) {
         MailOp::Report => {
             MODEL_BOX.with(|held| held.borrow().clone()).unwrap().panicked("a thread panicked".to_owned())
         }
-        MailOp::FailingUpdate => drop(sender.send(FAILING)),
+        MailOp::FailingUpdate => {
+            if sender.send(FAILING).is_ok() {
+                run.failed_after.get_or_insert(run.next);
+            }
+        }
     }
     run.in_flight.push(in_flight());
 }
@@ -1005,6 +1011,11 @@ fn mail_scenario(before: &[MailOp], inside: &[(usize, MailOp)]) -> Result<(usize
         }
     } else if !matches!(status, Status::Failed(_)) {
         return Err(format!("a fault left the plugin {status:?}"));
+    }
+    if let Some(last) = run.failed_after
+        && arrived.iter().any(|number| *number > last)
+    {
+        return Err(format!("arrived {arrived:?}, after the update that failed behind {last}"));
     }
     if arrived.iter().any(|number| !run.sent.contains(number)) {
         return Err(format!("arrived {arrived:?}, which was never accepted: {:?}", run.sent));

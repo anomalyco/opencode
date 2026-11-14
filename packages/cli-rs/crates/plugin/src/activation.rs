@@ -134,9 +134,10 @@ impl Activation {
             }
         }
         between(2);
-        // Bound first: failing disposes the activation, which takes the handler.
+        // A failing update closed the mailbox; failing is first-cause-wins, so this report then changes nothing. Bound
+        // first: failing disposes the activation, which takes the handler.
         let fail = self.on_panic.borrow().clone();
-        if let (Some(panic), Some(fail), false) = (panic, fail, self.mailbox.closed()) {
+        if let (Some(panic), Some(fail)) = (panic, fail) {
             fail(panic);
         }
         between(3);
