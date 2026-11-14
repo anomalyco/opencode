@@ -1,6 +1,14 @@
 import { expect, test } from "bun:test"
 import { permissionPresentation } from "../../src/util/permission"
 
+test("labels subagent permission with the requested resource", () => {
+  for (const input of [{}, { agent: "general" }]) {
+    expect(permissionPresentation({ action: "subagent", resources: ["reviewer"], input }).title).toBe(
+      "Reviewer Subagent",
+    )
+  }
+})
+
 test("preserves permission roots and self-contained metadata", () => {
   expect(permissionPresentation({ action: "external_directory", resources: ["/*"] }).title).toBe(
     "Access external directory /",

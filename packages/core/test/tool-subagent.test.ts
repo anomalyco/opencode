@@ -209,10 +209,12 @@ const withSubagent = (location: Location.Ref) =>
         })
         editor.update(Agent.ID.make("reviewer"), (agent) => {
           agent.mode = "subagent"
+          agent.system = "Review the changes."
           agent.model = childModel
         })
         editor.update(Agent.ID.make("fallback"), (agent) => {
           agent.mode = "subagent"
+          agent.system = "Implement the changes."
         })
         editor.update(Agent.ID.make("primary"), (agent) => {
           agent.mode = "primary"
@@ -320,6 +322,31 @@ describe("SubagentTool", () => {
           const locations = yield* LocationServiceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
           expect((yield* registry.snapshot()).definitions.map((tool) => tool.name)).toContain(SubagentTool.name)
+          const launch = () =>
+            executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-general",
+                name: SubagentTool.name,
+                input: { description: "review", prompt: "review this" },
+              },
+            })
+          const result = yield* launch()
+          expect(yield* session.get(outputSessionID(result.metadata))).toMatchObject({
+            agent: "general",
+            parentID: parent.id,
+          })
+          yield* Agent.Service.use((agents) =>
+            agents.transform((editor) =>
+              editor.update(toolIdentity.agent, (agent) => {
+                agent.permissions.push({ action: "subagent", resource: "general", effect: "deny" })
+              }),
+            ),
+          ).pipe(Effect.provide(locations.get(parent.location)))
+          expect(yield* launch()).toMatchObject({ status: "error", error: { type: "permission.rejected" } })
+          expect((yield* session.list({ parentID: parent.id })).data).toHaveLength(1)
           expect(
             yield* executeTool(registry, {
               sessionID: parent.id,
@@ -510,7 +537,6 @@ describe("SubagentTool", () => {
               id: "call-subagent-second",
               name: SubagentTool.name,
               input: {
-                agent: "reviewer",
                 description: "follow up",
                 prompt: "continue this",
                 sessionID: childID,
@@ -607,7 +633,7 @@ describe("SubagentTool", () => {
             Stream.runCollect,
             Effect.forkScoped({ startImmediately: true }),
           )
-          const call = (id: string, input: { sessionID?: Session.ID }) =>
+          const call = (id: string, input: { sessionID?: Session.ID; agent?: string; model?: string }) =>
             executeTool(registry, {
               sessionID: parent.id,
               ...toolIdentity,
@@ -615,15 +641,23 @@ describe("SubagentTool", () => {
                 type: "tool-call",
                 id,
                 name: SubagentTool.name,
-                input: { agent: "reviewer", description: "review", prompt: id, ...input },
+                input: { description: "review", prompt: id, ...input },
               },
             }).pipe(Effect.timeout("2 seconds"))
 
-          const launched = yield* call("call-launch", {})
+          const launched = yield* call("call-launch", { agent: "reviewer" })
           const childID = outputSessionID(launched.metadata)
           yield* gate.started
+          expect(
+            yield* call("call-wrong-role", { sessionID: childID, agent: "fallback", model: "test/override" }),
+          ).toMatchObject({
+            status: "error",
+            error: { message: expect.stringContaining('uses agent "reviewer", not "fallback"') },
+          })
+          expect(yield* sessions.inbox(childID)).toHaveLength(0)
+          expect(yield* sessions.get(childID)).toMatchObject({ agent: "reviewer", model: childModel })
           const steered = yield* call("call-steer", { sessionID: childID })
-          const followed = yield* call("call-steer-again", { sessionID: childID })
+          const followed = yield* call("call-steer-again", { sessionID: childID, agent: "" })
           ;[launched, steered, followed].forEach((result) =>
             expect(result).toMatchObject({ metadata: { sessionID: childID, status: "running" } }),
           )
@@ -631,6 +665,19 @@ describe("SubagentTool", () => {
           yield* gate.release
           yield* Fiber.join(delivered).pipe(Effect.timeout("2 seconds"))
           yield* sessions.wait(parent.id)
+          const childRequests = (yield* llm.requests()).filter((request) =>
+            request.messages.some(
+              (message) =>
+                message.role === "user" &&
+                message.content.some((part) => part.type === "text" && part.text.includes("call-launch")),
+            ),
+          )
+          expect(childRequests.length).toBeGreaterThan(1)
+          for (const request of childRequests) {
+            const system = request.system.map((part) => part.text)
+            expect(system).toContain("Review the changes.")
+            expect(system).not.toContain("Implement the changes.")
+          }
           const notices = (yield* sessions.context(parent.id))
             .filter((message) => message.type === "synthetic")
             .filter((message) => message.metadata?.source === "subagent")
@@ -642,7 +689,7 @@ describe("SubagentTool", () => {
     ),
   )
 
-  it.live("rejects unrelated children and switches agents on continuation", () =>
+  it.live("checks ownership and the child's own role on continuation", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
@@ -655,7 +702,7 @@ describe("SubagentTool", () => {
             title: "other review",
             agent: Agent.ID.make("reviewer"),
           })
-          const switched = yield* sessions.create({
+          const child = yield* sessions.create({
             parentID: parent.id,
             title: "fallback review",
             agent: Agent.ID.make("fallback"),
@@ -664,7 +711,7 @@ describe("SubagentTool", () => {
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
-          const call = (sessionID: Session.ID, id: string, agent = "reviewer") =>
+          const call = (sessionID: Session.ID, id: string) =>
             executeTool(registry, {
               sessionID: parent.id,
               ...toolIdentity,
@@ -672,7 +719,7 @@ describe("SubagentTool", () => {
                 type: "tool-call" as const,
                 id,
                 name: SubagentTool.name,
-                input: { agent, description: "follow up", prompt: "continue", sessionID },
+                input: { description: "follow up", prompt: "continue", sessionID },
               },
             })
 
@@ -713,25 +760,18 @@ describe("SubagentTool", () => {
               message: `Session ${unrelated.id} is not a child of the current session`,
             },
           })
-          expect(yield* call(switched.id, "call-switched-child")).toMatchObject({
-            status: "completed",
-            output: { status: "running" },
-            metadata: { sessionID: switched.id, status: "running" },
+          yield* Agent.Service.use((agents) =>
+            agents.transform((editor) =>
+              editor.update(toolIdentity.agent, (agent) => {
+                agent.permissions.push({ action: "subagent", resource: "fallback", effect: "deny" })
+              }),
+            ),
+          ).pipe(Effect.provide(locations.get(parent.location)))
+          expect(yield* call(child.id, "call-denied-follow-up")).toMatchObject({
+            status: "error",
+            error: { type: "permission.rejected" },
           })
-          expect(yield* sessions.get(switched.id)).toMatchObject({
-            agent: "reviewer",
-            model: childModel,
-          })
-          // Switching to an agent without a configured model keeps the child's current model.
-          expect(yield* call(switched.id, "call-modelless-switch", "fallback")).toMatchObject({
-            status: "completed",
-            output: { status: "running" },
-            metadata: { sessionID: switched.id, status: "running" },
-          })
-          expect(yield* sessions.get(switched.id)).toMatchObject({
-            agent: "fallback",
-            model: childModel,
-          })
+          expect(yield* sessions.inbox(child.id)).toHaveLength(0)
         }),
       ),
     ),
