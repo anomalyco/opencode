@@ -2309,9 +2309,13 @@ pub struct SelectAction {
     /// The values of the rows the action is hidden on; its key then goes on to the list.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hidden: Vec<String>,
-    /// In the footer's first group, beside `enable`/`disable`.
+    /// In the footer's first group, beside `enable`/`disable` (`Some(true)`), or its second; by default the first for
+    /// an action on the selected row and the second for a rowless one, as TS's `group`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary: Option<bool>,
+    /// Runs with no row and no value, so it shows and runs also while no row matches (TS `selection: "none"`).
     #[serde(default, skip_serializing_if = "is_false")]
-    pub primary: bool,
+    pub rowless: bool,
 }
 
 impl SelectOption {

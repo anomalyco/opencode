@@ -364,7 +364,10 @@ impl Surface {
             // What `layout` named may have moved with it, also when it is first laid out.
             mounted.laid.set(true);
             behave::arm(&app);
-            if (rect.width as u16, rect.height as u16) == mounted.seen.get() || mounted.resized.get() >= 2 {
+            // Only a slot's root follows its content; a surface that fills its room follows every resize of it, as a
+            // splitter drag gives.
+            let latched = !mounted.fills && mounted.resized.get() >= 2;
+            if (rect.width as u16, rect.height as u16) == mounted.seen.get() || latched {
                 return;
             }
             mounted.resized.set(mounted.resized.get() + 1);
@@ -375,7 +378,11 @@ impl Surface {
                 }
             });
         });
+        // A panel's and an overlay's first view runs as their first layout gives them their room, once the host shows
+        // them: it sees how they show (`SurfaceInput::panel`) and their size, so one view draws them.
+        let laid_out = matches!(surface.at, v2::Place::Panel(_) | v2::Place::Overlay(_));
         match fills {
+            true if laid_out => {}
             // A route's first view runs once the page it replaces is gone, whose keymap layers go in this turn's
             // deferred work, before the next frame: the view sees the keymap the route has (review bigboi-7).
             true => {
@@ -565,6 +572,9 @@ impl Surface {
         {
             taken = Some(crate::node::take_layout(layout));
         }
+        // A focus in the mount that the new tree takes away (a node gone, or built again) comes back after it.
+        let focused =
+            self.holder().map(|owner| owner.focused()).filter(|focused| focused.surface || focused.node.is_some());
         let mut state = self.state.borrow_mut();
         let State { tree, content, last, .. } = &mut *state;
         let restyled = !tree.styled_in(theme);
@@ -603,6 +613,9 @@ impl Surface {
         let slots_changed = tree.slots_changed();
         drop(state);
         self.repaint(restyled);
+        if let (Some(owner), Some(focused)) = (self.holder(), focused) {
+            owner.restore_focus(host, focused.node.as_deref());
+        }
         let live = self.live.borrow().clone();
         if let (true, Some(live)) = (slots_changed, live) {
             crate::settle(host, &live);

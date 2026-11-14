@@ -58,6 +58,20 @@ pub struct Probe {
     pub hide_b: bool,
     /// The selection copies on the reserved chord, and keeps it from the keymap (`terminal.copy` `manual`).
     pub manual_copy: bool,
+    /// The rich select has no key.
+    pub keyless: bool,
+    /// The other plugin binds escape everywhere, above an overlay's own.
+    pub other_escape: bool,
+    /// The panel's handler panics as it hears an overlay of it closed.
+    pub panic_closed: bool,
+    /// A press on `a` gives the focus to `b`.
+    pub down_focus_b: bool,
+    /// Node `a` has padding, which builds it again; node `a` is left out; node `a` is on a background token.
+    pub a_pad: bool,
+    pub hide_a: bool,
+    pub a_bg: Option<&'static str>,
+    /// Each view of the panel: how it showed, and its mount's generation.
+    pub panels: Vec<(Option<input::PanelInput>, u64)>,
     /// The panel's handler panics, which fails the plugin.
     pub panic: bool,
     /// The rich select has no footer action.
@@ -81,7 +95,9 @@ pub fn probe<T>(f: impl FnOnce(&mut Probe) -> T) -> T {
 fn log(owner: &str, host: &dyn abi::Host, event: &Event) {
     let mode = host.mode().unwrap_or_else(|| "-".to_owned());
     let event = match event {
-        Event::Key(key) => match &key.bind {
+        Event::Key(key) => match key.bind.as_deref() {
+            // The bind of several keys says which one it was.
+            Some("v") => format!("key v as {}", key.key),
             Some(bind) => format!("key {bind}"),
             None => format!("any {}", key.key),
         },
@@ -123,6 +139,14 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         host.focus("a");
     });
     setup.command(command("input.route"), |host, _| host.open_route("probe"));
+    setup.command(command("input.nopanel"), |host, _| {
+        host.open_panel(OpenPanel { surface: "nope".into(), session: None, fullscreen: false });
+    });
+    setup.command(command("input.unmenu"), |host, _| host.close_overlay("menu"));
+    setup.command(command("input.edge"), |host, _| {
+        let anchor = Anchor::Edge(input::Edge::Bottom);
+        host.overlay(Overlay { surface: "menu".into(), anchor, width: 24, height: 2 });
+    });
     // Changes nothing: the plugin's surfaces draw again after it, with what the probe says now.
     setup.command(command("input.redraw"), |_, _| {});
     // The geometry and focus reads, as a command makes them: of the plugin's mount that holds the node.
@@ -238,10 +262,15 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
                     Bind::new("o", "overlay"),
                     Bind::new("ctrl+c", "c"),
                     Bind::new("Control + C", "c"),
+                    Bind::new("a,ctrl+c", "c"),
+                    Bind::new("ctrl+c x", "c"),
+                    Bind::new("v,ctrl+t", "v"),
                 ],
                 ..Layer::default()
             },
             Layer { scope: LayerScope::Node("a".into()), keys: vec![Bind::new("y", "y")], ..Layer::default() },
+            // A layer of the composer too: the panel's mode still holds where it was set.
+            Layer { scope: LayerScope::Composer, keys: vec![Bind::new("z", "z")], ..Layer::default() },
             Layer {
                 scope: LayerScope::Surface,
                 mode: Some("menu".into()),
@@ -251,7 +280,15 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         ])
         .on(|host, event| {
             assert!(!probe(|probe| probe.panic), "the probe asked for a panic");
+            let closed = matches!(event, Event::Closed { .. });
+            assert!(!(closed && probe(|probe| probe.panic_closed)), "the probe asked for a panic on a close");
             log("side", host, event);
+            if let Event::Pointer(pointer) = event
+                && pointer.kind == PointerKind::Down
+                && probe(|probe| probe.down_focus_b)
+            {
+                host.focus("b");
+            }
             match event {
                 Event::Key(key) => match key.bind.as_deref() {
                     Some("x") if probe(|probe| probe.pass_x) => Handled::Pass,
@@ -385,7 +422,13 @@ fn select() -> abi::Select {
     let command = |name: &str| abi::Action::Command { name: name.into(), input: None };
     let options = rows
         .iter()
-        .map(|row| {
+        .flat_map(|row| {
+            // `dup`: a hidden disabled row of the same value toggles the other plugin; the shown one does not.
+            let hidden = (row == "dup").then(|| abi::SelectOption {
+                disabled: true,
+                toggle: Some("test.other".into()),
+                ..abi::SelectOption::new("row hidden", "dup")
+            });
             let mut option = abi::SelectOption::new(format!("row {row}"), row.clone());
             option.footer = Some(format!("{footer} {row}"));
             option.footer_color = Some(abi::Color::from("text.muted"));
@@ -393,11 +436,12 @@ fn select() -> abi::Select {
                 "beta" => option.action = Some(command("input.row")),
                 "other" => option.toggle = Some("test.other".into()),
                 "self" => option.toggle = Some(ID.into()),
+                "manager" => option.toggle = Some("opencode.plugins".into()),
                 "off" => option.disabled = true,
                 "spin" => option.gutter = Some(abi::Gutter::Spinner),
                 _ => option.gutter = Some(abi::Gutter::Span(abi::Span::new("x"))),
             }
-            option
+            hidden.into_iter().chain([option])
         })
         .collect();
     abi::Select {
@@ -406,7 +450,7 @@ fn select() -> abi::Select {
         options,
         current: None,
         action: command("input.picked"),
-        key: Some("pick".into()),
+        key: (!probe(|probe| probe.keyless)).then(|| "pick".into()),
         actions: match probe(|probe| probe.no_update) {
             true => Vec::new(),
             false => vec![
@@ -415,14 +459,24 @@ fn select() -> abi::Select {
                     key: Some("ctrl+u".into()),
                     action: command("input.update"),
                     hidden: vec!["beta".into()],
-                    primary: false,
+                    primary: Some(false),
+                    rowless: false,
                 },
                 abi::SelectAction {
                     title: "cut".into(),
                     key: Some("Ctrl + C".into()),
                     action: command("input.picked"),
                     hidden: Vec::new(),
-                    primary: false,
+                    primary: Some(false),
+                    rowless: false,
+                },
+                abi::SelectAction {
+                    title: "new".into(),
+                    key: Some("ctrl+n".into()),
+                    action: abi::Action::Command { name: "input.picked".into(), input: Some("new".into()) },
+                    hidden: Vec::new(),
+                    primary: None,
+                    rowless: true,
                 },
             ],
         },
@@ -457,6 +511,18 @@ pub fn other(setup: &mut abi::Setup) -> Result<(), String> {
         host.overlay(Overlay { surface: "pop".into(), anchor: Anchor::Point { x: 40, y: 8 }, width: 10, height: 2 });
     });
     setup.command(command("other.release"), |host, _| host.release_keys());
+    if probe(|probe| probe.other_escape) {
+        let layer = Layer {
+            scope: LayerScope::Global,
+            priority: 5,
+            keys: vec![Bind::new("escape", "esc")],
+            ..Layer::default()
+        };
+        setup.layer(layer, |host, event| {
+            log("other", host, event);
+            Handled::Consume
+        });
+    }
     // A mode of a plugin with only a global layer: in it, every key is the plugin's.
     setup.command(command("other.gmode"), |host, _| host.set_mode(Some("g")));
     setup.layer(
@@ -471,7 +537,9 @@ pub fn other(setup: &mut abi::Setup) -> Result<(), String> {
 
 fn side(cx: &mut v2::View<'_>) -> v2::Node {
     let panel = cx.input.panel;
+    let generation = cx.mount.generation;
     probe(|probe| {
+        probe.panels.push((panel, generation));
         probe.panel = panel;
         probe.views += 1;
     });
@@ -488,7 +556,17 @@ fn side(cx: &mut v2::View<'_>) -> v2::Node {
         true => v2::Node::text(vec![abi::Span::new(text)]),
         false => unselectable(v2::Node::text(vec![abi::Span::new(text)])),
     };
-    let a = v2::Node::row(vec![text("AAAA")]).with_id("a").interact(interact(true, true, Some("#ff0000")));
+    let mut a = v2::Node::row(vec![text("AAAA")]).with_id("a").interact(interact(true, true, Some("#ff0000")));
+    if let v2::Node::Box { padding, bg, .. } = &mut a {
+        if probe(|probe| probe.a_pad) {
+            *padding = (1, 0);
+        }
+        *bg = probe(|probe| probe.a_bg).map(abi::Color::from);
+    }
+    let a = match probe(|probe| probe.hide_a) {
+        true => text("----"),
+        false => a,
+    };
     let a = match probe(|probe| probe.click_a) {
         true => a.on_click(abi::Click::command("input.row", Some("a".into())).on_down()),
         false => a,
@@ -595,7 +673,7 @@ fn a_panel_surface_docks_takes_keys_and_revokes_them() {
     let screen = harness.app.text();
     assert!(screen.contains("PANEL full=false focused=true"), "{screen}");
     let shown = interact::ledger(&*harness.tui);
-    assert_eq!(shown.layers, before.layers + 3, "the panel's three layers: {shown:?}");
+    assert_eq!(shown.layers, before.layers + 4, "the panel's four layers: {shown:?}");
     harness.app.press("x");
     settle(&harness);
     assert_eq!(taken(), ["side: key x [-]"]);
@@ -706,7 +784,8 @@ fn a_mode_ends_with_its_scope_and_on_the_reserved_chord() {
     settle(&harness);
     harness.app.type_text("e");
     settle(&harness);
-    assert!(composer(&harness).ends_with('e'), "{}", composer(&harness));
+    // The chord reached the composer's own handler of it, in the base mode, which cleared it (carbon-1).
+    assert_eq!(composer(&harness), "e");
     assert!(!taken().iter().any(|line| line.contains("ctrl+c")), "a listener saw the reserved chord");
     assert_eq!(interact::ledger(&*harness.tui).modes, base.modes, "an ended mode stayed past the next key");
     // A panel's mode ends as the focus leaves the panel, with no key after it.
@@ -1616,4 +1695,163 @@ fn a_panicking_handler_fails_its_plugin_and_leaves_no_input() {
     assert_eq!(interact::ledger(&*harness.tui), twin);
     assert!(!harness.app.text().contains("MENU"));
     assert!(opencode_plugin::Host::composer_focused(&*harness.tui));
+}
+
+// Expected (carbon-1): binds that hold the reserved chord in a list (`a,ctrl+c`), a sequence (`ctrl+c x`) or another
+// spelling (`Control + C`) never take it, and no key after it is swallowed as the rest of a sequence.
+#[test]
+fn no_spelling_list_or_sequence_takes_the_reserved_chord() {
+    let harness = open();
+    run(&harness, "input.panel", None);
+    run(&harness, "input.focus", Some("a"));
+    taken();
+    harness.app.press("ctrl+c");
+    settle(&harness);
+    run(&harness, "input.focus", Some("side"));
+    harness.app.press("x");
+    settle(&harness);
+    assert_eq!(taken(), ["side: key x [-]"]);
+}
+
+// Expected (carbon-2): a mode the panel sets holds in the panel although the panel also has a layer of the composer;
+// another plugin's global layer takes no escape or key from an overlay with the focus.
+#[test]
+fn a_mode_holds_where_it_was_set_and_an_overlay_keeps_its_keys() {
+    let harness = open();
+    run(&harness, "input.panel", None);
+    harness.app.press("m");
+    harness.app.press("j");
+    settle(&harness);
+    assert_eq!(taken(), ["side: key mode [-]", "side: key down [menu]"]);
+    let harness = open_with(|probe| probe.other_escape = true);
+    run(&harness, "input.overlay", None);
+    run(&harness, "other.gmode", None);
+    taken();
+    harness.app.press("k");
+    harness.app.press("escape");
+    settle(&harness);
+    assert_eq!(taken(), ["menu: key k [-]"]);
+    assert!(!harness.app.text().contains("MENU"), "{}", harness.app.text());
+}
+
+// Expected (carbon-3): a focused node that the new tree builds again keeps the focus; one the tree leaves out gives it
+// to the panel, whose layers hold.
+#[test]
+fn a_focus_the_new_tree_takes_away_comes_back() {
+    let harness = open();
+    run(&harness, "input.panel", None);
+    run(&harness, "input.focus", Some("a"));
+    probe(|probe| probe.a_pad = true);
+    run(&harness, "input.redraw", None);
+    taken();
+    harness.app.press("y");
+    settle(&harness);
+    assert_eq!(taken(), ["side: key y [-]"], "the rebuilt node lost the focus");
+    probe(|probe| probe.hide_b = true);
+    run(&harness, "input.redraw", None);
+    taken();
+    harness.app.press("x");
+    settle(&harness);
+    assert_eq!(taken(), ["side: key x [-]"], "the panel lost the focus with its node");
+}
+
+// Expected (carbon-5): a press a node takes starts no selection of selectable text under it, so its drag goes on
+// outside it and its drop lands; a release under a host dialog is not the plugin's; a handler that gives the focus
+// away on the press keeps its capture; a press on a node that takes no focus focuses the panel.
+#[test]
+fn a_taken_press_owns_its_gesture() {
+    let harness = open_with(|probe| {
+        probe.selectable = true;
+        probe.strip = true;
+    });
+    run(&harness, "input.panel", None);
+    let screen = harness.app.text();
+    let (x, y) = support::at(&screen, "AAAA").unwrap();
+    let (sx, sy) = support::at(&screen, "STRIP").unwrap();
+    taken();
+    harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), x + 1, y + 3);
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), sx + 1, sy);
+    harness.app.mouse(MouseEventKind::Up(MouseButton::Left), sx + 1, sy);
+    settle(&harness);
+    let log = taken();
+    assert!(log.iter().any(|line| line.starts_with("side: Drag a")), "{log:?}");
+    assert!(log.contains(&"strip: Drop s 1,0 from side/a [-]".to_owned()), "{log:?}");
+    assert!(harness.app.app().selected_text().is_none());
+    // A host dialog over the capture.
+    harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
+    settle(&harness);
+    rows(&["alpha"], "f");
+    run(&harness, "input.select", None);
+    taken();
+    harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 1, y);
+    settle(&harness);
+    assert!(!taken().iter().any(|line| line.contains("Up a")), "a release under a dialog reached the plugin");
+    // The focus given away on the press.
+    let harness = open_with(|probe| probe.down_focus_b = true);
+    run(&harness, "input.panel", None);
+    let (x, y) = support::at(&harness.app.text(), "AAAA").unwrap();
+    harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
+    settle(&harness);
+    taken();
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), x + 2, y);
+    settle(&harness);
+    assert!(taken().iter().any(|line| line.starts_with("side: Drag a")), "the capture ended with its own focus move");
+    // A node that takes no focus.
+    let harness = open_with(|probe| probe.pointer_b = true);
+    run(&harness, "input.panel", None);
+    opencode_plugin::Host::focus_composer(&*harness.tui);
+    settle(&harness);
+    let (x, y) = support::at(&harness.app.text(), "BBBB").unwrap();
+    harness.app.click(x + 1, y);
+    settle(&harness);
+    taken();
+    harness.app.press("x");
+    settle(&harness);
+    assert_eq!(taken(), ["side: key x [-]"], "the press left the focus at the composer");
+}
+
+// Expected (carbon-8): a chord types nothing, so a modal composer's `i` is not `alt+i`; a bind of several keys tells
+// which one ran it; an overlay stays on the screen as it shrinks, and a wheel outside closes it.
+#[test]
+fn keys_say_what_was_pressed_and_overlays_stay_on_screen() {
+    let harness = open();
+    let base = interact::ledger(&*harness.tui).modes;
+    harness.app.press("escape");
+    harness.app.press("alt+i");
+    settle(&harness);
+    assert_eq!(interact::ledger(&*harness.tui).modes, base + 1, "alt+i left the composer's mode");
+    harness.app.press("i");
+    settle(&harness);
+    assert_eq!(interact::ledger(&*harness.tui).modes, base);
+    run(&harness, "input.panel", None);
+    taken();
+    harness.app.press("v");
+    harness.app.press("ctrl+t");
+    settle(&harness);
+    assert_eq!(taken(), ["side: key v as v [-]", "side: key v as ctrl+t [-]"]);
+    run(&harness, "input.overlay", None);
+    harness.app.resize(14, 8);
+    settle(&harness);
+    assert!(harness.app.text().contains("MENU one"), "{}", harness.app.text());
+    harness.app.resize(120, 30);
+    settle(&harness);
+    taken();
+    harness.app.mouse(MouseEventKind::ScrollDown, 100, 25);
+    settle(&harness);
+    assert!(!harness.app.text().contains("MENU"), "{}", harness.app.text());
+}
+
+// Expected (carbon-9): a box's background token, changed in place and switched with the theme, draws as a box mounted
+// in that state does.
+#[test]
+fn a_pointer_box_restyles_in_place() {
+    let open = || {
+        let harness = Box::new(open_with(|probe| probe.a_bg = Some("background.panel")));
+        run(&harness, "input.panel", None);
+        probe(|probe| probe.a_bg = Some("background.element"));
+        run(&harness, "input.redraw", None);
+        harness
+    };
+    support::assert_restyles_in_place(open, |_| {}, |screen| screen.contains("AAAA"));
 }
