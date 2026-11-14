@@ -5,6 +5,10 @@
 //!
 //! Environment: `MODEL_SEED=<n>` runs one seed, `MODEL_SEEDS=<n>` sets how many seeds run, `MODEL_SKIP=<property,...>`
 //! ignores failures of the named properties.
+//!
+//! Every run is also a run of the plugin C ABI (Pc, synthesis 4.14: "every model again through the transcripts"):
+//! what crosses it is fed to the protocol machine of `opencode_plugin::conformance`, and a broken rule fails the run
+//! as the property `abi-protocol`, after the model's own checks.
 
 use std::fmt::Debug;
 
@@ -87,7 +91,7 @@ pub fn check<M: Model>(model: &M, seeds: u64, steps: usize) {
     };
     for seed in range {
         let commands = model.generate(&mut Rng::new(seed), steps);
-        let Some(failure) = model.run(&commands) else { continue };
+        let Some(failure) = run(model, &commands) else { continue };
         let original = format!(
             "seed {seed}: {} at {} after step {} of {}: {}",
             failure.property,
@@ -97,7 +101,7 @@ pub fn check<M: Model>(model: &M, seeds: u64, steps: usize) {
             failure.detail
         );
         let shrunk = shrink(model, commands, &failure);
-        let last = model.run(&shrunk).unwrap_or(failure);
+        let last = run(model, &shrunk).unwrap_or(failure);
         let trace: Vec<String> = shrunk.iter().map(|command| format!("  {command:?}")).collect();
         let report = format!(
             "model failure, {original}\nshrunk to {} commands, {} at {} after step {}:\n{}\n{}",
@@ -114,10 +118,19 @@ pub fn check<M: Model>(model: &M, seeds: u64, steps: usize) {
     }
 }
 
+/// Runs `commands` under the C ABI's protocol machine: the model's own failure, else a broken rule of the protocol.
+fn run<M: Model>(model: &M, commands: &[M::Command]) -> Option<Failure> {
+    let (failure, broken) = opencode_plugin::conformance::checked(|| model.run(commands));
+    failure.or_else(|| {
+        let broken = broken.filter(|_| !skipped("abi-protocol"))?;
+        Some(Failure { property: "abi-protocol", site: "abi-protocol", step: commands.len(), detail: broken })
+    })
+}
+
 /// The shrinker keeps a candidate only when it fails the same check site: two checks of one property can fail for two
 /// different defects.
 fn fails_like<M: Model>(model: &M, commands: &[M::Command], failure: &Failure) -> bool {
-    model.run(commands).is_some_and(|other| other.property == failure.property && other.site == failure.site)
+    run(model, commands).is_some_and(|other| other.property == failure.property && other.site == failure.site)
 }
 
 /// Drops chunks of n/2 down to 1, then simplifies each command, and repeats both until neither changes the trace. The
