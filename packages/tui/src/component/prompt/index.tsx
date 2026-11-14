@@ -885,15 +885,14 @@ export function Prompt(props: PromptProps) {
           if (index !== undefined) newMap.set(extmark, { type: "file", index })
         }
 
+        // Each content change syncs; replace a list only when its parts changed, so typing notifies no reader.
+        const same = <T,>(next: T[], prev: T[] | undefined) =>
+          next.length === (prev?.length ?? 0) && next.every((part, index) => part === prev?.[index])
         draft.extmarkToPart = newMap
-        if (
-          nextFiles.length !== draft.prompt.files?.length ||
-          nextFiles.some((file, index) => file !== draft.prompt.files?.[index])
-        )
-          draft.prompt.files = nextFiles
-        draft.prompt.agents = agents
-        draft.prompt.skills = skills
-        draft.prompt.pasted = pasted
+        if (!same(nextFiles, draft.prompt.files)) draft.prompt.files = nextFiles
+        if (!same(agents, draft.prompt.agents)) draft.prompt.agents = agents
+        if (!same(skills, draft.prompt.skills)) draft.prompt.skills = skills
+        if (!same(pasted, draft.prompt.pasted)) draft.prompt.pasted = pasted
       }),
     )
   }
