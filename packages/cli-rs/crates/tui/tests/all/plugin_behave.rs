@@ -49,6 +49,10 @@ struct Board {
     anchors: Vec<(String, i32)>,
     /// `layout` asks for a view again on every call; the view then shows how many it ran.
     again: bool,
+    /// Each view gives the edge another height, so each changes what `layout` is told.
+    churn: bool,
+    /// The edge's rect each `layout` call was told.
+    edges: Vec<Option<v2::Rect>>,
 }
 
 thread_local! {
@@ -82,6 +86,18 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         host.scroll(files(), v2::Scroll::To { node, align: v2::ScrollAlign::Start });
     });
     setup.command(command("board.forget"), |host, _| host.scroll(files(), v2::Scroll::Forget));
+    setup.command(command("board.near"), |host, input| {
+        let node = input.unwrap_or_default().to_owned();
+        host.scroll(files(), v2::Scroll::To { node, align: v2::ScrollAlign::Nearest { inset: INSET } });
+    });
+    setup.command(command("board.page"), |host, input| {
+        let percent = input.and_then(|percent| percent.parse().ok()).unwrap_or(100);
+        host.scroll(files(), v2::Scroll::Page { percent });
+    });
+    setup.command(command("board.edge"), |host, input| {
+        let edge = if input == Some("bottom") { v2::Edge::Bottom } else { v2::Edge::Top };
+        host.scroll(files(), v2::Scroll::Edge { edge });
+    });
     setup.command(command("board.anchors"), |host, _| {
         let anchors = host.anchors(&files(), "file");
         board(|board| board.anchors = anchors.iter().map(|anchor| (anchor.id.clone(), anchor.row)).collect());
@@ -96,10 +112,11 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         }
     });
     let surface = v2::Surface::new("board", v2::Place::Route("board".into()), view)
-        .layout(Vec::new(), |geometry| {
+        .layout(vec![v2::Notify::Node { id: "edge".into() }], |geometry| {
             let top = geometry.top("files", "file");
             board(|board| {
                 board.layouts += 1;
+                board.edges.push(geometry.rect("edge"));
                 board.tops.push((top.map(|top| top.id.clone()), geometry.moved_only));
             });
             let reviewed = top.is_some_and(|top| top.variant == "reviewed");
@@ -159,10 +176,12 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
     if let v2::Node::Scroll { user_scroll, .. } | v2::Node::List { user_scroll, .. } = &mut files {
         *user_scroll = !quiet;
     }
-    let views = board(|board| board.views);
+    let (views, churn) = board(|board| (board.views, board.churn));
+    let edge_height = abi::Layout::default().height(abi::Width::Cells(if churn { 1 + (views % 2) as u16 } else { 1 }));
     let edge =
         v2::Node::row(vec![text(if board(|board| board.again) { format!("edge {views}") } else { "edge".into() })])
-            .with_id("edge");
+            .with_id("edge")
+            .layout(edge_height);
     v2::Node::column(vec![edge, files]).layout(grow)
 }
 
@@ -303,6 +322,12 @@ enum Command {
         height: u16,
         by: i32,
     },
+    /// `To` a card with `Nearest`, below the sticky header.
+    Near(usize),
+    Page(i16),
+    Edge {
+        bottom: bool,
+    },
 }
 
 struct Behaviors {
@@ -354,7 +379,7 @@ impl Model for Behaviors {
 
     fn generate(&self, rng: &mut Rng, steps: usize) -> Vec<Command> {
         (0..steps)
-            .map(|_| match rng.below(12) {
+            .map(|_| match rng.below(15) {
                 0 | 1 => Command::Wheel { down: rng.below(3) > 0, steps: 1 + rng.below(3) as u8 },
                 2 => Command::Resize { width: 40 + rng.below(40) as u16, height: 8 + rng.below(14) as u16 },
                 3..=5 => Command::Step(*rng.pick(&[1, 1, -1, 2, -2])),
@@ -362,7 +387,10 @@ impl Model for Behaviors {
                 7 | 8 => Command::Review(rng.below(CARDS)),
                 9 => Command::Forget,
                 10 => Command::Gone,
-                _ => Command::Batch { height: 8 + rng.below(14) as u16, by: *rng.pick(&[1, -1]) },
+                11 => Command::Batch { height: 8 + rng.below(14) as u16, by: *rng.pick(&[1, -1]) },
+                12 => Command::Near(rng.below(CARDS)),
+                13 => Command::Page(*rng.pick(&[100, -100, 50, -50, 1, -1, 250])),
+                _ => Command::Edge { bottom: rng.below(2) == 0 },
             })
             .collect()
     }
@@ -453,6 +481,33 @@ impl Model for Behaviors {
                     oracle.memory = None;
                     expected = Some(top);
                     board_view.dispatch("board.to", Some("card-999".into()));
+                }
+                Command::Near(card) => {
+                    // `scrollIntoView` with `block: nearest` and a `scroll-padding-top` of the header.
+                    oracle.memory = None;
+                    let rows = oracle.rows();
+                    let (y, height, inset) = (rows.start(*card), rows.heights[*card], i32::from(INSET));
+                    let target = if y - inset < top {
+                        y - inset
+                    } else if y + height > top + oracle.viewport {
+                        y + height - oracle.viewport
+                    } else {
+                        top
+                    };
+                    expected = Some(target.clamp(0, oracle.most()));
+                    board_view.dispatch("board.near", Some(format!("card-{card}")));
+                }
+                Command::Page(percent) => {
+                    oracle.memory = None;
+                    let rows = oracle.viewport * i32::from(*percent) / 100;
+                    let rows = if rows == 0 { i32::from(percent.signum()) } else { rows };
+                    expected = Some((top + rows).clamp(0, oracle.most()));
+                    board_view.dispatch("board.page", Some(percent.to_string()));
+                }
+                Command::Edge { bottom } => {
+                    oracle.memory = None;
+                    expected = Some(if *bottom { oracle.most() } else { 0 });
+                    board_view.dispatch("board.edge", Some(if *bottom { "bottom" } else { "top" }.into()));
                 }
             }
             let first = app.render();
@@ -821,10 +876,21 @@ fn a_split_follows_the_drag_and_keeps_its_width() {
     let (left, row) = support::at(&screen, "LEFT").expect("the split shows");
     let (right, _) = support::at(&screen, "RIGHT").unwrap();
     assert_eq!(right - left, 20, "{screen}");
+    // The press lands on the handle over the boundary, not on the text beside it: the drag selects nothing (TS's
+    // `PaneResizeHandle`).
     harness.app.drag((left + 20, row), (left + 32, row));
     let screen = harness.app.render().text();
     assert_eq!(support::at(&screen, "RIGHT").map(|(x, _)| x - left), Some(32), "{screen}");
-    harness.app.drag((left + 32, row), (left + 1, row));
+    let selected = || harness.app.app().selected_text().filter(|text| !text.is_empty());
+    assert_eq!(selected(), None, "the split's drag selected text");
+    // A selection the user made stays through a drag of the handle, which prevents the press's default.
+    harness.app.drag((left, row), (left + 3, row));
+    assert_eq!(selected().as_deref(), Some("LEFT"));
+    harness.app.drag((left + 32, row), (left + 30, row));
+    assert_eq!(selected().as_deref(), Some("LEFT"), "the handle's press ended the selection");
+    let screen = harness.app.render().text();
+    assert_eq!(support::at(&screen, "RIGHT").map(|(x, _)| x - left), Some(30), "{screen}");
+    harness.app.drag((left + 30, row), (left + 1, row));
     let screen = harness.app.render().text();
     assert_eq!(support::at(&screen, "RIGHT").map(|(x, _)| x - left), Some(5), "the minimum went:\n{screen}");
     dispatch(&harness, "kinds.code", "fn moved() {}");
@@ -1028,5 +1094,31 @@ fn layout_may_ask_for_a_view_again() {
     let (ran, laid) = board(|board| (board.views - views, board.layouts - layouts));
     assert_eq!((ran, laid), (2, 1));
     assert!(first.text().contains(&format!("edge {}", views + 2)), "{}", first.text());
+    assert_eq!(first, board_view.settle());
+}
+
+// Expected (synthesis 4.4 step 5): `layout` gets at most two deliveries a frame. A third waits for the next frame and
+// is not lost: there it is told that frame's geometry, the edge as the last view laid it out.
+#[test]
+fn a_layout_past_the_cap_waits_for_the_next_frame() {
+    let board_view = mount(3, 60, 12, false);
+    let app = &board_view.harness.app;
+    // Each delivery asks for a view, and each view gives the edge another height: a delivery a round, forever.
+    board(|board| {
+        board.again = true;
+        board.churn = true;
+    });
+    let before = board(|board| board.layouts);
+    board_view.dispatch("board.review", Some("0".into()));
+    app.render();
+    assert_eq!(board(|board| board.layouts) - before, 2, "deliveries in the frame of the event");
+    assert!(app.needs_frame(), "the third delivery asked for no frame");
+    // The plugin stops asking; the owed delivery comes in the next frame with what is laid out then.
+    board(|board| board.again = false);
+    let first = app.render();
+    assert_eq!(board(|board| board.layouts) - before, 3, "the third delivery was lost");
+    let views = board(|board| board.views);
+    let told = board(|board| board.edges.last().copied().flatten()).expect("the edge's rect");
+    assert_eq!(told.height, 1 + (views % 2) as i32, "the delivery was told an old rect");
     assert_eq!(first, board_view.settle());
 }
