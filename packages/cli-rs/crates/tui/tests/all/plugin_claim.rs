@@ -1049,11 +1049,18 @@ fn leaving_the_session_frees_every_claimed_part_on(carrier: Carrier) {
         world.send(&command, &mut expected);
     }
     assert_eq!(ledger().mounts, 4);
+    // Each claimed part is a mount of its own generation (4.2), which a library keeps its memo table by.
+    let generations: HashSet<u64> = mounted().iter().map(|shown| shown.id.generation).collect();
+    assert_eq!(generations.len(), 4, "{:?}", mounted());
+    let before = opencode_plugin::loader::native::crossed();
     world.harness.tui.navigate(opencode_tui::Route::Home);
     world.settle();
     let ledger = ledger();
     assert_eq!((ledger.mounts, ledger.content, ledger.memo_entries), (0, 0, 0), "{ledger:?}");
     assert!(mounted().is_empty());
+    // A library hears that each part's mount ended, once, and nothing else crosses.
+    let unmounts = opencode_plugin::loader::native::crossed().since(before).calls;
+    assert_eq!(unmounts, if carrier == Carrier::Abi { 4 } else { 0 }, "{carrier:?}");
 }
 
 /// One line for a `probe` call, as the host's own row draws one: what the cost probe's claim draws.
@@ -1275,4 +1282,42 @@ fn the_last_claim_of_a_tool_draws_it_with_its_content_at_its_width_on(carrier: C
     world.harness.tui.navigate(opencode_tui::Route::Home);
     world.settle();
     assert_eq!((ledger().mounts, ledger().content, ledger().content_bytes), (0, 0, 0));
+}
+
+/// Two claims of one plugin, each with a view of its own; the second gives the host one handle and releases the one
+/// it gave before, so the part holds one.
+fn two_claims(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::tool("first", probe('1')));
+    let last = Rc::new(Cell::new(None));
+    setup.claim(Claim::tool("second", move |cx, part| {
+        SEEN.with_borrow_mut(|seen| seen.push(('2', cx.input.width)));
+        if let Some(handle) = last.take() {
+            cx.release(handle);
+        }
+        let Part::Tool(tool) = part else { return None };
+        let handle = cx.content(format!("2 drew {} {:?}", key(part), tool.state).into_bytes());
+        last.set(Some(handle));
+        Some(v2::Node::Markdown { id: Some("text".into()), source: v2::Source::Content(handle) })
+    }));
+    Ok(())
+}
+
+// Expected: each claim of a plugin draws with its own view, on both carriers, and a view that releases what it gave
+// before leaves the part holding one handle.
+#[test]
+fn each_claim_draws_with_its_own_view_and_releases_hold() {
+    for carrier in CARRIERS {
+        SEEN.with_borrow_mut(Vec::clear);
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.two", setup: two_claims })]);
+        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "first" }));
+        world.emit("session.tool.input.started", json!({ "id": "call_2", "name": "second" }));
+        world.emit("session.tool.input.delta", json!({ "id": "call_2", "delta": "x" }));
+        world.emit("session.tool.called", json!({ "id": "call_2", "input": {}, "executed": true }));
+        world.settle();
+        world.harness.wait_for("2 drew call_2 Running");
+        assert!(world.harness.app.text().contains("1 drew call_1"), "{carrier:?}:\n{}", world.harness.app.text());
+        let content = ledger().content;
+        assert_eq!(content, 2, "{carrier:?}: one handle each part, the released ones gone: {:?}", ledger());
+        drop(world);
+    }
 }
