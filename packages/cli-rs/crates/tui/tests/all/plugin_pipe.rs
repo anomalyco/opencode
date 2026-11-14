@@ -521,6 +521,14 @@ fn ends_the_js_host(command: &str, input: Option<&str>, cause: &str, config: Con
     });
     // Judged by the handler's limit: nothing the setups answered is still owed (a load answered with its ID was).
     assert!(begun.elapsed() < setup, "the end took the setup's limit");
+    // The failure's toast stays, and any after it waits, until read, as when the user holds it: the new JS host's start
+    // may take longer than a toast shows.
+    pipe.harness.wait("the failure's toast", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        let title = pipe.harness.tui.toasts.current().and_then(|toast| toast.title);
+        title.is_some_and(|title| title.starts_with("Plugin failed"))
+    });
+    pipe.harness.tui.toasts.pause();
     pipe.settle();
     let error = failed(&pipe, PROBE).unwrap_or_default();
     assert!(error.contains(cause), "{error}");
