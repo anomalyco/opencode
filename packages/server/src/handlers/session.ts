@@ -28,7 +28,7 @@ import {
 } from "@opencode/protocol/errors"
 import { AbsolutePath } from "@opencode/core/schema"
 import { locationErrors } from "../location"
-import { failedMessageDecode, failedSnapshot, missingMessage, missingSession } from "./session-error"
+import { failedMessageDecode, failedSnapshot, missingMessage, missingSession, unmigratedSession } from "./session-error"
 
 function missingForm(id: Form.ID) {
   return new FormNotFoundError({ id, message: `Form not found: ${id}` })
@@ -114,7 +114,10 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                   ? { location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) } }
                   : { parentID: ctx.payload.parentID }),
               })
-              .pipe(Effect.catchTag("Session.NotFoundError", missingSession)),
+              .pipe(
+                Effect.catchTag("Session.NotFoundError", missingSession),
+                Effect.catchTag("Session.UnmigratedError", unmigratedSession),
+              ),
           }
         }),
       )
