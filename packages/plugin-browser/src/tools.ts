@@ -23,6 +23,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
       catch: (error) => new Tool.Error({ message: invalidURL, error }),
     })
     const target = yield* connection.target(tool.sessionID, action)
+    yield* connection.authorize(tool, action.type)
     const uploads =
       action.type === "files.upload" || action.type === "files.drop"
         ? yield* BrowserFiles.read(action.paths, ctx.location.directory)

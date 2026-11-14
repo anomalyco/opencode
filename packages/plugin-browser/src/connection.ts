@@ -1,8 +1,11 @@
 export * as BrowserConnection from "./connection.js"
 
+import { hostname } from "node:os"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { RpcRegistration } from "@opencode/plugin/effect/rpc"
-import type { Session } from "@opencode/schema/session"
+import { Location } from "@opencode/schema/location"
+import type { Permission } from "@opencode/schema/permission"
+import { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
 import { Cause, Deferred, Duration, Effect, Exit, Option, Schema, Scope, Semaphore, Stream } from "effect"
 import { BrowserMachine } from "./machine.js"
@@ -16,17 +19,61 @@ type Attachment = {
 
 export type Connection = Effect.Success<ReturnType<typeof make>>
 
+/** The server process that wrote a session's grant, stored as `grant:<sessionID>` until its revoke succeeds. */
+const GrantOwner = Schema.Struct({ host: Schema.String, pid: Schema.Number, location: Location.Ref })
+
+const GRANT_PREFIX = "grant:"
+
+/**
+ * A crash or SIGKILL skips the revokes, so a session keeps its grant with no attachment behind it. Revokes the grants
+ * this location's servers recorded, except those of a process that still runs: several servers can share one
+ * database, and another one's attachment may be live. Runs before the RPC registers, so no attach here can race it.
+ */
+export const reconcileStaleGrants = Effect.fn("BrowserConnection.reconcileStaleGrants")(function* (ctx: {
+  readonly session: Pick<Context["session"], "get" | "update">
+  readonly storage: Pick<Context["storage"], "scan" | "remove">
+  readonly location: Pick<Context["location"], "directory" | "workspaceID">
+}) {
+  const revoke = (entry: { readonly key: string; readonly value: Schema.Json }) => {
+    const owner = Schema.decodeUnknownOption(GrantOwner)(entry.value)
+    if (
+      Option.isNone(owner) ||
+      owner.value.location.directory !== ctx.location.directory ||
+      owner.value.location.workspaceID !== ctx.location.workspaceID ||
+      running(owner.value)
+    )
+      return Effect.void
+    return writePermissions(ctx, Session.ID.make(entry.key.slice(GRANT_PREFIX.length)), false).pipe(
+      Effect.ignore,
+      Effect.andThen(ctx.storage.remove(entry.key)),
+    )
+  }
+  const page = (after?: string): Effect.Effect<void> =>
+    ctx.storage
+      .scan({ prefix: GRANT_PREFIX, after })
+      .pipe(
+        Effect.flatMap((result) =>
+          Effect.forEach(result.entries, revoke, { discard: true }).pipe(
+            Effect.andThen(result.next === undefined ? Effect.void : page(result.next)),
+          ),
+        ),
+      )
+  yield* page()
+})
+
 export const make = Effect.fn("BrowserConnection.make")(function* (
-  ctx: Pick<Context, "agent" | "rpc" | "session" | "location" | "event">,
+  ctx: Pick<Context, "agent" | "rpc" | "session" | "location" | "event" | "permission" | "storage">,
 ) {
+  // Each agent's rules from config and its definition, which an attachment's grant must not override.
+  const configured = new Map<string, readonly Permission.Rule[]>()
   // Appended after config, so every agent hides the browser until an attachment allows it.
-  yield* ctx.agent.transform((editor) =>
-    editor
-      .list()
-      .forEach((agent) =>
-        agent.permissions.push(...BrowserMachine.ACCESS.map((rule) => ({ ...rule, effect: "deny" as const }))),
-      ),
-  )
+  yield* ctx.agent.transform((editor) => {
+    configured.clear()
+    editor.list().forEach((agent) => {
+      configured.set(agent.id, [...agent.permissions])
+      agent.permissions.push(...BrowserMachine.ACCESS.map((rule) => ({ ...rule, effect: "deny" as const })))
+    })
+  })
   // Permission syncs run here. Registered first, so it closes last: after disposal has drained the revokes.
   const work = yield* Scope.make()
   yield* Effect.addFinalizer((exit) => Scope.close(work, exit))
@@ -83,12 +130,24 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     if (effect.type === "warn") return Effect.logWarning(effect.message, effect.error)
     return Deferred.done(drained, Exit.void).pipe(Effect.asVoid)
   }
+  const owner: typeof GrantOwner.Encoded = {
+    host: hostname(),
+    pid: process.pid,
+    location: {
+      directory: ctx.location.directory,
+      ...(ctx.location.workspaceID === undefined ? {} : { workspaceID: ctx.location.workspaceID }),
+    },
+  }
   const syncPermissions = (effect: Extract<BrowserMachine.ConnectionEffect, { readonly type: "sync-permissions" }>) =>
-    ctx.session.get({ sessionID: effect.sessionID }).pipe(
-      Effect.flatMap((session) => {
-        const permissions = BrowserMachine.reconcileBrowserPermissions(session.permissions, effect.allow)
-        return permissions ? ctx.session.update({ sessionID: effect.sessionID, permissions }) : Effect.void
-      }),
+    // The owner is recorded before the grant and forgotten after the revoke, so a stored grant always has one.
+    (effect.allow
+      ? ctx.storage
+          .set(GRANT_PREFIX + effect.sessionID, owner)
+          .pipe(Effect.andThen(writePermissions(ctx, effect.sessionID, true)))
+      : writePermissions(ctx, effect.sessionID, false).pipe(
+          Effect.andThen(ctx.storage.remove(GRANT_PREFIX + effect.sessionID)),
+        )
+    ).pipe(
       Effect.timeoutOption(Duration.millis(BrowserMachine.PERMISSION_SYNC_TIMEOUT_MS)),
       Effect.matchCauseEffect({
         onSuccess: (done) =>
@@ -116,6 +175,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       ? Effect.succeed(attachment.tunnels)
       : Effect.fail(new Error("Browser attachment is unavailable; its network connections were closed."))
   }
+  yield* reconcileStaleGrants(ctx)
   const rpc: RpcRegistration<typeof Browser.Definition> = yield* ctx.rpc
     .register(Browser.Definition, {
       attach: (input, call) =>
@@ -208,6 +268,25 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     ),
     Effect.forkScoped({ startImmediately: true }),
   )
+  // A child copies its parent's permissions, browser grant included, but not the attachment. The grant is revoked while
+  // the child's prompt is admitted, so no step of the child lists browser tools. The lock keeps an attachment of the
+  // child's own from starting meanwhile; one that already exists keeps its grant.
+  yield* ctx.session.hook("prompt", (event) =>
+    ctx.session.get({ sessionID: event.sessionID }).pipe(
+      Effect.flatMap((session) =>
+        session.parentID === undefined || !session.permissions?.some(BrowserMachine.isGrant)
+          ? Effect.void
+          : lock.withPermit(
+              Effect.suspend(() =>
+                BrowserMachine.hasSession(machine.state, session.id)
+                  ? Effect.void
+                  : writePermissions(ctx, session.id, false),
+              ),
+            ),
+      ),
+      Effect.catchCause((cause) => Effect.logWarning("Browser permission revoke failed", cause)),
+    ),
+  )
   // Registered last, so it runs first: attachments close and revokes drain while the RPC and `work` are still open.
   yield* Effect.addFinalizer(() => dispatch({ type: "disposed" }).pipe(Effect.andThen(Deferred.await(drained))))
 
@@ -253,6 +332,32 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
   })
 
   return {
+    /**
+     * The attachment's grant is a session rule, evaluated after every agent rule, so it would override a `browser` deny
+     * from config or the agent's definition. Such a deny, or one in the session's own rules, refuses the call. The
+     * permission check then runs `permission.evaluate` hooks such as `tool.use` policies.
+     */
+    authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, operation: Browser.Method) {
+      const session = yield* ctx.session
+        .get({ sessionID: tool.sessionID })
+        .pipe(Effect.mapError((error) => new Tool.Error({ message: `Session not found: ${tool.sessionID}`, error })))
+      const rules = [
+        ...(configured.get(tool.agent) ?? []),
+        ...(session.permissions ?? []).filter((rule) => !BrowserMachine.isGrant(rule)),
+      ]
+      if (BrowserMachine.deniesBrowser(rules))
+        return yield* new Tool.Error({
+          message:
+            "[browser.denied] Browser tools are denied for this agent by configuration; no action ran. Do not retry browser tools.",
+        })
+      yield* ctx.permission.assert({
+        sessionID: tool.sessionID,
+        agent: tool.agent,
+        action: "browser",
+        resources: [operation],
+        source: { type: "tool", messageID: tool.messageID, id: tool.id },
+      })
+    }),
     target: Effect.fn("BrowserConnection.target")(function* (sessionID: Session.ID, action: Browser.Action) {
       const selected = BrowserMachine.selectTarget(machine.state, sessionID, action)
       if (!selected.ok) return yield* selected.error
@@ -279,3 +384,28 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     }),
   }
 })
+
+function writePermissions(
+  ctx: { readonly session: Pick<Context["session"], "get" | "update"> },
+  sessionID: Session.ID,
+  allow: boolean,
+) {
+  return ctx.session.get({ sessionID }).pipe(
+    Effect.flatMap((session) => {
+      const permissions = BrowserMachine.reconcileBrowserPermissions(session.permissions, allow)
+      return permissions ? ctx.session.update({ sessionID, permissions }) : Effect.void
+    }),
+  )
+}
+
+// A process on another host, such as another container on a shared volume, cannot be checked; its grants count as live.
+// A reused process ID also counts as live, which only leaves a stale grant in place.
+function running(owner: typeof GrantOwner.Type) {
+  if (owner.host !== hostname()) return true
+  try {
+    process.kill(owner.pid, 0)
+    return true
+  } catch (error) {
+    return error instanceof Error && "code" in error && error.code === "EPERM"
+  }
+}
