@@ -37,6 +37,9 @@ use opentui::prelude::*;
 
 use crate::Host;
 
+/// The host commands no plugin bind may name: the plugin manager's, the user's way back from any plugin.
+const RESERVED_COMMANDS: [&str; 2] = ["plugins.list", "plugins.toggle"];
+
 /// Calls a handler as one call of its plugin: [`Handled::Pass`] when the plugin is not called.
 pub(crate) type Deliver = Rc<dyn Fn(&dyn Host, &Rc<Owner>, &Event) -> Handled>;
 /// The widget of a node of the owner's tree, by id.
@@ -322,7 +325,8 @@ impl Owner {
             }
             // The reserved chord stops every plugin layer before the keymap sees it (`Router::escape`), so a bind of it
             // never runs.
-            let commands: Vec<TuiCommand> = layer.keys.iter().map(|bind| self.command(bind, deliver)).collect();
+            let commands: Vec<TuiCommand> =
+                layer.keys.iter().filter(|bind| self.takes(bind)).map(|bind| self.command(bind, deliver)).collect();
             if commands.is_empty() {
                 continue;
             }
@@ -337,6 +341,21 @@ impl Owner {
                 Err(error) => log::error!("plugin {} keymap layer: {error}", self.plugin),
             }
         }
+    }
+
+    /// Whether the keymap can take `bind`: one with no key and no name would fail its whole layer, and one named after
+    /// the plugin manager's commands would take `/plugins` from the user (carbon's review of P6c, 5).
+    fn takes(&self, bind: &Bind) -> bool {
+        let named = bind.command.as_deref().filter(|name| !name.is_empty());
+        if named.is_none() && (bind.key.is_empty() || bind.command.is_some()) {
+            log::warn!("plugin {}: a bind with no key and no name is left out", self.plugin);
+            return false;
+        }
+        if named.is_some_and(|name| RESERVED_COMMANDS.contains(&name)) {
+            log::warn!("plugin {}: a bind may not take the host's {}", self.plugin, named.unwrap_or_default());
+            return false;
+        }
+        true
     }
 
     /// The keymap command of `bind`, which calls the handler and holds the keys after it if it asks.
