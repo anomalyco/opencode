@@ -487,12 +487,16 @@ impl Model for Behaviors {
                     oracle.memory = None;
                     let rows = oracle.rows();
                     let (y, height, inset) = (rows.start(*card), rows.heights[*card], i32::from(INSET));
-                    let target = if y - inset < top {
-                        y - inset
-                    } else if y + height > top + oracle.viewport {
-                        y + height - oracle.viewport
-                    } else {
-                        top
+                    // Inside, or over the whole view: no move. Above: its top comes to the view's top, unless it is
+                    // taller than the view, when its bottom comes to the bottom. Below: its bottom comes to the
+                    // bottom, unless it is taller, when its top comes to the top.
+                    let (above, below, room) =
+                        (y < top + inset, y + height > top + oracle.viewport, oracle.viewport - inset);
+                    let target = match (above, below) {
+                        (true, true) | (false, false) => top,
+                        (true, false) if height < room => y - inset,
+                        (false, true) if height > room => y - inset,
+                        _ => y + height - oracle.viewport,
                     };
                     expected = Some(target.clamp(0, oracle.most()));
                     board_view.dispatch("board.near", Some(format!("card-{card}")));
@@ -578,6 +582,8 @@ fn the_deep_runs_rows_hold() {
             Command::Resize { width: 78, height: 18 },
             Command::Step(1),
         ],
+        // Seed 35 (2,000 seeds, O-115): `Nearest` for a card taller than the view below the header shows its top.
+        vec![Command::Batch { height: 8, by: 1 }, Command::Near(3)],
     ];
     for list in [false, true] {
         for row in &rows {
