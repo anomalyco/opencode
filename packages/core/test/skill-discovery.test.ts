@@ -33,7 +33,7 @@ const fixture = Effect.gen(function* () {
   return {
     cache: tmp.path,
     base,
-    pull: (skills: unknown[], files: Record<string, string> = {}) =>
+    pull: (skills: unknown[], files: Record<string, string> = {}, url = base) =>
       Effect.gen(function* () {
         state.skills = skills
         state.files = files
@@ -41,7 +41,7 @@ const fixture = Effect.gen(function* () {
         // Rebuild per pull so repeated calls exercise the disk cache, not a shared service.
         const directories = yield* Effect.gen(function* () {
           const discovery = yield* SkillDiscovery.Service
-          return yield* discovery.pull(base)
+          return yield* discovery.pull(url)
         }).pipe(
           Effect.provide(
             AppNodeBuilder.build(SkillDiscovery.node, [Global.node.replace(Global.layerWith({ cache: tmp.path }))]),
@@ -107,6 +107,24 @@ describe("SkillDiscovery.pull", () => {
       ).toBe("# Guide")
     }),
   )
+
+  for (const suffix of ["?lang=en", "#documentation"]) {
+    it.live(
+      `resolves the catalog directory when the URL ends in ${suffix}`,
+      Effect.gen(function* () {
+        const catalog = yield* fixture
+        const result = yield* catalog.pull(
+          [{ name: "deploy", files: ["SKILL.md"] }],
+          { "/catalog/deploy/SKILL.md": "# Deploy" },
+          `${catalog.base.slice(0, -1)}${suffix}`,
+        )
+        expect(result.directories).toHaveLength(1)
+        expect(result.requests.toSorted()).toEqual(
+          [`${catalog.base}index.json`, `${catalog.base}deploy/SKILL.md`].toSorted(),
+        )
+      }),
+    )
+  }
 
   it.live(
     "refreshes cached files when the version changes",
