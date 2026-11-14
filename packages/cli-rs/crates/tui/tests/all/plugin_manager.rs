@@ -233,7 +233,8 @@ fn a_plugin_hears_each_change_of_the_plugin_list_once() {
     }
 }
 
-/// The builds of a plugin that takes the manager's ID, through the C ABI's byte shims; its command panics.
+/// The builds of a plugin that takes the manager's ID, through the C ABI's byte shims: its `/plugins` shows an alert,
+/// and its command panics.
 struct Shadow;
 
 impl Backend for Shadow {
@@ -245,17 +246,45 @@ impl Backend for Shadow {
         _: Option<&str>,
     ) -> Result<(Definition, ErrorFn), String> {
         fn shadow(setup: &mut abi::Setup) -> Result<(), String> {
-            let command = Command { name: "shadow.boom".to_owned(), ..Command::default() };
-            setup.command(command, |_, _| panic!("the manager panics"));
+            setup.command(Command { name: "shadow.boom".to_owned(), ..Command::default() }, |_, _| {
+                panic!("the manager panics")
+            });
+            setup.command(Command { name: "plugins.list".to_owned(), ..Command::default() }, |host, _| {
+                let message = "the replacement serves /plugins".to_owned();
+                host.dialog(abi::Dialog::Alert(abi::Alert {
+                    title: "Shadow plugins".to_owned(),
+                    message,
+                    action: None,
+                }));
+            });
             Ok(())
         }
         loopback_described(host, abi::export_plugin!(@loopback_described "opencode.plugins", shadow))
     }
 }
 
-// Expected (synthesis 3.6, 4.10; deviation F16-plugin-manager-fallback): while the manager has failed, `/plugins` is
-// the host's read-only list, whose row for the manager starts it again; then the host's list goes. A manager that is
-// running, or one the user disabled, has no such list.
+/// Fails the replacement manager and opens the host's list on its row.
+fn fail_shadow(harness: &Harness) {
+    harness.dispatch("shadow.boom");
+    settle(harness);
+    while harness.tui.toasts.current().is_some() {
+        harness.tui.toasts.dismiss();
+    }
+    harness.dispatch("plugins.list");
+    harness.wait_for("failed, enter enables it again");
+    harness.app.type_text("opencode.plugins");
+    settle(harness);
+}
+
+fn manager_status(harness: &Harness) -> opencode_plugin::Status {
+    let key = opencode_plugin::Entry::plugin_key(ID);
+    harness.tui.plugins.entries().into_iter().find(|entry| entry.key == key).unwrap().status
+}
+
+// Expected (synthesis 3.6, 4.10; deviation F16-plugin-manager-fallback; review bigboi-1, bigboi-3): while the manager
+// has failed, `/plugins` is the host's read-only list. Its row for the manager starts it again on the user's key or
+// click, never on a run of the submit by name (as a plugin's `dispatch` runs it); then the host's list goes and the
+// manager that runs serves `/plugins` again. A row's error shows, with Back to the list.
 #[test]
 fn the_host_lists_the_plugins_while_the_manager_has_failed() {
     let (harness, _) = open(&["./broken.ts"]);
@@ -269,17 +298,17 @@ fn the_host_lists_the_plugins_while_the_manager_has_failed() {
     harness.tui.plugins.set_loader(loader.clone());
     loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
     settle(&harness);
-    // A manager of the same ID replaced the built-in, with no `/plugins` of its own; no host list either.
-    assert!(!commands(&harness).contains("plugins.list"));
-    harness.dispatch("shadow.boom");
+    harness.dispatch("plugins.list");
+    harness.wait_for("Shadow plugins");
+    harness.app.press("escape");
     settle(&harness);
-    while harness.tui.toasts.current().is_some() {
-        harness.tui.toasts.dismiss();
-    }
+    fail_shadow(&harness);
+    // A row's error, and Back to the list on it.
+    harness.app.press("escape");
+    settle(&harness);
     harness.dispatch("plugins.list");
     let shown = harness.wait_for("failed, enter enables it again");
     assert!(shown.contains("./broken.ts") && shown.contains("skipped"), "{shown}");
-    // A row's error, and Back to the list on it.
     harness.app.type_text("broken");
     settle(&harness);
     harness.app.press("enter");
@@ -288,16 +317,27 @@ fn the_host_lists_the_plugins_while_the_manager_has_failed() {
     harness.wait_for("failed, enter enables it again");
     harness.app.press("escape");
     settle(&harness);
-    // The manager's row starts it again.
-    harness.dispatch("plugins.list");
-    harness.wait_for("failed, enter enables it again");
-    harness.app.type_text("opencode.plugins");
+    // A run of the submit by name starts nothing.
+    fail_shadow(&harness);
+    harness.dispatch("dialog.select.submit");
     settle(&harness);
+    assert!(matches!(manager_status(&harness), opencode_plugin::Status::Failed(_)), "a submit by name restarted it");
+    // The user's enter does, and the manager that runs serves `/plugins`.
     harness.app.press("enter");
     settle(&harness);
-    let entry = harness.tui.plugins.entries().into_iter().find(|entry| entry.id == ID).unwrap();
-    assert_eq!(entry.status, opencode_plugin::Status::Active);
-    assert!(!commands(&harness).contains("plugins.list"), "the host's list stayed");
+    assert_eq!(manager_status(&harness), opencode_plugin::Status::Active);
+    harness.dispatch("plugins.list");
+    harness.wait_for("Shadow plugins");
+    harness.app.press("escape");
+    settle(&harness);
+    // So does a click on its row.
+    fail_shadow(&harness);
+    let (x, y) = harness.find("enter enables it again");
+    harness.app.click(x, y);
+    settle(&harness);
+    assert_eq!(manager_status(&harness), opencode_plugin::Status::Active);
+    harness.dispatch("plugins.list");
+    harness.wait_for("Shadow plugins");
 }
 
 /// A built-in whose command panics.
@@ -366,4 +406,342 @@ fn a_failed_built_in_shows_and_a_plugin_is_found_by_its_target() {
     harness.app.type_text("ext-dir");
     let shown = harness.wait_for("test.ext");
     assert!(!shown.contains("test.crash"), "{shown}");
+}
+
+/// The builds of a plugin that takes `0`'s ID, through the C ABI's byte shims; its setup does nothing.
+struct Named(&'static str);
+
+impl Backend for Named {
+    fn load(
+        &self,
+        host: &Rc<dyn Host>,
+        _: &[u8],
+        _: &std::path::Path,
+        _: Option<&str>,
+    ) -> Result<(Definition, ErrorFn), String> {
+        fn named(_: &mut abi::Setup) -> Result<(), String> {
+            Ok(())
+        }
+        match self.0 {
+            "opencode.stats" => {
+                loopback_described(host, abi::export_plugin!(@loopback_described "opencode.stats", named))
+            }
+            _ => loopback_described(host, abi::export_plugin!(@loopback_described "opencode.plugins", named)),
+        }
+    }
+}
+
+/// A build of a plugin of ID `id`, which crashed the client last time, held back as the client starts again; and its
+/// target. The loader's digest of the bytes `[1]` with no options names the build.
+fn held_crash(harness: &Harness, id: &'static str) -> (Rc<Loader>, String, opencode_util::temp::TempDir) {
+    use std::hash::Hasher;
+    let root = opencode_util::temp::tempdir().unwrap();
+    std::fs::create_dir(root.path().join(".git")).unwrap();
+    let config = root.path().join("config");
+    let dir = config.join("plugins").join("held-build");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join(entry_file()), [1]).unwrap();
+    let mut hasher = std::hash::DefaultHasher::new();
+    hasher.write(&[1]);
+    hasher.write(b"");
+    let target = dir.to_string_lossy().into_owned();
+    let crashed = opencode_plugin::Crashed {
+        id: id.to_owned(),
+        target: target.clone(),
+        digest: format!("{:016x}", hasher.finish()),
+        reason: "crashed the client in `run-command` and is disabled".to_owned(),
+    };
+    harness.tui.plugins.set_crashed(vec![crashed], |_| Ok(()));
+    let loader = Rc::new(Loader::new(Rc::new(Named(id)), config, root.path().to_path_buf(), Vec::new()));
+    harness.tui.plugins.set_loader(loader.clone());
+    loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
+    settle(harness);
+    (loader, target, root)
+}
+
+fn status_of(harness: &Harness, key: &str) -> Option<(opencode_plugin::Status, bool)> {
+    let entries = harness.tui.plugins.entries();
+    entries.into_iter().find(|entry| entry.key == key).map(|entry| (entry.status, entry.active))
+}
+
+// Expected (review bigboi-3): a build held back after a crash that shares its ID with a running built-in is a row of
+// its own: enter on it releases that build and leaves the built-in running, and the build loads next. A held build of
+// the manager's ID neither installs the host's list nor touches the manager, which serves `/plugins`.
+#[test]
+fn a_held_build_that_shares_an_id_is_a_row_of_its_own() {
+    let (harness, _) = open(&[]);
+    let (loader, target, _root) = held_crash(&harness, "opencode.stats");
+    let held = opencode_plugin::Entry::held_key(&target);
+    assert!(matches!(status_of(&harness, &held), Some((opencode_plugin::Status::Failed(_), false))));
+    harness.dispatch("plugins.list");
+    harness.wait_for("show internal");
+    harness.app.type_text("held-build");
+    let shown = harness.wait_for("enable enter");
+    assert!(shown.contains("opencode.stats") && shown.contains("failed"), "{shown}");
+    harness.app.press("enter");
+    settle(&harness);
+    assert_eq!(status_of(&harness, "plugin:opencode.stats"), Some((opencode_plugin::Status::Active, true)));
+    assert_eq!(status_of(&harness, &held), None, "the held build stayed");
+    loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
+    assert!(!harness.tui.plugins.held(&target));
+
+    let (harness, _) = open(&[]);
+    let (_loader, target, _root) = held_crash(&harness, ID);
+    harness.dispatch("plugins.list");
+    harness.wait_for("show internal");
+    harness.app.type_text("held-build");
+    harness.wait_for("failed");
+    harness.app.press("enter");
+    settle(&harness);
+    assert_eq!(
+        status_of(&harness, &opencode_plugin::Entry::plugin_key(ID)),
+        Some((opencode_plugin::Status::Active, true))
+    );
+    assert!(harness.tui.plugins.held(&target), "the manager toggled a build of its own ID");
+    harness.app.press("escape");
+    settle(&harness);
+    harness.dispatch("plugins.list");
+    harness.wait_for("show internal");
+}
+
+thread_local! {
+    /// What [`reader`] read of the plugin list, as JSON.
+    static READ: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
+/// A plugin that reads the plugin list as it changes and on its command.
+fn reader() -> abi::Plugin {
+    fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+        let read = |host: &dyn abi::Read| READ.set(serde_json::to_string(&host.plugins()).unwrap());
+        setup.on_plugins(move |host| read(host));
+        setup.command(Command { name: "reader.read".to_owned(), ..Command::default() }, move |host, _| read(host));
+        Ok(())
+    }
+    abi::Plugin { id: "test.reader", setup }
+}
+
+/// Plugins whose setup fails, and whose command panics, each with a private marker.
+fn secrets() -> [abi::Plugin; 2] {
+    fn setup(_: &mut abi::Setup) -> Result<(), String> {
+        Err("SECRET-setup /home/user/.token".to_owned())
+    }
+    fn run(setup: &mut abi::Setup) -> Result<(), String> {
+        setup.command(Command { name: "secret.run".to_owned(), ..Command::default() }, |_, _| panic!("SECRET-run"));
+        Ok(())
+    }
+    [abi::Plugin { id: "test.setup", setup }, abi::Plugin { id: "test.run", setup: run }]
+}
+
+/// A build that fails to load, with a private marker.
+struct Unloadable;
+
+impl Backend for Unloadable {
+    fn load(
+        &self,
+        _: &Rc<dyn Host>,
+        _: &[u8],
+        _: &std::path::Path,
+        _: Option<&str>,
+    ) -> Result<(Definition, ErrorFn), String> {
+        Err("SECRET-load".to_owned())
+    }
+}
+
+// Expected (review bigboi-2, synthesis 3.6): the plugin list a plugin reads, linked or over the C ABI, holds no error
+// text of another plugin: not a setup's, a panic's or a load's. The user still sees each in the manager's error view,
+// which the host fills.
+#[test]
+fn the_plugin_list_holds_no_error_text() {
+    for abi in [false, true] {
+        let (harness, _) = open(&[]);
+        let read = match abi {
+            false => opencode_plugin::Builtin::Plugin(reader()),
+            true => opencode_plugin::Builtin::Abi(reader()),
+        };
+        opencode_tui::plugins::host::add(&harness.tui, read.into());
+        for plugin in secrets() {
+            opencode_tui::plugins::host::add(&harness.tui, plugin.into());
+        }
+        harness.dispatch("secret.run");
+        let root = opencode_util::temp::tempdir().unwrap();
+        std::fs::create_dir(root.path().join(".git")).unwrap();
+        let config = root.path().join("config");
+        let dir = config.join("plugins").join("unloadable");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(entry_file()), [1]).unwrap();
+        let loader = Rc::new(Loader::new(Rc::new(Unloadable), config, root.path().to_path_buf(), Vec::new()));
+        harness.tui.plugins.set_loader(loader.clone());
+        loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
+        settle(&harness);
+        harness.dispatch("reader.read");
+        settle(&harness);
+        let read = READ.take();
+        assert!(read.contains("test.setup") && read.contains("test.run") && read.contains("unloadable"), "{read}");
+        assert!(!read.contains("SECRET") && !read.contains(".token"), "abi {abi}: {read}");
+        let errors: Vec<String> = harness
+            .tui
+            .plugins
+            .entries()
+            .into_iter()
+            .filter_map(|entry| match entry.status {
+                opencode_plugin::Status::Failed(error) => Some(error),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(errors.iter().filter(|error| error.contains("SECRET")).count(), 3, "{errors:?}");
+        while harness.tui.toasts.current().is_some() {
+            harness.tui.toasts.dismiss();
+        }
+        harness.dispatch("plugins.list");
+        harness.wait_for("show internal");
+        harness.app.type_text("test.setup");
+        harness.wait_for("view error space");
+        harness.app.press("space");
+        harness.wait_for("SECRET-setup");
+    }
+}
+
+/// A transport that holds each read of the server plugins at `/tmp/other`, where the manager opens, until the test answers
+/// it, and sends the rest to `inner`, the host's own reads of its default location included.
+struct Gated {
+    inner: opencode_api::memory::Memory,
+    held: std::sync::Mutex<Vec<tokio::sync::oneshot::Sender<opencode_api::transport::Response>>>,
+}
+
+impl opencode_api::transport::Transport for Gated {
+    fn send(
+        &self,
+        request: opencode_api::transport::Request,
+    ) -> opencode_api::transport::BoxFuture<'_, Result<opencode_api::transport::Response, String>> {
+        let other = request.url.query().is_some_and(|query| query.contains("%2Ftmp%2Fother"));
+        if request.method != "GET" || request.url.path() != "/api/plugin" || !other {
+            return self.inner.send(request);
+        }
+        let (send, answer) = tokio::sync::oneshot::channel();
+        self.held.lock().unwrap().push(send);
+        Box::pin(async move { answer.await.map_err(|error| error.to_string()) })
+    }
+}
+
+impl Gated {
+    /// Answers the held reads, the newest first: the newest with a package `newest`, the others with `older`.
+    fn answer(&self, harness: &Harness, newest: &str, older: &str) {
+        let held: Vec<_> = self.held.lock().unwrap().drain(..).collect();
+        for (index, send) in held.into_iter().enumerate().rev() {
+            let id = if index == 0 { older } else { newest };
+            let plugins = serde_json::json!([{
+                "id": id, "source": { "type": "package", "target": id, "version": "1.0.0" },
+                "features": { "server": true }, "state": { "status": "active" },
+            }]);
+            let body = serde_json::json!({ "location": support::location("/tmp/app"), "data": plugins });
+            let _ = send.send(support::respond(200, &body));
+            settle(harness);
+        }
+    }
+}
+
+// Expected (review bigboi-6, TS `createResource`): the manager shows the newest read of the server plugins, also when
+// an older one, of the same open or an earlier one, answers after it.
+#[test]
+fn the_newest_server_list_shows_whatever_order_the_replies_come_in() {
+    use opencode_api::memory::{Memory, Route as MemoryRoute};
+    let memory = Memory::new(vec![
+        MemoryRoute::json("GET", "/api/location", 200, &support::location("/tmp/app")),
+        MemoryRoute::json("GET", "/api/session", 200, &serde_json::json!({ "data": [], "cursor": {} })),
+    ]);
+    let gated = Arc::new(Gated { inner: memory.clone(), held: Default::default() });
+    let deps = Deps { route: Route::Home, events: true, ..support::deps(gated.clone()) };
+    let harness = support::mount(100, 30, deps);
+    opencode_tui::features::location::navigate_home(&harness.tui, Some(opencode_store::Location::new("/tmp/other")));
+    settle(&harness);
+    // In one open: its read, then a read on `plugin.updated`.
+    harness.dispatch("plugins.list");
+    harness.wait_for("show internal");
+    assert!(harness.app.wait_until(support::WAIT, || gated.held.lock().unwrap().len() == 1));
+    memory.emit(&serde_json::json!({ "id": "evt_1", "created": 1, "type": "plugin.updated", "data": {} }));
+    assert!(harness.app.wait_until(support::WAIT, || gated.held.lock().unwrap().len() == 2));
+    settle(&harness);
+    gated.answer(&harness, "newest.pkg", "older.pkg");
+    let shown = harness.wait_for("newest.pkg");
+    assert!(!shown.contains("older.pkg"), "{shown}");
+    // Across opens: the first open's read answers after the second's.
+    harness.app.press("escape");
+    settle(&harness);
+    harness.dispatch("plugins.list");
+    settle(&harness);
+    harness.app.press("escape");
+    settle(&harness);
+    harness.dispatch("plugins.list");
+    assert!(harness.app.wait_until(support::WAIT, || gated.held.lock().unwrap().len() == 2));
+    gated.answer(&harness, "second.pkg", "first.pkg");
+    let shown = harness.wait_for("second.pkg");
+    assert!(!shown.contains("first.pkg"), "{shown}");
+}
+
+/// A plugin that does nothing, under `id`.
+fn quiet(id: &'static str) -> abi::Plugin {
+    fn setup(_: &mut abi::Setup) -> Result<(), String> {
+        Ok(())
+    }
+    abi::Plugin { id, setup }
+}
+
+// Expected (review bigboi-7): in one filtered open, on both carriers, each enter toggles the selected plugin alone and
+// the selection stays on its row; a plugin that fails while the list shows shows failed on its row, the selection
+// stays, and the others' registrations are unchanged; enter on it then disables it.
+#[test]
+fn toggles_in_one_filtered_open_reach_the_selected_plugin_alone() {
+    for abi in [false, true] {
+        let deps = Deps { route: Route::Home, abi_builtins: abi, ..support::deps(Arc::new(support::empty())) };
+        let harness = support::mount(100, 30, deps);
+        for id in ["test.a", "test.b"] {
+            opencode_tui::plugins::host::add(&harness.tui, quiet(id).into());
+        }
+        opencode_tui::plugins::host::add(&harness.tui, boom().into());
+        settle(&harness);
+        harness.dispatch("plugins.list");
+        harness.wait_for("show internal");
+        harness.app.type_text("test.");
+        harness.wait_for("test.boom");
+        let state = |harness: &Harness| -> Vec<(String, bool)> {
+            ["test.a", "test.b", "test.boom"]
+                .iter()
+                .map(|id| {
+                    let (status, active) = status_of(harness, &opencode_plugin::Entry::plugin_key(id)).unwrap();
+                    (format!("{id} {status:?}"), active)
+                })
+                .collect()
+        };
+        let selected = |harness: &Harness| -> String {
+            let text = harness.app.text();
+            let row = text.lines().find(|line| line.contains('┃') && line.contains("test.")).unwrap_or_default();
+            row.split_whitespace().find(|word| word.starts_with("test.")).unwrap_or_default().to_owned()
+        };
+        let row = |harness: &Harness, id: &str| -> String {
+            let text = harness.app.text();
+            text.lines().find(|line| line.split_whitespace().any(|word| word == id)).unwrap_or_default().to_owned()
+        };
+        harness.app.press("enter");
+        settle(&harness);
+        assert!(row(&harness, "test.a").contains("inactive"), "abi {abi}: {}", harness.app.text());
+        assert_eq!(selected(&harness), "test.a", "abi {abi}");
+        assert_eq!(state(&harness).iter().map(|(_, active)| *active).collect::<Vec<_>>(), [false, true, true]);
+        harness.app.press("down");
+        harness.app.press("enter");
+        settle(&harness);
+        assert_eq!(selected(&harness), "test.b", "abi {abi}");
+        assert_eq!(state(&harness).iter().map(|(_, active)| *active).collect::<Vec<_>>(), [false, false, true]);
+        harness.app.press("down");
+        settle(&harness);
+        harness.dispatch("boom.boom");
+        settle(&harness);
+        assert!(row(&harness, "test.boom").contains("failed"), "abi {abi}: {}", harness.app.text());
+        assert_eq!(selected(&harness), "test.boom", "abi {abi}");
+        assert!(state(&harness)[2].0.contains("Failed") && state(&harness)[2].1);
+        assert_eq!(state(&harness)[..2].iter().map(|(_, active)| *active).collect::<Vec<_>>(), [false, false]);
+        harness.app.press("enter");
+        settle(&harness);
+        assert!(!state(&harness)[2].1, "abi {abi}: the failed plugin stayed active");
+        assert_eq!(selected(&harness), "test.boom", "abi {abi}");
+    }
 }

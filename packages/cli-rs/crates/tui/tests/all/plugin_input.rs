@@ -196,6 +196,7 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             back: Some(abi::Action::Command { name: "input.picked".into(), input: Some("back".into()) }),
             reference: None,
             key: None,
+            plugin: None,
         }));
     });
     // Lists, last first, the rows whose value holds the query, and logs what it was given.

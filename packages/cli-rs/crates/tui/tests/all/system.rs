@@ -363,6 +363,12 @@ fn plugin_manager_matches_typescript_on(abi: bool) {
 // as TS's subscription lives as long as the dialog.
 #[test]
 fn plugin_manager_follows_plugin_updated_under_its_error_view() {
+    for abi in [false, true] {
+        plugin_manager_follows_plugin_updated_under_its_error_view_on(abi);
+    }
+}
+
+fn plugin_manager_follows_plugin_updated_under_its_error_view_on(abi: bool) {
     use opencode_api::memory::{Memory, Route as MemoryRoute};
     let failed = json!([{
         "id": "audit", "source": { "type": "local", "path": format!("{DIRECTORY}/audit.ts") },
@@ -379,6 +385,7 @@ fn plugin_manager_follows_plugin_updated_under_its_error_view() {
         config: support::config(support::component_info(json!({}))),
         route: Route::Home,
         events: true,
+        abi_builtins: abi,
         ..support::deps(Arc::new(memory.clone()))
     };
     let tui = opencode_tui::mount(&app, deps);
@@ -408,8 +415,14 @@ fn plugin_manager_follows_plugin_updated_under_its_error_view() {
 
 #[test]
 fn plugin_manager_reads_the_active_location() {
-    let app = TestApp::new(100, 30);
-    let (mounted, _) = plugin_manager(&app, json!({}));
+    for abi in [false, true] {
+        let app = TestApp::new(100, 30);
+        let (mounted, _) = plugin_manager_on(&app, json!({}), abi);
+        plugin_manager_reads_the_active_location_on(&app, &mounted);
+    }
+}
+
+fn plugin_manager_reads_the_active_location_on(app: &TestApp, mounted: &Mounted) {
     opencode_tui::features::location::navigate_home(&mounted.tui, Some(opencode_store::Location::new("/tmp/other")));
     mounted.tui.keymap.dispatch("plugins.list", None);
     app.wait_until(WAIT, || mounted.requests("/api/plugin").len() == 2);
@@ -938,13 +951,21 @@ fn without_an_updater_there_is_no_update_command_or_notice() {
 // the prompt takes typing, as in TS.
 #[test]
 fn the_prompt_takes_typing_after_a_plugin_manager_toggle() {
-    let h = support::mount(100, 30, support::deps(Arc::new(Fake::new(|seen| support::base(seen, support::DIRECTORY)))));
-    h.wait_for("Fix the parser");
-    toggle_a_plugin(&h);
-    h.app.press("escape");
-    h.wait_gone("enable enter");
-    h.app.type_text("xyz");
-    h.wait("the text reaches the prompt", || h.text().contains("xyz"));
+    for abi in [false, true] {
+        let h = support::mount(100, 30, carried(abi));
+        h.wait_for("Fix the parser");
+        toggle_a_plugin(&h);
+        h.app.press("escape");
+        h.wait_gone("enable enter");
+        h.app.type_text("xyz");
+        h.wait("the text reaches the prompt", || h.text().contains("xyz"));
+    }
+}
+
+/// The session fixture's server, with the built-ins on the linked carrier or with `abi` across the C ABI's byte shims.
+fn carried(abi: bool) -> Deps {
+    let deps = support::deps(Arc::new(Fake::new(|seen| support::base(seen, support::DIRECTORY))));
+    Deps { abi_builtins: abi, ..deps }
 }
 
 /// Opens `/plugins`, shows the internal plugins, and turns the first off, which mounts the route again under the
@@ -961,13 +982,51 @@ pub(crate) fn toggle_a_plugin(h: &support::Harness) {
 // Expected (D4): with the internal plugins shown, the search finds a built-in by its ID, as TS does.
 #[test]
 fn the_plugin_manager_search_finds_built_ins_once_they_show() {
-    let h = support::mount(100, 30, support::deps(Arc::new(Fake::new(|seen| support::base(seen, support::DIRECTORY)))));
-    h.wait_for("Fix the parser");
-    h.tui.keymap.dispatch("plugins.list", None);
-    h.wait_for("Plugins");
-    h.app.press("ctrl+a");
-    h.wait_for("hide internal");
-    h.app.type_text("btw");
-    h.wait_for("opencode.btw");
-    assert!(!h.app.text().contains("No results found"), "{}", h.app.text());
+    for abi in [false, true] {
+        let h = support::mount(100, 30, carried(abi));
+        h.wait_for("Fix the parser");
+        h.tui.keymap.dispatch("plugins.list", None);
+        h.wait_for("Plugins");
+        h.app.press("ctrl+a");
+        h.wait_for("hide internal");
+        h.app.type_text("btw");
+        h.wait_for("opencode.btw");
+        assert!(!h.app.text().contains("No results found"), "{}", h.app.text());
+    }
+}
+
+// Expected (review bigboi-4): the manager's actions take the user's keybinds as TS's commands do: `none` turns update
+// off, another key moves it, and the literal default does nothing then; the requests say so. As in TS, enter on a
+// toggle row still toggles when `plugins.toggle` is `none` or moved (the select's own submit; provisional decision),
+// and the moved key toggles too; the registry says so.
+#[test]
+fn the_manager_actions_take_the_users_keybinds() {
+    let updates = |mounted: &Mounted| mounted.requests("/api/plugin/update").len();
+    for (binds, pressed, sent) in [
+        (json!({ "dialog.plugins.update": "none" }), "ctrl+u", 0),
+        (json!({ "dialog.plugins.update": "ctrl+t" }), "ctrl+u", 0),
+        (json!({ "dialog.plugins.update": "ctrl+t" }), "ctrl+t", 1),
+    ] {
+        let app = TestApp::new(100, 30);
+        let (mounted, _) = plugin_manager(&app, json!({ "keybinds": binds }));
+        mounted.tui.keymap.dispatch("plugins.list", None);
+        wait_for(&app, "team.plugins");
+        app.press("down");
+        app.press("down");
+        wait_for(&app, "update available");
+        app.press(pressed);
+        app.wait_until(Duration::from_millis(300), || updates(&mounted) > 0);
+        assert_eq!(updates(&mounted), sent, "{binds} {pressed}");
+    }
+    for (binds, pressed, toggled) in
+        [(json!({ "plugins.toggle": "none" }), "enter", true), (json!({ "plugins.toggle": "ctrl+t" }), "ctrl+t", true)]
+    {
+        let app = TestApp::new(100, 30);
+        let (mounted, _) = plugin_manager(&app, json!({ "keybinds": binds }));
+        mounted.tui.keymap.dispatch("plugins.list", None);
+        wait_for(&app, "team.tui");
+        app.press(pressed);
+        app.wait_until(Duration::from_millis(300), || !active(&mounted.tui, "team.tui"));
+        assert_eq!(!active(&mounted.tui, "team.tui"), toggled, "{binds} {pressed}");
+    }
 }
