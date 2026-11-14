@@ -53,18 +53,27 @@ impl View {
         (Self::wrap(host, Box::new(mount.clone()), commands), mount)
     }
 
-    /// The route that shows `content`.
+    /// The route that shows `content` centered in a scroll box, as TS's `StatsPage` does: the route of ABI 1.x.
     pub fn wrap(host: &dyn Host, content: Box<dyn Claimed>, commands: Vec<TuiCommand>) -> Self {
-        let app = host.app();
-        let theme = host.theme();
-        let scroll = ScrollBox::new(app).scrollbars(false).grow(1.0);
+        let scroll = ScrollBox::new(host.app()).scrollbars(false).grow(1.0);
         scroll.content_view().align_items(Align::Center).justify(Justify::Center).padding_y(1);
         scroll.add(&content.root());
+        Self::page(host, &scroll, content, commands)
+    }
+
+    /// The route that gives `content` the whole page: the route of a 2.0 surface, whose root fills it.
+    pub fn fill(host: &dyn Host, content: Box<dyn Claimed>, commands: Vec<TuiCommand>) -> Self {
+        let root = content.root();
+        Self::page(host, &root, content, commands)
+    }
+
+    fn page(host: &dyn Host, inner: &impl Widget, content: Box<dyn Claimed>, commands: Vec<TuiCommand>) -> Self {
+        let app = host.app();
         let root = opentui::prelude::View::new(app)
             .width(Length::percent(100.0))
             .height(Length::percent(100.0))
-            .bg(theme.background.base)
-            .child(&scroll);
+            .bg(host.theme().background.base)
+            .child(inner);
         let layer = (!commands.is_empty())
             .then(|| host.keymap().layer(KeymapLayer::<FocusId>::new(commands)))
             .and_then(|layer| layer.map_err(|error| log::error!("plugin route keymap layer: {error}")).ok());

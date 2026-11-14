@@ -594,3 +594,60 @@ fn a_late_reply_does_not_reach_a_mount_opened_again() {
     arrived(2);
     assert_eq!(REPLIES.with(|replies| replies.borrow().len()), 1, "the plugin's own reply did not arrive");
 }
+
+thread_local! {
+    /// The sizes the views of `test.room` were given, by surface.
+    static ROOM: RefCell<Vec<(&'static str, u16, u16)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A route of a title over a growing scroll of 40 rows, and a claim in the footer's status row that grows; both log
+/// their input size.
+fn room(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.surface(v2::Surface::new("room", v2::Place::Route("room".into()), |cx| {
+        ROOM.with(|room| room.borrow_mut().push(("route", cx.input.width, cx.input.height)));
+        let rows = (0..40).map(|row| v2::Node::text(vec![abi::Span::new(format!("row {row}"))])).collect();
+        let scroll = v2::Node::scroll(rows).with_id("rows").layout(abi::Layout::default().grow());
+        v2::Node::column(vec![v2::Node::text(vec![abi::Span::new("room title")]), scroll])
+            .layout(abi::Layout::default().grow())
+    }));
+    setup.surface(v2::Surface::new("tag", v2::Place::Slot(abi::Placement::append("home.footer.status")), |cx| {
+        ROOM.with(|room| room.borrow_mut().push(("slot", cx.input.width, cx.input.height)));
+        v2::Node::text(vec![abi::Span::new("room tag")]).layout(abi::Layout::default().grow().min_width_zero())
+    }));
+    Ok(())
+}
+
+// Expected: a 2.0 route has the whole page: its growing scroll shows rows and the wheel moves them, and after a resize
+// its view gets the new size. A slot surface's view gets the room its slot gives it, not the terminal's.
+#[test]
+fn a_surface_gets_the_room_it_is_given() {
+    ROOM.with(|room| room.borrow_mut().clear());
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![abi::Plugin { id: "test.room", setup: room }.into()],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount(80, 24, deps);
+    harness.wait_for("room tag");
+    settle(&harness);
+    let slot = ROOM.with(|room| room.borrow().iter().rev().find(|(name, ..)| *name == "slot").copied()).unwrap();
+    assert!(slot.1 > 0 && slot.1 < 80, "the slot surface was given {slot:?}");
+    harness.tui.navigate(Route::Plugin { id: "test.room".into(), name: "room".into() });
+    let screen = harness.wait_for("room title");
+    // The title takes the page's first row and the scroll every row below it.
+    assert!(screen.lines().next().is_some_and(|line| line.trim() == "room title"), "{screen}");
+    let rows = screen.lines().filter(|line| line.trim_start().starts_with("row ")).count();
+    assert_eq!(rows, 23, "the route's scroll does not fill the page:\n{screen}");
+    let first =
+        |screen: &str| screen.lines().find(|line| line.trim_start().starts_with("row ")).unwrap().trim().to_owned();
+    let top = first(&screen);
+    harness.app.scroll(10, 10, true);
+    settle(&harness);
+    assert_ne!(first(&harness.app.render().text()), top, "the wheel moved nothing");
+    harness.app.resize(70, 18);
+    settle(&harness);
+    harness.app.render();
+    settle(&harness);
+    let last = ROOM.with(|room| room.borrow().iter().rev().find(|(name, ..)| *name == "route").copied()).unwrap();
+    assert!(last.1 == 70 && last.2 > 0 && last.2 <= 18, "after a resize the route's view was given {last:?}");
+}

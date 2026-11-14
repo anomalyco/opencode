@@ -71,6 +71,13 @@ pub(crate) struct Surface {
     id: v2::MountId,
     /// Lives as long as the mount; what its route's commands asked for checks it before it arrives.
     alive: Rc<()>,
+    /// A route's surface fills the page; a slot's takes its node's layout, as a 1.x claim's root does.
+    fills: bool,
+    /// The layout a slot's root took last.
+    layout: Cell<Option<abi::Layout>>,
+    /// The size the last view was given, and how many views in a row a change of it called.
+    seen: Cell<(u16, u16)>,
+    resized: Cell<u8>,
     state: RefCell<State>,
     live: RefCell<Option<Rc<slot::Live>>>,
     watch: RefCell<Option<Disposer>>,
@@ -108,7 +115,11 @@ impl Surface {
             key: key.to_owned(),
             generation: GENERATION.fetch_add(1, Ordering::Relaxed),
         };
-        let root = View::new(host.app()).column().shrink(0.0);
+        let fills = path.is_empty();
+        let root = match fills {
+            true => View::new(host.app()).column().width(Length::percent(100.0)).height(Length::percent(100.0)),
+            false => View::new(host.app()).column().shrink(0.0).visible(false),
+        };
         let mounted = Rc::new(Self {
             root,
             owner: owner.clone(),
@@ -120,6 +131,10 @@ impl Surface {
             palette: surface.palette,
             id,
             alive: Rc::new(()),
+            fills,
+            layout: Cell::new(None),
+            seen: Cell::new((0, 0)),
+            resized: Cell::new(0),
             state: RefCell::default(),
             live: RefCell::new(None),
             watch: RefCell::new(None),
@@ -133,8 +148,31 @@ impl Surface {
             }
         }));
         *mounted.watch.borrow_mut() = watch;
+        // The room the surface is given decides its input: a view runs again, after the frame, once its root is laid
+        // out at another size than the view saw. A slot's root follows its content, so at most two of these run in a
+        // row before another cause draws it.
+        let (weak, app) = (Rc::downgrade(&mounted), host.app().clone());
+        mounted.root.on_resize(move |_, rect| {
+            let Some(mounted) = weak.upgrade() else { return };
+            if (rect.width as u16, rect.height as u16) == mounted.seen.get() || mounted.resized.get() >= 2 {
+                return;
+            }
+            mounted.resized.set(mounted.resized.get() + 1);
+            let weak = Rc::downgrade(&mounted);
+            app.defer(move |_| {
+                if let (Some(mounted), Some(host)) = (weak.upgrade(), mounted_owner(&weak)) {
+                    mounted.draw_sized(host.as_ref());
+                }
+            });
+        });
         mounted.draw(host);
         mounted
+    }
+
+    /// Calls the view and adopts its tree, for a cause other than its size.
+    pub fn draw(&self, host: &dyn Host) {
+        self.resized.set(0);
+        self.draw_sized(host);
     }
 
     /// What stands for the mount while it lives.
@@ -143,7 +181,7 @@ impl Surface {
     }
 
     /// Calls the view and adopts its tree; on a refusal, once more for a whole tree.
-    pub fn draw(&self, host: &dyn Host) {
+    fn draw_sized(&self, host: &dyn Host) {
         let theme = host.theme();
         for _ in 0..2 {
             let full = {
@@ -199,6 +237,7 @@ impl Surface {
             (0, _) | (_, 0) => host.app().size(),
             size => size,
         };
+        self.seen.set((width, height));
         let input = v2::SurfaceInput { width, height, palette, full };
         let mut memo = std::mem::take(&mut self.state.borrow_mut().memo);
         let held = memo.len() as i64;
@@ -232,7 +271,16 @@ impl Surface {
     }
 
     /// Adopts `nodes`, or refuses them and changes nothing.
-    fn adopt(&self, host: &dyn Host, theme: &Theme, nodes: Vec<Node>) -> Result<(), Refused> {
+    fn adopt(&self, host: &dyn Host, theme: &Theme, mut nodes: Vec<Node>) -> Result<(), Refused> {
+        // A slot's root takes its node's layout, and the node fills the root (`node::Mount` does the same).
+        let mut taken = None;
+        if !self.fills
+            && let Some(Node::Box { layout, .. } | Node::Text { layout, .. } | Node::Scroll { layout, .. }) =
+                nodes.first_mut()
+            && crate::reconcile::sizes_ok(layout)
+        {
+            taken = Some(crate::node::take_layout(layout));
+        }
         let owner = self.owner.clone();
         let act: Act = Rc::new(move |action| crate::node::act(&owner, action));
         let slot = |parent: &View, path: &str| {
@@ -256,6 +304,13 @@ impl Surface {
         let has = |handle: ContentRef| content.contains_key(&handle);
         let env = Env { host, theme, act: &act, slot: &slot, source: &source, content: &has };
         tree.apply(&env, &self.root, &nodes)?;
+        if !self.fills {
+            if let Some(taken) = taken.filter(|taken| self.layout.get() != Some(*taken)) {
+                crate::node::root_layout(&self.root, &taken);
+                self.layout.set(Some(taken));
+            }
+            self.root.visible(!tree.is_empty());
+        }
         *revision += 1;
         *last = Some(nodes);
         // Content no tree of this mount names any more goes, once the revision it was given for is adopted.
@@ -339,6 +394,11 @@ impl crate::activation::Drawn for Surface {
     fn woken(&self, host: &dyn Host) {
         self.draw(host);
     }
+}
+
+/// The host of the mount `weak` names.
+fn mounted_owner(weak: &Weak<Surface>) -> Option<Rc<dyn Host>> {
+    weak.upgrade()?.owner.upgrade()
 }
 
 /// The text tool call `part` returned, or the text of a part with that id; `None` while the host has not loaded it.
