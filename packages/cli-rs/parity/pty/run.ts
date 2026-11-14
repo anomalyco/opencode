@@ -132,6 +132,9 @@ export async function runPty(side: Side, value: PtyCase) {
   if (value.palette) terminal.write(value.palette.colors.map((color, index) => `\x1b]4;${index};${color}\x07`).join(""))
   if (value.preface) terminal.write(value.preface)
   const closed = Promise.withResolvers<void>()
+  // The end of the output that may be the start of an OSC sequence, held for the next read: a read can split one, and
+  // the patterns below match only whole ones (kitty's OSC 66 would reach an emulator that drops its text).
+  let held = ""
   const proc = Bun.spawn(value.command?.(side, server?.url) ?? command(side, withServer(value.args, server?.url)), {
     cwd: box.cwd,
     env: box.env,
@@ -145,7 +148,10 @@ export async function runPty(side: Side, value: PtyCase) {
         const reply = value.graphics && graphicsReplies(text, value.graphics.cell, cols, rows)
         if (reply) proc.terminal?.write(reply)
         if (!value.palette && !value.terminal) return terminal.write(data)
-        const drawn = value.terminal === "kitty" ? drawTextSizing(text) : text
+        const pending = held + text
+        const end = wholeOsc(pending)
+        held = pending.slice(end)
+        const drawn = value.terminal === "kitty" ? drawTextSizing(pending.slice(0, end)) : pending.slice(0, end)
         if (!value.palette) return terminal.write(drawn)
         const palette = value.palette
         terminal.write(
@@ -370,6 +376,13 @@ function attributes(lines: CapturedLine[]) {
       .map((run) => `${run.from}-${run.to} ${named(run.value)}`)
       .join(", "),
   )
+}
+
+// Where `text` stops being whole: at an OSC sequence that has not ended, or a last ESC that may start one.
+function wholeOsc(text: string) {
+  const start = text.lastIndexOf("\x1b]")
+  if (start !== -1 && !/\x07|\x1b\\/.test(text.slice(start + 2))) return start
+  return text.endsWith("\x1b") ? text.length - 1 : text.length
 }
 
 // kitty draws an OSC 66 text-sizing sequence (`ESC ] 66 ; w=N:s=N ; text ST`): `s` cells high and `w` (else the
