@@ -542,10 +542,12 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                         laying.call("layout", &*host, |_| layout(geometry)).unwrap_or_default()
                     }) as abi::v2::LayoutFn
                 }),
+                // Owned by the mount whose scroll it hears: what it asks for ends with that mount.
                 scrolled: surface.on_scroll.clone().map(|handler| {
                     let scope = scope.clone();
-                    Rc::new(move |event: &abi::v2::ScrollEvent| scope.run("on-scroll", |host| handler(host, event)))
-                        as behave::Scrolls
+                    Rc::new(move |alive: &Weak<()>, event: &abi::v2::ScrollEvent| {
+                        scope.run_owned(alive, "on-scroll", |host| handler(host, event));
+                    }) as behave::Scrolls
                 }),
             };
             let owning = scope.clone();
@@ -577,10 +579,13 @@ fn in_process(plugin: abi::Plugin) -> Definition {
     definition
 }
 
-/// The keymap command of a plugin's `command`, which calls `run` with its input.
+/// The keymap command of a plugin's `command`, which calls `run` with its input. It runs for the user's input unless
+/// a plugin effect dispatched it ([`flush`]): a command the plugin runs itself, or one a reply or a result runs.
 pub(crate) fn tui_command(command: &abi::Command, run: impl Fn(Option<&str>) + 'static) -> TuiCommand {
-    let mut entry = TuiCommand::new(command.name.clone(), move |input, _| run(input))
-        .bind(command.keybind.clone().map_or(Bind::Default, Bind::Key));
+    let mut entry = TuiCommand::new(command.name.clone(), move |input, _| {
+        behave::as_user(!FLUSHING.with(Cell::get), || run(input));
+    })
+    .bind(command.keybind.clone().map_or(Bind::Default, Bind::Key));
     // The keymap refuses an empty title, which a hidden command may have.
     if !command.title.trim().is_empty() {
         entry = entry.title(command.title.clone());
@@ -870,19 +875,19 @@ impl abi::Read for Scoped<'_> {
     }
 
     fn scroll_state(&self, target: &abi::v2::Target) -> Option<abi::v2::ScrollState> {
-        behave::scroll_state(&self.scope.id, target)
+        behave::scroll_state(&self.caller(), target)
     }
 
     fn anchors(&self, target: &abi::v2::Target, group: &str) -> Vec<abi::v2::AnchorAt> {
-        behave::anchors(&self.scope.id, target, group)
+        behave::anchors(&self.caller(), target, group)
     }
 
     fn top_anchor(&self, target: &abi::v2::Target, group: &str, inset: u16) -> Option<abi::v2::AnchorAt> {
-        behave::top_anchor(&self.scope.id, target, group, inset)
+        behave::top_anchor(&self.caller(), target, group, inset)
     }
 
     fn transcript(&self) -> Option<abi::v2::TranscriptView> {
-        behave::transcript()
+        behave::transcript(self.host.app())
     }
 }
 
@@ -891,11 +896,13 @@ impl abi::Host for Scoped<'_> {
         // A verb on the transcript answers the user's input to this plugin (decision 8): from a view, `layout`, a
         // wake or a reply it would fight the user's wheel, or loop through the transcript's own `layout` call.
         if target == abi::v2::Target::Transcript && !behave::in_handler() {
-            log::warn!("plugin {}: a transcript verb outside a handler is dropped", self.scope.id);
+            log::warn!("plugin {}: a transcript verb outside a handler of the user's input is dropped", self.scope.id);
             return;
         }
-        let plugin = self.scope.id.clone();
-        self.defer(move |_| behave::scroll(&plugin, &target, &verb));
+        // The mount it names is the one of this call, found now: a verb for a mount closed before it applies is
+        // dropped.
+        let effect = behave::scroll(&self.caller(), target, verb);
+        self.defer(move |_| effect());
     }
 
     fn storage_set(&self, key: &str, value: serde_json::Value) {
@@ -1151,6 +1158,11 @@ impl Scoped<'_> {
         id
     }
 
+    /// Who asks, for the behaviors: the host's app, the plugin, and the mount whose call runs.
+    fn caller(&self) -> behave::Caller<'_> {
+        behave::Caller { app: self.host.app(), plugin: &self.scope.id, mount: self.scope.mount.borrow().clone() }
+    }
+
     /// Holds `effect` until the call returns.
     fn defer(&self, effect: impl FnOnce(&dyn Host) + 'static) {
         match &mut *self.scope.call.borrow_mut() {
@@ -1294,7 +1306,7 @@ pub fn flush() {
     }
     while let Some((host, effect)) = EFFECTS.with(|effects| effects.borrow_mut().pop_front()) {
         if let Some(host) = host.upgrade() {
-            effect(&*host);
+            behave::as_user(false, || effect(&*host));
         }
     }
     FLUSHING.with(|flushing| flushing.set(false));
