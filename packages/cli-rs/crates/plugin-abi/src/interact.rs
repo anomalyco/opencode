@@ -11,7 +11,9 @@
 //! overlays it opened. When the mount ends, the host revokes all of it. A layer registered in setup
 //! ([`crate::Setup::layer`]) is the plugin's and lives until the plugin leaves `active`.
 //!
-//! The C ABI carries none of this yet: in P2 it runs on the linked path only (the plugins of [`crate::Plugin`]).
+//! A library has all of it over the C ABI: a handler is the request [`crate::Request::Input`], the host's verbs and
+//! reads are requests of the plugin's ([`crate::HostRequest::Focus`] and the rest), and it behaves as a plugin of
+//! [`crate::Plugin`] does (`carrier-equal`).
 
 use std::rc::Rc;
 
