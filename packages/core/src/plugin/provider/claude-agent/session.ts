@@ -3,6 +3,9 @@ export * as ClaudeSessionHooks from "./session.js"
 import { AssistantMessage, ToolMessage, type ToolResultPart } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
+import { SessionModelRequest } from "../../../session/model-request.js"
+import type { ClaudeIO } from "./claude/io.js"
+import type { ClaudeStatus } from "./claude/status.js"
 import { RequestKind } from "./language-model/request-kind.js"
 import { ClaudeProvider } from "./provider.js"
 
@@ -19,7 +22,11 @@ const flagToolError = (part: ToolResultPart): ToolResultPart => {
   return { ...part, providerMetadata: { ...part.providerMetadata, [ClaudeProvider.ID]: flags } }
 }
 
-export const register = Effect.fn("ClaudeSessionHooks.register")(function* (ctx: Context) {
+export const register = Effect.fn("ClaudeSessionHooks.register")(function* (
+  ctx: Context,
+  status: ClaudeStatus.Interface,
+  io: ClaudeIO.Interface,
+) {
   yield* ctx.session.hook(
     "model.request",
     (event) =>
@@ -48,6 +55,22 @@ export const register = Effect.fn("ClaudeSessionHooks.register")(function* (ctx:
         })
       }),
     { providerID: ClaudeProvider.ID },
+  )
+  // OpenCode lets Claude Agent's images grow past the default budget, up to what Anthropic's own API accepts. Other
+  // backends (Bedrock, Vertex, Foundry, gateways) take 20-32 MB, so they keep the default.
+  yield* Effect.forEach(
+    ["context", "generate", "compaction", "title"] as const,
+    (kind) =>
+      ctx.session.hook(
+        kind,
+        (event) =>
+          Effect.gen(function* () {
+            if (yield* ClaudeProvider.firstParty(ctx, status, io)) return
+            event.messages = [...SessionModelRequest.boundImages(event.messages)]
+          }),
+        { providerID: ClaudeProvider.ID },
+      ),
+    { discard: true },
   )
   // Claude Code already retries API failures. Replaying the whole turn here also retries permanent billing errors.
   yield* ctx.session.hook(

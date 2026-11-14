@@ -51,6 +51,8 @@ const IMAGE_BYTES = { trigger: 25 * 1024 * 1024, target: 15 * 1024 * 1024 } // 2
 // Claude Agent keeps the history, images included, in its own Claude Code session and sends only what is new. A cut
 // changes history that session already holds, so it branches before the first removed image and replays the rest,
 // rewriting the prompt cache. A larger budget makes that rare while staying under Anthropic's 128 MB request limit.
+// Bedrock, Vertex, Foundry and gateways take 20-32 MB, so Claude Agent's request hooks apply the default budget first
+// unless Claude Code talks to Anthropic's own API.
 const CLAUDE_AGENT_IMAGE_BYTES = { trigger: 96 * 1024 * 1024, target: 64 * 1024 * 1024 } // 96 MiB, cut to 64 MiB
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"

@@ -1,4 +1,4 @@
-import { Message, SystemPart } from "@opencode/ai/effect"
+import { Media, Message, SystemPart } from "@opencode/ai/effect"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import type { AccountInfo } from "@anthropic-ai/claude-agent-sdk"
 import { AISDK } from "@opencode/core/aisdk"
@@ -432,6 +432,55 @@ describe("ClaudeAgentPlugin session hooks", () => {
       ]
       const context = yield* hooks.trigger("session", "context", event)
       expect(context.options[ClaudeSystemPrompt.INSTRUCTIONS_OPTION]).toBe("SKILLS\n\nENTRY\n\nPLUGIN-PART")
+    }),
+  )
+
+  // Nine 3 MiB images: 27 MiB is past the default 25 MiB budget, which cuts the oldest four.
+  const removedImages = Effect.fn(function* (account?: AccountInfo, env?: Record<string, string>) {
+    const onConnect = FakeClaude.expectStartup({ account })
+    const claude = FakeClaude.make(account ? [onConnect] : [])
+    yield* addPlugin(FakeIO.make({ claude, env }))
+    yield* addAgents
+    if (account) {
+      yield* connect
+      yield* Effect.promise(() => claude.reached(onConnect))
+      yield* eventually(claudeModels, (models) => models.length > 0)
+      claude.check()
+    }
+    const hooks = yield* PluginHooks.Service
+    const event = hookEvent((yield* newSession).id)
+    event.messages = Array.from({ length: 9 }, (_, i) =>
+      Message.user({
+        type: "media",
+        media: Media.base64("a".repeat(3 * 1024 * 1024), "image/png"),
+        filename: `${i}.png`,
+      }),
+    )
+    const context = yield* hooks.trigger("session", "context", event)
+    return context.messages.filter((message) => message.content[0]?.type === "text").length
+  })
+
+  it.live("lets images grow past the default budget on Anthropic's own API", () =>
+    Effect.gen(function* () {
+      expect(yield* removedImages(apiKey)).toBe(0)
+    }),
+  )
+
+  it.live("keeps the default image budget on a cloud platform", () =>
+    Effect.gen(function* () {
+      expect(yield* removedImages({ apiProvider: "bedrock" })).toBe(4)
+    }),
+  )
+
+  it.live("keeps the default image budget through a custom base URL", () =>
+    Effect.gen(function* () {
+      expect(yield* removedImages(apiKey, { ANTHROPIC_BASE_URL: "https://gateway.example" })).toBe(4)
+    }),
+  )
+
+  it.live("keeps the default image budget until Claude Code reports its API", () =>
+    Effect.gen(function* () {
+      expect(yield* removedImages()).toBe(4)
     }),
   )
 
