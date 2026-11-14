@@ -2312,9 +2312,10 @@ fn the_tui_ending_leaves_nothing_its_plugins_started() {
 }
 
 // Expected (Pl on the pipe): a JS plugin's trees, content and watched reads are charged like the others'. The lab's
-// slot holds its nodes and its content; with no room left in its content share, a watched read that grows is not
-// pushed (the plugin reads nothing and can ask why) and goes on, and with none at all its diff's new content shows the
-// placeholder.
+// slot holds its nodes and its content, and a read it watches is charged while it watches it; with no room left in its
+// content share, a watched read that grows is not pushed (the plugin reads nothing and can ask why) and goes on; an
+// unwatch gives the read's bytes back; with no share at all its diff's new content shows the placeholder; disabled, it
+// holds nothing.
 #[test]
 fn a_js_plugins_trees_content_and_reads_are_held_to_the_limits() {
     use opencode_plugin::limits::{self, Limits};
@@ -2322,10 +2323,17 @@ fn a_js_plugins_trees_content_and_reads_are_held_to_the_limits() {
     let pipe = lab(config);
     let held = limits::held(LAB);
     assert!(held.nodes > 0 && held.content > 0, "the lab holds {held:?}");
+    // A read it watches is charged while it is watched.
+    pipe.harness.tui.keymap.dispatch("lab.store", Some(&"z".repeat(2000)));
+    pipe.settle();
+    shows(&pipe, "zzzz");
+    let grown = limits::held(LAB).content;
+    assert!(grown >= held.content + 2000, "the read is not charged: {} then {grown}", held.content);
+    let held = limits::held(LAB);
     let share = |content: u64| limits::set(Limits { plugin_content: content, ..Limits::default() });
     {
         let _limits = share(held.content);
-        pipe.harness.tui.keymap.dispatch("lab.store", Some(&"y".repeat(500)));
+        pipe.harness.tui.keymap.dispatch("lab.store", Some(&"y".repeat(2500)));
         pipe.settle();
         shows(&pipe, "note=null");
         pipe.harness.tui.keymap.dispatch("lab.readerror", None);
@@ -2333,8 +2341,20 @@ fn a_js_plugins_trees_content_and_reads_are_held_to_the_limits() {
         assert!(error.contains("past what the plugin may hold"), "{error}");
         assert_eq!(pipe.status(LAB), Some(Status::Active));
     }
+    // Watched again at 2,000 bytes, then not: its unwatch gives the read's bytes back.
+    pipe.harness.tui.keymap.dispatch("lab.store", Some(&"z".repeat(2000)));
+    pipe.settle();
+    shows(&pipe, "zzzz");
+    let grown = limits::held(LAB).content;
+    pipe.harness.tui.keymap.dispatch("lab.unwatch", None);
+    pipe.settle();
+    assert!(limits::held(LAB).content + 2000 <= grown, "the read is charged after its unwatch");
     let _limits = share(0);
     pipe.harness.tui.keymap.dispatch("lab.c", None);
     pipe.settle();
     shows(&pipe, "⋯ its content is past what the plugin may hold");
+    // Disabled, it holds nothing: its mounts' content and its reads.
+    pipe.harness.tui.plugins.toggle(&opencode_tui::plugins::host::host(&pipe.harness.tui), LAB, false);
+    pipe.settle();
+    assert_eq!(limits::held(LAB), limits::Held::default(), "held once disabled");
 }
