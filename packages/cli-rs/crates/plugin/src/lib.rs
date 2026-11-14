@@ -1581,9 +1581,16 @@ pub(crate) fn budget(
         let id = id.to_owned();
         defer(host, move |host| host.slow(&id, &cost));
     }
-    let Some(strong) = host.upgrade().filter(|_| timed.opened && monitor.wants_close()) else { return };
+    if timed.opened && monitor.wants_close() {
+        close_at_paint(host, monitor);
+    }
+}
+
+/// Closes the frames before the one open as the next paint starts, before it counts its frame; while one over the
+/// budget is still open, at the paint after too.
+fn close_at_paint(host: &Weak<dyn Host>, monitor: &Rc<contain::Monitor>) {
+    let Some(strong) = host.upgrade() else { return };
     let (host, monitor) = (host.clone(), monitor.clone());
-    // Animations run as a paint starts, before it counts the frame: the frame of these calls ends there.
     strong.app().animate(move |_, _| {
         for (id, cost) in monitor.close() {
             defer(&host, move |host| host.slow(&id, &cost));
@@ -1592,6 +1599,9 @@ pub(crate) fn budget(
         // plugin calls always ends here, at the paint, so a change is always seen here.
         if monitor.take_flipped() {
             defer(&host, |host| host.slow_changed());
+        }
+        if monitor.open_over() && monitor.wants_close() {
+            close_at_paint(&host, &monitor);
         }
         false
     });

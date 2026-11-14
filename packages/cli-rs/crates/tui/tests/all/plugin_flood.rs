@@ -47,6 +47,8 @@ thread_local! {
     /// The monitor's clock, past its start: only updates and the key's handler move it.
     static CLOCK: Cell<Duration> = const { Cell::new(Duration::ZERO) };
     static SENDERS: RefCell<[Option<abi::Sender<u32>>; 2]> = const { RefCell::new([None, None]) };
+    /// What a draw of `a`'s canvas costs on the monitor's clock.
+    static DRAW_COST: Cell<Duration> = const { Cell::new(Duration::ZERO) };
 }
 
 fn log(event: Event) {
@@ -73,8 +75,20 @@ fn setup_a(setup: &mut abi::Setup) -> Result<(), String> {
         log(Event::Key);
         CLOCK.with(|clock| clock.set(clock.get() + KEY_COST));
     });
+    // A key on every route, for the rows that time a key beside a canvas; the model never presses it.
+    let anywhere = abi::Command { name: "flood.anywhere".into(), keybind: Some("j".into()), ..abi::Command::default() };
+    setup.command(anywhere, |_, _| CLOCK.with(|clock| clock.set(clock.get() + KEY_COST)));
     setup.surface(v2::Surface::new("flood", v2::Place::Route("flood".into()), |_| {
         v2::Node::text(vec![abi::Span::new("flood")])
+    }));
+    // A canvas that draws once a frame, at [`DRAW_COST`].
+    let canvas = |_: &mut v2::View<'_>| {
+        let size = Some(abi::Width::Cells(4));
+        v2::Node::canvas("c").animate(true).layout(abi::Layout { width: size, height: size, ..abi::Layout::default() })
+    };
+    setup.surface(v2::Surface::new("drawn", v2::Place::Route("drawn".into()), canvas).draw(|_| {
+        CLOCK.with(|clock| clock.set(clock.get() + DRAW_COST.with(Cell::get)));
+        Some(abi::canvas::List::new())
     }));
     Ok(())
 }
@@ -343,5 +357,117 @@ fn wakes_before_a_paint_ask_for_one_drain() {
     for carrier in CARRIERS {
         let failure = Flood { carrier, all: Duration::from_millis(4) }.run(&commands);
         assert_eq!(failure, None, "{carrier:?}");
+    }
+}
+
+/// Sends `count` messages from plugin `plugin`'s thread, and joins it.
+fn send(plugin: usize, count: u32) {
+    let sender = SENDERS.with(|senders| senders.borrow()[plugin].clone()).unwrap();
+    std::thread::spawn(move || (0..count).for_each(|number| drop(sender.send(number)))).join().unwrap();
+}
+
+// Expected (fixed row; review carbon 4.1): a paint does not cut the frame open as it starts: a plugin whose canvas
+// draw (0.8 ms) as one paint lays out and update (0.3 ms) as the next starts take 1.1 ms a frame is slow; on both
+// carriers.
+#[test]
+fn a_paint_does_not_cut_the_frame_open() {
+    for carrier in CARRIERS {
+        let harness = open(carrier, Duration::from_millis(4));
+        harness.tui.navigate(Route::Plugin { id: PLUGINS[0].to_owned(), name: "drawn".to_owned() });
+        harness.app.render();
+        DRAW_COST.with(|cost| cost.set(Duration::from_micros(800)));
+        for _ in 0..40 {
+            send(0, 1);
+            harness.app.advance(Duration::from_millis(16));
+            harness.app.render();
+        }
+        DRAW_COST.with(|cost| cost.set(Duration::ZERO));
+        let slow = harness.tui.plugins.monitor().is_slow(PLUGINS[0]);
+        assert!(slow, "{carrier:?}: 1.1 ms a paint was not slow");
+    }
+}
+
+// Expected (fixed row; review carbon 4.1): a key handled between paints is in the frame of the paint after it, which a
+// paint does not cut as it starts: a key (0.4 ms), an update (0.3 ms) and a draw (0.4 ms) each paint are 1.1 ms a
+// frame, and slow; on both carriers.
+#[test]
+fn a_key_between_paints_is_in_the_next_paints_frame() {
+    for carrier in CARRIERS {
+        let harness = open(carrier, Duration::from_millis(4));
+        harness.tui.navigate(Route::Plugin { id: PLUGINS[0].to_owned(), name: "drawn".to_owned() });
+        harness.app.render();
+        DRAW_COST.with(|cost| cost.set(Duration::from_micros(400)));
+        for _ in 0..40 {
+            send(0, 1);
+            harness.app.app().dispatch(opentui::prelude::Event::Wake);
+            harness.app.press("j");
+            harness.app.advance(Duration::from_millis(16));
+            harness.app.render();
+        }
+        DRAW_COST.with(|cost| cost.set(Duration::ZERO));
+        assert!(harness.tui.plugins.monitor().is_slow(PLUGINS[0]), "{carrier:?}: 1.1 ms a frame was not slow");
+    }
+}
+
+// Expected (fixed row; review carbon 4.1): a paint's draws are in that paint's frame, not taken from the next paint's
+// updates: with a draw of 0.9 ms each paint, a plugin with mail still gets four updates of 0.3 ms a paint, the last
+// one starting at 0.9 ms of its own; on both carriers.
+#[test]
+fn a_paints_draws_leave_the_next_paints_updates_their_budget() {
+    for carrier in CARRIERS {
+        let harness = open(carrier, Duration::from_millis(4));
+        harness.tui.navigate(Route::Plugin { id: PLUGINS[0].to_owned(), name: "drawn".to_owned() });
+        harness.app.render();
+        DRAW_COST.with(|cost| cost.set(Duration::from_micros(900)));
+        send(0, 100);
+        let mut per_paint = Vec::new();
+        for _ in 0..6 {
+            let before = LOG.with(|log| log.borrow().len());
+            harness.app.render();
+            per_paint.push(LOG.with(|log| log.borrow().len()) - before);
+        }
+        DRAW_COST.with(|cost| cost.set(Duration::ZERO));
+        assert!(per_paint[1..].iter().all(|updates| *updates == 4), "{carrier:?}: updates a paint {per_paint:?}");
+    }
+}
+
+// Expected (fixed row; review carbon 4.3): two plugins with mail share a total budget that binds in turn: the one
+// served first in a frame goes last in the next, so over ten frames their updates differ by one at most; on both
+// carriers.
+#[test]
+fn plugins_take_turns_to_go_first() {
+    for carrier in CARRIERS {
+        let harness = open(carrier, Duration::from_micros(1500));
+        send(0, 100);
+        send(1, 100);
+        for _ in 0..10 {
+            harness.app.render();
+        }
+        let updates = LOG.with(|log| {
+            let log = log.borrow();
+            [0, 1]
+                .map(|plugin| log.iter().filter(|event| matches!(event, Event::Update(of, _) if *of == plugin)).count())
+        });
+        assert!(updates[0].abs_diff(updates[1]) <= 1, "{carrier:?}: updates {updates:?}");
+    }
+}
+
+// Expected (fixed row; review carbon 4.2): a wake stays posted until the drain takes it, so 25 sends between two
+// paints, each followed by a poll, wake the UI thread once; after the paint takes it, the next 25 once more. On both
+// carriers.
+#[test]
+fn sends_between_paints_wake_the_ui_thread_once() {
+    for carrier in CARRIERS {
+        let harness = open(carrier, Duration::from_millis(4));
+        for round in 0..2 {
+            let before = opencode_plugin::schedule::work().wakes;
+            for _ in 0..25 {
+                send(0, 1);
+                harness.app.event(opentui::prelude::Event::Wake);
+            }
+            let wakes = opencode_plugin::schedule::work().wakes - before;
+            assert_eq!(wakes, 1, "{carrier:?}, round {round}: wakes between two paints");
+            harness.app.render();
+        }
     }
 }

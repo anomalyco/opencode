@@ -496,7 +496,7 @@ impl Component for Board {
         let size = (painter.width().min(u16::MAX.into()) as u16, painter.height().min(u16::MAX.into()) as u16);
         if let Some(drawer) = state.drawer.clone().filter(|_| visible.2 > 0 && visible.3 > 0) {
             if let Some(cause) = state.stale(size).or(frame.map(|_| Cause::Animate)) {
-                state.draw(&drawer, size, cause, frame.unwrap_or_default());
+                crate::contain::in_frame(|| state.draw(&drawer, size, cause, frame.unwrap_or_default()));
             }
             let origin = state.widget.borrow().as_ref().map(|widget| widget.rect());
             let (left, top) =
