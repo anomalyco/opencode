@@ -909,8 +909,9 @@ fn a_revision_touches_what_changed_at_any_size() {
 }
 
 // Expected (`work`, a prepend and a reparent; bigboi's 5 and 9): a card put before the others, written out or kept,
-// builds that card and moves each other card once, at 40 cards and at 410; a card written out under a new box builds
-// that box and moves the card, the same as when it is kept there.
+// builds that card and moves each other card once, at 40 cards and at 410; a box whose own layout changes is built
+// again alone and its cards move into it; a card written out under a new box builds that box and moves the card, the
+// same as when it is kept there.
 #[test]
 fn a_prepend_or_a_reparent_moves_what_it_must() {
     for (files, keep) in [(40, false), (40, true), (410, false), (410, true)] {
@@ -930,6 +931,18 @@ fn a_prepend_or_a_reparent_moves_what_it_must() {
             (1, 0, 0, files as u64),
             "{files} {keep}: {done:?}"
         );
+    }
+    // The column's own layout changes: it is built again alone, and its 20 cards move into it.
+    {
+        let host = host(0);
+        let parent = root(&host);
+        let mut tree = Tree::default();
+        apply(&host, &mut tree, &parent, &cards(20, &[], false)).unwrap();
+        let grown = cards(20, &[], false).into_iter().map(|node| node.layout(abi::Layout::default().grow()));
+        let before = reconcile::work();
+        apply(&host, &mut tree, &parent, &grown.collect::<Vec<_>>()).unwrap();
+        let done = reconcile::work().since(before);
+        assert_eq!((done.created, done.removed, done.set, done.moved), (1, 1, 0, 20), "{done:?}");
     }
     for keep in [false, true] {
         let host = host(0);
@@ -1191,6 +1204,9 @@ fn a_tree_the_layout_cannot_take_is_refused() {
         assert_eq!(apply(&host, &mut tree, &parent, &[v2::Node::column(vec![wide])]), Err(Refused::Number));
         assert_eq!(host.app.render(), frame);
     }
+    // A scroll without an id, whose offset could pass to another.
+    assert_eq!(apply(&host, &mut tree, &parent, &[v2::Node::scroll(vec![])]), Err(Refused::Unkeyed));
+    assert_eq!(host.app.render(), frame);
     // Two nodes a revision, each a box around a keep of the last: the tree grows one level each time.
     let mut tree = Tree::default();
     apply(&host, &mut tree, &parent, &[v2::Node::column(vec![]).with_id("r0")]).unwrap();
@@ -1275,13 +1291,12 @@ fn a_keyed_scroll_keeps_its_offset_and_its_focus() {
 }
 
 // Expected: a scroll that follows its end shows the rows appended to it, as its own scroll box does; one that does not
-// stays at the top. Each starts out the other way, so the change is made in place.
+// stays at the top. Each starts out the same way, and the other way, so the change is made in place.
 #[test]
 fn a_following_scroll_shows_appended_rows() {
     for follow in [true, false] {
         let host = host(0);
         let parent = root(&host);
-        let mut tree = Tree::default();
         let tree_of = |rows: usize, follow: bool| {
             let mut scroll = rows_scroll(rows, 3, abi::Layout::default());
             if let v2::Node::Scroll { follow: following, .. } = &mut scroll {
@@ -1289,12 +1304,16 @@ fn a_following_scroll_shows_appended_rows() {
             }
             vec![scroll]
         };
-        apply(&host, &mut tree, &parent, &tree_of(2, !follow)).unwrap();
-        host.app.render();
-        apply(&host, &mut tree, &parent, &tree_of(10, follow)).unwrap();
-        host.app.render();
-        let top = top_row(&host);
-        assert_eq!(top, if follow { "row 7" } else { "row 0" }, "follow={follow}");
+        for first in [!follow, follow] {
+            let mut tree = Tree::default();
+            parent.clear();
+            apply(&host, &mut tree, &parent, &tree_of(2, first)).unwrap();
+            host.app.render();
+            apply(&host, &mut tree, &parent, &tree_of(10, follow)).unwrap();
+            host.app.render();
+            let top = top_row(&host);
+            assert_eq!(top, if follow { "row 7" } else { "row 0" }, "follow={follow}, first={first}");
+        }
     }
 }
 
@@ -1384,4 +1403,26 @@ fn an_unchanged_patch_is_not_touched() {
     apply(&host, &mut tree, &parent, &diff(v2::DiffView::Split)).unwrap();
     let done = reconcile::work().since(before);
     assert_eq!((done.touched(), done.set, done.parses), (1, 1, 0), "{done:?}");
+    let want = fresh(&diff(v2::DiffView::Split), 0, &|_| None).capture;
+    host.app.wait_until(std::time::Duration::from_secs(2), || host.app.render() == want);
+    assert_eq!(host.app.render(), want, "the patch did not switch to split");
+}
+
+// Expected: a box whose fill goes, in place, paints no fill, as a fresh mount of it does.
+#[test]
+fn a_fill_that_goes_paints_nothing() {
+    let filled = |bg: Option<&'static str>| {
+        let mut node = v2::Node::column(vec![v2::Node::text(vec![abi::Span::new("filled")])]).with_id("box");
+        if let v2::Node::Box { bg: fill, .. } = &mut node {
+            *fill = bg.map(abi::Color::from);
+        }
+        vec![node]
+    };
+    let host = host(0);
+    let parent = root(&host);
+    let mut tree = Tree::default();
+    apply(&host, &mut tree, &parent, &filled(Some("background.raised.high"))).unwrap();
+    host.app.render();
+    apply(&host, &mut tree, &parent, &filled(None)).unwrap();
+    assert_eq!(host.app.render(), fresh(&filled(None), 0, &|_| None).capture);
 }
