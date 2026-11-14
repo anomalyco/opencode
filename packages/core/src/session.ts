@@ -1,7 +1,7 @@
 export * as Session from "./session.js"
 export * from "./session/schema.js"
 
-import { DateTime, Effect, Layer, Context, Option, Stream } from "effect"
+import { Cause, DateTime, Effect, Layer, Context, Option, Stream } from "effect"
 import { LLMClient } from "@opencode/ai/effect"
 import { ListAnchor, ListCursor, ListFilter } from "@opencode/schema/session"
 import { and, desc, eq } from "drizzle-orm"
@@ -95,7 +95,7 @@ type CreateBaseInput = {
   permissions?: Permission.Ruleset
 }
 type CreateInput = CreateBaseInput &
-  ({ location: Location.Ref; parentID?: never } | { parentID: SessionSchema.ID; location?: never })
+  ({ location: Location.Ref; parentID?: never } | { parentID: SessionSchema.ID; location?: Location.Ref })
 
 type CompactInput = Parameters<Session.Handle["compact"]>[0] & { sessionID: SessionSchema.ID }
 
@@ -281,6 +281,7 @@ const layer = Layer.effect(
     const jobs = yield* Job.Service
     const environments = yield* SessionEnvironment.Service
     const locations = yield* LocationServiceMap.Service
+    const fs = yield* FSUtil.Service
     const sessions = yield* Session.make()
     const mediaBlob = (session: SessionSchema.Info) => SessionBlob.enabledFor(instances, session)
     const isDurableSessionEvent = (item: Bus.LogItem): item is SessionEvent.DurableEvent =>
@@ -293,10 +294,49 @@ const layer = Layer.effect(
         if (recorded) return recorded
         const parent = input.parentID ? yield* store.get(input.parentID) : undefined
         if (input.parentID && parent === undefined) return yield* new NotFoundError({ sessionID: input.parentID })
-        const location = parent?.location ?? (input.location && LocationServiceMap.canonical(input.location))
+        // parentID defines conversational hierarchy. Execution location defaults to the parent's
+        // location, but a child may be created in an explicitly validated location of the same project.
+        // Note: SubagentTool enforces "known worktree of same project" selection; Session.create validates
+        // explicit child locations for existence/same-project ownership and destination service availability.
+        const explicit = input.location ? LocationServiceMap.canonical(input.location) : undefined
+        const location = explicit ?? parent?.location
         if (location === undefined)
           return yield* Effect.die(new Error("Session.create requires either location or an existing parentID"))
+        if (parent && explicit) {
+          if (!(yield* fs.isDir(location.directory))) {
+            return yield* Effect.die(
+              new Error(`Session.create child location must be an existing directory: ${location.directory}`),
+            )
+          }
+        }
         const project = yield* projects.resolve(location.directory)
+        if (parent && explicit) {
+          if (project.id !== parent.projectID) {
+            return yield* Effect.die(
+              new Error(
+                `Session.create child location must belong to the same project as the parent: ${location.directory}`,
+              ),
+            )
+          }
+          // Probe location services so the session is not created against an unavailable destination.
+          yield* locations.contextEffect(location).pipe(
+            Effect.scoped,
+            Effect.catchCause((cause) => {
+              if (Cause.hasInterruptsOnly(cause))
+                return Effect.failCause(Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)))
+              return Effect.logWarning("session create child location unavailable", {
+                directory: location.directory,
+                cause,
+              }).pipe(
+                Effect.andThen(
+                  Effect.die(new Error(`Session.create child location is unavailable: ${location.directory}`)),
+                ),
+              )
+            }),
+          )
+        }
+        // subpath is derived relative to the resolved project directory. For same-project worktrees located
+        // outside the project directory, this may be a parent-escaping relative path (e.g. ../repo-wt).
         const projected = yield* bus
           .publish(
             SessionEvent.Created,
@@ -310,8 +350,8 @@ const layer = Layer.effect(
               subpath: RelativePath.make(path.relative(project.directory, location.directory).replaceAll("\\", "/")),
               title: input.title,
               agent: input.agent,
-              // Children inherit metadata and permissions the way they inherit
-              // location, so host policies that read them treat the family uniformly.
+              // Children inherit metadata and permissions by default so host policies treat the
+              // family uniformly; path-dependent rules are interpreted relative to effective location.
               metadata: input.metadata ?? parent?.metadata,
               permissions: input.permissions ?? parent?.permissions,
               model: input.model,

@@ -1,9 +1,12 @@
 import { describe, expect } from "bun:test"
+import { $ } from "bun"
+import fs from "fs/promises"
+import path from "path"
+import { eq } from "drizzle-orm"
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect"
 import { AIError, InvalidRequestError, LanguageModel, LLMEvent } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
-import path from "path"
 import { Money } from "@opencode/schema/money"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/core/effect/app-node-platform"
@@ -21,6 +24,8 @@ import { Agent } from "@opencode/core/agent"
 import { Job } from "@opencode/core/job"
 import { JobTable } from "@opencode/core/job/sql"
 import { KV } from "@opencode/core/kv"
+import { Worktree } from "@opencode/schema/worktree"
+import { WorktreeTable } from "@opencode/core/worktree/sql"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
@@ -120,12 +125,38 @@ const subagentPluginSupervisor = makeLocationNode({
   layer: Layer.effectDiscard(
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
-      yield* registerToolPlugin(SubagentTool.Plugin, {}, (name, callback) => hooks.register("tool", name, callback))
+      const { db } = yield* Database.Service
+      yield* registerToolPlugin(
+        SubagentTool.Plugin,
+        {
+          worktree: {
+            list: ({ projectID }) =>
+              db
+                .select()
+                .from(WorktreeTable)
+                .where(eq(WorktreeTable.project_id, projectID))
+                .all()
+                .pipe(
+                  Effect.map((rows) =>
+                    rows.map((row) => ({ directory: row.directory, strategy: row.strategy ?? undefined })),
+                  ),
+                  Effect.orDie,
+                ),
+            create: () => Effect.die("unused worktree.create"),
+            remove: () => Effect.die("unused worktree.remove"),
+            refresh: () => Effect.die("unused worktree.refresh"),
+            transform: () => Effect.die("unused worktree.transform"),
+            reload: () => Effect.die("unused worktree.reload"),
+          },
+        },
+        (name, callback) => hooks.register("tool", name, callback),
+      )
     }),
   ),
   deps: [
     Agent.node,
     Config.node,
+    Database.node,
     Model.node,
     Permission.node,
     Session.node,
@@ -869,6 +900,236 @@ describe("SubagentTool", () => {
           expect(synthetic[0]?.text).toContain(`<subagent sessionID="${childID}" state="completed"`)
           expect(synthetic[0]?.text).toContain(childText)
           expect(yield* jobs.pendingBackground).toEqual([])
+        }),
+      ),
+    ),
+  )
+
+  it.live("rejects unknown worktree and refuses worktree changes on resume", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+
+          const unknown = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-unknown-worktree",
+              name: SubagentTool.name,
+              input: {
+                agent: "reviewer",
+                description: "review",
+                prompt: "review",
+                worktree: path.join(dir.path, "not-a-known-worktree"),
+              },
+            },
+          })
+          expect(unknown).toMatchObject({
+            status: "error",
+            error: { type: "tool.execution", message: expect.stringContaining("not a known worktree") },
+          })
+
+          const first = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-child-for-resume-worktree",
+              name: SubagentTool.name,
+              input: { agent: "reviewer", description: "review", prompt: "review" },
+            },
+          })
+          const childID = outputSessionID(first.metadata)
+          const resumed = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-resume-with-worktree",
+              name: SubagentTool.name,
+              input: {
+                agent: "reviewer",
+                description: "follow up",
+                prompt: "continue",
+                sessionID: childID,
+                worktree: dir.path,
+              },
+            },
+          })
+          expect(resumed).toMatchObject({
+            status: "error",
+            error: {
+              type: "tool.execution",
+              message: `Cannot change worktree for existing subagent session: ${childID}`,
+            },
+          })
+        }),
+      ),
+    ),
+  )
+
+  it.live("creates subagent children in registered same-project worktrees via actual tool execution", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const root = path.join(dir.path, "repo")
+          const wtA = path.join(dir.path, "repo-wt-a")
+          const wtB = path.join(dir.path, "repo-wt-b")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(root, { recursive: true })
+            await $`git init`.cwd(root).quiet()
+            await $`git config user.name Test`.cwd(root).quiet()
+            await $`git config user.email test@opencode.test`.cwd(root).quiet()
+            await $`git config commit.gpgsign false`.cwd(root).quiet()
+            await $`git commit --allow-empty -m root`.cwd(root).quiet()
+            await $`git worktree add ${wtA} -b wt-a`.cwd(root).quiet()
+            await $`git worktree add ${wtB} -b wt-b`.cwd(root).quiet()
+          })
+
+          const location = Location.Ref.make({ directory: AbsolutePath.make(root) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({
+            location,
+            model: parentModel,
+            title: "parent",
+            permissions: [{ action: "edit", resource: "src/**", effect: "allow" }],
+            metadata: { source: "orchestrator" },
+          })
+          yield* withSubagent(parent.location)
+
+          const { db } = yield* Database.Service
+          yield* db
+            .insert(WorktreeTable)
+            .values([
+              { project_id: parent.projectID, directory: AbsolutePath.make(wtA), strategy: Worktree.StrategyID.make("git") },
+              { project_id: parent.projectID, directory: AbsolutePath.make(wtB), strategy: Worktree.StrategyID.make("git") },
+            ])
+            .run()
+            .pipe(Effect.orDie)
+
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+
+          const first = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-subagent-wt-a",
+              name: SubagentTool.name,
+              input: { agent: "reviewer", description: "review a", prompt: "review a", worktree: wtA },
+            },
+          })
+          expect(first.status).toBe("completed")
+          const childA = outputSessionID(first.metadata)
+
+          const second = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-subagent-wt-b",
+              name: SubagentTool.name,
+              input: { agent: "reviewer", description: "review b", prompt: "review b", worktree: wtB },
+            },
+          })
+          expect(second.status).toBe("completed")
+          const childB = outputSessionID(second.metadata)
+
+          expect(childA).not.toBe(childB)
+          const infoA = yield* sessions.get(childA)
+          const infoB = yield* sessions.get(childB)
+          expect(infoA.parentID).toBe(parent.id)
+          expect(infoB.parentID).toBe(parent.id)
+          expect(infoA.projectID).toBe(parent.projectID)
+          expect(infoB.projectID).toBe(parent.projectID)
+          expect(infoA.location.directory).toBe(AbsolutePath.make(wtA))
+          expect(infoB.location.directory).toBe(AbsolutePath.make(wtB))
+          expect(infoA.location.directory).not.toBe(parent.location.directory)
+          expect(infoB.location.directory).not.toBe(parent.location.directory)
+          expect(infoA.permissions).toEqual(parent.permissions)
+          expect(infoB.permissions).toEqual(parent.permissions)
+          expect(infoA.metadata).toEqual(parent.metadata)
+          expect(infoB.metadata).toEqual(parent.metadata)
+        }),
+      ),
+    ),
+  )
+
+  it.live("converts Session.create validation defects to ToolFailure without creating partial children", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const root = path.join(dir.path, "repo")
+          const bad = path.join(dir.path, "not-a-dir-wt")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(root, { recursive: true })
+            await $`git init`.cwd(root).quiet()
+            await $`git config user.name Test`.cwd(root).quiet()
+            await $`git config user.email test@opencode.test`.cwd(root).quiet()
+            await $`git config commit.gpgsign false`.cwd(root).quiet()
+            await $`git commit --allow-empty -m root`.cwd(root).quiet()
+            // Registered as a known worktree path but not a directory at create time -> Session.create defects.
+            await fs.writeFile(bad, "not-a-directory")
+          })
+
+          const location = Location.Ref.make({ directory: AbsolutePath.make(root) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel, title: "parent" })
+          yield* withSubagent(parent.location)
+          const { db } = yield* Database.Service
+          yield* db
+            .insert(WorktreeTable)
+            .values({ project_id: parent.projectID, directory: AbsolutePath.make(bad), strategy: Worktree.StrategyID.make("git") })
+            .run()
+            .pipe(Effect.orDie)
+
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const before = (yield* sessions.list({})).data.filter((s) => s.parentID === parent.id)
+
+          const result = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-subagent-bad-worktree",
+              name: SubagentTool.name,
+              input: { agent: "reviewer", description: "review", prompt: "review", worktree: bad },
+            },
+          })
+
+          expect(result.status).toBe("error")
+          if (result.status === "error") {
+            expect(result.error).toMatchObject({ type: "tool.execution" })
+            expect(String(result.error?.message ?? "")).toContain("Failed to create subagent in worktree")
+            expect(String(result.error?.message ?? "")).toContain(bad)
+          }
+
+          // No partial child session created; parent/orchestrator context remains healthy.
+          expect((yield* sessions.get(parent.id)).location.directory).toBe(AbsolutePath.make(root))
+          const after = (yield* sessions.list({})).data.filter((s) => s.parentID === parent.id)
+          expect(after).toHaveLength(before.length)
+
+          // Orchestrator can continue issuing tool calls after handled failure.
+          const followup = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-subagent-followup",
+              name: SubagentTool.name,
+              input: { agent: "reviewer", description: "ok", prompt: "ok" },
+            },
+          })
+          expect(followup.status).toBe("completed")
         }),
       ),
     ),

@@ -4,14 +4,18 @@ import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Effect, Predicate, Schema } from "effect"
+import path from "path"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
 import { Job } from "../../job.js"
+import { Location } from "../../location.js"
 import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
+import { AbsolutePath } from "../../schema.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
 import { SubagentJob } from "../../session/subagent-job.js"
+import { Global } from "@opencode/util/global"
 
 export const name = "subagent"
 
@@ -40,6 +44,10 @@ export const Input = Schema.Struct({
   sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
     description: "Send a follow-up to an existing subagent, running or finished. Omit to start a new one.",
   }),
+  worktree: Schema.optionalKey(Schema.String).annotate({
+    description:
+      "Optional worktree directory (path) to run a NEW subagent in. Must identify an existing worktree known to OpenCode and belonging to the current project (SubagentTool enforces known-worktree selection; Session.create validates existence/same-project ownership and destination availability). When omitted, the child inherits the parent session's location. Ignored for follow-ups to existing subagent sessions (their location does not change).",
+  }),
 })
 
 export const Output = Schema.Struct({
@@ -53,6 +61,7 @@ export const description = [
   "Keep working on non-overlapping tasks, or briefly tell the user what you launched and end your response. Do not sleep, poll, or proactively check on the child's progress.",
   "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
   "Pass the returned sessionID to continue that specific child conversation. A follow-up to a running child joins its current run.",
+  "Optional `worktree` runs a NEW child in that existing, same-project worktree known to OpenCode; relative file paths and default shell cwd follow the child's effective location. `worktree` is not a filesystem sandbox and is not applied to resumed sessions.",
 ].join("\n")
 
 export const Plugin = {
@@ -159,6 +168,29 @@ export const Plugin = {
                 return yield* new ToolFailure({
                   message: `Session ${existing.id} is not a child of the current session`,
                 })
+              if (existing !== undefined && input.worktree !== undefined)
+                return yield* new ToolFailure({
+                  message: `Cannot change worktree for existing subagent session: ${existing.id}`,
+                })
+
+              let childLocation: Location.Ref | undefined
+              let requestedWorktree: string | undefined
+              if (existing === undefined && input.worktree !== undefined) {
+                const raw = input.worktree.trim()
+                if (!raw) return yield* new ToolFailure({ message: "worktree must not be empty" })
+                requestedWorktree = raw
+                const expanded = raw === "~" ? Global.Path.home : raw.startsWith("~/") ? path.join(Global.Path.home, raw.slice(2)) : raw
+                const directory = AbsolutePath.make(path.resolve(parent.location.directory, expanded))
+                const known = yield* ctx.worktree.list({ projectID: parent.projectID }).pipe(
+                  Effect.mapError((error) => new ToolFailure({ message: "Unable to list worktrees", error })),
+                )
+                const match = known.find((item) => path.resolve(item.directory) === path.resolve(directory))
+                if (!match)
+                  return yield* new ToolFailure({
+                    message: `Worktree is not a known worktree of this project: ${directory}`,
+                  })
+                childLocation = Location.Ref.make({ directory: AbsolutePath.make(path.resolve(match.directory)) })
+              }
               const override = input.model === undefined ? undefined : yield* resolveModel(input.model)
               // Continuing with a different agent switches the child, mirroring create semantics
               // where an explicit model wins over the agent's configured model, which wins over the inherited one.
@@ -176,19 +208,50 @@ export const Plugin = {
               }
 
               const model = override ?? agent.model ?? parent.model
+              if (existing === undefined && childLocation && requestedWorktree) {
+                // Revalidate immediately before creation to reduce TOCTOU; Session.create also probes.
+                const known = yield* ctx.worktree.list({ projectID: parent.projectID }).pipe(
+                  Effect.mapError((error) => new ToolFailure({ message: "Unable to list worktrees", error })),
+                )
+                if (!known.some((item) => path.resolve(item.directory) === path.resolve(childLocation!.directory)))
+                  return yield* new ToolFailure({
+                    message: `Worktree is no longer a known worktree of this project: ${childLocation.directory}`,
+                  })
+              }
+
               const child =
                 existing ??
                 (yield* sessions
                   .create({
                     parentID: context.sessionID,
+                    ...(childLocation ? { location: childLocation } : {}),
                     title: input.description,
                     agent: agent.id,
                     model,
                   })
                   .pipe(
                     Effect.mapError(
-                      (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
+                      (error) =>
+                        new ToolFailure({
+                          message: childLocation
+                            ? `Failed to create subagent in worktree: ${childLocation.directory}`
+                            : `Parent session not found: ${context.sessionID}`,
+                          error,
+                        }),
                     ),
+                    // Session.create currently rejects invalid/unavailable explicit child locations as
+                    // fail-closed defects (not typed errors). Convert them to a tool failure so the
+                    // parent turn receives a meaningful error and stays healthy; interrupts survive.
+                    Effect.catchDefect((defect) => {
+                      const reason = defect instanceof Error ? defect.message : String(defect)
+                      return Effect.fail(
+                        new ToolFailure({
+                          message: childLocation
+                            ? `Failed to create subagent in worktree: ${childLocation.directory} (${reason})`
+                            : `Failed to create subagent session (${reason})`,
+                        }),
+                      )
+                    }),
                   ))
 
               // A child that is not draining yet must be admitted without waking: the job's resume
@@ -236,10 +299,11 @@ export const Plugin = {
     yield* ctx.tool.hook("execute.before", (event) =>
       Effect.sync(() => {
         if (event.tool !== name || !Predicate.isObject(event.input)) return
-        if (event.input.model !== "" && event.input.sessionID !== "") return
+        if (event.input.model !== "" && event.input.sessionID !== "" && event.input.worktree !== "") return
         const input = { ...event.input }
         if (input.model === "") delete input.model
         if (input.sessionID === "") delete input.sessionID
+        if (input.worktree === "") delete input.worktree
         event.input = input
       }),
     )

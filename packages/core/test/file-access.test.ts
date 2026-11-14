@@ -1,10 +1,11 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { FileAccess } from "@opencode/core/file-access"
 import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
+import { Project } from "@opencode/core/project"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -174,5 +175,84 @@ describe("FileAccess.authorizeRead", () => {
       expect(requests[1].resources).toEqual([slash(path.join(git, "nested", "*"))])
       expect(Object.hasOwn(requests[1], "metadata")).toBe(false)
     }).pipe(provide(requests))
+  })
+})
+
+describe("FileAccess permission semantics across session locations", () => {
+  it.live("evaluates internal resources relative to effective location for same physical project file", () => {
+    const requests: Permission.AssertInput[] = []
+    return tmpdirScoped().pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const root = AbsolutePath.make(tmp.path)
+          const wt = AbsolutePath.make(path.join(tmp.path, ".worktrees", "A"))
+          yield* Effect.promise(async () => {
+            await fs.mkdir(wt, { recursive: true })
+            await fs.writeFile(path.join(tmp.path, "README.md"), "root")
+          })
+
+          const resolveAt = (directory: AbsolutePath, file: string) =>
+            Effect.gen(function* () {
+              const access = yield* FileAccess.Service
+              return yield* access.resolve({ path: file, kind: "file" })
+            }).pipe(
+              Effect.provide(
+                AppNodeBuilder.build(LayerNode.group([FileAccess.node, Location.node]), [
+                  Location.node.replace(
+                    Layer.succeed(
+                      Location.Service,
+                      Location.Service.of({
+                        directory,
+                        project: { id: Project.ID.global, directory: root, canonical: root },
+                      }),
+                    ),
+                  ),
+                  Permission.node.replace(permissionLayer({ assert: (input) => Effect.sync(() => requests.push(input)) })),
+                ]),
+              ),
+            )
+
+          const parentTarget = yield* resolveAt(root, "README.md")
+          const childTarget = yield* resolveAt(wt, "../../README.md")
+
+          expect(parentTarget.absolute).toBe(AbsolutePath.make(path.join(tmp.path, "README.md")))
+          expect(parentTarget.resource).toBe("README.md")
+          expect(parentTarget.externalDirectory).toBeUndefined()
+
+          expect(childTarget.absolute).toBe(parentTarget.absolute)
+          expect(childTarget.resource).toBe(slash(path.relative(wt, path.join(tmp.path, "README.md")) || "."))
+          expect(childTarget.externalDirectory).toBeUndefined()
+
+          // Same physical file, different resource form by effective location.
+          const denyRoot = [{ action: "edit" as const, resource: "README.md", effect: "deny" as const }]
+          expect(Permission.evaluate("edit", parentTarget.resource, denyRoot)).toMatchObject({
+            effect: "deny",
+            resource: "README.md",
+          })
+          expect(Permission.evaluate("edit", childTarget.resource, denyRoot)).toMatchObject({
+            effect: "ask",
+            resource: "*",
+          })
+
+          const allowRelativeFromChild = [{ action: "edit" as const, resource: childTarget.resource, effect: "allow" as const }]
+          expect(Permission.evaluate("edit", childTarget.resource, allowRelativeFromChild)).toMatchObject({
+            effect: "allow",
+            resource: childTarget.resource,
+          })
+
+          const absoluteInternalDeny = [
+            { action: "edit" as const, resource: slash(path.join(tmp.path, "README.md")), effect: "deny" as const },
+          ]
+          expect(Permission.evaluate("edit", parentTarget.resource, absoluteInternalDeny)).toMatchObject({
+            effect: "ask",
+            resource: "*",
+          })
+
+          const external = yield* resolveAt(wt, "../../../../outside.txt")
+          expect(external.externalDirectory).toBeDefined()
+          expect(external.resource).toBe(slash(external.absolute))
+        }),
+      ),
+    )
   })
 })
