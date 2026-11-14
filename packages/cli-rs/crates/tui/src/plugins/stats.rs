@@ -56,7 +56,9 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     });
     // As TS's `StatsPage` resource: each mount asks afresh, and a reply after the route went is dropped.
     let mounted = state.clone();
-    let page = page.mounts().on(move |host, event| {
+    // The calendar and the logo compute their colors from the theme's, so a theme change calls the view (the 1.x route
+    // rendered again on one).
+    let page = page.palette().mounts().on(move |host, event| {
         let Event::Mount { mounted: mount, .. } = event else { return Handled::Pass };
         if *mount {
             mounted.mounts.set(mounted.mounts.get() + 1);
