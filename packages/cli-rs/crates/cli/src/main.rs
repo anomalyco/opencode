@@ -38,6 +38,16 @@ fn main() -> ExitCode {
     // Bun decodes the arguments the same way, with U+FFFD for bytes that are not UTF-8. Nothing reads the raw
     // arguments again.
     let args: Vec<String> = raw.iter().skip(1).map(|arg| arg.to_string_lossy().into_owned()).collect();
+    // `plugin dev` and `plugin test` are the native plugin author's, and not in the TypeScript tree the parser follows.
+    let (args, dev) = match commands::plugin_dev::take(&args) {
+        None => (args, None),
+        Some(Err(error)) => return exit(Err(error)),
+        Some(Ok(commands::plugin_dev::Native::Test(test))) => return exit(commands::plugin_dev::test(&test)),
+        Some(Ok(commands::plugin_dev::Native::Dev { dir, rest })) => match commands::plugin_dev::dev(&dir) {
+            Ok(dev) => (rest, Some(dev)),
+            Err(error) => return exit(Err(error)),
+        },
+    };
     prompt::init(&args);
     let invocation = match parse::parse(&args, &help::name()) {
         Outcome::Help(path) => return exit(help::show(&path)),
@@ -76,7 +86,9 @@ fn main() -> ExitCode {
         args = logged.as_str();
         "cli starting"
     );
-    let result = commands::run(&commands::Context { server: invocation.server.clone(), args }, cli);
+    let context =
+        commands::Context { server: invocation.server.clone(), args, dev: dev.as_ref().map(|dev| dev.library.clone()) };
+    let result = commands::run(&context, cli);
     if let Some(error) = result.as_ref().err().filter(|error| error.downcast_ref::<output::Exit>().is_none()) {
         log::error!(cause = format!("{error:#}").as_str(), args = logged.as_str(); "cli process failed");
     }

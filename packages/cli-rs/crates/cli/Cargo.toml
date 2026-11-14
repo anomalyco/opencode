@@ -31,6 +31,8 @@ serde_json.workspace = true
 tokio.workspace = true
 unicode-width.workspace = true
 url.workspace = true
+# `plugin test` renders on the headless renderer.
+opentui.workspace = true
 opencode-acp.workspace = true
 opencode-api.workspace = true
 opencode-latex.workspace = true
@@ -48,8 +50,6 @@ opencode-util.workspace = true
 rustix = { workspace = true, features = ["termios", "event", "pty"] }
 libc.workspace = true
 
-[target.'cfg(not(unix))'.dependencies]
-opentui.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
