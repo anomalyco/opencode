@@ -308,7 +308,12 @@ impl Monitor {
         if let Some(index) = plugins.iter().position(|stats| stats.artifact == *artifact) {
             return Slot(index as u16);
         }
-        plugins.push(Stats { artifact: artifact.clone(), ..Stats::default() });
+        // A library is opened (and its load timed) before its ID is known: the slot with the ID takes that load over.
+        let load = plugins
+            .iter()
+            .find(|stats| stats.artifact == Artifact { id: String::new(), ..artifact.clone() })
+            .and_then(|stats| stats.load);
+        plugins.push(Stats { artifact: artifact.clone(), load, ..Stats::default() });
         let slot = (plugins.len() - 1) as u16;
         if let Some((record, _)) = self.record.get() {
             record.name(slot, artifact);
