@@ -26,9 +26,10 @@ export const make = Effect.fn("PluginModule.make")(function* () {
   const watched = new Set<string>()
   const watch = Effect.fn("PluginModule.watch")(function* (file: string) {
     if (watched.has(file)) return
+    const target = yield* Effect.promise(() => watchTarget(file))
+    if (!target) return
     watched.add(file)
     const ready = yield* Deferred.make<void>()
-    const target = yield* Effect.promise(() => watchTarget(file))
     const updates = yield* watcher.subscribe(target, Deferred.succeed(ready, undefined))
     yield* updates.pipe(
       Stream.runForEach(() => PubSub.publish(changes, undefined)),
@@ -64,14 +65,14 @@ export function source(target: string, version?: string): Source {
   return { type: "package", target, ...(version ? { version } : {}) }
 }
 
-// A missing dependency may have missing parents too. Watch the nearest existing
-// ancestor recursively so creating the rest of the path can trigger recovery.
-function watchTarget(file: string): Promise<Watcher.WatchInput> {
+// Dependency recovery directories may contain the engine log or unrelated work.
+// Watch source files only; retry missing imports on the next config activation.
+function watchTarget(file: string): Promise<Watcher.WatchInput | undefined> {
   return stat(file).then(
-    (info) => ({ path: file, type: info.isDirectory() ? "directory" : "file" }),
+    (info) => (info.isFile() ? { path: file, type: "file" } : undefined),
     (cause) => {
-      if (path.dirname(file) === file) throw cause
-      return watchTarget(path.dirname(file))
+      if (cause.code === "ENOENT" || cause.code === "ENOTDIR") return undefined
+      throw cause
     },
   )
 }

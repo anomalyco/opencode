@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
-import { cp, mkdir } from "node:fs/promises"
+import { cp } from "node:fs/promises"
 import path from "node:path"
-import { Brand, Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schedule, Schema, Scope, Stream } from "effect"
+import { Brand, Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Stream } from "effect"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
@@ -32,35 +32,34 @@ const it = testEffect(
   ),
 )
 
-it.live("watches creation of an external helper with missing parent directories", () =>
+it.live("does not watch existing ancestors of a missing plugin import", () =>
   Effect.gen(function* () {
     const directory = yield* tmpdirScoped()
     const entry = path.join(directory.path, "plugin/index.ts")
+    const targets: string[] = []
     yield* Effect.promise(() => Bun.write(entry, 'export { default } from "../shared/new/nested/helper.ts"'))
-    const modules = yield* PluginModule.make()
+    const modules = yield* PluginModule.make().pipe(
+      Effect.provideService(Watcher.Service, {
+        subscribe: (target, ready = Effect.void) =>
+          Effect.sync(() => targets.push(target.path)).pipe(Effect.andThen(ready), Effect.as(Stream.never)),
+      }),
+    )
     const operation = { type: "add" as const, target: path.dirname(entry), options: {} }
     expect(Exit.isFailure(yield* modules.load(operation).pipe(Effect.exit))).toBe(true)
-    // Parcel's Windows backend starts reading changes on its own thread after subscribe resolves, so a file created
-    // right away can go unseen. Create probe directories, one event each, until the watch reports one.
-    const armed = yield* modules.changes().pipe(Stream.runHead, Effect.forkScoped({ startImmediately: true }))
-    let probes = 0
-    yield* Effect.promise(() => mkdir(path.join(directory.path, `probe-${probes++}`))).pipe(
-      Effect.andThen(Fiber.join(armed).pipe(Effect.timeout("500 millis"))),
-      Effect.retry(Schedule.forever),
-      Effect.timeout("10 seconds"),
-    )
-    const changed = yield* modules
-      .changes()
-      .pipe(Stream.runHead, Effect.timeout("5 seconds"), Effect.forkScoped({ startImmediately: true }))
+    expect(targets).toHaveLength(1)
+    expect(targets[0]).toEndWith("plugin/index.ts")
     yield* Effect.promise(() =>
       Bun.write(
         path.join(directory.path, "shared/new/nested/helper.ts"),
         'export default { id: "appeared", async setup() {} }',
       ),
     )
-    yield* Fiber.join(changed)
-    const loaded = yield* modules.load(operation)
-    expect(loaded).toMatchObject({ id: "appeared" })
+    // A later config activation can retry the source without a broad recovery watch.
+    expect(yield* modules.load(operation)).toMatchObject({ id: "appeared" })
+    const count = targets.length
+    yield* Effect.promise(() => Bun.write(entry, 'export { default } from "../shared/missing.ts"'))
+    expect(Exit.isFailure(yield* modules.load(operation).pipe(Effect.exit))).toBe(true)
+    expect(targets).toHaveLength(count)
   }),
 )
 
