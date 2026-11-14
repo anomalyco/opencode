@@ -2358,3 +2358,18 @@ fn a_js_plugins_trees_content_and_reads_are_held_to_the_limits() {
     pipe.settle();
     assert_eq!(limits::held(LAB), limits::Held::default(), "held once disabled");
 }
+
+// Expected (Pl on the pipe): a JS plugin that fails gives back what it held, the reads it watched among it.
+#[test]
+fn a_failed_js_plugin_holds_nothing() {
+    use opencode_plugin::limits;
+    let Some(config) = config() else { return };
+    let pipe = lab(config);
+    pipe.harness.tui.keymap.dispatch("lab.store", Some(&"z".repeat(2000)));
+    pipe.settle();
+    shows(&pipe, "zzzz");
+    pipe.harness.tui.keymap.dispatch("lab.bigint", None);
+    quietly(&pipe, "the lab failed", || failed(&pipe, LAB).is_some());
+    pipe.settle();
+    assert_eq!(limits::held(LAB), limits::Held::default(), "held once failed");
+}

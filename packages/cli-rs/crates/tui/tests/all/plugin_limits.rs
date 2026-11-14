@@ -34,13 +34,13 @@ thread_local! {
     /// The route's views, as the plugin counts them.
     static VIEWS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
     /// Each view of the route and of the sibling, and whether it heard that its plugin woke.
-    static HEARD: RefCell<Vec<(&'static str, bool)>> = const { RefCell::new(Vec::new()) };
+    static HEARD: RefCell<Vec<(&'static str, bool, bool)>> = const { RefCell::new(Vec::new()) };
 }
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.surface(v2::Surface::new("tree", v2::Place::Route("tree".into()), |cx| {
         VIEWS.with(|views| views.set(views.get() + 1));
-        HEARD.with(|heard| heard.borrow_mut().push(("route", cx.input.changed.woken)));
+        HEARD.with(|heard| heard.borrow_mut().push(("route", cx.input.changed.woken, cx.input.changed.size)));
         let subject = SUBJECT.with(|subject| subject.borrow().clone());
         subject(cx)
     }));
@@ -84,7 +84,7 @@ thread_local! {
 
 fn sibling(setup: &mut abi::Setup) -> Result<(), String> {
     setup.surface(v2::Surface::new("beside", v2::Place::Slot(abi::Placement::append("app")), |cx| {
-        HEARD.with(|heard| heard.borrow_mut().push(("beside", cx.input.changed.woken)));
+        HEARD.with(|heard| heard.borrow_mut().push(("beside", cx.input.changed.woken, cx.input.changed.size)));
         let beside = BESIDE.with(|beside| beside.borrow().clone());
         beside(cx)
     }));
@@ -1451,13 +1451,21 @@ fn two_plugins_share_the_rows_of_a_frame() {
             let first = harness.app.render().text();
             let deferred = reconcile::work().since(before).deferred;
             assert_eq!(deferred, 1, "{carrier:?}: revisions left for the next frame");
+            // Before the next paint, storage changes, which draws the sibling in the next frame's rows; then the
+            // terminal resizes, which finds none left: its cause joins the revision that waits.
+            opencode_tui::plugins::host::host(&harness.tui).storage_changed();
+            harness.app.advance(Duration::ZERO);
+            harness.app.resize(81, 30);
             let second = caught_up(&harness);
-            // The revision left for the next frame hears what changed for it, as the other does (P6a's input).
+            // The revision left for the next frame hears what changed for it, as the other does (P6a's input), each
+            // cause that asked for it while it waited.
             let heard = HEARD.with(|heard| heard.borrow().clone());
             for surface in ["route", "beside"] {
-                let woke = heard.iter().any(|(name, woke)| *name == surface && *woke);
+                let woke = heard.iter().any(|(name, woke, _)| *name == surface && *woke);
                 assert!(woke, "{carrier:?}: {surface} never heard it woke: {heard:?}");
             }
+            let both = heard.iter().any(|(name, woke, size)| *name == "beside" && *woke && *size);
+            assert!(both, "{carrier:?}: the waiting revision lost a cause: {heard:?}");
             (first, second)
         };
         assert!(first.contains("route 1") != first.contains("beside 1"), "{carrier:?}: one revision a frame\n{first}");
