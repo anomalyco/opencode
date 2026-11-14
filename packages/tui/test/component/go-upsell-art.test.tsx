@@ -35,6 +35,10 @@ test("the art stops every frame when hidden, closed, or still, and leaves nothin
     ),
     { width: 60, height: 20 },
   )
+  // With RGB the logo's block cells are drawn as half blocks, and the test renderer turns RGB on when
+  // COLORTERM=truecolor is set. Pin it off so the frame check below doesn't depend on the shell.
+  const capabilities = app.renderer.capabilities
+  Object.defineProperty(app.renderer, "capabilities", { get: () => ({ ...capabilities, rgb: false }) })
   const draws = spyOn(OptimizedBuffer.prototype, "withBuffers")
   const setCell = spyOn(OptimizedBuffer.prototype, "setCell")
 
