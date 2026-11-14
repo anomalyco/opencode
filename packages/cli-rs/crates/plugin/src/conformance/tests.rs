@@ -1329,6 +1329,15 @@ fn the_protocol_machine_refuses_what_the_header_forbids() {
     assert!(after(&[request(input), ok("null"), request(input)]).is_some(), "an input answered null was called again");
     assert!(after(&[request(claim), ok("7"), request(input)]).is_some(), "a claim answered 7 was called again");
     assert!(after(&[request(claim), toast]).is_some(), "a claim's view was granted an effect");
+    let mut protocol = Protocol::default();
+    created(
+        &mut protocol,
+        r#"{"id":"p","commands":[],"fences":[],"slots":[],"routes":[],"storage":[],"searches":["s"]}"#,
+    );
+    protocol.event(&Event::Call { instance: 1, request: br#"{"type":"search","name":"s","query":"","options":[]}"# });
+    assert_eq!(protocol.broken(), None);
+    protocol.event(&toast);
+    assert!(protocol.broken().is_some(), "a search was granted an effect");
     // A create that failed is never destroyed; one whose manifest the host refused is.
     let mut protocol = Protocol::default();
     protocol.event(&Event::Create { instance: 3, major: 2, minor: 0, features: b"[]", options: b"" });
