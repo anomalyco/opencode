@@ -307,7 +307,11 @@ fn a_subagent_row_opens_its_child_session() {
     let found = h.app.wait_until(WAIT, || h.tui.route() == Route::Session { id: SessionID("ses_child".into()) });
     assert!(found, "still on {:?}", h.tui.route());
     h.wait_for("Child work");
-    assert!(support::lines(&h.log).iter().any(|line| line == "GET /api/session/ses_child/message"),);
+    // The title comes from the session's own read; its messages are a read of their own, which may go out later.
+    let read = h
+        .app
+        .wait_until(WAIT, || support::lines(&h.log).iter().any(|line| line == "GET /api/session/ses_child/message"));
+    assert!(read, "{:?}", support::lines(&h.log));
 }
 
 #[test]
