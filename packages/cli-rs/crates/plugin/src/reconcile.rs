@@ -17,7 +17,7 @@ use opentui::input::{MouseButton, MouseEventKind};
 use opentui::prelude::*;
 use opentui::style::Color;
 
-use crate::node::{Act, color, lay_out, styled};
+use crate::node::{Act, bordered, color, edges_of, lay_out, styled};
 use crate::{Host, SlotMount};
 
 /// What reconciling did to widgets, counted since the thread started.
@@ -568,7 +568,22 @@ impl Pass<'_, '_> {
         }
         count(|work| work.created += 1);
         let (widget, extra, children): (AnyWidget, Extra, Vec<Mounted>) = match node {
-            Node::Box { row, gap, padding, justify, align, bg, layout, on_click, children, .. } => {
+            Node::Box {
+                row,
+                gap,
+                padding,
+                justify,
+                align,
+                bg,
+                layout,
+                on_click,
+                children,
+                border,
+                padding_sides,
+                wrap,
+                overflow,
+                ..
+            } => {
                 let view = View::new(app);
                 if *row {
                     view.row();
@@ -576,11 +591,29 @@ impl Pass<'_, '_> {
                 if *gap > 0 {
                     view.gap(*gap);
                 }
-                if padding.0 > 0 {
-                    view.padding_x(padding.0);
+                match padding_sides {
+                    Some(edges) => {
+                        for (edge, cells) in edges_of(edges) {
+                            view.padding_edge(edge, cells.max(0));
+                        }
+                    }
+                    None => {
+                        if padding.0 > 0 {
+                            view.padding_x(padding.0);
+                        }
+                        if padding.1 > 0 {
+                            view.padding_y(padding.1);
+                        }
+                    }
                 }
-                if padding.1 > 0 {
-                    view.padding_y(padding.1);
+                if let Some(border) = border {
+                    bordered(&view, theme, border);
+                }
+                if *wrap {
+                    view.flex_wrap(opentui::layout::Wrap::Wrap);
+                }
+                if *overflow == abi::Overflow::Hidden {
+                    view.overflow(opentui::layout::Overflow::Hidden);
                 }
                 match justify {
                     abi::Justify::Start => {}
@@ -757,7 +790,22 @@ fn same_kind(old: &Node, new: &Node) -> bool {
 /// The node without its children, which are kept apart.
 fn shell(node: &Node) -> Node {
     match node {
-        Node::Box { id, row, gap, padding, justify, align, bg, layout, on_click, .. } => Node::Box {
+        Node::Box {
+            id,
+            row,
+            gap,
+            padding,
+            justify,
+            align,
+            bg,
+            layout,
+            on_click,
+            border,
+            padding_sides,
+            wrap,
+            overflow,
+            ..
+        } => Node::Box {
             id: id.clone(),
             row: *row,
             gap: *gap,
@@ -768,6 +816,10 @@ fn shell(node: &Node) -> Node {
             layout: *layout,
             on_click: on_click.clone(),
             children: Vec::new(),
+            border: border.clone(),
+            padding_sides: *padding_sides,
+            wrap: *wrap,
+            overflow: *overflow,
         },
         Node::Scroll { id, height, follow, layout, .. } => {
             Node::Scroll { id: id.clone(), height: *height, follow: *follow, layout: *layout, children: Vec::new() }
@@ -811,27 +863,29 @@ fn click_of(node: &Node) -> Option<&abi::Click> {
 /// A box changes in place when only its background and its click (one to another) change; its children are
 /// reconciled apart.
 fn box_change(old: &Node, new: &Node) -> Change {
-    let (
-        Node::Box { id, row, gap, padding, justify, align, bg, layout, on_click, .. },
-        Node::Box {
-            id: id2,
-            row: row2,
-            gap: gap2,
-            padding: padding2,
-            justify: justify2,
-            align: align2,
-            bg: bg2,
-            layout: layout2,
-            on_click: on_click2,
-            ..
-        },
-    ) = (old, new)
-    else {
+    let (Node::Box { bg, on_click, .. }, Node::Box { bg: bg2, on_click: on_click2, .. }) = (old, new) else {
         return Change::Replace;
     };
-    if (id, row, gap, padding, justify, align, layout) != (id2, row2, gap2, padding2, justify2, align2, layout2)
-        || on_click.is_some() != on_click2.is_some()
-    {
+    // Everything but the background and the click, children aside, must stay.
+    let rest = |node: &Node| match node {
+        Node::Box { id, row, gap, padding, justify, align, layout, border, padding_sides, wrap, overflow, .. } => {
+            Some((
+                id.clone(),
+                *row,
+                *gap,
+                *padding,
+                *justify,
+                *align,
+                *layout,
+                border.clone(),
+                *padding_sides,
+                *wrap,
+                *overflow,
+            ))
+        }
+        _ => None,
+    };
+    if rest(old) != rest(new) || on_click.is_some() != on_click2.is_some() {
         return Change::Replace;
     }
     if bg == bg2 && on_click == on_click2 { Change::Same } else { Change::InPlace }
@@ -893,7 +947,14 @@ fn paint_text(mounted: &Mounted, theme: &Theme) {
 fn restyle(mounted: &Mounted, env: &Env<'_>) {
     let theme = env.theme;
     match (&mounted.node, &mounted.extra) {
-        (Node::Box { bg: Some(bg), .. }, Extra::Box { view, .. }) => drop(view.bg(fill(theme, Some(bg)))),
+        (Node::Box { bg, border, .. }, Extra::Box { view, .. }) => {
+            if bg.is_some() {
+                view.bg(fill(theme, bg.as_ref()));
+            }
+            if let Some(border) = border {
+                bordered(view, theme, border);
+            }
+        }
         (Node::Text { .. }, Extra::Text { .. }) => paint_text(mounted, theme),
         (Node::Spinner { .. }, Extra::Spinner(spinner)) => spinner.set_color(theme.interactive().step(200)),
         (Node::Diff { .. }, Extra::Diff(paints)) => paints.restyle(theme),

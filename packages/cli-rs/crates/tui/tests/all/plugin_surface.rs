@@ -195,7 +195,7 @@ impl Model for Surfaces {
         let mut mounted: Option<u64> = None;
         let mut highest = 0;
         for (step, command) in commands.iter().enumerate() {
-            let fail = |property, detail: String| Some(Failure { property, step, detail });
+            let fail = |property, detail: String| Some(Failure { property, site: property, step, detail });
             let seen = board(|board| board.calls.len());
             let work = reconcile::work();
             apply(&harness, *command);
@@ -269,7 +269,7 @@ impl Model for Surfaces {
 }
 
 fn fail_at(step: usize, property: &'static str, detail: String) -> Option<Failure> {
-    Some(Failure { property, step, detail })
+    Some(Failure { property, site: property, step, detail })
 }
 
 // Expected: a surface's mounts get views only while they show, each with a generation of its own whose first view
