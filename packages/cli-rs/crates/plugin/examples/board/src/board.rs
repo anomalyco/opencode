@@ -34,10 +34,11 @@ struct Board {
     broken: bool,
 }
 
-/// The files: how many `layout` calls ran, and where the last step landed.
+/// The files: how many `layout` calls ran, the header's width the last one was told, and where the last step landed.
 #[derive(Default)]
 struct Files {
     layouts: u32,
+    told: Option<i32>,
     landed: String,
     /// What the last `files.read` read: the offset, the files' anchors and the top file.
     read: String,
@@ -132,8 +133,11 @@ fn files(setup: &mut Setup) {
         read.borrow_mut().read = format!("at {offset} of {anchors} top {top}");
     });
     let surface = v2::Surface::new("files", v2::Place::Route("files".into()), move |_| files_view(&shown.borrow()))
-        .layout(vec![v2::Notify::Scroll { id: "list".into() }], move |geometry| {
-            laid.borrow_mut().layouts += 1;
+        .layout(vec![v2::Notify::Node { id: "head".into() }], move |geometry| {
+            let told = geometry.rect("head").map(|rect| rect.width);
+            let mut laid = laid.borrow_mut();
+            laid.layouts += 1;
+            laid.told = told;
             let top = geometry.top("list", "file").map(|top| top.id.clone()).unwrap_or_default();
             let odd = top.trim_start_matches('f').parse::<usize>().is_ok_and(|file| file % 2 == 1);
             v2::LayoutReply::default()
@@ -149,7 +153,8 @@ fn files(setup: &mut Setup) {
 
 /// The files: a header, and a list of each file's name and patch, estimated at 5 rows whatever it has.
 fn files_view(files: &Files) -> v2::Node {
-    let header = format!("landed {} layouts {} {}", files.landed, files.layouts, files.read);
+    let told = files.told.map_or("-".to_owned(), |width| width.to_string());
+    let header = format!("landed {} layouts {} told {told} {}", files.landed, files.layouts, files.read);
     let head = v2::Node::row(vec![v2::Node::text(vec![Span::new(header)])]).with_id("head");
     let items = (0..FILES)
         .map(|file| {

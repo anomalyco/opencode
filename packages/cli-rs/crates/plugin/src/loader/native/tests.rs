@@ -2387,6 +2387,8 @@ unsafe extern "C" fn raw_call(_: *mut c_void, request: Bytes, out: *mut Owned) -
                     r#"{"type":"title","title":"t"}"#,
                     r#"{"type":"set-theme","name":"nord"}"#,
                     r#"{"type":"install-theme","name":"x","theme":{"theme":{}}}"#,
+                    // 2.0 (P3).
+                    r#"{"type":"scroll","target":{"type":"node","surface":"s","id":"l"},"verb":{"type":"by","rows":1}}"#,
                 ];
                 let statuses = asks.iter().map(|ask| table.call(ask).0);
                 RAW_STATUSES.with_borrow_mut(|known| known.extend(statuses));
@@ -2444,7 +2446,7 @@ fn a_render_that_asks_for_effects_gets_none() {
     assert_eq!(quiet.1, (0, 0, 0, None, Status::Active, 0));
     for mode in [0, 1] {
         let (statuses, mut seen) = outcome(mode);
-        assert_eq!(statuses, [abi::ERROR; 12], "mode {mode}");
+        assert_eq!(statuses, [abi::ERROR; 13], "mode {mode}");
         if mode == 1 {
             assert!(matches!(&seen.4, Status::Failed(error) if error.contains("bad result")), "{:?}", seen.4);
             assert_eq!(seen.1, 1, "one toast says the plugin failed");
@@ -2452,6 +2454,59 @@ fn a_render_that_asks_for_effects_gets_none() {
         }
         assert_eq!(seen, quiet.1, "mode {mode}");
     }
+}
+
+thread_local! {
+    /// The status the host answered the transcript plugin's scroll with, when its command ran.
+    static TX_STATUS: Cell<Option<i32>> = const { Cell::new(None) };
+}
+
+/// A plugin without the SDK whose one command scrolls the transcript.
+unsafe extern "C" fn tx_create(host: *const HostApi, _: Bytes, instance: *mut *mut c_void, out: *mut Owned) -> i32 {
+    RAW_HOST.set(host.cast_mut());
+    let manifest = r#"{"id":"tx","commands":[{"name":"tx.scroll","title":"Scroll","group":null,"slash":null,"keybind":null,"palette":false}],"fences":[],"slots":[],"routes":[],"storage":[]}"#;
+    // SAFETY: the loader passes valid pointers; the instance pointer is never read.
+    unsafe {
+        *instance = std::ptr::NonNull::<u8>::dangling().as_ptr().cast();
+        *out = Owned::from_vec(manifest.as_bytes().to_vec());
+    }
+    abi::OK
+}
+
+unsafe extern "C" fn tx_call(_: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
+    // SAFETY: the loader passes the request for the call.
+    let request = String::from_utf8_lossy(unsafe { request.as_slice() }).into_owned();
+    if request.contains(r#""type":"command""#) {
+        let scroll = r#"{"type":"scroll","target":{"type":"transcript"},"verb":{"type":"by","rows":1}}"#;
+        TX_STATUS.set(Some(Table(RAW_HOST.get()).call(scroll).0));
+    }
+    // SAFETY: `out` is valid for writes during the call.
+    unsafe { *out = Owned::from_vec(b"null".to_vec()) };
+    abi::OK
+}
+
+// Expected (decision 8, review big-boi 6, over the C ABI): a library's command the user runs is a handler of the
+// user's input, so the host takes its transcript verb.
+#[test]
+fn a_librarys_command_may_scroll_the_transcript() {
+    let host = host();
+    let api = PluginApi {
+        size: size_of::<PluginApi>(),
+        major: 1,
+        minor: V1_MINOR,
+        requires_minor: 4,
+        create: Some(tx_create),
+        call: Some(tx_call),
+        destroy: None,
+        free: Some(abi::runtime::free),
+        describe: None,
+    };
+    let (definition, error) = define(&dynamic(&host), Library::from_table(&api, 1, V1_MINOR).unwrap(), None).unwrap();
+    let registry = Registry::define(Vec::new(), []);
+    registry.load(&dynamic(&host), definition.external("tx.so", error));
+    TX_STATUS.set(None);
+    assert!(matches!(host.keymap().dispatch("tx.scroll", None), RunResult::Ok));
+    assert_eq!(TX_STATUS.get(), Some(abi::OK));
 }
 
 /// The raw plugin as a 1.3 plugin with one fence, `raw`.
