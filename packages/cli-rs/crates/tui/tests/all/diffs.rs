@@ -513,3 +513,86 @@ fn ctrl_c_in_the_viewer_is_the_hosts() {
     h.keys(&["ctrl+c"]);
     assert!(h.app.app().is_quitting(), "ctrl+c did not exit:\n{}", h.app.text());
 }
+
+/// The viewer's settings as the TUI config holds them now.
+fn diffs_setting(h: &Diffs) -> serde_json::Value {
+    h.tui.settings.info().to_value()["diffs"].clone()
+}
+
+// Expected (P6c, `Read::setting` and `Host::set_setting`): `v` saves the view the viewer shows, and a plugin's write of a
+// value its setting does not take, or of a name the host does not name, saves nothing.
+#[test]
+fn a_setting_saves_only_what_it_takes() {
+    let h = route(2, 4, 140, 30);
+    h.keys(&["v"]);
+    h.wait("the view was not saved", || diffs_setting(&h)["view"] == "unified");
+    let setup = |setup: &mut opencode_plugin::abi::Setup| {
+        let command = opencode_plugin::abi::Command { name: "probe.set".into(), ..Default::default() };
+        setup.command(command, |host, _| {
+            host.set_setting("diffs.view", json!("sideways"));
+            host.set_setting("diffs.tree", json!("yes"));
+            host.set_setting("theme.name", json!("light"));
+        });
+        Ok(())
+    };
+    opencode_tui::plugins::host::add(&h.tui, opencode_plugin::abi::Plugin { id: "probe", setup }.into());
+    h.dispatch("probe.set");
+    h.settle();
+    assert_eq!(diffs_setting(&h)["view"], "unified");
+    assert!(diffs_setting(&h)["tree"].is_null(), "{}", diffs_setting(&h));
+    assert_ne!(h.tui.settings.info().to_value()["theme"]["name"], "light");
+}
+
+// Expected (P6c, `PanelInput::forced`): `f` in a panel the room forces full screen changes nothing and saves nothing; with
+// room it goes full screen and saves it.
+#[test]
+fn full_screen_is_saved_only_when_the_panel_toggles() {
+    for (width, saved) in [(100, serde_json::Value::Null), (140, json!(true))] {
+        let h = mount_with(support::session_route("ses_a"), json!([hunk_file(0, 4)]), width, 30);
+        h.wait_for("Review");
+        h.tui.keymap.dispatch("diff.open", None);
+        h.wait_for("src/f0000.rs");
+        h.keys(&["f"]);
+        h.app.advance(Duration::from_millis(50));
+        assert_eq!(diffs_setting(&h)["fullscreen"], saved, "at {width}");
+    }
+}
+
+// Expected (P6c, a select's `query`): the base picker asks the server for the branches of what is typed, once it stayed
+// 150 ms, and shows its empty text when none match.
+#[test]
+fn the_base_picker_searches_the_server_as_the_user_types() {
+    let files: Vec<Value> = (0..2).map(|index| hunk_file(index, 4)).collect();
+    let memory = Memory::new(
+        routes(Value::Array(files))
+            .into_iter()
+            .chain([MemoryRoute::json("GET", "/api/vcs/branch", 200, &json!({ "location": { "directory": DIRECTORY }, "data": [] }))])
+            .collect(),
+    );
+    let config = json!({ "animations": false, "diffs": { "source": "branch" } });
+    let deps = Deps {
+        config: support::config(support::decode(&config.to_string())),
+        route: Route::Home,
+        events: true,
+        ..support::deps(Arc::new(memory.clone()))
+    };
+    let h = Diffs { harness: support::mount(120, 30, deps), memory, turns: Cell::new(0) };
+    h.wait_for("/project");
+    h.tui.keymap.dispatch("diff.open", None);
+    h.wait_for("≡ f0000.rs");
+    h.keys(&["d"]);
+    h.wait_for("Diff source");
+    h.keys(&["down", "down", "down", "return"]);
+    h.wait_for("No branches found");
+    let searched = |search: &str| {
+        h.memory.requests().iter().any(|logged| {
+            logged.path == "/api/vcs/branch" && logged.query.get("search").is_some_and(|values| values == &[search])
+        })
+    };
+    h.app.type_text("rel");
+    h.settle();
+    assert!(!searched("rel"), "the search did not wait");
+    h.app.advance(Duration::from_millis(200));
+    h.wait("the picker did not search the server", || searched("rel"));
+    h.wait_for("No branches found");
+}
