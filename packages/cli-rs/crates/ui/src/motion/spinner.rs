@@ -1,11 +1,10 @@
 //! The spinner: `component/spinner.tsx` and `component/spinner-renderable.ts`.
 
 use super::text::{paint_shaded, shimmer_strength_at};
-use super::{Clock, Drawn, OneCellMotion, channels, millis, one_cell_frame, rgba, running, tick_every, tick_frames};
+use super::{Motion, OneCellMotion, channels, millis, one_cell_frame, rgba, running};
 use opentui::App;
 use opentui::prelude::*;
 use opentui::widget::{Component, Constraint, Custom, Element, Painter, Widget};
-use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -66,10 +65,9 @@ struct SpinnerView {
     shimmer: Option<Color>,
     animations: bool,
     still: String,
-    clock: Clock,
+    motion: Rc<Motion>,
     /// A sequenced one-cell motion and the age it starts at: its frame and level follow the time, not the glyphs.
     sequence: Option<(OneCellMotion, Duration)>,
-    drawn: Rc<Drawn>,
 }
 
 impl Spinner {
@@ -82,9 +80,8 @@ impl Spinner {
             shimmer: None,
             animations: true,
             still: "⋯".to_owned(),
-            clock: Clock::default(),
+            motion: Motion::new(app, false, None, None, Duration::ZERO),
             sequence: None,
-            drawn: Rc::default(),
         };
         let spinner = Self { widget: Custom::measured(app, view).shrink(0.0), app: app.clone() };
         spinner.restart();
@@ -125,7 +122,7 @@ impl Spinner {
     pub fn frames<S: AsRef<str>>(self, frames: &[S]) -> Self {
         self.widget.update(|view| {
             view.glyphs = split(frames);
-            view.clock = Clock::default();
+            view.motion.clock.set(Duration::ZERO);
         });
         self.restart();
         self
@@ -195,21 +192,15 @@ impl Spinner {
         self.widget.with(SpinnerView::frame)
     }
 
-    /// Replaces the clock, which stops the old driver, and starts the one the settings need.
+    /// Replaces the motion, which ends the old one, with the one the settings need: a shimmer moves on every frame,
+    /// a stepped spinner one interval per tick.
     fn restart(&self) {
-        let (clock, interval, every_frame, drawn) = self.widget.update(|view| {
-            view.clock = Rc::new(Cell::new(view.clock.get()));
-            let moving = view.animations && (view.glyphs.len() > 1 || view.shimmer.is_some());
-            (moving.then(|| Rc::clone(&view.clock)), view.interval, view.shimmer.is_some(), Rc::clone(&view.drawn))
+        self.widget.update(|view| {
+            let moving =
+                view.animations && (view.shimmer.is_some() || (view.glyphs.len() > 1 && !view.interval.is_zero()));
+            let step = view.shimmer.is_none().then_some(view.interval);
+            view.motion = Motion::new(&self.app, moving, step, None, view.motion.clock.get());
         });
-        let Some(clock) = clock else { return };
-        if every_frame {
-            tick_frames(&self.app, &clock, None, Some(&drawn));
-            return;
-        }
-        if !interval.is_zero() {
-            tick_every(&self.app, interval, &clock, &drawn);
-        }
     }
 }
 
@@ -220,7 +211,7 @@ impl SpinnerView {
     }
 
     fn frame(&self) -> usize {
-        spinner_frame(self.glyphs.len(), self.interval, self.clock.get())
+        spinner_frame(self.glyphs.len(), self.interval, self.motion.clock.get())
     }
 
     fn line(&self) -> String {
@@ -235,19 +226,19 @@ impl SpinnerView {
 
 impl Component for SpinnerView {
     fn paint(&self, painter: &mut Painter<'_>) {
-        self.drawn.paint(painter);
+        self.motion.paint(painter);
         let base = self.color.base();
         if !self.moving() {
             painter.text(0, 0, &self.line(), Style::new().fg(base).bg(Color::TRANSPARENT));
             return;
         }
         if let Some(shimmer) = self.shimmer {
-            let elapsed = millis(self.clock.get());
+            let elapsed = millis(self.motion.clock.get());
             paint_shaded(painter, &self.line(), base, shimmer, |column, end| shimmer_strength_at(elapsed, column, end));
             return;
         }
         if let Some((motion, age)) = &self.sequence {
-            let frame = one_cell_frame(motion, millis(*age + self.clock.get()));
+            let frame = one_cell_frame(motion, millis(*age + self.motion.clock.get()));
             let [r, g, b, a] = channels(base);
             painter.text(0, 0, &frame.glyph, Style::new().fg(rgba(r, g, b, a * frame.level)).bg(Color::TRANSPARENT));
             return;

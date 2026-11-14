@@ -3,14 +3,15 @@
 //!
 //! Each widget keeps the time it has animated for and derives its frame from it, so a frame is a function of an
 //! instant: [`spinner_frame`], [`shimmer_strength`], and [`fade_strength`] give the same values the widgets paint.
-//! Stepped spinners advance on an app interval timer; shimmer and fade advance on [`App::animate`], every frame.
-//! Both follow the app clock, so `TestApp::advance` drives them. A spinner or shimmer that is not drawn stops until
-//! it paints again, and keeps no time meanwhile, as Core's `animationFps` does; a fade runs to its end.
+//! A widget's [`Motion`] moves that time on the app's shared animation clock, in the frames the clock shares among
+//! every animation: a stepped spinner by one interval per tick, so its glyph is its summed ticks; shimmer and fade by
+//! the time between frames. A widget that is not drawn stops until it paints again, and keeps no time meanwhile, as
+//! Core's `animationFps` does.
 //!
 //! The `animations` config switch is one per UI thread, as the TypeScript components all read
 //! `config.animations ?? true`: the app sets it with [`set_running`] at start and on every config change, and every
-//! widget here follows it at once. With it off a widget shows its still form and its driver stops; turning it back
-//! on resumes the drivers. [`enabled`] applies the config default.
+//! widget here follows it at once. With it off a widget shows its still form and its motion stops; turning it back
+//! on resumes the motion of each widget as it paints. [`enabled`] applies the config default.
 
 mod curve;
 mod one_cell;
@@ -27,12 +28,12 @@ pub use scanner::{ScannerOptions, ScannerStyle, scanner_colors, scanner_frames};
 pub use spinner::{ColorFn, SPINNER_FRAMES, SPINNER_INTERVAL, Spinner, SpinnerColor, one_cell_color, spinner_frame};
 pub use text::{FadeInText, ShimmerText, fade_strength, shimmer_strength};
 
-use crate::bind;
 use opentui::App;
+use opentui::app::{AnimationTick, Cx};
 use opentui::style::Color;
 use opentui::widget::Painter;
 use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 use std::time::Duration;
 
 /// Whether motion runs for a config `animations` value: on unless set to `false`.
@@ -46,170 +47,120 @@ pub fn toggle_title(animations: Option<bool>) -> &'static str {
 }
 
 thread_local! {
-    static SWITCH: Switch = Switch::default();
+    static OFF: Cell<bool> = const { Cell::new(false) };
 }
-
-/// The thread's `animations` switch and the drivers it stopped, to resume when it turns back on.
-#[derive(Default)]
-struct Switch {
-    off: Cell<bool>,
-    parked: RefCell<Vec<(Weak<Cell<Duration>>, Resume)>>,
-}
-
-type Resume = Box<dyn FnOnce(&App)>;
 
 /// Whether motion runs on this thread.
 pub fn running() -> bool {
-    SWITCH.with(|switch| !switch.off.get())
+    !OFF.get()
 }
 
-/// Turns motion on or off for every widget of this kit on this thread, and asks for a frame that shows it.
+/// Turns motion on or off for every widget of this kit on this thread, and asks for a frame that shows it. A
+/// widget's motion stops at its next tick after the switch turns off, and starts again when it paints after the
+/// switch turns on.
 pub fn set_running(app: &App, running: bool) {
-    let resumed = SWITCH.with(|switch| {
-        if switch.off.replace(!running) == !running || !running {
-            return Vec::new();
-        }
-        switch.parked.take()
-    });
-    for (_, resume) in resumed {
-        resume(app);
-    }
+    OFF.set(!running);
     app.request_redraw();
 }
 
-/// Keeps a stopped driver of `clock` to resume when motion turns back on, dropping those whose widget is gone.
-fn park(clock: &Weak<Cell<Duration>>, resume: impl FnOnce(&App) + 'static) {
-    SWITCH.with(|switch| {
-        let mut parked = switch.parked.borrow_mut();
-        parked.retain(|(clock, _)| clock.strong_count() > 0);
-        parked.push((Weak::clone(clock), Box::new(resume)));
-    });
+/// The time a widget has animated for, moved on the app's shared animation clock while the widget is drawn and
+/// motion runs. With a `step` below the app's frame rate it ticks `1 / step` times a second and moves one step per
+/// tick; otherwise it moves on every frame ([`App::animate`]) by the time between frames. It stops at `limit`.
+///
+/// A tick after a frame that did not paint the widget in view stops the motion, as OpenTUI parks a widget's ticks;
+/// the widget's next paint starts it again. A widget that is hidden, scrolled out of view, or under a collapsed
+/// parent is not painted, and a scroll box with few rows paints the ones out of view clipped away, which does not
+/// count either. So an undrawn widget costs no frames and no wakeups. A still motion never moves. Dropping the
+/// motion ends it.
+///
+/// Not `Widget::on_animation_tick`: its handle can only be made from the widget, which its own state cannot hold
+/// without a cycle, so a paint could not start it again; and it counts a clipped row as drawn.
+struct Motion {
+    app: App,
+    moving: bool,
+    step: Option<Duration>,
+    limit: Option<Duration>,
+    clock: Cell<Duration>,
+    /// The last frame that painted the widget in view, or the frame count when the motion started.
+    drawn: Cell<u64>,
+    tick: RefCell<Option<AnimationTick>>,
+    framing: Cell<bool>,
 }
 
-/// How long a widget has animated. Its driver holds it weakly, so dropping it, with the widget or by replacing it
-/// with a new clock, stops the driver at its next tick.
-type Clock = Rc<Cell<Duration>>;
+impl Motion {
+    /// Starts motion from `clock`, unless it is still or the switch is off.
+    fn new(app: &App, moving: bool, step: Option<Duration>, limit: Option<Duration>, clock: Duration) -> Rc<Self> {
+        let frame = Duration::from_secs(1) / app.options().max_fps.max(1);
+        // A tick at the frame rate would wake the loop for the tick and again for the frame slot after it.
+        let step = step.filter(|step| *step > frame + Duration::from_micros(1));
+        let motion = Rc::new(Self {
+            app: app.clone(),
+            moving,
+            step,
+            limit,
+            clock: Cell::new(clock),
+            drawn: Cell::new(0),
+            tick: RefCell::default(),
+            framing: Cell::new(false),
+        });
+        motion.start();
+        motion
+    }
 
-/// Whether a widget is drawn, for its driver: a widget that is hidden, scrolled out of view, or under a collapsed
-/// parent is not painted, and its driver stops at its first tick after a frame that did not paint it. The widget's
-/// next paint resumes it, so an undrawn widget costs no frames and no wakeups.
-#[derive(Default)]
-struct Drawn {
-    painted: Cell<bool>,
-    parked: Cell<Option<Unpark>>,
-}
-
-type Unpark = Box<dyn FnOnce(&Rc<Drawn>)>;
-
-impl Drawn {
-    /// Called from the widget's paint. A paint clipped away entirely does not count: a scroll box with few rows
-    /// paints the ones out of view too.
+    /// Called from the widget's paint.
     fn paint(self: &Rc<Self>, painter: &Painter<'_>) {
         let (_, _, width, height) = painter.visible_rect();
         if width == 0 || height == 0 {
             return;
         }
-        self.painted.set(true);
-        if let Some(resume) = self.parked.take() {
-            resume(self);
+        self.drawn.set(self.app.frame_number());
+        if self.tick.borrow().is_none() && !self.framing.get() {
+            self.start();
         }
     }
 
-    /// Whether a frame ran since the tick that saw frame `seen` without painting the widget. Moves `seen` on.
-    fn missed(&self, app: &App, seen: &mut u64) -> bool {
-        let frame = app.frame_number();
-        let ran = std::mem::replace(seen, frame) != frame;
-        ran && !self.painted.replace(false)
-    }
-}
-
-/// Advances `clock` by `interval` on every tick of an app interval timer, asking for a frame each time, until the
-/// widget is not drawn ([`Drawn`]). With motion off the driver parks.
-fn tick_every(app: &App, interval: Duration, clock: &Clock, drawn: &Rc<Drawn>) {
-    let drawn = Rc::clone(drawn);
-    let weak = Rc::downgrade(clock);
-    if !running() {
-        return park(&Rc::downgrade(clock), move |app| {
-            if let Some(clock) = weak.upgrade() {
-                tick_every(app, interval, &clock, &drawn);
+    fn start(self: &Rc<Self>) {
+        if !self.moving || !running() || self.limit.is_some_and(|limit| self.clock.get() >= limit) {
+            return;
+        }
+        self.drawn.set(self.app.frame_number());
+        let weak = Rc::downgrade(self);
+        let Some(step) = self.step else {
+            self.framing.set(true);
+            return self.app.animate(move |cx, elapsed| {
+                weak.upgrade().is_some_and(|motion| {
+                    let moving = motion.advance(cx, elapsed);
+                    motion.framing.set(moving);
+                    moving
+                })
+            });
+        };
+        let tick = self.app.on_animation_tick(1.0 / step.as_secs_f64(), move |cx, tick| {
+            let Some(motion) = weak.upgrade() else { return };
+            if !motion.advance(cx, step * tick.ticks as u32) {
+                drop(motion.tick.take());
             }
         });
+        *self.tick.borrow_mut() = Some(tick);
     }
-    let mut seen = app.frame_number();
-    let id = Rc::new(Cell::new(None));
-    let own = Rc::clone(&id);
-    id.set(Some(app.set_interval(interval, move |cx| {
-        let clock = weak.upgrade().filter(|_| running());
-        let Some(clock) = clock else {
-            if let Some(id) = own.take() {
-                cx.cancel_timer(id);
-            }
-            if let Some(clock) = weak.upgrade() {
-                tick_every(cx.app(), interval, &clock, &drawn);
-            }
-            return;
-        };
-        clock.set(clock.get() + interval);
-        if !drawn.missed(cx.app(), &mut seen) {
-            cx.request_redraw();
-            return;
-        }
-        if let Some(id) = own.take() {
-            cx.cancel_timer(id);
-        }
-        let (app, weak) = (cx.app().clone(), Weak::clone(&weak));
-        drawn.parked.set(Some(Box::new(move |drawn| {
-            if let Some(clock) = weak.upgrade() {
-                tick_every(&app, interval, &clock, drawn);
-                // The loop takes its deadline before it paints, so a timer armed in paint would wait for an
-                // unrelated wakeup; an animation makes it come around once.
-                app.animate(|_, _| false);
-            }
-        })));
-    })));
-}
 
-/// Advances `clock` by the time between frames until `limit` (if any) is reached, or, with `drawn`, until the widget
-/// is not drawn. With motion off a looping driver parks, and a limited one jumps to its end.
-fn tick_frames(app: &App, clock: &Clock, limit: Option<Duration>, drawn: Option<&Rc<Drawn>>) {
-    let weak: Weak<Cell<Duration>> = Rc::downgrade(clock);
-    let drawn = drawn.cloned();
-    let gate = drawn.clone();
-    let stop = move |clock: &Clock| match limit {
-        Some(limit) => clock.set(limit),
-        None => {
-            let (resume, gate) = (Weak::clone(&weak), gate.clone());
-            park(&weak, move |app| {
-                if let Some(clock) = resume.upgrade() {
-                    tick_frames(app, &clock, None, gate.as_ref());
-                }
-            });
-        }
-    };
-    if !running() {
-        return stop(clock);
-    }
-    let weak = Rc::downgrade(clock);
-    let mut seen = app.frame_number();
-    app.animate(bind!(weak, |clock, cx, elapsed| {
+    /// Moves the clock by `by`, unless the switch is off or the last frame did not paint the widget in view.
+    /// Returns whether to keep moving. It runs in the frame that paints the move, so it asks for none.
+    fn advance(&self, cx: &mut Cx<'_>, by: Duration) -> bool {
         if !running() {
-            stop(&clock);
+            // A fade jumps to its end, as `createAnimatable` does without animations.
+            if let Some(limit) = self.limit {
+                self.clock.set(limit);
+            }
             return false;
         }
-        let next = clock.get() + elapsed;
-        clock.set(limit.map_or(next, |limit| next.min(limit)));
-        if let Some(drawn) = drawn.as_ref().filter(|drawn| drawn.missed(cx.app(), &mut seen)) {
-            let (app, weak) = (cx.app().clone(), Rc::downgrade(&clock));
-            drawn.parked.set(Some(Box::new(move |drawn| {
-                if let Some(clock) = weak.upgrade() {
-                    tick_frames(&app, &clock, limit, Some(drawn));
-                }
-            })));
+        if self.drawn.get() < cx.app().frame_number() {
             return false;
         }
-        cx.request_redraw();
-        limit.is_none_or(|limit| next < limit)
-    }));
+        let next = self.clock.get() + by;
+        self.clock.set(self.limit.map_or(next, |limit| next.min(limit)));
+        self.limit.is_none_or(|limit| next < limit)
+    }
 }
 
 /// Milliseconds, as the TypeScript clocks count.
