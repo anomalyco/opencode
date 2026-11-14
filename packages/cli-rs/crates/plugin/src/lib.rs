@@ -125,6 +125,8 @@ pub trait Host: 'static {
     fn open_route(&self, _id: &str, _name: &str) {}
     /// Mounts the current route again, so changed slot claims and code-block renderers show.
     fn remount(&self) {}
+    /// The plugins on disk may load differently now (a held target was released): the host has the loader look again.
+    fn plugins_changed(&self) {}
     /// Runs the registered command `name` with `input` (a plugin's [`abi::Host::dispatch`], a click's
     /// [`abi::Action::Command`]). Called outside every plugin callback.
     fn dispatch(&self, _name: &str, _input: Option<&str>) {}
@@ -356,7 +358,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             revoked: RefCell::default(),
             mount: RefCell::default(),
             monitor: setup.monitor.clone(),
-            slot: setup.monitor.slot(setup.id()),
+            slot: setup.monitor.slot(&setup.artifact()),
         });
         let mut api = abi::Registered::new(setup.id(), None);
         api.set_waker(activation.waker());
@@ -595,8 +597,10 @@ impl Scope {
             return None;
         }
         let (out, timed) = self.monitor.call(self.slot, export, || self.attempt(host, f));
-        budget(&self.host, &self.id, &timed);
+        let panicked = matches!(out, Some(Err(_)));
+        budget(&self.host, &self.monitor, &self.id, &timed, panicked);
         if timed.overrun {
+            self.monitor.host_overran();
             log::error!("plugin {}: {export} took {} ms, a host bug in a built-in", self.id, timed.took.as_millis());
         }
         match out? {
@@ -1158,12 +1162,28 @@ thread_local! {
     static FLUSHING: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Tells the host, once a session, that plugin `id` became slow, as the budget said of its last call.
-pub(crate) fn budget(host: &Weak<dyn Host>, id: &str, timed: &contain::Timed) {
-    if let Some(cost) = timed.slow.clone() {
+/// Acts on what the budget said of a call of plugin `id`: a plugin that became slow is told once a session, unless the
+/// call `failed` it, which tells its own report; a call that opened a frame has the frames closed at the next paint.
+pub(crate) fn budget(
+    host: &Weak<dyn Host>,
+    monitor: &Rc<contain::Monitor>,
+    id: &str,
+    timed: &contain::Timed,
+    failed: bool,
+) {
+    if let Some(cost) = timed.slow.clone().filter(|_| !failed) {
         let id = id.to_owned();
         defer(host, move |host| host.slow(&id, &cost));
     }
+    let Some(strong) = host.upgrade().filter(|_| timed.opened && monitor.wants_close()) else { return };
+    let (host, monitor) = (host.clone(), monitor.clone());
+    // Animations run as a paint starts, before it counts the frame: the frame of these calls ends there.
+    strong.app().animate(move |_, _| {
+        for (id, cost) in monitor.close() {
+            defer(&host, move |host| host.slow(&id, &cost));
+        }
+        false
+    });
 }
 
 /// Queues `effect` on the host's one effect queue, which both paths share: it runs in order with every other plugin
@@ -1200,6 +1220,8 @@ pub(crate) struct Setup<'a> {
     registration: Registration,
     /// Times the plugin's calls.
     pub(crate) monitor: &'a Rc<contain::Monitor>,
+    /// The external build it is, if it is one: its target and digest.
+    artifact: Option<(&'a str, &'a str)>,
 }
 
 impl Setup<'_> {
@@ -1221,6 +1243,14 @@ impl Setup<'_> {
     /// Tells the registry how to learn that a call of this activation panicked: then it contributes nothing more.
     pub(crate) fn failure(&mut self, failure: ErrorFn) {
         self.registration.failure = Some(failure);
+    }
+
+    /// What the record names this plugin's calls by.
+    pub(crate) fn artifact(&self) -> contain::Artifact {
+        match self.artifact {
+            Some((target, digest)) => contain::Artifact::external(self.id, target, digest),
+            None => contain::Artifact::builtin(self.id),
+        }
     }
 
     /// Claims a place in the slot tree (TS `ui.slot`).
@@ -1465,31 +1495,31 @@ pub struct SetupFailed {
     pub kept: bool,
 }
 
-/// An external plugin that crashed or hung the client (synthesis 4.5). It stays disabled, in the client's state and not
-/// in `cli.json`, until the user enables it again or its build changes.
+/// An external plugin's build that crashed or hung the client (synthesis 4.5). Its library is not opened again, by
+/// this client or the next, until the user enables it or another build takes its target.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Crashed {
+    /// The ID its build described, for the manager.
     pub id: String,
+    pub target: String,
+    /// The build ([`Definition::digest`]).
+    pub digest: String,
     /// What the manager lists: "crashed the client in `render-slot` and is disabled".
     pub reason: String,
-    /// The build that crashed ([`Definition::digest`]), once the plugin loaded after the crash.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub digest: Option<String>,
 }
 
-/// Why an external plugin does not start as it loads.
+/// Why the loader may not open a target's library.
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum Blocked {
-    No,
-    /// It crashed the client: listed failed with the reason.
-    Crashed(String),
-    /// The client started in safe mode: listed inactive.
+pub enum Hold {
+    /// Its build crashed the client.
+    Crashed { id: String, reason: String },
+    /// The client started with every external plugin off.
     Safe,
-    /// It had crashed the client, and this is another build: it starts as the `plugins` entries say.
-    Cleared,
+    /// No parent guards this client, so no native plugin may run in it (decision 5): the reason.
+    Unsupervised(String),
 }
 
-type SaveCrashed = Box<dyn Fn(&[Crashed])>;
+type Forget = Box<dyn Fn(&Crashed)>;
 
 /// The host's plugins in enable order, and the configured entries it did not load.
 pub struct Registry {
@@ -1506,9 +1536,15 @@ pub struct Registry {
     live: Rc<slot::Live>,
     monitor: Rc<contain::Monitor>,
     crashed: RefCell<Vec<Crashed>>,
-    save_crashed: RefCell<Option<SaveCrashed>>,
-    /// Every external plugin starts disabled: a second crash that named no plugin (synthesis 4.5).
+    forget: RefCell<Option<Forget>>,
+    /// Every external plugin is held: a second crash that named no plugin (synthesis 4.5).
     safe: Cell<bool>,
+    /// Why every external plugin is held, when no parent guards the client.
+    unsupervised: RefCell<Option<String>>,
+    /// The targets the user enabled while they were held, this run.
+    released: RefCell<Vec<String>>,
+    /// The targets held now, never opened: by target, with the ID their crash named, and why.
+    held: RefCell<Vec<(String, Hold)>>,
 }
 
 impl Registry {
@@ -1547,8 +1583,11 @@ impl Registry {
             live: Rc::default(),
             monitor: Rc::new(contain::Monitor::new(contain::Limits::from_env())),
             crashed: RefCell::default(),
-            save_crashed: RefCell::default(),
+            forget: RefCell::default(),
             safe: Cell::new(false),
+            unsupervised: RefCell::default(),
+            released: RefCell::default(),
+            held: RefCell::default(),
         }
     }
 
@@ -1557,51 +1596,85 @@ impl Registry {
         &self.monitor
     }
 
-    /// The external plugins that crashed the client, before any loads: each loads disabled and listed failed with its
-    /// reason. `save` keeps the list whenever it changes: a build learned, a build changed, an enable.
-    pub fn set_crashed(&self, crashed: Vec<Crashed>, save: impl Fn(&[Crashed]) + 'static) {
+    /// The builds that crashed the client, before any loads. `forget` is told when an entry ends: the user enabled the
+    /// plugin, or another build took its target.
+    pub fn set_crashed(&self, crashed: Vec<Crashed>, forget: impl Fn(&Crashed) + 'static) {
         *self.crashed.borrow_mut() = crashed;
-        *self.save_crashed.borrow_mut() = Some(Box::new(save));
+        *self.forget.borrow_mut() = Some(Box::new(forget));
     }
 
-    /// The plugins that crashed the client, as kept.
+    /// The builds that crashed the client, as known.
     pub fn crashed(&self) -> Vec<Crashed> {
         self.crashed.borrow().clone()
     }
 
-    /// Starts every external plugin that loads from now on disabled, as after a second crash that named no plugin.
-    /// The user enables them one at a time; nothing of it is kept.
+    /// Holds every external plugin from now on, as after a second crash that named no plugin: the user enables them
+    /// one at a time. Nothing of it is kept.
     pub fn set_safe(&self) {
         self.safe.set(true);
     }
 
-    /// Whether `definition`, an external build, starts disabled. A crashed plugin learns its build at its first load;
-    /// another build ends the entry.
-    fn blocked(&self, definition: &Definition) -> Blocked {
-        let mut crashed = self.crashed.borrow_mut();
-        let Some(index) = crashed.iter().position(|entry| entry.id == definition.id) else {
-            return if self.safe.get() { Blocked::Safe } else { Blocked::No };
-        };
-        let blocked = match (crashed[index].digest.clone(), &definition.digest) {
-            (Some(seen), Some(build)) if seen != *build => {
-                crashed.remove(index);
-                Blocked::Cleared
-            }
-            (None, Some(build)) => {
-                crashed[index].digest = Some(build.clone());
-                Blocked::Crashed(crashed[index].reason.clone())
-            }
-            _ => return Blocked::Crashed(crashed[index].reason.clone()),
-        };
-        drop(crashed);
-        self.save_crashed();
-        blocked
+    /// Holds every external plugin, because no parent guards this client; `reason` says what to do.
+    pub fn set_unsupervised(&self, reason: impl Into<String>) {
+        *self.unsupervised.borrow_mut() = Some(reason.into());
     }
 
-    fn save_crashed(&self) {
-        if let Some(save) = &*self.save_crashed.borrow() {
-            save(&self.crashed.borrow());
+    /// Whether the loader may open the library of `target`, whose build is `digest`. A held target is listed, and
+    /// nothing of it is opened. A crash entry of another build at the target ends.
+    pub fn admit(&self, target: &str, digest: &str) -> bool {
+        let ended = {
+            let mut crashed = self.crashed.borrow_mut();
+            let index = crashed.iter().position(|entry| entry.target == target && entry.digest != digest);
+            index.map(|index| crashed.remove(index))
+        };
+        if let (Some(ended), Some(forget)) = (ended, &*self.forget.borrow()) {
+            forget(&ended);
         }
+        let released = self.released.borrow().iter().any(|known| known == target);
+        let crash = self.crashed.borrow().iter().find(|entry| entry.target == target).cloned();
+        let hold = match crash {
+            Some(crash) if !released => Some(Hold::Crashed { id: crash.id, reason: crash.reason }),
+            _ if released => None,
+            _ if self.safe.get() => Some(Hold::Safe),
+            _ => self.unsupervised.borrow().clone().map(Hold::Unsupervised),
+        };
+        let mut held = self.held.borrow_mut();
+        held.retain(|(known, _)| known != target);
+        match hold {
+            Some(hold) => {
+                held.push((target.to_owned(), hold));
+                false
+            }
+            None => true,
+        }
+    }
+
+    /// Whether `target` is held.
+    pub fn held(&self, target: &str) -> bool {
+        self.held.borrow().iter().any(|(known, _)| known == target)
+    }
+
+    /// Lets the user's enable of a held target through: it ends its crash entry, and the loader opens it next.
+    fn release(&self, host: &Rc<dyn Host>, id: &str) -> Option<Result<(), String>> {
+        let (target, hold) = {
+            let held = self.held.borrow();
+            let (target, hold) = held.iter().find(|(target, hold)| match hold {
+                Hold::Crashed { id: known, .. } => known == id || target == id,
+                _ => target == id,
+            })?;
+            (target.clone(), hold.clone())
+        };
+        if let Hold::Unsupervised(reason) = hold {
+            return Some(Err(reason));
+        }
+        self.held.borrow_mut().retain(|(known, _)| *known != target);
+        self.released.borrow_mut().push(target.clone());
+        let ended: Vec<Crashed> = self.crashed.borrow_mut().extract_if(.., |entry| entry.target == target).collect();
+        if let Some(forget) = &*self.forget.borrow() {
+            ended.iter().for_each(forget);
+        }
+        host.plugins_changed();
+        Some(Ok(()))
     }
 
     /// Applies the `plugins` entries of a changed `cli.json`, as TS reconciles on `config.data.plugins`: the
@@ -1693,8 +1766,6 @@ impl Registry {
             }
             return None;
         }
-        let blocked = self.blocked(&definition);
-        let free = matches!(blocked, Blocked::No | Blocked::Cleared);
         // Like TS (`context.tsx` restores the fallback), the replacement of an active built-in sets up before the
         // built-in stops, and a setup that fails leaves the built-in running.
         let builtin = self.with_target(&target, |_| ()).is_none().then(|| {
@@ -1705,36 +1776,25 @@ impl Registry {
                 .and_then(|builtin| builtin.active.as_ref().map(|(order, _)| *order))
         });
         let started = match builtin.flatten() {
-            Some(order) if free && self.enabled(&target, &definition.id) => {
-                match self.setup(host, &definition, Some(order)) {
-                    Ok(started) => Some(started),
-                    Err(error) => {
-                        let kept = format!("{error} (previous version still active)");
-                        self.set_unloaded(&target, Some(Status::Failed(kept)));
-                        return Some(SetupFailed { error, kept: false });
-                    }
+            Some(order) if self.enabled(&target, &definition.id) => match self.setup(host, &definition, Some(order)) {
+                Ok(started) => Some(started),
+                Err(error) => {
+                    let kept = format!("{error} (previous version still active)");
+                    self.set_unloaded(&target, Some(Status::Failed(kept)));
+                    return Some(SetupFailed { error, kept: false });
                 }
-            }
+            },
             _ => None,
         };
         let previous = {
             let mut plugins = self.plugins.borrow_mut();
-            let crashed = match &blocked {
-                Blocked::Crashed(reason) => Some(reason.clone()),
-                _ => None,
-            };
             match plugins.iter_mut().find(|plugin| plugin.definition.target() == Some(target.as_str())) {
                 Some(plugin) => {
-                    match &blocked {
-                        Blocked::Crashed(_) => plugin.enabled = false,
-                        Blocked::Cleared => plugin.enabled = self.enabled(&target, &definition.id),
-                        Blocked::No | Blocked::Safe => {}
-                    }
-                    (plugin.definition, plugin.failed) = (definition, crashed);
+                    (plugin.definition, plugin.failed) = (definition, None);
                     Some(plugin.active.take())
                 }
                 None => {
-                    let enabled = free && self.enabled(&target, &definition.id);
+                    let enabled = self.enabled(&target, &definition.id);
                     // Like TS, an external plugin with a built-in's ID replaces it, in its place.
                     match plugins
                         .iter_mut()
@@ -1744,16 +1804,14 @@ impl Registry {
                             builtin.place = builtin.active.as_ref().map(|(order, _)| *order).or(builtin.place);
                             let original = std::mem::replace(&mut builtin.definition, definition);
                             builtin.shadowed = Some((original, builtin.enabled, builtin.failed.take()));
-                            (builtin.source, builtin.enabled, builtin.failed) = (Source::External, enabled, crashed);
+                            (builtin.source, builtin.enabled) = (Source::External, enabled);
                             Some(match started {
                                 Some(started) => builtin.active.replace(started),
                                 None => builtin.active.take(),
                             })
                         }
                         None => {
-                            let mut plugin = Plugin::new(definition, Source::External, enabled);
-                            plugin.failed = crashed;
-                            plugins.push(plugin);
+                            plugins.push(Plugin::new(definition, Source::External, enabled));
                             None
                         }
                     }
@@ -1834,6 +1892,7 @@ impl Registry {
     /// Deactivates and removes the external plugin loaded from `target`; the built-in it replaced comes back in its
     /// place.
     pub fn unload(&self, host: &Rc<dyn Host>, target: &str) {
+        self.held.borrow_mut().retain(|(known, _)| known != target);
         let (removed, restored) = {
             let mut plugins = self.plugins.borrow_mut();
             let Some(index) = plugins.iter().position(|plugin| plugin.definition.target() == Some(target)) else {
@@ -1885,6 +1944,10 @@ impl Registry {
     /// as it enables the plugin returns its error for the manager to show, and leaves the plugin as it was: enabled or
     /// not, and listed as the last load left it, so a later reload of a disabled plugin starts nothing.
     pub fn toggle(&self, host: &Rc<dyn Host>, id: &str, active: bool) -> Option<Result<(), String>> {
+        // A held target is not loaded: enabling it lets the loader open it; there is nothing to disable.
+        if self.with_plugin(id, |_| ()).is_none() {
+            return if active { self.release(host, id) } else { None };
+        }
         let before = self.with_plugin(id, |plugin| (plugin.enabled, plugin.failed.clone()))?;
         let error = self.switch(host, id, active)?;
         Some(match error {
@@ -1909,13 +1972,6 @@ impl Registry {
             }
             return Some(None);
         }
-        // Enabling a plugin that crashed the client is the user's word that it may run again.
-        let crashed = self.crashed.borrow().iter().any(|crashed| crashed.id == id);
-        if crashed {
-            self.crashed.borrow_mut().retain(|crashed| crashed.id != id);
-            self.save_crashed();
-            self.with_plugin(id, |plugin| plugin.failed = None);
-        }
         // Enabling a failed plugin restarts it with a fresh setup.
         let failed = self.with_plugin(id, |plugin| {
             plugin.enabled = true;
@@ -1930,16 +1986,29 @@ impl Registry {
     /// Every plugin and skipped entry, for the plugin manager.
     pub fn entries(&self) -> Vec<Entry> {
         let plugins = self.plugins.borrow();
-        let active = plugins.iter().map(|plugin| Entry {
-            id: plugin.definition.id.clone(),
-            target: plugin.definition.target().map(str::to_owned),
-            source: plugin.source,
-            status: match &plugin.active {
+        let active = plugins.iter().map(|plugin| {
+            let status = match &plugin.active {
                 Some(_) => plugin.definition.failure().map_or(Status::Active, Status::Failed),
                 None => plugin.failed.clone().map_or(Status::Inactive, Status::Failed),
-            },
-            active: plugin.active.is_some(),
-            slow: self.monitor.report(&plugin.definition.id),
+            };
+            Entry {
+                id: plugin.definition.id.clone(),
+                target: plugin.definition.target().map(str::to_owned),
+                source: plugin.source,
+                // `slow` is a flag on `active` (4.14).
+                slow: (status == Status::Active).then(|| self.monitor.report(&plugin.definition.id)).flatten(),
+                status,
+                active: plugin.active.is_some(),
+            }
+        });
+        let held = self.held.borrow();
+        let held = held.iter().map(|(target, hold)| {
+            let (id, source, status) = match hold {
+                Hold::Crashed { id, reason } => (id.clone(), Source::External, Status::Failed(reason.clone())),
+                Hold::Safe => (target.clone(), Source::External, Status::Inactive),
+                Hold::Unsupervised(reason) => (target.clone(), Source::Configured, Status::Skipped(reason.clone())),
+            };
+            Entry { id, target: Some(target.clone()), source, status, active: false, slow: None }
         });
         let unloaded = self.unloaded.borrow();
         let unloaded = unloaded.iter().map(|(target, status)| Entry {
@@ -1950,7 +2019,7 @@ impl Registry {
             active: false,
             slow: None,
         });
-        active.chain(unloaded).collect()
+        active.chain(held).chain(unloaded).collect()
     }
 
     /// Mounts slot `path` into `parent`: the claims before it, prepended to it, `content` (the host's own,
@@ -2081,7 +2150,8 @@ impl Registry {
         let generation = self.generations.get() + 1;
         self.generations.set(generation);
         let registration = Registration { generation, ..Registration::default() };
-        let mut setup = Setup { host, id: &definition.id, registration, monitor: &self.monitor };
+        let artifact = definition.target().zip(definition.digest.as_deref());
+        let mut setup = Setup { host, id: &definition.id, registration, monitor: &self.monitor, artifact };
         if let Err(error) = (definition.setup)(&mut setup) {
             setup.registration.dispose();
             return Err(error);

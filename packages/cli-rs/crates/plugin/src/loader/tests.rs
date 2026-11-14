@@ -1,6 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fs;
+use std::hash::{DefaultHasher, Hasher};
 use std::path::Path;
 use std::rc::Rc;
 
@@ -1446,72 +1447,120 @@ fn a_cli_json_entry_for_a_global_library_is_another_target() {
     assert_eq!(entry(&entries, &file).status, Status::Failed("plugin ID global is already registered".to_owned()));
 }
 
-// Expected (synthesis 4.5): a plugin that crashed the client loads disabled and listed failed with the reason. It
-// learns its build at the first load and keeps it; it stays disabled through a reload of the same build, starts
-// again once the build changes, and also once the user enables it. Each change of the list is kept.
+/// The digest the loader gives a build of `text` without options.
+fn build_of(text: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    hasher.write(text.as_bytes());
+    hasher.write(b"");
+    format!("{:016x}", hasher.finish())
+}
+
+// Expected (synthesis 4.5; bigboi 1, 3): a build that crashed the client is never opened again: no load, no setup;
+// the manager lists it failed with the reason. A reload of the same build and an unrelated `cli.json` edit leave it
+// held; the user's enable lets it load and ends the entry; another build at the target loads and ends it too.
 #[test]
-fn a_crashed_plugin_stays_disabled_until_it_is_enabled_or_rebuilt() {
+fn a_crashed_build_is_never_opened_until_enabled_or_rebuilt() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
     let dir = config.join("plugins").join("fake");
     write(&dir.join(entry_file()), "id=fake");
     let target = dir.to_string_lossy().into_owned();
-    let (host, fake) = (host(), Rc::new(Fake::default()));
-    let registry = Registry::define(Vec::new(), []);
-    let saved: Rc<RefCell<Vec<Vec<crate::Crashed>>>> = Rc::default();
     let reason = "crashed the client in `render-slot` and is disabled";
-    let crashed = crate::Crashed { id: "fake".to_owned(), reason: reason.to_owned(), digest: None };
-    registry.set_crashed(vec![crashed], {
-        let saved = saved.clone();
-        move |crashed| saved.borrow_mut().push(crashed.to_vec())
-    });
-    let loader = Loader::new(fake.clone() as Rc<dyn Backend>, config, root.path().to_path_buf(), Vec::new());
-    loader.reconcile(&dynamic(&host), &registry);
+    let crashed = crate::Crashed {
+        id: "fake".to_owned(),
+        target: target.clone(),
+        digest: build_of("id=fake"),
+        reason: reason.to_owned(),
+    };
+    let start = |crashed: Vec<crate::Crashed>| {
+        let (host, fake) = (host(), Rc::new(Fake::default()));
+        let registry = Registry::define(Vec::new(), []);
+        let forgotten: Rc<RefCell<Vec<crate::Crashed>>> = Rc::default();
+        let seen = forgotten.clone();
+        registry.set_crashed(crashed, move |entry| seen.borrow_mut().push(entry.clone()));
+        let loader =
+            Loader::new(fake.clone() as Rc<dyn Backend>, config.clone(), root.path().to_path_buf(), Vec::new());
+        (host, fake, registry, loader, forgotten)
+    };
     let listed = |registry: &Registry| entry(&registry.entries(), &target).clone();
-    assert_eq!((listed(&registry).status, listed(&registry).active), (Status::Failed(reason.to_owned()), false));
-    assert_eq!(fake.active.get(), 0);
-    let learned = saved.borrow().last().cloned().unwrap();
-    assert_eq!(learned.len(), 1);
-    assert!(learned[0].digest.is_some());
 
-    // The user enables it: it runs, and the list forgets it.
-    assert_eq!(registry.toggle(&dynamic(&host), "fake", true), Some(Ok(())));
-    assert_eq!((listed(&registry).status, fake.active.get()), (Status::Active, 1));
-    assert_eq!(saved.borrow().last().unwrap(), &Vec::<crate::Crashed>::new());
-
-    // A new client: the same build stays disabled, another build starts.
-    let registry = Registry::define(Vec::new(), []);
-    registry.set_crashed(learned, |_| {});
-    let loader = Loader::new(fake.clone() as Rc<dyn Backend>, root.path().join("config"), root.path().into(), vec![]);
+    let (host, fake, registry, loader, forgotten) = start(vec![crashed.clone()]);
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    assert_eq!((fake.loads.get(), fake.active.get()), (0, 0));
+    assert_eq!((listed(&registry).id.as_str(), listed(&registry).status), ("fake", Status::Failed(reason.to_owned())));
+    assert!(!loader.reconcile(&dynamic(&host), &registry));
+    registry.set_targets(&dynamic(&host), ["other"]);
     loader.reconcile(&dynamic(&host), &registry);
-    assert_eq!(listed(&registry).status, Status::Failed(reason.to_owned()));
+    assert_eq!(fake.loads.get(), 0, "a list edit does not let it run");
+    assert_eq!(registry.toggle(&dynamic(&host), "fake", true), Some(Ok(())));
+    assert_eq!(*forgotten.borrow(), std::slice::from_ref(&crashed));
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!((listed(&registry).status, fake.loads.get(), fake.active.get()), (Status::Active, 1, 1));
+
+    // A new client: another build at the target is not the one that crashed.
+    let (host, fake, registry, loader, forgotten) = start(vec![crashed.clone()]);
     write(&dir.join(entry_file()), "id=fake\n");
     loader.reconcile(&dynamic(&host), &registry);
-    assert_eq!(listed(&registry).status, Status::Active);
+    assert_eq!((listed(&registry).status, fake.loads.get()), (Status::Active, 1));
+    assert_eq!(*forgotten.borrow(), [crashed]);
     assert!(registry.crashed().is_empty());
 }
 
-// Expected (synthesis 4.5): after a second crash that named no plugin, every external plugin loads disabled, not
-// failed, and the user enables them one at a time; built-ins run.
+// Expected (synthesis 4.5; bigboi 1, 3): after a second crash that named no plugin, no external library is opened,
+// not even to learn its ID: each is listed inactive by its target, the built-ins run, a rebuild or a list edit opens
+// nothing, and the user enables them one at a time.
 #[test]
-fn safe_mode_loads_every_external_plugin_disabled() {
+fn safe_mode_opens_no_external_library() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
     for name in ["one", "two"] {
         write(&config.join("plugins").join(name).join(entry_file()), &format!("id={name}"));
     }
+    let target = |name: &str| config.join("plugins").join(name).to_string_lossy().into_owned();
     let (host, fake) = (host(), Rc::new(Fake::default()));
     let builtin = Definition::new("builtin", |_| {});
     let registry = Registry::define(vec![builtin], []);
     registry.activate(&dynamic(&host));
     registry.set_safe();
+    let loader = Loader::new(fake.clone() as Rc<dyn Backend>, config.clone(), root.path().to_path_buf(), Vec::new());
+    loader.reconcile(&dynamic(&host), &registry);
+    let status = |name: &str| entry(&registry.entries(), &target(name)).status.clone();
+    assert_eq!((status("one"), status("two"), fake.loads.get()), (Status::Inactive, Status::Inactive, 0));
+    let builtin = registry.entries().into_iter().find(|entry| entry.id == "builtin").unwrap();
+    assert_eq!(builtin.status, Status::Active);
+    write(&config.join("plugins").join("one").join(entry_file()), "id=one\n");
+    registry.set_targets(&dynamic(&host), ["x"]);
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!(fake.loads.get(), 0);
+    assert_eq!(registry.toggle(&dynamic(&host), &target("one"), true), Some(Ok(())));
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!((status("two"), fake.loads.get(), fake.active.get()), (Status::Inactive, 1, 1));
+    let one = registry.entries().into_iter().find(|entry| entry.id == "one").unwrap();
+    assert_eq!(one.status, Status::Active);
+}
+
+// Expected (bigboi 2): a client no parent guards opens no external library; the manager says to restart, and enabling
+// it there is refused, since no restart could follow a crash.
+#[test]
+fn an_unsupervised_client_opens_no_external_library() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let config = root.path().join("config");
+    write(&config.join("plugins").join("one").join(entry_file()), "id=one");
+    let target = config.join("plugins").join("one").to_string_lossy().into_owned();
+    let (host, fake) = (host(), Rc::new(Fake::default()));
+    let registry = Registry::define(Vec::new(), []);
+    registry.set_unsupervised("restart opencode-native to run it");
     let loader = Loader::new(fake.clone() as Rc<dyn Backend>, config, root.path().to_path_buf(), Vec::new());
     loader.reconcile(&dynamic(&host), &registry);
-    let status = |id: &str| registry.entries().into_iter().find(|entry| entry.id == id).map(|entry| entry.status);
-    assert_eq!((status("one"), status("two")), (Some(Status::Inactive), Some(Status::Inactive)));
-    assert_eq!(status("builtin"), Some(Status::Active));
-    assert_eq!(registry.toggle(&dynamic(&host), "one", true), Some(Ok(())));
-    assert_eq!((status("one"), status("two"), fake.active.get()), (Some(Status::Active), Some(Status::Inactive), 1));
+    let listed = entry(&registry.entries(), &target).clone();
+    assert_eq!(
+        (listed.status, listed.source, fake.loads.get()),
+        (Status::Skipped("restart opencode-native to run it".into()), Source::Configured, 0)
+    );
+    assert_eq!(
+        registry.toggle(&dynamic(&host), &target, true),
+        Some(Err("restart opencode-native to run it".to_owned()))
+    );
 }
 
 // Expected: the client runs under a parent only when a native build is among the targets: a discovered directory
