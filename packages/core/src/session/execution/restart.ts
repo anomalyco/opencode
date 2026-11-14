@@ -81,6 +81,7 @@ export const layer = (options?: Options) =>
       const execution = yield* SessionExecution.Service
       const bus = yield* Bus.Service
       const jobs = yield* Job.Service
+      const subagents = yield* SubagentJob.Service
       const sessions = yield* Session.Service
       const instances = yield* Instance.Service
       const db = (yield* Database.Service).db
@@ -471,7 +472,14 @@ export const layer = (options?: Options) =>
           yield* Effect.forEach(
             resumable,
             Effect.fnUntraced(function* ({ background, recovery }) {
-              yield* SubagentJob.start(jobs, execution, recovery, background.notificationID)
+              yield* subagents.recover(recovery.parentSessionID, recovery.childSessionID)
+              yield* SubagentJob.start(
+                jobs,
+                execution,
+                recovery,
+                background.notificationID,
+                subagents.release(recovery.parentSessionID, recovery.childSessionID),
+              )
               suspended.delete(recovery.childSessionID)
             }),
             { discard: true },
@@ -489,6 +497,7 @@ export const node = makeGlobalNode({
     SessionExecution.node,
     Bus.node,
     Job.node,
+    SubagentJob.node,
     Session.node,
     Instance.node,
     Database.node,

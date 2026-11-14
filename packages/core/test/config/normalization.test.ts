@@ -572,6 +572,8 @@ describe("ConfigNormalize", () => {
           part_rows: true,
           image_generate: { model: "openai/gpt-image-2" },
           subagent_depth: 0,
+          subagent_concurrency: 3,
+          subagent_over_limit: "wait",
           location_idle_timeout: "2 hours",
           policies: [{ action: "provider.use", resource: "custom", effect: "allow" }],
         },
@@ -585,6 +587,8 @@ describe("ConfigNormalize", () => {
         part_rows: true,
         image_generate: { model: { providerID: "openai", model: "gpt-image-2" } },
         subagent_depth: 0,
+        subagent_concurrency: 3,
+        subagent_over_limit: "wait",
         location_idle_timeout: "7200000 millis",
       },
       policies: [
@@ -614,6 +618,27 @@ describe("ConfigNormalize", () => {
         ["invalid", ["experimental", "image_generate"]],
       ])
     }
+  })
+
+  test("normalizes the subagent concurrency settings", () => {
+    expect(
+      normalized({ experimental: { subagent_concurrency: -1, subagent_over_limit: "wait" } }).encoded.experimental,
+    ).toEqual({ subagent_concurrency: -1, subagent_over_limit: "wait" })
+    expect(normalized({ experimental: { subagent_concurrency: 0 } }).encoded.experimental).toEqual({
+      subagent_concurrency: 0,
+    })
+    // A rejected leaf drops only itself, so a sibling still lands.
+    const partial = normalized({ experimental: { subagent_concurrency: 2, subagent_over_limit: "queue" } })
+    expect(partial.encoded.experimental).toEqual({ subagent_concurrency: 2 })
+    expect(partial.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+      ["invalid", ["experimental", "subagent_over_limit"]],
+    ])
+    const invalid = normalized({ experimental: { subagent_concurrency: 1.5, subagent_over_limit: "queue" } })
+    expect(invalid.encoded.experimental).toBeUndefined()
+    expect(invalid.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+      ["invalid", ["experimental", "subagent_concurrency"]],
+      ["invalid", ["experimental", "subagent_over_limit"]],
+    ])
   })
 
   test("normalizes every registered flag as a boolean", () => {

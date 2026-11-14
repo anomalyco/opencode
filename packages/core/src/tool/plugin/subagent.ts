@@ -115,9 +115,9 @@ export const Plugin = {
                   ),
                 )
               let current = parent
-              let depth = 0
+              let level = 0
               while (current.parentID) {
-                depth++
+                level++
                 current = yield* sessions
                   .get(current.parentID)
                   .pipe(
@@ -126,11 +126,13 @@ export const Plugin = {
                     ),
                   )
               }
-              const limit = Config.latest(yield* config.entries(), "experimental")?.subagent_depth ?? 1
-              if (depth >= limit)
+              const entries = yield* config.entries()
+              const depth = Config.latest(entries, "experimental")?.subagent_depth ?? 1
+              if (level >= depth)
                 return yield* new ToolFailure({
-                  message: `Subagent depth limit reached (${limit}). Increase "experimental.subagent_depth" to allow nested subagents.`,
+                  message: `Subagent depth limit reached (${depth}). Increase "experimental.subagent_depth" to allow nested subagents.`,
                 })
+              const concurrency = SubagentJob.limits(entries)
               const agent = yield* agents.resolve(input.agent)
               if (agent === undefined) return yield* new ToolFailure({ message: `Unknown agent: ${input.agent}` })
               if (agent.mode === "primary")
@@ -176,52 +178,78 @@ export const Plugin = {
               }
 
               const model = override ?? agent.model ?? parent.model
-              const child =
-                existing ??
-                (yield* sessions
-                  .create({
-                    parentID: context.sessionID,
-                    title: input.description,
-                    agent: agent.id,
-                    model,
+              // Slots are keyed by child session ID, so a new child's ID is picked before it exists and a
+              // rejected call leaves no orphan session behind.
+              const childID = existing?.id ?? SessionSchema.ID.create()
+              const acquired = yield* subagents.acquire({
+                parentSessionID: context.sessionID,
+                childSessionID: childID,
+                limit: concurrency.limit,
+                mode: concurrency.mode,
+                ...(context.cancel === undefined ? {} : { cancel: context.cancel }),
+              })
+              if (!acquired)
+                return yield* new ToolFailure({
+                  message: `Subagent concurrency limit reached (${concurrency.limit}). Increase "experimental.subagent_concurrency" or wait for a running subagent to finish.`,
+                })
+              // The job's run owns the slot from the handoff on; until then this call owns it,
+              // including when it is interrupted mid-flight.
+              let handoff = false
+              return yield* Effect.gen(function* () {
+                const child =
+                  existing ??
+                  (yield* sessions
+                    .create({
+                      id: childID,
+                      parentID: context.sessionID,
+                      title: input.description,
+                      agent: agent.id,
+                      model,
+                    })
+                    .pipe(
+                      Effect.mapError(
+                        (error) =>
+                          new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
+                      ),
+                    ))
+
+                // A child that is not draining yet must be admitted without waking: the job's resume
+                // owns the start, so the period cannot run before its boundary is registered.
+                const running =
+                  existing !== undefined &&
+                  ((yield* sessions.active).has(existing.id) || (yield* jobs.get(existing.id))?.status === "running")
+                yield* context.progress({ sessionID: child.id, status: "running" })
+
+                yield* sessions
+                  .prompt({
+                    sessionID: child.id,
+                    text:
+                      existing === undefined
+                        ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
+                        : input.prompt,
+                    ...(running ? {} : { resume: false }),
                   })
                   .pipe(
                     Effect.mapError(
-                      (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
+                      (error) => new ToolFailure({ message: `Failed to prompt subagent: ${child.id}`, error }),
                     ),
-                  ))
+                  )
 
-              // A child that is not draining yet must be admitted without waking: the job's resume
-              // owns the start, so the period cannot run before its boundary is registered.
-              const running =
-                existing !== undefined &&
-                ((yield* sessions.active).has(existing.id) || (yield* jobs.get(existing.id))?.status === "running")
-              yield* context.progress({ sessionID: child.id, status: "running" })
-
-              yield* sessions
-                .prompt({
-                  sessionID: child.id,
-                  text:
-                    existing === undefined
-                      ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
-                      : input.prompt,
-                  ...(running ? {} : { resume: false }),
-                })
-                .pipe(
-                  Effect.mapError(
-                    (error) => new ToolFailure({ message: `Failed to prompt subagent: ${child.id}`, error }),
-                  ),
-                )
-
-              const recovery = {
-                kind: "subagent" as const,
-                parentSessionID: context.sessionID,
-                childSessionID: child.id,
-                agent: agent.name,
-                description: input.description,
-              }
-              yield* subagents.start(recovery)
-              return backgroundResult(child.id)
+                const recovery = {
+                  kind: "subagent" as const,
+                  parentSessionID: context.sessionID,
+                  childSessionID: child.id,
+                  agent: agent.name,
+                  description: input.description,
+                }
+                yield* subagents.start(recovery)
+                handoff = true
+                return backgroundResult(child.id)
+              }).pipe(
+                Effect.ensuring(
+                  Effect.suspend(() => (handoff ? Effect.void : subagents.release(context.sessionID, childID))),
+                ),
+              )
             }).pipe(
               Effect.map((output) => ({
                 output,
@@ -248,6 +276,12 @@ export const Plugin = {
       Effect.gen(function* () {
         const tool = event.tools[name]
         if (!tool) return
+        const limits = SubagentJob.limits(yield* config.entries())
+        // Zero allows no subagents, so the model is not offered a call that can only fail.
+        if (limits.limit === 0) {
+          delete event.tools[name]
+          return
+        }
         const selected = yield* agents.resolve(event.agent)
         if (!selected) return
         const available = (yield* agents.list())

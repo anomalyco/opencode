@@ -43,6 +43,14 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   subagent_depth: NonNegativeInt.pipe(optional).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1.",
   }),
+  subagent_concurrency: Schema.Int.check(Schema.isGreaterThanOrEqualTo(-1)).pipe(optional).annotate({
+    description:
+      "Maximum number of subagents running at once for one session. Omit it or set -1 for unlimited, 0 to allow no subagents, or any positive count. Defaults to unlimited.",
+  }),
+  subagent_over_limit: Schema.Literals(["fail", "wait"]).pipe(optional).annotate({
+    description:
+      'What a subagent call does when the concurrency cap is full: "fail" returns a tool error right away, "wait" queues until a slot frees. Defaults to "fail".',
+  }),
   location_idle_timeout: Schema.Union([Schema.DurationFromString, Schema.Literal(false)])
     .pipe(optional)
     .annotate({

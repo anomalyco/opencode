@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { Config } from "../src/config.js"
 import { ConfigAgent } from "../src/config/agent.js"
+import { ConfigExperimental } from "../src/config/experimental.js"
 import { ConfigFlag } from "../src/config/flag.js"
 import { ConfigMCP } from "../src/config/mcp.js"
 import { ConfigPolicy } from "../src/config/policy.js"
@@ -145,6 +146,33 @@ describe("Config.Entry", () => {
       { action: "shell", resource: "*", effect: "ask" },
       { action: "shell", resource: "git status", effect: "allow" },
     ])
+  })
+
+  test("round-trips the subagent concurrency settings and rejects out-of-range values", () => {
+    const decode = Schema.decodeUnknownSync(Config.Info)
+    for (const limit of [-1, 0, 1, 8])
+      expect(Schema.encodeSync(Config.Info)(decode({ experimental: { subagent_concurrency: limit } }))).toEqual({
+        experimental: { subagent_concurrency: limit },
+      })
+    for (const mode of ["fail", "wait"] as const)
+      expect(Schema.encodeSync(Config.Info)(decode({ experimental: { subagent_over_limit: mode } }))).toEqual({
+        experimental: { subagent_over_limit: mode },
+      })
+    expect(decode({ experimental: { subagent_concurrency: 2, subagent_over_limit: "wait" } }).experimental).toEqual({
+      subagent_concurrency: 2,
+      subagent_over_limit: "wait",
+    })
+    expect(() => decode({ experimental: { subagent_concurrency: -2 } })).toThrow()
+    expect(() => decode({ experimental: { subagent_concurrency: 1.5 } })).toThrow()
+    expect(() => decode({ experimental: { subagent_concurrency: "2" } })).toThrow()
+    expect(() => decode({ experimental: { subagent_over_limit: "queue" } })).toThrow()
+    // Both keys are optional, so an unset one is omitted rather than encoded as undefined.
+    const encoded = Schema.encodeSync(Config.Info)(
+      new Config.Info({ experimental: new ConfigExperimental.Info({ subagent_concurrency: 3 }) }),
+    )
+    if (!("experimental" in encoded)) throw new Error("Expected an experimental block")
+    expect(encoded.experimental).not.toHaveProperty("subagent_over_limit")
+    expect(Schema.encodeSync(Config.Info)(decode({ experimental: {} }))).toEqual({ experimental: {} })
   })
 
   test("has a stable public identifier", () => {

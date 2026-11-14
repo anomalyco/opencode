@@ -120,7 +120,11 @@ const subagentPluginSupervisor = makeLocationNode({
   layer: Layer.effectDiscard(
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
-      yield* registerToolPlugin(SubagentTool.Plugin, {}, (name, callback) => hooks.register("tool", name, callback))
+      yield* registerToolPlugin(
+        SubagentTool.Plugin,
+        { session: { hook: (kind, callback) => hooks.register("session", kind, callback) } },
+        (name, callback) => hooks.register("tool", name, callback),
+      )
     }),
   ),
   deps: [
@@ -155,32 +159,28 @@ const it = testEffect(
   AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(subagentPluginSupervisor)]),
 )
 const completionLLM = TestLLM.testLayer({ fallback: TestLLM.text(childText, "completion") })
-const completionIt = testEffect(
-  Layer.merge(
-    completionLLM,
-    AppNodeBuilder.build(LayerNode.group([nodes, SessionRestart.node, KV.node]), [
-      Global.node.replace(tempGlobalLayer),
-      offlineModels,
-      PluginSupervisor.node.replace(subagentPluginSupervisor),
-      LayerNodePlatform.llmClient.replace(completionLLM),
-      SessionRunnerModel.node.replace(
-        Layer.succeed(SessionRunnerModel.Service, {
-          resolve: () =>
-            Effect.succeed(
-              SessionRunnerModel.resolved(
-                LanguageModel.make({ id: "child", provider: "test", route: OpenAIChat.route }),
-                {
-                  capabilities: { tools: true, input: ["text"], output: ["text"] },
-                  cost: [],
-                  limit: { context: 200_000, output: 32_000 },
-                },
-              ),
-            ),
-        }),
-      ),
-    ]),
+const completionGraph = AppNodeBuilder.build(LayerNode.group([nodes, SessionRestart.node, KV.node]), [
+  Global.node.replace(tempGlobalLayer),
+  offlineModels,
+  PluginSupervisor.node.replace(subagentPluginSupervisor),
+  LayerNodePlatform.llmClient.replace(completionLLM),
+  SessionRunnerModel.node.replace(
+    Layer.succeed(SessionRunnerModel.Service, {
+      resolve: () =>
+        Effect.succeed(
+          SessionRunnerModel.resolved(
+            LanguageModel.make({ id: "child", provider: "test", route: OpenAIChat.route }),
+            {
+              capabilities: { tools: true, input: ["text"], output: ["text"] },
+              cost: [],
+              limit: { context: 200_000, output: 32_000 },
+            },
+          ),
+        ),
+    }),
   ),
-)
+])
+const completionIt = testEffect(Layer.merge(completionLLM, completionGraph))
 
 const withSubagent = (location: Location.Ref) =>
   Effect.gen(function* () {
@@ -873,6 +873,230 @@ describe("SubagentTool", () => {
       ),
     ),
   )
+
+  completionIt.live("fails a call over the configured cap and frees the slot when the child settles", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir.path, "opencode.json"),
+              JSON.stringify({ experimental: { subagent_concurrency: 1 } }),
+            ),
+          )
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const bus = yield* Bus.Service
+          const llm = yield* TestLLM.Test
+          const gate = yield* llm.gate()
+          const delivered = yield* bus.subscribe(SessionEvent.InboxDelivered).pipe(
+            Stream.filter((event) => event.data.sessionID === parent.id),
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          const call = (id: string, input: Record<string, unknown>) =>
+            executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: { type: "tool-call" as const, id, name: SubagentTool.name, input },
+            }).pipe(Effect.timeout("2 seconds"))
+
+          // The first child holds the only slot until its run settles.
+          const launched = yield* call("cap-launch", { agent: "reviewer", description: "review", prompt: "one" })
+          const heldID = outputSessionID(launched.metadata)
+          expect(launched).toMatchObject({ status: "completed", metadata: { sessionID: heldID, status: "running" } })
+          yield* gate.started
+          expect(
+            yield* call("cap-blocked", { agent: "reviewer", description: "next", prompt: "should fail" }),
+          ).toEqual({
+            status: "error",
+            error: {
+              type: "tool.execution",
+              message: expect.stringContaining('Subagent concurrency limit reached (1). Increase "experimental.subagent_concurrency"'),
+            },
+          })
+          // A rejected call creates no session, and a follow-up on the running child needs no second slot.
+          expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(1)
+          expect(
+            yield* call("cap-repeat", {
+              agent: "reviewer",
+              description: "follow up",
+              prompt: "continue again",
+              sessionID: heldID,
+            }),
+          ).toMatchObject({ status: "completed", metadata: { sessionID: heldID, status: "running" } })
+
+          // The run frees its slot before the settlement notice is delivered to the parent.
+          yield* gate.release
+          yield* Fiber.join(delivered).pipe(Effect.timeout("2 seconds"))
+          expect(
+            yield* call("cap-after-settle", { agent: "reviewer", description: "next", prompt: "should run" }),
+          ).toMatchObject({ status: "completed", metadata: { status: "running" } })
+          expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(2)
+        }),
+      ),
+    ),
+  )
+
+  it.live("keeps the tool listed while the cap allows subagents", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(path.join(dir.path, "opencode.json"), JSON.stringify({ experimental: { subagent_concurrency: 2 } })),
+          )
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const hooks = yield* PluginHooks.Service.pipe(Effect.provide(locations.get(parent.location)))
+
+          const prepared = yield* hooks.trigger("session", "context", {
+            ...toolIdentity,
+            sessionID: parent.id,
+            model: parentModel,
+            system: [],
+            messages: [],
+            options: {},
+            tools: { [SubagentTool.name]: { description: SubagentTool.description, input: { type: "object" } } },
+          })
+          expect(prepared.tools[SubagentTool.name]?.description).toContain("Available subagents:")
+        }),
+      ),
+    ),
+  )
+
+  it.live("offers no subagent tool at a cap of zero", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(path.join(dir.path, "opencode.json"), JSON.stringify({ experimental: { subagent_concurrency: 0 } })),
+          )
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const hooks = yield* PluginHooks.Service.pipe(Effect.provide(locations.get(parent.location)))
+
+          const prepared = yield* hooks.trigger("session", "context", {
+            ...toolIdentity,
+            sessionID: parent.id,
+            model: parentModel,
+            system: [],
+            messages: [],
+            options: {},
+            tools: { [SubagentTool.name]: { description: SubagentTool.description, input: { type: "object" } } },
+          })
+          expect(prepared.tools).not.toHaveProperty(SubagentTool.name)
+
+          expect(
+            yield* executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-zero-subagent",
+                name: SubagentTool.name,
+                input: { agent: "reviewer", description: "review", prompt: "should not run" },
+              },
+            }),
+          ).toEqual({
+            status: "error",
+            error: {
+              type: "tool.execution",
+              message: expect.stringContaining("Subagent concurrency limit reached (0)"),
+            },
+          })
+          expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(0)
+        }),
+      ),
+    ),
+  )
+
+  completionIt.live("runs a queued call once a slot frees in wait mode", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir.path, "opencode.json"),
+              JSON.stringify({ experimental: { subagent_concurrency: 1, subagent_over_limit: "wait" } }),
+            ),
+          )
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const llm = yield* TestLLM.Test
+          const gate = yield* llm.gate()
+          const call = (id: string, input: Record<string, unknown>) =>
+            executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: { type: "tool-call" as const, id, name: SubagentTool.name, input },
+            }).pipe(Effect.timeout("2 seconds"))
+
+          const running = yield* call("wait-held", { agent: "reviewer", description: "review", prompt: "one" })
+          const heldID = outputSessionID(running.metadata)
+          expect(running).toMatchObject({ status: "completed", metadata: { sessionID: heldID, status: "running" } })
+          yield* gate.started
+          // The second call queues behind the held slot; it cannot create its session until the slot frees.
+          const queued = yield* call("wait-next", {
+            agent: "reviewer",
+            description: "queued",
+            prompt: "runs second",
+          }).pipe(Effect.forkScoped({ startImmediately: true }))
+          yield* Effect.yieldNow
+          expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(1)
+
+          yield* gate.release
+          expect(yield* Fiber.join(queued)).toMatchObject({ status: "completed", metadata: { status: "running" } })
+          expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(2)
+        }),
+      ),
+    ),
+  )
+
+  it.live("keeps fan-out unlimited without a cap", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const call = (id: string, input: Record<string, unknown>) =>
+            executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: { type: "tool-call" as const, id, name: SubagentTool.name, input },
+            })
+
+          expect(
+            yield* call("unlimited-first", { agent: "reviewer", description: "first", prompt: "one" }),
+          ).toMatchObject({ status: "completed", metadata: { status: "running" } })
+          expect(
+            yield* call("unlimited-second", { agent: "reviewer", description: "second", prompt: "two" }),
+          ).toMatchObject({ status: "completed", metadata: { status: "running" } })
+          expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(2)
+        }),
+      ),
+    ),
+  )
+
 })
 
 /** A parent with the subagent tool registered, its child calls, and every synthetic notice it received. */

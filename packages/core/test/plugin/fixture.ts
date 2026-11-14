@@ -145,6 +145,9 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       Mcp.node.replace(emptyMcpLayer),
       Generate.node.replace(generate),
       Permission.node.replace(permission),
+      // The in-memory watcher, as in the other plugin graphs: these tests deliver updates through
+      // `Watcher.Test.emit`, and the native subscribe's `Effect.timeout` never fires under TestClock.
+      Watcher.node.replace(Watcher.testLayer),
       offlineModels,
     ],
   ).pipe(Layer.provideMerge(configLayer))
