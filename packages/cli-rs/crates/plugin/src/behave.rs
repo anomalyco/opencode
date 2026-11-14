@@ -1042,6 +1042,7 @@ impl Surface {
                     let before = scrolled.offset();
                     let viewport = scrolled.state().viewport;
                     let pending = behave.pending.get(id).cloned();
+                    let mut decided = None;
                     let aim = pending.as_ref().map(|pending| {
                         let found = index
                             .nodes
@@ -1052,6 +1053,7 @@ impl Surface {
                                 let hunk = scrolled.anchors.iter().find(|(_, at, _)| at.id == pending.node);
                                 hunk.map(|(_, _, widget)| widget.clone())
                             });
+                        let laid = found.is_some();
                         let (y, height) = match found {
                             Some(widget) => {
                                 let Some(y) = scrolled.y(&widget, &behave.translated) else { return Resolve::Unsolved };
@@ -1067,9 +1069,20 @@ impl Surface {
                         };
                         Resolve::To(match pending.aim {
                             Aim::Row(row) => y.saturating_sub(row),
-                            Aim::Nearest { inset, from } => nearest(y, height, from, viewport, inset),
+                            // Decided once the node has rows, from the offset it was asked at; then the node keeps its
+                            // row in the view, as a list's corrections move both.
+                            Aim::Nearest { inset, from } => {
+                                let target = nearest(y, height, from, viewport, inset);
+                                if laid {
+                                    decided = Some(Aim::Row(y.saturating_sub(target)));
+                                }
+                                target
+                            }
                         })
                     });
+                    if let (Some(aim), Some(pending)) = (decided, behave.pending.get_mut(id)) {
+                        pending.aim = aim;
+                    }
                     match aim {
                         Some(Resolve::To(target)) => scrolled.go(i64::from(target)),
                         Some(Resolve::Gone) => drop(behave.pending.remove(id)),
