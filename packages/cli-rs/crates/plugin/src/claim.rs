@@ -410,10 +410,13 @@ impl Core {
         // Animations run as a paint starts, before its layout: the view lands in that paint.
         host.app().animate(move |cx, _| {
             let Some(core) = weak.upgrade() else { return false };
+            // A view since took the newest revision at its width.
+            if !core.waiting.get() {
+                return false;
+            }
             if core.viewed.get() == Some(cx.app().frame_number()) {
                 return true;
             }
-            core.waiting.set(false);
             if let (false, Some(host)) = (core.fallen.get(), core.claim.owner.upgrade()) {
                 let before = core.shows.get();
                 if core.draw(&*host) != before {
@@ -427,6 +430,8 @@ impl Core {
 
     /// Calls the view on the part and adopts its tree; whether the claim shows the part.
     fn draw(&self, host: &dyn Host) -> bool {
+        // This view takes the newest revision at its width: one held back for the paint is owed no more.
+        self.waiting.set(false);
         let theme = host.theme();
         self.viewed.set(Some(host.app().frame_number()));
         let whole = self.state.borrow().last.is_none();
