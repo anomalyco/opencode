@@ -1134,8 +1134,6 @@ const layer = () =>
     }),
   )
 
-// Spans carry only the command text, truncated; never env, stdin or output. Shells outlive the turn that started
-// them, so the session comes from the shell's own metadata rather than the caller's span annotations.
 // Find a character crossing this byte offset. A valid prefix at a live EOF has no end yet.
 function splitCharacter(bytes: Buffer, cut: number, running: boolean) {
   for (let start = cut - 1; start >= Math.max(0, cut - 3); start--) {
@@ -1151,6 +1149,8 @@ function splitCharacter(bytes: Buffer, cut: number, running: boolean) {
   }
 }
 
+// Spans carry only the command text, truncated; never env, stdin or output. Shells outlive the turn that started
+// them, so the session comes from the shell's own metadata rather than the caller's span annotations.
 function annotate(info: Info) {
   const sessionID = info.metadata.sessionID
   return Effect.annotateCurrentSpan({
