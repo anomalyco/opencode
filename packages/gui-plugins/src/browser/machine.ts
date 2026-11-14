@@ -7,6 +7,9 @@ export const RETRY_BASE_MS = 1_000
 
 export const RETRY_MAX_MS = 30_000
 
+// Give a cold location time to register its browser plugin, but stop retrying a server that does not have one.
+const RPC_UNAVAILABLE_RETRIES = 4
+
 /** The pane's main-process Ipc: running in a generation, starting or restarting, or gone. */
 export type Ipc =
   | { readonly status: "active"; readonly generation: number }
@@ -63,6 +66,8 @@ export type AddressFocus =
 export type Attachment = {
   readonly serverID: string
   readonly phase: Phase
+  /** Unavailable browser RPC responses since the last successful attachment. */
+  readonly rpcFailures: number
   /** The desktop's tab inventory, kept while suspended or retrying so a new binding restores it. */
   readonly browser: Browser.State | null
   /** Host embed per tab page of the current binding. */
@@ -401,6 +406,7 @@ function attached(state: Open, event: Extract<Event, { type: "session.attached" 
   return put(state, event.sessionKey, {
     serverID: event.serverID,
     phase: { status: "idle" },
+    rpcFailures: 0,
     browser: null,
     embeds: {},
     error: undefined,
@@ -475,7 +481,7 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
     case "register.accepted": {
       if (phase.status !== "registering" || phase.attempt !== event.attempt) return { state, effects: [] }
 
-      return put(state, key, { ...attachment, phase: { status: "ready", attempt: phase.attempt } }, [
+      return put(state, key, { ...attachment, rpcFailures: 0, phase: { status: "ready", attempt: phase.attempt } }, [
         { type: "cancel-register-timeout", sessionKey: key },
       ])
     }
@@ -696,8 +702,16 @@ function paneState(
 
   if (!phase) return { state, effects: [] }
 
-  // The server's plugin lacks the browser RPC: every session on it stops until the server changes.
-  if (event.error === "browser.pane.unsupported") {
+  // An unavailable RPC can be a cold-start race. Reuse registration backoff before deciding it is unsupported.
+  if (
+    event.error === "browser.pane.rpc-unavailable" &&
+    phase.status === "registering" &&
+    attachment.rpcFailures < RPC_UNAVAILABLE_RETRIES
+  )
+    return backoff(state, key, { ...attachment, rpcFailures: attachment.rpcFailures + 1 }, phase)
+
+  // A missing browser RPC after retries, or an incompatible handshake, stops sessions until the server changes.
+  if (event.error === "browser.pane.unsupported" || event.error === "browser.pane.rpc-unavailable") {
     const serverID = attachment.serverID
     const gone = listed(state.sessions).filter((entry) => entry[1].serverID === serverID)
 
@@ -755,6 +769,7 @@ function paneState(
     {
       ...attachment,
       phase: { status: "ready", attempt: phase.attempt },
+      rpcFailures: 0,
       browser: event.state,
       error: event.error,
       strip: mirrored.strip,
