@@ -53,6 +53,8 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
             bleed: false,
             centered: true,
             bare: false,
+            close: None,
+            height: None,
         }));
     });
     Ok(())

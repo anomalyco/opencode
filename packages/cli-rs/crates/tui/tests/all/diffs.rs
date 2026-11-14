@@ -61,12 +61,18 @@ fn mount(route: Route) -> Diffs {
 
 /// Serves `diff`, one file or a list of them.
 fn mount_with(route: Route, diff: Value, width: u16, height: u16) -> Diffs {
+    mount_on(route, diff, width, height, false)
+}
+
+/// [`mount_with`], with the built-ins on the C ABI's byte shims when `abi`.
+fn mount_on(route: Route, diff: Value, width: u16, height: u16, abi: bool) -> Diffs {
     let memory = Memory::new(routes(diff));
     let config = json!({ "animations": false, "session": { "sidebar": "hide" }, "diffs": { "source": "turn" } });
     let deps = Deps {
         config: support::config(support::decode(&config.to_string())),
         route,
         events: true,
+        abi_builtins: abi,
         ..support::deps(Arc::new(memory.clone()))
     };
     Diffs { harness: support::mount(width, height, deps), memory, turns: Cell::new(0) }
@@ -80,15 +86,16 @@ impl Diffs {
         let x = line[..line.find("src/main.rs").unwrap()].chars().count() as u16;
         self.app.mouse(MouseEventKind::Down(MouseButton::Right), x, y as u16);
         self.wait_for("Mark complete");
-        assert_eq!(self.tui.keymap.mode(), "menu");
+        // The menu is the plugin's overlay, which holds the focus: the viewer's keys wait.
+        assert_ne!(opencode_plugin::interact::ledger(&*opencode_tui::plugins::host::host(&self.tui)).overlays, 0);
     }
 
-    /// The menu is gone, with its mode.
+    /// The menu is gone, with what it held.
     fn assert_menu_closed(&self) {
         self.app.advance(Duration::from_millis(1));
         let screen = self.app.text();
         assert!(!screen.contains("Mark complete"), "the menu stayed:\n{screen}");
-        assert_ne!(self.tui.keymap.mode(), "menu", "the menu kept its mode");
+        assert_eq!(opencode_plugin::interact::ledger(&*opencode_tui::plugins::host::host(&self.tui)).overlays, 0);
     }
 
     fn diff_reads(&self) -> usize {
@@ -261,4 +268,27 @@ fn large_added_patch() -> String {
         lines.len(),
         lines.join("\n")
     )
+}
+
+// Expected (P6c): the viewer is the same plugin on both carriers: its panel opens with its cards and fails on neither.
+// More cards than the tree's other keyed nodes: a library's memo table of the cards is checked against a tree whose
+// list items count.
+#[test]
+fn the_viewer_runs_on_both_carriers() {
+    let file = |path: &str, patch: &str, status: &str| json!({ "file": path, "patch": patch, "additions": 1, "deletions": 1, "status": status });
+    let diff = json!([
+        file("README.md", "@@ -1 +1 @@\n-old\n+new\n", "modified"),
+        file("docs/old.md", "@@ -1,2 +0,0 @@\n-Old notes\n-more\n", "deleted"),
+        file("src/main.rs", "@@ -1 +1 @@\n-old\n+new\n", "modified"),
+        file("src/lib.rs", "@@ -1 +1 @@\n-old\n+new\n", "modified"),
+        file("src/util.rs", "@@ -1 +1 @@\n-old\n+new\n", "modified"),
+    ]);
+    for abi in [false, true] {
+        let h = mount_on(support::session_route("ses_a"), diff.clone(), 140, 30, abi);
+        h.wait_for("Review");
+        h.tui.keymap.dispatch("diff.open", None);
+        let found = h.app.wait_until(support::WAIT, || h.app.text().contains("README.md"));
+        let failed: Vec<_> = h.tui.plugins.entries().into_iter().filter(|entry| entry.id == "opencode.diffs").collect();
+        assert!(found, "abi {abi}: {failed:?}\n{}", h.app.text());
+    }
 }

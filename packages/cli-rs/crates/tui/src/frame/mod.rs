@@ -357,10 +357,9 @@ impl SessionFrame {
         }
         let Some(old) = state.host.borrow_mut().take() else { return };
         let target = old.target().clone();
-        let width = old.root.rect().width as u16;
         old.root.detach();
         drop(old);
-        state.mount_host(tui, target, width);
+        state.mount_host(tui, target);
         if state.active.get() == Pane::Right {
             state.focus_right(tui);
         }
@@ -374,8 +373,8 @@ impl SessionFrame {
 
 impl SessionState {
     /// Mounts the panel `target` in the right pane.
-    fn mount_host(&self, tui: &Tui, target: crate::panel::Target, width: u16) {
-        let host = Host::new(tui, target, width, self.active.get() == Pane::Right);
+    fn mount_host(&self, tui: &Tui, target: crate::panel::Target) {
+        let host = Host::new(tui, target);
         // `PanelHost`'s `onMouseDown={props.onFocus}`.
         host.root.on_mouse(bind!(tui, |tui, _, event| {
             if matches!(event.kind, MouseEventKind::Down(_))
@@ -402,8 +401,7 @@ impl SessionState {
                 old.root.detach();
             }
             if let Some(target) = panel.clone() {
-                let width = if fullscreen { available as u16 } else { size };
-                self.mount_host(tui, target, width);
+                self.mount_host(tui, target);
                 focus = true;
             }
         }

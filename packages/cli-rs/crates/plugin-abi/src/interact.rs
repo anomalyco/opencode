@@ -215,11 +215,23 @@ pub struct Bind {
     /// key from its own thread.
     #[serde(default, skip_serializing_if = "is_false")]
     pub hold: bool,
+    /// P6c: the name of the user's keybind for it, such as `diff.next_hunk`: the config's keys for that name take it,
+    /// else the keybind's default, and `key` when the host knows no keybind of that name. [`Read::shortcut`] of the
+    /// name shows them.
+    ///
+    /// [`Read::shortcut`]: crate::Read::shortcut
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
 }
 
 impl Bind {
     pub fn new(key: impl Into<String>, name: impl Into<String>) -> Self {
         Self { key: key.into(), name: name.into(), ..Self::default() }
+    }
+
+    /// A bind the user's keybind `command` takes, heard as `name`.
+    pub fn command(command: impl Into<String>, name: impl Into<String>) -> Self {
+        Self { name: name.into(), command: Some(command.into()), ..Self::default() }
     }
 }
 
@@ -255,6 +267,10 @@ pub struct PanelInput {
     pub fullscreen: bool,
     /// The panel has the input.
     pub focused: bool,
+    /// P6c: full screen because the session's room is too narrow to show the panel beside it; an open of the panel
+    /// beside the session shows it full screen still.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub forced: bool,
 }
 
 /// Opens the plugin's panel `surface` beside a session ([`Host::open_panel`]); one panel shows at a time.

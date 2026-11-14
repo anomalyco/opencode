@@ -298,5 +298,7 @@ fn panel(session: &str, goal: &Goal) -> Panel {
         bleed: false,
         centered: false,
         bare: false,
+        close: None,
+        height: None,
     }
 }

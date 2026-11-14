@@ -30,12 +30,9 @@ use crate::features::attention::focus::When;
 use crate::features::attention::notify::{self, Request, Sound};
 use crate::prelude::*;
 
-/// The plugin registry, and what its host entry ([`Builtin::Host`]) reaches the TUI through once `Rc<Tui>` exists.
+/// The plugin registry.
 pub struct Plugins {
     registry: Registry,
-    tui: Rc<OnceCell<Weak<Tui>>>,
-    /// The diff viewer's state while it is active, which its route shows.
-    pub(crate) diffs: RefCell<Option<Rc<super::diffs::viewer::Shared>>>,
     /// The loader of the external plugins, which the plugin manager's approvals reach.
     loader: RefCell<Option<Rc<Loader>>>,
     /// The snapshot last published in the run record.
@@ -275,11 +272,17 @@ impl Host for Tui {
     fn fetch(&self, fetch: abi::Fetch, reply: Box<dyn FnOnce(Result<Value, String>)>) {
         // The client of the moment, on the transport that follows a restarted service.
         let client = self.data.client().clone();
+        let bytes = fetch.bytes;
         let call = super::fetch::call_of(fetch);
-        self.app
-            .spawn(async move { client.reply(call?).await.map_err(|error| error.tui_message()) }, move |_, result| {
-                reply(result)
-            });
+        let sent = async move {
+            let call = call?;
+            match bytes {
+                true => client.reply_bytes(call).await.map(|body| Value::String(abi::base64::encode(&body))),
+                false => client.reply(call).await,
+            }
+            .map_err(|error| error.tui_message())
+        };
+        self.app.spawn(sent, move |_, result| reply(result));
     }
 
     fn dialog(&self, id: &str, generation: u64, dialog: abi::Dialog) {
@@ -389,6 +392,10 @@ impl Host for Tui {
         });
     }
 
+    fn set_setting(&self, name: &str, value: Value) {
+        set_setting(self, name, value);
+    }
+
     fn install_theme(&self, name: &str, theme: Value) {
         if !opencode_plugin::theme_file_name(name) || !opencode_ui::theme::is_theme_source(&theme) {
             log::warn!("a plugin installs a theme that is not one, or not as a plain file name: {name:?}");
@@ -491,6 +498,7 @@ impl Host for Tui {
             width: session.0,
             fullscreen: self.panels.presentation() == crate::panel::Presentation::Fullscreen,
             focused: session.1,
+            forced: !self.panels.can_split(),
         })
     }
 
@@ -957,6 +965,38 @@ impl abi::Read for Reader<'_> {
     fn plugins(&self) -> Vec<abi::PluginEntry> {
         self.tui.plugins.entries().into_iter().map(entry).collect()
     }
+
+    fn setting(&self, name: &str) -> Option<Value> {
+        let path = setting_path(name)?;
+        let config = self.tui.settings.info().to_value();
+        path.iter().try_fold(&config, |value, key| value.get(key)).filter(|value| !value.is_null()).cloned()
+    }
+}
+
+/// The path in the TUI config of the plugins' setting `name` ([`abi::SETTINGS`]).
+fn setting_path(name: &str) -> Option<Vec<&str>> {
+    abi::SETTINGS.contains(&name).then(|| name.split('.').collect())
+}
+
+/// Saves the plugins' setting `name`, when the config takes `value` for it as it is.
+fn set_setting(tui: &Tui, name: &str, value: Value) {
+    let Some(path) = setting_path(name) else {
+        log::warn!("a plugin sets {name:?}, which is not one of the settings plugins set");
+        return;
+    };
+    let mut candidate = Value::Object(Default::default());
+    crate::dialogs::settings::set_path(&mut candidate, &path, value.clone());
+    let decoded = opencode_local::cli_config::decode_text(&candidate.to_string()).map(|info| info.to_value());
+    let taken = decoded.and_then(|decoded| path.iter().try_fold(decoded, |value, key| value.get(key).cloned()));
+    if taken.as_ref() != Some(&value) {
+        log::warn!("a plugin sets {name} to {value}, which the setting does not take");
+        return;
+    }
+    let path: Vec<String> = path.into_iter().map(str::to_owned).collect();
+    crate::dialogs::settings::update(tui, move |config| {
+        let path: Vec<&str> = path.iter().map(String::as_str).collect();
+        crate::dialogs::settings::set_path(config, &path, value);
+    });
 }
 
 /// A registry entry as a plugin reads it: without the error, which may hold another plugin's secrets (review bigboi-2).
@@ -1037,9 +1077,8 @@ fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
 }
 
 /// The built-ins in TS order (`plugin/builtins.ts`), with the ones from other crates ([`crate::Deps::builtins`],
-/// Mermaid and LaTeX) in their TS place after `stats`. The storybook (F14) is excepted (Q17). The diff viewer is a host
-/// entry, which reaches the TUI through `tui` once it exists.
-fn builtins(tui: &Rc<OnceCell<Weak<Tui>>>, external: Vec<Builtin>, abi: bool) -> Vec<Builtin> {
+/// Mermaid and LaTeX) in their TS place after `stats`, and the diff viewer last. The storybook (F14) is excepted (Q17).
+fn builtins(external: Vec<Builtin>, abi: bool) -> Vec<Builtin> {
     // On the other carrier each plugin's calls cross the C ABI's byte shims ([`Builtin::Abi`]).
     let carried = |builtin: Builtin| match builtin {
         Builtin::Plugin(plugin) if abi => Builtin::Abi(plugin),
@@ -1059,35 +1098,16 @@ fn builtins(tui: &Rc<OnceCell<Weak<Tui>>>, external: Vec<Builtin>, abi: bool) ->
         super::stats::plugin().into(),
     ];
     builtins.extend(external);
-    builtins.push(hosted(tui, super::diffs::viewer::ID, super::diffs::viewer::activate));
+    builtins.push(super::diffs::plugin().into());
     builtins.into_iter().map(carried).collect()
-}
-
-/// A part of the TUI that the plugin manager lists and toggles like a plugin, which is not plugin API: `activate` runs
-/// on activation once the TUI exists, and the disposer it returns runs on deactivation.
-fn hosted(tui: &Rc<OnceCell<Weak<Tui>>>, id: &'static str, activate: fn(&Rc<Tui>) -> Disposer) -> Builtin {
-    let active: Rc<RefCell<Option<Disposer>>> = Rc::default();
-    let (tui, disposer) = (tui.clone(), active.clone());
-    Builtin::Host {
-        id,
-        activate: Rc::new(move || {
-            if let Some(tui) = tui.get().and_then(Weak::upgrade) {
-                *disposer.borrow_mut() = Some(activate(&tui));
-            }
-        }),
-        dispose: Rc::new(move || drop(active.take())),
-    }
 }
 
 /// The registry of the built-ins and the `plugins` config, not yet active; with `abi`, the built-ins run through the
 /// C ABI's byte shims ([`crate::Deps::abi_builtins`]).
 pub fn registry(info: &opencode_local::cli_config::Info, external: Vec<Builtin>, abi: bool) -> Plugins {
     let targets = info.plugins.iter().flatten().map(target);
-    let tui = Rc::default();
     Plugins {
-        registry: Registry::new(builtins(&tui, external, abi), targets),
-        tui,
-        diffs: RefCell::default(),
+        registry: Registry::new(builtins(external, abi), targets),
         loader: RefCell::default(),
         published: RefCell::default(),
         scripts: RefCell::default(),
@@ -1112,7 +1132,6 @@ pub fn host(tui: &Rc<Tui>) -> Rc<dyn Host> {
 
 /// Activates the plugins once the TUI is built.
 pub fn install(tui: &Rc<Tui>) {
-    let _ = tui.plugins.tui.set(tui.weak());
     // The budget sums a plugin's calls by painted frame (synthesis 4.4).
     let weak = tui.weak();
     tui.plugins.monitor().set_frames(move || weak.upgrade().map_or(0, |tui| tui.app.frame_number()));

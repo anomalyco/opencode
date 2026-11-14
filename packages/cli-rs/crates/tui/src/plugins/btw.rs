@@ -169,5 +169,7 @@ fn panel(answer: &Answer, copied: bool) -> Panel {
         bleed: true,
         centered: true,
         bare: false,
+        close: None,
+        height: None,
     }
 }

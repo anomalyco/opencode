@@ -191,6 +191,8 @@ fn card(cx: &mut v2::View<'_>, card: usize, reviewed: bool) -> v2::Node {
                 view: v2::DiffView::Unified,
                 filetype: None,
                 hunks: Some("hunk".into()),
+                wrap: Default::default(),
+                padding: 0,
             });
         }
         v2::Node::column(children).anchor("file", if reviewed { "reviewed" } else { "" })
@@ -1373,6 +1375,8 @@ fn big_setup(setup: &mut abi::Setup) -> Result<(), String> {
             view: v2::DiffView::Unified,
             filetype: None,
             hunks: Some("hunk".into()),
+            wrap: Default::default(),
+            padding: 0,
         };
         v2::Node::column(vec![v2::Node::scroll(vec![diff]).with_id("files").layout(abi::Layout::default().grow())])
             .layout(abi::Layout::default().grow())
@@ -1594,6 +1598,8 @@ fn probe_card(scroll: &str, index: usize, rows: u16, shape: &Shape) -> v2::Node 
             view: v2::DiffView::Unified,
             filetype: None,
             hunks: Some("h".into()),
+            wrap: Default::default(),
+            padding: 0,
         });
     }
     if shape.input && index == 0 {
@@ -2276,6 +2282,8 @@ fn big_more_setup(setup: &mut abi::Setup) -> Result<(), String> {
                 view: v2::DiffView::Unified,
                 filetype: None,
                 hunks: None,
+                wrap: Default::default(),
+                padding: 0,
             }
         };
         let diff = if BIG_KEPT.get() { cx.memo("big", (), |_| diff()) } else { diff() };

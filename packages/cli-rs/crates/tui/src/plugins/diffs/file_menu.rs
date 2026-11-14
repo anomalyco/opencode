@@ -1,135 +1,72 @@
 //! Diff file menu (E.15b, row DLG49, `feature-plugins/system/diff-viewer-file-menu.tsx`): one row under a
-//! right-clicked file heading or tree row that marks the file complete or incomplete. It holds the `menu` input
-//! mode while open, so the viewer's keys wait; Escape, Ctrl+C, or a click elsewhere close it.
+//! right-clicked file heading or tree row that marks the file complete or incomplete. An overlay of the plugin's,
+//! owned by the viewer's mount: it takes the focus, so the viewer's keys wait; Escape and a press outside close it,
+//! and Enter or a click of the row runs it.
 
-use super::viewer::{ID, Viewer};
+use opencode_plugin::abi::interact::{Anchor, Bind, Button, Event, Handled, Interact, Layer, Overlay, PointerKind};
+use opencode_plugin::abi::v2::{self, Node};
+use opencode_plugin::abi::{Host, Layout, Span, Width, Wrap};
 
-use crate::prelude::*;
+use super::{Diffs, MENU};
 
-const MODE: &str = "menu";
 const WIDTH: u16 = 19;
-/// Above the panels and routes, below the dialogs (3000).
-const Z_INDEX: i32 = 2600;
+/// The row's id, which the pointer names.
+const ROW: &str = "row";
 
-/// The open menu; dropping it closes it.
-pub struct Menu {
-    app: App,
-    overlay: View,
-    /// The row its hover handler restyles. The handler holds it weakly: a widget whose handler holds the widget is
-    /// never freed.
-    _row: Rc<View>,
-    // The layer goes before the mode.
-    _layer: Option<Disposer>,
-    _mode: Disposer,
+/// Opens the menu one row under the cell `x`, `y` of a press (`openFileMenu`).
+pub fn open(host: &dyn Host, x: u16, y: u16) {
+    host.overlay(Overlay { surface: MENU.to_owned(), anchor: Anchor::Point { x, y: y + 1 }, width: WIDTH, height: 1 });
 }
 
-impl Drop for Menu {
-    fn drop(&mut self) {
-        self.overlay.detach();
-        self.app.request_redraw();
+/// The menu's one row, for the file it is open on.
+pub fn view(diffs: &Diffs, _: &mut v2::View<'_>) -> Node {
+    let held = diffs.viewer.borrow();
+    let reviewed = held.as_ref().and_then(|viewer| viewer.menu.map(|file| viewer.is_reviewed(file)));
+    let label = if reviewed == Some(true) { "Mark incomplete" } else { "Mark complete" };
+    Node::row(vec![Node::text([Span::new(label)]).fg("text.base").unselectable().wrap(Wrap::None).truncate()])
+        .with_id(ROW)
+        .bg("background.raised.high")
+        .padding_sides(opencode_plugin::abi::Edges { left: 1, right: 1, ..Default::default() })
+        .interact(Interact {
+            pointer: true,
+            hover: Some("background.action.primary.hovered".into()),
+            ..Interact::default()
+        })
+        .layout(Layout::default().width(Width::Percent(100.0)).height(Width::Cells(1)))
+}
+
+/// Enter runs the menu.
+pub fn layer() -> Layer {
+    Layer { keys: vec![Bind::new("return", "run")], ..Layer::default() }
+}
+
+/// The menu's keys and presses: Enter or a left click runs it, a right press closes it.
+pub fn handle(diffs: &Diffs, host: &dyn Host, event: &Event) -> Handled {
+    match event {
+        Event::Key(key) if key.bind.as_deref() == Some("run") => run(diffs, host),
+        Event::Pointer(pointer) if pointer.node == ROW => match (pointer.kind, pointer.button) {
+            (PointerKind::Down, Some(Button::Right)) => close(diffs, host),
+            (PointerKind::Up, Some(Button::Left)) => run(diffs, host),
+            _ => {}
+        },
+        _ => return Handled::Pass,
+    }
+    Handled::Consume
+}
+
+fn close(diffs: &Diffs, host: &dyn Host) {
+    host.close_overlay(MENU);
+    if let Some(viewer) = diffs.viewer.borrow_mut().as_mut() {
+        viewer.menu = None;
     }
 }
 
-/// A right-click on a file's header or tree row (`openFileMenu`), at cell `x`, `y`.
-pub fn open(viewer: &Viewer, file: usize, x: u16, y: u16) {
-    let Some(tui) = viewer.tui() else { return };
-    // The previous menu goes first, so its mode and layer do not stack.
-    drop(viewer.menu.take());
-    let app = &tui.app;
-    let theme = tui.page();
-    let (width, height) = app.size();
-    let label = if viewer.is_reviewed(file) { "Mark incomplete" } else { "Mark complete" };
-    let menu_width = WIDTH.min(width);
-    let base = theme.background.raised.high;
-    let hovered = theme.background.action.primary.hovered;
-    let row = View::new(app)
-        .absolute()
-        .position(Edge::Left, x.min(width - menu_width))
-        .position(Edge::Top, (y + 1).min(height.saturating_sub(1)))
-        .width(menu_width)
-        .height(1)
-        .padding_edge(Edge::Left, 1)
-        .padding_edge(Edge::Right, 1)
-        .bg(base)
-        .child(&Text::new(app, label).fg(theme.text.base).selectable(false).wrap(WrapMode::None).truncate(true));
-    let overlay = View::new(app)
-        .absolute()
-        .position(Edge::Left, 0)
-        .position(Edge::Top, 0)
-        .width(width)
-        .height(height)
-        .z_index(Z_INDEX)
-        .child(&row);
-
-    let weak = viewer.weak();
-    let row = Rc::new(row);
-    let painted = Rc::downgrade(&row);
-    row.on_hover(move |cx, over| {
-        if let Some(row) = painted.upgrade() {
-            row.bg(if over { hovered } else { base });
-            cx.request_redraw();
-        }
-    });
-    let menu = weak.clone();
-    row.mouse_pointer(MousePointer::POINTER).on_mouse(move |cx, event| match event.kind {
-        MouseEventKind::Down(button) => {
-            if button == MouseButton::Right {
-                close(&menu);
-            }
-            cx.prevent_default();
-            cx.stop_propagation();
-        }
-        MouseEventKind::Up(button) => {
-            cx.prevent_default();
-            cx.stop_propagation();
-            if button == MouseButton::Left {
-                run(&menu, file);
-            }
-        }
-        _ => {}
-    });
-    let menu = weak.clone();
-    overlay.on_mouse(move |cx, event| {
-        if matches!(event.kind, MouseEventKind::Down(_)) {
-            close(&menu);
-            cx.prevent_default();
-            cx.stop_propagation();
-        }
-    });
-    opencode_ui::root::add(app, &overlay);
-
-    let mode = tui.keymap.push_mode(MODE, Condition::Always);
-    let (on_close, on_run) = (weak.clone(), weak);
-    let layer = tui
-        .keymap
-        .layer(
-            KeymapLayer::new(vec![
-                TuiCommand::inline("escape,ctrl+c", move |_, _| close(&on_close))
-                    .title("Close file menu")
-                    .group("Diff"),
-                TuiCommand::inline("return", move |_, _| run(&on_run, file)).title(label).group("Diff"),
-            ])
-            .mode(MODE),
-        )
-        .inspect_err(|error| log::error!("{ID} file menu layer: {error}"))
-        .ok();
-    *viewer.menu.borrow_mut() = Some(Menu { app: app.clone(), overlay, _row: row, _layer: layer, _mode: mode });
-    app.request_redraw();
-}
-
-/// Closes the menu after the event that asked for it, so its widgets outlive their own handlers.
-fn close(viewer: &Weak<Viewer>) {
-    let Some(tui) = viewer.upgrade().and_then(|viewer| viewer.tui()) else { return };
-    let viewer = viewer.clone();
-    tui.app.defer(bind!(viewer, |viewer, _| drop(viewer.menu.take())));
-}
-
 /// The menu's one action: closes it, then toggles the file's mark (`run`).
-fn run(viewer: &Weak<Viewer>, file: usize) {
-    let Some(tui) = viewer.upgrade().and_then(|viewer| viewer.tui()) else { return };
-    let viewer = viewer.clone();
-    tui.app.defer(bind!(viewer, |viewer, _| {
-        drop(viewer.menu.take());
-        viewer.toggle_reviewed(Some(file));
-    }));
+fn run(diffs: &Diffs, host: &dyn Host) {
+    host.close_overlay(MENU);
+    let mut held = diffs.viewer.borrow_mut();
+    let Some(viewer) = held.as_mut() else { return };
+    let file = viewer.menu.take();
+    viewer.toggle_reviewed(host, file);
+    viewer.follow_tree(host);
 }
