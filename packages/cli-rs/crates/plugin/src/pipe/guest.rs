@@ -535,7 +535,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
             deliver: claim.handler.then(|| guest.deliver(InputTo::Surface { surface: index })),
             layers: claim.layers.clone(),
             panel: matches!(place.at, v2::Place::Panel(_)),
-            mounts: false,
+            mounts: claim.mounts,
             activation: guest.owners.input.clone(),
         });
         let viewer = Viewer::new(guest, index);
@@ -716,7 +716,9 @@ impl surface::Viewer for Viewer {
         if offered.is_some() {
             self.settle(id, !viewing.input.full);
         }
-        let input = v2::SurfaceInput { full: false, ..viewing.input.clone() };
+        // What changed since the last view is not the JS host's input (P6a): its views run again as what they watch
+        // changes, and an input it is told is a new layout epoch, which a tree in flight would be refused for.
+        let input = v2::SurfaceInput { full: false, changed: Default::default(), ..viewing.input.clone() };
         let (started, sent, real) = {
             let mut mounts = self.mounts.borrow_mut();
             let mount = mounts.entry(id.clone()).or_default();

@@ -482,8 +482,10 @@ version answers until the candidate's setup returned, and stays when it throws. 
 contract 2.0 without Solid: `options`, `app` (the client's version and channel), `themeMode` (as the theme changes),
 `keymap.layer` commands (with their scope), `ui.toast` (with its session), `data.on` (with a disposer); and, under
 `Symbol.for("opencode.carrier")`, the carrier the V2 compatibility layer (P8) builds the rest on:
-`surface(name, place, view, { palette, notify, on, layers })` with views that return contract 2.0 trees (`memo`, nested
-too, `content`, `release`) on a route, a slot, a panel or an overlay; `layer(layer, handler)`; `command`, `on`,
+`surface(name, place, view, { palette, notify, on, layers, mounts })` with views that return contract 2.0 trees
+(`memo`, nested too, `content`, `release`, a box's `visible`, a keep of the root that keeps the memo table) on a route,
+a slot, a panel or an overlay, and whose `on` hears each mount begin and end with `mounts` (P6a). A view's input has a
+slot surface's `slot` and no `changed`: the JS host views again when what the plugin watches changes; `layer(layer, handler)`; `command`, `on`,
 `storage(keys)`, `effect` (any host request, P2's `open-panel`, `overlay`, `focus`, `set-mode`, `release-keys` among
 them), `watch`/`unwatch`/`read` (snapshots, at most 64), `invalidate`, `fetch`.
 
@@ -656,7 +658,9 @@ The conformance suite (phase Pc) holds the C ABI still for every binding. `crate
 lists scripted sessions: activation and its end, commands and the host requests they make, a route surface with
 content and a memoized subtree, the mailbox and a wake, a canvas and its draws, scroll verbs, a scroll read, a step
 and where it landed, and `layout` (P3), input and surfaces (P2: every verb and read once; a key a layer consumes, one it
-passes, a paste and a pointer press; a search), renderer claims of a tool call and of a fence (Pr), a panic, a refused tree, a setup that
+passes, a paste and a pointer press; a search), renderer claims of a tool call and of a fence (Pr), the built-ins'
+contract (P6a: a surface that hears its mount begin and end, a view told what changed that keeps its root, a hidden
+box, a read of one message), a panic, a refused tree, a setup that
 fails, an overrun, and the same plugin as a 1.x library. Each is recorded from `crates/plugin/examples/conformance`
 (the reference, linked into the loader's tests and called through the SDK's byte shims) into
 `crates/plugin/conformance/transcripts.jsonl`: every request and reply that cross the C ABI on the UI thread, with

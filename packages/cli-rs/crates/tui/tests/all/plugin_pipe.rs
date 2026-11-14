@@ -1,11 +1,13 @@
 //! The pipe carrier (P7, synthesis 3.7, 4.3, 4.14): TypeScript plugins on the JS host, a real Bun process. The plugins
-//! are `crates/plugin/examples/pipe`: `twin/tui.ts`, whose linked twin is `twin.rs`, and `probe/tui.ts`, which writes
-//! its own call log. Every row skips without Bun, unless `OPENCODE_RS_REQUIRE_TS=1`.
+//! are `crates/plugin/examples/pipe`: `twin/tui.ts` and `kept/tui.ts` (P6a), whose linked twins are `twin.rs` and
+//! `kept.rs`, and `probe/tui.ts`, which writes its own call log. Every row skips without Bun, unless `OPENCODE_RS_REQUIRE_TS=1`.
 //!
 //! A frame of the pipe is compared once the JS host has settled: everything sent was handled, and no tree waits for
 //! the host ([`settle`]). Before that, a surface shows what the second tier allows: its last whole revision or a
 //! placeholder.
 
+#[path = "../../../plugin/examples/pipe/kept.rs"]
+mod kept;
 #[path = "../../../plugin/examples/pipe/twin.rs"]
 mod twin;
 
@@ -276,6 +278,95 @@ fn the_twin_is_equal_linked_and_on_the_pipe() {
     {
         for ((name, linked), (_, piped)) in linked.iter().zip(&other) {
             assert_eq!(linked.1, piped.1, "{carrier} at {name}: toasts");
+            assert_eq!(linked.2, piped.2, "{carrier} at {name}: status");
+            if linked.0 != piped.0 {
+                panic!(
+                    "{carrier} at {name}: the frames differ\nlinked:\n{}\n{carrier}:\n{}",
+                    screen(&linked.0),
+                    screen(&piped.0)
+                );
+            }
+        }
+    }
+}
+
+/// The script of the twin of the built-ins' contract (P6a), in process on `carrier` or on the pipe: what each
+/// checkpoint saw.
+fn kept_script(pipe: Option<Config>, carrier: Carrier) -> Vec<(&'static str, Seen)> {
+    let (harness, _root) = match pipe {
+        Some(config) => {
+            let pipe = open(&[("kept", None)], config, (80, 30));
+            pipe.active(kept::ID);
+            (pipe.harness, Some(pipe.root))
+        }
+        None => {
+            let mut deps = Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) };
+            deps.builtins.push(builtin(carrier, abi::Plugin { id: kept::ID, setup: kept::setup }));
+            (support::mount(80, 30, deps), None)
+        }
+    };
+    let scripts = harness.tui.plugins.scripts.borrow().clone();
+    let settle = || match &scripts {
+        Some(scripts) => settle(&harness, scripts),
+        None => {
+            for _ in 0..3 {
+                harness.app.advance(Duration::from_millis(1));
+            }
+        }
+    };
+    let tui = &harness.tui;
+    let route = Route::Plugin { id: kept::ID.to_owned(), name: "kept".to_owned() };
+    let mut seen = Vec::new();
+    tui.navigate(route.clone());
+    settle();
+    seen.push(("open", observe(&harness, kept::ID)));
+    tui.keymap.dispatch("kept.bump", None);
+    settle();
+    seen.push(("bumped", observe(&harness, kept::ID)));
+    // A view that keeps the root keeps the memo values under it, in whichever table holds them (review carbon-2).
+    tui.keymap.dispatch("kept.same", None);
+    settle();
+    assert_eq!(
+        opencode_plugin::surface::ledger_of(kept::ID).memo_entries,
+        1,
+        "{carrier:?}, pipe {}",
+        scripts.is_some()
+    );
+    tui.keymap.dispatch("kept.hide", None);
+    settle();
+    seen.push(("hidden", observe(&harness, kept::ID)));
+    tui.theme.borrow_mut().set("tokyonight");
+    tui.theme_changed();
+    settle();
+    seen.push(("theme", observe(&harness, kept::ID)));
+    tui.keymap.dispatch("kept.hide", None);
+    settle();
+    seen.push(("shown", observe(&harness, kept::ID)));
+    tui.navigate(Route::Home);
+    settle();
+    tui.navigate(route);
+    settle();
+    seen.push(("remount", observe(&harness, kept::ID)));
+    seen
+}
+
+// Expected (`carrier-equal` of P6a on the pipe): one plugin of the built-ins' contract, written twice (Rust linked,
+// TypeScript on the JS host), gives equal frames and status at every checkpoint, also on the C ABI: mount notices heard
+// begin and end (the route's line counts them), a box hidden and shown again in place, a read of one message, and views
+// that keep their root while what they show is the same.
+#[test]
+fn the_kept_twin_is_equal_linked_and_on_the_pipe() {
+    let Some(config) = config() else { return };
+    let linked = kept_script(None, Carrier::Linked);
+    let text = |seen: &Seen| screen(&seen.0);
+    let (open, remount) = (text(&linked[0].1), text(&linked[5].1));
+    assert!(open.contains("kept 0 · begun 1 · ended 0 · message none") && open.contains("extra"), "{open}");
+    assert!(remount.contains("kept 1 · begun 2 · ended 1"), "{remount}");
+    assert!(!text(&linked[2].1).contains("extra") && text(&linked[2].1).contains("below"), "{}", text(&linked[2].1));
+    for (carrier, other) in
+        [("pipe", kept_script(Some(config), Carrier::Linked)), ("abi", kept_script(None, Carrier::Abi))]
+    {
+        for ((name, linked), (_, piped)) in linked.iter().zip(&other) {
             assert_eq!(linked.2, piped.2, "{carrier} at {name}: status");
             if linked.0 != piped.0 {
                 panic!(
