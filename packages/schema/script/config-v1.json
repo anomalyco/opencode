@@ -609,10 +609,38 @@
           "description": "Enable or disable the MCP server on startup"
         },
         "timeout": {
-          "exclusiveMinimum": 0,
-          "type": "integer",
-          "maximum": 9007199254740991,
-          "description": "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer",
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "object",
+              "properties": {
+                "startup": {
+                  "exclusiveMinimum": 0,
+                  "type": "integer",
+                  "maximum": 9007199254740991,
+                  "description": "Maximum time in milliseconds to establish and initialize the MCP server."
+                },
+                "catalog": {
+                  "exclusiveMinimum": 0,
+                  "type": "integer",
+                  "maximum": 9007199254740991,
+                  "description": "Maximum time in milliseconds to wait for MCP discovery requests such as tools/list and prompts/list."
+                },
+                "execution": {
+                  "exclusiveMinimum": 0,
+                  "type": "integer",
+                  "maximum": 9007199254740991,
+                  "description": "Maximum time in milliseconds to wait for MCP tool and prompt execution."
+                }
+              },
+              "additionalProperties": false
+            }
+          ],
+          "description": "Timeout in ms for MCP server requests. A bare number applies to connecting, fetching tools, and execution alike. When unset the defaults are 30000 (30 seconds) for connecting and fetching tools and 12 hours for execution. Pass { startup, catalog, execution } to set the phases separately so a longer startup does not shorten execution."
         }
       },
       "required": [
@@ -689,10 +717,38 @@
           "description": "OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection."
         },
         "timeout": {
-          "exclusiveMinimum": 0,
-          "type": "integer",
-          "maximum": 9007199254740991,
-          "description": "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer",
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "object",
+              "properties": {
+                "startup": {
+                  "exclusiveMinimum": 0,
+                  "type": "integer",
+                  "maximum": 9007199254740991,
+                  "description": "Maximum time in milliseconds to establish and initialize the MCP server."
+                },
+                "catalog": {
+                  "exclusiveMinimum": 0,
+                  "type": "integer",
+                  "maximum": 9007199254740991,
+                  "description": "Maximum time in milliseconds to wait for MCP discovery requests such as tools/list and prompts/list."
+                },
+                "execution": {
+                  "exclusiveMinimum": 0,
+                  "type": "integer",
+                  "maximum": 9007199254740991,
+                  "description": "Maximum time in milliseconds to wait for MCP tool and prompt execution."
+                }
+              },
+              "additionalProperties": false
+            }
+          ],
+          "description": "Timeout in ms for MCP server requests. A bare number applies to connecting, fetching tools, and execution alike. When unset the defaults are 30000 (30 seconds) for connecting and fetching tools and 12 hours for execution. Pass { startup, catalog, execution } to set the phases separately so a longer startup does not shorten execution."
         }
       },
       "required": [
