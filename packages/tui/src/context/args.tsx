@@ -17,7 +17,14 @@ export const { use: useArgs, provider: ArgsProvider } = createSimpleContext({
   init: (props: Args) => {
     // The first new session created from home takes this ID; later ones mint their own.
     let pending = props.newSessionID
+    // --prompt is used once: by the first home prompt, or by the startup navigation into a session.
+    let prompt = props.prompt
     return mergeProps(props, {
+      takePrompt() {
+        const text = prompt
+        prompt = undefined
+        return text
+      },
       takeNewSessionID() {
         const id = pending
         pending = undefined

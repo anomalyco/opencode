@@ -676,6 +676,7 @@ function App() {
         local.model.set({ providerID, modelID }, { recent: true })
       }
       if (args.sessionID && !args.fork) {
+        args.takePrompt()
         route.navigate({
           type: "session",
           sessionID: args.sessionID,
@@ -701,6 +702,7 @@ function App() {
       .then((response) => {
         const match = response.data[0]?.id
         if (!match) return
+        args.takePrompt()
         if (!args.fork) {
           route.navigate({ type: "session", sessionID: match, prompt: startupPrompt })
           return
@@ -718,6 +720,7 @@ function App() {
   createEffect(() => {
     if (forked || !args.sessionID || !args.fork) return
     forked = true
+    args.takePrompt()
     void client.api.session
       .fork({ sessionID: args.sessionID })
       .then((result) => route.navigate({ type: "session", sessionID: result.id, prompt: startupPrompt }))
