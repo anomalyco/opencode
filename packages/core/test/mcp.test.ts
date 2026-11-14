@@ -1232,6 +1232,14 @@ test("reconnects and retries a tool call after the MCP session expires", async (
           expect(server.state.toolCalls).toHaveLength(1)
           expect(server.state.initializations).toBe(1)
 
+          // Settle the startup prompt listing before restarting: this test exercises the foreground
+          // tool request's expiry, not a background listing closing that request before it can reply.
+          yield* service
+            .prompts()
+            .pipe(
+              Effect.repeat({ until: (prompts) => prompts.length > 0, schedule: Schedule.spaced("10 millis") }),
+              Effect.timeout("10 seconds"),
+            )
           // The restarted server does not know the client's session, so the next request 404s.
           yield* Effect.promise(server.restart)
           const result = yield* service.callTool({ server: "resources", name: "echo", args: { n: 2 } })
@@ -2795,6 +2803,37 @@ testEffect(Layer.empty).effect("flush waits for a server that connects within it
   }),
 )
 
+testEffect(Layer.empty).effect("background reconnects do not reopen startup grace or publish pending", () =>
+  Effect.gen(function* () {
+    const release = yield* Deferred.make<void>()
+    const started = yield* Deferred.make<void>()
+    const run = Effect.runPromiseWith(yield* Effect.context())
+    const server = yield* resourceServer({
+      respond: (request) => {
+        if (request.method !== "POST") return undefined
+        if (server.state.initializations <= 3) return new Response(null, { status: 503 })
+        return run(
+          Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as(undefined)),
+        )
+      },
+    })
+    const published: string[] = []
+    yield* Effect.gen(function* () {
+      const mcp = yield* Mcp.Service
+      yield* advance(() => server.state.initializations >= 4)
+      yield* Deferred.await(started)
+      expect((yield* mcp.servers())[0]?.status.status).toBe("failed")
+      const startup = yield* mcp.awaitStartup().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Effect.yieldNow
+      expect(startup.pollUnsafe()).toBeDefined()
+      expect(published.filter((type) => type === McpEvent.StatusChanged.type)).toHaveLength(2)
+    }).pipe(
+      Effect.ensuring(Deferred.succeed(release, undefined)),
+      Effect.provide(resourceMcpLayer(server.url, undefined, undefined, { published })),
+    )
+  }),
+)
+
 testEffect(Layer.empty).effect("flush stops waiting for a hung server when its startup window ends", () =>
   Effect.gen(function* () {
     const gated = yield* gatedServer
@@ -3463,10 +3502,12 @@ describe("MCP pool", () => {
   })
 
   // A server that is down, or that refuses this client, would refuse a private connection too.
-  for (const [code, what, attempts] of [
-    [503, "was down", 3],
-    [401, "rejected the credentials", 1],
-    [403, "refused access", 1],
+  // Recovery retries a down server with backoff and reconnects on its own; a refusal that
+  // needs the user stops until they connect. Pooling survives either way.
+  for (const [code, what] of [
+    [503, "was down"],
+    [401, "rejected the credentials"],
+    [403, "refused access"],
   ] as const)
     live(`keeps pooling a server that ${what} when first tried`, () => {
       const captured = poolLogs()
@@ -3484,11 +3525,27 @@ describe("MCP pool", () => {
         const pool = yield* makePool
         const a = yield* open(pooled(server.url), pool, directories[0])
         expect((yield* status(a.mcp))?.status).toBe("failed")
-        // The startup retries transient failures, and nothing tries a private connection afterwards.
-        expect(refusing.count).toBe(attempts)
         expect(captured.logs).toEqual([])
-        refusing.value = false
-        yield* a.mcp.connect("resources")
+        if (code === 503) {
+          // The startup retried, and recovery keeps trying until the server comes back.
+          refusing.value = false
+          yield* a.mcp.tools().pipe(
+            Effect.filterOrFail(
+              (tools) => tools.some((tool) => tool.name === "echo"),
+              () => "pending",
+            ),
+            Effect.retry({ times: 900, schedule: Schedule.spaced("10 millis") }),
+          )
+          expect((yield* status(a.mcp))?.status).toBe("connected")
+        } else {
+          // No user, no reconnection: the failure stops until they connect.
+          const stalled = refusing.count
+          yield* Effect.sleep("400 millis")
+          expect(refusing.count).toBe(stalled)
+          refusing.value = false
+          yield* a.mcp.connect("resources")
+          expect((yield* status(a.mcp))?.status).toBe("connected")
+        }
         yield* open(pooled(server.url), pool, directories[1])
         expect(server.state.toolLists).toBe(1)
       }).pipe(Effect.provide(captured.layer))
@@ -3567,6 +3624,81 @@ describe("MCP pool", () => {
       yield* c.mcp.disconnect("resources")
       yield* open(pooled(server.url), pool, directories[0])
       expect(server.state.toolLists).toBe(2)
+    }),
+  )
+
+  testEffect(Layer.empty).effect("stays disconnected when the user disconnects while recovery waits", () =>
+    Effect.gen(function* () {
+      const failing = { value: true }
+      const server = yield* resourceServer({
+        modern: true,
+        resources: false,
+        respond: () => (failing.value ? new Response(null, { status: 503 }) : undefined),
+      })
+      const published: string[] = []
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        yield* advance(() => published.filter((type) => type === McpEvent.StatusChanged.type).length >= 2)
+        expect((yield* status(mcp))?.status).toBe("failed")
+        yield* mcp.disconnect("resources")
+        const posts = server.state.urls.length
+        yield* TestClock.adjust("10 minutes")
+        yield* drain
+        expect((yield* status(mcp))?.status).toBe("disabled")
+        expect(server.state.urls.length).toBe(posts)
+        failing.value = false
+        yield* TestClock.adjust("10 minutes")
+        yield* drain
+        expect((yield* status(mcp))?.status).toBe("disabled")
+        expect(server.state.urls.length).toBe(posts)
+      }).pipe(Effect.provide(resourceMcpLayer(pooled(server.url), undefined, undefined, { published })))
+    }),
+  )
+
+  testEffect(Layer.empty).effect("recovers a pooled server that is still down at the first rejoin", () =>
+    Effect.gen(function* () {
+      const failing = { value: true }
+      const server = yield* resourceServer({
+        modern: true,
+        resources: false,
+        respond: () => (failing.value ? new Response(null, { status: 503 }) : undefined),
+      })
+      const published: string[] = []
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        // Each failed start sends three discover probes (the initial attempt and two quick retries).
+        yield* advance(() => server.state.urls.length >= 6)
+        expect((yield* status(mcp))?.status).toBe("failed")
+        expect(published.filter((type) => type === McpEvent.StatusChanged.type)).toHaveLength(2)
+        failing.value = false
+        yield* advance(() => server.state.toolLists === 1)
+        yield* drain
+        expect((yield* status(mcp))?.status).toBe("connected")
+        expect(published.filter((type) => type === McpEvent.StatusChanged.type)).toHaveLength(3)
+        expect((yield* mcp.tools()).some((tool) => tool.name === "echo")).toBe(true)
+      }).pipe(Effect.provide(resourceMcpLayer(pooled(server.url), undefined, undefined, { published })))
+    }),
+  )
+
+  testEffect(Layer.empty).effect("retries a pooled server that is down when first connected", () =>
+    Effect.gen(function* () {
+      const failing = { value: true }
+      const server = yield* resourceServer({
+        modern: true,
+        resources: false,
+        respond: () => (failing.value ? new Response(null, { status: 503 }) : undefined),
+      })
+      const published: string[] = []
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        yield* advance(() => published.filter((type) => type === McpEvent.StatusChanged.type).length >= 2)
+        expect((yield* status(mcp))?.status).toBe("failed")
+        failing.value = false
+        yield* advance(() => server.state.toolLists === 1)
+        yield* drain
+        expect((yield* status(mcp))?.status).toBe("connected")
+        expect((yield* mcp.tools()).some((tool) => tool.name === "echo")).toBe(true)
+      }).pipe(Effect.provide(resourceMcpLayer(pooled(server.url), undefined, undefined, { published })))
     }),
   )
 
@@ -3751,7 +3883,7 @@ describe("MCP pool", () => {
             callbacks: run,
             fork: run,
             events: {
-              connecting: Effect.void,
+              connecting: () => Effect.void,
               connected: Effect.void,
               failed: () => Effect.void,
               settled: Effect.void,
@@ -3907,6 +4039,37 @@ describe("MCP pool", () => {
         Effect.sync(() => alive(second!)),
         (alive) => !alive,
       )
+    }),
+  )
+
+  live("a real pooled process drop cannot reconnect a holder after disconnect", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const pids = path.join(tmp.path, "pids")
+      const config = new ConfigMCP.Local({
+        type: "local",
+        command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-modern-stdio.ts")],
+        environment: { MCP_PID_FILE: pids },
+        cwd: directories[0],
+        pool: true,
+      })
+      const pool = yield* makePool
+      const a = yield* open(config, pool, directories[0])
+      const first = Number((yield* Effect.promise(() => fs.readFile(pids, "utf8"))).trim())
+      process.kill(first, "SIGKILL")
+      yield* status(a.mcp).pipe(
+        Effect.filterOrFail(
+          (status) => status?.status === "failed",
+          () => "waiting for process close",
+        ),
+        Effect.retry({ times: 500, schedule: Schedule.spaced("10 millis") }),
+      )
+      yield* a.mcp.disconnect("resources")
+      yield* Effect.sleep("1500 millis")
+      expect((yield* status(a.mcp))?.status).toBe("disabled")
+      expect((yield* Effect.promise(() => fs.readFile(pids, "utf8"))).trim().split("\n")).toHaveLength(1)
+      yield* a.mcp.connect("resources")
+      expect((yield* status(a.mcp))?.status).toBe("connected")
     }),
   )
 
