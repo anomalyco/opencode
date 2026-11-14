@@ -123,11 +123,12 @@ function isPathAction(action: string): action is PathAction {
 
 function expandHome(resource: string, home: string) {
   if (resource === "~" || resource === "$HOME") return home
-  const relative = resource.startsWith("~/")
-    ? resource.slice(2)
-    : resource.startsWith("$HOME/") || resource.startsWith("$HOME\\")
-      ? resource.slice(6)
-      : undefined
+  const relative =
+    resource.startsWith("~/") || resource.startsWith("~\\")
+      ? resource.slice(2)
+      : resource.startsWith("$HOME/") || resource.startsWith("$HOME\\")
+        ? resource.slice(6)
+        : undefined
   if (relative !== undefined) return (path.posix.isAbsolute(home) ? path.posix : path.win32).join(home, relative)
   return resource
 }
