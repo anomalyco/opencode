@@ -1,10 +1,18 @@
-import { createMemo, onCleanup, untrack } from "solid-js"
+import { createEffect, createMemo, onCleanup, untrack } from "solid-js"
 import type { PluginOptions } from "@opencode/plugin/gui"
-import type { Bridge, BridgePluginGui, Entry } from "@opencode/plugin/gui/host"
+import {
+  pluginIdAvailable,
+  runsOn,
+  type Bridge,
+  type BridgePluginGui,
+  type BridgePluginGuis,
+  type Entry,
+} from "@opencode/plugin/gui/host"
 import type { OpenCodeClient } from "@opencode/client/promise"
 import { useGlobal } from "@/runtime/server/runtime"
-import { ServerConnection } from "@/runtime/server/registry"
-import { pluginDefinition } from "./module"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { builtins } from "./builtins"
+import { pluginDefinition, webPluginDefinition } from "./module"
 import {
   createPluginGuiState,
   PLUGIN_GUI_INITIAL_TIMEOUT_MS,
@@ -27,18 +35,25 @@ export type PluginGui = {
  * server already runs the plugins' server entries, so their bundles add no new source of code; other servers' plugins
  * load no GUI.
  *
+ * A web tab has no main process. It lists the plugins that the server which served it allows on the web
+ * (`experimental.plugin_gui_web`) and reads their bundles itself, with its own credential, applying the id and OS
+ * checks main applies on desktop. It runs only their window setups.
+ *
  * Mounted below the app's server providers, which the plugin root sits above, for the client of that server; it
  * hands the definitions up through `onChange` rather than the root reading them.
  */
 export function PluginGuiLoader(props: {
-  bridge: Bridge
+  /** The desktop bridge; undefined in a web tab. */
+  bridge: Bridge | undefined
   /** The GUIs that load, and the ids of plugins whose GUI cannot load because a built-in claims the id. */
   onChange: (plugins: readonly PluginGui[], reserved: readonly string[]) => void
 }) {
   const global = useGlobal()
+  const servers = useServers()
+  const bridge = props.bridge
 
   const controller = createMemo(() => {
-    const conn = global.servers.list().find(ServerConnection.builtin)
+    const conn = global.servers.list().find(bridge ? ServerConnection.builtin : servers.current)
 
     return conn ? global.serverCtx(ServerConnection.key(conn)) : undefined
   })
@@ -78,9 +93,12 @@ export function PluginGuiLoader(props: {
     drain()
   }
 
+  // A web tab's own server lists what main would send.
+  const list = () => (bridge ? bridge.pluginGuis() : webGuis(client()))
+
   const run = (effect: PluginGuiEffect) => {
     if (effect.type === "fetch.initial")
-      return void Promise.try(() => props.bridge.pluginGuis()).then(
+      return void Promise.try(list).then(
         (guis) => dispatch({ type: "initial.resolved", attempt: effect.attempt, guis }),
         (cause: unknown) => dispatch({ type: "initial.failed", attempt: effect.attempt, cause }),
       )
@@ -100,38 +118,99 @@ export function PluginGuiLoader(props: {
     }
 
     if (effect.type === "evaluate")
-      return void Promise.all(effect.plugins.map(evaluate)).then(
+      return void Promise.all(effect.plugins.map((plugin) => evaluate(plugin, !bridge))).then(
         (loaded) => dispatch({ type: "evaluated", attempt: effect.attempt, loaded }),
         (cause: unknown) => dispatch({ type: "evaluate.failed", attempt: effect.attempt, cause }),
       )
 
     if (effect.type === "publish")
       return props.onChange(
-        effect.plugins.map((plugin) => ({ definition: plugin.definition, options: plugin.options, client })),
+        effect.plugins
+          // Main leaves out plugins limited to other systems; on the web no OS is known, so only those that list none run.
+          .filter((plugin) => bridge || runsOn(plugin.definition, undefined))
+          .map((plugin) => ({ definition: plugin.definition, options: plugin.options, client })),
         effect.reserved,
       )
 
     console.error("[plugin] failed to load plugin GUIs", effect.cause)
   }
 
-  onCleanup(
-    props.bridge.on((message) => {
-      if (message.type === "pluginGuis")
-        dispatch({ type: "pushed", guis: { plugins: message.plugins, reserved: message.reserved } })
-    }),
-  )
+  if (bridge)
+    onCleanup(
+      bridge.on((message) => {
+        if (message.type === "pluginGuis")
+          dispatch({ type: "pushed", guis: { plugins: message.plugins, reserved: message.reserved } })
+      }),
+    )
+
+  // On the web, the tab lists again on each `plugin.updated` and reconnect, as main does, and once a server that was
+  // not there for the first list arrives. Only the newest listing is pushed.
+  if (!bridge) {
+    const first = untrack(controller)
+    const listing = { count: 0 }
+
+    createEffect(() => {
+      const ctx = controller()
+
+      if (!ctx) return
+
+      const relist = () => {
+        const count = ++listing.count
+
+        void webGuis(ctx.sdk.api).then(
+          (guis) => {
+            if (count === listing.count) dispatch({ type: "pushed", guis })
+          },
+          (cause: unknown) => console.error("[plugin] failed to list plugin GUIs", cause),
+        )
+      }
+
+      if (ctx !== first) relist()
+      onCleanup(ctx.sdk.event.on("plugin.updated", relist))
+      onCleanup(ctx.sdk.event.on("server.connected", relist))
+    })
+  }
+
   onCleanup(() => dispatch({ type: "disposed" }))
   initial.effects.forEach(run)
 
   return null
 }
 
-/** Evaluates a plugin's bundle at the revision main sent. */
-async function evaluate(plugin: BridgePluginGui): Promise<LoadedPluginGui> {
+/**
+ * The plugin GUIs a web tab loads: those its server allows on the web, read as main reads them on desktop. A plugin
+ * whose id a built-in claims stays out, and a bundle that cannot be read is left out until the next listing.
+ */
+async function webGuis(api: OpenCodeClient | undefined): Promise<BridgePluginGuis> {
+  if (!api) throw new Error("The app's own server is unavailable")
+
+  const listed = (await api.experimental.plugin.web()).data.flatMap((plugin) => (plugin.id ? [plugin.id] : []))
+  const reserved = listed.filter((id) => !pluginIdAvailable(id, builtins))
+
+  const plugins = await Promise.all(
+    listed
+      .filter((id) => !reserved.includes(id))
+      .map((id) =>
+        api.plugin.gui({ id }).then(
+          (bundle) => [{ ...bundle.data, id }],
+          (cause: unknown) => {
+            console.error("[plugin] failed to read a plugin GUI", id, cause)
+
+            return []
+          },
+        ),
+      ),
+  )
+
+  return { plugins: plugins.flat(), reserved }
+}
+
+/** Evaluates a plugin's bundle at the revision main sent, or a web tab listed. */
+async function evaluate(plugin: BridgePluginGui, web: boolean): Promise<LoadedPluginGui> {
   return {
     id: plugin.id,
     revision: plugin.revision,
     options: plugin.options,
-    definition: await pluginDefinition(plugin.id, plugin.code),
+    definition: await (web ? webPluginDefinition : pluginDefinition)(plugin.id, plugin.code),
   }
 }

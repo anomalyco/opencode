@@ -2403,6 +2403,15 @@ export type ExperimentalPersistentPtyConnectTokenOperation<E = never> = (
   input: ExperimentalPersistentPtyConnectTokenInput,
 ) => Effect.Effect<ExperimentalPersistentPtyConnectTokenOutput, E>
 
+export type ExperimentalPluginWebInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+export type ExperimentalPluginWebOutput = {
+  readonly location: Location.PublicRef
+  readonly data: ReadonlyArray<Plugin.Info>
+}
+export type ExperimentalPluginWebOperation<E = never> = (
+  input?: ExperimentalPluginWebInput,
+) => Effect.Effect<ExperimentalPluginWebOutput, E>
+
 export type ExperimentalScheduleCreateInput = {
   readonly sessionID: Session.ID
   readonly name?: string | undefined
@@ -2539,6 +2548,7 @@ export interface ExperimentalApi<E = never> {
     readonly remove: ExperimentalPersistentPtyRemoveOperation<E>
     readonly connectToken: ExperimentalPersistentPtyConnectTokenOperation<E>
   }
+  readonly plugin: { readonly web: ExperimentalPluginWebOperation<E> }
   readonly schedule: {
     readonly create: ExperimentalScheduleCreateOperation<E>
     readonly list: ExperimentalScheduleListOperation<E>

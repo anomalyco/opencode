@@ -690,6 +690,19 @@ value.
 }
 ```
 
+### Plugin GUIs in the web app
+
+`plugin_gui_web` lets the web app load the [GUI part](/build/plugins/gui#in-the-web-app) of configured plugins. Set it
+to `true` for every plugin with a GUI, or to a list of plugin ids. Defaults to `false`.
+
+```jsonc
+{
+  "experimental": {
+    "plugin_gui_web": ["acme"],
+  },
+}
+```
+
 ### Deprecated policies
 
 `experimental.policies` is deprecated. Use top-level [`policies`](/policies) instead. The old key still works and
