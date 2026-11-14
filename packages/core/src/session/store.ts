@@ -56,6 +56,15 @@ export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<Session.Info[]>
   readonly messages: (input: MessagesInput) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   readonly context: (sessionID: Session.ID) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
+  /**
+   * The newest completed, error-free assistant message above the sequence
+   * bound. Reads newest-first in pages so a long run of incomplete steps does
+   * not decode the whole history.
+   */
+  readonly lastAssistantAfter: (input: {
+    readonly sessionID: Session.ID
+    readonly afterSeq?: number
+  }) => Effect.Effect<SessionMessage.Assistant | undefined, MessageDecodeError>
   readonly message: (
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
@@ -66,8 +75,7 @@ export interface Interface {
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.MediaInfo } | undefined>
   /**
-   * Top-level Sessions holding an execution claim. Recoverable background
-   * children are resumed separately through their durable Job records.
+   * Sessions holding an execution claim, including directly driven children.
    */
   readonly listSuspended: () => Effect.Effect<ReadonlyArray<Session.ID>>
   /**
@@ -80,10 +88,9 @@ export interface Interface {
   /** Releases the claim and resets resume accounting. Terminal events call this on commit. */
   readonly release: (sessionID: Session.ID) => Effect.Effect<void>
   /**
-   * Clears orphaned child claims except children owned by recoverable
-   * background subagent jobs.
+   * Release abandoned claims when the child's parent was deleted.
    */
-  readonly releaseChildClaims: (recoverable: ReadonlyArray<Session.ID>) => Effect.Effect<void>
+  readonly releaseOrphanedChildClaims: () => Effect.Effect<void>
   /**
    * Durably counts one more resume of an orphaned claim, returning the new
    * total — or undefined when the Session no longer exists.
@@ -192,6 +199,32 @@ const layer = Layer.effect(
         return yield* SessionHistory.decodeMessageRowsWithRefs(db, yield* messageRows(input))
       }),
       context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID, "latest")),
+      lastAssistantAfter: Effect.fn("SessionStore.lastAssistantAfter")(function* (input) {
+        let cursorSeq: number | undefined
+        while (true) {
+          const rows = yield* db
+            .select()
+            .from(SessionMessageTable)
+            .where(
+              and(
+                eq(SessionMessageTable.session_id, input.sessionID),
+                eq(SessionMessageTable.type, "assistant"),
+                input.afterSeq === undefined ? undefined : gt(SessionMessageTable.seq, input.afterSeq),
+                cursorSeq === undefined ? undefined : lt(SessionMessageTable.seq, cursorSeq),
+              ),
+            )
+            .orderBy(desc(SessionMessageTable.seq))
+            .limit(20)
+            .all()
+            .pipe(Effect.orDie)
+          for (const message of yield* SessionHistory.decodeMessageRows(db, rows)) {
+            if (message.type === "assistant" && message.time.completed !== undefined && message.error === undefined)
+              return message
+          }
+          if (rows.length < 20) return undefined
+          cursorSeq = rows[rows.length - 1]!.seq
+        }
+      }),
       message: Effect.fn("SessionStore.message")(function* (messageID) {
         const row = yield* messageRow(messageID)
         if (!row) return undefined
@@ -208,7 +241,7 @@ const layer = Layer.effect(
         return yield* db
           .select({ sessionID: SessionTable.id })
           .from(SessionTable)
-          .where(and(isNotNull(SessionTable.time_suspended), isNull(SessionTable.parent_id)))
+          .where(isNotNull(SessionTable.time_suspended))
           .all()
           .pipe(
             Effect.orDie,
@@ -235,15 +268,14 @@ const layer = Layer.effect(
           .run()
           .pipe(Effect.orDie)
       }),
-      releaseChildClaims: Effect.fn("SessionStore.releaseChildClaims")((recoverable) =>
+      releaseOrphanedChildClaims: Effect.fn("SessionStore.releaseOrphanedChildClaims")(() =>
         db
           .update(SessionTable)
           .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
           .where(
             and(
               isNotNull(SessionTable.time_suspended),
-              isNotNull(SessionTable.parent_id),
-              recoverable.length > 0 ? notInArray(SessionTable.id, Array.from(recoverable)) : undefined,
+              notInArray(SessionTable.parent_id, db.select({ id: SessionTable.id }).from(SessionTable)),
             ),
           )
           .run()

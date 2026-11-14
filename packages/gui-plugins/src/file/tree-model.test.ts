@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { FileNode } from "@opencode/plugin/gui"
-import { buildAllowedTreeInput, buildGitStatusMap, buildLiveTreeInput, diffGitStatusPatch } from "./tree-model"
+import {
+  buildAllowedTreeInput,
+  buildKindsStatus,
+  buildLiveTreeInput,
+  collectAllowedCollapsedDirs,
+  diffStatusLayers,
+} from "./tree-model"
 
 describe("buildAllowedTreeInput", () => {
   test("collects normalized paths, ancestor directories, and total count", () => {
@@ -64,29 +70,63 @@ describe("buildLiveTreeInput", () => {
   })
 })
 
-describe("diffGitStatusPatch", () => {
-  test("computes incremental set and remove operations", () => {
-    const prev = buildGitStatusMap(
-      new Map([
-        ["src/a.ts", "add"],
-        ["src/b.ts", "mix"],
-      ]),
-      new Set(["dist/"]),
-    )
+describe("collectAllowedCollapsedDirs", () => {
+  test("keeps tracked folders open and untracked folders closed until the user toggles them", () => {
+    const model = buildAllowedTreeInput(["src/lib/a.ts", "docs/guide.md", "research/"])
 
-    const next = buildGitStatusMap(
-      new Map([
-        ["src/a.ts", "del"],
-        ["src/c.ts", "add"],
-      ]),
-    )
+    const state = new Map([
+      ["docs", false],
+      ["research", true],
+    ])
 
-    expect(diffGitStatusPatch(prev, next)).toEqual({
+    expect([...collectAllowedCollapsedDirs(model, (dir) => state.get(dir))]).toEqual(["docs"])
+    expect([...collectAllowedCollapsedDirs(model, () => undefined)]).toEqual(["research"])
+  })
+})
+
+describe("diffStatusLayers", () => {
+  test("computes incremental set and remove operations when the change kinds change", () => {
+    const previous = {
+      kinds: buildKindsStatus(
+        new Map([
+          ["src/a.ts", "add"],
+          ["src/b.ts", "mix"],
+        ]),
+      ),
+      ignored: new Set(["dist/"]),
+    }
+
+    const next = {
+      kinds: buildKindsStatus(
+        new Map([
+          ["src/a.ts", "del"],
+          ["src/c.ts", "add"],
+        ]),
+      ),
+      ignored: new Set<string>(),
+    }
+
+    expect(diffStatusLayers(previous, next)).toEqual({
       remove: ["dist/", "src/b.ts"],
       set: [
         { path: "src/a.ts", status: "deleted" },
         { path: "src/c.ts", status: "added" },
       ],
+    })
+  })
+
+  test("diffs only ignored entries while the change kinds stay the same map, and a change kind wins", () => {
+    const kinds = buildKindsStatus(new Map([["app.log", "add"]]))
+
+    expect(
+      diffStatusLayers(
+        { kinds, ignored: new Set(["dist/", "app.log"]) },
+        { kinds, ignored: new Set(["app.log", "out/"]) },
+      ),
+    ).toEqual({ remove: ["dist/"], set: [{ path: "out/", status: "ignored" }] })
+    expect(diffStatusLayers({ kinds, ignored: new Set() }, { kinds, ignored: new Set(["app.log"]) })).toEqual({
+      remove: [],
+      set: [],
     })
   })
 })

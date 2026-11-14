@@ -101,11 +101,11 @@ From the owning package (`packages/session-ui` or `packages/app`):
 5. **Windows.** Check platform keys and labels and font-dependent geometry. The Windows component legs are the authoritative check.
    - Do not skip on Windows, and do not raise `config.ts` timeouts, retries or the `mount` wait.
    - If one test does genuinely expensive work, call `story.setTimeout(...)` in that test, with a comment that names the work.
-6. **Confirm CI ran the component legs.** E2E never runs on pushes to dev (`check-test.yml:28`), so no post-merge run catches a regression.
-   - The `affected` gate filters on `@opencode/app` and `@opencode/stories` (`check-test.yml:60-61`). `ui`, `session-ui` and `gui-plugins` count through app's dependencies. `workflow_dispatch` forces the legs on (`check-test.yml:56-59`).
+6. **Confirm CI ran the component legs.** Pull requests run only the affected unit tests on Linux, so the component legs come from a push to dev or beta, a nightly run or the release gate.
+   - The `affected` gate filters on `@opencode/app` and `@opencode/stories`. `ui`, `session-ui` and `gui-plugins` count through app's dependencies. Manual runs force the legs on.
    - `check-test.yml` is listed in `globalDependencies` (`turbo.json:8`), so editing it marks every package affected.
-   - The required `e2e (linux)` and `e2e (windows)` checks also pass when no leg was needed (`check-test.yml:329-352`). Look for `e2e (<os>, session-ui-components)` and `e2e (<os>, app-components)`.
-   - If CI skipped them, report your local cold run in the PR.
+   - The `e2e (linux)` and `e2e (windows)` checks also pass when no leg was needed. Look for `e2e (<os>, session-ui-components)` and `e2e (<os>, app-components)`.
+   - If no push has run them, report your local cold run in the PR.
 
 ## When CI flakes
 

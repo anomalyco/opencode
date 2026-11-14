@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "ບໍ່ມີການຕັ້ງຄ່າປລັກອິນ",
   skills: "ທັກສະ",
   "skills.empty": "ບໍ່ມີການຕັ້ງຄ່າທັກສະ",
-  lsp: "LSP",
-  "lsp.empty": "ບໍ່ມີການຕັ້ງຄ່າເຊີບເວີ LSP",
   failed: "ລົ້ມເຫຼວ",
   retry: "ລອງໃໝ່",
   connecting: "ກໍາລັງເຊື່ອມຕໍ່...",

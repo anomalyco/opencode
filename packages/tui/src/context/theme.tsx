@@ -180,7 +180,7 @@ const themeContext = createSimpleContext({
       if (palette) setSystemTheme(generateSystem(palette, store.mode))
     }
     if (palette) {
-      const mode = store.lock ?? terminalMode(palette) ?? store.mode
+      const mode = store.lock ?? renderer.themeMode ?? terminalMode(palette) ?? store.mode
       if (store.mode !== mode) setStore("mode", mode)
       applyPalette()
     } else setSystemTheme(undefined)

@@ -31,8 +31,9 @@ describe("CodeModeInstructions", () => {
         "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool.",
       )
 
+      // The empty notice never explained Code Mode, so the first tools restate the whole catalog.
       const added = yield* readUpdate(CodeModeInstructions.make({ tools: [echo] }), initialized)
-      expect(added.text).toContain("New tools are available in addition to those previously listed:")
+      expect(added.text).toContain("This catalog supersedes the previous Code Mode tool catalog.")
       expect(added.text).toContain(echo.signature)
 
       expect(yield* readUpdate(CodeModeInstructions.make({ tools: [] }), { values: added.values })).toMatchObject({
@@ -54,15 +55,14 @@ describe("CodeModeInstructions", () => {
       expect(initialized.text).toContain(`  - ${echo.signature} // Echo text`)
 
       const added = yield* readUpdate(CodeModeInstructions.make({ tools: [echo, lookup] }), initialized)
-      expect(added.text).toContain("The Code Mode tool catalog has changed.")
-      expect(added.text).toContain("New tools are available in addition to those previously listed:")
-      expect(added.text).toContain(`  - ${lookup.signature} // Look up an order`)
-      expect(added.text).not.toContain("## Code Mode tools (call only inside `execute`)")
+      expect(added.text).toBe(
+        `The Code Mode tool catalog has changed.\n\nNew tools are available:\n- orders (1 tool)\n  - ${lookup.signature} // Look up an order`,
+      )
 
       const removed = yield* readUpdate(CodeModeInstructions.make({ tools: [echo] }), { values: added.values })
       expect(removed.text).toBe(
         "The Code Mode tool catalog has changed.\n\n" +
-          "The following tools are no longer available and must not be called: tools.orders.lookup.",
+          "The following tool namespaces are no longer available and must not be used: `orders`.",
       )
 
       expect(yield* readUpdate(CodeModeInstructions.make(), initialized)).toMatchObject({

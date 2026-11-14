@@ -14,6 +14,10 @@ describe("sessionExportFilename", () => {
   ])("names %o as %s", (session, filename) => {
     expect(sessionExportFilename(session)).toBe(filename)
   })
+
+  test("shortens long titles to fit the filename limit", () => {
+    expect(sessionExportFilename({ id: "ses_123", title: "a".repeat(300) })).toBe(`${"a".repeat(250)}.json`)
+  })
 })
 
 describe("fetchSessionExport", () => {
@@ -41,9 +45,43 @@ describe("fetchSessionExport", () => {
     expect(result).toEqual({ info, messages: [first, second] })
     expect(result).not.toHaveProperty("cursor")
     expect(calls).toEqual([
-      [{ sessionID: "ses_1", limit: 200, order: "asc" }, { mediaRefs: false }],
-      [{ sessionID: "ses_1", limit: 200, cursor: "page-2" }, { mediaRefs: false }],
+      [
+        { sessionID: "ses_1", limit: 200, order: "asc" },
+        { mediaRefs: false, signal: expect.any(AbortSignal) },
+      ],
+      [
+        { sessionID: "ses_1", limit: 200, cursor: "page-2" },
+        { mediaRefs: false, signal: expect.any(AbortSignal) },
+      ],
     ])
+  })
+
+  test("cancelling the export aborts every request it sent", async () => {
+    const controller = new AbortController()
+    const signals: AbortSignal[] = []
+
+    const api = {
+      session: {
+        get: async (_input: { sessionID: string }, options: { signal: AbortSignal }) => {
+          signals.push(options.signal)
+
+          return { id: "ses_1" }
+        },
+      },
+      message: {
+        list: async (input: { cursor?: string }, options: ServerRequestOptions & { signal: AbortSignal }) => {
+          signals.push(options.signal)
+
+          return input.cursor ? { data: [], cursor: {} } : { data: [], cursor: { next: "page-2" } }
+        },
+      },
+    } as unknown as Pick<ServerApi, "session" | "message">
+
+    await fetchSessionExport({ sessionID: "ses_1", api, signal: controller.signal })
+    controller.abort()
+
+    expect(signals).toHaveLength(3)
+    expect(signals.map((signal) => signal.aborted)).toEqual([true, true, true])
   })
 })
 

@@ -1,10 +1,10 @@
-import { Show, createEffect, createMemo, on, type Component, type JSX } from "solid-js"
+import { Show, createEffect, createMemo, type Component, type JSX } from "solid-js"
 import { Key } from "@solid-primitives/keyed"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useGlobal } from "@/runtime/server/runtime"
+import { useServer } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
 import { displayName } from "@opencode/ui/project-avatar"
 import { homeProjectDirectories } from "@/shell/layout/helpers"
@@ -25,23 +25,15 @@ export const SettingsProjects: Component<{
   headerAction?: JSX.Element
 }> = (props) => {
   const language = useLanguage()
-  const global = useGlobal()
+  // The server provider mounts this page again for a new controller.
+  const context = useServer().ctx
   const pickDirectory = useDirectoryPicker()
   const [store, setStore] = createStore({ filter: "", others: false })
-  const context = createMemo(() => global.ensureServerCtx(props.server))
 
   let focus: string | undefined
 
-  const projects = createMemo(() => context().projects.unique())
-
-  const used = createMemo(
-    () =>
-      new Set(
-        context()
-          .projects.used()
-          .map((project) => project.id),
-      ),
-  )
+  const projects = createMemo(() => context.projects.unique())
+  const used = createMemo(() => new Set(context.projects.used().map((project) => project.id)))
 
   const others = createMemo(() => projects().filter((project) => !used().has(project.id)))
   const searchable = createMemo(() => projects().length > 7 || others().length > 0)
@@ -61,8 +53,6 @@ export const SettingsProjects: Component<{
     if (!searchable()) setStore("filter", "")
   })
 
-  createEffect(on(context, () => setStore("others", false)))
-
   const addProject = () =>
     pickDirectory({
       server: props.server,
@@ -71,7 +61,7 @@ export const SettingsProjects: Component<{
       onSelect: (result) => {
         const directories = homeProjectDirectories(result)
 
-        void addProjects(context(), directories).then((project) => {
+        void addProjects(context, directories).then((project) => {
           if (project && directories.length === 1) props.onOpenProject(project)
         })
       },

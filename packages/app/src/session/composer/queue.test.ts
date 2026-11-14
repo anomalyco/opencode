@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo } from "@opencode/client/promise"
 import { extractPromptFromMessage } from "@/composer/prompt"
 import { blobDataUrl, setMediaBlobLoader } from "@/runtime/persistence/drafts"
-import { queuedPromptAttachments, queuedPromptRows, undoQueuedPrompt, type SentEdit } from "./queue"
+import { undoQueuedPrompt } from "./queue"
+import { queuedPromptAttachments, queuedPromptRows, type SentEdit } from "./queue-machine"
 
 const queued = [
   {
@@ -285,6 +286,27 @@ describe("queuedPromptAttachments", () => {
         }),
       ).rejects.toBeInstanceOf(Error)
       expect(events.slice(cancels)).toEqual([`load:${mediaUri}`])
+
+      // An undo stopped while its media loads (past its bound, or on unmount) leaves the item queued.
+      const stopped = new AbortController()
+      blobs.set(hash, pngBytes)
+      setMediaBlobLoader("queue-test", async (uri) => {
+        stopped.abort()
+
+        return `data:image/png;base64,${Buffer.from(blobs.get(uri.slice("media:".length))!).toString("base64")}`
+      })
+      const before = events.length
+
+      await expect(
+        undoQueuedPrompt({
+          prompt: extracted,
+          signal: stopped.signal,
+          cancelInboxItem: async () => {
+            events.push("cancelInboxItem")
+          },
+        }),
+      ).rejects.toMatchObject({ name: "AbortError" })
+      expect(events.slice(before)).toEqual([])
     } finally {
       setMediaBlobLoader("queue-test", undefined)
     }

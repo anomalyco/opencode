@@ -4,7 +4,7 @@ import {
   LLMEvent,
   type LLMRequest,
   Message,
-  type ContentPart,
+  type AssistantMessage,
   type ProviderMetadata,
   type ToolCallPart,
   ToolResultPart,
@@ -82,7 +82,7 @@ const indexStep = (event: LLMEvent, index: number): LLMEvent => {
 }
 
 const stepState = (events: ReadonlyArray<LLMEvent>) => {
-  const assistantContent: ContentPart[] = []
+  const assistantContent: Array<AssistantMessage["content"][number]> = []
   const toolCalls: ToolCallPart[] = []
   let reason: Extract<LLMEvent, { type: "finish" }>["reason"] = { normalized: "unknown" }
   let usage: Usage | undefined
@@ -116,7 +116,7 @@ const stepState = (events: ReadonlyArray<LLMEvent>) => {
 }
 
 const appendText = (
-  content: ContentPart[],
+  content: Array<AssistantMessage["content"][number]>,
   type: "text" | "reasoning",
   text: string,
   providerMetadata?: ProviderMetadata,

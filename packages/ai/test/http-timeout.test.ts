@@ -1,8 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber } from "effect"
 import * as TestClock from "effect/testing/TestClock"
-import { ai, HttpOptions } from "../src/effect.js"
-import { LLMClient, mergeHttpOptions } from "../src/route.js"
+import { ai } from "../src/effect.js"
+import { LLMClient, mergeTransport } from "../src/route.js"
 import { configure } from "../src/providers/openai.js"
 import { dynamicResponse } from "./lib/http.js"
 import { deltaChunk, finishChunk } from "./lib/openai-chunks.js"
@@ -89,9 +89,11 @@ describe("HTTP transport timeouts", () => {
 
   it.effect("applies a configured header timeout", () =>
     Effect.gen(function* () {
-      const fiber = yield* LLMClient.generate(
-        ai.request({ model, prompt: "Hello", http: { headerTimeout: 1_000 } }),
-      ).pipe(Effect.provide(silentServer), Effect.flip, Effect.forkChild({ startImmediately: true }))
+      const fiber = yield* LLMClient.generate(ai.request({ model, prompt: "Hello", timeout: { headers: 1_000 } })).pipe(
+        Effect.provide(silentServer),
+        Effect.flip,
+        Effect.forkChild({ startImmediately: true }),
+      )
       yield* TestClock.adjust("1 second")
       const error = yield* Fiber.join(fiber)
 
@@ -101,9 +103,10 @@ describe("HTTP transport timeouts", () => {
 
   it.effect("disables the header timeout with false", () =>
     Effect.gen(function* () {
-      const fiber = yield* LLMClient.generate(
-        ai.request({ model, prompt: "Hello", http: { headerTimeout: false } }),
-      ).pipe(Effect.provide(slowHeadersServer), Effect.forkChild({ startImmediately: true }))
+      const fiber = yield* LLMClient.generate(ai.request({ model, prompt: "Hello", timeout: { headers: false } })).pipe(
+        Effect.provide(slowHeadersServer),
+        Effect.forkChild({ startImmediately: true }),
+      )
       yield* TestClock.adjust("10 minutes")
       const response = yield* Fiber.join(fiber)
 
@@ -114,9 +117,10 @@ describe("HTTP transport timeouts", () => {
   it.effect("disables the chunk timeout with false", () =>
     Effect.gen(function* () {
       const server = yield* stalledServer
-      const fiber = yield* LLMClient.generate(
-        ai.request({ model, prompt: "Hello", http: { chunkTimeout: false } }),
-      ).pipe(Effect.provide(server.layer), Effect.forkChild({ startImmediately: true }))
+      const fiber = yield* LLMClient.generate(ai.request({ model, prompt: "Hello", timeout: { chunk: false } })).pipe(
+        Effect.provide(server.layer),
+        Effect.forkChild({ startImmediately: true }),
+      )
       yield* Deferred.await(server.stalled)
       yield* Effect.yieldNow
       yield* TestClock.adjust("10 minutes")
@@ -131,7 +135,7 @@ describe("HTTP transport timeouts", () => {
     Effect.gen(function* () {
       const server = yield* stalledServer
       const fiber = yield* LLMClient.generate(
-        ai.request({ model, prompt: "Hello", http: { timeout: 60_000, chunkTimeout: false } }),
+        ai.request({ model, prompt: "Hello", timeout: { total: 60_000, chunk: false } }),
       ).pipe(Effect.provide(server.layer), Effect.flip, Effect.forkChild({ startImmediately: true }))
       yield* Deferred.await(server.stalled)
       yield* Effect.yieldNow
@@ -145,7 +149,7 @@ describe("HTTP transport timeouts", () => {
   it.effect("bounds the header wait by a shorter whole-request timeout", () =>
     Effect.gen(function* () {
       const fiber = yield* LLMClient.generate(
-        ai.request({ model, prompt: "Hello", http: { timeout: 1_000, headerTimeout: false } }),
+        ai.request({ model, prompt: "Hello", timeout: { total: 1_000, headers: false } }),
       ).pipe(Effect.provide(silentServer), Effect.flip, Effect.forkChild({ startImmediately: true }))
       yield* TestClock.adjust("1 second")
       const error = yield* Fiber.join(fiber)
@@ -156,14 +160,15 @@ describe("HTTP transport timeouts", () => {
 
   it.effect("merges timeouts with later values winning", () =>
     Effect.sync(() => {
-      const merged = mergeHttpOptions(
-        new HttpOptions({ timeout: 5_000, headerTimeout: 1_000, chunkTimeout: 2_000 }),
-        new HttpOptions({ headers: { a: "b" } }),
-        new HttpOptions({ chunkTimeout: false }),
+      const merged = mergeTransport(
+        { timeout: { total: 5_000, headers: 1_000, chunk: 2_000 } },
+        { headers: { a: "b" } },
+        { timeout: { chunk: false } },
+        { timeout: 3_000 },
       )
 
-      expect(merged).toMatchObject({ headers: { a: "b" }, timeout: 5_000, headerTimeout: 1_000, chunkTimeout: false })
-      expect(mergeHttpOptions(new HttpOptions({}), undefined)).toBeUndefined()
+      expect(merged).toMatchObject({ headers: { a: "b" }, timeout: { total: 3_000, headers: 1_000, chunk: false } })
+      expect(mergeTransport({}, undefined)).toEqual({})
     }),
   )
 })

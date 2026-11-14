@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Nėra sukonfigūruotų papildinių",
   skills: "Įgūdžiai",
   "skills.empty": "Įgūdžiai nesukonfigūruoti",
-  lsp: "LSP",
-  "lsp.empty": "Nekonfigūruota jokių LSP serverių",
   failed: "Nepavyko",
   retry: "Bandyti dar kartą",
   connecting: "Jungiamasi…",

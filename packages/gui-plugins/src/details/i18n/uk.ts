@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Не налаштовано плагінів",
   skills: "Навички",
   "skills.empty": "Не налаштовано навичок",
-  lsp: "LSP",
-  "lsp.empty": "Не налаштовано серверів LSP",
   failed: "Не вдалося",
   retry: "Повторити",
   connecting: "Підключення…",

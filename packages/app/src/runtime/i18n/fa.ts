@@ -149,7 +149,7 @@ export const dict = {
   "provider.connect.title": "{{provider}} را وصل کنید",
   "provider.connect.method.apiKey": "کلید API",
   "provider.connect.status.inProgress": "مجوز در حال انجام است…",
-  "provider.connect.status.waiting": "در انتظار مجوز…",
+  "provider.connect.status.waiting": "در انتظار مجوز",
   "provider.connect.status.failed": "مجوز انجام نشد: {{error}}",
   "provider.connect.apiKey.description":
     "کلید API سرویس {{provider}} را وارد کنید تا حساب شما متصل شود و بتوانید از مدل‌های {{provider}} در OpenCode استفاده کنید.",
@@ -346,7 +346,6 @@ export const dict = {
   "session.new.project.search": "جستجوی پروژه ها",
   "session.new.project.add": "اضافه کردن پروژه",
   "session.new.workspace.runIn": "اجرای جلسه در",
-  "session.new.workspace.triggerLocal": "محلی",
   "session.new.workspace.local": "مخزن محلی",
   "session.new.git.none": "Git وجود ندارد",
   "session.header.open.finder": "Finder",
@@ -820,7 +819,6 @@ export const dict = {
 
   "command.session.location.cycle": "جابجایی چرخشی مکان نشست",
   "dialog.provider.anthropic.note": "دسترسی مستقیم به مدل‌های Claude از طریق کلید API",
-  "provider.connect.title.anthropicProMax": "ورود با Anthropic",
   "prompt.toast.uploading.percent": "\u2068{{percent}}\u2069٪",
   "prompt.toast.uploading.cancelFile": "لغو بارگذاری \u2068{{filename}}\u2069",
   "prompt.toast.uploadFailed.title": "بارگذاری ناموفق بود",

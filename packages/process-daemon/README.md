@@ -17,7 +17,7 @@ terminals. Observer commands connect to an existing daemon without taking owners
 The service uses a private authenticated local byte stream (Unix socket or Windows
 named pipe) and an atomic registration file.
 
-Integrations launch `opencode-pty daemon --name NAME [--runtime-dir DIR]` (protocol 7).
+Integrations launch `opencode-pty daemon --name NAME [--runtime-dir DIR]` (protocol 8).
 The server must claim the daemon within 5 seconds by sending the authenticated
 framed envelope `{"token":"...","request":{"op":"own","instance_id":"..."}}`.
 The response is `{"type":"owned"}`; that connection stays open as the sole
@@ -70,7 +70,7 @@ socket pair until a connection arrives, a stop or ownership change wakes it, an
 ownership deadline is due, or a two-second safety net elapses. Windows still
 polls every 25 ms.
 
-The Windows named-pipe backend keeps protocol 7 and the registration fields
+The Windows named-pipe backend keeps protocol 8 and the registration fields
 `instance_id`, `pid`, `protocol`, `socket`, `token`, and `features`. Treat `socket` as an opaque
 local endpoint: on Windows it is `\\.\pipe\opencode-pty-<instance_id>`, not a
 filesystem socket. A random per-instance name, exclusive first pipe instance,
@@ -111,7 +111,7 @@ so the runtime directory must be on a local NTFS volume (Windows 10 1709 or
 later); there is no non-atomic fallback.
 
 The Windows Rust `TerminalClient` and interactive CLI are not ported. Integrations
-can use protocol 7 directly and the minimal `daemon::PipeConnection` byte-stream
+can use protocol 8 directly and the minimal `daemon::PipeConnection` byte-stream
 helper. Connect with `PipeConnection::connect_to(socket, pid)`, which rejects a
 pipe whose server is not the registered daemon process: after a crash the stale
 registration's pipe name is free for another local user to create. Integrations
@@ -211,9 +211,9 @@ return all available rows. Soft-wrapped rows stay separate, trailing whitespace
 is trimmed, and blank rows (including trailing blank rows) are empty strings.
 The alternate screen never exposes primary-screen history.
 
-The protocol 7 request is `{"op":"read_rows","id":1,"rows":30}`;
+The protocol 8 request is `{"op":"read_rows","id":1,"rows":30}`;
 omitted or `null` `rows` uses the current height. Its response is
-`{"type":"rows","terminal":{...},"lines":[...],"cursor_x":0,"cursor_y":0}`.
+`{"type":"rows","process":{...},"lines":[...],"cursor_x":0,"cursor_y":0}`.
 Metadata, lines, and zero-based active-screen cursor coordinates come from one
 actor snapshot. Reading does not move the viewport, change selection, or take
 control. Existing snapshots, checkpoints, and replay are unchanged.
@@ -311,7 +311,7 @@ can consume application terminal queries itself; the tests also check its
 cursor-inheritance query reaches our reader and Ghostty parser.
 
 The reusable fixture in `tests/support/terminal_fixture.rs` returns a
-`CreateTerminal` request and uses a separate control/observation channel, so
+`CreatePty` request and uses a separate control/observation channel, so
 daemon tests can reuse it without a shell or Rust client. Include it as
 `terminal_fixture`, call `Fixture::request`, create the terminal, then call
 `Fixture::connect`. `Command::Output` writes real console stdout; `Command::Read`

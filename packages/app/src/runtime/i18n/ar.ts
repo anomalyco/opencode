@@ -153,7 +153,7 @@ export const dict = {
   "provider.connect.title": "الاتصال بـ {{provider}}",
   "provider.connect.method.apiKey": "مفتاح API",
   "provider.connect.status.inProgress": "جارٍ التفويض…",
-  "provider.connect.status.waiting": "في انتظار التفويض…",
+  "provider.connect.status.waiting": "في انتظار التفويض",
   "provider.connect.status.failed": "فشل التفويض: {{error}}",
   "provider.connect.apiKey.description":
     "أدخل مفتاح API الخاص بـ {{provider}} لتوصيل حسابك واستخدام نماذج {{provider}} في OpenCode.",
@@ -344,7 +344,6 @@ export const dict = {
   "session.new.project.search": "البحث عن المشاريع",
   "session.new.project.add": "إضافة مشروع",
   "session.new.workspace.runIn": "تشغيل الجلسة في",
-  "session.new.workspace.triggerLocal": "محلي",
   "session.new.workspace.local": "المستودع المحلي",
   "session.new.git.none": "لا يوجد Git",
   "settings.tab.servers": "الخوادم",
@@ -875,7 +874,6 @@ export const dict = {
 
   "command.session.location.cycle": "التنقل بين مواقع الجلسة",
   "dialog.provider.anthropic.note": "وصول مباشر إلى نماذج Claude عبر مفتاح API",
-  "provider.connect.title.anthropicProMax": "تسجيل الدخول باستخدام Anthropic",
   "prompt.toast.uploading.percent": "\u2068{{percent}}\u2069%",
   "prompt.toast.uploading.cancelFile": "إلغاء رفع \u2068{{filename}}\u2069",
   "prompt.toast.uploadFailed.title": "فشل الرفع",

@@ -4,9 +4,9 @@ import { expect } from "bun:test"
 import { Effect } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
-import { startServer } from "./fixture/server"
+import { serveRoutes } from "./fixture/routes"
 
-it.live("waits for plugin initialization before listing models", () =>
+it.live("lists configured models filtered by type", () =>
   Effect.gen(function* () {
     const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-model-endpoint-")))
     yield* Effect.promise(() =>
@@ -23,10 +23,16 @@ it.live("waits for plugin initialization before listing models", () =>
         }),
       ),
     )
-    const server = yield* startServer(tmp.path)
-    const url = new URL("/api/model", server.base)
+    const server = yield* serveRoutes({
+      database: { path: ":memory:" },
+      config: { directory: tmp.path },
+      fs: { filewatcher: false },
+      models: { fetch: false },
+    })
+    yield* server.pluginsLoaded(tmp.path)
+    const url = new URL("/api/model", "http://opencode.local")
     url.searchParams.set("location[directory]", tmp.path)
-    const response = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+    const response = yield* Effect.promise(() => server.fetch(url))
 
     expect(response.status).toBe(200)
     const body: unknown = yield* Effect.promise(() => response.json())
@@ -36,14 +42,14 @@ it.live("waits for plugin initialization before listing models", () =>
     ).toBeTrue()
 
     url.searchParams.set("types", "image")
-    const images = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+    const images = yield* Effect.promise(() => server.fetch(url))
     expect(images.status).toBe(200)
     const imageBody: unknown = yield* Effect.promise(() => images.json())
     if (!isRecord(imageBody) || !Array.isArray(imageBody["data"])) throw new Error("Expected a model list response")
     expect(imageBody["data"].some((model) => isRecord(model) && model["providerID"] === "custom")).toBeFalse()
 
     url.searchParams.append("types", "chat")
-    const both = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+    const both = yield* Effect.promise(() => server.fetch(url))
     expect(both.status).toBe(200)
     const bothBody: unknown = yield* Effect.promise(() => both.json())
     if (!isRecord(bothBody) || !Array.isArray(bothBody["data"])) throw new Error("Expected a model list response")

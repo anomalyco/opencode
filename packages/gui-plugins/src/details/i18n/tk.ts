@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Hiç hili plugin düzülmedi",
   skills: "Ussatlyk",
   "skills.empty": "Hiç hili hünär düzülmedi",
-  lsp: "LSP",
-  "lsp.empty": "LSP serwerleri düzülmedi",
   failed: "Şowsuz",
   retry: "Gaýtadan synanyşyň",
   connecting: "Birikmek…",

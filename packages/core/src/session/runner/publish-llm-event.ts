@@ -30,6 +30,14 @@ type Input = {
 
 const asRecord = (value: unknown): Record<string, unknown> => (isRecord(value) ? value : { value })
 
+/** Provider events that carry a step's first generated token, matching how the stream counts output. */
+const beginsOutput = (event: LLMEvent) =>
+  event.type === "text-start" ||
+  event.type === "reasoning-start" ||
+  event.type === "tool-input-start" ||
+  event.type === "tool-input-error" ||
+  event.type === "tool-call"
+
 const INPUT_EXCERPT_LIMIT = 2048
 
 type InputExcerpt = {
@@ -142,6 +150,15 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       assistantMessageID: yield* startAssistant(),
     })
   })
+  let firstTokenPublished = false
+  const firstToken = Effect.fnUntraced(function* () {
+    if (firstTokenPublished) return
+    firstTokenPublished = true
+    yield* bus.publish(SessionEvent.Step.FirstToken, {
+      sessionID: input.sessionID,
+      assistantMessageID: yield* startAssistant(),
+    })
+  })
   const native = (metadata: ProviderMetadata | undefined) => metadata?.[input.providerMetadataKey]
   const fragments = (
     name: string,
@@ -228,52 +245,32 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     return { start, append, end, flush, publishPending, has: (id: string) => chunks.has(id) }
   }
 
-  const text = fragments(
-    "text",
-    (_textID, value, ordinal, native) =>
-      Effect.gen(function* () {
-        yield* bus.publish(SessionEvent.Text.Ended, {
-          sessionID: input.sessionID,
-          assistantMessageID: yield* currentAssistantMessageID(),
-          ordinal,
-          text: value,
-          native,
-        })
-      }),
-    (_textID, value, ordinal) =>
-      Effect.gen(function* () {
-        yield* bus.publish(SessionEvent.Text.Delta, {
-          sessionID: input.sessionID,
-          assistantMessageID: yield* currentAssistantMessageID(),
-          ordinal,
-          delta: value,
-        })
-      }),
-    true,
-  )
-  const reasoning = fragments(
-    "reasoning",
-    (_reasoningID, value, ordinal, native) =>
-      Effect.gen(function* () {
-        yield* bus.publish(SessionEvent.Reasoning.Ended, {
-          sessionID: input.sessionID,
-          assistantMessageID: yield* currentAssistantMessageID(),
-          ordinal,
-          text: value,
-          native,
-        })
-      }),
-    (_reasoningID, value, ordinal) =>
-      Effect.gen(function* () {
-        yield* bus.publish(SessionEvent.Reasoning.Delta, {
-          sessionID: input.sessionID,
-          assistantMessageID: yield* currentAssistantMessageID(),
-          ordinal,
-          delta: value,
-        })
-      }),
-    true,
-  )
+  const contentFragments = (name: string, events: typeof SessionEvent.Text | typeof SessionEvent.Reasoning) =>
+    fragments(
+      name,
+      (_id, value, ordinal, native) =>
+        Effect.gen(function* () {
+          yield* bus.publish(events.Ended, {
+            sessionID: input.sessionID,
+            assistantMessageID: yield* currentAssistantMessageID(),
+            ordinal,
+            text: value,
+            native,
+          })
+        }),
+      (_id, value, ordinal) =>
+        Effect.gen(function* () {
+          yield* bus.publish(events.Delta, {
+            sessionID: input.sessionID,
+            assistantMessageID: yield* currentAssistantMessageID(),
+            ordinal,
+            delta: value,
+          })
+        }),
+      true,
+    )
+  const text = contentFragments("text", SessionEvent.Text)
+  const reasoning = contentFragments("reasoning", SessionEvent.Reasoning)
   const toolInput = fragments("tool input", (id, value) =>
     Effect.gen(function* () {
       const tool = tools.get(id)
@@ -433,6 +430,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   )
 
   const publish = Effect.fnUntraced(function* (event: LLMEvent) {
+    if (beginsOutput(event)) yield* firstToken()
     switch (event.type) {
       case "step-start":
         yield* startAssistant()
@@ -607,7 +605,6 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     publishStepFailure,
     failUnsettledTools,
     failIncompleteTools,
-    hasProviderError: () => providerFailed,
     hasStarted: () => stepStarted,
     /** Immutable snapshot of everything recorded for this step so far. */
     record: (): StepRecord => ({

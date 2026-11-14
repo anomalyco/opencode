@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "No s'ha configurat cap connector",
   skills: "Habilitats",
   "skills.empty": "No s'ha configurat cap habilitat",
-  lsp: "LSP",
-  "lsp.empty": "No s'ha configurat cap servidor LSP",
   failed: "Ha fallat",
   retry: "Torna-ho a provar",
   connecting: "S'està connectant…",
