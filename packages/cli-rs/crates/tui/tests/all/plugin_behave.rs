@@ -561,13 +561,19 @@ impl Model for Behaviors {
                     board_view.dispatch("board.review", Some(card.to_string()));
                 }
                 Command::Fold(card) => {
-                    // The item at the top stays, as many rows into it as it has, where the clamp allows.
+                    // The item at the top stays, as many rows into it as it has, where the clamp allows. The view did
+                    // not move: a step's memory moves with it, unless the clamp moved the view.
                     let rows = oracle.rows();
                     let current = rows.card_at(top);
                     let within = top - rows.start(current);
                     oracle.reviewed[*card] = !oracle.reviewed[*card];
                     let rows = oracle.rows();
                     let kept = rows.start(current) + within.min(rows.heights[current] - 1);
+                    if let Some((_, left)) = &mut oracle.memory
+                        && *left == top
+                    {
+                        *left = kept;
+                    }
                     expected = Some(kept.clamp(0, oracle.most()));
                     board_view.dispatch("board.fold", Some(card.to_string()));
                 }
@@ -728,13 +734,47 @@ fn the_deep_runs_rows_hold() {
     }
     // A list's own rows (a scroll keeps no reading position by itself). Seed 32 (2,000 seeds, reviews): a fold keeps
     // the card at the top while items mount above it. Seed 4: a fold near the end, whose reading lies past it, settles.
-    // Seed 40: a fold above ends a step's memory. Seed 61: a step that the view after it would clamp, as an item it
-    // mounts is shorter than its estimate, lands where it was meant to. Seed 64: a page into an item shorter than
-    // its estimate goes its rows on. Seed 127: a jump through items far off their estimates settles in its frame. Seed
-    // 551: the reading a resize and a step hold reaches the end the new heights give. Seed 707: a step's memory
+    // Seed 40: a fold above moves a step's memory with the view. Seed 61: a step that the view after it would clamp, as
+    // an item it mounts is shorter than its estimate, lands where it was meant to. Seed 64: a page into an item shorter
+    // than its estimate goes its rows on. Seed 127: a jump through items far off their estimates settles in its frame.
+    // Seed 551: the reading a resize and a step hold reaches the end the new heights give. Seed 707: a step's memory
     // follows the list's correction from where the step meant to go. Seed 98 (700 seeds, a mutant): a `Nearest` that
-    // moves the window resolves in the round after, so a fold after it keeps the card at the top.
+    // moves the window resolves in the round after, so a fold after it keeps the card at the top. The list model's last
+    // open seeds (2,000 seeds, before the merge): seed 1283, a step's memory moves with a fold above the top, as the
+    // view did not move (six more seeds); seed 747, `Nearest` decides once its node has rows and then holds the node's
+    // row while items above mount; seed 850, a resize's correction counts from where the restore put the reading, not
+    // from where a solve clamped the offset in between (two more seeds). After those fixes, seed 1514: the shift counts
+    // from where the reading was taken, as a solve may clamp the offset before the restore runs (six more seeds); seed
+    // 1583: a user's move is at the end only by the sums the move saw, not an end the solve's newly mounted items
+    // moved.
     let rows = [
+        vec![Command::Edge { bottom: true }, Command::Step(1), Command::Fold(0), Command::Step(1)],
+        vec![
+            Command::Near(8),
+            Command::Resize { width: 59, height: 14 },
+            Command::Review(8),
+            Command::Fold(9),
+            Command::Step(1),
+            Command::Fold(4),
+            Command::Wheel { down: false, steps: 1 },
+            Command::Step(-2),
+        ],
+        vec![Command::To(8), Command::Step(1), Command::Fold(1), Command::Step(1)],
+        vec![
+            Command::Review(7),
+            Command::Edge { bottom: true },
+            Command::Resize { width: 64, height: 17 },
+            Command::Near(7),
+        ],
+        vec![
+            Command::Review(8),
+            Command::Edge { bottom: true },
+            Command::Step(-1),
+            Command::Review(3),
+            Command::Step(-1),
+            Command::Resize { width: 78, height: 21 },
+            Command::Step(-2),
+        ],
         vec![
             Command::Review(5),
             Command::Resize { width: 70, height: 14 },
@@ -750,7 +790,7 @@ fn the_deep_runs_rows_hold() {
             Command::Wheel { down: true, steps: 3 },
             Command::Fold(9),
         ],
-        // A fold above the top moves the offset with the view: a step's memory ends, as on a scroll.
+        // A fold above the top moves the offset, not the view: a step's memory moves with it.
         vec![Command::To(5), Command::Step(1), Command::Fold(3), Command::Step(-2)],
         vec![Command::To(8), Command::Review(4), Command::Resize { width: 40, height: 21 }, Command::Step(-1)],
         vec![Command::Review(5), Command::Step(1), Command::Wheel { down: true, steps: 1 }, Command::Page(250)],
@@ -1897,9 +1937,9 @@ fn behaviors_past_the_rounds_finish_in_the_next_frame() {
 }
 
 // Expected (review big-boi 4, carbon-2): a jump into a list whose estimates are far off takes all of a frame's rounds,
-// and with a resize in its batch it needs more; `layout` asks for a view once in the frame it is told of the jump. Every frame keeps
-// the bounds, at most the rounds OpenTUI allows and two deliveries, and with no event the jump ends at its target with
-// the view `layout` asked for.
+// and with a resize in its batch it needs more; `layout` asks for a view once in the frame it is told of the jump.
+// Every frame keeps the bounds, at most the rounds OpenTUI allows and two deliveries, and with no event the jump ends
+// at its target with the view `layout` asked for.
 #[test]
 fn a_jump_past_the_rounds_while_layout_asks_again_keeps_the_frames_bounds() {
     // The jump alone settles in the last round, which asks for the view; with a resize the rounds run out first.
