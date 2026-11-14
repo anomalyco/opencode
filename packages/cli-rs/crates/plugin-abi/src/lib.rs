@@ -1804,9 +1804,10 @@ fn header_size(bytes: &[u8]) -> Option<(u32, u32)> {
             from += 2;
             continue;
         }
-        // A length covers itself, so one under 2 names no segment.
+        // A length covers itself, so one under 2 names no segment; a start or an end of the image before a frame is
+        // no image.
         let len = be(from + 2, 2)? as usize;
-        if len < 2 {
+        if len < 2 || marker == 0xd8 || marker == 0xd9 {
             return None;
         }
         from += 2 + len;
