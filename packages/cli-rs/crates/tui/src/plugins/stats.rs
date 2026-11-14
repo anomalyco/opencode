@@ -2,13 +2,14 @@
 //! `@opencode/util/activity-calendar`): `stats.open` opens the `stats` plugin route, which reads this year's
 //! usage from `GET /api/experimental/session/stats` each time it mounts, however it was opened, and shows it as a
 //! poster: the token total in large digits, a calendar of active days, the best streak, the active days, and the
-//! sessions. Escape goes back.
+//! sessions. Escape goes back. The route is a contract 2.0 surface (P6a), which draws the 1.x route's page itself: a
+//! scroll whose content is centered.
 
 use opencode_api::client::Client;
 use opencode_api::generated::{ExperimentalSessionStatsInput, ExperimentalSessionStatsInputTools, SessionStatsInfo};
-use opencode_plugin::abi::{
-    self, Align, Command, Justify, Layout, Node, Read, Render, RequestId, Rgba, Scope, Span, Width, Wrap,
-};
+use opencode_plugin::abi::interact::{Event, Handled};
+use opencode_plugin::abi::v2::{Node, Place, Surface};
+use opencode_plugin::abi::{self, Align, Command, Justify, Layout, Read, RequestId, Rgba, Scope, Span, Width, Wrap};
 use opencode_ui::activity_calendar::{activity_calendar, time_zone};
 use opencode_ui::theme::tint;
 use opencode_util::time::{self, Date, Zone};
@@ -40,32 +41,36 @@ struct State {
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     let state = Rc::new(State::default());
     let shown = state.clone();
-    setup.route(ROUTE, move |read, changed| {
+    let page = Surface::new(ROUTE, Place::Route(ROUTE.to_owned()), move |cx| {
+        let changed = &cx.input.changed;
         if !(changed.all || changed.size || changed.woken) {
-            return Render::Keep;
+            return Node::Keep { key: PAGE.to_owned() };
         }
         let node = match &*shown.stats.borrow() {
             None => Node::text([Span::new("Gathering your stats…")]).fg("text.muted"),
-            Some(Ok(stats)) => poster(read, stats),
+            Some(Ok(stats)) => poster(cx.read, stats),
             Some(Err(_)) => Node::text([Span::new("Could not load stats. Reopen /stats to try again.")])
                 .fg("text.feedback.error.base"),
         };
-        Render::Show(node)
+        page(node, cx.input.height)
     });
     // As TS's `StatsPage` resource: each mount asks afresh, and a reply after the route went is dropped.
     let mounted = state.clone();
-    setup.on_route_mount(ROUTE, move |host, mount| {
-        if mount {
+    let page = page.mounts().on(move |host, event| {
+        let Event::Mount { mounted: mount, .. } = event else { return Handled::Pass };
+        if *mount {
             mounted.mounts.set(mounted.mounts.get() + 1);
             *mounted.stats.borrow_mut() = None;
             mounted.request.set(Some(host.fetch(request())));
-            return;
+            return Handled::Pass;
         }
         mounted.mounts.set(mounted.mounts.get().saturating_sub(1));
         if mounted.mounts.get() == 0 {
             mounted.request.set(None);
         }
+        Handled::Pass
     });
+    setup.surface(page);
     let (open, id) = (state.clone(), setup.id().to_owned());
     let command = Command {
         name: "stats.open".to_owned(),
@@ -131,6 +136,17 @@ const DIGITS: [(char, [&str; 5]); 15] = [
     ('B', ["110", "101", "110", "101", "110"]),
     ('T', ["111", "010", "010", "010", "010"]),
 ];
+
+/// The page's scroll, which keeps where it was scrolled while the route shows.
+const PAGE: &str = "page";
+
+/// `content` as the 1.x route showed it (TS `StatsPage`'s container): in a scroll of the whole page, `height` rows,
+/// centered across it and down it, one row in from the top and the bottom.
+fn page(content: Node, height: u16) -> Node {
+    let room = Layout { min_height: Some(Width::Cells(height)), ..Layout::default() };
+    let centered = Node::column(vec![content]).align(Align::Center).justify(Justify::Center).padding(0, 1).layout(room);
+    Node::scroll(vec![centered]).layout(Layout::default().grow()).with_id(PAGE)
+}
 
 fn text(text: impl Into<String>, fg: &'static str) -> Node {
     Node::text([Span::new(text)]).fg(fg)
