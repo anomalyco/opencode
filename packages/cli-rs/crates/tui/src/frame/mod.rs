@@ -515,6 +515,25 @@ pub(crate) fn terminal_shown(tui: &Tui) -> bool {
     terminal(tui).is_some()
 }
 
+/// The focus moved, by a plugin: the pane that holds it has the input, so a panel the focus went into is told it has
+/// it, and the session pane gets it back from a panel the focus left for it (review carbon-1).
+pub(crate) fn follow_focus(tui: &Tui) {
+    let Some(session) = tui.frame.session() else { return };
+    let Some(focused) = tui.app.focused() else { return };
+    let path: Vec<u32> =
+        std::iter::successors(Some(focused), |widget| widget.parent()).map(|widget| widget.id()).collect();
+    let within = |id: u32| path.contains(&id);
+    // A focus moved while the panel's host is replaced: the layout that replaces it sets the pane.
+    let Ok(host) = session.host.try_borrow() else { return };
+    let in_panel = host.as_ref().is_some_and(|host| within(host.root.id()));
+    drop(host);
+    if in_panel {
+        session.set_active(tui, Pane::Right);
+    } else if within(session.pane.id()) {
+        session.set_active(tui, Pane::Session);
+    }
+}
+
 /// Focus moved into the right pane, as by a click on the terminal.
 pub(crate) fn right_focused(tui: &Tui) {
     if let Some(session) = tui.frame.session() {
