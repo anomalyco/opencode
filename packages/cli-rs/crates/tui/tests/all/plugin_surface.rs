@@ -481,14 +481,29 @@ fn parts(setup: &mut abi::Setup) -> Result<(), String> {
     setup.surface(v2::Surface::new("parts", v2::Place::Route("parts".into()), move |_| {
         let views = PART_VIEWS.get();
         PART_VIEWS.set(views + 1);
-        let held = match views {
-            0 => v2::Node::column(vec![v2::Node::text(vec![abi::Span::new("kept:")]), part("call_2")]).with_id("held"),
-            _ => v2::Node::Keep { key: "held".into() },
+        let code = v2::Node::Code {
+            id: None,
+            content: v2::Source::PartOutput(v2::PartRef { session: "ses_p".into(), part: "call_2".into() }),
+            filetype: None,
+            numbers: false,
+            layout: abi::Layout::default(),
         };
+        let (held, item) = match views {
+            0 => (
+                v2::Node::column(vec![v2::Node::text(vec![abi::Span::new("kept:")]), part("call_2"), code])
+                    .with_id("held"),
+                v2::Node::column(vec![part("call_2")]).with_id("item"),
+            ),
+            _ => (v2::Node::Keep { key: "held".into() }, v2::Node::Keep { key: "item".into() }),
+        };
+        let list = v2::Node::list(vec![v2::ListItem::new(item, 1)])
+            .with_id("list")
+            .layout(abi::Layout::default().height(abi::Width::Cells(1)));
         v2::Node::column(vec![
             part("call_1"),
             part("call_2"),
             held,
+            list,
             part("msg_1"),
             v2::Node::text(vec![abi::Span::new("end")]),
         ])
@@ -507,7 +522,8 @@ fn tool_event(kind: &str, seq: u64, data: serde_json::Value) -> V2Event {
 
 // Expected: a tool call's output named by reference shows the transcript's own text, which never crosses to the
 // plugin. A call the transcript does not have yet, or that streams its input or runs, shows nothing; once it completes
-// its output shows, also under a kept ancestor, with no view of the plugin's. A newer tool whose input holds the
+// its output shows, also under a kept ancestor, in code, and in a list's kept item, with no view of the plugin's
+// (review big-boi 11, carbon-4). A newer tool whose input holds the
 // call's id and a text, and a message whose id is named, show nothing of theirs.
 #[test]
 fn a_part_output_shows_the_transcripts_own_text() {
@@ -587,7 +603,10 @@ fn a_part_output_shows_the_transcripts_own_text() {
     )]);
     harness.wait_for("REAL_RESULT");
     settle(&harness);
-    assert_eq!(shown(&harness), ["tool said fn parse", "lib.rs", "REAL_RESULT", "kept:", "REAL_RESULT", "end"]);
+    assert_eq!(
+        shown(&harness),
+        ["tool said fn parse", "lib.rs", "REAL_RESULT", "kept:", "REAL_RESULT", "REAL_RESULT", "REAL_RESULT", "end"]
+    );
     assert!(PART_VIEWS.get() >= 2, "the kept box was never kept");
 }
 

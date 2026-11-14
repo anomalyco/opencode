@@ -37,7 +37,7 @@ pub struct Work {
     pub moved: u64,
     /// Subtrees adopted through [`Node::Keep`].
     pub kept: u64,
-    /// Patches parsed for a [`Node::Diff`].
+    /// Patches parsed for a [`Node::Diff`], code highlighted for a [`Node::Code`], and images decoded.
     pub parses: u64,
 }
 
@@ -109,6 +109,15 @@ pub(crate) fn count_kept() {
     count(|work| work.kept += 1);
 }
 
+/// Counts an image decoded.
+pub(crate) fn count_decoded() {
+    count(|work| work.parses += 1);
+}
+
+/// The most rows a list's estimates may add up to. OpenTUI lays out in `f32`, which holds whole rows exactly up to
+/// 2^24: past it rows would collide, and the window would never settle.
+pub const MAX_ROWS: u64 = 1 << 24;
+
 /// Whether every size of `layout` in percent is a finite number of 0 or more.
 pub fn sizes_ok(layout: &abi::Layout) -> bool {
     [layout.width, layout.height, layout.min_height, layout.max_height]
@@ -137,6 +146,12 @@ pub enum Refused {
     /// A node with state, verbs or events without an id (synthesis 4.2): a scroll, a canvas, a list or its item, an
     /// input, an anchor, a split, a diff with hunks. Without one another node's state could pass to it.
     Unkeyed,
+    /// A split on a box that is not a row: the user drags the width of its first child.
+    Split,
+    /// An image of a tool call's output, which is text: an image shows content or bytes.
+    Output,
+    /// A list whose estimates add up to more than [`MAX_ROWS`].
+    Rows,
 }
 impl std::fmt::Display for Refused {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -148,6 +163,9 @@ impl std::fmt::Display for Refused {
             Refused::Deep => write!(f, "the tree nests deeper than {MAX_DEPTH} layout levels"),
             Refused::Number => write!(f, "a size in percent is not a finite number of 0 or more"),
             Refused::Unkeyed => write!(f, "a node with state has no id"),
+            Refused::Split => write!(f, "a split is not a row"),
+            Refused::Output => write!(f, "an image shows a tool call's output"),
+            Refused::Rows => write!(f, "a list's estimates add up to more than {MAX_ROWS} rows"),
         }
     }
 }
@@ -164,8 +182,9 @@ pub struct Env<'a> {
     pub source: &'a dyn Fn(&Source) -> Option<Rc<str>>,
     /// Whether the mount holds content `ContentRef`.
     pub content: &'a dyn Fn(ContentRef) -> bool,
-    /// The bytes of a source, for an image; `None` when the host has none.
-    pub bytes: &'a dyn Fn(&Source) -> Option<Rc<[u8]>>,
+    /// The image a source decodes to, for an image; `None` when the host has none, or the bytes do not decode or are
+    /// past what the host takes.
+    pub image: &'a dyn Fn(&Source) -> Option<opentui::native::Image>,
     /// The host asked for a whole tree, after a refusal: a keep names a subtree the view did not vouch for again.
     pub full: bool,
     /// How the mount's canvases call their plugin; `None` where nothing draws them.
@@ -220,8 +239,8 @@ pub(crate) enum Extra {
     Scroll(ScrollBox),
     /// The patch, and the text it shows.
     Diff(Patch, Rc<str>),
-    /// An added file over 3,000 lines, in chunks mounted near the view.
-    Chunked(Rc<opencode_ui::diff::Chunked>),
+    /// An added file over 3,000 lines, in chunks mounted near the view, and the text it shows.
+    Chunked(Rc<opencode_ui::diff::Chunked>, Rc<str>),
     /// The Markdown, and the text it shows.
     Markdown(opentui::widget::Markdown, Rc<str>),
     Slot(Option<SlotMount>),
@@ -231,8 +250,8 @@ pub(crate) enum Extra {
     List(Box<List>),
     /// The code and the text it shows.
     Code(opentui::widget::Code, Rc<str>),
-    /// The image and the bytes it shows.
-    Image(opentui::widget::ImageView, Option<Rc<[u8]>>),
+    /// The image.
+    Image(opentui::widget::ImageView),
     /// In the tree before, a subtree that the tree being adopted holds again; its widget moved to wherever the tree
     /// has its id now.
     Taken,
@@ -260,6 +279,27 @@ impl Field {
         match self {
             Field::Line(input) => input.as_any(),
             Field::Lines(area) => area.as_any(),
+        }
+    }
+
+    /// The text the field shows and its cursor.
+    fn draft(&self) -> (String, (u32, u32)) {
+        let (text, buffer) = match self {
+            Field::Line(input) => (input.value(), input.buffer()),
+            Field::Lines(area) => (area.text(), area.buffer()),
+        };
+        (text, buffer.info().map_or((0, 0), |info| info.cursor))
+    }
+
+    /// Shows `text` with the cursor at `cursor`.
+    fn restore(&self, (text, cursor): &(String, (u32, u32))) {
+        self.set(text);
+        let buffer = match self {
+            Field::Line(input) => input.buffer(),
+            Field::Lines(area) => area.buffer(),
+        };
+        if let Err(error) = buffer.set_cursor(cursor.0, cursor.1) {
+            log::warn!("an input's cursor: {error}");
         }
     }
 }
@@ -381,30 +421,53 @@ impl Tree {
         self.slots_changed
     }
 
-    /// Calls `f` with each nested slot the tree mounts.
+    /// Calls `f` with each nested slot the tree mounts, in the items of its lists too.
     pub fn each_slot(&self, f: &mut dyn FnMut(&SlotMount)) {
-        fn walk(nodes: &[Mounted], f: &mut dyn FnMut(&SlotMount)) {
-            for node in nodes {
-                if let Extra::Slot(Some(slot)) = &node.extra {
-                    f(slot);
-                }
-                walk(&node.children, f);
+        each(&self.nodes, &mut |node| {
+            if let Extra::Slot(Some(slot)) = &node.extra {
+                f(slot);
             }
-        }
-        walk(&self.nodes, f);
+        });
     }
 
-    /// Calls `f` with the source of each Markdown and Diff the tree shows, kept subtrees included.
+    /// Calls `f` with the source of each Markdown, Diff and Code the tree shows, kept subtrees and the items of its
+    /// lists with widgets included.
     pub fn each_source(&self, f: &mut dyn FnMut(&Source)) {
-        fn walk(nodes: &[Mounted], f: &mut dyn FnMut(&Source)) {
-            for node in nodes {
-                if let Node::Markdown { source, .. } | Node::Diff { content: source, .. } = &node.node {
-                    f(source);
-                }
-                walk(&node.children, f);
+        each(&self.nodes, &mut |node| {
+            if let Node::Markdown { source, .. }
+            | Node::Diff { content: source, .. }
+            | Node::Code { content: source, .. } = &node.node
+            {
+                f(source);
             }
+        });
+    }
+
+    /// Moves what the user typed into the tree's inputs, where it is not the value the tree gave, into `drafts`.
+    pub(crate) fn take_drafts(&self, drafts: &mut HashMap<String, (String, (u32, u32))>) {
+        each(&self.nodes, &mut |node| {
+            if let (Some(id), Extra::Input(field, given, _)) = (node.node.id(), &node.extra) {
+                let draft = field.draft();
+                if draft.0 != *given.borrow() {
+                    drafts.insert(id.to_owned(), draft);
+                }
+            }
+        });
+    }
+
+    /// Shows in the tree's inputs what the user typed into them before their widgets went, taking it from
+    /// `drafts`.
+    pub(crate) fn restore_drafts(&self, drafts: &mut HashMap<String, (String, (u32, u32))>) {
+        if drafts.is_empty() {
+            return;
         }
-        walk(&self.nodes, f);
+        each(&self.nodes, &mut |node| {
+            if let (Some(id), Extra::Input(field, ..)) = (node.node.id(), &node.extra)
+                && let Some(draft) = drafts.remove(id)
+            {
+                field.restore(&draft);
+            }
+        });
     }
 
     /// Where the scroll with id `id` is scrolled, as of the last frame.
@@ -491,6 +554,17 @@ impl Tree {
                     }
                     if node.layout_of().is_some_and(|layout| !sizes_ok(layout)) {
                         return Err(Refused::Number);
+                    }
+                    if let Node::Box { row: false, split: Some(_), .. } = node {
+                        return Err(Refused::Split);
+                    }
+                    if let Node::Image { content: Source::PartOutput(_), .. } = node {
+                        return Err(Refused::Output);
+                    }
+                    if let Node::List { items, .. } = node
+                        && items.iter().map(|item| u64::from(item.estimate.max(1))).sum::<u64>() > MAX_ROWS
+                    {
+                        return Err(Refused::Rows);
                     }
                     if let Node::Markdown { source: Source::Content(content), .. }
                     | Node::Diff { content: Source::Content(content), .. }
@@ -582,6 +656,21 @@ fn collect_ids(nodes: &[Mounted], above: Option<&str>, ids: &mut HashMap<String,
         deepest = deepest.max(depth);
     }
     deepest
+}
+
+/// Calls `f` with each node of `nodes`' subtrees, the items of their lists with widgets included.
+fn each(nodes: &[Mounted], f: &mut dyn FnMut(&Mounted)) {
+    for node in nodes {
+        f(node);
+        if let Extra::List(list) = &node.extra {
+            for item in &list.items {
+                if let Some(mounted) = &item.mounted {
+                    each(&mounted.tree.nodes, f);
+                }
+            }
+        }
+        each(&node.children, f);
+    }
 }
 
 /// Whether `widget` is in the app's tree.
@@ -807,15 +896,36 @@ impl Pass<'_, '_> {
                 }
                 Ok(old)
             }
-            // A patch that is or becomes chunked is built again when its text changes.
+            // A patch that is or becomes chunked takes new text in place while it stays a large added file, and is
+            // built again otherwise; a theme restyles it in place.
             (Node::Diff { content: was, filetype: had, .. }, Node::Diff { content, filetype, .. })
                 if matches!(old.extra, Extra::Chunked(..))
-                    || ((was != content || had != filetype) && opencode_ui::diff::chunks(&self.text(content))) =>
+                    || ((was != content || had != filetype || matches!(content, Source::PartOutput(_)))
+                        && opencode_ui::diff::chunks(&self.text(content))) =>
             {
-                let same = was == content && had == filetype && !matches!(content, Source::PartOutput(_));
-                // A chunked patch has no restyle of its own: a new theme builds it again.
-                if same && !self.restyle && matches!(old.extra, Extra::Chunked(..)) {
+                let text = (was != content || matches!(content, Source::PartOutput(_))).then(|| self.text(content));
+                let syntax = self.syntax();
+                if let (Extra::Chunked(chunked, shown), true) = (&mut old.extra, had == filetype) {
+                    match text.filter(|text| text != shown) {
+                        None => {}
+                        Some(text) if chunked.set_patch(&text) => {
+                            *shown = text;
+                            count(|work| {
+                                work.parses += 1;
+                                work.set += 1;
+                            });
+                        }
+                        Some(_) => {
+                            let built = self.build(new);
+                            return Err(Box::new((old, built)));
+                        }
+                    }
+                    if self.restyle {
+                        chunked.restyle(self.env.theme, &syntax);
+                        count(|work| work.set += 1);
+                    }
                     old.node = new.clone();
+                    old.dynamic = dynamic(new, &[]);
                     return Ok(old);
                 }
                 let built = self.build(new);
@@ -826,7 +936,18 @@ impl Pass<'_, '_> {
                 Node::Input { value, placeholder, lines, on_change, on_submit, layout, .. },
             ) => {
                 if had != lines || laid != layout {
+                    // Built again, it keeps what the user typed, where the value stays, and the focus.
                     let built = self.build(new);
+                    let (Extra::Input(was, given, _), Extra::Input(field, ..)) = (&old.extra, &built.extra) else {
+                        unreachable!()
+                    };
+                    let draft = was.draft();
+                    if *given.borrow() == *value && draft.0 != *value {
+                        field.restore(&draft);
+                    }
+                    if self.env.host.app().focused().is_some_and(|focused| focused.id() == was.widget().id()) {
+                        self.refocus = Some(field.widget());
+                    }
                     return Err(Box::new((old, built)));
                 }
                 let Node::Input { placeholder: shown, .. } = &old.node else { unreachable!() };
@@ -853,13 +974,25 @@ impl Pass<'_, '_> {
                 Ok(old)
             }
             (Node::List { row: was, layout: laid, .. }, Node::List { row, layout, items, .. }) => {
+                let restyle = self.restyle;
                 if was != row || laid != layout {
-                    let built = self.build(new);
+                    // Built again, it takes the old one's items, their widgets and measures, its offset and the
+                    // reading position, so a keep of an item still holds; and the focus.
+                    let mut built = self.shell(new);
+                    let (Extra::List(was), Extra::List(list)) = (&mut old.extra, &mut built.extra) else {
+                        unreachable!()
+                    };
+                    list.take_from(was);
+                    if self.env.host.app().focused().is_some_and(|focused| focused.id() == was.scroll.id()) {
+                        self.refocus = Some(list.scroll.as_any());
+                    }
+                    list.reconcile(self.env, items, restyle);
+                    built.dynamic = list.dynamic();
                     return Err(Box::new((old, built)));
                 }
-                let restyle = self.restyle;
                 let Extra::List(list) = &mut old.extra else { unreachable!() };
                 list.reconcile(self.env, items, restyle);
+                old.dynamic = list.dynamic();
                 old.node = shell(new);
                 Ok(old)
             }
@@ -877,7 +1010,10 @@ impl Pass<'_, '_> {
                 let Extra::Code(code, shown) = &mut old.extra else { unreachable!() };
                 if filetype_changed {
                     code.filetype(filetype.as_deref());
-                    count(|work| work.set += 1);
+                    count(|work| {
+                        work.parses += 1;
+                        work.set += 1;
+                    });
                 }
                 if numbers_changed {
                     code.line_numbers(*numbers);
@@ -886,7 +1022,10 @@ impl Pass<'_, '_> {
                 if let Some(text) = text.filter(|text| text != shown) {
                     code.set_code(text.to_string());
                     *shown = text;
-                    count(|work| work.set += 1);
+                    count(|work| {
+                        work.parses += 1;
+                        work.set += 1;
+                    });
                 }
                 old.node = new.clone();
                 old.dynamic = dynamic(new, &[]);
@@ -901,15 +1040,13 @@ impl Pass<'_, '_> {
                     return Err(Box::new((old, built)));
                 }
                 let (reread, fit_changed) = (was != content, had != fit);
-                let bytes = reread.then(|| (self.env.bytes)(content));
-                let Extra::Image(image, shown) = &mut old.extra else { unreachable!() };
+                let Extra::Image(image) = &mut old.extra else { unreachable!() };
                 if fit_changed {
                     image.fit(image_fit(*fit));
                     count(|work| work.set += 1);
                 }
-                if let Some(bytes) = bytes.filter(|bytes| bytes != shown) {
-                    show_image(image, bytes.as_deref());
-                    *shown = bytes;
+                if reread {
+                    image.image((self.env.image)(content));
                     count(|work| work.set += 1);
                 }
                 old.node = new.clone();
@@ -1011,6 +1148,24 @@ impl Pass<'_, '_> {
                     }
                 }
             }
+            (Node::Diff { .. }, Extra::Chunked(chunked, shown)) => {
+                // A kept large added file whose new text is not one stays as it was.
+                match text.filter(|text| text != shown) {
+                    Some(text) if chunked.set_patch(&text) => {
+                        *shown = text;
+                        count(|work| {
+                            work.parses += 1;
+                            work.set += 1;
+                        });
+                    }
+                    Some(_) => log::warn!("a kept patch is no longer a large added file; it shows its old text"),
+                    None => {}
+                }
+                if self.restyle {
+                    chunked.restyle(env.theme, &syntax);
+                    count(|work| work.set += 1);
+                }
+            }
             (Node::Markdown { .. }, Extra::Markdown(markdown, shown)) => {
                 if self.restyle {
                     let colors = opencode_ui::markdown::view_colors(env.theme, &syntax);
@@ -1034,11 +1189,28 @@ impl Pass<'_, '_> {
                 let text = matches!(source, Source::PartOutput(_)).then(|| self.text(source));
                 self.show(mounted, text, false, false);
             }
+            Node::Code { content: source @ Source::PartOutput(_), .. } => {
+                let text = self.text(source);
+                if let Extra::Code(code, shown) = &mut mounted.extra
+                    && text != *shown
+                {
+                    code.set_code(text.to_string());
+                    *shown = text;
+                    count(|work| {
+                        work.parses += 1;
+                        work.set += 1;
+                    });
+                }
+                if self.restyle {
+                    self.restyle(mounted);
+                }
+            }
             _ if self.restyle => self.restyle(mounted),
             _ => {}
         }
-        if let (true, Extra::List(list)) = (self.restyle, &mut mounted.extra) {
-            list.restyle(self.env);
+        let dynamic = mounted.dynamic;
+        if let (true, Extra::List(list)) = (self.restyle || dynamic, &mut mounted.extra) {
+            list.revisit(self.env, self.restyle);
         }
         let restyle = self.restyle;
         for child in &mut mounted.children {
@@ -1111,19 +1283,26 @@ impl Pass<'_, '_> {
             return self.adopt(held, node).0;
         }
         let mut mounted = self.shell(node);
+        let mut listed = false;
         match (node, &mut mounted.extra) {
-            (Node::Box { children, .. }, Extra::Box { view, .. }) => {
-                let view = view.clone();
+            (Node::Box { children, .. }, Extra::Box { view, split, .. }) => {
+                let (view, split) = (view.clone(), split.clone());
                 mounted.children = self.children(&view, Vec::new(), children);
+                if let Some(split) = split {
+                    split.first(mounted.children.first().and_then(|child| child.widget.clone()));
+                }
             }
             (Node::Scroll { children, .. }, Extra::Scroll(scroll)) => {
                 let content = scroll.content_view().clone();
                 mounted.children = self.children(&content, Vec::new(), children);
             }
-            (Node::List { items, .. }, Extra::List(list)) => list.reconcile(self.env, items, false),
+            (Node::List { items, .. }, Extra::List(list)) => {
+                list.reconcile(self.env, items, false);
+                listed = list.dynamic();
+            }
             _ => {}
         }
-        mounted.dynamic = dynamic(node, &mounted.children);
+        mounted.dynamic = listed || dynamic(node, &mounted.children);
         mounted
     }
 
@@ -1301,18 +1480,16 @@ impl Pass<'_, '_> {
                 (code.as_any(), Extra::Code(code, text))
             }
             Node::Image { content, fit, layout, .. } => {
-                let bytes = (env.bytes)(content);
-                let image = opentui::widget::ImageView::new(app).fit(image_fit(*fit));
-                show_image(&image, bytes.as_deref());
+                let image = opentui::widget::ImageView::new(app).fit(image_fit(*fit)).image((env.image)(content));
                 lay_out(&image, layout);
-                (image.as_any(), Extra::Image(image, bytes))
+                (image.as_any(), Extra::Image(image))
             }
             Node::Diff { content, view, filetype, .. } => {
                 let text = self.text(content);
                 count(|work| work.parses += 1);
                 let syntax = self.syntax();
                 match opencode_ui::diff::Chunked::new(app, theme, &syntax, &text, filetype.as_deref(), 0) {
-                    Some(chunked) => (chunked.root().as_any(), Extra::Chunked(Rc::new(chunked))),
+                    Some(chunked) => (chunked.root().as_any(), Extra::Chunked(Rc::new(chunked), text)),
                     None => {
                         let view = diff_view(*view);
                         let patch =
@@ -1442,7 +1619,9 @@ fn count_removed(node: &Mounted) {
 }
 
 fn has_slot(node: &Mounted) -> bool {
-    matches!(node.extra, Extra::Slot(_)) || node.children.iter().any(has_slot)
+    let mut found = false;
+    each(std::slice::from_ref(node), &mut |node| found |= matches!(node.extra, Extra::Slot(_)));
+    found
 }
 
 fn same_kind(old: &Node, new: &Node) -> bool {
@@ -1591,19 +1770,6 @@ fn image_fit(fit: opencode_plugin_abi::v2::Fit) -> opentui::native::ImageFit {
         opencode_plugin_abi::v2::Fit::Contain => opentui::native::ImageFit::Contain,
         opencode_plugin_abi::v2::Fit::Cover => opentui::native::ImageFit::Cover,
         opencode_plugin_abi::v2::Fit::Fill => opentui::native::ImageFit::Fill,
-    }
-}
-
-/// Shows `bytes` in `image`, or nothing when there are none or they do not decode.
-fn show_image(image: &opentui::widget::ImageView, bytes: Option<&[u8]>) {
-    match bytes {
-        Some(bytes) => {
-            if let Err(error) = image.load(bytes) {
-                log::warn!("an image node does not decode: {error}");
-                image.image(None);
-            }
-        }
-        None => drop(image.image(None)),
     }
 }
 

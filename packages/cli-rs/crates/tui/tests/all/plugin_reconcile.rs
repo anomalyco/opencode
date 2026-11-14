@@ -97,7 +97,7 @@ fn apply_acting(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::No
         slot: &slot,
         source: &source,
         content: &|_| false,
-        bytes: &|_| None,
+        image: &|_| None,
         full: false,
         draw: None,
     };
