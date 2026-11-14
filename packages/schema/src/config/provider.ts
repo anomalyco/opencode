@@ -72,6 +72,35 @@ export const Reasoning = Schema.Union([
 ]).annotate({ identifier: "Config.Model.Reasoning" })
 export type Reasoning = typeof Reasoning.Type
 
+const HourMinute = Schema.String
+  .check(Schema.isPattern(/^(?:[01]\d|2[0-3]):[0-5]\d$/u))
+  .annotate({ description: "Local time of day as HH:mm, 00:00 to 23:59" })
+
+/** Days of the week, Monday to Sunday, as accepted by `availability.windows[].days`. */
+export const DayOfWeek = Schema.Literals(["mon", "tue", "wed", "thu", "fri", "sat", "sun"])
+export type DayOfWeek = typeof DayOfWeek.Type
+
+class AvailabilityWindow extends Schema.Class<AvailabilityWindow>("Config.Model.Availability.Window")({
+  /** Days the window applies to; defaults to every day. */
+  days: DayOfWeek.pipe(Schema.Array, optional),
+  /** Inclusive start of the window, HH:mm in the window's timezone. */
+  start: HourMinute,
+  /** Inclusive end of the window, HH:mm. `end` earlier than `start` wraps past midnight. */
+  end: HourMinute,
+}) {}
+
+class Availability extends Schema.Class<Availability>("Config.Model.Availability")({
+  /** `block` treats the windows as times the model may NOT be used; `allow` as the only times it may. Defaults to `block`. */
+  mode: Schema.Literals(["block", "allow"]).pipe(optional),
+  windows: Schema.Array(AvailabilityWindow).check(Schema.isMinLength(1)),
+  /** IANA timezone for window times, for example `UTC` or `Europe/Berlin`. Defaults to `UTC`. */
+  timezone: Schema.String.pipe(optional),
+  /** Model used instead while a window blocks this one, as `provider/model` or `provider/model#variant`. */
+  fallback: Schema.String.check(
+    Schema.isPattern(/^[^/#]+\/[^#]+(?:#[^#]+)?$/u),
+  ).annotate({ description: "Fallback model reference like `anthropic/claude-sonnet-4-6`" }).pipe(optional),
+}) {}
+
 class ModelConfig extends Schema.Class<ModelConfig>("Config.Model")({
   modelID: ID.pipe(optional),
   type: Type.pipe(optional),
@@ -107,6 +136,7 @@ class ModelConfig extends Schema.Class<ModelConfig>("Config.Model")({
   }).pipe(Schema.Array, optional),
   cost: Schema.Union([Cost, Cost.pipe(Schema.Array)]).pipe(optional),
   disabled: Schema.Boolean.pipe(optional),
+  availability: Availability.pipe(optional),
   limit: Limit.pipe(optional),
 }) {}
 

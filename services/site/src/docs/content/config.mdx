@@ -559,6 +559,60 @@ headers, and model variants.
 
 Provider `settings.transport: "websocket"` selects its session WebSocket.
 
+### Model availability
+
+Models can declare time windows when they may be used. During a blocked
+window, sessions select the model's `fallback` instead (followed
+transitively up to three hops). Without a usable fallback the session fails
+with a no-route error.
+
+```jsonc
+{
+  "providers": {
+    "deepseek": {
+      "models": {
+        "chat": {
+          // Avoid DeepSeek's 2x peak pricing windows (UTC, weekdays).
+          "availability": {
+            "mode": "block",
+            "windows": [
+              { "days": ["mon", "tue", "wed", "thu", "fri"], "start": "01:00", "end": "04:00" },
+              { "days": ["mon", "tue", "wed", "thu", "fri"], "start": "06:00", "end": "10:00" }
+            ],
+            "timezone": "UTC",
+            "fallback": "anthropic/claude-sonnet-5-5"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+- `mode`: `"block"` (default) treats windows as times the model may NOT be
+  used; `"allow"` treats them as the only times it may.
+- `windows[].days`: `mon` through `sun`; every day when omitted. `start` and
+  `end` are inclusive `HH:mm` in the window's timezone; an `end` earlier
+  than `start` wraps past midnight (counting as the listed day), and
+  `start === end` matches exactly that one minute, not the whole day.
+- `timezone`: an IANA timezone name, `UTC` by default. Windows are evaluated
+  as wall-clock time in the named zone, so daylight-saving transitions follow
+  that zone's rules.
+- `fallback`: a `provider/model` or `provider/model#variant` reference used
+  while a window blocks the model.
+
+While a window blocks the model, requests silently use the fallback: the UI
+and clients keep showing the configured model — cost accounting uses the
+effective (fallback) model — and the only trace is a log line on the server.
+Making the substitution visible in the UI may be added later.
+
+A model-level `availability` in the config replaces (not merges with) any
+availability a catalog or plugin already provided for that model.
+
+Fallback chains are followed transitively up to three hops, cycles are
+detected and reported, and a blocked model with no usable fallback fails
+with a no-route error that says which case applied.
+
 See the [providers guide](/providers) for credentials, custom endpoints, provider packages, the WebSocket transport, and model configuration.
 
 ## Variables
