@@ -224,6 +224,9 @@ pub(crate) struct Surface {
     revision: Cell<Option<u64>>,
     /// Each content handle's image, decoded once however many nodes show it; `None` when it does not decode.
     images: RefCell<HashMap<ContentRef, Option<opentui::native::Image>>>,
+    /// A panel or an overlay before its first layout: it draws first as that layout gives it its room, so a change
+    /// before it draws nothing (it would draw at a size and a showing the panel does not have yet).
+    pending: Cell<bool>,
     input: Rc<Input>,
     /// What the mount holds of the input; it ends with the mount.
     holder: RefCell<Option<Rc<Owner>>>,
@@ -312,6 +315,7 @@ impl Surface {
             watch: RefCell::new(None),
             revision: Cell::new(None),
             images: RefCell::default(),
+            pending: Cell::new(matches!(surface.at, v2::Place::Panel(_) | v2::Place::Overlay(_))),
             input: input.clone(),
             holder: RefCell::new(None),
         });
@@ -371,6 +375,7 @@ impl Surface {
                 return;
             }
             mounted.resized.set(mounted.resized.get() + 1);
+            mounted.pending.set(false);
             let weak = Rc::downgrade(&mounted);
             app.defer(move |_| {
                 if let (Some(mounted), Some(host)) = (weak.upgrade(), mounted_owner(&weak)) {
@@ -380,9 +385,8 @@ impl Surface {
         });
         // A panel's and an overlay's first view runs as their first layout gives them their room, once the host shows
         // them: it sees how they show (`SurfaceInput::panel`) and their size, so one view draws them.
-        let laid_out = matches!(surface.at, v2::Place::Panel(_) | v2::Place::Overlay(_));
         match fills {
-            true if laid_out => {}
+            true if mounted.pending.get() => {}
             // A route's first view runs once the page it replaces is gone, whose keymap layers go in this turn's
             // deferred work, before the next frame: the view sees the keymap the route has (review bigboi-7).
             true => {
@@ -400,6 +404,9 @@ impl Surface {
 
     /// Calls the view and adopts its tree, for a cause other than its size.
     pub fn draw(&self, host: &dyn Host) {
+        if self.pending.get() {
+            return;
+        }
         self.resized.set(0);
         self.draw_sized(host);
     }

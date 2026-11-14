@@ -616,18 +616,35 @@ struct Shown {
     at: At,
     /// The composer's mode `normal`: escape in the composer sets it; the focus leaving the composer ends it.
     normal: bool,
+    /// A press on `a` that the plugin took holds the pointer, until a release or a move of the focus (carbon-9).
+    captured: bool,
+    /// The panel's mode `menu`, in which its base keys (`x`, `m`, `o`) are none of it.
+    menu: bool,
 }
 
 impl Shown {
     fn new(active: bool) -> Self {
-        Self { active, panel: false, overlay: false, route: false, at: At::Composer, normal: false }
+        Self {
+            active,
+            panel: false,
+            overlay: false,
+            route: false,
+            at: At::Composer,
+            normal: false,
+            captured: false,
+            menu: false,
+        }
     }
 
     fn focus(&mut self, at: At) {
         if at != At::Composer {
             self.normal = false;
         }
+        if at != At::Panel {
+            self.menu = false;
+        }
         self.at = at;
+        self.captured = false;
     }
 }
 
@@ -679,6 +696,10 @@ impl Model for Ledgers {
                 }
                 continue;
             }
+            // On every step, the capture is what the trace says, whatever else the mounts hold.
+            if ledger.capture != shown.captured {
+                return fail("capture", format!("{command:?}: the capture is {}, the trace {shown:?}", ledger.capture));
+            }
             let expected = Ledger { modes: unmounted.modes + usize::from(shown.normal), ..unmounted };
             if !shown.panel && !shown.route && ledger != expected {
                 return fail("mount", format!("{command:?}: no mount left {ledger:?}, not {expected:?}"));
@@ -721,10 +742,16 @@ fn live(harness: &Harness, shown: &mut Shown, command: Life) {
         Life::Key(key) => {
             harness.app.press(&key.to_string());
             wait(harness);
-            if key == 'o' && shown.active && shown.panel && shown.at == At::Panel {
-                shown.overlay = true;
-                shown.focus(At::Overlay);
+            let panel = shown.active && shown.panel && shown.at == At::Panel && !shown.menu;
+            match key {
+                'o' if panel => {
+                    shown.overlay = true;
+                    shown.focus(At::Overlay);
+                }
+                'm' if panel => shown.menu = true,
+                _ => {}
             }
+            // Time passed beyond a hold's deadline, which is no resize: a capture stays.
         }
         Life::Press if shown.panel => {
             let (x, y) = support::at(&harness.app.text(), "AAAA").expect("the panel shows AAAA");
@@ -737,13 +764,17 @@ fn live(harness: &Harness, shown: &mut Shown, command: Life) {
                         shown.focus(At::Panel);
                     }
                 }
-                false => shown.focus(At::Panel),
+                false => {
+                    shown.focus(At::Panel);
+                    shown.captured = true;
+                }
             }
         }
         Life::Release if shown.panel => {
             let (x, y) = support::at(&harness.app.text(), "AAAA").expect("the panel shows AAAA");
             harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 1, y);
             plugin::settle(harness);
+            shown.captured = false;
         }
         Life::FocusComposer => {
             opencode_plugin::Host::focus_composer(&**tui);
@@ -757,7 +788,10 @@ fn live(harness: &Harness, shown: &mut Shown, command: Life) {
             harness.app.press("x");
             plugin::settle(harness);
             probe(|probe| probe.panic = false);
+            // A capture means `a` has the focus already: focusing it moves nothing, and the capture stays.
+            let captured = shown.captured;
             shown.focus(At::Panel);
+            shown.captured = captured;
             if !runs(tui) {
                 *shown = Shown::new(false);
                 session(harness);
@@ -808,6 +842,7 @@ fn close(shown: &mut Shown) {
     if shown.panel {
         shown.panel = false;
         shown.overlay = false;
+        shown.captured = false;
         if shown.at != At::Composer {
             shown.focus(At::Composer);
         }

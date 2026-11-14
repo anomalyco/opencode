@@ -472,7 +472,7 @@ fn select() -> abi::Select {
                 },
                 abi::SelectAction {
                     title: "new".into(),
-                    key: Some("ctrl+n".into()),
+                    key: Some("ctrl+y".into()),
                     action: abi::Action::Command { name: "input.picked".into(), input: Some("new".into()) },
                     hidden: Vec::new(),
                     primary: None,
@@ -1811,6 +1811,99 @@ fn a_taken_press_owns_its_gesture() {
     assert_eq!(taken(), ["side: key x [-]"], "the press left the focus at the composer");
 }
 
+// Expected (carbon-6): a panel's first view sees how it shows and is the only view as it opens; a splitter drag gives
+// it every width; a theme switch keeps its mount and restyles an overlay; a handler that fails as it hears its
+// overlay replaced leaves no overlay; a panel the plugin does not have opens nothing.
+#[test]
+fn a_panel_shows_with_one_view_follows_its_room_and_its_theme() {
+    let harness = open();
+    run(&harness, "input.panel", None);
+    let panels = probe(|probe| probe.panels.clone());
+    assert_eq!(panels.len(), 1, "{panels:?}");
+    assert!(panels[0].0.is_some_and(|panel| panel.focused && panel.width > 0), "{panels:?}");
+    // The splitter, dragged left in steps.
+    let (left, top) = support::at(&harness.app.text(), "PANEL").unwrap();
+    harness.app.mouse(MouseEventKind::Down(MouseButton::Left), left - 1, top + 5);
+    for step in 1..=4 {
+        harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), left - 1 - step * 3, top + 5);
+        settle(&harness);
+    }
+    harness.app.mouse(MouseEventKind::Up(MouseButton::Left), left - 13, top + 5);
+    settle(&harness);
+    // Four steps of three cells: the view saw each width, not only the first two.
+    let widths: Vec<u16> =
+        probe(|probe| probe.panels.iter().filter_map(|(panel, _)| panel.map(|panel| panel.width)).collect());
+    assert_eq!(widths.last(), Some(&(widths[0] + 12)), "the view did not follow the drag: {widths:?}");
+    // A theme switch.
+    let generation = probe(|probe| probe.panels.last().unwrap().1);
+    harness.app.press("o");
+    settle(&harness);
+    let (mx, my) = support::at(&harness.app.text(), "MENU one").unwrap();
+    let before = harness.app.render().cell(u32::from(mx), u32::from(my)).unwrap().fg;
+    assert!(harness.tui.theme.borrow_mut().set("tokyonight"));
+    harness.tui.theme_changed();
+    settle(&harness);
+    assert_eq!(probe(|probe| probe.panels.last().unwrap().1), generation, "the panel mounted again");
+    let after = harness.app.render().cell(u32::from(mx), u32::from(my)).unwrap().fg;
+    assert_ne!(before, after, "the overlay kept the old theme");
+    // A failure on hearing the overlay replaced.
+    let twin = without();
+    probe(|probe| probe.panic_closed = true);
+    run(&harness, "input.overlay", None);
+    probe(|probe| probe.panic_closed = false);
+    settle(&harness);
+    assert!(failure(&harness).is_some());
+    assert_eq!(interact::ledger(&*harness.tui), twin);
+    // A panel the plugin does not have.
+    let harness = open();
+    run(&harness, "input.nopanel", None);
+    assert!(harness.tui.panels.current().is_none());
+}
+
+// Expected (carbon-7): a toggle row of a select with no key toggles; a hidden disabled row of the same value toggles
+// nothing; rows naming the caller or the plugin manager show no toggle; a rowless action runs with no row.
+#[test]
+fn a_select_toggles_only_what_it_shows() {
+    let harness = open_with(|probe| probe.keyless = true);
+    rows(&["other"], "f");
+    run(&harness, "input.select", None);
+    harness.app.press("enter");
+    settle(&harness);
+    assert!(!active(&harness, "test.other"), "a keyless select's toggle did nothing");
+    assert!(harness.app.text().contains("disabled"), "{}", harness.app.text());
+    harness.app.press("escape");
+    settle(&harness);
+    run(&harness, "input.select", None);
+    harness.app.press("enter");
+    settle(&harness);
+    assert!(active(&harness, "test.other"));
+    let harness = open();
+    rows(&["dup"], "f");
+    run(&harness, "input.select", None);
+    taken();
+    harness.app.press("enter");
+    settle(&harness);
+    assert!(active(&harness, "test.other"), "a hidden row toggled a plugin");
+    assert_eq!(taken(), ["picked dup"]);
+    harness.app.press("escape");
+    settle(&harness);
+    rows(&["self", "manager"], "f");
+    run(&harness, "input.select", None);
+    let screen = harness.app.text();
+    assert!(!screen.contains("enabled") && !screen.contains("disable"), "{screen}");
+    harness.app.press("down");
+    settle(&harness);
+    harness.app.press("enter");
+    settle(&harness);
+    assert!(active(&harness, "opencode.plugins"));
+    harness.app.type_text("zzz");
+    settle(&harness);
+    taken();
+    harness.app.press("ctrl+y");
+    settle(&harness);
+    assert_eq!(taken(), ["picked new"]);
+}
+
 // Expected (carbon-8): a chord types nothing, so a modal composer's `i` is not `alt+i`; a bind of several keys tells
 // which one ran it; an overlay stays on the screen as it shrinks, and a wheel outside closes it.
 #[test]
@@ -1840,6 +1933,23 @@ fn keys_say_what_was_pressed_and_overlays_stay_on_screen() {
     harness.app.mouse(MouseEventKind::ScrollDown, 100, 25);
     settle(&harness);
     assert!(!harness.app.text().contains("MENU"), "{}", harness.app.text());
+}
+
+// Expected (carbon-9): an overlay the plugin closes goes with no close event; one against the bottom edge shows there.
+#[test]
+fn an_overlay_closes_on_the_plugins_word_and_shows_against_an_edge() {
+    let harness = open();
+    run(&harness, "input.panel", None);
+    harness.app.press("o");
+    settle(&harness);
+    taken();
+    run(&harness, "input.unmenu", None);
+    assert!(!harness.app.text().contains("MENU"));
+    assert_eq!(taken(), Vec::<String>::new());
+    run(&harness, "input.edge", None);
+    // The overlay's blank cells show what is under them, so its line is found by its first word.
+    let (_, y) = support::at(&harness.app.text(), "MENU").unwrap();
+    assert_eq!(y, 28, "{}", harness.app.text());
 }
 
 // Expected (carbon-9): a box's background token, changed in place and switched with the theme, draws as a box mounted
