@@ -90,6 +90,8 @@ struct Pad {
     /// The canvas sits in a box of its own, or takes no minimum width: a move, and a layout of the same size.
     wrap: bool,
     loose: bool,
+    /// The canvas has no width of its own.
+    auto: bool,
     /// The generation the last view had.
     generation: u64,
 }
@@ -107,6 +109,7 @@ impl Default for Pad {
             unkeyed: false,
             wrap: false,
             loose: false,
+            auto: false,
             generation: 0,
         }
     }
@@ -141,13 +144,13 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 fn view(cx: &mut v2::View<'_>) -> v2::Node {
-    let (shown, (width, height), version, animate, unkeyed, wrap, loose) = pad(|pad| {
+    let (shown, (width, height), version, animate, unkeyed, wrap, loose, auto) = pad(|pad| {
         pad.views += 1;
         pad.generation = cx.mount.generation;
-        (pad.shown, pad.size, pad.version, pad.animate, pad.unkeyed, pad.wrap, pad.loose)
+        (pad.shown, pad.size, pad.version, pad.animate, pad.unkeyed, pad.wrap, pad.loose, pad.auto)
     });
     let fixed = abi::Layout {
-        width: Some(abi::Width::Cells(width)),
+        width: (!auto).then_some(abi::Width::Cells(width)),
         height: Some(abi::Width::Cells(height)),
         shrink: Some(false),
         min_width_zero: loose,
@@ -452,6 +455,9 @@ struct Reference {
     motion: bool,
     held: Option<Held>,
     dead: bool,
+    version: u64,
+    /// The size and version of the canvas's last draw.
+    asked: Option<((u16, u16), u64)>,
 }
 
 impl Reference {
@@ -459,8 +465,24 @@ impl Reference {
         self.mounted.is_some() && self.shown && !self.dead
     }
 
+    /// The canvas shows and has a size: a canvas of none is not drawn, nor painted, so it does not animate.
+    fn drawable(&self) -> bool {
+        self.showing() && self.size.0 > 0 && self.size.1 > 0
+    }
+
     fn animating(&self) -> bool {
-        self.showing() && self.animate && self.motion
+        self.drawable() && self.animate && self.motion
+    }
+
+    /// What a canvas laid out now asks for: nothing when it has a list for its size and version.
+    fn laid_out(&self) -> Option<v2::Cause> {
+        match self.asked {
+            _ if !self.drawable() => None,
+            Some(asked) if asked == (self.size, self.version) => None,
+            Some((size, _)) if size == self.size => Some(v2::Cause::Version),
+            Some(_) => Some(v2::Cause::Resized),
+            None => Some(v2::Cause::First),
+        }
     }
 
     /// Takes the draws of a frame; the first failure of `lifecycle`.
@@ -475,6 +497,7 @@ impl Reference {
             if (drawn.frame.width, drawn.frame.height) != self.size {
                 return Err(format!("a draw for {:?} of a canvas of {:?}", drawn.frame, self.size));
             }
+            self.asked = Some((self.size, self.version));
             match &drawn.returned {
                 Returned::Art(shapes) => self.held = Some(Held::Art(shapes.clone())),
                 Returned::Over => self.held = Some(Held::Over),
@@ -536,11 +559,11 @@ impl Model for Canvases {
             };
             let (seen, work) = (pad(|pad| pad.draws.len()), host::work());
             // The draw a command asks for in its frame, from the canvas as it showed before it.
-            let (was_showing, was_size, was_animating) = (reference.showing(), reference.size, reference.animating());
+            let was_animating = reference.animating();
             apply(&harness, command);
             match command {
                 Command::Open | Command::Home => {
-                    reference.held = None;
+                    (reference.held, reference.asked) = (None, None);
                     let on_route = matches!(harness.tui.route(), Route::Plugin { .. });
                     reference.mounted = (on_route && !reference.dead).then(|| pad(|pad| pad.generation));
                     if let Some(generation) = reference.mounted {
@@ -552,10 +575,11 @@ impl Model for Canvases {
                 }
                 Command::Show(shown) => {
                     if *shown != reference.shown {
-                        reference.held = None;
+                        (reference.held, reference.asked) = (None, None);
                     }
                     reference.shown = *shown;
                 }
+                Command::Version => reference.version += 1,
                 Command::Size(width, height) => reference.size = (*width, *height),
                 Command::Animate(on) => reference.animate = *on,
                 Command::Motion(on) => reference.motion = *on,
@@ -565,14 +589,12 @@ impl Model for Canvases {
             let draws: Vec<Drawn> = pad(|pad| pad.draws[seen..].to_vec());
             let animating = was_animating && reference.animating();
             let asked = match command {
-                Command::Open if reference.showing() => Some(v2::Cause::First),
-                Command::Show(true) if reference.showing() && !was_showing => Some(v2::Cause::First),
-                Command::Size(..) if reference.showing() && was_size != reference.size => Some(v2::Cause::Resized),
-                Command::Version if reference.showing() && animating => Some(v2::Cause::Animate),
-                Command::Version if reference.showing() => Some(v2::Cause::Version),
-                _ if animating => Some(v2::Cause::Animate),
+                Command::Open | Command::Show(true) | Command::Size(..) => reference.laid_out(),
+                Command::Version if reference.drawable() && animating => Some(v2::Cause::Animate),
+                Command::Version if reference.drawable() => Some(v2::Cause::Version),
                 _ => None,
-            };
+            }
+            .or(animating.then_some(v2::Cause::Animate));
             // A frame of the animation carries its time, whatever else asks for the draw in it.
             let dt = match asked {
                 Some(v2::Cause::First) | None => Duration::ZERO,
@@ -629,7 +651,7 @@ impl Model for Canvases {
             if expected == 0 && (done.lists != 0 || done.bytes != 0) {
                 return fail("work", "checked", format!("a still frame checked a list: {done:?}"));
             }
-            let painted = u64::from(reference.showing() && matches!(reference.held, Some(Held::Art(_))));
+            let painted = u64::from(reference.drawable() && matches!(reference.held, Some(Held::Art(_))));
             if expected == 0 && done.replays != painted {
                 return fail("work", "replays", format!("{} replays, {painted} expected: {done:?}", done.replays));
             }
@@ -1321,10 +1343,11 @@ thread_local! {
 }
 
 fn slot_setup(setup: &mut abi::Setup) -> Result<(), String> {
-    let place = v2::Place::Slot(abi::Placement::append("home.footer"));
+    let place = v2::Place::Slot(abi::Placement::append("home.footer.status"));
     let view = |_: &mut v2::View<'_>| {
         v2::Node::canvas("badge").layout(abi::Layout {
-            width: Some(abi::Width::Cells(7)),
+            grow: true,
+            min_width_zero: true,
             height: Some(abi::Width::Cells(1)),
             ..abi::Layout::default()
         })
@@ -1338,17 +1361,35 @@ fn slot_setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: a canvas at the root of a slot surface takes its own layout there, as a box at a slot's root does, and is
-// drawn at that size.
+// Expected: a canvas at the root of a slot surface takes its own layout there, as a box at a slot's root does: a
+// growing canvas grows in the slot's row. It is drawn at that size.
 #[test]
 fn a_canvas_at_a_slots_root_takes_its_layout() {
     SLOT.with(|frames| frames.borrow_mut().clear());
     let harness = open_tui(80, 24, vec![abi::Plugin { id: "test.badge", setup: slot_setup }.into()]);
     let screen = frame(&harness, Duration::from_millis(16)).text();
     let frames = SLOT.with(|frames| frames.borrow().clone());
-    assert_eq!(
-        frames.iter().map(|frame| (frame.width, frame.height, frame.cause)).collect::<Vec<_>>(),
-        [(7, 1, v2::Cause::First)]
-    );
+    assert_eq!(frames.iter().map(|frame| (frame.height, frame.cause)).collect::<Vec<_>>(), [(1, v2::Cause::First)]);
+    assert!(frames[0].width >= 10, "the slot's room, not the canvas's own: {frames:?}");
     assert!(screen.contains("§badge§"), "{screen}");
+}
+
+// Expected: arming a canvas's hook for a version moves nothing: a canvas with no width of its own keeps its size,
+// so each version draws it once at that size and no resize follows.
+#[test]
+fn a_version_leaves_the_canvas_its_size() {
+    PAD.with(|cell| *cell.borrow_mut() = Pad { auto: true, ..Pad::default() });
+    let harness = open_tui(80, 24, vec![abi::Plugin { id: ID, setup }.into()]);
+    apply(&harness, &Command::Open);
+    let _ = frame(&harness, Duration::from_millis(1));
+    for _ in 0..3 {
+        apply(&harness, &Command::Version);
+        let _ = frame(&harness, Duration::from_millis(16));
+        let _ = frame(&harness, Duration::from_millis(16));
+    }
+    let draws: Vec<(u16, u16, v2::Cause)> =
+        pad(|pad| pad.draws.iter().map(|drawn| (drawn.frame.width, drawn.frame.height, drawn.frame.cause)).collect());
+    let size = (draws[0].0, draws[0].1);
+    let causes = [v2::Cause::First, v2::Cause::Version, v2::Cause::Version, v2::Cause::Version];
+    assert_eq!(draws, causes.map(|cause| (size.0, size.1, cause)));
 }
