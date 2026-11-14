@@ -30,6 +30,8 @@ pub struct Args {
     pub local: bool,
     /// The server is the background service (TS `client.restart`), which the reconnecting overlay names.
     pub managed: bool,
+    /// The executable a local server runs, when the client could tell: the JS host runs on its Bun.
+    pub server_executable: Option<std::path::PathBuf>,
     /// `--auto`: permissions that are not denied are accepted (`context/permission.tsx`).
     pub auto: bool,
     /// The terminal's variables, uploaded to each session on a local server (TS `environment`, G13).
@@ -50,6 +52,7 @@ impl Default for Args {
             model: None,
             local: false,
             managed: false,
+            server_executable: None,
             auto: false,
             environment: None,
             contain: Default::default(),

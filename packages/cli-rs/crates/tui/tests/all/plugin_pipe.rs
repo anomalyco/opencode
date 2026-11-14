@@ -2412,7 +2412,44 @@ fn the_js_hosts_answers_hash_no_plugin_again() {
 // Bun starts in a directory of the JS host's own, and the project's directory reaches plugins as data.
 #[test]
 fn a_hostile_project_loads_nothing_into_the_js_host() {
-    let Some(mut config) = config() else { return };
+    hostile(|_| config());
+}
+
+// Expected (js-host-runtime): the same holds on the opencode binary run as the Bun it embeds (`BUN_BE_BUN=1`), found as
+// the client finds a local server's binary it cannot tell from the process: the first `opencode` on the path that
+// answers as Bun, never the project's own behind a relative entry. Its Bun version is reported, and new enough.
+#[test]
+fn a_hostile_project_loads_nothing_into_the_js_host_on_opencodes_bun() {
+    hostile(|project| {
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        let path = std::env::join_paths(
+            [PathBuf::from("bin"), PathBuf::new()].into_iter().chain(std::env::split_paths(&path)),
+        )
+        .unwrap();
+        let var = |name: &str| match name {
+            "OPENCODE_PLUGIN_JS" => Some("1".into()),
+            "OPENCODE_BUN" => None,
+            "PATH" => Some(path.clone()),
+            _ => std::env::var_os(name),
+        };
+        let found =
+            Config::from_vars(var, project.to_path_buf(), &pipe::Server::Local(None)).filter(|found| found.opencode);
+        let Some(mut found) = found else {
+            assert_ne!(std::env::var("OPENCODE_RS_REQUIRE_TS").as_deref(), Ok("1"), "no opencode binary runs as Bun");
+            return None;
+        };
+        let version = found.bun_version.clone().expect("opencode's Bun says its version");
+        eprintln!("the JS host runs on {} (opencode's Bun {version})", found.bun.display());
+        let numbers: Vec<u64> =
+            version.split(['-', '+']).next().unwrap().split('.').map(|n| n.parse().unwrap()).collect();
+        assert!((numbers[0], numbers[1], numbers[2]) >= pipe::OLDEST_BUN, "{version}");
+        found.limits.ack = Duration::from_secs(10);
+        Some(found)
+    });
+}
+
+/// Opens a project that tries to load code into the JS host, on the JS host `runtime` makes for it.
+fn hostile(runtime: impl FnOnce(&Path) -> Option<Config>) {
     let root = opencode_util::temp::tempdir().unwrap();
     let (project, ran) = (root.path().join("work"), root.path().join("ran"));
     std::fs::create_dir_all(project.join("bin")).unwrap();
@@ -2420,8 +2457,16 @@ fn a_hostile_project_loads_nothing_into_the_js_host() {
     write("bunfig.toml", "preload = [\"./pwn.ts\"]\n".to_owned());
     write("pwn.ts", format!("require(\"node:fs\").appendFileSync({:?}, \"preload\\n\")\n", ran));
     write(".env", "PWN_FROM_ENV=1\n".to_owned());
-    write("bin/bun", format!("#!/bin/sh\necho bun >> {:?}\n", ran));
+    for name in ["bun", "opencode"] {
+        write(&format!("bin/{name}"), format!("#!/bin/sh\necho {name} >> {ran:?}\necho 1.4.4\n"));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(project.join("bin").join(name), std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+    }
     write("package.json", "{ \"name\": \"hostile\", \"type\": \"commonjs\" }\n".to_owned());
+    let Some(mut config) = runtime(&project) else { return };
     let log = root.path().join("seen.jsonl");
     let config_dir = root.path().join("config");
     let plugin = config_dir.join("plugins/seen");

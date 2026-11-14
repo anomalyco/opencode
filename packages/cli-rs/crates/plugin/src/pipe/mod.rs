@@ -16,8 +16,9 @@
 //!   handler ran fails, and the others are set up again, their surfaces keeping their last trees meanwhile. Three ends
 //!   in a minute fail every plugin on it.
 //!
-//! The JS host runs when [`Config::from_env`] finds Bun, unless `OPENCODE_PLUGIN_JS=0`: the V2 compatibility layer (P8,
-//! `compat/`) runs today's V2 plugins on it unmodified where their features map.
+//! The JS host runs when `OPENCODE_PLUGIN_JS=1` and [`Config::from_env`] finds Bun, the local server's opencode
+//! binary first: the V2 compatibility layer (P8, `compat/`) runs today's V2 plugins on it unmodified where their
+//! features map.
 
 pub mod child;
 mod guest;
@@ -46,11 +47,27 @@ const SOURCE: &str = include_str!("host.ts");
 /// The V2 compatibility layer the JS host imports (P8), generated from `compat/` by `script/gen/js-host.ts`.
 const COMPAT: &str = include_str!("compat.js");
 
+/// The oldest Bun the JS host was run on (1.4.0 to 1.4.4 were): an opencode binary whose own Bun is older is not used.
+pub const OLDEST_BUN: (u64, u64, u64) = (1, 4, 0);
+
+/// Where the server the client talks to runs, which decides the JS host's runtime.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Server {
+    /// On this machine, running this executable when the client could tell.
+    Local(Option<PathBuf>),
+    /// Perhaps on another machine (`--server`).
+    Remote,
+}
+
 /// How the JS host runs.
 #[derive(Clone, Debug)]
 pub struct Config {
-    /// The Bun executable.
+    /// The Bun executable, or an opencode binary run as the Bun it embeds.
     pub bun: PathBuf,
+    /// `bun` is an opencode binary, which runs as Bun with `BUN_BE_BUN=1`.
+    pub opencode: bool,
+    /// The version `bun` reported as Bun's, when it was asked.
+    pub bun_version: Option<String>,
     /// Bun's arguments before the script.
     pub args: Vec<String>,
     pub limits: Limits,
@@ -70,6 +87,8 @@ impl Config {
     pub fn new(bun: PathBuf) -> Self {
         Self {
             bun,
+            opencode: false,
+            bun_version: None,
             args: Vec::new(),
             limits: Limits::default(),
             ends: 3,
@@ -81,24 +100,107 @@ impl Config {
         }
     }
 
-    /// The JS host, when `OPENCODE_PLUGIN_JS` is `1` and Bun is found: `OPENCODE_BUN`, an absolute path, or `bun` on
-    /// the path ([`find`]). It is off by default: opt in.
-    pub fn from_env() -> Option<Self> {
-        Self::from_vars(|name| std::env::var_os(name))
+    /// The JS host, when `OPENCODE_PLUGIN_JS` is `1` (it is off by default: opt in) and Bun is found for the client's
+    /// `server`: see [`Config::from_vars`].
+    pub fn from_env(server: &Server) -> Option<Self> {
+        Self::from_vars(|name| std::env::var_os(name), std::env::current_dir().unwrap_or_default(), server)
     }
 
-    /// [`Config::from_env`] over the environment `var` reads.
-    pub fn from_vars(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Option<Self> {
+    /// [`Config::from_env`] over the environment `var` reads, for a client in `directory`. The runtime is
+    /// `OPENCODE_BUN` (an absolute path only), else the opencode binary of a local server run as its own Bun
+    /// ([`Config::opencode`]; opencode ships with Bun), else `bun` on the path ([`find_in`]). The server's binary is the
+    /// executable its process runs, or, where the client cannot tell, the first `opencode` on the path that answers.
+    pub fn from_vars(
+        var: impl Fn(&str) -> Option<std::ffi::OsString>,
+        directory: PathBuf,
+        server: &Server,
+    ) -> Option<Self> {
         if var("OPENCODE_PLUGIN_JS").as_deref() != Some(std::ffi::OsStr::new("1")) {
             return None;
         }
-        let directory = std::env::current_dir().unwrap_or_default();
-        let bun = match var("OPENCODE_BUN") {
-            Some(bun) => Some(PathBuf::from(bun)).filter(|bun| bun.is_absolute()),
-            None => find_in("bun", &var("PATH")?, &directory, var("HOME").map(PathBuf::from).as_deref()),
-        }?;
-        Some(Self { directory, ..Self::new(bun) })
+        let home = var("HOME").map(PathBuf::from);
+        let path = var("PATH").unwrap_or_default();
+        let config = match var("OPENCODE_BUN") {
+            Some(bun) => Some(PathBuf::from(bun)).filter(|bun| bun.is_absolute()).map(Self::new),
+            None => match server {
+                Server::Local(Some(executable)) => {
+                    outside(executable, &directory, home.as_deref()).then(|| Self::opencode(executable)).flatten()
+                }
+                Server::Local(None) => found_in("opencode", &path, &directory, home.as_deref())
+                    .iter()
+                    .find_map(|found| Self::opencode(found)),
+                Server::Remote => None,
+            }
+            .or_else(|| {
+                let bun = find_in("bun", &path, &directory, home.as_deref())?;
+                Some(Self { bun_version: bun_version(&bun), ..Self::new(bun) })
+            }),
+        };
+        let Some(config) = config else {
+            log::warn!(
+                "OPENCODE_PLUGIN_JS=1, but neither the server's opencode nor bun on the path runs the JS host: TypeScript plugins are skipped"
+            );
+            return None;
+        };
+        let kind = if config.opencode { "opencode's Bun" } else { "Bun" };
+        let version = config.bun_version.as_deref().unwrap_or("unknown");
+        log::info!("the JS host runs on {} ({kind} {version})", config.bun.display());
+        Some(Self { directory, ..config })
     }
+
+    /// `binary`, an opencode build, run as the Bun it embeds (`BUN_BE_BUN=1`), when that Bun says its version and it is
+    /// [`OLDEST_BUN`] or newer. Its real path is what is asked and run: `opencode` on the path may be a `mise` shim, a
+    /// link to `mise`, which then answers for itself and is not taken.
+    pub fn opencode(binary: &Path) -> Option<Self> {
+        let binary = std::fs::canonicalize(binary).ok()?;
+        let version = bun_version(&binary)?;
+        if semver(&version)? < OLDEST_BUN {
+            log::info!("{} embeds Bun {version}, older than the JS host runs on", binary.display());
+            return None;
+        }
+        Some(Self { opencode: true, bun_version: Some(version), ..Self::new(binary) })
+    }
+}
+
+/// The version `binary --version` prints as Bun (with `BUN_BE_BUN=1`, which makes an opencode binary Bun and changes
+/// nothing for Bun), when it prints one version alone within a second: opencode without `BUN_BE_BUN` prints
+/// `opencode v…`, and `mise` its version and platform. It runs as the JS host does, apart from any project: in the
+/// binary's directory, with the allowlisted environment.
+fn bun_version(binary: &Path) -> Option<String> {
+    let mut child = std::process::Command::new(binary)
+        .arg("--version")
+        .current_dir(binary.parent()?)
+        .env_clear()
+        .envs(std::env::vars_os().filter(|(name, _)| inherited(name)))
+        .env("BUN_BE_BUN", "1")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .ok()?;
+    let begun = Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait().ok()? {
+            break status;
+        }
+        if begun.elapsed() > Duration::from_secs(1) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    };
+    let mut out = String::new();
+    std::io::Read::read_to_string(&mut child.stdout.take()?, &mut out).ok()?;
+    let version = out.trim();
+    (status.success() && semver(version).is_some()).then(|| version.to_owned())
+}
+
+/// `major.minor.patch` of a version alone (a `-` or `+` suffix allowed), as Bun prints its own.
+fn semver(text: &str) -> Option<(u64, u64, u64)> {
+    let mut parts = text.split(['-', '+']).next()?.split('.').map(|part| part.parse::<u64>().ok());
+    let version = (parts.next()??, parts.next()??, parts.next()??);
+    parts.next().is_none().then_some(version)
 }
 
 /// `name` on the `PATH`.
@@ -112,23 +214,36 @@ pub fn find(name: &str) -> Option<PathBuf> {
 /// relative or empty one is the working directory, and not inside `directory` (unless that is the home directory,
 /// which is no project): a project's own `bun` would run as soon as the client opened it.
 pub fn find_in(name: &str, path: &std::ffi::OsStr, directory: &Path, home: Option<&Path>) -> Option<PathBuf> {
+    found_in(name, path, directory, home).into_iter().next()
+}
+
+/// Every `name` [`find_in`] would take, in the order of `path`.
+fn found_in(name: &str, path: &std::ffi::OsStr, directory: &Path, home: Option<&Path>) -> Vec<PathBuf> {
     let file = format!("{name}{}", std::env::consts::EXE_SUFFIX);
-    let real = |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let project = (Some(real(directory)) != home.map(real)).then(|| real(directory));
-    // A relative entry names a directory under the one the client works in, as the shell resolves it there.
     std::env::split_paths(path)
         .filter(|dir| dir.is_absolute())
-        .map(|dir| directory.join(dir).join(&file))
-        .filter(|path| path.is_file())
-        .find(|path| project.as_ref().is_none_or(|project| !real(path).starts_with(project)))
+        .map(|dir| dir.join(&file))
+        .filter(|path| path.is_file() && outside(path, directory, home))
+        .collect()
+}
+
+/// Whether `path` is outside the project in `directory`; a home directory is no project.
+fn outside(path: &Path, directory: &Path, home: Option<&Path>) -> bool {
+    let real = |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let project = real(directory);
+    Some(&project) == home.map(real).as_ref() || !real(path).starts_with(&project)
 }
 
 /// Bun with the JS host's script in `dir`, its private directory, which it starts in (carbon-1): no `bunfig.toml` (a
 /// `preload`), `.env` or other file of the project it works for is read as Bun starts, and only the variables
-/// [`inherited`] allows reach it. The project's directory is told as data (`OPENCODE_DIRECTORY`).
+/// [`inherited`] allows reach it. The project's directory is told as data (`OPENCODE_DIRECTORY`). An opencode binary
+/// gets `BUN_BE_BUN=1`, which makes it Bun, and then reads what Bun reads, so the same holds for it.
 fn command(config: &Config, dir: &Path) -> std::process::Command {
     let mut command = std::process::Command::new(&config.bun);
     command.current_dir(dir).env_clear().envs(std::env::vars_os().filter(|(name, _)| inherited(name)));
+    if config.opencode {
+        command.env("BUN_BE_BUN", "1");
+    }
     command.arg("--no-env-file").arg(format!("--config={}", dir.join("bunfig.toml").display()));
     command.args(&config.args).arg(dir.join("host.ts"));
     command.env("OPENCODE_VERSION", &config.version).env("OPENCODE_CHANNEL", &config.channel);
@@ -1346,12 +1461,15 @@ mod tests {
                 _ => None,
             }
         };
+        let from = |flag, bun| Config::from_vars(vars(flag, bun), PathBuf::from("/work"), &Server::Remote);
         for off in [None, Some("0"), Some("true")] {
-            assert!(Config::from_vars(vars(off, "/opt/bun/bin/bun")).is_none(), "{off:?}");
+            assert!(from(off, "/opt/bun/bin/bun").is_none(), "{off:?}");
         }
-        let found = Config::from_vars(vars(Some("1"), "/opt/bun/bin/bun")).map(|config| config.bun);
-        assert_eq!(found, Some(PathBuf::from("/opt/bun/bin/bun")));
-        assert!(Config::from_vars(vars(Some("1"), "bin/bun")).is_none());
+        assert_eq!(
+            from(Some("1"), "/opt/bun/bin/bun").map(|config| config.bun),
+            Some(PathBuf::from("/opt/bun/bin/bun"))
+        );
+        assert!(from(Some("1"), "bin/bun").is_none());
         let config = Config { directory: PathBuf::from("/work"), ..Config::new(PathBuf::from("/opt/bun/bin/bun")) };
         let dir = Path::new("/private/js-host");
         let command = command(&config, dir);
@@ -1366,5 +1484,97 @@ mod tests {
             assert!(!inherits(name), "{name}");
         }
         assert!(inherits("HOME") && inherits("XDG_CONFIG_HOME") && inherits("OPENCODE_CHANNEL"));
+        let be_bun = |config: &Config| {
+            let command = super::command(config, dir);
+            command
+                .get_envs()
+                .find(|(name, _)| *name == "BUN_BE_BUN")
+                .and_then(|(_, value)| value)
+                .map(ToOwned::to_owned)
+        };
+        assert_eq!(be_bun(&config), None);
+        let opencode = Config { opencode: true, ..config.clone() };
+        assert_eq!(be_bun(&opencode), Some("1".into()));
+        assert_eq!(super::command(&opencode, dir).get_current_dir(), Some(dir));
+    }
+
+    #[test]
+    fn a_version_is_bun_s_alone() {
+        assert_eq!(semver("1.4.4"), Some((1, 4, 4)));
+        assert_eq!(semver("1.4.5-canary.20+38afee6c8"), Some((1, 4, 5)));
+        for text in
+            ["2026.10.19 linux-x64 (2026-10-24)", "opencode v0.0.0-dev-202611120832", "v1.4.4", "1.4", "1.4.4.1", ""]
+        {
+            assert_eq!(semver(text), None, "{text}");
+        }
+    }
+
+    // Expected (js-host-runtime): the JS host runs on a local server's opencode binary as Bun when its Bun answers and
+    // is new enough; where the client cannot tell the server's binary, on the first `opencode` on the path that does (a
+    // `mise` shim answers for `mise`); else, and for a remote server, on `bun`; never on a project's own.
+    #[cfg(unix)]
+    #[test]
+    fn the_js_host_runs_on_the_servers_opencode_else_bun() {
+        let root = opencode_util::temp::tempdir().unwrap();
+        let root = std::fs::canonicalize(root.path()).unwrap();
+        let script = |path: &Path, text: &str| {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            // `sh` writes it: a write descriptor open here could leak into a child another test forks (ETXTBSY).
+            let status = std::process::Command::new("sh")
+                .args(["-c", "printf %s \"$1\" > \"$0\" && chmod 755 \"$0\""])
+                .arg(path)
+                .arg(text)
+                .status()
+                .unwrap();
+            assert!(status.success());
+        };
+        let opencode = |bun: &str| {
+            format!("#!/bin/sh\nif [ \"$BUN_BE_BUN\" = 1 ]; then echo {bun}; else echo opencode v0.0.0-dev; fi\n")
+        };
+        let (server, old, tools, shims) =
+            (root.join("server"), root.join("old"), root.join("tools"), root.join("shims"));
+        let work = root.join("work");
+        script(&server.join("opencode"), &opencode("1.4.4"));
+        script(&old.join("opencode"), &opencode("1.3.9"));
+        script(&work.join("bin/opencode"), &opencode("1.4.4"));
+        script(&work.join("bin/bun"), "#!/bin/sh\necho 1.4.4\n");
+        script(&tools.join("bun"), "#!/bin/sh\necho 1.4.2\n");
+        // `mise`'s shims are links to it: run by the shim's name it runs the tool, by its own it answers for itself.
+        let mise =
+            "#!/bin/sh\ncase \"$0\" in */opencode) echo 1.4.4 ;; *) echo '2026.10.19 linux-x64 (2026-10-24)' ;; esac\n";
+        script(&root.join("mise/mise"), mise);
+        std::fs::create_dir_all(&shims).unwrap();
+        std::os::unix::fs::symlink(root.join("mise/mise"), shims.join("opencode")).unwrap();
+        let from = |server: Server, entries: &[&Path], bun: Option<&str>| {
+            let path = std::env::join_paths(entries).unwrap();
+            let var = |name: &str| match name {
+                "OPENCODE_PLUGIN_JS" => Some("1".into()),
+                "OPENCODE_BUN" => bun.map(Into::into),
+                "PATH" => Some(path.clone()),
+                _ => None,
+            };
+            Config::from_vars(var, work.clone(), &server)
+                .map(|config| (config.bun, config.opencode, config.bun_version))
+        };
+        let relative = [Path::new("bin"), Path::new("")];
+        let chosen =
+            |bun: &Path, opencode, version: &str| Some((bun.to_path_buf(), opencode, Some(version.to_owned())));
+        let all = [&relative[..], &[&shims, &old, &server, &tools]].concat();
+        // The server's binary is known.
+        let known = Server::Local(Some(server.join("opencode")));
+        assert_eq!(from(known, &all, None), chosen(&server.join("opencode"), true, "1.4.4"));
+        let too_old = Server::Local(Some(old.join("opencode")));
+        assert_eq!(from(too_old, &all, None), chosen(&tools.join("bun"), false, "1.4.2"));
+        let projects = Server::Local(Some(work.join("bin/opencode")));
+        assert_eq!(from(projects, &all, None), chosen(&tools.join("bun"), false, "1.4.2"));
+        // It is not: the path's first `opencode` that answers, past the shim and the old one.
+        assert_eq!(from(Server::Local(None), &all, None), chosen(&server.join("opencode"), true, "1.4.4"));
+        // A remote server's binary is not this machine's.
+        assert_eq!(from(Server::Remote, &all, None), chosen(&tools.join("bun"), false, "1.4.2"));
+        // Nothing outside the project.
+        assert_eq!(from(Server::Local(None), &[&relative[..], &[&shims, &old]].concat(), None), None);
+        // `OPENCODE_BUN` wins, unasked.
+        let named = from(Server::Local(Some(server.join("opencode"))), &all, Some("/opt/bun/bin/bun"));
+        assert_eq!(named, Some((PathBuf::from("/opt/bun/bin/bun"), false, None)));
     }
 }
