@@ -1,10 +1,12 @@
 /** @jsxImportSource @opentui/solid */
 // The V2 probe of the compatibility layer's tests (P8): a `{ id, setup }` module written against `@opencode/plugin/tui`
 // as an npm plugin is, with JSX over OpenTUI's intrinsics. It logs each call, one JSON line, to the file its `log`
-// option names. Its commands add an item to the list its home footer claim draws, make that render throw or spin,
-// flood the host with toasts, pick from a select, and use what the layer does not map. An event it hears is logged.
+// option names. Its commands add an item to the list its home footer claim draws, make that render throw, spin, use an
+// intrinsic without a node or bare text, flood the host with toasts, ask the host's dialogs, show a dialog of its own,
+// open its page, toast a theme color, and use what the layer does not map. An event it hears is logged.
 
 import { Plugin } from "@opencode/plugin/tui"
+import { RGBA } from "@opentui/core"
 import { createSignal } from "solid-js"
 import { appendFileSync } from "node:fs"
 import path from "node:path"
@@ -19,6 +21,7 @@ export default Plugin.define({
     const log = (entry: unknown) => appendFileSync(file, JSON.stringify(entry) + "\n")
     const [items, setItems] = createSignal<string[]>([])
     const [mode, setMode] = createSignal("ok")
+    const [shown, setShown] = createSignal(0)
     log({ setup: true })
     context.keymap.layer(() => ({
       commands: [
@@ -33,6 +36,7 @@ export default Plugin.define({
         { id: "v2probe.throw", run: () => void setMode("throw") },
         { id: "v2probe.loop", run: () => void setMode("loop") },
         { id: "v2probe.select", run: () => void setMode("select") },
+        { id: "v2probe.bare", run: () => void setMode("bare") },
         {
           id: "v2probe.flood",
           run: () => {
@@ -65,32 +69,64 @@ export default Plugin.define({
           },
         },
         {
+          id: "v2probe.show",
+          run: () => {
+            context.ui.dialog.show(
+              () => (
+                <box padding={1} gap={1}>
+                  <text fg={context.theme.text.base}>
+                    <b>Own dialog</b>
+                  </text>
+                  <text>{() => `shown ${shown()}`}</text>
+                  <text fg={context.theme.text.muted} onMouseUp={() => setShown((count) => count + 1)}>
+                    bump it
+                  </text>
+                </box>
+              ),
+              () => log({ closed: true }),
+            )
+            context.ui.dialog.set({ size: "large" })
+          },
+        },
+        { id: "v2probe.unshow", run: () => context.ui.dialog.clear() },
+        {
+          id: "v2probe.color",
+          run: () => {
+            const [r, g, b] = (context.theme.text.muted as RGBA).toInts()
+            context.ui.toast.show({ message: `#${[r, g, b].map((value) => value.toString(16).padStart(2, "0")).join("")}` })
+          },
+        },
+        {
           id: "v2probe.page",
           run: () => context.ui.router.navigate({ type: "plugin", name: "page", data: { n: 3 } }),
         },
+        { id: "v2probe.home", run: () => context.ui.router.navigate({ type: "home" }) },
         {
           id: "v2probe.unmapped",
           run: () => {
-            context.ui.dialog.show(() => null)
+            context.markdown.registerCodeBlockRenderer("probe", () => undefined as never)
             log({ panel: context.ui.panel.open("side") })
           },
         },
       ],
     }))
     context.data.on("session.created", (event) => log({ event: event.data.sessionID }))
-    // A page of its own: a bordered box with a title, and a scroll of twenty lines.
+    // A page of its own: a bordered box with a title, a scroll of twenty lines, and a command that lives with it.
     context.ui.router.register({
       name: "page",
-      render: (input) => (
-        <box border borderStyle="rounded" title="Page" padding={1} flexGrow={1}>
-          <text>{`data n=${input.data?.n}`}</text>
-          <scrollbox height={5}>
-            {Array.from({ length: 20 }, (_, index) => (
-              <text>{`line ${index}`}</text>
-            ))}
-          </scrollbox>
-        </box>
-      ),
+      render: (input) => {
+        context.keymap.layer(() => ({ commands: [{ id: "v2probe.onpage", run: () => log({ onpage: true }) }] }))
+        return (
+          <box border borderStyle="rounded" title="Page" padding={1} flexGrow={1}>
+            <text>{`data n=${input.data?.n}`}</text>
+            <scrollbox height={5}>
+              {Array.from({ length: 20 }, (_, index) => (
+                <text>{`line ${index}`}</text>
+              ))}
+            </scrollbox>
+          </box>
+        )
+      },
     })
     context.ui.slot({
       append: "home.footer",
@@ -99,16 +135,28 @@ export default Plugin.define({
           {() => {
             if (mode() === "throw") throw new Error("boom")
             if (mode() === "loop") while (true) {}
-            // An intrinsic the contract has no node for.
+            // An intrinsic the contract has no node for, and text outside a `<text>`.
             if (mode() === "select") return <select />
+            if (mode() === "bare") return <box>bare words</box>
             return (
               <text fg={context.theme.text.muted}>
                 v2probe <b>{items().length}</b>: {items().join(",")}
+                <span fg="#ff0000">|</span>
               </text>
             )
           }}
+          <text visible={false}>hidden text</text>
+          {/* Read once, as an installed package's JSX reads it: the read comes before the render that shows it. */}
+          <text>{`v2probe dir ${context.data.location.default().directory}`}</text>
         </box>
       ),
+    })
+    // A path the host does not publish: the claim goes to its nearest published ancestor, appended, as in TS.
+    context.ui.slot({ append: "home.footer.custom", render: () => <text>v2probe degraded claim</text> })
+    // Always shown: the route as the host pushes it, which follows navigation.
+    context.ui.slot({
+      append: "app",
+      render: () => <text>{() => `v2probe route ${context.ui.router.current().type}`}</text>,
     })
   },
 })

@@ -1051,8 +1051,8 @@ impl Scripts {
         owner: Option<Weak<crate::interact::Owner>>,
     ) {
         let seq = self.next();
-        let message =
-            Down::Call { seq, id: guest.id().to_owned(), activation: guest.activation(), call: request.clone() };
+        let (id, activation, route) = (guest.id().to_owned(), guest.activation(), guest.unwatched_route());
+        let message = Down::Call { seq, id, activation, call: request.clone(), route };
         let call = Call { guest: Rc::downgrade(guest), export, user, request, owner };
         self.send(message, Some(Waiting::Call(Box::new(call))));
         if hold {

@@ -58,6 +58,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
                 binds: Vec::new(),
                 bleed: false,
                 centered: false,
+                bare: false,
             }));
         },
     );

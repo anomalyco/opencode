@@ -268,6 +268,26 @@ export function serialize(root: VNode, reading: Reading): Json {
   })
 }
 
+// A 2.0 tree as the nodes of ABI 1.x a panel dialog's body takes: a scroll is a box (the panel's body scrolls), a code
+// view and a field their text, and the ids go.
+export function legacy(node: Json): Json {
+  const { id: _id, ...rest } = node
+  switch (node.type) {
+    case "box":
+      return { ...rest, children: node.children.map(legacy) }
+    case "scroll":
+      return compact({ type: "box", layout: node.layout, children: node.children.map(legacy) })
+    case "markdown":
+      return { type: "markdown", text: node.source.text }
+    case "code":
+      return compact({ type: "text", spans: [{ text: node.content.text }], layout: node.layout })
+    case "input":
+      return compact({ type: "text", spans: [{ text: node.value ?? node.placeholder ?? "" }], layout: node.layout })
+    default:
+      return rest
+  }
+}
+
 function nodes(children: VNode[], reading: Reading): Json[] {
   return children.flatMap((child) => {
     if (child.tag === "#text") {

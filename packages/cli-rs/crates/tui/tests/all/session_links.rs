@@ -195,6 +195,7 @@ fn only_the_btw_answer_links_sessions_among_plugin_markdown() {
             binds: Vec::new(),
             bleed: true,
             centered: true,
+            bare: false,
         })
     };
     opencode_tui::plugins::panel::show(&h.tui, "test.other", 0, panel("other"));

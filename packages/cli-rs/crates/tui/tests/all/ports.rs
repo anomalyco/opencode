@@ -395,6 +395,27 @@ fn a_fold_over_the_c_abi_keeps_a_field_another_client_stored() {
     assert_eq!(stored(), json!({ "open": false, "sibling": 99 }));
 }
 
+// Expected (P8): the published package's clicks run on the JS host as its port's do: a click on a row opens its child,
+// and a click on the header stores the fold (`storage.store`'s update), where the port's toggle stores it.
+#[test]
+fn the_published_subagents_sidebar_opens_a_clicked_row_and_stores_the_fold() {
+    let Some(h) = open_as(&[Carrier::Npm("opencode-subagents-sidebar")], 170, subagents, true, None) else { return };
+    h.wait_for("+2 more");
+    let (first, title, _) = &by_update()[0];
+    let (x, y) = h.find(&format!("• {title}"));
+    h.app.click(x + 2, y);
+    let child = Route::Session { id: opencode_api::generated::SessionID(first.clone()) };
+    h.wait("the click opens the child", || h.tui.route() == child);
+    h.tui.navigate(support::session_route("ses_p"));
+    h.wait_for("+2 more");
+    let storage = h.tui.storage().unwrap();
+    let stored = || storage.load("plugin.subagents-sidebar.view", &Value::Null).unwrap();
+    assert_eq!(stored(), Value::Null);
+    let (x, y) = h.find("▼ Subagents");
+    h.app.click(x + 2, y);
+    h.wait("the fold reaches the disk", || stored() == json!({ "open": false }));
+}
+
 // --- @mynameistito/opencode-force-input
 
 fn running(seen: &Seen) -> Option<Reply> {

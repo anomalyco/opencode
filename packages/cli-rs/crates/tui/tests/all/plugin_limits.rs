@@ -113,6 +113,7 @@ fn old(setup: &mut abi::Setup) -> Result<(), String> {
             actions: Vec::new(),
             binds: Vec::new(),
             bleed: false,
+            bare: false,
             centered: false,
         }));
     });

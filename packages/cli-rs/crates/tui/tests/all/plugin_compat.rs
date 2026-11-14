@@ -58,9 +58,17 @@ fn toasts(pipe: &Pipe) -> Vec<String> {
     shown
 }
 
+/// The probe's list in its home footer claim: `v2probe <count>: <items>|`.
 fn footer(pipe: &Pipe) -> String {
     let text = pipe.harness.app.text();
-    text.lines().map(str::trim).find(|line| line.starts_with("v2probe ")).unwrap_or_default().to_owned()
+    let listed =
+        |line: &&str| line.strip_prefix("v2probe ").is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit()));
+    text.lines().map(str::trim).find(listed).unwrap_or_default().to_owned()
+}
+
+/// The first line of the screen that starts with `prefix`, trimmed.
+fn line(pipe: &Pipe, prefix: &str) -> Option<String> {
+    pipe.harness.app.text().lines().map(str::trim).find(|line| line.starts_with(prefix)).map(str::to_owned)
 }
 
 // Expected (`delivery` for the V2 layer): commands a V2 plugin registers with `keymap.layer` reach its handlers once each
@@ -70,7 +78,7 @@ fn footer(pipe: &Pipe) -> String {
 fn a_v2_plugins_commands_arrive_once_each_in_order() {
     let Some(config) = config() else { return };
     let (pipe, log) = probe(config);
-    assert_eq!(footer(&pipe), "v2probe 0:");
+    assert_eq!(footer(&pipe), "v2probe 0: |");
     let mut sent = Vec::new();
     for (round, fault) in [None, Some(Fault::Repeat), Some(Fault::Drop), Some(Fault::Swap)].into_iter().enumerate() {
         if let Some(fault) = fault {
@@ -86,7 +94,7 @@ fn a_v2_plugins_commands_arrive_once_each_in_order() {
     assert_eq!(calls(&log), sent);
     // The last item shows; a restart resets the plugin's state, as it resets any plugin's on the JS host.
     let shown = footer(&pipe);
-    assert!(shown.starts_with("v2probe ") && shown.ends_with("33"), "{shown}");
+    assert!(shown.starts_with("v2probe ") && shown.ends_with("33|"), "{shown}");
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
 
@@ -131,11 +139,16 @@ fn what_does_not_map_warns_once_and_answers_false() {
     let Some(config) = config() else { return };
     let (pipe, log) = probe(config);
     toasts(&pipe);
-    for _ in 0..2 {
-        pipe.harness.tui.keymap.dispatch("v2probe.unmapped", None);
-        pipe.settle();
-    }
-    assert_eq!(toasts(&pipe), ["Plugin: example.v2probe: ui.dialog.show is not supported by opencode-native yet"]);
+    // The toasts each use shows: the host shows one at a time.
+    let shown: Vec<Vec<String>> = (0..2)
+        .map(|_| {
+            pipe.harness.tui.keymap.dispatch("v2probe.unmapped", None);
+            pipe.settle();
+            toasts(&pipe)
+        })
+        .collect();
+    let warning = "Plugin: example.v2probe: markdown.registerCodeBlockRenderer is not supported by opencode-native yet";
+    assert_eq!(shown, [vec![warning.to_owned()], vec![]]);
     assert_eq!(calls(&log), [json!({ "panel": false }), json!({ "panel": false })]);
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
@@ -199,6 +212,137 @@ fn a_route_draws_a_bordered_box_and_a_scroll_with_its_data() {
     pipe.settle();
     let screen = pipe.harness.app.text();
     assert!(screen.contains("line 9") && !screen.contains("line 0"), "{screen}");
+}
+
+// Expected (OpenTUI's reconciler as TS runs it): a node with `visible={false}` draws nothing; a span takes its `style`
+// and `href` alone, so its `fg` prop leaves it in the text's color; a claim of a path the host does not publish goes to
+// its nearest published ancestor, appended; a read an installed package's JSX makes once, as it mounts, shows the
+// host's value, which came after that render; and text outside a `<text>` crashes the render as OpenTUI's does.
+#[test]
+fn a_render_draws_by_the_reconcilers_rules() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe(config);
+    let screen = pipe.harness.app.text();
+    assert!(!screen.contains("hidden text"), "{screen}");
+    assert_eq!(line(&pipe, "v2probe degraded").as_deref(), Some("v2probe degraded claim"), "{screen}");
+    assert_eq!(
+        line(&pipe, "v2probe dir ").as_deref(),
+        Some(&*format!("v2probe dir {}", support::DIRECTORY)),
+        "{screen}"
+    );
+    let (x, y) = pipe.harness.find("0: |");
+    let cell = pipe.harness.app.render().cell(u32::from(x + 3), u32::from(y)).unwrap().fg;
+    assert_eq!(cell, pipe.harness.tui.page().text.muted, "a span took its fg prop");
+    toasts(&pipe);
+    pipe.harness.tui.keymap.dispatch("v2probe.bare", None);
+    pipe.settle();
+    let shown = toasts(&pipe);
+    let crash = "Plugin: example.v2probe crashed in slot home.footer: Orphan text error: \"bare words\"";
+    assert!(shown.len() == 1 && shown[0].starts_with(crash), "{shown:?}");
+    assert_eq!(pipe.status(PROBE), Some(Status::Active));
+}
+
+// Expected: a theme change restyles a node colored from the context's theme without the plugin's render running again
+// (its colors carry their token), and the theme the plugin reads after it is the new one.
+#[test]
+fn a_theme_change_restyles_the_render_and_reaches_the_theme() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe(config);
+    let tui = &pipe.harness.tui;
+    let fg = || {
+        let (x, y) = pipe.harness.find("v2probe 0");
+        pipe.harness.app.render().cell(u32::from(x), u32::from(y)).unwrap().fg
+    };
+    assert_eq!(fg(), tui.page().text.muted);
+    let before = tui.page().text.muted;
+    tui.theme.borrow_mut().set("tokyonight");
+    tui.theme_changed();
+    pipe.settle();
+    let muted = tui.page().text.muted;
+    assert_ne!(muted, before, "the theme did not change the color");
+    assert_eq!(fg(), muted);
+    toasts(&pipe);
+    tui.keymap.dispatch("v2probe.color", None);
+    pipe.settle();
+    assert_eq!(toasts(&pipe), [format!("#{:02x}{:02x}{:02x}", muted.r, muted.g, muted.b)]);
+}
+
+// Expected: a dialog another one replaces answers nothing (`undefined`), as TS's does; the second answers its pick.
+#[test]
+fn a_replaced_dialog_answers_nothing() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe(config);
+    for _ in 0..2 {
+        pipe.harness.tui.keymap.dispatch("v2probe.pick", None);
+        pipe.settle();
+    }
+    pipe.harness.app.press("return");
+    pipe.settle();
+    assert_eq!(calls(&log), [json!({ "picked": null }), json!({ "picked": { "n": 1 } })]);
+}
+
+// Expected (`ui.dialog.show`, the audit's most common gap): the plugin's own JSX shows in the host's panel dialog and
+// follows its signals, a click in it runs its handler, and escape closes it and calls `onClose`, as `dialog.clear()`
+// does.
+#[test]
+fn a_dialog_of_its_own_shows_its_jsx_and_closes() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe(config);
+    let tui = &pipe.harness.tui;
+    tui.keymap.dispatch("v2probe.show", None);
+    pipe.settle();
+    let screen = pipe.harness.app.text();
+    assert!(screen.contains("Own dialog") && screen.contains("shown 0"), "{screen}");
+    let (x, y) = pipe.harness.find("bump it");
+    pipe.harness.app.click(x, y);
+    pipe.settle();
+    assert!(pipe.harness.app.text().contains("shown 1"), "{}", pipe.harness.app.text());
+    pipe.harness.app.press("escape");
+    pipe.settle();
+    assert!(!pipe.harness.app.text().contains("Own dialog"), "{}", pipe.harness.app.text());
+    assert_eq!(calls(&log), [json!({ "closed": true })]);
+    tui.keymap.dispatch("v2probe.show", None);
+    pipe.settle();
+    tui.keymap.dispatch("v2probe.unshow", None);
+    pipe.settle();
+    assert!(!pipe.harness.app.text().contains("Own dialog"), "{}", pipe.harness.app.text());
+    assert_eq!(calls(&log), [json!({ "closed": true }), json!({ "closed": true })]);
+}
+
+// Expected: a command a component registers (the page's, after setup) runs while the component is mounted, though
+// registering it reloaded the plugin's registrations, and goes once the component left; the reload settles (nothing
+// more crosses while the page stays), and the reads the plugin watched before it follow navigation after it.
+#[test]
+fn a_components_command_lives_with_its_mount_across_a_reload() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe(config);
+    let tui = &pipe.harness.tui;
+    assert_eq!(line(&pipe, "v2probe route").as_deref(), Some("v2probe route home"));
+    tui.keymap.dispatch("v2probe.page", None);
+    pipe.settle();
+    let quiet = opencode_plugin::pipe::crossed();
+    std::thread::sleep(Duration::from_millis(400));
+    for _ in 0..5 {
+        pipe.harness.app.advance(Duration::from_millis(16));
+    }
+    let after = opencode_plugin::pipe::crossed();
+    assert_eq!((after.received, after.trees), (quiet.received, quiet.trees), "the reload did not settle");
+    assert!(matches!(tui.keymap.dispatch("v2probe.onpage", None), opentui::keymap::RunResult::Ok));
+    pipe.settle();
+    assert_eq!(calls(&log), [json!({ "onpage": true })]);
+    tui.keymap.dispatch("v2probe.home", None);
+    pipe.settle();
+    assert_eq!(line(&pipe, "v2probe route").as_deref(), Some("v2probe route home"));
+    tui.keymap.dispatch("v2probe.page", None);
+    pipe.settle();
+    let screen = pipe.harness.app.text();
+    assert!(screen.contains("v2probe route plugin"), "the route read did not follow after the reload:\n{screen}");
+    tui.keymap.dispatch("v2probe.home", None);
+    pipe.settle();
+    // The command outlives its mount by 250 ms of the JS host's time.
+    std::thread::sleep(Duration::from_millis(400));
+    pipe.settle();
+    assert!(!matches!(tui.keymap.dispatch("v2probe.onpage", None), opentui::keymap::RunResult::Ok), "it stayed");
 }
 
 // Expected (containment): a render that spins ends the JS host by the progress rule; the plugin fails, named, and the
@@ -269,5 +413,5 @@ fn a_project_v2_plugin_waits_for_approval() {
     pipe.active(PROBE);
     pipe.settle();
     assert!(marker.exists(), "the approved module did not run");
-    assert_eq!(footer(&pipe), "v2probe 0:");
+    assert_eq!(footer(&pipe), "v2probe 0: |");
 }

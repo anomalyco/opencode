@@ -168,5 +168,6 @@ fn panel(answer: &Answer, copied: bool) -> Panel {
         binds: vec![PanelBind { key: "c".to_owned(), title: "Copy answer".to_owned(), action: copy }],
         bleed: true,
         centered: true,
+        bare: false,
     }
 }

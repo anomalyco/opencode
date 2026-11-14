@@ -221,9 +221,10 @@ dark), and touches nothing of the host; a plugin's own thread calls `wake`.
     undone; the TUI sets up only its own modes again. The title the TUI or a plugin set is sent again.
 - A `Dialog` is a `Prompt`, whose text goes to its action as the input; a `Select { title, placeholder, options,
   current, action }` (TS `dialog.select`), whose pick closes it and goes to its action as the input; a `Panel { key,
-  size, title, subtitle, body, actions, binds, bleed, centered }`, which changes in place while its key is open and
+  size, title, subtitle, body, actions, binds, bleed, centered, bare }`, which changes in place while its key is open and
   keeps where its body is scrolled (`size` is `medium`, `large`, or since 1.6 `xlarge`, as TS's dialog
-  sizes); or `Close { key }`, which closes that panel. Since 1.5 it may also be a `Confirm
+  sizes; since P8 a `bare` one is only the dialog's frame around its body, as TS draws a plugin's `ui.dialog.show`);
+  or `Close { key }`, which closes that panel. Since 1.5 it may also be a `Confirm
   { title, message, label, action }` (TS `dialog.confirm`): `Confirm` runs the action with the input `true`, `Cancel`
   and escape with `false`, and a dialog that replaces it runs nothing, as TS resolves `true`, `false` or `undefined`;
   or an `Alert { title, message, action }` (TS `dialog.alert`), whose action runs once after it closes, by enter,
