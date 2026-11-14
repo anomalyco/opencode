@@ -79,10 +79,14 @@ pub fn install(tui: &Rc<Tui>) {
         (None, Some(entry)) => vec![entry.clone()],
         (None, None) => Vec::new(),
     };
-    tui.plugins.set_crashed(crashed, move |ended| {
-        if let Some(file) = &file {
-            update(file, |list| list.retain(|known| known.target != ended.target || known.digest != ended.digest));
+    tui.plugins.set_crashed(crashed, move |ended| match &file {
+        Some(file) => {
+            let forget = |list: &mut Vec<Crashed>| {
+                list.retain(|known| known.target != ended.target || known.digest != ended.digest);
+            };
+            try_update(file, forget).map(drop)
         }
+        None => Ok(()),
     });
     if handoff.safe {
         tui.plugins.set_safe();
@@ -126,8 +130,16 @@ fn read(file: &Path) -> Vec<Crashed> {
 }
 
 /// Changes the crash list under the state directory's lock, read and written in one step, so two clients that change
-/// it at once both keep their change. Returns the list after the change.
+/// it at once both keep their change. Returns the list after the change, or the list as it is when it cannot change.
 fn update(file: &Path, change: impl FnOnce(&mut Vec<Crashed>)) -> Vec<Crashed> {
+    try_update(file, change).unwrap_or_else(|error| {
+        log::warn!("{error}");
+        read(file)
+    })
+}
+
+/// [`update`], or why the change was not kept.
+fn try_update(file: &Path, change: impl FnOnce(&mut Vec<Crashed>)) -> Result<Vec<Crashed>, String> {
     let dir: PathBuf = file.parent().map(Path::to_path_buf).unwrap_or_default();
     let options = opencode_local::lock::Options::default();
     let updated = opencode_local::lock::with_lock(&dir, "plugin-crashes", &options, || {
@@ -137,15 +149,9 @@ fn update(file: &Path, change: impl FnOnce(&mut Vec<Crashed>)) -> Vec<Crashed> {
         opencode_local::storage::write_text_atomic(file, &text).map(|()| list)
     });
     match updated {
-        Ok(Ok(list)) => list,
-        Ok(Err(error)) => {
-            log::warn!("{}: {error}", file.display());
-            read(file)
-        }
-        Err(error) => {
-            log::warn!("{}: {error}", file.display());
-            read(file)
-        }
+        Ok(Ok(list)) => Ok(list),
+        Ok(Err(error)) => Err(format!("{}: {error}", file.display())),
+        Err(error) => Err(format!("{}: {error}", file.display())),
     }
 }
 
@@ -165,9 +171,11 @@ fn notice(tui: &Rc<Tui>, crash: &Crash, safe: bool, dropped: bool) {
         Some(artifact) => {
             let id =
                 if artifact.id.is_empty() { artifact.target.clone().unwrap_or_default() } else { artifact.id.clone() };
+            // The held build, not a loaded plugin of the same ID (review bigboi-3).
+            let held = opencode_plugin::Entry::held_key(artifact.target.as_deref().unwrap_or_default());
             ToastOptions::new(Variant::Error, format!("It {}.{lost}", reason(call, crash.hang)))
                 .title(format!("Plugin failed: {id}"))
-                .action("Enable again", bind!(tui, |tui| enable(&tui, &id)))
+                .action("Enable again", bind!(tui, |tui| enable(&tui, &held)))
         }
         None if safe => ToastOptions::new(
             Variant::Warning,
@@ -180,9 +188,9 @@ fn notice(tui: &Rc<Tui>, crash: &Crash, safe: bool, dropped: bool) {
     tui.toasts.show(options);
 }
 
-/// Enables plugin `id` again, as the plugin manager does.
-pub(crate) fn enable(tui: &Rc<Tui>, id: &str) {
-    match tui.plugins.toggle(&super::host::host(tui), id, true) {
+/// Enables the plugin of entry `key` again ([`opencode_plugin::Entry::key`]), as the plugin manager does.
+pub(crate) fn enable(tui: &Rc<Tui>, key: &str) {
+    match tui.plugins.toggle_entry(&super::host::host(tui), key, true) {
         Some(Err(error)) => tui.toasts.error(error),
         Some(Ok(())) => super::host::host(tui).remount(),
         None => {}
@@ -227,5 +235,27 @@ pub fn sync(tui: &Tui) {
     if published.as_ref() != Some(&snapshot) {
         record.publish(&snapshot);
         *published = Some(snapshot);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Expected (review bigboi, inherited): a change of the crash list that cannot be written says so and leaves the
+    // file as it was, so a release that depends on it does not happen.
+    #[cfg(unix)]
+    #[test]
+    fn a_crash_list_that_cannot_be_written_says_so() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = opencode_util::temp::tempdir().unwrap();
+        let file = root.path().join(FILE);
+        let entry = Crashed { id: "p".into(), target: "/p".into(), digest: "d".into(), reason: "r".into() };
+        assert_eq!(try_update(&file, |list| list.push(entry.clone())), Ok(vec![entry.clone()]));
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o500)).unwrap();
+        let refused = try_update(&file, Vec::clear);
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(refused.is_err(), "{refused:?}");
+        assert_eq!(read(&file), [entry]);
     }
 }

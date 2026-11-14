@@ -1946,6 +1946,10 @@ pub enum Status {
 /// One plugin as the plugin manager lists it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry {
+    /// What names this entry and no other ([`Registry::toggle_entry`]): `plugin:<id>` for a plugin of the registry,
+    /// `held:<target>` for a build held back, `target:<target>` for a target that did not load. An ID alone is not
+    /// enough: a held build may share its ID with a loaded plugin (review bigboi-3).
+    pub key: String,
     /// The plugin ID, or the configured target of a skipped entry.
     pub id: String,
     /// Where an external or skipped plugin comes from: its `plugins` target or path.
@@ -1957,6 +1961,18 @@ pub struct Entry {
     pub active: bool,
     /// What its calls cost, while it is slow (synthesis 4.4).
     pub slow: Option<String>,
+}
+
+impl Entry {
+    /// The key of the registry's plugin `id`.
+    pub fn plugin_key(id: &str) -> String {
+        format!("plugin:{id}")
+    }
+
+    /// The key of the build held back at `target`.
+    pub fn held_key(target: &str) -> String {
+        format!("held:{target}")
+    }
 }
 
 /// Why a configured TypeScript TUI plugin is listed but not loaded (deviation of F16 until P.4).
@@ -2023,7 +2039,7 @@ pub enum Hold {
     Unsupervised(String),
 }
 
-type Forget = Box<dyn Fn(&Crashed)>;
+type Forget = Box<dyn Fn(&Crashed) -> Result<(), String>>;
 
 /// The host's plugins in enable order, and the configured entries it did not load.
 pub struct Registry {
@@ -2101,8 +2117,9 @@ impl Registry {
     }
 
     /// The builds that crashed the client, before any loads. `forget` is told when an entry ends: the user enabled the
-    /// plugin, or another build took its target.
-    pub fn set_crashed(&self, crashed: Vec<Crashed>, forget: impl Fn(&Crashed) + 'static) {
+    /// plugin, or another build took its target. It says whether the crash list kept the change: a release it could not
+    /// record does not happen, as the next start would hold the build again.
+    pub fn set_crashed(&self, crashed: Vec<Crashed>, forget: impl Fn(&Crashed) -> Result<(), String> + 'static) {
         *self.crashed.borrow_mut() = crashed;
         *self.forget.borrow_mut() = Some(Box::new(forget));
     }
@@ -2131,8 +2148,10 @@ impl Registry {
             let index = crashed.iter().position(|entry| entry.target == target && entry.digest != digest);
             index.map(|index| crashed.remove(index))
         };
-        if let (Some(ended), Some(forget)) = (ended, &*self.forget.borrow()) {
-            forget(&ended);
+        if let (Some(ended), Some(forget)) = (ended, &*self.forget.borrow())
+            && let Err(error) = forget(&ended)
+        {
+            log::warn!("plugin {target}: the crash list kept its old build: {error}");
         }
         let released = self.released.borrow().iter().any(|known| known == target);
         let crash = self.crashed.borrow().iter().find(|entry| entry.target == target).cloned();
@@ -2184,25 +2203,47 @@ impl Registry {
 
     /// Lets the user's enable of a held target through: it ends its crash entry, and the loader opens it next.
     fn release(&self, host: &Rc<dyn Host>, id: &str) -> Option<Result<(), String>> {
-        let (target, hold) = {
+        let target = {
             let held = self.held.borrow();
-            let (target, hold) = held.iter().find(|(target, hold)| match hold {
+            let (target, _) = held.iter().find(|(target, hold)| match hold {
                 Hold::Crashed { id: known, .. } => known == id || target == id,
                 _ => target == id,
             })?;
-            (target.clone(), hold.clone())
+            target.clone()
         };
+        self.release_target(host, &target)
+    }
+
+    /// [`Registry::release`] of the build held at `target`. The crash list must keep its end first (review bigboi,
+    /// inherited): else the build stays held, and the user is told why.
+    fn release_target(&self, host: &Rc<dyn Host>, target: &str) -> Option<Result<(), String>> {
+        let hold = self.held.borrow().iter().find(|(known, _)| known == target).map(|(_, hold)| hold.clone())?;
         if let Hold::Unsupervised(reason) = hold {
             return Some(Err(reason));
         }
-        self.held.borrow_mut().retain(|(known, _)| *known != target);
-        self.released.borrow_mut().push(target.clone());
-        let ended: Vec<Crashed> = self.crashed.borrow_mut().extract_if(.., |entry| entry.target == target).collect();
-        if let Some(forget) = &*self.forget.borrow() {
-            ended.iter().for_each(forget);
+        let ended: Vec<Crashed> =
+            self.crashed.borrow().iter().filter(|entry| entry.target == target).cloned().collect();
+        if let Some(forget) = &*self.forget.borrow()
+            && let Err(error) = ended.iter().try_for_each(forget)
+        {
+            return Some(Err(format!("The plugin stays disabled: its crash could not be forgotten: {error}")));
         }
+        self.crashed.borrow_mut().retain(|entry| entry.target != target);
+        self.held.borrow_mut().retain(|(known, _)| known != target);
+        self.released.borrow_mut().push(target.to_owned());
         host.plugins_changed();
         Some(Ok(()))
+    }
+
+    /// The plugin manager's toggle of the entry `key` names ([`Entry::key`]), `None` when there is none or it cannot be
+    /// toggled: a plugin of the registry as [`Registry::toggle`], or the release of a held build, which only enables.
+    pub fn toggle_entry(&self, host: &Rc<dyn Host>, key: &str, active: bool) -> Option<Result<(), String>> {
+        if let Some(id) = key.strip_prefix("plugin:") {
+            self.with_plugin(id, |_| ())?;
+            return self.toggle(host, id, active);
+        }
+        let target = key.strip_prefix("held:").filter(|_| active)?;
+        self.release_target(host, target)
     }
 
     /// Applies the `plugins` entries of a changed `cli.json`, as TS reconciles on `config.data.plugins`: the
@@ -2532,6 +2573,7 @@ impl Registry {
                 None => plugin.failed.clone().map_or(Status::Inactive, Status::Failed),
             };
             Entry {
+                key: Entry::plugin_key(&plugin.definition.id),
                 id: plugin.definition.id.clone(),
                 target: plugin.definition.target().map(str::to_owned),
                 source: plugin.source,
@@ -2548,10 +2590,12 @@ impl Registry {
                 Hold::Safe => (target.clone(), Source::External, Status::Inactive),
                 Hold::Unsupervised(reason) => (target.clone(), Source::Configured, Status::Skipped(reason.clone())),
             };
-            Entry { id, target: Some(target.clone()), source, status, active: false, slow: None }
+            let key = Entry::held_key(target);
+            Entry { key, id, target: Some(target.clone()), source, status, active: false, slow: None }
         });
         let unloaded = self.unloaded.borrow();
         let unloaded = unloaded.iter().map(|(target, status)| Entry {
+            key: format!("target:{target}"),
             id: target.clone(),
             target: Some(target.clone()),
             source: Source::Configured,
