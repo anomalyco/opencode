@@ -877,6 +877,7 @@ dependencies = [
  "opencode-mermaid",
  "opencode-parity",
  "opencode-plugin",
+ "opencode-plugin-abi",
  "opencode-store",
  "opencode-ui",
  "opencode-util",

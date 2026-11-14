@@ -1,0 +1,18 @@
+# A plugin of contract 2.0 (P4): a route of memoized cards, commands, and a thread that floods its mailbox. The TUI's
+# `plugin_carriers` tests build it as a `cdylib` and link `src/board.rs` itself, and compare the two
+# (`carrier-equal`). Not a workspace member.
+[package]
+name = "opencode-board-plugin"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+name = "opencode_board"
+crate-type = ["cdylib"]
+
+[dependencies]
+opencode-plugin-abi = { path = "../../../plugin-abi" }
+
+[workspace]
