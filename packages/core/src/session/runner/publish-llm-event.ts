@@ -304,7 +304,13 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     readonly name: string
     readonly providerExecuted?: boolean
   }) {
-    if (tools.has(event.id)) return yield* Effect.die(new Error(`Duplicate tool input start: ${event.id}`))
+    const existing = tools.get(event.id)
+    if (existing) {
+      if (existing.name !== event.name || !toolInput.has(event.id))
+        return yield* Effect.die(new Error(`Duplicate tool input start: ${event.id}`))
+      yield* Effect.logWarning(`Ignoring duplicate tool input start: ${event.id}`)
+      return existing
+    }
     yield* startAssistant()
     const tool: ToolState = {
       name: event.name,
