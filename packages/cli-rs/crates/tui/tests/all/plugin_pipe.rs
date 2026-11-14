@@ -2069,3 +2069,93 @@ fn a_call_over_the_effect_bound_fails_its_plugin() {
     assert!(failed(&pipe, LAB).unwrap().contains("300 effects"));
     assert_eq!(pipe.status(twin::ID), Some(Status::Active));
 }
+
+/// Not a row: the client the next row kills outright. Its JS host runs the spawner, whose command spins; it prints the
+/// JS host's process ID and waits to be killed.
+#[test]
+fn a_client_whose_plugin_spawns() {
+    let Some(pids) = std::env::var_os("PIPE_SPAWN_CLIENT") else { return };
+    let Some(config) = config() else { return };
+    let options = serde_json::json!({ "pids": pids.to_string_lossy() });
+    let pipe = open(&[("spawner", Some(options))], config, (80, 30));
+    pipe.active("example.spawner");
+    pipe.settle();
+    pipe.harness.tui.keymap.dispatch("spawner.spin", None);
+    for _ in 0..50 {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    println!("\nhost {} .", pipe.scripts().pid().unwrap());
+    std::thread::sleep(Duration::from_secs(30));
+}
+
+// Expected (no orphans): a client killed outright, with no destructor and no reaper, while its JS host spins in a
+// plugin's command, leaves nothing that plugin started: neither its child nor one in a session of its own whose parent
+// exited, nor the JS host. Linux only; macOS and Windows do not run it.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_client_killed_outright_leaves_nothing_its_plugins_started() {
+    use std::io::BufRead;
+    if bun().is_none() {
+        return;
+    }
+    let pids = std::env::temp_dir().join(format!("spawned-{}-{:?}", std::process::id(), std::thread::current().id()));
+    let _ = std::fs::remove_file(&pids);
+    let mut client = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "plugin_pipe::a_client_whose_plugin_spawns", "--nocapture", "--test-threads=1"])
+        .env("PIPE_SPAWN_CLIENT", &pids)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut lines = std::io::BufReader::new(client.stdout.take().unwrap()).lines();
+    let host: u32 = lines.find_map(|line| line.ok()?.rsplit_once("host ")?.1.split(' ').next()?.parse().ok()).unwrap();
+    let started: Vec<u32> =
+        std::fs::read_to_string(&pids).unwrap().split_whitespace().map(|pid| pid.parse().unwrap()).collect();
+    let alive = |pid: &u32| {
+        let state = std::fs::read_to_string(format!("/proc/{pid}/stat")).unwrap_or_default();
+        !state.is_empty() && !state.contains(") Z ")
+    };
+    let all: Vec<u32> = started.iter().copied().chain([host]).collect();
+    assert_eq!(all.len(), 3);
+    assert!(all.iter().all(alive), "{all:?} were not all running");
+    // SIGKILL on Unix.
+    client.kill().unwrap();
+    client.wait().unwrap();
+    let begun = Instant::now();
+    while all.iter().any(alive) && begun.elapsed() < Duration::from_secs(5) {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let left: Vec<&u32> = all.iter().filter(|pid| alive(pid)).collect();
+    // Nothing must outlive the row either way.
+    for pid in &left {
+        let _ = std::process::Command::new("kill").args(["-9", &pid.to_string()]).status();
+    }
+    let _ = std::fs::remove_file(&pids);
+    assert!(left.is_empty(), "{left:?} outlived the client (JS host {host})");
+}
+
+// Expected (review: bound each read): a watched read over 256 KiB of JSON (here a stored value the host wrote) is not
+// pushed: the plugin reads nothing, can
+// ask why, and goes on; the same read under the bound is pushed again.
+#[test]
+fn a_read_over_its_bound_fails_alone() {
+    let Some(config) = config() else { return };
+    let pipe = lab(config);
+    let tui = &pipe.harness.tui;
+    // Written by the host: the plugin's own write of it would be over the frame it crosses in.
+    let host = opencode_tui::plugins::host::host(tui);
+    let big = serde_json::json!({ "text": "x".repeat(300 << 10) }).to_string();
+    opencode_plugin::Host::storage_write(&*host, "plugin.example.lab.note", &big).unwrap();
+    opencode_plugin::Host::storage_changed(&*host);
+    pipe.settle();
+    shows(&pipe, "note=null");
+    tui.keymap.dispatch("lab.readerror", None);
+    assert!(toasted(&pipe, "read error").contains("over 262144"), "{:?}", toasts(&pipe.harness));
+    toasts(&pipe.harness);
+    assert_eq!(pipe.status(LAB), Some(Status::Active));
+    tui.keymap.dispatch("lab.store", Some("y"));
+    shows(&pipe, r#"note="{\"text\":\"y\"}""#);
+    tui.keymap.dispatch("lab.readerror", None);
+    assert_eq!(toasted(&pipe, "read error"), "read error none");
+}

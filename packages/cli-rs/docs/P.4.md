@@ -492,7 +492,8 @@ It is the second timing tier. No frame waits for the JS host:
   whole one. Until a mount's first tree it shows a placeholder that keeps the rows its key had (or one); while a new
   one is on its way, the last.
 - **Reads** are snapshots the host pushes for what the plugin watches, before each event, after each call's effects
-  and at each change. There is no `layout` call and no canvas draw.
+  and at each change. A read over 256 KiB of JSON is not pushed: the plugin reads nothing (`carrier.readError(key)`
+  says why), and goes on. The host still builds the read whole on its thread before it measures it. There is no `layout` call and no canvas draw.
 - **Hold**: a command that declares `hold` holds the keys typed after it until its handler's effects applied, or 50
   ms; the hold is the JS host's, one at a time, of at most 64 keys, the oldest dropped. The reserved chord is never
   held: it ends the hold, drops what it kept, and reaches the host.
@@ -500,9 +501,13 @@ It is the second timing tier. No frame waits for the JS host:
   of 8 MiB that drains as it reads, past which a message is refused (a handler's call answered with nothing); nothing
   ends for it. From it, 256 unread messages and 8 MiB, and 8 unread trees, after which it blocks in its write. A JS host
   that owes an answer and sends nothing for 1 s (a started load or setup: 10 s) is hung, so a queue that moves is not;
-  hung, or over a resident set of 512 MiB, it is ended. Its process group is killed with it, and it dies with the
-  client (Linux `PR_SET_PDEATHSIG`; a job object on Windows; elsewhere a thread of its own that watches its parent; the
-  end of its input everywhere). The plugin whose work it said it ran when it ended fails (a handler, a view, a
+  hung, or over a resident set of 512 MiB, it is ended. Its process group is killed with it. It also dies with the
+  client however the client ends, and takes what its plugins started with it: when its input ends, on Linux on the
+  parent-death signal, and everywhere from a thread of its own that watches its parent (a plugin that spins cannot
+  hold it back), it kills its descendants and its group, itself last. On Linux it is a child subreaper, so a process a
+  plugin started stays its descendant though its parent exits or it leaves the group; on macOS only the group is
+  killed, so one that started a session of its own and whose parent exited escapes; on Windows a job holds the JS host
+  and everything it starts, and the system closes it with the client. Only Linux is run. The plugin whose work it said it ran when it ended fails (a handler, a view, a
   cleanup, a setup), as does one that flooded the host with effects; a memory end names nobody. The others are set up
   again on a new JS host with new state, their surfaces keeping their last trees meanwhile, and get the calls the old
   one never started, in order, once each; the one it ran is not run again. Their modes end with it. Three ends in a
