@@ -62,6 +62,10 @@ pub enum Down {
         /// The activation it is for: the load whose setup made it. Another one's never answers it.
         activation: u64,
         call: Request,
+        /// P8: the route as the call starts, when the plugin does not watch it: a handler reads it at once
+        /// (`ui.router.current()`), where a watch it makes then would answer only after the handler ran.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        route: Option<serde_json::Value>,
     },
     /// A surface of plugin `id` mounted, with its first input. Answered with [`Up::Done`] once its view was sent.
     Mount {

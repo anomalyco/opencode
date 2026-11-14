@@ -297,5 +297,6 @@ fn panel(session: &str, goal: &Goal) -> Panel {
         binds,
         bleed: false,
         centered: false,
+        bare: false,
     }
 }

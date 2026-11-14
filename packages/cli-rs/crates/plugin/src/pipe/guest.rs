@@ -447,6 +447,13 @@ impl Guest {
         (value, hash)
     }
 
+    /// The route as a call carries it ([`super::proto::Down::Call`]): only when the plugin does not watch it, as then
+    /// its snapshot is already the JS host's.
+    pub(crate) fn unwatched_route(&self) -> Option<serde_json::Value> {
+        let watched = self.watches.borrow().values().any(|(request, _)| matches!(request, HostRequest::Route));
+        (!watched).then(|| self.evaluate(&HostRequest::Route).0)
+    }
+
     pub(crate) fn unwatch(&self, key: &str) {
         self.watches.borrow_mut().remove(key);
         if let Some(charged) = self.pushed.borrow_mut().remove(key) {
