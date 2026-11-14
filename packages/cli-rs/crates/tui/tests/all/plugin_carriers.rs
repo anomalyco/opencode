@@ -76,6 +76,10 @@ fn open_on(run: Run, width: u16, mut deps: Deps) -> Board {
         deps.builtins.push(builtin(carrier, plugin));
     }
     let harness = support::mount(width, 30, deps);
+    // Carriers are compared, not their speed: on a clock that does not move, the frame budget hands each burst over
+    // in one frame on every carrier (Pl).
+    let still = std::time::Instant::now();
+    harness.tui.plugins.monitor().set_clock(move || still);
     // The meter animates only while the client's animations run.
     opencode_ui::motion::set_running(&harness.app, true);
     let root = matches!(run, Run::Library).then(|| {
@@ -97,6 +101,7 @@ fn settle(harness: &Harness) {
         // A panel or an overlay draws first at its first layout.
         harness.app.render();
     }
+    crate::plugin_mail::drain(harness);
 }
 
 /// What a checkpoint compares: the frame's cells, the toasts shown since the last one, and the plugin's status.

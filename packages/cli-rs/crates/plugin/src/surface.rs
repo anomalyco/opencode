@@ -6,8 +6,9 @@
 //! A theme change restyles the widgets in place with no call, unless the surface reads the palette.
 
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::{Rc, Weak};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use opencode_plugin_abi::v2::{self, ContentRef, Node, Source};
@@ -17,7 +18,9 @@ use opentui::keymap::Disposer;
 use opentui::prelude::*;
 
 use crate::canvas;
+use crate::image::Picture;
 use crate::interact::{self, Owner};
+use crate::limits;
 use crate::node::{Act, abi_mode};
 use crate::reconcile::{Env, Refused, Tree};
 use crate::{Claimed, Host, SlotInput, behave, slot};
@@ -280,14 +283,42 @@ pub(crate) struct Surface {
     revision: Cell<Option<u64>>,
     /// The input the view last got, refilled for the next.
     viewed: RefCell<v2::SurfaceInput>,
-    /// Each content handle's image, decoded once however many nodes show it; `None` when it does not decode.
-    images: RefCell<HashMap<ContentRef, Option<opentui::native::Image>>>,
+    /// Each image source's picture, admitted and decoded once however many nodes show it, and the decoded bytes it
+    /// charges to the plugin.
+    images: RefCell<HashMap<ImageKey, (Picture, u64)>>,
     /// A panel or an overlay before its first layout: it draws first as that layout gives it its room, so a change
     /// before it draws nothing (it would draw at a size and a showing the panel does not have yet).
     pending: Cell<bool>,
     input: Rc<Input>,
     /// What the mount holds of the input; it ends with the mount.
     holder: RefCell<Option<Rc<Owner>>>,
+    /// Times the host's own work for the mount's nodes, as the plugin's host time.
+    host_time: HostTime,
+}
+
+/// Runs the host's own work for a plugin's nodes, timed as its host time (synthesis 4.4).
+pub(crate) type HostTime = Rc<dyn Fn(&mut dyn FnMut())>;
+
+/// An image's source: content by its handle, inline bytes by their hash.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ImageKey {
+    Content(ContentRef),
+    Text(u64),
+}
+
+impl ImageKey {
+    fn of(source: &Source) -> Option<ImageKey> {
+        match source {
+            Source::Content(handle) => Some(ImageKey::Content(*handle)),
+            Source::Text(text) => {
+                use std::hash::{Hash, Hasher};
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                text.hash(&mut hasher);
+                Some(ImageKey::Text(hasher.finish()))
+            }
+            Source::PartOutput(_) => None,
+        }
+    }
 }
 
 /// What one call of the view returned and asked for; the host takes it only with its tree.
@@ -303,7 +334,7 @@ struct Called {
 /// The content a view gave, which goes with its tree when the host refuses it.
 #[derive(Default)]
 struct Staged {
-    given: HashMap<ContentRef, Rc<[u8]>>,
+    given: HashMap<ContentRef, Arc<[u8]>>,
 }
 
 #[derive(Default)]
@@ -312,8 +343,11 @@ pub(crate) struct State {
     memo: v2::Memo,
     /// The memo values the ledger counts for the mount, in the host's table or the library's.
     booked: i64,
-    /// The content the accepted views gave and did not release.
-    content: HashMap<ContentRef, Rc<[u8]>>,
+    /// The content the accepted views gave and did not release, each charged to the plugin.
+    content: HashMap<ContentRef, Arc<[u8]>>,
+    /// The content the accepted views gave past what the plugin may hold, and did not release: the host keeps none
+    /// of it, and a node that shows it is a placeholder.
+    dropped: HashSet<ContentRef>,
     /// The last accepted tree, keeps as they came.
     last: Option<Vec<Node>>,
     /// The last tree was refused, so the next view builds whole.
@@ -335,6 +369,7 @@ impl Surface {
         fail: Fail,
         calls: behave::Calls,
         input: Rc<Input>,
+        host_time: HostTime,
     ) -> Rc<Self> {
         let id = v2::MountId { surface: surface.name.clone(), key: key.to_owned(), generation: generation() };
         let fills = path.is_empty();
@@ -373,6 +408,7 @@ impl Surface {
             pending: Cell::new(matches!(surface.at, v2::Place::Panel(_) | v2::Place::Overlay(_))),
             input: input.clone(),
             holder: RefCell::new(None),
+            host_time,
         });
         book(&mounted.plugin, |ledger| ledger.mounts += 1);
         if mounted.viewer.draws() {
@@ -581,17 +617,38 @@ impl Surface {
     fn wipe(&self) {
         behave::detach(&self.app, self);
         *self.behave.borrow_mut() = behave::State::default();
-        self.images.borrow_mut().clear();
+        self.release_images();
         let mut state = self.state.borrow_mut();
         state.tree.clear(&self.root);
         state.last = None;
+        state.dropped.clear();
         let (content, memo) = (std::mem::take(&mut state.content), std::mem::take(&mut state.booked));
         state.memo.clear();
+        self.release_content(&content);
+        book(&self.plugin, |ledger| ledger.memo_entries -= memo);
+    }
+
+    /// Gives back what `content` held: the ledger's count and the plugin's charge.
+    fn release_content(&self, content: &HashMap<ContentRef, Arc<[u8]>>) {
+        let bytes: u64 = content.values().map(|bytes| bytes.len() as u64).sum();
+        limits::release(&self.plugin, limits::Kind::Content, bytes);
         book(&self.plugin, |ledger| {
             ledger.content -= content.len() as i64;
-            ledger.content_bytes -= content.values().map(|bytes| bytes.len() as i64).sum::<i64>();
-            ledger.memo_entries -= memo;
+            ledger.content_bytes -= bytes as i64;
         });
+    }
+
+    /// Drops every picture the mount holds and gives back what they charged.
+    fn release_images(&self) {
+        let charged: u64 = self.images.borrow_mut().drain().map(|(_, (_, charged))| charged).sum();
+        limits::release(&self.plugin, limits::Kind::Images, charged);
+    }
+
+    /// Drops the picture of `key`, if the mount holds one, and gives back what it charged.
+    fn release_image(&self, key: ImageKey) {
+        if let Some((_, charged)) = self.images.borrow_mut().remove(&key) {
+            limits::release(&self.plugin, limits::Kind::Images, charged);
+        }
     }
 
     /// Takes the theme without a call: the last tree is adopted again in it. A surface that reads the palette
@@ -650,19 +707,20 @@ impl Surface {
         let mut memo = std::mem::take(&mut self.state.borrow_mut().memo);
         let given = RefCell::new(HashMap::new());
         let mut give = |handle, bytes: Vec<u8>| {
-            given.borrow_mut().insert(handle, Rc::from(bytes));
+            given.borrow_mut().insert(handle, Arc::from(bytes));
         };
         // A release is the plugin's word that it names the handle no more, so it holds also when the tree is
         // refused: the plugin forgot the handle either way.
         let mut release = |handle| {
-            self.images.borrow_mut().remove(&handle);
-            if given.borrow_mut().remove(&handle).is_none()
-                && let Some(bytes) = self.state.borrow_mut().content.remove(&handle)
-            {
-                book(&self.plugin, |ledger| {
-                    ledger.content -= 1;
-                    ledger.content_bytes -= bytes.len() as i64;
-                });
+            self.release_image(ImageKey::Content(handle));
+            if given.borrow_mut().remove(&handle).is_some() {
+                return;
+            }
+            let mut state = self.state.borrow_mut();
+            state.dropped.remove(&handle);
+            if let Some(bytes) = state.content.remove(&handle) {
+                drop(state);
+                self.release_content(&HashMap::from([(handle, bytes)]));
             }
         };
         let kept = |key: &str| self.state.borrow().tree.held_under(key);
@@ -715,9 +773,23 @@ impl Surface {
         let focused =
             self.holder().map(|owner| owner.focused()).filter(|focused| focused.surface || focused.node.is_some());
         let mut state = self.state.borrow_mut();
-        let State { tree, content, last, .. } = &mut *state;
+        // Content past what the plugin may hold is not kept: a node that shows it is a placeholder (4.2).
+        let (admitted, over) = admit_content(&self.plugin, staged);
+        let State { tree, content, last, dropped, .. } = &mut *state;
         let restyled = !tree.styled_in(theme);
-        self.reconciling(host, theme, tree, content, staged, full, |env, tree| tree.apply(env, &self.root, &nodes))?;
+        let unheld: HashSet<ContentRef> = dropped.union(&over).copied().collect();
+        let mut result = Ok(());
+        (self.host_time)(&mut || {
+            result = self.reconciling(host, theme, tree, content, staged, &unheld, full, |env, tree| {
+                tree.apply(env, &self.root, &nodes)
+            });
+        });
+        if let Err(refused) = result {
+            drop(state);
+            // A refused view's content is not the mount's: neither are the pictures it started.
+            staged.given.keys().for_each(|handle| self.release_image(ImageKey::Content(*handle)));
+            return Err(refused);
+        }
         if let Some(owner) = self.holder() {
             owner.set_tree(tree.ids().map(str::to_owned).collect(), tree.focusable());
         }
@@ -744,12 +816,17 @@ impl Surface {
         }
         *last = Some(nodes);
         for (handle, bytes) in &staged.given {
+            if over.contains(handle) {
+                dropped.insert(*handle);
+                continue;
+            }
             book(&self.plugin, |ledger| {
                 ledger.content += 1;
                 ledger.content_bytes += bytes.len() as i64;
             });
             content.insert(*handle, bytes.clone());
         }
+        limits::recharge(&self.plugin, limits::Kind::Content, 0, admitted);
         let slots_changed = tree.slots_changed();
         drop(state);
         self.repaint(restyled);
@@ -769,15 +846,17 @@ impl Surface {
         self.viewer.draw(&*self.owner.upgrade()?, &self.holder()?, &self.id, id, frame)
     }
 
-    /// Calls `f` with what a reconcile of `tree` builds with: the content the mount holds and the view staged.
+    /// Calls `f` with what a reconcile of `tree` builds with: the content the mount holds and the view staged, and the
+    /// content it was given and could not hold (`unheld`).
     #[allow(clippy::too_many_arguments)]
     fn reconciling<R>(
         &self,
         host: &dyn Host,
         theme: &Theme,
         tree: &mut Tree,
-        content: &HashMap<ContentRef, Rc<[u8]>>,
+        content: &HashMap<ContentRef, Arc<[u8]>>,
         staged: &Staged,
+        unheld: &HashSet<ContentRef>,
         full: bool,
         f: impl FnOnce(&Env<'_>, &mut Tree) -> R,
     ) -> R {
@@ -800,20 +879,24 @@ impl Surface {
             Source::Content(handle) => held(handle).map(|bytes| Rc::from(String::from_utf8_lossy(bytes).as_ref())),
             Source::PartOutput(part) => part_output(host, part).map(|text| Rc::from(text.as_str())),
         };
-        // An image decodes once a handle: nodes that show the same content share it.
-        let image = |source: &Source| match source {
-            Source::Content(handle) => {
-                if let Some(image) = self.images.borrow().get(handle) {
-                    return image.clone();
-                }
-                let image = decode(host.app(), held(handle)?);
-                self.images.borrow_mut().insert(*handle, image.clone());
-                image
+        // An image is admitted and decoded once a source: nodes that show the same content share it.
+        let image = |source: &Source| {
+            let Some(key) = ImageKey::of(source) else { return Picture::Pending };
+            if let Some((picture, _)) = self.images.borrow().get(&key) {
+                return picture.clone();
             }
-            Source::Text(text) => decode(host.app(), text.as_bytes()),
-            Source::PartOutput(_) => None,
+            let bytes: Arc<[u8]> = match source {
+                Source::Content(handle) => match held(handle) {
+                    Some(bytes) => bytes.clone(),
+                    None => return Picture::Pending,
+                },
+                Source::Text(text) => Arc::from(text.as_bytes()),
+                Source::PartOutput(_) => return Picture::Pending,
+            };
+            self.admit_image(host.app(), key, bytes)
         };
-        let has = |handle: ContentRef| held(&handle).is_some();
+        let has = |handle: ContentRef| held(&handle).is_some() || unheld.contains(&handle);
+        let dropped = |handle: ContentRef| unheld.contains(&handle);
         let owner = self.holder().map(|owner| Rc::downgrade(&owner));
         let env = Env {
             host,
@@ -822,12 +905,80 @@ impl Surface {
             slot: &slot,
             source: &source,
             content: &has,
+            dropped: &dropped,
             image: &image,
             full,
             draw: self.drawer.get(),
             owner: owner.as_ref(),
+            plugin: Some(&self.plugin),
+            item: false,
         };
         f(&env, tree)
+    }
+
+    /// Admits the image of `bytes` under `key` by its header: within the bytes and pixels of one image, and the decoded
+    /// bytes the plugin and all plugins may hold, which it charges. An admitted image decodes on a worker; bytes that
+    /// are no image show nothing, as before.
+    fn admit_image(&self, app: &App, key: ImageKey, bytes: Arc<[u8]>) -> Picture {
+        let Some((width, height)) = crate::image::size(&bytes) else {
+            log::warn!("an image node's bytes are not a PNG, GIF, JPEG or WebP image");
+            self.images.borrow_mut().insert(key, (Picture::Pending, 0));
+            return Picture::Pending;
+        };
+        let limits = limits::get();
+        let pixels = u64::from(width) * u64::from(height);
+        let decoded = pixels.saturating_mul(4);
+        let admitted = bytes.len() as u64 <= limits.image_bytes
+            && pixels <= limits.image_pixels
+            && limits::charge(&self.plugin, limits::Kind::Images, decoded);
+        if !admitted {
+            log::warn!(
+                "an image node of {width}x{height} pixels in {} bytes is past what the host decodes",
+                bytes.len()
+            );
+            self.images.borrow_mut().insert(key, (Picture::Over, 0));
+            return Picture::Over;
+        }
+        self.images.borrow_mut().insert(key, (Picture::Pending, decoded));
+        crate::reconcile::count_decoded();
+        let decoding = app.runtime().spawn_blocking(move || crate::image::decode(&bytes));
+        let weak = self.weak();
+        app.spawn(async move { decoding.await.ok().flatten() }, move |cx, pixels| {
+            if let Some(mounted) = weak.upgrade() {
+                mounted.decoded(cx.app(), key, pixels);
+            }
+        });
+        Picture::Pending
+    }
+
+    /// The worker decoded the image of `key`: the host copies its pixels into the app's context, as host time, and
+    /// shows it in every image node of the source. One the mount released meanwhile is dropped.
+    fn decoded(&self, app: &App, key: ImageKey, pixels: Option<crate::image::Pixels>) {
+        if !self.images.borrow().contains_key(&key) {
+            return;
+        }
+        let mut image = None;
+        (self.host_time)(&mut || {
+            image = pixels.as_ref().and_then(|pixels| {
+                let context = app.session().context();
+                opentui::native::Image::from_rgba(context, pixels.width, pixels.height, &pixels.rgba)
+                    .map_err(|error| log::warn!("an image node does not decode: {error}"))
+                    .ok()
+            });
+        });
+        let Some(image) = image else {
+            log::warn!("an image node's bytes do not decode");
+            return;
+        };
+        if let Some((picture, _)) = self.images.borrow_mut().get_mut(&key) {
+            *picture = Picture::Ready(image.clone());
+        }
+        self.state.borrow().tree.each_image(&mut |source, view| {
+            if ImageKey::of(source) == Some(key) {
+                view.image(Some(image.clone()));
+            }
+        });
+        app.request_redraw();
     }
 
     /// After a solve: the windows of the tree's lists. Whether one changed.
@@ -835,12 +986,22 @@ impl Surface {
         let Some(host) = self.owner.upgrade() else { return false };
         let theme = host.theme();
         let mut state = self.state.borrow_mut();
-        let State { tree, content, .. } = &mut *state;
+        let State { tree, content, dropped, .. } = &mut *state;
         if !tree.has_lists() {
             return false;
         }
-        let changed = self.reconciling(host.as_ref(), &theme, tree, content, &Staged::default(), false, |env, tree| {
-            tree.resolve_lists(env)
+        let mut changed = false;
+        (self.host_time)(&mut || {
+            changed = self.reconciling(
+                host.as_ref(),
+                &theme,
+                tree,
+                content,
+                &Staged::default(),
+                dropped,
+                false,
+                |env, tree| tree.resolve_lists(env),
+            );
         });
         if changed {
             host.app().request_redraw();
@@ -909,13 +1070,12 @@ impl Drop for Surface {
         if let Some(owner) = self.holder.get_mut().take() {
             owner.end();
         }
+        self.release_images();
         let state = self.state.get_mut();
-        let bytes: usize = state.content.values().map(|bytes| bytes.len()).sum();
-        let (content, memo) = (state.content.len() as i64, state.booked);
+        let (content, memo) = (std::mem::take(&mut state.content), state.booked);
+        self.release_content(&content);
         book(&self.plugin, |ledger| {
             ledger.mounts -= 1;
-            ledger.content -= content;
-            ledger.content_bytes -= bytes as i64;
             ledger.memo_entries -= memo;
         });
     }
@@ -987,63 +1147,36 @@ pub(crate) fn part_output(host: &dyn Host, part: &v2::PartRef) -> Option<String>
     found
 }
 
-/// The bytes of an image the host decodes, at most: a header that names more pixels, or more bytes, show nothing
-/// (decoding runs on the UI thread until a worker does it, phase Pl).
-const IMAGE_BYTES: usize = 16 << 20;
-const IMAGE_PIXELS: u64 = 4096 * 4096;
-
-/// The image `bytes` decode to, when their header names a PNG, GIF, JPEG or WebP image within the host's bounds.
-pub(crate) fn decode(app: &App, bytes: &[u8]) -> Option<opentui::native::Image> {
-    let Some((width, height)) = image_size(bytes) else {
+/// The image `bytes` decode to in the frame, for a 1.x claim's part, which has no plugin in the host to charge: within
+/// one image's limits (4.2), else the placeholder; bytes that are no image, or do not decode, show nothing.
+pub(crate) fn decode(app: &App, bytes: &[u8]) -> Picture {
+    let Some((width, height)) = crate::image::size(bytes) else {
         log::warn!("an image node's bytes are not a PNG, GIF, JPEG or WebP image");
-        return None;
+        return Picture::Pending;
     };
-    if bytes.len() > IMAGE_BYTES || u64::from(width) * u64::from(height) > IMAGE_PIXELS {
+    let limits = limits::get();
+    if bytes.len() as u64 > limits.image_bytes || u64::from(width) * u64::from(height) > limits.image_pixels {
         log::warn!("an image node of {width}x{height} pixels in {} bytes is past what the host decodes", bytes.len());
-        return None;
+        return Picture::Over;
     }
     crate::reconcile::count_decoded();
     opentui::native::Image::decode(app.session().context(), bytes)
-        .map_err(|error| log::warn!("an image node does not decode: {error}"))
-        .ok()
+        .map_or_else(|error| (log::warn!("an image node does not decode: {error}"), Picture::Pending).1, Picture::Ready)
 }
 
-/// The width and height the header of a PNG, GIF, JPEG or WebP image names.
-fn image_size(bytes: &[u8]) -> Option<(u32, u32)> {
-    let at = |from: usize, len: usize| bytes.get(from..from + len);
-    let be = |from: usize, len: usize| Some(at(from, len)?.iter().fold(0u32, |n, byte| n << 8 | u32::from(*byte)));
-    let le =
-        |from: usize, len: usize| Some(at(from, len)?.iter().rev().fold(0u32, |n, byte| n << 8 | u32::from(*byte)));
-    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-        return Some((be(16, 4)?, be(20, 4)?));
-    }
-    if bytes.starts_with(b"GIF8") {
-        return Some((le(6, 2)?, le(8, 2)?));
-    }
-    if bytes.starts_with(b"RIFF") && at(8, 4) == Some(b"WEBP") {
-        return match at(12, 4)? {
-            b"VP8 " => Some((le(26, 2)? & 0x3fff, le(28, 2)? & 0x3fff)),
-            b"VP8L" => {
-                let bits = le(21, 4)?;
-                Some(((bits & 0x3fff) + 1, ((bits >> 14) & 0x3fff) + 1))
-            }
-            b"VP8X" => Some((le(24, 3)? + 1, le(27, 3)? + 1)),
-            _ => None,
-        };
-    }
-    if !bytes.starts_with(&[0xff, 0xd8]) {
-        return None;
-    }
-    // JPEG: the segments up to the first start of frame, which holds the size.
-    let mut from = 2;
-    loop {
-        if *bytes.get(from)? != 0xff {
-            return None;
+/// Which content of `staged` plugin `plugin` may hold beside what it holds, in the order the view gave it: the bytes
+/// admitted, and the handles past its share or the total (4.2), which the host does not keep.
+fn admit_content(plugin: &str, staged: &Staged) -> (u64, HashSet<ContentRef>) {
+    let mut room = limits::room(plugin, limits::Kind::Content, 0);
+    let mut given: Vec<(&ContentRef, &Arc<[u8]>)> = staged.given.iter().collect();
+    given.sort_by_key(|(handle, _)| handle.0);
+    let (mut admitted, mut over) = (0, HashSet::new());
+    for (handle, bytes) in given {
+        let size = bytes.len() as u64;
+        match room.checked_sub(size) {
+            Some(left) => (room, admitted) = (left, admitted + size),
+            None => drop(over.insert(*handle)),
         }
-        let marker = *bytes.get(from + 1)?;
-        if (0xc0..=0xcf).contains(&marker) && ![0xc4, 0xc8, 0xcc].contains(&marker) {
-            return Some((be(from + 7, 2)?, be(from + 5, 2)?));
-        }
-        from += 2 + be(from + 2, 2)? as usize;
     }
+    (admitted, over)
 }

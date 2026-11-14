@@ -186,6 +186,7 @@ fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Resul
             let activation = Activation::new(setup.host(), instance.shared().mail.clone());
             let owners = crate::Owners::new(setup.id(), host.clone(), &activation);
             instance.shared().ctx.borrow_mut().owners = Some(owners.clone());
+            activation.set_monitor(monitor.clone());
             let guest = Rc::new(Guest {
                 instance: RefCell::new(Some(instance)),
                 busy: Cell::new(false),

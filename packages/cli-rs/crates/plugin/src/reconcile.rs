@@ -20,6 +20,8 @@ use opentui::style::Color;
 use opentui::syntax::SyntaxTheme;
 
 use crate::canvas::{Canvas, Drawer};
+use crate::image::Picture;
+use crate::limits::{self, Over};
 use crate::list::List;
 use crate::node::{Act, bordered, color, edges_of, lay_out, styled};
 use crate::{Host, SlotMount};
@@ -39,6 +41,8 @@ pub struct Work {
     pub kept: u64,
     /// Patches parsed for a [`Node::Diff`], code highlighted for a [`Node::Code`], and images decoded.
     pub parses: u64,
+    /// Nodes adopted as a placeholder, over a limit ([`crate::limits`]).
+    pub placeholders: u64,
 }
 
 impl Work {
@@ -51,6 +55,7 @@ impl Work {
             moved: self.moved - before.moved,
             kept: self.kept - before.kept,
             parses: self.parses - before.parses,
+            placeholders: self.placeholders - before.placeholders,
         }
     }
 
@@ -182,15 +187,21 @@ pub struct Env<'a> {
     pub source: &'a dyn Fn(&Source) -> Option<Rc<str>>,
     /// Whether the mount holds content `ContentRef`.
     pub content: &'a dyn Fn(ContentRef) -> bool,
-    /// The image a source decodes to, for an image; `None` when the host has none, or the bytes do not decode or are
-    /// past what the host takes.
-    pub image: &'a dyn Fn(&Source) -> Option<opentui::native::Image>,
+    /// Whether the view gave content `ContentRef` and its plugin could not hold it ([`crate::limits`]): a node that
+    /// shows it is a placeholder.
+    pub dropped: &'a dyn Fn(ContentRef) -> bool,
+    /// What an image of a source shows: admitted by its header and decoding on a worker, decoded, or over a limit.
+    pub image: &'a dyn Fn(&Source) -> Picture,
     /// The host asked for a whole tree, after a refusal: a keep names a subtree the view did not vouch for again.
     pub full: bool,
     /// How the mount's canvases call their plugin; `None` where nothing draws them.
     pub draw: Option<&'a Rc<Drawer>>,
     /// The mount whose handler a box's pointer and hover events reach ([`crate::interact`]).
     pub owner: Option<&'a Weak<crate::interact::Owner>>,
+    /// The plugin the tree's nodes are charged to; `None` for a 1.x claim, which the tree's own limits hold.
+    pub plugin: Option<&'a str>,
+    /// The tree is a list item's: the list's tree counted its nodes, so it counts only the rows it builds.
+    pub item: bool,
 }
 
 /// A mounted tree: the widgets of the last accepted tree, in a parent the owner gives each call.
@@ -202,15 +213,24 @@ pub struct Tree {
     ids: HashMap<String, Held>,
     /// Slots mounted or dropped by the last apply.
     slots_changed: bool,
+    /// The plugin its nodes are charged to, and how many.
+    charged: Option<(Rc<str>, u64)>,
 }
 
-/// What the tree holds under an id: the nearest ancestor with an id, the layout levels its subtree takes, and the
-/// list and item whose data holds it, for an id inside a list.
+/// What the tree holds under an id: the nearest ancestor with an id, the layout levels its subtree takes, the nodes
+/// in it, and the list and item whose data holds it, for an id inside a list.
 #[derive(Clone, Debug)]
 pub(crate) struct Held {
     pub above: Option<String>,
     pub depth: u16,
+    pub nodes: u64,
     pub item: Option<(String, String)>,
+}
+
+impl Drop for Tree {
+    fn drop(&mut self) {
+        self.uncharge();
+    }
 }
 
 pub(crate) struct Mounted {
@@ -312,7 +332,15 @@ impl Field {
 struct Plan {
     keeps: HashSet<String>,
     moves: HashSet<String>,
+    /// The nodes over a limit, each with the placeholder that stands for it.
+    over: Placeholders,
+    /// The nodes the tree holds, as charged to its plugin.
+    nodes: u64,
 }
+
+/// The nodes of a tree being adopted that are over a limit, by address, each with the placeholder that stands for
+/// it. The tree outlives the reconcile, so the addresses stay valid through it.
+type Placeholders = Rc<HashMap<*const Node, Option<Node>>>;
 
 /// What a reconcile is doing: the subtrees of the tree before that the new one holds again, not yet placed, the
 /// widgets to drop once every one of them is placed, and whether the theme changed.
@@ -325,13 +353,21 @@ struct Pass<'a, 'b> {
     syntax: std::cell::OnceCell<Rc<SyntaxTheme>>,
     /// The widget that took over from a focused one built again.
     refocus: Option<AnyWidget>,
+    over: Placeholders,
 }
 
 impl Tree {
     /// Adopts `nodes` into `parent`, which holds this tree's widgets and nothing else, or refuses it and changes
-    /// nothing.
+    /// nothing. A node over a limit is adopted as its placeholder.
     pub fn apply(&mut self, env: &Env<'_>, parent: &View, nodes: &[Node]) -> Result<(), Refused> {
         let plan = self.validate(env, nodes)?;
+        count(|work| work.placeholders += plan.over.values().filter(|node| node.is_some()).count() as u64);
+        // Validation admitted the nodes against what the plugin holds without this tree's last charge.
+        if let Some(plugin) = env.plugin.filter(|_| !env.item) {
+            self.uncharge();
+            limits::recharge(plugin, limits::Kind::Nodes, 0, plan.nodes);
+            self.charged = Some((Rc::from(plugin), plan.nodes));
+        }
         let restyle = self.theme.as_ref().is_some_and(|theme| theme != env.theme);
         let app = env.host.app();
         let focused = app.focused();
@@ -343,6 +379,7 @@ impl Tree {
             slots_changed: false,
             syntax: std::cell::OnceCell::new(),
             refocus: None,
+            over: plan.over.clone(),
         };
         if !plan.keeps.is_empty() || !plan.moves.is_empty() {
             take(&mut self.nodes, &plan, &mut pass.pool);
@@ -412,6 +449,23 @@ impl Tree {
         }
         self.ids.clear();
         self.slots_changed = changed;
+        self.uncharge();
+    }
+
+    /// Gives back the nodes charged to the tree's plugin.
+    fn uncharge(&mut self) {
+        if let Some((plugin, nodes)) = self.charged.take() {
+            limits::release(&plugin, limits::Kind::Nodes, nodes);
+        }
+    }
+
+    /// Calls `f` with each image widget the tree shows and its source, in the items of its lists too.
+    pub(crate) fn each_image(&self, f: &mut dyn FnMut(&Source, &opentui::widget::ImageView)) {
+        each(&self.nodes, &mut |node| {
+            if let (Node::Image { content, .. }, Extra::Image(image)) = (&node.node, &node.extra) {
+                f(content, image);
+            }
+        });
     }
 
     /// Whether nothing in the tree shows what the host reads again each revision (a tool call's output): a keep of
@@ -546,26 +600,48 @@ impl Tree {
         self.nodes.is_empty()
     }
 
-    /// Checks `nodes` against the contract and returns what it holds of this tree. The walk stops at the depth
-    /// bound, so a deeper tree costs no more than one at the bound.
+    /// Checks `nodes` against the contract and the limits ([`crate::limits`]), and returns what it holds of this tree
+    /// and which nodes stand as placeholders. The walk stops at the depth bound, so a deeper tree costs no more than
+    /// one at the bound.
+    ///
+    /// A node is over a limit by itself (its text, its hunks, its content, its image), or when it would take the tree
+    /// past its nodes or its rows with all its subtree: the first such node in tree order is a placeholder, and the
+    /// walk goes on, so a later, smaller sibling may still fit. A subtree a placeholder stands for is checked against
+    /// the contract all the same: a malformed tree is refused whole, wherever it is malformed.
     fn validate(&self, env: &Env<'_>, nodes: &[Node]) -> Result<Plan, Refused> {
         struct Walk<'a, 'b> {
             tree: &'a Tree,
             env: &'a Env<'b>,
             ids: HashSet<&'a str>,
+            /// Every keep, for the checks; `held` are the ones adopted, outside every placeholder.
             keeps: HashSet<&'a str>,
+            held: HashSet<&'a str>,
             moves: HashSet<&'a str>,
+            costs: Vec<Cost>,
+            at: usize,
+            limits: limits::Limits,
+            /// The nodes and rows the tree may take, and has taken so far.
+            room: (u64, u64),
+            used: (u64, u64),
+            over: HashMap<*const Node, Option<Node>>,
         }
         impl<'a> Walk<'a, '_> {
             /// `item` is the list and the item whose data the nodes are in: a keep there names a node of that item,
-            /// and an id there is reconciled within the item.
+            /// and an id there is reconciled within the item. `mode`: how the nodes are counted. `absorbing`: a run
+            /// of siblings past the tree's nodes or rows shows one placeholder, the first's, so the host builds one
+            /// for each parent at most; the siblings are the nodes, or a list's items.
             fn nodes(
                 &mut self,
                 nodes: &'a [Node],
                 above: u16,
                 item: Option<(&'a str, &'a str)>,
+                mode: Mode,
+                absorbing: &mut bool,
             ) -> Result<(), Refused> {
                 for node in nodes {
+                    let cost = self.costs[self.at];
+                    self.at += 1;
+                    let built = item.is_none();
                     if let Node::Keep { key } = node {
                         if self.env.full {
                             return Err(Refused::Kept(key.clone()));
@@ -574,11 +650,30 @@ impl Tree {
                         if held.item.as_ref().map(|(list, item)| (list.as_str(), item.as_str())) != item {
                             return Err(Refused::Unknown(key.clone()));
                         }
-                        if !self.keeps.insert(key) || self.ids.contains(key.as_str()) {
+                        if self.keeps.contains(key.as_str()) || self.ids.contains(key.as_str()) {
                             return Err(Refused::Duplicate(key.clone()));
                         }
                         if above + held.depth > MAX_DEPTH {
                             return Err(Refused::Deep);
+                        }
+                        match mode {
+                            Mode::Dropped => drop(self.keeps.insert(key)),
+                            Mode::Admitted => drop((self.keeps.insert(key), self.held.insert(key))),
+                            Mode::Count if self.fits(&cost, built) => {
+                                (self.keeps.insert(key), self.held.insert(key));
+                                self.used.0 += cost.nodes;
+                            }
+                            // A kept subtree cannot be opened: the placeholder takes its id, and the subtree goes
+                            // where the tree had it.
+                            Mode::Count => {
+                                self.ids.insert(key);
+                                let stands = !std::mem::replace(absorbing, true);
+                                if stands && built && held.item.is_none() {
+                                    self.moves.insert(key);
+                                }
+                                let placeholder = stands.then(|| placeholder(Some(key), &Over::Nodes));
+                                self.over.insert(std::ptr::from_ref(node), placeholder);
+                            }
                         }
                         continue;
                     }
@@ -586,15 +681,10 @@ impl Tree {
                     if depth > MAX_DEPTH {
                         return Err(Refused::Deep);
                     }
-                    if let Some(id) = node.id() {
-                        if !self.ids.insert(id) || self.keeps.contains(id) {
-                            return Err(Refused::Duplicate(id.to_owned()));
-                        }
-                        // A node of another kind under the id is built new where the subtree is reconciled. A node in
-                        // a list's item is reconciled within its item, and one that was is built new elsewhere.
-                        if item.is_none() && self.tree.ids.get(id).is_some_and(|held| held.item.is_none()) {
-                            self.moves.insert(id);
-                        }
+                    if let Some(id) = node.id()
+                        && (!self.ids.insert(id) || self.keeps.contains(id))
+                    {
+                        return Err(Refused::Duplicate(id.to_owned()));
                     }
                     let unkeyed = node.id().is_none()
                         && match node {
@@ -620,30 +710,154 @@ impl Tree {
                     {
                         return Err(Refused::Rows);
                     }
-                    if let Node::Markdown { source: Source::Content(content), .. }
-                    | Node::Diff { content: Source::Content(content), .. }
-                    | Node::Code { content: Source::Content(content), .. }
-                    | Node::Image { content: Source::Content(content), .. } = node
+                    let source = match node {
+                        Node::Markdown { source, .. }
+                        | Node::Diff { content: source, .. }
+                        | Node::Code { content: source, .. }
+                        | Node::Image { content: source, .. } => Some(source),
+                        _ => None,
+                    };
+                    if let Some(Source::Content(content)) = source
                         && !(self.env.content)(*content)
                     {
                         return Err(Refused::Content(*content));
                     }
-                    self.nodes(node.children(), depth, item)?;
+                    let (inner, stands) = match mode {
+                        Mode::Dropped => (Mode::Dropped, false),
+                        _ => match self.admit(node, source, &cost, built, mode) {
+                            Ok(inner) => (inner, true),
+                            Err(over) => {
+                                // A placeholder costs a node and a row while the tree has them, and none past them.
+                                let counted = matches!(over, Over::Nodes | Over::Rows)
+                                    || !self.fits(&Cost { nodes: 1, rows: 1, ..cost }, built);
+                                let stands = !(counted && std::mem::replace(absorbing, true));
+                                // An admitted subtree counted the node already.
+                                if stands && !counted && mode == Mode::Count {
+                                    self.used.0 += 1;
+                                    self.used.1 += u64::from(built);
+                                }
+                                self.over
+                                    .insert(std::ptr::from_ref(node), stands.then(|| placeholder(node.id(), &over)));
+                                (Mode::Dropped, stands)
+                            }
+                        },
+                    };
+                    // A node of another kind under the id is built new where the subtree is reconciled. A node in a
+                    // list's item is reconciled within its item, and one that was is built new elsewhere. A
+                    // placeholder keeps the id of the node it stands for; a node it absorbs goes.
+                    if let Some(id) = node.id()
+                        && stands
+                        && built
+                        && self.tree.ids.get(id).is_some_and(|held| held.item.is_none())
+                    {
+                        self.moves.insert(id);
+                    }
+                    self.nodes(node.children(), depth, item, inner, &mut false)?;
                     if let (Node::List { items, .. }, Some(list)) = (node, node.id()) {
+                        let mut absorbing = false;
                         for entry in items {
                             let key = entry.node.id().ok_or(Refused::Unkeyed)?;
-                            self.nodes(std::slice::from_ref(&entry.node), depth, Some((list, key)))?;
+                            let entry = std::slice::from_ref(&entry.node);
+                            self.nodes(entry, depth, Some((list, key)), inner, &mut absorbing)?;
                         }
                     }
                 }
                 Ok(())
             }
+
+            /// Admits `node`, with `cost`, and returns how its children are counted; or why it is over a limit.
+            /// `built`: the host builds it now, not a list's item data. Over a limit by itself (its text, its hunks,
+            /// its content, its image) it is a placeholder. Counted, it is taken whole when its subtree fits in what
+            /// the tree has left; else a node the host builds that has children is opened, taking its own share, and
+            /// each child is admitted in turn; else it is a placeholder, which costs nothing.
+            fn admit(
+                &mut self,
+                node: &Node,
+                source: Option<&Source>,
+                cost: &Cost,
+                built: bool,
+                mode: Mode,
+            ) -> Result<Mode, Over> {
+                if built {
+                    if cost.text > self.limits.text {
+                        return Err(Over::Text(cost.text));
+                    }
+                    if cost.hunks > self.limits.hunks {
+                        return Err(Over::Hunks(cost.hunks));
+                    }
+                    if let Some(Source::Content(content)) = source
+                        && (self.env.dropped)(*content)
+                    {
+                        return Err(Over::Content);
+                    }
+                }
+                let inner = match mode {
+                    Mode::Count if self.fits(cost, built) => {
+                        self.used.0 += cost.nodes;
+                        self.used.1 += if built { cost.rows } else { 0 };
+                        Mode::Admitted
+                    }
+                    Mode::Count
+                        if built
+                            && opens(node)
+                            && self.fits(&Cost { nodes: 1, rows: cost.own_rows, ..*cost }, built) =>
+                    {
+                        self.used.0 += 1;
+                        self.used.1 += cost.own_rows;
+                        Mode::Count
+                    }
+                    Mode::Count if self.used.0 + cost.nodes > self.room.0 => return Err(Over::Nodes),
+                    Mode::Count => return Err(Over::Rows),
+                    mode => mode,
+                };
+                // An image is admitted by its header once the tree has room for it, which starts its decode.
+                if let (true, Node::Image { content, .. }) = (built, node)
+                    && matches!((self.env.image)(content), Picture::Over)
+                {
+                    return Err(Over::Image);
+                }
+                Ok(inner)
+            }
+
+            /// Whether a subtree of `cost` fits in what the tree has left.
+            fn fits(&self, cost: &Cost, built: bool) -> bool {
+                self.used.0 + cost.nodes <= self.room.0 && (!built || self.used.1 + cost.rows <= self.room.1)
+            }
         }
-        let mut walk = Walk { tree: self, env, ids: HashSet::new(), keeps: HashSet::new(), moves: HashSet::new() };
-        walk.nodes(nodes, 0, None)?;
+
+        let limits = limits::get();
+        // What the tree holds now is given back when it is replaced.
+        let nodes_room = match (env.item, env.plugin) {
+            (true, _) => u64::MAX,
+            (false, None) => limits.nodes,
+            (false, Some(plugin)) => {
+                let own = self.charged.as_ref().filter(|(owner, _)| **owner == *plugin).map_or(0, |(_, held)| *held);
+                limits.nodes.min(limits::room(plugin, limits::Kind::Nodes, own))
+            }
+        };
+        let mut costs = Vec::new();
+        for node in nodes {
+            self.measure(env, node, 0, true, &mut costs);
+        }
+        let mut walk = Walk {
+            tree: self,
+            env,
+            ids: HashSet::new(),
+            keeps: HashSet::new(),
+            held: HashSet::new(),
+            moves: HashSet::new(),
+            costs,
+            at: 0,
+            limits,
+            room: (nodes_room, limits.rows),
+            used: (0, 0),
+            over: HashMap::new(),
+        };
+        walk.nodes(nodes, 0, None, Mode::Count, &mut false)?;
         let moves = walk.moves.iter().map(|id| (*id).to_owned()).collect();
+        let (over, used) = (Rc::new(std::mem::take(&mut walk.over)), walk.used.0);
         if walk.keeps.is_empty() {
-            return Ok(Plan { keeps: HashSet::new(), moves });
+            return Ok(Plan { keeps: HashSet::new(), moves, over, nodes: used });
         }
         // An id of the tree, or a keep, may not be one inside a subtree it keeps. Each ancestor is checked once.
         let mut clear: HashSet<&str> = HashSet::new();
@@ -662,8 +876,121 @@ impl Tree {
             }
             clear.extend(chain);
         }
-        Ok(Plan { keeps: walk.keeps.into_iter().map(str::to_owned).collect(), moves })
+        Ok(Plan { keeps: walk.held.into_iter().map(str::to_owned).collect(), moves, over, nodes: used })
     }
+
+    /// Pushes the cost of `node` and of each node under it, in the order [`Tree::validate`] walks them, and returns
+    /// the nodes and rows of its subtree. `built`: the host builds it now, not a list's item data, which counts no
+    /// rows and whose text is not read. Past the depth bound it stops: validation refuses the node there.
+    fn measure(&self, env: &Env<'_>, node: &Node, above: u16, built: bool, costs: &mut Vec<Cost>) -> (u64, u64) {
+        let index = costs.len();
+        costs.push(Cost::default());
+        if let Node::Keep { key } = node {
+            let nodes = self.ids.get(key).map_or(1, |held| held.nodes);
+            costs[index] = Cost { nodes, ..Cost::default() };
+            return (nodes, 0);
+        }
+        let mut cost = if built { text_cost(env, node) } else { Cost::default() };
+        let depth = above + weight(node);
+        let (mut nodes, mut rows) = (1, cost.own_rows);
+        if depth <= MAX_DEPTH {
+            for child in node.children() {
+                let (inner, built_rows) = self.measure(env, child, depth, built, costs);
+                (nodes, rows) = (nodes + inner, rows + built_rows);
+            }
+            if let Node::List { items, .. } = node {
+                for item in items {
+                    nodes += self.measure(env, &item.node, depth, false, costs).0;
+                }
+            }
+        }
+        (cost.nodes, cost.rows) = (nodes, rows);
+        costs[index] = cost;
+        (nodes, rows)
+    }
+}
+
+/// How validation counts nodes against the tree's limits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Mode {
+    /// Each node is admitted in turn.
+    Count,
+    /// An ancestor was taken whole, so its subtree is counted.
+    Admitted,
+    /// A placeholder stands for the nodes: they are checked against the contract only.
+    Dropped,
+}
+
+/// Whether a node the host builds can be opened to admit its children one by one.
+fn opens(node: &Node) -> bool {
+    match node {
+        Node::List { items, .. } => !items.is_empty(),
+        node => !node.children().is_empty(),
+    }
+}
+
+/// What a node costs the host: the nodes and the rows built at once of its subtree, its own rows, and its text and
+/// hunks.
+#[derive(Clone, Copy, Debug, Default)]
+struct Cost {
+    nodes: u64,
+    rows: u64,
+    own_rows: u64,
+    text: u64,
+    hunks: u64,
+}
+
+/// The rows of an added file over 3,000 lines that the host builds at once: it mounts only the chunks near the view
+/// (`opencode_ui::diff::Chunked`).
+const CHUNKED_ROWS: u64 = 512;
+
+/// A node's own text and rows: a node is one row, and a patch, code or Markdown also its lines; a text its lines.
+fn text_cost(env: &Env<'_>, node: &Node) -> Cost {
+    // A last line without its line break is a line too.
+    let lines =
+        |text: &str| text.bytes().filter(|byte| *byte == b'\n').count() as u64 + u64::from(!text.ends_with('\n'));
+    let read = |source: &Source| match source {
+        Source::Content(content) if (env.dropped)(*content) => Rc::from(""),
+        source => (env.source)(source).unwrap_or_else(|| Rc::from("")),
+    };
+    let (text, rows, hunks) = match node {
+        Node::Diff { content, .. } => {
+            let text = read(content);
+            let hunks = opencode_ui::diff::hunk_count(&text) as u64;
+            let lines = lines(&text);
+            // An added file over 3,000 lines builds its chunks near the view; validation reads no chunk.
+            let added = hunks == 1
+                && text.find("@@ -0,0 +1,").is_some_and(|at| {
+                    text[at..].lines().skip(1).all(|line| line.starts_with('+') || line.starts_with('\\'))
+                });
+            let rows = if added && lines > 3_000 { CHUNKED_ROWS } else { lines };
+            (text.len() as u64, rows, hunks)
+        }
+        Node::Code { content: source, .. } | Node::Markdown { source, .. } => {
+            let text = read(source);
+            (text.len() as u64, lines(&text), 0)
+        }
+        Node::Text { spans, .. } => {
+            let bytes: u64 = spans.iter().map(|span| span.text.len() as u64).sum();
+            let breaks: u64 =
+                spans.iter().map(|span| span.text.bytes().filter(|byte| *byte == b'\n').count() as u64).sum();
+            (bytes, breaks, 0)
+        }
+        Node::Input { value, .. } => (value.len() as u64, 0, 0),
+        _ => (0, 0, 0),
+    };
+    Cost { own_rows: 1 + rows, text, hunks, ..Cost::default() }
+}
+
+/// The placeholder that stands for a node over a limit: one muted row that says why, under the node's id.
+fn placeholder(id: Option<&str>, over: &Over) -> Node {
+    let mut node = Node::text(vec![abi::Span::new(format!("⋯ {over}"))]);
+    if let Node::Text { id: own, fg, selectable, .. } = &mut node {
+        *own = id.map(str::to_owned);
+        *fg = Some(abi::Color::from("text.muted"));
+        *selectable = false;
+    }
+    node
 }
 
 /// Moves each subtree `plan` holds again from `nodes` into `pool`, leaving an [`Extra::Taken`] in its place: a kept
@@ -694,22 +1021,24 @@ fn take(nodes: &mut [Mounted], plan: &Plan, pool: &mut HashMap<String, Mounted>)
     }
 }
 
-/// Records every id of `nodes`, under `above`; returns the layout levels the deepest of them takes.
-fn collect_ids(nodes: &[Mounted], above: Option<&str>, ids: &mut HashMap<String, Held>) -> u16 {
-    let mut deepest = 0;
+/// Records every id of `nodes`, under `above`; returns the layout levels the deepest of them takes, and the nodes
+/// of their subtrees, lists' item data included.
+fn collect_ids(nodes: &[Mounted], above: Option<&str>, ids: &mut HashMap<String, Held>) -> (u16, u64) {
+    let (mut deepest, mut count) = (0, 0);
     for node in nodes {
         let id = node.node.id();
-        let mut inner = collect_ids(&node.children, id.or(above), ids);
+        let (mut inner, mut within) = collect_ids(&node.children, id.or(above), ids);
         if let (Extra::List(list), Some(id)) = (&node.extra, id) {
-            inner = inner.max(list.collect_ids(id, ids));
+            let (depth, items) = list.collect_ids(id, ids);
+            (inner, within) = (inner.max(depth), within + items);
         }
-        let depth = weight(&node.node) + inner;
+        let (depth, nodes) = (weight(&node.node) + inner, 1 + within);
         if let Some(id) = id {
-            ids.insert(id.to_owned(), Held { above: above.map(str::to_owned), depth, item: None });
+            ids.insert(id.to_owned(), Held { above: above.map(str::to_owned), depth, nodes, item: None });
         }
-        deepest = deepest.max(depth);
+        (deepest, count) = (deepest.max(depth), count + nodes);
     }
-    deepest
+    (deepest, count)
 }
 
 /// Calls `f` with each node of `nodes`' subtrees, the items of their lists with widgets included.
@@ -741,9 +1070,18 @@ impl Pass<'_, '_> {
     /// The children `new` of `parent` reconciled with `old`, in place. A child with an id is the subtree the tree
     /// before held under that id, wherever it was; one without is the next child of `old` without one, of its kind.
     fn children(&mut self, parent: &View, old: Vec<Mounted>, new: &[Node]) -> Vec<Mounted> {
+        // A node over a limit is its placeholder from here on.
+        let over = self.over.clone();
+        let new: Vec<&Node> = new
+            .iter()
+            .filter_map(|node| match over.get(&std::ptr::from_ref(node)) {
+                Some(placeholder) => placeholder.as_ref(),
+                None => Some(node),
+            })
+            .collect();
         let slots = old.iter().any(|node| matches!(node.node, Node::Slot { .. }))
             || new.iter().any(|node| matches!(node, Node::Slot { .. }));
-        if slots && !self.stays(&old, new) {
+        if slots && !self.stays(&old, &new) {
             // A nested slot puts its claims straight into the parent, where nothing else can place them: build all
             // of the parent's children again. The old slots go first, so a claim hears it unmounts before it mounts
             // again; the other old widgets go once the subtrees under them that are held again have moved.
@@ -764,7 +1102,7 @@ impl Pass<'_, '_> {
             true => old.iter().map(|node| node.widget.as_ref().map(Widget::id)).collect(),
             false => Vec::new(),
         };
-        let matched = matches(&old, new);
+        let matched = matches(&old, &new);
         let mut olds: Vec<Option<Mounted>> = old.into_iter().map(Some).collect();
         let mut out = Vec::with_capacity(new.len());
         // Whether each child's widget is one the tree had before.
@@ -791,7 +1129,7 @@ impl Pass<'_, '_> {
 
     /// Whether `new` keeps every child of `old` where it is, with its widget: a parent with a slot can be
     /// reconciled in place only then. A child with an id may come from anywhere, so it does not.
-    fn stays(&self, old: &[Mounted], new: &[Node]) -> bool {
+    fn stays(&self, old: &[Mounted], new: &[&Node]) -> bool {
         old.len() == new.len()
             && old.iter().zip(new).all(|(old, new)| {
                 let node = &old.node;
@@ -1049,12 +1387,12 @@ impl Pass<'_, '_> {
                     if self.env.host.app().focused().is_some_and(|focused| focused.id() == was.scroll.id()) {
                         self.refocus = Some(list.scroll.as_any());
                     }
-                    list.reconcile(self.env, items, restyle);
+                    list.reconcile(self.env, items, restyle, &self.over);
                     built.dynamic = list.dynamic();
                     return Err(Box::new((old, built)));
                 }
                 let Extra::List(list) = &mut old.extra else { unreachable!() };
-                list.reconcile(self.env, items, restyle);
+                list.reconcile(self.env, items, restyle, &self.over);
                 old.dynamic = list.dynamic();
                 old.node = shell(new);
                 Ok(old)
@@ -1109,7 +1447,7 @@ impl Pass<'_, '_> {
                     count(|work| work.set += 1);
                 }
                 if reread {
-                    image.image((self.env.image)(content));
+                    image.image(decoded(self.env, content));
                     count(|work| work.set += 1);
                 }
                 old.node = new.clone();
@@ -1366,7 +1704,7 @@ impl Pass<'_, '_> {
                 mounted.children = self.children(&content, Vec::new(), children);
             }
             (Node::List { items, .. }, Extra::List(list)) => {
-                list.reconcile(self.env, items, false);
+                list.reconcile(self.env, items, false, &self.over);
                 listed = list.dynamic();
             }
             _ => {}
@@ -1574,7 +1912,7 @@ impl Pass<'_, '_> {
                 (code.as_any(), Extra::Code(code, text))
             }
             Node::Image { content, fit, layout, .. } => {
-                let image = opentui::widget::ImageView::new(app).fit(image_fit(*fit)).image((env.image)(content));
+                let image = opentui::widget::ImageView::new(app).fit(image_fit(*fit)).image(decoded(env, content));
                 lay_out(&image, layout);
                 (image.as_any(), Extra::Image(image))
             }
@@ -1670,14 +2008,14 @@ fn place(parent: &View, out: &[Mounted], reused: &[bool]) {
 
 /// For each of `new` without an id, the index of the child of `old` it is reconciled with: the next one without an
 /// id, of its kind. A child with an id comes from the subtrees held again.
-fn matches(old: &[Mounted], new: &[Node]) -> Vec<Option<usize>> {
+fn matches(old: &[Mounted], new: &[&Node]) -> Vec<Option<usize>> {
     let mut cursor: HashMap<std::mem::Discriminant<Node>, usize> = HashMap::new();
     new.iter()
         .map(|node| {
             if node.id().is_some() {
                 return None;
             }
-            let kind = std::mem::discriminant(node);
+            let kind = std::mem::discriminant(*node);
             let start = cursor.get(&kind).copied().unwrap_or(0);
             let found = (start..old.len())
                 .find(|&index| old[index].node.id().is_none() && std::mem::discriminant(&old[index].node) == kind);
@@ -1881,6 +2219,14 @@ fn paint_field(field: &Field, theme: &Theme) {
                 .focused_colors(text.focused, background.focused)
                 .placeholder_color(theme.text.muted),
         ),
+    }
+}
+
+/// The image `source` decoded to, once its worker is done.
+fn decoded(env: &Env<'_>, source: &Source) -> Option<opentui::native::Image> {
+    match (env.image)(source) {
+        Picture::Ready(image) => Some(image),
+        Picture::Pending | Picture::Over => None,
     }
 }
 

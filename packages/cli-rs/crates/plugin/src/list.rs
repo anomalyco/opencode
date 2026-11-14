@@ -129,8 +129,15 @@ impl List {
     }
 
     /// Adopts `items`, validated by the tree: a keep item keeps the item of its key; every other item's data is its
-    /// node with keeps written out, and an item with widgets reconciles its tree with it. Then the window.
-    pub fn reconcile(&mut self, env: &Env<'_>, items: &[ListItem], restyle: bool) {
+    /// node with keeps written out, or the placeholder that stands for it in `over`, and an item with widgets
+    /// reconciles its tree with it. Then the window.
+    pub fn reconcile(
+        &mut self,
+        env: &Env<'_>,
+        items: &[ListItem],
+        restyle: bool,
+        over: &HashMap<*const Node, Option<Node>>,
+    ) {
         // Where the reader is, before any height changes; a reading an earlier change took and no solve has given
         // back yet stays, and a move no solve has seen yet sets it.
         if self.reading.borrow().is_none() && !self.moving.get().is_some_and(|(frame, ..)| frame == u64::MAX) {
@@ -142,7 +149,13 @@ impl List {
         for item in items {
             let key = item.node.id().unwrap_or_default().to_owned();
             let estimate = item.estimate.max(1);
-            let next = match (old.remove(&key), &item.node) {
+            // An item a placeholder absorbed is not the list's.
+            let node = match over.get(&std::ptr::from_ref(&item.node)) {
+                Some(Some(placeholder)) => placeholder,
+                Some(None) => continue,
+                None => &item.node,
+            };
+            let next = match (old.remove(&key), node) {
                 (Some(mut held), Node::Keep { .. }) => {
                     count_kept();
                     held.estimate = estimate;
@@ -551,14 +564,15 @@ impl List {
         self.owners.get(id).copied()
     }
 
-    /// Records every id of the items' data, under the list `list`, as [`Tree`]'s validation reads them.
-    pub fn collect_ids(&self, list: &str, ids: &mut HashMap<String, Held>) -> u16 {
-        let mut deepest = 0;
+    /// Records every id of the items' data, under the list `list`, as [`Tree`]'s validation reads them; the layout
+    /// levels the deepest takes, and the nodes of all of them.
+    pub fn collect_ids(&self, list: &str, ids: &mut HashMap<String, Held>) -> (u16, u64) {
+        let (mut deepest, mut count) = (0, 0);
         for item in &self.items {
-            let depth = held_ids(&item.node, Some(list), &item.key, list, ids);
-            deepest = deepest.max(depth);
+            let (depth, nodes) = held_ids(&item.node, Some(list), &item.key, list, ids);
+            (deepest, count) = (deepest.max(depth), count + nodes);
         }
-        deepest
+        (deepest, count)
     }
 
     /// Counts the widgets of every item as removed.
@@ -573,7 +587,7 @@ impl List {
 
 /// Reconciles an item's tree with `node`; validation has checked it whole.
 fn apply(env: &Env<'_>, mounted: &mut Mounted, node: &Node) {
-    let item = Env { full: false, ..*env };
+    let item = Env { full: false, item: true, ..*env };
     if let Err(refused) = mounted.tree.apply(&item, &mounted.wrapper, std::slice::from_ref(node)) {
         log::error!("a list item the tree took was refused: {refused}");
     }
@@ -690,25 +704,25 @@ fn ids(node: &Node, f: &mut dyn FnMut(&str)) {
     }
 }
 
-/// Records the ids of `node`, in item `item` of list `list`, under `above`; the layout levels it takes.
-fn held_ids(node: &Node, above: Option<&str>, item: &str, list: &str, held: &mut HashMap<String, Held>) -> u16 {
+/// Records the ids of `node`, in item `item` of list `list`, under `above`; the layout levels it takes and its nodes.
+fn held_ids(node: &Node, above: Option<&str>, item: &str, list: &str, held: &mut HashMap<String, Held>) -> (u16, u64) {
     let id = node.id();
-    let mut deepest = 0;
+    let (mut deepest, mut nodes) = (0, 1);
     for child in node.children() {
-        deepest = deepest.max(held_ids(child, id.or(above), item, list, held));
+        let (depth, inner) = held_ids(child, id.or(above), item, list, held);
+        (deepest, nodes) = (deepest.max(depth), nodes + inner);
     }
     if let (Node::List { items, .. }, Some(inner)) = (node, id) {
         for nested in items {
             let key = nested.node.id().unwrap_or_default();
-            deepest = deepest.max(held_ids(&nested.node, Some(inner), key, inner, held));
+            let (depth, within) = held_ids(&nested.node, Some(inner), key, inner, held);
+            (deepest, nodes) = (deepest.max(depth), nodes + within);
         }
     }
     let depth = weight_of(node) + deepest;
     if let Some(id) = id {
-        held.insert(
-            id.to_owned(),
-            Held { above: above.map(str::to_owned), depth, item: Some((list.to_owned(), item.to_owned())) },
-        );
+        let item = Some((list.to_owned(), item.to_owned()));
+        held.insert(id.to_owned(), Held { above: above.map(str::to_owned), depth, nodes, item });
     }
-    depth
+    (depth, nodes)
 }
