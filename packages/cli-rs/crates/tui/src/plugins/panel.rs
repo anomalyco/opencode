@@ -155,9 +155,13 @@ fn pick(tui: &Tui, owner: Owner, select: abi::Select) {
                 .map(|action| (action.key.clone(), action.command.clone(), action.rowless, action.primary))
                 .collect()
         };
+        // As do its title, placeholder, size and search (review carbon-5).
         let same = |picker: &Picker| {
             let shown = picker.shown.borrow();
-            keys(&shown.actions) == keys(&select.actions) && shown.binds == select.binds
+            keys(&shown.actions) == keys(&select.actions)
+                && shown.binds == select.binds
+                && (&shown.title, &shown.placeholder, shown.size, &shown.search)
+                    == (&select.title, &select.placeholder, select.size, &select.search)
         };
         let handle = picker.as_ref().and_then(|picker| picker.handle.borrow().clone());
         match (picker, handle) {
@@ -181,9 +185,12 @@ fn pick(tui: &Tui, owner: Owner, select: abi::Select) {
     list(tui, owner, select, None);
 }
 
-/// Shows `select` as a new dialog, with the filter and the selected row of `kept`.
+/// Shows `select` as a new dialog, with the filter and the selected row of `kept`, else those the host's question
+/// about a held build left for this select ([`Reads::kept`](super::host::Reads)).
 fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Option<String>)>) {
     let keyed = select.key.as_ref().map(|key| format!("{}/{key}", owner.0));
+    let left = tui.reads.kept.borrow_mut().take();
+    let kept = kept.or_else(|| left.filter(|(key, _)| Some(key) == keyed.as_ref()).map(|(_, kept)| kept));
     let picker = Rc::new(Picker {
         key: keyed.clone().unwrap_or_default(),
         owner: RefCell::new(owner.clone()),
@@ -378,6 +385,8 @@ impl Picker {
                     let (shown, value) = (picker.shown.borrow().clone(), value.clone());
                     let then =
                         shown.options.iter().find(|option| option.value == value).and_then(|row| row.action.clone());
+                    let filter = picker.handle.borrow().as_ref().map(|handle| handle.filter()).unwrap_or_default();
+                    let keyed = picker.key.clone();
                     return super::approve::ask(
                         &tui,
                         &target,
@@ -385,11 +394,14 @@ impl Picker {
                             if tui.dialogs.is_open() || !tui.plugins.live(&owner.0, owner.1) {
                                 return;
                             }
+                            // The filter and the row come back with the list, as the plugin shows it again or as it was.
+                            let kept = (filter.clone(), Some(value.clone()));
                             match &then {
-                                Some(action) => run(&tui, &owner, action, Some(&value)),
-                                None => {
-                                    list(&tui, owner.clone(), shown.clone(), Some((String::new(), Some(value.clone()))))
+                                Some(action) => {
+                                    tui.reads.kept.replace(Some((keyed.clone(), kept)));
+                                    run(&tui, &owner, action, Some(&value));
                                 }
+                                None => list(&tui, owner.clone(), shown.clone(), Some(kept)),
                             }
                         }),
                     );
@@ -429,8 +441,15 @@ enum Toggle {
 fn toggled(tui: &Tui, caller: &str, name: &str) -> Option<(opencode_plugin::Entry, Toggle)> {
     let entries = tui.plugins.entries();
     let plugin = opencode_plugin::Entry::plugin_key(name);
-    let entry = entries.iter().find(|entry| entry.key == name).or_else(|| entries.iter().find(|e| e.key == plugin))?;
-    if entry.id == caller || entry.id == super::manager::ID {
+    // A target names the entry it is now: a project's build keeps its target once approved (review carbon-2).
+    let entry = entries
+        .iter()
+        .find(|entry| entry.key == name)
+        .or_else(|| entries.iter().find(|entry| entry.key == plugin))
+        .or_else(|| entries.iter().find(|entry| entry.target.as_deref() == Some(name)))?;
+    // Never the caller or the manager that runs: a held build of their ID is another plugin (review carbon-3).
+    let refused = [opencode_plugin::Entry::plugin_key(caller), opencode_plugin::Entry::plugin_key(super::manager::ID)];
+    if refused.contains(&entry.key) {
         return None;
     }
     if matches!(entry.status, opencode_plugin::Status::Pending | opencode_plugin::Status::Declined) {
@@ -480,8 +499,7 @@ fn actions(tui: &Tui, picker: &Rc<Picker>) -> Vec<opencode_ui::select::SelectAct
         .actions
         .iter()
         .enumerate()
-        // No plugin's key may be the reserved chord.
-        .filter(|(_, action)| !action.key.as_deref().is_some_and(|key| opencode_plugin::interact::reserved(tui, key)))
+        .filter(|(_, action)| usable_action(tui, action))
         .map(|(index, action)| {
             let weak = Rc::downgrade(picker);
             let read = move |f: &dyn Fn(&abi::SelectAction) -> bool| {
@@ -532,10 +550,13 @@ fn actions(tui: &Tui, picker: &Rc<Picker>) -> Vec<opencode_ui::select::SelectAct
                 true => {
                     let rowless = runs(false);
                     item.run = ActionRun::Dialog(Rc::new(move || rowless(None)));
+                    item.hidden_when = Some(Rc::new(move |_: Option<&SelectOption<String>>| read(&|a| a.hidden_all)));
                 }
                 false => {
                     item.hidden_when = Some(Rc::new(move |option: Option<&SelectOption<String>>| {
-                        option.is_none_or(|option| read(&|action| action.hidden.contains(&option.value)))
+                        option.is_none_or(|option| {
+                            read(&|action| action.hidden_all || action.hidden.contains(&option.value))
+                        })
                     }));
                 }
             }
@@ -544,13 +565,34 @@ fn actions(tui: &Tui, picker: &Rc<Picker>) -> Vec<opencode_ui::select::SelectAct
         .collect()
 }
 
+/// Whether the select's action `action` can be the dialog's: its keys parse and are not the reserved chord, and its
+/// keybind name is not one the host's own select uses, which it would take over (review carbon-1). The host's keymap
+/// refuses an empty name or key, which would end the TUI.
+fn usable_action(tui: &Tui, action: &abi::SelectAction) -> bool {
+    let command = action
+        .command
+        .as_deref()
+        .is_none_or(|name| !name.trim().is_empty() && name != "plugins.toggle" && !name.starts_with("dialog.select."));
+    let usable = command && action.key.as_deref().is_none_or(|key| usable_key(tui, key));
+    if !usable {
+        log::warn!("a plugin's select action {:?} cannot be bound; it is left out", action.title);
+    }
+    usable
+}
+
+/// Whether `key` parses as keys of the host's keymap and is not the reserved chord.
+fn usable_key(tui: &Tui, key: &str) -> bool {
+    let parsed = tui.keymap.keymap().parse_key_sequence(key).is_ok_and(|parts| !parts.is_empty());
+    parsed && !key.trim().is_empty() && !opencode_plugin::interact::reserved(tui, key)
+}
+
 /// The select's extra keys: each runs its action with the selected row's value.
 fn binds(tui: &Tui, picker: &Rc<Picker>) -> Vec<TuiCommand> {
     let shown = picker.shown.borrow().clone();
     shown
         .binds
         .into_iter()
-        .filter(|bind| !opencode_plugin::interact::reserved(tui, &bind.key))
+        .filter(|bind| usable_key(tui, &bind.key))
         .map(|bind| {
             let (weak, action) = (Rc::downgrade(picker), bind.action);
             TuiCommand::inline(

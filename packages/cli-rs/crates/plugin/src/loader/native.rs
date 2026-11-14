@@ -745,9 +745,16 @@ fn manifest(bytes: &[u8], major: u32, expect: Option<&str>) -> Result<Manifest, 
     if let Some(expect) = expect.filter(|expect| *expect != manifest.id) {
         return Err(format!("setup returned plugin ID {}, not {expect}", manifest.id));
     }
-    if major < 2 && (!manifest.surfaces.is_empty() || !manifest.claims.is_empty() || manifest.messages) {
-        log::warn!("plugin {}: a plugin of ABI {major}.x has no surfaces, claims or messages; ignored", manifest.id);
+    let two = !manifest.surfaces.is_empty()
+        || !manifest.claims.is_empty()
+        || manifest.messages
+        || !manifest.layers.is_empty()
+        || !manifest.searches.is_empty()
+        || manifest.plugins;
+    if major < 2 && two {
+        log::warn!("plugin {}: a plugin of ABI {major}.x has none of 2.0's registrations; ignored", manifest.id);
         (manifest.surfaces, manifest.claims, manifest.messages) = (Vec::new(), Vec::new(), false);
+        (manifest.layers, manifest.searches, manifest.plugins) = (Vec::new(), Vec::new(), false);
     }
     Ok(manifest)
 }

@@ -167,6 +167,11 @@ impl Host for Tui {
         }
         let options = ToastOptions::new(Variant::Warning, format!("{cost}. Run /plugins for details."))
             .title(format!("Plugin is slow: {id}"));
+        tell_plugins(self);
+        // Disabling the manager would leave no `/plugins` (review carbon-3).
+        if id == super::manager::ID {
+            return self.toasts.show(options);
+        }
         let id = id.to_owned();
         self.toasts.show(options.action(
             "Disable",
@@ -175,6 +180,9 @@ impl Host for Tui {
                 host(&tui).remount();
             }),
         ));
+    }
+
+    fn slow_changed(&self) {
         tell_plugins(self);
     }
 
@@ -655,7 +663,13 @@ pub struct Reads {
     pub(super) owner: RefCell<Option<(String, u64)>>,
     /// The rich select on screen, which a select of the same key changes in place (P2).
     pub(super) select: RefCell<Option<Rc<super::panel::Picker>>>,
+    /// The filter and the row the next select of this key opens with: what the host's question about a held build
+    /// closed over (review carbon-2).
+    pub(super) kept: RefCell<Option<(String, Kept)>>,
 }
+
+/// A select's filter, and the value of its selected row.
+pub(super) type Kept = (String, Option<String>);
 
 impl Reads {
     /// Tells the mounted claims that the storage changed. The plugins queue it after a write, so it is in order with
@@ -967,7 +981,13 @@ pub fn tell_plugins(tui: &Tui) {
     }
     tui.app.defer(bind!(tui, |tui, _| {
         tui.plugins.telling.set(false);
-        let entries = tui.plugins.entries();
+        // What a slow plugin costs changes with each frame; that it is slow is the change (review carbon-4).
+        let entries: Vec<_> = tui
+            .plugins
+            .entries()
+            .into_iter()
+            .map(|entry| opencode_plugin::Entry { slow: entry.slow.map(|_| String::new()), ..entry })
+            .collect();
         if *tui.plugins.told.borrow() == entries {
             return;
         }
@@ -1242,6 +1262,8 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<opencode
         loader.set_configured(configured(&tui, targets));
         loader.reconcile(&host, &tui.plugins);
         watch(&tui, &loader, &watches);
+        // A new entry the loader does not load is listed skipped, with no remount (review carbon-4).
+        tell_plugins(&tui);
     }));
 }
 

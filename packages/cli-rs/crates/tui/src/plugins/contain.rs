@@ -191,7 +191,10 @@ fn notice(tui: &Rc<Tui>, crash: &Crash, safe: bool, dropped: bool) {
 /// Enables the plugin of entry `key` again ([`opencode_plugin::Entry::key`]), as the plugin manager does.
 pub(crate) fn enable(tui: &Rc<Tui>, key: &str) {
     match tui.plugins.toggle_entry(&super::host::host(tui), key, true) {
-        Some(Err(error)) => tui.toasts.error(error),
+        Some(Err(error)) => {
+            tui.toasts.error(error);
+            super::host::tell_plugins(tui);
+        }
         Some(Ok(())) => super::host::host(tui).remount(),
         None => {}
     }

@@ -375,7 +375,7 @@ shims and as a library (`plugin_carriers`).
 
 `Dialog::Select` with a `key` is the rich select: shown again under its key while it is open, it changes in place and
 keeps its filter and selection, and picking a row does not close it. A row may have its own action, a footer color, a
-gutter (the host's spinner, or a span), a `search_text` the filter matches instead of the title, or `toggle`, a plugin
+gutter (the host's spinner, or a span), a `search_text` the filter matches beside the title and the category, or `toggle`, a plugin
 the host enables or disables when the user picks the row with a key or a click (never a run of a command by name).
 The toggle is the host's own action `plugins.toggle` (the user's keybind, `enter` by default): its title says
 `enable` or `disable` from that plugin's state, naming the plugin unless the row's title is its id, keyed or not. A

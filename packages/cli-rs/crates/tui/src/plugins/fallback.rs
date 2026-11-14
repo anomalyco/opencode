@@ -26,25 +26,49 @@ pub fn activate(tui: &Rc<Tui>) -> Disposer {
 
 /// The list, in place of any open dialog, on the row of plugin `focus` if given.
 fn show(tui: &Rc<Tui>, focus: Option<String>) {
-    let theme = tui.page();
-    let options: Vec<SelectOption<String>> = tui
+    let entries: Vec<Entry> = tui
         .plugins
         .entries()
         .into_iter()
         .filter(|entry| entry.source != Source::Builtin || entry.id == super::manager::ID || failed(entry))
-        .map(|entry| {
-            let mut option = SelectOption::new(entry.id.clone(), entry.key.clone()).footer(footer(&entry));
-            option.footer_color = Some(if failed(&entry) { theme.text.feedback.error.base } else { theme.text.muted });
-            option
-        })
         .collect();
     let weak = tui.weak();
     tui.dialogs.replace(
         move |cx| {
-            let mut props = SelectProps::new("Plugins", options.clone());
+            // In the dialog's theme, built again with it.
+            let theme = cx.theme.page();
+            let options: Vec<SelectOption<String>> = entries
+                .iter()
+                .map(|entry| {
+                    let mut option = SelectOption::new(entry.id.clone(), entry.key.clone()).footer(footer(entry));
+                    option.footer_color = Some(match entry.status {
+                        Status::Failed(_) => theme.text.feedback.error.base,
+                        Status::Pending => theme.text.feedback.warning.base,
+                        _ => theme.text.muted,
+                    });
+                    option
+                })
+                .collect();
+            let mut props = SelectProps::new("Plugins", options);
             props.focus_target = focus.clone();
             let handle: Rc<RefCell<Option<opencode_ui::select::Select<String>>>> = Rc::default();
             let picked = Rc::downgrade(&handle);
+            // Any row's error on its own key, the manager's too, whose enter starts it again (review carbon-3).
+            let errors: Vec<String> =
+                entries.iter().filter(|entry| error(entry).is_some()).map(|e| e.key.clone()).collect();
+            let shown = weak.clone();
+            let mut view_error = opencode_ui::select::SelectAction::new(
+                "dialog.plugins.error",
+                "view error",
+                bind!(shown, |tui, option: &SelectOption<String>| {
+                    let key = option.value.clone();
+                    tui.app.defer(bind!(tui, |tui, _| details(&tui, &key)));
+                }),
+            );
+            view_error.hidden_when = Some(Rc::new(move |option: Option<&SelectOption<String>>| {
+                option.is_none_or(|o| !errors.contains(&o.value))
+            }));
+            props.actions = vec![view_error];
             props.on_select = Some(Rc::new(bind!(weak, |tui, option: &SelectOption<String>| {
                 // A key or a click, not a run of the submit by name, as a plugin's `dispatch` runs it (review bigboi-1).
                 let by_input = picked
@@ -76,7 +100,13 @@ fn pick(tui: &Rc<Tui>, key: &str, by_input: bool) {
         }
         return;
     }
-    let (Status::Failed(error) | Status::Skipped(error)) = entry.status.clone() else { return };
+    details(tui, key);
+}
+
+/// The error of the entry `key` names, with Back to its row.
+fn details(tui: &Rc<Tui>, key: &str) {
+    let Some(entry) = tui.plugins.entries().into_iter().find(|entry| entry.key == key) else { return };
+    let Some(error) = error(&entry) else { return };
     let source = entry.target.clone().unwrap_or_else(|| entry.id.clone());
     let props = error_details::Props {
         title: "TUI plugin error".to_owned(),
@@ -98,6 +128,13 @@ fn pick(tui: &Rc<Tui>, key: &str, by_input: bool) {
 
 fn failed(entry: &Entry) -> bool {
     matches!(entry.status, Status::Failed(_))
+}
+
+fn error(entry: &Entry) -> Option<String> {
+    match &entry.status {
+        Status::Failed(error) | Status::Skipped(error) => Some(error.clone()),
+        _ => None,
+    }
 }
 
 fn footer(entry: &Entry) -> String {

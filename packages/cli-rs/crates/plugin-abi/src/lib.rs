@@ -2449,7 +2449,7 @@ pub struct SelectOption {
     /// the row's value, or shows the select again on that row.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub toggle: Option<String>,
-    /// 2.0 (P6b): what the filter matches instead of the title (TS `searchText`).
+    /// 2.0 (P6b): what the filter matches beside the title and the category (TS `searchText`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub search_text: Option<String>,
 }
@@ -2487,6 +2487,10 @@ pub struct SelectAction {
     /// 2.0 (P6b): shown dimmed, and its key does nothing (TS `disabled`).
     #[serde(default, skip_serializing_if = "is_false")]
     pub disabled: bool,
+    /// 2.0 (P6b): hidden on every row and with none, and its key goes on to the list; a select shown again with only
+    /// this changed changes in place (TS `hidden`).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub hidden_all: bool,
 }
 
 impl SelectOption {

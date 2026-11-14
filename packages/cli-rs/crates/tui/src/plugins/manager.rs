@@ -39,6 +39,8 @@ pub fn plugin() -> abi::Plugin {
 struct State {
     /// The opens so far: a reply to an earlier one changes nothing of this one.
     opened: Cell<u64>,
+    /// The error view of a row shows, whose Back brings the list back.
+    erring: Cell<bool>,
     /// The server-list reads and checks asked for so far: only the reply to the newest one is shown, whatever order
     /// they come back in (TS's resource keeps the newest).
     asked: Cell<u64>,
@@ -81,20 +83,24 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         host.dialog(Dialog::Select(list(host, state, None)));
         state.fetch(host, Asked::List(state.opened.get(), state.next()));
     });
+    // The list's own commands act only while it shows: run by name with no list, they open nothing (review carbon-5).
     let internal = state.clone();
     setup.command(hidden("opencode.plugins.internal"), move |host, _| {
-        internal.internal.set(!internal.internal.get());
-        internal.show(host);
+        if host.dialog_open(LIST) {
+            internal.internal.set(!internal.internal.get());
+            internal.show(host);
+        }
     });
     let check = state.clone();
     setup.command(hidden("opencode.plugins.check"), move |host, _| {
-        if !check.checking.replace(true) {
+        if host.dialog_open(LIST) && !check.checking.replace(true) {
             check.show(host);
             check.fetch(host, Asked::Check(check.opened.get(), check.next()));
         }
     });
     let update = state.clone();
     setup.command(hidden("opencode.plugins.update"), move |host, key| {
+        let key = key.filter(|_| host.dialog_open(LIST));
         let row = key.and_then(|key| update.rows(host).into_iter().find(|row| row.key() == key));
         if let Some(row) = row.filter(|row| update.updatable(row)) {
             update.updating.borrow_mut().push(row.key());
@@ -105,14 +111,28 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     // Enter on a row that toggles nothing, and the `view error` actions: the row's error, if it has one.
     let detail = state.clone();
     setup.command(hidden("opencode.plugins.error"), move |host, key| {
+        let key = key.filter(|_| host.dialog_open(LIST));
         let row = key.and_then(|key| detail.rows(host).into_iter().find(|row| row.key() == key));
         if let Some(row) = row.filter(Row::has_error) {
+            detail.erring.set(true);
             host.dialog(Dialog::ErrorDetails(details(&row)));
         }
     });
+    // Back from the error view: the list on the row.
     let back = state.clone();
     setup.command(hidden("opencode.plugins.back"), move |host, key| {
-        host.dialog(Dialog::Select(list(host, &back, key.map(str::to_owned))));
+        if back.erring.replace(false) {
+            host.dialog(Dialog::Select(list(host, &back, key.map(str::to_owned))));
+        }
+    });
+    // After the host's question about a held build: the list on the row as it is now, and the server list read again,
+    // as `plugin.updated` went unheard while the question showed (review carbon-2).
+    let asked = state.clone();
+    setup.command(hidden("opencode.plugins.asked"), move |host, key| {
+        if asked.opened.get() > 0 && !host.dialog_open(LIST) {
+            host.dialog(Dialog::Select(list(host, &asked, key.map(str::to_owned))));
+            asked.fetch(host, Asked::List(asked.opened.get(), asked.next()));
+        }
     });
     // TS's subscription lives as long as the dialog, its error view included (`plugins.tsx:39`).
     let updated = state.clone();
@@ -202,7 +222,9 @@ impl State {
 
     /// Every row: the TUI plugins, then the server plugins, each sorted by label.
     fn rows(&self, read: &dyn Read) -> Vec<Row> {
-        let mut local: Vec<Row> = read.plugins().into_iter().filter(|entry| entry.id != ID).map(Row::Tui).collect();
+        // Not the manager that runs, whose activation this is; a held build of its ID is a row (review carbon-3).
+        let running = |entry: &PluginEntry| entry.id == ID && entry.active;
+        let mut local: Vec<Row> = read.plugins().into_iter().filter(|entry| !running(entry)).map(Row::Tui).collect();
         // A package without a server part runs nothing there; its TUI part has its own row.
         let directory = self.directory.borrow();
         let mut server: Vec<Row> = self
@@ -238,21 +260,22 @@ fn list(read: &dyn Read, state: &State, focus: Option<String>) -> Select {
     let except = |applies: &dyn Fn(&Row) -> bool| -> Vec<String> {
         visible.iter().filter(|row| !applies(row)).map(|row| row.key()).collect()
     };
-    let mut actions = Vec::new();
-    if rows.iter().any(|row| row.package().is_some()) {
-        let checking = state.checking.get();
-        actions.push(SelectAction {
-            title: if checking { "checking for updates" } else { "check for updates" }.to_owned(),
-            key: Some("ctrl+r".to_owned()),
-            action: command("opencode.plugins.check", None),
-            hidden: Vec::new(),
-            primary: None,
-            rowless: true,
-            command: Some("dialog.plugins.check".to_owned()),
-            disabled: checking,
-        });
-    }
+    let checking = state.checking.get();
     let error = command("opencode.plugins.error", None);
+    // TS's order: check, then on the row view error (its own key), the host's toggle, update, and view error on enter;
+    // the toggle is the host's, which comes after these, and never shares a row with update or with the last.
+    let mut actions = vec![SelectAction {
+        title: if checking { "checking for updates" } else { "check for updates" }.to_owned(),
+        key: Some("ctrl+r".to_owned()),
+        action: command("opencode.plugins.check", None),
+        hidden: Vec::new(),
+        primary: None,
+        rowless: true,
+        command: Some("dialog.plugins.check".to_owned()),
+        disabled: checking,
+        // Kept with no package, so the server list's reply changes the select in place (review carbon-5).
+        hidden_all: !rows.iter().any(|row| row.package().is_some()),
+    }];
     actions.extend([
         // A toggle row's error: enter toggles it.
         SelectAction {
@@ -264,6 +287,18 @@ fn list(read: &dyn Read, state: &State, focus: Option<String>) -> Select {
             rowless: false,
             command: Some("dialog.plugins.error".to_owned()),
             disabled: false,
+            hidden_all: false,
+        },
+        SelectAction {
+            title: "update".to_owned(),
+            key: Some("ctrl+u".to_owned()),
+            action: command("opencode.plugins.update", None),
+            hidden: except(&|row| state.updatable(row)),
+            primary: None,
+            rowless: false,
+            command: Some("dialog.plugins.update".to_owned()),
+            disabled: false,
+            hidden_all: false,
         },
         // Any other row's error, which enter opens (TS's footer hint).
         SelectAction {
@@ -275,16 +310,7 @@ fn list(read: &dyn Read, state: &State, focus: Option<String>) -> Select {
             rowless: false,
             command: None,
             disabled: false,
-        },
-        SelectAction {
-            title: "update".to_owned(),
-            key: Some("ctrl+u".to_owned()),
-            action: command("opencode.plugins.update", None),
-            hidden: except(&|row| state.updatable(row)),
-            primary: None,
-            rowless: false,
-            command: Some("dialog.plugins.update".to_owned()),
-            disabled: false,
+            hidden_all: false,
         },
         SelectAction {
             title: format!("{} internal", if state.internal.get() { "hide" } else { "show" }),
@@ -295,6 +321,7 @@ fn list(read: &dyn Read, state: &State, focus: Option<String>) -> Select {
             rowless: true,
             command: None,
             disabled: false,
+            hidden_all: false,
         },
     ]);
     Select {
@@ -330,7 +357,7 @@ fn option(row: &Row, state: &State) -> SelectOption {
         },
         toggle: row.toggle(),
         // The host asks about a held build; once its question closes, the list comes back on the row as it is then.
-        action: row.held().then(|| command("opencode.plugins.back", None)),
+        action: row.held().then(|| command("opencode.plugins.asked", None)),
         ..SelectOption::new(row.label(), row.key())
     }
 }
