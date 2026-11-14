@@ -499,3 +499,17 @@ fn the_docked_panel_takes_the_keys_only_with_the_focus() {
     h.keys(&["m"]);
     h.wait_for("0/1");
 }
+
+// Expected (deviation F15-diff-viewer-ctrl-c): the reserved chord is the host's in the viewer, so it exits the app as
+// `app.exit` does on home; escape closes the viewer.
+#[test]
+fn ctrl_c_in_the_viewer_is_the_hosts() {
+    let h = route(1, 4, 120, 30);
+    h.keys(&["escape"]);
+    h.wait("escape did not close the viewer", || h.tui.route() == Route::Home);
+    h.tui.keymap.dispatch("diff.open", None);
+    h.wait_for("≡ f0000.rs");
+    assert!(!h.app.app().is_quitting());
+    h.keys(&["ctrl+c"]);
+    assert!(h.app.app().is_quitting(), "ctrl+c did not exit:\n{}", h.app.text());
+}
