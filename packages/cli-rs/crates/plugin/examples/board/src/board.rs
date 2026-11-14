@@ -224,6 +224,8 @@ fn files_view(files: &Files) -> v2::Node {
                 view: v2::DiffView::Unified,
                 filetype: None,
                 hunks: Some("hunk".into()),
+                wrap: Default::default(),
+                padding: 0,
             };
             let name = v2::Node::text(vec![Span::new(format!("file {file}"))]);
             let node = v2::Node::column(vec![name, diff]).with_id(format!("f{file}")).anchor("file", "");
@@ -377,6 +379,8 @@ fn view(board: &RefCell<Board>, cx: &mut v2::View<'_>) -> v2::Node {
                         view: v2::DiffView::Unified,
                         filetype: None,
                         hunks: None,
+                        wrap: Default::default(),
+                        padding: 0,
                     },
                 ])
             })

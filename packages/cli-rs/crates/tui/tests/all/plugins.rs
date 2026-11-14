@@ -783,6 +783,8 @@ fn paneled<const SUB: bool>(setup: &mut abi::Setup) -> Result<(), String> {
             bleed: false,
             centered: false,
             bare: false,
+            close: None,
+            height: None,
         }));
     });
     setup

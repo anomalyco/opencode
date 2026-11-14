@@ -384,6 +384,14 @@
                 }
               ]
             },
+            "wrap": {
+              "$ref": "#/$defs/Wrap"
+            },
+            "padding": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
             "type": {
               "const": "diff"
             }
@@ -877,6 +885,9 @@
           "type": "boolean"
         },
         "focused": {
+          "type": "boolean"
+        },
+        "forced": {
           "type": "boolean"
         }
       },

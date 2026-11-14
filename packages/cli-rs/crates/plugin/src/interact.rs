@@ -335,9 +335,9 @@ impl Owner {
     }
 
     /// The keymap command of `bind`, which calls the handler and holds the keys after it if it asks.
-    fn command(self: &Rc<Self>, bind: &Bind, deliver: &Deliver) -> TuiCommand {
-        let (owner, deliver, bind) = (Rc::downgrade(self), deliver.clone(), bind.clone());
-        let mut command = TuiCommand::inline(bind.key.clone(), move |_, pressed: Option<&KeyEvent>| {
+    fn command(self: &Rc<Self>, declared: &Bind, deliver: &Deliver) -> TuiCommand {
+        let (owner, deliver, bind) = (Rc::downgrade(self), deliver.clone(), declared.clone());
+        let run = move |_: Option<&str>, pressed: Option<&KeyEvent>| {
             let Some(owner) = owner.upgrade().filter(|owner| owner.alive()) else { return false };
             let Some(host) = owner.host.upgrade() else { return false };
             // The stroke that matched; a run with no key (none today) names the bind's keys.
@@ -351,8 +351,16 @@ impl Owner {
                 router.hold(&*host, &owner);
             }
             handled
-        });
-        if let Some(title) = &bind.title {
+        };
+        // A bind of the user's keybind takes its keys by name (P6c), as a host command of that name does.
+        let mut command = match (&declared.command, declared.key.is_empty()) {
+            (Some(name), true) => TuiCommand::new(name.clone(), run),
+            (Some(name), false) => {
+                TuiCommand::new(name.clone(), run).bind(opencode_ui::keymap::Bind::Key(declared.key.clone()))
+            }
+            (None, _) => TuiCommand::inline(declared.key.clone(), run),
+        };
+        if let Some(title) = &declared.title {
             command = command.title(title.clone()).group("Plugin");
         }
         command

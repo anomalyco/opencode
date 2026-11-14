@@ -101,6 +101,8 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
                         view: v2::DiffView::Unified,
                         filetype: None,
                         hunks: None,
+                        wrap: Default::default(),
+                        padding: 0,
                     },
                 ])
             })
@@ -800,7 +802,7 @@ fn a_content_handle_names_nothing_in_another_mount() {
 /// A route with a command of its own and a global one, each of which fetches `/api/hold`; the replies are logged.
 fn owned(setup: &mut abi::Setup) -> Result<(), String> {
     let fetch = |host: &dyn abi::Host, _: Option<&str>| {
-        host.fetch(abi::Fetch { method: "GET".into(), path: "/api/hold".into(), query: Vec::new(), body: None });
+        host.fetch(abi::Fetch { method: "GET".into(), path: "/api/hold".into(), ..abi::Fetch::default() });
     };
     let command = |name: &str, scope| abi::Command { name: name.into(), scope, ..abi::Command::default() };
     setup.command(command("owned.route", abi::Scope::Route("owned".into())), fetch);

@@ -158,6 +158,12 @@ pub enum Node {
         /// P3: the first row of each hunk is anchor `{id}#{index}` of this group; it needs an id.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         hunks: Option<String>,
+        /// P6c: how its lines wrap; at words by default.
+        #[serde(default, skip_serializing_if = "is_word")]
+        wrap: Wrap,
+        /// P6c: cells inside its left and right edges.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        padding: u16,
     },
     /// P3: a text field whose text and cursor are the host's. With an id, the surface's handler hears
     /// [`crate::interact::Event::Change`] with the text after each edit, and [`crate::interact::Event::Submit`] on
@@ -762,7 +768,15 @@ impl Node {
 
     /// A patch of `content` in the unified view.
     pub fn diff(content: Source) -> Self {
-        Node::Diff { id: None, content, view: DiffView::Unified, filetype: None, hunks: None }
+        Node::Diff {
+            id: None,
+            content,
+            view: DiffView::Unified,
+            filetype: None,
+            hunks: None,
+            wrap: Wrap::Word,
+            padding: 0,
+        }
     }
 
     /// A one-line text field showing `value`.
@@ -940,6 +954,22 @@ impl Node {
     pub fn padding(mut self, x: u16, y: u16) -> Self {
         if let Node::Box { padding, .. } = &mut self {
             *padding = (x, y);
+        }
+        self
+    }
+
+    /// P6c: a box with `edges` cells inside each edge, instead of [`Node::padding`]; anything else is unchanged.
+    pub fn padding_sides(mut self, edges: Edges) -> Self {
+        if let Node::Box { padding_sides, .. } = &mut self {
+            *padding_sides = Some(edges);
+        }
+        self
+    }
+
+    /// P6c: a box that cuts off what does not fit in it; anything else is unchanged.
+    pub fn clip(mut self) -> Self {
+        if let Node::Box { overflow, .. } = &mut self {
+            *overflow = Overflow::Hidden;
         }
         self
     }
@@ -1222,6 +1252,8 @@ mod tests {
                 view: DiffView::Split,
                 filetype: Some("rust".into()),
                 hunks: None,
+                wrap: Default::default(),
+                padding: 0,
             },
             Node::scroll(vec![Node::Markdown {
                 id: None,

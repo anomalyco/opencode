@@ -3,9 +3,9 @@
 
 use std::collections::BTreeSet;
 
-use opencode_ui::theme::tint;
-
-use crate::prelude::*;
+use opencode_plugin::abi::interact::Interact;
+use opencode_plugin::abi::v2;
+use opencode_plugin::abi::{Click, Edges, Layout, Rgba, Span, Width, Wrap};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
@@ -211,160 +211,141 @@ pub struct Pane<'a> {
     pub source: &'a str,
     pub detail: Option<&'a str>,
     pub help: Option<String>,
-    /// A click on the help footer (`HelpShortcut`).
-    pub on_help: Rc<dyn Fn()>,
+    /// The muted text tinted over the pane's surface: the markers' and the rails' colors.
+    pub faint: Rgba,
+    pub rail: Rgba,
 }
 
-/// What a row click does.
-pub type OnRow = Rc<dyn Fn(&Row)>;
-/// What a right-click on a file row does, with the file and the cell (`onFileContextMenu`).
-pub type OnMenu = Rc<dyn Fn(usize, u16, u16)>;
+/// The id of a row's node, which a press on it names.
+pub fn row_id(row: &Row) -> String {
+    format!("t:{}", row.id)
+}
 
-/// The pane (`DiffViewerFileTree`, tree layout): the source header, the rows, and the help footer. Returns the pane and
-/// the rows' scroll box.
-pub fn pane(
-    app: &App,
-    theme: &Theme,
-    input: &Pane<'_>,
-    tree: &Tree,
-    on_row: OnRow,
-    on_source: Rc<dyn Fn()>,
-    on_menu: OnMenu,
-) -> (View, ScrollBox) {
-    let surface = theme.background.raised.base;
-    let faint = tint(theme.text.muted, surface, 0.45);
-    let rail = tint(theme.text.muted, surface, 0.7);
+/// The pane (`DiffViewerFileTree`, tree layout): the source header, the rows in their scroll `tree`, and the help
+/// footer. A click on the header switches the source (`diff.source`), one on the help opens it (`diff.help`); a row's
+/// presses reach the surface's handler.
+pub fn pane(input: &Pane<'_>, tree: &Tree) -> v2::Node {
+    let surface = "background.raised.base";
     let content_width = (i64::from(input.width) - 6).max(0);
     let reviewed_count = (0..input.files.len()).filter(|&file| (input.reviewed)(file)).count();
-
-    let label =
-        Text::new(app, input.source).fg(theme.text.action.secondary.base).bold().wrap(WrapMode::None).shrink(0.0);
-    let switch = View::new(app).row().grow(1.0).basis(Length::Auto).min_width(0).child(&label);
+    let mut switch = vec![
+        v2::Node::text([Span::new(input.source).bold()])
+            .fg("text.action.secondary.base")
+            .wrap(Wrap::None)
+            .layout(Layout::default().shrink(false)),
+    ];
     if let Some(detail) = input.detail {
-        switch.add(
-            &Text::new(app, format!(" · {detail}"))
-                .fg(theme.text.muted)
-                .wrap(WrapMode::None)
-                .truncate(true)
-                .grow(1.0)
-                .basis(Length::Auto)
-                .min_width(0),
+        switch.push(
+            v2::Node::text([Span::new(format!(" · {detail}"))])
+                .fg("text.muted")
+                .wrap(Wrap::None)
+                .truncate()
+                .layout(Layout::default().grow().min_width_zero()),
         );
     }
-    switch.mouse_pointer(MousePointer::POINTER).on_click(move |cx, _| {
-        cx.stop_propagation();
-        on_source();
-    });
-    let header = View::new(app).row().height(1).shrink(0.0).margin_edge(Edge::Bottom, 1).gap(1).child(&switch).child(
-        &Text::new(app, format!("{reviewed_count}/{}", input.files.len()))
-            .fg(theme.text.muted)
-            .wrap(WrapMode::None)
-            .shrink(0.0),
-    );
+    let header = v2::Node::row(vec![
+        v2::Node::row(switch)
+            .layout(Layout::default().grow().min_width_zero())
+            .on_click(Click::command(super::SOURCE, None)),
+        v2::Node::text([Span::new(format!("{reviewed_count}/{}", input.files.len()))])
+            .fg("text.muted")
+            .wrap(Wrap::None)
+            .layout(Layout::default().shrink(false)),
+    ])
+    .gap(1)
+    .layout(Layout::default().height(Width::Cells(1)).shrink(false).margin(Edges { bottom: 1, ..Edges::default() }));
 
-    let rows = View::new(app).column().shrink(0.0);
-    for row in flatten(tree, Some(input.expanded)) {
-        let selected = row.file.is_some() && row.file == input.selected;
-        let reviewed = row.file.is_some_and(|file| (input.reviewed)(file));
-        let foreground = match () {
-            _ if row.kind == Kind::Directory => theme.text.muted,
-            _ if selected => theme.text.action.primary.selected,
-            _ if reviewed => theme.text.muted,
-            _ => theme.text.base,
-        };
-        let marker = match row.kind {
-            Kind::File => "≡ ",
-            Kind::Directory if input.expanded.contains(&row.id) => "▾ ",
-            Kind::Directory => "▸ ",
-        };
-        let depth = (row.depth as i64).min(((content_width - 3) / 2).max(0)).max(0);
-        let indent = "│ ".repeat(depth as usize);
-        let name_width = content_width - width(&indent) - width(marker);
-        let name = match row.kind {
-            Kind::Directory => truncate_directory_chain(&row.name, name_width),
-            Kind::File => crate::dialogs::open::truncate_file_path(&row.name, name_width),
-        };
-        let item = row.file.and_then(|file| input.files.get(file));
-        let (status, status_color) = match item.map(|item| item.status) {
-            None => ("", theme.text.muted),
-            Some(_) if reviewed => ("✓", theme.text.muted),
-            Some(Status::Modified) => ("M", theme.text.muted),
-            Some(Status::Added) => ("A", theme.diff.text.added),
-            Some(Status::Deleted) => ("D", theme.diff.text.removed),
-            Some(Status::Unknown) => ("?", theme.text.muted),
-        };
-        let name = Text::new(app, name).fg(foreground).wrap(WrapMode::None).truncate(true);
-        if selected {
-            name.bold();
-        }
-        let line = View::new(app)
-            .row()
-            .height(1)
-            .child(&Text::new(app, vec![indent.fg(rail), marker.fg(faint)]).wrap(WrapMode::None).shrink(0.0))
-            .child(&View::new(app).grow(1.0).basis(Length::Auto).min_width(0).margin_edge(Edge::Right, 1).child(&name))
-            .child(&Text::new(app, status).fg(status_color).wrap(WrapMode::None).width(1).shrink(0.0));
-        let base = surface;
-        let hover = theme.background.raised.high;
-        let container =
-            View::new(app).column().width(Length::percent(100.0)).height(1).shrink(0.0).bg(base).child(&line);
-        // The line fills the row. A handler holding the row itself would keep the row alive forever.
-        container.on_hover(move |cx, over| {
-            line.bg(if over { hover } else { base });
-            cx.request_redraw();
-        });
-        if let Some(file) = row.file {
-            let on_menu = on_menu.clone();
-            container.on_mouse(move |cx, event| {
-                if event.kind == MouseEventKind::Down(MouseButton::Right) {
-                    cx.prevent_default();
-                    cx.stop_propagation();
-                    on_menu(file, event.x, event.y);
-                }
-            });
-        }
-        let on_row = on_row.clone();
-        container.mouse_pointer(MousePointer::POINTER).on_click(move |cx, _| {
-            cx.stop_propagation();
-            on_row(&row);
-        });
-        rows.add(&container);
-    }
-    let scroll = ScrollBox::new(app).scrollbars(false).grow(1.0).basis(Length::Auto).min_height(0).focusable(false);
-    scroll.add(&rows);
+    let rows = flatten(tree, Some(input.expanded))
+        .into_iter()
+        .map(|row| {
+            let selected = row.file.is_some() && row.file == input.selected;
+            let reviewed = row.file.is_some_and(|file| (input.reviewed)(file));
+            let foreground = match () {
+                _ if row.kind == Kind::Directory => "text.muted",
+                _ if selected => "text.action.primary.selected",
+                _ if reviewed => "text.muted",
+                _ => "text.base",
+            };
+            let marker = match row.kind {
+                Kind::File => "≡ ",
+                Kind::Directory if input.expanded.contains(&row.id) => "▾ ",
+                Kind::Directory => "▸ ",
+            };
+            let depth = (row.depth as i64).min(((content_width - 3) / 2).max(0)).max(0);
+            let indent = "│ ".repeat(depth as usize);
+            let name_width = content_width - width(&indent) - width(marker);
+            let name = match row.kind {
+                Kind::Directory => truncate_directory_chain(&row.name, name_width),
+                Kind::File => crate::dialogs::open::truncate_file_path(&row.name, name_width),
+            };
+            let item = row.file.and_then(|file| input.files.get(file));
+            let (status, status_color) = match item.map(|item| item.status) {
+                None => ("", "text.muted"),
+                Some(_) if reviewed => ("✓", "text.muted"),
+                Some(Status::Modified) => ("M", "text.muted"),
+                Some(Status::Added) => ("A", "diff.text.added"),
+                Some(Status::Deleted) => ("D", "diff.text.removed"),
+                Some(Status::Unknown) => ("?", "text.muted"),
+            };
+            let name = Span { bold: selected, ..Span::new(name) };
+            let line = v2::Node::row(vec![
+                v2::Node::text([Span::new(indent).fg(input.rail), Span::new(marker).fg(input.faint)])
+                    .wrap(Wrap::None)
+                    .layout(Layout::default().shrink(false)),
+                v2::Node::column(vec![v2::Node::text([name]).fg(foreground).wrap(Wrap::None).truncate()])
+                    .layout(Layout::default().grow().min_width_zero().margin(Edges { right: 1, ..Edges::default() })),
+                v2::Node::text([Span::new(status)])
+                    .fg(status_color)
+                    .wrap(Wrap::None)
+                    .layout(Layout::default().width(Width::Cells(1)).shrink(false)),
+            ])
+            .layout(Layout::default().height(Width::Cells(1)));
+            // The row fills the line; a press on it is the handler's: the left button picks it, the right opens the
+            // file menu.
+            v2::Node::column(vec![line])
+                .with_id(row_id(&row))
+                .bg(surface)
+                .interact(Interact {
+                    pointer: true,
+                    hover: Some("background.raised.high".into()),
+                    ..Interact::default()
+                })
+                .layout(Layout::default().width(Width::Percent(100.0)).height(Width::Cells(1)).shrink(false))
+        })
+        .collect();
+    let scroll = v2::Node::scroll(vec![v2::Node::column(rows).layout(Layout::default().shrink(false))])
+        .with_id(super::TREE)
+        .layout(Layout::default().grow().min_height(Width::Cells(0)));
 
-    let body = View::new(app)
-        .column()
-        .grow(1.0)
-        .basis(Length::Auto)
-        .min_width(0)
-        .min_height(0)
-        .padding_edge(Edge::Bottom, 1)
-        .padding_edge(Edge::Left, 2)
-        .padding_edge(Edge::Right, 2)
-        .bg(surface)
-        .child(&header)
-        .child(&scroll);
+    let mut body = vec![header, scroll];
     if let Some(help) = &input.help {
         // `HelpShortcut`: a left click opens the help.
-        let text =
-            Text::new(app, vec![help.clone().fg(theme.text.base), " help".fg(theme.text.muted)]).wrap(WrapMode::None);
-        let on_help = input.on_help.clone();
-        text.mouse_pointer(MousePointer::POINTER).on_click(move |cx, _| {
-            cx.stop_propagation();
-            on_help();
-        });
-        body.add(&View::new(app).shrink(0.0).padding_edge(Edge::Top, 1).padding_edge(Edge::Bottom, 1).child(&text));
+        body.push(
+            v2::Node::column(vec![
+                v2::Node::text([Span::new(help.clone()).fg("text.base"), Span::new(" help").fg("text.muted")])
+                    .wrap(Wrap::None)
+                    .on_click(Click::command(super::HELP, None)),
+            ])
+            .padding_sides(Edges { top: 1, bottom: 1, ..Edges::default() })
+            .layout(Layout::default().shrink(false)),
+        );
     }
-    let pane = View::new(app)
-        .column()
-        .width(input.width)
-        .height(Length::percent(100.0))
-        .min_width(0)
-        .min_height(0)
-        .shrink(0.0)
-        .child(&View::new(app).height(1).shrink(0.0).bg(surface))
-        .child(&body);
-    (pane, scroll)
+    let body = v2::Node::column(body)
+        .bg(surface)
+        .padding_sides(Edges { bottom: 1, left: 2, right: 2, ..Edges::default() })
+        .layout(Layout::default().grow().min_width_zero().min_height(Width::Cells(0)));
+    v2::Node::column(vec![
+        v2::Node::column(Vec::new()).bg(surface).layout(Layout::default().height(Width::Cells(1)).shrink(false)),
+        body,
+    ])
+    .layout(
+        Layout::default()
+            .width(Width::Cells(input.width))
+            .height(Width::Percent(100.0))
+            .min_width_zero()
+            .min_height(Width::Cells(0))
+            .shrink(false),
+    )
 }
 
 #[cfg(test)]

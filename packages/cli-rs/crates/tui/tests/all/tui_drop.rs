@@ -57,6 +57,11 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
                 search: None,
                 size: None,
                 focus: None,
+                query: None,
+                query_delay: 0,
+                filterless: false,
+                empty: None,
+                note: None,
             }),
         ),
         (
@@ -95,6 +100,8 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
                 bleed: false,
                 centered: false,
                 bare: false,
+                close: None,
+                height: None,
             }),
         ),
     ];

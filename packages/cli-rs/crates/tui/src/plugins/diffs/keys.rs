@@ -2,12 +2,11 @@
 //! (`:1311-1361`). Of the 26 `diff.*` keybinds in `config/keybind.ts`, 20 are viewer commands, `diff.open` opens it,
 //! and the five deprecated tree keys (`diff.toggle`, `.expand`, `.expand_all`, `.collapse`, `.switch_focus`) are
 //! kept for config only and register nothing, as in TS.
+//!
+//! The viewer's keys are a layer of its surface (P6c): each bind is the user's keybind of the command's name
+//! ([`Bind::command`]), heard by the surface's handler while the panel has the focus or the route shows.
 
-use opencode_ui::dialog::FocusId;
-
-use super::viewer::Viewer;
-
-use crate::prelude::*;
+use opencode_plugin::abi::interact::{Bind, Layer, LayerScope};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
@@ -34,7 +33,7 @@ pub enum Action {
 }
 
 /// The viewer's commands in TS order. `app.exit` closes the viewer while it has the input; the specific bindings
-/// win over its `ctrl+d`.
+/// win over its `ctrl+d`. Its `ctrl+c` is the host's: no plugin layer takes the reserved chord (P2).
 pub const COMMANDS: [(&str, &str, Action); 21] = [
     ("diff.close", "Close diff viewer", Action::Close),
     ("diff.down", "Move diff viewer down", Action::Down),
@@ -59,34 +58,18 @@ pub const COMMANDS: [(&str, &str, Action); 21] = [
     ("app.exit", "Close diff viewer", Action::Close),
 ];
 
-/// The viewer's layer: in the base mode, so a dialog takes the keys, and only while `target` (the panel host) has
-/// the focus, or while `enabled` holds for the full-screen route.
-pub fn layer(viewer: &Rc<Viewer>, target: Option<FocusId>, enabled: Condition) -> KeymapLayer<FocusId> {
-    let commands = COMMANDS
+/// The viewer's layer: in the base mode, so a dialog takes the keys, above the host's layers of its scope.
+pub fn layer() -> Layer {
+    let keys = COMMANDS
         .iter()
-        .map(|&(id, title, action)| {
-            let command =
-                TuiCommand::new(id, bind!(viewer, |viewer, _, _| viewer.run(action))).title(title).group("VCS");
-            let when = |test: fn(&Viewer) -> bool| Condition::when(bind!(viewer, |viewer| test(&viewer)));
-            match action {
-                Action::ToggleFileTree => command.enabled(when(|viewer| !viewer.compact())),
-                Action::ToggleFullscreen => command.enabled(when(Viewer::in_panel)),
-                _ => command,
-            }
-        })
+        .map(|&(name, title, _)| Bind { title: Some(title.to_owned()), ..Bind::command(name, name) })
         .collect();
-    KeymapLayer { target, enabled, priority: 1, commands, ..KeymapLayer::default() }
+    Layer { scope: LayerScope::Surface, priority: 1, keys, ..Layer::default() }
 }
 
-/// `diff.open` (`/diff`, in the palette): toggles the session's panel, or opens the full-screen route elsewhere.
-pub fn open_layer(tui: &Rc<Tui>, open: Rc<dyn Fn(&Tui)>) -> KeymapLayer<FocusId> {
-    KeymapLayer::global(vec![
-        TuiCommand::new("diff.open", bind!(tui, |tui, _, _| open(&tui)))
-            .title("Open diff viewer")
-            .group("VCS")
-            .palette()
-            .slash("diff"),
-    ])
+/// The action a bind of [`layer`] names.
+pub fn action(bind: &str) -> Option<Action> {
+    COMMANDS.iter().find(|(name, ..)| *name == bind).map(|&(.., action)| action)
 }
 
 #[cfg(test)]

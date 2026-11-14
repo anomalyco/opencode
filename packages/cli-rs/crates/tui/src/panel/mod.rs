@@ -2,10 +2,7 @@
 //!
 //! A plugin opens a panel for a session with [`Panels::open`]; the session frame shows it beside the session,
 //! or over the whole screen when the room is too small to split or the plugin asks for it. The host is a
-//! raised, focusable box that the plugin fills through the builder it registered with [`Panels::register`]
-//! (P.1 connects the `session.panel` slot to it; E.15a's diff viewer is the first user).
-
-use std::any::Any;
+//! raised, focusable box that the plugin's panel surface (P2) fills; E.15a's diff viewer is the first user.
 
 use crate::frame::layout::SESSION_PANEL_SPLIT_MIN_WIDTH;
 use crate::prelude::*;
@@ -24,23 +21,11 @@ pub struct Target {
     pub session: String,
 }
 
-/// What a panel builder gets: the panel, and how it shows now.
-pub struct Input<'a> {
-    pub target: &'a Target,
-    pub width: u16,
-    pub presentation: Presentation,
-    pub focused: bool,
-}
-
-/// Builds a panel's content into the host's root, and returns what the host keeps alive while it shows the panel.
-pub type Builder = Rc<dyn Fn(&Tui, &View, &Input<'_>) -> Box<dyn Any>>;
-
 #[derive(Default)]
 pub struct Panels {
     current: RefCell<Option<Target>>,
     requested: Cell<Presentation>,
     width: Cell<i64>,
-    builders: RefCell<HashMap<(String, String), Builder>>,
 }
 
 impl Panels {
@@ -62,11 +47,6 @@ impl Panels {
 
     pub fn presentation(&self) -> Presentation {
         if self.can_split() { self.requested.get() } else { Presentation::Fullscreen }
-    }
-
-    /// Registers the builder of `plugin`'s panel `name`.
-    pub fn register(&self, plugin: &str, name: &str, builder: Builder) {
-        self.builders.borrow_mut().insert((plugin.to_owned(), name.to_owned()), builder);
     }
 
     pub fn open(&self, tui: &Tui, target: Target, presentation: Presentation) {
@@ -106,46 +86,27 @@ impl Panels {
         });
         crate::frame::refresh(tui);
     }
-
-    fn builder(&self, target: &Target) -> Option<Builder> {
-        self.builders.borrow().get(&(target.plugin.clone(), target.name.clone())).cloned()
-    }
 }
 
 /// The host of the open panel: a focusable box on the raised surface when split, the page when full screen.
 pub struct Host {
     pub root: View,
     target: Target,
-    content: Option<Content>,
-}
-
-/// What a panel shows: a built-in's widgets, or a plugin's panel surface (P2).
-enum Content {
-    Builtin(#[allow(dead_code)] Box<dyn Any>),
-    Plugin(opencode_plugin::PanelMount),
+    /// The plugin's panel surface (P2), which mounts into the panel and reads how it shows from the host.
+    content: Option<opencode_plugin::PanelMount>,
 }
 
 impl Host {
-    pub fn new(tui: &Tui, target: Target, input_width: u16, focused: bool) -> Self {
-        let presentation = tui.panels.presentation();
+    pub fn new(tui: &Tui, target: Target) -> Self {
         let root = View::new(&tui.app).column().grow(1.0).min_width(0).min_height(0).focusable(true);
         paint(tui, &root);
-        let content = match tui.panels.builder(&target) {
-            Some(builder) => Some(Content::Builtin(builder(
-                tui,
-                &root,
-                &Input { target: &target, width: input_width, presentation, focused },
-            ))),
-            // A panel surface of a plugin (P2) mounts into the panel and reads how it shows from the host.
-            None => tui.plugins.panel(tui, &target.plugin, &target.name, &root).map(Content::Plugin),
-        };
+        let content = tui.plugins.panel(tui, &target.plugin, &target.name, &root);
         Self { root, target, content }
     }
 
-    /// Takes the page theme in place: a plugin's panel surface keeps its mount and state. False for a built-in
-    /// panel, which mounts again.
+    /// Takes the page theme in place: the plugin's panel surface keeps its mount and state. False without one.
     pub fn restyle(&self, tui: &Tui) -> bool {
-        let Some(Content::Plugin(mount)) = &self.content else { return false };
+        let Some(mount) = &self.content else { return false };
         paint(tui, &self.root);
         mount.restyle(tui)
     }

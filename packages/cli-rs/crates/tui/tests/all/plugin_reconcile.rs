@@ -461,6 +461,8 @@ impl Generator<'_> {
                 view: *self.rng.pick(&[v2::DiffView::Unified, v2::DiffView::Split]),
                 filetype: self.chance(70).then(|| "rust".to_owned()),
                 hunks: None,
+                wrap: Default::default(),
+                padding: 0,
             },
             8 => v2::Node::Canvas {
                 id: self.id().or_else(|| self.scrolls.pop().map(str::to_owned)),
@@ -1068,6 +1070,8 @@ fn a_theme_change_rebuilds_nothing() {
             view: v2::DiffView::Unified,
             filetype: Some("rust".into()),
             hunks: None,
+            wrap: Default::default(),
+            padding: 0,
         });
         children.push(v2::Node::Spinner { id: None, label: "wait".into() });
     }
@@ -1237,6 +1241,8 @@ fn a_tree_with_unknown_content_is_refused() {
         view: v2::DiffView::Unified,
         filetype: None,
         hunks: None,
+        wrap: Default::default(),
+        padding: 0,
     };
     assert_eq!(
         apply(&host, &mut tree, &parent, &[v2::Node::column(vec![diff])]),
@@ -1471,6 +1477,8 @@ fn an_unchanged_patch_is_not_touched() {
             view,
             filetype: None,
             hunks: None,
+            wrap: Default::default(),
+            padding: 0,
         }]
     };
     let host = host(0);

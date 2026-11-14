@@ -206,6 +206,16 @@ impl Client {
         serde_json::from_slice(&bytes).map_err(|error| Error::MalformedResponse(error.to_string()))
     }
 
+    /// [`Client::reply`] for a body that is not JSON, such as a file the server reads: its bytes on any 2xx status.
+    pub async fn reply_bytes(&self, call: Call) -> Result<Bytes, Error> {
+        let request = self.prepare(call)?;
+        let response = self.transport.send(request).await.map_err(Error::Transport)?;
+        if !(200..300).contains(&response.status) {
+            return Err(status_error(response).await);
+        }
+        response.bytes().await.map_err(Error::Transport)
+    }
+
     /// Sends `call` and expects no body. Public so a caller can send a body with its own key order.
     pub async fn empty(&self, call: Call) -> Result<(), Error> {
         self.execute(call).await.map(|_| ())
