@@ -105,21 +105,25 @@
       "xfail": []
     },
     "views": {
-      "about": "The plugin manager's views (phase P6b, synthesis 4.14 item 2), with the life plugin loaded and its setup failing as it first loads (option fail in TS, the armed twin in Rust), so its row is failed with an error: closed, the list, the list filtered, and the details of the failure. open is /plugins; filter types life into the list's filter; details asks for the selected row's error with the key the footer offers for view error; escape closes the list or goes back from the details to the list. An observation is dialog/filter/life: - for no manager, list for the list, error for the details; the filter, - while it shows its placeholder (Search) and life once typed, ? while no list shows; and the life row, failed or none, ? while no list shows. Every action of every state has an outcome or a place in unspecified, which a reader does not send: filter and details while the manager is closed would type into the home composer, open in a list or the details types /plugins, and filter twice or details in the details is not a view of its own.",
+      "about": "The plugin manager's views (phase P6b, synthesis 4.14 item 2; review bigboi-7), with two plugins whose setups fail as they first load, each with its own cause: life (option fail in TS, the armed twin in Rust; cause 'life setup ...') and its distractor other (parity/plugins/other; cause 'other setup ...'). Both are listed failed, life first. open is /plugins; filter types parity.other into the list's filter (other alone would also match the letters of life's temporary path, which TS's filter searches); down moves the selection to the next row; details asks for the selected row's error with the key the footer offers for view error; escape closes the list, or goes back from the details to the list. An observation is dialog/a/b. For the list: the query as its field shows it (- while it shows its placeholder, Search) and the TUI plugin rows on screen in order, each name:status (failed, off or on), joined by +. For the details: the plugin whose source they show (its directory, parity.<name>) and the plugin whose cause they show. - for no manager. Every action of every state has an outcome or a place in unspecified, which a reader does not send: filter, down and details while the manager is closed would type into the home composer, open in a list or the details types /plugins, filter twice is not a view of its own, down past the last row wraps, and which row is selected after Back is left open.",
       "unspecified": {
-        "closed": ["filter", "details"],
+        "closed": ["filter", "down", "details"],
         "list": ["open"],
-        "filtered": ["open", "filter"],
-        "error": ["open", "filter", "details"],
-        "errorFiltered": ["open", "filter", "details"]
+        "listOther": ["open", "down"],
+        "filtered": ["open", "filter", "down"],
+        "errorLife": ["open", "filter", "down", "details"],
+        "errorOther": ["open", "filter", "down", "details"],
+        "back": ["open", "down", "details"]
       },
       "initial": "closed",
       "states": {
         "closed": ["-/?/?", { "open": "list", "escape": "closed" }],
-        "list": ["list/-/failed", { "escape": "closed", "filter": "filtered", "details": "error" }],
-        "filtered": ["list/life/failed", { "escape": "closed", "details": "errorFiltered" }],
-        "error": ["error/?/?", { "escape": "list" }],
-        "errorFiltered": ["error/?/?", { "escape": "list" }]
+        "list": ["list/-/life:failed+other:failed", { "escape": "closed", "filter": "filtered", "down": "listOther", "details": "errorLife" }],
+        "listOther": ["list/-/life:failed+other:failed", { "escape": "closed", "filter": "filtered", "details": "errorOther" }],
+        "filtered": ["list/parity.other/other:failed", { "escape": "closed", "details": "errorOther" }],
+        "errorLife": ["error/life/life", { "escape": "back" }],
+        "errorOther": ["error/other/other", { "escape": "back" }],
+        "back": ["list/-/life:failed+other:failed", { "escape": "closed", "filter": "filtered" }]
       },
       "xfail": []
     }
@@ -134,7 +138,7 @@
       "xfail": []
     },
     "views": {
-      "cycles": ["open escape", "open filter escape", "open details escape escape", "open filter details escape escape"],
+      "cycles": ["open escape", "open filter escape", "open details escape escape", "open down details escape escape", "open filter details escape escape"],
       "xfail": []
     }
   }
