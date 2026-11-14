@@ -2164,6 +2164,8 @@ fn a_handlers_watch_ends_with_its_js_host() {
     tui.keymap.dispatch("lab.lateread", None);
     assert_eq!(toasted(&pipe, "late"), "late true");
     toasts(&pipe.harness);
+    // The JS host ran all it was sent: the kill ends no plugin's code, which would fail that plugin.
+    pipe.settle();
     let pid = pipe.scripts().pid().unwrap();
     pipe.scripts().kill();
     quietly(&pipe, "the end was noticed", || pipe.scripts().pid().is_some_and(|now| now != pid));
