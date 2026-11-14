@@ -1,5 +1,5 @@
-import { Route, useParams } from "@solidjs/router"
-import { createMemo, lazy, Show, Suspense, type ParentProps } from "solid-js"
+import { Route, useNavigate, useParams } from "@solidjs/router"
+import { createEffect, createMemo, lazy, Show, Suspense, type ParentProps } from "solid-js"
 import { Home } from "@/home/route"
 import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -12,6 +12,7 @@ import { SettingsSurfaceProvider } from "@/settings/surface"
 import Shell from "@/shell/shell"
 import { requireServerKey } from "./session"
 import { PluginAttachment } from "@/runtime/plugin/root"
+import { usePluginServers } from "@/runtime/plugin/servers"
 
 export const File = lazy(() => import("@opencode/session-ui/file").then((module) => ({ default: module.File })))
 
@@ -81,10 +82,23 @@ export function AppRoutes() {
 function TargetServerRoute(props: ParentProps) {
   const params = useParams<{ serverKey: string }>()
   const global = useGlobal()
+  const servers = useServers()
+  const plugins = usePluginServers()
+  const navigate = useNavigate()
 
   const connection = createMemo(() =>
     global.servers.list().find((item) => ServerConnection.key(item) === requireServerKey(params.serverKey)),
   )
+
+  // A restored route can name a server that was removed. Once stored and contributed servers have loaded, a key no
+  // source knows has nothing to show, so go Home instead of leaving the route blank.
+  createEffect(() => {
+    if (!servers.hydrated() || !plugins.ready()) return
+
+    if (connection() || plugins.entry(requireServerKey(params.serverKey))) return
+
+    navigate("/", { replace: true })
+  })
 
   return (
     <Show when={connection()} keyed>
