@@ -9,7 +9,8 @@ import {
   ToolDefinition,
   type LLMRequest,
 } from "@opencode/ai/effect"
-import { OpenAIChat } from "@opencode/ai/protocols"
+import { AnthropicMessages, OpenAIChat } from "@opencode/ai/protocols"
+import { compileRequest } from "@opencode/ai/testing"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
@@ -795,7 +796,9 @@ it.effect("summary updates include the retained tail in compaction hooks and the
     // Hooks read the checkpoint's stored metadata; the model request does not carry it.
     expect(expected[0]?.metadata).toEqual({ recent: "[User]: Previous exact request" })
     expect(requests[0].messages.slice(0, -1)).toEqual(expected.map((message) => Message.make({ ...message })))
-    expect(requests[0].messages.at(-1)?.content).toEqual([{ type: "text", text: SessionCompaction.buildPrompt(true) }])
+    expect(requests[0].messages.at(-1)?.content).toEqual([
+      { type: "text", text: SessionCompaction.buildPrompt(true), transient: true },
+    ])
     const store = yield* SessionStore.Service
     expect(yield* store.context(session.id)).toMatchObject([
       { type: "compaction", metadata: { keepID: messages[1].id } },
@@ -849,7 +852,9 @@ it.effect(
       expect(requests).toHaveLength(1)
       expect(requests[0].messages).toHaveLength(2)
       expect(requests[0].messages[0].content).toEqual([{ type: "text", text: messages[0].text }])
-      expect(requests[0].messages[1].content).toEqual([{ type: "text", text: SessionCompaction.buildPrompt(false) }])
+      expect(requests[0].messages[1].content).toEqual([
+        { type: "text", text: SessionCompaction.buildPrompt(false), transient: true },
+      ])
     }),
 )
 
@@ -1014,6 +1019,38 @@ const measured = (text: string, input: number, created = 0) =>
     time: { created, completed: created + 1 },
   })
 
+it.effect("summary prompts stay out of the cached conversation prefix", () =>
+  Effect.gen(function* () {
+    requests = []
+    const context = {
+      ...loaded(yield* insertSession(Session.ID.create()), [
+        textUser("First question"),
+        measured("First answer", 1_000),
+        textUser("Second question"),
+        measured("Second answer", 2_000),
+      ]),
+      model: SessionRunnerModel.resolved(
+        AnthropicMessages.route.model({ id: "claude-sonnet-4-5", provider: "anthropic" }),
+        { capabilities: resolved.capabilities, cost, limit: resolved.limit },
+      ),
+    }
+    const compaction = yield* SessionCompaction.Service
+    expect(yield* compaction.compact({ reason: "manual", context, inputID: SessionMessage.ID.create() })).toEqual({
+      status: "completed",
+    })
+    expect(requests).toHaveLength(1)
+    const body = (yield* compileRequest(requests[0]!)).body as {
+      messages: ReadonlyArray<{ content: ReadonlyArray<{ type: string; text?: string; cache_control?: unknown }> }>
+    }
+    // No later request repeats the summary prompt, so the tail breakpoint stays at the end of the conversation,
+    // where the next main request reads it if the summary fails.
+    expect(
+      body.messages.flatMap((message) => message.content.flatMap((block) => (block.cache_control ? [block.text] : []))),
+    ).toEqual(["Second answer"])
+    expect(body.messages.at(-1)?.content.at(-1)).toEqual({ type: "text", text: SessionCompaction.buildPrompt(false) })
+  }),
+)
+
 /**
  * A 200k window compacts at 170k. The first response measured 80k, so a background summary starts half that room,
  * 45k, before the threshold, at 125k. `near` ends past that point; `due` continues it past the threshold.
@@ -1101,6 +1138,8 @@ it.effect("summary cache prefix still flattens genuinely oversized measured inpu
     ])
     expect(yield* fixture.run()).toEqual({ status: "completed" })
     expect(requests).toHaveLength(1)
+    // No other request starts with this transcript, so caching it would only pay for writes.
+    expect(requests[0].cache).toBe("none")
     expect(requests[0].tools).toEqual([])
     expect(requests[0].messages).toHaveLength(2)
     expect(JSON.stringify(requests[0].messages[0])).toContain("characters omitted")

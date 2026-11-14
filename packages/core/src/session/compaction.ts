@@ -493,11 +493,15 @@ export const layer = Layer.effect(
       const measured = trigger.reason === "overflow" ? undefined : measuredPrompt({ ...context, messages })
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
-      // template gets one reminder before it counts as a failure.
+      // template gets one reminder before it counts as a failure. No later request repeats either, so both are
+      // request-local and cache breakpoints stay on the conversation before them.
       const send = (request: LLMRequest, size?: Estimate) =>
         Effect.gen(function* () {
           const prompted = fitOutput(
-            { ...request, messages: [...request.messages, Message.user(prompt)] },
+            {
+              ...request,
+              messages: [...request.messages, Message.user([{ ...Message.text(prompt), transient: true }])],
+            },
             context.model.limit,
             size && { ...size, estimated: size.estimated + Token.estimate(prompt) },
           )
@@ -505,7 +509,10 @@ export const layer = Layer.effect(
           if (filled(reply.text)) return reply
 
           const nudged = fitOutput(
-            { ...prompted, messages: [...prompted.messages, Message.user(NUDGE)] },
+            {
+              ...prompted,
+              messages: [...prompted.messages, Message.user([{ ...Message.text(NUDGE), transient: true }])],
+            },
             context.model.limit,
             size && { ...size, estimated: size.estimated + Token.estimate(prompt) + Token.estimate(NUDGE) },
           )
@@ -784,7 +791,8 @@ export const layer = Layer.effect(
         .map((renders, index) => renders[levels[index]])
         .filter(Boolean)
         .join("\n\n")
-      return { ...request, tools: [], messages: [...lead, Message.user(note(omitted) + text)] }
+      // No other request starts with this transcript, so cache breakpoints would only pay for writes.
+      return { ...request, tools: [], cache: "none" as const, messages: [...lead, Message.user(note(omitted) + text)] }
     }
 
     const stream = (

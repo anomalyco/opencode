@@ -373,6 +373,11 @@ it.effect(
       expect(instructionUpdates?.[0]).toContain("Changed context")
       expect(instructionUpdates?.[0]).toContain("tools.captured.lookup(): Promise<string>")
       expect(userTexts(requests[0])).toEqual(["Existing durable context", "Summarize privately"])
+      // Later requests repeat neither the update preview nor the prompt, so cache breakpoints stay before them.
+      expect(requests[0]?.messages.slice(-2).map((message) => message.content)).toMatchObject([
+        [{ type: "text", transient: true }],
+        [{ type: "text", text: "Summarize privately", transient: true }],
+      ])
       expect(
         requests[0]?.messages.flatMap((message) =>
           message.role === "assistant"
