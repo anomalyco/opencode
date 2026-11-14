@@ -153,6 +153,14 @@ pub fn mount_app(tui: &Tui, remount: bool) {
     sync_app(tui, &opencode_store::Changes::everything());
 }
 
+/// Restyles the `app` slot's claims in place, or mounts the slot again when one cannot.
+pub fn restyle_app(tui: &Tui) {
+    let slot = tui.frame.app.borrow().as_ref().map(|(_, slot)| slot.clone());
+    if !slot.is_some_and(|slot| slot.restyle(tui)) {
+        mount_app(tui, true);
+    }
+}
+
 /// Passes a change batch to the `app` slot's claims.
 pub fn sync_app(tui: &Tui, changes: &opencode_store::Changes) {
     // A claim's handler may remount the slot while it syncs.
