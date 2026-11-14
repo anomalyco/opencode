@@ -57,6 +57,9 @@ fn open_with(config: serde_json::Value, extra: Vec<opencode_plugin::Builtin>) ->
     };
     let harness = support::mount(100, 30, deps);
     settle(&harness);
+    // The host's own read of the server plugins as it starts, which a loaded machine may send late: rows that count
+    // the manager's reads count from after it.
+    harness.wait("the host's own read", || reads(&log) >= 1);
     (harness, log)
 }
 
