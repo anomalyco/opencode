@@ -43,6 +43,7 @@ use opencode_plugin_abi::v2::{
 use opencode_plugin_abi::{self as abi};
 use opentui::input::MouseEventKind;
 use opentui::prelude::*;
+use opentui::widget::ScrollCause;
 
 use crate::reconcile::{Extra, Mounted};
 use crate::surface::Surface;
@@ -355,7 +356,6 @@ struct Hook {
     /// This frame left work for the next.
     frame_owed: Cell<bool>,
     mounts: RefCell<Vec<Weak<Surface>>>,
-    key: Cell<Option<opentui::app::HandlerId>>,
     /// Work waits for the next frame, whose arm is queued.
     owed: Cell<bool>,
     /// The mounts whose view `layout` asked for, past the frame's budget.
@@ -455,9 +455,6 @@ pub(crate) fn detach(app: &App, surface: *const Surface) {
     });
     if let Some(hook) = gone {
         opencode_ui::root::release(&hook.app);
-        if let Some(key) = hook.key.take() {
-            hook.app.remove_handler(key);
-        }
     }
 }
 
@@ -481,7 +478,6 @@ impl Hook {
             in_frame: Cell::new(false),
             frame_owed: Cell::new(false),
             mounts: RefCell::default(),
-            key: Cell::new(None),
             owed: Cell::new(false),
             views: RefCell::default(),
             stalled: Cell::new(0),
@@ -496,15 +492,6 @@ impl Hook {
                 hook.run();
             }
         });
-        // Any key may scroll: a key a focused scroll takes, which is the user's move, or a handler's verb.
-        let weak = Rc::downgrade(&hook);
-        hook.key.set(Some(app.on_key_capture(move |cx, _| {
-            let Some(hook) = weak.upgrade() else { return };
-            if let Some(focused) = cx.app().focused() {
-                hook.live().iter().for_each(|mount| mount.key_on(focused.id()));
-            }
-            hook.arm();
-        })));
         hook
     }
 
@@ -794,43 +781,32 @@ impl Surface {
         self.behave.borrow_mut().index = None;
     }
 
-    /// Makes the wheel and a resize of each scroll arm the hook, once a widget.
+    /// Makes a move and a resize of each scroll arm the hook, once a widget. A move by the wheel, a key or the pointer
+    /// is the user's; the behaviors' own moves and a verb's arm where they are made.
     fn hook_scrolls(&self, index: &Index) {
         for (id, scrolled) in &index.scrolls {
             if !self.behave.borrow_mut().hooked.insert(scrolled.widget.id()) {
                 continue;
             }
-            let (weak, app, scroll, widget) = (self.weak(), self.app().clone(), id.clone(), scrolled.widget.clone());
-            scrolled.widget.on_mouse(move |_, event| {
-                if !matches!(event.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown) {
-                    return;
+            let (weak, app, scroll) = (self.weak(), self.app().clone(), id.clone());
+            scrolled.widget.on_scroll(move |_, event| match event.cause {
+                // Reported before the frame's layout: what the plugin's handler asks for, and the view after it,
+                // go into this frame.
+                ScrollCause::Wheel | ScrollCause::Key | ScrollCause::Pointer => {
+                    if let Some(mounted) = weak.upgrade() {
+                        mounted.each_list(&scroll, crate::list::List::moved);
+                        mounted.user_moved(&scroll);
+                    }
+                    crate::flush();
+                    arm(&app);
                 }
-                arm(&app);
-                if let Some(mounted) = weak.upgrade() {
-                    mounted.each_list(&scroll, crate::list::List::moved);
-                }
-                // The wheel moves the scroll after this handler.
-                user_move(&app, weak.clone(), scroll.clone(), &widget);
+                ScrollCause::Layout => arm(&app),
+                ScrollCause::Program => {}
             });
             for resized in [scrolled.widget.as_any(), scrolled.widget.content_view().as_any()] {
                 let app = self.app().clone();
                 resized.on_resize(move |_, _| arm(&app));
             }
-        }
-    }
-
-    /// A key reaches widget `focused`: when it is one of the mount's scrolls, a move it makes is the user's.
-    fn key_on(&self, focused: u32) {
-        let found = self.with_index(|index, _| {
-            index
-                .scrolls
-                .iter()
-                .find(|(_, scrolled)| scrolled.widget.id() == focused)
-                .map(|(id, scrolled)| (id.clone(), scrolled.widget.clone()))
-        });
-        if let Some((scroll, widget)) = found {
-            self.each_list(&scroll, crate::list::List::moved);
-            user_move(self.app(), self.weak(), scroll, &widget);
         }
     }
 
@@ -1347,21 +1323,6 @@ impl Surface {
 /// A row of a list, in the `i32` of the contract.
 fn clamp_row(row: f64) -> i32 {
     row.round().clamp(0.0, f64::from(i32::MAX)) as i32
-}
-
-/// Watches scroll `scroll` of mount `mounted` through the input that runs now, which moves `widget` once its
-/// handlers return: a move it makes is the user's.
-fn user_move(app: &App, mounted: Weak<Surface>, scroll: String, widget: &ScrollBox) {
-    let before = widget.scroll_position();
-    let widget = widget.clone();
-    app.defer(move |_| {
-        if widget.scroll_position() == before {
-            return;
-        }
-        if let Some(mounted) = mounted.upgrade() {
-            mounted.user_moved(&scroll);
-        }
-    });
 }
 
 fn hashers() -> (impl Hasher, impl Hasher, impl Hasher) {

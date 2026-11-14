@@ -548,18 +548,14 @@ impl Inner {
         self.register(tui);
     }
 
-    /// Publishes the transcript with `scroll` as its mover. The wheel and its resizes run the host's behaviors; a
-    /// pointer that only moves over it does not.
+    /// Publishes the transcript with `scroll` as its mover. Its moves, whatever moved it, and its resizes run the
+    /// host's behaviors; a pointer that only moves over it does not.
     fn publish(&self, tui: &Tui, scroll: Rc<dyn Fn(&opencode_plugin::abi::v2::Scroll)>) {
         let read = bind!(self.this.clone(), |inner| inner.viewport());
         let published = opencode_plugin::behave::Published { read: Rc::new(read), scroll };
         *self.published.borrow_mut() = Some(opencode_plugin::behave::publish_transcript(&tui.app, published));
         let app = tui.app.clone();
-        self.scroll.on_mouse(move |_, event| {
-            if matches!(event.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown) {
-                opencode_plugin::behave::transcript_moved(&app);
-            }
-        });
+        self.scroll.on_scroll(move |_, _| opencode_plugin::behave::transcript_moved(&app));
         for resized in [self.scroll.as_any(), self.scroll.content_view().as_any()] {
             let app = tui.app.clone();
             resized.on_resize(move |_, _| opencode_plugin::behave::transcript_moved(&app));

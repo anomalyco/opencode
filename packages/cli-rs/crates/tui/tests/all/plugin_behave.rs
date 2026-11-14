@@ -2504,11 +2504,12 @@ fn layout_hears_the_messages_above_the_transcript() {
     assert_eq!(told, Some(9));
 }
 
-// Expected (review big-boi, work): a key no scroll takes costs a list told about its top anchor the same items visited
-// at 410 cards as at 4,000: the top anchor is found from the item at the top, not from the whole group.
+// Expected (review big-boi, work; OpenTUI's `ScrollBox::on_scroll`): a key that scrolls nothing arms nothing and runs
+// no behaviors, at any size. A wheel step, which moves the list, costs a list told about its top anchor the same items
+// visited at 410 cards as at 4,000: the top anchor is found from the item at the top, not from the whole group.
 #[test]
-fn a_quiet_key_visits_the_same_items_at_any_size() {
-    let visits = |count: usize| {
+fn a_quiet_key_costs_nothing_and_a_wheel_step_the_same_at_any_size() {
+    let work = |count: usize| {
         let harness = probe(Shape { cards: cards(count, 2), list: true, top: true, ..Shape::default() }, 40, 12);
         harness.app.render();
         dispatch(&harness, "p.at", &(count as i32).to_string());
@@ -2518,11 +2519,20 @@ fn a_quiet_key_visits_the_same_items_at_any_size() {
             harness.app.press("f11");
             harness.app.render();
         }
-        behave::counts().since(before)
+        let keys = behave::counts().since(before);
+        let before = behave::counts();
+        for _ in 0..10 {
+            harness.app.scroll(4, 4, false);
+            settled(&harness);
+        }
+        (keys, behave::counts().since(before))
     };
-    let (small, large) = (visits(410), visits(4000));
-    assert!(small.resolves > 0, "the keys ran no behaviors: {small:?}");
-    assert_eq!(small.visits, large.visits, "{small:?} {large:?}");
+    let ((small_keys, small_wheel), (large_keys, large_wheel)) = (work(410), work(4000));
+    for keys in [small_keys, large_keys] {
+        assert_eq!((keys.arms, keys.resolves, keys.visits), (0, 0, 0), "a quiet key: {keys:?}");
+    }
+    assert!(small_wheel.resolves > 0, "the wheel ran no behaviors: {small_wheel:?}");
+    assert_eq!(small_wheel.visits, large_wheel.visits, "{small_wheel:?} {large_wheel:?}");
 }
 
 // Expected (P4c containment): a `layout` that panics is a contained plugin call. The plugin fails and the frame paints;
