@@ -1579,3 +1579,53 @@ fn a_native_build_among_the_targets_wants_a_parent() {
     write(&cwd.join(".opencode/plugins/local").join(entry_file()), "id=local");
     assert!(has_native_build(&config, &cwd, &[]));
 }
+
+// Expected (P4c on Pa): one gate decides whether a library opens, and a held target is listed once. In a new client, a
+// project build the user approved and that then crashed the client is held as crashed, not opened, in one row; a new
+// build of it waits for approval, in one row, pending, and is not opened either. In safe mode, a pending build the user
+// approves is held in one row, inactive, not also pending.
+#[test]
+fn a_crashed_project_build_is_held_in_one_row() {
+    let project = Project::new();
+    let target = project.plugin("proj", "id=proj");
+    let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
+    let loader = project.loader(fake.clone(), Vec::new());
+    loader.reconcile(&dynamic(&host), &registry);
+    let shown = loader.held(&target).and_then(Result::ok).expect("a build is held back");
+    assert!(answer(&loader, &target, approval::Decision::Approved));
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!(entry(&registry.entries(), &target).status, Status::Active);
+
+    let reason = "crashed the client in `render-slot` and is disabled";
+    let crashed = crate::Crashed {
+        id: "proj".to_owned(),
+        target: target.clone(),
+        digest: build_of(&shown.sha256),
+        reason: reason.to_owned(),
+    };
+    let (registry, fake) = (Registry::define(Vec::new(), []), Rc::new(Fake::default()));
+    registry.set_crashed(vec![crashed], |_| {});
+    let loader = project.loader(fake.clone(), Vec::new());
+    let rows = |registry: &Registry| -> Vec<Status> {
+        let entries = registry.entries();
+        entries
+            .into_iter()
+            .filter(|entry| entry.target.as_deref() == Some(target.as_str()))
+            .map(|entry| entry.status)
+            .collect()
+    };
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!((rows(&registry), fake.loads.get()), (vec![Status::Failed(reason.to_owned())], 0));
+    write(&library(&target), "id=proj2");
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!((rows(&registry), fake.loads.get()), (vec![Status::Pending], 0));
+
+    let (registry, fake) = (Registry::define(Vec::new(), []), Rc::new(Fake::default()));
+    registry.set_safe();
+    let loader = project.loader(fake.clone(), Vec::new());
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!(rows(&registry), [Status::Pending]);
+    assert!(answer(&loader, &target, approval::Decision::Approved));
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!((rows(&registry), fake.loads.get()), (vec![Status::Inactive], 0));
+}
