@@ -120,7 +120,6 @@ const logEvents = (session: Session.Interface, sessionID: Session.ID, follow?: b
 const assertCreateInputTypes = (session: Session.Interface) => {
   // @ts-expect-error location or parentID is required.
   session.create({})
-  // @ts-expect-error child sessions inherit their parent's location.
   session.create({ parentID: Session.ID.create(), location })
 }
 void assertCreateInputTypes
@@ -500,13 +499,21 @@ describe("Session.create", () => {
     }),
   )
 
-  it.effect("inherits location from an existing parent when omitted", () =>
+  it.effect("uses explicit child locations and inherits the full parent location when omitted", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
-      const parent = yield* session.create({ location })
+      const parent = yield* session.create({ location: { ...location, workspaceID: Workspace.ID.make("wrk_parent") } })
       const child = yield* session.create({ parentID: parent.id, title: "child" })
+      const explicit = yield* session.create({
+        parentID: parent.id,
+        location: { directory: AbsolutePath.make("/other/") },
+      })
+      const local = yield* session.create({ parentID: parent.id, location })
 
-      expect(child).toMatchObject({ parentID: parent.id, location })
+      expect(child).toMatchObject({ parentID: parent.id, location: parent.location })
+      expect(explicit).toMatchObject({ parentID: parent.id, location: { directory: "/other" } })
+      expect(explicit.location.workspaceID).toBeUndefined()
+      expect(local.location).toEqual(location)
     }),
   )
 
