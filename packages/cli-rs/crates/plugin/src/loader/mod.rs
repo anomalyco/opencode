@@ -622,4 +622,4 @@ pub fn local_source(target: &str, directory: &Path) -> Option<PathBuf> {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

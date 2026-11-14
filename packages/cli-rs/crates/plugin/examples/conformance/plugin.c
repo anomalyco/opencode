@@ -1,0 +1,361 @@
+/*
+ * The conformance plugin (Pc) in C, on `crates/plugin-abi/include/opencode_plugin.h` alone: the behavior of
+ * `src/conformance.rs`, request for request, so the golden transcripts of `crates/plugin/conformance`, recorded from the
+ * Rust source, replay against it. The loader's conformance tests build it with the system's C compiler, with symbols
+ * hidden and every warning an error, and `-DCONFORMANCE_V1` exports it as a 1.x library.
+ *
+ * It reads the few fields it needs from a request with a byte search, which holds for the requests the host sends it,
+ * and is no way to read JSON in general.
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "opencode_plugin.h"
+
+#ifdef CONFORMANCE_V1
+#define MAJOR 1
+#define MINOR 6
+#define REQUIRES 4
+#else
+#define MAJOR OPENCODE_ABI_MAJOR
+#define MINOR OPENCODE_ABI_MINOR
+#define REQUIRES 0
+#endif
+
+typedef struct instance {
+    const opencode_host_api *host;
+    unsigned views;
+    unsigned messages;
+    int dup;
+    /* The generation of the mount whose `fixed` subtree the host holds; 0 for none. */
+    unsigned long long fixed;
+    unsigned long long pads;
+    unsigned draws;
+} instance;
+
+/* Whether the host table has `entry`: its size covers it, and it is set. */
+#define OFFERS(host, entry) \
+    ((host)->size >= offsetof(opencode_host_api, entry) + sizeof((host)->entry) && (host)->entry != NULL)
+
+static opencode_owned owned(const char *text) {
+    opencode_owned out = {NULL, 0, 0};
+    size_t len = strlen(text);
+    if (len == 0) {
+        return out;
+    }
+    uint8_t *ptr = malloc(len);
+    if (ptr == NULL) {
+        return out;
+    }
+    memcpy(ptr, text, len);
+    out.ptr = ptr;
+    out.len = len;
+    out.cap = len;
+    return out;
+}
+
+static opencode_bytes bytes(const char *text) {
+    opencode_bytes out = {(const uint8_t *)text, strlen(text)};
+    return out;
+}
+
+/* Where `needle` starts in `haystack`, which is not NUL-terminated, or NULL. */
+static const uint8_t *find(opencode_bytes haystack, const char *needle) {
+    size_t len = strlen(needle);
+    for (size_t at = 0; at + len <= haystack.len; at++) {
+        if (memcmp(haystack.ptr + at, needle, len) == 0) {
+            return haystack.ptr + at;
+        }
+    }
+    return NULL;
+}
+
+static int is(opencode_bytes request, const char *type) {
+    char needle[64];
+    snprintf(needle, sizeof needle, "\"type\":\"%s\"", type);
+    return find(request, needle) != NULL;
+}
+
+/* The number after `"name":`, or 0. */
+static unsigned long long number(opencode_bytes request, const char *name) {
+    char needle[64];
+    snprintf(needle, sizeof needle, "\"%s\":", name);
+    const uint8_t *at = find(request, needle);
+    if (at == NULL) {
+        return 0;
+    }
+    const uint8_t *end = request.ptr + request.len;
+    unsigned long long value = 0;
+    for (at += strlen(needle); at < end && *at >= '0' && *at <= '9'; at++) {
+        value = value * 10 + (unsigned long long)(*at - '0');
+    }
+    return value;
+}
+
+/* Whether the command request names `name`. */
+static int names(opencode_bytes request, const char *name) {
+    char needle[96];
+    snprintf(needle, sizeof needle, "\"name\":\"%s\"", name);
+    return find(request, needle) != NULL;
+}
+
+/* Asks the host `request`; its answer goes into `answer`, NUL-terminated, when there is room. */
+static int32_t ask(const opencode_host_api *host, const char *request, char *answer, size_t room) {
+    opencode_owned out = {NULL, 0, 0};
+    int32_t status = host->call(host->ctx, bytes(request), &out);
+    if (answer != NULL && room > 0) {
+        size_t len = out.len < room - 1 ? out.len : room - 1;
+        if (len > 0) {
+            memcpy(answer, out.ptr, len);
+        }
+        answer[len] = '\0';
+    }
+    host->free(out);
+    return status;
+}
+
+static void toast(const opencode_host_api *host, const char *variant, const char *message) {
+    char request[256];
+    snprintf(request, sizeof request, "{\"type\":\"toast\",\"variant\":\"%s\",\"message\":\"%s\"}", variant, message);
+    ask(host, request, NULL, 0);
+}
+
+static void send(const opencode_host_api *host, const char *key, const char *message) {
+    if (OFFERS(host, send)) {
+        host->send(host->ctx, bytes(key), bytes(message));
+    }
+}
+
+static const char *const COMMANDS[] = {
+    "conf.toast", "conf.store", "conf.send", "conf.wake", "conf.panic", "conf.dup", "conf.read", "conf.pad",
+};
+
+static int32_t create(const opencode_host_api *host, opencode_bytes options, void **out_instance,
+                      opencode_owned *out) {
+    if (out == NULL) {
+        return OPENCODE_ERROR;
+    }
+    if (out_instance == NULL || host == NULL || !OFFERS(host, call) || !OFFERS(host, free)) {
+        *out = owned("a host with call and free is needed");
+        return OPENCODE_ERROR;
+    }
+    if (find(options, "fail-setup") != NULL) {
+        *out = owned("setup refused");
+        return OPENCODE_ERROR;
+    }
+    instance *self = calloc(1, sizeof(instance));
+    if (self == NULL) {
+        *out = owned("out of memory");
+        return OPENCODE_ERROR;
+    }
+    self->host = host;
+    /* As the Rust SDK's `storage_key` does: the host serves the key from here on, also during setup. */
+    ask(host, "{\"type\":\"storage-key\",\"key\":\"count\"}", NULL, 0);
+    *out_instance = self;
+    char manifest[2048] = "{\"id\":\"conformance\",\"commands\":[";
+    for (size_t index = 0; index < sizeof COMMANDS / sizeof COMMANDS[0]; index++) {
+        char command[192];
+        snprintf(command, sizeof command,
+                 "%s{\"name\":\"%s\",\"title\":\"%s\",\"group\":null,\"slash\":null,\"keybind\":null,\"palette\":false}",
+                 index == 0 ? "" : ",", COMMANDS[index], COMMANDS[index]);
+        strncat(manifest, command, sizeof manifest - strlen(manifest) - 1);
+    }
+    strncat(manifest,
+            "],\"fences\":[],\"slots\":[],\"routes\":[],\"storage\":[\"count\"],\"render\":2,\"wake\":true,"
+            "\"surfaces\":[{\"name\":\"conf\",\"place\":{\"type\":\"route\",\"name\":\"conf\"}},"
+            "{\"name\":\"pad\",\"place\":{\"type\":\"route\",\"name\":\"pad\"},\"draw\":true}],\"messages\":true}",
+            sizeof manifest - strlen(manifest) - 1);
+    *out = owned(manifest);
+    return OPENCODE_OK;
+}
+
+static int32_t command(instance *self, opencode_bytes request, opencode_owned *out) {
+    const opencode_host_api *host = self->host;
+    if (names(request, "conf.toast")) {
+        toast(host, "success", "hello");
+    } else if (names(request, "conf.store")) {
+        ask(host, "{\"type\":\"storage-set\",\"key\":\"count\",\"value\":\"1\"}", NULL, 0);
+        char answer[64];
+        int32_t status = ask(host, "{\"type\":\"storage-get\",\"key\":\"count\"}", answer, sizeof answer);
+        char message[96] = "stored nothing";
+        size_t len = strlen(answer);
+        /* The answer is the stored JSON text as a JSON string, here "\"1\"" without escapes. */
+        if (status == OPENCODE_OK && len >= 2 && answer[0] == '"' && answer[len - 1] == '"') {
+            answer[len - 1] = '\0';
+            snprintf(message, sizeof message, "stored %s", answer + 1);
+        }
+        toast(host, "info", message);
+    } else if (names(request, "conf.send")) {
+        send(host, "", "\"ping\"");
+        send(host, "k", "\"a\"");
+        send(host, "k", "\"b\"");
+        toast(host, "info", "sent");
+    } else if (names(request, "conf.wake")) {
+        if (OFFERS(host, wake)) {
+            host->wake(host->ctx);
+        }
+    } else if (names(request, "conf.panic")) {
+        toast(host, "info", "before panic");
+        *out = owned("boom");
+        return OPENCODE_PANIC;
+    } else if (names(request, "conf.dup")) {
+        self->dup = 1;
+    } else if (names(request, "conf.pad")) {
+        self->pads += 1;
+    } else if (names(request, "conf.read")) {
+        int light = OFFERS(host, theme_mode) && host->theme_mode(host->ctx) == OPENCODE_THEME_LIGHT;
+        char answer[16];
+        int32_t status = ask(host, "{\"type\":\"interactive\"}", answer, sizeof answer);
+        char message[64];
+        snprintf(message, sizeof message, "read %s %s", light ? "light" : "dark",
+                 status == OPENCODE_OK && strcmp(answer, "true") == 0 ? "true" : "false");
+        toast(host, "info", message);
+    } else {
+        *out = owned("no such command");
+        return OPENCODE_ERROR;
+    }
+    *out = owned("null");
+    return OPENCODE_OK;
+}
+
+/* The view of the route `conf`: the `fixed` subtree is built once a mount, and kept while the host holds it. */
+static int32_t view(instance *self, opencode_bytes request, opencode_owned *out) {
+    unsigned long long generation = number(request, "generation");
+    unsigned long long next = number(request, "next");
+    int full = find(request, "\"full\":true") != NULL;
+    self->views += 1;
+    char count[128];
+    snprintf(count, sizeof count, "{\"type\":\"text\",\"id\":\"count\",\"spans\":[{\"text\":\"views %u, messages %u\"}]}",
+             self->views, self->messages);
+    char reply[1024];
+    if (self->dup) {
+        self->fixed = 0;
+        snprintf(reply, sizeof reply, "{\"node\":{\"type\":\"box\",\"id\":\"root\",\"children\":[%s,%s]}}", count,
+                 count);
+    } else if (full || self->fixed != generation) {
+        self->fixed = generation;
+        snprintf(reply, sizeof reply,
+                 "{\"node\":{\"type\":\"box\",\"id\":\"root\",\"children\":[%s,{\"type\":\"markdown\",\"id\":\"fixed\","
+                 "\"source\":{\"content\":%llu}}]},\"content\":[[%llu,\"# fixed\"]],\"memo\":1}",
+                 count, next + 1, next + 1);
+    } else {
+        snprintf(reply, sizeof reply,
+                 "{\"node\":{\"type\":\"box\",\"id\":\"root\",\"children\":[%s,{\"type\":\"keep\",\"key\":\"fixed\"}]},"
+                 "\"memo\":1}",
+                 count);
+    }
+    *out = owned(reply);
+    return OPENCODE_OK;
+}
+
+/* The view of the route `pad`: its canvas at the version `conf.pad` counts. */
+static int32_t pad(instance *self, opencode_owned *out) {
+    char reply[256];
+    snprintf(reply, sizeof reply,
+             "{\"node\":{\"type\":\"box\",\"id\":\"pad-root\",\"children\":[{\"type\":\"canvas\",\"id\":\"pad\","
+             "\"layout\":{\"width\":{\"cells\":20},\"height\":{\"cells\":1}},\"version\":%llu}]}}",
+             self->pads);
+    *out = owned(reply);
+    return OPENCODE_OK;
+}
+
+/* The draw of the canvas `pad`: a list, as `crates/plugin-abi/src/canvas.rs` lays it out, of one text at the corner in
+ * the terminal's colors. The version byte, then the record: its operation (2, text), its payload's length (u32,
+ * little-endian), and the payload: x and y (i16, little-endian), the style (no flags, no attributes, two colors of
+ * zeros), and the text. */
+static int32_t draw(instance *self, opencode_bytes request, opencode_owned *out) {
+    static const char *const CAUSES[] = {"first", "resized", "version", "animate"};
+    const char *cause = "first";
+    for (size_t index = 0; index < sizeof CAUSES / sizeof CAUSES[0]; index++) {
+        char needle[32];
+        snprintf(needle, sizeof needle, "\"cause\":\"%s\"", CAUSES[index]);
+        if (find(request, needle) != NULL) {
+            cause = CAUSES[index];
+        }
+    }
+    self->draws += 1;
+    char text[64];
+    snprintf(text, sizeof text, "draw %u %s", self->draws, cause);
+    size_t len = strlen(text), payload = 4 + 10 + len, total = 1 + 1 + 4 + payload;
+    uint8_t *ptr = calloc(1, total);
+    if (ptr == NULL) {
+        *out = owned("out of memory");
+        return OPENCODE_ERROR;
+    }
+    uint8_t head[] = {1, 2, payload & 0xff, (payload >> 8) & 0xff, (payload >> 16) & 0xff, (payload >> 24) & 0xff};
+    memcpy(ptr, head, sizeof head);
+    /* x, y and the style are all zeros, as calloc left them. */
+    memcpy(ptr + sizeof head + 4 + 10, text, len);
+    out->ptr = ptr;
+    out->len = total;
+    out->cap = total;
+    return OPENCODE_OK;
+}
+
+static int32_t call(void *raw, opencode_bytes request, opencode_owned *out) {
+    if (out == NULL) {
+        return OPENCODE_ERROR;
+    }
+    instance *self = raw;
+    if (self == NULL) {
+        *out = owned("no instance");
+        return OPENCODE_ERROR;
+    }
+    if (is(request, "command")) {
+        return command(self, request, out);
+    }
+    if (is(request, "view")) {
+        /* The mount names its surface. */
+        return find(request, "\"surface\":\"pad\"") != NULL ? pad(self, out) : view(self, request, out);
+    }
+    if (is(request, "draw")) {
+        return draw(self, request, out);
+    }
+    if (is(request, "unmount")) {
+        if (number(request, "generation") == self->fixed) {
+            self->fixed = 0;
+        }
+    } else if (is(request, "message")) {
+        self->messages += 1;
+    } else if (is(request, "wake")) {
+        toast(self->host, "info", "woken");
+    } else {
+        /* A request this plugin does not know, such as one of a later minor: an error, and nothing changes. */
+        *out = owned("unknown request");
+        return OPENCODE_ERROR;
+    }
+    *out = owned("null");
+    return OPENCODE_OK;
+}
+
+static void destroy(void *raw) {
+    free(raw);
+}
+
+static void release(opencode_owned buffer) {
+    free(buffer.ptr);
+}
+
+static int32_t describe(opencode_owned *out) {
+    if (out == NULL) {
+        return OPENCODE_ERROR;
+    }
+    *out = owned("{\"version\":\"1.0.0\",\"id\":\"conformance\"}");
+    return OPENCODE_OK;
+}
+
+static const opencode_plugin_api API = {
+    sizeof(opencode_plugin_api), MAJOR, MINOR, REQUIRES, create, call, destroy, release, describe,
+};
+
+#ifdef CONFORMANCE_V1
+OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v1(void) {
+    return &API;
+}
+#else
+OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void) {
+    return &API;
+}
+#endif

@@ -20,7 +20,7 @@ use crate::{Entry, Source, abi};
 type Handler = Rc<dyn Fn(&abi::types::V2Event)>;
 
 /// A host that records what plugins ask of it.
-pub(super) struct TestHost {
+pub(crate) struct TestHost {
     pub app: TestApp,
     keymap: DialogKeymap,
     pub storage: RefCell<HashMap<String, String>>,
@@ -52,10 +52,10 @@ pub(super) struct TestHost {
 }
 
 /// Whether a program's plugin is still active.
-pub(super) type Alive = Box<dyn Fn() -> bool>;
+pub(crate) type Alive = Box<dyn Fn() -> bool>;
 
 /// A fetch's reply.
-pub(super) type Reply = Box<dyn FnOnce(Result<serde_json::Value, String>)>;
+pub(crate) type Reply = Box<dyn FnOnce(Result<serde_json::Value, String>)>;
 
 /// What [`TestHost`]'s renders read.
 struct Fixture<'a> {
@@ -310,7 +310,7 @@ impl TestHost {
     }
 }
 
-pub(super) fn host() -> Rc<TestHost> {
+pub(crate) fn host() -> Rc<TestHost> {
     Rc::new(TestHost {
         app: TestApp::new(60, 10),
         keymap: DialogKeymap::new(Keybinds::defaults(), Options::default()),
@@ -334,11 +334,11 @@ pub(super) fn host() -> Rc<TestHost> {
 }
 
 /// `host` as the registry takes it.
-pub(super) fn dynamic(host: &Rc<TestHost>) -> Rc<dyn Host> {
+pub(crate) fn dynamic(host: &Rc<TestHost>) -> Rc<dyn Host> {
     host.clone()
 }
 
-pub(super) fn entry<'a>(entries: &'a [Entry], target: &str) -> &'a Entry {
+pub(crate) fn entry<'a>(entries: &'a [Entry], target: &str) -> &'a Entry {
     entries
         .iter()
         .find(|entry| entry.target.as_deref() == Some(target))
