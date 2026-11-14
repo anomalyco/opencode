@@ -662,6 +662,9 @@ fn picking(setup: &mut abi::Setup) -> Result<(), String> {
             ],
             current: Some("b".to_owned()),
             action: abi::Action::Command { name: "probe.picked".to_owned(), input: None },
+            key: None,
+            actions: Vec::new(),
+            binds: Vec::new(),
         }));
     });
     setup.command(command("probe.picked"), |host, input| {

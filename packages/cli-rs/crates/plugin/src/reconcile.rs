@@ -189,6 +189,8 @@ pub struct Env<'a> {
     pub full: bool,
     /// How the mount's canvases call their plugin; `None` where nothing draws them.
     pub draw: Option<&'a Rc<Drawer>>,
+    /// The mount whose handler a box's pointer and hover events reach ([`crate::interact`]).
+    pub owner: Option<&'a Weak<crate::interact::Owner>>,
 }
 
 /// A mounted tree: the widgets of the last accepted tree, in a parent the owner gives each call.
@@ -229,6 +231,8 @@ pub(crate) enum Extra {
         click: Option<Rc<RefCell<abi::Click>>>,
         /// The split's width, which the user's drag sets; it stays while the box's id does.
         split: Option<Rc<crate::behave::SplitState>>,
+        /// Its focus, pointer and hover, when it has any.
+        wired: Option<Rc<crate::interact::Wired>>,
     },
     Text {
         text: Rc<Text>,
@@ -480,6 +484,34 @@ impl Tree {
             Extra::List(list) => Some(list.scroll.scroll_position()),
             _ => None,
         }
+    }
+
+    /// The widget of the node with id `id`, kept subtrees included.
+    pub fn widget(&self, id: &str) -> Option<AnyWidget> {
+        fn find(nodes: &[Mounted], id: &str) -> Option<AnyWidget> {
+            nodes.iter().find_map(|node| match node.node.id() == Some(id) {
+                true => node.widget.clone(),
+                false => find(&node.children, id),
+            })
+        }
+        find(&self.nodes, id)
+    }
+
+    /// The ids of the boxes that can take the focus.
+    pub fn focusable(&self) -> Vec<String> {
+        fn walk(nodes: &[Mounted], out: &mut Vec<String>) {
+            for node in nodes {
+                if let Node::Box { id: Some(id), interact, .. } = &node.node
+                    && interact.focusable
+                {
+                    out.push(id.clone());
+                }
+                walk(&node.children, out);
+            }
+        }
+        let mut out = Vec::new();
+        walk(&self.nodes, &mut out);
+        out
     }
 
     /// The ids the tree holds.
@@ -786,9 +818,15 @@ impl Pass<'_, '_> {
                         }
                     }
                     Change::InPlace => {
-                        let Extra::Box { view, click, .. } = &old.extra else { unreachable!() };
+                        let Extra::Box { view, click, wired, .. } = &old.extra else { unreachable!() };
                         if bg_of(&old.node) != bg_of(new) {
-                            view.bg(fill(theme, bg_of(new)));
+                            match wired {
+                                Some(wired) => {
+                                    wired.base.set(fill(theme, bg_of(new)));
+                                    view.bg(wired.shown());
+                                }
+                                None => drop(view.bg(fill(theme, bg_of(new)))),
+                            }
                         }
                         if let (Some(cell), Some(next)) = (click, click_of(new)) {
                             *cell.borrow_mut() = next.clone();
@@ -1224,9 +1262,15 @@ impl Pass<'_, '_> {
     fn restyle(&mut self, mounted: &Mounted) {
         let theme = self.env.theme;
         match (&mounted.node, &mounted.extra) {
-            (Node::Box { bg, border, .. }, Extra::Box { view, split, .. }) => {
-                if bg.is_some() {
-                    view.bg(fill(theme, bg.as_ref()));
+            (Node::Box { bg, border, interact, .. }, Extra::Box { view, split, wired, .. }) => {
+                match wired {
+                    Some(wired) => {
+                        wired.base.set(fill(theme, bg.as_ref()));
+                        wired.hover.set(color(theme, interact.hover.as_ref()));
+                        view.bg(wired.shown());
+                    }
+                    None if bg.is_some() => drop(view.bg(fill(theme, bg.as_ref()))),
+                    None => {}
                 }
                 if let Some(border) = border {
                     bordered(view, theme, border);
@@ -1327,6 +1371,8 @@ impl Pass<'_, '_> {
                 wrap,
                 overflow,
                 split,
+                interact,
+                id,
                 ..
             } => {
                 let view = View::new(app);
@@ -1377,9 +1423,13 @@ impl Pass<'_, '_> {
                     view.bg(bg);
                 }
                 let click = on_click.clone().map(|click| clickable(&view, click, env.act));
+                let wired = (!interact.is_none()).then(|| {
+                    let hover = color(theme, interact.hover.as_ref());
+                    crate::interact::wire(&view, id.as_deref(), interact, env.owner, fill(theme, bg.as_ref()), hover)
+                });
                 lay_out(&view, layout);
                 let split = split.map(|split| crate::behave::SplitState::attach(app, &view, split, theme));
-                (view.as_any(), Extra::Box { view, click, split })
+                (view.as_any(), Extra::Box { view, click, split, wired })
             }
             Node::Text { spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click, .. } => {
                 let base = color(theme, fg.as_ref()).unwrap_or(theme.text.base);
@@ -1648,6 +1698,7 @@ fn shell(node: &Node) -> Node {
             sticky,
             anchor,
             split,
+            interact,
             ..
         } => Node::Box {
             id: id.clone(),
@@ -1667,6 +1718,7 @@ fn shell(node: &Node) -> Node {
             sticky: *sticky,
             anchor: anchor.clone(),
             split: *split,
+            interact: interact.clone(),
         },
         Node::Scroll { id, height, follow, layout, notify_top, user_scroll, .. } => Node::Scroll {
             id: id.clone(),
@@ -1734,10 +1786,12 @@ fn box_change(old: &Node, new: &Node) -> Change {
             overflow,
             sticky,
             split,
+            interact,
             ..
         } => Some((
             (id.clone(), *row, *gap, *padding, *justify, *align, *layout),
             (border.clone(), *padding_sides, *wrap, *overflow, *sticky, *split),
+            interact.clone(),
         )),
         _ => None,
     };

@@ -456,6 +456,8 @@ impl SessionState {
         let before = self.active.replace(pane);
         if before != pane {
             tui.app.defer(bind!(tui, |tui, _| tui.resync()));
+            // A plugin's panel surface is told it has the input, or lost it.
+            crate::plugins::host::local_changed(tui);
         }
         before
     }
@@ -519,6 +521,18 @@ pub(crate) fn right_focused(tui: &Tui) {
 }
 
 /// Whether the session pane owns the input (`useInteractivity`): no right pane has it and no panel is full screen.
+/// The width of the panel `target` shows in, and whether it has the input; `None` while it does not show.
+pub(crate) fn panel_state(tui: &Tui, target: &crate::panel::Target) -> Option<(u16, bool)> {
+    let session = tui.frame.session()?;
+    let host = session.host.borrow();
+    let host = host.as_ref().filter(|host| host.target() == target)?;
+    let width = match host.root.rect().width as u16 {
+        0 => tui.panels.width().clamp(0, i64::from(u16::MAX)) as u16,
+        width => width,
+    };
+    Some((width, session.active.get() == Pane::Right))
+}
+
 pub(crate) fn session_interactive(tui: &Tui) -> bool {
     tui.frame.session().is_none_or(|session| session.active.get() == Pane::Session) && !fullscreen_panel(tui)
 }

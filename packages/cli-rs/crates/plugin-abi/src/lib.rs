@@ -59,6 +59,7 @@
 #![allow(unsafe_code)]
 
 pub mod canvas;
+pub mod interact;
 pub mod mail;
 mod schema;
 pub mod v2;
@@ -388,8 +389,21 @@ pub struct SurfaceClaim {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum SurfacePlace {
-    Route { name: String },
-    Slot { kind: SlotKind, path: String },
+    Route {
+        name: String,
+    },
+    Slot {
+        kind: SlotKind,
+        path: String,
+    },
+    /// P2: a docked panel, and an overlay. Opening either is a request of contract 2.0 the C ABI does not carry yet,
+    /// so a library's never shows.
+    Panel {
+        name: String,
+    },
+    Overlay {
+        name: String,
+    },
 }
 
 impl From<&v2::Place> for SurfacePlace {
@@ -397,6 +411,8 @@ impl From<&v2::Place> for SurfacePlace {
         match place {
             v2::Place::Route(name) => SurfacePlace::Route { name: name.clone() },
             v2::Place::Slot(at) => SurfacePlace::Slot { kind: at.kind, path: at.path.clone() },
+            v2::Place::Panel(name) => SurfacePlace::Panel { name: name.clone() },
+            v2::Place::Overlay(name) => SurfacePlace::Overlay { name: name.clone() },
         }
     }
 }
@@ -406,6 +422,8 @@ impl From<&SurfacePlace> for v2::Place {
         match place {
             SurfacePlace::Route { name } => v2::Place::Route(name.clone()),
             SurfacePlace::Slot { kind, path } => v2::Place::Slot(Placement::new(*kind, path.clone())),
+            SurfacePlace::Panel { name } => v2::Place::Panel(name.clone()),
+            SurfacePlace::Overlay { name } => v2::Place::Overlay(name.clone()),
         }
     }
 }
@@ -2131,6 +2149,24 @@ pub enum Dialog {
     Confirm(Confirm),
     /// 1.5: a message with `ok` (TS `dialog.alert`). A 1.4 host shows nothing.
     Alert(Alert),
+    /// 2.0: an error's details, drawn by the host's own error view (TS `DialogErrorDetails`); `back` runs from its
+    /// Back button and from escape.
+    ErrorDetails(ErrorDetails),
+}
+
+/// A [`Dialog::ErrorDetails`].
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ErrorDetails {
+    pub title: String,
+    pub error: String,
+    /// Where the error came from, such as a file or a package.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// Lines of context under the error, such as `Status: failed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub back: Option<Action>,
 }
 
 /// A [`Dialog::Confirm`]. `Confirm` is active as it opens; the arrows and tab move between the buttons, and enter or a
@@ -2186,6 +2222,17 @@ pub struct Select {
     pub current: Option<String>,
     /// What picking an option runs, with its value as the input.
     pub action: Action,
+    /// 2.0: the rich select (synthesis 4.10). A select shown again while one of the plugin's with this key is open
+    /// changes in place: its rows, footers and actions, with the filter and the selected row kept. Picking a row no
+    /// longer closes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// 2.0: actions on the selected row, in the footer with their keys; each runs with the row's value as its input.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub actions: Vec<SelectAction>,
+    /// 2.0: keys that run an action with the selected row's value as its input, or none without a row.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub binds: Vec<PanelBind>,
 }
 
 /// An option of a [`Select`].
@@ -2204,6 +2251,44 @@ pub struct SelectOption {
     pub category: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub disabled: bool,
+    /// 2.0: the footer's color.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub footer_color: Option<Color>,
+    /// 2.0: a mark left of the title.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gutter: Option<Gutter>,
+    /// 2.0: what picking this row runs, with its value as the input, instead of the select's action.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<Action>,
+    /// 2.0: picking this row enables or disables the plugin with this id, which the host does, and only the host
+    /// (synthesis 3.6): it draws the footer's `enable` or `disable` from the plugin's state, refuses the caller's own
+    /// id and the plugin manager's, and runs it after the key, if the row still names that plugin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toggle: Option<String>,
+}
+
+/// 2.0: a mark left of a [`SelectOption`]'s title.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Gutter {
+    /// The host's spinner, in the row's color.
+    Spinner,
+    Span(Span),
+}
+
+/// 2.0: an action of a [`Select`] on the selected row.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SelectAction {
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    pub action: Action,
+    /// The values of the rows the action is hidden on; its key then goes on to the list.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hidden: Vec<String>,
+    /// In the footer's first group, beside `enable`/`disable`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub primary: bool,
 }
 
 impl SelectOption {
@@ -2443,6 +2528,20 @@ pub trait Read {
     fn transcript(&self) -> Option<v2::TranscriptView> {
         None
     }
+    /// 2.0: where the node with id `id` of the running call's mount is, as the last settled frame laid it out; `None`
+    /// outside a mount's call, or for an id its tree does not hold.
+    fn rect(&self, _id: &str) -> Option<interact::Rect> {
+        None
+    }
+    /// 2.0: where the focus is, for the running call's mount.
+    fn focused(&self) -> interact::Focused {
+        interact::Focused::default()
+    }
+    /// 2.0: the mode the running call's owner, its mount or else the plugin, is in ([`Host::set_mode`]); `None` in the
+    /// base mode, also after the host ended the mode.
+    fn mode(&self) -> Option<String> {
+        None
+    }
 }
 
 /// What a command or an event handler reads and asks of the host. An effect waits until the outermost plugin
@@ -2538,6 +2637,26 @@ pub trait Host: Read {
     /// user's input only (a key, a click, the palette, the user's scroll), never from a view, `layout`, a wake, a
     /// reply, a command the plugin dispatched or the report of its own step.
     fn scroll(&self, _target: v2::Target, _verb: v2::Scroll) {}
+    /// 2.0: opens the plugin's panel surface beside a session ([`v2::Place::Panel`]); it replaces the panel on screen.
+    fn open_panel(&self, _open: interact::OpenPanel) {}
+    /// 2.0: closes the plugin's panel `surface`, if it shows.
+    fn close_panel(&self, _surface: &str) {}
+    /// 2.0: opens the plugin's overlay surface ([`v2::Place::Overlay`]); it belongs to the running call's mount, or to
+    /// the plugin, and replaces the plugin's overlay on screen.
+    fn overlay(&self, _overlay: interact::Overlay) {}
+    /// 2.0: closes the plugin's overlay `surface`, if it shows.
+    fn close_overlay(&self, _surface: &str) {}
+    /// 2.0: gives the focus to the node with id `id` of the running call's mount; a node without
+    /// [`interact::Interact::focusable`], another plugin's node and a host widget are refused.
+    fn focus(&self, _id: &str) {}
+    /// 2.0: takes the focus from the running call's mount, if it has it, and gives it to the composer.
+    fn blur(&self) {}
+    /// 2.0: sets the mode of the running call's owner, its mount or else the plugin: its layers of that mode hold,
+    /// and the host's base layers do not. `None` ends it. It ends too when the focus leaves the owner's scope, when
+    /// the owner ends, and on [`interact::RESERVED`].
+    fn set_mode(&self, _mode: Option<&str>) {}
+    /// 2.0: routes the keys a [`interact::Bind::hold`] key held, in order.
+    fn release_keys(&self) {}
     /// Declares storage key `key` of the plugin, for [`Setup::storage_key`].
     #[doc(hidden)]
     fn declare_storage_key(&self, _key: &str) {}
@@ -3310,6 +3429,17 @@ impl Setup<'_> {
     pub fn features(&self) -> &[String] {
         &self.registered.features
     }
+
+    /// 2.0: keys the plugin takes while `layer`'s scope holds ([`interact::Layer`]): of the composer, or global. They
+    /// are the plugin's until it leaves `active`. A layer of a surface's own scope belongs on [`v2::Surface::layers`].
+    /// In process only, as surfaces are.
+    pub fn layer(
+        &mut self,
+        layer: interact::Layer,
+        handler: impl Fn(&dyn Host, &interact::Event) -> interact::Handled + 'static,
+    ) {
+        self.registered.layers.push((layer, Rc::new(handler)));
+    }
 }
 
 /// What a plugin registered, which the host keeps while the plugin is active; the plugin registers through a
@@ -3343,6 +3473,7 @@ pub struct Registered {
     features: Vec<String>,
     /// The [`v2::Memo`] table of each mount, by generation, for the views of [`Request::View`].
     memos: std::cell::RefCell<std::collections::HashMap<u64, v2::Memo>>,
+    layers: Vec<(interact::Layer, interact::HandlerFn)>,
 }
 
 /// A registered handler of [`Setup::messages`].
@@ -3472,6 +3603,11 @@ impl Registered {
     /// The surfaces of [`Setup::surface`].
     pub fn surfaces(&self) -> &[v2::Surface] {
         &self.surfaces
+    }
+
+    /// The layers of [`Setup::layer`], with their handlers.
+    pub fn layers(&self) -> &[(interact::Layer, interact::HandlerFn)] {
+        &self.layers
     }
 
     /// The event handlers, with the types each takes.
@@ -4304,6 +4440,9 @@ mod tests {
                     options: vec![SelectOption::new("A", "a").description("d"), SelectOption::new("B", "b")],
                     current: Some("b".into()),
                     action: Action::Command { name: "x.pick".into(), input: None },
+                    key: None,
+                    actions: Vec::new(),
+                    binds: Vec::new(),
                 }),
             },
         ];
@@ -4587,6 +4726,9 @@ mod tests {
             options: vec![SelectOption::new("Child", "ses_1").description("running")],
             current: None,
             action: Action::Command { name: "x.open".into(), input: None },
+            key: None,
+            actions: Vec::new(),
+            binds: Vec::new(),
         });
         let json = r#"{"type":"select","title":"Subagents","options":[{"title":"Child","value":"ses_1","description":"running"}],"action":{"type":"command","name":"x.open"}}"#;
         assert_eq!(serde_json::to_string(&select).unwrap(), json);

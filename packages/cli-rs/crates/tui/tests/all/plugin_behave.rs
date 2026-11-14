@@ -1279,6 +1279,7 @@ fn adopt(host: &Plain, tree: &mut reconcile::Tree, nodes: &[v2::Node]) -> Result
         image: &|_| None,
         full: false,
         draw: None,
+        owner: None,
     };
     tree.apply(&env, &host.app.root(), nodes)
 }

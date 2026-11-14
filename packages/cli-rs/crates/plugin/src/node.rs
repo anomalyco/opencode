@@ -201,6 +201,7 @@ impl Mount {
                     _ => None,
                 };
                 let env = reconcile::Env {
+                    owner: None,
                     host,
                     theme: &theme,
                     act: &act,

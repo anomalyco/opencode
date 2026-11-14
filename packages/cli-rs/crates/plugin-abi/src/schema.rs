@@ -6,6 +6,7 @@
 use serde::Serialize;
 use serde_json::{Value, json};
 
+use crate::interact::{Interact, PanelInput};
 use crate::v2::{
     Anchor, AnchorAt, Cause, ContentRef, DiffView, Edge, Fit, Frame, Geometry, LayoutReply, ListItem, Mode, MountId,
     Node, Notify, Paint, Palette, PartRef, Rect, Scroll, ScrollAlign, ScrollEvent, ScrollState, Source, Split,
@@ -80,43 +81,49 @@ macro_rules! unit {
 /// [`TranscriptView`]), the scroll events ([`ScrollEvent`]) and the `layout` call ([`Geometry`] in, [`LayoutReply`]
 /// out) are under their names too.
 pub fn schema() -> Value {
+    let mut node = tagged!(Node, "A node of a surface's tree.", {
+        Box { } { id: nullable(string()), row: boolean(), gap: uint16(), padding: pair(uint16(), uint16()),
+            justify: reference("Justify"), align: reference("Align"), bg: nullable(reference("Color")),
+            layout: reference("Layout"), on_click: nullable(reference("Click")),
+            children: array(reference("Node")), border: nullable(reference("Border")),
+            padding_sides: nullable(reference("Edges")), wrap: boolean(), overflow: reference("Overflow"),
+            sticky: nullable(reference("Edge")), anchor: nullable(reference("Anchor")),
+            split: nullable(reference("Split")), interact: Value::Null },
+        Text { spans: array(reference("Span")) } { id: nullable(string()), fg: nullable(reference("Color")),
+            wrap: reference("Wrap"), truncate: boolean(), selectable: boolean(),
+            hover_fg: nullable(reference("Color")), layout: reference("Layout"),
+            on_click: nullable(reference("Click")) },
+        Slot { path: string() } { },
+        Markdown { source: reference("Source") } { id: nullable(string()) },
+        Spinner { label: string() } { id: nullable(string()) },
+        Scroll { } { id: nullable(string()), height: nullable(uint16()), follow: boolean(),
+            layout: reference("Layout"), children: array(reference("Node")),
+            notify_top: nullable(string()), user_scroll: boolean() },
+        Diff { content: reference("Source") } { id: nullable(string()), view: reference("DiffView"),
+            filetype: nullable(string()), hunks: nullable(string()) },
+        Input { } { id: nullable(string()), value: string(), placeholder: string(),
+            lines: nullable(uint16()), on_change: nullable(string()), on_submit: nullable(string()),
+            layout: reference("Layout") },
+        List { } { id: nullable(string()), row: boolean(), items: array(reference("ListItem")),
+            layout: reference("Layout"), notify_top: nullable(string()), user_scroll: boolean() },
+        Code { content: reference("Source") } { id: nullable(string()), filetype: nullable(string()),
+            numbers: boolean(), layout: reference("Layout") },
+        Image { content: reference("Source") } { id: nullable(string()), fit: reference("Fit"),
+            layout: reference("Layout") },
+        Keep { key: string() } { },
+        Canvas { } { id: nullable(string()), layout: reference("Layout"), version: uint64(), animate: boolean() },
+    });
+    // A box's `interact` is flattened: its fields sit beside the box's own.
+    let interact = object!(Interact, "", { } {
+        focusable: boolean(), pointer: boolean(), hover: nullable(reference("Color")), hover_events: boolean(),
+    });
+    if let Some(boxed) = node["oneOf"].as_array_mut().and_then(|variants| variants.first_mut()) {
+        let properties = boxed["properties"].as_object_mut().expect("a box has properties");
+        properties.remove("interact");
+        properties.extend(interact["properties"].as_object().cloned().unwrap_or_default());
+    }
     let defs: Vec<(&str, Value)> = vec![
-        (
-            "Node",
-            tagged!(Node, "A node of a surface's tree.", {
-                Box { } { id: nullable(string()), row: boolean(), gap: uint16(), padding: pair(uint16(), uint16()),
-                    justify: reference("Justify"), align: reference("Align"), bg: nullable(reference("Color")),
-                    layout: reference("Layout"), on_click: nullable(reference("Click")),
-                    children: array(reference("Node")), border: nullable(reference("Border")),
-                    padding_sides: nullable(reference("Edges")), wrap: boolean(), overflow: reference("Overflow"),
-                    sticky: nullable(reference("Edge")), anchor: nullable(reference("Anchor")),
-                    split: nullable(reference("Split")) },
-                Text { spans: array(reference("Span")) } { id: nullable(string()), fg: nullable(reference("Color")),
-                    wrap: reference("Wrap"), truncate: boolean(), selectable: boolean(),
-                    hover_fg: nullable(reference("Color")), layout: reference("Layout"),
-                    on_click: nullable(reference("Click")) },
-                Slot { path: string() } { },
-                Markdown { source: reference("Source") } { id: nullable(string()) },
-                Spinner { label: string() } { id: nullable(string()) },
-                Scroll { } { id: nullable(string()), height: nullable(uint16()), follow: boolean(),
-                    layout: reference("Layout"), children: array(reference("Node")),
-                    notify_top: nullable(string()), user_scroll: boolean() },
-                Diff { content: reference("Source") } { id: nullable(string()), view: reference("DiffView"),
-                    filetype: nullable(string()), hunks: nullable(string()) },
-                Input { } { id: nullable(string()), value: string(), placeholder: string(),
-                    lines: nullable(uint16()), on_change: nullable(string()), on_submit: nullable(string()),
-                    layout: reference("Layout") },
-                List { } { id: nullable(string()), row: boolean(), items: array(reference("ListItem")),
-                    layout: reference("Layout"), notify_top: nullable(string()), user_scroll: boolean() },
-                Code { content: reference("Source") } { id: nullable(string()), filetype: nullable(string()),
-                    numbers: boolean(), layout: reference("Layout") },
-                Image { content: reference("Source") } { id: nullable(string()), fit: reference("Fit"),
-                    layout: reference("Layout") },
-                Keep { key: string() } { },
-                Canvas { } { id: nullable(string()), layout: reference("Layout"), version: uint64(),
-                    animate: boolean() },
-            }),
-        ),
+        ("Node", node),
         (
             "ListItem",
             object!(ListItem, "An item of a list: a node with an id, and the rows assumed until it is laid out.", {
@@ -153,7 +160,13 @@ pub fn schema() -> Value {
             "SurfaceInput",
             object!(SurfaceInput, "What a surface's view gets besides the plugin's own state.", {
             width: uint16(), height: uint16(), palette: reference("Palette"),
-        } { full: boolean() }),
+        } { full: boolean(), panel: nullable(reference("PanelInput")) }),
+        ),
+        (
+            "PanelInput",
+            object!(PanelInput, "How a panel surface shows.", {
+            width: uint16(), fullscreen: boolean(), focused: boolean(),
+        } { }),
         ),
         (
             "Frame",
@@ -587,6 +600,12 @@ mod tests {
                 sticky: Some(Edge::Bottom),
                 anchor: Some(Anchor::new("file", "reviewed")),
                 split: Some(Split { at: 30, min: 4 }),
+                interact: Interact {
+                    focusable: true,
+                    pointer: true,
+                    hover: Some(Color::from("background.raised")),
+                    hover_events: true,
+                },
             },
             Node::Text {
                 id: Some("t".into()),
@@ -657,6 +676,7 @@ mod tests {
             height: 2,
             palette: Palette { mode: Mode::Light, colors: [("text.base".into(), Rgba::new(1, 2, 3, 4))].into() },
             full: true,
+            panel: Some(PanelInput { width: 40, fullscreen: true, focused: true }),
         };
         assert!(agree::<SurfaceInput>("SurfaceInput", serde_json::to_value(&input).unwrap()));
         let mount = MountId { surface: "s".into(), key: "k".into(), generation: u64::MAX };
@@ -772,6 +792,7 @@ mod tests {
             json!({ "type": "box" }),
             json!({ "type": "text", "spans": [{ "text": "a", "fg": "#AABBCCDD" }], "fg": null }),
             json!({ "type": "box", "padding_sides": { "left": -2 }, "border": { "title": "t" } }),
+            json!({ "type": "box", "id": "b", "focusable": true, "hover": "text.muted" }),
         ];
         for value in taken {
             assert!(agree::<Node>("Node", value));

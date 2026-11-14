@@ -36,6 +36,7 @@ mod plugin_carriers;
 mod plugin_contain;
 mod plugin_fetch;
 mod plugin_gate;
+mod plugin_input;
 mod plugin_machines;
 mod plugin_mail;
 mod plugin_model;

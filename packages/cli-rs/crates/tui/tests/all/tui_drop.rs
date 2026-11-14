@@ -51,6 +51,9 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
                 options: vec![abi::SelectOption::new("Drop option", "option")],
                 current: None,
                 action: action(),
+                key: None,
+                actions: Vec::new(),
+                binds: Vec::new(),
             }),
         ),
         (

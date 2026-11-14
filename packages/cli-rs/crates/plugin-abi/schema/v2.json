@@ -137,6 +137,25 @@
             },
             "type": {
               "const": "box"
+            },
+            "focusable": {
+              "type": "boolean"
+            },
+            "pointer": {
+              "type": "boolean"
+            },
+            "hover": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "hover_events": {
+              "type": "boolean"
             }
           },
           "required": ["type"]
@@ -709,10 +728,38 @@
         },
         "full": {
           "type": "boolean"
+        },
+        "panel": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PanelInput"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": ["width", "height", "palette"],
       "description": "What a surface's view gets besides the plugin's own state."
+    },
+    "PanelInput": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "fullscreen": {
+          "type": "boolean"
+        },
+        "focused": {
+          "type": "boolean"
+        }
+      },
+      "required": ["width", "fullscreen", "focused"],
+      "description": "How a panel surface shows."
     },
     "Frame": {
       "type": "object",
