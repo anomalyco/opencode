@@ -448,6 +448,42 @@ fn quick_folds_each_land_and_keep_a_field_another_client_stored() {
     }
 }
 
+// --- opencode-sidebar-prompt
+
+// Expected (bigboi P8-6): the published package shows the newest prompt, delivered or still in the session's inbox:
+// with a queued prompt newer than the delivered one, it shows the queued one, as TS's frame for the same inbox reads
+// ("Last prompt", "Then tag the release and announce it", "in the changelog channel."; TS records no checkpoint of
+// it, as the busy session's spinner never settles).
+#[test]
+fn the_published_sidebar_prompt_shows_a_queued_prompt() {
+    let queued = json!({
+        "id": "msg_3", "sessionID": "ses_p", "type": "user", "time": { "created": 3000 }, "delivery": "queue",
+        "payload": { "text": "Then tag the release and announce it in the changelog channel." },
+    });
+    let handler = move |seen: &Seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/session/ses_p") => Some((200, json!({ "data": session("ses_p", "Release", None, 3) }))),
+        ("GET", "/api/session") => Some((200, json!({ "data": [session("ses_p", "Release", None, 3)], "cursor": {} }))),
+        ("GET", "/api/session/ses_p/message") => Some((
+            200,
+            json!({ "data": [{ "id": "msg_1", "type": "user", "text": "Write the release notes.", "time": { "created": 1000 } }], "cursor": {} }),
+        )),
+        ("GET", "/api/session/ses_p/inbox") => Some((200, json!({ "data": [queued.clone()] }))),
+        _ => None,
+    };
+    let Some(h) = open_as(&[Carrier::Npm("opencode-sidebar-prompt")], 140, handler, false, None) else { return };
+    let rows = || h.sidebar(100).into_iter().skip_while(|row| row != "Last prompt").take(4).collect::<Vec<_>>();
+    h.wait("the sidebar shows a prompt", || rows().len() == 4);
+    assert_eq!(
+        rows(),
+        [
+            "Last prompt",
+            "Then tag the release and announce it",
+            "in the changelog channel.",
+            "Open full prompt · /lastprompt"
+        ]
+    );
+}
+
 // --- @mynameistito/opencode-force-input
 
 fn running(seen: &Seen) -> Option<Reply> {

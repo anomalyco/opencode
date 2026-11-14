@@ -2016,6 +2016,10 @@ pub enum HostRequest {
     InputMode,
     /// 2.0 (P8): [`Read::sessions`].
     Sessions,
+    /// 2.0 (P8): [`Read::pending`].
+    Pending {
+        id: String,
+    },
 }
 
 /// 1.5: the composer on screen, from [`Read::composer`].
@@ -2646,6 +2650,11 @@ pub trait Read {
     fn sessions(&self) -> Vec<Session> {
         Vec::new()
     }
+    /// 2.0 (P8): the inbox items of session `id` the server has not delivered yet, in the order they were admitted
+    /// (TS `data.session.pending.list()`); empty when its inbox is not loaded.
+    fn pending(&self, _id: &str) -> Vec<types::SessionInboxInfo> {
+        Vec::new()
+    }
     /// Calls `visit` with the loaded messages of session `id`, oldest first; empty when none are loaded. In process
     /// the host lends its own list; over the C ABI the plugin gets a copy.
     fn messages(&self, _id: &str, visit: &mut dyn FnMut(&[SessionMessageInfo])) {
@@ -3109,6 +3118,10 @@ impl Read for HostHandle {
 
     fn sessions(&self) -> Vec<Session> {
         self.read(&HostRequest::Sessions).unwrap_or_default()
+    }
+
+    fn pending(&self, id: &str) -> Vec<types::SessionInboxInfo> {
+        self.read(&HostRequest::Pending { id: id.to_owned() }).unwrap_or_default()
     }
 
     fn messages(&self, id: &str, visit: &mut dyn FnMut(&[SessionMessageInfo])) {
