@@ -507,6 +507,14 @@ macro_rules! choices {
                     _ => unreachable!("the parser accepts only {:?}", $name::CHOICES),
                 }
             }
+
+            /// The text the command line gives for it. A restart rebuilds `--log-level` with it.
+            #[allow(dead_code)]
+            pub fn as_choice(self) -> &'static str {
+                match self {
+                    $($name::$variant => $text,)*
+                }
+            }
         }
     };
 }
