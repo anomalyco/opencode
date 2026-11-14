@@ -418,6 +418,33 @@ for the manager starts it again on the user's key or click (`crates/tui/src/plug
 `F16-plugin-manager-fallback`); a restart whose setup fails leaves it failed. The manager's slow toast has no
 Disable. A release of a crashed build that the crash list cannot record does not happen, and says why.
 
+### The diff viewer (P6c)
+
+The diff viewer (`opencode.diffs`, `crates/tui/src/plugins/diffs`) is the last built-in that was host code; it is a
+plugin of this contract on both carriers now. Its docked panel and its route are two surfaces with one view: the cards
+are a windowed `List` whose items are memoized, a card's heading is `sticky` and its patch a `Diff` whose hunks are
+anchors, `]` and `[` are `Step` with the heading's two rows as inset, marking another file reviewed is `To` with `Keep`,
+and the fixed edge above the cards takes the reviewed color of the card at the top from `layout`. Its keys are a layer
+of its surface, its file menu an overlay, and its source, branch and help dialogs host dialogs. What it needed was added
+to the contract, for any plugin:
+
+- `Bind::command` names the user's keybind a bind takes, such as `diff.next_hunk`: the config's keys for that name,
+  else its default. `Read::shortcut` of the name shows them. Its `ctrl+c` stays the host's.
+- `Read::setting` and `Host::set_setting` read and save the host's named settings (`abi::SETTINGS`: the `diffs.*` keys
+  of the TUI config). A value the setting does not take is not saved. Over the C ABI: the read `setting` and the
+  request `set-setting`.
+- `PanelInput::forced`: the panel shows full screen because the room is too narrow; an open beside the session still
+  shows it full screen.
+- `Fetch::bytes`: the reply is the body's bytes in base64 (`abi::base64`), for a file the server reads.
+- `Dialog::Images`: images in the host's image preview.
+- A select's `query` runs its action with the filter's text once it stayed `query_delay` ms, and the host filters
+  nothing, as for rows a server search lists; `filterless` shows no filter; `empty` is the text while no row shows and
+  `note` a line under the rows.
+- A panel's `close` is its header's close label, and `height` a set height for its body; one with a height and no
+  actions has no footer row.
+- `Node::Diff`'s `wrap` and `padding`; the box builders `padding_sides` and `clip`; `abi::image_size`.
+- A sticky box paints over the siblings it is pinned above, as CSS's sticky does.
+
 ### Storage
 
 `storage_key(key)` declares a key; only declared keys read and write, as `plugin.<id>.<key>` in the TUI's storage.
@@ -436,8 +463,8 @@ the `on_reply` handlers on the UI thread, in order with the other effects, unles
 is the JSON body of any 2xx status, or `null` without a body. An error is text: a declared server error's message
 (else its tag), `UnexpectedStatus: 404: <body>` for another error status (the body trimmed and cut at 200
 characters; `UnexpectedStatus: 404` without one), `Transport: …` when the request could not be sent or would leave the
-origin, or `MalformedResponse: …` when the body is not JSON. A fetch asked for by a failed setup or by a dispose
-callback is not sent.
+origin, or `MalformedResponse: …` when the body is not JSON. With `bytes` (2.0), the reply is the body's bytes in
+base64 as a JSON string, whatever they are. A fetch asked for by a failed setup or by a dispose callback is not sent.
 
 ### Events
 

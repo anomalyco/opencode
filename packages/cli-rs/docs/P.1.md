@@ -24,10 +24,9 @@ ports.
 `Node` into widgets. Its `Host` trait is what the adapters of both paths call; the TUI implements it once
 (`crates/tui/src/plugins/host.rs`). It is not plugin API.
 
-`Registry::new` takes `Builtin`s: `Builtin::Plugin(abi::Plugin)`, or `Builtin::Host { id, activate, dispose }`
-for the part of the TUI that the plugin manager lists and toggles but that is not a plugin: the diff viewer
-(`opencode.diffs`). It reaches the TUI through a `OnceCell<Weak<Tui>>` that `install` sets once `Rc<Tui>` exists.
-The plugin manager (`opencode.plugins`) is a plugin since P6b (`docs/P.4.md`, "The plugin list").
+`Registry::new` takes `Builtin`s: `Builtin::Plugin(abi::Plugin)`, or `Builtin::Abi(abi::Plugin)` for the same plugin
+through the C ABI's byte shims. Every built-in is a plugin: the plugin manager (`opencode.plugins`) since P6b and the
+diff viewer (`opencode.diffs`) since P6c (`docs/P.4.md`, "The plugin list" and "The diff viewer").
 
 A mounted slot (`SlotMount`) or plugin route (`RouteMount`) syncs with `abi::Changed`, which the TUI builds
 from each store change batch (`host::changed`), or with `None` for a batch that changed nothing.
@@ -74,10 +73,9 @@ skipped), for the plugin manager.
 `crates/tui/src/plugins/host.rs`:
 
 - `impl Host for Tui`;
-- `builtins()`: the built-ins in TS order (`plugin/builtins.ts`), with the host entry in its place;
-- `registry(info, external)` builds the registry from them and the config; `install(&Rc<Tui>)` sets the host
-  entry's `OnceCell`, logs skipped entries, and activates; `add(&Rc<Tui>, Definition)` adds and activates one
-  more and remounts the route;
+- `builtins()`: the built-ins in TS order (`plugin/builtins.ts`), the diff viewer last;
+- `registry(info, external)` builds the registry from them and the config; `install(&Rc<Tui>)` logs skipped
+  entries and activates; `add(&Rc<Tui>, Definition)` adds and activates one more and remounts the route;
 - `slot(tui, parent, path, input, content)`, `route(tui, id, name)`, and `code_blocks(tui)` for the TUI
   call sites.
 
