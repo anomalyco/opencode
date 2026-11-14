@@ -1328,7 +1328,21 @@ fn p0a_properties_change_as_a_fresh_mount_draws_them() {
             .layout(abi::Layout { height: Some(abi::Width::Percent(50.0)), ..abi::Layout::default() })
             .bg("background.raised.base"),
     ];
-    for (from, to) in [(dressed(true), dressed(false)), (dressed(false), dressed(true)), (dressed(false), halves)] {
+    let framed = |color: Option<&'static str>| {
+        let mut node = v2::Node::column(vec![text()]).with_id("box");
+        if let v2::Node::Box { border: bordered, .. } = &mut node {
+            *bordered = color.map(|color| std::boxed::Box::new(border(color)));
+        }
+        vec![node]
+    };
+    let rows = [
+        (dressed(true), dressed(false)),
+        (dressed(false), dressed(true)),
+        (dressed(false), halves),
+        (framed(Some("border.base")), framed(None)),
+        (framed(Some("border.base")), framed(Some("text.muted"))),
+    ];
+    for (from, to) in rows {
         let host = host(0);
         let parent = root(&host);
         let mut tree = Tree::default();
