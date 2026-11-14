@@ -587,6 +587,19 @@ pub(crate) fn lay_out<W: Widget>(widget: &W, layout: &abi::Layout) -> W {
             }
         }
     }
+    if let Some(absolute) = &layout.absolute {
+        widget.absolute();
+        let sides = [Edge::Top, Edge::Right, Edge::Bottom, Edge::Left];
+        let offsets = [absolute.top, absolute.right, absolute.bottom, absolute.left];
+        for (edge, cells) in sides.into_iter().zip(offsets) {
+            if let Some(cells) = cells {
+                widget.position(edge, cells);
+            }
+        }
+        if absolute.z != 0 {
+            widget.z_index(absolute.z);
+        }
+    }
     widget.clone()
 }
 
