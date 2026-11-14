@@ -441,7 +441,12 @@ fn a_plugins_jump_to_the_top_backfills_each_time() {
     let first = read(&h);
     mini(&h, "mini.top");
     let second = read(&h);
-    assert!(second.0 < first.0 || second.1 > first.1, "the second jump revealed nothing: {first:?}, {second:?}");
+    // An older page's request reaches the server on the client's own thread.
+    let asked = || h.older.load(Ordering::SeqCst) > first.1;
+    assert!(
+        second.0 < first.0 || h.app.wait_until(WAIT, asked),
+        "the second jump revealed nothing: {first:?}, {second:?}"
+    );
 }
 
 // Expected (review carbon-7): a pointer that moves over the transcript, without the wheel, runs no behaviors.
