@@ -118,8 +118,8 @@ const renderer = createRenderer<VNode>({
     return node.tag === "#text"
   },
   setProperty(node, name, value) {
-    // OpenTUI's spans take their `style` and `href` alone; another node takes each prop of a `style` as its own.
-    if (SPANS.has(node.tag) && name !== "style" && name !== "href") return
+    // A node other than a span takes each prop of a `style` as its own. A span is read by its `style` and `href` alone
+    // (`inner`), as OpenTUI's spans are.
     if (!SPANS.has(node.tag) && name === "style") Object.assign(node.props, value ?? {})
     else node.props[name === "text" ? "content" : name] = value
     touch(node)
