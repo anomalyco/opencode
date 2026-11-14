@@ -2419,3 +2419,55 @@ fn a_claim_keeps_no_content_it_released_and_is_not_asked_of_an_unknown_state() {
         assert_eq!((ledger().content, ledger().content_bytes), (0, 0), "{carrier:?}: {:?}", ledger());
     }
 }
+
+thread_local! {
+    /// What `claim.keeper`'s next views return, in order: a tree, a keep of an id the host never held, or nothing.
+    static KEEPER: RefCell<Vec<&'static str>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Claims `keeper` calls with a memoized card, or what [`KEEPER`] says next.
+fn plugin_keeper(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::tool("keeper", |cx, part| {
+        let next = KEEPER.with_borrow_mut(|plan| (!plan.is_empty()).then(|| plan.remove(0))).unwrap_or("tree");
+        DREW.with_borrow_mut(|drew| drew.push(format!("{next} full {}", cx.input.full)));
+        let card = cx.memo("card", 1u8, |_| v2::Node::text(vec![abi::Span::new(format!("keeper {}", key(part)))]));
+        match next {
+            "keep" => Some(v2::Node::column(vec![card, v2::Node::Keep { key: "never".into() }])),
+            "decline" => None,
+            _ => Some(v2::Node::column(vec![card])),
+        }
+    }));
+    Ok(())
+}
+
+// Expected (4.2 and P4's checks; review finding carbon-6, mutants C6 and C8): a whole view that keeps what the host does
+// not hold falls back with no second view, and the ledger books what a library holds after it. A library that
+// declines the whole view asked for after a refused keep stays within bounds, and the plugin stays active.
+#[test]
+fn a_refused_keep_is_asked_once_whole_and_a_decline_after_it_stays_within_bounds() {
+    for carrier in CARRIERS {
+        DREW.with_borrow_mut(Vec::clear);
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.keeper", setup: plugin_keeper })]);
+        KEEPER.set(vec!["keep"]);
+        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "keeper" }));
+        world.settle();
+        assert_eq!(DREW.with_borrow(Vec::clone), ["keep full true"], "{carrier:?}: a whole view was asked again");
+        assert!(world.mount_of("call_1").is_some_and(|shown| !shown.shows), "{carrier:?}");
+        // The host's own table forgets a refused view; a library took the tree as it answered, and holds its card's
+        // value until the mount ends, which the ledger books.
+        let held = if carrier == Carrier::Abi { 1 } else { 0 };
+        assert_eq!(ledger().memo_entries, held, "{carrier:?}: {:?}", ledger());
+
+        DREW.with_borrow_mut(Vec::clear);
+        world.emit("session.tool.input.started", json!({ "id": "call_2", "name": "keeper" }));
+        world.settle();
+        KEEPER.set(vec!["keep", "decline"]);
+        world.emit("session.tool.input.delta", json!({ "id": "call_2", "delta": "x" }));
+        world.settle();
+        let drew = DREW.with_borrow(Vec::clone);
+        assert_eq!(drew, ["tree full true", "keep full false", "decline full true"], "{carrier:?}");
+        let status = world.harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "claim.keeper");
+        assert_eq!(status.map(|entry| entry.status), Some(opencode_plugin::Status::Active), "{carrier:?}");
+        assert!(world.frame().text().contains("⋯ keeper"), "{carrier:?}:\n{}", world.frame().text());
+    }
+}
