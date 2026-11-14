@@ -410,6 +410,83 @@ fn the_linked_reference_replays_every_transcript() {
     }
 }
 
+// Expected (unknown kinds, synthesis 4.6): a library of a later minor whose view holds a node kind this host does not
+// know has the tree refused whole, the kind named in the failure, and nothing after it: the transcript holds as
+// recorded up to that view's reply, the user then sees the plugin failed and no tree, and the host calls the library no
+// more, not even to destroy it. (The SDK's lowering of a kind to its fallback comes with the first kind of 2.1.)
+#[test]
+fn a_kind_the_host_does_not_know_is_refused_whole() {
+    let mut transcript =
+        golden().unwrap().into_iter().find(|transcript| transcript.header.transcript == "surfaces").unwrap();
+    let at = transcript
+        .entries
+        .iter()
+        .position(|entry| matches!(entry, Entry::Return { reply, .. } if reply.get("node").is_some()))
+        .unwrap();
+    let Entry::Return { reply, .. } = &mut transcript.entries[at] else { unreachable!() };
+    reply["node"]["children"][1] = json!({ "type": "x-future-kind", "id": "fixed" });
+    let recorded = run(&transcript.header, &Load::Player(&transcript, false));
+    player::finish();
+    assert_eq!(recorded[..=at], transcript.entries[..=at]);
+    let rest: Vec<&Entry> = recorded[at + 1..].iter().collect();
+    let Some(Entry::Observe { seen }) = rest.first() else { panic!("{rest:?}") };
+    let status = seen["status"].as_str().unwrap();
+    assert!(status.contains("view returned a bad result") && status.contains("x-future-kind"), "{status}");
+    assert_eq!(seen["screen"], json!([]));
+    assert!(rest.iter().all(|entry| matches!(entry, Entry::Observe { .. })), "the host called on: {rest:?}");
+}
+
+// Expected: `stopped` and `report` are "any thread", so a library may call them on the UI thread inside a call, as a C
+// plugin can (the SDK calls them only from its threads). The host answers `stopped` 0 while the plugin is active, and
+// a report fails the plugin once, with the report's text, after the call; the transcript holds both crossings.
+#[test]
+fn a_library_may_ask_stopped_and_report_on_the_ui_thread() {
+    let mut transcript =
+        golden().unwrap().into_iter().find(|transcript| transcript.header.transcript == "actions").unwrap();
+    let at = transcript.entries.iter().position(|entry| matches!(entry, Entry::Call { .. })).unwrap();
+    transcript.entries.insert(at + 1, Entry::Stopped { answer: 0 });
+    transcript.entries.insert(at + 2, Entry::Report { message: "a thread died".to_owned() });
+    let recorded = run(&transcript.header, &Load::Player(&transcript, false));
+    player::finish();
+    assert_eq!(recorded[..at + 3], transcript.entries[..at + 3]);
+    let seen = recorded.iter().find_map(|entry| match entry {
+        Entry::Observe { seen } => Some(seen.clone()),
+        _ => None,
+    });
+    let seen = seen.unwrap();
+    assert!(seen["status"].as_str().unwrap().contains("a thread died"), "{seen}");
+    assert_eq!(
+        seen["toasts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|toast| toast.as_str().unwrap().contains("Plugin failed"))
+            .count(),
+        1,
+        "{seen}"
+    );
+}
+
+unsafe extern "C" fn answers_ok(_: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
+    // SAFETY: `out` is valid for writes.
+    unsafe { *out = Owned::from_vec(b"null".to_vec()) };
+    abi::OK
+}
+
+// Expected: on the library side a host of a later minor refuses a library that answers a request it cannot know with
+// anything but ERROR; the reference answers ERROR.
+#[test]
+fn a_library_that_takes_an_unknown_request_fails_the_later_host() {
+    let api = PluginApi { call: Some(answers_ok), ..reference(2) };
+    // SAFETY: the shims are this process's.
+    let (library, accepted) = unsafe { (Opened::new(&api).unwrap(), Opened::new(&reference(2)).unwrap()) };
+    let instance = std::ptr::dangling_mut::<c_void>();
+    let error = future_request(&library, instance).unwrap_err();
+    assert!(error.contains("was answered 0, not ERROR"), "{error}");
+    // The reference answers ERROR (with no instance here; with one, `the_linked_reference_replays_every_transcript`).
+    assert_eq!(future_request(&accepted, std::ptr::null_mut()), Ok(()));
+}
+
 /// Which side of the C ABI writes a part of an entry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Side {
