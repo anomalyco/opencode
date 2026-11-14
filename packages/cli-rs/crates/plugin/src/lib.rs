@@ -1350,6 +1350,7 @@ impl Setup<'_> {
         activation: &Rc<Activation>,
     ) {
         let (owner, activation) = (Rc::downgrade(self.host), activation.clone());
+        let plugin: Rc<str> = Rc::from(self.id);
         match surface.at.clone() {
             abi::v2::Place::Route(name) => {
                 let key = name.clone();
@@ -1360,6 +1361,7 @@ impl Setup<'_> {
                     let mounted = surface::Surface::new(
                         host,
                         owner.clone(),
+                        plugin.clone(),
                         &surface,
                         (&key, ""),
                         &SlotInput::default(),
@@ -1385,6 +1387,7 @@ impl Setup<'_> {
                         let mounted = surface::Surface::new(
                             host,
                             owner.clone(),
+                            plugin.clone(),
                             &surface,
                             (&path, &path),
                             input,

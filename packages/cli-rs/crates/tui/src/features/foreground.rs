@@ -21,6 +21,8 @@ pub fn release(tui: &Tui, task: impl FnOnce() + 'static) -> bool {
         return false;
     }
     let slot = Slot(tui.weak());
+    // The time the terminal is away is no animation's.
+    opencode_plugin::canvas::handover(&tui.app);
     tui.app.release_terminal(move |_| {
         let _slot = slot;
         task();

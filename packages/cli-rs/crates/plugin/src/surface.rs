@@ -159,6 +159,8 @@ fn book(f: impl FnOnce(&mut Ledger)) {
 pub(crate) struct Surface {
     root: View,
     owner: Weak<dyn Host>,
+    /// The plugin's ID, which its canvases' lists are charged to.
+    plugin: Rc<str>,
     viewer: Rc<dyn Viewer>,
     /// How its canvases call the surface's draw.
     drawer: std::cell::OnceCell<Rc<canvas::Drawer>>,
@@ -219,6 +221,7 @@ impl Surface {
     pub fn new(
         host: &dyn Host,
         owner: Weak<dyn Host>,
+        plugin: Rc<str>,
         surface: &Place,
         (key, path): (&str, &str),
         slot_input: &SlotInput,
@@ -240,6 +243,7 @@ impl Surface {
         let mounted = Rc::new(Self {
             root,
             owner: owner.clone(),
+            plugin,
             viewer,
             drawer: std::cell::OnceCell::new(),
             fail,
@@ -261,6 +265,7 @@ impl Surface {
         if mounted.viewer.draws() {
             let (weak, fail) = (Rc::downgrade(&mounted), mounted.fail.clone());
             let drawer = canvas::Drawer {
+                owner: mounted.plugin.clone(),
                 draw: Box::new(move |id, frame| weak.upgrade()?.draw_canvas(id, frame)),
                 fail: Box::new(move |error| fail(error)),
             };
