@@ -43,6 +43,8 @@ export interface Carrier {
   read(key: string): Json
   // Why the read `key` watches is nothing, when the host could not answer it.
   readError?(key: string): string | undefined
+  // Runs `cleanup` as the plugin's activation ends.
+  cleanup?(cleanup: () => unknown): void
   listen(listener: (key: string) => void): void
   invalidate(): void
   fetch(request: Json): Promise<Json>
@@ -376,6 +378,11 @@ export function context(base: Base, carrier: Carrier) {
     resend = true
     queueMicrotask(sendShown)
   }
+  // A dialog of the plugin's own ends with its activation, and a dialog it asked answers nothing (carbon-5).
+  carrier.cleanup?.(() => {
+    settle()
+    unshow()
+  })
   carrier.listen((key) => {
     if (!shown || key !== `dialog-open:${shown.key}`) return
     const open = carrier.read(key) === true
@@ -741,6 +748,8 @@ export function context(base: Base, carrier: Carrier) {
       store(key: string, options: { initial: Json }) {
         const known = stores.get(key)
         if (known) return known
+        // Declared to the host at once, so its reads and writes work before the manifest that lists it (carbon-2).
+        void carrier.effect({ type: "storage-key", key })
         carrier.storage([key])
         carrier.changed()
         const persisted = () => {

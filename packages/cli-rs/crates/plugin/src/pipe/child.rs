@@ -124,10 +124,13 @@ struct Inbox {
     ordered: usize,
     bytes: usize,
     trees: usize,
-    /// The unread messages of each plugin's own: its effects, and the start of its code that ran for an answer of them
-    /// (`Up::Entered` with its ID), which a flood of effects also brings. The end of that code names no plugin; with
-    /// the start counted, the plugin's own are still most of a flood of its effects and their answers.
+    /// The unread messages of each plugin's own: every one that names it ([`owner`]), such as its effects, its watches
+    /// and the start of its code that ran for an answer (carbon-5: a flood of watches or logs is a plugin's too). The
+    /// end of that code names no plugin; with the start counted, the plugin's own are still most of a flood of its
+    /// effects and their answers.
     effects: std::collections::HashMap<String, usize>,
+    /// The unread bytes of each plugin's own messages, which name it for a flood of bytes.
+    sizes: std::collections::HashMap<String, usize>,
     /// A `Gone` was queued: nothing more is.
     ended: bool,
 }
@@ -275,6 +278,7 @@ impl Child {
         let events: Vec<Event> = inbox.events.drain(..).collect();
         (inbox.ordered, inbox.bytes, inbox.trees) = (0, 0, 0);
         inbox.effects.clear();
+        inbox.sizes.clear();
         drop(inbox);
         self.shared.room.notify_all();
         events
@@ -435,6 +439,20 @@ fn write(shared: &Shared, mut stdin: ChildStdin) {
     // Dropping the pipe is the end of input, which ends the child.
 }
 
+/// The plugin a message of the JS host is its own, when it names one.
+fn owner(up: &Up) -> Option<&str> {
+    match up {
+        Up::Effects { id, .. }
+        | Up::Watch { id, .. }
+        | Up::Unwatch { id, .. }
+        | Up::Manifest { id, .. }
+        | Up::Fail { id, .. }
+        | Up::Entered { id: Some(id) }
+        | Up::Log { id: Some(id), .. } => Some(id),
+        _ => None,
+    }
+}
+
 /// Queues `event` for the UI thread and wakes it, unless the stream ended. Over a bound, the stream ends instead.
 fn deliver(shared: &Shared, event: Event, bytes: usize) -> bool {
     let mut inbox = lock(&shared.inbox);
@@ -446,21 +464,31 @@ fn deliver(shared: &Shared, event: Event, bytes: usize) -> bool {
             inbox.trees += 1;
             event
         }
-        Event::Up(_) if inbox.ordered + 1 > shared.limits.ordered || inbox.bytes + bytes > shared.limits.inbox => {
+        Event::Up(up) if inbox.ordered + 1 > shared.limits.ordered || inbox.bytes + bytes > shared.limits.inbox => {
             let why = format!(
                 "the JS host sent over {} messages or {} bytes the host had not taken",
                 shared.limits.ordered, shared.limits.inbox
             );
-            // The plugin whose own effects are most of them flooded it.
-            let most = inbox.effects.iter().max_by_key(|(_, count)| **count);
-            let plugin = most.filter(|(_, count)| **count * 2 > inbox.ordered).map(|(id, _)| id.clone());
-            Event::Gone(why, plugin)
+            // The plugin whose own messages are most of them flooded it, this one counted: by their bytes when the
+            // bytes overflowed, else by their number.
+            let (mut counts, mut sizes) = (inbox.effects.clone(), inbox.sizes.clone());
+            if let Some(id) = owner(up) {
+                *counts.entry(id.to_owned()).or_default() += 1;
+                *sizes.entry(id.to_owned()).or_default() += bytes;
+            }
+            let (table, total) = match inbox.bytes + bytes > shared.limits.inbox {
+                true => (sizes, inbox.bytes + bytes),
+                false => (counts, inbox.ordered + 1),
+            };
+            let most = table.into_iter().max_by_key(|(_, count)| *count);
+            Event::Gone(why, most.filter(|(_, count)| count * 2 > total).map(|(id, _)| id))
         }
         Event::Up(up) => {
             inbox.ordered += 1;
             inbox.bytes += bytes;
-            if let Up::Effects { id, .. } | Up::Entered { id: Some(id) } = &**up {
-                *inbox.effects.entry(id.clone()).or_default() += 1;
+            if let Some(id) = owner(up) {
+                *inbox.effects.entry(id.to_owned()).or_default() += 1;
+                *inbox.sizes.entry(id.to_owned()).or_default() += bytes;
             }
             event
         }
@@ -702,6 +730,7 @@ fn resident(shared: &Shared) -> Option<u64> {
 mod tests {
     use super::*;
     use crate::pipe::proto::Up;
+    use opencode_plugin_abi::{HostRequest, Level};
 
     /// A child that writes `frames` to its output and then waits for its input to end, as the JS host does.
     fn fake(frames: &[u8], limits: Limits) -> (Child, opencode_util::temp::TempDir) {
@@ -798,6 +827,33 @@ mod tests {
             _ => None,
         });
         assert_eq!(blamed, Some(Some("loud".to_owned())));
+        // Watches and logs name their plugin too (carbon-5), and a flood of bytes is blamed on the plugin whose bytes
+        // are most of them, the one that overflowed counted, though another sent more messages.
+        let watch = |id: &str, key: &str| {
+            control(&Up::Watch { id: id.to_owned(), key: key.to_owned(), request: HostRequest::Route })
+        };
+        let mut frames = hello();
+        (0..9).for_each(|index| frames.extend(watch("watcher", &format!("k{index}"))));
+        let (child, _dir) = fake(&frames, limits);
+        std::thread::sleep(Duration::from_millis(300));
+        let blamed = child.take().into_iter().find_map(|event| match event {
+            Event::Gone(_, plugin) => Some(plugin),
+            _ => None,
+        });
+        assert_eq!(blamed, Some(Some("watcher".to_owned())));
+        let log = |id: &str, size: usize| {
+            control(&Up::Log { id: Some(id.to_owned()), level: Level::Info, message: "x".repeat(size) })
+        };
+        let mut frames = hello();
+        (0..6).for_each(|_| frames.extend(log("chatty", 10)));
+        frames.extend(log("heavy", 2000));
+        let (child, _dir) = fake(&frames, Limits { inbox: 2048, ..limits });
+        std::thread::sleep(Duration::from_millis(300));
+        let blamed = child.take().into_iter().find_map(|event| match event {
+            Event::Gone(_, plugin) => Some(plugin),
+            _ => None,
+        });
+        assert_eq!(blamed, Some(Some("heavy".to_owned())));
     }
 
     // Expected (the flood of trees, S2): past the bound of trees the host has not taken, the reader stops reading, so

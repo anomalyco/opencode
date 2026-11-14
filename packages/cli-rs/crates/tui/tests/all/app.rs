@@ -479,6 +479,7 @@ fn npm_config(config: &serde_json::Value) -> String {
         let _ = std::fs::remove_dir_all(&into);
         std::fs::create_dir_all(&into).expect("the npm package's directory");
         let tarball = parity.join("plugins/npm").join(format!("{}.tgz", name.replace('/', "__")));
+        crate::ports::pinned(&tarball);
         let status = std::process::Command::new("tar")
             .arg("-xzf")
             .arg(&tarball)

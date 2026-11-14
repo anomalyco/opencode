@@ -6,12 +6,15 @@ host through the V2 compatibility layer. Before a scenario runs, each side unpac
 `./out/npm/node_modules/<name>` names into that directory (`parity/out` is ignored), so the package sits under
 `node_modules` as an install puts it, and TS compiles it as it compiles an installed package.
 
-| Tarball | Package | `dist.integrity` |
+| Tarball | Package | `dist.integrity`, equal to the registry's |
 | --- | --- | --- |
-| `opencode-subagents-sidebar.tgz` | `opencode-subagents-sidebar@0.1.6` | `sha512-` of the file, equal to the registry's |
-| `@mynameistito__opencode-force-input.tgz` | `@mynameistito/opencode-force-input@1.1.20` | same |
-| `opencode-session-usage.tgz` | `opencode-session-usage@0.1.8` | same |
-| `opencode-sidebar-prompt.tgz` | `opencode-sidebar-prompt@0.1.6` | same |
+| `opencode-subagents-sidebar.tgz` | `opencode-subagents-sidebar@0.1.6` | `sha512-Six0zMfLg3zSwkC5Wrflxj+/KtSv7D/iTfZH8xE1znZ7xvcmj30+oxY0hnfYxMfz8lkveYjiuqQrXT3BClq69A==` |
+| `@mynameistito__opencode-force-input.tgz` | `@mynameistito/opencode-force-input@1.1.20` | `sha512-DcFpUaOYtdQzk+xDix+VxP2cFWVoGv7idT0/l6Hguh+LDRVwqGySZLyS2v5Y+E/VlAnvrtjIJEo5Ysy8ie1Pow==` |
+| `opencode-session-usage.tgz` | `opencode-session-usage@0.1.8` | `sha512-x8nNJJpMaYNSaAIVcLXl+RXItK5MuVVOB8t99nsYuZXAsAw4GtwufQLzoxDRaedVIIHYWw54Bxdrg+pEbmiTow==` |
+| `opencode-sidebar-prompt.tgz` | `opencode-sidebar-prompt@0.1.6` | `sha512-QgSndS0jbpI7ZC9qf59XqzX5xcaSyA8xTyBwSV2XUJAELRA0tsLlg9ILYSvIimAgmn7PFOVJgWCiHqux98gUiA==` |
+
+`integrity.json` pins the same digests; TS's recorder (`parity/app/scenarios.test.tsx`) and the Rust rows
+(`crates/tui/tests/all/{app,ports}.rs`) refuse a tarball whose SHA-512 is not its pin before they unpack it.
 
 A scope's `/` is `__` in the file name. Check one against the registry:
 
