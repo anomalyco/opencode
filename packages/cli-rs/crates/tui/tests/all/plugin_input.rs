@@ -76,6 +76,8 @@ pub struct Probe {
     pub panic: bool,
     /// The rich select has no footer action.
     pub no_update: bool,
+    /// The rich select's first footer action, `launch`, runs on the row and does not say its group.
+    pub launch: bool,
     /// Node `a` has a click of its own, on the press, which runs `input.row a`.
     pub click_a: bool,
     /// Two composer paste layers: an older one above, a newer one below.
@@ -437,6 +439,7 @@ fn select() -> abi::Select {
                 "other" => option.toggle = Some("test.other".into()),
                 "self" => option.toggle = Some(ID.into()),
                 "manager" => option.toggle = Some("opencode.plugins".into()),
+                "acme" => option.toggle = Some("@acme/skipped".into()),
                 "off" => option.disabled = true,
                 "spin" => option.gutter = Some(abi::Gutter::Spinner),
                 _ => option.gutter = Some(abi::Gutter::Span(abi::Span::new("x"))),
@@ -453,32 +456,43 @@ fn select() -> abi::Select {
         key: (!probe(|probe| probe.keyless)).then(|| "pick".into()),
         actions: match probe(|probe| probe.no_update) {
             true => Vec::new(),
-            false => vec![
-                abi::SelectAction {
-                    title: "update".into(),
-                    key: Some("ctrl+u".into()),
-                    action: command("input.update"),
-                    hidden: vec!["beta".into()],
-                    primary: Some(false),
-                    rowless: false,
-                },
-                abi::SelectAction {
-                    title: "cut".into(),
-                    key: Some("Ctrl + C".into()),
+            false => probe(|probe| probe.launch)
+                .then(|| abi::SelectAction {
+                    title: "launch".into(),
+                    key: Some("f5".into()),
                     action: command("input.picked"),
                     hidden: Vec::new(),
-                    primary: Some(false),
-                    rowless: false,
-                },
-                abi::SelectAction {
-                    title: "new".into(),
-                    key: Some("ctrl+y".into()),
-                    action: abi::Action::Command { name: "input.picked".into(), input: Some("new".into()) },
-                    hidden: Vec::new(),
                     primary: None,
-                    rowless: true,
-                },
-            ],
+                    rowless: false,
+                })
+                .into_iter()
+                .chain([
+                    abi::SelectAction {
+                        title: "update".into(),
+                        key: Some("ctrl+u".into()),
+                        action: command("input.update"),
+                        hidden: vec!["beta".into()],
+                        primary: Some(false),
+                        rowless: false,
+                    },
+                    abi::SelectAction {
+                        title: "cut".into(),
+                        key: Some("Ctrl + C".into()),
+                        action: command("input.picked"),
+                        hidden: Vec::new(),
+                        primary: Some(false),
+                        rowless: false,
+                    },
+                    abi::SelectAction {
+                        title: "new".into(),
+                        key: Some("ctrl+y".into()),
+                        action: abi::Action::Command { name: "input.picked".into(), input: Some("new".into()) },
+                        hidden: Vec::new(),
+                        primary: None,
+                        rowless: true,
+                    },
+                ])
+                .collect(),
         },
         binds: vec![
             abi::PanelBind { key: "ctrl+e".into(), title: "echo".into(), action: command("input.picked") },
@@ -1787,6 +1801,17 @@ fn a_taken_press_owns_its_gesture() {
     harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 1, y);
     settle(&harness);
     assert!(!taken().iter().any(|line| line.contains("Up a")), "a release under a dialog reached the plugin");
+    // A drag the plugin took, dropped on its strip once a host dialog opened.
+    harness.app.press("escape");
+    settle(&harness);
+    harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
+    settle(&harness);
+    run(&harness, "input.select", None);
+    taken();
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), sx + 1, sy);
+    harness.app.mouse(MouseEventKind::Up(MouseButton::Left), sx + 1, sy);
+    settle(&harness);
+    assert!(!taken().iter().any(|line| line.contains("Drop")), "a drop under a dialog reached the plugin");
     // The focus given away on the press.
     let harness = open_with(|probe| probe.down_focus_b = true);
     run(&harness, "input.panel", None);
@@ -1840,7 +1865,8 @@ fn a_panel_shows_with_one_view_follows_its_room_and_its_theme() {
     settle(&harness);
     let (mx, my) = support::at(&harness.app.text(), "MENU one").unwrap();
     let before = harness.app.render().cell(u32::from(mx), u32::from(my)).unwrap().fg;
-    assert!(harness.tui.theme.borrow_mut().set("tokyonight"));
+    // A switch of the mode keeps the theme's name, which the plugins do not hear of: only the host restyles them.
+    assert!(harness.tui.theme.borrow_mut().set_mode(Some(opencode_ui::theme::ThemeMode::Light), false));
     harness.tui.theme_changed();
     settle(&harness);
     assert_eq!(probe(|probe| probe.panels.last().unwrap().1), generation, "the panel mounted again");
@@ -1880,6 +1906,7 @@ fn a_select_toggles_only_what_it_shows() {
     let harness = open();
     rows(&["dup"], "f");
     run(&harness, "input.select", None);
+    assert!(!harness.app.text().contains("test.other"), "a hidden row's toggle has a hint: {}", harness.app.text());
     taken();
     harness.app.press("enter");
     settle(&harness);
@@ -1887,7 +1914,9 @@ fn a_select_toggles_only_what_it_shows() {
     assert_eq!(taken(), ["picked dup"]);
     harness.app.press("escape");
     settle(&harness);
-    rows(&["self", "manager"], "f");
+    // A plugin the config names that never loaded: the host would not toggle it either.
+    harness.tui.plugins.set_targets(&opencode_tui::plugins::host::host(&harness.tui), ["@acme/skipped"]);
+    rows(&["self", "manager", "acme"], "f");
     run(&harness, "input.select", None);
     let screen = harness.app.text();
     assert!(!screen.contains("enabled") && !screen.contains("disable"), "{screen}");
@@ -1923,10 +1952,14 @@ fn keys_say_what_was_pressed_and_overlays_stay_on_screen() {
     harness.app.press("ctrl+t");
     settle(&harness);
     assert_eq!(taken(), ["side: key v as v [-]", "side: key v as ctrl+t [-]"]);
-    run(&harness, "input.overlay", None);
-    harness.app.resize(14, 8);
+    run(&harness, "input.edge", None);
+    harness.app.resize(40, 8);
     settle(&harness);
-    assert!(harness.app.text().contains("MENU one"), "{}", harness.app.text());
+    assert!(
+        harness.app.text().contains("MENU"),
+        "the overlay against the bottom edge left the screen: {}",
+        harness.app.text()
+    );
     harness.app.resize(120, 30);
     settle(&harness);
     taken();
@@ -1964,4 +1997,16 @@ fn a_pointer_box_restyles_in_place() {
         harness
     };
     support::assert_restyles_in_place(open, |_| {}, |screen| screen.contains("AAAA"));
+}
+
+// Expected (carbon-7): an action on the row is primary unless it says, and a rowless one secondary, as TS's `group`
+// defaults: listed first, the row action still shows after the rowless one, with the primary actions.
+#[test]
+fn a_row_action_is_primary_unless_it_says() {
+    let harness = open_with(|probe| probe.launch = true);
+    rows(&["alpha"], "f");
+    run(&harness, "input.select", None);
+    let screen = harness.app.text();
+    let at = |word: &str| support::at(&screen, word).map(|(x, y)| (y, x));
+    assert!(at("launch") > at("new") && at("new").is_some(), "{screen}");
 }
