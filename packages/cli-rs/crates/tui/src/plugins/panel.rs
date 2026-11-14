@@ -319,8 +319,9 @@ impl Picker {
             let names = picker.shown.borrow().options.iter().any(|option| {
                 option.value == value && !option.disabled && option.toggle.as_deref() == Some(plugin.as_str())
             });
-            // No close can come between the key and this: the app runs what is deferred after each event.
-            if !(names && tui.plugins.live(&owner.0, owner.1)) {
+            // No close or end of the plugin can come between the key and this: the app runs what is deferred after each
+            // event, and a plugin that leaves `active` closes its dialogs first.
+            if !names {
                 return;
             }
             let Some(active) = toggled(&tui, &owner.0, &plugin) else { return };
