@@ -73,6 +73,29 @@ fn count(f: impl FnOnce(&mut Work)) {
     });
 }
 
+/// The deepest a plugin's tree may nest, in OpenTUI layout levels. OpenTUI refuses a node past 256 levels with an
+/// error that ends the TUI; the host's own views take the levels above a surface, and a nested slot's claims nest
+/// their own trees, each held to this bound, below it.
+pub const MAX_DEPTH: u16 = 64;
+
+/// The layout levels a node's own widget takes: a scroll box is four views, a patch a column of diffs of code views,
+/// and Markdown a few levels of its own.
+fn weight(node: &Node) -> u16 {
+    match node {
+        Node::Box { .. } | Node::Text { .. } | Node::Spinner { .. } | Node::Slot { .. } => 1,
+        Node::Scroll { .. } | Node::Diff { .. } | Node::Markdown { .. } => 4,
+        Node::Keep { .. } => 0,
+    }
+}
+
+/// Whether every size of `layout` in percent is a finite number of 0 or more.
+pub fn sizes_ok(layout: &abi::Layout) -> bool {
+    [layout.width, layout.height, layout.min_height, layout.max_height]
+        .into_iter()
+        .flatten()
+        .all(|size| !matches!(size, abi::Width::Percent(percent) if !percent.is_finite() || percent < 0.0))
+}
+
 /// Why a tree was refused. Nothing of it was adopted.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Refused {
@@ -82,14 +105,21 @@ pub enum Refused {
     Unknown(String),
     /// A node shows content the mount does not have.
     Content(ContentRef),
+    /// The widgets the tree would hold nest deeper than [`MAX_DEPTH`], kept subtrees included; OpenTUI's layout
+    /// fails the whole TUI past its own limit.
+    Deep,
+    /// A size in percent that is not a finite number of 0 or more, which OpenTUI's layout refuses with an error that
+    /// ends the TUI.
+    Number,
 }
-
 impl std::fmt::Display for Refused {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Refused::Duplicate(id) => write!(f, "the id {id:?} is in the tree twice"),
             Refused::Unknown(id) => write!(f, "a keep names {id:?}, which the host does not hold"),
             Refused::Content(content) => write!(f, "content {} is not the mount's", content.0),
+            Refused::Deep => write!(f, "the tree nests deeper than {MAX_DEPTH} layout levels"),
+            Refused::Number => write!(f, "a size in percent is not a finite number of 0 or more"),
         }
     }
 }
@@ -113,10 +143,17 @@ pub struct Env<'a> {
 pub struct Tree {
     nodes: Vec<Mounted>,
     theme: Option<Theme>,
-    /// Every id the tree holds, with the nearest ancestor that has one.
-    ids: HashMap<String, Option<String>>,
+    /// Every id the tree holds.
+    ids: HashMap<String, Held>,
     /// Slots mounted or dropped by the last apply.
     slots_changed: bool,
+}
+
+/// What the tree holds under an id: the nearest ancestor with an id, and the layout levels its subtree takes.
+#[derive(Clone, Debug)]
+struct Held {
+    above: Option<String>,
+    depth: u16,
 }
 
 struct Mounted {
@@ -238,55 +275,79 @@ impl Tree {
         self.nodes.is_empty()
     }
 
-    /// Checks `nodes` against the contract and returns the ids it keeps.
+    /// Checks `nodes` against the contract and returns the ids it keeps. The walk stops at the depth bound, so a
+    /// deeper tree costs no more than one at the bound.
     fn validate(&self, env: &Env<'_>, nodes: &[Node]) -> Result<HashSet<String>, Refused> {
-        let mut ids = HashSet::new();
-        let mut keeps = HashSet::new();
-        fn walk(
-            nodes: &[Node],
-            env: &Env<'_>,
-            ids: &mut HashSet<String>,
-            keeps: &mut HashSet<String>,
-        ) -> Result<(), Refused> {
-            for node in nodes {
-                if let Node::Keep { key } = node {
-                    if !keeps.insert(key.clone()) || ids.contains(key) {
-                        return Err(Refused::Duplicate(key.clone()));
+        struct Walk<'a, 'b> {
+            tree: &'a Tree,
+            env: &'a Env<'b>,
+            ids: HashSet<&'a str>,
+            keeps: HashSet<&'a str>,
+        }
+        impl<'a> Walk<'a, '_> {
+            fn nodes(&mut self, nodes: &'a [Node], above: u16) -> Result<(), Refused> {
+                for node in nodes {
+                    if let Node::Keep { key } = node {
+                        let held = self.tree.ids.get(key).ok_or_else(|| Refused::Unknown(key.clone()))?;
+                        if !self.keeps.insert(key) || self.ids.contains(key.as_str()) {
+                            return Err(Refused::Duplicate(key.clone()));
+                        }
+                        if above + held.depth > MAX_DEPTH {
+                            return Err(Refused::Deep);
+                        }
+                        continue;
                     }
-                    continue;
+                    let depth = above + weight(node);
+                    if depth > MAX_DEPTH {
+                        return Err(Refused::Deep);
+                    }
+                    if let Some(id) = node.id()
+                        && (!self.ids.insert(id) || self.keeps.contains(id))
+                    {
+                        return Err(Refused::Duplicate(id.to_owned()));
+                    }
+                    match node {
+                        Node::Box { layout, .. } | Node::Text { layout, .. } | Node::Scroll { layout, .. }
+                            if !sizes_ok(layout) =>
+                        {
+                            return Err(Refused::Number);
+                        }
+                        Node::Markdown { source: Source::Content(content), .. }
+                        | Node::Diff { content: Source::Content(content), .. }
+                            if !(self.env.content)(*content) =>
+                        {
+                            return Err(Refused::Content(*content));
+                        }
+                        _ => {}
+                    }
+                    self.nodes(node.children(), depth)?;
                 }
-                if let Some(id) = node.id()
-                    && (!ids.insert(id.to_owned()) || keeps.contains(id))
-                {
-                    return Err(Refused::Duplicate(id.to_owned()));
-                }
-                if let Node::Markdown { source: Source::Content(content), .. }
-                | Node::Diff { content: Source::Content(content), .. } = node
-                    && !(env.content)(*content)
-                {
-                    return Err(Refused::Content(*content));
-                }
-                walk(node.children(), env, ids, keeps)?;
+                Ok(())
             }
-            Ok(())
         }
-        walk(nodes, env, &mut ids, &mut keeps)?;
-        for key in &keeps {
-            if !self.ids.contains_key(key) {
-                return Err(Refused::Unknown(key.clone()));
-            }
+        let mut walk = Walk { tree: self, env, ids: HashSet::new(), keeps: HashSet::new() };
+        walk.nodes(nodes, 0)?;
+        if walk.keeps.is_empty() {
+            return Ok(HashSet::new());
         }
-        // An id of the tree, or a keep, may not be one inside a subtree it keeps.
-        for id in ids.iter().chain(&keeps) {
-            let mut above = self.ids.get(id).cloned().flatten();
+        // An id of the tree, or a keep, may not be one inside a subtree it keeps. Each ancestor is checked once.
+        let mut clear: HashSet<&str> = HashSet::new();
+        for id in walk.ids.iter().chain(&walk.keeps) {
+            let mut chain = Vec::new();
+            let mut above = self.ids.get(*id).and_then(|held| held.above.as_deref());
             while let Some(ancestor) = above {
-                if keeps.contains(&ancestor) {
-                    return Err(Refused::Duplicate(id.clone()));
+                if clear.contains(ancestor) {
+                    break;
                 }
-                above = self.ids.get(&ancestor).cloned().flatten();
+                if walk.keeps.contains(ancestor) {
+                    return Err(Refused::Duplicate((*id).to_owned()));
+                }
+                chain.push(ancestor);
+                above = self.ids.get(ancestor).and_then(|held| held.above.as_deref());
             }
+            clear.extend(chain);
         }
-        Ok(keeps)
+        Ok(walk.keeps.into_iter().map(str::to_owned).collect())
     }
 }
 
@@ -311,14 +372,18 @@ fn take(nodes: &mut [Mounted], keys: &HashSet<String>, kept: &mut HashMap<String
     }
 }
 
-fn collect_ids(nodes: &[Mounted], above: Option<&str>, ids: &mut HashMap<String, Option<String>>) {
+/// Records every id of `nodes`, under `above`; returns the layout levels the deepest of them takes.
+fn collect_ids(nodes: &[Mounted], above: Option<&str>, ids: &mut HashMap<String, Held>) -> u16 {
+    let mut deepest = 0;
     for node in nodes {
         let id = node.node.id();
+        let depth = weight(&node.node) + collect_ids(&node.children, id.or(above), ids);
         if let Some(id) = id {
-            ids.insert(id.to_owned(), above.map(str::to_owned));
+            ids.insert(id.to_owned(), Held { above: above.map(str::to_owned), depth });
         }
-        collect_ids(&node.children, id.or(above), ids);
+        deepest = deepest.max(depth);
     }
+    deepest
 }
 
 impl Pass<'_, '_> {

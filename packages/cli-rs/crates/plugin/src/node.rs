@@ -151,7 +151,11 @@ impl Mount {
         let node = match (self.render)(host, &input, changed) {
             abi::Render::Keep => return,
             abi::Render::Hide => None,
-            abi::Render::Show(node) => Some(node),
+            abi::Render::Show(node) if fits(&node) => Some(node),
+            abi::Render::Show(_) => {
+                log::error!("a claim in slot {}: its node nests too deep or has a size OpenTUI refuses", self.path);
+                return;
+            }
         };
         let theme = host.theme();
         let hidden = matches!(&*self.shown.borrow(), Some(None)) && node.is_none();
@@ -445,7 +449,29 @@ fn clickable(widget: &impl Widget, click: Option<&abi::Click>, act: &Act) {
     });
 }
 
+/// Whether OpenTUI can lay out `node`: it nests no deeper than [`reconcile::MAX_DEPTH`] levels and its sizes in
+/// percent are finite numbers of 0 or more. OpenTUI ends the TUI on either, so a node that fails is not drawn. The
+/// walk stops at the bound.
+pub fn fits(node: &abi::Node) -> bool {
+    fn walk(node: &abi::Node, above: u16) -> bool {
+        let depth = above + if matches!(node, abi::Node::Markdown { .. }) { 4 } else { 1 };
+        match node {
+            _ if depth > reconcile::MAX_DEPTH => false,
+            abi::Node::Box { layout, children, .. } => {
+                reconcile::sizes_ok(layout) && children.iter().all(|child| walk(child, depth))
+            }
+            abi::Node::Text { layout, .. } => reconcile::sizes_ok(layout),
+            _ => true,
+        }
+    }
+    walk(node, 0)
+}
+
 pub(crate) fn lay_out<W: Widget>(widget: &W, layout: &abi::Layout) -> W {
+    // A size OpenTUI refuses never reaches it; `fits` keeps such a node from being drawn at all.
+    if !reconcile::sizes_ok(layout) {
+        return widget.clone();
+    }
     match layout.width {
         Some(abi::Width::Cells(cells)) => drop(widget.width(cells)),
         Some(abi::Width::Percent(percent)) => drop(widget.width(Length::percent(percent))),

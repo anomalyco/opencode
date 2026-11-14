@@ -411,6 +411,10 @@ impl Live {
     fn fill_body(&self, tui: &Tui, body: &abi::Node) {
         use opencode_plugin::Host;
         self.content.clear();
+        if !node::fits(body) {
+            log::error!("plugin {}: its panel's body nests too deep or has a size OpenTUI refuses", self.owner.0);
+            return;
+        }
         let act = self.act(tui);
         let mut hovers = Vec::new();
         let links = RefCell::new(Vec::new());
