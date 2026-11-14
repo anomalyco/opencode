@@ -1088,6 +1088,19 @@ impl Router {
     }
 
     /// Closes plugin `plugin`'s overlay `surface`; `tell` sends its opener [`Event::Closed`].
+    /// Closes the overlay that has the focus, telling its opener, as the reserved chord does; whether one had it.
+    pub fn close_focused(&self, host: &dyn Host) -> bool {
+        let focused = self
+            .overlays
+            .borrow()
+            .iter()
+            .find(|shown| focus_within(host.app(), shown.frame.id()))
+            .map(|shown| (shown.plugin.clone(), shown.surface.clone()));
+        let Some((plugin, surface)) = focused else { return false };
+        self.close(host, &plugin, &surface, true);
+        true
+    }
+
     pub(crate) fn close(&self, host: &dyn Host, plugin: &str, surface: &str, tell: bool) {
         let shown = {
             let mut overlays = self.overlays.borrow_mut();
