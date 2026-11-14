@@ -80,7 +80,14 @@ export const layer = Layer.effect(
             if (
               !owned.some(
                 (tool) =>
-                  Permission.evaluate(McpTool.name(tool.server, tool.name), "*", permissions).effect !== "deny",
+                  Permission.evaluateActions(
+                    {
+                      action: McpTool.name(tool.server, tool.name),
+                      legacyAction: McpTool.legacyName(tool.server, tool.name),
+                    },
+                    "*",
+                    permissions,
+                  ).effect !== "deny",
               )
             )
               return []

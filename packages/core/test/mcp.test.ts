@@ -652,6 +652,9 @@ describe("MCP errors", () => {
 test("MCP tool names match V1 sanitization", () => {
   expect(McpTool.namespace("context 7")).toBe("context_7")
   expect(McpTool.name("context 7", "resolve.library/id")).toBe("context_7_resolve_library_id")
+  expect(McpTool.namespace("mcp-atlassian")).toBe("mcp-atlassian")
+  expect(McpTool.legacyName("mcp-atlassian", "get-page")).toBe("mcp-atlassian_get-page")
+  expect(McpTool.name("mcp-atlassian", "get-page")).toBe("mcp_atlassian_get_page")
 })
 
 test("passes session IDs as MCP request metadata", async () => {
