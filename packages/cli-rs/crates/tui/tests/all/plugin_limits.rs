@@ -33,11 +33,14 @@ thread_local! {
     static BESIDE: RefCell<Subject> = RefCell::new(Rc::new(|_| v2::Node::text(vec![abi::Span::new("sibling")])));
     /// The route's views, as the plugin counts them.
     static VIEWS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// Each view of the route and of the sibling, and whether it heard that its plugin woke.
+    static HEARD: RefCell<Vec<(&'static str, bool)>> = const { RefCell::new(Vec::new()) };
 }
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.surface(v2::Surface::new("tree", v2::Place::Route("tree".into()), |cx| {
         VIEWS.with(|views| views.set(views.get() + 1));
+        HEARD.with(|heard| heard.borrow_mut().push(("route", cx.input.changed.woken)));
         let subject = SUBJECT.with(|subject| subject.borrow().clone());
         subject(cx)
     }));
@@ -81,6 +84,7 @@ thread_local! {
 
 fn sibling(setup: &mut abi::Setup) -> Result<(), String> {
     setup.surface(v2::Surface::new("beside", v2::Place::Slot(abi::Placement::append("app")), |cx| {
+        HEARD.with(|heard| heard.borrow_mut().push(("beside", cx.input.changed.woken)));
         let beside = BESIDE.with(|beside| beside.borrow().clone());
         beside(cx)
     }));
@@ -1442,11 +1446,19 @@ fn two_plugins_share_the_rows_of_a_frame() {
             PHASE.with(|phase| phase.set(1));
             WAKE_ROUTE.with(|waker| waker.borrow().as_ref().unwrap().wake());
             WAKER.with(|waker| waker.borrow().as_ref().unwrap().wake());
+            HEARD.with(|heard| heard.borrow_mut().clear());
             let before = reconcile::work();
             let first = harness.app.render().text();
             let deferred = reconcile::work().since(before).deferred;
             assert_eq!(deferred, 1, "{carrier:?}: revisions left for the next frame");
-            (first, caught_up(&harness))
+            let second = caught_up(&harness);
+            // The revision left for the next frame hears what changed for it, as the other does (P6a's input).
+            let heard = HEARD.with(|heard| heard.borrow().clone());
+            for surface in ["route", "beside"] {
+                let woke = heard.iter().any(|(name, woke)| *name == surface && *woke);
+                assert!(woke, "{carrier:?}: {surface} never heard it woke: {heard:?}");
+            }
+            (first, second)
         };
         assert!(first.contains("route 1") != first.contains("beside 1"), "{carrier:?}: one revision a frame\n{first}");
         let twin = {
