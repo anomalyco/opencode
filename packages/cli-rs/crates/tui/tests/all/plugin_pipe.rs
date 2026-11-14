@@ -2159,3 +2159,27 @@ fn a_read_over_its_bound_fails_alone() {
     tui.keymap.dispatch("lab.readerror", None);
     assert_eq!(toasted(&pipe, "read error"), "read error none");
 }
+
+// Expected (no orphans): a TUI that ends as usual leaves nothing a plugin started either, also a process outside the JS
+// host's group, which the host's kill of the group misses: the JS host ends it as its input ends.
+#[cfg(target_os = "linux")]
+#[test]
+fn the_tui_ending_leaves_nothing_its_plugins_started() {
+    let Some(config) = config() else { return };
+    let pids = std::env::temp_dir().join(format!("ended-{}-{:?}", std::process::id(), std::thread::current().id()));
+    let _ = std::fs::remove_file(&pids);
+    let pipe = open(&[("spawner", Some(serde_json::json!({ "pids": pids.to_string_lossy() })))], config, (80, 30));
+    pipe.active("example.spawner");
+    pipe.settle();
+    let started: Vec<u32> =
+        std::fs::read_to_string(&pids).unwrap().split_whitespace().map(|pid| pid.parse().unwrap()).collect();
+    let all: Vec<u32> = started.iter().copied().chain(pipe.scripts().pid()).collect();
+    assert_eq!(all.len(), 3);
+    drop(pipe);
+    let left: Vec<u32> = all.into_iter().filter(|pid| !gone(*pid)).collect();
+    for pid in &left {
+        let _ = std::process::Command::new("kill").args(["-9", &pid.to_string()]).status();
+    }
+    let _ = std::fs::remove_file(&pids);
+    assert!(left.is_empty(), "{left:?} outlived the TUI");
+}
