@@ -297,6 +297,16 @@ export const settings: Setting[] = [
     keywords: ["attachments", "clipboard", "images", "prompt"],
   },
   {
+    title: "History scope",
+    category: "Input",
+    path: ["prompt", "history_scope"],
+    description: "Whether prompt recall is shared by every session or scoped to the current session",
+    default: "global",
+    values: ["global", "session"],
+    labels: ["all sessions", "current session"],
+    keywords: ["prompt history", "recall", "history"],
+  },
+  {
     title: "Leader timeout",
     category: "Input",
     path: ["leader", "timeout"],
