@@ -35,10 +35,12 @@ export const kindKeys = {
   shell: "ui.timeline.event.shells",
 } as const
 
-/** How a group's label counts work it started, beside its other calls: "1 command, started 1 shell". */
+/** How a group's label counts work that runs on, beside its other calls: "1 command, started 1 shell". */
 export const launchKeys = {
   started: { shell: "ui.timeline.activity.startedShells", subagent: "ui.timeline.activity.startedSubagents" },
   ran: { shell: "ui.timeline.activity.commands", subagent: "ui.timeline.activity.subagents" },
+  finished: { shell: "ui.timeline.activity.finishedShells", subagent: "ui.timeline.activity.finishedSubagents" },
+  stopped: { shell: "ui.timeline.activity.stoppedShells", subagent: "ui.timeline.activity.stoppedSubagents" },
 } as const
 
 // Text a call or notice carries, where it is not empty.
@@ -97,6 +99,13 @@ export function noticeEvent(message: SessionMessageInfo): TimelineEvent | undefi
   if (state === "cancelled") return { ...item, verb: "stopped", failed: false }
 
   return { ...item, verb: "finished", failed: state === "error" }
+}
+
+/** Which subagent or shell an event is about, where it says. */
+export function workKey(event: TimelineEvent) {
+  const id = event.kind === "shell" ? event.shellID : event.sessionID
+
+  return id ? `${event.kind}:${id}` : undefined
 }
 
 /**

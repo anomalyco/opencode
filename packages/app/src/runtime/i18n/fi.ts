@@ -282,7 +282,7 @@ export const dict = {
   "provider.connect.title": "Yhdistä {{provider}}",
   "provider.connect.method.apiKey": "API-avain",
   "provider.connect.status.inProgress": "Valtuutus käynnissä…",
-  "provider.connect.status.waiting": "Odotetaan valtuutusta…",
+  "provider.connect.status.waiting": "Odotetaan valtuutusta",
   "provider.connect.status.failed": "Valtuutus epäonnistui: {{error}}",
   "provider.connect.apiKey.description":
     "Anna {{provider}}-API-avaimesi yhdistääksesi tilisi ja käyttääksesi {{provider}}-malleja OpenCodessa.",
@@ -821,7 +821,6 @@ export const dict = {
   "session.background.moveInline": "Siirrä käynnissä oleva työ taustalle painamalla {{keybind}}",
   "command.session.location.cycle": "Vaihda istunnon sijaintia",
   "dialog.provider.anthropic.note": "Suora pääsy Claude-malleihin API-avaimella",
-  "provider.connect.title.anthropicProMax": "Kirjaudu sisään Anthropiciin",
   "prompt.toast.uploading.percent": "{{percent}} %",
   "prompt.toast.uploading.cancelFile": "Peru tiedoston {{filename}} lähetys",
   "prompt.toast.uploadFailed.title": "Lähetys epäonnistui",

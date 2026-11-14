@@ -149,7 +149,7 @@ export const dict = {
   "provider.connect.title": "{{provider}} ni ulang",
   "provider.connect.method.apiKey": "API kaliti",
   "provider.connect.status.inProgress": "Avtorizatsiya davom etmoqda…",
-  "provider.connect.status.waiting": "Avtorizatsiya kutilmoqda…",
+  "provider.connect.status.waiting": "Avtorizatsiya kutilmoqda",
   "provider.connect.status.failed": "Avtorizatsiya amalga oshmadi: {{error}}",
   "provider.connect.apiKey.description":
     "Hisobingizni ulash va OpenCode’da {{provider}} modellaridan foydalanish uchun {{provider}} API kalitini kiriting.",
@@ -826,7 +826,6 @@ export const dict = {
   "workspace.delete.location": "Joylashuv",
   "command.session.location.cycle": "Sessiya joylashuvini almashtirish",
   "dialog.provider.anthropic.note": "API kaliti orqali Claude modellariga bevosita kirish",
-  "provider.connect.title.anthropicProMax": "Anthropic orqali kirish",
   "prompt.toast.uploading.cancelFile": "{{filename}} faylini yuklashni bekor qilish",
   "prompt.toast.uploadFailed.title": "Yuklash amalga oshmadi",
   "prompt.toast.uploading.percent": "{{percent}}%",

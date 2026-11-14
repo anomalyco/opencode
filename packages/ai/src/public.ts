@@ -109,13 +109,26 @@ export type {
 } from "./schema/index.js"
 export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageResponse } from "./image.js"
 export type {
+  ImageJob,
   ImageModelOptions,
   ImageOptions,
   ImageRequest,
   ImageRequestInput,
   ImageResolution,
   ImageRoute,
+  ImageStatus,
 } from "./image.js"
+export { VideoAspectRatio, VideoDuration, VideoModel, VideoModelSchema, VideoResponse } from "./video.js"
+export type {
+  VideoJob,
+  VideoModelOptions,
+  VideoOptions,
+  VideoRequest,
+  VideoRequestInput,
+  VideoResolution,
+  VideoRoute,
+  VideoStatus,
+} from "./video.js"
 export {
   ChoiceAnswer,
   ChoiceQuestion,

@@ -2,15 +2,6 @@
   overflow: hidden;
 }
 
-/* Keep a fixed height so the dialog does not resize as results change while typing. */
-[data-component="dialog-v2"]:has(.command-palette) [data-slot="dialog-container"] {
-  width: min(calc(100vw - 24px), 640px);
-  height: min(calc(100vh - 96px), 480px);
-  border-radius: 12px;
-  background: var(--v2-background-bg-base);
-  box-shadow: var(--v2-elevation-floating);
-}
-
 .command-palette-body {
   display: flex;
   min-height: 0;
@@ -135,21 +126,6 @@
   .command-palette-description {
     max-width: 100%;
   }
-}
-
-/* Like the project picker, results grow down from a stable search-field anchor. Other picker dialogs keep their layout. */
-[data-component="dialog-v2"]:has(.command-palette-compact) {
-  align-items: flex-start;
-}
-
-[data-component="dialog-v2"]:has(.command-palette-compact) [data-slot="dialog-container"] {
-  width: min(calc(100vw - 24px), 480px);
-  height: auto;
-  max-height: min(calc(100vh - 96px), 480px);
-  min-height: 0;
-  margin-top: max(48px, calc((100vh - 480px) / 2));
-  background: var(--v2-background-bg-base);
-  box-shadow: var(--v2-elevation-overlay);
 }
 
 .command-palette-compact {

@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { Card, CardActions, CardDescription, CardTitle } from "./card"
+import { Card, CardActions, CardDescription, CardTitle, type CardProps } from "./card"
 import { Button } from "@opencode/ui/button"
 
 const docs = `### Overview
@@ -39,18 +38,32 @@ export default {
   },
   args: {
     variant: "normal",
+    icon: "auto",
+    title: "Card title",
+    description: "Small supporting text.",
   },
   argTypes: {
+    icon: { control: "select", options: ["auto", "none", "check"] },
     variant: {
       control: "select",
       options: ["normal", "error", "warning", "success", "info"],
     },
   },
-  render: (props: { variant?: "normal" | "error" | "warning" | "success" | "info" }) => {
+  render: (props: {
+    variant: CardProps["variant"]
+    icon: "auto" | "none" | "check"
+    title: string
+    description: string
+  }) => {
     return (
       <Card variant={props.variant}>
-        <CardTitle variant={props.variant}>Card title</CardTitle>
-        <CardDescription>Small supporting text.</CardDescription>
+        <CardTitle
+          variant={props.variant}
+          icon={props.icon === "auto" ? undefined : props.icon === "none" ? false : props.icon}
+        >
+          {props.title}
+        </CardTitle>
+        <CardDescription>{props.description}</CardDescription>
         <CardActions>
           <Button size="small" variant="neutral">
             Action

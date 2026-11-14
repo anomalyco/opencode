@@ -181,12 +181,11 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "查看另外 70 多个提供商",
 
   "dialog.provider.viewAll": "查看更多提供商",
-
   "provider.connect.title": "连接 {{provider}}",
-  "provider.connect.title.anthropicProMax": "登录 Anthropic",
+
   "provider.connect.method.apiKey": "API 密钥",
   "provider.connect.status.inProgress": "正在授权…",
-  "provider.connect.status.waiting": "等待授权…",
+  "provider.connect.status.waiting": "等待授权",
   "provider.connect.status.failed": "授权失败：{{error}}",
   "provider.connect.apiKey.description":
     "输入你的 {{provider}} API 密钥以连接账户，并在 OpenCode 中使用 {{provider}} 模型。",

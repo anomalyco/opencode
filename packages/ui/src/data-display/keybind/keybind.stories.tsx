@@ -1,18 +1,25 @@
-import { Keybind } from "./keybind"
+import { For } from "solid-js"
+import { Keybind, type KeybindProps } from "./keybind"
+
+const variants = ["neutral", "ghost", "outline"] satisfies KeybindProps["variant"][]
+
+type Args = { keys: string; variant: KeybindProps["variant"] }
+
+function Preview(args: Args) {
+  return <Keybind keys={args.keys.trim().split(/\s+/).filter(Boolean)} variant={args.variant} />
+}
 
 const docs = `### Overview
 Inline keybind indicator that renders one or more keyboard keys in a compact row.
 
 ### API
-- \`keys\`: Array of key labels to display (e.g. \`["⌘", "K"]\`).
-- \`variant\`: "neutral" (gray background) | "ghost" (no background) | "outline" (border, no background).
+- \`keys\`: Array of key labels to display. Separate labels with spaces in the preview.
 - Inherits native div attributes.
 
 ### Variants
-- **Neutral** — each key sits on a \`#D4D4D4\` pill with darker text.
-- **Ghost** — keys render without a background, lighter text color.
-- **Outline** — each key has an inset border and no background, with the same dimensions as Neutral.
-`
+- Neutral — each key sits on a gray pill with darker text.
+- Ghost — keys render without a background, with lighter text.
+- Outline — each key has an inset border and no background, with the dimensions of Neutral.`
 
 export default {
   title: "UI/Keybind",
@@ -22,45 +29,30 @@ export default {
   parameters: {
     frameHeight: "200px",
     frameBackground: "#fff",
-    docs: {
-      description: {
-        component: docs,
-      },
-    },
+    docs: { description: { component: docs } },
   },
-  args: {
-    keys: ["⌘"],
-    variant: "neutral",
-  },
+  args: { keys: "⌘", variant: "neutral" },
   argTypes: {
-    keys: {
-      control: "object",
-    },
-    variant: {
-      control: "select",
-      options: ["neutral", "ghost", "outline"],
-    },
+    variant: { control: "select", options: variants },
   },
+  render: Preview,
 }
 
 export const Playground = {}
 
 export const Variants = {
-  render: () => (
-    <div style={{ display: "flex", gap: "24px", "align-items": "center" }}>
-      <Keybind keys={["⌘"]} variant="neutral" />
-      <Keybind keys={["⌘"]} variant="ghost" />
-      <Keybind keys={["⌘"]} variant="outline" />
+  render: (args: Args) => (
+    <div class="flex items-center gap-6">
+      <For each={variants}>{(variant) => <Preview {...args} variant={variant} />}</For>
     </div>
   ),
 }
 
 export const MultipleKeys = {
-  render: () => (
-    <div style={{ display: "flex", gap: "24px", "align-items": "center" }}>
-      <Keybind keys={["⌘", "K"]} variant="neutral" />
-      <Keybind keys={["⌘", "K"]} variant="ghost" />
-      <Keybind keys={["⌘", "K"]} variant="outline" />
+  args: { keys: "⌘ K" },
+  render: (args: Args) => (
+    <div class="flex items-center gap-6">
+      <For each={variants}>{(variant) => <Preview {...args} variant={variant} />}</For>
       <Keybind keys={["Ctrl", "B"]} variant="neutral" />
       <Keybind keys={["Ctrl", "B"]} variant="ghost" />
     </div>
@@ -68,29 +60,18 @@ export const MultipleKeys = {
 }
 
 export const AllExamples = {
-  render: () => (
-    <div style={{ display: "flex", "flex-direction": "column", gap: "16px" }}>
-      <div style={{ display: "flex", gap: "24px", "align-items": "center" }}>
-        <span style={{ "font-size": "11px", color: "#808080", width: "50px" }}>Neutral</span>
-        <Keybind keys={["⌘"]} variant="neutral" />
-        <Keybind keys={["⌘", "K"]} variant="neutral" />
-        <Keybind keys={["⌘", "⇧", "P"]} variant="neutral" />
-        <Keybind keys={["Ctrl", "Shift", "B"]} variant="neutral" />
-      </div>
-      <div style={{ display: "flex", gap: "24px", "align-items": "center" }}>
-        <span style={{ "font-size": "11px", color: "#808080", width: "50px" }}>Ghost</span>
-        <Keybind keys={["⌘"]} variant="ghost" />
-        <Keybind keys={["⌘", "K"]} variant="ghost" />
-        <Keybind keys={["⌘", "⇧", "P"]} variant="ghost" />
-        <Keybind keys={["Ctrl", "Shift", "B"]} variant="ghost" />
-      </div>
-      <div style={{ display: "flex", gap: "24px", "align-items": "center" }}>
-        <span style={{ "font-size": "11px", color: "#808080", width: "50px" }}>Outline</span>
-        <Keybind keys={["⌘"]} variant="outline" />
-        <Keybind keys={["⌘", "K"]} variant="outline" />
-        <Keybind keys={["⌘", "⇧", "P"]} variant="outline" />
-        <Keybind keys={["Ctrl", "Shift", "B"]} variant="outline" />
-      </div>
+  render: (args: Args) => (
+    <div class="grid gap-4">
+      <For each={variants}>
+        {(variant) => (
+          <div class="flex items-center gap-6">
+            <span class="w-[50px] text-xs text-text-weak capitalize">{variant}</span>
+            <For each={[args.keys, "⌘ K", "⌘ ⇧ P", "Ctrl Shift B"]}>
+              {(keys) => <Preview keys={keys} variant={variant} />}
+            </For>
+          </div>
+        )}
+      </For>
     </div>
   ),
 }
