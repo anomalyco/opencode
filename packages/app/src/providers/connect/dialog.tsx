@@ -107,9 +107,9 @@ export const DialogConnectProvider: Component<{
 
   return (
     <Dialog
-      size="large"
-      // A provider step fits its content; the list and the models keep the full height.
-      fit={frame() === "provider" || frame() === "accounts"}
+      size="normal"
+      fit
+      anchored
       preventBackdropDismiss={view().preventBackdropDismiss}
       onCloseAutoFocus={(event) => {
         if (view().completed && props.selection && props.onDone) {
@@ -396,8 +396,8 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
           }}
         />
       </div>
-      <div class="relative min-h-0 flex-1">
-        <div class="flex size-full min-h-0 flex-col gap-0.5 overflow-y-auto pb-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div class="relative flex min-h-0 flex-1 flex-col">
+        <div class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <For each={groups()}>
             {(group) => (
               <Show when={group.items().length > 0}>
@@ -1492,11 +1492,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
         data-component="provider-connect-content"
         data-scrollable
         class="flex min-h-0 flex-1 flex-col overflow-y-auto"
-        classList={{
-          "pb-2": view().frame === "provider" && !kind("methods"),
-          "w-full max-w-[480px] self-start":
-            kind("key") || kind("form") || kind("code") || kind("browser") || kind("claude"),
-        }}
+        classList={{ "pb-2": view().frame === "provider" && !kind("methods") }}
       >
         <Switch>
           <Match when={narrow("no-models")}>{(current) => <ConsoleNoModels body={current()} />}</Match>

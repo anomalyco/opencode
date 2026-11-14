@@ -27,6 +27,8 @@ export interface DialogProps extends ParentProps {
   size?: "normal" | "large" | "x-large"
   /** Height follows the content, up to the size's height. Large sizes grow down from a fixed top edge. */
   fit?: boolean
+  /** Fit within the preset's height and keep its top edge as content changes. */
+  anchored?: boolean
   variant?: "default" | "settings"
   class?: ComponentProps<"div">["class"]
   containerClass?: ComponentProps<"div">["class"]
@@ -113,6 +115,7 @@ export function Dialog(props: DialogProps) {
     "containerClass",
     "classList",
     "fit",
+    "anchored",
     "children",
     "onCloseAutoFocus",
     "preventBackdropDismiss",
@@ -128,6 +131,7 @@ export function Dialog(props: DialogProps) {
       data-component="dialog-v2"
       data-variant={local.variant === "settings" ? "settings" : undefined}
       data-fit={local.fit ? true : undefined}
+      data-anchored={local.anchored ? true : undefined}
       data-size={local.size || "normal"}
     >
       <div data-slot="dialog-container" class={local.containerClass}>
