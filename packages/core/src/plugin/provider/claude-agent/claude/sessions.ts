@@ -66,6 +66,8 @@ export interface Interface {
   readonly run: (request: Request) => Effect.Effect<void, Error>
   // OpenCode stopped running the session, so a turn still waiting for tool results will not get them.
   readonly idle: (sessionID: string) => Effect.Effect<void>
+  // OpenCode deleted the session, so nothing can resume it: stop its process now rather than after IDLE_MS.
+  readonly remove: (sessionID: string) => Effect.Effect<void>
 }
 
 const launch = (request: Request) =>
@@ -112,13 +114,15 @@ export function registry() {
     )
   })
 
+  const closeEntry = Effect.fn("ClaudeSessions.closeEntry")(function* (entry: Entry) {
+    if (entry.active) yield* Fiber.interrupt(entry.active)
+    // The active turn's finalizer can install a new idle timer.
+    if (entry.idle) yield* Fiber.interrupt(entry.idle)
+    yield* entry.lock.withPermit(stop(entry)).pipe(Effect.catch((error) => Effect.logWarning(error)))
+  })
+
   const closeEntries = Effect.fn("ClaudeSessions.closeEntries")(function* () {
-    for (const entry of [...entries.values(), ...temporary]) {
-      if (entry.active) yield* Fiber.interrupt(entry.active)
-      // The active turn's finalizer can install a new idle timer.
-      if (entry.idle) yield* Fiber.interrupt(entry.idle)
-      yield* entry.lock.withPermit(stop(entry)).pipe(Effect.catch((error) => Effect.logWarning(error)))
-    }
+    for (const entry of [...entries.values(), ...temporary]) yield* closeEntry(entry)
     entries.clear()
   })
 
@@ -469,7 +473,15 @@ export function registry() {
       yield* armIdle(entry)
     })
 
-    return { run, idle } satisfies Interface
+    const remove = Effect.fn("ClaudeSessions.remove")(function* (sessionID: string) {
+      const entry = entries.get(sessionID)
+      entries.delete(sessionID)
+      if (entry) yield* closeEntry(entry)
+      // A record saved before a restart has no entry here.
+      yield* records.remove(sessionID)
+    })
+
+    return { run, idle, remove } satisfies Interface
   })
 
   return { attach, close }

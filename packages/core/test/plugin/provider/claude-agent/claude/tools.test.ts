@@ -137,6 +137,23 @@ describe("Claude tool steps", () => {
     }),
   )
 
+  it.effect("deleting a session interrupts and drains a turn left waiting for tool results right away", () =>
+    Effect.gen(function* () {
+      const cancel = FakeClaude.replay("tools-waiting-cancel")
+      const nextUser = cancel.findIndex(
+        (step, index) => index > 1 && step.type === "exchange" && step.input.type === "user",
+      )
+      const claude = FakeClaude.make(cancel.slice(0, nextUser))
+      const test = yield* TestSessions.start(claude)
+      yield* TestTools.step(test.model, TestTools.prompt())
+      yield* test.sessions.idle("session-a")
+      yield* test.sessions.remove("session-a")
+      yield* Effect.promise(() => claude.runs[0]!.closed)
+      expect(test.storage.data.size).toBe(0)
+      claude.check()
+    }),
+  )
+
   it.effect("a process exit while OpenCode runs tools resumes with their saved results", () =>
     Effect.gen(function* () {
       const steps = FakeClaude.replay("tools-cancel")

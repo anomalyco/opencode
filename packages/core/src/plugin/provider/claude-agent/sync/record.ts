@@ -12,17 +12,22 @@ const Record = Schema.Struct({
 })
 export type Record = typeof Record.Type
 
+// Storage key prefix of a Session's record
+export const PREFIX = "sessions/"
+
 export interface Storage {
   readonly get: (key: string) => Effect.Effect<unknown>
   readonly set: (key: string, value: Record) => Effect.Effect<void>
+  readonly remove: (key: string) => Effect.Effect<void>
 }
 
 export function make(storage: Storage) {
   return {
     get: Effect.fn("SessionRecord.get")(function* (sessionID: string) {
-      const saved = Schema.decodeUnknownOption(Record)(yield* storage.get(`sessions/${sessionID}`))
+      const saved = Schema.decodeUnknownOption(Record)(yield* storage.get(PREFIX + sessionID))
       return Option.getOrUndefined(saved)
     }),
-    set: (sessionID: string, record: Record) => storage.set(`sessions/${sessionID}`, record),
+    set: (sessionID: string, record: Record) => storage.set(PREFIX + sessionID, record),
+    remove: (sessionID: string) => storage.remove(PREFIX + sessionID),
   }
 }

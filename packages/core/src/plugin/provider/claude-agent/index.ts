@@ -1,4 +1,5 @@
 import { define } from "@opencode/plugin/effect/plugin"
+import { Session } from "@opencode/schema/session"
 import { Effect, Option, Stream } from "effect"
 import { ClaudeIO } from "./claude/io.js"
 import { ClaudeSessions } from "./claude/sessions.js"
@@ -8,6 +9,7 @@ import { ClaudeInstructions } from "./instructions.js"
 import { ClaudeIntegration } from "./integration.js"
 import { ClaudeProvider } from "./provider.js"
 import { ClaudeSessionHooks } from "./session.js"
+import { SessionRecord } from "./sync/record.js"
 import { Environment } from "../../../environment/index.js"
 import { EnvironmentUnavailable } from "../../../environment/unavailable.js"
 import { Location } from "../../../location.js"
@@ -31,12 +33,48 @@ export const make = (io: ClaudeIO.Interface, registry = ClaudeSessions.registry(
       const sessions = yield* registry.attach({ io, status, storage: ctx.storage, directory: ctx.location.directory })
       yield* ctx.event
         .subscribe({
-          types: ["session.execution.succeeded", "session.execution.failed", "session.execution.interrupted"],
+          types: [
+            "session.execution.succeeded",
+            "session.execution.failed",
+            "session.execution.interrupted",
+            "session.deleted",
+          ],
         })
         .pipe(
-          Stream.runForEach((event) => sessions.idle(event.data.sessionID)),
+          Stream.runForEach((event) =>
+            (event.type === "session.deleted"
+              ? sessions.remove(event.data.sessionID)
+              : sessions.idle(event.data.sessionID)
+            ).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning("failed to update a Claude session", { sessionID: event.data.sessionID, cause }),
+              ),
+            ),
+          ),
           Effect.forkScoped({ startImmediately: true }),
         )
+      // Only a listening instance drops a deleted Session's record, so drop the ones deleted while none listened.
+      yield* Effect.gen(function* () {
+        let after: string | undefined
+        do {
+          const page = yield* ctx.storage.scan({ prefix: SessionRecord.PREFIX, after, limit: 100 })
+          yield* Effect.forEach(
+            page.entries,
+            (entry) =>
+              Effect.gen(function* () {
+                const session = yield* ctx.session
+                  .get({ sessionID: Session.ID.make(entry.key.slice(SessionRecord.PREFIX.length)) })
+                  .pipe(Effect.option)
+                if (Option.isNone(session)) yield* ctx.storage.remove(entry.key)
+              }),
+            { discard: true },
+          )
+          after = page.next
+        } while (after !== undefined)
+      }).pipe(
+        Effect.catchCause((cause) => Effect.logWarning("failed to drop records of deleted Claude sessions", { cause })),
+        Effect.forkScoped({ startImmediately: true }),
+      )
       yield* ClaudeProvider.register(ctx, status, io)
       yield* ClaudeIntegration.register(ctx, status)
       yield* ClaudeAISDK.register(ctx, sessions)
