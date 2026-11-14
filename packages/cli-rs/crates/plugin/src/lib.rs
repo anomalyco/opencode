@@ -1577,10 +1577,6 @@ pub(crate) fn budget(
         let id = id.to_owned();
         defer(host, move |host| host.slow(&id, &cost));
     }
-    // Every change of slow, not only the first one a session that a toast tells (review carbon-4).
-    if monitor.take_flipped() {
-        defer(host, |host| host.slow_changed());
-    }
     let Some(strong) = host.upgrade().filter(|_| timed.opened && monitor.wants_close()) else { return };
     let (host, monitor) = (host.clone(), monitor.clone());
     // Animations run as a paint starts, before it counts the frame: the frame of these calls ends there.
@@ -1588,6 +1584,8 @@ pub(crate) fn budget(
         for (id, cost) in monitor.close() {
             defer(&host, move |host| host.slow(&id, &cost));
         }
+        // Every change of slow, not only the first one a session that a toast tells (review carbon-4). A frame of
+        // plugin calls always ends here, at the paint, so a change is always seen here.
         if monitor.take_flipped() {
             defer(&host, |host| host.slow_changed());
         }
