@@ -208,8 +208,12 @@ export function context(base: Base, carrier: Carrier) {
         (read(`family:${sessionID}`, { type: "family", id: sessionID })?.members ?? []).map((member: Json) => member.id),
       cost: (sessionID: string): number => read(`family:${sessionID}`, { type: "family", id: sessionID })?.cost ?? 0,
       status: (sessionID: string) => (session(sessionID)?.status === "running" ? "running" : "idle"),
-      // The host's inbox is not a read: a session has no pending items, quietly, as one whose inbox is empty.
-      pending: { list: () => [], sync: async () => {}, invalidate() {} },
+      // The session's inbox items not delivered yet, as the host holds them (bigboi P8-6).
+      pending: {
+        list: (sessionID: string) => read(`pending:${sessionID}`, { type: "pending", id: sessionID }) ?? [],
+        sync: (sessionID: string) => synced(`pending:${sessionID}`, { type: "pending", id: sessionID }),
+        invalidate() {},
+      },
       sync: (sessionID: string) => synced(`session:${sessionID}`, { type: "session", id: sessionID }),
       invalidate() {},
       message: {
@@ -315,7 +319,7 @@ export function context(base: Base, carrier: Carrier) {
   // around it, as TS does; a close of it (escape, the backdrop, another dialog) calls `onClose`, as TS's
   // `dialog.replace` does.
   const PANEL = "compat.dialog"
-  let shown: { mounted: Mounted; onClose?: () => void; opened: boolean } | undefined
+  let shown: { mounted: Mounted; onClose?: () => void; opened: boolean; keys?: () => void } | undefined
   let presentation = { size: "medium", centered: false }
   let resend = false
   const unshow = () => {
@@ -323,16 +327,36 @@ export function context(base: Base, carrier: Carrier) {
     shown = undefined
     if (!was) return
     was.mounted.dispose()
+    was.keys?.()
     presses.delete(PANEL)
     was.onClose?.()
   }
+  // A panel's body is a node of ABI 1.x, which has no scroll: a `<scrollbox>` in the dialog is a box that does not
+  // scroll (bigboi P8-6). While one shows, the keys that would scroll it say so, once, rather than do nothing.
+  const SCROLLS = `${id}.compat.dialog-scroll`
+  const scrolls = (node: Json): boolean => node?.type === "scroll" || (node?.children ?? []).some(scrolls)
   const sendShown = () => {
     resend = false
     if (!shown) return
     const reading = pressing(PANEL)
     let body: Json
     try {
-      body = legacy(serialize(shown.mounted.root, reading))
+      const tree = serialize(shown.mounted.root, reading)
+      if (scrolls(tree) && !shown.keys)
+        shown.keys = createRoot((dispose) => {
+          ctx.keymap.layer(() => ({
+            mode: "global",
+            commands: [
+              {
+                id: SCROLLS,
+                bind: "up,down,pageup,pagedown",
+                run: () => unsupported("scrolling a <scrollbox> in ui.dialog.show"),
+              },
+            ],
+          }))
+          return dispose
+        })
+      body = legacy(tree)
     } catch (error) {
       void carrier.effect({ type: "toast", variant: "error", title: "Plugin", message: `${id} crashed in dialog: ${error instanceof Error ? error.message : String(error)}` })
       unshow()

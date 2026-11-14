@@ -797,6 +797,10 @@ impl abi::Read for Reader<'_> {
         self.session(id, |state, id| visit(state.messages(id)));
     }
 
+    fn pending(&self, id: &str) -> Vec<abi::types::SessionInboxInfo> {
+        self.session(id, |state, id| state.pending(id).to_vec())
+    }
+
     fn models(&self, location: Option<&abi::LocationRef>) -> Option<Vec<ModelInfo>> {
         self.catalog(location, Catalog::Model, |data| data.model.clone())
     }

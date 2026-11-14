@@ -238,3 +238,25 @@ test("click handlers go with their mount", async () => {
   // The collector scans the stack conservatively: a few may stay; a kept table keeps all hundred.
   expect(kept.filter((ref) => ref.deref()).length).toBeLessThan(20)
 })
+
+// Bigboi P8-6: a session's pending inbox items are the host's, not an empty list.
+test("pending items are the host's", async () => {
+  const item = { type: "user", id: "inb_1", payload: { text: "queued" }, time: { created: 3 } }
+  const fake = host((key) => (key === "pending:s1" ? [item] : []))
+  const ctx = plugin("t.pending", fake)
+  await ctx.data.session.pending.sync("s1")
+  expect(ctx.data.session.pending.list("s1")).toEqual([item])
+})
+
+// Bigboi P8-6: a `<scrollbox>` in a dialog of the plugin's own does not scroll here; the keys that would scroll it say
+// so, once, while it shows.
+test("a dialog's scrollbox says it does not scroll", () => {
+  const fake = host()
+  const ctx = plugin("t.scroll", fake)
+  ctx.ui.dialog.show(() => h("scrollbox", { children: h("text", { children: "long" }) }))
+  const scroll = fake.meta.get("t.scroll.compat.dialog-scroll")
+  expect(scroll?.keybind).toBe("up,down,pageup,pagedown")
+  fake.commands.get("t.scroll.compat.dialog-scroll")!()
+  fake.commands.get("t.scroll.compat.dialog-scroll")!()
+  expect(fake.toasts()).toEqual(["t.scroll: scrolling a <scrollbox> in ui.dialog.show is not supported by opencode-native yet"])
+})

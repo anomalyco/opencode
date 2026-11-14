@@ -1034,6 +1034,10 @@ impl abi::Read for Scoped<'_> {
         self.read.messages(id, visit)
     }
 
+    fn pending(&self, id: &str) -> Vec<abi::types::SessionInboxInfo> {
+        self.read.pending(id)
+    }
+
     fn models(&self, location: Option<&abi::LocationRef>) -> Option<Vec<abi::types::ModelInfo>> {
         self.read.models(location)
     }
