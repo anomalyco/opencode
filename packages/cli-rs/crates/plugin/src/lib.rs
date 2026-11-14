@@ -14,7 +14,6 @@ pub mod surface;
 
 use std::any::Any;
 use std::cell::{Cell, RefCell};
-use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
@@ -365,13 +364,11 @@ fn in_process(plugin: abi::Plugin) -> Definition {
         // Setup reaches the host as a command does: its effects wait on the one queue. A setup that panics runs its
         // dispose callbacks within the same call, as the C ABI's `create` does, so nothing either asked for happens.
         let (set_up, _) = scope.monitor.call(scope.slot, "setup", || {
-            scope.attempt(&**setup.host(), |host| {
-                match catch_unwind(AssertUnwindSafe(|| (plugin.setup)(&mut api.setup_with(host)))) {
-                    Ok(set_up) => set_up,
-                    Err(panic) => {
-                        api.dispose(Some(host));
-                        std::panic::resume_unwind(panic)
-                    }
+            scope.attempt(&**setup.host(), |host| match contain::catch(|| (plugin.setup)(&mut api.setup_with(host))) {
+                Ok(set_up) => set_up,
+                Err(panic) => {
+                    api.dispose(Some(host));
+                    std::panic::resume_unwind(panic)
                 }
             })
         });
@@ -623,7 +620,7 @@ impl Scope {
         let (mut f, mut out) = (Some(f), None);
         host.read(&mut |read| {
             if let Some(f) = f.take() {
-                out = Some(catch_unwind(AssertUnwindSafe(|| f(&Scoped { read, host, scope: self }))));
+                out = Some(contain::catch(|| f(&Scoped { read, host, scope: self })));
             }
         });
         let call = std::mem::replace(&mut *self.call.borrow_mut(), outer).unwrap_or_default();
