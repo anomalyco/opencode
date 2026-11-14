@@ -86,9 +86,9 @@ pub(crate) struct List {
     shifted: Cell<f64>,
     /// The end clamped a restore since the behaviors last read it: the view did move.
     clamped: Cell<bool>,
-    /// An item's content changed since the list last settled: a correction then follows content that moved, so it
-    /// is no shift of the same view.
-    replaced: bool,
+    /// Where the restore last put a reading it still holds: its shift counts from there, not from where a solve then
+    /// clamped the offset.
+    restored: Cell<Option<f64>>,
     /// What the user typed into the inputs of items that lost their widgets, by input id.
     drafts: HashMap<String, (String, (u32, u32))>,
     /// The offset of the list this one was built again from, until its first solve: the scroll box takes it once it
@@ -122,7 +122,7 @@ impl List {
             moving: Cell::new(None),
             shifted: Cell::new(0.0),
             clamped: Cell::new(false),
-            replaced: false,
+            restored: Cell::new(None),
             drafts: HashMap::new(),
             carried: None,
         }
@@ -135,6 +135,8 @@ impl List {
         // back yet stays, and a move no solve has seen yet sets it.
         if self.reading.borrow().is_none() && !self.moving.get().is_some_and(|(frame, ..)| frame == u64::MAX) {
             *self.reading.get_mut() = self.at_top();
+            // A solve may clamp the offset before the restore: the shift counts from where the reading was.
+            self.restored.set(Some(self.top()));
         }
         let mut old: HashMap<String, Item> = self.items.drain(..).map(|item| (item.key.clone(), item)).collect();
         for item in items {
@@ -158,7 +160,6 @@ impl List {
                         apply(env, mounted, node);
                     }
                     if written != held.node {
-                        self.replaced = true;
                         held.measured = None;
                         held.anchors = logical(&written, env);
                         held.dynamic = reads_output(&written);
@@ -168,24 +169,20 @@ impl List {
                     held
                 }
                 // Validation refuses a keep of an item the list does not hold.
-                (None, node) => {
-                    self.replaced = true;
-                    Item {
-                        key: key.clone(),
-                        node: node.clone(),
-                        estimate,
-                        measured: None,
-                        used: f64::from(estimate),
-                        anchors: logical(node, env),
-                        dynamic: reads_output(node),
-                        mounted: None,
-                    }
-                }
+                (None, node) => Item {
+                    key: key.clone(),
+                    node: node.clone(),
+                    estimate,
+                    measured: None,
+                    used: f64::from(estimate),
+                    anchors: logical(node, env),
+                    dynamic: reads_output(node),
+                    mounted: None,
+                },
             };
             self.items.push(next);
         }
         for (_, gone) in old {
-            self.replaced = true;
             if let Some(mounted) = gone.mounted {
                 unmount(mounted, &mut HashMap::new());
             }
@@ -267,8 +264,10 @@ impl List {
                 let (follows, reading) = match intent {
                     Some(None) => (true, None),
                     Some(Some(row)) => (false, self.at_row(row).map(|(key, rows, _)| (key, rows, false))),
+                    // The end as the move saw it: this solve may already lay out an item it mounted, shorter than
+                    // its estimate, and clamp the offset to an end the reader never reached.
                     None => {
-                        let most = f64::from(self.scroll.content_view().rect().height - self.scroll.rect().height);
+                        let most = self.prefix[self.items.len()] - f64::from(self.scroll.rect().height);
                         let follows = most > 0.0 && self.top() >= most - 0.5;
                         (follows, if follows { None } else { self.at_top() })
                     }
@@ -282,10 +281,17 @@ impl List {
                 (false, None)
             }
         };
+        let kept = match (follows, &first) {
+            (false, None) => self.reading.take(),
+            _ => None,
+        };
+        if kept.is_none() {
+            self.restored.set(None);
+        }
         let reading = match (follows, first) {
             (true, _) => None,
             (false, Some(reading)) => reading,
-            (false, None) => self.reading.take().or_else(|| self.at_top()),
+            (false, None) => kept.or_else(|| self.at_top()),
         };
         let viewport = self.scroll.rect();
         let mut heights = false;
@@ -333,10 +339,11 @@ impl List {
             }
             let target = wanted.min(most);
             let (x, top) = self.scroll.scroll_position();
-            let from = meant.unwrap_or(top);
-            if (target - from).abs() >= 0.5 && !self.replaced {
+            let from = self.restored.get().or(meant).unwrap_or(top);
+            if (target - from).abs() >= 0.5 {
                 self.shifted.set(self.shifted.get() + target - from);
             }
+            self.restored.set(Some(target));
             if (target - top).abs() >= 0.5 {
                 self.scroll.scroll_to(x, target);
                 moved = true;
@@ -345,9 +352,8 @@ impl List {
         // Items this round mounts are laid out by the next solve, before their heights are in the sums: the same
         // reading holds until the list settles.
         let changed = self.place(env) || moved;
-        match changed {
-            true => *self.reading.get_mut() = held,
-            false => self.replaced = false,
+        if changed {
+            *self.reading.get_mut() = held;
         }
         changed
     }
