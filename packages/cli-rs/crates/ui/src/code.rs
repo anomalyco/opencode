@@ -135,7 +135,8 @@ fn paste_text(theme: &Theme) -> Color {
 }
 
 /// Read-only code in the theme's text color, highlighted as `filetype` (`<code conceal={false} fg={text.base}>`).
-/// It shows all its lines, wraps at a word as Core's `<code>` does, and takes no focus, as in the transcript.
+/// It shows all its lines, wraps at a word as Core's `<code>` does, and takes no focus, as in the transcript. Its
+/// text is final, so it keeps no parse tree for appends: a caller with new text builds a new view.
 pub fn view(app: &App, theme: &Theme, syntax: &SyntaxTheme, filetype: Option<&str>, content: &str) -> Code {
     crate::grammars::register();
     Code::new(app)
@@ -143,6 +144,7 @@ pub fn view(app: &App, theme: &Theme, syntax: &SyntaxTheme, filetype: Option<&st
         .syntax_theme(syntax.clone())
         .filetype(filetype)
         .set_code(content)
+        .finish()
         .wrap(WrapMode::Word)
         .focusable(false)
 }

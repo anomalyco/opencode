@@ -766,6 +766,7 @@ pub fn structured_widget(app: &App, snapshot: &Snapshot, theme: &RunTheme, mono:
                 .syntax_theme(syntax)
                 .filetype(filetype(file))
                 .set_code(content.clone())
+                .finish()
                 .wrap(WrapMode::Char)
                 .focusable(false);
             code.grow(1.0).basis(Length::Auto);
