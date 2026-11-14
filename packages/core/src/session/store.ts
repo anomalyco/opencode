@@ -1,7 +1,7 @@
 export * as SessionStore from "./store.js"
 
 import { and, asc, desc, eq, gt, isNotNull, isNull, like, lt, notInArray, or, sql, type SQL } from "drizzle-orm"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { Project } from "@opencode/schema/project"
 import { Workspace } from "@opencode/schema/workspace"
 import { AbsolutePath, PositiveInt, RelativePath } from "@opencode/schema/schema"
@@ -53,7 +53,7 @@ export type MessagesInput = {
 
 export interface Interface {
   readonly get: (sessionID: Session.ID) => Effect.Effect<Session.Info | undefined>
-  readonly list: (input?: ListInput) => Effect.Effect<Session.Info[]>
+  readonly list: (input?: ListInput, options?: { readonly messageTimes?: boolean }) => Effect.Effect<Session.ListInfo[]>
   readonly messages: (input: MessagesInput) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   readonly context: (sessionID: Session.ID) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   /**
@@ -149,7 +149,7 @@ const layer = Layer.effect(
         const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
         return row ? fromRow(row) : undefined
       }),
-      list: Effect.fn("SessionStore.list")(function* (input = {}) {
+      list: Effect.fn("SessionStore.list")(function* (input = {}, options) {
         const direction = input.anchor?.direction ?? "next"
         const requestedOrder = input.order ?? "desc"
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
@@ -187,10 +187,38 @@ const layer = Layer.effect(
             order === "asc" ? asc(sortColumn) : desc(sortColumn),
             order === "asc" ? asc(SessionTable.id) : desc(SessionTable.id),
           )
-        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
-          Effect.orDie,
-        )
-        return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
+        const limited = input.limit === undefined ? query : query.limit(input.limit)
+        if (!options?.messageTimes) {
+          const rows = yield* limited.all().pipe(Effect.orDie)
+          return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
+        }
+        // Limit the page before looking up message times, even when session sorting requires a temporary index.
+        const page = limited.as("page")
+        const rows = yield* db
+          .select({
+            ...page._.selectedFields,
+            lastUserMessage: sql<number | null>`(select message.time_created from ${SessionMessageTable} as message where message.session_id = ${sql.identifier("page")}.id and message.type = 'user' order by message.seq desc limit 1)`,
+            lastAssistantMessage: sql<number | null>`(select message.time_created from ${SessionMessageTable} as message where message.session_id = ${sql.identifier("page")}.id and message.type = 'assistant' order by message.seq desc limit 1)`,
+          })
+          .from(page)
+          .orderBy(
+            order === "asc" ? asc(page.time_updated) : desc(page.time_updated),
+            order === "asc" ? asc(page.id) : desc(page.id),
+          )
+          .all()
+          .pipe(Effect.orDie)
+        return (direction === "previous" ? rows.toReversed() : rows).map((row) => {
+          return {
+            ...fromRow(row),
+            experimental: {
+              time: {
+                lastUserMessage: row.lastUserMessage === null ? null : DateTime.makeUnsafe(row.lastUserMessage),
+                lastAssistantMessage:
+                  row.lastAssistantMessage === null ? null : DateTime.makeUnsafe(row.lastAssistantMessage),
+              },
+            },
+          }
+        })
       }),
       messages: Effect.fn("SessionStore.messages")(function* (input) {
         return yield* SessionHistory.decodeMessageRows(db, yield* messageRows(input))

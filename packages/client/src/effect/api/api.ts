@@ -142,7 +142,7 @@ export type SessionListInput = {
   readonly cursor?: Session.ListCursor | undefined
 }
 export type SessionListOutput = {
-  readonly data: ReadonlyArray<Session.Info>
+  readonly data: ReadonlyArray<Session.ListInfo>
   readonly cursor: {
     readonly previous?: Session.ListCursor | undefined
     readonly next?: Session.ListCursor | undefined

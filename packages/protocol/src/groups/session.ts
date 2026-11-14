@@ -49,6 +49,11 @@ const PublicSessionInfo = Schema.Struct({
   location: Location.PublicRef,
 }).annotate({ identifier: "Session.Info" })
 
+const PublicSessionListInfo = Schema.Struct({
+  ...Struct.omit(Session.ListInfo.fields, ["location"]),
+  location: Location.PublicRef,
+}).annotate({ identifier: "Session.ListInfo" })
+
 const PublicSessionTransfer = Schema.Struct({
   info: PublicSessionInfo,
   messages: Schema.Array(PublicSessionMessage),
@@ -128,7 +133,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       HttpApiEndpoint.get("session.list", "/api/session", {
         query: SessionsQuery,
         success: Schema.Struct({
-          data: Schema.Array(PublicSessionInfo),
+          data: Schema.Array(PublicSessionListInfo),
           cursor: Schema.Struct({
             previous: Session.ListCursor.pipe(Schema.optional),
             next: Session.ListCursor.pipe(Schema.optional),
