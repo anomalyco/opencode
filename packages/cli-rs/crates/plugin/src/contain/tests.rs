@@ -166,6 +166,70 @@ fn an_overrun_is_one_call_over_100_ms_and_a_cold_first_call_is_exempt() {
     assert!(!fresh.monitor.is_slow("p"));
 }
 
+// Expected: the time the thread waited on a run queue during a call is the machine's load, not the plugin's, so it is
+// not charged: 150 ms with 50 ms of it queued is 100 ms and no overrun, with 50 ms less a nanosecond it is one. Time
+// queued before the call is not the call's.
+#[test]
+fn time_on_a_run_queue_is_not_charged() {
+    for (waited, overrun) in [(Duration::from_millis(50), false), (Duration::from_millis(50) - NS, true)] {
+        let bench = Bench::new();
+        let queued = Rc::new(Cell::new(Duration::from_secs(7)));
+        let read = queued.clone();
+        *bench.monitor.queued.borrow_mut() = Rc::new(move || read.get());
+        let slot = bench.monitor.slot(&Artifact::builtin("p"));
+        let now = bench.now.clone();
+        let ((), timed) = bench.monitor.call(slot, "run-command", || {
+            now.set(now.get() + Duration::from_millis(150));
+            queued.set(queued.get() + waited);
+        });
+        assert_eq!(timed.took, Duration::from_millis(150) - waited);
+        assert_eq!(timed.overrun, overrun, "{waited:?}");
+    }
+}
+
+// Expected (Linux): what the kernel says this thread waited on a run queue grows while another thread holds its only
+// CPU, and the call that waited is charged less than its wall time by about that much.
+#[cfg(target_os = "linux")]
+#[test]
+fn the_kernel_tells_the_time_on_a_run_queue() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    // SAFETY: `sched_getcpu` takes nothing.
+    #[allow(unsafe_code)]
+    let cpu = unsafe { libc::sched_getcpu() } as usize;
+    pin(cpu);
+    let stop = Arc::new(AtomicBool::new(false));
+    let spinner = {
+        let stop = stop.clone();
+        std::thread::spawn(move || {
+            pin(cpu);
+            while !stop.load(Ordering::Relaxed) {}
+        })
+    };
+    let monitor = Monitor::default();
+    let slot = monitor.slot(&Artifact::builtin("p"));
+    let before = queued();
+    let started = Instant::now();
+    // Busy for 200 ms of wall time, which the spinner shares.
+    let ((), timed) = monitor.call(slot, "run-command", || while started.elapsed() < Duration::from_millis(200) {});
+    let waited = queued() - before;
+    stop.store(true, Ordering::Relaxed);
+    spinner.join().unwrap();
+    assert!(waited > Duration::from_millis(20), "{waited:?}");
+    assert!(timed.took < started.elapsed() - waited / 2, "{timed:?} {waited:?}");
+}
+
+/// Pins the calling thread to `cpu`.
+#[cfg(target_os = "linux")]
+#[allow(unsafe_code)]
+fn pin(cpu: usize) {
+    // SAFETY: a zeroed set is a valid empty one, `CPU_SET` writes inside it, and the call only reads it.
+    unsafe {
+        let mut set: libc::cpu_set_t = std::mem::zeroed();
+        libc::CPU_SET(cpu, &mut set);
+        assert_eq!(libc::sched_setaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &set), 0);
+    }
+}
+
 // Expected: a call within a call is part of the outer one: it is not timed apart, and the outer one counts all.
 #[test]
 fn a_nested_call_is_part_of_the_outer_one() {
