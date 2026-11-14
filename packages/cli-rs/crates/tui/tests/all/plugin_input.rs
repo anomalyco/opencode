@@ -1812,6 +1812,15 @@ fn a_taken_press_owns_its_gesture() {
     harness.app.mouse(MouseEventKind::Up(MouseButton::Left), sx + 1, sy);
     settle(&harness);
     assert!(!taken().iter().any(|line| line.contains("Drop")), "a drop under a dialog reached the plugin");
+    // The dialog ended the capture: once it closes, the button still down, a drag is no longer the plugin's.
+    harness.app.press("escape");
+    settle(&harness);
+    taken();
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), x + 2, y);
+    settle(&harness);
+    assert!(!taken().iter().any(|line| line.contains("Drag a")), "a dialog left the capture");
+    harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 2, y);
+    settle(&harness);
     // The focus given away on the press.
     let harness = open_with(|probe| probe.down_focus_b = true);
     run(&harness, "input.panel", None);
@@ -2009,4 +2018,19 @@ fn a_row_action_is_primary_unless_it_says() {
     let screen = harness.app.text();
     let at = |word: &str| support::at(&screen, word).map(|(x, y)| (y, x));
     assert!(at("launch") > at("new") && at("new").is_some(), "{screen}");
+}
+
+// Expected (carbon-9): a hold whose owner ends goes with it, so a key typed at once after reaches the composer then,
+// not at the hold's deadline.
+#[test]
+fn a_hold_goes_with_its_owner() {
+    let harness = open_with(|probe| probe.hold = true);
+    run(&harness, "input.panel", None);
+    harness.app.press("x");
+    settle(&harness);
+    assert!(interact::ledger(&*harness.tui).holding, "x started no hold");
+    run(&harness, "input.close", None);
+    harness.app.type_text("q");
+    settle(&harness);
+    assert_eq!(composer(&harness), "q");
 }

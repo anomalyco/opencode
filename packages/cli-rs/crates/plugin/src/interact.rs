@@ -673,7 +673,8 @@ impl Router {
                 mode.ended.set(true);
             }
         }
-        self.prune();
+        // The keymap's intercept prunes them before the chord reaches any layer, so the host's own handler of it runs in
+        // the base mode.
         let timer = self.hold.borrow_mut().take().and_then(|held| held.timer);
         if let Some(timer) = timer {
             host.app().cancel_timer(timer);
@@ -966,11 +967,8 @@ impl Router {
             .width(w)
             .height(h)
             .focusable(true);
+        // Building runs no view: the first waits for the frame's first layout.
         let Some(mount) = build(&frame) else { return };
-        // Its first view may have failed the plugin.
-        if !opener.alive() {
-            return;
-        }
         self.show(host, plugin, overlay, opener, layer, backdrop, frame, mount);
     }
 
@@ -1266,7 +1264,8 @@ pub(crate) fn wire<W: Widget + Clone + 'static>(
     if interact.pointer {
         view.on_drop(move |cx, source, event| {
             let Some(owner) = owner.upgrade().filter(|owner| owner.alive()) else { return };
-            let Some(host) = owner.host.upgrade().filter(|host| !host.modal_open()) else { return };
+            // A host dialog's backdrop takes a drop over it, so none lands here under one.
+            let Some(host) = owner.host.upgrade() else { return };
             // A drop counts only from a node of the plugin's, in this mount or another of its mounts.
             let Some(from) = host.router().and_then(|router| router.dragged(&owner.plugin, source)) else { return };
             let rect = owner.rect(&node).unwrap_or_default();
