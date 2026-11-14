@@ -695,6 +695,8 @@ pub enum Fenced {
 }
 
 /// What a slot render ([`Setup::slot`]) returns.
+// One a render, returned by value and dropped after: boxing `Show` would change every plugin's renders for no gain.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "node", rename_all = "kebab-case")]
 pub enum Render {

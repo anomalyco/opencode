@@ -608,6 +608,7 @@ mod tests {
             min_height: Some(Width::Cells(1)),
             max_height: Some(Width::Cells(9)),
             margin: Some(Edges { top: -1, right: 1, bottom: 2, left: 3 }),
+            absolute: Some(crate::Absolute { top: Some(-2), right: Some(2), bottom: None, left: None, z: 1 }),
         };
         let click = Click { action: Action::Command { name: "x".into(), input: Some("y".into()) }, on: Press::Down };
         let border = Border {
