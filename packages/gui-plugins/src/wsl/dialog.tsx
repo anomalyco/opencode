@@ -5,11 +5,17 @@ import { Divider } from "@opencode/ui/divider"
 import { Loader } from "@opencode/ui/loader"
 import { RadioGroup, RadioItem } from "@opencode/ui/radio"
 import { TextInput } from "@opencode/ui/text-input"
-import { createMemo, For, Show } from "solid-js"
-import { createStore } from "solid-js/store"
+import { batch, createMemo, createSignal, For, onCleanup, Show, untrack } from "solid-js"
 import { showToast } from "@opencode/ui/toast"
-import { usePlugin, type Context, type IpcClient } from "@opencode/plugin/gui"
+import { createKeyed, usePlugin, type Context, type IpcClient } from "@opencode/plugin/gui"
 import type { Wsl, WslServersState } from "./contract"
+import {
+  createWslDialogState,
+  transitionWslDialog,
+  type WslDialogAction,
+  type WslDialogEffect,
+  type WslDialogEvent,
+} from "./dialog-machine"
 import { useWslAddServerProbes } from "./probes"
 import { addServerViewModel, type AddServerText } from "./model"
 
@@ -83,12 +89,12 @@ export function DialogAddWslServer(props: DialogWslServerProps) {
         <Dialog fit class="settings-wsl-dialog">
           <DialogHeader hideClose={true}>
             <DialogTitle>
-              {controller.view() === "main" ? language.t("server.add") : language.t("onboarding.installDistro")}
+              {model().view === "main" ? language.t("server.add") : language.t("onboarding.installDistro")}
             </DialogTitle>
           </DialogHeader>
           <Divider />
           <Show
-            when={controller.view() === "main"}
+            when={model().view === "main"}
             fallback={
               <>
                 <DialogBody class="settings-wsl-dialog-body settings-wsl-catalog-picker">
@@ -96,7 +102,7 @@ export function DialogAddWslServer(props: DialogWslServerProps) {
                     class="settings-wsl-catalog-search"
                     appearance="large"
                     placeholder={language.t("onboarding.searchDistros")}
-                    value={controller.catalogSearch()}
+                    value={model().catalogSearch}
                     disabled={model().busy}
                     onInput={(event) => controller.setCatalogSearch(event.currentTarget.value)}
                   />
@@ -227,7 +233,7 @@ export function DialogAddWslServer(props: DialogWslServerProps) {
             </DialogBody>
 
             <DialogFooter>
-              <Button variant="neutral" disabled={controller.adding()} onClick={controller.close}>
+              <Button variant="neutral" disabled={model().adding} onClick={controller.close}>
                 {language.t("common.cancel")}
               </Button>
               <Button
@@ -261,40 +267,23 @@ function useWslAddServerController(props: DialogWslServerProps) {
     return client
   }
 
-  const [store, setStore] = createStore<{
-    view: "main" | "catalog"
-    selectedDistro: string | null
-    catalogSearch: string
-    catalogTarget: string | null
-    adding: boolean
-  }>({
-    view: "main",
-    selectedDistro: null,
-    catalogSearch: "",
-    catalogTarget: null,
-    adding: false,
-  })
+  // The machine state is immutable; each transition replaces it whole.
+  const [dialogState, setDialogState] = createSignal(createWslDialogState())
+  // Each running call's abort controller and timeout.
+  const runs = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
 
   const current = createMemo(() => (props.api ? props.state : unavailable(language.t("error.unavailable"))))
 
   const viewModel = (probingAddable: boolean) =>
-    addServerViewModel({
-      state: current(),
-      view: store.view,
-      selectedDistro: store.selectedDistro,
-      catalogSearch: store.catalogSearch,
-      catalogTarget: store.catalogTarget,
-      adding: store.adding,
-      probingAddable,
-    })
+    addServerViewModel({ state: current(), dialog: dialogState(), probingAddable })
 
   const baseModel = createMemo(() => viewModel(false))
 
   const probes = useWslAddServerProbes({
     state: current,
     api,
-    view: () => store.view,
-    adding: () => store.adding,
+    available: () => !!props.api,
+    view: () => baseModel().view,
     busy: () => baseModel().busy,
     selectedDistro: () => baseModel().selectedDistro,
     addableInstalledDistros: () => baseModel().addableInstalledDistros,
@@ -303,94 +292,104 @@ function useWslAddServerController(props: DialogWslServerProps) {
 
   const model = createMemo(() => viewModel(probes.probingAddable()))
 
-  const openCatalog = () => {
-    const first = model().installableDistros[0]
-    setStore({
-      view: "catalog",
-      catalogSearch: "",
-      catalogTarget: first?.name ?? null,
+  const dispatch = (event: WslDialogEvent) => {
+    const previous = untrack(dialogState)
+    const next = transitionWslDialog(previous, event)
+
+    // One batch, so the probes see the dialog busy in the same update that clears their failures, and never start a
+    // probe beside the call.
+    batch(() => {
+      if (next.state !== previous) setDialogState(next.state)
+      next.effects.forEach(
+        (effect) => void Promise.try(() => run(effect)).catch((cause) => requestError(language, cause)),
+      )
     })
   }
 
-  const run = async <T,>(action: () => Promise<T>) => {
-    try {
-      await action()
-    } catch (err) {
-      requestError(language, err)
-    }
-  }
+  const run = (effect: WslDialogEffect) => {
+    if (effect.type === "probes.reset") return probes.resetProbeFailure()
 
-  const refreshDistros = () => {
-    void run(async () => {
-      probes.resetProbeFailure()
-      await api().refreshDistros()
-    })
-  }
+    if (effect.type === "dialog.close") return dialog.close()
 
-  const installDistro = (name: string) => {
-    void run(async () => {
-      probes.resetProbeFailure()
-      await api().installDistro({ name })
-      setStore("view", "main")
-    })
-  }
+    if (effect.type === "toast.error") return requestError(language, effect.cause)
 
-  const installCatalogDistro = () => {
-    if (model().installingCatalogDistro) return
-    const name = model().catalogTarget
+    if (effect.type === "action.abort") {
+      const running = runs.get(effect.attempt)
 
-    if (!name) return
-    installDistro(name)
-  }
-
-  const closeCatalog = () => {
-    probes.resetProbeFailure()
-    setStore({ view: "main", catalogSearch: "", catalogTarget: null })
-  }
-
-  const runPrimary = async () => {
-    const button = model().primaryButton
-
-    if (button.loading) return
-    const distro = model().selectedDistro
-    const action = button.action
-
-    if (!distro || !action) return
-
-    if (action === "install-opencode") {
-      await run(() => api().installOpencode({ name: distro }))
+      runs.delete(effect.attempt)
+      clearTimeout(running?.timer)
+      running?.controller.abort()
 
       return
     }
 
-    setStore("adding", true)
+    const attempt = effect.attempt
+    const controller = new AbortController()
 
-    try {
-      await api().addServer({ distro })
-      dialog.close()
-    } catch (err) {
-      requestError(language, err)
-    } finally {
-      setStore("adding", false)
+    const settle = (event: WslDialogEvent) => {
+      if (runs.has(attempt)) dispatch(event)
     }
+
+    const fail = (cause?: unknown) => settle({ type: "action.failed", attempt, cause })
+
+    runs.set(attempt, { controller, timer: setTimeout(() => fail(), effect.timeoutMs) })
+    void Promise.try(() => call(effect.action, AbortSignal.any([language.signal, controller.signal]))).then(
+      () => settle({ type: "action.succeeded", attempt }),
+      fail,
+    )
   }
+
+  const call = async (action: WslDialogAction, signal: AbortSignal) => {
+    const client = api()
+
+    if (action.kind === "install-wsl") return client.installWsl({ signal })
+
+    if (action.kind === "refresh-distros") return client.refreshDistros({ signal })
+
+    if (action.kind === "install-distro") return client.installDistro({ name: action.distro }, { signal })
+
+    if (action.kind === "install-opencode") return client.installOpencode({ name: action.distro }, { signal })
+
+    // The server shows up in main's state; the dialog needs only to know it was saved.
+    await client.addServer({ distro: action.distro }, { signal })
+  }
+
+  // WSL's main side going away ends the call the dialog waits for; the dialog then shows WSL as unavailable.
+  createKeyed(
+    () => props.api,
+    () => dispatch({ type: "availability.changed", available: true }),
+    { otherwise: () => dispatch({ type: "availability.changed", available: false }) },
+  )
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   return {
     state: current,
     model,
     runtimeError: () => current()?.runtime?.error ?? null,
-    view: () => store.view,
-    catalogSearch: () => store.catalogSearch,
-    adding: () => store.adding,
-    setCatalogSearch: (value: string) => setStore("catalogSearch", value),
-    setCatalogTarget: (value: string) => setStore("catalogTarget", value),
-    setSelectedDistro: (value: string) => setStore("selectedDistro", value),
-    openCatalog,
-    closeCatalog,
-    refreshDistros,
-    installCatalogDistro,
-    installWsl: () => void run(() => api().installWsl()),
-    runPrimary: () => void runPrimary(),
+    setCatalogSearch: (value: string) => dispatch({ type: "catalog.search.changed", value }),
+    setCatalogTarget: (distro: string) => dispatch({ type: "catalog.target.changed", distro }),
+    setSelectedDistro: (distro: string) => dispatch({ type: "distro.selected", distro }),
+    openCatalog: () =>
+      dispatch({
+        type: "catalog.opened",
+        defaultTarget: model().installableDistros[0]?.name ?? null,
+        busy: model().busy,
+      }),
+    closeCatalog: () => dispatch({ type: "catalog.closed", busy: model().busy }),
+    refreshDistros: () => dispatch({ type: "distros.refresh.requested", busy: model().busy }),
+    installCatalogDistro: () =>
+      dispatch({ type: "catalog.install.requested", distro: model().catalogTarget, busy: model().busy }),
+    installWsl: () => dispatch({ type: "wsl.install.requested", busy: model().busy }),
+    runPrimary: () => {
+      const button = model().primaryButton
+
+      dispatch({
+        type: "primary.requested",
+        distro: model().selectedDistro,
+        action: button.action,
+        disabled: button.disabled || button.loading,
+      })
+    },
     close: () => dialog.close(),
   }
 }
@@ -468,12 +467,13 @@ function DialogWslSetup(props: {
   )
 }
 
+// A call that timed out has no cause; its toast says only that the request failed.
 function requestError(language: Context, cause: unknown) {
   console.error("WSL servers request failed", cause instanceof Error ? (cause.stack ?? cause.message) : String(cause))
   showToast({
     variant: "error",
     title: language.t("common.requestFailed"),
-    description: cause instanceof Error ? cause.message : String(cause),
+    description: cause === undefined ? undefined : cause instanceof Error ? cause.message : String(cause),
   })
 }
 
@@ -486,6 +486,7 @@ function unavailable(error: string): WslServersState {
     opencodeChecks: {},
     pendingRestart: false,
     servers: [],
-    job: null,
+    hostJob: "idle",
+    distroJobs: {},
   }
 }

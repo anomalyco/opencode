@@ -159,6 +159,7 @@ export const dict = {
   "ui.common.dismiss": "አሰናብት",
   "ui.common.close": "ዝጋ",
   "ui.common.next": "ቀጣይ",
+  "ui.common.continue": "ቀጥል",
   "ui.common.submit": "አስረክብ",
   "ui.common.showMore": "ተጨማሪ አሳይ",
   "ui.permission.deny": "ክድ",

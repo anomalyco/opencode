@@ -43,7 +43,7 @@ it.effect("groups available models by provider with paging", () =>
     const plugins = yield* Plugin.Service
     const sessions = yield* Session.Service
     const location = yield* Location.Service
-    const pluginHost = yield* PluginHost.make(plugins)
+    const pluginHost = yield* PluginHost.make(plugins, "test")
     yield* catalog.transform((editor) => {
       editor.update(Provider.ID.make("other"), (provider) => {
         provider.name = "Other Provider"
@@ -188,7 +188,7 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
       .run()
       .pipe(Effect.orDie)
     yield* strategies.transform((editor) => editor.configure({ directory: AbsolutePath.make(parent.path) }))
-    yield* OpenCodeTools.Plugin.effect(yield* PluginHost.make(plugins))
+    yield* OpenCodeTools.Plugin.effect(yield* PluginHost.make(plugins, "test"))
     const session = yield* sessions.create({ location: Location.Ref.make({ directory: location.directory }) })
     const registry = yield* Tool.Service
     const program = (code: string) =>

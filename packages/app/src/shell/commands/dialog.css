@@ -85,6 +85,7 @@
 
 .command-palette-meta {
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .command-palette-file-path {

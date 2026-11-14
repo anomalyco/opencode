@@ -39,7 +39,8 @@ const request = ai.request({
   model,
   system: "You are concise.",
   prompt: "Say hello.",
-  generation: { maxTokens: 20, temperature: 0 },
+  maxTokens: 20,
+  temperature: 0,
 })
 
 describe("Gemini route", () => {
@@ -100,7 +101,7 @@ describe("Gemini route", () => {
       const thinkingBudget = (budget: number, maxTokens = 32_000) =>
         compileRequest({
           ...request,
-          generation: { maxTokens },
+          maxTokens,
           providerOptions: { thinkingConfig: { thinkingBudget: budget } },
         }).pipe(Effect.map((prepared) => prepared.body.generationConfig?.thinkingConfig?.thinkingBudget))
 
@@ -117,16 +118,14 @@ describe("Gemini route", () => {
         ai.request({
           model,
           prompt: "Say hello.",
-          generation: {
-            maxTokens: 40,
-            temperature: 0.2,
-            topP: 0.8,
-            topK: 12,
-            frequencyPenalty: 0.3,
-            presencePenalty: 0.4,
-            seed: 42,
-            stop: ["done"],
-          },
+          maxTokens: 40,
+          temperature: 0.2,
+          topP: 0.8,
+          topK: 12,
+          frequencyPenalty: 0.3,
+          presencePenalty: 0.4,
+          seed: 42,
+          stop: ["done"],
         }),
       )
 
@@ -983,6 +982,7 @@ describe("Gemini route", () => {
         candidates: [{ content: { role: "model", parts: [{ text: "Hello" }] }, finishReason: "STOP" }],
         usageMetadata: {
           promptTokenCount: 5,
+          toolUsePromptTokenCount: 3,
           candidatesTokenCount: 2,
           cost: 0,
           opencode: { allowance: 0.0042 },
@@ -990,7 +990,43 @@ describe("Gemini route", () => {
       })
       const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
 
-      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, cost: 0 })
+      expect(response.usage).toMatchObject({ inputTokens: 8, outputTokens: 2, cost: 0 })
+    }),
+  )
+
+  it.effect("counts cumulative tool-use prompts once alongside cached input", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        {
+          candidates: [{ content: { role: "model", parts: [{ text: "Working" }] } }],
+          usageMetadata: {
+            promptTokenCount: 271,
+            cachedContentTokenCount: 100,
+            toolUsePromptTokenCount: 200,
+          },
+        },
+        {
+          candidates: [{ content: { role: "model", parts: [{ text: " done" }] }, finishReason: "STOP" }],
+          usageMetadata: {
+            promptTokenCount: 271,
+            cachedContentTokenCount: 100,
+            toolUsePromptTokenCount: 480,
+            candidatesTokenCount: 130,
+            thoughtsTokenCount: 158,
+          },
+        },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.usage).toMatchObject({
+        inputTokens: 751,
+        nonCachedInputTokens: 651,
+        cacheReadInputTokens: 100,
+        outputTokens: 288,
+        reasoningTokens: 158,
+        totalTokens: 1039,
+        providerMetadata: { google: { promptTokenCount: 271, toolUsePromptTokenCount: 480 } },
+      })
     }),
   )
 
@@ -1875,7 +1911,7 @@ describe("Gemini route", () => {
           fixedResponse(
             sseEvents(
               { candidates: [{ content: { role: "model", parts: [{ text: "Hi" }] } }] },
-              { usageMetadata: { promptTokenCount: null, candidatesTokenCount: 5 } },
+              { usageMetadata: { promptTokenCount: null, toolUsePromptTokenCount: null, candidatesTokenCount: 5 } },
             ),
           ),
         ),
@@ -2208,7 +2244,7 @@ describe("Gemini response continuation", () => {
           },
         }),
       ])
-      const fiber = yield* LLMClient.generate({ ...continuedRequest, http: { timeout: 1_000 } }).pipe(
+      const fiber = yield* LLMClient.generate({ ...continuedRequest, timeout: 1_000 }).pipe(
         Effect.provide(server.layer),
         Effect.flip,
         Effect.forkChild({ startImmediately: true }),
@@ -2250,7 +2286,7 @@ describe("Gemini response continuation", () => {
   it.effect("reports the first request's input with all output", () =>
     Effect.gen(function* () {
       const usage = [
-        { promptTokenCount: 142, candidatesTokenCount: 32768, totalTokenCount: 32910 },
+        { promptTokenCount: 142, toolUsePromptTokenCount: 5, candidatesTokenCount: 32768, totalTokenCount: 32915 },
         { promptTokenCount: 32910, candidatesTokenCount: 32768, totalTokenCount: 65678 },
         {
           promptTokenCount: 65678,
@@ -2261,8 +2297,9 @@ describe("Gemini response continuation", () => {
         {
           promptTokenCount: 98446,
           cachedContentTokenCount: 65679,
+          toolUsePromptTokenCount: 7,
           candidatesTokenCount: 7257,
-          totalTokenCount: 105703,
+          totalTokenCount: 105710,
         },
       ]
       const server = scripted([
@@ -2278,16 +2315,17 @@ describe("Gemini response continuation", () => {
 
       expect(response.usage).toEqual(
         new Usage({
-          inputTokens: 142,
+          inputTokens: 147,
           outputTokens: 105561,
-          nonCachedInputTokens: 142,
-          totalTokens: 105703,
+          nonCachedInputTokens: 147,
+          totalTokens: 105708,
           providerMetadata: {
             google: {
               promptTokenCount: 197176,
+              toolUsePromptTokenCount: 12,
               cachedContentTokenCount: 98590,
               candidatesTokenCount: 105561,
-              totalTokenCount: 302737,
+              totalTokenCount: 302749,
               requests: 4,
             },
           },

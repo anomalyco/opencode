@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Nav konfigurēts neviens spraudnis",
   skills: "Prasmes",
   "skills.empty": "Nav konfigurētu prasmju",
-  lsp: "LSP",
-  "lsp.empty": "Nav konfigurēts neviens LSP serveris",
   failed: "Neizdevās",
   retry: "Mēģināt vēlreiz",
   connecting: "Notiek savienošana…",

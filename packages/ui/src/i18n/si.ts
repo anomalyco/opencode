@@ -160,6 +160,7 @@ export const dict = {
   "ui.common.dismiss": "අස් කරන්න",
   "ui.common.close": "වසන්න",
   "ui.common.next": "ඊළඟ",
+  "ui.common.continue": "දිගටම කරගෙන යන්න",
   "ui.common.submit": "ඉදිරිපත් කරන්න",
   "ui.common.showMore": "තව පෙන්වන්න",
   "ui.permission.deny": "ප්‍රතික්ෂේප කරන්න",

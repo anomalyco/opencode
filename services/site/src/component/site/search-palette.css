@@ -1,0 +1,482 @@
+/* The ⌘K dialog (search-palette.tsx), loaded with it on first use. Below Design mode's overlay (18)
+   and controls (19), so the dialog can be selected and restyled while it is open. */
+
+[data-site] {
+  [data-component="site-search"] {
+    --search-duration: 150ms;
+    position: fixed;
+    inset: 0;
+    z-index: 17;
+    font-family: var(--font-sans);
+
+    /* The look settings arrive as custom properties (searchLook in search.tsx); the backdrop
+       presets (dim, blur, none) are values of the same sliders. */
+    --search-tint: black;
+
+    &[data-tint="blue"] {
+      --search-tint: color-mix(in srgb, var(--link) 45%, black);
+    }
+
+    [data-slot="backdrop"] {
+      position: absolute;
+      inset: 0;
+      background: light-dark(
+        color-mix(in srgb, var(--search-tint) var(--search-dim-light, 24%), transparent),
+        color-mix(in srgb, var(--search-tint) var(--search-dim-dark, 56%), transparent)
+      );
+      backdrop-filter: var(--search-backdrop-filter, none);
+      -webkit-backdrop-filter: var(--search-backdrop-filter, none);
+      animation: search-fade var(--search-duration) ease-out;
+    }
+
+    /* --popover-shadow with the drop shadows scaled by the shadow strength; the ring stays. */
+    [data-slot="panel"] {
+      --search-panel-filter: var(--search-panel-filter-light, none);
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      color: var(--text);
+      background: color-mix(in srgb, var(--popover-bg) var(--search-panel-alpha, 100%), transparent);
+      backdrop-filter: var(--search-panel-filter);
+      -webkit-backdrop-filter: var(--search-panel-filter);
+      box-shadow:
+        0 0 0 1px light-dark(rgb(0 0 0 / 0.1), rgb(255 255 255 / 0.1)),
+        0 1px 1px
+          light-dark(
+            rgb(0 0 0 / calc(0.04 * var(--search-shadow, 1))),
+            rgb(0 0 0 / calc(0.3 * var(--search-shadow, 1)))
+          ),
+        0 2px 4px -1px
+          light-dark(
+            rgb(0 0 0 / calc(0.06 * var(--search-shadow, 1))),
+            rgb(0 0 0 / calc(0.35 * var(--search-shadow, 1)))
+          ),
+        0 6px 12px -4px
+          light-dark(
+            rgb(0 0 0 / calc(0.08 * var(--search-shadow, 1))),
+            rgb(0 0 0 / calc(0.45 * var(--search-shadow, 1)))
+          );
+      overflow: hidden;
+      transform-origin: top center;
+    }
+
+    /* Palette (the default): centred in the top third. */
+    [data-slot="panel"] {
+      top: 16vh;
+      left: 50%;
+      translate: -50% 0;
+      width: min(640px, calc(100vw - 2rem));
+      max-height: min(480px, 76vh);
+    }
+
+    [data-slot="field"] {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      flex-shrink: 0;
+      padding: 0 0.875rem;
+      height: 3rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-weak);
+    }
+
+    [data-slot="icon"] {
+      flex-shrink: 0;
+    }
+
+    input {
+      flex: 1;
+      min-width: 0;
+      height: 100%;
+      padding: 0;
+      border: 0;
+      outline: none;
+      background: transparent;
+      color: var(--text-strong);
+      font: inherit;
+      /* Matches the result titles. Phones set 16px below, which keeps iOS from zooming into the field. */
+      font-size: var(--fs-input);
+
+      &::placeholder {
+        color: var(--popover-text-weak);
+      }
+
+      &::-webkit-search-cancel-button {
+        display: none;
+      }
+    }
+
+    [data-slot="close"] {
+      flex-shrink: 0;
+      font-family: var(--font-mono);
+      font-size: var(--fs-micro);
+      color: var(--popover-text-weak);
+      padding: 0.25rem 0;
+      border: 0;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--text-strong);
+        }
+      }
+
+      &:active {
+        color: var(--text-strong);
+      }
+
+      [data-slot="cancel"] {
+        display: none;
+      }
+    }
+
+    [data-slot="results"] {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-block: 0.25rem;
+    }
+
+    [data-slot="group"] {
+      padding: 0.75rem 0.875rem 0.25rem;
+      font-family: var(--font-mono);
+      font-size: var(--fs-micro);
+      color: var(--popover-text-weak);
+    }
+
+    [data-slot="empty"] {
+      margin: 0;
+      padding: 1rem 0.875rem;
+      font-size: var(--fs-small);
+      color: var(--popover-text-weak);
+
+      &:empty {
+        display: none;
+      }
+    }
+
+    /* The shared menu row (site.css): a square tint and a bar on the left edge. One row is
+       highlighted at a time, by keyboard or by the pointer moving over it. */
+    [data-slot="option"] {
+      position: relative;
+      display: flex;
+      align-items: baseline;
+      gap: 0.75rem;
+      padding: 0.5rem 0.875rem;
+      cursor: pointer;
+      font-size: var(--fs-small);
+      line-height: 1.4;
+
+      &::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        inset-inline-start: 0;
+        width: 2px;
+        background: var(--menu-hint);
+        opacity: 0;
+      }
+
+      &[aria-current="page"]::before {
+        background: var(--menu-bar);
+        opacity: 1;
+      }
+
+      &[data-active] {
+        background: var(--menu-hover);
+
+        &::before {
+          background: var(--menu-hint);
+          opacity: 1;
+        }
+      }
+
+      &:active {
+        background: var(--menu-press);
+      }
+    }
+
+    [data-slot="text"] {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    [data-slot="title"] {
+      color: var(--text-strong);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    [data-slot="snippet"] {
+      font-size: var(--fs-micro);
+      color: var(--popover-text-weak);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    [data-slot="context"] {
+      flex-shrink: 0;
+      max-width: 40%;
+      font-family: var(--font-mono);
+      font-size: var(--fs-micro);
+      color: var(--popover-text-weak);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    mark {
+      background: none;
+      color: var(--link);
+    }
+
+    /* Spotlight: a large mono field and one list, nothing else. */
+    &[data-style="spotlight"] {
+      [data-slot="panel"] {
+        top: 20vh;
+        width: min(720px, calc(100vw - 2rem));
+      }
+
+      [data-slot="field"] {
+        height: 4.25rem;
+        padding-inline-start: 1.25rem;
+      }
+
+      [data-slot="icon"] {
+        width: 20px;
+        height: 20px;
+      }
+
+      input {
+        font-family: var(--font-mono);
+        font-size: 24px;
+      }
+
+      [data-slot="results"]:has([data-slot="empty"]:empty) {
+        display: none;
+      }
+
+      [data-slot="option"] {
+        padding-inline: 1.25rem;
+      }
+
+      [data-slot="group"] {
+        padding-inline: 1.25rem;
+      }
+    }
+
+    /* Sheet: a full-height panel on the right. */
+    &[data-style="sheet"] [data-slot="panel"] {
+      top: 0;
+      inset-inline-end: 0;
+      bottom: 0;
+      inset-inline-start: auto;
+      translate: none;
+      width: min(480px, 100vw);
+      max-height: none;
+      transform-origin: var(--x-end, right) center;
+    }
+
+    /* Inline: drops from the top edge across the content column, under the sidebar's level. */
+    &[data-style="inline"] [data-slot="panel"] {
+      top: 0;
+      inset-inline-start: calc(var(--page-offset) + var(--sidebar-width) + var(--gutter));
+      inset-inline-end: calc(var(--page-offset) + var(--edge));
+      translate: none;
+      width: auto;
+      max-height: min(560px, 70vh);
+
+      /* Without the sidebar, under the top bar and across the window. */
+      @media (max-width: 60rem) {
+        top: var(--topbar-height);
+        inset-inline-start: 0;
+        inset-inline-end: 0;
+      }
+    }
+
+    /* Minimal: the field and compact one-line rows. */
+    &[data-style="minimal"] {
+      [data-slot="panel"] {
+        width: min(480px, calc(100vw - 2rem));
+      }
+
+      [data-slot="field"] {
+        height: 2.5rem;
+      }
+
+      [data-slot="option"] {
+        padding-block: 0.3125rem;
+        font-size: var(--fs-meta);
+      }
+
+      [data-slot="snippet"],
+      [data-slot="close"] {
+        display: none;
+      }
+    }
+  }
+
+  /* The search always follows the site theme (Settings › Pop-ups does not force it), on every page
+     including the docs. The see-through panel's tone filter follows that scheme, which light-dark()
+     cannot choose for a filter: the site theme, else the system one. */
+  &[data-theme="dark"] [data-component="site-search"] [data-slot="panel"] {
+    --search-panel-filter: var(--search-panel-filter-dark, none);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    &:not([data-theme="light"]) [data-component="site-search"] [data-slot="panel"] {
+      --search-panel-filter: var(--search-panel-filter-dark, none);
+    }
+  }
+
+  /* Reduced transparency: no blur and a solid panel. */
+  @media (prefers-reduced-transparency: reduce) {
+    [data-component="site-search"] {
+      [data-slot="backdrop"],
+      [data-slot="panel"] {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+
+      [data-slot="panel"] {
+        background: var(--popover-bg);
+      }
+    }
+  }
+
+  /* Motion: in on open, a little faster out. Reduced motion keeps only the fade. */
+  [data-component="site-search"][data-motion="scale"] [data-slot="panel"] {
+    animation: search-scale var(--search-duration) var(--ease-out);
+  }
+
+  [data-component="site-search"][data-motion="slide"] [data-slot="panel"] {
+    animation: search-slide var(--search-duration) var(--ease-out);
+  }
+
+  [data-component="site-search"][data-style="sheet"][data-motion="slide"] [data-slot="panel"] {
+    animation-name: search-slide-side;
+  }
+
+  [data-component="site-search"][data-closing] {
+    pointer-events: none;
+
+    [data-slot="backdrop"],
+    [data-slot="panel"] {
+      animation: search-out 120ms ease-in forwards;
+    }
+  }
+
+  [data-component="site-search"][data-motion="none"] :is([data-slot="backdrop"], [data-slot="panel"]) {
+    animation: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-component="site-search"] [data-slot="panel"] {
+      animation-name: search-fade;
+    }
+
+    [data-component="site-search"][data-closing] :is([data-slot="backdrop"], [data-slot="panel"]) {
+      animation: none;
+    }
+  }
+
+  /* Phones: every style is a full-width sheet from the top, with a Cancel button. */
+  @media (max-width: 40rem) {
+    [data-component="site-search"] {
+      [data-slot="panel"],
+      &[data-style] [data-slot="panel"] {
+        top: 0;
+        inset-inline-start: 0;
+        inset-inline-end: 0;
+        bottom: 0;
+        translate: none;
+        width: 100%;
+        max-height: none;
+        padding-top: env(safe-area-inset-top, 0px);
+        transform-origin: top center;
+      }
+
+      &[data-style] [data-slot="field"] {
+        height: 3.25rem;
+        padding-inline-end: 0.25rem;
+      }
+
+      &[data-style] input {
+        font-size: var(--fs-input);
+      }
+
+      /* At least 44px tall to tap, inside the 52px field, with no visible change. */
+      &[data-style] [data-slot="close"] {
+        display: block;
+        min-height: 2.75rem;
+        border: 0;
+        font-family: var(--font-sans);
+        font-size: var(--fs-ui);
+        color: var(--link);
+
+        [data-slot="esc"] {
+          display: none;
+        }
+
+        [data-slot="cancel"] {
+          display: inline;
+        }
+      }
+
+      /* The sheet is a phone screen, so it uses the phone scale: titles at the body size, snippets a
+         step down, labels at the 14px floor, and rows at least 44px tall. */
+      &[data-style] [data-slot="option"] {
+        min-height: 2.75rem;
+        padding-block: 0.625rem;
+        font-size: var(--fs-body);
+        line-height: 1.35;
+      }
+
+      &[data-style] [data-slot="snippet"] {
+        font-size: var(--fs-small);
+      }
+
+      &[data-style] :is([data-slot="context"], [data-slot="group"]) {
+        font-size: var(--fs-meta);
+      }
+    }
+  }
+}
+
+@keyframes search-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes search-scale {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+@keyframes search-slide {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes search-slide-side {
+  from {
+    opacity: 0;
+    transform: translateX(calc(16px * var(--x-dir, 1)));
+  }
+}
+
+@keyframes search-out {
+  to {
+    opacity: 0;
+  }
+}

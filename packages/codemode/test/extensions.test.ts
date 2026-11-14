@@ -474,6 +474,46 @@ describe("Effect globals", () => {
   })
 })
 
+describe("imports", () => {
+  const fs = { readFile: (path: string) => `text of ${path}`, promises: { readFile: async (path: string) => path } }
+  const files = Extension.make({ name: "files", globals: { fs } })
+
+  test("import, require, and import() load globals by Node module name, and their functions fire the hooks", async () => {
+    const calls: Array<string> = []
+    const target = CodeMode.make({
+      extensions: [files],
+      hooks: { "extension.before": (call) => Effect.sync(() => void calls.push(`${call.extension}:${call.name}`)) },
+    })
+    expect(
+      await value(
+        `import fs, { readFile } from "node:fs"
+         import * as ns from "fs"
+         import { readFile as readAsync } from "fs/promises"
+         import { URL } from "url"
+         const dynamic = await import("fs")
+         return [readFile("a"), fs === require("fs"), ns.default === fs, dynamic === ns,
+           await readAsync("b"), new URL("https://a.test/x").pathname, typeof require("crypto").randomUUID]`,
+        target,
+      ),
+    ).toEqual(["text of a", true, true, true, "b", "/x", "function"])
+    expect(calls).toEqual(["files:fs.readFile", "files:fs.promises.readFile"])
+  })
+
+  test("a module that isn't provided, or a missing export, fails at the import", async () => {
+    const target = CodeMode.make({ extensions: [files] })
+    expect((await failure(`import yaml from "yaml"`, target)).message).toStartWith(
+      `Error: Cannot import "yaml": it isn't available in Code Mode, which can't load packages or files.`,
+    )
+    expect(await value(`try { await import("child_process") } catch (e) { return e.message }`, target)).toStartWith(
+      `Cannot import "child_process"`,
+    )
+    expect((await failure(`import { writeFile } from "fs"`, target)).message).toStartWith(
+      `SyntaxError: "fs" has no export named "writeFile".`,
+    )
+    expect((await failure(`require("fs")`)).message).toStartWith(`Error: Cannot import "fs"`)
+  })
+})
+
 describe("host errors", () => {
   test("a synchronous throw becomes the matching program error", async () => {
     const target = CodeMode.make({
@@ -602,9 +642,9 @@ describe("configuration", () => {
     })
   })
 
-  test("a global must be a function", () => {
+  test("a global must be a function or an object", () => {
     expect(() => Extension.make({ name: "bad", globals: { n: 1 as never } })).toThrow(
-      'Extension "bad" global "n" must be a function.',
+      'Extension "bad" global "n" must be a function or an object.',
     )
   })
 

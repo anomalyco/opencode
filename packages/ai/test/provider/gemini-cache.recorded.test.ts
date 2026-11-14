@@ -20,7 +20,8 @@ const cacheRequest = ai.request({
   model,
   system: LARGE_CACHEABLE_SYSTEM,
   prompt: "Say hi.",
-  generation: { maxTokens: 16, temperature: 0 },
+  maxTokens: 16,
+  temperature: 0,
 })
 
 const recorded = recordedTests({

@@ -62,7 +62,14 @@ desktop platform calls it before flushing its namespaces on shutdown. A real uns
 change wins over a value arriving from another window, and over a stored value that finishes
 loading after the user already edited. A remote value that arrives while the store is dirty
 is held until the save runs; if the local setter calls turned out not to change the
-serialized form, the remote value is adopted instead of being lost.
+serialized form, the remote value is adopted instead of being lost. The lifecycle is the pure
+machine in `persist-machine.ts`; a failed write restores the record of what storage holds, so the
+next save writes the value again even when it did not change.
+
+On the web, a `localStorage` write that hits the quota evicts other `opencode.*` values, largest
+first, and puts every one back when that still does not make room. A failed eviction waits out a
+backoff (5 s doubling to 60 s) before the next one, but reads, writes and removals always try storage
+again (`storage-machine.ts`). The first failed write shows a toast once per page.
 
 ## Namespaces
 
@@ -78,8 +85,13 @@ until then neither the initial load, a change from another window (`accept`), no
 of an older failed batch can replace the key. The host also stamps every update with a
 monotonic revision, returned in the ack and carried by change events and loads, so an event
 that reaches a window after a newer ack or load for the same key is recognised as stale and
-dropped; an event held back during an in-flight write is applied after the ack when the host
-ordered it later.
+dropped; an event held back during an in-flight write, or a snapshot that finishes during
+one, is applied after the ack when the host ordered it later. A failed batch puts its
+unsuperseded keys back in the queue and retries on its own, doubling the delay up to about
+26 s; a failed load resolves the waiting reads from memory and the next read loads again.
+`clear()` raises the revision floor to the newest revision the window knows, so neither a late
+snapshot nor an older event brings a cleared key back. The phases and ordering rules live in
+the pure machine in `namespace-machine.ts`.
 
 ## Migrations
 
@@ -130,7 +142,7 @@ stays visible; the renderer uploads the missing bytes again from the chunk text 
 normally, fresh ids on a store without WebCrypto), and publishes. This covers a chunk another
 tab collected, and an image the composer kept in its history long after its blob was
 collected. The desktop host additionally refreshes `touched_at` for every blob a written
-document references and collects only blobs unreferenced and untouched for `blobGrace`, so
+document references and collects only blobs unreferenced and untouched for `BLOB_GRACE_MS`, so
 repairs stay rare.
 `persisted()` hands the draft store the encoded document (`setDocument`) rather than
 a serialized string, so the store does not re-parse the full document to externalize

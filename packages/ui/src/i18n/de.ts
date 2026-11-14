@@ -189,6 +189,7 @@ export const dict = {
   "ui.common.dismiss": "Verwerfen",
   "ui.common.close": "Schließen",
   "ui.common.next": "Weiter",
+  "ui.common.continue": "Weiter",
   "ui.common.submit": "Absenden",
   "ui.common.showMore": "Mehr anzeigen",
 

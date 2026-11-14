@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "کوئی پلگ ان کنفیگر نئیں اے۔",
   skills: "ہنر",
   "skills.empty": "کوئی ہنر ترتیب نئیں دیا گیا اے۔",
-  lsp: "LSP",
-  "lsp.empty": "کوئی LSP سرورز کنفیگر نئیں ہوئے۔",
   failed: "ناکام",
   retry: "دوبارہ کوشش کرو۔",
   connecting: "منسلک ہو رہا ہے…",

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import type { FixtureMethods } from "./worker-rpc.fixture"
-import { createWorkerClient, SupersededError, WorkerClosedError } from "./worker-rpc"
+import { AbortedError, createWorkerClient, SupersededError, WorkerClosedError } from "./worker-rpc"
 
 const clients: ReturnType<typeof createWorkerClient<FixtureMethods>>[] = []
 
@@ -26,7 +26,7 @@ describe("worker rpc", () => {
     const call = client.call("echo", "aborted", { signal: controller.signal })
 
     controller.abort()
-    await expect(call).rejects.toBeInstanceOf(WorkerClosedError)
+    await expect(call).rejects.toBeInstanceOf(AbortedError)
     await busy
     expect(await client.call("echo", "next")).toBe("next")
     expect((await client.call("log", undefined)).ran).toEqual(["sleep", "echo:next"])
@@ -40,7 +40,7 @@ describe("worker rpc", () => {
 
     await running
     controller.abort()
-    await expect(call).rejects.toBeInstanceOf(WorkerClosedError)
+    await expect(call).rejects.toBeInstanceOf(AbortedError)
     expect(await client.call("log", undefined)).toEqual({ ran: ["hold"], aborted: ["hold"], closed: 0 })
   })
 
@@ -52,7 +52,7 @@ describe("worker rpc", () => {
 
     await running
     controller.abort()
-    await expect(call).rejects.toBeInstanceOf(WorkerClosedError)
+    await expect(call).rejects.toBeInstanceOf(AbortedError)
     // The stand-in bitmap cannot be posted, so a reply would fail in the worker before it counted a close.
     expect(await client.call("log", undefined)).toEqual({ ran: ["paint"], aborted: [], closed: 1 })
   })
@@ -65,10 +65,19 @@ describe("worker rpc", () => {
 
     await running
     controller.abort()
-    await expect(call).rejects.toBeInstanceOf(WorkerClosedError)
+    await expect(call).rejects.toBeInstanceOf(AbortedError)
     // The worker replied before it read the cancel, and the window's next calls still settle with their own replies.
     expect(await client.call("echo", "after")).toBe("after")
     expect((await client.call("log", undefined)).ran).toEqual(["spin", "echo:after"])
+  })
+
+  test("a reply that cannot be posted rejects its call, frees its bitmaps, and the next call still runs", async () => {
+    const client = start()
+
+    // The stand-in bitmap cannot be posted, as a detached or uncloneable reply cannot.
+    await expect(client.call("paint", 0)).rejects.toThrow()
+    expect(await client.call("echo", "after")).toBe("after")
+    expect(await client.call("log", undefined)).toEqual({ ran: ["paint", "echo:after"], aborted: [], closed: 1 })
   })
 
   test("close rejects the pending calls and every later one", async () => {

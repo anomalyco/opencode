@@ -1,0 +1,155 @@
+/* Settings › Provider logos (provider-logos.tsx): monochrome provider marks in "What is OpenCode?".
+   The marks are masks in the text colour, muted at rest; hover brings a mark to the ink and shows
+   its name (the site's tooltip). */
+[data-site] [data-component="provider-logos"] {
+  --mark: 24px;
+
+  &[data-variant="none"],
+  > * {
+    display: none;
+  }
+
+  ul {
+    display: flex;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  li {
+    display: grid;
+    place-items: center;
+    color: var(--text-weaker);
+    transition: color 150ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+      }
+    }
+
+    &:active {
+      color: var(--text-strong);
+    }
+  }
+
+  [data-slot="mark"] {
+    display: inline-block;
+    flex-shrink: 0;
+    width: var(--mark);
+    height: var(--mark);
+    background: currentColor;
+    mask: var(--logo) center / contain no-repeat;
+  }
+
+  /* "row": ten key marks in one quiet row. */
+  &[data-variant="row"] > [data-slot="row"] {
+    display: block;
+
+    ul {
+      flex-wrap: wrap;
+      gap: 1.25rem 1.75rem;
+    }
+  }
+
+  /* "inline": a sentence with the marks set in it, each before its model's name. */
+  &[data-variant="inline"] > [data-slot="inline"] {
+    display: block;
+    margin: 0;
+    font-size: var(--fs-lead);
+    line-height: 1.6;
+    color: var(--text-weak);
+
+    [data-slot="pair"] {
+      white-space: nowrap;
+      color: var(--text-strong);
+    }
+
+    [data-slot="mark"] {
+      --mark: 1.15em;
+      margin-inline-end: 0.3em;
+      vertical-align: -0.2em;
+    }
+  }
+
+  /* "grid": every mark on the page in a tight grid, then the count and where to read more. */
+  &[data-variant="grid"] > [data-slot="grid"] {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+
+    ul {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(2.5rem, 1fr));
+      gap: 1rem 0.5rem;
+    }
+
+    li {
+      height: 2.5rem;
+    }
+
+    [data-slot="mark"] {
+      --mark: 20px;
+    }
+
+    p {
+      margin: 0;
+      font-family: var(--font-mono);
+      font-size: var(--fs-meta);
+      color: var(--text-weak);
+
+      a {
+        color: inherit;
+        text-decoration: underline;
+        text-underline-offset: 0.15em;
+
+        @media (hover: hover) and (pointer: fine) {
+          &:hover {
+            color: var(--link);
+          }
+        }
+
+        &:active {
+          color: var(--link);
+        }
+      }
+    }
+  }
+
+  /* "marquee": every mark drifting left in one row, the list twice so it loops without a seam;
+     hover pauses it. Reduced motion keeps a still row. */
+  &[data-variant="marquee"] > [data-slot="marquee"] {
+    display: block;
+    overflow: hidden;
+    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+
+    [data-slot="track"] {
+      display: flex;
+      width: max-content;
+      animation: provider-marquee 80s linear infinite;
+    }
+
+    ul {
+      gap: 2.5rem;
+      padding-inline-end: 2.5rem;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover [data-slot="track"] {
+        animation-play-state: paused;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      [data-slot="track"] {
+        animation: none;
+      }
+    }
+  }
+}
+
+@keyframes provider-marquee {
+  to {
+    translate: -50% 0;
+  }
+}

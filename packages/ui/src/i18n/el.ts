@@ -163,6 +163,7 @@ export const dict = {
   "ui.common.dismiss": "Παράβλεψη",
   "ui.common.close": "Κλείσιμο",
   "ui.common.next": "Επόμενο",
+  "ui.common.continue": "Συνέχεια",
   "ui.common.submit": "Υποβολή",
   "ui.common.showMore": "Εμφάνιση περισσότερων",
   "ui.permission.deny": "Απόρριψη",

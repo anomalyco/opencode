@@ -103,6 +103,34 @@ export const QuestionSeries = {
   ),
 }
 
+// A question whose text includes a URL to open before answering.
+export const LinkPrompt = {
+  render: () => (
+    <SessionPreview
+      title="Harden package publishing"
+      description="opencode · release"
+      document={questionPendingDocument}
+      request={{
+        type: "question",
+        value: {
+          ...activeQuestionRequest,
+          fields: [
+            {
+              key: "approval",
+              type: "string",
+              title: "Approval",
+              description:
+                'One more approval (it turns on "require 2FA, disallow tokens" for all 3 packages): https://www.npmjs.com/auth/cli/2ff15723-dfa2-4eec-addd-53cb3ff7597f',
+              options: [{ value: "done", label: "Done", description: "Approved." }],
+              custom: true,
+            },
+          ],
+        },
+      }}
+    />
+  ),
+}
+
 // A pick-any question with more answers than the dock has room for, then a short one.
 export const LongList = {
   render: () => (
@@ -317,6 +345,31 @@ export const LongPrompt = {
                   description: "Write schema stats and mismatch logs to disk without touching the live workspace.",
                 },
               ],
+              custom: true,
+            },
+          ],
+        },
+      }}
+    />
+  ),
+}
+
+export const FreeResponse = {
+  render: () => (
+    <SessionPreview
+      title="Name the release"
+      description="opencode · release"
+      document={questionPendingDocument}
+      request={{
+        type: "question",
+        value: {
+          ...activeQuestionRequest,
+          fields: [
+            {
+              key: "name",
+              type: "string",
+              title: "Release name",
+              description: "What should we call this release?",
               custom: true,
             },
           ],

@@ -45,7 +45,7 @@ for (const item of [
           prompt:
             "Look up conversion rate for code ZEBRA. Then multiply that rate by 17 and add 9. You must use lookup_rate before answering.",
           tools: [lookup],
-          generation: { maxTokens: 4096 },
+          maxTokens: 4096,
           providerOptions: "effort" in item ? { reasoningEffort: item.effort } : undefined,
         })
         const first = yield* LLMClient.generate(request)
@@ -141,7 +141,7 @@ recorded.effect.with(
           "Look up private rates for both ZEBRA and MOOSE using two calls to lookup_rate. Then add the rates and multiply by 7. Use parallel calls if possible.",
         tools: [lookup],
         providerOptions: { reasoningEffort: "high", parallelToolCalls: true },
-        generation: { maxTokens: 4096 },
+        maxTokens: 4096,
       })
       const first = yield* LLMClient.generate(request)
       expect(first.toolCalls).toHaveLength(2)
@@ -213,7 +213,7 @@ recorded.effect.with(
           model: Venice.configure({ apiKey }).chat("qwen3-6-27b"),
           prompt: "What is 23 multiplied by 17 plus 9? Reply with just the number.",
           providerOptions: { reasoning: { enabled: false } },
-          generation: { maxTokens: 4096 },
+          maxTokens: 4096,
         }),
       )
       expect(response.text).toContain("400")

@@ -30,6 +30,12 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
       Error form and a promise, which is a `TypeError` with an await hint rather than a silent `{}`.
 - [x] Live Date, RegExp, Map, Set, URL, URLSearchParams, Headers, and Uint8Array values inside CodeMode.
 - [x] Tool calls through the host-provided `tools` tree only.
+- [x] Imports of globals by Node module name: `import x from "m"`, `import { a, b as c } from "m"`,
+      `import * as m from "m"`, `import "m"`, `require("m")`, and `await import("m")`, with `node:fs` naming the
+      same module as `fs` and `fs/promises`, `url`, `util`, and `buffer` mapped to their globals. Imports load before
+      the program runs; a default import binds the module itself and the namespace adds it as `default`, the way
+      Node presents a CommonJS module. Anything else throws, and `import()` of it rejects. `export` is a parse error,
+      and an import below the top level throws.
 - [x] The global `search(...)` built-in: synchronous tool discovery that counts as an admitted tool call and is
       shadowable by program declarations like other globals. Its result can also be awaited or chained with
       `then`, `catch`, and `finally`.
@@ -590,14 +596,16 @@ with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
       frozen. Functions, symbols, promises, iterators, URL, Headers, and tool references cannot be cloned; without a
       `DOMException`, the failure is a `TypeError` whose message starts with `DataCloneError:`.
 - [x] `TextEncoder` and `TextDecoder` for UTF-8 only: any other label is a `RangeError`. `TextDecoder` accepts the
-      `fatal` and `ignoreBOM` options; `decode` takes a Uint8Array or nothing.
+      `fatal` and `ignoreBOM` options. `decode(chunk, { stream: true })` accepts incremental Uint8Array input;
+      `decode()` flushes the stream.
 - [x] `new Headers()` from records, synchronous iterables of pairs, and Headers, wrapping the host's `Headers`: names
       fold to lowercase, values are normalized and combined, and invalid names or values throw a `TypeError`.
 - [x] Headers `append`, `delete`, `get`, `getSetCookie`, `has`, `set`, `forEach`, `keys`, `values`, `entries`, and
       `[Symbol.iterator]`; iteration is live and sorted by name, with `set-cookie` values kept apart.
 - [x] Headers serialize to a `{ name: value }` object in JSON, in results, and in tool arguments.
 - [ ] `Request`, `Response`, and `Blob`.
-- [ ] `crypto.subtle` and `TextDecoder` streaming or non-UTF-8 encodings.
+- [x] A host-provided streaming fetch response exposes `bodyUsed`, whole-body readers, a default stream reader and `for await` iteration. `arrayBuffer()` crosses as a `Uint8Array`.
+- [ ] `crypto.subtle` and non-UTF-8 `TextDecoder` encodings.
 
 ## Extensions
 
