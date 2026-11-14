@@ -36,7 +36,12 @@ const FAILS: Note = (u32::MAX, 0);
 struct Mail {
     sender: Option<abi::Sender<Note>>,
     spawner: Option<abi::Spawner>,
+    waker: Option<abi::Waker>,
     arrived: Vec<Note>,
+    /// How many updates send one more message, as a thread that refills each freed place does.
+    refill: u32,
+    /// The messages that had arrived when each wake handler ran.
+    woken: Vec<usize>,
 }
 
 thread_local! {
@@ -50,10 +55,20 @@ fn mail<T>(f: impl FnOnce(&mut Mail) -> T) -> T {
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     let sender = setup.messages(|_, note: Note| {
         assert!(note != FAILS, "a failing update");
-        mail(|mail| mail.arrived.push(note));
+        let refill = mail(|mail| {
+            mail.arrived.push(note);
+            let refill = mail.refill > 0;
+            mail.refill -= u32::from(refill);
+            refill.then(|| mail.sender.clone()).flatten()
+        });
+        if let Some(sender) = refill {
+            let _ = sender.send((note.0, note.1 + 1));
+        }
     })?;
     let spawner = setup.spawner();
-    mail(|mail| (mail.sender, mail.spawner) = (Some(sender), Some(spawner)));
+    let waker = setup.waker();
+    setup.on_wake(|_| mail(|mail| mail.woken.push(mail.arrived.len())));
+    mail(|mail| (mail.sender, mail.spawner, mail.waker) = (Some(sender), Some(spawner), waker));
     Ok(())
 }
 
@@ -501,5 +516,50 @@ fn an_update_that_fails_ends_its_batch() {
         let status = harness.tui.plugins.entries().into_iter().find(|entry| entry.id == ID).unwrap().status;
         let failed = matches!(&status, opencode_plugin::Status::Failed(error) if error.contains("a failing update"));
         assert!(failed, "{carrier:?}: {status:?}");
+    }
+}
+
+// Expected (fixed row; review bigboi 8): a thread's panic report, and a wake of the waker, wait only for the messages
+// put in before them, though each update puts one more in, as a thread that refills every freed place does: the
+// report fails the plugin, and the wake handler runs, after one message, long before the refills end. On both
+// carriers.
+#[test]
+fn a_refilled_mailbox_holds_back_no_report_and_no_wake() {
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        mail(|mail| mail.refill = u32::MAX);
+        mail(|mail| mail.sender.clone()).unwrap().send((7, 0)).unwrap();
+        mail(|mail| mail.waker.clone()).unwrap().wake();
+        for _ in 0..20 {
+            harness.app.advance(Duration::from_millis(1));
+            harness.app.render();
+        }
+        let (woken, refill) = mail(|mail| (mail.woken.clone(), mail.refill));
+        assert_eq!(woken.first(), Some(&1), "{carrier:?}: the wake ran after the messages {woken:?}");
+        assert!(refill > 0, "{carrier:?}: the refills ended first");
+        // A report: the thread's panic comes after one message, while the refills go on.
+        let before = mail(|mail| mail.arrived.len());
+        let (panicked, done) = std::sync::mpsc::channel();
+        mail(|mail| mail.spawner.clone())
+            .unwrap()
+            .spawn("boom", move |_| {
+                panicked.send(()).unwrap();
+                panic!("a mail thread panicked");
+            })
+            .unwrap();
+        done.recv_timeout(Duration::from_secs(10)).unwrap();
+        harness.wait("the panic failed the plugin", || {
+            harness.app.advance(Duration::from_millis(1));
+            harness.app.render();
+            harness
+                .tui
+                .plugins
+                .entries()
+                .iter()
+                .any(|entry| entry.id == ID && entry.status != opencode_plugin::Status::Active)
+        });
+        let (after, refill) = mail(|mail| (mail.arrived.len(), mail.refill));
+        assert!(after - before <= abi::BOUND + 1, "{carrier:?}: {} updates came before the report", after - before);
+        assert!(refill > 0, "{carrier:?}: the refills ended before the report");
     }
 }
