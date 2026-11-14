@@ -1662,10 +1662,15 @@ fn two_apps_on_a_thread_each_resolve_their_own_mounts() {
     assert_eq!(frame, first.settle(), "the first app's frame was not settled");
     let frame = second.harness.app.render();
     assert_eq!(offset_shown(&frame.text(), &rows, 1), Some(0), "the second app moved:\n{}", frame.text());
+    let stepped = first.settle();
     second.dispatch("board.step", Some("1".into()));
+    let counts = behave::counts();
     let frame = second.harness.app.render();
+    // The second app's own frame runs the behaviors, with its own hook.
+    assert!(behave::counts().since(counts).resolves > 0, "the second app's frame ran no behaviors");
     assert_eq!(offset_shown(&frame.text(), &rows, 1), Some(3), "{}", frame.text());
     assert_eq!(frame, second.settle(), "the second app's frame was not settled");
+    assert_eq!(frame, stepped, "the second app's frame differs from the first's");
     // The first app's mount goes; the second still resolves.
     drop(first);
     second.dispatch("board.step", Some("1".into()));
