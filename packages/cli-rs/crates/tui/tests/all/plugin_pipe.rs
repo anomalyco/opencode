@@ -672,7 +672,10 @@ fn a_holding_command_holds_the_keys_after_it() {
     let (pipe, log) = probe_and_twin(config, false);
     let harness = &pipe.harness;
     harness.tui.keymap.dispatch("probe.hold", Some("5"));
-    harness.app.type_text("ab");
+    // Typed before the UI takes anything else: the handler's answer cannot have arrived, however soon the JS host gave it.
+    for key in ['a', 'b'] {
+        harness.app.app().dispatch(Event::Key(KeyEvent::new(KeyCode::Char(key), Modifiers::NONE)));
+    }
     assert_eq!(harness.text(), "", "a held key reached the composer before the command returned");
     pipe.settle();
     assert_eq!(harness.text(), "ab");
