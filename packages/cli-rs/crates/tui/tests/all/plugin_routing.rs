@@ -280,6 +280,10 @@ impl Reference {
                 self.log.push("menu: key k [-]".to_owned());
                 true
             }
+            ("nav", Focus::Overlay, Key::K) => {
+                self.log.push("menu: key k [nav]".to_owned());
+                true
+            }
             ("-", Focus::Overlay, Key::N) => {
                 self.log.push("menu: key nav [-]".to_owned());
                 self.nav = true;
