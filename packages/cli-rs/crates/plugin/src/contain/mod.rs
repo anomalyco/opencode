@@ -324,6 +324,8 @@ impl Monitor {
     /// Runs `f` as call `kind` of the plugin in `slot`: timed, and named in the record while it runs. A call within a
     /// call is part of the outer one.
     pub fn call<R>(&self, slot: Slot, kind: &'static str, f: impl FnOnce() -> R) -> (R, Timed) {
+        // The record names a call by its kind's index: an unlisted kind would leave a crash in it unnamed.
+        debug_assert!(record::KINDS.contains(&kind), "call kind {kind} is not in the record's list");
         if self.depth.get() > 0 {
             return (f(), Timed::default());
         }

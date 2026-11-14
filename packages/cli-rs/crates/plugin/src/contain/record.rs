@@ -74,6 +74,8 @@ pub const KINDS: &[&str] = &[
     "fence-gone",
     "dispose",
     "load",
+    "on-deltas",
+    "view",
 ];
 
 /// The index of `kind` in [`KINDS`], or the last index past it for a kind it does not list.
