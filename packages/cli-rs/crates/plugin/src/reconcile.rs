@@ -1491,9 +1491,14 @@ fn shell(node: &Node) -> Node {
             notify_top: notify_top.clone(),
             user_scroll: *user_scroll,
         },
-        Node::List { id, row, layout, .. } => {
-            Node::List { id: id.clone(), row: *row, items: Vec::new(), layout: *layout }
-        }
+        Node::List { id, row, layout, notify_top, user_scroll, .. } => Node::List {
+            id: id.clone(),
+            row: *row,
+            items: Vec::new(),
+            layout: *layout,
+            notify_top: notify_top.clone(),
+            user_scroll: *user_scroll,
+        },
         _ => node.clone(),
     }
 }

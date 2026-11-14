@@ -175,6 +175,12 @@ pub enum Node {
         items: Vec<ListItem>,
         #[serde(default, skip_serializing_if = "is_default_layout")]
         layout: Layout,
+        /// As a scroll's: `layout` is called when the top anchor of this group changes.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        notify_top: Option<String>,
+        /// As a scroll's: the surface hears [`ScrollEvent::UserScroll`].
+        #[serde(default, skip_serializing_if = "is_false")]
+        user_scroll: bool,
     },
     /// P3: source code in the host's code view, highlighted as `filetype` with the host's grammars and theme.
     Code {
@@ -659,7 +665,17 @@ impl Node {
 
     /// A list of `items` top to bottom, windowed by the host.
     pub fn list(items: Vec<ListItem>) -> Self {
-        Node::List { id: None, row: false, items, layout: Layout::default() }
+        Node::List { id: None, row: false, items, layout: Layout::default(), notify_top: None, user_scroll: false }
+    }
+
+    /// The scroll or list with `layout` told about its top anchor of `group`, and the surface about the user's
+    /// moves; anything else is unchanged.
+    pub fn watched(mut self, group: impl Into<String>) -> Self {
+        if let Node::Scroll { notify_top, user_scroll, .. } | Node::List { notify_top, user_scroll, .. } = &mut self {
+            *notify_top = Some(group.into());
+            *user_scroll = true;
+        }
+        self
     }
 
     /// A patch of `content` in the unified view.
