@@ -462,7 +462,7 @@ describe("Project.resolve", () => {
     }),
   )
 
-  it.live("returns git global for repo with no commits and no remote", () =>
+  it.live("gives a repo with no commits and no remote a directory-derived id", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path))
@@ -470,11 +470,50 @@ describe("Project.resolve", () => {
 
       const result = yield* project.resolve(abs(tmp.path))
 
-      expect(result.id).toBe(Project.ID.make("global"))
+      expect(result.id).toBe(Project.ID.make(Hash.fast(`directory:${yield* real(tmp.path)}`)))
+      expect(result.id).not.toBe(Project.ID.global)
       expect(result.directory).toBe(yield* real(tmp.path))
       expect(result.canonical).toBe(result.directory)
       expect(result.previous).toBeUndefined()
       expect(result.vcs?.type).toBe("git")
+    }),
+  )
+
+  it.live("gives unrelated repos with no commits distinct project ids", () =>
+    Effect.gen(function* () {
+      const first = yield* tmpdirScoped()
+      const second = yield* tmpdirScoped()
+      yield* Effect.promise(() => Promise.all([initRepo(first.path), initRepo(second.path)]))
+      const project = yield* Project.Service
+
+      const a = yield* project.resolve(abs(first.path))
+      const b = yield* project.resolve(abs(second.path))
+
+      expect(a.id).not.toBe(Project.ID.global)
+      expect(b.id).not.toBe(Project.ID.global)
+      expect(a.id).not.toBe(b.id)
+      expect((yield* project.list()).map((item) => item.id)).toEqual(expect.arrayContaining([a.id, b.id]))
+    }),
+  )
+
+  it.live("archives the unborn project once a commit gives the repo its id", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* Effect.promise(() => initRepo(tmp.path))
+      const project = yield* Project.Service
+      const unborn = yield* project.resolve(abs(tmp.path))
+
+      yield* Effect.promise(() =>
+        $`git -c user.name=Test -c user.email=test@opencode.test -c commit.gpgsign=false commit --allow-empty -qm root`
+          .cwd(tmp.path)
+          .quiet(),
+      )
+      const committed = yield* project.resolve(abs(tmp.path))
+
+      expect(committed.id).not.toBe(unborn.id)
+      expect(committed.previous).toBe(unborn.id)
+      expect((yield* project.list()).map((item) => item.id)).toEqual([committed.id])
+      expect((yield* project.list({ archived: true })).find((item) => item.id === unborn.id)?.time.archived).toBeNumber()
     }),
   )
 
@@ -489,7 +528,7 @@ describe("Project.resolve", () => {
       expect(result.id).toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
       expect(result.directory).toBe(yield* real(tmp.path))
       expect(result.canonical).toBe(result.directory)
-      expect(result.previous).toBeUndefined()
+      expect(result.previous).toBe(Project.ID.make(Hash.fast(`directory:${yield* real(tmp.path)}`)))
       expect(result.vcs?.type).toBe("git")
     }),
   )
@@ -751,15 +790,16 @@ describe("Project.resolve", () => {
       if (!supported) return
       yield* Effect.gen(function* () {
         const project = yield* Project.Service
-        expect((yield* project.resolve(abs(tmp.path))).id).toBe(Project.ID.global)
+        const unborn = yield* project.resolve(abs(tmp.path))
+        expect(unborn.id).toBe(Project.ID.make(Hash.fast(`directory:${yield* real(tmp.path)}`)))
         yield* Effect.promise(() =>
           $`git -c user.name=Test -c user.email=test@opencode.test -c commit.gpgsign=false commit --allow-empty -qm root`
             .cwd(tmp.path)
             .quiet(),
         )
-        expect((yield* project.resolve(abs(tmp.path))).id).toBe(
-          Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))),
-        )
+        const committed = yield* project.resolve(abs(tmp.path))
+        expect(committed.id).toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
+        expect(committed.previous).toBe(unborn.id)
       }).pipe(Effect.provide(counted().layer))
     }),
   )
