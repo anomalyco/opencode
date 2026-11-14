@@ -270,7 +270,7 @@ pub fn pane(input: &Pane<'_>, tree: &Tree, cx: &mut v2::View<'_>) -> v2::Node {
     .gap(1)
     .layout(Layout::default().height(Width::Cells(1)).shrink(false).margin(Edges { bottom: 1, ..Edges::default() }));
 
-    let rows = flatten(tree, Some(input.expanded))
+    let rows: Vec<v2::ListItem> = flatten(tree, Some(input.expanded))
         .into_iter()
         .map(|row| {
             let selected = row.file.is_some() && row.file == input.selected;
@@ -314,12 +314,12 @@ pub fn pane(input: &Pane<'_>, tree: &Tree, cx: &mut v2::View<'_>) -> v2::Node {
                 rail: input.rail,
             };
             let id = row_id(&row);
-            cx.memo(id.clone(), line.clone(), |_| row_node(id, &line, surface))
+            v2::ListItem::new(cx.memo(id.clone(), line.clone(), |_| row_node(id, &line, surface)), 1)
         })
         .collect();
-    let scroll = v2::Node::scroll(vec![v2::Node::column(rows).layout(Layout::default().shrink(false))])
-        .with_id(super::TREE)
-        .layout(Layout::default().grow().min_height(Width::Cells(0)));
+    // A windowed list, as the cards are: only the rows near the view are built, so 1,000 files stay within what the
+    // host builds for one tree at once.
+    let scroll = v2::Node::list(rows).with_id(super::TREE).layout(Layout::default().grow().min_height(Width::Cells(0)));
 
     let mut body = vec![header, scroll];
     if let Some(help) = &input.help {
@@ -356,23 +356,25 @@ pub fn pane(input: &Pane<'_>, tree: &Tree, cx: &mut v2::View<'_>) -> v2::Node {
 /// menu.
 fn row_node(id: String, line: &Line, surface: &'static str) -> v2::Node {
     let name = Span { bold: line.selected, ..Span::new(line.name.clone()) };
-    let content = v2::Node::row(vec![
+    // Four nodes a row: 1,000 rows and their cards are one tree, within what the host takes of one.
+    v2::Node::row(vec![
         v2::Node::text([Span::new(line.indent.clone()).fg(line.rail), Span::new(line.marker).fg(line.faint)])
             .wrap(Wrap::None)
             .layout(Layout::default().shrink(false)),
-        v2::Node::column(vec![v2::Node::text([name]).fg(line.foreground).wrap(Wrap::None).truncate()])
+        v2::Node::text([name])
+            .fg(line.foreground)
+            .wrap(Wrap::None)
+            .truncate()
             .layout(Layout::default().grow().min_width_zero().margin(Edges { right: 1, ..Edges::default() })),
         v2::Node::text([Span::new(line.status)])
             .fg(line.status_color)
             .wrap(Wrap::None)
             .layout(Layout::default().width(Width::Cells(1)).shrink(false)),
     ])
-    .layout(Layout::default().height(Width::Cells(1)));
-    v2::Node::column(vec![content])
-        .with_id(id)
-        .bg(surface)
-        .interact(Interact { pointer: true, hover: Some("background.raised.high".into()), ..Interact::default() })
-        .layout(Layout::default().width(Width::Percent(100.0)).height(Width::Cells(1)).shrink(false))
+    .with_id(id)
+    .bg(surface)
+    .interact(Interact { pointer: true, hover: Some("background.raised.high".into()), ..Interact::default() })
+    .layout(Layout::default().width(Width::Percent(100.0)).height(Width::Cells(1)).shrink(false))
 }
 
 #[cfg(test)]
