@@ -166,12 +166,12 @@ describe("ShellScan", () => {
     },
   )
 
-  test("keeps first-command redirects but excludes list-level redirects from resources", () => {
+  test("keeps redirects in resources across list operators", () => {
     expect(ShellScan.scan("FOO=bar 2>>err printf ok > out && cat < input")).toMatchObject({
       kind: "scanned",
       commands: [
         { resource: "FOO=bar 2>>err printf ok > out", words: ["printf", "ok"] },
-        { resource: "cat", words: ["cat"] },
+        { resource: "cat < input", words: ["cat"] },
       ],
     })
   })
@@ -181,7 +181,7 @@ describe("ShellScan", () => {
       kind: "scanned",
       commands: [
         { resource: "printf ok>out 2>&1", words: ["printf", "ok"] },
-        { resource: "cat", words: ["cat"] },
+        { resource: "cat<input", words: ["cat"] },
       ],
     })
   })

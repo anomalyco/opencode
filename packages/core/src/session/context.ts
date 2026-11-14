@@ -4,6 +4,7 @@ import { Model } from "../model.js"
 import { Permission } from "../permission.js"
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "../agent.js"
+import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { CodeModeInstructions } from "../codemode/instructions.js"
 import { Database } from "../database/database.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -18,7 +19,6 @@ import { SkillInstructions } from "../skill/instructions.js"
 import { Tool } from "../tool.js"
 import { AgentNotFoundError } from "./error.js"
 import { SessionHistory } from "./history.js"
-import { SessionProviderContext } from "./provider-context.js"
 import { InstructionEntry } from "./instruction-entry.js"
 import { SessionMessage } from "./message.js"
 import { SessionModelRequest } from "./model-request.js"
@@ -37,7 +37,7 @@ export interface Loaded {
   readonly session: SessionSchema.Info
   readonly agent: Agent.Selection & { readonly info: Agent.Info }
   readonly model: SessionRunnerModel.Resolved
-  readonly initial: string
+  readonly initial: ReadonlyArray<Instructions.Rendered>
   readonly messages: ReadonlyArray<SessionMessage.Info>
   readonly tools: Tool.Snapshot
 }
@@ -55,6 +55,7 @@ export interface Interface {
   readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
   readonly resolveModel: (
     session: SessionSchema.Info,
+    request: { readonly kind: SessionRequestKind; readonly agent: Agent.ID },
   ) => Effect.Effect<SessionRunnerModel.Resolved, SessionRunnerModel.Error>
   /** Selects auxiliary title capabilities without instruction or tool preflight. */
   readonly selectTitle: (session: SessionSchema.Info) => Effect.Effect<
@@ -90,29 +91,43 @@ const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const registry = yield* Tool.Service
 
-    const resolveModel = (session: SessionSchema.Info) => models.resolve(session, model.available)
+    const resolveModel = (
+      session: SessionSchema.Info,
+      request: { readonly kind: SessionRequestKind; readonly agent: Agent.ID },
+    ) => models.resolve(session, model.available, request)
 
     const selectTitle = Effect.fn("SessionContext.selectTitle")(function* (session: SessionSchema.Info) {
       const agent = yield* agents.get(Agent.ID.make("title"))
       if (!agent) return
-      const primary = yield* resolveModel(session).pipe(Effect.orElseSucceed(() => undefined))
-      const info = yield* Effect.gen(function* () {
-        if (agent.model) return yield* model.get(agent.model.providerID, agent.model.id)
+      const primary = yield* resolveModel(session, { kind: "title", agent: agent.id }).pipe(
+        Effect.orElseSucceed(() => undefined),
+      )
+      const candidate = yield* Effect.gen(function* () {
+        if (agent.model) {
+          const info = yield* model.get(agent.model.providerID, agent.model.id)
+          return info && { info, variant: agent.model.variant ?? minimalVariant(info) }
+        }
         if (!primary) return
-        return yield* model.small(primary.ref.providerID)
+        const small = yield* model.small(primary.ref.providerID)
+        if (small) return { info: small, variant: minimalVariant(small) }
+        // Without a lower variant, the primary model at its selected variant is already the fallback.
+        const info = yield* model.get(primary.ref.providerID, primary.ref.id)
+        const variant = info && lowerVariant(info, primary.ref.variant)
+        return variant && { info, variant }
       })
-      const variant =
-        agent.model?.variant ?? MINIMAL_REASONING_VARIANTS.find((id) => info?.variants.some((item) => item.id === id))
       const preferred =
-        info &&
-        (yield* resolveModel({
-          ...session,
-          model: Model.Ref.make({
-            providerID: info.providerID,
-            id: info.id,
-            ...(variant ? { variant } : {}),
-          }),
-        }).pipe(Effect.orElseSucceed(() => undefined)))
+        candidate &&
+        (yield* resolveModel(
+          {
+            ...session,
+            model: Model.Ref.make({
+              providerID: candidate.info.providerID,
+              id: candidate.info.id,
+              ...(candidate.variant ? { variant: candidate.variant } : {}),
+            }),
+          },
+          { kind: "title", agent: agent.id },
+        ).pipe(Effect.orElseSucceed(() => undefined)))
       const selected = preferred ?? primary
       if (!selected) return
       return { agent, primary, selected }
@@ -161,12 +176,12 @@ const layer = Layer.effect(
     })
 
     const load = Effect.fn("SessionContext.load")(function* (selection: Selection) {
-      const model = yield* resolveModel(selection.session)
+      const model = yield* resolveModel(selection.session, { kind: "primary", agent: selection.agent.id })
       const history = yield* SessionHistory.entriesForRunner(
         db,
         selection.session.id,
         selection.instructions,
-        SessionProviderContext.provenance(model) ?? "local",
+        model.ref,
       )
       return {
         session: selection.session,
@@ -184,6 +199,18 @@ const layer = Layer.effect(
 
 /** Variant IDs that minimize reasoning output, in preference order. */
 const MINIMAL_REASONING_VARIANTS = ["none", "minimal", "low"].map((id) => Model.VariantID.make(id))
+
+const minimalVariant = (info: Model.Info) =>
+  MINIMAL_REASONING_VARIANTS.find((id) => info.variants.some((item) => item.id === id))
+
+/**
+ * `none` and `minimal` always reduce reasoning. `low` can enable reasoning on a model whose default
+ * does not reason, so it is only used when it ranks below the variant the session selected.
+ */
+const lowerVariant = (info: Model.Info, selected: Model.VariantID | undefined) => {
+  const rank = (id: Model.VariantID | undefined) => info.variants.findIndex((item) => item.id === id)
+  return MINIMAL_REASONING_VARIANTS.find((id) => rank(id) !== -1 && (id !== "low" || rank(id) < rank(selected)))
+}
 
 export const node = makeLocationNode({
   service: Service,

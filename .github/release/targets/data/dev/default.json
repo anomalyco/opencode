@@ -1,0 +1,39 @@
+{
+  "name": "opencode-data-dev",
+  "compatibilityDate": "2026-07-25",
+  "compatibilityFlags": ["nodejs_compat"],
+  "triggers": [
+    { "type": "fetch", "pattern": "dev.opencode.ai/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/en/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/zh/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/zht/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/ko/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/de/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/es/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/fr/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/it/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/da/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/ja/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/pl/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/ru/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/uk/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/ar/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/no/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/br/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/th/data*", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/tr/data*", "zone": "dev.opencode.ai" }
+  ],
+  "observability": { "enabled": true },
+  "workersDev": false,
+  "previewUrls": false,
+  "env": {
+    "ASSETS": { "type": "assets" },
+    "OG_WORKER": { "type": "worker", "worker": "opencode-data-og-dev" },
+    "STAGE": { "type": "text", "value": "dev" },
+    "PUBLIC_URL": { "type": "text", "value": "https://dev.opencode.ai/data" },
+    "DATA_DATABASE_HOST": { "type": "secret" },
+    "DATA_DATABASE_USERNAME": { "type": "secret" },
+    "DATA_DATABASE_PASSWORD": { "type": "secret" }
+  },
+  "manifest": { "type": "partial", "mainModule": "index.mjs", "modules": {} }
+}

@@ -1,0 +1,10 @@
+/* The list scrolls under a fade that would cut a ring drawn outside a control, so rings sit inside each control and
+   focus scrolls a row clear of the 8px and 12px fades. */
+[data-slot="session-queue-list"] {
+  scroll-padding-block: 8px 12px;
+}
+
+[data-component="session-queue-panel"]
+  :is([data-component="button-v2"], [data-component="icon-button-v2"]):is(:focus-visible, [data-state="focus"]) {
+  outline-offset: -2px;
+}

@@ -6,6 +6,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Environment } from "@opencode/core/environment/index"
 import { FileMutation } from "@opencode/core/file-mutation"
+import { FileWrite } from "@opencode/core/file-write"
 import { Formatter } from "@opencode/core/formatter"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
@@ -25,15 +26,7 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const editToolNode = makeLocationNode({
   name: "test/edit-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(EditTool.Plugin)),
-  deps: [
-    Tool.node,
-    FileAccess.node,
-    FileMutation.node,
-    Environment.node,
-    Formatter.node,
-    Location.node,
-    Permission.node,
-  ],
+  deps: [Tool.node, FileWrite.node, FileMutation.node, Environment.node, Location.node, Permission.node],
 })
 
 const sessionID = Session.ID.make("ses_edit_tool_test")
@@ -43,17 +36,20 @@ const makeEditFixture = () => {
     writes: string[]
     reads: number
     denyAction?: string
+    readAllowed: boolean
     afterRead: () => Effect.Effect<void>
     formatFile: (target: string) => Effect.Effect<boolean>
   } = {
     assertions: [],
     writes: [],
     reads: 0,
+    readAllowed: true,
     afterRead: () => Effect.void,
     formatFile: () => Effect.succeed(false),
   }
 
   const permission = permissionLayer({
+    allows: (input) => Effect.succeed(input.action === "read" && fixture.readAllowed),
     assert: (input) =>
       Effect.sync(() => fixture.assertions.push(input)).pipe(
         Effect.andThen(
@@ -129,7 +125,10 @@ describe("EditTool", () => {
         Effect.andThen(
           withTool(tmp.path, edit, (registry) =>
             Effect.gen(function* () {
-              expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["edit", "execute"])
+              expect(yield* toolDefinitions(registry)).toMatchObject([
+                { name: "edit", outputSchema: { type: "string" } },
+                { name: "execute" },
+              ])
               expect(
                 (yield* toolDefinitions(registry, [{ action: "edit", resource: "*", effect: "deny" }])).map(
                   (tool) => tool.name,
@@ -147,12 +146,8 @@ describe("EditTool", () => {
                   text: "Edited hello.txt (1 replacement)",
                 },
               ])
-              // Compact UI metadata carries the file diffs the TUI renders.
+              expect(settled.output).toBe("Edited hello.txt (1 replacement)")
               expect(settled.metadata).toMatchObject({
-                files: [{ file: "hello.txt", status: "modified", additions: 1, deletions: 1 }],
-              })
-              expect(settled.output).toEqual({
-                replacements: 1,
                 files: [
                   {
                     file: "hello.txt",
@@ -205,7 +200,6 @@ describe("EditTool", () => {
               )
               expect(settled.status).toBe("completed")
               if (settled.status !== "completed") return
-              expect(settled.output.files[0]?.patch).toContain("-before\n+AFTER")
               expect(settled.metadata?.files?.[0]?.patch).toContain("-before\n+AFTER")
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("AFTER\n")
             }),
@@ -430,6 +424,62 @@ describe("EditTool", () => {
     }),
   )
 
+  it.live("points a missed oldString at the closest lines, or at newString already applied, when read is allowed", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "miss.ts")
+      const miss = (oldString: string, newString: string) =>
+        withTool(tmp.path, edit, (registry) => executeTool(registry, call({ path: "miss.ts", oldString, newString })))
+      const missed = "Could not find oldString in miss.ts. It must match exactly, including whitespace and indentation."
+      return Effect.promise(() =>
+        fs.writeFile(
+          target,
+          "import { a } from './a'\n\nexport function run() {\n  const value = a()\n  return value + 1\n}\n",
+        ),
+      ).pipe(
+        Effect.andThen(
+          Effect.gen(function* () {
+            expect(yield* miss("export function run() {\n\tconst value = a()\n\treturn value + 2\n}", "x")).toEqual({
+              status: "error",
+              error: {
+                type: "tool.execution",
+                message: `${missed}\n\nThe closest lines in the file:\n3: export function run() {\n4:   const value = a()\n5:   return value + 1\n6: }`,
+              },
+            })
+            expect(yield* miss("  return value + 2", "  return value + 1")).toEqual({
+              status: "error",
+              error: { type: "tool.execution", message: missed },
+            })
+            expect(yield* miss("const value = b()", "  const value = a()\n  return value + 1")).toEqual({
+              status: "error",
+              error: {
+                type: "tool.execution",
+                message: `${missed}\n\nnewString is already in the file, so this edit may already be applied.`,
+              },
+            })
+            expect(yield* miss("nothing like it", "anything")).toEqual({
+              status: "error",
+              error: { type: "tool.execution", message: missed },
+            })
+            expect(yield* miss("import { a } from './a'\n\n\n\n\n\n", "x")).toEqual({
+              status: "error",
+              error: {
+                type: "tool.execution",
+                message: `${missed}\n\nThe closest lines in the file:\n1: import { a } from './a'`,
+              },
+            })
+            edit.readAllowed = false
+            expect(yield* miss("export function run() {\n\tconst value = a()\n\treturn value + 2\n}", "x")).toEqual({
+              status: "error",
+              error: { type: "tool.execution", message: missed },
+            })
+            expect(edit.writes).toEqual([])
+          }),
+        ),
+      )
+    }),
+  )
+
   it.live("returns specific missing file and directory errors", () =>
     withTempDir((tmp) => {
       const edit = makeEditFixture()
@@ -472,7 +522,7 @@ describe("EditTool", () => {
           Effect.gen(function* () {
             expect(settled.status).toBe("completed")
             if (settled.status !== "completed") return
-            expect(settled.output).toMatchObject({ replacements: 3 })
+            expect(settled.output).toBe("Edited all.txt (3 replacements)")
             expect(settled.content).toEqual([{ type: "text", text: "Edited all.txt (3 replacements)" }])
             expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after after after")
             expect(edit.writes).toHaveLength(1)
@@ -549,7 +599,7 @@ describe("EditTool", () => {
                 registry,
                 call({ path: "overlap.txt", oldString: "a\na", newString: "x", replaceAll: true }),
               )
-              expect(replaced).toMatchObject({ status: "completed", output: { replacements: 1 } })
+              expect(replaced).toMatchObject({ status: "completed", output: "Edited overlap.txt (1 replacement)" })
               yield* executeTool(registry, call({ path: "windows.txt", oldString: "a\nb", newString: "x" }))
             }),
           ),
@@ -687,7 +737,7 @@ describe("EditTool", () => {
             Effect.gen(function* () {
               expect(
                 yield* executeTool(registry, call({ path: "strip.sh", oldString: "\r", newString: "", replaceAll: true })),
-              ).toMatchObject({ status: "completed", output: { replacements: 2 } })
+              ).toMatchObject({ status: "completed", output: "Edited strip.sh (2 replacements)" })
               expect(
                 yield* executeTool(registry, call({ path: "whole.sh", oldString: "x\r\ny\r\n", newString: "x\ny\n" })),
               ).toMatchObject({ status: "completed" })
@@ -789,7 +839,7 @@ describe("EditTool", () => {
         ),
         Effect.andThen((result) =>
           Effect.gen(function* () {
-            expect(result).toMatchObject({ status: "completed", output: { replacements: 1 } })
+            expect(result).toMatchObject({ status: "completed", output: "Edited concurrent.txt (1 replacement)" })
             expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
             expect(edit.writes).toEqual([target])
           }),

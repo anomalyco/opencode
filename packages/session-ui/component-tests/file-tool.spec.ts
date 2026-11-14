@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 story("keeps grouped file choices when the Used group reopens", async ({ mount }) => {
   const root = await mount("current-session-research-agents--agent-research", { args: { scenario: "workflow" } })

@@ -1,12 +1,13 @@
 import { Option, Schema } from "effect"
 
-// The OpenCode iOS app sends each request from a voice call as plain prompt text: a header line, then a JSON
-// body. Nothing else marks the message, so this mirrors the app's `VoiceHandoff.parse`. The header's wording
-// has changed between releases; its opening and the body's shape have not.
+// Voice calls send each request as plain prompt text: a header line, then a JSON body. Nothing else marks the
+// message, so this mirrors the iOS app's `VoiceHandoff.parse`. The header's wording has changed between
+// releases; its opening and the body's shape have not.
 const decodeBody = Schema.decodeUnknownOption(
   Schema.fromJsonString(
     Schema.Struct({
       instruction: Schema.String,
+      transcript_delta: Schema.optional(Schema.Array(Schema.String)),
       voice: Schema.optional(Schema.String),
     }),
   ),
@@ -28,6 +29,10 @@ export function parseVoiceDelegation(text: string) {
   const instruction = body?.instruction.trim()
 
   if (!instruction) return
+
+  // Desktop's first voice calls wrote a bare header and put the user's raw transcript in `voice`, not a framing.
+  if (text.slice(0, newline) === "Voice delegation." && !body?.transcript_delta)
+    return { instruction, framing: undefined }
 
   return { instruction, framing: body?.voice?.trim() || undefined }
 }

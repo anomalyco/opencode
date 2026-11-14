@@ -1,0 +1,89 @@
+.palette-menu-search {
+  flex-shrink: 0;
+  padding: 6px;
+}
+
+.palette-menu-search [data-component="text-input-v2"] {
+  width: 100%;
+  height: 36px;
+  padding-inline-end: 12px;
+  border-radius: 6px;
+  outline: 0;
+  background: color-mix(in srgb, var(--v2-background-bg-layer-02) 60%, transparent);
+  box-shadow: none;
+  transition:
+    background-color 120ms ease-in-out,
+    box-shadow 120ms ease-in-out;
+}
+
+.palette-menu-search
+  [data-component="text-input-v2"]:where(:hover, :focus-within):not([data-disabled], [data-invalid]) {
+  background: var(--v2-background-bg-layer-02);
+  box-shadow: none;
+}
+
+.palette-menu-search [data-slot="text-input-v2-value"] {
+  border-radius: 6px;
+  background: transparent;
+  gap: 8px;
+}
+
+.palette-menu-search [data-slot="text-input-v2-leading-icon"] {
+  padding-inline-start: 12px;
+}
+
+.palette-menu-search [data-slot="text-input-v2-input"] {
+  border-radius: 6px;
+  background: transparent;
+}
+
+.palette-menu-row {
+  display: flex;
+  width: 100%;
+  height: 36px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--v2-text-text-base);
+  text-align: start;
+  cursor: default;
+  scroll-margin: 6px 0;
+}
+
+.palette-menu-row:is([data-active], :focus-visible) {
+  background: var(--v2-overlay-simple-overlay-hover);
+  outline: none;
+}
+
+.palette-menu-row[data-size="compact"] {
+  height: 28px;
+  padding-inline: 8px;
+  scroll-margin-block: 0;
+}
+
+[data-color-scheme="dark"] .palette-menu-row:is([data-active], :focus-visible) {
+  background: var(--v2-alpha-light-10);
+}
+
+.palette-menu-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  font-weight: 530;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .palette-menu-search [data-component="text-input-v2"] {
+    transition: none;
+  }
+}

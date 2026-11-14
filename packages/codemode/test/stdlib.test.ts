@@ -36,6 +36,26 @@ const error = async (code: string) => {
 }
 
 describe("Number and Math", () => {
+  test("Number.toString truncates the radix before checking its range", async () => {
+    expect(
+      await value(`return [36.1, 36.9, "36.9", { valueOf() { return 36.9 } }].map(radix => (35).toString(radix))`),
+    ).toEqual(["z", "z", "z", "z"])
+  })
+
+  test("Number.toString keeps invalid radixes catchable as RangeError", async () => {
+    expect(
+      await value(`return [0, 1.9, 37, NaN, Infinity, -Infinity].map(radix => {
+        try { return (35).toString(radix) }
+        catch (error) { return error instanceof RangeError }
+      })`),
+    ).toEqual([true, true, true, true, true, true])
+    expect(await value(`return [(35).toString(), (35).toString(undefined), (35).toString(2.9)]`)).toEqual([
+      "35",
+      "35",
+      "100011",
+    ])
+  })
+
   test("Math.random returns a number in [0, 1)", async () => {
     expect(await value(`const n = Math.random(); return typeof n === "number" && n >= 0 && n < 1`)).toBe(true)
   })
@@ -1003,6 +1023,36 @@ describe("Set", () => {
 })
 
 describe("Uint8Array", () => {
+  test("from maps the original values with thisArg, after consuming the source", async () => {
+    expect(
+      await value(`
+        const events = []
+        function* source() {
+          events.push("start")
+          yield 300
+          events.push("end")
+        }
+        return [
+          [...Uint8Array.from([300, 2], (value, index) => value / 2 + index)],
+          [...Uint8Array.from(new Uint8Array([2, 3]), (value, index) => value + 255 + index)],
+          [...Uint8Array.from([1, 2], function (value, index) { return value + index + this.offset }, { offset: 5 })],
+          [...Uint8Array.from(atob("aGk="), (c) => c.charCodeAt(0))],
+          [...Uint8Array.from([300, 2], undefined)],
+          [...Uint8Array.from(source(), (value) => { events.push("map"); return value })],
+          events,
+        ]
+      `),
+    ).toEqual([[150, 2], [1, 3], [6, 8], [104, 105], [44, 2], [44], ["start", "end", "map"]])
+  })
+
+  test("from rejects a non-callable mapper even for an empty source", async () => {
+    for (const mapper of ["42", "null", "{}"]) {
+      expect((await error(`return Uint8Array.from([], ${mapper}).length`)).message).toContain(
+        "TypeError: Uint8Array.from expects a function callback",
+      )
+    }
+  })
+
   test("constructs from a length, an array, an iterable, or another Uint8Array", async () => {
     expect(
       await value(`
@@ -1126,6 +1176,15 @@ describe("Uint8Array", () => {
 })
 
 describe("TextEncoder and TextDecoder", () => {
+  test("encodes null as text while omitted and undefined inputs stay empty", async () => {
+    expect(
+      await value(`
+        const encoder = new TextEncoder()
+        return [[...encoder.encode(null)], [...encoder.encode()], [...encoder.encode(undefined)]]
+      `),
+    ).toEqual([[110, 117, 108, 108], [], []])
+  })
+
   test("round-trips UTF-8 and exposes the standard fields", async () => {
     expect(
       await value(`
@@ -1157,6 +1216,86 @@ describe("TextEncoder and TextDecoder", () => {
       true,
       true,
     ])
+  })
+
+  test("streams an emoji one byte at a time and copies the pending bytes", async () => {
+    expect(
+      await value(`
+      const decoder = new TextDecoder()
+      const chunk = new Uint8Array([65, 0xf0])
+      const stream = { stream: true }
+      const start = decoder.decode(chunk, stream)
+      chunk[1] = 0
+      return [start, decoder.decode(undefined, stream), decoder.decode(new Uint8Array([0x9f]), stream),
+        decoder.decode(new Uint8Array([0x98]), stream), decoder.decode(new Uint8Array([0x80, 66])), decoder.decode()]
+    `),
+    ).toEqual(["A", "", "", "", "😀B", ""])
+  })
+
+  test("only strips the first BOM of each stream, including a split BOM", async () => {
+    expect(
+      await value(`
+      return [false, true].map(ignoreBOM => {
+        const decoder = new TextDecoder('utf8', { ignoreBOM })
+        const bom = new Uint8Array([0xef, 0xbb, 0xbf])
+        return [decoder.decode(bom.slice(0, 1), { stream: true }), decoder.decode(bom.slice(1), { stream: true }),
+          decoder.decode(bom), decoder.decode(bom)]
+      })
+    `),
+    ).toEqual([
+      ["", "", "\ufeff", ""],
+      ["", "\ufeff", "\ufeff", "\ufeff"],
+    ])
+  })
+
+  test("reports malformed UTF-8 immediately and truncated UTF-8 on flush", async () => {
+    expect(
+      await value(`
+      return [false, true].map(fatal => {
+        return [[[0xe0], [0x80]], [[0xed, 0xa0]], [[0xf0, 0x80]], [[0xf4, 0x90]],
+          [[0xe2, 0x82], [65]], [[0xf0, 0x9f], undefined, undefined, [0xef, 0xbb, 0xbf, 66]]].flatMap(chunks => {
+          const decoder = new TextDecoder('utf8', { fatal })
+          return chunks.map(bytes => {
+            try { return bytes ? decoder.decode(new Uint8Array(bytes), { stream: true }) : decoder.decode() }
+            catch (error) { return error.name }
+          })
+        })
+      })
+    `),
+    ).toEqual([
+      ["", "��", "��", "��", "��", "", "�A", "", "�", "", "B"],
+      ["", "TypeError", "TypeError", "TypeError", "TypeError", "", "TypeError", "", "TypeError", "", "B"],
+    ])
+  })
+
+  test("keeps unread input in order after a fatal stream error", async () => {
+    expect(
+      await value(`
+      const decoder = new TextDecoder('utf8', { fatal: true })
+      const stream = { stream: true }
+      const fail = bytes => {
+        try { return decoder.decode(bytes, stream) } catch (error) { return error.name }
+      }
+      const chunk = new Uint8Array([0xff, 65])
+      const first = fail(chunk)
+      chunk[1] = 0
+      return [first, decoder.decode(), fail(new Uint8Array([0xe2, 0x82])),
+        fail(new Uint8Array([66, 67])), decoder.decode(new Uint8Array([68])), decoder.decode()]
+    `),
+    ).toEqual(["TypeError", "A", "", "TypeError", "BCD", ""])
+  })
+
+  test("rejects primitive options before touching the partial character", async () => {
+    expect(
+      await value(`
+      const decoder = new TextDecoder()
+      decoder.decode(new Uint8Array([0xc2]), { stream: true })
+      const errors = [true, false, 0, '', Symbol.iterator].map(options => {
+        try { return decoder.decode(undefined, options) } catch (error) { return error.name }
+      })
+      return [...errors, decoder.decode(new Uint8Array([0xa2]), null)]
+    `),
+    ).toEqual(["TypeError", "TypeError", "TypeError", "TypeError", "TypeError", "¢"])
   })
 
   test("only UTF-8 is supported; fatal decoding rejects malformed input", async () => {
@@ -1927,6 +2066,30 @@ describe("CodeMode values at intra-CodeMode checkpoints", () => {
 })
 
 describe("Uint8Array callback methods", () => {
+  test.each(["'1'", "true", "false", "null", "{}", "undefined", "NaN"])(
+    "typed-array searches do not coerce %s into a byte",
+    async (search) => {
+      expect(
+        await value(`
+          const bytes = new Uint8Array([0, 1, 2, 1])
+          return [bytes.indexOf(${search}), bytes.lastIndexOf(${search}), bytes.includes(${search})]
+        `),
+      ).toEqual([-1, -1, false])
+    },
+  )
+
+  test("typed-array searches keep numeric matching and start-index coercion", async () => {
+    expect(
+      await value(`
+        const bytes = new Uint8Array([0, 1, 2, 1])
+        return [
+          bytes.indexOf(1, "2"), bytes.lastIndexOf(1, "2"), bytes.includes(2, "3"),
+          bytes.indexOf(-0), bytes.includes(257), bytes.indexOf(1, -1)
+        ]
+      `),
+    ).toEqual([3, 1, false, 0, false, 3])
+  })
+
   test("map and filter return new Uint8Arrays with clamped bytes", async () => {
     expect(
       await value(`

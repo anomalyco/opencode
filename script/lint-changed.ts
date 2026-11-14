@@ -12,13 +12,25 @@ type Diagnostic = {
 }
 
 const base = await resolveBase(process.argv[2] ?? process.env.LINT_BASE)
-const tracked = (await $`git diff --name-only --diff-filter=ACMR ${base}`.text()).split("\n")
+// -M100% reports only exact moves as renames, so a moved file is linted only once its content changes.
+const tracked = (await $`git diff --name-only -M100% --diff-filter=ACM ${base}`.text()).split("\n")
 const untracked = (await $`git ls-files --others --exclude-standard`.text()).split("\n")
 // The packages .oxlintrc.json applies the anti-slop rules to.
-const packages = ["packages/app/", "packages/desktop/", "packages/gui-extensions/", "packages/ui/", "packages/session-ui/"]
+const packages = [
+  "packages/app/",
+  "packages/desktop/",
+  "packages/gui-plugins/",
+  "packages/plugin/src/gui/",
+  "packages/ui/",
+  "packages/session-ui/",
+]
+// oxlint skips declaration files and prints a non-JSON message when given only those.
 const files = [...new Set([...tracked, ...untracked])].filter(
   (file) =>
-    /\.(ts|tsx)$/.test(file) && packages.some((prefix) => file.startsWith(prefix)) && Bun.file(file).size > 0,
+    /\.(ts|tsx)$/.test(file) &&
+    !file.endsWith(".d.ts") &&
+    packages.some((prefix) => file.startsWith(prefix)) &&
+    Bun.file(file).size > 0,
 )
 
 if (files.length === 0) {
@@ -26,8 +38,15 @@ if (files.length === 0) {
   process.exit(0)
 }
 
-const report = JSON.parse(await $`bunx oxlint --format json ${files}`.nothrow().quiet().text()) as {
-  diagnostics: Diagnostic[]
+// In chunks: a renamed package lists hundreds of files, more than one Windows command line holds.
+const chunks = Array.from({ length: Math.ceil(files.length / 100) }, (_, index) => files.slice(index * 100, index * 100 + 100))
+const report: { diagnostics: Diagnostic[] } = { diagnostics: [] }
+
+for (const chunk of chunks) {
+  const output = JSON.parse(await $`bunx oxlint --format json ${chunk}`.nothrow().quiet().text()) as {
+    diagnostics: Diagnostic[]
+  }
+  report.diagnostics.push(...output.diagnostics)
 }
 
 report.diagnostics.forEach((diagnostic) => {

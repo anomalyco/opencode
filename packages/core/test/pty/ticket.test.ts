@@ -61,4 +61,16 @@ describe("PTY websocket tickets", () => {
       expect(yield* tickets.consume({ ptyID, workspaceID, ticket: issued.ticket })).toBe(true)
     }),
   )
+
+  it.live("keeps PTY and client MCP targets apart", () =>
+    Effect.gen(function* () {
+      const tickets = yield* PtyTicket.Service
+      const pty = yield* tickets.issue({ ptyID: Pty.ID.ascending(), directory: "/tmp/a" })
+      const mcp = yield* tickets.issue({ mcpClient: "tui", directory: "/tmp/a" })
+
+      expect(yield* tickets.consume({ mcpClient: "tui", directory: "/tmp/a", ticket: pty.ticket })).toBe(false)
+      expect(yield* tickets.consume({ mcpClient: "web", directory: "/tmp/a", ticket: mcp.ticket })).toBe(false)
+      expect(yield* tickets.consume({ mcpClient: "tui", directory: "/tmp/a", ticket: mcp.ticket })).toBe(true)
+    }),
+  )
 })

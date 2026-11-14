@@ -1,16 +1,16 @@
-import { constructor, constants, type Method, methods } from "../interpreter/native.js"
-import { coerceToNumber, type Value } from "../interpreter/objects.js"
-import { rangeError, typeError } from "../interpreter/model.js"
-import type { Interpreter } from "../interpreter/interpreter.js"
-import { withPrimitives } from "../interpreter/callback.js"
-import { coerce, coercion } from "./value.js"
+import { constructor, constants, type Method, methods } from "../runtime/native.js"
+import { coerceToNumber, type Value } from "../runtime/objects.js"
+import { typeError } from "../runtime/model.js"
+import type { Interpreter } from "../runtime/interpreter.js"
+import { withPrimitives } from "../runtime/callback.js"
+import { coerce } from "./value.js"
 
 export const numberGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
-  const number = constructor<R>(builtins, builtins.Number, {
+  const number = constructor(builtins, builtins.Number, {
     name: "Number",
     length: 1,
-    call: coercion(ctx, "Number").call,
+    call: (_, args) => coerce(ctx, "Number", args),
   })
   constants(number, {
     MAX_SAFE_INTEGER: Number.MAX_SAFE_INTEGER,
@@ -41,7 +41,7 @@ export const numberGlobal = <R>(ctx: Interpreter<R>) => {
     1,
     (thisValue, args) => {
       const value = self(thisValue, name)
-      return withPrimitives(ctx, "number", [args[0]], ([digits]) =>
+      return withPrimitives("number", [args[0]], ([digits]) =>
         op(value, digits === undefined ? undefined : coerceToNumber(digits)),
       )
     },
@@ -51,12 +51,7 @@ export const numberGlobal = <R>(ctx: Interpreter<R>) => {
     ["toLocaleString", 0, (thisValue) => self(thisValue, "toLocaleString").toLocaleString("en-US")],
     formatting("toExponential", (value, digits) => value.toExponential(digits)),
     formatting("toPrecision", (value, digits) => (digits === undefined ? value.toString() : value.toPrecision(digits))),
-    formatting("toString", (value, radix) => {
-      if (radix !== undefined && (radix < 2 || radix > 36)) {
-        throw rangeError("Number.toString radix must be between 2 and 36.")
-      }
-      return value.toString(radix)
-    }),
+    formatting("toString", (value, radix) => value.toString(radix)),
     ["valueOf", 0, (thisValue) => self(thisValue, "valueOf")],
   ])
   return number
@@ -64,10 +59,10 @@ export const numberGlobal = <R>(ctx: Interpreter<R>) => {
 
 export const booleanGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
-  const boolean = constructor<R>(builtins, builtins.Boolean, {
+  const boolean = constructor(builtins, builtins.Boolean, {
     name: "Boolean",
     length: 1,
-    call: coercion(ctx, "Boolean").call,
+    call: (_, args) => coerce(ctx, "Boolean", args),
   })
   const self = (thisValue: Value, name: string): boolean => {
     if (typeof thisValue === "boolean") return thisValue

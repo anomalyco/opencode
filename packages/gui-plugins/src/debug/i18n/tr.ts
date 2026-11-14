@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "Hata ayıklama çubuğunu aç/kapat",
+  providerAriaLabel: "Sağlayıcı performansı tanılaması",
+  na: "yok",
+  "duration.label": "TIME",
+  "duration.tip": "Son turu başlatan istemden yanıtın tamamlanmasına kadar geçen süre.",
+  "tps.label": "TPS",
+  "tps.tip": "Son turun model isteklerinde saniye başına çıktı ve akıl yürütme tokeni, araç süresi hariç.",
+  "focus.label": "FOCUS",
+  "focus.tip": "Tüm etkileşimli öğelere odak stillerini zorla uygula",
+  "focus.on": "AÇIK",
+  "focus.off": "KAPALI",
+  "direction.label": "DIR",
+  "direction.tip": "Seçili dili değiştirmeden tüm uygulamanın düzen yönünü zorla ayarla",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

@@ -1,0 +1,41 @@
+/* Faces for scripts that OpenTUI Mono, Inter and the mono stand-ins don't cover. Without them the mono
+   stacks fall through to monospaced system faces (Courier New for Arabic, Ayuthaya for Thai) that
+   space the letters far apart. Each unicode-range keeps its face to its own script, so Latin text
+   never falls back to it. Neither script has a good monospaced face, so mono text uses these too.
+   CJK needs no face: the browser's per-language fallback already picks PingFang, Hiragino and Apple
+   SD Gothic Neo (site.css lists them for other systems). */
+@font-face {
+  font-family: "OC Arabic";
+  src:
+    local("SF Arabic"), local("Geeza Pro"), local("GeezaPro"), local("Segoe UI"), local("SegoeUI"),
+    local("Noto Sans Arabic"), local("NotoSansArabic-Regular"), local("Tahoma");
+  font-weight: 100 500;
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+
+@font-face {
+  font-family: "OC Arabic";
+  src:
+    local("SF Arabic Bold"), local("Geeza Pro Bold"), local("GeezaPro-Bold"), local("Segoe UI Bold"),
+    local("SegoeUI-Bold"), local("Noto Sans Arabic Bold"), local("NotoSansArabic-Bold"), local("Tahoma Bold");
+  font-weight: 600 900;
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+
+@font-face {
+  font-family: "OC Thai";
+  src:
+    local("Thonburi"), local("Leelawadee UI"), local("LeelawadeeUI"), local("Noto Sans Thai"),
+    local("NotoSansThai-Regular"), local("Tahoma");
+  font-weight: 100 500;
+  unicode-range: U+0E00-0E7F;
+}
+
+@font-face {
+  font-family: "OC Thai";
+  src:
+    local("Thonburi Bold"), local("Thonburi-Bold"), local("Leelawadee UI Bold"), local("LeelawadeeUI-Bold"),
+    local("Noto Sans Thai Bold"), local("NotoSansThai-Bold"), local("Tahoma Bold");
+  font-weight: 600 900;
+  unicode-range: U+0E00-0E7F;
+}

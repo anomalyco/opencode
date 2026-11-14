@@ -1,6 +1,5 @@
 import { For, Show } from "solid-js"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
-import { ScrollView } from "@opencode/ui/scroll-view"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { fonts } from "./fonts"
@@ -26,7 +25,7 @@ export default function DialogThirdPartyNotices() {
         />
       </DialogHeader>
       <DialogBody>
-        <ScrollView class="settings-notices-scroll">
+        <div class="settings-notices-scroll" data-scrollable>
           <div class="settings-notices">
             <For each={notices}>
               {(entry) => (
@@ -107,7 +106,7 @@ export default function DialogThirdPartyNotices() {
               </For>
             </section>
           </div>
-        </ScrollView>
+        </div>
       </DialogBody>
     </Dialog>
   )

@@ -3,11 +3,12 @@ import { HttpClientResponse } from "effect/http"
 import type { Snapshot, Status } from "../generation.js"
 import { Media } from "../media.js"
 import type { AuthInput } from "./auth.js"
+import { RequestExecutor } from "./executor.js"
 import {
   AIError,
   AuthenticationError,
   ContentPolicyError,
-  HttpContext,
+  type HttpContext,
   InvalidProviderOutputError,
   InvalidRequestError,
   ProviderID,
@@ -88,22 +89,26 @@ export interface Started<Token> {
   readonly snapshot: Snapshot
 }
 
-/**
- * A follow-up call's inputs: the decoded token and the auth headers the route sent, so a protocol can attach them
- * to output URLs that require the same credentials to download (Veo). `materialize` downloads an output through the
- * route's executor, for URLs that expire too soon to hand back (BFL).
- */
+/** A follow-up call's inputs: the decoded token. */
 export interface PollContext<Token> {
   readonly token: Token
-  readonly auth: Record<string, string>
-  readonly materialize: (asset: Media.Asset) => Effect.Effect<Media.Asset, AIError>
+  /**
+   * The headers an authenticated GET of `url` would send (deployment headers plus auth), for result URLs that need
+   * the API key to download. URLs on another origin than the route's base URL get no headers.
+   */
+  readonly headers: (url: string) => Effect.Effect<Record<string, string>, AIError>
+  /**
+   * A further GET with the same auth and headers, retried like the poll itself, for providers whose result needs a
+   * second lookup (MiniMax v1 answers with a file id that resolves to a download URL).
+   */
+  readonly get: (path: string) => Effect.Effect<HttpClientResponse.HttpClientResponse, AIError>
 }
 
 /**
  * Submit, then poll. `start` posts the body to the route endpoint; `status`, `result`, and `cancel` are follow-up
  * calls addressed by the token. Paths are relative to the route base URL unless the provider hands back absolute
- * URLs (fal `status_url`), in which case they are used verbatim. `result` is always its own GET: providers that
- * return the output inside the status body (Veo, xAI, Runway) point `result.path` at the status path and decode the
+ * URLs, in which case they are used verbatim. `result` is always its own GET: providers that
+ * return the output inside the status body (xAI) point `result.path` at the status path and decode the
  * same document, so `Generation.await` and `Video.resume(...).await()` behave identically everywhere.
  */
 export interface Queued<Request, Response, Token> {
@@ -139,11 +144,6 @@ export interface Queued<Request, Response, Token> {
   readonly cancel?: {
     readonly method: AuthInput["method"]
     readonly path: (token: Token) => string
-    /**
-     * Fetch a fresh status first and skip the call for terminal generations, for providers whose cancel endpoint
-     * destroys finished work (Runway's `DELETE /v1/tasks/{id}` deletes completed tasks and their outputs).
-     */
-    readonly activeOnly?: boolean
   }
 }
 
@@ -200,14 +200,20 @@ const FAILURES = {
 
 export type Failure = keyof typeof FAILURES
 
-const context = (response: HttpClientResponse.HttpClientResponse) =>
-  new HttpContext({ url: response.request.url, status: response.status, headers: response.headers })
-
 /** One protocol's route id, display name, and provider, with the decoders and errors that carry them. */
 export const identity = (input: { readonly id: string; readonly name: string; readonly provider: string }) => {
   const provider = ProviderID.make(input.provider)
   const frameError = (message: string, body?: string, cause?: unknown) =>
     new AIError({ reason: new InvalidProviderOutputError({ route: input.id, message, body, cause }) })
+  const readError = (http: HttpContext) => (cause: unknown) =>
+    new AIError({
+      reason: new InvalidProviderOutputError({
+        route: input.id,
+        message: `Failed to read the ${input.name} response`,
+        http,
+        cause,
+      }),
+    })
 
   /**
    * Read a text body while retaining the original payload and HTTP context on every downstream error. `invalid` is a
@@ -217,20 +223,8 @@ export const identity = (input: { readonly id: string; readonly name: string; re
    * `contentPolicy` is a moderated result.
    */
   const text = Effect.fn("MediaProtocol.text")(function* (response: HttpClientResponse.HttpClientResponse) {
-    const http = context(response)
-    const body = yield* response.text.pipe(
-      Effect.mapError(
-        (cause) =>
-          new AIError({
-            reason: new InvalidProviderOutputError({
-              route: input.id,
-              message: `Failed to read the ${input.name} response`,
-              http,
-              cause,
-            }),
-          }),
-      ),
-    )
+    const http = RequestExecutor.responseHttp(response)
+    const body = yield* response.text.pipe(Effect.mapError(readError(http)))
     return {
       body,
       http,
@@ -271,11 +265,19 @@ export const identity = (input: { readonly id: string; readonly name: string; re
     })
   }
 
+  /** Read a raw binary body, for providers that answer with the media bytes themselves. */
+  const bytes = (response: HttpClientResponse.HttpClientResponse) =>
+    response.arrayBuffer.pipe(
+      Effect.map((buffer) => new Uint8Array(buffer)),
+      Effect.mapError(readError(RequestExecutor.responseHttp(response))),
+    )
+
   return {
     id: input.id,
     name: input.name,
     provider,
     text,
+    bytes,
     decodeJson,
     /** Decode a submission response into the token and first snapshot. */
     decodeStarted: <A, Token>(schema: Schema.Codec<A, unknown>, started: (value: A) => Started<Token>) => {
@@ -308,17 +310,9 @@ export const identity = (input: { readonly id: string; readonly name: string; re
 
 export type Identity = ReturnType<typeof identity>
 
-export type Output = Effect.Success<ReturnType<Identity["text"]>>
-
-/** Map a provider status string through the protocol's table; unknown values are an invalid provider document. */
-export const status = <Table extends Record<string, Status>>(
-  table: Table,
-  raw: string,
-  output: Output,
-): Effect.Effect<Status, AIError> => {
-  if (!Object.hasOwn(table, raw)) return Effect.fail(output.invalid(`Unknown generation status "${raw}"`))
-  return Effect.succeed(table[raw])
-}
+/** Map a provider status string through the protocol's table; unknown values keep the generation running. */
+export const status = (table: Readonly<Record<string, Status>>, raw: string): Status =>
+  Object.hasOwn(table, raw) ? table[raw] : "running"
 
 /** Map a provider error code through the protocol's table; missing or unmapped codes are `ProviderInternal`. */
 export const failure = (table: Readonly<Record<string, Failure>>, code: string | number | undefined): Failure =>

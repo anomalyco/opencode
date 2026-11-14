@@ -9,7 +9,7 @@ for (const reducedMotion of [false, true]) {
     const chat = page.locator('[data-slot="session-chat-panel"]')
     const scroll = page.locator('[data-slot="session-timeline-scroll"]')
     const viewport = scroll.locator(".scroll-view__viewport")
-    const thumb = scroll.locator('.scroll-view__thumb[data-orientation="vertical"]')
+    const thumb = page.locator('[data-slot="session-timeline-visible"] .scroll-view__thumb')
     const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
     await expect(thumb).toHaveCount(1)
     await scroll.hover()
@@ -22,10 +22,12 @@ for (const reducedMotion of [false, true]) {
       await expect(thumb).toHaveCSS("visibility", "hidden")
       await page.mouse.up()
       await expect(toggle).toHaveAttribute("aria-expanded", String(opened))
-      await chat.evaluate(async (element) => {
-        await Promise.all(element.getAnimations().map((animation) => animation.finished))
-      })
-      await expect(chat).toHaveAttribute("data-width-animating", "false")
+      const presence = page.locator('[data-slot="session-side-panel-presence"]')
+
+      if (opened) await expect(presence).toHaveCSS("transform", "none")
+
+      // A settled close keeps the side region mounted and skips its contents.
+      if (!opened) await expect(presence).toHaveCSS("content-visibility", "hidden")
       await expect(thumb).toHaveCSS("visibility", "hidden")
       // Late scroll anchoring must not bring the thumb back after the panel has settled.
       await viewport.evaluate(
