@@ -22,6 +22,7 @@ use crate::support::model::{self, Failure, Model, Rng};
 use crate::support::{self, Harness};
 
 use std::cell::{Cell, RefCell};
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -121,6 +122,10 @@ thread_local! {
     /// `model.a`'s armed fault, for world 0 only (the host; the twin is world 1).
     static ARMED: Cell<Option<(Fault, Kind)>> = const { Cell::new(None) };
     static LAG: Cell<bool> = const { Cell::new(false) };
+    /// `model.a`'s next budgeted call in world 0 is its first after setup, which no overrun fails.
+    static COLD: Cell<bool> = const { Cell::new(false) };
+    /// A fault that fails `model.a` fired in world 0 since this was last taken: the oracle of a failure.
+    static FIRED: Cell<bool> = const { Cell::new(false) };
     /// What the last run saw: whether `model.a` failed, and whether it was told slow.
     static OUTCOME: Cell<(bool, bool)> = const { Cell::new((false, false)) };
 }
@@ -160,6 +165,18 @@ fn called(plugin: u8, kind: Kind) {
     let fault = ARMED.get().filter(|(_, armed)| mine && *armed == kind).map(|(fault, _)| fault);
     if fault.is_some() {
         ARMED.set(None);
+    }
+    if mine {
+        match kind {
+            Kind::Setup => COLD.set(true),
+            Kind::Command | Kind::Render => {
+                let cold = COLD.replace(false);
+                if fault == Some(Fault::Panic) || (fault == Some(Fault::Overrun) && !cold) {
+                    FIRED.set(true);
+                }
+            }
+            Kind::Dispose => {}
+        }
     }
     let took = match fault {
         Some(Fault::Overrun) => Duration::from_millis(101),
@@ -212,14 +229,14 @@ impl World {
     fn open(world: usize) -> Self {
         let root = builds();
         let record = Arc::new(Record::create(root.path()).unwrap());
-        Self::mount(world, root, record, false)
+        Self::mount(world, root, record, None)
     }
 
-    /// A TUI on home with the plugins of `root` and `record`, which a parent made for it; with `state`, it keeps its
-    /// state in `root`, as a real run does.
-    fn mount(world: usize, root: opencode_util::temp::TempDir, record: Arc<Record>, state: bool) -> Self {
+    /// A TUI on home with the plugins of `root` and `record`, which a parent made for it; with `home`, it keeps its
+    /// state there, as a real run does.
+    fn mount(world: usize, root: opencode_util::temp::TempDir, record: Arc<Record>, home: Option<&Path>) -> Self {
         let config = root.path().join("config");
-        let roots = state.then(|| support::roots(support::home_paths(&root.path().join("home")), "test")).flatten();
+        let roots = home.and_then(|home| support::roots(support::home_paths(home), "test"));
         let deps = Deps { route: Route::Home, roots, ..support::deps(Arc::new(support::empty())) };
         let contain = Contain { record: Some(record), ..Contain::default() };
         let harness = support::mount_on(TestApp::new(100, 24), deps, Args { contain, ..Args::default() });
@@ -457,6 +474,7 @@ fn run(commands: &[Command]) -> Option<Failure> {
     LOG.take();
     ARMED.set(None);
     LAG.set(false);
+    FIRED.set(false);
     let world = World::open(0);
     let calls = take_calls();
     if let Some(detail) = balanced(&world, &calls) {
@@ -475,8 +493,13 @@ fn run(commands: &[Command]) -> Option<Failure> {
             return fail("draft-exact", step, detail);
         }
         twin.apply(command);
-        // The user disables `model.a` in the twin at the step its fault failed it in the host.
-        let failing = !failed && world.failed();
+        // The fault log says when `model.a` fails; the user disables it in the twin at that step, and the host's
+        // registry must agree.
+        let failing = FIRED.take();
+        if failing != (!failed && world.failed()) {
+            let detail = format!("the fault log says failing {failing}; the host lists model.a {:?}", world.status(A));
+            return fail("reported-once", step, detail);
+        }
         if failing {
             twin.toggle(A);
         }
@@ -674,14 +697,38 @@ fn restarted(snapshot: Option<Snapshot>) -> World {
     if let Some(snapshot) = &snapshot {
         record.publish(snapshot);
     }
-    World::mount(0, root, record, false)
+    World::mount(0, root, record, None)
 }
 
 /// A client a parent started after `crash`, with its state in `root`.
 fn after(root: opencode_util::temp::TempDir, crash: Crash) -> World {
+    let home = root.path().join("home");
+    after_in(root, crash, &home)
+}
+
+/// A client a parent started after `crash`, with its state in `home`.
+fn after_in(root: opencode_util::temp::TempDir, crash: Crash, home: &Path) -> World {
     let record = Arc::new(Record::create(root.path()).unwrap());
     record.set_handoff(&Handoff { crash: Some(crash), safe: false });
-    World::mount(0, root, record, true)
+    World::mount(0, root, record, Some(home))
+}
+
+/// The crash of `id`'s build in `root`, in a render: its target there, and the digest the loader gives it.
+fn crash_of(root: &opencode_util::temp::TempDir, id: &str) -> Crash {
+    let name = if id == "model.a" { "a" } else { "b" };
+    let target = root.path().join("config").join("plugins").join(name).to_string_lossy().into_owned();
+    let probe = World::open(0);
+    let digest = (0..record::NAMES as u16)
+        .find_map(|slot| probe.current.record.named(slot).filter(|artifact| artifact.id == id))
+        .and_then(|artifact| artifact.digest)
+        .expect("named");
+    drop(probe);
+    take_calls();
+    Crash {
+        artifact: Some(Artifact::external(id, &target, &digest)),
+        call: Some("render-slot".to_owned()),
+        hang: false,
+    }
 }
 
 /// The crash list in the state directory of `world`.
@@ -697,20 +744,7 @@ fn crash_list(world: &World) -> serde_json::Value {
 fn a_crash_holds_the_build_until_its_toast_enables_it() {
     LOG.take();
     let root = builds();
-    let target = root.path().join("config").join("plugins").join("a").to_string_lossy().into_owned();
-    // The digest the loader gives build `[A]`, read off a client that loaded it.
-    let probe = World::open(0);
-    let digest = (0..record::NAMES as u16)
-        .find_map(|slot| probe.current.record.named(slot).filter(|artifact| artifact.id == "model.a"))
-        .and_then(|artifact| artifact.digest)
-        .expect("model.a is named");
-    drop(probe);
-    take_calls();
-    let crash = Crash {
-        artifact: Some(Artifact::external("model.a", &target, &digest)),
-        call: Some("render-slot".to_owned()),
-        hang: false,
-    };
+    let crash = crash_of(&root, "model.a");
     let world = after(root, crash);
     assert!(take_calls().iter().all(|call| call.plugin != A), "the build that crashed ran");
     let reason = "crashed the client in `render-slot` and is disabled";
@@ -771,5 +805,53 @@ fn the_draft_oracle_can_fail() {
     assert_eq!(exact(&world), None);
     world.current.record.publish(&Snapshot::default());
     assert!(exact(&world).is_some());
+    take_calls();
+}
+
+// Expected (bigboi): two clients that share a state directory keep each other's crash entries: each change is read,
+// made and written under the lock, so the second client's crash does not drop the first's, and the first's enable
+// ends only its own.
+#[test]
+fn two_clients_keep_each_others_crash_entries() {
+    LOG.take();
+    let home = opencode_util::temp::tempdir().unwrap();
+    let (one, two) = (builds(), builds());
+    let (a, b) = (crash_of(&one, "model.a"), crash_of(&two, "model.b"));
+    let first = after_in(one, a, home.path());
+    let second = after_in(two, b, home.path());
+    let ids = |world: &World| -> Vec<String> {
+        let list = crash_list(world);
+        list.as_array().unwrap().iter().map(|entry| entry["id"].as_str().unwrap().to_owned()).collect()
+    };
+    assert_eq!(ids(&second), ["model.a", "model.b"]);
+    let action = first.opened.iter().find_map(|toast| toast.action.clone()).expect("Enable again");
+    (action.run)();
+    first.settle();
+    assert_eq!(
+        (ids(&first), second.status(B)),
+        (
+            vec!["model.b".to_owned()],
+            Some(Status::Failed("crashed the client in `render-slot` and is disabled".to_owned()))
+        )
+    );
+    take_calls();
+}
+
+// Expected (carbon 1): a client in a test starts no watchdog, though it has a record: nothing can end the test process
+// or write to its terminal. Only the CLI's run on a real terminal asks for one.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_test_client_starts_no_watchdog() {
+    LOG.take();
+    let world = World::open(0);
+    let names: Vec<String> = std::fs::read_dir("/proc/self/task")
+        .unwrap()
+        .filter_map(|task| std::fs::read_to_string(task.ok()?.path().join("comm")).ok())
+        .collect();
+    assert!(
+        names.iter().all(|name| !name.starts_with("plugin-watchdog") && !name.starts_with("plugin-notice")),
+        "{names:?}"
+    );
+    drop(world);
     take_calls();
 }
