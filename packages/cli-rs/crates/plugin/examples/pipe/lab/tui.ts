@@ -1,0 +1,77 @@
+// The lab of the pipe's tests (P7, review carbon): a V2 `{ id, setup }` module whose commands each show one thing the
+// carrier keeps. What the setup context says (`app`, `themeMode`); what an effect answered; a stored value it watches,
+// and stops watching; more watches than the host keeps; an effect or a view that is not JSON; a view that ends the JS
+// host. Its slot on the home footer has a memo within a memo, whose inner builds it counts by mount, content it gives
+// and releases on each view, and no rows at all once asked.
+
+export default {
+  id: "example.lab",
+  setup(api: any) {
+    const carrier = api[Symbol.for("opencode.carrier")]
+    const toast = (message: string) => api.ui.toast.show({ message })
+    const state = { a: 0, c: 0, zero: false, big: false, exit: false }
+    // Each mount's content handle, as a handle names content of its own mount alone, and its inner builds.
+    const handles = new Map<string, number>()
+    const inner = new Map<string, number>()
+    const command = (name: string, run: (input?: string) => unknown) => carrier.command({ name, title: name }, run)
+    carrier.storage(["note"])
+    carrier.watch("note", { type: "storage-get", key: "note" })
+    for (let index = 0; index < 70; index++) carrier.watch(`w${index}`, { type: "info" })
+    command("lab.context", () => toast(`${api.app.version} ${api.app.channel} ${api.themeMode}`))
+    command("lab.store", async (input?: string) => {
+      await carrier.effect({ type: "storage-set", key: "note", value: JSON.stringify({ text: input }) })
+      const stored = await carrier.effect({ type: "storage-get", key: "note" })
+      toast(`stored ${JSON.stringify(stored)}`)
+    })
+    command("lab.unwatch", () => carrier.unwatch("note"))
+    command("lab.watches", () => {
+      let answered = 0
+      for (let index = 0; index < 70; index++) if (carrier.read(`w${index}`) !== undefined) answered++
+      toast(`watches ${answered}`)
+    })
+    command("lab.bigint", () => carrier.effect({ type: "log", level: "info", message: 1n }))
+    command("lab.bigview", () => {
+      state.big = true
+    })
+    command("lab.exit", () => {
+      state.exit = true
+    })
+    command("lab.a", () => {
+      state.a += 1
+    })
+    command("lab.c", () => {
+      state.c += 1
+    })
+    command("lab.inner", () => toast(`inner ${Math.max(...inner.values())}`))
+    command("lab.zero", () => {
+      state.zero = true
+    })
+    carrier.surface("lab", { type: "slot", kind: "append", path: "home.footer" }, (cx: any) => {
+      if (state.exit) process.exit(9)
+      if (state.big) return { type: "text", spans: [{ text: `big ${1n}` }], size: 1n }
+      if (state.zero) return { type: "box", children: [] }
+      const mount = JSON.stringify(cx.mount)
+      const last = handles.get(mount)
+      if (last) cx.release(last)
+      const handle = cx.content(`@@ -1 +1 @@\n-c\n+c ${state.c}\n`)
+      handles.set(mount, handle)
+      return {
+        type: "box",
+        children: [
+          { type: "text", spans: [{ text: `lab c=${state.c} note=${JSON.stringify(carrier.read("note") ?? null)}` }] },
+          cx.memo("outer", state.a, () => ({
+            type: "box",
+            children: [
+              { type: "text", spans: [{ text: `lab a=${state.a}` }] },
+              cx.memo("inner", 0, () => {
+                inner.set(mount, (inner.get(mount) ?? 0) + 1)
+                return { type: "text", spans: [{ text: "lab inner" }] }
+              }),
+            ],
+          })),
+          { type: "diff", content: { content: handle } },
+        ],
+      }
+    })
+  },
+}

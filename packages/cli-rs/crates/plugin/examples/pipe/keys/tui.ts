@@ -3,7 +3,7 @@
 // keys holds the keys after it until its answer applied and released them, as a key's answer comes a round trip late
 // (synthesis 3.7). A listener of every key hears each. A panel `side` with a focusable node and a surface layer, whose
 // view shows the reads it watches (the mode, the focus), whose node takes the pointer, and whose `o` opens an overlay
-// `menu` with a layer of its own. Every handler logs what it got to `.log.jsonl` beside the module.
+// `menu` with a layer of its own. Every handler logs what it got to `.keys.log.jsonl` beside its directory.
 
 import { appendFileSync } from "node:fs"
 import path from "node:path"
@@ -12,7 +12,7 @@ export default {
   id: "example.keys",
   setup(api: any) {
     const carrier = api[Symbol.for("opencode.carrier")]
-    const log = (entry: unknown) => appendFileSync(path.join(import.meta.dir, ".log.jsonl"), JSON.stringify(entry) + "\n")
+    const log = (entry: unknown) => appendFileSync(path.join(import.meta.dir, "..", ".keys.log.jsonl"), JSON.stringify(entry) + "\n")
     const effect = (request: unknown) => carrier.effect(request)
     const said = (owner: string) => (event: any) => {
       const what = { key: event.bind ?? `any ${event.key}`, pointer: `pointer ${event.kind}` }[event.type as string]
