@@ -943,6 +943,17 @@ fn a_prepend_or_a_reparent_moves_what_it_must() {
         apply(&host, &mut tree, &parent, &grown.collect::<Vec<_>>()).unwrap();
         let done = reconcile::work().since(before);
         assert_eq!((done.created, done.removed, done.set, done.moved), (1, 1, 0, 20), "{done:?}");
+        // Children without an id move with it too.
+        let texts = |grow: bool| {
+            let texts = (0..20).map(|row| v2::Node::text(vec![abi::Span::new(format!("text {row}"))])).collect();
+            let column = v2::Node::column(texts).with_id("texts");
+            vec![if grow { column.layout(abi::Layout::default().grow()) } else { column }]
+        };
+        apply(&host, &mut tree, &parent, &texts(false)).unwrap();
+        let before = reconcile::work();
+        apply(&host, &mut tree, &parent, &texts(true)).unwrap();
+        let done = reconcile::work().since(before);
+        assert_eq!((done.created, done.removed, done.set, done.moved), (1, 1, 0, 20), "{done:?}");
     }
     for keep in [false, true] {
         let host = host(0);
