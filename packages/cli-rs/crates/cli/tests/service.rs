@@ -302,7 +302,6 @@ fn interop_with_a_typescript_service() {
             root.display()
         ),
     );
-    let free_port = || std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
     let port = free_port();
     std::fs::write(sandbox.path("config/opencode/service-local.json"), format!("{{\"port\":{port}}}\n")).unwrap();
     let ts = |args: &[&str]| {
@@ -347,4 +346,23 @@ fn interop_with_a_typescript_service() {
     assert_eq!(ts(&["service", "stop"]), "");
     assert_eq!(rs(&["service", "status"]), "stopped\n");
     eprintln!("rs set port {moved}, ts get port, rs start there, ts stop: ok");
+}
+
+/// A free port on 127.0.0.1 for a service that binds it later, below the kernel's ephemeral range: a port of that range
+/// goes to any port-0 listener or outgoing connection on the machine, and may be taken before the service starts.
+/// Never one given before in this process.
+fn free_port() -> u16 {
+    static GIVEN: std::sync::Mutex<Vec<u16>> = std::sync::Mutex::new(Vec::new());
+    let range = std::fs::read_to_string("/proc/sys/net/ipv4/ip_local_port_range").unwrap_or_default();
+    let below = range.split_whitespace().next().and_then(|first| first.parse().ok()).filter(|&first| first > 10_000);
+    let below: u16 = below.unwrap_or(32_768);
+    loop {
+        let random = std::hash::BuildHasher::hash_one(&std::hash::RandomState::new(), 0);
+        let port = 10_000 + (random % u64::from(below - 10_000)) as u16;
+        let mut given = GIVEN.lock().unwrap();
+        if !given.contains(&port) && std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
+            given.push(port);
+            return port;
+        }
+    }
 }
