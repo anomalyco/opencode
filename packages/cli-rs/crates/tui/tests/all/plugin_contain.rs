@@ -970,6 +970,8 @@ fn a_2_0_surface_is_contained() {
     let (app, tui) = (&harness.app, &harness.tui);
     let base = Instant::now();
     tui.plugins.monitor().set_clock(move || base + SURFACE_CLOCK.get());
+    // The mount's calls ran on the wall clock, which a loaded machine stretches past 100 ms: counted from here on.
+    let overruns = tui.plugins.monitor().host_overruns();
     let settle = || {
         app.advance(Duration::from_millis(1));
         app.render();
@@ -989,7 +991,7 @@ fn a_2_0_surface_is_contained() {
     SURFACE_FAULT.set(Some((At::RouteView, Fault::Overrun)));
     tui.navigate(page());
     settle();
-    assert_eq!((tui.plugins.monitor().host_overruns(), status()), (2, opencode_plugin::Status::Active));
+    assert_eq!((tui.plugins.monitor().host_overruns() - overruns, status()), (2, opencode_plugin::Status::Active));
     assert!(screen().contains("page body"));
     let seen = SURFACE_SEEN.take();
     for at in [At::SlotView, At::RouteView, At::Command] {
