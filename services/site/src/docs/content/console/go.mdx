@@ -115,6 +115,20 @@ Your client should:
 3. Send a stable session ID in `x-opencode-session` for each conversation so we can optimize routing and
    prompt caching.
 
+The session ID is required. Go rejects a request without one with HTTP 400:
+
+```json
+{
+  "type": "error",
+  "error": {
+    "type": "MissingSessionID",
+    "message": "Request is missing x-opencode-session and cannot be routed efficiently. ..."
+  }
+}
+```
+
+Some [validated clients](#validated-clients) send their own session header, which Go also accepts.
+
 See [Harnesses](/console/harnesses) to set up Go in Claude Code, Codex, Hermes, Pi, and Raycast.
 
 ### Validated clients
