@@ -241,7 +241,8 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   "dialog-open", 1.5 "composer", "checkpoint", "rollback", 1.6 "variants", "tabs-enabled", "tabs",
  *   "keymap-pending", "keymap-active", "keymap-commands", "shortcuts", "selection", "theme", "themes", 2.0 (P3)
  *   "scroll-state" {"target"}, "anchors" {"target", "group"}, "top-anchor" {"target", "group", "inset"?},
- *   "transcript", 2.0 (P2) "rect", "focused", "input-mode". Those that ask for something: "toast", "storage-set",
+ *   "transcript", 2.0 (P2) "rect", "focused", "input-mode", 2.0 (P6a) "message" {"session", "message"} (one
+ *   message, or null). Those that ask for something: "toast", "storage-set",
  *   "storage-merge", "open-route", "dispatch", "attention", "navigate", "fetch", "dialog", "copy", 1.5
  *   "composer-edit", 1.6 "set-variant", "set-model", "tab", "clear-selection", "foreground", "title", "set-theme",
  *   "install-theme", 2.0 (P3) "scroll" {"target", "verb"}, 2.0 (P2) "open-panel", "close-panel", "overlay",

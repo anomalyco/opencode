@@ -189,6 +189,28 @@
     ]
   },
   {
+    "transcript": "kept",
+    "about": "the built-ins' contract (P6a): a surface that hears its mount begin and end, a view told what changed that keeps its root while what it shows is the same and builds again once it is not, a hidden box, and a read of one message",
+    "library": 2,
+    "script": [
+      { "do": "load" },
+      { "do": "open", "route": "kept" },
+      { "do": "observe" },
+      { "do": "command", "name": "conf.toast" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "command", "name": "conf.bump" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "command", "name": "conf.message" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "close" },
+      { "do": "advance" },
+      { "do": "observe" }
+    ]
+  },
+  {
     "transcript": "panic",
     "about": "a command that asks for a toast and panics: nothing it asked for happens, the plugin fails once, its commands go, and it is never called again, not even destroyed",
     "library": 2,

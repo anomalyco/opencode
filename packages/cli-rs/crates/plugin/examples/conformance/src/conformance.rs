@@ -10,7 +10,8 @@
 //!   interactive; `conf.pad` moves the canvas `pad` to its next version; `conf.down` scrolls `items` by 2 rows,
 //!   `conf.step` steps it to the next anchor of `items`, and `conf.where` toasts where it is (P3); `conf.ui` makes
 //!   each verb and read of P2 once (focus, the focus read, a rect, a mode and its read, releasing held keys, a blur,
-//!   a panel and an overlay opened and closed) and toasts what the reads answered.
+//!   a panel and an overlay opened and closed) and toasts what the reads answered; `conf.bump` changes what `kept`
+//!   shows; `conf.message` reads message `msg_1` of session `ses_a` and toasts "message ID", or "message none" (P6a).
 //! - A route surface `conf`: a column `root` of a text `count`, "views N, messages M" (the views run and the messages
 //!   arrived, in this instance), and a Markdown node `fixed` of the content "# fixed", memoized: built once a mount and
 //!   kept after.
@@ -21,9 +22,13 @@
 //!   `i0` to `i5`, each an anchor of group `items` holding "item N". Its `layout` is told of `items`, and paints
 //!   `where` on `#203040` while `items` is scrolled down. Between `where` and `items`, a box `button` that takes the
 //!   pointer (P2) holds "press".
-//! - One handler of input (P2), for `rows` and for a key layer of setup (`ctrl+g` as `conf`, `ctrl+o` as `pass`,
-//!   everywhere, with pastes): it toasts "key conf", "paste TEXT", "pressed NODE" (a press, not a release) and
-//!   "landed ID" (where a step landed), and consumes the first three; everything else passes on.
+//! - A route surface `kept` (P6a) that hears its mounts begin and end: a column `kept-root` of a text `kept`, "kept N"
+//!   (the bumps), and a hidden box `hidden`. A view told nothing changed (not `all`) while N is what it last showed
+//!   keeps its root.
+//! - One handler of input (P2), for `rows`, `kept` and a key layer of setup (`ctrl+g` as `conf`, `ctrl+o` as `pass`,
+//!   everywhere, with pastes): it toasts "key conf", "paste TEXT", "pressed NODE" (a press, not a release),
+//!   "landed ID" (where a step landed) and "mount begins" or "mount ends", and consumes the first three; everything
+//!   else passes on.
 //! - A renderer claim (Pr) of the calls of tool `conf-tool`: Markdown of the content "claimed N", given anew in each
 //!   view, N the views it ran; and one of the fences of language `conf-fence`: "fenced CODE".
 //! - A search `conf.find` (P2): the values of the options whose title holds the query, in their order.
@@ -46,6 +51,9 @@ struct State {
     pads: Cell<u64>,
     draws: Cell<u32>,
     claimed: Cell<u32>,
+    bumps: Cell<u32>,
+    /// The bumps `kept` showed last.
+    shown: Cell<Option<u32>>,
 }
 
 pub fn setup(setup: &mut Setup) -> Result<(), String> {
@@ -116,6 +124,17 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         let mode = mode.unwrap_or_else(|| "none".to_owned());
         host.toast(Toast::new(Variant::Info, format!("ui {} {} {mode}", focused.surface, rect.is_some())));
     });
+    let bumped = state.clone();
+    setup.command(command("conf.bump"), move |_, _| bumped.bumps.set(bumped.bumps.get() + 1));
+    setup.command(command("conf.message"), |host, _| {
+        let mut said = "message none".to_owned();
+        host.message("ses_a", "msg_1", &mut |message| {
+            if let Some(message) = message {
+                said = format!("message {}", message.id());
+            }
+        });
+        host.toast(Toast::new(Variant::Info, said));
+    });
     let layer = interact::Layer {
         scope: LayerScope::Global,
         keys: vec![Bind::new("ctrl+g", "conf"), Bind::new("ctrl+o", "pass")],
@@ -139,6 +158,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         Some(v2::Node::Markdown { id: Some("claim".to_owned()), source: v2::Source::Content(handle) })
     }));
     setup.on_wake(|host| host.toast(Toast::new(Variant::Info, "woken")));
+    let shown = state.clone();
     setup.surface(v2::Surface::new("conf", v2::Place::Route("conf".to_owned()), move |view| {
         state.views.set(state.views.get() + 1);
         let line = format!("views {}, messages {}", state.views.get(), state.messages.get());
@@ -170,7 +190,24 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         Some(list)
     }));
     setup.surface(rows());
+    setup.surface(kept(shown));
     Ok(())
+}
+
+/// The surface `kept` (P6a): it keeps its root while what it shows is the same, and hears its mounts.
+fn kept(state: Rc<State>) -> v2::Surface {
+    v2::Surface::new("kept", v2::Place::Route("kept".to_owned()), move |view| {
+        let bumps = state.bumps.get();
+        if !view.input.changed.all && state.shown.get() == Some(bumps) {
+            return v2::Node::Keep { key: "kept-root".to_owned() };
+        }
+        state.shown.set(Some(bumps));
+        let shown = v2::Node::text(vec![Span::new(format!("kept {bumps}"))]).with_id("kept");
+        let hidden = v2::Node::column(vec![v2::Node::text(vec![Span::new("hidden")])]).with_id("hidden").visible(false);
+        v2::Node::column(vec![shown, hidden]).with_id("kept-root")
+    })
+    .mounts()
+    .on(handle)
 }
 
 /// The surface `rows`: a scroll of anchored items, its `layout` and its scroll handler.
@@ -214,6 +251,9 @@ fn handle(host: &dyn Host, event: &interact::Event) -> Handled {
         }
         interact::Event::Scroll { event: v2::ScrollEvent::Landed { anchor, .. } } => {
             (format!("landed {}", anchor.id), Handled::Pass)
+        }
+        interact::Event::Mount { mounted, .. } => {
+            (format!("mount {}", if *mounted { "begins" } else { "ends" }), Handled::Pass)
         }
         _ => return Handled::Pass,
     };
