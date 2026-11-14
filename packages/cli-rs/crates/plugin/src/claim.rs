@@ -117,6 +117,8 @@ pub struct Ledger {
 
 thread_local! {
     static LEDGER: Cell<Ledger> = Cell::new(Ledger::default());
+    /// A claimed part's tree is being adopted: its Markdown builds now, and draws its fences as code.
+    static ADOPTING: Cell<u32> = const { Cell::new(0) };
     static LIVE: RefCell<Vec<Weak<Core>>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -592,7 +594,10 @@ impl Core {
             draw: None,
             owner: None,
         };
-        tree.apply(&env, &self.root, &nodes)?;
+        ADOPTING.set(ADOPTING.get() + 1);
+        let applied = tree.apply(&env, &self.root, &nodes);
+        ADOPTING.set(ADOPTING.get() - 1);
+        applied?;
         *last = Some(nodes);
         for (handle, bytes) in given {
             book(|ledger| {
@@ -675,6 +680,10 @@ pub(crate) fn fence(claim: Rc<Registered>) -> crate::CodeBlockRender {
     let fences: Rc<RefCell<HashMap<u32, Weak<Fence>>>> = Rc::default();
     Rc::new(move |block, theme| {
         static KEYS: AtomicU64 = AtomicU64::new(1);
+        // A fence in a claimed part's own Markdown is code: a claim inside a claim could nest without bound.
+        if ADOPTING.get() > 0 {
+            return None;
+        }
         let part = Part::Fence(FencePart {
             language: block.language.to_owned(),
             info: block.info.to_owned(),
