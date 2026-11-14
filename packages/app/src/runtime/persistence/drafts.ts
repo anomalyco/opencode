@@ -1,5 +1,6 @@
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { Option, Schema } from "effect"
+import { TextBoundary } from "@opencode/util/text-boundary"
 import { mediaHashFromUri } from "@/runtime/server/media"
 import {
   createDraftRetentionState,
@@ -521,9 +522,7 @@ function split(text: string) {
   const pieces: string[] = []
 
   for (let start = 0; start < text.length; ) {
-    const end = Math.min(start + draftTextChunk, text.length)
-    const code = text.charCodeAt(end - 1)
-    const stop = end < text.length && code >= 0xd800 && code <= 0xdbff ? end + 1 : end
+    const stop = TextBoundary.tail(text, start + draftTextChunk)
     pieces.push(text.slice(start, stop))
     start = stop
   }

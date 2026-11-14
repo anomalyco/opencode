@@ -184,6 +184,55 @@ describe("Ripgrep", () => {
       }),
     ),
   )
+
+  it.live("ends oversized line previews on a whole character", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() =>
+          fs.writeFile(
+            path.join(tmp.path, "emoji.txt"),
+            [1_998, 1_999, 2_000].map((count) => `${"x".repeat(count)}😀tail\n`).join(""),
+          ),
+        )
+
+        const ripgrep = yield* Ripgrep.Service
+        const matches = yield* ripgrep.grep({ cwd: tmp.path, pattern: "tail", limit: 10 })
+
+        expect(matches.map((match) => match.text)).toEqual([
+          `${"x".repeat(1_998)}😀...`,
+          `${"x".repeat(1_999)}...`,
+          `${"x".repeat(2_000)}...`,
+        ])
+        expect(matches.map((match) => match.submatches.map((submatch) => submatch.text))).toEqual([
+          ["tail"],
+          ["tail"],
+          ["tail"],
+        ])
+      }),
+    ),
+  )
+
+  it.live("drops a character the diagnostic byte limit cuts through", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const ripgrep = yield* Ripgrep.Service
+        const invalid = (pattern: string) =>
+          ripgrep.grep({ cwd: tmp.path, pattern, limit: 10 }).pipe(
+            Effect.flip,
+            Effect.map((error) => (error instanceof Ripgrep.InvalidPatternError ? error.message : "")),
+          )
+        // Where the pattern starts in the diagnostic depends on the ripgrep version, so measure it first.
+        const probe = yield* invalid("probe[")
+        const before = probe.slice(0, probe.indexOf("probe"))
+        // The diagnostic keeps 8 KiB: start an emoji 3 bytes before that, so the limit cuts off its last byte.
+        const message = yield* invalid(`${"x".repeat(8 * 1024 - 3 - Buffer.byteLength(before))}😀[`)
+
+        expect(message).toStartWith(before)
+        expect(message).toEndWith("x")
+        expect(message).not.toContain("\uFFFD")
+      }),
+    ),
+  )
 })
 
 describe("RipgrepBinary.verify", () => {
