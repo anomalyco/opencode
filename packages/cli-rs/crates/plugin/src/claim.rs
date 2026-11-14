@@ -34,11 +34,12 @@ use opentui::prelude::*;
 use crate::Host;
 use crate::node::{Act, abi_mode};
 use crate::reconcile::{Env, Tree};
+use crate::surface::{self, Viewing};
 
-/// Runs a claim's view as one call of its plugin.
+/// Runs a claim's view in process as one call of its plugin.
 pub(crate) type Call = Rc<dyn Fn(&dyn Host, &mut dyn FnMut(&dyn abi::Read)) -> Called>;
 
-/// How a call of a claim's view ended.
+/// How a call of a claim's view in process ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Called {
     Returned,
@@ -46,6 +47,57 @@ pub(crate) enum Called {
     Overran,
     /// It panicked, or its plugin is no longer called.
     Failed,
+}
+
+/// Runs a claim's view for one part, on either carrier.
+pub(crate) trait Viewer {
+    /// One call of the view on `part`.
+    fn view(&self, host: &dyn Host, viewing: Viewing<'_>, part: &Part) -> Viewed;
+    /// The part's mount ended.
+    fn forget(&self, _host: &dyn Host, _mount: &v2::MountId) {}
+}
+
+/// How one call of a claim's view ended.
+pub(crate) enum Viewed {
+    /// Its tree, or `None` where it declines, and the values the memo table of a library holds after it (`None` for a
+    /// table in the host).
+    Returned(Option<Box<Node>>, Option<usize>),
+    /// It returned after the overrun limit: the part falls back. (A library that overruns fails, in its guest.)
+    Overran,
+    /// It panicked, its result was refused, or its plugin is no longer called.
+    Failed,
+}
+
+/// A claim's view in process: the plugin's own function, as one call of it, on the mount's memo table in the host.
+pub(crate) struct Linked {
+    view: abi::claim::ClaimFn,
+    call: Call,
+}
+
+impl Linked {
+    pub(crate) fn new(view: abi::claim::ClaimFn, call: Call) -> Self {
+        Self { view, call }
+    }
+}
+
+impl Viewer for Linked {
+    fn view(&self, host: &dyn Host, viewing: Viewing<'_>, part: &Part) -> Viewed {
+        let Viewing { mount, input, memo, give, release } = viewing;
+        let mut node = None;
+        let called = (self.call)(host, &mut |read| {
+            let mut content = |bytes: Vec<u8>| {
+                let handle = surface::new_content();
+                give(handle, bytes);
+                handle
+            };
+            node = Some((self.view)(&mut v2::View::new(read, input, mount, memo, &mut content, release), part));
+        });
+        match (called, node) {
+            (Called::Returned, Some(node)) => Viewed::Returned(node.map(Box::new), None),
+            (Called::Overran, _) => Viewed::Overran,
+            _ => Viewed::Failed,
+        }
+    }
 }
 
 /// What the parts claims draw hold now, and the views they ran, counted per thread outside any mount.
@@ -100,16 +152,16 @@ pub fn mounted() -> Vec<Shown> {
 
 /// One claim of an active plugin, which its parts share.
 pub(crate) struct Registered {
-    claim: abi::claim::Claim,
+    entry: abi::claim::Entry,
     owner: Weak<dyn Host>,
-    call: Call,
+    viewer: Rc<dyn Viewer>,
     /// The palette of the theme the last view saw.
     palette: RefCell<Option<(Theme, v2::Palette)>>,
 }
 
 impl Registered {
-    pub(crate) fn new(claim: abi::claim::Claim, owner: Weak<dyn Host>, call: Call) -> Rc<Self> {
-        Rc::new(Self { claim, owner, call, palette: RefCell::default() })
+    pub(crate) fn new(entry: abi::claim::Entry, owner: Weak<dyn Host>, viewer: Rc<dyn Viewer>) -> Rc<Self> {
+        Rc::new(Self { entry, owner, viewer, palette: RefCell::default() })
     }
 
     fn palette(&self, host: &dyn Host, theme: &Theme) -> v2::Palette {
@@ -130,7 +182,7 @@ impl Registered {
     }
 
     fn name(&self) -> &str {
-        match &self.claim.target {
+        match &self.entry.target {
             abi::claim::Target::Tool(name) | abi::claim::Target::Fence(name) => name,
         }
     }
@@ -216,30 +268,31 @@ struct Held {
     content: HashMap<ContentRef, Rc<[u8]>>,
     /// The last accepted tree, keeps as they came.
     last: Option<Vec<Node>>,
+    /// The values a library's memo table holds for the mount, as its last accepted view said.
+    remote: usize,
+}
+
+impl Held {
+    /// The memo values the mount holds, in the host or in its library.
+    fn memo_entries(&self) -> i64 {
+        (self.memo.len() + self.remote) as i64
+    }
 }
 
 /// What one call of the view returned and asked for; the host takes it only with its tree.
-struct Viewed {
-    called: Called,
-    node: Option<Node>,
+struct Attempt {
+    viewed: Viewed,
     given: HashMap<ContentRef, Rc<[u8]>>,
     memo: v2::Memo,
     /// The memo values the mount held before the call.
     held: i64,
 }
 
-/// The content handles of every claimed part: a handle is never given twice.
-static CONTENT: AtomicU64 = AtomicU64::new(1);
-
 impl Core {
     fn new(claim: Rc<Registered>, app: &App, key: &str, hint: u16) -> Rc<Self> {
-        static GENERATION: AtomicU64 = AtomicU64::new(1);
         let root = View::new(app).column().shrink(0.0);
-        let id = v2::MountId {
-            surface: claim.name().to_owned(),
-            key: key.to_owned(),
-            generation: GENERATION.fetch_add(1, Ordering::Relaxed),
-        };
+        let id =
+            v2::MountId { surface: claim.name().to_owned(), key: key.to_owned(), generation: surface::generation() };
         let core = Rc::new(Self {
             claim,
             id,
@@ -313,44 +366,47 @@ impl Core {
         self.viewed.set(Some(host.app().frame_number()));
         let whole = self.state.borrow().last.is_none();
         for full in [whole, true] {
-            let viewed = self.call_view(host, &theme, full);
-            let accepted = match viewed.called {
-                Called::Failed => None,
-                Called::Overran => {
+            let attempt = self.call_view(host, &theme, full);
+            let accepted = match attempt.viewed {
+                Viewed::Failed => None,
+                Viewed::Overran => {
                     log::warn!("claim {} took over the call limit on part {}", self.id.surface, self.id.key);
                     None
                 }
-                Called::Returned => Some(viewed.node),
+                Viewed::Returned(node, remote) => Some((node, remote)),
             };
-            let Some(node) = accepted else {
-                self.state.borrow_mut().memo = viewed.memo;
+            let Some((node, remote)) = accepted else {
+                self.state.borrow_mut().memo = attempt.memo;
                 return self.fall(waited);
             };
             let Some(node) = node else {
                 // A declined revision: the host's row draws it, and an accepted one later builds whole.
-                self.state.borrow_mut().memo = viewed.memo;
+                self.state.borrow_mut().memo = attempt.memo;
                 if !waited {
                     self.wipe();
                     self.shows.set(false);
                 }
                 return self.shows.get();
             };
-            let (mut memo, held) = (viewed.memo, viewed.held);
-            match self.adopt(host, &theme, vec![node], &viewed.given, full) {
+            let (mut memo, held) = (attempt.memo, attempt.held);
+            match self.adopt(host, &theme, vec![*node], &attempt.given, full) {
                 Ok(()) => {
                     let mut state = self.state.borrow_mut();
                     if let Some(last) = &state.last {
                         memo.finish(last);
                     }
-                    book(|ledger| ledger.memo_entries += memo.len() as i64 - held);
                     state.memo = memo;
+                    state.remote = remote.unwrap_or(0);
+                    let entries = state.memo_entries();
+                    book(|ledger| ledger.memo_entries += entries - held);
                     self.shows.set(true);
                     return true;
                 }
                 Err(refused) => {
                     memo.clear();
                     book(|ledger| ledger.memo_entries -= held);
-                    self.state.borrow_mut().memo = memo;
+                    let mut state = self.state.borrow_mut();
+                    (state.memo, state.remote) = (memo, 0);
                     log::warn!("claim {} refused a tree for part {}: {refused}", self.id.surface, self.id.key);
                 }
             }
@@ -376,7 +432,7 @@ impl Core {
         let Some(host) = self.claim.owner.upgrade() else { return };
         let last = self.state.borrow().last.clone();
         match last {
-            Some(last) if !self.claim.claim.palette => {
+            Some(last) if !self.claim.entry.palette => {
                 if let Err(refused) = self.adopt(&*host, &host.theme(), last, &HashMap::new(), false) {
                     log::error!("claim {}: its last tree again: {refused}", self.id.surface);
                 }
@@ -387,41 +443,39 @@ impl Core {
         }
     }
 
-    fn call_view(&self, host: &dyn Host, theme: &Theme, full: bool) -> Viewed {
+    fn call_view(&self, host: &dyn Host, theme: &Theme, full: bool) -> Attempt {
         let part = self.part.borrow().clone().expect("a part to view");
         let rect = self.root.rect();
         let width = if rect.width > 0.0 { rect.width as u16 } else { self.hint };
         self.width.set(width);
-        let input =
-            v2::SurfaceInput { width, height: host.app().size().1, palette: self.claim.palette(host, theme), full };
-        let mut memo = std::mem::take(&mut self.state.borrow_mut().memo);
-        let held = memo.len() as i64;
-        let (mut node, mut given) = (None, HashMap::new());
-        let view = self.claim.claim.view.clone();
+        // Only a claim that declares the palette gets it, as a surface (P4): it is most of a request's bytes.
+        let palette = match self.claim.entry.palette {
+            true => self.claim.palette(host, theme),
+            false => v2::Palette::default(),
+        };
+        let input = v2::SurfaceInput { width, height: host.app().size().1, palette, full };
+        let (mut memo, held) = {
+            let mut state = self.state.borrow_mut();
+            (std::mem::take(&mut state.memo), state.memo_entries())
+        };
         book(|ledger| ledger.views += 1);
-        let called = (self.claim.call)(host, &mut |read| {
-            let staged = RefCell::new(HashMap::new());
-            let mut content = |bytes: Vec<u8>| {
-                let handle = ContentRef(CONTENT.fetch_add(1, Ordering::Relaxed));
-                staged.borrow_mut().insert(handle, Rc::from(bytes));
-                handle
-            };
-            // A release holds also when the tree is refused: the plugin forgot the handle either way.
-            let mut release = |handle| {
-                if staged.borrow_mut().remove(&handle).is_none()
-                    && let Some(bytes) = self.state.borrow_mut().content.remove(&handle)
-                {
-                    book(|ledger| {
-                        ledger.content -= 1;
-                        ledger.content_bytes -= bytes.len() as i64;
-                    });
-                }
-            };
-            let mut cx = v2::View::new(read, &input, &self.id, &mut memo, &mut content, &mut release);
-            node = view(&mut cx, &part);
-            given = staged.take();
-        });
-        Viewed { called, node, given, memo, held }
+        let staged = RefCell::new(HashMap::new());
+        let mut give = |handle, bytes: Vec<u8>| drop(staged.borrow_mut().insert(handle, Rc::from(bytes)));
+        // A release holds also when the tree is refused: the plugin forgot the handle either way.
+        let mut release = |handle| {
+            if staged.borrow_mut().remove(&handle).is_none()
+                && let Some(bytes) = self.state.borrow_mut().content.remove(&handle)
+            {
+                book(|ledger| {
+                    ledger.content -= 1;
+                    ledger.content_bytes -= bytes.len() as i64;
+                });
+            }
+        };
+        let viewing =
+            Viewing { mount: &self.id, input: &input, memo: &mut memo, give: &mut give, release: &mut release };
+        let viewed = self.claim.viewer.view(host, viewing, &part);
+        Attempt { viewed, given: staged.take(), memo, held }
     }
 
     /// Adopts `nodes`, with the content `given` adds, or refuses them and changes nothing.
@@ -467,8 +521,9 @@ impl Core {
         let mut state = self.state.borrow_mut();
         state.tree.clear(&self.root);
         state.last = None;
-        let (content, memo) = (std::mem::take(&mut state.content), state.memo.len() as i64);
+        let (content, memo) = (std::mem::take(&mut state.content), state.memo_entries());
         state.memo.clear();
+        state.remote = 0;
         book(|ledger| {
             ledger.content -= content.len() as i64;
             ledger.content_bytes -= content.values().map(|bytes| bytes.len() as i64).sum::<i64>();
@@ -479,9 +534,12 @@ impl Core {
 
 impl Drop for Core {
     fn drop(&mut self) {
+        if let Some(host) = self.claim.owner.upgrade() {
+            self.claim.viewer.forget(&*host, &self.id);
+        }
         let state = self.state.get_mut();
         let bytes: usize = state.content.values().map(|bytes| bytes.len()).sum();
-        let (content, memo) = (state.content.len() as i64, state.memo.len() as i64);
+        let (content, memo) = (state.content.len() as i64, state.memo_entries());
         book(|ledger| {
             ledger.mounts -= 1;
             ledger.content -= content;

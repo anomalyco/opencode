@@ -48,6 +48,18 @@ pub(crate) fn next_content() -> u64 {
     CONTENT.load(Ordering::Relaxed)
 }
 
+/// A handle for content a view in process gives.
+pub(crate) fn new_content() -> ContentRef {
+    ContentRef(CONTENT.fetch_add(1, Ordering::Relaxed))
+}
+
+/// A new mount's generation, never given twice: a library keeps a memo table by it, for surfaces and claimed parts
+/// alike.
+pub(crate) fn generation() -> u64 {
+    static GENERATION: AtomicU64 = AtomicU64::new(1);
+    GENERATION.fetch_add(1, Ordering::Relaxed)
+}
+
 /// A library numbered `count` handles from [`next_content`]: none is given again.
 pub(crate) fn took_content(from: u64, count: u64) {
     CONTENT.fetch_max(from.saturating_add(count), Ordering::Relaxed);
@@ -126,7 +138,7 @@ impl Viewer for Linked {
         let mut node = None;
         let called = (self.call)("view", host, owner, &mut |read| {
             let mut content = |bytes: Vec<u8>| {
-                let handle = ContentRef(CONTENT.fetch_add(1, Ordering::Relaxed));
+                let handle = new_content();
                 give(handle, bytes);
                 handle
             };
@@ -277,12 +289,7 @@ impl Surface {
         calls: behave::Calls,
         input: Rc<Input>,
     ) -> Rc<Self> {
-        static GENERATION: AtomicU64 = AtomicU64::new(1);
-        let id = v2::MountId {
-            surface: surface.name.clone(),
-            key: key.to_owned(),
-            generation: GENERATION.fetch_add(1, Ordering::Relaxed),
-        };
+        let id = v2::MountId { surface: surface.name.clone(), key: key.to_owned(), generation: generation() };
         let fills = path.is_empty();
         let root = match fills {
             true => View::new(host.app()).column().width(Length::percent(100.0)).height(Length::percent(100.0)),

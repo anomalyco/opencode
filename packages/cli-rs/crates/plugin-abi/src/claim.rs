@@ -10,7 +10,8 @@
 //! part streams (the same state with new content) the host runs it at most once a frame, with the newest content, and
 //! keeps the last tree it accepted until then. A part that leaves the transcript forgets its tree.
 //!
-//! In process only on this ABI, like [`v2::Surface`]: a built-in registers claims with [`crate::Setup::claim`].
+//! A plugin registers claims with [`crate::Setup::claim`], on either carrier: in process with Rust values, and over the
+//! C ABI as [`crate::Manifest::claims`] and [`crate::Request::Claim`], answered by a [`Reply`].
 
 use std::rc::Rc;
 
@@ -20,8 +21,10 @@ use crate::types::SessionMessageAssistantTool;
 use crate::v2::{self, Node, PartRef, Source};
 
 /// What a claim draws: one tool's calls, by the tool's name as the transcript has it or as the host names it
-/// (`bash` and `shell` are one tool), or one fence language, as Markdown resolves a fence's info string.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// (`bash` and `shell` are one tool), or one fence language, as Markdown resolves a fence's info string. On the wire
+/// `{"type": "tool", "name": "bash"}`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "name", rename_all = "kebab-case")]
 pub enum Target {
     Tool(String),
     Fence(String),
@@ -34,6 +37,39 @@ pub struct Claim {
     /// The view reads [`v2::SurfaceInput::palette`], so a theme change calls it again for each part it shows.
     pub palette: bool,
     pub view: ClaimFn,
+}
+
+/// A claim as [`crate::Manifest::claims`] lists it ([`Claim`] without its view); [`crate::Request::Claim`] names it by
+/// its index there.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Entry {
+    pub target: Target,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub palette: bool,
+}
+
+impl From<&Claim> for Entry {
+    fn from(claim: &Claim) -> Self {
+        Self { target: claim.target.clone(), palette: claim.palette }
+    }
+}
+
+/// What [`crate::Request::Claim`] returns: the view's tree, or `None` where it declines, the content it gave the host with
+/// its handles, the handles it released, and how many values the mount's [`v2::Memo`] table holds after the view.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Reply {
+    #[serde(default)]
+    pub node: Option<Node>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub content: Vec<(v2::ContentRef, crate::Blob)>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub released: Vec<v2::ContentRef>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub memo: usize,
+}
+
+fn is_zero(value: &usize) -> bool {
+    *value == 0
 }
 
 /// A claim's view: the tree that draws `part`, or `None` to leave the part to the host's own row.
@@ -164,5 +200,10 @@ mod tests {
         let json = serde_json::to_string(&tool).unwrap();
         assert_eq!(serde_json::from_str::<Part>(&json).unwrap(), tool);
         assert_eq!(tool.phase(), Phase::Tool(State::Pending, false));
+        let entry = Entry { target: Target::Fence("latex".into()), palette: false };
+        assert_eq!(serde_json::to_string(&entry).unwrap(), r#"{"target":{"type":"fence","name":"latex"}}"#);
+        let declined = Reply { node: None, content: Vec::new(), released: Vec::new(), memo: 0 };
+        assert_eq!(serde_json::to_string(&declined).unwrap(), r#"{"node":null}"#);
+        assert_eq!(serde_json::from_str::<Reply>("{}").unwrap(), declined);
     }
 }
