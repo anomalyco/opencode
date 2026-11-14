@@ -1965,3 +1965,63 @@ fn a_part_is_viewed_again_at_a_new_width_and_gets_no_height() {
         assert!(INPUTS.with_borrow(|inputs| inputs.iter().all(|(_, height)| *height == 0)), "{carrier:?}");
     }
 }
+
+/// Claims `tall` calls with twelve lines, `{id}:{line}`; refuses the tree of what [`ARMED`] names with [`Fault::Bad`].
+fn plugin_tall(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::tool("tall", |_, part| {
+        let key = key(part);
+        if ARMED.with_borrow(|armed| armed.as_ref().is_some_and(|armed| *armed == (key.clone(), Fault::Bad))) {
+            let text = |text: &str| v2::Node::text(vec![abi::Span::new(text)]).with_id("twice");
+            return Some(v2::Node::column(vec![text("x"), text("y")]));
+        }
+        let lines = (0..12).map(|line| v2::Node::text(vec![abi::Span::new(format!("{key}:{line}"))])).collect();
+        Some(v2::Node::column(lines))
+    }));
+    Ok(())
+}
+
+// Expected (review finding H5): a claimed call above the reader that falls back to the host's shorter row, away from
+// the tail, leaves the reader's rows where they were on screen; at the tail the transcript stays at the tail.
+#[test]
+fn a_part_that_falls_back_above_the_reader_leaves_the_reader_in_place() {
+    for carrier in CARRIERS {
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.tall", setup: plugin_tall })]);
+        world.harness.app.resize(WIDTH, 30);
+        for index in 0..9 {
+            world.emit("session.tool.input.started", json!({ "id": format!("call_{index}"), "name": "tall" }));
+            world.emit("session.tool.called", json!({ "id": format!("call_{index}"), "input": {}, "executed": true }));
+        }
+        world.settle();
+        for _ in 0..4 {
+            world.harness.app.mouse(MouseEventKind::ScrollUp, WIDTH / 2, 10);
+            world.settle();
+        }
+        let rows = |screen: String| -> Vec<String> {
+            screen.lines().map(str::trim).filter(|line| line.starts_with("call_")).map(str::to_owned).collect()
+        };
+        let before = rows(world.frame().text());
+        assert!(!before.iter().any(|row| row.starts_with("call_0:")), "{carrier:?}: call_0 is on screen: {before:?}");
+        ARMED.set(Some(("call_0".to_owned(), Fault::Bad)));
+        world.emit("session.tool.progress", json!({ "id": "call_0", "metadata": { "n": 1 } }));
+        world.settle();
+        ARMED.set(None);
+        assert!(world.mount_of("call_0").is_some_and(|shown| !shown.shows), "{carrier:?}: call_0 did not fall back");
+        let after = rows(world.frame().text());
+        assert_eq!(after, before, "{carrier:?}: the reader moved");
+
+        // At the tail, the transcript stays at its bottom.
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.tall", setup: plugin_tall })]);
+        world.harness.app.resize(WIDTH, 30);
+        for index in 0..9 {
+            world.emit("session.tool.input.started", json!({ "id": format!("call_{index}"), "name": "tall" }));
+            world.emit("session.tool.called", json!({ "id": format!("call_{index}"), "input": {}, "executed": true }));
+        }
+        world.settle();
+        ARMED.set(Some(("call_0".to_owned(), Fault::Bad)));
+        world.emit("session.tool.progress", json!({ "id": "call_0", "metadata": { "n": 1 } }));
+        world.settle();
+        ARMED.set(None);
+        let screen = rows(world.frame().text());
+        assert_eq!(screen.last().map(String::as_str), Some("call_8:11"), "{carrier:?}: left the tail: {screen:?}");
+    }
+}

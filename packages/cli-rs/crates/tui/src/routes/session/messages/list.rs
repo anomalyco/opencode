@@ -89,6 +89,8 @@ struct Inner {
     claims: ToolClaims,
     /// Renders a message's rows again, after a claim's view at a paint changed which row shows one of its parts.
     switched: Rc<dyn Fn(&str)>,
+    /// Keeps the reader's rows in place after a claimed row above them changed height.
+    reflowed: Rc<dyn Fn(f64, f32)>,
     /// The `session` and `debug` settings the rows show with, as the config has them now.
     view: Cell<RowSettings>,
     groups: Rc<grouping::Settings>,
@@ -218,6 +220,17 @@ impl Transcript {
                         && let Some(tui) = inner.tui.upgrade()
                     {
                         inner.render(&tui, |shown| shown == message);
+                    }
+                })
+            },
+            reflowed: {
+                let weak = this.clone();
+                Rc::new(move |top: f64, grown: f32| {
+                    let Some(inner) = weak.upgrade() else { return };
+                    // At the tail the transcript follows the bottom; away from it, a row above the reader's that
+                    // grows or shrinks would move the rows below it on screen (`pinAbove` for a change in place).
+                    if *inner.start.borrow() != Start::Tail && top < inner.scroll.rect().screen_y {
+                        inner.scroll.scroll_by(0.0, f64::from(grown));
                     }
                 })
             },
@@ -845,6 +858,7 @@ impl Inner {
             renderers: &self.renderers,
             claims: &self.claims,
             switched: &self.switched,
+            reflowed: &self.reflowed,
             conceal: view.conceal,
             hide_thinking: view.hide_thinking,
             groups: &self.groups,
@@ -1204,6 +1218,8 @@ pub struct Context<'a> {
     pub claims: &'a ToolClaims,
     /// Renders a message's rows again: a claim's view at a paint changed which row shows one of its parts.
     pub switched: &'a Rc<dyn Fn(&str)>,
+    /// A claimed row whose top is at a screen row changed height by some rows: the reader's rows below it stay put.
+    pub reflowed: &'a Rc<dyn Fn(f64, f32)>,
     /// `session.markdown` is `rendered`.
     pub conceal: bool,
     /// `session.thinking` is `hide`.
