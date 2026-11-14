@@ -402,11 +402,14 @@ static int32_t call(void *raw, opencode_bytes request, opencode_owned *out) {
         return command(self, request, out);
     }
     if (is(request, "claim")) {
-        /* The claim of `conf-tool`'s calls. */
+        /* The claim of `conf-tool`'s calls: Markdown of content given anew in each view, numbered after `next`. */
         self->claimed += 1;
-        char reply[160];
+        unsigned long long handle = number(request, "next") + 1;
+        char reply[192];
         snprintf(reply, sizeof reply,
-                 "{\"node\":{\"type\":\"text\",\"id\":\"claim\",\"spans\":[{\"text\":\"claimed %u\"}]}}", self->claimed);
+                 "{\"node\":{\"type\":\"markdown\",\"id\":\"claim\",\"source\":{\"content\":%llu}},"
+                 "\"content\":[[%llu,\"claimed %u\"]]}",
+                 handle, handle, self->claimed);
         *out = owned(reply);
         return OPENCODE_OK;
     }
