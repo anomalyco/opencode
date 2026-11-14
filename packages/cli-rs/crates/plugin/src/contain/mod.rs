@@ -179,6 +179,8 @@ pub struct Monitor {
     host_overruns: Cell<u64>,
     /// A call runs: a call within it is part of it.
     depth: Cell<u32>,
+    /// All plugins' calls in a frame of the host's count ([`Monitor::spent`]).
+    counted: Cell<Option<(u64, Duration)>>,
     /// The host has a close at the next paint pending.
     closing: Cell<bool>,
     record: OnceCell<(Arc<Record>, Instant)>,
@@ -208,6 +210,8 @@ struct Stats {
     /// The host's own work for its nodes ([`Monitor::host`]), and all of it so far.
     host: Samples,
     host_total: Duration,
+    /// Its calls in a frame of the host's count, whatever closed P4c's window: what the scheduler's budget reads.
+    counted: Option<(u64, Duration)>,
 }
 
 #[derive(Default)]
@@ -268,6 +272,7 @@ impl Monitor {
             over_all: Cell::new(0),
             host_overruns: Cell::new(0),
             depth: Cell::new(0),
+            counted: Cell::new(None),
             closing: Cell::new(false),
             record: OnceCell::new(),
             on_notice: RefCell::default(),
@@ -391,6 +396,17 @@ impl Monitor {
         stats.host_total += took;
     }
 
+    /// What the plugin in `slot`'s calls took in the host's frame now, its handlers, views, `layout` and updates, and
+    /// what all plugins' calls took: what the scheduler of updates budgets them by ([`crate::schedule`]).
+    pub fn spent(&self, slot: Slot) -> (Duration, Duration) {
+        let frame = (self.frame.borrow())();
+        let now = |counted: Option<(u64, Duration)>| {
+            counted.filter(|(open, _)| *open == frame).map_or(Duration::ZERO, |(_, took)| took)
+        };
+        let own = self.plugins.borrow().get(usize::from(slot.0)).map_or(Duration::ZERO, |stats| now(stats.counted));
+        (own, now(self.counted.get()))
+    }
+
     /// The host's time for plugin `id`'s newest build so far ([`Monitor::host`]).
     pub fn host_time(&self, id: &str) -> Duration {
         self.latest(id, |stats| stats.host_total).unwrap_or_default()
@@ -424,6 +440,8 @@ impl Monitor {
             }
         };
         samples.add(took);
+        stats.counted = Some(add(stats.counted, frame, took));
+        self.counted.set(Some(add(self.counted.get(), frame, took)));
         let cold = std::mem::take(&mut stats.cold);
         let overrun = took > limits.overrun && !cold;
         let (slow, opened) = stats.add(frame, took, &limits);
@@ -583,6 +601,14 @@ impl Stats {
             self.frames.len()
         );
         Some(format!("{:.1} ms a frame", ms(typical)))
+    }
+}
+
+/// `counted` with a call of `took` in `frame`: added in its frame, or the first of a new one.
+fn add(counted: Option<(u64, Duration)>, frame: u64, took: Duration) -> (u64, Duration) {
+    match counted {
+        Some((open, sum)) if open == frame => (open, sum + took),
+        _ => (frame, took),
     }
 }
 

@@ -400,7 +400,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
         let proxy = setup.host().app().proxy();
         let mailbox = mailbox::Mailbox::new(setup.id(), Arc::new(activation::Wake::new(Some(proxy))));
         let activation = Activation::new(setup.host(), mailbox.clone());
-        activation.set_monitor(setup.monitor.clone());
+        activation.set_monitor(setup.monitor.clone(), setup.monitor.slot(&setup.artifact()));
         let scope = Rc::new(Scope {
             host: Rc::downgrade(setup.host()),
             id: setup.id().to_owned(),
