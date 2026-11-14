@@ -656,25 +656,28 @@ impl Tree {
                         if above + held.depth > MAX_DEPTH {
                             return Err(Refused::Deep);
                         }
-                        match mode {
-                            Mode::Dropped => drop(self.keeps.insert(key)),
-                            Mode::Admitted => drop((self.keeps.insert(key), self.held.insert(key))),
-                            Mode::Count if self.fits(&cost, built) => {
-                                (self.keeps.insert(key), self.held.insert(key));
+                        // A keep inside a placeholder's subtree is checked and not held again.
+                        if mode == Mode::Dropped {
+                            self.keeps.insert(key);
+                            continue;
+                        }
+                        if mode == Mode::Admitted || self.fits(&cost, built) {
+                            self.keeps.insert(key);
+                            self.held.insert(key);
+                            if mode == Mode::Count {
                                 self.used.0 += cost.nodes;
                             }
-                            // A kept subtree cannot be opened: the placeholder takes its id, and the subtree goes
-                            // where the tree had it.
-                            Mode::Count => {
-                                self.ids.insert(key);
-                                let stands = !std::mem::replace(absorbing, true);
-                                if stands && built && held.item.is_none() {
-                                    self.moves.insert(key);
-                                }
-                                let placeholder = stands.then(|| placeholder(Some(key), &Over::Nodes));
-                                self.over.insert(std::ptr::from_ref(node), placeholder);
-                            }
+                            continue;
                         }
+                        // A kept subtree cannot be opened: the placeholder takes its id, and the subtree goes where
+                        // the tree had it.
+                        self.ids.insert(key);
+                        let stands = !std::mem::replace(absorbing, true);
+                        if stands && built && held.item.is_none() {
+                            self.moves.insert(key);
+                        }
+                        let placeholder = stands.then(|| placeholder(Some(key), &Over::Nodes));
+                        self.over.insert(std::ptr::from_ref(node), placeholder);
                         continue;
                     }
                     let depth = above + weight(node);
