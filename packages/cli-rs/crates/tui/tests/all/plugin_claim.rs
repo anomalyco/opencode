@@ -1851,3 +1851,71 @@ fn the_ledger_counts_what_a_declined_part_keeps_and_what_went() {
         DECLINE.with_borrow_mut(HashSet::clear);
     }
 }
+
+thread_local! {
+    /// What `claim.label`'s views saw of each call: its id, the content items and the bytes of metadata.
+    static RESULTS: RefCell<Vec<(String, usize, usize)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Claims `label` calls with a one-line label of the call's state, and logs what each view saw of the result.
+fn plugin_label(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::tool("label", |_, part| {
+        let Part::Tool(tool) = part else { return None };
+        let (content, metadata) = match &tool.tool.state {
+            SessionMessageAssistantToolState::Running(state) => (0, json!(state.metadata).to_string().len()),
+            SessionMessageAssistantToolState::Completed(state) => {
+                (state.content.len(), state.metadata.as_ref().map_or(0, |metadata| json!(metadata).to_string().len()))
+            }
+            _ => (0, 0),
+        };
+        RESULTS.with_borrow_mut(|results| results.push((tool.tool.id.clone(), content, metadata)));
+        Some(v2::Node::text(vec![abi::Span::new(format!("label {} {:?}", tool.tool.id, tool.state))]))
+    }));
+    Ok(())
+}
+
+// Expected (synthesis 4.2: output by reference; review finding H4): what a call returned stays with the host. A
+// claim's view of a call that returned 100 KB and an image gets the call without them, and through the C ABI its
+// request stays under 4 KB, also when a resize views it again; metadata over 4 KB is left out, and less is sent.
+#[test]
+fn a_claimed_call_sends_its_view_no_result() {
+    let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+    let line = format!("{}\n", "word ".repeat(16));
+    let text = line.repeat(102_400 / line.len());
+    for carrier in CARRIERS {
+        RESULTS.with_borrow_mut(Vec::clear);
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.label", setup: plugin_label })]);
+        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "label" }));
+        world.emit("session.tool.called", json!({ "id": "call_1", "input": {}, "executed": true }));
+        world.emit("session.tool.progress", json!({ "id": "call_1", "metadata": { "n": 1 } }));
+        world.settle();
+        world.emit("session.tool.progress", json!({ "id": "call_1", "metadata": { "log": "x".repeat(10_000) } }));
+        world.settle();
+        let content = json!([
+            { "type": "text", "text": text },
+            { "type": "file", "uri": format!("data:image/png;base64,{png}"), "mime": "image/png", "name": "a.png" },
+        ]);
+        let before = opencode_plugin::loader::native::crossed();
+        world.emit("session.tool.success", json!({ "id": "call_1", "content": content, "executed": true }));
+        world.settle();
+        world.harness.wait_for("label call_1 Completed");
+        let finished = opencode_plugin::loader::native::crossed().since(before);
+        let before = opencode_plugin::loader::native::crossed();
+        world.harness.app.resize(WIDTH - 10, HEIGHT);
+        world.settle();
+        world.settle();
+        let resized = opencode_plugin::loader::native::crossed().since(before);
+        if carrier == Carrier::Abi {
+            assert!(finished.calls >= 1 && finished.sent < 4096, "{finished:?}");
+            assert!(resized.calls >= 1 && resized.sent < 4096, "{resized:?}");
+        }
+        let results = RESULTS.with_borrow(Vec::clone);
+        let progress: Vec<usize> = results.iter().map(|(_, _, metadata)| *metadata).collect();
+        assert!(
+            progress.contains(&json!({ "n": 1 }).to_string().len()),
+            "{carrier:?}: small metadata goes: {results:?}"
+        );
+        assert!(progress.iter().all(|bytes| *bytes <= 4096), "{carrier:?}: {results:?}");
+        assert!(results.iter().all(|(_, content, _)| *content == 0), "{carrier:?}: a view saw the result: {results:?}");
+    }
+}
