@@ -1,4 +1,9 @@
-import { Service, type Endpoint, type EnsureOptions } from "@opencode/client/effect/service"
+import {
+  reconnectUnresponsiveTimeout,
+  Service,
+  type Endpoint,
+  type EnsureOptions,
+} from "@opencode/client/effect/service"
 import { ClientError, isUnauthorizedError, OpenCode } from "@opencode/client/promise"
 import { OPENCODE_VERSION } from "../version"
 import { Effect, Option, Redacted } from "effect"
@@ -68,7 +73,7 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
 function managedService(options: EnsureOptions) {
   const reconnectOptions = { ...options, version: undefined }
   return {
-    reconnect: () => Service.ensure(reconnectOptions),
+    reconnect: () => Service.ensure({ ...reconnectOptions, unresponsiveTimeout: reconnectUnresponsiveTimeout }),
     restart: () =>
       Effect.gen(function* () {
         yield* Service.stop({ file: options.file, pty: "handoff" })

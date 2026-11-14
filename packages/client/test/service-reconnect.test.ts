@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import { Service } from "../src/effect/service"
 import { ensure, stop } from "../src/promise/service"
 import type { EnsureOptions, EnsureReason, StopOptions } from "../src/service"
+import { withEnsureTiming } from "../src/service-timing"
 import { serviceFixture, stopSignal, stoppedExitCode } from "./fixture/service-fixture"
 import { accelerate } from "./fixture/service-timing"
 
@@ -90,5 +91,71 @@ for (const client of clients) {
     expect(await owner.exited).toBe(stoppedExitCode)
     expect(await fixture.signal()).toBe(stopSignal)
     expect(await Bun.file(fixture.registration).exists()).toBe(false)
+  })
+
+  test(`${client.name} keeps a slow owner within its unresponsive budget without spawning contenders`, async () => {
+    await using fixture = await serviceFixture()
+    const owner = fixture.spawn("hanging")
+    await fixture.waitForFile()
+    const original = await Bun.file(fixture.registration).json()
+    const starts: EnsureReason[] = []
+
+    const pending = client.ensure({
+      file: fixture.registration,
+      command: fixture.command("record-start"),
+      unresponsiveTimeout: 60_000,
+      onStart: (reason) => starts.push(reason),
+    })
+
+    const deadline = Date.now() + 3_000
+    while (true) {
+      const count = (
+        await Bun.file(fixture.registration + ".requests")
+          .text()
+          .catch(() => "")
+      )
+        .trim()
+        .split("\n")
+        .filter(Boolean).length
+      if (count >= 5) break
+      if (Date.now() >= deadline) throw new Error(`Expected >= 5 timed-out probes, saw ${count}`)
+      await Bun.sleep(10)
+    }
+
+    expect(owner.exitCode).toBe(null)
+    expect(await Bun.file(fixture.registration + ".signal").exists()).toBe(false)
+    expect(await Bun.file(fixture.registration + ".started").exists()).toBe(false)
+    expect(starts).toEqual([])
+
+    await Bun.write(fixture.registration + ".release", "")
+    const endpoint = await pending
+    expect(endpoint.url).toBe(original.url)
+    expect(owner.exitCode).toBe(null)
+  })
+
+  test(`${client.name} evicts a hung owner once a budget longer than the startup deadline runs out`, async () => {
+    await using fixture = await serviceFixture()
+    const owner = fixture.spawn("hanging")
+    await fixture.waitForFile()
+    const original = await Bun.file(fixture.registration).json()
+    const options = withEnsureTiming(
+      {
+        file: fixture.registration,
+        command: fixture.command("delayed", "10"),
+        unresponsiveTimeout: 700,
+      },
+      { pollInterval: 20, requestTimeout: 80, spawnDelay: 100, promiseTimeout: 250 },
+    )
+    const started = Date.now()
+    const endpoint = await (client.name === "Promise"
+      ? ensure(options)
+      : Effect.runPromise(Service.ensure(options).pipe(Effect.provide(NodeFileSystem.layer))))
+    const replacement = await Bun.file(fixture.registration).json()
+    fixture.track(replacement.pid)
+
+    expect(Date.now() - started).toBeGreaterThanOrEqual(700)
+    expect(await owner.exited).toBe(stoppedExitCode)
+    expect(replacement.pid).not.toBe(original.pid)
+    expect(endpoint.url).toBe(replacement.url)
   })
 }

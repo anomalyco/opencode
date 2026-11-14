@@ -1,10 +1,18 @@
-import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
+import { Clock, Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import type { DiscoverOptions, EnsureOptions, StopOptions } from "../service.js"
 import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import {
+  decide,
+  fallback,
+  headers,
+  isUninterruptibleDiskSleep,
+  probeResult,
+  same,
+  unresponsiveOwner,
+} from "../service-probe.js"
 
 export * from "../service.js"
 export { headers }
@@ -49,7 +57,8 @@ export const incumbent = Effect.fn("service.incumbent")(function* (
 export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOptions = {}) {
   const timing = ensureTiming(options)
   const pool = contenderPool(timing)
-  let timeouts: { readonly info: Info; readonly count: number } | undefined
+  const unresponsive = unresponsiveOwner(options.unresponsiveTimeout ?? timing.unresponsiveTimeout)
+  let deadline = (yield* Clock.currentTimeMillis) + timing.promiseTimeout
   let announced = false
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>
     Effect.sync(() => {
@@ -68,25 +77,37 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       catch: (cause) => new Error("Failed to start server", { cause }),
     })
   })
+  let lastTimedOut = false
+  const timedOut = () =>
+    pool.failure() ??
+    new Error(
+      lastTimedOut
+        ? "Timed out waiting for the background service to respond"
+        : "Timed out waiting for the background service to start",
+    )
   const found = yield* Effect.gen(function* () {
+    const probedAt = yield* Clock.currentTimeMillis
+    // An owner still within its unresponsive budget holds the deadline open, so a long budget is not cut short.
+    if (probedAt >= deadline && !unresponsive.waiting()) return yield* Effect.fail(timedOut())
     const registration = yield* registered(options.file, timing.requestTimeout)
     const info = registration.info
     const service = registration.service
-    if (registration.timedOut && info !== undefined) {
-      timeouts = {
-        info,
-        count: timeouts !== undefined && same(timeouts.info, info) ? timeouts.count + 1 : 1,
-      }
-      if (timeouts.count >= 3) {
-        yield* announce("missing")
-        yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
-        yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
-        yield* terminate(info, options, timing)
-        pool.evict(info.pid)
-        pool.recruitNow()
-        timeouts = undefined
-      }
-    } else timeouts = undefined
+    lastTimedOut = registration.timedOut
+    const owner = registration.timedOut ? info : undefined
+    const diskSleep = owner !== undefined && (yield* Effect.promise(() => isUninterruptibleDiskSleep(owner.pid)))
+    const expired = unresponsive.observe(owner, probedAt, yield* Clock.currentTimeMillis, diskSleep)
+    let evicted = false
+    if (expired !== undefined) {
+      yield* announce("missing")
+      yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
+      yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
+      yield* terminate(expired, options, timing)
+      pool.evict(expired.pid)
+      pool.recruitNow()
+      unresponsive.forget()
+      deadline = (yield* Clock.currentTimeMillis) + timing.promiseTimeout
+      evicted = true
+    }
     if (service !== undefined) {
       pool.serviceAnswered()
       const decision = decide(service, options)
@@ -107,22 +128,19 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 
     const failed = pool.reap()
     if (failed !== undefined) return yield* Effect.fail(failed)
-    if (pool.shouldRecruit(info !== undefined)) {
+    // An owner that times out still holds the port; a contender would only add load until it is evicted.
+    if ((!registration.timedOut || evicted) && pool.shouldRecruit(info !== undefined)) {
       yield* announce("missing")
       pool.add(yield* spawnContender)
     }
     return Option.none()
   }).pipe(
-    Effect.repeat({
-      until: Option.isSome,
-      // Probes run sequentially, so a slow probe stretches each iteration; bound the loop by wall clock
-      // like the Promise variant rather than by attempt count.
-      schedule: Schedule.spaced(timing.pollInterval).pipe(Schedule.upTo({ duration: timing.promiseTimeout })),
-    }),
+    // Probes run sequentially, so a slow probe stretches each iteration; the loop is bounded by the wall-clock
+    // deadline above rather than by attempt count, like the Promise variant.
+    Effect.repeat({ until: Option.isSome, schedule: Schedule.spaced(timing.pollInterval) }),
     Effect.ensuring(Effect.sync(() => pool.releaseAll())),
   )
-  if (Option.isNone(found))
-    return yield* Effect.fail(pool.failure() ?? new Error("Timed out waiting for the background service to start"))
+  if (Option.isNone(found)) return yield* Effect.fail(timedOut())
   return found.value.endpoint
 })
 

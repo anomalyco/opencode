@@ -24,6 +24,12 @@ export type DiscoverOptions = {
 /** Reason ensuring the service requires a new process. */
 export type EnsureReason = "missing" | "version-mismatch"
 
+/**
+ * How long a reconnecting client waits for a service it was already using before replacing it. A live
+ * service that stops answering is usually stalled on disk or swap, and replacing it drops every session.
+ */
+export const reconnectUnresponsiveTimeout = 3 * 60_000
+
 /** Options used to ensure the local OpenCode service is running. */
 export type EnsureOptions = DiscoverOptions & {
   /** Service command and arguments. Defaults to `opencode serve --service`. */
@@ -32,6 +38,11 @@ export type EnsureOptions = DiscoverOptions & {
   readonly env?: Readonly<Record<string, string>>
   /** Called once before spawning a new service process. */
   readonly onStart?: (reason: EnsureReason, previousVersion?: string) => void
+  /**
+   * Milliseconds a registered service may accept connections without answering its health check
+   * before it is stopped and replaced. Defaults to 30 seconds.
+   */
+  readonly unresponsiveTimeout?: number
 }
 
 /** Options used to stop the local OpenCode service. */

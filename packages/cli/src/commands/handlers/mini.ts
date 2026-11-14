@@ -1,4 +1,4 @@
-import { Context, Effect, FileSystem, Option } from "effect"
+import { Effect, FileSystem, Option } from "effect"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { ServerConnection } from "../../services/server-connection"
@@ -16,14 +16,14 @@ export default Runtime.handler(Commands.commands.mini, (input) =>
     const config = yield* Config.Service
     const global = yield* Global.Service
     const resolved = resolve(yield* config.get(), { terminalSuspend: process.platform !== "win32" })
-    const fileSystem = yield* FileSystem.FileSystem
-    const runServicePromise = Effect.runPromiseWith(Context.make(FileSystem.FileSystem, fileSystem))
+    const context = yield* Effect.context<FileSystem.FileSystem>()
+    const runPromise = Effect.runPromiseWith(context)
     const service = server.service
     yield* Effect.promise(() =>
       runMini({
         server: {
           endpoint: server.endpoint,
-          reconnect: service ? (signal) => runServicePromise(service.reconnect(), { signal }) : undefined,
+          reconnect: service ? (signal) => runPromise(service.reconnect(), { signal }) : undefined,
         },
         continue: input.continue,
         session: Option.getOrUndefined(input.session),
@@ -36,7 +36,7 @@ export default Runtime.handler(Commands.commands.mini, (input) =>
         demo: input.demo,
         tuiConfig: resolved,
         config: {
-          update: (update) => runServicePromise(config.update(update)),
+          update: (update) => runPromise(config.update(update)),
         },
         paths: { home: global.home, state: global.state, log: global.log },
       }),
