@@ -1403,7 +1403,7 @@ const onResponseFinish = Effect.fnUntraced(function* (state: ParserState, event:
     // An output item's array position is its output index.
     for (const item of (event.response?.output ?? []).map((item, index) => resolveItem(state, item, index))) {
       // Terminal recovery cannot insert a checkpoint before already-emitted content.
-      if (item.type === "compaction" && state.lifecycle.stepStarted && !state.completedCompactions.has(item.id))
+      if (item.type === "compaction" && state.lifecycle.phase === "active" && !state.completedCompactions.has(item.id))
         return yield* ProviderShared.eventError(
           state.id,
           "Cannot recover a compaction checkpoint after output has been emitted",
