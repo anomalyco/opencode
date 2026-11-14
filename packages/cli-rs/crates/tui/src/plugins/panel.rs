@@ -137,8 +137,6 @@ pub struct Picker {
     owner: RefCell<Owner>,
     shown: RefCell<abi::Select>,
     handle: RefCell<Option<opencode_ui::select::Select<String>>>,
-    /// New with every select shown under its key: a toggle checks the rows it was picked from still show.
-    revision: Cell<u64>,
 }
 
 /// TS `dialog.select`: picking an option closes the list, then runs the action with the option's value. A select with
@@ -160,7 +158,6 @@ fn pick(tui: &Tui, owner: Owner, select: abi::Select) {
                 *picker.shown.borrow_mut() = select;
                 *picker.owner.borrow_mut() = owner.clone();
                 *tui.reads.owner.borrow_mut() = Some(owner);
-                picker.revision.set(picker.revision.get() + 1);
                 let theme = opencode_ui::theme::Theme::clone(&tui.page());
                 handle.set_options(options(tui, &theme, &picker.shown.borrow()));
                 handle.refresh_footer();
@@ -185,7 +182,6 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
         owner: RefCell::new(owner.clone()),
         shown: RefCell::new(select),
         handle: RefCell::default(),
-        revision: Cell::new(0),
     });
     *tui.reads.select.borrow_mut() = keyed.is_some().then(|| picker.clone());
     let dialog = keyed.as_ref().map_or_else(DialogOptions::default, |key| DialogOptions::default().key(key.clone()));
@@ -309,8 +305,7 @@ impl Picker {
             log::warn!("plugin {caller}: a row may not toggle {plugin}");
             return;
         }
-        let (picker, value, plugin, revision) =
-            (Rc::downgrade(self), value.to_owned(), plugin.to_owned(), self.revision.get());
+        let (picker, value, plugin) = (Rc::downgrade(self), value.to_owned(), plugin.to_owned());
         tui.app.defer(bind!(tui, |tui, _| {
             let Some(picker) = picker.upgrade() else { return };
             let owner = picker.owner.borrow().clone();
@@ -320,10 +315,8 @@ impl Picker {
                 .options
                 .iter()
                 .any(|option| option.value == value && option.toggle.as_deref() == Some(plugin.as_str()));
-            // The same select, as it was picked from, still on screen.
-            let shows = tui.reads.select.borrow().as_ref().is_some_and(|shown| Rc::ptr_eq(shown, &picker))
-                && tui.dialogs.key().as_deref() == Some(picker.key.as_str())
-                && picker.revision.get() == revision;
+            // The same select still on screen: closed or replaced, it is not the select any more.
+            let shows = tui.reads.select.borrow().as_ref().is_some_and(|shown| Rc::ptr_eq(shown, &picker));
             if !(names && shows && tui.plugins.live(&owner.0, owner.1)) {
                 return;
             }

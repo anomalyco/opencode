@@ -54,8 +54,10 @@ pub struct Probe {
     pub strip: bool,
     /// A global layer that takes pastes.
     pub paste_global: bool,
-    /// The panel leaves node `a` out.
-    pub hide_a: bool,
+    /// The panel leaves node `b` out.
+    pub hide_b: bool,
+    /// The selection copies on the reserved chord, and keeps it from the keymap (`terminal.copy` `manual`).
+    pub manual_copy: bool,
     /// The panel's handler panics, which fails the plugin.
     pub panic: bool,
     /// The rich select has no footer action.
@@ -210,6 +212,11 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     }])
     .on(|host, event| {
         log("route", host, event);
+        if let Event::Paste { text } = event
+            && text.starts_with("pass")
+        {
+            return Handled::Pass;
+        }
         if let Event::Key(key) = event
             && key.bind.as_deref() == Some("where")
         {
@@ -393,13 +400,22 @@ fn select() -> abi::Select {
         key: Some("pick".into()),
         actions: match probe(|probe| probe.no_update) {
             true => Vec::new(),
-            false => vec![abi::SelectAction {
-                title: "update".into(),
-                key: Some("ctrl+u".into()),
-                action: command("input.update"),
-                hidden: vec!["beta".into()],
-                primary: false,
-            }],
+            false => vec![
+                abi::SelectAction {
+                    title: "update".into(),
+                    key: Some("ctrl+u".into()),
+                    action: command("input.update"),
+                    hidden: vec!["beta".into()],
+                    primary: false,
+                },
+                abi::SelectAction {
+                    title: "cut".into(),
+                    key: Some("Ctrl + C".into()),
+                    action: command("input.picked"),
+                    hidden: Vec::new(),
+                    primary: false,
+                },
+            ],
         },
         binds: vec![
             abi::PanelBind { key: "ctrl+e".into(), title: "echo".into(), action: command("input.picked") },
@@ -468,14 +484,17 @@ fn side(cx: &mut v2::View<'_>) -> v2::Node {
         true => a.on_click(abi::Click::command("input.row", Some("a".into())).on_down()),
         false => a,
     };
-    let a = match probe(|probe| probe.hide_a) {
+    // With pointer events, `b` takes no focus: a capture of it begins and ends with the focus elsewhere.
+    let pointer_b = probe(|probe| probe.pointer_b);
+    let b = v2::Node::row(vec![text("BBBB")]).with_id("b").interact(interact(!pointer_b, pointer_b, None));
+    let b = match probe(|probe| probe.hide_b) {
         true => text("----"),
-        false => a,
+        false => b,
     };
     v2::Node::column(vec![
         text(&label),
         a,
-        v2::Node::row(vec![text("BBBB")]).with_id("b").interact(interact(true, probe(|probe| probe.pointer_b), None)),
+        b,
         match probe(|probe| probe.hover_t) {
             true => text("TTTT").with_id("t").hover_events(),
             false => text("TTTT").with_id("t"),
@@ -504,10 +523,14 @@ pub fn open_with(prepare: impl FnOnce(&mut Probe)) -> Harness {
         *probe = Probe::default();
         prepare(probe);
     });
-    let deps = Deps {
+    let mut deps = Deps {
         builtins: vec![abi::Plugin { id: ID, setup }.into(), abi::Plugin { id: "test.other", setup: other }.into()],
         ..support::deps(Arc::new(support::Fake::new(|seen| support::base(seen, support::DIRECTORY))))
     };
+    if probe(|probe| probe.manual_copy) {
+        let copy = serde_json::json!({ "terminal": { "copy": "manual" } });
+        deps.config = support::config(opencode_local::cli_config::merge(&[Some(copy)]));
+    }
     let harness = support::mount(120, 30, deps);
     settle(&harness);
     harness
@@ -1285,6 +1308,7 @@ fn the_reserved_chord_escapes_every_plugin_hold_spelling_and_listener() {
     let harness = open_with(|probe| {
         probe.hold = true;
         probe.selectable = true;
+        probe.manual_copy = true;
     });
     run(&harness, "input.panel", None);
     taken();
@@ -1320,7 +1344,7 @@ fn the_reserved_chord_escapes_every_plugin_hold_spelling_and_listener() {
     harness.app.type_text("b");
     settle(&harness);
     assert_eq!(composer(&harness), "b");
-    // The select's key spelled `Ctrl+C` is no key of it.
+    // The select's key and footer action spelled `Ctrl+C` and `Ctrl + C` are none of it.
     rows(&["alpha"], "f");
     run(&harness, "input.select", None);
     taken();
@@ -1396,6 +1420,17 @@ fn a_capture_and_a_mode_end_with_a_move_out_and_back() {
     settle(&harness);
     assert!(!taken().iter().any(|line| line.contains("Drag")), "a capture came back with the focus");
     harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 2, y);
+    // Moved by the host's own focus keys, out and back.
+    harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
+    settle(&harness);
+    harness.app.app().focus_next();
+    harness.app.app().focus_previous();
+    settle(&harness);
+    taken();
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), x + 2, y);
+    settle(&harness);
+    assert!(!taken().iter().any(|line| line.contains("Drag")), "a capture came back with the focus");
+    harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 2, y);
     harness.app.press("m");
     settle(&harness);
     run(&harness, "input.bounce", None);
@@ -1412,6 +1447,7 @@ fn a_paste_goes_by_priority_and_to_a_route_or_slot() {
     let harness = open_with(|probe| {
         probe.paste_rank = true;
         probe.strip = true;
+        probe.paste_global = true;
     });
     taken();
     harness.app.paste("p1");
@@ -1426,6 +1462,28 @@ fn a_paste_goes_by_priority_and_to_a_route_or_slot() {
     harness.app.paste("p3");
     settle(&harness);
     assert_eq!(taken(), ["route: paste p3 [-]"]);
+    // Passed by the route and the global layer, it is not offered again where it lands.
+    harness.app.paste("pass3");
+    settle(&harness);
+    assert_eq!(taken(), ["route: paste pass3 [-]", "pasted: paste pass3 [-]"]);
+}
+
+// Expected (review 8): the composer's mode ends as the composer goes with its route; back on the session, the
+// composer types again.
+#[test]
+fn a_composer_mode_ends_with_its_route() {
+    let harness = open();
+    let base = interact::ledger(&*harness.tui).modes;
+    harness.app.press("escape");
+    settle(&harness);
+    assert_eq!(interact::ledger(&*harness.tui).modes, base + 1);
+    run(&harness, "input.route", None);
+    harness.tui.navigate(opencode_tui::Route::Session { id: opencode_api::generated::SessionID("ses_a".into()) });
+    settle(&harness);
+    assert_eq!(interact::ledger(&*harness.tui).modes, base);
+    harness.app.type_text("d");
+    settle(&harness);
+    assert_eq!(composer(&harness), "d");
 }
 
 // Expected (review 10): on a box with a click of its own and pointer events, a press the plugin consumes runs no
@@ -1460,18 +1518,19 @@ fn a_route_reads_its_focused_node() {
     assert!(line.ends_with("Focused { node: Some(\"r\"), surface: true }"), "{line}");
 }
 
-// Expected (review 8 and 12): a capture ends as its node leaves the tree the host accepts, with no pointer event and no
-// read to end it; reading the ledger changes nothing.
+// Expected (review 8 and 12): a capture of a node that takes no focus ends as the node leaves the tree the host
+// accepts, with no pointer event and no read to end it; reading the ledger changes nothing.
 #[test]
 fn a_capture_ends_as_its_node_leaves_the_tree() {
-    let harness = open();
+    let harness = open_with(|probe| probe.pointer_b = true);
     run(&harness, "input.panel", None);
-    let (x, y) = support::at(&harness.app.text(), "AAAA").unwrap();
+    let (x, y) = support::at(&harness.app.text(), "BBBB").unwrap();
     harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
     settle(&harness);
-    probe(|probe| probe.hide_a = true);
+    assert!(interact::ledger(&*harness.tui).capture);
+    probe(|probe| probe.hide_b = true);
     run(&harness, "input.redraw", None);
-    assert!(!harness.app.text().contains("AAAA"));
+    assert!(!harness.app.text().contains("BBBB"));
     assert!(!interact::ledger(&*harness.tui).capture);
     assert_eq!(interact::ledger(&*harness.tui), interact::ledger(&*harness.tui));
 }
