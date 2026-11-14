@@ -77,13 +77,14 @@ pub fn connect(inner: &Rc<Inner>) {
         }
         enqueue(&prompt, Job::Text(text.replace("\r\n", "\n").replace('\r', "\n")));
     }));
-    // A plugin's mode of the composer ends as the composer loses the focus (synthesis 3.8).
-    let weak = Rc::downgrade(inner);
-    inner.textarea.on_focus(bind!(weak, |prompt, _, focused| {
-        if let (false, Some(tui)) = (focused, prompt.tui.upgrade()) {
-            tui.router.prune();
+    // A plugin's mode of the composer ends as the composer loses the focus (synthesis 3.8), and so does a capture that
+    // began with the focus there; also when the composer went with its route, before it heard of its focus.
+    let (tui, id) = (inner.tui.clone(), inner.textarea.id());
+    inner.textarea.on_focus(move |_, focused| {
+        if let (false, Some(tui)) = (focused, tui.upgrade()) {
+            tui.router.blurred(id);
         }
-    }));
+    });
     let weak = Rc::downgrade(inner);
     inner.textarea.on_mouse(move |cx, event| {
         if event.kind != MouseEventKind::Down(MouseButton::Left) {

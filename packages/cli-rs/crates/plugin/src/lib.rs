@@ -836,6 +836,16 @@ impl Scope {
         mounts.into_iter().rev().find(|owner| owner.has(id)).unwrap_or_else(|| self.input.clone())
     }
 
+    /// The owner a call's focus is about: the running call's mount, or, for a call of the plugin's own (a command), its
+    /// newest mount that has the focus.
+    fn owner_focused(&self) -> Rc<interact::Owner> {
+        if let Some(current) = self.current.borrow().clone() {
+            return current;
+        }
+        let mounts = self.activation.owners().into_iter().rev();
+        mounts.into_iter().find(|owner| owner.focused().surface).unwrap_or_else(|| self.input.clone())
+    }
+
     /// What delivers an event to `handler` as one call of the plugin, for the owner it is routed to; the plugin's
     /// surfaces draw again after it.
     fn deliver(self: &Rc<Self>, handler: abi::interact::HandlerFn) -> interact::Deliver {
@@ -1036,14 +1046,7 @@ impl abi::Read for Scoped<'_> {
     }
 
     fn focused(&self) -> abi::interact::Focused {
-        // A call of the plugin's own (a command) reads the mount that has the focus, if one does.
-        match self.scope.current.borrow().clone() {
-            Some(owner) => owner.focused(),
-            None => {
-                let mounts = self.scope.activation.owners().into_iter().rev();
-                mounts.map(|owner| owner.focused()).find(|focused| focused.surface).unwrap_or_default()
-            }
-        }
+        self.scope.owner_focused().focused()
     }
 
     fn mode(&self) -> Option<String> {
@@ -1165,7 +1168,7 @@ impl abi::Host for Scoped<'_> {
     }
 
     fn blur(&self) {
-        let owner = self.scope.owner();
+        let owner = self.scope.owner_focused();
         self.defer(move |host| owner.blur(host));
     }
 
@@ -1175,10 +1178,10 @@ impl abi::Host for Scoped<'_> {
     }
 
     fn release_keys(&self) {
-        let weak = self.scope.host.clone();
+        let id = self.scope.id.clone();
         self.defer(move |host| {
             if let Some(router) = host.router() {
-                router.release(&weak);
+                router.release_for(&id);
             }
         });
     }
@@ -1686,6 +1689,7 @@ impl Setup<'_> {
                         );
                         activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
                         if let Some(holder) = mounted.holder() {
+                            holder.hold_root();
                             activation.own(&holder);
                         }
                         Box::new(mounted)
