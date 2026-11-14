@@ -557,6 +557,8 @@ impl Inner {
     pub(crate) fn parts_changed(&self) {
         if let Some(tui) = self.tui.upgrade() {
             self.previews.update(&tui, self);
+            // Every replacement of the text (restore, reset, stash) ends here: `set_text` calls no change handler.
+            crate::plugins::contain::sync(&tui);
         }
     }
 
@@ -931,7 +933,7 @@ fn connect(inner: &Rc<Inner>) {
     inner.textarea.on_change(bind!(inner, |prompt, _, text| {
         prompt.prompt.borrow_mut()["text"] = Value::String(text.to_owned());
         if let Some(tui) = prompt.tui.upgrade() {
-            crate::plugins::contain::drafted(&tui, text);
+            crate::plugins::contain::sync(&tui);
         }
         parts::sync(&prompt);
         prompt.parts_changed();

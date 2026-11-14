@@ -38,6 +38,8 @@ pub struct Plugins {
     pub(crate) diffs: RefCell<Option<Rc<super::diffs::viewer::Shared>>>,
     /// The loader of the external plugins, which the plugin manager's approvals reach.
     loader: RefCell<Option<Rc<Loader>>>,
+    /// The snapshot last published in the run record.
+    pub(crate) published: RefCell<Option<opencode_plugin::contain::Snapshot>>,
 }
 
 impl Plugins {
@@ -152,6 +154,10 @@ impl Host for Tui {
     }
 
     fn slow(&self, id: &str, cost: &str) {
+        // A frame that made it slow may close after the plugin failed or was turned off: then it has its own report.
+        if !self.plugins.entries().iter().any(|entry| entry.id == id && entry.status == Status::Active) {
+            return;
+        }
         let options = ToastOptions::new(Variant::Warning, format!("{cost}. Run /plugins for details."))
             .title(format!("Plugin is slow: {id}"));
         let id = id.to_owned();
@@ -159,9 +165,13 @@ impl Host for Tui {
             "Disable",
             bind!(self, |tui| {
                 tui.plugins.toggle(&host(&tui), &id, false);
-                tui.navigate(tui.route());
+                host(&tui).remount();
             }),
         ));
+    }
+
+    fn plugins_changed(&self) {
+        let _ = self.app.proxy().send(PluginsChanged);
     }
 
     fn revoked(&self, id: &str) {
@@ -881,6 +891,7 @@ pub fn registry(info: &opencode_local::cli_config::Info, external: Vec<Builtin>)
         tui,
         diffs: RefCell::default(),
         loader: RefCell::default(),
+        published: RefCell::default(),
     }
 }
 
