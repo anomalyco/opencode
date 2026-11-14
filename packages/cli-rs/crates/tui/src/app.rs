@@ -117,6 +117,8 @@ pub struct Tui {
     pub composer: crate::composer::Memory,
     files: Option<Files>,
     route: RefCell<Route>,
+    /// The routes shown before the plugin routes on screen, the latest last: where the reserved chord goes back to.
+    before_plugin: RefCell<Vec<Route>>,
     view: RefCell<Option<Box<dyn RouteView>>>,
     /// The page theme the shell was last painted with, which the route view's parts read when they paint.
     painted: Live,
@@ -213,10 +215,25 @@ impl Tui {
             self.view.borrow().is_some() && self.route() == route && !crate::features::location::pending(self);
         // Mounting may move the focus (a docked panel, a pending permission); an open dialog keeps it.
         let dialog = self.dialogs.is_open().then(|| self.app.focused());
-        if let Some(view) = self.view.borrow_mut().take() {
+        // A remount of a plugin's route drops the old view once the new one is mounted, so a plugin that counts its
+        // mounts (`mounts()`) hears the new one begin before the old one ends, and keeps its state (review carbon-4).
+        // The host's own routes drop it first: the composer hands its draft on as it goes.
+        let old = self.view.borrow_mut().take();
+        if let Some(view) = &old {
             view.root().detach();
         }
-        *self.route.borrow_mut() = route.clone();
+        let old = if remount && matches!(route, Route::Plugin { .. }) {
+            old
+        } else {
+            drop(old);
+            None
+        };
+        let before = self.route.replace(route.clone());
+        match &route {
+            Route::Plugin { .. } if before != route => self.before_plugin.borrow_mut().push(before),
+            Route::Plugin { .. } => {}
+            _ => self.before_plugin.borrow_mut().clear(),
+        }
         // A remount (a theme change) keeps the home's location.
         if route == Route::Home && !remount {
             crate::features::location::home(self);
@@ -225,6 +242,7 @@ impl Tui {
         crate::tabs::route_changed(self);
         crate::frame::refresh(self);
         let view = routes::mount(self, &route);
+        drop(old);
         self.frame.main().add(&view.root());
         view.sync(self, &opencode_store::Changes::everything());
         crate::frame::mount_app(self, remount);
@@ -535,6 +553,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         composer: Default::default(),
         files,
         route: RefCell::new(Route::Home),
+        before_plugin: RefCell::default(),
         view: RefCell::new(None),
         painted: Live::new(page),
         restyle: Cell::new(false),
@@ -666,14 +685,52 @@ fn route_keys(tui: &Rc<Tui>) {
     });
 }
 
+/// The host's close rule for the reserved chord, which no plugin sees (synthesis 3.8): it closes the plugin's surface
+/// that has the input, one level, as TS's diff viewer binds `app.exit` to close itself: a focused overlay, else a
+/// focused panel, else a route, which goes back where it came from. Whether it closed one; if not, the chord goes on
+/// to the host's own keys (`app.exit`). The composer's draft stays, and a rebound `app.exit` changes nothing of it
+/// (review carbon-2).
+fn close_plugin_surface(tui: &Tui) -> bool {
+    if tui.router.close_focused(tui) {
+        return true;
+    }
+    let panel = tui.panels.current().filter(|target| {
+        crate::frame::panel_state(tui, target).is_some_and(|(_, focused)| focused)
+            || crate::frame::fullscreen_panel(tui)
+    });
+    if panel.is_some() {
+        tui.panels.close(tui);
+        return true;
+    }
+    if !matches!(tui.route(), Route::Plugin { .. }) {
+        return false;
+    }
+    let back = tui.before_plugin.borrow_mut().pop().unwrap_or(Route::Home);
+    // Going back to an earlier plugin route keeps what was before it.
+    let rest = std::mem::take(&mut *tui.before_plugin.borrow_mut());
+    tui.navigate(back);
+    if matches!(tui.route(), Route::Plugin { .. }) {
+        *tui.before_plugin.borrow_mut() = rest;
+    }
+    true
+}
+
 fn install_keys(tui: &Rc<Tui>) {
     // The reserved chord resets the plugins' input before anything may stop it, and goes on (synthesis 3.8).
     let weak = tui.weak();
-    tui.app.on_key_capture(move |_, key| {
-        if key.matches(opencode_plugin::abi::interact::RESERVED)
-            && let Some(tui) = weak.upgrade()
-        {
-            tui.router.escape(&*tui);
+    tui.app.on_key_capture(move |cx, key| {
+        let Some(tui) = weak.upgrade() else { return };
+        if !key.matches(opencode_plugin::abi::interact::RESERVED) {
+            return;
+        }
+        tui.router.escape(&*tui);
+        // A selection copies on the chord, and a host dialog takes it as its own key.
+        if tui.app.selected_text().is_some() || tui.dialogs.is_open() {
+            return;
+        }
+        if close_plugin_surface(&tui) {
+            cx.prevent_default();
+            cx.stop_propagation();
         }
     });
     // Console copy, then the selection keys, go before the keymap (E.20).
@@ -764,21 +821,8 @@ fn install_keys(tui: &Rc<Tui>) {
             })
         })
         .bindings(["app.exit"]);
-    // The reserved chord, which no plugin sees (synthesis 3.8), takes a plugin's route back home: TS's diff viewer binds
-    // `app.exit` to close itself, and the chord is `app.exit`'s. Elsewhere it is `app.exit`'s still.
-    let leave = KeymapLayer::new(vec![
-        TuiCommand::inline(
-            opencode_plugin::abi::interact::RESERVED,
-            bind!(weak, |tui, _, _| tui.navigate(Route::Home)),
-        )
-        .title("Close")
-        .group("System"),
-    ])
-    .enabled(Condition::when(bind!(weak, |tui| matches!(tui.route(), Route::Plugin { .. }))))
-    .priority(1);
     let layers = [
         commands,
-        leave,
         // Part of `appBindingCommands` (`app.tsx:150-186`); E.20 binds its own commands.
         KeymapLayer::default().bindings([COMMAND_PALETTE_COMMAND, "help.show", "opencode.settings"]),
         // `appGlobalBindingCommands` (`app.tsx:117`).
