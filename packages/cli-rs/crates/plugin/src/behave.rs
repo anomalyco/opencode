@@ -922,37 +922,65 @@ fn sticky(scrolled: &Scrolled, node: &AnyWidget, parent: &AnyWidget, edge: Edge,
 
 // Splits.
 
-/// The width of a split's first child, which the user's drag sets, and the drag.
+/// The width of a split's first child, which the user's drag sets, and its handle.
 pub(crate) struct SplitState {
     width: Cell<u16>,
     min: u16,
     dragged: Cell<bool>,
     dragging: Cell<bool>,
+    hovered: Cell<bool>,
+    /// The bar's color while the pointer is over the handle or drags it.
+    highlight: Cell<Color>,
     view: View,
+    /// TS's `PaneResizeHandle`: an absolute box two columns wide over the boundary, above the children, which the
+    /// press lands on, so it never starts a text selection; and the one-column bar it lights.
+    handle: View,
+    bar: View,
     first: RefCell<Option<AnyWidget>>,
 }
 
 impl SplitState {
-    /// The split of `view`, whose first child starts `split.at` wide; a press on the column after it starts a drag.
-    pub(crate) fn attach(view: &View, split: Split) -> Rc<Self> {
+    /// The split of `view`, whose first child starts `split.at` wide; a press on its handle, the last column of the
+    /// first child and the column after it, starts a drag.
+    pub(crate) fn attach(app: &App, view: &View, split: Split, theme: &opencode_ui::theme::Theme) -> Rc<Self> {
+        let bar = View::new(app).width(1).height(Length::percent(100.0));
+        let handle = View::new(app)
+            .absolute()
+            .position(opentui::layout::Edge::Top, 0)
+            .width(2)
+            .height(Length::percent(100.0))
+            .z_index(10)
+            .child(&bar);
         let state = Rc::new(SplitState {
             width: Cell::new(split.at.max(split.min)),
             min: split.min,
             dragged: Cell::new(false),
             dragging: Cell::new(false),
+            hovered: Cell::new(false),
+            highlight: Cell::new(theme.background.raised.high),
             view: view.clone(),
+            handle,
+            bar,
             first: RefCell::default(),
         });
+        view.add(&state.handle);
         let weak = Rc::downgrade(&state);
-        view.on_mouse(move |cx, event| {
+        state.handle.on_hover(move |cx, hovered| {
+            if let Some(state) = weak.upgrade() {
+                state.hovered.set(hovered);
+                state.paint();
+                cx.app().request_redraw();
+            }
+        });
+        let weak = Rc::downgrade(&state);
+        state.handle.on_mouse(move |cx, event| {
             let Some(state) = weak.upgrade() else { return };
             let rect = state.view.rect();
             let column = i32::from(event.x) - rect.screen_x.round() as i32;
             match event.kind {
-                MouseEventKind::Down(opentui::input::MouseButton::Left) if column == i32::from(state.width.get()) => {
+                MouseEventKind::Down(opentui::input::MouseButton::Left) => {
                     state.dragging.set(true);
-                    cx.prevent_default();
-                    cx.stop_propagation();
+                    state.paint();
                 }
                 MouseEventKind::Drag(opentui::input::MouseButton::Left) if state.dragging.get() => {
                     let most = (rect.width as i32 - 1 - i32::from(state.min)).max(i32::from(state.min));
@@ -961,23 +989,28 @@ impl SplitState {
                         state.width.set(width);
                         state.dragged.set(true);
                         state.size();
-                        cx.app().request_redraw();
                     }
-                    cx.stop_propagation();
                 }
                 MouseEventKind::Up(_) if state.dragging.get() => {
                     state.dragging.set(false);
-                    cx.stop_propagation();
+                    state.paint();
                 }
-                _ => {}
+                _ => return,
             }
+            cx.prevent_default();
+            cx.stop_propagation();
+            cx.app().request_redraw();
         });
         state
     }
 
-    /// Sizes the first child, `widget`, to the split's width.
+    /// Sizes the first child, `widget`, to the split's width, and keeps the handle on the boundary, above the
+    /// children the reconcile placed.
     pub(crate) fn first(&self, widget: Option<AnyWidget>) {
         *self.first.borrow_mut() = widget;
+        if self.handle.parent().is_none_or(|parent| parent.id() != self.view.id()) {
+            self.view.add(&self.handle);
+        }
         self.size();
     }
 
@@ -985,6 +1018,18 @@ impl SplitState {
         if let Some(first) = &*self.first.borrow() {
             first.width(u32::from(self.width.get())).shrink(0.0);
         }
+        self.handle.position(opentui::layout::Edge::Left, self.width.get().saturating_sub(1));
+    }
+
+    fn paint(&self) {
+        let lit = self.hovered.get() || self.dragging.get();
+        self.bar.bg(if lit { self.highlight.get() } else { Color::rgba(0, 0, 0, 0) });
+    }
+
+    /// Takes `theme`'s highlight.
+    pub(crate) fn restyle(&self, theme: &opencode_ui::theme::Theme) {
+        self.highlight.set(theme.background.raised.high);
+        self.paint();
     }
 
     /// Keeps the width `other` was dragged to, when it was.

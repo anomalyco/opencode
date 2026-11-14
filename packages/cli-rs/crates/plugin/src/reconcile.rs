@@ -1052,12 +1052,15 @@ impl Pass<'_, '_> {
     fn restyle(&mut self, mounted: &Mounted) {
         let theme = self.env.theme;
         match (&mounted.node, &mounted.extra) {
-            (Node::Box { bg, border, .. }, Extra::Box { view, .. }) => {
+            (Node::Box { bg, border, .. }, Extra::Box { view, split, .. }) => {
                 if bg.is_some() {
                     view.bg(fill(theme, bg.as_ref()));
                 }
                 if let Some(border) = border {
                     bordered(view, theme, border);
+                }
+                if let Some(split) = split {
+                    split.restyle(theme);
                 }
             }
             (Node::Text { .. }, Extra::Text { .. }) => paint_text(mounted, theme),
@@ -1196,7 +1199,7 @@ impl Pass<'_, '_> {
                 }
                 let click = on_click.clone().map(|click| clickable(&view, click, env.act));
                 lay_out(&view, layout);
-                let split = split.map(|split| crate::behave::SplitState::attach(&view, split));
+                let split = split.map(|split| crate::behave::SplitState::attach(app, &view, split, theme));
                 (view.as_any(), Extra::Box { view, click, split })
             }
             Node::Text { spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click, .. } => {
