@@ -1126,6 +1126,16 @@ fn the_protocol_machine_refuses_what_the_header_forbids() {
                 r#"{"type":"draw","surface":0,"mount":{"surface":"s","key":"","generation":1},"canvas":"c","frame":{"width":1,"height":1,"cause":"first","dt":{"secs":0,"nanos":0}}}"#,
             )],
         ),
+        (
+            "a layout of a surface without one",
+            vec![call(
+                r#"{"type":"layout","surface":0,"geometry":{"rects":[],"scrolls":[],"groups":[],"tops":[],"moved_only":false,"reached":[]}}"#,
+            )],
+        ),
+        (
+            "a scroll event of a surface without a handler",
+            vec![call(r#"{"type":"scrolled","surface":0,"event":{"type":"user-scroll","scroll":"x"}}"#)],
+        ),
         ("a view of a mount that ended", vec![call(unmount), ok("null"), call(view)]),
         (
             "a call after a panic",
@@ -1185,6 +1195,17 @@ fn the_protocol_machine_refuses_what_the_header_forbids() {
     created(&mut protocol, r#"{"id":"p","commands":[],"fences":[],"slots":[],"routes":[],"storage":[]}"#);
     protocol.event(&Event::Call { instance: 1, request: br#"{"type":"message","message":"1"}"# });
     assert!(protocol.broken().is_some(), "a plugin without a handler got a message");
+    // A layout reads only, as a view does.
+    let mut protocol = Protocol::default();
+    created(
+        &mut protocol,
+        r#"{"id":"p","commands":[],"fences":[],"slots":[],"routes":[],"storage":[],"surfaces":[{"name":"s","place":{"type":"route","name":"s"},"layout":true}]}"#,
+    );
+    let layout = r#"{"type":"layout","surface":0,"geometry":{"rects":[],"scrolls":[],"groups":[],"tops":[],"moved_only":false,"reached":[]}}"#;
+    protocol.event(&Event::Call { instance: 1, request: layout.as_bytes() });
+    assert_eq!(protocol.broken(), None);
+    protocol.event(&toast);
+    assert!(protocol.broken().is_some(), "a layout was granted an effect");
     // A create that failed is never destroyed; one whose manifest the host refused is.
     let mut protocol = Protocol::default();
     protocol.event(&Event::Create { instance: 3, major: 2, minor: 0, features: b"[]", options: b"" });
