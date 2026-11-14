@@ -557,7 +557,9 @@ fn claimed(run: Run) -> Vec<(&'static str, Seen)> {
         };
         let cells =
             cells.into_iter().enumerate().filter(|(index, _)| !composer(*index)).map(|(_, cell)| cell).collect();
-        (cells, toasts, status)
+        // What the claimed parts hold, a library's memo tables as it counts them included, beside the plugin's status.
+        let held = opencode_plugin::claim::ledger();
+        (cells, toasts, format!("{status} claims {:?}", (held.mounts, held.content, held.memo_entries)))
     };
     let mut seen = Vec::new();
     emit("session.tool.input.started", serde_json::json!({ "id": "call_1", "name": "board" }));
@@ -599,6 +601,9 @@ fn a_claimed_part_is_equal_on_every_carrier() {
     let linked = claimed(Run::In(Carrier::Linked));
     // The guard: each checkpoint sees a new frame, and the claim draws.
     assert!(linked.windows(2).all(|pair| pair[0].1.0 != pair[1].1.0), "a checkpoint saw what the one before did");
+    // The finished call and the fence each hold their card's one memo value; the declined call holds none.
+    let (_, (_, _, status)) = linked.last().unwrap();
+    assert!(status.ends_with(", 2)"), "{status}");
     for run in [Run::In(CARRIERS[1]), Run::Library] {
         let other = claimed(run);
         for ((name, linked), (_, other)) in linked.iter().zip(&other) {
