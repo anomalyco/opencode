@@ -208,7 +208,6 @@ impl Tui {
             view.root().detach();
         }
         *self.route.borrow_mut() = route.clone();
-        crate::plugins::contain::navigated(self, &route);
         // A remount (a theme change) keeps the home's location.
         if route == Route::Home && !remount {
             crate::features::location::home(self);
@@ -243,6 +242,8 @@ impl Tui {
         crate::features::title::route_changed(self);
         crate::features::devtools::route_changed(self);
         crate::features::attention::program_status::sync(self);
+        // The new route's session and its prompt's text, restored or not, are what a restart brings back.
+        crate::plugins::contain::sync(self);
         self.app.request_redraw();
     }
 
