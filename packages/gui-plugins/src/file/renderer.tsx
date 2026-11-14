@@ -239,11 +239,13 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
 
     if (!screen) return
 
+    // A closed tab stops watching its file, so a cached copy can be stale: always reread, as links do. Before the tab
+    // opens: selecting it loads the file too, which joins this read, while forcing after that load would read it again.
+    void screen.file.sync(path, { force: true })
     // Not batched: the mobile tab strip must register the new tab before it leaves the browser, or Kobalte falls back
     // to the first tab and reselects it.
     layout.open(key(screen.file, path), session, options)
     dispatchPicker({ type: "file.opened", sessionKey: session.key })
-    void screen.file.sync(path)
   }
 
   const applySelection = (session: MountedSession, files: Files, path: string, selection: LineRange | undefined) => {
