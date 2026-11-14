@@ -75,6 +75,8 @@ thread_local! {
     /// of its views.
     static ONCE: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
     static FULL: RefCell<Vec<bool>> = const { RefCell::new(Vec::new()) };
+    /// `claim.a` leaves its card's last line out: what the oracle must see.
+    static SHORT: Cell<bool> = const { Cell::new(false) };
 }
 
 /// What the plugins call a part: a tool call by its id, and the one fence.
@@ -167,7 +169,11 @@ fn view_a(cx: &mut v2::View<'_>, part: &Part) -> Option<v2::Node> {
             }
         }
     }
-    Some(tree(part))
+    let mut tree = tree(part);
+    if let (true, v2::Node::Box { children, .. }) = (SHORT.get(), &mut tree) {
+        children.pop();
+    }
+    Some(tree)
 }
 
 fn view_b(_: &mut v2::View<'_>, part: &Part) -> Option<v2::Node> {
@@ -471,8 +477,8 @@ impl World {
 }
 
 /// `node` mounted fresh, `width` by `height`, in `theme`: ABI 1.x nodes through `node::add`, the host's mount path
-/// for plugin claims of 1.x, and Markdown as `opencode_ui` draws it. No reconcile.
-fn fresh(node: &v2::Node, width: u16, height: u16, theme: &Theme) -> Capture {
+/// for plugin claims of 1.x, and Markdown as `opencode_ui` draws it. No reconcile. Also the rows it takes.
+fn fresh(node: &v2::Node, width: u16, height: u16, theme: &Theme) -> (Capture, u32) {
     let app = TestApp::new(width, height);
     let parent = View::new(&app).column().width(Length::percent(100.0));
     app.root().add(&parent);
@@ -485,7 +491,8 @@ fn fresh(node: &v2::Node, width: u16, height: u16, theme: &Theme) -> Capture {
     };
     let mut hovers = Vec::new();
     node::add(&app, theme, &parent, &lower(node), &act, &mut hovers, &markdown, &mut |_, _| {});
-    app.render()
+    let capture = app.render();
+    (capture, parent.rect().height as u32)
 }
 
 /// The node as ABI 1.x has it: ids go.
@@ -536,14 +543,17 @@ fn lower(node: &v2::Node) -> abi::Node {
     }
 }
 
-/// Where `shown` differs from the fresh mount of `node`, if it does.
+/// Where `shown` differs from the fresh mount of `node` at its width, with room to grow: in its height, or a cell.
 fn region_diff(frame: &Capture, shown: &Shown, node: &v2::Node, theme: &Theme) -> Option<String> {
     let rect = shown.rect;
     let (x0, y0, width, height) = (rect.screen_x as u32, rect.screen_y as u32, rect.width as u32, rect.height as u32);
     if width == 0 || height == 0 || y0 + height > frame.height || x0 + width > frame.width {
         return Some(format!("{} is not on screen whole: {rect:?}", shown.id.key));
     }
-    let twin = fresh(node, width as u16, height as u16, theme);
+    let (twin, rows) = fresh(node, width as u16, HEIGHT, theme);
+    if rows != height {
+        return Some(format!("{} takes {height} rows, and a fresh mount {rows}", shown.id.key));
+    }
     let row = |capture: &Capture, x: u32, y: u32| -> String {
         (x..x + width).filter_map(|x| capture.cell(x, y)).map(|cell| cell.symbol.as_str()).collect()
     };
@@ -621,6 +631,8 @@ pub enum Command {
 struct Step {
     frame: Capture,
     mask: Option<(u32, u32, u32, u32)>,
+    /// The model says `claim.a` draws a part.
+    a_draws: bool,
     witness: Vec<(String, Vec<String>)>,
     views: Views,
 }
@@ -716,7 +728,11 @@ impl ClaimModel {
                 failure = Some(Failure { property: "ledger", site: "live", step, detail });
             }
             let (witness, views) = witness();
-            steps.push(Step { frame: world.frame(), mask: world.mask(), witness, views });
+            let a_draws = expected
+                .shown()
+                .iter()
+                .any(|(key, _)| key == "fence" || SLOTS.iter().any(|(id, name)| id == key && *name == "probe"));
+            steps.push(Step { frame: world.frame(), mask: world.mask(), a_draws, witness, views });
             log.push(faults);
         }
         drop(world);
@@ -733,6 +749,20 @@ impl ClaimModel {
 }
 
 impl ClaimModel {
+    /// Runs `commands` in a TUI with `claim.b` alone: the host's rows of every part `claim.a` would claim.
+    fn bare(&self, commands: &[Command]) -> Vec<Step> {
+        let world = World::with(vec![builtin(self.carrier, abi::Plugin { id: "claim.b", setup: plugin_b })]);
+        let mut expected = Expected::new();
+        commands
+            .iter()
+            .map(|command| {
+                world.send(command, &mut expected);
+                let (witness, views) = witness();
+                Step { frame: world.frame(), mask: world.mask(), a_draws: false, witness, views }
+            })
+            .collect()
+    }
+
     /// Whether `fault` fails the plugin, rather than the part: a panic on every carrier, and an overrun of a library,
     /// which P4c fails as an external plugin's (an overrun in process is a counted host bug).
     fn fails(&self, fault: Fault) -> bool {
@@ -774,6 +804,17 @@ impl Model for ClaimModel {
         let (twin, _, failure) = self.world(commands, Some(&fired));
         if let Some(failure) = failure {
             return Some(Failure { site: "twin", ..failure });
+        }
+        // Where no part of `claim.a` draws, the host's rows equal a TUI's that never had `claim.a`.
+        if !model::skipped("host") {
+            let bare = self.bare(commands);
+            let host = faulty.iter().zip(&bare).enumerate().find_map(|(step, (faulty, bare))| {
+                let diff = frame_diff(faulty, bare).filter(|_| !faulty.a_draws)?;
+                Some(Failure { property: "host", site: "cells", step, detail: diff })
+            });
+            if host.is_some() {
+                return host;
+            }
         }
         if model::skipped("isolation") {
             return None;
@@ -939,12 +980,26 @@ fn the_oracles_can_fail_on(carrier: Carrier) {
     assert_eq!(stream_whole(&world, &expected), Ok(1));
     expected.calls[0] = Call::Streaming(TOKENS[0].to_owned());
     assert!(matches!(stream_whole(&world, &expected), Err(("fresh", _))));
+    // A part that lost its last line is not the tree the model says, however its own rows compare.
+    expected.calls[0] = Call::Streaming(TOKENS[..2].concat());
+    SHORT.set(true);
+    world.send(&Command::Delta(0, 2), &mut expected);
+    SHORT.set(false);
+    assert!(matches!(stream_whole(&world, &expected), Err(("fresh", _))), "a short part passed");
+    world.send(&Command::Delta(0, 3), &mut expected);
+    assert_eq!(stream_whole(&world, &expected), Ok(1));
     drop(world);
 
     let commands = whole_stream(&[Command::Arm(Fault::Panic, 0)]);
     let (faulty, fired, _) = ClaimModel { carrier }.world(&commands, None);
     let (twin, _, _) = ClaimModel { carrier }.world(&commands, Some(&vec![Vec::new(); fired.len()]));
     assert!(faulty.iter().zip(&twin).any(|(faulty, twin)| frame_diff(faulty, twin).is_some()));
+
+    // Where `claim.a` draws, its frames are not the host's: the comparison with the TUI without it can fail.
+    let commands = whole_stream(&[]);
+    let (clean, _, _) = ClaimModel { carrier }.world(&commands, None);
+    let bare = ClaimModel { carrier }.bare(&commands);
+    assert!(clean.iter().zip(&bare).any(|(clean, bare)| clean.a_draws && frame_diff(clean, bare).is_some()));
 }
 
 // Expected: a part streaming several revisions in one frame gets one view at once and one at the next paint, with the
