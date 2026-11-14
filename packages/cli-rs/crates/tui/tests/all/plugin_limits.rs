@@ -1165,3 +1165,107 @@ fn a_kept_placeholder_that_fits_now_is_asked_for_again() {
         assert!(frame.cells == twin.cells, "{carrier:?}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
     }
 }
+
+/// Shows `phases` in the route, the first now and each next by a wake, under `limits`, and returns the last frame and
+/// the views and placeholders the revisions after the first took.
+fn revisions(harness: &Harness, limits: Limits, phases: Subject) -> (opentui::native::Capture, u64, u64) {
+    let _limits = limits::set(limits);
+    PHASE.with(|phase| phase.set(0));
+    show(harness, phases);
+    let (views, before) = (VIEWS.with(std::cell::Cell::get), reconcile::work());
+    next_phase(harness);
+    let frame = harness.app.render();
+    (frame, VIEWS.with(std::cell::Cell::get) - views, reconcile::work().since(before).placeholders)
+}
+
+fn phase() -> u8 {
+    PHASE.with(std::cell::Cell::get)
+}
+
+/// `lines` lines of code under `id`: two rows a line, and one for the node.
+fn code_lines(id: &str, lines: usize) -> v2::Node {
+    code(source(rust_lines(lines))).with_id(id)
+}
+
+// Expected (fixed rows; review carbon 1): a keep is admitted as the subtree it stands for. Keeps of nodes a placeholder
+// stood for, or that were in its run, which still do not fit, show the one placeholder of their run and ask for no
+// whole tree; a keep counts the rows its subtree built; a keep of a node opened to admit its children asks for it again
+// once it fits whole. Each against the twin, with every limit lifted, drawing the tree the contract says; on both
+// carriers.
+#[test]
+fn a_keep_is_admitted_as_the_subtree_it_stands_for() {
+    let keyed = |count: usize| (0..count).map(|index| text(&format!("m{index}")).with_id(format!("m{index}")));
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        let twin = |subject: Subject| {
+            let _limits = support::unlimited();
+            show(&harness, subject)
+        };
+        let same = |name: &str, frame: &opentui::native::Capture, twin: opentui::native::Capture| {
+            assert!(frame.cells == twin.cells, "{carrier:?}, {name}\n{}\n---\n{}", frame.text(), twin.text());
+        };
+        // Seven keyed rows in room for six nodes: m4 is the placeholder, m5 and m6 its run. A revision that keeps all
+        // seven under a new head keeps that shape, in one view and with one placeholder.
+        let (frame, views, placeholders) = revisions(
+            &harness,
+            Limits { nodes: 6, ..small() },
+            subject(move |_| match phase() {
+                0 => v2::Node::column([text("h0")].into_iter().chain(keyed(7)).collect()),
+                _ => v2::Node::column(
+                    [text("h1")]
+                        .into_iter()
+                        .chain((0..7).map(|index| v2::Node::Keep { key: format!("m{index}") }))
+                        .collect(),
+                ),
+            }),
+        );
+        let mut shown: Vec<v2::Node> = [text("h1")].into_iter().chain(keyed(4)).collect();
+        shown.push(placeholder(Some("m4"), "too many nodes"));
+        same("absorbed keeps", &frame, twin(subject(move |_| v2::Node::column(shown.clone()))));
+        assert_eq!((views, placeholders), (1, 1), "{carrier:?}: absorbed keeps, views and placeholders");
+        // A placeholder past the rows, kept beside a node that is past them too: one placeholder.
+        let (frame, _, placeholders) = revisions(
+            &harness,
+            Limits { text: 1 << 20, ..small() },
+            subject(move |_| match phase() {
+                0 => v2::Node::column(vec![code_lines("f", 30), code_lines("b", 30), text("c")]),
+                _ => {
+                    v2::Node::column(vec![code_lines("f", 20), v2::Node::Keep { key: "b".into() }, code_lines("z", 30)])
+                }
+            }),
+        );
+        let shown =
+            || v2::Node::column(vec![code_lines("f", 20), placeholder(Some("b"), "too large to build at once")]);
+        same("kept placeholder", &frame, twin(subject(move |_| shown())));
+        assert_eq!(placeholders, 1, "{carrier:?}: kept placeholder, placeholders");
+        // A keep counts its rows: the code beside it is past them.
+        let (frame, ..) = revisions(
+            &harness,
+            Limits { text: 1 << 20, ..small() },
+            subject(move |_| match phase() {
+                0 => v2::Node::column(vec![code_lines("k", 30)]),
+                _ => v2::Node::column(vec![v2::Node::Keep { key: "k".into() }, code_lines("z", 30)]),
+            }),
+        );
+        let shown =
+            || v2::Node::column(vec![code_lines("k", 30), placeholder(Some("z"), "too large to build at once")]);
+        same("kept rows", &frame, twin(subject(move |_| shown())));
+        // A box opened in room for five nodes, kept once there is room for it whole: asked for again, and whole.
+        let outer = move || v2::Node::column(keyed(6).collect()).with_id("outer");
+        let phases = subject(move |cx| match (phase(), cx.input.full) {
+            (0, _) | (_, true) => v2::Node::column(vec![outer()]),
+            _ => v2::Node::column(vec![v2::Node::Keep { key: "outer".into() }]),
+        });
+        {
+            let _limits = limits::set(Limits { nodes: 5, ..small() });
+            PHASE.with(|phase| phase.set(0));
+            show(&harness, phases);
+        }
+        let frame = {
+            let _limits = limits::set(small());
+            next_phase(&harness);
+            harness.app.render()
+        };
+        same("opened box", &frame, twin(subject(move |_| v2::Node::column(vec![outer()]))));
+    }
+}

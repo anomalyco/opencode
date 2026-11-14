@@ -223,9 +223,21 @@ pub struct Tree {
     charged: Option<(Rc<str>, u64)>,
     /// What the last apply put placeholders in place of, for [`Tree::admitted`].
     over: Placeholders,
-    /// The ids whose nodes were placeholders past the tree's nodes or rows, and what their subtrees cost: a keep of
-    /// one that would fit now asks for a whole tree (review bigboi 5).
-    substituted: HashMap<String, (u64, u64)>,
+    /// What a keep of each id stands for, beside the nodes the tree holds under it ([`Admitted`]).
+    admitted: Admitted,
+}
+
+/// What a keep of an id of the tree stands for, as validation admitted its nodes: a keep is admitted as the subtree it
+/// stands for would be (reviews bigboi 5, carbon 1).
+#[derive(Clone, Debug, Default)]
+struct Admitted {
+    /// The ids of nodes past the tree's nodes or rows, whose subtree no widget holds: one a placeholder took, one in
+    /// the run it stands for, or one inside either; with the nodes and rows of their subtree.
+    missing: HashMap<String, (u64, u64)>,
+    /// The ids of the nodes opened to admit their children one by one, with the nodes and rows of their whole subtree.
+    opened: HashMap<String, (u64, u64)>,
+    /// The rows the subtree under each id built.
+    rows: HashMap<String, u64>,
 }
 
 /// What the tree holds under an id: the nearest ancestor with an id, the layout levels its subtree takes, the nodes
@@ -347,8 +359,8 @@ struct Plan {
     over: Placeholders,
     /// The nodes the tree holds, as charged to its plugin.
     nodes: u64,
-    /// The ids of placeholders past the nodes or rows, and what their subtrees cost.
-    substituted: HashMap<String, (u64, u64)>,
+    /// What a keep of each id stands for.
+    admitted: Admitted,
 }
 
 /// The nodes of a tree being adopted that are over a limit, by address, each with the placeholder that stands for
@@ -414,7 +426,7 @@ impl Tree {
         self.slots_changed = pass.slots_changed;
         self.ids.clear();
         collect_ids(&self.nodes, None, &mut self.ids);
-        (self.over, self.substituted) = (plan.over, plan.substituted);
+        (self.over, self.admitted) = (plan.over, plan.admitted);
         Ok(())
     }
 
@@ -473,7 +485,7 @@ impl Tree {
             changed |= has_slot(&node);
         }
         self.ids.clear();
-        self.substituted.clear();
+        self.admitted = Admitted::default();
         self.slots_changed = changed;
         self.uncharge();
     }
@@ -650,7 +662,7 @@ impl Tree {
             room: (u64, u64),
             used: (u64, u64),
             over: HashMap<*const Node, Option<Node>>,
-            substituted: HashMap<String, (u64, u64)>,
+            admitted: Admitted,
         }
         impl<'a> Walk<'a, '_> {
             /// `item` is the list and the item whose data the nodes are in: a keep there names a node of that item,
@@ -673,47 +685,64 @@ impl Tree {
                         if self.env.full {
                             return Err(Refused::Kept(key.clone()));
                         }
-                        let held = self.tree.ids.get(key).ok_or_else(|| Refused::Unknown(key.clone()))?;
-                        if held.item.as_ref().map(|(list, item)| (list.as_str(), item.as_str())) != item {
+                        let missing = self.tree.admitted.missing.get(key.as_str()).copied();
+                        let held = self.tree.ids.get(key);
+                        if held.is_none() && missing.is_none() {
                             return Err(Refused::Unknown(key.clone()));
+                        }
+                        if let Some(held) = held {
+                            if held.item.as_ref().map(|(list, item)| (list.as_str(), item.as_str())) != item {
+                                return Err(Refused::Unknown(key.clone()));
+                            }
+                            if above + held.depth > MAX_DEPTH {
+                                return Err(Refused::Deep);
+                            }
                         }
                         if self.keeps.contains(key.as_str()) || self.ids.contains(key.as_str()) {
                             return Err(Refused::Duplicate(key.clone()));
                         }
-                        if above + held.depth > MAX_DEPTH {
-                            return Err(Refused::Deep);
-                        }
                         // A keep inside a placeholder's subtree is checked and not held again.
                         if mode == Mode::Dropped {
                             self.keeps.insert(key);
+                            self.admitted.missing.insert(key.clone(), missing.unwrap_or((cost.nodes, cost.rows)));
                             continue;
                         }
-                        // A placeholder past the nodes or rows that would fit now is asked for again.
-                        if let Some((nodes, rows)) = self.tree.substituted.get(key.as_str())
-                            && self.fits(&Cost { nodes: *nodes, rows: *rows, ..cost }, built)
+                        // A node a placeholder stood for, or a subtree opened, that would fit whole now is asked for
+                        // again: the tree holds no widget of what it stands for.
+                        let opened = self.tree.admitted.opened.get(key.as_str()).copied();
+                        if let Some((nodes, rows)) = missing.or(opened)
+                            && (mode == Mode::Admitted || self.fits(&Cost { nodes, rows, ..cost }, built))
                         {
                             return Err(Refused::Unknown(key.clone()));
                         }
-                        if mode == Mode::Admitted || self.fits(&cost, built) {
+                        // What the tree holds under the id, as it holds it.
+                        let rows = self.tree.admitted.rows.get(key.as_str()).copied().unwrap_or(0);
+                        let mounted = held.map(|held| Cost { nodes: held.nodes, rows, ..cost });
+                        if let (None, Some(mounted)) = (missing, mounted)
+                            && (mode == Mode::Admitted || self.fits(&mounted, built))
+                        {
                             self.keeps.insert(key);
                             self.held.insert(key);
                             if mode == Mode::Count {
-                                self.used.0 += cost.nodes;
+                                self.used.0 += mounted.nodes;
+                                self.used.1 += if built { mounted.rows } else { 0 };
+                            }
+                            self.admitted.rows.insert(key.clone(), mounted.rows);
+                            if let Some(opened) = opened {
+                                self.admitted.opened.insert(key.clone(), opened);
                             }
                             continue;
                         }
-                        // A kept subtree cannot be opened: the placeholder takes its id, and the subtree goes where
-                        // the tree had it.
+                        // Past the nodes or rows: the first of a run is the placeholder, under the id, and the subtree
+                        // the tree had goes where it was; the others are in its run.
                         self.ids.insert(key);
                         let stands = !std::mem::replace(absorbing, true);
-                        if stands && built && held.item.is_none() {
+                        if stands && built && held.is_some_and(|held| held.item.is_none()) {
                             self.moves.insert(key);
                         }
-                        if stands {
-                            let was = self.tree.substituted.get(key.as_str()).copied();
-                            self.substituted.insert(key.clone(), was.unwrap_or((cost.nodes, 0)));
-                        }
-                        let placeholder = stands.then(|| placeholder(Some(key), &Over::Nodes));
+                        self.admitted.missing.insert(key.clone(), missing.unwrap_or((cost.nodes, cost.rows)));
+                        let over = if self.used.0 + cost.nodes > self.room.0 { Over::Nodes } else { Over::Rows };
+                        let placeholder = stands.then(|| placeholder(Some(key), &over));
                         self.over.insert(std::ptr::from_ref(node), placeholder);
                         continue;
                     }
@@ -762,8 +791,14 @@ impl Tree {
                     {
                         return Err(Refused::Content(*content));
                     }
+                    let start = self.used.1;
                     let (inner, stands) = match mode {
-                        Mode::Dropped => (Mode::Dropped, false),
+                        Mode::Dropped => {
+                            if let Some(id) = node.id() {
+                                self.admitted.missing.insert(id.to_owned(), (cost.nodes, cost.rows));
+                            }
+                            (Mode::Dropped, false)
+                        }
                         _ => match self.admit(node, source, &cost, built, mode) {
                             Ok(inner) => (inner, true),
                             Err(over) => {
@@ -776,8 +811,8 @@ impl Tree {
                                     self.used.0 += 1;
                                     self.used.1 += u64::from(built);
                                 }
-                                if let (true, true, Some(id)) = (stands, counted, node.id()) {
-                                    self.substituted.insert(id.to_owned(), (cost.nodes, cost.rows));
+                                if let (true, Some(id)) = (counted, node.id()) {
+                                    self.admitted.missing.insert(id.to_owned(), (cost.nodes, cost.rows));
                                 }
                                 self.over
                                     .insert(std::ptr::from_ref(node), stands.then(|| placeholder(node.id(), &over)));
@@ -803,6 +838,15 @@ impl Tree {
                             let entry = std::slice::from_ref(&entry.node);
                             self.nodes(entry, depth, Some((list, key)), inner, &mut absorbing)?;
                         }
+                    }
+                    // What a keep of the id stands for: a node opened stands for its whole subtree, and the subtree
+                    // under an id built the rows its nodes took.
+                    if let (Some(id), true) = (node.id(), stands) {
+                        if mode == Mode::Count && inner == Mode::Count {
+                            self.admitted.opened.insert(id.to_owned(), (cost.nodes, cost.rows));
+                        }
+                        let rows = if mode == Mode::Count { self.used.1 - start } else { cost.rows };
+                        self.admitted.rows.insert(id.to_owned(), rows);
                     }
                 }
                 Ok(())
@@ -895,14 +939,14 @@ impl Tree {
             room: (nodes_room, limits.rows),
             used: (0, 0),
             over: HashMap::new(),
-            substituted: HashMap::new(),
+            admitted: Admitted::default(),
         };
         walk.nodes(nodes, 0, None, Mode::Count, &mut false)?;
         let moves = walk.moves.iter().map(|id| (*id).to_owned()).collect();
         let (over, used) = (Rc::new(std::mem::take(&mut walk.over)), walk.used.0);
-        let substituted = std::mem::take(&mut walk.substituted);
+        let admitted = std::mem::take(&mut walk.admitted);
         if walk.keeps.is_empty() {
-            return Ok(Plan { keeps: HashSet::new(), moves, over, nodes: used, substituted });
+            return Ok(Plan { keeps: HashSet::new(), moves, over, nodes: used, admitted });
         }
         // An id of the tree, or a keep, may not be one inside a subtree it keeps. Each ancestor is checked once.
         let mut clear: HashSet<&str> = HashSet::new();
@@ -921,7 +965,7 @@ impl Tree {
             }
             clear.extend(chain);
         }
-        Ok(Plan { keeps: walk.held.into_iter().map(str::to_owned).collect(), moves, over, nodes: used, substituted })
+        Ok(Plan { keeps: walk.held.into_iter().map(str::to_owned).collect(), moves, over, nodes: used, admitted })
     }
 
     /// Pushes the cost of `node` and of each node under it, in the order [`Tree::validate`] walks them, and returns
@@ -930,10 +974,15 @@ impl Tree {
     fn measure(&self, env: &Env<'_>, node: &Node, above: u16, built: bool, costs: &mut Vec<Cost>) -> (u64, u64) {
         let index = costs.len();
         costs.push(Cost::default());
+        // A keep costs what it stands for: a node a placeholder stood for, or a subtree opened, its whole subtree;
+        // else what the tree holds under it.
         if let Node::Keep { key } = node {
-            let nodes = self.ids.get(key).map_or(1, |held| held.nodes);
-            costs[index] = Cost { nodes, ..Cost::default() };
-            return (nodes, 0);
+            let admitted = &self.admitted;
+            let held =
+                || (self.ids.get(key).map_or(1, |held| held.nodes), admitted.rows.get(key).copied().unwrap_or(0));
+            let (nodes, rows) = admitted.missing.get(key).or(admitted.opened.get(key)).copied().unwrap_or_else(held);
+            costs[index] = Cost { nodes, rows, ..Cost::default() };
+            return (nodes, if built { rows } else { 0 });
         }
         let mut cost = if built { text_cost(env, node) } else { Cost::default() };
         let depth = above + weight(node);
