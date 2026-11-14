@@ -2032,9 +2032,9 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(list).toBeVisible()
 })
 
-test("providers: adding an account starts a lone method once", async ({ page, context }) => {
+test("providers: account sign-ins distinguish reauthorization from Add account", async ({ page, context }) => {
   await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
-  const attempts: string[] = []
+  const attempts: Array<{ integrationID: string; body: unknown }> = []
 
   const { settings } = await open(page, {
     integrations: [
@@ -2049,11 +2049,27 @@ test("providers: adding an account starts a lone method once", async ({ page, co
         id: "github-copilot",
         name: "GitHub Copilot",
         methods: [{ id: "device", type: "oauth", label: "GitHub" }],
-        connections: [{ type: "credential", id: "cred_gh", label: "Octocat", method: "oauth" }],
+        connections: [
+          { type: "credential", id: "cred_gh", label: "Octocat", method: "oauth" },
+          {
+            type: "credential",
+            id: "cred_other",
+            label: "Other account",
+            method: "oauth",
+            status: { status: "needs_auth", message: "Sign in again" },
+          },
+          {
+            type: "credential",
+            id: "cred_key",
+            label: "Legacy key",
+            method: "key",
+            status: { status: "needs_auth", message: "Sign in again" },
+          },
+        ],
       },
     ],
     onIntegrationOAuth: (input) => {
-      attempts.push(input.integrationID)
+      attempts.push({ integrationID: input.integrationID, body: input.body })
 
       return { url: "https://auth.example.test/device?user_code=GH12-3456" }
     },
@@ -2071,11 +2087,27 @@ test("providers: adding an account starts a lone method once", async ({ page, co
   await expect(dialog.getByRole("radio", { name: "Go key", exact: true })).toBeVisible()
   await dialog.getByRole("navigation").getByRole("button", { name: "Connect", exact: true }).click()
   await dialog.locator('[data-provider-id="github-copilot"]').click()
+  const reauthorize = page.waitForEvent("popup")
+  await dialog.getByRole("radio", { name: /^Other account\b/ }).click()
+  await reauthorize
+  await expect
+    .poll(() => attempts)
+    .toEqual([
+      { integrationID: "github-copilot", body: { methodID: "device", credentialID: "cred_other" } },
+    ])
+  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
+  const keySignIn = page.waitForEvent("popup")
+  await dialog.getByRole("radio", { name: /^Legacy key\b/ }).click()
+  await keySignIn
+  await expect.poll(() => attempts).toHaveLength(2)
+  expect(attempts[1]).toEqual({ integrationID: "github-copilot", body: { methodID: "device" } })
+
+  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
   const popup = page.waitForEvent("popup")
   await dialog.getByRole("button", { name: "Add account", exact: true }).click()
   await popup
-  await expect.poll(() => attempts).toEqual(["github-copilot"])
-  expect(attempts).toEqual(["github-copilot"])
+  await expect.poll(() => attempts).toHaveLength(3)
+  expect(attempts[2]).toEqual({ integrationID: "github-copilot", body: { methodID: "device" } })
 })
 
 test("providers: Back from a pending sign-in cancels it and lets a backdrop click close the list", async ({

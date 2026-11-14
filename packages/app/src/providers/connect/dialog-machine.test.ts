@@ -617,6 +617,49 @@ test("a lone method waits on the accounts list and starts once Add account is ch
   expect(selectProviderDialogView(replay([goBack(added.state)], added.state).state).frame).toBe("accounts")
 })
 
+test("reauthorization keeps the selected account across retries", () => {
+  const picked = replay([selected("openai", true, accounts(2))])
+  const listed = replay([loaded(picked.state, [oauth])], picked.state)
+  const started = replay([{ type: "account.reauthorize", accountID: "cred_2" }], listed.state)
+
+  expect(started.effects).toContainEqual(
+    expect.objectContaining({
+      type: "connect.effect",
+      credentialID: "cred_2",
+      effect: expect.objectContaining({ type: "start" }),
+    }),
+  )
+
+  const failed = replay(
+    [
+      result(started.state, {
+        type: "start.failed",
+        attempt: connectEffect(started.effects, "start").attempt,
+        error: "Try again",
+      }),
+    ],
+    started.state,
+  )
+
+  const retried = replay([{ type: "connect.input", event: { type: "retry" } }], failed.state)
+
+  expect(retried.effects).toContainEqual(
+    expect.objectContaining({ credentialID: "cred_2", effect: expect.objectContaining({ type: "start" }) }),
+  )
+})
+
+test("reauthorization retains the selected account when returning to the method picker", () => {
+  const picked = replay([selected("openai", true, accounts(2))])
+  const listed = replay([loaded(picked.state, [oauth, key])], picked.state)
+  const chosen = replay([{ type: "account.reauthorize", accountID: "cred_2" }], listed.state)
+  const started = replay([{ type: "connect.input", event: { type: "method.selected", index: 0 } }], chosen.state)
+  const backed = replay([goBack(started.state)], started.state)
+  const restarted = replay([{ type: "connect.input", event: { type: "method.selected", index: 0 } }], backed.state)
+  expect(restarted.effects).toContainEqual(
+    expect.objectContaining({ credentialID: "cred_2", effect: expect.objectContaining({ type: "start" }) }),
+  )
+})
+
 test("a standalone dialog has no way back to the provider list", () => {
   const opened = replay([selected("opencode-go", false)], createProviderDialogState({ standalone: true }))
   const entering = replay([loaded(opened.state, [key])], opened.state)

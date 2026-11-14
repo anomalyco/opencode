@@ -42,6 +42,7 @@ export type ProviderDialogStep =
   | {
       readonly kind: "connect"
       readonly returnTo: ProviderReturnTarget
+      readonly credentialID?: string
       /** The result of copying the Console sign-in link, for the authorization it was copied from. */
       readonly copy?: { readonly attemptID: string; readonly copied: boolean }
       readonly connect: ProviderConnectState
@@ -124,6 +125,7 @@ export type ProviderDialogEvent =
     }
   | { readonly type: "accounts.synced"; readonly accounts: ProviderAccounts }
   | { readonly type: "account.add" }
+  | { readonly type: "account.reauthorize"; readonly accountID: string }
   | { readonly type: "account.rename.started"; readonly accountID: string }
   | { readonly type: "account.rename.closed" }
   | { readonly type: "account.remove.prompted"; readonly accountID: string }
@@ -153,6 +155,7 @@ export type ProviderDialogEvent =
 export type ProviderDialogEffect =
   | {
       readonly type: "connect.effect"
+      readonly credentialID?: string
       readonly session: number
       readonly provider: string
       readonly effect: Exclude<ProviderConnectEffect, { type: "complete" }>
@@ -498,7 +501,18 @@ function back(state: ProviderState): ProviderDialogTransition {
 
   const returnTo = step.kind === "accounts" ? "picker" : step.returnTo
 
-  return { state: { ...state, step: { kind: "connect", returnTo, connect: result.state } }, effects }
+  return {
+    state: {
+      ...state,
+      step: {
+        kind: "connect",
+        returnTo,
+        connect: result.state,
+        credentialID: step.kind === "connect" ? step.credentialID : undefined,
+      },
+    },
+    effects,
+  }
 }
 
 function synced(state: ProviderState, accounts: ProviderAccounts): ProviderDialogTransition {
@@ -606,7 +620,7 @@ function account(
     }
   }
 
-  if (event.type !== "account.add") return unchanged(state)
+  if (event.type !== "account.add" && event.type !== "account.reauthorize") return unchanged(state)
 
   // Like the TUI: a lone method starts directly, several show the method list. Claude Agent shows its setup first.
   if (state.provider === CLAUDE_AGENT_INTEGRATION)
@@ -619,7 +633,12 @@ function account(
 
   if (methods.length === 0) return unchanged(state)
 
-  const next: ProviderDialogStep = { kind: "connect", returnTo: "accounts", connect: step.connect }
+  const next: ProviderDialogStep = {
+    kind: "connect",
+    returnTo: "accounts",
+    connect: step.connect,
+    credentialID: event.type === "account.reauthorize" ? event.accountID : undefined,
+  }
 
   if (methods.length > 1) return unchanged({ ...state, step: next })
 
@@ -706,7 +725,11 @@ function connectTransition(
   catalog?: ProviderCatalogSnapshot,
 ): ProviderDialogTransition {
   const complete = result.effects.find((effect) => effect.type === "complete")
-  const effects = [...settleCancel(step.connect, result.state), ...wrap(state.session, state.provider, result)]
+
+  const effects = [
+    ...settleCancel(step.connect, result.state),
+    ...wrap(state.session, state.provider, result, step.kind === "connect" ? step.credentialID : undefined),
+  ]
 
   if (result.state === step.connect && complete === undefined) return unchanged(state, effects)
 
@@ -847,10 +870,19 @@ function settleCancel(prev: ProviderConnectState, next: ProviderConnectState): P
   return [{ type: "settle.cancel" }]
 }
 
-function wrap(session: number, provider: string, result: ProviderConnectTransition): ProviderDialogEffect[] {
-  return result.effects.flatMap((effect) =>
-    effect.type === "complete" ? [] : [{ type: "connect.effect", session, provider, effect } as const],
-  )
+function wrap(
+  session: number,
+  provider: string,
+  result: ProviderConnectTransition,
+  credentialID?: string,
+): ProviderDialogEffect[] {
+  return result.effects.flatMap((effect) => {
+    if (effect.type === "complete") return []
+
+    if (credentialID === undefined) return [{ type: "connect.effect", session, provider, effect } as const]
+
+    return [{ type: "connect.effect", session, provider, effect, credentialID } as const]
+  })
 }
 
 function current(state: ProviderDialogState, session: number) {
