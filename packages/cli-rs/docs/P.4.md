@@ -457,35 +457,56 @@ saved, as in TS.
 With `OPENCODE_PLUGIN_JS=1` and Bun found (`OPENCODE_BUN`, or `bun` on the path), a directory target without a native
 build runs on the JS host: one Bun process for every TypeScript TUI plugin, started with the first one
 (`crates/plugin/src/pipe`, rich-plugins 3.7 and 4.3). It loads the directory's TUI module as TS does (`package.json`
-`name` and `exports`, else `tui.ts` and its kin) and runs its V2 `{ id, setup }` default export. The setup context has
-what maps onto contract 2.0 without Solid: `options`, `app`, `themeMode`, `keymap.layer` commands, `ui.toast`,
-`data.on`; and, under `Symbol.for("opencode.carrier")`, the carrier the V2 compatibility layer (P8) builds the rest on:
-`surface(name, place, view, { palette, notify, onScroll })` with views that return contract 2.0 trees (`memo`,
-`content`), `command`, `on`, `effect` (any host request), `watch`/`read` (snapshots), `invalidate`, `fetch`.
+`name` and `exports`, else `tui.ts` and its kin) by file URL and describes its V2 `{ id, setup }` default export; its
+setup runs only once the loader knows the plugin is enabled, so a plugin that `cli.json` disables runs nothing. Each
+load imports the plugin's modules afresh, its helpers included, and a reload's setup runs on a candidate: the running
+version answers until the candidate's setup returned, and stays when it throws. The setup context has what maps onto
+contract 2.0 without Solid: `options`, `app` (the client's version and channel), `themeMode` (as the theme changes),
+`keymap.layer` commands (with their scope), `ui.toast` (with its session), `data.on` (with a disposer); and, under
+`Symbol.for("opencode.carrier")`, the carrier the V2 compatibility layer (P8) builds the rest on:
+`surface(name, place, view, { palette, notify, on, layers })` with views that return contract 2.0 trees (`memo`, nested
+too, `content`, `release`) on a route, a slot, a panel or an overlay; `layer(layer, handler)`; `command`, `on`,
+`storage(keys)`, `effect` (any host request, P2's `open-panel`, `overlay`, `focus`, `set-mode`, `release-keys` among
+them), `watch`/`unwatch`/`read` (snapshots, at most 64), `invalidate`, `fetch`.
 
 A project's TypeScript plugin waits for approval as a native build does (below): its artifact is the directory and a
-hash of its files, and nothing of it reaches the JS host before. The JS host's standard output is the protocol's: a
-plugin's `console` and `process.stdout`, its own modules' and its dependencies' included, write to the JS host's standard
-error, which the client logs; only a write to the descriptor itself (`fs.writeSync(1, …)`) breaks the protocol, which
-ends the JS host and fails the plugin that wrote it.
+SHA-256 of every file in it, hidden ones and `node_modules` included, and nothing of it reaches the JS host before. A
+file outside the directory that it imports is not part of what was approved. Safe mode holds a TypeScript plugin as it
+holds a library. The JS host's standard output is the protocol's: a plugin's `console` (every method) and
+`process.stdout`, its own modules' and its dependencies' included, write to the JS host's standard error, which the
+client logs; only a write to the descriptor itself (`fs.writeSync(1, …)`) breaks the protocol, which ends the JS host
+and fails the plugin that wrote it. A plugin that gives the host what is not JSON (a `BigInt`, a cycle) fails alone.
 
 It is the second timing tier. No frame waits for the JS host:
 
-- **Events** (commands, events, scroll events, replies) cross with a sequence. The JS host acknowledges each on
-  receipt and answers when the handler returned, with its effects, which apply then, in order. A handler that throws
-  has none and fails its plugin, as a panic does in process.
+- **Events** (commands, events, input, replies) cross with a sequence. The JS host acknowledges each on receipt, says
+  when it starts one, and answers once the handler returned and the views it made due were sent, with its effects,
+  which apply then, in order (at most 256). A handler that throws has none and fails its plugin, as a panic does in
+  process.
+- **Input** (P2): a key, a paste or a press cannot wait a round trip, so the host answers from what the plugin declared:
+  a bind's key, a paste of a layer that takes pastes and a pointer event on a node that asks for them are consumed; a
+  key of a listener of every key goes on, and the handler only hears it. The handler's answer is advisory. A key that
+  changes how the next ones route (a mode switch) declares `hold`: the keys after it wait until its `release-keys`
+  effect applied, or 50 ms. A handler's effects are its mount's: the overlay it opens, the focus, its mode.
 - **Trees** are revisions of a mount, one in flight: the host adopts it in its next frame, or refuses it and gets a
   whole one. Until a mount's first tree it shows a placeholder that keeps the rows its key had (or one); while a new
   one is on its way, the last.
-- **Reads** are snapshots the host pushes for what the plugin watches, before each event and each change. There is no
-  `layout` call and no canvas draw.
-- **Hold**: a command that declares `hold` holds the keys typed after it until its handler returned, or 50 ms.
-- **Supervision**: the queues are bounded (1 MiB queued to the JS host; 256 unread messages and 8 MiB from it; 8
-  unread trees, after which it waits), an event or a handler unanswered after 1 s (a load or setup: 10 s) ends it, as
-  does a resident set over 512 MiB. Its process group is killed with it, it dies with the client (Linux
-  `PR_SET_PDEATHSIG`; a job object on Windows; the end of its input everywhere). The plugin whose handler ran when it
-  ended fails, as does one that flooded the host with effects; the others are set up again on a new JS host, their
-  surfaces keeping their last trees meanwhile. Three ends in a minute fail every plugin on it.
+- **Reads** are snapshots the host pushes for what the plugin watches, before each event, after each call's effects
+  and at each change. There is no `layout` call and no canvas draw.
+- **Hold**: a command that declares `hold` holds the keys typed after it until its handler's effects applied, or 50
+  ms; the hold is the JS host's, one at a time, of at most 64 keys, the oldest dropped. The reserved chord is never
+  held: it ends the hold, drops what it kept, and reaches the host.
+- **Supervision**: the queues are bounded. To the JS host, 1 MiB is queued and what does not fit waits in an overflow
+  of 8 MiB that drains as it reads, past which a message is refused (a handler's call answered with nothing); nothing
+  ends for it. From it, 256 unread messages and 8 MiB, and 8 unread trees, after which it blocks in its write. A JS host
+  that owes an answer and sends nothing for 1 s (a started load or setup: 10 s) is hung, so a queue that moves is not;
+  hung, or over a resident set of 512 MiB, it is ended. Its process group is killed with it, and it dies with the
+  client (Linux `PR_SET_PDEATHSIG`; a job object on Windows; elsewhere a thread of its own that watches its parent; the
+  end of its input everywhere). The plugin whose work it said it ran when it ended fails (a handler, a view, a
+  cleanup, a setup), as does one that flooded the host with effects; a memory end names nobody. The others are set up
+  again on a new JS host with new state, their surfaces keeping their last trees meanwhile, and get the calls the old
+  one never started, in order, once each; the one it ran is not run again. Their modes end with it. Three ends in a
+  minute fail every plugin on it.
 
 ### Approval of a project's plugins
 
