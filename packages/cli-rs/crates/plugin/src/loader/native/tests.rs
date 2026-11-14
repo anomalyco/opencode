@@ -2081,7 +2081,12 @@ fn panicky_run(at: &'static str, leak: (&'static str, bool), through: bool) -> (
         }
         "wake" => {
             PANICKY_WAKER.take().unwrap().wake();
-            assert!(host.app.wait_until(Duration::from_secs(10), || WOKEN.get() > 0), "no wake");
+            // The wake handlers run as a paint starts.
+            let woken = || {
+                host.app.render();
+                WOKEN.get() > 0
+            };
+            assert!(host.app.wait_until(Duration::from_secs(10), woken), "no wake");
         }
         "render" | "mount" => {
             mounted.push(registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {}));
