@@ -298,6 +298,23 @@ function settled(
       effects: [{ type: "end-toggle", attempt: event.attempt, ok: true }, ...back],
     }
 
+  // Auto-retry logic for failed/timed-out connections
+  const MAX_RETRIES = 3
+  const currentToggle = state.toggles.find((t) => t.name === event.name && t.attempt === event.attempt)
+  const attemptNumber = currentToggle?.attempt ?? event.attempt
+
+  if ((event.type === "toggle.failed" || event.type === "toggle.timed-out") && attemptNumber < MAX_RETRIES) {
+    const nextAttempt = attemptNumber + 1
+    return {
+      state: next,
+      effects: [
+        { type: "end-toggle", attempt: event.attempt, ok: false },
+        { type: "run-toggle", name: event.name, attempt: nextAttempt, enabled: true, timeoutMs: MCP_TOGGLE_TIMEOUT_MS },
+        ...(event.type === "toggle.timed-out" ? [{ type: "toast-timed-out", name: event.name }] : []),
+      ],
+    }
+  }
+
   const end: McpEffect = { type: "end-toggle", attempt: event.attempt, ok: false }
 
   if (event.type === "toggle.timed-out")
