@@ -1717,6 +1717,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
             layers: claim.layers.clone(),
             panel: matches!(place.at, v2::Place::Panel(_)),
             mounts: claim.mounts,
+            activation: guest.owners.input.clone(),
         });
         let remote = Rc::new(Remote { guest: guest.clone(), index, draw: claim.draw });
         setup.surface(place, remote, commands, fail, calls, &guest.owners, input);
