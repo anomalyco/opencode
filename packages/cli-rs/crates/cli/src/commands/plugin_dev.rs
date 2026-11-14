@@ -169,8 +169,7 @@ fn artifact(messages: &str) -> Option<PathBuf> {
         })
         .flat_map(|message| message["filenames"].as_array().cloned().unwrap_or_default())
         .filter_map(|file| file.as_str().map(PathBuf::from))
-        .filter(|file| file.extension().is_some_and(|extension| extension == std::env::consts::DLL_EXTENSION))
-        .last()
+        .rfind(|file| file.extension().is_some_and(|extension| extension == std::env::consts::DLL_EXTENSION))
 }
 
 /// Copies `artifact` to the library the TUI loads, in one rename, so the plugin watcher never reads half a file.
