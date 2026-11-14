@@ -1827,26 +1827,26 @@ ToolRegistry.register({
       open()
     }
 
+    // Mirrors the subagent's finished notice so a child Session reads as started … finished in the timeline.
     const trigger = () => (
-      <div data-component="task-tool-card">
-        <div data-component="task-tool-surface">
-          <div data-slot="basic-tool-tool-info-structured">
-            <div data-slot="basic-tool-tool-info-main">
-              <Show when={view().running}>
-                <SessionProgressIndicatorV2 />
-              </Show>
-              <span data-component="task-tool-title">{title()}</span>
-              <Show when={subtitle()}>
-                <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
-              </Show>
-            </div>
-            <Show when={clickable()}>
-              <div data-component="task-tool-action">
-                <Icon name="chevron-right" size="normal" />
-              </div>
-            </Show>
-          </div>
-        </div>
+      <div
+        data-component="task-tool-card"
+        class="flex w-full min-w-0 items-center gap-1.5 py-1 text-13-regular leading-text-compact text-v2-text-text-faint"
+        classList={{ "cursor-pointer hover:text-v2-text-text-base": clickable() }}
+      >
+        <span class="min-w-0 truncate">
+          <bdi dir="auto" data-component="task-tool-title" class="font-[530] text-v2-text-text-code-accent">
+            {i18n.t("ui.sessionTimeline.notice.started", { actor: title() })}
+          </bdi>
+          <Show when={subtitle()}>
+            {(value) => (
+              <span data-slot="task-tool-description">
+                {" · "}
+                <bdi dir="auto">{value()}</bdi>
+              </span>
+            )}
+          </Show>
+        </span>
       </div>
     )
 
