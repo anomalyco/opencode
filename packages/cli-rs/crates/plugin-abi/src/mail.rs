@@ -59,7 +59,7 @@ pub enum Outgoing {
 #[doc(hidden)]
 pub enum Message {
     Value(Box<dyn Any + Send>),
-    Json(Box<serde_json::value::RawValue>),
+    Json(serde_json::Value),
 }
 
 /// The host's side of a plugin's threads, callable from any thread.
@@ -210,7 +210,7 @@ pub(crate) fn handler<M: DeserializeOwned + 'static>(
     move |host, message| {
         let message = match message {
             Message::Value(value) => value.downcast::<M>().ok().map(|message| *message),
-            Message::Json(json) => serde_json::from_str::<M>(json.get()).ok(),
+            Message::Json(json) => serde_json::from_value::<M>(json).ok(),
         };
         if let Some(message) = message {
             run(host, message);
