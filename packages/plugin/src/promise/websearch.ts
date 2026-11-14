@@ -7,7 +7,7 @@ export interface WebSearchDefinition {
   readonly name: string
   readonly execute: (
     input: WebSearch.ProviderInput,
-    context: { readonly signal: AbortSignal },
+    context: { readonly signal: AbortSignal; readonly settings?: WebSearch.Settings },
   ) => Promise<readonly WebSearch.Result[]>
 }
 
@@ -21,5 +21,9 @@ export interface WebSearchEditor {
   readonly default: {
     get(): string | false | undefined
     set(selection: string | false): void
+  }
+  readonly settings: {
+    set(id: string, settings: WebSearch.Settings): void
+    clear(): void
   }
 }

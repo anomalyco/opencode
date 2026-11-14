@@ -42,17 +42,18 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
       id: "firecrawl",
       name: "Firecrawl",
       env: "FIRECRAWL_API_KEY",
-      execute: (input, credential) =>
+      endpoint,
+      execute: (input, connection) =>
         Effect.gen(function* () {
           const result = yield* WebSearchMcp.call(
             http,
-            endpoint,
+            connection.endpoint,
             "firecrawl_search",
             { input: McpInput, output: McpOutput },
             { query: input.query, limit: 8 },
             {
               "User-Agent": App.useragent(ctx.app),
-              ...(credential?.type === "key" ? { Authorization: `Bearer ${credential.key}` } : {}),
+              ...(connection.key ? { Authorization: `Bearer ${connection.key}` } : {}),
             },
           )
           const content = result?.content.find((item) => item.text)
