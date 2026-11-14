@@ -2476,7 +2476,7 @@ fn a_fetch_reply_too_large_for_the_js_host_fails() {
     pipe.harness.tui.keymap.dispatch("huge.fetch", None);
     pipe.harness.wait("the fetch ended", || {
         pipe.harness.app.advance(Duration::from_millis(1));
-        log.exists()
+        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
     });
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "Err\n");
 }
@@ -2518,7 +2518,7 @@ fn a_v2_plugin_reads_a_sessions_pending_inbox() {
     pipe.harness.tui.keymap.dispatch("pending.log", None);
     pipe.harness.wait("the plugin read its inbox", || {
         pipe.harness.app.advance(Duration::from_millis(1));
-        log.exists()
+        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
     });
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "[\"msg_3\"]\n");
 }
