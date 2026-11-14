@@ -471,3 +471,26 @@ fn sends_between_paints_wake_the_ui_thread_once() {
         }
     }
 }
+
+// Expected (fixed row; review carbon 4.1, the mutant `c41-no-rearm`): a frame over the budget that a paint could not
+// end, because its calls ran between paints, ends at a later paint with no call after it. Plugin a's key costs 1.2 ms
+// between each of 13 paints, then nothing more: two paints later, a is slow. On both carriers.
+#[test]
+fn the_last_frame_over_the_budget_ends_without_a_call() {
+    for carrier in CARRIERS {
+        let harness = open(carrier, Duration::from_millis(4));
+        for _ in 0..13 {
+            for _ in 0..3 {
+                harness.app.press("j");
+            }
+            harness.app.advance(Duration::from_millis(16));
+            harness.app.render();
+        }
+        assert!(!harness.tui.plugins.monitor().is_slow(PLUGINS[0]), "{carrier:?}: slow before its 13th frame ended");
+        for _ in 0..2 {
+            harness.app.advance(Duration::from_millis(16));
+            harness.app.render();
+        }
+        assert!(harness.tui.plugins.monitor().is_slow(PLUGINS[0]), "{carrier:?}: the 13th frame never ended");
+    }
+}
