@@ -24,6 +24,8 @@ enum Open {
     /// The plugin asked for a prompt, and no frame ran it yet.
     Pending,
     Route,
+    /// The plugin route navigated to in the same turn, before a frame.
+    Navigating,
     /// The diff viewer docked beside the session.
     SidePanel,
 }
@@ -134,6 +136,7 @@ fn outlived(open: Open) -> Vec<&'static str> {
             h.tui.navigate(Route::Plugin { id: "drop".to_owned(), name: "drop".to_owned() });
             h.wait_for("Drop route");
         }
+        Open::Navigating => h.tui.navigate(Route::Plugin { id: "drop".to_owned(), name: "drop".to_owned() }),
         Open::SidePanel => {
             h.tui.navigate(support::session_route("ses_a"));
             h.wait_for("Fix the parser");
@@ -170,10 +173,11 @@ fn a_plugin_dialog_open_at_the_drop_frees_the_tui_and_its_plugins() {
 }
 
 // Expected (plugins-pt R3-b): the same with a plugin's live panel open, with a plugin route shown, and with the diff
-// viewer docked beside a session.
+// viewer docked beside a session. A drop in the same turn as the navigation to the route panicked before OpenTUI #2132:
+// teardown dropped the deferred tasks while it held their queue, and one deferred again as it dropped.
 #[test]
 fn a_panel_or_route_open_at_the_drop_frees_the_tui_and_its_plugins() {
-    for open in [Open::Panel, Open::Route, Open::SidePanel] {
+    for open in [Open::Panel, Open::Route, Open::Navigating, Open::SidePanel] {
         assert_eq!(outlived(open), Vec::<&str>::new(), "dropped with {open:?} open");
     }
 }
