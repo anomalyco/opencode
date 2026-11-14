@@ -732,8 +732,16 @@ fn the_deep_runs_rows_hold() {
     // mounts is shorter than its estimate, lands where it was meant to. Seed 64: a page into an item shorter than
     // its estimate goes its rows on. Seed 127: a jump through items far off their estimates settles in its frame. Seed
     // 551: the reading a resize and a step hold reaches the end the new heights give. Seed 707: a step's memory
-    // follows the list's correction from where the step meant to go.
+    // follows the list's correction from where the step meant to go. Seed 98 (700 seeds, a mutant): a `Nearest` that
+    // moves the window resolves in the round after, so a fold after it keeps the card at the top.
     let rows = [
+        vec![
+            Command::Review(5),
+            Command::Resize { width: 70, height: 14 },
+            Command::Fold(9),
+            Command::Near(9),
+            Command::Review(7),
+        ],
         vec![Command::Resize { width: 75, height: 12 }, Command::Near(8), Command::Review(5), Command::Fold(6)],
         vec![
             Command::Review(8),
@@ -1888,6 +1896,57 @@ fn behaviors_past_the_rounds_finish_in_the_next_frame() {
     assert!(most <= u64::from(behave::ROUNDS), "a frame ran {most} rounds");
 }
 
+// Expected (review big-boi 4, carbon-2): a jump into a list whose estimates are far off takes all of a frame's rounds,
+// and with a resize in its batch it needs more; `layout` asks for a view once in the frame it is told of the jump. Every frame keeps
+// the bounds, at most the rounds OpenTUI allows and two deliveries, and with no event the jump ends at its target with
+// the view `layout` asked for.
+#[test]
+fn a_jump_past_the_rounds_while_layout_asks_again_keeps_the_frames_bounds() {
+    // The jump alone settles in the last round, which asks for the view; with a resize the rounds run out first.
+    for (go, width) in [(250, None), (350, Some(30)), (700, Some(30))] {
+        let cards: Vec<(u16, u16)> = (0..1000).map(|i| if i % 3 == 0 { (40, 2) } else { (2, 40) }).collect();
+        let notify = vec![
+            v2::Notify::Scroll { id: "s".into() },
+            v2::Notify::Group { scroll: "s".into(), group: "g".into() },
+            v2::Notify::Node { id: "strip".into() },
+        ];
+        let harness = probe(Shape { cards, list: true, notify, again_until: Some(1), ..Shape::default() }, 40, 50);
+        settled(&harness);
+        shape(|shape| shape.again_until = Some(2));
+        let before = seen(|seen| seen.geometries.len());
+        dispatch(&harness, "p.go", &format!("c{go}"));
+        if let Some(width) = width {
+            harness.app.resize(width, 50 - (go % 7) as u16);
+        }
+        let mut frames = Vec::new();
+        while frames.len() < 40 {
+            let counts = behave::counts();
+            harness.app.render();
+            let ran = behave::counts().since(counts);
+            frames.push((ran.resolves, ran.layouts));
+            assert!(ran.resolves <= u64::from(behave::ROUNDS), "c{go}: frames {frames:?}");
+            assert!(ran.layouts <= u64::from(behave::DELIVERIES), "c{go}: frames {frames:?}");
+            if !harness.app.needs_frame() {
+                break;
+            }
+        }
+        assert_eq!(frames[0].0, u64::from(behave::ROUNDS), "c{go}: the rounds did not run out: {frames:?}");
+        let text = harness.app.render().text();
+        let lines: Vec<&str> = text.lines().map(str::trim_end).collect();
+        assert_eq!(lines[0], "stage 2", "c{go}: frames {frames:?}\n{text}");
+        assert!(lines[1].starts_with(&format!("r0{go}.0")), "c{go}: frames {frames:?}\n{text}");
+        // Once for the jump, settled, and once for the view it asked for, which moved only the strip.
+        let told: Vec<_> = seen(|seen| {
+            seen.geometries[before..]
+                .iter()
+                .map(|geometry| (geometry.scrolls.clone(), geometry.groups.clone()))
+                .collect()
+        });
+        assert_eq!(told.len(), 2, "c{go}: frames {frames:?}");
+        assert!(told[0] == told[1], "c{go}: `layout` was told what had not settled: {frames:?}");
+    }
+}
+
 // Expected (review big-boi 2): a list holds the reading position by itself. When an item above the top grows and its
 // estimate follows, the card at the top stays there in the first frame.
 #[test]
@@ -1918,6 +1977,20 @@ fn a_narrower_list_keeps_the_card_at_the_top() {
     let first = top_line(&harness);
     assert!(first.starts_with("r0087"), "{}", harness.app.render().text());
     assert_eq!(top_line(&harness), first);
+}
+
+// Expected (decision: `Offset`, `By` and `Page` count the host's rows): an offset into an item far shorter than its
+// estimate goes its rows on past the item, in the first frame. Offset 300 names card 39 six rows in, by the twelve
+// two-row cards with widgets and the ten-row estimates after them; card 39 has two rows, so six rows on from its start
+// is card 42's.
+#[test]
+fn an_offset_into_a_short_item_goes_its_rows_on() {
+    let harness = probe(Shape { cards: vec![(2, 10); 100], list: true, ..Shape::default() }, 40, 12);
+    settled(&harness);
+    dispatch(&harness, "p.at", "300");
+    let first = harness.app.render();
+    assert_eq!(first.text().lines().next(), Some("r0042.0"), "{}", first.text());
+    assert_eq!(first, settled(&harness));
 }
 
 // Expected (review big-boi 2, carbon-4): an estimate of 0 is taken as a row: the list opens at its first card and
@@ -1982,10 +2055,14 @@ fn a_step_reaches_hunks_of_items_without_widgets() {
     let hunks = vec![(1, 250), (3, 5), (2, 5), (1, 5), (2, 5), (2, 5), (2, 5), (2, 5), (2, 5), (2, 5)];
     let harness = probe(Shape { cards, list: true, hunks, ..Shape::default() }, 60, 60);
     harness.app.render();
-    for by in ["1", "1", "1", "1", "-1", "-1", "-1"] {
+    // Each step puts its hunk's first row at the inset, in an item that had no widgets too.
+    let rows = ["h1.0.0", "@@ -1001", "@@ -2001", "h2.0.0", "@@ -2001", "@@ -1001", "h1.0.0"];
+    for (by, row) in ["1", "1", "1", "1", "-1", "-1", "-1"].into_iter().zip(rows) {
         dispatch(&harness, "p.hstep", by);
         let first = harness.app.render();
         assert_eq!(first, settled(&harness), "a step's first frame was not settled");
+        let screen = first.text();
+        assert!(screen.lines().nth(1).is_some_and(|line| line.contains(row)), "{row}:\n{screen}");
     }
     assert_eq!(landed(), ["d1#0", "d1#1", "d1#2", "d2#0", "d1#2", "d1#1", "d1#0"]);
     let screen = harness.app.render().text();
@@ -2033,7 +2110,7 @@ fn a_layout_paint_takes_the_new_theme() {
 }
 
 // Expected (review big-boi 11, carbon-5): a box built again keeps the paint `layout` gave it; a box whose own
-// background changes takes it, and the paint goes.
+// background changes takes it, and the paint goes, also from a later theme.
 #[test]
 fn a_boxs_own_background_ends_a_paint() {
     let notify = vec![v2::Notify::Scroll { id: "s".into() }];
@@ -2051,6 +2128,9 @@ fn a_boxs_own_background_ends_a_paint() {
     });
     dispatch(&harness, "p.view", "");
     assert_eq!(bg(&harness), Some(harness.tui.page().background.raised.base));
+    // The paint is gone: a new theme shows the box's own background.
+    switch_theme(&harness);
+    assert_eq!(bg(&harness), Some(harness.tui.page().background.raised.base), "a new theme brought the paint back");
 }
 
 // Expected (review big-boi 11): what the user typed into an input stays when its item leaves the window and comes back.
