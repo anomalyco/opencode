@@ -183,6 +183,7 @@ fn ask_yes(tui: &Tui, owner: Owner, confirm: abi::Confirm) {
                         on_cancel: Some(answer("false")),
                         confirm_label: confirm.label.confirm.clone(),
                         cancel_label: confirm.label.cancel.clone(),
+                        ..ConfirmProps::default()
                     },
                 )
             },

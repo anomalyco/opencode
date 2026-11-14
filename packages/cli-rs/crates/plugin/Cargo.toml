@@ -20,6 +20,12 @@ serde.workspace = true
 serde_json.workspace = true
 unicode-width.workspace = true
 opencode-api-types.workspace = true
+# The hash an approval of a project plugin names (rich-plugins 3.9).
+ring.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+# Who owns the approvals file, and opening it without following a link.
+libc.workspace = true
 
 [dev-dependencies]
 opencode-util.workspace = true

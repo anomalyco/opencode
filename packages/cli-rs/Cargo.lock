@@ -787,6 +787,7 @@ dependencies = [
 name = "opencode-plugin"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "log",
  "opencode-api-types",
  "opencode-latex",
@@ -796,6 +797,7 @@ dependencies = [
  "opencode-ui",
  "opencode-util",
  "opentui",
+ "ring",
  "serde",
  "serde_json",
  "unicode-width",
