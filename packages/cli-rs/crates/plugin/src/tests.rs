@@ -793,3 +793,52 @@ fn a_failed_surface_drops_what_it_held() {
     drop(mount);
     assert_eq!(surface::ledger(), surface::Ledger::default());
 }
+
+thread_local! {
+    /// The views of `test.outer`, and what the claim in the slot it shows heard of its mounts.
+    static OUTER_VIEWS: Cell<usize> = const { Cell::new(0) };
+    static MOUNTS: std::cell::RefCell<Vec<bool>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+// Expected (carbon's 8.3): when a surface builds the slot it shows again, the claims in it hear that their mount ends
+// before the next one starts.
+#[test]
+fn a_rebuilt_nested_slot_unmounts_before_it_mounts() {
+    use abi::v2;
+    fn outer(setup: &mut abi::Setup) -> Result<(), String> {
+        setup.surface(v2::Surface::new("outer", v2::Place::Slot(abi::Placement::append(slot::HOME_FOOTER)), |_| {
+            let views = OUTER_VIEWS.get();
+            OUTER_VIEWS.set(views + 1);
+            let text = v2::Node::text(vec![abi::Span::new("outer")]);
+            let nested = v2::Node::Slot { path: "home.footer.status".into() };
+            // Each view puts the slot on the other side of the text, so it is built again.
+            v2::Node::row(if views % 2 == 0 { vec![text, nested] } else { vec![nested, text] })
+        }));
+        Ok(())
+    }
+    fn inner(setup: &mut abi::Setup) -> Result<(), String> {
+        setup.on_mount(abi::Placement::append("home.footer.status"), |_, _, mounted| {
+            MOUNTS.with(|mounts| mounts.borrow_mut().push(mounted));
+        });
+        Ok(())
+    }
+    OUTER_VIEWS.set(0);
+    MOUNTS.with(|mounts| mounts.borrow_mut().clear());
+    let host = host();
+    let registry = Rc::new(Registry::define(
+        vec![
+            abi::Plugin { id: "test.outer", setup: outer }.into(),
+            abi::Plugin { id: "test.inner", setup: inner }.into(),
+        ],
+        [],
+    ));
+    *host.registry.borrow_mut() = Rc::downgrade(&registry);
+    registry.activate(&dynamic(&host));
+    let parent = View::new(host.app()).column().width(30);
+    let mount = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    host.app().root().add(&parent);
+    assert_eq!(MOUNTS.with(|mounts| mounts.borrow().clone()), [true]);
+    mount.sync(&*host, Some(&abi::Changed::default()));
+    assert_eq!(OUTER_VIEWS.get(), 2);
+    assert_eq!(MOUNTS.with(|mounts| mounts.borrow().clone()), [true, false, true]);
+}
