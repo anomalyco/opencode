@@ -129,8 +129,12 @@ static void send(const opencode_host_api *host, const char *key, const char *mes
 }
 
 static const char *const COMMANDS[] = {
-    "conf.toast", "conf.store", "conf.send", "conf.wake", "conf.panic", "conf.dup", "conf.read", "conf.pad",
+    "conf.toast", "conf.store", "conf.send", "conf.wake", "conf.panic", "conf.dup",
+    "conf.read",  "conf.pad",   "conf.down", "conf.step", "conf.where",
 };
+
+/* The scroll `items` of the surface `rows`, as a verb or a read names it. */
+#define ITEMS "{\"type\":\"node\",\"surface\":\"rows\",\"id\":\"items\"}"
 
 static int32_t create(const opencode_host_api *host, opencode_bytes options, void **out_instance,
                       opencode_owned *out) {
@@ -165,7 +169,9 @@ static int32_t create(const opencode_host_api *host, opencode_bytes options, voi
     strncat(manifest,
             "],\"fences\":[],\"slots\":[],\"routes\":[],\"storage\":[\"count\"],\"render\":2,\"wake\":true,"
             "\"surfaces\":[{\"name\":\"conf\",\"place\":{\"type\":\"route\",\"name\":\"conf\"}},"
-            "{\"name\":\"pad\",\"place\":{\"type\":\"route\",\"name\":\"pad\"},\"draw\":true}],\"messages\":true}",
+            "{\"name\":\"pad\",\"place\":{\"type\":\"route\",\"name\":\"pad\"},\"draw\":true},"
+            "{\"name\":\"rows\",\"place\":{\"type\":\"route\",\"name\":\"rows\"},"
+            "\"notify\":[{\"type\":\"scroll\",\"id\":\"items\"}],\"layout\":true,\"on_scroll\":true}],\"messages\":true}",
             sizeof manifest - strlen(manifest) - 1);
     *out = owned(manifest);
     return OPENCODE_OK;
@@ -204,6 +210,20 @@ static int32_t command(instance *self, opencode_bytes request, opencode_owned *o
         self->dup = 1;
     } else if (names(request, "conf.pad")) {
         self->pads += 1;
+    } else if (names(request, "conf.down")) {
+        ask(host, "{\"type\":\"scroll\",\"target\":" ITEMS ",\"verb\":{\"type\":\"by\",\"rows\":2}}", NULL, 0);
+    } else if (names(request, "conf.step")) {
+        ask(host, "{\"type\":\"scroll\",\"target\":" ITEMS ",\"verb\":{\"type\":\"step\",\"group\":\"items\",\"by\":1}}",
+            NULL, 0);
+    } else if (names(request, "conf.where")) {
+        char answer[128];
+        int32_t status = ask(host, "{\"type\":\"scroll-state\",\"target\":" ITEMS "}", answer, sizeof answer);
+        char message[64] = "nowhere";
+        opencode_bytes state = bytes(answer);
+        if (status == OPENCODE_OK && find(state, "\"offset\":") != NULL) {
+            snprintf(message, sizeof message, "offset %llu of %llu", number(state, "offset"), number(state, "extent"));
+        }
+        toast(host, "info", message);
     } else if (names(request, "conf.read")) {
         int light = OFFERS(host, theme_mode) && host->theme_mode(host->ctx) == OPENCODE_THEME_LIGHT;
         char answer[16];
@@ -261,6 +281,48 @@ static int32_t pad(instance *self, opencode_owned *out) {
     return OPENCODE_OK;
 }
 
+/* The view of the route `rows`: a text `where` over a scroll `items`, 3 rows high, of six anchored items. */
+static int32_t rows(opencode_owned *out) {
+    char reply[1536] = "{\"node\":{\"type\":\"box\",\"id\":\"rows-root\",\"children\":[{\"type\":\"text\",\"id\":\"where\","
+                       "\"spans\":[{\"text\":\"where\"}]},{\"type\":\"scroll\",\"id\":\"items\",\"height\":3,\"children\":[";
+    for (int index = 0; index < 6; index++) {
+        char item[160];
+        snprintf(item, sizeof item,
+                 "%s{\"type\":\"box\",\"id\":\"i%d\",\"anchor\":{\"group\":\"items\"},\"children\":[{\"type\":\"text\","
+                 "\"spans\":[{\"text\":\"item %d\"}]}]}",
+                 index == 0 ? "" : ",", index, index);
+        strncat(reply, item, sizeof reply - strlen(reply) - 1);
+    }
+    strncat(reply, "]}]}}", sizeof reply - strlen(reply) - 1);
+    *out = owned(reply);
+    return OPENCODE_OK;
+}
+
+/* The layout of `rows`: `where` painted while `items` is scrolled down. Its geometry's scrolls hold the first
+ * "offset", as the only scroll it is told of. */
+static int32_t layout(opencode_bytes request, opencode_owned *out) {
+    int down = number(request, "offset") > 0;
+    *out = owned(down ? "{\"paints\":[{\"node\":\"where\",\"bg\":\"#203040\"}]}" : "{}");
+    return OPENCODE_OK;
+}
+
+/* The scroll handler of `rows`: where a step landed. */
+static void scrolled(instance *self, opencode_bytes request) {
+    const char *needle = "\"anchor\":{\"id\":\"";
+    const uint8_t *at = find(request, needle);
+    if (!is(request, "landed") || at == NULL) {
+        return;
+    }
+    at += strlen(needle);
+    char message[64] = "landed ";
+    size_t len = strlen(message);
+    while (at < request.ptr + request.len && *at != '"' && len < sizeof message - 1) {
+        message[len++] = (char)*at++;
+    }
+    message[len] = '\0';
+    toast(self->host, "info", message);
+}
+
 /* The draw of the canvas `pad`: a list, as `crates/plugin-abi/src/canvas.rs` lays it out, of one text at the corner in
  * the terminal's colors. The version byte, then the record: its operation (2, text), its payload's length (u32,
  * little-endian), and the payload: x and y (i16, little-endian), the style (no flags, no attributes, two colors of
@@ -308,7 +370,13 @@ static int32_t call(void *raw, opencode_bytes request, opencode_owned *out) {
     }
     if (is(request, "view")) {
         /* The mount names its surface. */
+        if (find(request, "\"surface\":\"rows\"") != NULL) {
+            return rows(out);
+        }
         return find(request, "\"surface\":\"pad\"") != NULL ? pad(self, out) : view(self, request, out);
+    }
+    if (is(request, "layout")) {
+        return layout(request, out);
     }
     if (is(request, "draw")) {
         return draw(self, request, out);
@@ -319,6 +387,8 @@ static int32_t call(void *raw, opencode_bytes request, opencode_owned *out) {
         }
     } else if (is(request, "message")) {
         self->messages += 1;
+    } else if (is(request, "scrolled")) {
+        scrolled(self, request);
     } else if (is(request, "wake")) {
         toast(self->host, "info", "woken");
     } else {
