@@ -428,7 +428,7 @@ impl Live {
             &|text| {
                 // As in TS, of the plugins' Markdown only the `/btw` answer links sessions (`btw.tsx`).
                 if self.owner.0 != super::btw::ID {
-                    return tui.markdown(text);
+                    return tui.markdown(text).as_any();
                 }
                 let markdown = super::host::markdown(tui);
                 links.borrow_mut().push(session_links::attach(tui, &markdown));
