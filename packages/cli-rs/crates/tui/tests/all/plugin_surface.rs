@@ -1,6 +1,7 @@
 //! Mounts of contract 2.0 surfaces (P1, synthesis 4.2 and 4.14): `lifecycle` and `ledger` for mounts, `no-effects`
 //! for a refused tree, `keep-full` for a second refusal, and `work` for a theme change, on a linked test plugin in
-//! the real TUI.
+//! the real TUI. Every test runs on both carriers of contract 2.0 (P4): linked, and through the byte shims of the C ABI
+//! as a library runs; `carrier-equal` compares the two step by step.
 //!
 //! The plugin `test.board` shows a route of cards, one a value, each memoized on its value with its body a `Diff`
 //! by content handle. Its view writes its own call log: the mount's generation, whether the host asked for a whole
@@ -124,10 +125,27 @@ fn patch(index: usize, value: u32) -> String {
     format!("@@ -1 +1 @@\n-item {index}\n+item {index} is {value}\n")
 }
 
-fn open_tui() -> Harness {
+/// How the TUI runs the test plugin.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Carrier {
+    Linked,
+    /// Through the byte shims of the C ABI: JSON both ways, as a loaded library.
+    Abi,
+}
+
+pub const CARRIERS: [Carrier; 2] = [Carrier::Linked, Carrier::Abi];
+
+pub fn builtin(carrier: Carrier, plugin: abi::Plugin) -> opencode_plugin::Builtin {
+    match carrier {
+        Carrier::Linked => opencode_plugin::Builtin::Plugin(plugin),
+        Carrier::Abi => opencode_plugin::Builtin::Abi(plugin),
+    }
+}
+
+fn open_tui(carrier: Carrier) -> Harness {
     let deps = Deps {
         route: Route::Home,
-        builtins: vec![abi::Plugin { id: ID, setup }.into()],
+        builtins: vec![builtin(carrier, abi::Plugin { id: ID, setup })],
         ..support::deps(Arc::new(support::empty()))
     };
     let harness = support::mount(80, 40, deps);
@@ -187,7 +205,7 @@ fn apply(harness: &Harness, command: Command) {
     settle(harness);
 }
 
-struct Surfaces;
+struct Surfaces(Carrier);
 
 impl Model for Surfaces {
     type Command = Command;
@@ -208,7 +226,7 @@ impl Model for Surfaces {
     fn run(&self, commands: &[Command]) -> Option<Failure> {
         board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
         let baseline = surface::ledger();
-        let harness = open_tui();
+        let harness = open_tui(self.0);
         // The reference: the generation mounted, the highest one seen, and a bad view armed.
         let mut mounted: Option<u64> = None;
         let mut highest = 0;
@@ -298,13 +316,66 @@ fn fail_at(step: usize, property: &'static str, detail: String) -> Option<Failur
 // view and rebuilds nothing; and what a mount held goes with it.
 #[test]
 fn surface_mounts_hold_their_properties() {
-    model::check(&Surfaces, 40, 32);
+    for carrier in CARRIERS {
+        model::check(&Surfaces(carrier), 40, 32);
+    }
+}
+
+/// `carrier-equal`: the same commands on both carriers give equal frames, cells with their styles, and equal call logs
+/// at every step. Each carrier is the twin of the other.
+struct Equal;
+
+impl Model for Equal {
+    type Command = Command;
+
+    fn generate(&self, rng: &mut Rng, steps: usize) -> Vec<Command> {
+        Surfaces(Carrier::Linked).generate(rng, steps)
+    }
+
+    fn run(&self, commands: &[Command]) -> Option<Failure> {
+        let runs: Vec<Vec<(Vec<opentui::testing::Cell>, Vec<Call>)>> = CARRIERS
+            .iter()
+            .map(|carrier| {
+                board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
+                let harness = open_tui(*carrier);
+                // Generations are new across the process, so each run numbers its own from 1.
+                let mut generations: Vec<u64> = Vec::new();
+                commands
+                    .iter()
+                    .map(|command| {
+                        apply(&harness, *command);
+                        let mut calls = board(|board| std::mem::take(&mut board.calls));
+                        for call in &mut calls {
+                            if !generations.contains(&call.generation) {
+                                generations.push(call.generation);
+                            }
+                            call.generation =
+                                generations.iter().position(|known| *known == call.generation).unwrap() as u64;
+                        }
+                        // Home's prompt shows a random placeholder in each TUI; only the route's frame is the plugin's.
+                        let on_route = matches!(harness.tui.route(), Route::Plugin { .. });
+                        let cells = if on_route { harness.app.render().cells } else { Vec::new() };
+                        (cells, calls)
+                    })
+                    .collect()
+            })
+            .collect();
+        let (linked, library) = (&runs[0], &runs[1]);
+        let step = linked.iter().zip(library).position(|(linked, library)| linked != library)?;
+        let detail = format!("linked {:?}\nlibrary {:?}", linked[step].1, library[step].1);
+        Some(Failure { property: "carrier-equal", site: "carrier-equal", step, detail })
+    }
+}
+
+#[test]
+fn both_carriers_give_equal_frames_and_call_logs() {
+    model::check(&Equal, 24, 24);
 }
 
 /// The cells of the route after `commands`, with a plugin that reads the palette or not.
-fn frame_cells(commands: &[Command], palette: bool) -> Vec<opentui::testing::Cell> {
+fn frame_cells(carrier: Carrier, commands: &[Command], palette: bool) -> Vec<opentui::testing::Cell> {
     board(|board| *board = Board { values: vec![0; ITEMS], palette, ..Board::default() });
-    let harness = open_tui();
+    let harness = open_tui(carrier);
     for command in commands {
         apply(&harness, *command);
     }
@@ -312,9 +383,9 @@ fn frame_cells(commands: &[Command], palette: bool) -> Vec<opentui::testing::Cel
 }
 
 /// The frame of the route after `commands`.
-fn frame_after(commands: &[Command]) -> String {
+fn frame_after(carrier: Carrier, commands: &[Command]) -> String {
     board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
-    let harness = open_tui();
+    let harness = open_tui(carrier);
     for command in commands {
         apply(&harness, *command);
     }
@@ -327,31 +398,37 @@ fn frame_after(commands: &[Command]) -> String {
 #[test]
 fn a_refused_tree_leaves_no_trace() {
     use Command::*;
-    let with = frame_after(&[Open, Bump(1), Bad, Bump(2), Wake]);
-    let without = frame_after(&[Open, Bump(1), Bump(2), Wake]);
-    assert_eq!(with, without);
-    assert_ne!(frame_after(&[Open, Bump(1), Bump(3), Wake]), without);
-    let calls = board(|board| board.calls.clone());
-    assert!(calls.iter().all(|call| !call.bad));
+    for carrier in CARRIERS {
+        let with = frame_after(carrier, &[Open, Bump(1), Bad, Bump(2), Wake]);
+        let without = frame_after(carrier, &[Open, Bump(1), Bump(2), Wake]);
+        assert_eq!(with, without, "{carrier:?}");
+        assert_ne!(frame_after(carrier, &[Open, Bump(1), Bump(3), Wake]), without);
+        let calls = board(|board| board.calls.clone());
+        assert!(calls.iter().all(|call| !call.bad));
+    }
 }
 
 // Expected (`keep-full`): a second refused tree in a row fails the plugin: one report, no view after, and its mount
 // holds no content.
 #[test]
 fn a_second_refusal_in_a_row_fails_the_plugin() {
-    board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
-    let harness = open_tui();
-    apply(&harness, Command::Open);
-    board(|board| board.bad = 2);
-    apply(&harness, Command::Bump(0));
-    assert!(matches!(status(&harness), opencode_plugin::Status::Failed(ref error) if error.contains("refused twice")));
-    let calls = board(|board| board.calls.len());
-    apply(&harness, Command::Bump(1));
-    apply(&harness, Command::Wake);
-    assert_eq!(board(|board| board.calls.len()), calls, "a failed plugin got a view");
-    // Nothing of the failed plugin's mount stays, and its route shows the host's screen for a missing route.
-    assert_eq!(surface::ledger(), Ledger::default());
-    assert!(!harness.app.render().text().contains("card 0"));
+    for carrier in CARRIERS {
+        board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
+        let harness = open_tui(carrier);
+        apply(&harness, Command::Open);
+        board(|board| board.bad = 2);
+        apply(&harness, Command::Bump(0));
+        let failed =
+            matches!(status(&harness), opencode_plugin::Status::Failed(ref error) if error.contains("refused twice"));
+        assert!(failed, "{carrier:?}");
+        let calls = board(|board| board.calls.len());
+        apply(&harness, Command::Bump(1));
+        apply(&harness, Command::Wake);
+        assert_eq!(board(|board| board.calls.len()), calls, "a failed plugin got a view");
+        // Nothing of the failed plugin's mount stays, and its route shows the host's screen for a missing route.
+        assert_eq!(surface::ledger(), Ledger::default(), "{carrier:?}");
+        assert!(!harness.app.render().text().contains("card 0"), "{carrier:?}");
+    }
 }
 
 // Expected (`work`, a theme change): a surface that names its colors by token gets no call on a theme switch and its
@@ -359,10 +436,10 @@ fn a_second_refusal_in_a_row_fails_the_plugin() {
 // palette. Either way the route draws as one opened in the new theme.
 #[test]
 fn a_theme_change_calls_only_a_surface_that_reads_the_palette() {
-    for palette in [false, true] {
-        let fresh = frame_cells(&[Command::Theme(1), Command::Open, Command::Bump(2)], palette);
+    for (carrier, palette) in CARRIERS.into_iter().flat_map(|carrier| [(carrier, false), (carrier, true)]) {
+        let fresh = frame_cells(carrier, &[Command::Theme(1), Command::Open, Command::Bump(2)], palette);
         board(|board| *board = Board { values: vec![0; ITEMS], palette, ..Board::default() });
-        let harness = open_tui();
+        let harness = open_tui(carrier);
         apply(&harness, Command::Open);
         // The last tree keeps every card but one.
         apply(&harness, Command::Bump(2));
@@ -978,19 +1055,21 @@ fn a_failed_surface_gives_its_slot_back() {
 // nothing is built.
 #[test]
 fn a_theme_of_another_name_calls_the_view_once_and_builds_nothing() {
-    board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
-    let harness = open_tui();
-    apply(&harness, Command::Open);
-    let calls = board(|board| board.calls.len());
-    let work = reconcile::work();
-    assert!(harness.tui.theme.borrow_mut().set("tokyonight"));
-    harness.tui.theme_changed();
-    settle(&harness);
-    let done = reconcile::work().since(work);
-    let after = board(|board| board.calls[calls..].to_vec());
-    assert_eq!(after.len(), 1, "{after:?}");
-    assert!(after[0].built == 0 && !after[0].full, "{after:?}");
-    assert_eq!((done.created, done.removed, done.parses), (0, 0, 0), "{done:?}");
+    for carrier in CARRIERS {
+        board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
+        let harness = open_tui(carrier);
+        apply(&harness, Command::Open);
+        let calls = board(|board| board.calls.len());
+        let work = reconcile::work();
+        assert!(harness.tui.theme.borrow_mut().set("tokyonight"));
+        harness.tui.theme_changed();
+        settle(&harness);
+        let done = reconcile::work().since(work);
+        let after = board(|board| board.calls[calls..].to_vec());
+        assert_eq!(after.len(), 1, "{after:?}");
+        assert!(after[0].built == 0 && !after[0].full, "{after:?}");
+        assert_eq!((done.created, done.removed, done.parses), (0, 0, 0), "{done:?}");
+    }
 }
 
 // Expected (`lifecycle`, a reload; bigboi's 9): a plugin disabled and enabled again while its route's command and its
@@ -1037,29 +1116,97 @@ fn a_reload_drops_the_replies_of_the_activation_before() {
 // the shown ones. The oracle is a marker each widget's handler holds, apart from the host's own counts.
 #[test]
 fn a_mounts_widgets_are_freed_with_it() {
-    board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
-    let harness = open_tui();
-    // The text, its card, the board and the surface's root.
-    let marked = |harness: &Harness| {
-        let marker = Rc::new(());
-        support::mark_at(&harness.app, "card 0: 0", 4, &marker);
-        assert_eq!(Rc::strong_count(&marker), 5);
-        marker
+    for carrier in CARRIERS {
+        board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
+        let harness = open_tui(carrier);
+        // The text, its card, the board and the surface's root.
+        let marked = |harness: &Harness| {
+            let marker = Rc::new(());
+            support::mark_at(&harness.app, "card 0: 0", 4, &marker);
+            assert_eq!(Rc::strong_count(&marker), 5);
+            marker
+        };
+        apply(&harness, Command::Open);
+        let marker = marked(&harness);
+        apply(&harness, Command::Bad);
+        apply(&harness, Command::Bump(1));
+        assert_eq!(Rc::strong_count(&marker), 5, "a refused tree and its retry freed shown widgets");
+        apply(&harness, Command::Open);
+        assert_eq!(Rc::strong_count(&marker), 1, "a mount opened again kept the last one's widgets");
+        let marker = marked(&harness);
+        apply(&harness, Command::Home);
+        assert_eq!(Rc::strong_count(&marker), 1, "a closed mount kept its widgets");
+        apply(&harness, Command::Open);
+        let marker = marked(&harness);
+        board(|board| board.bad = 2);
+        apply(&harness, Command::Bump(2));
+        assert!(matches!(status(&harness), opencode_plugin::Status::Failed(_)));
+        assert_eq!(Rc::strong_count(&marker), 1, "a failed plugin's mount kept its widgets");
+    }
+}
+
+thread_local! {
+    /// How many cards `test.cards` shows, and the value of the first.
+    static CARDS: std::cell::Cell<(usize, u32)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+/// A route of cards, each memoized on its value; a command bumps the first card, another changes nothing.
+fn cards(setup: &mut abi::Setup) -> Result<(), String> {
+    let command = |name: &str| abi::Command { name: name.into(), ..abi::Command::default() };
+    setup.command(command("cards.bump"), |_, _| CARDS.with(|cards| cards.set((cards.get().0, cards.get().1 + 1))));
+    setup.command(command("cards.same"), |_, _| {});
+    setup.surface(v2::Surface::new("cards", v2::Place::Route("cards".into()), |cx| {
+        let (count, first) = CARDS.with(std::cell::Cell::get);
+        let cards = (0..count)
+            .map(|index| {
+                let value = if index == 0 { first } else { 0 };
+                cx.memo(format!("card-{index}"), value, |_| {
+                    v2::Node::text(vec![abi::Span::new(format!("card {index} is {value}"))])
+                })
+            })
+            .collect();
+        v2::Node::column(cards).with_id("cards")
+    }));
+    Ok(())
+}
+
+/// What crossed the C ABI while `step` ran, on the route of `test.cards` with `count` cards.
+fn crossed_by(count: usize, step: impl FnOnce(&Harness)) -> opencode_plugin::loader::native::Crossed {
+    CARDS.with(|cards| cards.set((count, 0)));
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![builtin(Carrier::Abi, abi::Plugin { id: "test.cards", setup: cards })],
+        ..support::deps(Arc::new(support::empty()))
     };
-    apply(&harness, Command::Open);
-    let marker = marked(&harness);
-    apply(&harness, Command::Bad);
-    apply(&harness, Command::Bump(1));
-    assert_eq!(Rc::strong_count(&marker), 5, "a refused tree and its retry freed shown widgets");
-    apply(&harness, Command::Open);
-    assert_eq!(Rc::strong_count(&marker), 1, "a mount opened again kept the last one's widgets");
-    let marker = marked(&harness);
-    apply(&harness, Command::Home);
-    assert_eq!(Rc::strong_count(&marker), 1, "a closed mount kept its widgets");
-    apply(&harness, Command::Open);
-    let marker = marked(&harness);
-    board(|board| board.bad = 2);
-    apply(&harness, Command::Bump(2));
-    assert!(matches!(status(&harness), opencode_plugin::Status::Failed(_)));
-    assert_eq!(Rc::strong_count(&marker), 1, "a failed plugin's mount kept its widgets");
+    let harness = support::mount(80, 40, deps);
+    harness.tui.navigate(Route::Plugin { id: "test.cards".into(), name: "cards".into() });
+    settle(&harness);
+    let before = opencode_plugin::loader::native::crossed();
+    step(&harness);
+    settle(&harness);
+    opencode_plugin::loader::native::crossed().since(before)
+}
+
+// Expected (`work` in bytes, 4.14): through the C ABI, a revision that changes one card crosses the same bytes at 40
+// and at 410 cards, beyond what a revision that changes nothing crosses, and its request is the same size; a theme of
+// another name, which a plugin reads (ABI 1.6), crosses one view on a surface that names its colors by token.
+#[test]
+fn a_revision_crosses_bytes_that_follow_the_change() {
+    let run = |count, command: &'static str| {
+        crossed_by(count, move |harness| {
+            harness.tui.keymap.dispatch(command, None);
+        })
+    };
+    let (small, large) =
+        ((run(40, "cards.same"), run(40, "cards.bump")), (run(410, "cards.same"), run(410, "cards.bump")));
+    assert_eq!((small.0.calls, small.1.calls), (2, 2), "a command and a view");
+    // The requests name the mount's generation, a number across the process, which may have one digit more.
+    assert!(small.1.sent.abs_diff(large.1.sent) <= 1, "the requests grew with the cards: {small:?} {large:?}");
+    assert_eq!(small.1.received - small.0.received, large.1.received - large.0.received, "{small:?} {large:?}");
+    assert!(small.1.received > small.0.received);
+    let theme = crossed_by(410, |harness| {
+        harness.tui.theme.borrow_mut().set("tokyonight");
+        harness.tui.theme_changed();
+    });
+    assert_eq!(theme.calls, 1, "a theme of another name crossed more than its one view: {theme:?}");
 }

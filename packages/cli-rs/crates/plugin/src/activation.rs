@@ -123,7 +123,9 @@ impl Activation {
                 _ => break,
             }
         }
-        if let (Some(panic), Some(fail)) = (panic, self.on_panic.borrow().clone()) {
+        // Bound first: failing disposes the activation, which takes the handler.
+        let fail = self.on_panic.borrow().clone();
+        if let (Some(panic), Some(fail)) = (panic, fail) {
             fail(panic);
         }
         if !hinted || self.disposed() {

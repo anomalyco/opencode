@@ -36,3 +36,5 @@ bytes.workspace = true
 opencode-latex.workspace = true
 opencode-mermaid.workspace = true
 opencode-parity.workspace = true
+# The board plugin's source, linked into the carrier tests as a plugin crate links it.
+opencode-plugin-abi.workspace = true
