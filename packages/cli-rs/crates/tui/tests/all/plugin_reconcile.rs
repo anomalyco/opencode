@@ -908,6 +908,48 @@ fn a_revision_touches_what_changed_at_any_size() {
     }
 }
 
+// Expected (`work`, a prepend and a reparent; bigboi's 5 and 9): a card put before the others, written out or kept,
+// builds that card and moves each other card once, at 40 cards and at 410; a card written out under a new box builds
+// that box and moves the card, the same as when it is kept there.
+#[test]
+fn a_prepend_or_a_reparent_moves_what_it_must() {
+    for (files, keep) in [(40, false), (40, true), (410, false), (410, true)] {
+        let host = host(0);
+        let parent = root(&host);
+        let mut tree = Tree::default();
+        apply(&host, &mut tree, &parent, &cards(files, &[], false)).unwrap();
+        let mut prepended = cards(files, &[], keep);
+        if let v2::Node::Box { children, .. } = &mut prepended[0] {
+            children.insert(0, v2::Node::text(vec![abi::Span::new("new")]));
+        }
+        let before = reconcile::work();
+        apply(&host, &mut tree, &parent, &prepended).unwrap();
+        let done = reconcile::work().since(before);
+        assert_eq!(
+            (done.created, done.removed, done.set, done.moved),
+            (1, 0, 0, files as u64),
+            "{files} {keep}: {done:?}"
+        );
+    }
+    for keep in [false, true] {
+        let host = host(0);
+        let parent = root(&host);
+        let mut tree = Tree::default();
+        apply(&host, &mut tree, &parent, &cards(20, &[], false)).unwrap();
+        let mut moved = cards(20, &[], keep);
+        if let v2::Node::Box { children, .. } = &mut moved[0] {
+            let card = children.remove(3);
+            let card = if keep { v2::Node::Keep { key: "card-3".into() } } else { card };
+            children.push(v2::Node::column(vec![card]).with_id("tray"));
+        }
+        let before = reconcile::work();
+        apply(&host, &mut tree, &parent, &moved).unwrap();
+        let done = reconcile::work().since(before);
+        assert_eq!((done.created, done.removed, done.set, done.moved), (1, 0, 0, 1), "keep={keep}: {done:?}");
+        assert_eq!(host.app.render(), fresh(&expand(&moved, &cards(20, &[], false)).unwrap(), 0, &|_| None).capture);
+    }
+}
+
 // Expected (`work`, `Keep`): a subtree under a keep costs nothing inside it. A card added after the kept ones builds
 // that card and moves nothing; one added before them moves each kept card once, since OpenTUI paints siblings in the
 // order they were attached and the kept ones must paint after it.
@@ -1254,4 +1296,53 @@ fn a_following_scroll_shows_appended_rows() {
         let top = top_row(&host);
         assert_eq!(top, if follow { "row 7" } else { "row 0" }, "follow={follow}");
     }
+}
+
+// Expected (bigboi's 10, P0a's properties): a box that loses its margin, its height and its border, one whose height
+// is a percent of its parent, and a border's color across a theme switch each draw as a fresh mount of the tree
+// through `node::add` does.
+#[test]
+fn p0a_properties_change_as_a_fresh_mount_draws_them() {
+    let text = || v2::Node::text(vec![abi::Span::new("inside")]);
+    let border = |color: &'static str| abi::Border {
+        sides: abi::Sides { top: true, right: true, bottom: true, left: true },
+        style: abi::BorderStyle::Rounded,
+        color: Some(abi::Color::from(color)),
+        title: Some("title".into()),
+        title_align: abi::TitleAlign::Center,
+    };
+    let dressed = |dressed: bool| {
+        let mut node = v2::Node::column(vec![text()]).with_id("box");
+        if let v2::Node::Box { layout, border: bordered, .. } = &mut node
+            && dressed
+        {
+            layout.margin = Some(abi::Edges { top: 1, right: 2, bottom: 0, left: 3 });
+            layout.height = Some(abi::Width::Cells(5));
+            *bordered = Some(std::boxed::Box::new(border("border.base")));
+        }
+        vec![node]
+    };
+    let halves = vec![
+        v2::Node::column(vec![text()])
+            .with_id("half")
+            .layout(abi::Layout { height: Some(abi::Width::Percent(50.0)), ..abi::Layout::default() })
+            .bg("background.raised.base"),
+    ];
+    for (from, to) in [(dressed(true), dressed(false)), (dressed(false), dressed(true)), (dressed(false), halves)] {
+        let host = host(0);
+        let parent = root(&host);
+        let mut tree = Tree::default();
+        apply(&host, &mut tree, &parent, &from).unwrap();
+        host.app.render();
+        apply(&host, &mut tree, &parent, &to).unwrap();
+        assert_eq!(host.app.render(), fresh(&to, 0, &|_| None).capture, "{to:?}");
+    }
+    let host = host(0);
+    let parent = root(&host);
+    let mut tree = Tree::default();
+    apply(&host, &mut tree, &parent, &dressed(true)).unwrap();
+    host.app.render();
+    *host.theme.borrow_mut() = theme(1);
+    apply(&host, &mut tree, &parent, &dressed(true)).unwrap();
+    assert_eq!(host.app.render(), fresh(&dressed(true), 1, &|_| None).capture);
 }
