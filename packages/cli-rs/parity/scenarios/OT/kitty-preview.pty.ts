@@ -1,10 +1,8 @@
-// anomalyco/opentui#2130: an image preview drawn in half blocks over a Kitty thumbnail leaves no block glyphs behind
-// when it closes. Before #2130 the cell diff skipped the thumbnail's cells, so the dialog's glyphs stayed over it.
-//
-// The terminal shows Kitty graphics with 20x40-pixel cells. The prompt's thumbnail of a 1600x1200 noise image is a
-// Kitty copy. In the preview the image is no smaller than its source, so its upload is larger than one frame's output
-// and it draws in half blocks (parity/deviations/OT1896-large-image-blocks.md). Rust only: TS draws the preview with
-// Kitty, so its blocks never cover the thumbnail.
+// The image preview over the prompt's Kitty thumbnail, on a terminal that shows Kitty graphics with 20x40-pixel cells.
+// In the preview a 1600x1200 noise image is no smaller than its source, so its upload is larger than one frame's
+// output. TS sends it with Kitty across frames; Rust, since anomalyco/opentui#2135, sends one copy that fits a frame.
+// Both show it with Kitty, so the open preview compares, and closing it leaves no block glyph over the thumbnail
+// (anomalyco/opentui#2130, which cleared the half blocks Rust drew there before #2135).
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { deflateSync } from "node:zlib"
@@ -23,7 +21,6 @@ export default definePty({
   env: { OPENCODE_CLI_CONFIG_CONTENT: JSON.stringify(config) },
   server: { fallback: "tui" },
   graphics: { cell: 20 },
-  rsOnly: true,
   setup: async () => {
     await Bun.write(png, noise(1600, 1200))
   },
@@ -33,9 +30,10 @@ export default definePty({
     // The thumbnail sits above `[Image 1]`, at the prompt's left.
     {
       keys: press(30, 22) + release(30, 22),
-      until: { screen: new RegExp(`Image 1 of 1[\\s\\S]*${quadrants.source}`) },
+      until: { screen: "Image 1 of 1" },
       settle: 1500,
       timeout: 20_000,
+      checkpoint: "preview",
     },
     { keys: "\x1b", until: { screen: "[Image 1]" }, settle: 1500, absent: "Image 1 of 1", checkpoint: "closed" },
   ],
