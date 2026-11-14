@@ -53,13 +53,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
             })
             .collect();
         let action = Action::Command { name: OPEN.to_owned(), input: None };
-        host.dialog(Dialog::Select(Select {
-            title: "Subagents".to_owned(),
-            placeholder: None,
-            options,
-            current: None,
-            action,
-        }));
+        host.dialog(Dialog::Select(Select::new("Subagents", options, action)));
     });
     // Route navigation, as the TS plugin does: the built-in session list navigates this way too.
     setup.command(Command { name: OPEN.to_owned(), ..Command::default() }, |host, input| {
