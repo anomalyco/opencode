@@ -61,8 +61,8 @@ thread_local! {
     static MAILBOXES: RefCell<Vec<(String, Weak<Mailbox>)>> = RefCell::default();
 }
 
-/// What the mailbox of plugin `id`'s current activation has seen, if it has one: a failed plugin's shows it closed; a
-/// disabled or unloaded plugin has none.
+/// What the mailbox of plugin `id`'s current activation has seen, if it has one: a failed, disabled or unloaded plugin
+/// has none.
 pub fn stats(id: &str) -> Option<Stats> {
     MAILBOXES.with(|boxes| {
         let boxes = boxes.borrow();
