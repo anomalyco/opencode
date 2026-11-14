@@ -186,13 +186,19 @@ export class EffectSQLiteSession<TRelations extends AnyRelations> extends SQLite
                             ),
                           )
                         : this.executeTransactionStatement(connection, `release savepoint effect_sql_${id}`)
-                      : id === 0
-                        ? this.executeTransactionStatement(connection, "rollback")
-                        : this.executeTransactionStatement(connection, `rollback to savepoint effect_sql_${id}`).pipe(
-                            Effect.andThen(
-                              this.executeTransactionStatement(connection, `release savepoint effect_sql_${id}`),
-                            ),
-                          )
+                      : (id === 0
+                          ? this.executeTransactionStatement(connection, "rollback")
+                          : this.executeTransactionStatement(connection, `rollback to savepoint effect_sql_${id}`).pipe(
+                              Effect.andThen(
+                                this.executeTransactionStatement(connection, `release savepoint effect_sql_${id}`),
+                              ),
+                            )
+                        ).pipe(
+                          // SQLite rolls the whole transaction back itself on errors such as SQLITE_FULL, so this
+                          // fails because there is nothing left to roll back. Report the body's error, not that one.
+                          // Any other rollback failure still fails.
+                          Effect.catch((error) => (alreadyRolledBack(error) ? Effect.void : Effect.fail(error))),
+                        )
 
                     return finalize.pipe(Effect.flatMap(() => exit))
                   }),
@@ -238,4 +244,13 @@ export class EffectSQLiteTransaction<TRelations extends AnyRelations> extends SQ
       tx: SQLiteEffectTransaction<EffectSQLiteQueryEffectHKT, EffectSQLiteRunResult, TRelations>,
     ) => Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, SqlError | E, R> = (tx) => this.session.transaction(tx)
+}
+
+// What SQLite reports when it already rolled the transaction back, up to and including the savepoint.
+function alreadyRolledBack(error: unknown, depth = 0): boolean {
+  if (typeof error !== "object" || error === null || depth > 5) return false
+  if ("message" in error && typeof error.message === "string") {
+    if (error.message.includes("no transaction is active") || error.message.includes("no such savepoint")) return true
+  }
+  return "cause" in error && alreadyRolledBack(error.cause, depth + 1)
 }

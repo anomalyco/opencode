@@ -1349,6 +1349,11 @@ function App() {
     })
   })
 
+  // Server-wide, so every TUI shows it whatever directory it has open.
+  event.on("storage.failed", (evt) => {
+    toast.show({ title: "Can't save to disk", message: evt.data.message, variant: "error" })
+  })
+
   event.on("tui.session.select", (evt, { directory }) => {
     if (directory !== (location.current?.directory ?? data.location.default().directory)) return
     route.navigate({
