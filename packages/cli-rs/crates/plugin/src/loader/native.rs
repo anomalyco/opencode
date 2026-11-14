@@ -1320,7 +1320,12 @@ impl Guest {
         Rc::new(move |_: &dyn Host, owner: &Rc<crate::interact::Owner>, event: &abi::interact::Event| {
             let Some(guest) = guest.upgrade() else { return abi::interact::Handled::Pass };
             let request = Request::Input { to: to.clone(), event: event.clone() };
-            let handled = guest.owners.as_owner(owner, || guest.request("handle", &request));
+            // The user's when the user's input caused it, which a verb on the transcript needs.
+            let call = || guest.owners.as_owner(owner, || guest.request("handle", &request));
+            let handled = match event.by_user() {
+                Some(user) => behave::as_user(user, call),
+                None => call(),
+            };
             if handled.is_some() {
                 guest.activation.invalidate();
             }
@@ -1597,14 +1602,6 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
                     let request = Request::Layout { surface: index, geometry: geometry.clone() };
                     guest.upgrade().and_then(|guest| guest.request("layout", &request)).unwrap_or_default()
                 }) as v2::LayoutFn
-            }),
-            scrolled: claim.on_scroll.then(|| {
-                let guest = Rc::downgrade(guest);
-                Rc::new(move |_: &Weak<()>, event: &v2::ScrollEvent| {
-                    if let Some(guest) = guest.upgrade() {
-                        guest.handle("on-scroll", &Request::Scrolled { surface: index, event: event.clone() });
-                    }
-                }) as behave::Scrolls
             }),
             ended: Some({
                 let guest = Rc::downgrade(guest);

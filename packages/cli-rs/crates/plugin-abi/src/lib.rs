@@ -386,9 +386,6 @@ pub struct SurfaceClaim {
     /// 2.0 (P3): the surface has a `layout`.
     #[serde(default, skip_serializing_if = "is_false")]
     pub layout: bool,
-    /// 2.0 (P3): the surface has a scroll handler, which [`Request::Scrolled`] runs.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub on_scroll: bool,
     /// P2: the surface has a handler ([`v2::Surface::on`]), which [`Request::Input`] calls.
     #[serde(default, skip_serializing_if = "is_false")]
     pub handler: bool,
@@ -1538,11 +1535,6 @@ pub enum Request {
     Layout {
         surface: usize,
         geometry: v2::Geometry,
-    },
-    /// 2.0 (P3): runs the scroll handler of the surface [`Manifest::surfaces`] names by index. Result: null.
-    Scrolled {
-        surface: usize,
-        event: v2::ScrollEvent,
     },
     /// 2.0 (P2): calls the handler `to` names with `event`. Result: [`interact::Handled`].
     Input {
@@ -3534,7 +3526,6 @@ impl Setup<'_> {
             draw: surface.draw.is_some(),
             notify: surface.notify.clone(),
             layout: surface.layout.is_some(),
-            on_scroll: surface.on_scroll.is_some(),
             handler: surface.handler.is_some(),
             layers: surface.layers.clone(),
         };
@@ -3888,11 +3879,6 @@ impl Registered {
                 let layout =
                     self.surfaces.get(surface).and_then(|surface| surface.layout.as_ref()).ok_or("no layout")?;
                 json(serde_json::to_value(layout(&geometry)))
-            }
-            Request::Scrolled { surface, event } => {
-                let surface = self.surfaces.get(surface).ok_or("no such surface")?;
-                surface.on_scroll.as_ref().ok_or("no scroll handler")?(&self.host, &event);
-                Ok(serde_json::Value::Null)
             }
             Request::Input { to, event } => {
                 let handler = match to {

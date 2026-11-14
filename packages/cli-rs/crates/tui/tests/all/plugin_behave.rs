@@ -22,6 +22,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::Duration;
 
+use opencode_plugin::abi::interact::{Event, Handled};
 use opencode_plugin::abi::{self, v2};
 use opencode_plugin::{behave, reconcile};
 use opencode_tui::{Deps, Route};
@@ -120,9 +121,15 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     });
     let surface = v2::Surface::new("board", v2::Place::Route("board".into()), view)
         .layout(vec![v2::Notify::Node { id: "edge".into() }], board_layout)
-        .on_scroll(|_, event| match event {
-            v2::ScrollEvent::Landed { anchor, .. } => board(|board| board.landed.push(anchor.id.clone())),
-            v2::ScrollEvent::UserScroll { .. } => board(|board| board.user_scrolls += 1),
+        .on(|_, event| {
+            match event {
+                Event::Scroll { event: v2::ScrollEvent::Landed { anchor, .. } } => {
+                    board(|board| board.landed.push(anchor.id.clone()))
+                }
+                Event::Scroll { event: v2::ScrollEvent::UserScroll { .. } } => board(|board| board.user_scrolls += 1),
+                _ => {}
+            }
+            Handled::Pass
         });
     setup.surface(surface);
     Ok(())
@@ -1018,14 +1025,12 @@ const PNG: &[u8] = &[
 fn kinds_setup(setup: &mut abi::Setup) -> Result<(), String> {
     let command =
         |name: &str| abi::Command { name: name.into(), scope: abi::Scope::Route("kinds".into()), ..Default::default() };
-    setup.command(command("kinds.changed"), |_, input| kinds(|kinds| kinds.changes.push(input.unwrap_or("").into())));
-    setup.command(command("kinds.submit"), |_, input| kinds(|kinds| kinds.submits.push(input.unwrap_or("").into())));
     setup.command(command("kinds.value"), |_, input| kinds(|kinds| kinds.value = input.unwrap_or("").into()));
     setup.command(command("kinds.code"), |_, input| kinds(|kinds| kinds.code = input.unwrap_or("").into()));
     setup.command(command("kinds.image"), |_, input| {
         kinds(|kinds| kinds.image = if input == Some("png") { PNG.to_vec() } else { b"junk".to_vec() })
     });
-    setup.surface(v2::Surface::new("kinds", v2::Place::Route("kinds".into()), |cx| {
+    let surface = v2::Surface::new("kinds", v2::Place::Route("kinds".into()), |cx| {
         let (value, code, image) = kinds(|kinds| (kinds.value.clone(), kinds.code.clone(), kinds.image.clone()));
         let image = cx.content(image);
         let input = v2::Node::Input {
@@ -1033,8 +1038,6 @@ fn kinds_setup(setup: &mut abi::Setup) -> Result<(), String> {
             value,
             placeholder: "name".into(),
             lines: None,
-            on_change: Some("kinds.changed".into()),
-            on_submit: Some("kinds.submit".into()),
             layout: abi::Layout::default(),
         };
         let mut split = v2::Node::row(vec![text("LEFT".into()), text("RIGHT".into())]).with_id("split");
@@ -1059,7 +1062,16 @@ fn kinds_setup(setup: &mut abi::Setup) -> Result<(), String> {
             split,
         ])
         .layout(abi::Layout::default().grow())
-    }));
+    })
+    .on(|_, event| {
+        match event {
+            Event::Change { text, .. } => kinds(|kinds| kinds.changes.push(text.clone())),
+            Event::Submit { text, .. } => kinds(|kinds| kinds.submits.push(text.clone())),
+            _ => {}
+        }
+        Handled::Pass
+    });
+    setup.surface(surface);
     Ok(())
 }
 
@@ -1082,11 +1094,11 @@ fn dispatch(harness: &support::Harness, name: &str, input: &str) {
     harness.app.advance(Duration::ZERO);
 }
 
-// Expected (synthesis 4.2, 4.13 rank 4): an input's text and cursor are the host's: typing runs its change command
-// with the text, enter its submit command; a value the tree changes replaces the text, and a revision that keeps the
-// value keeps what the user typed.
+// Expected (synthesis 4.2, 4.13 rank 4): an input's text and cursor are the host's: each edit comes to the surface's
+// handler as a change with the text, enter as a submit; a value the tree changes replaces the text, and a revision
+// that keeps the value keeps what the user typed.
 #[test]
-fn an_input_runs_its_commands_and_keeps_what_the_user_typed() {
+fn an_input_tells_its_handler_and_keeps_what_the_user_typed() {
     let harness = mount_kinds();
     let screen = harness.app.render().text();
     let (x, y) = support::at(&screen, "name").expect("the input's placeholder shows");
@@ -1190,12 +1202,22 @@ fn transcript_setup(setup: &mut abi::Setup) -> Result<(), String> {
     });
     // A wake is not the user's input: a verb from it would fight the wheel.
     setup.on_wake(|host| host.scroll(v2::Target::Transcript, v2::Scroll::By { rows: 9 }));
+    // A key a layer of the plugin takes is (P2's handler, folded with P3's).
+    let layer = abi::interact::Layer {
+        scope: abi::interact::LayerScope::Global,
+        keys: vec![abi::interact::Bind::new("z", "up")],
+        ..Default::default()
+    };
+    setup.layer(layer, |host, _| {
+        host.scroll(v2::Target::Transcript, v2::Scroll::By { rows: -4 });
+        Handled::Consume
+    });
     Ok(())
 }
 
 // Expected (decision 8, review big-boi 6): the transcript takes `By`, `Offset` and `Edge` from a handler of the user's
-// input, and reads back what it publishes; a `Step` on it, a verb from a wake and one from a command the plugin
-// dispatched itself are dropped.
+// input, a command or a key handler, and reads back what it publishes; a `Step` on it, a verb from a wake and one from
+// a command the plugin dispatched itself are dropped.
 #[test]
 fn the_transcript_takes_three_verbs_from_a_handler_only() {
     let verbs: std::rc::Rc<RefCell<Vec<v2::Scroll>>> = std::rc::Rc::default();
@@ -1219,8 +1241,9 @@ fn the_transcript_takes_three_verbs_from_a_handler_only() {
         harness.app.advance(Duration::from_millis(1));
         harness.app.render();
     }
+    harness.app.press("z");
     harness.app.advance(Duration::from_millis(5));
-    assert_eq!(*verbs.borrow(), [v2::Scroll::By { rows: -3 }]);
+    assert_eq!(*verbs.borrow(), [v2::Scroll::By { rows: -3 }, v2::Scroll::By { rows: -4 }]);
     // A read answers any call.
     assert_eq!(READ.with(|read| read.borrow().clone()), [7, 7]);
 }
@@ -1517,12 +1540,15 @@ fn probe_setup(setup: &mut abi::Setup) -> Result<(), String> {
             };
             v2::LayoutReply { again, ..reply }
         })
-        .on_scroll(|host, event| {
-            let read = host.scroll_state(&probe_target());
-            seen(|seen| {
-                seen.events.push(event.clone());
-                seen.reads.push(read);
-            });
+        .on(|host, event| {
+            if let Event::Scroll { event } = event {
+                let read = host.scroll_state(&probe_target());
+                seen(|seen| {
+                    seen.events.push(event.clone());
+                    seen.reads.push(read);
+                });
+            }
+            Handled::Pass
         });
     setup.surface(surface);
     Ok(())
@@ -2363,8 +2389,6 @@ fn input_setup(setup: &mut abi::Setup) -> Result<(), String> {
             value: String::new(),
             placeholder: "name".into(),
             lines: many.then_some(3),
-            on_change: None,
-            on_submit: None,
             layout: abi::Layout::default().width(abi::Width::Cells(width)),
         };
         v2::Node::column(vec![input]).layout(abi::Layout::default().grow())

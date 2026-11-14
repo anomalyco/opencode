@@ -66,6 +66,8 @@ pub struct Owner {
     /// The ids of its tree's nodes, and of its focusable ones.
     ids: RefCell<Vec<String>>,
     focusable: RefCell<Vec<String>>,
+    /// The mount it holds the input of, as long as it lives; `None` for an activation.
+    mount: Option<Weak<()>>,
 }
 
 struct Mode {
@@ -188,13 +190,14 @@ impl Owner {
         root: View,
         lookup: Lookup,
         deliver: Option<Deliver>,
+        mount: Weak<()>,
     ) -> Rc<Self> {
-        Rc::new(Self::new(plugin, surface, host, Some(root), Some(lookup), deliver))
+        Rc::new(Self::new(plugin, surface, host, Some(root), Some(lookup), deliver, Some(mount)))
     }
 
     /// An activation's owner, which has no surface.
     pub(crate) fn activation(plugin: &str, host: Weak<dyn Host>) -> Rc<Self> {
-        Rc::new(Self::new(plugin, "", host, None, None, None))
+        Rc::new(Self::new(plugin, "", host, None, None, None, None))
     }
 
     fn new(
@@ -204,6 +207,7 @@ impl Owner {
         root: Option<View>,
         lookup: Option<Lookup>,
         deliver: Option<Deliver>,
+        mount: Option<Weak<()>>,
     ) -> Self {
         Self {
             plugin: plugin.to_owned(),
@@ -220,6 +224,7 @@ impl Owner {
             mode: RefCell::default(),
             ids: RefCell::default(),
             focusable: RefCell::default(),
+            mount,
         }
     }
 
@@ -534,6 +539,18 @@ impl Owner {
     /// Whether its tree holds a node with id `id`.
     pub(crate) fn has(&self, id: &str) -> bool {
         self.ids.borrow().iter().any(|known| known == id)
+    }
+
+    /// The mount it holds the input of; `None` for an activation.
+    pub(crate) fn mounted(&self) -> Option<Weak<()>> {
+        self.mount.clone()
+    }
+
+    /// Calls the mount's handler with what one of its widgets or scrolls sends (P3): an edit, a scroll.
+    pub(crate) fn hear(self: &Rc<Self>, event: &Event) {
+        if let Some(host) = self.host.upgrade() {
+            self.send(&*host, event);
+        }
     }
 
     /// Calls the mount's handler with `event`.

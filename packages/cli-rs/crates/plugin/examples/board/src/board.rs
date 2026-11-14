@@ -41,6 +41,8 @@ struct Board {
     /// The meter's next draw panics.
     broken: bool,
     keys: Vec<String>,
+    /// What the panel's input told its handler (P3's `Input` on P2's events).
+    said: Vec<String>,
 }
 
 /// The files: how many `layout` calls ran, the header's width the last one was told, and where the last step landed.
@@ -187,10 +189,11 @@ fn files(setup: &mut Setup) {
             v2::LayoutReply::default()
                 .paint("head", if odd { "background.raised.high" } else { "background.raised.base" })
         })
-        .on_scroll(move |_, event| {
-            if let v2::ScrollEvent::Landed { anchor, .. } = event {
+        .on(move |_, event| {
+            if let Event::Scroll { event: v2::ScrollEvent::Landed { anchor, .. } } = event {
                 landed.borrow_mut().landed = anchor.id.clone();
             }
+            Handled::Pass
         });
     setup.surface(surface);
 }
@@ -250,10 +253,10 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
         Bind::new("v", "menu"),
         Bind::new("b", "blur"),
     ];
-    let (heard, viewed) = (board.clone(), board.clone());
+    let (heard, viewed, said) = (board.clone(), board.clone(), board.clone());
     let surface = v2::Surface::new("notes", v2::Place::Panel("notes".into()), move |cx| {
         let panel = cx.input.panel.unwrap_or_default();
-        let keys = viewed.borrow().keys.join(" ");
+        let (keys, said) = (viewed.borrow().keys.join(" "), viewed.borrow().said.join(" "));
         let pad = v2::Node::column(vec![v2::Node::text(vec![Span::new("pad")])])
             .with_id("pad")
             .interact(Interact { focusable: true, ..Interact::default() });
@@ -265,6 +268,14 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
             ))]),
             v2::Node::text(vec![Span::new(format!("heard {keys}"))]),
             pad,
+            v2::Node::text(vec![Span::new(format!("said {said}"))]),
+            v2::Node::Input {
+                id: Some("say".into()),
+                value: String::new(),
+                placeholder: "say".into(),
+                lines: None,
+                layout: Layout::default(),
+            },
         ])
     })
     .layers(vec![Layer { keys, ..Layer::default() }])
@@ -291,6 +302,8 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
                 _ => return Handled::Pass,
             },
             Event::Closed { surface } => heard(format!("closed:{surface}")),
+            Event::Change { text, .. } => said.borrow_mut().said.push(format!("c:{text}")),
+            Event::Submit { text, .. } => said.borrow_mut().said.push(format!("s:{text}")),
             _ => return Handled::Pass,
         }
         Handled::Consume
