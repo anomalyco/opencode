@@ -11,12 +11,14 @@ The OpenCode native CLI (command `opencode-native`), on OpenTUI's Rust crates. R
   cargo through the package script, which runs in this directory:
   `bun run --cwd packages/cli-rs cargo check -p opencode-api`.
 - opentui comes from `packages/rust` of `anomalyco/opentui`, pinned by git `rev` in `Cargo.toml` and linked
-  statically. That checkout has no native library: `.cargo/config.toml` points `OPENTUI_LIB_DIR` at
-  `~/.cache/opentui-native/x86_64-linux`, which `/home/simon/src/opendocs/native-hardening/tools/abi-artifacts.py`
+  statically. That checkout has no native library: `.cargo/config.toml` points `OPENTUI_LIB_DIR` at the pin's own
+  directory, `~/.cache/opentui-native/<short rev>/x86_64-linux`, which
+  `/home/simon/src/opendocs/native-hardening/tools/abi-artifacts.py --client <Cargo.toml> --dest <that directory>`
   fills with the artifacts whose `opentui.h` matches the bindings at that `rev`. When the build fails with the
   header hash message, rerun it. A shell `OPENTUI_LIB_DIR` wins over the config.
-- A change to OpenTUI's Rust crates is a pull request into `packages/rust` of `anomalyco/opentui`. A re-pin runs
-  `abi-artifacts.py` first, then commits the new `rev` with its `Cargo.lock`. The `rev` may name the head of an
+- A change to OpenTUI's Rust crates is a pull request into `packages/rust` of `anomalyco/opentui`. A re-pin fills the
+  new `rev`'s directory with `abi-artifacts.py` first, then commits the new `rev` with its `Cargo.lock` and the new
+  directory in `.cargo/config.toml`. Other pins' directories stay, so branches on them keep building. The `rev` may name the head of an
   open pull request; re-pin to the merge commit on `main` once it merges.
 
 ## Checks
