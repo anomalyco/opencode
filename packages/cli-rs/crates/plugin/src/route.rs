@@ -58,27 +58,33 @@ impl View {
         let scroll = ScrollBox::new(host.app()).scrollbars(false).grow(1.0);
         scroll.content_view().align_items(Align::Center).justify(Justify::Center).padding_y(1);
         scroll.add(&content.root());
-        Self::page(host, &scroll, content, commands)
+        Self::page(host, &scroll, content, layer(host, commands))
     }
 
-    /// The route that gives `content` the whole page: the route of a 2.0 surface, whose root fills it.
-    pub fn fill(host: &dyn Host, content: Box<dyn Claimed>, commands: Vec<TuiCommand>) -> Self {
+    /// The route that gives `content` the whole page: the route of a 2.0 surface, whose root fills it. Its keymap
+    /// `layer` is made before `content` first draws ([`layer`]).
+    pub fn fill(host: &dyn Host, content: Box<dyn Claimed>, layer: Option<Disposer>) -> Self {
         let root = content.root();
-        Self::page(host, &root, content, commands)
+        Self::page(host, &root, content, layer)
     }
 
-    fn page(host: &dyn Host, inner: &impl Widget, content: Box<dyn Claimed>, commands: Vec<TuiCommand>) -> Self {
+    fn page(host: &dyn Host, inner: &impl Widget, content: Box<dyn Claimed>, layer: Option<Disposer>) -> Self {
         let app = host.app();
         let root = opentui::prelude::View::new(app)
             .width(Length::percent(100.0))
             .height(Length::percent(100.0))
             .bg(host.theme().background.base)
             .child(inner);
-        let layer = (!commands.is_empty())
-            .then(|| host.keymap().layer(KeymapLayer::<FocusId>::new(commands)))
-            .and_then(|layer| layer.map_err(|error| log::error!("plugin route keymap layer: {error}")).ok());
         Self { root, content, layer: RefCell::new(layer), app: app.clone() }
     }
+}
+
+/// The keymap layer of a route's `commands`. A surface's route makes it before its first view, which may read the
+/// keymap (ABI 1.6), so the layer's arrival does not call the view again (review bigboi-7).
+pub(crate) fn layer(host: &dyn Host, commands: Vec<TuiCommand>) -> Option<Disposer> {
+    (!commands.is_empty())
+        .then(|| host.keymap().layer(KeymapLayer::<FocusId>::new(commands)))
+        .and_then(|layer| layer.map_err(|error| log::error!("plugin route keymap layer: {error}")).ok())
 }
 
 impl Claimed for View {

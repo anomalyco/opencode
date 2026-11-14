@@ -11,6 +11,10 @@ pub struct Plugin {
     content: Option<RouteMount>,
     /// The diff viewer, a host entry, which lives as long as its route.
     _viewer: Option<Rc<Viewer>>,
+    /// Not synced yet. The TUI syncs a route it has just mounted, in the same turn (`Tui::navigate`); the plugin's
+    /// content drew as it mounted, so that first sync brings nothing new (review bigboi-7: a route's first frame ran
+    /// two views).
+    fresh: Cell<bool>,
 }
 
 impl Plugin {
@@ -25,7 +29,7 @@ impl Plugin {
             (None, None) => crate::features::route_missing::mount(tui, id, name),
         };
         let root = View::new(&tui.app).column().grow(1.0).basis(Length::Auto).child(&view);
-        Self { root, content, _viewer: viewer }
+        Self { root, content, _viewer: viewer, fresh: Cell::new(true) }
     }
 }
 
@@ -35,6 +39,9 @@ impl RouteView for Plugin {
     }
 
     fn sync(&self, tui: &Tui, changes: &Changes) {
+        if self.fresh.replace(false) {
+            return;
+        }
         if let Some(content) = &self.content {
             crate::plugins::host::changed(tui, changes, |changed| content.sync(tui, changed));
         }

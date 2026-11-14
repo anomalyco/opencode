@@ -29,11 +29,16 @@ pub fn entry_file() -> String {
 
 /// Loads native builds.
 pub trait Backend {
-    /// Loads the build `library` against `host`, returning the definition, not yet active, and its failure while
-    /// it runs. Setup runs with `options` (JSON text) on each activation, not here. An error is why the build
-    /// cannot load.
-    fn load(&self, host: &Rc<dyn Host>, library: &[u8], options: Option<&str>)
-    -> Result<(Definition, ErrorFn), String>;
+    /// Loads the build `library`, read from the file `source`, against `host`, returning the definition, not yet
+    /// active, and its failure while it runs. Setup runs with `options` (JSON text) on each activation, not here. An
+    /// error is why the build cannot load.
+    fn load(
+        &self,
+        host: &Rc<dyn Host>,
+        library: &[u8],
+        source: &Path,
+        options: Option<&str>,
+    ) -> Result<(Definition, ErrorFn), String>;
 }
 
 /// A `plugins` entry of `cli.json` that names no built-in: a TypeScript package or path, or a native build.
@@ -299,9 +304,9 @@ impl Loader {
         let checked = deps::check(&bytes, target.project);
         // Opening the library runs its code: the record names the build while it does, before its ID is known.
         let slot = registry.monitor().slot(&crate::contain::Artifact::external("", name, &format!("{digest:016x}")));
-        let (loaded, _) = registry
-            .monitor()
-            .call(slot, "load", || checked.and_then(|()| self.backend.load(host, &bytes, target.options.as_deref())));
+        let (loaded, _) = registry.monitor().call(slot, "load", || {
+            checked.and_then(|()| self.backend.load(host, &bytes, &file, target.options.as_deref()))
+        });
         let loaded = loaded.and_then(|loaded| {
             if !registry.id_taken(&loaded.0.id, name) {
                 return Ok(loaded);

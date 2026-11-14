@@ -359,7 +359,13 @@ struct Fake {
 }
 
 impl Backend for Fake {
-    fn load(&self, _: &Rc<dyn Host>, library: &[u8], options: Option<&str>) -> Result<(Definition, ErrorFn), String> {
+    fn load(
+        &self,
+        _: &Rc<dyn Host>,
+        library: &[u8],
+        _: &Path,
+        options: Option<&str>,
+    ) -> Result<(Definition, ErrorFn), String> {
         if let Some(during) = self.during.borrow().as_ref() {
             during();
         }

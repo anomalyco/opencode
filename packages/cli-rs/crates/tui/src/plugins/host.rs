@@ -550,7 +550,8 @@ pub struct Reads {
     pending: Arc<AtomicUsize>,
     /// The mounted claims' pushes, which a storage write calls with `local` from the effect queue.
     watchers: RefCell<Vec<Weak<Push>>>,
-    telling: Cell<bool>,
+    /// Who hears the notice the effect queue holds: the watchers there when the last change it tells of was made.
+    told: RefCell<Option<Vec<Weak<Push>>>>,
     /// The server plugins of the default location (TS `plugins.server()`), and that location.
     server: RefCell<(Option<Location>, Vec<PluginInfo>)>,
     /// What the last change batch changed, for the plugins.
@@ -565,12 +566,14 @@ impl Reads {
     /// Tells the mounted claims that the storage changed. The plugins queue it after a write, so it is in order with
     /// their other effects; it tells at the end of the queue, once for every write queued before then.
     fn changed(&self, tui: &Tui) {
-        if self.telling.replace(true) {
+        // A watcher that comes after the change, such as a surface the change mounted, drew with it already (review
+        // bigboi-7: a route's first frame ran two views).
+        if self.told.replace(Some(self.watchers.borrow().clone())).is_some() {
             return;
         }
         tui.app.defer(bind!(tui, |tui, _| {
-            tui.reads.telling.set(false);
-            let pushes: Vec<_> = tui.reads.watchers.borrow().iter().filter_map(Weak::upgrade).collect();
+            let told = tui.reads.told.take().unwrap_or_default();
+            let pushes: Vec<_> = told.iter().filter_map(Weak::upgrade).collect();
             let local = abi::Changed { local: true, ..abi::Changed::default() };
             pushes.iter().for_each(|push| push(&local));
         }));
