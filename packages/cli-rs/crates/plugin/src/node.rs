@@ -285,6 +285,8 @@ pub(crate) fn root_layout(root: &View, layout: &abi::Layout) {
         .min_height(Length::Undefined)
         .max_height(Length::Undefined);
     [Edge::Top, Edge::Right, Edge::Bottom, Edge::Left].into_iter().for_each(|edge| drop(root.margin_edge(edge, 0)));
+    // OpenTUI has no way back from absolute: a root an earlier layout made absolute stays out of the flow, at the
+    // edges it was given.
     lay_out(root, layout);
 }
 

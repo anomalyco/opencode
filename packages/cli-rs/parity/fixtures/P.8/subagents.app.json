@@ -1,0 +1,63 @@
+{
+ "scenario": "P.8/subagents",
+ "width": 140,
+ "height": 34,
+ "directory": "/tmp/opencode/packages/tui",
+ "config": {
+  "experimental": {"new-designs":true},
+  "plugins": ["./out/npm/node_modules/opencode-subagents-sidebar"],
+  "animations": false
+ },
+ "args": {
+  "sessionID": "ses_s"
+ },
+ "env": {
+  "OPENCODE_PARITY_PLUGIN": "npm"
+ },
+ "routes": [
+  {"path":"/api/session/ses_s","json":{"data":{"id":"ses_s","title":"Plan the release","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":5,"updated":5},"location":{"directory":"/tmp/opencode/packages/tui"}}}},
+  {"path":"/api/session","json":{"data":[{"id":"ses_s","title":"Plan the release","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":5,"updated":5},"location":{"directory":"/tmp/opencode/packages/tui"}},{"id":"ses_c1","title":"Write the changelog","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":4,"updated":4},"location":{"directory":"/tmp/opencode/packages/tui"},"parentID":"ses_s"},{"id":"ses_c2","title":"Tag the release","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":3,"updated":3},"location":{"directory":"/tmp/opencode/packages/tui"},"parentID":"ses_s"}],"cursor":{}}},
+  {"path":"/api/session/ses_s/message","json":{"data":[{"id":"msg_1","type":"user","text":"Plan it","time":{"created":1}}],"cursor":{}}},
+  {"path":"/api/session/ses_s/inbox","json":{"data":[]}}
+ ],
+ "steps": [
+  {"checkpoint":"listed","until":"Subagents","fixture":"P.8/subagents/listed"}
+ ],
+ "requests": {
+  "writes": [],
+  "reads": [
+   {"method":"GET","path":"/api/agent","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/command","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/config","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":[]},
+   {"method":"GET","path":"/api/experimental/migration/v1","query":{},"status":200,"json":{"status":"completed"}},
+   {"method":"GET","path":"/api/experimental/session/ses_s/terminal","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/form","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/fs/list","query":{"location[directory]":["<cwd>"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/info","query":{},"status":200,"json":{"version":"test","pid":0,"urls":[],"paths":{"tmp":"/tmp"},"capabilities":{"persistentPty":true}}},
+   {"method":"GET","path":"/api/integration","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/location","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}}},
+   {"method":"GET","path":"/api/mcp","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/mcp/resource","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":{"resources":[],"templates":[]}}},
+   {"method":"GET","path":"/api/model","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/plugin","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/project","query":{},"status":200,"json":[]},
+   {"method":"GET","path":"/api/provider","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/reference","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode/packages/tui","canonical":"/tmp/opencode/packages/tui"}},"data":[]}},
+   {"method":"GET","path":"/api/session","query":{"limit":["200"],"order":["desc"],"parentID":["ses_s"]},"status":200,"json":{"data":[{"id":"ses_s","title":"Plan the release","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":5,"updated":5},"location":{"directory":"/tmp/opencode/packages/tui"}},{"id":"ses_c1","title":"Write the changelog","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":4,"updated":4},"location":{"directory":"/tmp/opencode/packages/tui"},"parentID":"ses_s"},{"id":"ses_c2","title":"Tag the release","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":3,"updated":3},"location":{"directory":"/tmp/opencode/packages/tui"},"parentID":"ses_s"}],"cursor":{}}},
+   {"method":"GET","path":"/api/session/active","query":{},"status":200,"json":{"data":{}}},
+   {"method":"GET","path":"/api/session/ses_c1/form","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/session/ses_c1/permission","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/session/ses_c2/form","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/session/ses_c2/permission","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/session/ses_s","query":{},"status":200,"json":{"data":{"id":"ses_s","title":"Plan the release","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":5,"updated":5},"location":{"directory":"/tmp/opencode/packages/tui"}}}},
+   {"method":"GET","path":"/api/session/ses_s/form","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/session/ses_s/inbox","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/session/ses_s/message","query":{"limit":["20"],"order":["desc"]},"status":200,"json":{"data":[{"id":"msg_1","type":"user","text":"Plan it","time":{"created":1}}],"cursor":{}}},
+   {"method":"GET","path":"/api/session/ses_s/permission","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/shell","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/skill","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/vcs","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":{"branch":{"current":"main","default":"main"}}}},
+   {"method":"POST","path":"/api/rpc/opencode.goal/get","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"body":{"input":{"sessionID":"ses_s"}},"status":200,"json":{"output":null}}
+  ]
+ }
+}

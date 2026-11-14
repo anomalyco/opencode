@@ -255,8 +255,17 @@ export interface Reading {
   dropped: Set<string>
 }
 
+// A render's nodes are children of the slot's parent in TS, as `<Slot>` is a fragment. The host puts them in the
+// mount's own box; when every one is absolute that box is absolute too, and fills the slot's parent, so they sit where
+// TS puts them.
 export function serialize(root: VNode, reading: Reading): Json {
-  return { type: "box", children: nodes(root.children, reading) }
+  const children = nodes(root.children, reading)
+  const absolute = children.length > 0 && children.every((child) => child.layout?.absolute)
+  return compact({
+    type: "box",
+    layout: absolute ? { absolute: { top: 0, right: 0, bottom: 0, left: 0 } } : undefined,
+    children,
+  })
 }
 
 function nodes(children: VNode[], reading: Reading): Json[] {

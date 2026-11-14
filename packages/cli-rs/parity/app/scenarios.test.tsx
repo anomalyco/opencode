@@ -6,6 +6,7 @@ import { CodeRenderable, type Renderable } from "@opentui/core"
 import { Database } from "bun:sqlite"
 import type { ServerWebSocket } from "bun"
 import { mkdtemp, rm } from "node:fs/promises"
+import { mkdirSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { createAppFixture } from "../../../tui/test/fixture/app"
@@ -67,6 +68,7 @@ async function record(name: string, file: string) {
         value === undefined ? delete process.env[key] : (process.env[key] = value),
       ),
   }
+  unpackNpm(config)
   let index = 0
   const pty = scenario.pty ? installFakePty(scenario.pty, () => index) : undefined
   await using _pty = { [Symbol.asyncDispose]: async () => pty?.restore() }
@@ -158,6 +160,25 @@ async function record(name: string, file: string) {
     },
   }
   await Bun.write(`${parity}fixtures/${name}.app.json`, recordingText(recording))
+}
+
+// P8: each `plugins` entry `./out/npm/node_modules/<name>` is the published tarball `plugins/npm/<name>.tgz` (a scope's
+// `/` as `__`), unpacked there afresh, as an install puts a package under `node_modules`; the Rust replay does the same
+// (`npm` in crates/tui/tests/all/app.rs).
+function unpackNpm(config: Record<string, unknown>) {
+  const prefix = "./out/npm/node_modules/"
+  const entries = (config.plugins as unknown[] | undefined) ?? []
+  for (const entry of entries) {
+    const target = typeof entry === "string" ? entry : (entry as { package: string }).package
+    if (!target.startsWith(prefix)) continue
+    const name = target.slice(prefix.length)
+    const into = `${parity}${target.slice(2)}`
+    rmSync(into, { recursive: true, force: true })
+    mkdirSync(into, { recursive: true })
+    const tarball = `${parity}plugins/npm/${name.replace("/", "__")}.tgz`
+    const tar = Bun.spawnSync(["tar", "-xzf", tarball, "-C", into, "--strip-components=1"])
+    if (tar.exitCode !== 0) throw new Error(`cannot unpack ${tarball}: ${tar.stderr.toString()}`)
+  }
 }
 
 // A fake IDE MCP server (E.5): it answers `initialize`, keeps every message a client sends, and pushes
