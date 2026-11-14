@@ -263,59 +263,8 @@ pub(crate) fn decode(bytes: &[u8]) -> Option<Pixels> {
 /// The width and height the header of a PNG, GIF, JPEG or WebP image names; `None` for no image, or one without
 /// pixels.
 pub(crate) fn size(bytes: &[u8]) -> Option<(u32, u32)> {
-    header(bytes).filter(|(width, height)| *width > 0 && *height > 0)
-}
-
-fn header(bytes: &[u8]) -> Option<(u32, u32)> {
-    let at = |from: usize, len: usize| bytes.get(from..from + len);
-    let be = |from: usize, len: usize| Some(at(from, len)?.iter().fold(0u32, |n, byte| n << 8 | u32::from(*byte)));
-    let le =
-        |from: usize, len: usize| Some(at(from, len)?.iter().rev().fold(0u32, |n, byte| n << 8 | u32::from(*byte)));
-    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-        return Some((be(16, 4)?, be(20, 4)?));
-    }
-    if bytes.starts_with(b"GIF8") {
-        return Some((le(6, 2)?, le(8, 2)?));
-    }
-    if bytes.starts_with(b"RIFF") && at(8, 4) == Some(b"WEBP") {
-        return match at(12, 4)? {
-            b"VP8 " => Some((le(26, 2)? & 0x3fff, le(28, 2)? & 0x3fff)),
-            b"VP8L" => {
-                let bits = le(21, 4)?;
-                Some(((bits & 0x3fff) + 1, ((bits >> 14) & 0x3fff) + 1))
-            }
-            b"VP8X" => Some((le(24, 3)? + 1, le(27, 3)? + 1)),
-            _ => None,
-        };
-    }
-    if !bytes.starts_with(&[0xff, 0xd8]) {
-        return None;
-    }
-    // JPEG: the segments up to the first start of frame, which holds the size. Fill bytes may come before a marker,
-    // and a marker without a length (TEM, a restart) has no segment (ITU T.81 B.1.1), as the decoder reads them
-    // (review carbon 3.1).
-    let mut from = 2;
-    loop {
-        if *bytes.get(from)? != 0xff {
-            return None;
-        }
-        while *bytes.get(from + 1)? == 0xff {
-            from += 1;
-        }
-        let marker = *bytes.get(from + 1)?;
-        if marker == 0x01 || (0xd0..=0xd7).contains(&marker) {
-            from += 2;
-            continue;
-        }
-        if (0xc0..=0xcf).contains(&marker) && ![0xc4, 0xc8, 0xcc].contains(&marker) {
-            return Some((be(from + 7, 2)?, be(from + 5, 2)?));
-        }
-        let length = be(from + 2, 2)? as usize;
-        if length < 2 || marker == 0xd9 || marker == 0xd8 {
-            return None;
-        }
-        from += 2 + length;
-    }
+    // One reader for the host and the plugins, which read a header before they show it.
+    opencode_plugin_abi::image_size(bytes)
 }
 
 /// What an image node shows.
