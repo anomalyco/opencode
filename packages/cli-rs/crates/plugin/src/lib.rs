@@ -545,7 +545,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                 scrolled: surface.on_scroll.clone().map(|handler| {
                     let scope = scope.clone();
                     Rc::new(move |event: &abi::v2::ScrollEvent| scope.run("on-scroll", |host| handler(host, event)))
-                        as Rc<dyn Fn(&abi::v2::ScrollEvent)>
+                        as behave::Scrolls
                 }),
             };
             let owning = scope.clone();

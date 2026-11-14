@@ -227,7 +227,7 @@ pub(crate) enum Extra {
     Slot(Option<SlotMount>),
     Canvas(Canvas),
     /// The field, the value the tree gave it last, and the commands its events run.
-    Input(Field, RefCell<String>, Rc<RefCell<(Option<String>, Option<String>)>>),
+    Input(Field, RefCell<String>, Rc<RefCell<Events>>),
     List(Box<List>),
     /// The code and the text it shows.
     Code(opentui::widget::Code, Rc<str>),
@@ -237,6 +237,9 @@ pub(crate) enum Extra {
     /// has its id now.
     Taken,
 }
+
+/// The commands an input's change and submit run.
+pub(crate) type Events = (Option<String>, Option<String>);
 
 /// An input of one line or many.
 #[derive(Clone)]
@@ -1260,7 +1263,7 @@ impl Pass<'_, '_> {
                 };
                 paint_field(&field, theme);
                 let commands = Rc::new(RefCell::new((on_change.clone(), on_submit.clone())));
-                let run = |which: fn(&(Option<String>, Option<String>)) -> Option<String>| {
+                let run = |which: fn(&Events) -> Option<String>| {
                     let (commands, act) = (commands.clone(), env.act.clone());
                     move |_: &mut Cx<'_>, text: &str| {
                         if let Some(name) = which(&commands.borrow()) {
