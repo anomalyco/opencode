@@ -144,6 +144,12 @@ async function act(app: App, action: string) {
     await setup.renderOnce()
     return
   }
+  if (action === "leader") {
+    // The leader starts a key sequence, which the line shows while it is pending.
+    setup.mockInput.pressKey("x", { ctrl: true })
+    await until(setup, (frame) => keys(frame) !== undefined, "the pending keys")
+    return
+  }
   if (action === "reload") {
     // A new build in place; the watcher reconciles. The line names the build, also under a dialog.
     const source = await Bun.file(app.entry).text()
@@ -165,13 +171,20 @@ function dialog(frame: string) {
   return dialogs.find(([title]) => frame.includes(title))?.[1]
 }
 
+// The keys the plugin's line shows as pending, if any.
+function keys(frame: string) {
+  return frame.match(/life plugin: [AB][^\n]* keys (\S+)/)?.[1]
+}
+
 // line/palette/row/dialog. While its dialog shows, the palette and the manager would replace it, so the first three
-// are not read.
+// are not read; while a key sequence is pending, a key would continue it, so the line is read with its keys alone.
 async function observe(setup: Fixture) {
   const frame = setup.captureCharFrame()
   const shown = dialog(frame)
   if (shown) return `?/?/?/${shown}`
   const line = ["A", "B"].find((side) => frame.includes(`life plugin: ${side}`)) ?? "-"
+  const pending = keys(frame)
+  if (pending) return `${line}+${pending}/?/?/-`
   const listed = (await palette(setup, "Life flip", false)) ? "yes" : "no"
   const found = await manager(setup)
   await closeManager(setup)
@@ -286,6 +299,10 @@ test("the plugin life follows the shared fixture on walks", async () => {
   await check(walks(), known(machine.xfail))
 }, 600_000)
 
-test.if(deep)("the plugin life recovers from a dropped, repeated or swapped action", async () => {
-  await check(faulted(), known(machine.xfail, machines.faults.life.xfail))
-}, 600_000)
+test.if(deep)(
+  "the plugin life recovers from a dropped, repeated or swapped action",
+  async () => {
+    await check(faulted(), known(machine.xfail, machines.faults.life.xfail))
+  },
+  600_000,
+)
