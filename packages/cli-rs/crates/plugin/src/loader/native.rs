@@ -1708,6 +1708,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
             deliver: claim.handler.then(|| guest.deliver(abi::InputTo::Surface { surface: index })),
             layers: claim.layers.clone(),
             panel: matches!(place.at, v2::Place::Panel(_)),
+            mounts: claim.mounts,
         });
         let remote = Rc::new(Remote { guest: guest.clone(), index, draw: claim.draw });
         setup.surface(place, remote, commands, fail, calls, &guest.owners, input);

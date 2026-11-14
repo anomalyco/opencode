@@ -408,6 +408,8 @@ pub struct Surface {
     pub handler: Option<HandlerFn>,
     /// The key layers each mount of it registers, which end with the mount.
     pub layers: Vec<Layer>,
+    /// P6a: its handler hears [`crate::interact::Event::Mount`] as each mount begins and ends.
+    pub mounts: bool,
 }
 
 impl Surface {
@@ -422,7 +424,13 @@ impl Surface {
             notify: Vec::new(),
             handler: None,
             layers: Vec::new(),
+            mounts: false,
         }
+    }
+
+    /// The surface whose handler hears each mount begin and end ([`crate::interact::Event::Mount`]).
+    pub fn mounts(self) -> Self {
+        Self { mounts: true, ..self }
     }
 
     /// The surface whose view reads the palette.
@@ -963,6 +971,14 @@ impl Node {
     pub fn wrap(mut self, value: Wrap) -> Self {
         if let Node::Text { wrap, .. } = &mut self {
             *wrap = value;
+        }
+        self
+    }
+
+    /// Text the mouse cannot select; anything else is unchanged.
+    pub fn unselectable(mut self) -> Self {
+        if let Node::Text { selectable, .. } = &mut self {
+            *selectable = false;
         }
         self
     }

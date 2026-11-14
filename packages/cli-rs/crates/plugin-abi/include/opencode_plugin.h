@@ -166,7 +166,7 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *    "route_mounts"?: [name], "fence_gone"?: bool,
  *    "surfaces"?: [{"name", "place": {"type": "route", "name"} | {"type": "slot", "kind", "path"}
  *      | {"type": "panel", "name"} | {"type": "overlay", "name"}, "palette"?, "draw"?: bool, "notify"?: [notify],
- *      "layout"?: bool, "handler"?: bool, "layers"?: [layer]}],
+ *      "layout"?: bool, "handler"?: bool, "layers"?: [layer], "mounts"?: bool}],
  *    "claims"?: [{"target": {"type": "tool" | "fence", "name"}, "palette"?}],
  *    "messages"?: bool, "layers"?: [layer], "searches"?: [name]}
  *   A layer is {"scope": "surface" | {"node": id} | "composer" | "global", "priority"?, "mode"?,
@@ -185,12 +185,14 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   {"type": "fence-gone", "key"}                              -> null
  *   2.0:
  *   {"type": "view", "surface": index, "mount": {"surface", "key", "generation"},
- *    "input": {"width", "height", "palette": {"mode", "colors"}, "full"?}, "next": n}
+ *    "input": {"width", "height", "palette": {"mode", "colors"}, "full"?, "changed"?, "slot"?}, "next": n}
  *                                     -> {"node": tree, "content"?: [[handle, content]], "memo"?: n}
  *      `memo` is how many values the plugin's memo table for the mount holds, at most the tree's nodes with an id.
  *      `content` is what the view gave the host this time, numbered next + 1, next + 2, ...; a node names it as
  *      {"content": handle}. A tree may name a subtree the last accepted tree had under an id as
- *      {"type": "keep", "key": id}. With "full" set, the host holds no tree to keep from.
+ *      {"type": "keep", "key": id}. With "full" set, the host holds no tree to keep from. "changed" is what changed
+ *      since the mount's last view, as in "render"; a keep of the last tree's root keeps the mount as it is. "slot" is a
+ *      slot surface's input, as in "render".
  *   {"type": "draw", "surface": index, "mount", "canvas": id,
  *    "frame": {"width", "height", "cause": "first" | "resized" | "version" | "animate", "dt": {"secs", "nanos"}}}
  *                                     -> the canvas's list as bytes, not JSON; none keeps the list the host holds
@@ -217,7 +219,8 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   {"type": "input", "to": {"type": "surface", "surface": index} | {"type": "layer", "layer": index},
  *    "event": {"type": "key" | "paste" | "pointer" | "hover" | "closed", ...} |
  *     {"type": "scroll", "event": {"type": "landed", "scroll", "anchor"} | {"type": "user-scroll", "scroll"}} |
- *     {"type": "change" | "submit", "node", "text"}}               -> "consume" | "pass"
+ *     {"type": "change" | "submit", "node", "text"} |
+ *     {"type": "mount", "mounted", "slot"?}}                     -> "consume" | "pass"
  *      A surface's handler hears the events of the mount the host routed them to; what it reads and asks of the input
  *      ("rect", "focused", "input-mode", "focus", "set-mode", "overlay", "scroll", ...) is that mount's. A layer of the
  *      manifest is the plugin's own. A scroll's and an input's events go to the surface's handler; the answer to them
@@ -225,7 +228,7 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   {"type": "search", "name", "query", "options": [option]}   -> [value]
  *
  * 2.0 tree nodes ("type"): "box" {"id"?, "row"?, "gap"?, "padding"?, "justify"?, "align"?, "bg"?, "layout"?,
- *   "on_click"?, "children"}, "text" {"id"?, "spans", "fg"?, "wrap"?, "truncate"?, "selectable"?, "hover_fg"?,
+ *   "on_click"?, "children", "visible"?}, "text" {"id"?, "spans", "fg"?, "wrap"?, "truncate"?, "selectable"?, "hover_fg"?,
  *   "layout"?, "on_click"?}, "slot" {"path"}, "markdown" {"id"?, "source"}, "spinner" {"id"?, "label"},
  *   "scroll" {"id"?, "height"?, "follow"?, "layout"?, "children"}, "diff" {"id"?, "content", "view"?, "filetype"?},
  *   "canvas" {"id", "layout"?, "version"?, "animate"?}, "keep" {"key"}. A source is {"text": text},

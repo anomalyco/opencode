@@ -572,6 +572,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                 deliver: surface.handler.clone().map(|handler| scope.deliver(handler)),
                 layers: surface.layers.clone(),
                 panel: matches!(surface.place, abi::v2::Place::Panel(_)),
+                mounts: surface.mounts,
             });
             let failing = scope.clone();
             let fail: surface::Fail = Rc::new(move |error| {
