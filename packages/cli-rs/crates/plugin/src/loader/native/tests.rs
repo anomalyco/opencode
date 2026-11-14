@@ -2751,3 +2751,60 @@ fn a_builtin_runs_inside_the_catch() {
     assert_eq!(MARKED.take(), [true, true, true]);
     assert!(!crate::contain::catching());
 }
+
+/// A plugin whose `fetcher.fetch` asks the server and whose `fetcher.panic` panics.
+fn fetcher(setup: &mut abi::Setup) -> Result<(), String> {
+    let command = |name: &str| abi::Command { name: name.into(), title: name.into(), ..abi::Command::default() };
+    setup.command(command("fetcher.fetch"), |host, _| {
+        host.fetch(abi::Fetch { method: "GET".into(), path: "/late".into(), ..abi::Fetch::default() });
+    });
+    setup.command(command("fetcher.panic"), |_, _| panic!("fetcher fault"));
+    Ok(())
+}
+
+// Expected (carbon 5): a fetch a plugin asked for is not sent once the plugin failed before it went out, on both
+// paths; while it runs, it is.
+#[test]
+fn a_failed_plugin_sends_no_fetch() {
+    for (through, fail) in [(false, false), (false, true), (true, false), (true, true)] {
+        let host = host();
+        let registry = Rc::new(Registry::define(Vec::new(), []));
+        *host.registry.borrow_mut() = Rc::downgrade(&registry);
+        match through {
+            true => {
+                let loaded =
+                    loopback_described(&dynamic(&host), abi::export_plugin!(@loopback_described "fetcher", fetcher));
+                let (definition, error) = loaded.unwrap();
+                registry.load(&dynamic(&host), definition.external("fetcher.so", error));
+            }
+            false => {
+                registry.add(abi::Plugin { id: "fetcher", setup: fetcher });
+                registry.activate(&dynamic(&host));
+            }
+        }
+        host.keymap().dispatch("fetcher.fetch", None);
+        if fail {
+            host.keymap().dispatch("fetcher.panic", None);
+        }
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(host.fetches.borrow().len(), usize::from(!fail), "through the C ABI: {through}, failed: {fail}");
+    }
+}
+
+// Expected (bigboi, 4.4): opening a library is timed as its load, which the plugin's statistics keep under its ID once
+// setup made it known.
+#[test]
+fn opening_a_library_is_its_load() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let config = root.path().join("config");
+    let dir = config.join("plugins").join("sample");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join(entry_file()), build("")).unwrap();
+    let host = host();
+    let registry = Registry::define(Vec::new(), []);
+    let loader =
+        Loader::new(Rc::new(Native) as Rc<dyn Backend>, config, root.path().to_path_buf(), Vec::<Configured>::new());
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    let (load, setup) = registry.monitor().load("sample");
+    assert!(load.is_some() && setup.is_some(), "{load:?} {setup:?}");
+}

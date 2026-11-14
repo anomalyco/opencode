@@ -582,6 +582,10 @@ fn reported(world: &World, reports: &[String], failing: bool, due: bool) -> Opti
     if footer != usize::from(failed) {
         return Some(format!("the plugin failed: {failed}; the footer counts it {footer} times"));
     }
+    let listed_slow = world.harness.tui.plugins.entries().iter().any(|entry| entry.id == id(A) && entry.slow.is_some());
+    if failed && listed_slow {
+        return Some("a failed model.a is listed slow".to_owned());
+    }
     if !matches!(world.status(A), Some(Status::Failed(_)) | Some(Status::Active)) {
         return Some(format!("model.a is listed {:?}", world.status(A)));
     }
@@ -632,6 +636,12 @@ fn fixed() -> Vec<(&'static str, Vec<Command>, (bool, bool))> {
             (true, true),
         ),
         ("not-slow-at-twelve-frames", lagged(12), (false, false)),
+        // The 13th slow frame is the one the fault ran in: it ends after the plugin failed, so slow is no news.
+        (
+            "slow-after-the-fault-is-no-news",
+            [lagged(11), vec![Command::Arm(Fault::Panic, Kind::Command), Command::Run(A), Command::Frame]].concat(),
+            (true, true),
+        ),
     ]
 }
 
@@ -679,13 +689,22 @@ fn the_oracles_can_fail() {
     let mut toasts = Vec::new();
     for _ in 0..20 {
         slow.apply(Command::Run(A));
-        toasts.extend(slow.settle());
+        toasts.extend(slow.drain());
         slow.apply(Command::Frame);
-        toasts.extend(slow.settle());
+        toasts.extend(slow.drain());
     }
     LAG.set(false);
-    assert_eq!(toasts, ["Plugin is slow: model.a"]);
+    let titles: Vec<_> = toasts.iter().filter_map(|toast| toast.title.clone()).collect();
+    assert_eq!(titles, ["Plugin is slow: model.a"]);
     assert!(slow.harness.tui.plugins.entries().iter().any(|entry| entry.id == "model.a" && entry.slow.is_some()));
+    // The manager shows what its calls cost; the toast's Disable turns it off.
+    let _ = slow.harness.tui.keymap.dispatch("plugins.list", None);
+    slow.settle();
+    let screen = rows(&slow.frame()).join("\n");
+    assert!(screen.contains("slow (p50/p99/worst)"), "{screen}");
+    (toasts[0].action.clone().expect("Disable").run)();
+    slow.settle();
+    assert_eq!(slow.status(A), Some(Status::Inactive));
     take_calls();
 }
 

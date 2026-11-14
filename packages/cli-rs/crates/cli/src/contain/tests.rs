@@ -314,21 +314,27 @@ fn a_fault_is_a_crash_and_a_request_is_an_end() {
 #[cfg(unix)]
 const PROBE: &str = "OPENCODE_CONTAIN_PROBE";
 
-// Expected (bigboi 9, carbon 3, 8): a real parent passes a SIGTERM sent to it alone on to its client, which ends with
-// it, and the parent then ends with the client's code. Its caller ignored SIGCHLD, as an embedding program may: the
-// parent still waits for its client. The parent runs in a process of its own (this test binary again), as its signal
-// dispositions are the process's.
+/// Runs a real parent in a process of its own (this test binary again, in row `row`), as its signal dispositions are
+/// the process's; its client does as `mode` says, then waits. Returns the parent and its client's PID.
 #[cfg(unix)]
-#[test]
 #[allow(unsafe_code)]
-fn a_real_parent_passes_a_term_on() {
+fn real_parent(row: &str, mode: &str) -> (std::process::Child, libc::pid_t) {
     use std::io::BufRead;
-    if std::env::var_os(PROBE).is_some() {
+    if let Ok(mode) = std::env::var(PROBE) {
         let raw = os(&["opencode-native"]);
         // SAFETY: a disposition, in the probe's own process.
         unsafe { libc::signal(libc::SIGCHLD, libc::SIG_IGN) };
         match supervise_with(&raw, &restart_of(&raw), &mut sys::Unix::new()) {
             Ok(_) => {
+                if mode == "lease" {
+                    // As on a system with no death signal: only the lease tells the client.
+                    #[cfg(target_os = "linux")]
+                    // SAFETY: a process attribute of the client itself.
+                    unsafe {
+                        libc::prctl(libc::PR_SET_PDEATHSIG, 0)
+                    };
+                    let _ = super::record();
+                }
                 println!("client {}", std::process::id());
                 loop {
                     std::thread::sleep(Duration::from_secs(1));
@@ -338,8 +344,8 @@ fn a_real_parent_passes_a_term_on() {
         }
     }
     let mut probe = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["contain::tests::a_real_parent_passes_a_term_on", "--exact", "--nocapture", "--test-threads=1"])
-        .env(PROBE, "1")
+        .args([row, "--exact", "--nocapture", "--test-threads=1"])
+        .env(PROBE, mode)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .spawn()
@@ -352,6 +358,47 @@ fn a_real_parent_passes_a_term_on() {
             break pid.parse().unwrap();
         }
     };
+    (probe, client)
+}
+
+/// Whether process `pid` ends within `limit`.
+#[cfg(unix)]
+#[allow(unsafe_code)]
+fn ends(pid: libc::pid_t, limit: Duration) -> bool {
+    let deadline = Instant::now() + limit;
+    while Instant::now() < deadline {
+        // SAFETY: a probe of a PID.
+        if unsafe { libc::kill(pid, 0) } == -1 {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    // SAFETY: the probe's client, which is not this process.
+    unsafe { libc::kill(pid, libc::SIGKILL) };
+    false
+}
+
+// Expected (bigboi, O6): a client whose parent is killed outright ends too, by the death signal on Linux, and by the
+// parent's lease where a system has none (the client clears the death signal here to stand for one).
+#[cfg(unix)]
+#[test]
+fn a_client_ends_with_its_parent() {
+    for mode in ["kill", "lease"] {
+        let (mut probe, client) = real_parent("contain::tests::a_client_ends_with_its_parent", mode);
+        probe.kill().unwrap();
+        probe.wait().unwrap();
+        assert!(ends(client, Duration::from_secs(15)), "{mode}: the client outlived its parent");
+    }
+}
+
+// Expected (bigboi 9, carbon 3, 8): a real parent passes a SIGTERM sent to it alone on to its client, which ends with
+// it, and the parent then ends with the client's code. Its caller ignored SIGCHLD, as an embedding program may: the
+// parent still waits for its client.
+#[cfg(unix)]
+#[test]
+#[allow(unsafe_code)]
+fn a_real_parent_passes_a_term_on() {
+    let (mut probe, client) = real_parent("contain::tests::a_real_parent_passes_a_term_on", "term");
     // SAFETY: a signal to the probe, this test's own child.
     unsafe { libc::kill(probe.id() as libc::pid_t, libc::SIGTERM) };
     let deadline = Instant::now() + Duration::from_secs(20);

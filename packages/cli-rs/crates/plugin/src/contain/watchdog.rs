@@ -83,7 +83,7 @@ fn watch(record: Weak<Record>, epoch: Instant, limits: Limits, notices: SyncSend
     }
 }
 
-fn paint(
+pub(super) fn paint(
     record: Weak<Record>,
     notices: Receiver<Running>,
     limits: Limits,

@@ -355,3 +355,40 @@ fn the_watchdog_decides_from_the_record() {
     assert!(record.leave(generation));
     assert_eq!(decide(&limits, &record, s(3), generation).0, Action::Wait);
 }
+
+// Expected (reload-fresh): a build set up again (disabled and enabled) starts with fresh statistics, as a new build
+// does.
+#[test]
+fn a_build_set_up_again_starts_fresh() {
+    let bench = Bench::new();
+    let slot = bench.monitor.slot(&Artifact::builtin("p"));
+    bench.frames(slot, 13, 1);
+    assert!(bench.monitor.is_slow("p"));
+    bench.call(slot, "setup", US);
+    assert!(!bench.monitor.is_slow("p"));
+    assert_eq!(bench.monitor.report("p"), None);
+}
+
+// Expected (bigboi 6): the notice thread paints only a call that still runs: one that returned before its turn is not
+// marked noticed, so the host does not say it responded.
+#[test]
+fn the_notice_is_only_for_a_running_call() {
+    let dir = opencode_util::temp::tempdir().unwrap();
+    let record = Arc::new(Record::create(dir.path()).unwrap());
+    record.name(0, &Artifact::builtin("p"));
+    let paint = |running| {
+        let (send, receive) = std::sync::mpsc::sync_channel(1);
+        send.send(running).unwrap();
+        drop(send);
+        watchdog::paint(Arc::downgrade(&record), receive, Limits::default(), None, Instant::now());
+    };
+    let returned = record.enter(0, 1, 0);
+    let stale = record.running().unwrap();
+    assert!(record.leave(returned));
+    paint(stale);
+    assert!(!record.was_noticed(returned));
+    let live = record.enter(0, 1, 0);
+    paint(record.running().unwrap());
+    assert!(record.was_noticed(live));
+    assert!(record.leave(live));
+}
