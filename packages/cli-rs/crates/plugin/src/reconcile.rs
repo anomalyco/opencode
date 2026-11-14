@@ -940,11 +940,17 @@ struct Cost {
     hunks: u64,
 }
 
-/// The rows of an added file over 3,000 lines that the host builds at once: it mounts only the chunks near the view
-/// (`opencode_ui::diff::Chunked`).
-const CHUNKED_ROWS: u64 = 512;
+/// What a patch's hunk costs the host, in rows: each is a diff view of its own, with its code views, and costs about
+/// what 30 texts do (`steps/plugins-pl.md`, the probe of `plugin_limits.rs`).
+const HUNK_ROWS: u64 = 30;
+/// What a line of code costs the host, in rows: its first frame highlights it.
+const CODE_ROWS: u64 = 2;
+/// The lines of an added file over 3,000 lines that the host builds at once: it mounts only the chunks near the view
+/// (`opencode_ui::diff::Chunked`), four of 128 lines, each a hunk.
+const CHUNKED_ROWS: u64 = 512 + 4 * HUNK_ROWS;
 
-/// A node's own text and rows: a node is one row, and a patch, code or Markdown also its lines; a text its lines.
+/// A node's own text and rows, by what each costs the host (the probe of `plugin_limits.rs`): a node is one row, a
+/// text's or Markdown's line one more, a line of code two, a patch's line one and its hunk [`HUNK_ROWS`].
 fn text_cost(env: &Env<'_>, node: &Node) -> Cost {
     // A last line without its line break is a line too.
     let lines =
@@ -963,10 +969,14 @@ fn text_cost(env: &Env<'_>, node: &Node) -> Cost {
                 && text.find("@@ -0,0 +1,").is_some_and(|at| {
                     text[at..].lines().skip(1).all(|line| line.starts_with('+') || line.starts_with('\\'))
                 });
-            let rows = if added && lines > 3_000 { CHUNKED_ROWS } else { lines };
+            let rows = if added && lines > 3_000 { CHUNKED_ROWS } else { lines + HUNK_ROWS * hunks };
             (text.len() as u64, rows, hunks)
         }
-        Node::Code { content: source, .. } | Node::Markdown { source, .. } => {
+        Node::Code { content, .. } => {
+            let text = read(content);
+            (text.len() as u64, CODE_ROWS * lines(&text), 0)
+        }
+        Node::Markdown { source, .. } => {
             let text = read(source);
             (text.len() as u64, lines(&text), 0)
         }

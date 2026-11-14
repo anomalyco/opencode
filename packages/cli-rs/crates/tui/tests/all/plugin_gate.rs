@@ -412,6 +412,9 @@ fn mount(width: u16, height: u16, deps: Deps) -> support::Harness {
 #[test]
 #[ignore = "P1's gate probe; a release build runs it with GATE_OUT"]
 fn gate_probe() {
+    // The route part opens 410 and 1,000 cards in one scroll, past the rows the host builds at once (Pl): the gate
+    // measures what such a tree costs, so it lifts the limits.
+    let _limits = crate::support::unlimited();
     let sizes: Vec<usize> = std::env::var("GATE_SIZES")
         .unwrap_or_else(|_| "40,410,1000".into())
         .split(',')
