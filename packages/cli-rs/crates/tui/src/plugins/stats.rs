@@ -52,7 +52,9 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             Some(Err(_)) => Node::text([Span::new("Could not load stats. Reopen /stats to try again.")])
                 .fg("text.feedback.error.base"),
         };
-        page(node, cx.input.height)
+        // The terminal's height, as the poster reads it: on a resize the host's watch calls the view before a layout
+        // gives the route its new room, so the input's is the last frame's (review carbon-1).
+        page(node, cx.read.info().size.1)
     });
     // As TS's `StatsPage` resource: each mount asks afresh, and a reply after the route went is dropped.
     let mounted = state.clone();

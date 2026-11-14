@@ -1479,6 +1479,8 @@ struct Shape {
     top: bool,
     /// `layout` panics.
     panic_layout: bool,
+    /// This card is a focusable box inside a hidden one.
+    hidden: Option<usize>,
 }
 
 #[derive(Default)]
@@ -1601,6 +1603,12 @@ fn probe_card(scroll: &str, index: usize, rows: u16, shape: &Shape) -> v2::Node 
     }
     if let (0, true, v2::Node::Box { overflow, .. }) = (index, shape.card_hidden, &mut card) {
         *overflow = abi::Overflow::Hidden;
+    }
+    if shape.hidden == Some(index) {
+        if let v2::Node::Box { interact, .. } = &mut card {
+            interact.focusable = true;
+        }
+        return v2::Node::column(vec![card]).with_id(format!("{prefix}x{index}")).visible(false);
     }
     match shape.wrapped {
         true => v2::Node::column(vec![card]).with_id(format!("{prefix}w{index}")),
@@ -2156,6 +2164,20 @@ fn an_anchor_inside_an_item_stands_for_it_without_widgets() {
     let anchors = seen(|seen| seen.anchors.clone());
     assert_eq!(anchors.len(), 1000);
     assert!(anchors.iter().enumerate().all(|(card, id)| *id == format!("c{card}")));
+}
+
+// Expected (review carbon-5): a card in a hidden box is no anchor, in a scroll or a list, and a step passes it.
+#[test]
+fn a_hidden_card_is_no_anchor() {
+    for list in [false, true] {
+        let harness = probe(Shape { cards: cards(4, 3), list, hidden: Some(1), ..Shape::default() }, 40, 12);
+        harness.app.render();
+        dispatch(&harness, "p.anchors", "");
+        assert_eq!(seen(|seen| seen.anchors.clone()), ["c0", "c2", "c3"], "list {list}");
+        dispatch(&harness, "p.step", "1");
+        settled(&harness);
+        assert_eq!(landed(), ["c2"], "list {list}");
+    }
 }
 
 /// The probe, as a harness the theme helpers take.

@@ -70,6 +70,8 @@ pub struct Probe {
     pub a_pad: bool,
     pub hide_a: bool,
     pub a_bg: Option<&'static str>,
+    /// Node `a` is in a hidden box.
+    pub a_in_hidden: bool,
     /// Each view of the panel: how it showed, and its mount's generation.
     pub panels: Vec<(Option<input::PanelInput>, u64)>,
     /// The panel's handler panics, which fails the plugin.
@@ -583,6 +585,10 @@ fn side(cx: &mut v2::View<'_>) -> v2::Node {
     }
     let a = match probe(|probe| probe.hide_a) {
         true => text("----"),
+        false => a,
+    };
+    let a = match probe(|probe| probe.a_in_hidden) {
+        true => v2::Node::column(vec![a]).with_id("ah").visible(false),
         false => a,
     };
     let a = match probe(|probe| probe.click_a) {
@@ -1771,6 +1777,22 @@ fn a_focus_the_new_tree_takes_away_comes_back() {
     harness.app.press("x");
     settle(&harness);
     assert_eq!(taken(), ["side: key x [-]"], "the panel lost the focus with its node");
+}
+
+// Expected (review carbon-5): a focused node that the new tree puts in a hidden box can take no focus, so the focus
+// goes to the panel, as for a node left out.
+#[test]
+fn a_focus_the_new_tree_hides_goes_to_the_panel() {
+    let harness = open();
+    run(&harness, "input.panel", None);
+    run(&harness, "input.focus", Some("a"));
+    probe(|probe| probe.a_in_hidden = true);
+    run(&harness, "input.redraw", None);
+    taken();
+    harness.app.press("x");
+    settle(&harness);
+    assert_eq!(taken(), ["side: key x [-]"], "the panel lost the focus to a hidden node");
+    assert!(!harness.app.text().contains("AAAA"), "{}", harness.app.text());
 }
 
 // Expected (carbon-5): a press a node takes starts no selection of selectable text under it, so its drag goes on

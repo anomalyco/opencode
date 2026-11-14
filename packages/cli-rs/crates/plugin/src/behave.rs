@@ -247,6 +247,10 @@ impl Index {
 
     fn walk(&mut self, nodes: &[Mounted], scroll: Option<&str>, parent: Option<&AnyWidget>) {
         for mounted in nodes {
+            // A hidden box shows nothing: what is in it is no anchor, sticky or scroll of the moment (review carbon-5).
+            if mounted.node.is_hidden() {
+                continue;
+            }
             let id = mounted.node.id();
             if let (Some(id), Some(widget)) = (id, &mounted.widget) {
                 self.nodes.insert(id.to_owned(), (widget.clone(), scroll.map(str::to_owned)));

@@ -481,20 +481,15 @@ impl Host for Tui {
     }
 
     fn watch(&self, push: Rc<dyn Fn(&abi::Changed)>) -> Option<Disposer> {
+        // The revision counts each change once, before any watcher hears it ([`count_local`]).
         let local = abi::Changed { local: true, ..abi::Changed::default() };
         let listener = {
-            let (push, local, reads) = (push.clone(), local.clone(), self.reads.revision.clone());
-            self.local.subscribe(move || {
-                reads.set(reads.get() + 1);
-                push(&local)
-            })
+            let (push, local) = (push.clone(), local.clone());
+            self.local.subscribe(move || push(&local))
         };
         let settings = {
-            let (push, reads) = (push.clone(), self.reads.revision.clone());
-            self.settings.subscribe(move |_| {
-                reads.set(reads.get() + 1);
-                push(&local)
-            })
+            let push = push.clone();
+            self.settings.subscribe(move |_| push(&local))
         };
         let resize = {
             let push = push.clone();
@@ -511,6 +506,17 @@ impl Host for Tui {
             drop(push);
         }))
     }
+}
+
+/// Counts each change of the host's own state (its local state and settings) in [`Host::local_revision`], once and
+/// before the watchers hear it, so every view after it hears it as `local` once (review carbon-6). Called before any
+/// claim mounts: listeners run in the order they subscribed.
+pub(crate) fn count_local(tui: &Tui) {
+    let revision = tui.reads.revision.clone();
+    let local = tui.local.subscribe(move || revision.set(revision.get() + 1));
+    let revision = tui.reads.revision.clone();
+    let settings = tui.settings.subscribe(move |_| revision.set(revision.get() + 1));
+    tui.reads.counting.borrow_mut().extend([local, settings]);
 }
 
 /// Calls `sync` with what change batch `changes` changed for the plugins' claims and routes, or with `None` when it
@@ -631,6 +637,8 @@ pub struct Reads {
     telling: Cell<bool>,
     /// The changes of the host's own state the watchers hear of, counted ([`Host::local_revision`]).
     revision: Rc<Cell<u64>>,
+    /// What counts the changes of the local state and the settings in `revision` ([`count_local`]).
+    counting: RefCell<Vec<Disposer>>,
     /// The server plugins of the default location (TS `plugins.server()`), and that location.
     server: RefCell<(Option<Location>, Vec<PluginInfo>)>,
     /// What the last change batch changed, for the plugins.

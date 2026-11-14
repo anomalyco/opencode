@@ -35,6 +35,9 @@ pub(crate) struct Input {
     pub panel: bool,
     /// Its handler hears each mount begin and end ([`abi::interact::Event::Mount`], P6a).
     pub mounts: bool,
+    /// The activation's own input owner, which hears the mount events: what they ask for is the plugin's, and ends
+    /// with the activation (review carbon-3).
+    pub activation: Rc<Owner>,
 }
 /// Fails the plugin with the error.
 pub(crate) type Fail = Rc<dyn Fn(String)>;
@@ -282,7 +285,10 @@ pub(crate) struct Surface {
 
 /// What one call of the view returned and asked for; the host takes it only with its tree.
 struct Called {
-    nodes: Vec<Node>,
+    /// `None` when the carrier's plugin answers later: nothing new.
+    node: Option<Node>,
+    /// The host's [`Host::local_revision`] the view heard; the mount has seen it once the host takes the tree.
+    revision: Option<u64>,
     staged: Staged,
     memo: v2::Memo,
     /// The values a library's own table holds after the call; `None` when the table is `memo`.
@@ -356,7 +362,7 @@ impl Surface {
             state: RefCell::default(),
             live: RefCell::new(None),
             watch: RefCell::new(None),
-            revision: Cell::new(None),
+            revision: Cell::new(host.local_revision()),
             viewed: RefCell::default(),
             images: RefCell::default(),
             pending: Cell::new(matches!(surface.at, v2::Place::Panel(_) | v2::Place::Overlay(_))),
@@ -476,26 +482,28 @@ impl Surface {
                 self.wipe();
                 return;
             };
-            if called.nodes.is_empty() {
+            let Some(node) = called.node else {
                 self.state.borrow_mut().memo = called.memo;
                 return;
-            }
+            };
             let (mut memo, remote) = (called.memo, called.remote);
             // A keep of the last tree's root keeps the mount as it is: nothing to adopt and no frame (P6a), when the
             // pass would change nothing: no node shows what the host reads again (a tool call's output), and the tree
             // is in the theme of the moment. The memo table finishes against the keep, as a library's does.
-            if !full && called.staged.given.is_empty() && self.keeps_root(&called.nodes) && self.settled(&theme) {
-                memo.finish(&called.nodes);
+            if !full && called.staged.given.is_empty() && self.keeps_root(&node) && self.settled(&theme) {
+                memo.finish(std::slice::from_ref(&node));
+                self.revision.set(called.revision);
                 let mut state = self.state.borrow_mut();
                 let size = remote.unwrap_or(memo.len()) as i64;
                 book(&self.plugin, |ledger| ledger.memo_entries += size - state.booked);
                 (state.memo, state.booked) = (memo, size);
                 return;
             }
-            let result = self.adopt(host, &theme, called.nodes, &called.staged, full);
+            let result = self.adopt(host, &theme, vec![node], &called.staged, full);
             let mut state = self.state.borrow_mut();
             match result {
                 Ok(()) => {
+                    self.revision.set(called.revision);
                     if let Some(last) = &state.last {
                         memo.finish(last);
                     }
@@ -533,11 +541,11 @@ impl Surface {
     }
 
     /// Tells the plugin of a surface that asks that this mount began or is ending. The plugin hears it, not the mount:
-    /// what it starts is the plugin's and outlives the mount, as a 1.x `on_mount`'s does (a read the next mount shows).
+    /// what it starts is the plugin's and outlives the mount, as a 1.x `on_mount`'s does (a read the next mount shows),
+    /// and it ends with the plugin's activation, as a command's does.
     fn tell_mount(&self, host: &dyn Host, mounted: bool) {
         let Some(deliver) = self.input.deliver.as_ref().filter(|_| self.input.mounts) else { return };
-        let owner = Owner::activation(&self.input.plugin, self.owner.clone());
-        deliver(host, &owner, &self.mount_event(mounted));
+        deliver(host, &self.input.activation, &self.mount_event(mounted));
     }
 
     /// [`abi::interact::Event::Mount`] for this mount, with a slot surface's input.
@@ -561,10 +569,10 @@ impl Surface {
         state.tree.is_static() && state.tree.styled_in(theme)
     }
 
-    /// Whether `nodes` is a keep of the root of the last accepted tree.
-    fn keeps_root(&self, nodes: &[Node]) -> bool {
-        let [Node::Keep { key }] = nodes else { return false };
-        self.state.borrow().last.as_deref().and_then(|last| last.first()?.id()) == Some(key.as_str())
+    /// Whether `node` is a keep of the root of the tree (the last accepted tree may itself be that keep).
+    fn keeps_root(&self, node: &Node) -> bool {
+        let Node::Keep { key } = node else { return false };
+        self.state.borrow().tree.nodes.first().and_then(|root| root.node.id()) == Some(key.as_str())
     }
 
     /// Drops all the mount holds but itself: its plugin failed, so it shows nothing more and the behaviors leave it.
@@ -613,7 +621,7 @@ impl Surface {
         // The host's own state changed since the last view: this view hears it as `local`, as its notice, which
         // comes later, calls no view once this one ran.
         let revision = host.local_revision();
-        let local = revision != self.revision.replace(revision);
+        let local = revision != self.revision.get();
         self.seen.set((width, height));
         let panel = match self.input.panel {
             true => host.panel_input(&self.input.plugin, &self.id.surface),
@@ -674,7 +682,7 @@ impl Surface {
             return None;
         };
         let staged = Staged { given: given.take() };
-        Some(Called { nodes: viewed.node.into_iter().collect(), staged, memo, remote: viewed.memo })
+        Some(Called { node: viewed.node, revision, staged, memo, remote: viewed.memo })
     }
 
     /// Adopts `nodes`, with the content `staged` gives, or refuses them and changes nothing.
@@ -729,7 +737,7 @@ impl Surface {
                 }
             }
             // A hidden root box shows nothing in the slot, not even the gap the slot's parent puts before it.
-            self.root.visible(!tree.is_empty() && !nodes.first().is_some_and(Node::is_hidden));
+            self.root.visible(!tree.is_empty() && !tree.nodes.first().is_some_and(|root| root.node.is_hidden()));
         }
         *last = Some(nodes);
         for (handle, bytes) in &staged.given {
@@ -931,6 +939,10 @@ impl Claimed for Rc<Surface> {
 
 impl crate::activation::Drawn for Surface {
     fn woken(&self, host: &dyn Host) {
+        // A mount whose first view is still to come (a route's runs after the turn) sees the plugin's state then.
+        if self.state.borrow().last.is_none() {
+            return;
+        }
         self.draw(host, &abi::Changed { woken: true, ..abi::Changed::default() });
     }
 }

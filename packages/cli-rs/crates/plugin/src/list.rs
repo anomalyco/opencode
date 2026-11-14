@@ -591,6 +591,8 @@ fn unmount(mut mounted: Mounted, drafts: &mut HashMap<String, (String, (u32, u32
 fn logical(node: &Node, env: &Env<'_>) -> Vec<(String, AnchorAt)> {
     fn walk(node: &Node, env: &Env<'_>, out: &mut Vec<(String, AnchorAt)>) {
         match node {
+            // A hidden box shows nothing, so nothing in it is an anchor (review carbon-5).
+            Node::Box { .. } if node.is_hidden() => return,
             Node::Box { id: Some(id), anchor: Some(anchor), .. } => {
                 let at = AnchorAt {
                     id: id.clone(),

@@ -573,6 +573,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                 layers: surface.layers.clone(),
                 panel: matches!(surface.place, abi::v2::Place::Panel(_)),
                 mounts: surface.mounts,
+                activation: scope.owners.input.clone(),
             });
             let failing = scope.clone();
             let fail: surface::Fail = Rc::new(move |error| {
@@ -726,7 +727,9 @@ impl Owners {
 
     /// Runs `f` as a call of `owner`, a mount: what it reads and asks of the input is that mount's.
     pub(crate) fn as_owner<R>(&self, owner: &Rc<interact::Owner>, f: impl FnOnce() -> R) -> R {
-        let outer = self.current.replace(Some(owner.clone()));
+        // The activation's own owner is no mount: a call as it is a call of the plugin's own, as a command is.
+        let mount = (!Rc::ptr_eq(owner, &self.input)).then(|| owner.clone());
+        let outer = self.current.replace(mount);
         let result = f();
         *self.current.borrow_mut() = outer;
         result

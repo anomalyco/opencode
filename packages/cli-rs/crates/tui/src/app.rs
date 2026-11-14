@@ -549,6 +549,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
 
     install_keys(&tui);
     install_theme(&tui);
+    crate::plugins::host::count_local(&tui);
     // Before the connection starts: a broadcast receiver gets only later events, and the first `server.connected`
     // (terminal support, the client MCP) can arrive before mount ends. TS subscribes synchronously during mount, before
     // its event stream yields anything.

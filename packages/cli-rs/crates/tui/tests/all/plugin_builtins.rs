@@ -79,11 +79,19 @@ fn stream(harness: &Harness, count: u64) {
 
 // Expected (`work`, per streamed update): a delta that changes nothing a built-in shows builds, sets, moves and keeps
 // nothing in their trees: each view answers a keep of its root, which the host takes with no work. The counters are
-// the host's, and only plugin trees count in them.
+// the host's, and only plugin trees count in them. A tree built again equal to the last is no work to the host, so on
+// the C ABI carrier each view also crosses no more than a keep (review carbon-7): one call a surface, a few dozen bytes
+// back, where a section built again sends its whole tree.
 #[test]
 fn a_streamed_delta_does_no_work_in_the_built_ins() {
     stream(&session(&[], Vec::new()), 20);
+    let crossed = stream_crossed(&history(0, true), 20);
+    assert_eq!(crossed.calls, 20 * SESSION.len() as u64, "{crossed:?}");
+    assert!(crossed.received <= crossed.calls * KEEP_BYTES, "{crossed:?}");
 }
+
+/// The most a view's reply that keeps its root crosses the C ABI, in bytes.
+const KEEP_BYTES: u64 = 96;
 
 /// `ses_a` with `turns` question and answer pairs before, each answer with its tokens, on the C ABI carrier when `abi`.
 fn history(turns: u64, abi: bool) -> Harness {
@@ -149,7 +157,7 @@ fn stream_crossed(harness: &Harness, count: u64) -> opencode_plugin::loader::nat
     let text = json!({ "sessionID": "ses_a", "assistantMessageID": id, "ordinal": 0 });
     harness.tui.data.apply(&[event("session.text.started", 2, text)]);
     settle(harness);
-    let before = opencode_plugin::loader::native::crossed();
+    let (before, work) = (opencode_plugin::loader::native::crossed(), reconcile::work());
     for index in 0..count {
         let delta =
             json!({ "sessionID": "ses_a", "assistantMessageID": id, "ordinal": 0, "delta": format!("w{index} ") });
@@ -157,6 +165,7 @@ fn stream_crossed(harness: &Harness, count: u64) -> opencode_plugin::loader::nat
         settle(harness);
     }
     assert!(harness.app.text().contains(&format!("w{} ", count - 1)), "{}", harness.app.text());
+    assert_eq!(reconcile::work().since(work), reconcile::Work::default(), "streamed deltas worked in the built-ins");
     opencode_plugin::loader::native::crossed().since(before)
 }
 
@@ -220,6 +229,36 @@ fn the_stats_poster_takes_a_new_theme() {
     }
 }
 
+// Expected (`settled-first`, a resize of `/stats`): the first frame at the new height is the poster opened at it,
+// compact or tall, centered in the new room, both ways across the compact threshold (review carbon-1: the view saw the
+// last frame's height, so the page centered in rows the terminal no longer has).
+#[test]
+fn a_resized_stats_page_draws_its_first_frame_at_the_new_size() {
+    let harness = stats_route(44);
+    for height in [24, 44] {
+        harness.app.resize(100, height);
+        let first = harness.app.render();
+        let fresh = stats_route(height);
+        settle(&fresh);
+        assert_eq!(first, fresh.app.render(), "{height} rows:\n{}", first.text());
+    }
+}
+
+// Expected: the poster's big number and calendar are glyphs, not text: a drag over them selects nothing, as TS's
+// `selectable={false}` (review carbon-7, `unselectable`).
+#[test]
+fn the_stats_poster_selects_no_glyphs() {
+    use opentui::input::{MouseButton, MouseEventKind};
+    let harness = stats_route(44);
+    let screen = harness.app.render().text();
+    let (x, y) = support::at(&screen, "██").expect("the big number");
+    harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x, y);
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), x + 6, y + 2);
+    harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 6, y + 2);
+    settle(&harness);
+    assert_eq!(harness.app.app().selected_text(), None);
+}
+
 // Expected (`lifecycle`, `/stats`): the stats asked for as the route opened, answered after it closed, reach nothing:
 // Home shows, and the route holds no mount; opened again, it asks again and shows the new answer.
 #[test]
@@ -263,6 +302,49 @@ fn a_stats_reply_after_the_route_closed_reaches_nothing() {
     harness.tui.navigate(route);
     harness.wait_for("TOKENS");
     assert_eq!(ASKED.load(Ordering::SeqCst), 2);
+}
+
+// Expected (review carbon-7): the built-ins that follow the terminal's size hear a resize: the getting started card
+// goes below 22 rows and comes back above, and the prompt footer's shell hint shortens below 44 columns and grows back.
+#[test]
+fn the_built_ins_follow_a_resize() {
+    let harness = session(&[], Vec::new());
+    for (height, card) in [(21, false), (34, true)] {
+        harness.app.resize(170, height);
+        settle(&harness);
+        assert_eq!(harness.app.render().text().contains("Getting started"), card, "{height} rows");
+    }
+    harness.app.type_text("!");
+    harness.wait_for("esc exit shell mode");
+    for (width, long) in [(40, false), (170, true)] {
+        harness.app.resize(width, 34);
+        settle(&harness);
+        let screen = harness.app.render().text();
+        assert_eq!(screen.contains("exit shell mode"), long, "{width} columns:\n{screen}");
+        assert!(screen.contains("shell"), "{width} columns:\n{screen}");
+    }
+}
+
+// Expected: a `todowrite` call that completes in the reply that streams, a message changed in place, shows its list in
+// the sidebar's todo section (P6a review: the section reads a changed message alone, and the session only for one that
+// holds such a call).
+#[test]
+fn a_todo_list_written_in_a_streaming_reply_shows_in_the_sidebar() {
+    let harness = session(&[], Vec::new());
+    let started = json!({ "sessionID": "ses_a", "assistantMessageID": "msg_live", "agent": "build",
+                          "model": { "providerID": "p", "id": "m" }, "started": 1 });
+    harness.tui.data.apply(&[event("session.step.started", 1, started)]);
+    settle(&harness);
+    let ids = json!({ "sessionID": "ses_a", "assistantMessageID": "msg_live", "id": "call_t" });
+    let with = |extra: Value| support::merge(ids.clone(), extra);
+    let todos = json!({ "todos": [{ "content": "Write the parser", "status": "in_progress" }] });
+    harness.tui.data.apply(&[event("session.tool.input.started", 2, with(json!({ "name": "todowrite" })))]);
+    harness.tui.data.apply(&[event("session.tool.called", 3, with(json!({ "input": todos, "executed": true })))]);
+    let output = json!({ "content": [{ "type": "text", "text": "ok" }], "executed": true });
+    harness.tui.data.apply(&[event("session.tool.success", 4, with(output))]);
+    let sidebar =
+        || harness.app.text().lines().any(|line| line.chars().skip(120).collect::<String>().contains("Write"));
+    harness.wait("the list in the sidebar", sidebar);
 }
 
 /// The built-ins with a 2.0 surface on the session route.
@@ -370,9 +452,10 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     .mounts()
     .on(|host, event| {
         if let Event::Mount { mount, mounted, slot } = event {
-            let shell = slot.as_ref().and_then(|slot| slot.prompt).is_some_and(|prompt| prompt.shell);
+            let prompt = slot.as_ref().and_then(|slot| slot.prompt);
+            let (shell, details) = (prompt.is_some_and(|prompt| prompt.shell), prompt.is_some_and(|p| p.show_details));
             let session = slot.as_ref().and_then(|slot| slot.session_id.clone()).unwrap_or_default();
-            let line = format!("mount {mounted} {} {session} shell {shell}", mount.generation);
+            let line = format!("mount {mounted} {} {session} shell {shell} details {details}", mount.generation);
             HEARD.with(|heard| heard.borrow_mut().push(line));
             // What the plugin starts as a mount ends is the plugin's: its reply comes after the mount went.
             if !mounted {
@@ -405,16 +488,17 @@ fn generation(line: &str) -> u64 {
     line.split(' ').nth(1).and_then(|number| number.parse().ok()).unwrap_or_default()
 }
 
-/// The lines of the log that are mount notices and whole views (`all`), without replies and `local`. The host may send
-/// a batch of `all` again as it starts or mounts a route: a repeated view of the same mount counts once.
+/// The lines of the log that are mount notices and each mount's first view, without replies. The first view hears
+/// `all` and no `local`: everything is new to it (review carbon-6). The host may send a batch of `all` again as it
+/// starts or mounts a route, which the next change of its own state may be in.
 fn mounts_and_first_views() -> Vec<String> {
-    let mut lines: Vec<String> = heard()
+    let mut viewed = std::collections::HashSet::new();
+    heard()
         .into_iter()
-        .filter(|line| line != "reply" && (!line.starts_with("view") || line.contains("all")))
-        .map(|line| line.replace(",local", ""))
-        .collect();
-    lines.dedup();
-    lines
+        .filter(|line| {
+            line != "reply" && (!line.starts_with("view") || line.contains("all") && viewed.insert(generation(line)))
+        })
+        .collect()
 }
 
 // Expected (`lifecycle`): a surface that asks hears each mount begin before its first view, which hears `all`, and end
@@ -435,7 +519,10 @@ fn mounts_in_order(abi: bool) {
     let harness = session(&[], vec![builtin]);
     let first = mounts_and_first_views();
     let opened = first.first().map(|line| line.split(' ').nth(2).unwrap().parse::<u64>().unwrap()).unwrap();
-    assert_eq!(first, [format!("mount true {opened} ses_a shell false"), format!("view {opened} shell false all")]);
+    assert_eq!(
+        first,
+        [format!("mount true {opened} ses_a shell false details true"), format!("view {opened} shell false all")]
+    );
     harness.app.type_text("!");
     harness.wait_for("esc exit shell mode");
     settle(&harness);
@@ -449,12 +536,12 @@ fn mounts_in_order(abi: bool) {
     let views: Vec<u64> = log.iter().filter(|line| line.starts_with("view")).map(|line| generation(line)).collect();
     assert!(views.len() == 2 && views[0] > opened && views[1] > views[0], "abi {abi}: {log:?}");
     let expected = [
-        format!("mount true {} ses_a shell true", views[0]),
+        format!("mount true {} ses_a shell true details true", views[0]),
         format!("view {} shell true all", views[0]),
-        format!("mount false {opened} ses_a shell false"),
-        format!("mount true {} ses_a shell false", views[1]),
+        format!("mount false {opened} ses_a shell false details true"),
+        format!("mount true {} ses_a shell false details true", views[1]),
         format!("view {} shell false all", views[1]),
-        format!("mount false {} ses_a shell true", views[0]),
+        format!("mount false {} ses_a shell true details true", views[0]),
     ];
     assert_eq!(log, expected, "abi {abi}");
     // The route mounts again: a mount of equal input, which only the notice's mount tells from the one it replaces.
@@ -467,8 +554,8 @@ fn mounts_in_order(abi: bool) {
     let mut sorted = log.clone();
     sorted.sort();
     let mut expected = [
-        format!("mount false {} ses_a shell false", views[1]),
-        format!("mount true {again} ses_a shell false"),
+        format!("mount false {} ses_a shell false details true", views[1]),
+        format!("mount true {again} ses_a shell false details true"),
         format!("view {again} shell false all"),
     ];
     expected.sort();
@@ -528,4 +615,184 @@ fn a_view_hears_what_changed_since_the_last() {
     assert_eq!(status, opencode_plugin::Status::Active);
     assert!(harness.app.render().text().contains("probe"));
     KEEPING.set(false);
+}
+
+// Expected (review carbon-6): a change of the host's own state is `local` to the next view of each surface once,
+// however many surfaces watch it: a delta after it is heard as the delta alone, by each of two plugins' surfaces.
+#[test]
+fn a_change_of_the_hosts_state_is_local_once() {
+    let probes = ["test.probe.a", "test.probe.b"].map(|id| abi::Plugin { id, setup: probe }.into()).into();
+    let harness = session(&[], probes);
+    let started = json!({ "sessionID": "ses_a", "assistantMessageID": "msg_live", "agent": "build",
+                          "model": { "providerID": "p", "id": "m" }, "started": 1 });
+    harness.tui.data.apply(&[event("session.step.started", 1, started)]);
+    let text = json!({ "sessionID": "ses_a", "assistantMessageID": "msg_live", "ordinal": 0 });
+    harness.tui.data.apply(&[event("session.text.started", 2, text)]);
+    settle(&harness);
+    heard();
+    harness.tui.local.set_variant(Some("high"));
+    settle(&harness);
+    let changed = heard();
+    assert!(changed.len() >= 2 && changed.iter().all(|line| line.ends_with(" local")), "{changed:?}");
+    let delta = json!({ "sessionID": "ses_a", "assistantMessageID": "msg_live", "ordinal": 0, "delta": "x" });
+    harness.tui.data.apply(&[event("session.text.delta", 3, delta)]);
+    settle(&harness);
+    let deltas = heard();
+    assert!(deltas.len() == 2 && deltas.iter().all(|line| line.ends_with("shell false ses_a/msg_live")), "{deltas:?}");
+}
+
+thread_local! {
+    /// The keeper's cards, each the value of its memo.
+    static CARDS: RefCell<Vec<u32>> = RefCell::new(vec![1, 2, 3]);
+    /// The cards its views built.
+    static BUILT: Cell<usize> = const { Cell::new(0) };
+    /// Its root is a hidden box.
+    static HIDE: Cell<bool> = const { Cell::new(false) };
+    /// Its next view gives content and keeps its root; later views show that content.
+    static GIVE: Cell<bool> = const { Cell::new(false) };
+    static GIVEN: Cell<Option<abi::v2::ContentRef>> = const { Cell::new(None) };
+    /// The slot's width and height and the surface's, as each view was told them.
+    static SIZES: RefCell<Vec<[u16; 4]>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A slot surface in the prompt's status row that reads the palette and keeps its root unless it is new or its command
+/// woke it, also when told `all` (as one whose memo of its whole input hit). Its cards are memos.
+fn keeper(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.command(Command { name: "keeper.wake".into(), ..Command::default() }, |_, _| {});
+    let surface = Surface::new("keeper", Place::Slot(Placement::append(slot::PROMPT_FOOTER_STATUS)), |cx| {
+        if let Some(slot) = &cx.input.slot {
+            SIZES.with(|sizes| sizes.borrow_mut().push([slot.width, slot.height, cx.input.width, cx.input.height]));
+        }
+        if GIVE.replace(false) {
+            GIVEN.set(Some(cx.content("GIVEN BYTES")));
+            return Node::Keep { key: "keeper".into() };
+        }
+        if !cx.input.full && !cx.input.changed.woken {
+            return Node::Keep { key: "keeper".into() };
+        }
+        let cards = CARDS.with(|cards| cards.borrow().clone());
+        let mut children: Vec<Node> = cards
+            .into_iter()
+            .enumerate()
+            .map(|(index, value)| {
+                cx.memo(format!("card{index}"), value, |_| {
+                    BUILT.set(BUILT.get() + 1);
+                    Node::text([Span::new(format!("K{index}={value}"))]).fg("text.muted")
+                })
+            })
+            .collect();
+        if let Some(handle) = GIVEN.get() {
+            children.push(Node::Markdown { id: None, source: abi::v2::Source::Content(handle) });
+        }
+        Node::row(children).gap(1).with_id("keeper").visible(!HIDE.get())
+    })
+    .palette();
+    setup.surface(surface);
+    Ok(())
+}
+
+fn carried(plugin: abi::Plugin, abi: bool) -> opencode_plugin::Builtin {
+    match abi {
+        true => opencode_plugin::Builtin::Abi(plugin),
+        false => opencode_plugin::Builtin::Plugin(plugin),
+    }
+}
+
+/// `ses_a` with the keeper, on the C ABI carrier when `abi`.
+fn keeper_session(abi: bool) -> Harness {
+    CARDS.with(|cards| *cards.borrow_mut() = vec![1, 2, 3]);
+    GIVEN.set(None);
+    let harness = session(&[], vec![carried(abi::Plugin { id: "test.keeper", setup: keeper }, abi)]);
+    if !HIDE.get() {
+        harness.wait_for("K2=3");
+    }
+    harness
+}
+
+// Expected (review carbon-2): a view that keeps its root without running its memos keeps their values, also after a
+// theme switch it answered so: a delta it keeps the root for leaves the table whole and costs no work, and the next
+// view that runs the memos builds only the card that changed. Content a view gives as it keeps its root is held, and a
+// later tree shows it. Each view of the slot is told the slot's size, which is the surface's. On both carriers.
+#[test]
+fn a_kept_root_keeps_what_the_mount_holds() {
+    for abi in [false, true] {
+        let harness = keeper_session(abi);
+        assert_eq!(surface::ledger_of("test.keeper").memo_entries, 3, "abi {abi}");
+        assert!(harness.tui.theme.borrow_mut().set("tokyonight"));
+        harness.tui.theme_changed();
+        settle(&harness);
+        stream(&harness, 2);
+        assert_eq!(surface::ledger_of("test.keeper").memo_entries, 3, "abi {abi}");
+        BUILT.set(0);
+        CARDS.with(|cards| cards.borrow_mut()[1] = 5);
+        harness.tui.keymap.dispatch("keeper.wake", None);
+        harness.wait_for("K1=5");
+        assert_eq!(BUILT.get(), 1, "abi {abi}");
+        GIVE.set(true);
+        harness.tui.keymap.dispatch("keeper.wake", None);
+        settle(&harness);
+        harness.tui.keymap.dispatch("keeper.wake", None);
+        harness.wait_for("GIVEN BYTES");
+        let sizes = SIZES.with(|sizes| sizes.take());
+        assert!(sizes.iter().all(|[w, h, width, height]| (w, h) == (width, height) && *w > 0), "abi {abi}: {sizes:?}");
+    }
+}
+
+// Expected (review carbon-2, carbon-5): a view that reads the palette and answers a theme switch with a keep of its
+// root is painted in the new theme, its root shown or hidden as a fresh mount's. On both carriers.
+#[test]
+fn a_kept_root_takes_a_new_theme() {
+    for (abi, hide) in [(false, false), (true, false), (false, true)] {
+        HIDE.set(hide);
+        let ready = move |screen: &str| screen.contains("K2=3") != hide && screen.contains("Getting started");
+        support::assert_restyles_in_place(|| Box::new(keeper_session(abi)), |_| {}, ready);
+    }
+    HIDE.set(false);
+}
+
+thread_local! {
+    /// The views of the mounter's route.
+    static VIEWS: Cell<usize> = const { Cell::new(0) };
+}
+
+/// A route that hears its mounts begin, and opens an overlay of the plugin as one does.
+fn mounter(setup: &mut abi::Setup) -> Result<(), String> {
+    let page = Surface::new("mounter", Place::Route("mounter".into()), |_| {
+        VIEWS.set(VIEWS.get() + 1);
+        Node::text([Span::new("MOUNTER")]).with_id("page")
+    })
+    .mounts()
+    .on(|host, event| {
+        if let Event::Mount { mounted: true, .. } = event {
+            let anchor = abi::interact::Anchor::Point { x: 2, y: 2 };
+            host.overlay(abi::interact::Overlay { surface: "pop".into(), anchor, width: 10, height: 2 });
+        }
+        Handled::Pass
+    });
+    setup.surface(page);
+    setup.surface(Surface::new("pop", Place::Overlay("pop".into()), |_| Node::text([Span::new("POPPED")])));
+    Ok(())
+}
+
+// Expected (review carbon-3): what a plugin opens as it hears a mount begin is the plugin's, and ends with it: the
+// overlay closes as the plugin is disabled, which leaves the overlay layer and the plugin's ledger as before. The
+// route's first view runs once: the wake the notice's handler gives before it calls none. On both carriers.
+#[test]
+fn what_a_mount_notice_opens_ends_with_the_plugin() {
+    for abi in [false, true] {
+        let harness = session(&[], vec![carried(abi::Plugin { id: "test.mounter", setup: mounter }, abi)]);
+        let overlays = opencode_plugin::interact::ledger(&*harness.tui).overlays;
+        VIEWS.set(0);
+        harness.tui.navigate(opencode_tui::Route::Plugin { id: "test.mounter".into(), name: "mounter".into() });
+        harness.wait_for("POPPED");
+        settle(&harness);
+        assert_eq!(VIEWS.get(), 1, "abi {abi}");
+        let host = opencode_tui::plugins::host::host(&harness.tui);
+        assert_eq!(harness.tui.plugins.toggle(&host, "test.mounter", false), Some(Ok(())));
+        harness.tui.navigate(support::session_route("ses_a"));
+        settle(&harness);
+        assert!(!harness.app.render().text().contains("POPPED"), "abi {abi}");
+        assert_eq!(opencode_plugin::interact::ledger(&*harness.tui).overlays, overlays, "abi {abi}");
+        assert_eq!(surface::ledger_of("test.mounter"), surface::Ledger::default(), "abi {abi}");
+    }
 }

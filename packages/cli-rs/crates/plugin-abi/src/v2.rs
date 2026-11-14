@@ -571,6 +571,15 @@ impl Memo {
     /// value whose [`Node::Keep`] it holds, with the values inside it; the rest goes. The host calls it once it
     /// accepted the view's tree.
     pub fn finish(&mut self, accepted: &[Node]) {
+        // A view that answered a keep of its whole tree (P6a: it heard nothing it shows change, whether or not its memos
+        // ran) leaves the table as it was: every subtree its values built is still in the tree, and none it built now
+        // is (review carbon-2).
+        if let [Node::Keep { .. }] = accepted {
+            self.staged.clear();
+            self.hits.clear();
+            self.used.clear();
+            return;
+        }
         fn walk<'a>(
             nodes: &'a [Node],
             staged: &HashMap<String, Entry>,

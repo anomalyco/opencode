@@ -502,10 +502,10 @@ impl Tree {
         find(&self.nodes, id)
     }
 
-    /// The ids of the boxes that can take the focus.
+    /// The ids of the boxes that can take the focus: none in a hidden box, which OpenTUI focuses not (review carbon-5).
     pub fn focusable(&self) -> Vec<String> {
         fn walk(nodes: &[Mounted], out: &mut Vec<String>) {
-            for node in nodes {
+            for node in nodes.iter().filter(|node| !node.node.is_hidden()) {
                 if let Node::Box { id: Some(id), interact, .. } = &node.node
                     && interact.focusable
                 {
