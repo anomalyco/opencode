@@ -1,23 +1,28 @@
-//! P2's properties of routing (synthesis 4.14): `delivery`, and `ledger` for layers, modes, capture and overlays, on
-//! the test plugin of `plugin_input` in the real TUI.
+//! P2's properties of routing (synthesis 4.14): `delivery`, and `ledger` for layers, modes, capture, holds and
+//! overlays, on the test plugin of `plugin_input` in the real TUI.
 //!
 //! `delivery`: an active plugin gets each key, paste and pointer event it is entitled to once, in the order of the
 //! input, and no other; inside a batch, the effects of event n (a mode, a focus) apply before event n + 1 is routed.
-//! The oracle is a reference router written here, a pure function of the event list over focus, layers, priorities
-//! and modes, which shares no code with the host. It is compared with the plugin's own log, and with the composer's
-//! text, which says which keys went on past the plugin.
+//! The oracle is a reference router written here, a pure function of the event list over focus, layers, priorities,
+//! modes, the overlay, a host dialog and the host's selection, which shares no code with the host. The events are
+//! chosen from the reference alone, never from the screen; a target the reference expects and the screen lacks fails
+//! the run. It is compared with the plugin's own log and with what the host shows: the composer's text and cursor,
+//! whether the composer has the focus, and whether a selection holds.
 //!
-//! `ledger`: when a mount ends, nothing it owned of the input is left, and when the plugin leaves `active` nothing of
-//! it is left and the focus is at the composer. The twin is the same TUI before the plugin registered anything: the
-//! counts are read from the registries the host routes by (the keymap's layers and modes, the router's listeners and
-//! capture, the overlay layer's widgets).
+//! `ledger`: when a mount ends, nothing it owned of the input is left, and when the plugin leaves `active`, by a
+//! disable or a failure, nothing of it is left and the focus is at the composer. The expected counts come from the
+//! twin, the same TUI with the plugin before any mount (or without it), and the plugin's mode from the trace; a hold,
+//! a capture, a mode and an overlay are armed before the exits, and time passes beyond a hold's deadline.
+
+use std::time::Duration;
 
 use crate::plugin_input::{self as plugin, probe};
 use crate::support::model::{self, Failure, Model, Rng};
 use crate::support::{self, Harness};
 
+use opencode_plugin::abi;
 use opencode_plugin::interact::{self, Ledger};
-use opencode_tui::Tui;
+use opencode_tui::{Deps, Tui};
 use opentui::input::{Event as Input, KeyCode, KeyEvent, Modifiers, MouseButton, MouseEventKind};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -29,15 +34,36 @@ enum Key {
     I,
     D,
     Q,
+    O,
+    K,
+    N,
+    Left,
+    Backspace,
     Escape,
 }
 
 impl Key {
-    const ALL: [Key; 8] = [Key::X, Key::Y, Key::M, Key::J, Key::I, Key::D, Key::Q, Key::Escape];
+    const ALL: [Key; 13] = [
+        Key::X,
+        Key::Y,
+        Key::M,
+        Key::J,
+        Key::I,
+        Key::D,
+        Key::Q,
+        Key::O,
+        Key::K,
+        Key::N,
+        Key::Left,
+        Key::Backspace,
+        Key::Escape,
+    ];
 
     fn event(self) -> Input {
         let code = match self {
             Key::Escape => KeyCode::Escape,
+            Key::Left => KeyCode::Left,
+            Key::Backspace => KeyCode::Backspace,
             key => KeyCode::Char(key.char().unwrap()),
         };
         Input::Key(KeyEvent::new(code, Modifiers::NONE))
@@ -52,12 +78,20 @@ impl Key {
             Key::I => 'i',
             Key::D => 'd',
             Key::Q => 'q',
-            Key::Escape => return None,
+            Key::O => 'o',
+            Key::K => 'k',
+            Key::N => 'n',
+            Key::Left | Key::Backspace | Key::Escape => return None,
         })
     }
 
     fn name(self) -> String {
-        self.char().map_or_else(|| "escape".to_owned(), String::from)
+        match self {
+            Key::Escape => "escape".to_owned(),
+            Key::Left => "left".to_owned(),
+            Key::Backspace => "backspace".to_owned(),
+            key => key.char().unwrap().to_string(),
+        }
     }
 }
 
@@ -68,6 +102,8 @@ enum Focus {
     Panel,
     A,
     B,
+    /// The overlay's frame.
+    Overlay,
 }
 
 #[derive(Clone, Debug)]
@@ -76,46 +112,73 @@ enum Command {
     Keys(Vec<Key>),
     /// The host moves the focus, by the composer's own focus or the plugin's `focus` from a command.
     Focus(Focus),
-    /// The plugin's panel opens, or closes and the composer takes the focus.
+    /// The plugin's panel opens, or closes.
     Panel(bool),
     /// The `x` binds pass the key on, or take it.
     Pass(bool),
     Paste,
-    /// A press and a release on node `a`.
+    /// A press and a release on node `a`, long after any press before it.
     Click,
+    /// Two presses and releases on node `a`, a double click.
+    DoubleClick,
+    /// A press on node `a`, a drag in it and a release.
+    Drag,
+    /// The panel's texts may be selected, or not.
+    Selectable(bool),
+    /// The plugin's select, a dialog of the host, opens.
+    Dialog,
 }
 
-/// The reference router: what the plugin is entitled to, and what the composer shows.
+/// The reference router: what the plugin is entitled to, and what the host shows.
 #[derive(Clone, Debug)]
 struct Reference {
     panel: bool,
+    overlay: bool,
+    dialog: bool,
     focus: Focus,
-    /// The composer layer's mode `normal`, and the panel's mode `menu`.
+    /// The composer layer's mode `normal`, the panel's `menu`, the overlay's `nav`.
     normal: bool,
     menu: bool,
+    nav: bool,
     pass: bool,
+    selectable: bool,
+    selection: bool,
     log: Vec<String>,
     composer: String,
+    cursor: usize,
 }
 
 impl Reference {
     fn new() -> Self {
         Self {
             panel: false,
+            overlay: false,
+            dialog: false,
             focus: Focus::Composer,
             normal: false,
             menu: false,
+            nav: false,
             pass: false,
+            selectable: false,
+            selection: false,
             log: Vec::new(),
             composer: String::new(),
+            cursor: 0,
         }
     }
 
-    /// The mode the keymap is in: a mode holds only while the focus is in its scope.
+    fn in_panel(&self) -> bool {
+        matches!(self.focus, Focus::Panel | Focus::A | Focus::B)
+    }
+
+    /// The mode the keymap is in: a host dialog's over the plugins'; a plugin's holds only while the focus is in its
+    /// scope.
     fn mode(&self) -> &'static str {
-        match (self.focus, self.normal, self.menu) {
-            (Focus::Composer, true, _) => "normal",
-            (Focus::Panel | Focus::A | Focus::B, _, true) => "menu",
+        match (self.dialog, self.focus) {
+            (true, _) => "dialog",
+            (_, Focus::Composer) if self.normal => "normal",
+            (_, Focus::Panel | Focus::A | Focus::B) if self.menu => "menu",
+            (_, Focus::Overlay) if self.nav => "nav",
             _ => "-",
         }
     }
@@ -125,19 +188,41 @@ impl Reference {
         if focus != Focus::Composer {
             self.normal = false;
         }
-        if focus == Focus::Composer {
+        if !matches!(focus, Focus::Panel | Focus::A | Focus::B) {
             self.menu = false;
+        }
+        if focus != Focus::Overlay {
+            self.nav = false;
         }
         self.focus = focus;
     }
 
-    /// Whether the run may send `key` now: escape outside the composer is the host's, which the reference does not
-    /// model, so the run leaves it out.
-    fn sendable(&self, key: Key) -> bool {
-        key != Key::Escape || self.focus == Focus::Composer
+    /// The overlay closes, and the opener hears it; a focus it had goes back to the panel.
+    fn close_overlay(&mut self) {
+        self.overlay = false;
+        if self.focus == Focus::Overlay {
+            self.focus(Focus::Panel);
+        }
+        // The panel reads its own mode, which holds while the focus is in it.
+        let mode = if self.in_panel() && self.menu { "menu" } else { "-" };
+        self.log.push(format!("side: closed menu [{mode}]"));
     }
 
     fn key(&mut self, key: Key) {
+        // A selection takes escape before anything, and goes with any other key.
+        if self.selection {
+            self.selection = false;
+            if key == Key::Escape {
+                return;
+            }
+        }
+        if self.dialog {
+            // Its filter types the key; escape closes it, and the focus goes back.
+            if key == Key::Escape {
+                self.dialog = false;
+            }
+            return;
+        }
         let mode = self.mode();
         // The listeners, before every layer: the global one in the base mode, the composer's in normal mode.
         match mode {
@@ -152,64 +237,109 @@ impl Reference {
             _ => {}
         }
         // The keymap's layers that hold, by priority.
+        let panel = self.in_panel();
         let consumed = match (mode, self.focus, key) {
             ("-", Focus::Composer, Key::Escape) => {
                 self.log.push("setup: key normal [-]".to_owned());
                 self.normal = true;
                 true
             }
-            ("-", Focus::Panel | Focus::A | Focus::B, Key::X) => {
-                self.log.push("side: key x [-]".to_owned());
-                !self.pass
-            }
-            ("-", Focus::Panel | Focus::A | Focus::B, Key::M) => {
-                self.log.push("side: key mode [-]".to_owned());
-                self.menu = true;
-                true
-            }
             ("-", Focus::Composer, Key::X) => {
                 self.log.push("setup: key cx [-]".to_owned());
                 !self.pass
             }
-            ("-", Focus::A, Key::Y) => {
-                self.log.push("side: key y [-]".to_owned());
-                self.focus = Focus::B;
+            ("-", _, Key::X) if panel => {
+                self.log.push("side: key x [-]".to_owned());
+                !self.pass
+            }
+            ("-", _, Key::M) if panel => {
+                self.log.push("side: key mode [-]".to_owned());
+                self.menu = true;
                 true
             }
-            ("menu", Focus::Panel | Focus::A | Focus::B, Key::J) => {
+            ("-", _, Key::O) if panel => {
+                self.log.push("side: key overlay [-]".to_owned());
+                // It replaces an overlay on screen, whose opener hears it closed.
+                if self.overlay {
+                    self.log.push("side: closed menu [-]".to_owned());
+                }
+                self.overlay = true;
+                self.focus(Focus::Overlay);
+                true
+            }
+            ("-", Focus::A, Key::Y) => {
+                self.log.push("side: key y [-]".to_owned());
+                self.focus(Focus::B);
+                true
+            }
+            ("menu", _, Key::J) if panel => {
                 self.log.push("side: key down [menu]".to_owned());
+                true
+            }
+            ("-", Focus::Overlay, Key::K) => {
+                self.log.push("menu: key k [-]".to_owned());
+                true
+            }
+            ("-", Focus::Overlay, Key::N) => {
+                self.log.push("menu: key nav [-]".to_owned());
+                self.nav = true;
+                true
+            }
+            (_, Focus::Overlay, Key::Escape) => {
+                self.close_overlay();
                 true
             }
             _ => false,
         };
-        // Past the plugin, a typed key reaches the composer when it has the focus.
-        if !consumed
-            && self.focus == Focus::Composer
-            && let Some(char) = key.char()
-        {
-            self.composer.push(char);
+        // Past the plugin, the composer edits at its cursor while it has the focus.
+        if consumed || self.focus != Focus::Composer {
+            return;
+        }
+        match key {
+            Key::Left => self.cursor = self.cursor.saturating_sub(1),
+            Key::Backspace if self.cursor > 0 => {
+                self.cursor -= 1;
+                self.composer.remove(self.cursor);
+            }
+            key => {
+                if let Some(char) = key.char() {
+                    self.composer.insert(self.cursor, char);
+                    self.cursor += 1;
+                }
+            }
         }
     }
 
     /// A paste goes to the layer of its scope that declares pastes, in its mode, or on to the host.
     fn paste(&mut self) {
+        if self.dialog {
+            return;
+        }
         match (self.focus, self.mode()) {
             (Focus::Composer, "normal") => self.log.push("setup: paste P [normal]".to_owned()),
-            (Focus::Composer, _) => self.composer.push('P'),
-            (_, "-") => self.log.push("side: paste P [-]".to_owned()),
+            (Focus::Composer, _) => {
+                self.composer.insert(self.cursor, 'P');
+                self.cursor += 1;
+            }
+            (Focus::Panel | Focus::A | Focus::B, "-") => self.log.push("side: paste P [-]".to_owned()),
             _ => {}
         }
     }
 
-    /// A press on a focusable node gives it the focus before its handler runs.
-    fn click(&mut self) {
-        if !self.panel {
+    /// A press over the overlay's backdrop closes it and goes no further; else a press on the focusable pointer node
+    /// `a` gives it the focus before its handler runs. Either ends a selection: a press on selectable text starts a new
+    /// one, and the backdrop prevents nothing.
+    fn press(&mut self, kinds: &[&str]) {
+        self.selection = false;
+        if self.overlay {
+            self.close_overlay();
             return;
         }
         self.focus(Focus::A);
         let mode = self.mode();
-        self.log.push(format!("side: Down a 1,0 [{mode}]"));
-        self.log.push(format!("side: Up a 1,0 [{mode}]"));
+        for kind in kinds {
+            self.log.push(format!("side: {kind} [{mode}]"));
+        }
     }
 }
 
@@ -220,14 +350,18 @@ impl Model for Delivery {
 
     fn generate(&self, rng: &mut Rng, steps: usize) -> Vec<Command> {
         (0..steps)
-            .map(|_| match rng.below(12) {
+            .map(|_| match rng.below(16) {
                 0..=3 => Command::Keys(vec![*rng.pick(&Key::ALL)]),
                 4 | 5 => Command::Keys((0..2 + rng.below(4)).map(|_| *rng.pick(&Key::ALL)).collect()),
                 6 | 7 => Command::Focus(*rng.pick(&[Focus::Composer, Focus::Panel, Focus::A, Focus::B])),
                 8 => Command::Panel(rng.below(3) > 0),
                 9 => Command::Pass(rng.below(2) == 0),
                 10 => Command::Paste,
-                _ => Command::Click,
+                11 => Command::Click,
+                12 => Command::DoubleClick,
+                13 => Command::Drag,
+                14 => Command::Selectable(rng.below(2) == 0),
+                _ => Command::Dialog,
             })
             .collect()
     }
@@ -244,48 +378,61 @@ impl Model for Delivery {
     }
 
     fn run(&self, commands: &[Command]) -> Option<Failure> {
-        let harness = plugin::open_with(|probe| probe.listen = true);
+        let harness = plugin::open_with(|probe| {
+            probe.listen = true;
+            probe.rows = vec!["alpha".to_owned()];
+        });
         let mut reference = Reference::new();
         for (step, command) in commands.iter().enumerate() {
             apply(&harness, &mut reference, command);
             // Hover is the host's with no call, and its events are `plugin_input`'s.
             let log: Vec<String> = plugin::taken().into_iter().filter(|line| !line.contains("hover")).collect();
             let fail = |site, detail: String| Some(Failure { property: "delivery", site, step, detail });
-            if !model::skipped("delivery") && log != reference.log {
+            if model::skipped("delivery") {
+                continue;
+            }
+            if log != reference.log {
                 return fail("log", format!("{command:?}: the plugin saw {log:?}, the reference {:?}", reference.log));
             }
             reference.log.clear();
-            let composer = composer(&harness.tui);
-            if !model::skipped("delivery") && composer != reference.composer {
+            let (text, cursor) = composer(&harness.tui);
+            if (text.as_str(), cursor) != (reference.composer.as_str(), reference.cursor) {
                 return fail(
                     "composer",
-                    format!("{command:?}: the composer shows {composer:?}, not {:?}", reference.composer),
+                    format!(
+                        "{command:?}: the composer shows {text:?} at {cursor}, not {:?} at {}",
+                        reference.composer, reference.cursor
+                    ),
                 );
+            }
+            let focused = opencode_plugin::Host::composer_focused(&*harness.tui);
+            if focused != (reference.focus == Focus::Composer && !reference.dialog) {
+                return fail("focus", format!("{command:?}: the composer has the focus: {focused}, {reference:?}"));
+            }
+            let selection = harness.app.app().selected_text().is_some();
+            if selection != reference.selection {
+                return fail("selection", format!("{command:?}: a selection holds: {selection}, {reference:?}"));
             }
         }
         None
     }
 }
 
-/// Runs `command` on the TUI and on the reference.
+/// Where `text` is on the screen; the reference expects it there.
+fn target(harness: &Harness, text: &str) -> (u16, u16) {
+    support::at(&harness.app.text(), text)
+        .unwrap_or_else(|| panic!("the reference expects {text} on the screen:\n{}", harness.app.text()))
+}
+
+/// Runs `command` on the TUI and on the reference. What it sends depends on the reference only.
 fn apply(harness: &Harness, reference: &mut Reference, command: &Command) {
     let tui = &harness.tui;
+    // While a host dialog is open, the run sends only keys and pastes.
+    if reference.dialog && !matches!(command, Command::Keys(_) | Command::Paste) {
+        return;
+    }
     match command {
         Command::Keys(keys) => {
-            let keys: Vec<Key> = {
-                // Each key's sendability depends on the focus before it, which the keys before it may move.
-                let mut probe = reference.clone();
-                keys.iter()
-                    .copied()
-                    .filter(|key| {
-                        let ok = probe.sendable(*key);
-                        if ok {
-                            probe.key(*key);
-                        }
-                        ok
-                    })
-                    .collect()
-            };
             plugin::batch(harness, &keys.iter().map(|key| key.event()).collect::<Vec<_>>());
             keys.iter().for_each(|key| reference.key(*key));
         }
@@ -315,10 +462,16 @@ fn apply(harness: &Harness, reference: &mut Reference, command: &Command) {
         }
         Command::Panel(false) => {
             plugin::run(harness, "input.close", None);
-            opencode_plugin::Host::focus_composer(&**tui);
-            plugin::settle(harness);
-            reference.panel = false;
-            reference.focus(Focus::Composer);
+            if reference.panel {
+                // The overlay ends with its opener, which hears nothing; the panel's texts and their selection go,
+                // and a focus in them goes to the composer.
+                reference.panel = false;
+                reference.overlay = false;
+                reference.selection = false;
+                if reference.focus != Focus::Composer {
+                    reference.focus(Focus::Composer);
+                }
+            }
         }
         Command::Pass(pass) => {
             probe(|probe| probe.pass_x = *pass);
@@ -329,29 +482,72 @@ fn apply(harness: &Harness, reference: &mut Reference, command: &Command) {
             plugin::settle(harness);
             reference.paste();
         }
-        Command::Click => {
-            if !reference.panel {
-                return;
-            }
-            let Some((x, y)) = support::at(&harness.app.text(), "AAAA") else { return };
+        Command::Click | Command::Drag if reference.panel => {
+            // Long after any press before it: no double click.
+            harness.app.advance(Duration::from_secs(1));
+            let (x, y) = target(harness, "AAAA");
             harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
-            harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 1, y);
+            let kinds: &[&str] = match command {
+                Command::Drag => {
+                    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), x + 2, y);
+                    harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 2, y);
+                    &["Down a 1,0", "Drag a 2,0", "Up a 2,0"]
+                }
+                _ => {
+                    harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 1, y);
+                    &["Down a 1,0", "Up a 1,0"]
+                }
+            };
             plugin::settle(harness);
-            reference.click();
+            // A drag over selectable text selects it: OpenTUI starts a selection before any handler runs. Over the
+            // overlay's backdrop it starts on the backdrop.
+            let selects = matches!(command, Command::Drag) && !reference.overlay && reference.selectable;
+            reference.press(kinds);
+            reference.selection = selects;
         }
+        Command::DoubleClick if reference.panel && !reference.overlay => {
+            harness.app.advance(Duration::from_secs(1));
+            let (x, y) = target(harness, "AAAA");
+            for _ in 0..2 {
+                harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
+                harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 1, y);
+            }
+            plugin::settle(harness);
+            reference.press(&["Down a 1,0", "Up a 1,0", "Down a 1,0", "Up a 1,0"]);
+            reference.selection = reference.selectable;
+        }
+        Command::Selectable(selectable) => {
+            probe(|probe| probe.selectable = *selectable);
+            plugin::run(harness, "input.redraw", None);
+            if reference.panel && reference.selectable != *selectable {
+                reference.selection = false;
+            }
+            reference.selectable = *selectable;
+        }
+        Command::Dialog if !reference.overlay => {
+            plugin::run(harness, "input.select", None);
+            // It takes the focus: the mode of the scope the focus leaves ends.
+            let focus = reference.focus;
+            reference.focus(Focus::Overlay);
+            reference.focus = focus;
+            reference.dialog = true;
+        }
+        _ => {}
     }
 }
 
-fn composer(tui: &Tui) -> String {
-    let mut text = String::new();
+/// The composer's text and cursor.
+fn composer(tui: &Tui) -> (String, usize) {
+    let mut composer = (String::new(), 0);
     opencode_plugin::Host::read(tui, &mut |read| {
-        text = read.composer().map(|composer| composer.text).unwrap_or_default();
+        composer = read.composer().map(|composer| (composer.text, composer.cursor)).unwrap_or_default();
     });
-    text
+    composer
 }
 
-// Expected (`delivery`, 4.14): along any sequence of keys, bursts, focus moves, panel opens and closes, pastes and
-// clicks, the plugin's own log equals the reference router's, and so does the composer's text.
+// Expected (`delivery`, 4.14): along any sequence of keys, bursts, focus moves, panel opens and closes, pastes,
+// presses, double clicks, drags, an overlay and a host dialog, the plugin's own log equals the reference router's, and
+// so do the composer's text and cursor, the composer's focus and the host's selection.
 #[test]
 fn every_event_reaches_the_plugin_once_in_order() {
     model::check(&Delivery, 24, 24);
@@ -360,7 +556,8 @@ fn every_event_reaches_the_plugin_once_in_order() {
 #[derive(Clone, Copy, Debug)]
 enum Life {
     Panel(bool),
-    /// A key of the panel: `x`, `m` (its mode), `o` (its overlay); or escape in the composer (the plugin's mode).
+    /// A key of the panel: `x` (which holds what follows it), `m` (its mode), `o` (its overlay); or escape in the
+    /// composer (the plugin's mode).
     Key(char),
     /// A press on node `a`, which the plugin consumes: the pointer is captured until a release.
     Press,
@@ -368,6 +565,12 @@ enum Life {
     FocusComposer,
     /// The plugin leaves `active`, or comes back.
     Active(bool),
+    /// A handler of the panel panics on a key: the plugin fails.
+    Fail,
+    /// The plugin's route shows, or the session again.
+    Route(bool),
+    /// Time passes beyond a hold's deadline.
+    Wait,
 }
 
 /// The `ledger` model's state of the plugin, as the test drives it.
@@ -375,6 +578,9 @@ enum Life {
 struct Shown {
     active: bool,
     panel: bool,
+    route: bool,
+    /// The composer's mode `normal`, from the trace: escape in the composer sets it; the focus leaving it ends it.
+    normal: bool,
 }
 
 struct Ledgers;
@@ -384,96 +590,92 @@ impl Model for Ledgers {
 
     fn generate(&self, rng: &mut Rng, steps: usize) -> Vec<Life> {
         (0..steps)
-            .map(|_| match rng.below(10) {
+            .map(|_| match rng.below(14) {
                 0 | 1 => Life::Panel(rng.below(3) > 0),
                 2..=4 => Life::Key(*rng.pick(&['x', 'm', 'o', '\u{1b}'])),
                 5 => Life::Press,
                 6 => Life::Release,
                 7 => Life::FocusComposer,
-                _ => Life::Active(rng.below(3) > 0),
+                8 | 9 => Life::Active(rng.below(3) > 0),
+                10 => Life::Fail,
+                11 => Life::Route(rng.below(2) == 0),
+                _ => Life::Wait,
             })
             .collect()
     }
 
     fn run(&self, commands: &[Life]) -> Option<Failure> {
-        // The twins: the TUI without the plugin, and with it before any mount, both on the same session.
-        let without = ledger_of(
-            &support::mount(
-                120,
-                30,
-                support::deps(std::sync::Arc::new(support::Fake::new(|seen| support::base(seen, support::DIRECTORY)))),
-            )
-            .tui,
-        );
-        let harness = plugin::open();
-        let unmounted = ledger_of(&harness.tui);
-        let mut shown = Shown { active: true, panel: false };
+        // The twins: the TUI without the plugin (the other test plugin only), and with it before any mount, both on
+        // the same session.
+        let deps = Deps {
+            builtins: vec![abi::Plugin { id: "test.other", setup: plugin::other }.into()],
+            ..support::deps(std::sync::Arc::new(support::Fake::new(|seen| support::base(seen, support::DIRECTORY))))
+        };
+        let without = interact::ledger(&*support::mount(120, 30, deps).tui);
+        let harness = plugin::open_with(|probe| probe.hold = true);
+        let unmounted = interact::ledger(&*harness.tui);
+        let mut shown = Shown { active: true, panel: false, route: false, normal: false };
         for (step, command) in commands.iter().enumerate() {
             live(&harness, &mut shown, *command);
-            let ledger = ledger_of(&harness.tui);
+            let ledger = interact::ledger(&*harness.tui);
             let fail = |site, detail: String| Some(Failure { property: "ledger", site, step, detail });
             if model::skipped("ledger") {
                 continue;
             }
             if !shown.active {
                 if ledger != without {
-                    return fail("plugin", format!("{command:?}: a disabled plugin left {ledger:?}, not {without:?}"));
+                    return fail("plugin", format!("{command:?}: a plugin that left left {ledger:?}, not {without:?}"));
                 }
-                if !opencode_plugin::Host::composer_focused(&*harness.tui) {
+                if !shown.route && !opencode_plugin::Host::composer_focused(&*harness.tui) {
                     return fail("focus", format!("{command:?}: the focus is not at the composer"));
                 }
                 continue;
             }
-            // The mode of the plugin's own layers is the plugin's while the composer has the focus.
-            let mode = usize::from(probe_mode(&harness));
-            let expected = Ledger { modes: unmounted.modes + mode, ..unmounted };
-            if !shown.panel && ledger != expected {
-                return fail("mount", format!("{command:?}: a closed panel left {ledger:?}, not {expected:?}"));
+            let expected = Ledger { modes: unmounted.modes + usize::from(shown.normal), ..unmounted };
+            if !shown.panel && !shown.route && ledger != expected {
+                return fail("mount", format!("{command:?}: no mount left {ledger:?}, not {expected:?}"));
             }
         }
         None
     }
 }
 
-/// The ledger, as the host reads it from its registries.
-fn ledger_of(tui: &Tui) -> Ledger {
-    interact::ledger(tui)
-}
-
-/// Whether the plugin's own mode holds now: it reads it in its composer layer's handler, so the test asks its host.
-fn probe_mode(harness: &Harness) -> bool {
-    harness.tui.keymap.mode().ends_with(":normal")
-}
-
-/// Runs `command` on the TUI.
+/// Runs `command` on the TUI and on the trace's state; the driver repairs nothing.
 fn live(harness: &Harness, shown: &mut Shown, command: Life) {
     let tui = &harness.tui;
     match command {
-        Life::Panel(true) if shown.active => {
+        Life::Panel(true) if shown.active && !shown.route => {
             plugin::run(harness, "input.panel", None);
+            if !shown.panel {
+                shown.normal = false;
+            }
             shown.panel = true;
         }
         Life::Panel(false) if shown.active => {
             plugin::run(harness, "input.close", None);
-            opencode_plugin::Host::focus_composer(&**tui);
-            plugin::settle(harness);
             shown.panel = false;
         }
         Life::Key('\u{1b}') => {
-            // Escape is the host's outside the composer: the composer takes the focus first.
+            // Escape in the composer: the composer takes the focus first.
             opencode_plugin::Host::focus_composer(&**tui);
             plugin::settle(harness);
             harness.app.press("escape");
             plugin::settle(harness);
+            shown.normal = shown.active && !shown.route;
         }
         Life::Key(key) => {
             harness.app.press(&key.to_string());
             plugin::settle(harness);
+            // `o` in the panel moves the focus to the overlay.
+            if key == 'o' && shown.panel && !opencode_plugin::Host::composer_focused(&**tui) {
+                shown.normal = false;
+            }
         }
         Life::Press if shown.panel => {
             if let Some((x, y)) = support::at(&harness.app.text(), "AAAA") {
                 harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
                 plugin::settle(harness);
+                shown.normal = false;
             }
         }
         Life::Release => {
@@ -491,32 +693,79 @@ fn live(harness: &Harness, shown: &mut Shown, command: Life) {
             tui.plugins.toggle(&host, plugin::ID, active);
             tui.navigate(tui.route());
             plugin::settle(harness);
-            shown.active = active;
-            shown.panel = false;
+            let active = runs(tui);
+            *shown = Shown { active, panel: false, route: shown.route && active, normal: false };
+            // The route of a plugin that left shows nothing: the user goes back to the session.
+            if !active {
+                session(harness);
+            }
+        }
+        Life::Fail if shown.active && shown.panel => {
+            probe(|probe| probe.panic = true);
+            harness.app.press("q");
+            plugin::run(harness, "input.focus", Some("a"));
+            harness.app.press("x");
+            plugin::settle(harness);
+            probe(|probe| probe.panic = false);
+            if !runs(tui) {
+                *shown = Shown { active: false, panel: false, route: false, normal: false };
+                session(harness);
+            }
+        }
+        Life::Route(true) if shown.active && !shown.route => {
+            plugin::run(harness, "input.route", None);
+            *shown = Shown { panel: false, route: true, normal: false, ..*shown };
+        }
+        Life::Route(false) if shown.route => {
+            session(harness);
+            shown.route = false;
+        }
+        Life::Wait => {
+            harness.app.advance(opencode_plugin::abi::interact::HOLD * 2);
+            plugin::settle(harness);
+            harness.app.press("q");
+            plugin::settle(harness);
         }
         _ => {}
     }
     plugin::taken();
 }
 
-// Expected (`ledger`, 4.14): whatever the plugin's mounts held (layers, a mode, a capture, an overlay), a closed panel
-// leaves the registries as the plugin left them with no mount, and a disabled plugin leaves them as a TUI without it,
-// with the focus at the composer.
+/// Whether the test plugin runs: active, and not failed.
+fn runs(tui: &Tui) -> bool {
+    tui.plugins.entries().iter().any(|entry| entry.id == plugin::ID && entry.status == opencode_plugin::Status::Active)
+}
+
+/// Shows the session again.
+fn session(harness: &Harness) {
+    let route = opencode_tui::Route::Session { id: opencode_api::generated::SessionID("ses_a".into()) };
+    if harness.tui.route() != route {
+        harness.tui.navigate(route);
+        plugin::settle(harness);
+    }
+}
+
+// Expected (`ledger`, 4.14): whatever the plugin's mounts held (layers, a mode, a capture, a hold and its timer, an
+// overlay), a closed panel or a route left leaves the registries as the plugin left them with no mount, and a disabled
+// or failed plugin leaves them as a TUI without it, with the focus at the composer.
 #[test]
 fn nothing_an_ended_mount_or_plugin_held_is_left() {
     model::check(&Ledgers, 24, 24);
 }
 
-// Expected: the deep run's seed 553 (2,000 seeds), as a fixed row. Two clicks on the panel's text were a double click,
-// whose word selection the host's escape cleared before any layer saw the key; the panel's texts now select nothing.
+// Expected: the deep run's seed 553 (2,000 seeds), as fixed rows. A double click on the panel's selectable text makes
+// a selection, which takes the next escape before any layer, also in the composer; on text that selects nothing,
+// escape is the plugin's.
 #[test]
-fn a_double_click_in_the_panel_keeps_escape_for_the_composer() {
-    let trace = [
-        Command::Panel(true),
-        Command::Click,
-        Command::Click,
-        Command::Focus(Focus::Composer),
-        Command::Keys(vec![Key::Escape]),
-    ];
-    assert_eq!(Delivery.run(&trace), None);
+fn a_double_click_in_the_panel_selects_only_selectable_text() {
+    for selectable in [false, true] {
+        let trace = [
+            Command::Selectable(selectable),
+            Command::Panel(true),
+            Command::DoubleClick,
+            Command::Focus(Focus::Composer),
+            Command::Keys(vec![Key::Escape]),
+        ];
+        assert_eq!(Delivery.run(&trace), None, "selectable: {selectable}");
+    }
 }
