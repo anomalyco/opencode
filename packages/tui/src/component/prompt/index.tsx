@@ -313,7 +313,6 @@ export function Prompt(props: PromptProps) {
       },
     ],
   }))
-  const [cursorVersion, setCursorVersion] = createSignal(0)
   const connected = useConnected()
 
   function promptModelWarning() {
@@ -894,7 +893,7 @@ export function Prompt(props: PromptProps) {
         title: "Stash prompt",
         name: "prompt.stash",
         category: "Prompt",
-        enabled: !!store.prompt.text,
+        enabled: () => !!store.prompt.text,
         run: () => {
           if (!store.prompt.text) return
           stash.push({ prompt: store.prompt })
@@ -951,7 +950,7 @@ export function Prompt(props: PromptProps) {
   Keymap.createLayer(() => {
     return {
       target: inputTarget,
-      enabled: inputTarget() !== undefined && !disabled() && store.prompt.text !== "",
+      enabled: inputTarget() !== undefined && !disabled() ? () => store.prompt.text !== "" : false,
       bindings: ["prompt.clear"],
     }
   })
@@ -959,16 +958,10 @@ export function Prompt(props: PromptProps) {
   Keymap.createLayer(() => {
     return {
       target: inputTarget,
-      enabled: (() => {
-        cursorVersion()
-        return (
-          inputTarget() !== undefined &&
-          !disabled() &&
-          store.mode === "normal" &&
-          !auto()?.visible &&
-          input?.visualCursor.offset === 0
-        )
-      })(),
+      enabled:
+        inputTarget() !== undefined && !disabled() && store.mode === "normal"
+          ? () => !auto()?.visible && input?.visualCursor.offset === 0
+          : false,
       commands: [
         {
           bind: "!",
@@ -1004,10 +997,10 @@ export function Prompt(props: PromptProps) {
   Keymap.createLayer(() => {
     return {
       target: inputTarget,
-      enabled: (() => {
-        cursorVersion()
-        return inputTarget() !== undefined && !disabled() && store.mode === "shell" && input?.visualCursor.offset === 0
-      })(),
+      enabled:
+        inputTarget() !== undefined && !disabled() && store.mode === "shell"
+          ? () => input?.visualCursor.offset === 0
+          : false,
       commands: [
         { bind: "backspace", title: "Exit shell mode", group: "Prompt", run: () => setStore("mode", "normal") },
       ],
@@ -1018,10 +1011,7 @@ export function Prompt(props: PromptProps) {
     return {
       priority: 1,
       target: inputTarget,
-      enabled: (() => {
-        cursorVersion()
-        return inputTarget() !== undefined && !disabled() && !auto()?.visible && input !== undefined
-      })(),
+      enabled: inputTarget() !== undefined && !disabled() ? () => !auto()?.visible && input !== undefined : false,
       commands: [
         {
           id: "prompt.history.previous",
@@ -1054,10 +1044,7 @@ export function Prompt(props: PromptProps) {
     return {
       priority: 1,
       target: inputTarget,
-      enabled: (() => {
-        cursorVersion()
-        return inputTarget() !== undefined && !disabled() && !auto()?.visible && input !== undefined
-      })(),
+      enabled: inputTarget() !== undefined && !disabled() ? () => !auto()?.visible && input !== undefined : false,
       commands: [
         {
           id: "prompt.history.next",
@@ -1777,9 +1764,7 @@ export function Prompt(props: PromptProps) {
                 setStore("prompt", "text", value)
                 auto()?.onInput(value)
                 syncExtmarksWithPromptParts()
-                setCursorVersion((value) => value + 1)
               }}
-              onCursorChange={() => setCursorVersion((value) => value + 1)}
               onKeyDown={(e: { preventDefault(): void }) => {
                 if (disabled()) {
                   e.preventDefault()
