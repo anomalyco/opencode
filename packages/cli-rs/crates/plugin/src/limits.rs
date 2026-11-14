@@ -40,6 +40,9 @@ pub struct Limits {
     /// The bytes of the images decoded for one plugin, and for all, at four bytes a pixel.
     pub plugin_images: u64,
     pub all_images: u64,
+    /// The rows all trees may build in one frame, every plugin's and every list item's: past it, a revision waits for
+    /// the next frame, and a list mounts the items left in the frames after (review bigboi 3).
+    pub frame_rows: u64,
 }
 
 /// Measured in release, `TestApp` 200x58 (`steps/plugins-pl.md`): a row costs the host about 4 us to build and lay out
@@ -61,11 +64,38 @@ impl Default for Limits {
             all_content: 128 << 20,
             plugin_images: 32 << 20,
             all_images: 96 << 20,
+            frame_rows: 3_000,
         }
     }
 }
 
+/// The rows the trees of app `app` built in its frame now ([`Limits::frame_rows`]).
+pub(crate) fn frame_spent(app: &opentui::prelude::App) -> u64 {
+    let now = frame_of(app);
+    FRAME.with(|frame| frame.get()).filter(|(key, _)| *key == now).map_or(0, |(_, spent)| spent)
+}
+
+/// Whether the trees of `app` may build `rows` more in its frame now: they may while none built anything in it.
+pub(crate) fn frame_room(app: &opentui::prelude::App, rows: u64) -> bool {
+    let spent = frame_spent(app);
+    spent == 0 || spent.saturating_add(rows) <= get().frame_rows
+}
+
+/// A tree of `app` built `rows` in its frame now.
+pub(crate) fn spend_frame(app: &opentui::prelude::App, rows: u64) {
+    let spent = frame_spent(app).saturating_add(rows);
+    FRAME.with(|frame| frame.set(Some((frame_of(app), spent))));
+}
+
+/// The frame of `app` the rows built now count in: the paint's, its layout included ([`crate::contain::in_frame`]).
+pub(crate) fn frame_of(app: &opentui::prelude::App) -> (usize, u64) {
+    let painting = u64::from(crate::contain::painting());
+    (crate::schedule::key(app), app.frame_number().saturating_sub(painting))
+}
+
 thread_local! {
+    /// The app and frame the rows were built in, and how many.
+    static FRAME: Cell<Option<((usize, u64), u64)>> = const { Cell::new(None) };
     static LIMITS: Cell<Limits> = Cell::new(Limits::default());
     static HELD: RefCell<HashMap<String, Held>> = RefCell::default();
 }

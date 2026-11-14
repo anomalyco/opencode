@@ -635,8 +635,16 @@ pub fn unlimited() -> opencode_plugin::limits::Restore {
     opencode_plugin::limits::set(opencode_plugin::limits::Limits {
         nodes: most,
         rows: most,
+        text: most,
+        hunks: most,
+        image_bytes: most,
+        image_side: most,
         plugin_nodes: most,
         all_nodes: most,
-        ..opencode_plugin::limits::Limits::default()
+        plugin_content: most,
+        all_content: most,
+        plugin_images: most,
+        all_images: most,
+        frame_rows: most,
     })
 }

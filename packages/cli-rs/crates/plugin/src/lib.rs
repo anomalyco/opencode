@@ -1701,11 +1701,19 @@ impl Setup<'_> {
         let owner = Rc::downgrade(self.host);
         let path = placement.target.clone();
         let activation = activation.clone();
+        let charge = self.charge();
         self.slot(placement, move |host, input| {
-            let mount = node::Mount::new(host, owner.clone(), &path, input, render.clone(), mount.clone(), sized);
+            let (render, mount, charge) = (render.clone(), mount.clone(), charge.clone());
+            let mount = node::Mount::new(host, owner.clone(), &path, input, render, mount, sized, charge);
             activation.track(Rc::downgrade(&mount) as Weak<dyn Drawn>);
             Box::new(mount)
         });
+    }
+
+    /// The plugin a mount of ABI 1.x is charged to, and what times the host's work for it (review carbon 2.4).
+    fn charge(&self) -> node::Charge {
+        let (monitor, slot) = (self.monitor.clone(), self.monitor.slot(&self.artifact()));
+        (Rc::from(self.id), Rc::new(move |work| monitor.host(slot, work)))
     }
 
     /// Registers route `name` of the one API, on either path: `render` draws in [`route::View`], and `commands` run
@@ -1719,9 +1727,10 @@ impl Setup<'_> {
         activation: &Rc<Activation>,
     ) {
         let (owner, activation) = (Rc::downgrade(self.host), activation.clone());
+        let charge = self.charge();
         self.route(name, move |host| {
             let (view, mounted) =
-                route::View::new(host, owner.clone(), render.clone(), commands.clone(), mount.clone());
+                route::View::new(host, owner.clone(), render.clone(), commands.clone(), mount.clone(), charge.clone());
             activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
             Box::new(view)
         });

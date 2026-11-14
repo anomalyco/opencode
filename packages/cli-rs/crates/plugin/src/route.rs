@@ -48,8 +48,9 @@ impl View {
         render: SlotRender,
         commands: Vec<TuiCommand>,
         on_mount: Option<MountFn>,
+        charge: crate::node::Charge,
     ) -> (Self, Rc<Mount>) {
-        let mount = Mount::new(host, owner, "", &SlotInput::default(), render, on_mount, false);
+        let mount = Mount::new(host, owner, "", &SlotInput::default(), render, on_mount, false, charge);
         (Self::wrap(host, Box::new(mount.clone()), commands), mount)
     }
 

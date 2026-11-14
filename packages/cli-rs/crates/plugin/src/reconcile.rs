@@ -43,6 +43,8 @@ pub struct Work {
     pub parses: u64,
     /// Nodes adopted as a placeholder, over a limit ([`crate::limits`]).
     pub placeholders: u64,
+    /// Revisions and list items left for a later frame, past the rows of a frame ([`limits::Limits::frame_rows`]).
+    pub deferred: u64,
     /// Bytes of text read to measure what it costs ([`measure`]).
     pub scanned: u64,
 }
@@ -58,6 +60,7 @@ impl Work {
             kept: self.kept - before.kept,
             parses: self.parses - before.parses,
             placeholders: self.placeholders - before.placeholders,
+            deferred: self.deferred - before.deferred,
             scanned: self.scanned - before.scanned,
         }
     }
@@ -225,6 +228,8 @@ pub struct Tree {
     over: Placeholders,
     /// What a keep of each id stands for, beside the nodes the tree holds under it ([`Admitted`]).
     admitted: Admitted,
+    /// The rows the last apply built.
+    rows: u64,
 }
 
 /// What a keep of an id of the tree stands for, as validation admitted its nodes: a keep is admitted as the subtree it
@@ -364,6 +369,8 @@ struct Plan {
     nodes: u64,
     /// What a keep of each id stands for.
     admitted: Admitted,
+    /// The rows the tree builds.
+    rows: u64,
 }
 
 /// The nodes of a tree being adopted that are over a limit, by address, each with the placeholder that stands for
@@ -390,6 +397,8 @@ impl Tree {
     pub fn apply(&mut self, env: &Env<'_>, parent: &View, nodes: &[Node]) -> Result<(), Refused> {
         let plan = self.validate(env, nodes)?;
         count(|work| work.placeholders += plan.over.values().filter(|node| node.is_some()).count() as u64);
+        limits::spend_frame(env.host.app(), plan.rows);
+        self.rows = plan.rows;
         // Validation admitted the nodes against what the plugin holds without this tree's last charge.
         if let Some(plugin) = env.plugin.filter(|_| !env.item) {
             self.uncharge();
@@ -442,6 +451,16 @@ impl Tree {
             project(&mut nodes, &over);
         }
         nodes
+    }
+
+    /// The rows the last apply built: what the next revision is taken to build ([`limits::frame_room`]).
+    pub(crate) fn rows(&self) -> u64 {
+        self.rows
+    }
+
+    /// Counts a revision or a list item left for a later frame.
+    pub(crate) fn defer() {
+        count(|work| work.deferred += 1);
     }
 
     /// Whether the tree holds a list.
@@ -957,9 +976,9 @@ impl Tree {
         walk.nodes(nodes, 0, None, Mode::Count, &mut false)?;
         let moves = walk.moves.iter().map(|id| (*id).to_owned()).collect();
         let (over, used) = (Rc::new(std::mem::take(&mut walk.over)), walk.used.0);
-        let admitted = std::mem::take(&mut walk.admitted);
+        let (admitted, rows) = (std::mem::take(&mut walk.admitted), walk.used.1);
         if walk.keeps.is_empty() {
-            return Ok(Plan { keeps: HashSet::new(), moves, over, nodes: used, admitted });
+            return Ok(Plan { keeps: HashSet::new(), moves, over, nodes: used, admitted, rows });
         }
         // An id of the tree, or a keep, may not be one inside a subtree it keeps. Each ancestor is checked once.
         let mut clear: HashSet<&str> = HashSet::new();
@@ -978,7 +997,8 @@ impl Tree {
             }
             clear.extend(chain);
         }
-        Ok(Plan { keeps: walk.held.into_iter().map(str::to_owned).collect(), moves, over, nodes: used, admitted })
+        let keeps = walk.held.into_iter().map(str::to_owned).collect();
+        Ok(Plan { keeps, moves, over, nodes: used, admitted, rows })
     }
 
     /// Pushes the cost of `node` and of each node under it, in the order [`Tree::validate`] walks them, and returns
@@ -1047,6 +1067,9 @@ struct Cost {
     hunks: u64,
 }
 
+/// The bytes of a node's text that cost the host a row, however its lines break: a line of 1 MiB wraps and lays out
+/// as about 1,024 rows do (review carbon 2.3; `steps/plugins-pl.md`, 4 ms for a text of 1 MiB).
+const ROW_BYTES: u64 = 1024;
 /// What a patch's hunk costs the host, in rows: each is a diff view of its own, with its code views, and costs about
 /// what 30 texts do (`steps/plugins-pl.md`, the probe of `plugin_limits.rs`).
 const HUNK_ROWS: u64 = 30;
@@ -1072,9 +1095,9 @@ fn text_cost(env: &Env<'_>, node: &Node) -> Cost {
             let bytes: u64 = spans.iter().map(|span| span.text.len() as u64).sum();
             let breaks: u64 =
                 spans.iter().map(|span| span.text.bytes().filter(|byte| *byte == b'\n').count() as u64).sum();
-            (bytes, breaks, 0)
+            (bytes, breaks + bytes / ROW_BYTES, 0)
         }
-        Node::Input { value, .. } => (value.len() as u64, 0, 0),
+        Node::Input { value, .. } => (value.len() as u64, value.len() as u64 / ROW_BYTES, 0),
         _ => (0, 0, 0),
     };
     Cost { own_rows: 1 + rows, text, hunks, ..Cost::default() }
@@ -1084,12 +1107,13 @@ fn text_cost(env: &Env<'_>, node: &Node) -> Cost {
 /// code two, a patch's line one and its hunk [`HUNK_ROWS`]; an added file over 3,000 lines builds its chunks near the
 /// view, and validation reads no chunk.
 fn rows_of(node: &Node, text: Measure) -> u64 {
-    1 + match node {
-        Node::Diff { .. } if text.chunked => CHUNKED_ROWS,
-        Node::Diff { .. } => text.lines + HUNK_ROWS * text.hunks,
-        Node::Code { .. } => CODE_ROWS * text.lines,
-        _ => text.lines,
-    }
+    1 + text.bytes / ROW_BYTES
+        + match node {
+            Node::Diff { .. } if text.chunked => CHUNKED_ROWS,
+            Node::Diff { .. } => text.lines + HUNK_ROWS * text.hunks,
+            Node::Code { .. } => CODE_ROWS * text.lines,
+            _ => text.lines,
+        }
 }
 
 /// What a source's text costs the host: its bytes; and, within one node's text, its lines, the hunks it has as a

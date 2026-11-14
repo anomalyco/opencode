@@ -47,7 +47,12 @@ pub(crate) struct Mount {
     watch: RefCell<Option<Disposer>>,
     /// The renders for a new size in the current frame.
     resized: Cell<u8>,
+    /// The plugin its nodes are charged to, and what times the host's work for them (review carbon 2.4).
+    charge: Charge,
 }
+
+/// The plugin a mount of ABI 1.x is charged to, and what times the host's work for its nodes as the plugin's.
+pub(crate) type Charge = (Rc<str>, crate::surface::HostTime);
 
 /// The renders for a new size a claim gets within one frame; OpenTUI lays a frame out at most 8 times.
 const RESIZE_DRAWS: u8 = 2;
@@ -61,6 +66,7 @@ impl Mount {
         render: SlotRender,
         on_mount: Option<MountFn>,
         sized: bool,
+        charge: Charge,
     ) -> Rc<Self> {
         let input = abi::SlotInput {
             session_id: slot_input.session_id.clone(),
@@ -87,6 +93,7 @@ impl Mount {
             live: RefCell::new(None),
             watch: RefCell::new(None),
             resized: Cell::new(0),
+            charge,
         });
         let weak = Rc::downgrade(&mount);
         let watch = host.watch(Rc::new({
@@ -216,11 +223,13 @@ impl Mount {
                     image: &|_| crate::image::Picture::Pending,
                     full: false,
                     draw: None,
-                    plugin: None,
+                    plugin: Some(&self.charge.0),
                     item: false,
                 };
                 // A tree of ABI 1.x has no ids and no keeps, so nothing in it can be refused.
-                if let Err(refused) = tree.apply(&env, &self.root, &[v2::Node::from(inner)]) {
+                let mut applied = Ok(());
+                (self.charge.1)(&mut || applied = tree.apply(&env, &self.root, &[v2::Node::from(inner.clone())]));
+                if let Err(refused) = applied {
                     log::error!("a claim in slot {}: {refused}", self.path);
                 }
             }
@@ -474,6 +483,59 @@ fn clickable(widget: &impl Widget, click: Option<&abi::Click>, act: &Act) {
 /// Whether OpenTUI can lay out `node`: it nests no deeper than [`reconcile::MAX_DEPTH`] levels and its sizes in
 /// percent are finite numbers of 0 or more. OpenTUI ends the TUI on either, so a node that fails is not drawn. The
 /// walk stops at the bound.
+/// Whether `lines` are within one node's text and a tree's rows ([`crate::limits`]).
+fn admits_lines(lines: &[Line]) -> Result<(), crate::limits::Over> {
+    let limits = crate::limits::get();
+    let bytes: u64 = lines.iter().flatten().map(|span| span.text.len() as u64).sum();
+    if bytes > limits.text {
+        return Err(crate::limits::Over::Text(bytes));
+    }
+    if lines.len() as u64 + bytes / 1024 > limits.rows {
+        return Err(crate::limits::Over::Rows);
+    }
+    Ok(())
+}
+
+/// Whether a node of ABI 1.x the host draws without a [`reconcile::Tree`] (a panel's body) is within a tree's nodes
+/// and rows and each node within its text ([`crate::limits`]); past them it shows the placeholder (review carbon 2.4).
+pub fn admits(node: &abi::Node) -> Result<(), crate::limits::Over> {
+    fn walk(
+        node: &abi::Node,
+        limits: &crate::limits::Limits,
+        nodes: &mut u64,
+        rows: &mut u64,
+    ) -> Result<(), crate::limits::Over> {
+        let text: String = match node {
+            abi::Node::Text { spans, .. } => spans.iter().map(|span| span.text.as_str()).collect(),
+            abi::Node::Markdown { text } => text.clone(),
+            _ => String::new(),
+        };
+        let bytes = text.len() as u64;
+        if bytes > limits.text {
+            return Err(crate::limits::Over::Text(bytes));
+        }
+        *nodes += 1;
+        *rows += 1 + text.matches('\n').count() as u64 + bytes / 1024;
+        if *nodes > limits.nodes {
+            return Err(crate::limits::Over::Nodes);
+        }
+        if *rows > limits.rows {
+            return Err(crate::limits::Over::Rows);
+        }
+        match node {
+            abi::Node::Box { children, .. } => children.iter().try_for_each(|child| walk(child, limits, nodes, rows)),
+            _ => Ok(()),
+        }
+    }
+    walk(node, &crate::limits::get(), &mut 0, &mut 0)
+}
+
+/// The placeholder of something over a limit, as a widget: one muted row that says why.
+pub fn add_placeholder(app: &App, theme: &Theme, over: &crate::limits::Over) -> AnyWidget {
+    let muted = color(theme, Some(&abi::Color::from("text.muted"))).unwrap_or(theme.text.base);
+    Text::new(app, [Span::styled(format!("⋯ {over}"), Style::new().fg(muted))]).selectable(false).as_any()
+}
+
 pub fn fits(node: &abi::Node) -> bool {
     fn walk(node: &abi::Node, above: u16) -> bool {
         let depth = above + if matches!(node, abi::Node::Markdown { .. }) { 4 } else { 1 };
@@ -727,6 +789,10 @@ pub enum Scroll {
 
 /// Rows of spans as one no-wrap text. `fg` draws spans without their own; by default `text.base`.
 pub fn lines_widget(app: &App, theme: &Theme, lines: &[Line], fg: Option<&abi::Color>, scroll: Scroll) -> AnyWidget {
+    // The lines are one text: past a node's text, or the rows of a tree, they are its placeholder (review carbon 2.4).
+    if let Err(over) = admits_lines(lines) {
+        return add_placeholder(app, theme, &over);
+    }
     let width = lines
         .iter()
         .map(|line| line.iter().map(|span| unicode_width::UnicodeWidthStr::width(span.text.as_str())).sum::<usize>())
