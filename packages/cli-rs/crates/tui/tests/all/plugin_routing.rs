@@ -191,13 +191,13 @@ impl Reference {
         }
     }
 
+    /// A paste goes to the layer of its scope that declares pastes, in its mode, or on to the host.
     fn paste(&mut self) {
-        if self.focus != Focus::Composer {
-            return;
-        }
-        match self.mode() {
-            "normal" => self.log.push("setup: paste P [normal]".to_owned()),
-            _ => self.composer.push('P'),
+        match (self.focus, self.mode()) {
+            (Focus::Composer, "normal") => self.log.push("setup: paste P [normal]".to_owned()),
+            (Focus::Composer, _) => self.composer.push('P'),
+            (_, "-") => self.log.push("side: paste P [-]".to_owned()),
+            _ => {}
         }
     }
 

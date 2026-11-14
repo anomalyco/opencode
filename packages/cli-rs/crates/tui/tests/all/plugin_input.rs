@@ -122,6 +122,7 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             Layer {
                 scope: LayerScope::Surface,
                 priority: 5,
+                paste: true,
                 keys: vec![
                     Bind::new("x", "x"),
                     Bind::new("m", "mode"),
@@ -785,4 +786,15 @@ fn a_call_reads_the_geometry_and_the_focus_of_its_mount() {
     let expected = format!("Rect {{ x: {}, y: {}, width: ", rect.x, rect.y);
     assert!(line.starts_with(&format!("where Some({expected}")), "{line}");
     assert!(line.ends_with("height: 1 }) Focused { node: Some(\"a\"), surface: true }"), "{line}");
+}
+
+// Expected (paste): a paste in a panel goes to its surface's layer that declares pastes.
+#[test]
+fn a_paste_in_a_panel_goes_to_its_paste_layer() {
+    let harness = open();
+    run(&harness, "input.panel", None);
+    taken();
+    harness.app.paste("zz");
+    settle(&harness);
+    assert_eq!(taken(), ["side: paste zz [-]"]);
 }
