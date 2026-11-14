@@ -42,11 +42,12 @@ pub fn install(tui: &Rc<Tui>) -> Vec<Disposer> {
             tui.dialogs.clear();
         })
         .palette(),
-        command("terminal.suspend", "Suspend terminal", |tui| tui.app.suspend()).enabled(if cfg!(windows) {
-            Condition::Never
-        } else {
-            Condition::Always
-        }),
+        command("terminal.suspend", "Suspend terminal", |tui| {
+            // The time the terminal is away is no animation's.
+            opencode_plugin::canvas::handover(&tui.app);
+            tui.app.suspend();
+        })
+        .enabled(if cfg!(windows) { Condition::Never } else { Condition::Always }),
         command("terminal.title.toggle", &toggle_title(title_enabled(&info), "terminal title"), |tui| {
             let next = !title_enabled(&tui.settings.info());
             if !next {

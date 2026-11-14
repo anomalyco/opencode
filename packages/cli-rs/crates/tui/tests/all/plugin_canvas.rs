@@ -92,6 +92,8 @@ struct Pad {
     loose: bool,
     /// The canvas has no width of its own.
     auto: bool,
+    /// The columns, from the row's left, and the rows, from the canvas's bottom, that a box drawn after it covers.
+    cover: (u16, u16),
     /// The generation the last view had.
     generation: u64,
 }
@@ -110,6 +112,7 @@ impl Default for Pad {
             wrap: false,
             loose: false,
             auto: false,
+            cover: (0, 0),
             generation: 0,
         }
     }
@@ -136,6 +139,10 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             "animate" => pad.animate = value == "1",
             "wrap" => pad.wrap = value == "1",
             "loose" => pad.loose = value == "1",
+            "cover" => {
+                let (columns, rows) = value.split_once('x').unwrap();
+                pad.cover = (columns.parse().unwrap(), rows.parse().unwrap());
+            }
             _ => {}
         });
     });
@@ -144,10 +151,10 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 fn view(cx: &mut v2::View<'_>) -> v2::Node {
-    let (shown, (width, height), version, animate, unkeyed, wrap, loose, auto) = pad(|pad| {
+    let (shown, (width, height), version, animate, unkeyed, wrap, loose, auto, cover) = pad(|pad| {
         pad.views += 1;
         pad.generation = cx.mount.generation;
-        (pad.shown, pad.size, pad.version, pad.animate, pad.unkeyed, pad.wrap, pad.loose, pad.auto)
+        (pad.shown, pad.size, pad.version, pad.animate, pad.unkeyed, pad.wrap, pad.loose, pad.auto, pad.cover)
     });
     let fixed = abi::Layout {
         width: (!auto).then_some(abi::Width::Cells(width)),
@@ -162,7 +169,27 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
         let canvas = if unkeyed { v2::Node::Canvas { id: None, layout: fixed, version, animate } } else { canvas };
         row.push(if wrap { v2::Node::column(vec![canvas]) } else { canvas });
     }
-    v2::Node::column(vec![v2::Node::row(row).bg(abi::Color::Rgba(BG))]).with_id("page")
+    let mut page = vec![v2::Node::row(row).bg(abi::Color::Rgba(BG))];
+    let (columns, cover) = cover;
+    if cover > 0 {
+        // An opaque box that takes the pointer, drawn over the canvas's last `cover` rows and the first `columns`.
+        let click =
+            abi::Click { action: abi::Action::Command { name: "pad.set".into(), input: None }, on: abi::Press::Down };
+        page.push(
+            v2::Node::row(Vec::new())
+                .bg(abi::Color::Rgba(abi::Rgba::new(90, 0, 0, 255)))
+                .on_click(click)
+                .layout(abi::Layout {
+                    width: Some(abi::Width::Cells(columns)),
+                    height: Some(abi::Width::Cells(cover)),
+                    margin: Some(abi::Edges { top: -(cover as i16), ..abi::Edges::default() }),
+                    shrink: Some(false),
+                    ..abi::Layout::default()
+                })
+                .with_id("cover"),
+        );
+    }
+    v2::Node::column(page).with_id("page")
 }
 
 fn draw(cx: &mut v2::Draw<'_>) -> Option<List> {
@@ -210,7 +237,7 @@ fn shapes(rng: &mut Rng, width: u16, height: u16, depth: u8) -> Vec<Shape> {
         abi::Rgba::new(250, 200, 0, 255),
         abi::Rgba::new(90, 90, 250, 128),
     ];
-    const TEXTS: [&str; 4] = ["ab", "score 120", "█▓░", "x"];
+    const TEXTS: [&str; 6] = ["ab", "score 120", "█▓░", "x", "界x", "e\u{301}"];
     const CHARS: [char; 6] = ['#', '@', '█', '·', 'o', '─'];
     let x = |rng: &mut Rng| rng.below(usize::from(width) + 4) as i16 - 2;
     let y = |rng: &mut Rng| rng.below(usize::from(height) + 2) as i16 - 1;
@@ -1102,9 +1129,9 @@ fn the_game_steps_on_the_hosts_frames_and_turns_on_its_keys() {
     assert_eq!(head(&last), (6, 8), "the pause was counted as time to step");
 }
 
-/// What the gate's full-screen canvas does: animate a new screen of cells each frame, animate the same screen each
-/// frame (so the terminal gets no output), keep its list, or have none.
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
+/// What the gate's canvases do: animate a new screen of cells each frame, animate the same screen each frame (so the
+/// terminal gets no output), keep their lists, or have none.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum Mode {
     #[default]
     Animate,
@@ -1116,16 +1143,49 @@ enum Mode {
 #[derive(Default)]
 struct Full {
     mode: Mode,
+    /// Canvases side by side, each growing.
+    canvases: usize,
     frame: u64,
-    /// The plugin's own time to build each list, and the last list's bytes.
+    /// The plugin's own time to build each list.
     built: Vec<Duration>,
-    last: Vec<u8>,
-    /// Keys of the route that asked for a new screen.
-    version: u64,
+    /// Keys of the route, each asking still canvases for the screen of its number.
+    keys: u64,
 }
 
 thread_local! {
     static FULL: RefCell<Full> = RefCell::default();
+}
+
+/// The cell at `(x, y)` of the screen numbered `seed`: its character, foreground and background. The plugin draws it,
+/// and the gate's oracle computes it.
+fn screen_cell(seed: u64, x: u32, y: u32) -> (char, abi::Rgba, abi::Rgba) {
+    let index = u64::from(y) * 1009 + u64::from(x);
+    let mixed = (index ^ seed.wrapping_mul(0x9e37_79b9)).wrapping_mul(0x2545_f491_4f6c_dd1d) >> 40;
+    let char = ['█', '▓', '▒', '░', '#', '·'][(mixed % 6) as usize];
+    (
+        char,
+        abi::Rgba::new(mixed as u8, (mixed >> 8) as u8, (mixed >> 16) as u8, 255),
+        abi::Rgba::new(0, 0, (mixed >> 4) as u8, 255),
+    )
+}
+
+/// The stamp a still screen numbered `seed` shows in its first row.
+fn stamp(seed: u64) -> String {
+    format!("key {seed:06}")
+}
+
+/// The list of screen `seed` at `width` x `height`, stamped when `stamped`.
+fn screen(seed: u64, width: u16, height: u16, stamped: bool) -> List {
+    let cells = (0..u32::from(height)).flat_map(|y| (0..u32::from(width)).map(move |x| (x, y))).map(|(x, y)| {
+        let (char, fg, bg) = screen_cell(seed, x, y);
+        (char, list::Style::new().fg(fg).bg(bg))
+    });
+    let mut list = List::new();
+    list.cells(0, 0, width, cells);
+    if stamped {
+        list.text(0, 0, &stamp(seed), list::Style::new().fg(abi::Rgba::new(255, 255, 255, 255)));
+    }
+    list
 }
 
 fn full_setup(setup: &mut abi::Setup) -> Result<(), String> {
@@ -1135,42 +1195,35 @@ fn full_setup(setup: &mut abi::Setup) -> Result<(), String> {
         scope: abi::Scope::Route("full".into()),
         ..abi::Command::default()
     };
-    setup.command(key, |_, _| FULL.with(|full| full.borrow_mut().version += 1));
+    setup.command(key, |_, _| FULL.with(|full| full.borrow_mut().keys += 1));
     let view = |_: &mut v2::View<'_>| {
-        let (mode, version) = FULL.with(|full| (full.borrow().mode, full.borrow().version));
-        let canvas = v2::Node::canvas("screen")
-            .version(version)
-            .animate(matches!(mode, Mode::Animate | Mode::Same))
-            .layout(abi::Layout { grow: true, shrink: Some(false), ..abi::Layout::default() });
-        v2::Node::column(vec![canvas]).layout(abi::Layout { grow: true, ..abi::Layout::default() }).with_id("full")
+        let (mode, keys, count) = FULL.with(|full| (full.borrow().mode, full.borrow().keys, full.borrow().canvases));
+        let canvases = (0..count.max(1))
+            .map(|index| {
+                v2::Node::canvas(format!("screen{index}"))
+                    .version(keys)
+                    .animate(matches!(mode, Mode::Animate | Mode::Same))
+                    .layout(abi::Layout { grow: true, shrink: Some(false), ..abi::Layout::default() })
+            })
+            .collect();
+        let grow = abi::Layout { grow: true, ..abi::Layout::default() };
+        v2::Node::column(vec![v2::Node::row(canvases).layout(grow)]).layout(grow).with_id("full")
     };
     setup.surface(v2::Surface::new("full", v2::Place::Route("full".into()), view).draw(|cx| {
         let started = std::time::Instant::now();
-        let (mode, frame) = FULL.with(|full| {
+        let (mode, frame, keys) = FULL.with(|full| {
             let mut full = full.borrow_mut();
             full.frame += 1;
-            (full.mode, full.frame)
+            (full.mode, full.frame, full.keys)
         });
-        if mode == Mode::Empty {
-            return None;
-        }
-        let frame = if mode == Mode::Same { 0 } else { frame };
-        // A new screen each frame: every cell's character and colors change, as a simulation's would.
-        let (width, height) = (cx.frame.width, cx.frame.height);
-        let cells = (0..u32::from(width) * u32::from(height)).map(|index| {
-            let seed = (index as u64 ^ frame.wrapping_mul(0x9e37_79b9)).wrapping_mul(0x2545_f491_4f6c_dd1d) >> 40;
-            let char = ['█', '▓', '▒', '░', ' ', '·'][(seed % 6) as usize];
-            let fg = abi::Rgba::new(seed as u8, (seed >> 8) as u8, (seed >> 16) as u8, 255);
-            (char, list::Style::new().fg(fg).bg(abi::Rgba::new(0, 0, (seed >> 4) as u8, 255)))
-        });
-        let mut list = List::new();
-        list.cells(0, 0, width, cells);
+        let list = match mode {
+            Mode::Empty => return None,
+            Mode::Animate => screen(frame, cx.frame.width, cx.frame.height, false),
+            Mode::Same => screen(0, cx.frame.width, cx.frame.height, false),
+            Mode::Still => screen(keys, cx.frame.width, cx.frame.height, true),
+        };
         let built = started.elapsed();
-        FULL.with(|full| {
-            let mut full = full.borrow_mut();
-            full.built.push(built);
-            full.last = list.as_bytes().to_vec();
-        });
+        FULL.with(|full| full.borrow_mut().built.push(built));
         Some(list)
     }));
     Ok(())
@@ -1182,99 +1235,123 @@ fn percentile(samples: &mut [Duration], at: f64) -> f64 {
     samples[index].as_secs_f64() * 1e6
 }
 
-/// Times `frames` frames of 16 ms each: the frame (`App::present`, with its output) and the plugin's own build.
-fn timed(harness: &Harness, frames: usize) -> (Vec<Duration>, Vec<Duration>) {
-    FULL.with(|full| full.borrow_mut().built.clear());
-    let mut times = Vec::with_capacity(frames);
-    for _ in 0..frames {
-        harness.app.advance(Duration::from_millis(16));
-        let started = std::time::Instant::now();
-        harness.app.present().unwrap();
-        times.push(started.elapsed());
-    }
-    (times, FULL.with(|full| std::mem::take(&mut full.borrow_mut().built)))
+/// One frame's times, paired: the whole frame (`App::present`, with its output), the plugin's draws, the host's
+/// checks and replays of their lists, and the rest of the frame.
+#[derive(Default)]
+struct Stages {
+    frame: Vec<Duration>,
+    plugin: Vec<Duration>,
+    host: Vec<Duration>,
+    rest: Vec<Duration>,
 }
 
-// The gate of P5 (synthesis 4.4, 6; S2's limit): host time a frame for a full-screen canvas that draws a new screen
-// of cells at 60 fps, at the parity harness's size and at 200x60, against 1 ms. Ignored; a release build runs it with
-// `--ignored plugin_canvas::a_full_screen_canvas --nocapture` and prints, in µs, p50 and p99 of: the whole frame
-// animating a new screen each frame, the plugin's own build of its list, the same for a screen that does not change
-// (the frame then writes nothing to the terminal), the frame replaying a kept list, the frame of a canvas with no
-// list, a key of the route to the frame whose cells show the screen it asked for (with the frame's copy of its
-// cells), and the host's check of one list.
+/// Times `frames` frames of 16 ms each, stage by stage.
+fn timed(harness: &Harness, frames: usize) -> Stages {
+    let mut stages = Stages::default();
+    for _ in 0..frames {
+        harness.app.advance(Duration::from_millis(16));
+        let work = host::work();
+        let started = std::time::Instant::now();
+        harness.app.present().unwrap();
+        let frame = started.elapsed();
+        let done = host::work().since(work);
+        let (plugin, host) = (Duration::from_nanos(done.draw_ns), Duration::from_nanos(done.check_ns + done.replay_ns));
+        stages.frame.push(frame);
+        stages.plugin.push(plugin);
+        stages.host.push(host);
+        stages.rest.push(frame.saturating_sub(plugin + host));
+    }
+    stages
+}
+
+/// The gate's TUI of `width` x `height` on route `full`, with `canvases` side by side in `mode`, warmed up.
+fn full_tui(width: u16, height: u16, canvases: usize, mode: Mode) -> Harness {
+    FULL.with(|full| *full.borrow_mut() = Full { mode, canvases, ..Full::default() });
+    let harness = open_tui(width, height, vec![abi::Plugin { id: "test.full", setup: full_setup }.into()]);
+    harness.tui.navigate(Route::Plugin { id: "test.full".to_owned(), name: "full".to_owned() });
+    let _ = timed(&harness, 60);
+    harness
+}
+
+// The gate of P5 (synthesis 4.4, 6; S2's limit; bigboi 3): host time a frame for full-screen canvases that draw a new
+// screen of cells at 60 fps. Ignored; a release build runs it with `--ignored plugin_canvas::a_full_screen_canvas
+// --nocapture`. `TestApp` turns on OpenTUI's `OT_SCENE_DEBUG_VERIFY`, which repaints every still frame, so every
+// number is with it on. It prints, in µs, p50 and p99 of each stage, paired within each frame: the whole frame, the
+// plugin's draws, the host's checks and replays, and the rest (OpenTUI's layout, paint and output), for a new screen
+// each frame, the same screen each frame (no output), kept lists and no lists; for one canvas at the parity
+// harness's size and at 200x60, two canvases sharing 200x60, and two of 200x60 side by side. Then a key of the route
+// to the frame that shows the screen it asked for, checked against cells computed from the key's own number before it
+// is pressed: its stamp, a cell in the middle and the far corner, with their colors, and one draw a key.
 #[test]
 #[ignore]
 fn a_full_screen_canvas_at_60_fps() {
     const FRAMES: usize = 600;
-    for (width, height) in [(100, 30), (200, 60)] {
-        FULL.with(|full| *full.borrow_mut() = Full::default());
-        let harness = open_tui(width, height, vec![abi::Plugin { id: "test.full", setup: full_setup }.into()]);
-        let route = Route::Plugin { id: "test.full".to_owned(), name: "full".to_owned() };
-        harness.tui.navigate(route.clone());
-        let _ = timed(&harness, 60);
-        let work = host::work();
-        let (mut animated, mut built) = timed(&harness, FRAMES);
-        let done = host::work().since(work);
-        assert_eq!(done.draws, FRAMES as u64, "one draw a frame");
-        let bytes = FULL.with(|full| full.borrow().last.clone());
-        FULL.with(|full| full.borrow_mut().mode = Mode::Same);
-        harness.tui.navigate(Route::Home);
-        harness.tui.navigate(route.clone());
-        let _ = timed(&harness, 60);
-        let (mut same, mut same_built) = timed(&harness, FRAMES);
-        FULL.with(|full| full.borrow_mut().mode = Mode::Still);
-        harness.tui.navigate(Route::Home);
-        harness.tui.navigate(route.clone());
-        let _ = timed(&harness, 60);
-        let work = host::work();
-        let (mut replayed, _) = timed(&harness, FRAMES);
-        let still = host::work().since(work);
-        assert_eq!((still.draws, still.replays), (0, FRAMES as u64), "a still canvas is replayed, not drawn");
-        // A key of the route asks for a new screen: from the key to the frame that shows it, the cells read back.
-        let mut keyed: Vec<Duration> = (0..FRAMES / 4)
-            .map(|_| {
+    for (width, height, canvases) in [(100, 30, 1), (200, 60, 1), (200, 60, 2), (400, 60, 2)] {
+        let mut line = format!("canvas-gate {width}x{height} canvases={canvases}");
+        for mode in [Mode::Animate, Mode::Same, Mode::Still, Mode::Empty] {
+            let harness = full_tui(width, height, canvases, mode);
+            let work = host::work();
+            let mut stages = timed(&harness, FRAMES);
+            let done = host::work().since(work);
+            let draws = if matches!(mode, Mode::Animate | Mode::Same) { FRAMES * canvases } else { 0 };
+            assert_eq!(done.draws, draws as u64, "{mode:?}: one draw a canvas a frame");
+            if mode != Mode::Empty {
+                assert_eq!(done.replays, (FRAMES * canvases) as u64, "{mode:?}: every canvas replayed");
+            }
+            for (name, samples) in [
+                ("frame", &mut stages.frame),
+                ("plugin", &mut stages.plugin),
+                ("host", &mut stages.host),
+                ("rest", &mut stages.rest),
+            ] {
+                line += &format!(" | {mode:?} {name} {:.1} {:.1}", percentile(samples, 0.5), percentile(samples, 0.99));
+            }
+        }
+        if canvases == 1 {
+            let harness = full_tui(width, height, 1, Mode::Still);
+            let mut keyed = Vec::new();
+            for _ in 0..FRAMES / 4 {
                 harness.app.advance(Duration::from_millis(16));
+                let expected = FULL.with(|full| full.borrow().keys) + 1;
+                let draws = host::work().draws;
                 let started = std::time::Instant::now();
                 harness.app.press("k");
                 let frame = harness.app.render();
-                let took = started.elapsed();
-                let shown = FULL.with(|full| full.borrow().last.clone());
-                let first = list::ops(&shown).find_map(|op| match op {
-                    list::Op::Cells { cells, .. } => cells.iter().next(),
-                    _ => None,
-                });
-                let cell = frame.cell(0, 0).unwrap();
-                assert_eq!(cell.symbol.chars().next(), first.map(|(_, char)| char), "the key's screen is on screen");
-                took
-            })
-            .collect();
-        FULL.with(|full| full.borrow_mut().mode = Mode::Empty);
-        harness.tui.navigate(Route::Home);
-        harness.tui.navigate(route);
-        let _ = timed(&harness, 60);
-        let (mut empty, _) = timed(&harness, FRAMES);
-        let mut checks: Vec<Duration> = (0..FRAMES)
-            .map(|_| {
-                let started = std::time::Instant::now();
-                std::hint::black_box(list::check(std::hint::black_box(&bytes)).unwrap());
-                started.elapsed()
-            })
-            .collect();
-        let line = |name: &str, samples: &mut [Duration]| {
-            format!("{name} {:.1} {:.1}", percentile(samples, 0.5), percentile(samples, 0.99))
-        };
-        eprintln!(
-            "canvas-gate {width}x{height} bytes={} | {} | {} | {} | {} | {} | {} | {} | {}",
-            bytes.len(),
-            line("animated", &mut animated),
-            line("built", &mut built),
-            line("same", &mut same),
-            line("same-built", &mut same_built),
-            line("replayed", &mut replayed),
-            line("empty", &mut empty),
-            line("key", &mut keyed),
-            line("check", &mut checks),
-        );
+                keyed.push(started.elapsed());
+                assert_eq!(host::work().draws - draws, 1, "one draw a key");
+                let row: String =
+                    (0..stamp(expected).len() as u32).map(|x| frame.cell(x, 0).unwrap().symbol.clone()).collect();
+                assert_eq!(row, stamp(expected), "the key's screen is on screen");
+                for (x, y) in
+                    [(u32::from(width) / 2, u32::from(height) / 2), (u32::from(width) - 1, u32::from(height) - 1)]
+                {
+                    let (char, fg, bg) = screen_cell(expected, x, y);
+                    let cell = frame.cell(x, y).unwrap();
+                    let color = |color: abi::Rgba| opentui::style::Color::rgba(color.r, color.g, color.b, color.a);
+                    assert_eq!(
+                        (cell.symbol.as_str(), cell.fg, cell.bg),
+                        (char.to_string().as_str(), color(fg), color(bg)),
+                        "({x}, {y})"
+                    );
+                }
+            }
+            line += &format!(" | key {:.1} {:.1}", percentile(&mut keyed, 0.5), percentile(&mut keyed, 0.99));
+            let bytes = screen(1, width, height, false).into_bytes();
+            let mut checks: Vec<Duration> = (0..FRAMES)
+                .map(|_| {
+                    let started = std::time::Instant::now();
+                    std::hint::black_box(list::check(std::hint::black_box(&bytes)).unwrap());
+                    started.elapsed()
+                })
+                .collect();
+            line += &format!(
+                " | bytes {} | check {:.1} {:.1}",
+                bytes.len(),
+                percentile(&mut checks, 0.5),
+                percentile(&mut checks, 0.99)
+            );
+        }
+        eprintln!("{line}");
     }
 }
 
@@ -1561,4 +1638,466 @@ fn a_canvas_draw_is_contained() {
     assert_eq!(host::ledger(), baseline);
     assert_eq!(tui.plugins.monitor().record().unwrap().crash(), Crash::default(), "the record names nobody after");
     PAINT_RECORD.set(None);
+}
+
+thread_local! {
+    /// The list `test.cells` draws, which a test sets.
+    static CELLS: RefCell<Option<List>> = const { RefCell::new(None) };
+    static CELLS_DRAWS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// A plugin with one canvas of 12 x 3 right of the mark, on a row of [`BG`], drawn with the list [`CELLS`] holds.
+fn cells_setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let view = |_: &mut v2::View<'_>| {
+        let canvas = v2::Node::canvas("c").layout(abi::Layout {
+            width: Some(abi::Width::Cells(12)),
+            height: Some(abi::Width::Cells(3)),
+            shrink: Some(false),
+            ..abi::Layout::default()
+        });
+        let mark = v2::Node::text(vec![abi::Span::new(MARK)]).layout(abi::Layout::default().shrink(false));
+        v2::Node::column(vec![v2::Node::row(vec![mark, canvas]).bg(abi::Color::Rgba(BG))]).with_id("cells")
+    };
+    setup.surface(v2::Surface::new("cells", v2::Place::Route("cells".into()), view).draw(|_| {
+        CELLS_DRAWS.set(CELLS_DRAWS.get() + 1);
+        CELLS.with_borrow(Clone::clone)
+    }));
+    Ok(())
+}
+
+/// The TUI on route `test.cells`, drawing `list`, after its first frame.
+fn cells_tui(list: List) -> Harness {
+    CELLS.set(Some(list));
+    CELLS_DRAWS.set(0);
+    let harness = open_tui(80, 24, vec![abi::Plugin { id: "test.cells", setup: cells_setup }.into()]);
+    harness.tui.navigate(Route::Plugin { id: "test.cells".to_owned(), name: "cells".to_owned() });
+    harness
+}
+
+// Expected (bigboi 1): a text the renderer can record is drawn, and one byte more is a list over its limit: the canvas
+// shows the placeholder, the frame and the rest of the screen go on (the mark beside the canvas shows), and the
+// plugin stays active. Without the limit the renderer refuses the recording and the frame fails, ending the TUI.
+#[test]
+fn a_text_the_renderer_cannot_record_is_over_the_limit() {
+    assert_eq!(list::MAX_TEXT_BYTES, opentui::sys::OT_BUFFER_TEXT_BYTES_MAX as usize);
+    for (bytes, shown) in [(list::MAX_TEXT_BYTES, "xxxxxxxxxxxx"), (list::MAX_TEXT_BYTES + 1, "canvas over")] {
+        let mut text = List::new();
+        text.text(0, 0, &"x".repeat(bytes), list::Style::new().fg(abi::Rgba::new(255, 255, 255, 255)));
+        let harness = cells_tui(text);
+        let frame = harness.app.try_render().expect("the frame goes on");
+        let rows = canvas_rows(&frame, 12, 1);
+        assert!(rows[0].starts_with(shown), "{bytes} bytes: {rows:?}");
+        assert!(frame.text().contains(MARK));
+        assert_eq!(status(&harness, "test.cells"), opencode_plugin::Status::Active);
+    }
+}
+
+// Expected (bigboi 7): clips nested past the bound are a resource limit like the others: the canvas shows the
+// placeholder in the same frame, the mark beside it shows, and the plugin stays active; a pop without a clip is a
+// list the host cannot read, which fails it.
+#[test]
+fn clips_past_the_bound_show_the_placeholder() {
+    let mut deep = List::new();
+    for _ in 0..=list::MAX_CLIPS {
+        deep.clip(0, 0, 12, 3);
+    }
+    let harness = cells_tui(deep);
+    let frame = harness.app.render();
+    assert!(canvas_rows(&frame, 12, 1)[0].starts_with("canvas over"));
+    assert!(frame.text().contains(MARK));
+    assert_eq!(status(&harness, "test.cells"), opencode_plugin::Status::Active);
+    let harness = cells_tui(List::new().pop().clone());
+    harness.app.render();
+    let _ = frame_after_one(&harness);
+    assert!(matches!(status(&harness, "test.cells"), opencode_plugin::Status::Failed(_)));
+}
+
+fn frame_after_one(harness: &Harness) -> Capture {
+    frame(harness, Duration::from_millis(16))
+}
+
+// Expected (bigboi 6): what a list draws, cell by cell, hand-written and computed without OpenTUI's painter, on the
+// frame that draws it and on a frame that replays it. A text takes the columns its characters need (a wide one
+// leaves its next cell to it, a combining cluster is one cell); a cell takes a character one column wide, and one of
+// another width draws U+FFFD; a clip through half of a wide character draws none of it and leaves what is beside it;
+// a later operation overwrites an earlier one; a translucent fill blends over the row's background; a cell without
+// colors keeps the background under it; every style bit reaches the cell.
+#[test]
+fn a_list_draws_the_cells_its_table_says() {
+    use opentui::style::{Attributes, Color};
+    let white = abi::Rgba::new(255, 255, 255, 255);
+    let pen = list::Style::new().fg(white);
+    let mut list = List::new();
+    list.text(0, 0, "界a", pen)
+        .cell(3, 0, '界', pen)
+        .text(4, 0, "e\u{301}", pen)
+        .cell(6, 0, '#', pen)
+        .clip(8, 0, 1, 1)
+        .text(7, 0, "界", pen)
+        .pop()
+        .cell(9, 0, 'S', pen)
+        .text(0, 1, "ab", pen)
+        .cell(1, 1, 'X', pen)
+        .fill(2, 1, 2, 1, abi::Rgba::new(255, 0, 0, 128))
+        .cell(5, 1, 'm', list::Style::new());
+    let bits = [
+        (list::Style { bold: true, ..pen }, Attributes::BOLD),
+        (list::Style { dim: true, ..pen }, Attributes::DIM),
+        (list::Style { italic: true, ..pen }, Attributes::ITALIC),
+        (list::Style { underline: true, ..pen }, Attributes::UNDERLINE),
+        (list::Style { inverse: true, ..pen }, Attributes::INVERSE),
+        (list::Style { strikethrough: true, ..pen }, Attributes::STRIKETHROUGH),
+    ];
+    for (index, (style, _)) in bits.iter().enumerate() {
+        list.cell(index as i16, 2, 's', *style);
+    }
+    let harness = cells_tui(list);
+    let bg = Color::rgba(BG.r, BG.g, BG.b, BG.a);
+    for step in ["drawn", "replayed"] {
+        let frame = frame_after_one(&harness);
+        let (left, top) = origin(&frame).unwrap();
+        let cell = |x: u32, y: u32| frame.cell(left + x, top + y).unwrap().clone();
+        let symbols: Vec<String> = (0..10).map(|x| cell(x, 0).symbol).collect();
+        assert_eq!(symbols, ["界", "", "a", "\u{FFFD}", "e\u{301}", " ", "#", " ", " ", "S"], "{step}");
+        let symbols: Vec<String> = (0..6).map(|x| cell(x, 1).symbol).collect();
+        assert_eq!(symbols, ["a", "X", " ", " ", " ", "m"], "{step}");
+        // Red at alpha 128 over the row's background, channel by channel: 255 a + c (1 - a), a = 128 / 255.
+        let blend = |over: u8, under: u8| f64::from(over) * 128.0 / 255.0 + f64::from(under) * 127.0 / 255.0;
+        let fill = cell(2, 1).bg;
+        for (got, want) in [(fill.r, blend(255, BG.r)), (fill.g, blend(0, BG.g)), (fill.b, blend(0, BG.b))] {
+            assert!((f64::from(got) - want).abs() <= 1.0, "{step}: the fill is {fill:?}, not about {want}");
+        }
+        assert_eq!(cell(5, 1).bg, bg, "{step}: a cell without a background keeps the row's");
+        for (index, (_, attribute)) in bits.iter().enumerate() {
+            let got = cell(index as u32, 2).attributes;
+            assert_eq!(got, *attribute, "{step}: style bit {index}");
+            assert_eq!(cell(index as u32, 2).symbol, "s");
+        }
+    }
+    assert_eq!(CELLS_DRAWS.get(), 1);
+}
+
+// Expected (bigboi, contract): a list kept for another size is replayed as it is, cut to the canvas: a draw that
+// returns nothing after a resize keeps the list it had, at the new size, until the next draw replaces it. A resize
+// is a chance to draw, not a new list.
+#[test]
+fn a_kept_list_is_replayed_at_a_new_size_until_replaced() {
+    PAD.with(|cell| *cell.borrow_mut() = Pad::default());
+    let harness = open_tui(80, 24, vec![abi::Plugin { id: ID, setup }.into()]);
+    apply(&harness, &Command::Open);
+    let _ = frame(&harness, Duration::from_millis(1));
+    let held = |pad: &Pad| match &pad.draws.last().unwrap().returned {
+        Returned::Art(shapes) => Held::Art(shapes.clone()),
+        other => panic!("{other:?}"),
+    };
+    let first = pad(|pad| held(pad));
+    apply(&harness, &Command::Next(Next::Keep));
+    apply(&harness, &Command::Size(16, 4));
+    let kept = frame(&harness, Duration::from_millis(16));
+    assert_eq!(pad(|pad| pad.draws.last().unwrap().frame.cause), v2::Cause::Resized);
+    assert_eq!(differs(&kept, Some(&first), (16, 4)), None, "the list before is replayed at the new size");
+    apply(&harness, &Command::Next(Next::Art(9)));
+    apply(&harness, &Command::Version);
+    let replaced = frame(&harness, Duration::from_millis(16));
+    let next = pad(|pad| held(pad));
+    assert_ne!(next, first);
+    assert_eq!(differs(&replaced, Some(&next), (16, 4)), None);
+}
+
+// Expected (bigboi 4): an animating canvas without a draw asks for no frame and runs no animation.
+#[test]
+fn a_canvas_without_a_draw_does_not_animate() {
+    fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+        let view = |_: &mut v2::View<'_>| {
+            v2::Node::column(vec![v2::Node::canvas("c").animate(true).layout(abi::Layout {
+                width: Some(abi::Width::Cells(6)),
+                height: Some(abi::Width::Cells(2)),
+                ..abi::Layout::default()
+            })])
+        };
+        setup.surface(v2::Surface::new("bare", v2::Place::Route("bare".into()), view));
+        Ok(())
+    }
+    let harness = open_tui(80, 24, vec![abi::Plugin { id: "test.bare", setup }.into()]);
+    harness.tui.navigate(Route::Plugin { id: "test.bare".to_owned(), name: "bare".to_owned() });
+    for _ in 0..12 {
+        let _ = frame(&harness, Duration::from_millis(16));
+    }
+    assert_eq!(host::ledger().driving, 0);
+    assert!(!harness.app.needs_frame());
+}
+
+// Expected (bigboi 4): an animating canvas covered by what is drawn over it rests: under the command palette (a
+// dialog, whose backdrop takes the pointer from the screen) and under an opaque box over all its rows it is not drawn
+// and asks for no frame, within two frames; with the cover gone it asks for a frame and animates again, its time not
+// counting the rest. Under a box over part of its rows, or its first columns, it animates on.
+#[test]
+fn a_covered_canvas_rests() {
+    PAD.with(|cell| *cell.borrow_mut() = Pad { animate: true, ..Pad::default() });
+    let harness = open_tui(80, 24, vec![abi::Plugin { id: ID, setup }.into()]);
+    apply(&harness, &Command::Open);
+    let draws = || pad(|pad| pad.draws.len());
+    let frames = |count: usize| {
+        for _ in 0..count {
+            let _ = frame(&harness, Duration::from_millis(16));
+        }
+    };
+    let rests = |what: &str| {
+        frames(3);
+        let drawn = draws();
+        frames(5);
+        assert_eq!(draws(), drawn, "{what}: a covered canvas was drawn");
+        assert!(!harness.app.needs_frame(), "{what}: a covered canvas asks for frames");
+        assert_eq!(host::ledger().driving, 0, "{what}");
+    };
+    let animates = |what: &str| {
+        frames(2);
+        let drawn = draws();
+        frames(4);
+        assert_eq!(draws(), drawn + 4, "{what}: the canvas does not animate");
+        let last = pad(|pad| pad.draws.last().unwrap().frame);
+        assert_eq!((last.cause, last.dt), (v2::Cause::Animate, Duration::from_millis(16)), "{what}");
+    };
+    animates("open");
+    let _ = harness.tui.keymap.dispatch("command.palette.show", None);
+    assert!(harness.tui.dialogs.is_open());
+    rests("under the palette");
+    harness.tui.dialogs.clear();
+    let _ = frame(&harness, Duration::from_millis(16));
+    assert!(harness.app.needs_frame(), "an uncovered canvas asks for the frame that starts it");
+    animates("the palette closed");
+    let set = |input: &str| {
+        let _ = harness.tui.keymap.dispatch("pad.set", Some(input));
+    };
+    set("cover=13x4");
+    rests("under a box over all of it");
+    set("cover=13x2");
+    animates("under a box over half its rows");
+    set("cover=4x4");
+    animates("under a box over its first columns");
+    set("cover=0x0");
+    animates("uncovered");
+}
+
+// Expected (bigboi 5): the time the terminal is away is no animation's. After a suspend (here the command, whose
+// hand-over the test client does not carry out), five seconds with no frame are not given to the next frame of a
+// canvas that stayed mounted and shown; without the suspend they are.
+#[test]
+fn the_time_the_terminal_is_away_is_not_counted() {
+    for suspend in [false, true] {
+        CHART.with(|cell| *cell.borrow_mut() = Chart::default());
+        let harness = open_tui(80, 24, vec![abi::Plugin { id: "test.chart", setup: chart_setup }.into()]);
+        harness.tui.navigate(chart_route());
+        for _ in 0..3 {
+            let _ = frame(&harness, Duration::from_millis(16));
+        }
+        if suspend {
+            let _ = harness.tui.keymap.dispatch("terminal.suspend", None);
+        }
+        harness.app.advance(Duration::from_secs(5));
+        let _ = harness.app.render();
+        let dt = chart(|chart| chart.frames.last().unwrap().dt);
+        match suspend {
+            true => assert!(dt < Duration::from_millis(20), "the suspend was counted: {dt:?}"),
+            false => assert!(dt >= Duration::from_secs(5), "a stall is the animation's time: {dt:?}"),
+        }
+    }
+}
+
+/// What each `test.load` plugin draws in each of its canvases.
+#[derive(Clone, Copy, Debug)]
+enum Load {
+    /// Texts of 65,000 bytes, this many, at the canvas's left.
+    Texts(usize),
+    /// 1 x 1 fills at the canvas's corner, this many.
+    Fills(usize),
+}
+
+thread_local! {
+    /// How many canvases each `test.load` plugin shows, and what it draws in them.
+    static LOAD: std::cell::Cell<(usize, Load)> = const { std::cell::Cell::new((1, Load::Fills(1))) };
+    /// A version every canvas takes, which a test bumps for a draw of the same lists.
+    static LOAD_VERSION: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static LOAD_DRAWS: RefCell<Vec<v2::Cause>> = const { RefCell::new(Vec::new()) };
+}
+
+const LOADS: [&str; 5] = ["test.load.a", "test.load.b", "test.load.c", "test.load.d", "test.load.e"];
+
+/// A plugin with a row of canvases of 3 x 1 in the home footer's status, drawn as [`LOAD`] says.
+fn load_setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let view = |_: &mut v2::View<'_>| {
+        let (count, _) = LOAD.get();
+        let canvases = (0..count)
+            .map(|index| {
+                v2::Node::canvas(format!("c{index}")).version(LOAD_VERSION.get()).layout(abi::Layout {
+                    width: Some(abi::Width::Cells(3)),
+                    height: Some(abi::Width::Cells(1)),
+                    shrink: Some(false),
+                    ..abi::Layout::default()
+                })
+            })
+            .collect();
+        v2::Node::row(canvases)
+    };
+    setup.command(abi::Command { name: format!("{}.bump", setup.id()), ..abi::Command::default() }, |_, _| {
+        LOAD_VERSION.set(LOAD_VERSION.get() + 1);
+    });
+    let place = v2::Place::Slot(abi::Placement::append("home.footer.status"));
+    setup.surface(v2::Surface::new("load", place, view).draw(|cx| {
+        LOAD_DRAWS.with_borrow_mut(|draws| draws.push(cx.frame.cause));
+        let mut list = List::new();
+        match LOAD.get().1 {
+            Load::Texts(count) => {
+                let text = "x".repeat(65_000);
+                for _ in 0..count {
+                    list.text(0, 0, &text, list::Style::new());
+                }
+            }
+            Load::Fills(count) => {
+                for _ in 0..count {
+                    list.fill(0, 0, 1, 1, abi::Rgba::new(0, 200, 0, 255));
+                }
+            }
+        }
+        Some(list)
+    }));
+    Ok(())
+}
+
+/// The TUI on home with `plugins` of the `test.load` plugins, each showing `canvases` canvases of `load`.
+fn load_tui(plugins: usize, canvases: usize, load: Load) -> Harness {
+    LOAD.set((canvases, load));
+    LOAD_VERSION.set(0);
+    let plugins = LOADS[..plugins].iter().map(|id| abi::Plugin { id, setup: load_setup }.into()).collect();
+    let harness = open_tui(200, 30, plugins);
+    let _ = frame(&harness, Duration::from_millis(16));
+    harness
+}
+
+/// The bytes of one `Texts(14)` list.
+fn texts_bytes() -> i64 {
+    let mut list = List::new();
+    for _ in 0..14 {
+        list.text(0, 0, &"x".repeat(65_000), list::Style::new());
+    }
+    list.as_bytes().len() as i64
+}
+
+// Expected (bigboi 2): what one plugin's canvases hold is bounded: of five lists of 0.9 MiB, four fit its 4 MiB and
+// the fifth canvas shows the placeholder; a new version of the same lists replaces each in place, so the four stay
+// and the fifth does not get in; and what it holds goes when its canvases do. The plugin stays active.
+#[test]
+fn one_plugin_holds_at_most_its_bytes() {
+    let bytes = texts_bytes();
+    let harness = load_tui(1, 5, Load::Texts(14));
+    let owner = LOADS[0];
+    assert_eq!((opencode_plugin::canvas::held(owner), host::ledger().lists), (4 * bytes, 4));
+    let row = |frame: &Capture| (0..frame.height).map(|y| frame.row(y)).find(|row| row.contains("xxxcan"));
+    assert!(row(&harness.app.render()).is_some_and(|row| row.contains("xxxxxxxxxxxxcan")), "the fifth is over");
+    LOAD_DRAWS.take();
+    let _ = harness.tui.keymap.dispatch(&format!("{owner}.bump"), None);
+    let _ = frame(&harness, Duration::from_millis(16));
+    assert_eq!(LOAD_DRAWS.take(), [v2::Cause::Version; 5], "each canvas drew its new version in place");
+    assert_eq!((opencode_plugin::canvas::held(owner), host::ledger().lists), (4 * bytes, 4));
+    assert_eq!(host::ledger().canvases, 5);
+    let shown = harness.app.render();
+    assert!(row(&shown).is_some_and(|row| row.contains("xxxxxxxxxxxxcan")), "the four keep their places");
+    assert_eq!(status(&harness, owner), opencode_plugin::Status::Active);
+    harness.tui.navigate(Route::Plugin { id: "test.chart".to_owned(), name: "none".to_owned() });
+    let _ = frame(&harness, Duration::from_millis(16));
+    assert_eq!((opencode_plugin::canvas::held(owner), host::ledger()), (0, Ledger::default()));
+}
+
+// Expected (bigboi 2): what all canvases hold is bounded too: five plugins of four lists of 0.9 MiB each fit their own
+// bound, and the lists past 16 MiB in all show the placeholder; no plugin holds more than its bound.
+#[test]
+fn all_canvases_hold_at_most_the_total() {
+    let bytes = texts_bytes();
+    let _harness = load_tui(5, 4, Load::Texts(14));
+    let fit = opencode_plugin::canvas::TOTAL_BYTES / bytes;
+    assert_eq!(host::ledger().lists, fit);
+    assert_eq!(host::ledger().bytes, fit * bytes);
+    assert!(LOADS.iter().all(|owner| opencode_plugin::canvas::held(owner) <= opencode_plugin::canvas::PLUGIN_BYTES));
+}
+
+// Expected (bigboi 2): what the canvases of one frame ask the renderer to record is bounded, below what OpenTUI
+// records in a frame: nine lists of 32,000 fills (4 MB of recording each) from three plugins draw eight a frame and
+// show the placeholder in the ninth, and the frame goes on. Each list alone is within its own bounds.
+#[test]
+fn a_frame_records_at_most_its_bound() {
+    let harness = load_tui(3, 3, Load::Fills(32_000));
+    assert_eq!(host::ledger().lists, 9);
+    for _ in 0..3 {
+        let work = host::work();
+        let frame = harness.app.try_render().expect("the frame goes on");
+        let done = host::work().since(work);
+        assert_eq!((done.replays, done.squeezed), (8, 1), "{done:?}");
+        assert!(frame.text().contains("can"), "the ninth shows the placeholder");
+    }
+}
+
+// Expected (bigboi 2): a list is charged by what it touches at the size it is drawn at: fills that cover the canvas
+// 7,281 times are within the cells one list may touch, and 7,282 times are over it; 32,768 fills are within the
+// recording one list may ask for, and 32,769 are over it; a run of cells and a fill wholly outside the canvas cost
+// nothing and replay nothing.
+#[test]
+fn a_list_is_charged_by_the_cells_it_touches() {
+    let per = 12 * 3;
+    let fit = opencode_plugin::canvas::LIST_CELLS / per;
+    for (fills, over) in [(fit, false), (fit + 1, true)] {
+        let mut list = List::new();
+        for _ in 0..fills {
+            list.fill(-5, -5, 40, 40, abi::Rgba::new(0, 0, 200, 255));
+        }
+        let harness = cells_tui(list);
+        let shown = canvas_rows(&harness.app.render(), 12, 1)[0].starts_with("canvas over");
+        assert_eq!(shown, over, "{fills} fills");
+    }
+    let fit = opencode_plugin::canvas::LIST_RECORDING / opencode_plugin::canvas::RECORD;
+    for (fills, over) in [(fit, false), (fit + 1, true)] {
+        let mut list = List::new();
+        for _ in 0..fills {
+            list.fill(0, 0, 1, 1, abi::Rgba::new(0, 0, 200, 255));
+        }
+        let harness = cells_tui(list);
+        let shown = canvas_rows(&harness.app.render(), 12, 1)[0].starts_with("canvas over");
+        assert_eq!(shown, over, "{fills} fills");
+    }
+    let mut outside = List::new();
+    outside.cells(40, 0, 100, (0..60_000).map(|_| ('o', list::Style::new()))).fill(
+        -9,
+        0,
+        9,
+        3,
+        abi::Rgba::new(9, 9, 9, 255),
+    );
+    let harness = cells_tui(outside);
+    let _ = harness.app.render();
+    let work = host::work();
+    let _ = harness.app.render();
+    let done = host::work().since(work);
+    assert_eq!((done.replays, done.ops), (1, 0), "{done:?}");
+}
+
+// Expected (bigboi 2): a kept list is charged again at a new size: a run of 30 cells in a canvas of 12 records 12 of
+// them, and the same list kept at 20 records 20.
+#[test]
+fn a_kept_list_is_charged_at_its_new_size() {
+    let pen = Pen(abi::Rgba::new(255, 255, 255, 255), None, false);
+    FIXED.with(|cell| *cell.borrow_mut() = Some(vec![Shape::Cells(0, 0, 30, vec![('#', pen); 30])]));
+    PAD.with(|cell| *cell.borrow_mut() = Pad::default());
+    let harness = open_tui(80, 24, vec![abi::Plugin { id: ID, setup }.into()]);
+    apply(&harness, &Command::Open);
+    let recorded = || {
+        let _ = frame(&harness, Duration::from_millis(16));
+        let work = host::work();
+        let _ = frame(&harness, Duration::from_millis(16));
+        host::work().since(work).recorded
+    };
+    let record = opencode_plugin::canvas::RECORD as u64;
+    assert_eq!(recorded(), 12 * record);
+    apply(&harness, &Command::Next(Next::Keep));
+    apply(&harness, &Command::Size(20, 4));
+    assert_eq!(recorded(), 20 * record);
+    FIXED.with(|cell| *cell.borrow_mut() = None);
 }

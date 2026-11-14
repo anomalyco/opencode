@@ -21,8 +21,13 @@
 //! dim 2, italic 4, underline 8, inverse 16, strikethrough 32), then the foreground and the background colors, each
 //! written whether it is set or not. A `border` is a [`BorderStyle`]: 0 single, 1 double, 2 rounded, 3 heavy.
 //!
-//! The host checks a list whole before it keeps it ([`check`]): one it cannot read is refused, and one over
-//! [`MAX_BYTES`] or [`MAX_OPS`] is not drawn; the canvas then shows a placeholder.
+//! The host checks a list whole before it keeps it ([`check`]): one it cannot read is refused, and one over a limit
+//! ([`MAX_BYTES`], [`MAX_OPS`] with a run of cells counting one a cell, [`MAX_TEXT_BYTES`] a text, [`MAX_CLIPS`] open)
+//! is not drawn; the canvas then shows a placeholder. The host bounds what lists cost it beyond this, by the size
+//! they are drawn at, and for each plugin and in total.
+//!
+//! A cell, alone or in a run, takes a character one column wide; the host draws one of another width as U+FFFD. Text
+//! that is wider, or combined, is drawn with `text`, which takes the columns its characters need.
 
 use crate::{BorderStyle, Rgba};
 
@@ -30,10 +35,14 @@ use crate::{BorderStyle, Rgba};
 pub const VERSION: u8 = 1;
 /// The most bytes a list may have. A full screen of 200 x 60 cells is 168,006 bytes as one `cells` record.
 pub const MAX_BYTES: usize = 1 << 20;
-/// The most operations a list may have.
+/// The most operations a list may have, a run of cells counting one a cell: what one list may ask the renderer to
+/// record.
 pub const MAX_OPS: usize = 1 << 16;
 /// The most clips a list may have open at once.
 pub const MAX_CLIPS: usize = 32;
+/// The most bytes one text may have: OpenTUI's renderer records no longer text (`OT_BUFFER_TEXT_BYTES_MAX`), and a
+/// text past it would fail the whole frame, not the canvas.
+pub const MAX_TEXT_BYTES: usize = 1 << 16;
 
 const FILL: u8 = 1;
 const TEXT: u8 = 2;
@@ -157,19 +166,30 @@ pub enum Error {
     /// The bytes are not a list: the host refuses it whole.
     Malformed(String),
     /// A list over a limit: the canvas shows a placeholder.
-    Over { bytes: usize, ops: usize },
+    Over(Limit),
+}
+
+/// The limit a list is over.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Limit {
+    /// Its bytes, of [`MAX_BYTES`].
+    Bytes(usize),
+    /// Its operations, of [`MAX_OPS`].
+    Ops(usize),
+    /// One text's bytes, of [`MAX_TEXT_BYTES`].
+    Text(usize),
+    /// Clips open at once, of [`MAX_CLIPS`].
+    Clips,
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Malformed(why) => write!(f, "a canvas list the host cannot read: {why}"),
-            Error::Over { bytes, ops } => {
-                write!(
-                    f,
-                    "a canvas list over its limit: {bytes} bytes and {ops} operations, of {MAX_BYTES} and {MAX_OPS}"
-                )
-            }
+            Error::Over(Limit::Bytes(bytes)) => write!(f, "a canvas list of {bytes} bytes, of {MAX_BYTES}"),
+            Error::Over(Limit::Ops(ops)) => write!(f, "a canvas list of {ops} operations, of {MAX_OPS}"),
+            Error::Over(Limit::Text(bytes)) => write!(f, "a canvas text of {bytes} bytes, of {MAX_TEXT_BYTES}"),
+            Error::Over(Limit::Clips) => write!(f, "a canvas list with more than {MAX_CLIPS} clips open"),
         }
     }
 }
@@ -184,20 +204,27 @@ pub struct Checked {
 /// does not know count and are skipped.
 pub fn check(bytes: &[u8]) -> Result<Checked, Error> {
     if bytes.len() > MAX_BYTES {
-        return Err(Error::Over { bytes: bytes.len(), ops: 0 });
+        return Err(Error::Over(Limit::Bytes(bytes.len())));
     }
     let (mut count, mut clips) = (0, 0usize);
+    // The list is read whole, so one that is malformed is refused as such also past a limit.
+    let mut over = None;
     for op in records(bytes)? {
         let (kind, payload) = op?;
-        count += 1;
+        let op = decode(kind, payload)?;
+        count += match op {
+            Some(Op::Cells { cells, .. }) => cells.len().max(1),
+            _ => 1,
+        };
         if count > MAX_OPS {
-            return Err(Error::Over { bytes: bytes.len(), ops: count });
+            over = over.or(Some(Limit::Ops(count)));
         }
-        match decode(kind, payload)? {
+        match op {
+            Some(Op::Text { text, .. }) if text.len() > MAX_TEXT_BYTES => over = over.or(Some(Limit::Text(text.len()))),
             Some(Op::Clip { .. }) => {
                 clips += 1;
                 if clips > MAX_CLIPS {
-                    return Err(Error::Malformed(format!("more than {MAX_CLIPS} clips open")));
+                    over = over.or(Some(Limit::Clips));
                 }
             }
             Some(Op::Pop) => {
@@ -206,7 +233,10 @@ pub fn check(bytes: &[u8]) -> Result<Checked, Error> {
             _ => {}
         }
     }
-    Ok(Checked { ops: count })
+    match over {
+        Some(limit) => Err(Error::Over(limit)),
+        None => Ok(Checked { ops: count }),
+    }
 }
 
 /// The operations of a list [`check`] took, in order, without the ones this version does not know. A record it cannot
@@ -512,7 +542,7 @@ mod tests {
         assert_eq!(cells.iter().collect::<Vec<_>>(), [(lit, 'a'), (Style::new(), 'b'), (lit.bold(), 'c')]);
         assert!(matches!(read[2], Op::Rect { border: BorderStyle::Rounded, background: None, .. }));
         assert!(matches!(read[3], Op::Rect { border: BorderStyle::Heavy, background: Some(BLUE), .. }));
-        assert_eq!(check(list.as_bytes()), Ok(Checked { ops: 4 }));
+        assert_eq!(check(list.as_bytes()), Ok(Checked { ops: 6 }), "a run of three cells counts three");
     }
 
     // Expected: a record of a kind this version does not know is counted and skipped, and the records after it read.
@@ -530,7 +560,7 @@ mod tests {
     // Expected: bytes that are not a list are refused whole, whatever came before the fault: no version, another
     // version, a record cut short or longer than the list, a fixed record of another length, text that is not UTF-8,
     // a character that is not one, alone or in a run of cells, a partial cell, cells of no width, an unknown border,
-    // a pop without a clip, and too many clips.
+    // and a pop without a clip.
     #[test]
     fn a_list_the_host_cannot_read_is_refused() {
         let good = List::new().fill(0, 0, 1, 1, RED).clone().into_bytes();
@@ -561,32 +591,63 @@ mod tests {
         rect[14] = 4;
         assert!(malformed(&rect));
         assert!(malformed(List::new().pop().as_bytes()));
-        let mut deep = List::new();
-        for _ in 0..MAX_CLIPS {
-            deep.clip(0, 0, 1, 1);
-        }
-        assert!(check(deep.as_bytes()).is_ok());
-        assert!(malformed(deep.clip(0, 0, 1, 1).as_bytes()));
     }
 
-    // Expected: a list at a limit is drawn, and one over it is not: one byte or one operation more.
+    // Expected: a list at a limit is drawn, and one over it is not: one byte, one operation, one cell of a run, one
+    // byte of a text, one clip open more. Each is a resource limit; a list that is malformed too is refused as such.
     #[test]
     fn a_list_over_a_limit_is_not_drawn() {
+        let over = |list: &List| match check(list.as_bytes()) {
+            Err(Error::Over(limit)) => Some(limit),
+            other => {
+                assert!(other.is_ok(), "{other:?}");
+                None
+            }
+        };
         let mut list = List::new();
         for _ in 0..MAX_OPS {
             list.pop_free();
         }
         assert_eq!(check(list.as_bytes()), Ok(Checked { ops: MAX_OPS }));
         list.pop_free();
-        assert!(matches!(check(list.as_bytes()), Err(Error::Over { ops, .. }) if ops == MAX_OPS + 1));
-        let text = "x".repeat(MAX_BYTES - 1 - 5 - 4 - STYLE);
+        assert_eq!(over(&list), Some(Limit::Ops(MAX_OPS + 1)));
+
+        // A run of cells counts one an entry.
+        let run = |cells: usize| List::new().cells(0, 0, 200, (0..cells).map(|_| ('x', Style::new()))).clone();
+        assert_eq!(check(run(MAX_OPS).as_bytes()), Ok(Checked { ops: MAX_OPS }));
+        assert_eq!(over(&run(MAX_OPS + 1)), Some(Limit::Ops(MAX_OPS + 1)));
+
+        // One text the renderer can record, and one byte more.
+        let text = |bytes: usize| List::new().text(0, 0, &"x".repeat(bytes), Style::new()).clone();
+        assert_eq!(over(&text(MAX_TEXT_BYTES)), None);
+        assert_eq!(over(&text(MAX_TEXT_BYTES + 1)), Some(Limit::Text(MAX_TEXT_BYTES + 1)));
+
+        // A list of exactly the most bytes, of texts each within their bound, and one byte more.
+        let record = 5 + 4 + STYLE;
         let mut full = List::new();
-        full.text(0, 0, &text, Style::new());
+        while full.as_bytes().len() + record + MAX_TEXT_BYTES < MAX_BYTES {
+            full.text(0, 0, &"x".repeat(MAX_TEXT_BYTES), Style::new());
+        }
+        let rest = MAX_BYTES - full.as_bytes().len() - record;
+        full.text(0, 0, &"x".repeat(rest), Style::new());
         assert_eq!(full.as_bytes().len(), MAX_BYTES);
-        assert!(check(full.as_bytes()).is_ok());
-        let mut over = List::new();
-        over.text(0, 0, &format!("{text}x"), Style::new());
-        assert!(matches!(check(over.as_bytes()), Err(Error::Over { .. })));
+        assert_eq!(over(&full), None);
+        let mut longer = List::from_bytes(full.as_bytes()[..full.as_bytes().len() - rest - record].to_vec());
+        longer.text(0, 0, &"x".repeat(rest + 1), Style::new());
+        assert_eq!(over(&longer), Some(Limit::Bytes(MAX_BYTES + 1)));
+
+        // Clips nested to the bound, and one more: a resource limit, not a malformed list.
+        let mut deep = List::new();
+        for _ in 0..MAX_CLIPS {
+            deep.clip(0, 0, 1, 1);
+        }
+        assert_eq!(over(&deep), None);
+        assert_eq!(over(deep.clip(0, 0, 1, 1)), Some(Limit::Clips));
+
+        // A list over a limit that is malformed too is refused as malformed.
+        let mut both = run(MAX_OPS + 1);
+        both.pop();
+        assert!(matches!(check(both.as_bytes()), Err(Error::Malformed(_))));
     }
 
     impl List {

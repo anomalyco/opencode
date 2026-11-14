@@ -5,11 +5,17 @@
 //! round, with the size the canvas has in that frame; at most once a frame:
 //!
 //! - when the canvas shows at a size or a version it has no list for: first, after a resize, after a new `version`;
-//! - while it animates: in each frame after one that painted it. The driver is OpenTUI's `App::animate`, as the
-//!   host's own spinners and shimmer have ([`opencode_ui::motion`]), with their rules: a canvas that a frame did not
-//!   paint (hidden, scrolled out of view, under a closed route) stops at the driver's next tick and costs no frame and
-//!   no wakeup; its next paint starts it again, and the time between is not counted. With the `animations` switch off
-//!   it does not run, and the canvas keeps its last list.
+//! - while it animates: in each frame after one that showed it. The driver is OpenTUI's `App::animate`, as the
+//!   host's own spinners and shimmer have ([`opencode_ui::motion`]), with their rules: a canvas the last frame did not
+//!   show (hidden, scrolled out of view, under a closed route, or covered by what is drawn over it: none of a few
+//!   samples of it is the canvas's in that frame's hit grid) stops at the driver's next tick and costs no frame and no
+//!   wakeup; it starts again once a frame shows it, and the time between is not counted. With the `animations` switch
+//!   off it does not run, and the canvas keeps its last list. A canvas without a draw does not animate. The time the
+//!   terminal is handed to another program ([`handover`]) is not counted either.
+//!
+//! What lists cost the host is bounded: each list by its recording and the cells it touches at the size it is drawn
+//! at (what lands outside the canvas is culled), the lists a plugin's canvases hold and all canvases hold, and the
+//! recording of a frame's canvases. Over a bound a canvas shows a placeholder; the frame goes on.
 //!
 //! A canvas that does not show (out of view, or with no room: a dimension of none, which only the painter sees, since
 //! OpenTUI's `rect()` and resize report one cell) is not drawn; it is drawn in the paint that shows it again.
@@ -25,7 +31,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use opencode_plugin_abi::canvas::{self as list, Op};
 use opencode_plugin_abi::v2::{Cause, Frame};
@@ -37,9 +43,25 @@ use opentui::prelude::*;
 /// nothing (the canvas keeps its list; also when the call failed, and the host then ends the mount), and `fail` fails
 /// the plugin for a list the host cannot read.
 pub struct Drawer {
+    /// The plugin whose lists these are: what its canvases hold is charged to it.
+    pub(crate) owner: Rc<str>,
     pub(crate) draw: Draw,
     pub(crate) fail: Box<dyn Fn(String)>,
 }
+
+/// The most list bytes the canvases of one plugin may hold together.
+pub const PLUGIN_BYTES: i64 = 4 << 20;
+/// The most list bytes all canvases may hold together.
+pub const TOTAL_BYTES: i64 = 16 << 20;
+/// The most renderer recording, in bytes, that one list may ask for at the size it is drawn at.
+pub const LIST_RECORDING: usize = 4 << 20;
+/// The most cells one list may touch at that size, a fill counting each cell of it in the canvas.
+pub const LIST_CELLS: usize = 1 << 18;
+/// The most renderer recording the canvases of one frame may ask for together: half of what OpenTUI records in a
+/// frame (`OT_SCENE_RECORD_BYTES_MAX`, 64 MiB), the rest left to the host's own widgets.
+pub const FRAME_RECORDING: usize = 32 << 20;
+/// What the renderer records for one drawn operation, a text's bytes aside: a draw head and the largest draw record.
+pub const RECORD: usize = 128;
 
 pub(crate) type Draw = Box<dyn Fn(&str, Frame) -> Option<Vec<u8>>>;
 
@@ -70,6 +92,14 @@ pub struct Work {
     /// Paints of a kept list, and the operations they replayed.
     pub replays: u64,
     pub ops: u64,
+    /// Paints that showed the placeholder because the frame's recording was spent.
+    pub squeezed: u64,
+    /// The recording replays spent, as their lists' cost at the size they were painted at.
+    pub recorded: u64,
+    /// Time in the plugin's draws, in the host's checks of their lists, and in replays.
+    pub draw_ns: u64,
+    pub check_ns: u64,
+    pub replay_ns: u64,
 }
 
 impl Work {
@@ -83,6 +113,11 @@ impl Work {
             refused: self.refused - before.refused,
             replays: self.replays - before.replays,
             ops: self.ops - before.ops,
+            squeezed: self.squeezed - before.squeezed,
+            recorded: self.recorded - before.recorded,
+            draw_ns: self.draw_ns - before.draw_ns,
+            check_ns: self.check_ns - before.check_ns,
+            replay_ns: self.replay_ns - before.replay_ns,
         }
     }
 }
@@ -90,6 +125,23 @@ impl Work {
 thread_local! {
     static LEDGER: Cell<Ledger> = Cell::new(Ledger::default());
     static WORK: Cell<Work> = Cell::new(Work::default());
+    /// The list bytes each plugin's canvases hold.
+    static HELD: RefCell<std::collections::HashMap<Rc<str>, i64>> = RefCell::default();
+    /// The frame whose recording the canvases spend now, and what they spent of it.
+    static FRAME: Cell<(u64, usize)> = const { Cell::new((0, 0)) };
+    /// When the terminal was last handed to another program ([`handover`]).
+    static HANDOVER: Cell<Option<std::time::Instant>> = const { Cell::new(None) };
+}
+
+/// The list bytes the canvases of plugin `owner` hold now.
+pub fn held(owner: &str) -> i64 {
+    HELD.with_borrow(|held| held.get(owner).copied().unwrap_or(0))
+}
+
+/// The terminal goes to another program now (a suspend, an external editor): the time until it comes back is not an
+/// animation's, so the frame after it counts only the time before this.
+pub fn handover(app: &App) {
+    HANDOVER.set(Some(app.now()));
 }
 
 pub fn ledger() -> Ledger {
@@ -134,16 +186,28 @@ struct State {
     animate: Cell<bool>,
     /// The time of the animation's frame that waits for the paint.
     frame: Cell<Option<Duration>>,
-    /// A frame painted the canvas since its driver's last tick.
-    painted: Cell<bool>,
+    /// The part of the canvas the last paint showed, in screen cells.
+    visible: Cell<(i32, i32, u32, u32)>,
     driving: Cell<bool>,
+    /// The driver stopped because something covered the canvas: it starts again once nothing does.
+    rested: Cell<bool>,
+    /// The canvas's widget, for its coverage: given up when the widget goes, so it holds no cycle past it.
+    widget: RefCell<Option<AnyWidget>>,
 }
 
 enum Shown {
     Empty,
-    List(Rc<[u8]>),
+    /// A list, and what it costs at the size it was last costed for.
+    List(Rc<[u8]>, Cell<((u16, u16), Cost)>),
     /// The last list was over a limit.
     Over,
+}
+
+/// What replaying a list at a size asks of the renderer: its recording, in bytes, and the cells it touches.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Cost {
+    recording: usize,
+    cells: usize,
 }
 
 struct Board(Rc<State>);
@@ -160,8 +224,10 @@ impl Canvas {
             version: Cell::new(version),
             animate: Cell::new(animate),
             frame: Cell::new(None),
-            painted: Cell::new(false),
+            visible: Cell::new((0, 0, 0, 0)),
             driving: Cell::new(false),
+            rested: Cell::new(false),
+            widget: RefCell::new(None),
         });
         book(|ledger| ledger.canvases += 1);
         Self::around(app, state)
@@ -173,7 +239,9 @@ impl Canvas {
     }
 
     fn around(app: &App, state: Rc<State>) -> Self {
-        Self { widget: Custom::new(app, Board(state.clone())), state }
+        let widget = Custom::new(app, Board(state.clone()));
+        *state.widget.borrow_mut() = Some(widget.as_any());
+        Self { widget, state }
     }
 
     pub fn widget(&self) -> AnyWidget {
@@ -185,6 +253,15 @@ impl Canvas {
     pub fn set(&self, version: u64, animate: bool) {
         self.state.animate.set(animate);
         self.state.version.set(version);
+    }
+}
+
+impl Drop for Canvas {
+    fn drop(&mut self) {
+        let mut widget = self.state.widget.borrow_mut();
+        if widget.as_ref().is_some_and(|widget| widget.id() == self.widget.id()) {
+            *widget = None;
+        }
     }
 }
 
@@ -201,28 +278,45 @@ impl State {
 
     /// Asks the plugin for a list for this frame at `size`, and keeps it. A frame of the animation that waits is this
     /// draw: its time goes with it, whatever else asked.
-    fn draw(&self, size: (u16, u16), cause: Cause, dt: Duration) {
-        let Some(drawer) = self.drawer.clone() else { return };
+    fn draw(&self, drawer: &Drawer, size: (u16, u16), cause: Cause, dt: Duration) {
         self.asked.set(Some((size, self.version.get())));
-        count(|work| work.draws += 1);
-        let frame = Frame { width: size.0, height: size.1, cause, dt };
-        if let Some(bytes) = (drawer.draw)(&self.id, frame) {
-            self.present(&drawer, bytes);
+        let started = Instant::now();
+        let bytes = (drawer.draw)(&self.id, Frame { width: size.0, height: size.1, cause, dt });
+        let took = started.elapsed().as_nanos() as u64;
+        count(|work| {
+            work.draws += 1;
+            work.draw_ns += took;
+        });
+        if let Some(bytes) = bytes {
+            self.present(drawer, bytes, size);
         }
     }
 
-    /// Keeps `bytes` once they are checked: a list over a limit shows the placeholder, one the host cannot read
-    /// fails the plugin and keeps the list before.
-    fn present(&self, drawer: &Drawer, bytes: Vec<u8>) {
-        let next = match list::check(&bytes) {
-            Ok(_) => {
+    /// Keeps `bytes`, drawn for `size`, once they are checked: a list over a limit (its own, at that size, or what its
+    /// plugin or all canvases may hold) shows the placeholder, one the host cannot read fails the plugin and keeps the
+    /// list before.
+    fn present(&self, drawer: &Drawer, bytes: Vec<u8>, size: (u16, u16)) {
+        let started = Instant::now();
+        let checked = list::check(&bytes).map(|_| cost(&bytes, size));
+        let old = match &*self.shown.borrow() {
+            Shown::List(old, _) => old.len() as i64,
+            _ => 0,
+        };
+        let (new, mine, all) = (bytes.len() as i64, held(&drawer.owner) - old, ledger().bytes - old);
+        let next = match checked {
+            Ok(cost)
+                if cost.recording <= LIST_RECORDING
+                    && cost.cells <= LIST_CELLS
+                    && mine + new <= PLUGIN_BYTES
+                    && all + new <= TOTAL_BYTES =>
+            {
                 count(|work| {
                     work.lists += 1;
                     work.bytes += bytes.len() as u64;
                 });
-                Shown::List(Rc::from(bytes))
+                Shown::List(Rc::from(bytes), Cell::new((size, cost)))
             }
-            Err(list::Error::Over { .. }) => {
+            Ok(_) | Err(list::Error::Over(_)) => {
                 count(|work| work.over += 1);
                 Shown::Over
             }
@@ -232,24 +326,14 @@ impl State {
                 return;
             }
         };
-        let old = self.shown.replace(next);
-        book(|ledger| {
-            if let Shown::List(bytes) = &old {
-                ledger.lists -= 1;
-                ledger.bytes -= bytes.len() as i64;
-            }
-            if let Shown::List(bytes) = &*self.shown.borrow() {
-                ledger.lists += 1;
-                ledger.bytes += bytes.len() as i64;
-            }
-        });
-    }
-
-    /// Whether a frame ran since the tick that saw frame `seen` without painting the canvas. Moves `seen` on.
-    fn missed(&self, app: &App, seen: &mut u64) -> bool {
-        let frame = app.frame_number();
-        let ran = std::mem::replace(seen, frame) != frame;
-        ran && !self.painted.replace(false)
+        let took = started.elapsed().as_nanos() as u64;
+        count(|work| work.check_ns += took);
+        let kept = match &next {
+            Shown::List(bytes, _) => bytes.len() as i64,
+            _ => 0,
+        };
+        self.shown.replace(next);
+        hold(&drawer.owner, kept - old, i64::from(kept > 0) - i64::from(old > 0));
     }
 
     fn set_driving(&self, on: bool) {
@@ -257,40 +341,107 @@ impl State {
             book(|ledger| ledger.driving += if on { 1 } else { -1 });
         }
     }
+
+    /// Whether the last frame did not show the canvas: at no sample of its part `visible` (screen cells) does that
+    /// frame's hit grid hold it. So a canvas hidden, scrolled away or covered by what is drawn over it is not shown; a
+    /// dialog's backdrop, which takes the pointer from all below it, covers a canvas under the dialog too.
+    fn covered(&self, visible: (i32, i32, u32, u32)) -> bool {
+        let Some(widget) = self.widget.borrow().clone() else { return false };
+        let samples = |length: u32| {
+            let count = length.min(COVER_SAMPLES);
+            (0..count).map(move |index| (index * (length - 1)).checked_div(count - 1).unwrap_or(0) as i32)
+        };
+        let mine = |x: i32, y: i32| {
+            let (Ok(x), Ok(y)) = (u16::try_from(x), u16::try_from(y)) else { return false };
+            // A widget the last frame hit and that is gone since, such as this canvas's own before it was built
+            // again, tells nothing.
+            self.app.widget_at(x, y).is_none_or(|hit| hit.id() == widget.id())
+        };
+        !samples(visible.2).any(|x| samples(visible.3).any(|y| mine(visible.0 + x, visible.1 + y)))
+    }
 }
 
-/// Runs a canvas's animation: a frame for its paint to draw, until a frame did not paint it, it stops animating, or
-/// the `animations` switch is off.
+/// The samples a side of a canvas's coverage takes at most: a part left uncovered between them reads as covered.
+const COVER_SAMPLES: u32 = 5;
+
+/// Books `bytes` and `lists` more held by `owner`'s canvases.
+fn hold(owner: &Rc<str>, bytes: i64, lists: i64) {
+    book(|ledger| {
+        ledger.bytes += bytes;
+        ledger.lists += lists;
+    });
+    HELD.with_borrow_mut(|held| {
+        let entry = held.entry(owner.clone()).or_default();
+        *entry += bytes;
+        if *entry == 0 {
+            held.remove(owner);
+        }
+    });
+}
+
+/// Runs a canvas's animation: a frame for its paint to draw, until the last frame did not show it, it stops animating,
+/// or the `animations` switch is off. Its time is the time between its ticks, less what follows a [`handover`].
 fn drive(state: &Rc<State>) {
     state.set_driving(true);
     let weak = Rc::downgrade(state);
-    let mut seen = state.app.frame_number();
-    state.app.animate(move |cx, elapsed| {
+    let mut last = state.app.now();
+    state.app.animate(move |cx, _| {
         let Some(state) = weak.upgrade() else { return false };
         let app = cx.app();
-        if !state.animate.get() || !opencode_ui::motion::running() || state.missed(app, &mut seen) {
+        if !state.animate.get() || !opencode_ui::motion::running() {
             state.set_driving(false);
             return false;
         }
+        if state.covered(state.visible.get()) {
+            state.rested.set(true);
+            state.set_driving(false);
+            return false;
+        }
+        let now = app.now();
+        let until = HANDOVER.get().filter(|handover| *handover >= last).unwrap_or(now);
         // A running animation asks for the frame.
-        state.frame.set(Some(elapsed));
+        state.frame.set(Some(until.saturating_duration_since(last)));
+        last = now;
         true
+    });
+}
+
+/// Starts the animation of a canvas that shows, unless it stopped because it was covered and still is. The hit grid
+/// a paint reads is the last frame's, so a covered canvas reads it again once this frame is presented, and asks for a
+/// frame only when nothing covers it then: a covered canvas asks for no frame.
+fn resume(state: &Rc<State>) {
+    if !state.rested.get() {
+        drive(state);
+        return;
+    }
+    if !state.covered(state.visible.get()) {
+        state.rested.set(false);
+        drive(state);
+        return;
+    }
+    let weak = Rc::downgrade(state);
+    state.app.defer(move |cx| {
+        if let Some(state) = weak.upgrade()
+            && state.rested.get()
+            && !state.covered(state.visible.get())
+        {
+            cx.request_redraw();
+        }
     });
 }
 
 impl Drop for State {
     fn drop(&mut self) {
         let bytes = match &*self.shown.borrow() {
-            Shown::List(bytes) => Some(bytes.len() as i64),
-            _ => None,
+            Shown::List(bytes, _) => bytes.len() as i64,
+            _ => 0,
         };
+        if let Some(drawer) = &self.drawer {
+            hold(&drawer.owner, -bytes, -i64::from(bytes > 0));
+        }
         let driving = self.driving.get();
         book(|ledger| {
             ledger.canvases -= 1;
-            if let Some(bytes) = bytes {
-                ledger.lists -= 1;
-                ledger.bytes -= bytes;
-            }
             if driving {
                 ledger.driving -= 1;
             }
@@ -303,50 +454,156 @@ impl Component for Board {
         let state = &self.0;
         // A frame that does not show the canvas drops the animation's frame: its time is not counted.
         let frame = state.frame.take();
-        let (_, _, width, height) = painter.visible_rect();
-        if width > 0 && height > 0 {
-            let size = (painter.width().min(u16::MAX.into()) as u16, painter.height().min(u16::MAX.into()) as u16);
+        let visible = painter.visible_rect();
+        let size = (painter.width().min(u16::MAX.into()) as u16, painter.height().min(u16::MAX.into()) as u16);
+        if let Some(drawer) = state.drawer.clone().filter(|_| visible.2 > 0 && visible.3 > 0) {
             if let Some(cause) = state.stale(size).or(frame.map(|_| Cause::Animate)) {
-                state.draw(size, cause, frame.unwrap_or_default());
+                state.draw(&drawer, size, cause, frame.unwrap_or_default());
             }
-            state.painted.set(true);
+            let origin = state.widget.borrow().as_ref().map(|widget| widget.rect());
+            let (left, top) =
+                origin.map_or((0, 0), |rect| (rect.screen_x.floor() as i32, rect.screen_y.floor() as i32));
+            state.visible.set((left + visible.0, top + visible.1, visible.2, visible.3));
             if state.animate.get() && !state.driving.get() && opencode_ui::motion::running() {
-                drive(state);
+                resume(state);
             }
         }
+        let started = Instant::now();
         match &*state.shown.borrow() {
             Shown::Empty => {}
-            Shown::List(bytes) => {
-                let ops = replay(painter, &mut list::ops(bytes));
+            Shown::List(bytes, costed) => {
+                let (at, mut cost) = costed.get();
+                if at != size {
+                    cost = self::cost(bytes, size);
+                    costed.set((size, cost));
+                }
+                if !spend(&state.app, cost.recording) {
+                    count(|work| work.squeezed += 1);
+                    painter.text(0, 0, PLACEHOLDER, Style::new().dim());
+                    return;
+                }
+                let ops = replay(painter, &mut list::ops(bytes), size);
+                let took = started.elapsed().as_nanos() as u64;
                 count(|work| {
                     work.replays += 1;
+                    work.recorded += cost.recording as u64;
                     work.ops += ops;
+                    work.replay_ns += took;
                 });
             }
-            Shown::Over => painter.text(0, 0, "canvas over its limit", Style::new().dim()),
+            Shown::Over => painter.text(0, 0, PLACEHOLDER, Style::new().dim()),
         }
     }
 }
 
-/// Paints `ops` up to their end or the `pop` that closes the clip they are in; returns how many it painted.
-fn replay<'a>(painter: &mut Painter<'_>, ops: &mut impl Iterator<Item = Op<'a>>) -> u64 {
-    let mut painted = 0;
-    while let Some(op) = ops.next() {
-        painted += 1;
-        match op {
-            Op::Fill { x, y, width, height, color } => {
-                painter.fill(x.into(), y.into(), width.into(), height.into(), rgba(color))
-            }
-            Op::Text { x, y, style, text } => painter.text(x.into(), y.into(), text, styled(style)),
-            Op::Cell { x, y, style, char } => painter.cell(x.into(), y.into(), char, styled(style)),
-            Op::Cells { x, y, width, cells } => {
-                let width = usize::from(width.max(1));
-                for (index, (style, char)) in cells.iter().enumerate() {
-                    let (column, row) = ((index % width) as i32, (index / width) as i32);
-                    painter.cell(i32::from(x) + column, i32::from(y) + row, char, styled(style));
+const PLACEHOLDER: &str = "canvas over its limit";
+
+/// Spends `recording` of the frame's; `false` when the frame has not that much left.
+fn spend(app: &App, recording: usize) -> bool {
+    let (frame, spent) = FRAME.get();
+    let spent = if frame == app.frame_number() { spent } else { 0 };
+    let total = spent + recording;
+    if total > FRAME_RECORDING {
+        FRAME.set((app.frame_number(), spent));
+        return false;
+    }
+    FRAME.set((app.frame_number(), total));
+    true
+}
+
+/// Whether a rectangle reaches into a canvas of `size`.
+fn inside(x: i16, y: i16, width: u32, height: u32, size: (u16, u16)) -> bool {
+    let (x, y) = (i64::from(x), i64::from(y));
+    x < i64::from(size.0) && y < i64::from(size.1) && x + i64::from(width) > 0 && y + i64::from(height) > 0
+}
+
+/// The cells of a rectangle inside a canvas of `size`.
+fn area(x: i16, y: i16, width: u16, height: u16, size: (u16, u16)) -> usize {
+    let span = |start: i16, length: u16, limit: u16| {
+        let (from, to) = (i64::from(start).max(0), (i64::from(start) + i64::from(length)).min(i64::from(limit)));
+        (to - from).max(0) as usize
+    };
+    span(x, width, size.0) * span(y, height, size.1)
+}
+
+/// What [`replay`] asks of the renderer for `bytes` at `size`: an operation it culls costs nothing, a clip a little.
+fn cost(bytes: &[u8], size: (u16, u16)) -> Cost {
+    let mut cost = Cost::default();
+    for op in list::ops(bytes) {
+        let (recording, cells) = match op {
+            Op::Fill { x, y, width, height, .. } | Op::Rect { x, y, width, height, .. } => {
+                match inside(x, y, width.into(), height.into(), size) {
+                    true => (RECORD, area(x, y, width, height, size)),
+                    false => (0, 0),
                 }
             }
-            Op::Rect { x, y, width, height, border, color, background } => {
+            Op::Text { x, y, text, .. } => match inside(x, y, text.len() as u32, 1, size) {
+                // The renderer records the whole text and draws the columns it reaches.
+                true => (RECORD + text.len(), area(x, y, text.chars().count().min(u16::MAX.into()) as u16, 1, size)),
+                false => (0, 0),
+            },
+            Op::Cell { x, y, .. } => match inside(x, y, 1, 1, size) {
+                true => (RECORD, 1),
+                false => (0, 0),
+            },
+            Op::Cells { x, y, width, cells } => {
+                let shown = (0..cells.len()).filter(|index| place(x, y, width, *index, size).is_some()).count();
+                (RECORD * shown, shown)
+            }
+            Op::Clip { .. } | Op::Pop => (RECORD / 4, 0),
+        };
+        cost.recording += recording;
+        cost.cells += cells;
+    }
+    cost
+}
+
+/// Where entry `index` of a run of cells from `(x, y)` in rows of `width` lands, when it lands inside a canvas of
+/// `size`.
+fn place(x: i16, y: i16, width: u16, index: usize, size: (u16, u16)) -> Option<(i32, i32)> {
+    let width = usize::from(width.max(1));
+    let (column, row) = (i32::from(x) + (index % width) as i32, i32::from(y) + (index / width) as i32);
+    let shown = (0..i32::from(size.0)).contains(&column) && (0..i32::from(size.1)).contains(&row);
+    shown.then_some((column, row))
+}
+
+/// The character a cell draws: one column wide, or U+FFFD for one of another width.
+fn single(char: char) -> char {
+    match unicode_width::UnicodeWidthChar::width(char) {
+        Some(1) => char,
+        _ => char::REPLACEMENT_CHARACTER,
+    }
+}
+
+/// Paints `ops` up to their end or the `pop` that closes the clip they are in, at `size`, culling what does not reach
+/// into the canvas; returns how many it painted. The one place a list becomes paint calls.
+fn replay<'a>(painter: &mut Painter<'_>, ops: &mut impl Iterator<Item = Op<'a>>, size: (u16, u16)) -> u64 {
+    let mut painted = 0;
+    while let Some(op) = ops.next() {
+        match op {
+            Op::Fill { x, y, width, height, color } if inside(x, y, width.into(), height.into(), size) => {
+                painter.fill(x.into(), y.into(), width.into(), height.into(), rgba(color));
+                painted += 1;
+            }
+            Op::Text { x, y, style, text } if inside(x, y, text.len() as u32, 1, size) => {
+                painter.text(x.into(), y.into(), text, styled(style));
+                painted += 1;
+            }
+            Op::Cell { x, y, style, char } if inside(x, y, 1, 1, size) => {
+                painter.cell(x.into(), y.into(), single(char), styled(style));
+                painted += 1;
+            }
+            Op::Cells { x, y, width, cells } => {
+                for (index, (style, char)) in cells.iter().enumerate() {
+                    if let Some((column, row)) = place(x, y, width, index, size) {
+                        painter.cell(column, row, single(char), styled(style));
+                        painted += 1;
+                    }
+                }
+            }
+            Op::Rect { x, y, width, height, border, color, background }
+                if inside(x, y, width.into(), height.into(), size) =>
+            {
                 let spec = BoxSpec {
                     style: border_style(border),
                     border_color: rgba(color),
@@ -355,12 +612,15 @@ fn replay<'a>(painter: &mut Painter<'_>, ops: &mut impl Iterator<Item = Op<'a>>)
                     ..BoxSpec::default()
                 };
                 painter.draw_box(x.into(), y.into(), width.into(), height.into(), &spec);
+                painted += 1;
             }
             Op::Clip { x, y, width, height } => {
-                painter
-                    .clip(x.into(), y.into(), width.into(), height.into(), |painter| painted += replay(painter, ops));
+                painter.clip(x.into(), y.into(), width.into(), height.into(), |painter| {
+                    painted += replay(painter, ops, size)
+                });
             }
             Op::Pop => return painted,
+            _ => {}
         }
     }
     painted
