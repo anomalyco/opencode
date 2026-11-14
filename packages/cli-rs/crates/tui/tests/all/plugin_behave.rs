@@ -592,6 +592,22 @@ fn the_deep_runs_rows_hold() {
     }
 }
 
+// Expected (`scroll-step`, `Nearest`; `scrollIntoView` with `block: nearest`): under a view of 7 rows and a header of
+// one, an 8-row card that covers the view stays; one above the top with its end inside, taller than the view, brings
+// its end to the bottom.
+#[test]
+fn nearest_keeps_a_card_that_covers_the_view_and_aligns_a_tall_one_by_its_end() {
+    let rows = [
+        vec![Command::Resize { width: 60, height: 8 }, Command::To(2), Command::Near(2)],
+        vec![Command::Resize { width: 60, height: 8 }, Command::To(2), Command::Page(50), Command::Near(2)],
+    ];
+    for list in [false, true] {
+        for row in &rows {
+            assert_eq!(Behaviors { list }.run(row), None, "list {list}: {row:?}");
+        }
+    }
+}
+
 // Fixed rows.
 
 // Expected (synthesis 3.5, 4.4): the board's first frame shows the first card, its sticky header, and the edge
@@ -707,6 +723,13 @@ fn a_list_of_a_thousand_builds_what_shows() {
     assert_eq!(offset_shown(&first.text(), &rows, 1), Some(rows.start(700) + 3), "{}", first.text());
     let mounted = reconcile::work().since(before);
     assert!(mounted.created < 200, "{mounted:?}");
+    // `Nearest` to a card far below moves to the rows the host assumes for it, which mounts it, and a round confirms:
+    // three rounds, no more.
+    let counts = behave::counts();
+    board_view.dispatch("board.near", Some("card-900".into()));
+    let first = board_view.harness.app.render();
+    assert!(behave::counts().since(counts).resolves <= 3, "rounds");
+    assert_eq!(offset_shown(&first.text(), &rows, 1), Some(rows.start(900) + 8 - 15), "{}", first.text());
 }
 
 // Expected (`scroll-step`): `Forget` ends a step's memory, as new content asks; a verb for a node that has left the
