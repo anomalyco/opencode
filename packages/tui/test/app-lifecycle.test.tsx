@@ -923,12 +923,17 @@ test("session startup prompt is submitted exactly once", async () => {
   }
 })
 
-test("home startup prompt is submitted exactly once", async () => {
+test.each([false, true])("home startup prompt waits for plugins unless explicitly submitted (manual: %s)", async (manual) => {
   await using state = await tmpdir()
   const cwd = process.cwd()
   const location = { directory: cwd, project: { id: "project", directory: cwd, canonical: cwd } }
   const bodies: unknown[] = []
   const submitted = Promise.withResolvers<void>()
+  const requested = Promise.withResolvers<void>()
+  const refreshing = Promise.withResolvers<void>()
+  const refreshed = Promise.withResolvers<Response>()
+  let failed = true
+  let activated = false
   let session: unknown
   await using setup = await createAppFixture({
     state: state.path,
@@ -937,8 +942,23 @@ test("home startup prompt is submitted exactly once", async () => {
     fetch: async (url, request) => {
       if (url.pathname === "/api/location") return json(location)
       if (url.pathname === "/api/fs/list") return json({ location, data: [] })
-      if (url.pathname === "/api/agent")
+      if (url.pathname === "/api/plugin") {
+        requested.resolve()
+        if (failed) return json({ message: "Plugin inventory unavailable" }, { status: 503 })
+        return json({
+          location,
+          data: activated
+            ? [{ id: "config", source: { type: "builtin" }, features: { server: true }, state: { status: "active" } }]
+            : [],
+        })
+      }
+      if (url.pathname === "/api/agent") {
+        if (activated) {
+          refreshing.resolve()
+          return refreshed.promise.then((response) => response.clone())
+        }
         return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+      }
       if (url.pathname === "/api/model")
         return json({ location, data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }] })
       if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
@@ -967,15 +987,50 @@ test("home startup prompt is submitted exactly once", async () => {
   })
 
   await setup.ready
+  if (manual) {
+    // Home prefills CLI input only once per process; also exercise this fixture on its own.
+    await setup.waitForFrame((frame) => frame.includes("commands"))
+    for (let i = 0; i < "HOME_READY".length; i++) await setup.mockInput.pressKey("BACKSPACE")
+    await setup.mockInput.typeText("HOME_READY")
+  }
+  // The unfixed client submits Build instead of consulting the server inventory.
+  await Promise.race([requested.promise, submitted.promise])
+  expect(bodies).toHaveLength(0)
   await Promise.race([
     submitted.promise,
-    Bun.sleep(2000).then(() => {
-      throw new Error("startup prompt was not submitted")
-    }),
+    setup.waitForFrame((frame) => frame.includes("Could not load plugins") && frame.includes("Enter")),
   ])
-  await Bun.sleep(20)
+  expect(bodies).toHaveLength(0)
+  if (manual) {
+    await setup.mockInput.pressKey("RETURN")
+    await submitted.promise
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0]).toMatchObject({ text: "HOME_READY" })
+    expect(session).toMatchObject({ agent: "build" })
+    return
+  }
+  failed = false
+  setup.events.emit({ id: "evt_plugin_retry", type: "plugin.updated", created: 1, location, data: {} })
+  await setup.waitForFrame((frame) => frame.includes("Waiting for plugins before sending"))
+  expect(bodies).toHaveLength(0)
+  activated = true
+  setup.events.emit({ id: "evt_plugins", type: "plugin.updated", created: 1, location, data: {} })
+  await refreshing.promise
+  // Inventory publication must not release the prompt before the fresh agent response.
+  expect(bodies).toHaveLength(0)
+  refreshed.resolve(
+    json({
+      location,
+      data: ["reviewer", "build"].map((id) => ({ id, mode: "primary", hidden: false, permissions: [] })),
+    }),
+  )
+  await submitted.promise
   expect(bodies).toHaveLength(1)
   expect(bodies[0]).toMatchObject({ text: "HOME_READY" })
+  expect(session).toMatchObject({ agent: "reviewer" })
+  setup.events.emit({ id: "evt_plugins_again", type: "plugin.updated", created: 2, location, data: {} })
+  await setup.waitForVisualIdle()
+  expect(bodies).toHaveLength(1)
 })
 
 test.each([false, true])("uses the resolved launch directory for new prompts (fallback: %s)", async (fallback) => {
