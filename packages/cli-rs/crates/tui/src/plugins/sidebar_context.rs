@@ -56,6 +56,8 @@ pub struct Last {
     models: Option<Vec<ModelInfo>>,
     usage: Option<Usage>,
     from: usize,
+    /// The messages from `from` on, each with a [`mark`] of what [`usage`] reads of it.
+    after: Vec<(String, u64)>,
     cost: f64,
     /// The IDs of the session's family at the last cost read.
     family: Vec<String>,
@@ -109,12 +111,16 @@ impl Last {
             self.models = self.location.as_ref().and_then(|location| read.models(Some(location)));
         }
         let mut stale = models || changed.list(&self.session);
-        if !stale && changed.messages.iter().any(|(session, _)| *session == self.session) {
-            read.messages(&self.session, &mut |messages| {
-                stale = messages.get(self.from..).unwrap_or_default().iter().any(|message| {
-                    changed.messages.iter().any(|(session, id)| *session == self.session && id == message.id())
-                });
-            });
+        // A message changed in place from the usage's source on moves the usage only if what it reads of it changed:
+        // each such message is read alone, so a streamed delta costs one message and not the session (P6a review).
+        for (session, id) in &changed.messages {
+            if stale {
+                break;
+            }
+            let Some((_, was)) = self.after.iter().find(|(after, _)| after == id) else { continue };
+            if *session == self.session {
+                read.message(&self.session, id, &mut |message| stale = message.map(mark) != Some(*was));
+            }
         }
         if stale {
             (self.usage, self.from) = match self.location {
@@ -122,10 +128,15 @@ impl Last {
                     let mut found = (None, 0);
                     read.messages(&self.session, &mut |messages| {
                         found = usage(messages, self.models.as_deref(), self.boundary.as_deref());
+                        let after = messages.get(found.1..).unwrap_or_default();
+                        self.after = after.iter().map(|message| (message.id().to_owned(), mark(message))).collect();
                     });
                     found
                 }
-                None => (None, 0),
+                None => {
+                    self.after.clear();
+                    (None, 0)
+                }
             };
         }
         (self.usage.is_some() || self.cost > 0.0).then_some((self.usage, self.cost))
@@ -189,6 +200,26 @@ pub fn usage(
         .filter(|context| *context > 0);
     let percent = context.map(|context| (total / context as f64 * 100.0).round() as i64);
     (Some(Usage { tokens: total, percent }), index)
+}
+
+/// A fingerprint of what [`usage`] reads of `message`: whether it is a completed compaction, and an assistant's model
+/// and tokens. A text that streams leaves it as it was.
+fn mark(message: &SessionMessageInfo) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    match message {
+        SessionMessageInfo::Compaction(SessionMessageCompaction::Completed(_)) => 1.hash(&mut hasher),
+        SessionMessageInfo::Assistant(message) => {
+            2.hash(&mut hasher);
+            (&message.model.provider_id, &message.model.id).hash(&mut hasher);
+            if let Some(tokens) = &message.tokens {
+                let counts = [tokens.input, tokens.output, tokens.reasoning, tokens.cache.read, tokens.cache.write];
+                counts.map(f64::to_bits).hash(&mut hasher);
+            }
+        }
+        _ => 0.hash(&mut hasher),
+    }
+    hasher.finish()
 }
 
 /// `Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })`: `$1,234.56`.

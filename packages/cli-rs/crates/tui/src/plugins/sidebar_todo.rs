@@ -34,7 +34,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         let fresh = changed.all || changed.local || last.as_ref().is_none_or(|last| last.session != session);
         let last = match &mut *last {
             Some(last) if !fresh => last,
-            last => last.insert(Last { session: session.to_owned(), boundary: None, input: None }),
+            last => last.insert(Last { session: session.to_owned(), boundary: None, input: None, source: None }),
         };
         if !last.update(cx.read, changed, fresh) && !fresh {
             return kept(ROOT);
@@ -59,6 +59,8 @@ struct Last {
     session: String,
     boundary: Option<String>,
     input: Option<Value>,
+    /// The message the list came from.
+    source: Option<String>,
 }
 
 impl Last {
@@ -70,14 +72,26 @@ impl Last {
             self.boundary =
                 read.session(&self.session).and_then(|session| session.info.revert).map(|revert| revert.message_id.0);
         }
-        let messages =
-            info || changed.list(&self.session) || changed.messages.iter().any(|(session, _)| *session == self.session);
+        let mut messages = info || changed.list(&self.session);
+        // A message changed in place can change the list only if it holds a `todowrite` call or held the one the list
+        // came from: each is read alone, so a streamed delta costs one message and not the session (P6a review).
+        for (session, id) in &changed.messages {
+            if messages {
+                break;
+            }
+            if *session == self.session {
+                messages = self.source.as_deref() == Some(id.as_str());
+                read.message(&self.session, id, &mut |message| messages |= message.is_some_and(writes_todos));
+            }
+        }
         if !messages {
             return false;
         }
         let mut same = true;
         read.messages(&self.session, &mut |messages| {
-            let input = todo_input(messages, self.boundary.as_deref());
+            let found = todo_input(messages, self.boundary.as_deref());
+            self.source = found.map(|(source, _)| source.to_owned());
+            let input = found.map(|(_, input)| input);
             if input != self.input.as_ref() {
                 self.input = input.cloned();
                 same = false;
@@ -85,6 +99,15 @@ impl Last {
         });
         !same
     }
+}
+
+/// Whether `message` holds a `todowrite` call, in any state.
+fn writes_todos(message: &SessionMessageInfo) -> bool {
+    let SessionMessageInfo::Assistant(message) = message else { return false };
+    message
+        .content
+        .iter()
+        .any(|item| matches!(item, SessionMessageAssistantContentItem::Tool(tool) if tool.name == "todowrite"))
 }
 
 fn view(list: &[Todo], open: bool) -> Node {
@@ -128,22 +151,20 @@ fn item(todo: &Todo) -> Node {
 }
 
 /// `sessionTodos`: the input of the latest completed `todowrite` call before `boundary`.
-fn todo_input<'a>(messages: &'a [SessionMessageInfo], boundary: Option<&str>) -> Option<&'a Value> {
+/// With the id of the message that holds it.
+fn todo_input<'a>(messages: &'a [SessionMessageInfo], boundary: Option<&str>) -> Option<(&'a str, &'a Value)> {
     let end = boundary
         .and_then(|boundary| messages.iter().position(|message| message.id() == boundary))
         .unwrap_or(messages.len());
-    messages[..end]
-        .iter()
-        .flat_map(|message| match message {
-            SessionMessageInfo::Assistant(message) => message.content.as_slice(),
-            _ => &[],
-        })
-        .rev()
-        .find_map(|item| match item {
+    messages[..end].iter().rev().find_map(|message| {
+        let SessionMessageInfo::Assistant(assistant) = message else { return None };
+        let input = assistant.content.iter().rev().find_map(|item| match item {
             SessionMessageAssistantContentItem::Tool(tool) if tool.name == "todowrite" => match &tool.state {
                 SessionMessageAssistantToolState::Completed(state) => state.input.get("todos"),
                 _ => None,
             },
             _ => None,
-        })
+        });
+        input.map(|input| (message.id(), input))
+    })
 }

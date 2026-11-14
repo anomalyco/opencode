@@ -977,6 +977,13 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
                 value
             });
         }
+        HostRequest::Message { session, message } => {
+            return read(ctx, |read| {
+                let mut value = Ok(serde_json::Value::Null);
+                read.message(&session, &message, &mut |found| value = serde_json::to_value(found));
+                value
+            });
+        }
         HostRequest::Models { location } => {
             return read(ctx, |read| serde_json::to_value(read.models(location.as_ref())));
         }
@@ -1188,6 +1195,7 @@ fn effect(request: &HostRequest) -> bool {
         | HostRequest::Session { .. }
         | HostRequest::Family { .. }
         | HostRequest::Messages { .. }
+        | HostRequest::Message { .. }
         | HostRequest::Models { .. }
         | HostRequest::Model
         | HostRequest::Limits

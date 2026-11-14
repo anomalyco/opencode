@@ -1729,6 +1729,11 @@ pub enum HostRequest {
     Messages {
         id: String,
     },
+    /// 2.0 (P6a): [`Read::message`], one message or null.
+    Message {
+        session: String,
+        message: String,
+    },
     /// 1.4: [`Read::models`].
     Models {
         location: Option<LocationRef>,
@@ -2501,6 +2506,11 @@ pub trait Read {
     fn messages(&self, _id: &str, visit: &mut dyn FnMut(&[SessionMessageInfo])) {
         visit(&[]);
     }
+    /// 2.0 (P6a): calls `visit` with loaded message `message` of session `session`, or `None`. Over the C ABI only that
+    /// message crosses, so a view that hears a change in place of one message reads what changed, not the session.
+    fn message(&self, session: &str, message: &str, visit: &mut dyn FnMut(Option<&SessionMessageInfo>)) {
+        self.messages(session, &mut |messages| visit(messages.iter().find(|item| item.id() == message)));
+    }
     /// The models of `location`, or of the location the TUI works in for `None`; `None` while they are not loaded.
     fn models(&self, _location: Option<&LocationRef>) -> Option<Vec<ModelInfo>> {
         None
@@ -2953,6 +2963,12 @@ impl Read for HostHandle {
         let messages: Vec<SessionMessageInfo> =
             self.read(&HostRequest::Messages { id: id.to_owned() }).unwrap_or_default();
         visit(&messages);
+    }
+
+    fn message(&self, session: &str, message: &str, visit: &mut dyn FnMut(Option<&SessionMessageInfo>)) {
+        let request = HostRequest::Message { session: session.to_owned(), message: message.to_owned() };
+        let found: Option<SessionMessageInfo> = self.read(&request);
+        visit(found.as_ref());
     }
 
     fn models(&self, location: Option<&LocationRef>) -> Option<Vec<ModelInfo>> {
