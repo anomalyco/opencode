@@ -726,12 +726,15 @@ export const layer = Layer.effect(
             message.content.some((part) => part.type === "compaction"),
         ) + 1
       const summary = previous !== undefined && !SessionHistory.isNativeCompaction(previous) ? previous : undefined
-      // TODO: Read the previous summary from the hooked request once it no longer merges summary and recent into one
-      // message. Until then it is rebuilt from storage, which drops a compaction hook's edits to that message.
-      const lead = summary
-        ? toLLMMessages([{ ...summary, metadata: { ...summary.metadata, recent: "" } }], context.model.ref)
-        : request.messages.slice(0, end)
-      const recent = summary ? SessionRecentText.kept(summary) : ""
+      // The checkpoint as the hooks left it, recent part included, so their edits to it are kept. Rebuilt from storage
+      // only when a hook removed it.
+      const hooked = summary && request.messages.find((message) => message.id === summary.id)
+      const lead = hooked
+        ? [hooked]
+        : summary
+          ? toLLMMessages([{ ...summary, metadata: { ...summary.metadata, recent: "" } }], context.model.ref)
+          : request.messages.slice(0, end)
+      const recent = summary && !hooked ? SessionRecentText.kept(summary) : ""
 
       // A user message and everything after it, up to the next one, is one exchange. Each is rendered at every level
       // once, so shortening is running arithmetic over these sizes. The previous summary's recent part is already
