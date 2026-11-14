@@ -1108,6 +1108,9 @@ impl Project {
         std::fs::create_dir_all(work.join(".git")).unwrap();
         let dir = work.join(".opencode/plugins/probe");
         copy(&Path::new(EXAMPLES).join("probe"), &dir);
+        // It runs from a copy of its files: it logs beside this directory all the same.
+        std::fs::write(dir.join("log.txt"), dir.with_file_name(".probe.log.jsonl").to_string_lossy().as_bytes())
+            .unwrap();
         // Build 0 is the module with its build line, as each build is.
         let source = std::fs::read_to_string(dir.join("tui.ts")).unwrap();
         std::fs::write(dir.join("tui.ts"), format!("{source}\n// build 0\n")).unwrap();
