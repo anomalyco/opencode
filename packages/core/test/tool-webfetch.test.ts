@@ -609,6 +609,28 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
+  it.effect("converts XHTML to the requested format", () =>
+    Effect.gen(function* () {
+      reset()
+      const page = '<html xmlns="http://www.w3.org/1999/xhtml"><body><h1>Guide</h1></body></html>'
+      respond = () =>
+        Effect.succeed(new Response(page, { headers: { "content-type": "application/xhtml+xml; charset=utf-8" } }))
+      const registry = yield* Tool.Service
+      const url = "https://1.1.1.1/guide.xhtml"
+
+      for (const [format, text] of [
+        ["markdown", "# Guide"],
+        ["text", "Guide"],
+        ["html", page],
+      ] as const) {
+        expect(yield* executeTool(registry, call({ url, format }, `call-${format}`))).toMatchObject({
+          status: "completed",
+          content: [{ type: "text", text }],
+        })
+      }
+    }),
+  )
+
   it.effect("converts deeply nested HTML without overflowing", () =>
     Effect.gen(function* () {
       reset()
