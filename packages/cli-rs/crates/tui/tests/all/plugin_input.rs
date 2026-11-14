@@ -488,6 +488,7 @@ fn select(read: &dyn abi::Read) -> abi::Select {
                     rowless: false,
                     command: None,
                     disabled: false,
+                    hidden_all: false,
                 })
                 .into_iter()
                 .chain([
@@ -500,6 +501,7 @@ fn select(read: &dyn abi::Read) -> abi::Select {
                         rowless: false,
                         command: None,
                         disabled: probe(|probe| probe.update_disabled),
+                        hidden_all: false,
                     },
                     abi::SelectAction {
                         title: "cut".into(),
@@ -510,6 +512,7 @@ fn select(read: &dyn abi::Read) -> abi::Select {
                         rowless: false,
                         command: None,
                         disabled: false,
+                        hidden_all: false,
                     },
                     abi::SelectAction {
                         title: "new".into(),
@@ -520,6 +523,7 @@ fn select(read: &dyn abi::Read) -> abi::Select {
                         rowless: true,
                         command: None,
                         disabled: false,
+                        hidden_all: false,
                     },
                 ])
                 .collect(),
