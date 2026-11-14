@@ -28,6 +28,13 @@ const MACHINES: &str = include_str!("../../../../parity/machines/plugins.json");
 thread_local! {
     /// Life arm: the next setup fails. It outlives an activation, as the TS plugin's module state does.
     static ARMED: Cell<bool> = const { Cell::new(false) };
+    /// The built-ins run across the C ABI's byte shims (review bigboi-7: the manager on both carriers).
+    static ABI: Cell<bool> = const { Cell::new(false) };
+}
+
+/// The Rust twin of `parity/plugins/other/tui.tsx`, the views machine's distractor, whose setup fails with its cause.
+fn other(_: &mut abi::Setup) -> Result<(), String> {
+    Err("other setup fails as it loads".to_owned())
 }
 
 /// The Rust twin of `parity/plugins/life/tui.tsx`.
@@ -95,7 +102,8 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// The twin's builds, through the C ABI's byte shims: every build is `life`, and a new file is a reload.
+/// The twins' builds, through the C ABI's byte shims: a build in `parity.other` is `other`, every other `life`, and a
+/// new file is a reload.
 struct Builds;
 
 impl Backend for Builds {
@@ -103,10 +111,13 @@ impl Backend for Builds {
         &self,
         host: &Rc<dyn Host>,
         _: &[u8],
-        _: &std::path::Path,
+        path: &std::path::Path,
         _: Option<&str>,
     ) -> Result<(Definition, ErrorFn), String> {
-        loopback_described(host, abi::export_plugin!(@loopback_described "parity.life", life))
+        match path.to_string_lossy().contains("parity.other") {
+            true => loopback_described(host, abi::export_plugin!(@loopback_described "parity.other", other)),
+            false => loopback_described(host, abi::export_plugin!(@loopback_described "parity.life", life)),
+        }
     }
 }
 
@@ -121,10 +132,12 @@ struct Life {
 
 impl Life {
     /// The life plugin in the config's plugins directory, or with `project` in the project's, where it waits for
-    /// approval (rich-plugins 3.9); with `failing`, its setup fails as it first loads.
+    /// approval (rich-plugins 3.9); with `failing`, its setup fails as it first loads, and so does the distractor's
+    /// beside it.
     fn open(project: bool, failing: bool) -> Self {
         ARMED.set(failing);
-        let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+        let deps = Deps { route: Route::Home, abi_builtins: ABI.get(), ..support::deps(Arc::new(support::empty())) };
+        let harness = support::mount(80, 24, deps);
         let root = opencode_util::temp::tempdir().unwrap();
         // The project root, so the loader looks for plugins in this directory and none above it.
         std::fs::create_dir(root.path().join(".git")).unwrap();
@@ -135,6 +148,11 @@ impl Life {
         std::fs::create_dir_all(&dir).unwrap();
         let build = dir.join(entry_file());
         std::fs::write(&build, [1]).unwrap();
+        if failing {
+            let other = plugins.join("parity.other");
+            std::fs::create_dir_all(&other).unwrap();
+            std::fs::write(other.join(entry_file()), [1]).unwrap();
+        }
         let loader = Rc::new(Loader::new(Rc::new(Builds), config, root.path().to_path_buf(), Vec::new()));
         // The plugin manager's question reaches this loader.
         harness.tui.plugins.set_loader(loader.clone());
@@ -266,8 +284,8 @@ impl Life {
         self.settle();
     }
 
-    /// Runs an action of the views machine: `/plugins` and enter, `life` typed into the filter, the key the footer
-    /// offers for `view error`, or escape.
+    /// Runs an action of the views machine: `/plugins` and enter, `parity.other` typed into the filter, down, the key the
+    /// footer offers for `view error`, or escape.
     fn act_views(&self, action: &str) {
         match action {
             "open" => {
@@ -275,7 +293,8 @@ impl Life {
                 self.settle();
                 self.harness.app.press("enter");
             }
-            "filter" => self.harness.app.type_text("life"),
+            "filter" => self.harness.app.type_text("parity.other"),
+            "down" => self.harness.app.press("down"),
             "details" => {
                 let key = if self.harness.app.text().contains("view error space") { "space" } else { "enter" };
                 self.harness.app.press(key);
@@ -286,23 +305,47 @@ impl Life {
         self.settle();
     }
 
-    /// `dialog/filter/life`, as `parity/machines/plugins.json` writes them for the views machine.
+    /// `dialog/a/b`, as `parity/machines/plugins.json` writes them for the views machine: the query and the rows of
+    /// the list, or the plugin whose source and the plugin whose cause the details show.
     fn observe_views(&self) -> String {
         let screen = self.harness.app.text();
+        let lines: Vec<&str> = screen.lines().collect();
         if screen.contains("TUI plugin error") {
-            return "error/?/?".to_owned();
+            // The source, on the row under the title: the plugin's directory. A toast may name other plugins.
+            let title = lines.iter().position(|line| line.contains("TUI plugin error"));
+            let source = title.and_then(|row| lines.get(row + 1)).copied().unwrap_or_default();
+            let plugin = source.split("parity.").nth(1);
+            let plugin = plugin.and_then(|rest| rest.split(|c: char| !c.is_alphanumeric()).next()).unwrap_or("?");
+            let cause = match (screen.contains("life setup"), screen.contains("other setup")) {
+                (true, false) => "life",
+                (false, true) => "other",
+                _ => "?",
+            };
+            return format!("error/{plugin}/{cause}");
         }
         if !screen.contains("show internal") && !screen.contains("hide internal") {
             return "-/?/?".to_owned();
         }
-        let filter = if screen.contains("Search") { "-" } else { "life" };
-        let row = screen.lines().find(|line| line.contains("parity.life") && !line.contains("Plugin failed"));
-        let life = match row {
-            Some(row) if row.contains("failed") => "failed",
-            Some(_) => "on",
-            None => "none",
-        };
-        format!("list/{filter}/{life}")
+        // The filter's field is two rows under the title's.
+        let title = lines.iter().position(|line| line.contains("Plugins") && line.contains("esc"));
+        let query = title.and_then(|row| lines.get(row + 2)).map_or("?", |line| line.trim());
+        let query = if query == "Search" { "-" } else { query };
+        let rows: Vec<String> = lines
+            .iter()
+            .filter(|line| line.contains("parity.") && line.contains("local"))
+            .map(|line| {
+                let name = line.split("parity.").nth(1).and_then(|rest| rest.split_whitespace().next()).unwrap_or("?");
+                let status = if line.contains("failed") {
+                    "failed"
+                } else if line.contains("inactive") {
+                    "off"
+                } else {
+                    "on"
+                };
+                format!("{name}:{status}")
+            })
+            .collect();
+        format!("list/{query}/{}", rows.join("+"))
     }
 
     /// `dialog/internal/life`, as `parity/machines/plugins.json` writes them for the manager machine.
@@ -576,7 +619,10 @@ fn the_plugin_manager_keys_follow_the_shared_fixture_on_walks_and_faults() {
 #[test]
 fn the_plugin_manager_views_follow_the_shared_fixture() {
     let views = &CORPUS["machines"]["views"];
-    check("views", traces(&CORPUS, views, false), &[&views["xfail"]]).check();
+    for abi in [false, true] {
+        ABI.set(abi);
+        check("views", traces(&CORPUS, views, false), &[&views["xfail"]]).check();
+    }
 }
 
 // Expected: the same along the file's seeded walks, and after one action of two normal cycles is dropped, repeated or
@@ -584,6 +630,9 @@ fn the_plugin_manager_views_follow_the_shared_fixture() {
 #[test]
 fn the_plugin_manager_views_follow_the_shared_fixture_on_walks_and_faults() {
     let views = &CORPUS["machines"]["views"];
-    check("views", traces(&CORPUS, views, true), &[&views["xfail"]]);
-    check("views", faulted(&cycles("views")), &[&views["xfail"], &CORPUS["faults"]["views"]["xfail"]]);
+    for abi in [false, true] {
+        ABI.set(abi);
+        check("views", traces(&CORPUS, views, true), &[&views["xfail"]]);
+        check("views", faulted(&cycles("views")), &[&views["xfail"], &CORPUS["faults"]["views"]["xfail"]]);
+    }
 }
