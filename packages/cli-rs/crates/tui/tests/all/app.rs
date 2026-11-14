@@ -90,6 +90,7 @@ fn run(recording: &Recording) -> (bool, String) {
         Some("app") => opencode_tui::plugins::host::add(&tui, app_plugin().into()),
         Some("p0a") => opencode_tui::plugins::host::add(&tui, p0a_plugin().into()),
         Some("p0b") => opencode_tui::plugins::host::add(&tui, p0b_plugin().into()),
+        Some("fence-margin") => opencode_tui::plugins::host::add(&tui, fence_margin_plugin().into()),
         _ => {}
     }
     // The editor context's sources (E.5): the fake IDE server and the Zed database the TS side had.
@@ -392,6 +393,19 @@ fn p0b_plugin() -> abi::Plugin {
         Ok(())
     }
     abi::Plugin { id: "parity.p0b", setup }
+}
+
+/// `parity/plugins/fence-margin/tui.tsx`: `parity` fences drawn as `fence: <code>` in TS `TextRenderable`'s white.
+fn fence_margin_plugin() -> abi::Plugin {
+    fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+        setup.code_block("parity", |_, fence| abi::Fenced::Lines {
+            lines: vec![vec![Span::new(format!("fence: {}", fence.code))]],
+            fg: Some(abi::Color::Rgba(abi::Rgba::new(255, 255, 255, 255))),
+            drag: false,
+        });
+        Ok(())
+    }
+    abi::Plugin { id: "parity.fence-margin", setup }
 }
 
 /// The scenario routes first, then each recorded read by its exact query, then by path alone.
