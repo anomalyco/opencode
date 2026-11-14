@@ -92,6 +92,9 @@ export type PtyCase = {
   // The emulator stands in for kitty 0.40: it draws OSC 66 text-sizing sequences at their size, which moves the
   // cursor as kitty does, and names itself `kitty(0.40.1)` in its XTVERSION reply.
   terminal?: "kitty"
+  // The terminal shows Kitty graphics: the harness answers the graphics query, and the window's size in pixels for
+  // cells `cell` pixels wide and twice as high. The emulator ignores the images themselves.
+  graphics?: { cell: number }
   // Compare the request log too; `"writes"` leaves the reads out, for screens whose reads belong to later steps.
   requests?: boolean | "writes"
   tsOnly?: boolean
@@ -138,6 +141,9 @@ export async function runPty(side: Side, value: PtyCase) {
       data(_terminal, data) {
         const text = decoder.decode(data, { stream: true })
         output.text += text
+        // Ahead of the emulator's own replies, such as the DA1 that follows the graphics query.
+        const reply = value.graphics && graphicsReplies(text, value.graphics.cell, cols, rows)
+        if (reply) proc.terminal?.write(reply)
         if (!value.palette && !value.terminal) return terminal.write(data)
         const drawn = value.terminal === "kitty" ? drawTextSizing(text) : text
         if (!value.palette) return terminal.write(drawn)
@@ -377,6 +383,14 @@ function drawTextSizing(text: string) {
     const below = Array.from({ length: scale - 1 }, () => `\x1b[B\x1b[${cells}D${" ".repeat(cells)}`).join("")
     return body.padEnd(cells) + below + (scale > 1 ? `\x1b[${scale - 1}A` : "")
   })
+}
+
+// What a terminal with Kitty graphics answers: `OK` to the graphics query (`ESC _ G i=N,…,a=q;… ST`), and the window's
+// size in pixels to `CSI 14 t`.
+function graphicsReplies(text: string, cell: number, cols: number, rows: number) {
+  const query = /\x1b_Gi=(\d+)[^;\x1b]*a=q[^\x1b]*\x1b\\/.exec(text)
+  const size = text.includes("\x1b[14t") ? `\x1b[4;${rows * cell * 2};${cols * cell}t` : ""
+  return (query ? `\x1b_Gi=${query[1]};OK\x1b\\` : "") + size
 }
 
 function kittyReplies(data: Uint8Array) {
