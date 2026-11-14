@@ -222,3 +222,36 @@ fn one_source_is_equal_on_every_carrier() {
         }
     }
 }
+
+// Expected (`carrier-equal` for a contained panic, P4c): a panic in a command of the board's route is caught where it
+// happens and fails the plugin once, naming the call, with the same frames, toasts and status linked, through the
+// byte shims, and as a real library; later frames add nothing.
+#[test]
+fn a_contained_panic_is_equal_on_every_carrier() {
+    let run = |run: Run| {
+        let board = open(run);
+        let tui = &board.harness.tui;
+        tui.navigate(Route::Plugin { id: ID.to_owned(), name: "board".to_owned() });
+        settle(&board.harness);
+        let open = observe(&board.harness);
+        tui.keymap.dispatch("board.panic", None);
+        settle(&board.harness);
+        let failed = observe(&board.harness);
+        for _ in 0..5 {
+            board.harness.app.advance(Duration::from_millis(16));
+        }
+        [open, failed, observe(&board.harness)]
+    };
+    let linked = run(Run::In(Carrier::Linked));
+    let (_, toasts, status) = &linked[1];
+    assert_eq!(toasts.len(), 1, "{toasts:?}");
+    assert!(status.contains("run-command panicked: the board's command panicked"), "{status}");
+    assert!(linked[2].1.is_empty(), "a failure was reported again: {:?}", linked[2].1);
+    assert_ne!(linked[0].0, linked[1].0, "the failed route still shows");
+    for other in [Run::In(CARRIERS[1]), Run::Library] {
+        for (at, (linked, seen)) in linked.iter().zip(run(other)).enumerate() {
+            assert_eq!((&linked.1, &linked.2), (&seen.1, &seen.2), "{other:?} at {at}: toasts and status");
+            assert!(linked.0 == seen.0, "{other:?} at {at}: the frames differ");
+        }
+    }
+}

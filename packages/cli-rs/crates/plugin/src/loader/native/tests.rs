@@ -2854,19 +2854,22 @@ fn noting(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (P4's finding): a built-in's setup, command and dispose run inside the host's catch, so the panic hooks
-// let their panics unwind to it (`contain::filter_panics`); outside a call, nothing is.
+// Expected (P4's finding; carrier-equal): a built-in's setup, command and dispose run inside the host's catch, so the
+// panic hooks let their panics unwind to it (`contain::filter_panics`), in process and through the C ABI's shims alike;
+// on that carrier a host callback's panic in a library call is one too. Outside a call, nothing is.
 #[test]
 fn a_builtin_runs_inside_the_catch() {
-    let host = host();
-    MARKED.take();
-    let registry = Registry::define(Vec::new(), []);
-    registry.add(abi::Plugin { id: "noting", setup: noting });
-    registry.activate(&dynamic(&host));
-    host.keymap().dispatch("noting.run", None);
-    registry.toggle(&dynamic(&host), "noting", false);
-    assert_eq!(MARKED.take(), [true, true, true]);
-    assert!(!crate::contain::catching());
+    for builtin in [crate::Builtin::Plugin, crate::Builtin::Abi] {
+        let host = host();
+        MARKED.take();
+        let registry = Registry::define(Vec::new(), []);
+        registry.add(builtin(abi::Plugin { id: "noting", setup: noting }));
+        registry.activate(&dynamic(&host));
+        host.keymap().dispatch("noting.run", None);
+        registry.toggle(&dynamic(&host), "noting", false);
+        assert_eq!(MARKED.take(), [true, true, true]);
+        assert!(!crate::contain::catching());
+    }
 }
 
 /// A plugin whose `fetcher.fetch` asks the server and whose `fetcher.panic` panics.
