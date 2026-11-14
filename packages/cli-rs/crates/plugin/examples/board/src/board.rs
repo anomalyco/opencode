@@ -5,7 +5,9 @@
 //! adding up the animation's time. Commands bump a card, toast, panic, animate the meter or make its next draw panic,
 //! and start threads: one that floods the mailbox, waiting on `Full`, and one that panics. Keys of the route (P2) bump
 //! a card, pass a key on to the plugin's own global layer, set a mode in which the same key bumps another card, and
-//! panic; the header lists the keys the handlers heard, each with the mode the handler read.
+//! panic; the header lists the keys the handlers heard, each with the mode the handler read. A panel beside a session,
+//! `notes`, focuses its pad, reads where the focus is and the pad's place, holds a key and releases it, and opens an
+//! overlay under its pad; a select lists the cards a search finds.
 //!
 //! Its `files` route is P3's: a windowed list of files whose estimates are not their heights, each an anchor of group
 //! `file` with its hunks in group `hunk`. Commands bring a file to the top, step between hunks and show a file with
@@ -18,8 +20,11 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use opencode_plugin_abi::canvas::{List, Style};
-use opencode_plugin_abi::interact::{Bind, Event, Handled, Layer, LayerScope};
-use opencode_plugin_abi::{Command, Layout, Rgba, SendError, Setup, Span, Toast, Variant, Width, v2};
+use opencode_plugin_abi::interact::{Anchor, Bind, Event, Handled, Interact, Layer, LayerScope, OpenPanel, Overlay};
+use opencode_plugin_abi::{
+    Action, Command, Dialog, Host, Layout, Rgba, Select, SelectOption, SendError, Setup, Span, Toast, Variant, Width,
+    v2,
+};
 
 pub const CARDS: usize = 6;
 
@@ -105,6 +110,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         board.broken = true;
         board.values[0] += 1;
     });
+    notes(setup, &board);
     // The plugin's own layer hears the key the route's handler passes.
     let global = board.clone();
     let layer = Layer { scope: LayerScope::Global, keys: vec![Bind::new("h", "help")], ..Layer::default() };
@@ -220,6 +226,81 @@ fn files_view(files: &Files) -> v2::Node {
         *notify_top = Some("file".into());
     }
     v2::Node::column(vec![head, list]).layout(Layout::default().grow())
+}
+
+/// The panel `notes`, its overlay `menu`, and the select of cards with its search.
+fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
+    setup.command(command("board.notes"), |host, _| {
+        host.open_panel(OpenPanel { surface: "notes".into(), session: None, fullscreen: false });
+    });
+    setup.search("cards", |_, query, options| {
+        options.iter().filter(|option| option.title.contains(query)).map(|option| option.value.clone()).collect()
+    });
+    setup.command(command("board.pick"), |host, _| {
+        let options = (0..CARDS).map(|card| SelectOption::new(format!("card {card}"), card.to_string())).collect();
+        let action = Action::Command { name: "board.bump".into(), input: None };
+        host.dialog(Dialog::Select(Select { search: Some("cards".into()), ..Select::new("Cards", options, action) }));
+    });
+    let keys = vec![
+        Bind::new("f", "focus"),
+        Bind::new("w", "where"),
+        Bind::new("r", "rect"),
+        Bind { hold: true, ..Bind::new("k", "hold") },
+        Bind::new("v", "menu"),
+        Bind::new("q", "close"),
+    ];
+    let (heard, viewed) = (board.clone(), board.clone());
+    let surface = v2::Surface::new("notes", v2::Place::Panel("notes".into()), move |cx| {
+        let panel = cx.input.panel.unwrap_or_default();
+        let keys = viewed.borrow().keys.join(" ");
+        let pad = v2::Node::column(vec![v2::Node::text(vec![Span::new("pad")])])
+            .with_id("pad")
+            .interact(Interact { focusable: true, ..Interact::default() });
+        v2::Node::column(vec![
+            v2::Node::text(vec![Span::new(format!("notes focused={}", panel.focused))]),
+            v2::Node::text(vec![Span::new(format!("heard {keys}"))]),
+            pad,
+        ])
+    })
+    .layers(vec![Layer { keys, ..Layer::default() }])
+    .on(move |host, event| {
+        let heard = |text: String| heard.borrow_mut().keys.push(text);
+        match event {
+            Event::Key(key) => match key.bind.as_deref().unwrap_or_default() {
+                "focus" => host.focus("pad"),
+                "where" => heard(format!("where:{}", host.focused().node.unwrap_or_default())),
+                "rect" => heard(format!("rect:{:?}", host.rect("pad").map(|rect| (rect.width, rect.height)))),
+                "hold" => {
+                    heard("hold".to_owned());
+                    host.release_keys();
+                }
+                "menu" => host.overlay(Overlay {
+                    surface: "menu".into(),
+                    anchor: Anchor::Node { node: "pad".into() },
+                    width: 12,
+                    height: 2,
+                }),
+                "close" => host.close_panel("notes"),
+                _ => return Handled::Pass,
+            },
+            Event::Closed { surface } => heard(format!("closed:{surface}")),
+            _ => return Handled::Pass,
+        }
+        Handled::Consume
+    });
+    setup.surface(surface);
+    let shut = Layer { keys: vec![Bind::new("x", "shut")], ..Layer::default() };
+    let menu =
+        v2::Surface::new("menu", v2::Place::Overlay("menu".into()), |_| v2::Node::text(vec![Span::new("MENU here")]))
+            .layers(vec![shut])
+            .on(|host: &dyn Host, event| match event {
+                Event::Key(_) => {
+                    host.close_overlay("menu");
+                    Handled::Consume
+                }
+                _ => Handled::Pass,
+            });
+    setup.surface(menu);
 }
 
 fn view(board: &RefCell<Board>, cx: &mut v2::View<'_>) -> v2::Node {
