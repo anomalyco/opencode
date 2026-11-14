@@ -82,20 +82,33 @@ pub enum Event {
     Memory(u64),
 }
 
-/// What an event's deadline waits for.
+/// What an event waits for before the JS host owes nothing for it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Wait {
-    /// Its acknowledgement, within [`Limits::ack`].
+    /// Its acknowledgement.
     Ack,
-    /// Its answer (a handler returned, a ping was answered) within [`Limits::ack`]: an acknowledgement is not progress.
+    /// Its answer: a handler returned and its views were sent, a view was sent, a ping was answered. An acknowledgement
+    /// is not progress.
     Answer,
-    /// A load's or a setup's answer, within [`Limits::setup`].
+    /// A load's answer, whose setup may run up to [`Limits::setup`] once it started.
     Setup,
 }
 
-/// A send the queue had no room for.
+/// A send the queue refused.
 #[derive(Debug, PartialEq, Eq)]
-pub struct Full;
+pub enum Refused {
+    /// The queue holds too much: the child does not read.
+    Full,
+    /// The frame alone is over what the queue holds.
+    TooLarge(usize),
+}
+
+/// What the JS host owes: the events it has not acknowledged or answered, and when it last sent anything.
+struct Owed {
+    /// Each event, what it waits for, and whether the JS host said it started it.
+    events: VecDeque<(u64, Wait, bool)>,
+    progress: Instant,
+}
 
 struct Out {
     frames: VecDeque<Vec<u8>>,
@@ -121,8 +134,9 @@ struct Shared {
     out_ready: Condvar,
     inbox: Mutex<Inbox>,
     room: Condvar,
-    /// Events not acknowledged or not answered, oldest first, with when that is due, and whether an answer is.
-    sent: Mutex<VecDeque<(u64, Instant, bool)>>,
+    /// What the JS host owes. It is hung when it owes something and sent nothing for the limit: a queue that moves is
+    /// not a hang, however long, and one handler that runs past the limit is (review bigboi-3).
+    sent: Mutex<Owed>,
     watch: Condvar,
     /// The last acknowledged sequence.
     acked: AtomicU64,
@@ -162,8 +176,16 @@ impl Child {
         command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
         contain(&mut command);
         let mut process = command.spawn()?;
+        // Without its job the child would outlive a client that dies: it is not run then (review bigboi-9).
         #[cfg(windows)]
-        let job = opencode_util::win::KillOnCloseJob::new().ok().filter(|job| job.assign(&process).is_ok());
+        let job = match opencode_util::win::KillOnCloseJob::new().and_then(|job| job.assign(&process).map(|()| job)) {
+            Ok(job) => Some(job),
+            Err(error) => {
+                let _ = process.kill();
+                let _ = process.wait();
+                return Err(error);
+            }
+        };
         let (stdin, stdout, stderr) = (process.stdin.take(), process.stdout.take(), process.stderr.take());
         let pid = process.id();
         let shared = Arc::new(Shared {
@@ -172,7 +194,7 @@ impl Child {
             out_ready: Condvar::new(),
             inbox: Mutex::default(),
             room: Condvar::new(),
-            sent: Mutex::default(),
+            sent: Mutex::new(Owed { events: VecDeque::new(), progress: Instant::now() }),
             watch: Condvar::new(),
             acked: AtomicU64::new(0),
             read: AtomicU64::new(0),
@@ -212,20 +234,27 @@ impl Child {
 
     /// Queues one frame; `seq` is the event it carries, whose acknowledgement or answer the watch waits for as `wait`
     /// says. Refused when the queue has no room, or the child ended.
-    pub fn send(&self, kind: u8, payload: &[u8], seq: Option<u64>, wait: Wait) -> Result<(), Full> {
+    pub fn send(&self, kind: u8, payload: &[u8], seq: Option<u64>, wait: Wait) -> Result<(), Refused> {
         let frame = wire::encode(kind, payload);
+        if frame.len() > self.shared.limits.queued {
+            return Err(Refused::TooLarge(frame.len()));
+        }
         {
             let mut out = lock(&self.shared.out);
             if out.closed || out.bytes + frame.len() > self.shared.limits.queued {
-                return Err(Full);
+                return Err(Refused::Full);
             }
             out.bytes += frame.len();
             out.frames.push_back(frame);
         }
         if let Some(seq) = seq {
-            let limits = &self.shared.limits;
-            let due = Instant::now() + if wait == Wait::Setup { limits.setup } else { limits.ack };
-            lock(&self.shared.sent).push_back((seq, due, wait != Wait::Ack));
+            let mut owed = lock(&self.shared.sent);
+            // The clock starts when something is owed, not at the JS host's last word before it.
+            if owed.events.is_empty() {
+                owed.progress = Instant::now();
+            }
+            owed.events.push_back((seq, wait, false));
+            drop(owed);
             self.shared.watch.notify_all();
         }
         self.shared.out_ready.notify_all();
@@ -463,19 +492,31 @@ fn read(shared: &Shared, stdout: ChildStdout) {
                 }
             }
         }
+        // Anything the JS host sends is progress.
+        lock(&shared.sent).progress = Instant::now();
         if let Event::Up(up) = &event
             && let Up::Ack { seq } = **up
         {
             shared.acked.fetch_max(seq, Ordering::AcqRel);
-            lock(&shared.sent).retain(|(sent, _, answer)| *sent > seq || *answer);
+            lock(&shared.sent).events.retain(|(sent, wait, _)| *sent > seq || *wait != Wait::Ack);
             shared.watch.notify_all();
+            // It read: what waits in the host's overflow can go.
+            if !shared.pending.swap(true, Ordering::AcqRel) {
+                (shared.wake)();
+            }
             continue;
+        }
+        if let Event::Up(up) = &event
+            && let Up::Started { seq } = **up
+        {
+            let mut owed = lock(&shared.sent);
+            owed.events.iter_mut().filter(|(sent, ..)| *sent == seq).for_each(|(_, _, started)| *started = true);
         }
         if let Event::Up(up) = &event
             && let Up::Done { seq, .. } | Up::Loaded { seq, .. } | Up::Unsupported { seq } | Up::Pong { seq, .. } =
                 &**up
         {
-            lock(&shared.sent).retain(|(sent, ..)| sent != seq);
+            lock(&shared.sent).events.retain(|(sent, ..)| sent != seq);
             shared.watch.notify_all();
         }
         if matches!(event, Event::Tree(_)) {
@@ -537,40 +578,47 @@ fn errors(shared: &Shared, stderr: std::process::ChildStderr) {
 }
 
 fn watch(shared: &Shared) {
+    // The progress a hang was named at, so one silence is named once.
     let mut named = None;
     let mut memory_told = false;
     let mut polled = Instant::now();
-    let mut sent = lock(&shared.sent);
+    let mut owed = lock(&shared.sent);
     loop {
         if shared.closed.load(Ordering::Acquire) {
             return;
         }
         let now = Instant::now();
         let mut wait = shared.limits.poll.saturating_sub(now - polled);
-        // The first due of the events not acknowledged: they are acknowledged in order, so a later one is late too.
-        if let Some(&(seq, due, _)) = sent.iter().min_by_key(|(_, due, _)| *due) {
-            if now >= due && named != Some(seq) {
-                named = Some(seq);
-                drop(sent);
+        if !owed.events.is_empty() {
+            // A setup that started may take the setup's time; anything else, the limit.
+            let setup = owed.events.iter().any(|(_, wait, started)| *started && *wait == Wait::Setup);
+            let limit = if setup { shared.limits.setup } else { shared.limits.ack };
+            let due = owed.progress + limit;
+            if now >= due && named != Some(owed.progress) {
+                named = Some(owed.progress);
+                // The event it was running, if it said, else the oldest it owes.
+                let running = owed.events.iter().find(|(.., started)| *started).or(owed.events.front());
+                let seq = running.map_or(0, |(seq, ..)| *seq);
+                drop(owed);
                 deliver(shared, Event::Hung { seq }, 0);
-                sent = lock(&shared.sent);
+                owed = lock(&shared.sent);
                 continue;
             }
             wait = wait.min(due.saturating_duration_since(now).max(Duration::from_millis(1)));
         }
         if now.duration_since(polled) >= shared.limits.poll {
             polled = now;
-            drop(sent);
+            drop(owed);
             if let Some(rss) = resident(shared).filter(|rss| *rss > shared.limits.memory)
                 && !memory_told
             {
                 memory_told = true;
                 deliver(shared, Event::Memory(rss), 0);
             }
-            sent = lock(&shared.sent);
+            owed = lock(&shared.sent);
             continue;
         }
-        sent = shared.watch.wait_timeout(sent, wait).map_or_else(|poisoned| poisoned.into_inner().0, |(sent, _)| sent);
+        owed = shared.watch.wait_timeout(owed, wait).map_or_else(|poisoned| poisoned.into_inner().0, |(owed, _)| owed);
     }
 }
 
@@ -735,6 +783,49 @@ mod tests {
             let hung = events.iter().any(|event| matches!(event, Event::Hung { seq: 1 }));
             assert_eq!(hung, late, "{wait:?}: {events:?}");
         }
+    }
+
+    /// Not a row: the client that the next row kills outright. It starts a child that loops and never reads, prints its
+    /// process ID, and waits to be killed.
+    #[test]
+    fn a_client_that_is_killed() {
+        if std::env::var_os("PIPE_KILLED_CLIENT").is_none() {
+            return;
+        }
+        let mut command = Command::new("sh");
+        command.arg("-c").arg("while :; do :; done");
+        let child = Child::spawn(command, Limits::default(), || {}).unwrap();
+        println!("\nchild {} .", child.pid());
+        std::thread::sleep(Duration::from_secs(30));
+    }
+
+    // Expected (review bigboi-9, Linux): a child the client started dies when the client is killed outright, with no
+    // destructor and no reaper, though it is busy and reads nothing (`PR_SET_PDEATHSIG`). Its own descendants are not
+    // covered, and neither macOS nor Windows runs this.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_busy_child_dies_with_a_client_killed_outright() {
+        use std::io::BufRead;
+        let mut client = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "pipe::child::tests::a_client_that_is_killed", "--nocapture", "--test-threads=1"])
+            .env("PIPE_KILLED_CLIENT", "1")
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut lines = std::io::BufReader::new(client.stdout.take().unwrap()).lines();
+        let pid: u32 =
+            lines.find_map(|line| line.ok()?.rsplit_once("child ")?.1.split(' ').next()?.parse().ok()).unwrap();
+        assert!(std::path::Path::new(&format!("/proc/{pid}")).exists());
+        // SAFETY: a signal to the client this test started.
+        unsafe { libc::kill(client.id() as libc::pid_t, libc::SIGKILL) };
+        client.wait().unwrap();
+        let begun = Instant::now();
+        while std::path::Path::new(&format!("/proc/{pid}")).exists() && begun.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        // A zombie is gone too: its parent, the init process, reaps it.
+        let state = std::fs::read_to_string(format!("/proc/{pid}/stat")).unwrap_or_default();
+        assert!(state.is_empty() || state.contains(") Z "), "the child {pid} outlived its client: {state}");
     }
 
     // Expected: a send past the bytes the queue holds is refused at once; the child is not waited for.

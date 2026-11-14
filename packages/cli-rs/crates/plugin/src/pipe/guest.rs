@@ -102,11 +102,16 @@ impl Guest {
         &self.loaded.id
     }
 
-    fn ended(&self) -> bool {
+    /// The JS host's activation of the plugin this one answers to.
+    pub(crate) fn activation(&self) -> u64 {
+        self.js.get()
+    }
+
+    pub(crate) fn ended(&self) -> bool {
         self.disposed.get() || self.failure.borrow().is_some()
     }
 
-    fn send(&self, message: Down, waiting: Waiting) {
+    fn send(&self, message: Down, waiting: Option<Waiting>) {
         if let Some(scripts) = self.scripts.upgrade() {
             scripts.send(message, waiting);
         }
@@ -134,7 +139,7 @@ impl Guest {
             dir: self.loaded.dir.to_string_lossy().into_owned(),
             options: self.loaded.options.as_deref().and_then(|options| serde_json::from_str(options).ok()),
         };
-        self.send(load, Waiting::Activate(Rc::downgrade(self)));
+        self.send(load, Some(Waiting::Activate(Rc::downgrade(self))));
     }
 
     /// The JS host ended: the plugin is set up again on the next one, and its mounts are told again. Their surfaces keep
@@ -219,7 +224,7 @@ impl Guest {
         let (effects, _) = ctx.take();
         let weak: Weak<dyn Answers> = Rc::downgrade(self) as Weak<dyn Answers>;
         apply(&self.host, self.id().to_owned(), weak, Some(self.generation), effects);
-        self.send(Down::Answered { id: self.id().to_owned(), key: key.to_owned(), results }, Waiting::Told);
+        self.send(Down::Answered { id: self.id().to_owned(), key: key.to_owned(), results }, None);
     }
 
     /// Fails the plugin with `error`: it is not called again, and the host says so once.
@@ -235,7 +240,7 @@ impl Guest {
         if let Some(scripts) = self.scripts.upgrade() {
             let seq = scripts.next();
             let message = Down::Deactivate { seq, id: self.id().to_owned(), activation: self.js.get() };
-            scripts.send(message, Waiting::Told);
+            scripts.send(message, None);
         }
     }
 
@@ -307,7 +312,7 @@ impl Guest {
                 .collect()
         };
         for (key, value) in changed {
-            self.send(Down::Snapshot { id: self.id().to_owned(), key, value }, Waiting::Told);
+            self.send(Down::Snapshot { id: self.id().to_owned(), key, value }, None);
         }
     }
 }
@@ -434,6 +439,9 @@ pub(crate) struct Viewer {
 struct Mount {
     /// The JS host was told of the mount.
     started: bool,
+    /// The sequence of the mount or input it was told last: its layout epoch. A revision that saw an older one was
+    /// built for another size and is refused (review bigboi-7).
+    epoch: u64,
     /// The input it was told last, without `full`.
     sent: Option<v2::SurfaceInput>,
     pending: Option<Box<Revision>>,
@@ -476,15 +484,16 @@ impl Viewer {
             count(|crossed| crossed.dropped += 1);
             return false;
         }
-        if tree.base != mount.adopted {
+        let stale = tree.epoch < mount.epoch;
+        if tree.base != mount.adopted || stale {
             count(|crossed| crossed.dropped += 1);
             let (rev, adopted) = (tree.rev, mount.adopted);
             drop(mounts);
-            let error = format!("revision {rev} builds on {}, and the host shows {adopted}", tree.base);
-            guest.send(
-                Down::Refused { id: guest.id().to_owned(), mount: tree.mount, rev, adopted, error },
-                Waiting::Told,
-            );
+            let error = match stale {
+                true => format!("revision {rev} was built for an input the host has replaced"),
+                false => format!("revision {rev} builds on {}, and the host shows {adopted}", tree.base),
+            };
+            guest.send(Down::Refused { id: guest.id().to_owned(), mount: tree.mount, rev, adopted, error }, None);
             return false;
         }
         mount.pending = Some(tree);
@@ -516,7 +525,7 @@ impl Viewer {
             }
         };
         drop(mounts);
-        guest.send(message, Waiting::Told);
+        guest.send(message, None);
     }
 
     /// The JS host started again: each mount is told again, and builds whole.
@@ -534,19 +543,31 @@ impl Viewer {
         }
     }
 
-    /// Tells the JS host of `mount`'s input: a mount when `mount` is new to it, else an input.
+    /// Tells the JS host of `mount`'s input: a mount when `mount` is new to it, else an input. A revision that waits
+    /// and saw an older input is refused now: its geometry is not the mount's any more.
     fn tell(&self, guest: &Guest, id: &v2::MountId, input: v2::SurfaceInput, new: bool) {
         let Some(scripts) = guest.scripts.upgrade() else { return };
         let seq = scripts.next();
-        if let Some(mount) = self.mounts.borrow_mut().get_mut(id) {
-            (mount.started, mount.sent) = (true, Some(input.clone()));
-        }
+        let stale = match self.mounts.borrow_mut().get_mut(id) {
+            Some(mount) => {
+                (mount.started, mount.sent, mount.epoch) = (true, Some(input.clone()), seq);
+                mount.pending.take_if(|tree| tree.epoch < seq).map(|tree| (tree.rev, mount.adopted))
+            }
+            None => None,
+        };
         let (plugin, mount) = (guest.id().to_owned(), id.clone());
         let message = match new {
-            true => Down::Mount { seq, id: plugin, surface: self.index, mount, input },
-            false => Down::Input { seq, id: plugin, mount, input },
+            true => {
+                Down::Mount { seq, id: plugin.clone(), activation: guest.js.get(), surface: self.index, mount, input }
+            }
+            false => Down::Input { seq, id: plugin.clone(), activation: guest.js.get(), mount, input },
         };
-        scripts.send(message, Waiting::Told);
+        scripts.send(message, Some(Waiting::View(self.guest.clone())));
+        if let Some((rev, adopted)) = stale {
+            count(|crossed| crossed.dropped += 1);
+            let error = format!("revision {rev} was built for an input the host has replaced");
+            scripts.send(Down::Refused { id: plugin, mount: id.clone(), rev, adopted, error }, None);
+        }
     }
 }
 
@@ -631,7 +652,8 @@ impl surface::Viewer for Viewer {
         }
         let Some(scripts) = guest.scripts.upgrade() else { return };
         let seq = scripts.next();
-        scripts.send(Down::Unmount { seq, id: guest.id().to_owned(), mount: id.clone() }, Waiting::Told);
+        let activation = guest.js.get();
+        scripts.send(Down::Unmount { seq, id: guest.id().to_owned(), activation, mount: id.clone() }, None);
     }
 }
 

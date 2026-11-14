@@ -17,7 +17,7 @@
 // - The process exits when its input ends.
 
 import path from "node:path"
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, realpathSync } from "node:fs"
 
 const MAGIC = "opencode-js-host"
 const VERSION = 1
@@ -120,7 +120,11 @@ interface Plugin {
   batch: number
 }
 
+// Each plugin's current activation by ID, which its own messages (effects, watches) name; and every activation by the
+// load that made it, which the host's calls and views name. An activation lives until the host deactivates it: a
+// candidate set up for a reload does not end the running one, whose registrations the host still routes to.
 const plugins = new Map<string, Plugin>()
+const generations = new Map<number, Plugin>()
 let last = 0
 
 function mountKey(id: Json) {
@@ -355,32 +359,25 @@ function resolveEntry(dir: string): string | undefined {
   }
 }
 
+// Sets up `plugin`, a candidate activation. The running activation of its ID, if any, keeps answering what the host
+// routes to it until the host deactivates it, once it registered the candidate. A candidate whose setup throws is
+// dropped, and the running one stays (a reload that fails keeps the previous version).
 async function setup(seq: number, plugin: Plugin) {
-  // A setup again (an activation, a changed module, a new JS host) starts from nothing: the last one's cleanups run.
-  if (plugin.active) deactivate(plugin)
-  plugin.mounts.clear()
-  plugin.commands = []
-  plugin.events = []
-  plugin.surfaces = []
-  plugin.cleanups = []
-  plugin.setupEffects = []
-  plugin.setupWatches = []
-  plugin.resolvers = []
   plugin.setting = true
-  plugin.failed = false
   plugin.activation = seq
   try {
     const cleanup = await plugin.definition.setup(context(plugin))
     if (typeof cleanup === "function") plugin.cleanups.push(cleanup as () => unknown)
   } catch (error) {
     plugin.setting = false
-    plugin.setupEffects = []
     plugin.failed = true
     send({ type: "done", seq, error: `setup threw: ${message(error)}` })
     return
   }
   plugin.setting = false
   plugin.active = true
+  generations.set(seq, plugin)
+  plugins.set(plugin.id, plugin)
   const effects = plugin.setupEffects
   plugin.setupEffects = []
   if (effects.length) plugin.answers.set("setup", plugin.resolvers)
@@ -390,23 +387,8 @@ async function setup(seq: number, plugin: Plugin) {
   for (const watch of plugin.setupWatches.splice(0)) send(watch)
 }
 
-async function load(seq: number, target: string, dir: string, options: Json) {
-  const entry = resolveEntry(dir)
-  if (!entry) return send({ type: "unsupported", seq })
-  let module: Json
-  try {
-    // Each load imports the module afresh, as a generation of its own: a changed module's new code runs.
-    module = await import(`${entry}?generation=${seq}`)
-  } catch (error) {
-    return send({ type: "done", seq, error: `cannot load ${target}: ${message(error)}` })
-  }
-  const definition = module?.default
-  if (!definition || typeof definition.id !== "string" || !definition.id || typeof definition.setup !== "function")
-    return send({ type: "done", seq, error: `Invalid V2 TUI plugin module: ${target}` })
-  const known = plugins.get(definition.id)
-  if (known && known.target !== target)
-    return send({ type: "done", seq, error: `plugin ID ${definition.id} is already registered` })
-  const plugin: Plugin = known ?? {
+function candidate(definition: Plugin["definition"], target: string, dir: string, options: Json): Plugin {
+  return {
     id: definition.id,
     target,
     dir,
@@ -429,12 +411,32 @@ async function load(seq: number, target: string, dir: string, options: Json) {
     replies: new Map(),
     batch: 0,
   }
-  Object.assign(plugin, { definition, options, dir })
-  plugins.set(plugin.id, plugin)
-  await setup(seq, plugin)
+}
+
+async function load(seq: number, target: string, dir: string, options: Json) {
+  const entry = resolveEntry(dir)
+  if (!entry) return send({ type: "unsupported", seq })
+  // Each load imports the plugin's modules afresh, as a generation of its own: its helpers as much as its entry, so a
+  // changed module's new code runs. The running generation keeps the modules it has.
+  const roots = [dir, realpathSync(dir)].map((root) => root + path.sep)
+  for (const key of Object.keys(require.cache)) if (roots.some((root) => key.startsWith(root))) delete require.cache[key]
+  let module: Json
+  try {
+    module = await import(`${entry}?generation=${seq}`)
+  } catch (error) {
+    return send({ type: "done", seq, error: `cannot load ${target}: ${message(error)}` })
+  }
+  const definition = module?.default
+  if (!definition || typeof definition.id !== "string" || !definition.id || typeof definition.setup !== "function")
+    return send({ type: "done", seq, error: `Invalid V2 TUI plugin module: ${target}` })
+  const known = plugins.get(definition.id)
+  if (known && known.target !== target)
+    return send({ type: "done", seq, error: `plugin ID ${definition.id} is already registered` })
+  await setup(seq, candidate(definition, target, dir, options))
 }
 
 function deactivate(plugin: Plugin) {
+  generations.delete(plugin.activation)
   plugin.active = false
   plugin.mounts.clear()
   for (const cleanup of plugin.cleanups.splice(0).reverse()) {
@@ -480,31 +482,35 @@ function call(seq: number, plugin: Plugin, request: Json) {
     return send({ type: "done", seq, error })
   }
   if (effects.length) plugin.answers.set(`c${seq}`, resolvers)
-  send({ type: "done", seq, effects })
+  // The answer comes once the views the call made due were sent: it is the call's completion, which the host times.
   viewAll(plugin)
+  send({ type: "done", seq, effects })
 }
 
 const work: Json[] = []
 let running = false
 
+// The work whose start the host times: a load's setup, a handler, a mount's or an input's view.
+const STARTED = new Set(["load", "call", "mount", "input"])
+
 async function handle(message: Json) {
-  const plugin = message.id ? plugins.get(message.id) : undefined
+  const plugin = typeof message.activation === "number" ? generations.get(message.activation) : message.id ? plugins.get(message.id) : undefined
+  if (STARTED.has(message.type)) send({ type: "started", seq: message.seq })
   switch (message.type) {
+    case "skipped":
     case "hello":
       return
     case "load":
       return load(message.seq, message.target, message.dir, message.options)
-    case "activate":
-      if (!plugin) return send({ type: "done", seq: message.seq, error: `no plugin ${message.id}` })
-      return setup(message.seq, plugin)
     case "deactivate":
-      if (plugin && plugin.activation === message.activation) deactivate(plugin)
+      if (plugin) deactivate(plugin)
       return
+    // A call for an activation that is gone answers with nothing: the host routed it before it ended.
     case "call":
-      if (!plugin) return send({ type: "done", seq: message.seq, error: `no plugin ${message.id}` })
+      if (!plugin) return send({ type: "done", seq: message.seq })
       return call(message.seq, plugin, message.call)
     case "mount": {
-      if (!plugin || !plugin.active) return
+      if (!plugin || !plugin.active) return send({ type: "done", seq: message.seq })
       const mount: Mount = {
         id: message.mount,
         key: mountKey(message.mount),
@@ -522,14 +528,17 @@ async function handle(message: Json) {
         released: [],
       }
       plugin.mounts.set(mount.key, mount)
-      return view(plugin, mount)
+      view(plugin, mount)
+      return send({ type: "done", seq: message.seq })
     }
     case "input": {
       const mount = plugin?.mounts.get(mountKey(message.mount))
-      if (!plugin || !mount) return
-      mount.input = message.input
-      mount.epoch = message.seq
-      return view(plugin, mount)
+      if (plugin && mount) {
+        mount.input = message.input
+        mount.epoch = message.seq
+        view(plugin, mount)
+      }
+      return send({ type: "done", seq: message.seq })
     }
     case "unmount":
       plugin?.mounts.delete(mountKey(message.mount))
