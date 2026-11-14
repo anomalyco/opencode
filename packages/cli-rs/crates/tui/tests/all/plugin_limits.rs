@@ -41,6 +41,25 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         let subject = SUBJECT.with(|subject| subject.borrow().clone());
         subject(cx)
     }));
+    // P2's surfaces show the same tree: a panel and an overlay, which its commands open and close.
+    let view = |cx: &mut v2::View<'_>| {
+        let subject = SUBJECT.with(|subject| subject.borrow().clone());
+        subject(cx)
+    };
+    setup.surface(v2::Surface::new("side", v2::Place::Panel("side".into()), view));
+    setup.surface(v2::Surface::new("pop", v2::Place::Overlay("pop".into()), view));
+    let command = |name: &str| abi::Command { name: name.to_owned(), ..abi::Command::default() };
+    setup.command(command("limits.panel"), |host, _| {
+        host.open_panel(abi::interact::OpenPanel { surface: "side".into(), session: None, fullscreen: true });
+    });
+    setup.command(command("limits.overlay"), |host, _| {
+        let anchor = abi::interact::Anchor::Point { x: 0, y: 0 };
+        host.overlay(abi::interact::Overlay { surface: "pop".into(), anchor, width: 60, height: 28 });
+    });
+    setup.command(command("limits.close"), |host, _| {
+        host.close_panel("side");
+        host.close_overlay("pop");
+    });
     Ok(())
 }
 
@@ -729,5 +748,56 @@ fn probe() {
             median(hosts),
             bytes.len()
         );
+    }
+}
+
+/// Opens P2's surface `command` afresh on `subject`, on Home: a new mount, whose first view returns it.
+fn show_in(harness: &Harness, command: &str, subject: Subject) -> opentui::native::Capture {
+    SUBJECT.with(|slot| *slot.borrow_mut() = subject);
+    harness.tui.keymap.dispatch("limits.close", None);
+    settle(harness);
+    harness.tui.keymap.dispatch(command, None);
+    settle(harness);
+    harness.app.render()
+}
+
+// Expected (`limits`, P2's surfaces): a panel's and an overlay's trees are held to the limits a route's is: one past
+// a limit shows the node that crosses as its placeholder and the rest as it is, and the host holds what it shows; on
+// both carriers.
+#[test]
+fn panels_and_overlays_are_held_to_the_limits() {
+    let texts = |count: usize| v2::Node::column((0..count).map(|index| text(&format!("t{index}"))).collect());
+    for carrier in CARRIERS {
+        // A panel opens beside a session that shows.
+        let deps = Deps {
+            builtins: vec![
+                builtin(carrier, abi::Plugin { id: ID, setup }),
+                builtin(carrier, abi::Plugin { id: SIBLING, setup: sibling }),
+            ],
+            ..support::deps(Arc::new(support::Fake::new(|seen| support::base(seen, support::DIRECTORY))))
+        };
+        let harness = support::mount(100, 30, deps);
+        settle(&harness);
+        for command in ["limits.panel", "limits.overlay"] {
+            let (frame, held) = {
+                let _limits = limits::set(Limits { nodes: 12, ..small() });
+                let frame = show_in(&harness, command, subject(move |_| framed(texts(9))));
+                (frame, limits::held(ID).nodes)
+            };
+            let twin = {
+                let _limits = support::unlimited();
+                let shows = move |_: &mut v2::View<'_>| {
+                    v2::Node::column(vec![text("head"), texts(9), placeholder(None, "too many nodes")])
+                };
+                show_in(&harness, command, subject(shows))
+            };
+            let (shown, wanted) = (frame.text(), twin.text());
+            assert!(frame.cells == twin.cells, "{carrier:?}, {command}: not the twin's frame\n{shown}\n---\n{wanted}");
+            assert!(shown.contains("⋯ too many nodes"), "{carrier:?}, {command}: no placeholder\n{shown}");
+            assert_eq!(held, 12, "{carrier:?}, {command}: held");
+        }
+        harness.tui.keymap.dispatch("limits.close", None);
+        settle(&harness);
+        assert_eq!(limits::held(ID).nodes, 0, "{carrier:?}: held once they closed");
     }
 }
