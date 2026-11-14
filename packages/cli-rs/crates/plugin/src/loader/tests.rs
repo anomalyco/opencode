@@ -340,8 +340,7 @@ pub(crate) fn host() -> Rc<TestHost> {
     })
 }
 
-/// Routes the app's keys to `host`'s keymap before any widget, and applies what a plugin's handler asked for before the
-/// next key, as the TUI does (`route_keys`).
+/// Routes the app's keys to `host`'s keymap before any widget, as the TUI does (`route_keys`).
 pub(crate) fn route_keys(host: &Rc<TestHost>) {
     let weak = Rc::downgrade(host);
     host.app.on_key_capture(move |cx, key| {
@@ -354,7 +353,6 @@ pub(crate) fn route_keys(host: &Rc<TestHost>) {
         if result.handled || result.stop_propagation {
             cx.stop_propagation();
         }
-        crate::flush();
     });
 }
 
