@@ -1880,7 +1880,8 @@ fn plugin_twice(setup: &mut abi::Setup) -> Result<(), String> {
 fn a_fence_that_falls_back_leaves_one_of_the_same_text_claimed() {
     for carrier in CARRIERS {
         let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.twice", setup: plugin_twice })]);
-        REFUSE.set(2);
+        // The first fence's first view is whole, so its refusal falls it back at once.
+        REFUSE.set(1);
         world.emit("session.text.started", json!({ "ordinal": 0 }));
         let text = "```probe\nsame\n```\n\nBetween.\n\n```probe\nsame\n```\n\nAfter.\n";
         world.emit("session.text.delta", json!({ "ordinal": 0, "delta": text }));
@@ -2216,5 +2217,67 @@ fn a_fence_in_a_claimed_part_is_not_claimed_again() {
         assert_eq!(screen.matches("nested").count(), 1, "{carrier:?}:\n{screen}");
         assert_eq!(screen.matches("code").count(), 1, "{carrier:?}:\n{screen}");
         assert_eq!(mounted().len(), 1, "{carrier:?}: {:?}", mounted());
+    }
+}
+
+/// Claims `cache` calls: gives the host its text once, as content, and names that handle in every later view; declines
+/// a running call.
+fn plugin_cache(setup: &mut abi::Setup) -> Result<(), String> {
+    let cached = Rc::new(RefCell::new(std::collections::HashMap::new()));
+    setup.claim(Claim::tool("cache", move |cx, part| {
+        let Part::Tool(tool) = part else { return None };
+        DREW.with_borrow_mut(|drew| drew.push(format!("{:?}", tool.state)));
+        if tool.state == abi::claim::State::Running {
+            return None;
+        }
+        let generation = cx.mount.generation;
+        let handle = *cached.borrow_mut().entry(generation).or_insert_with(|| cx.content(b"cached body".to_vec()));
+        Some(v2::Node::column(vec![v2::Node::Markdown {
+            id: Some("body".into()),
+            source: v2::Source::Content(handle),
+        }]))
+    }));
+    Ok(())
+}
+
+// Expected (4.2: a handle lives until the mount ends or the plugin releases it; review finding carbon-6): a part the
+// claim declined keeps the content its views gave, so a later view may name it again; the ledger counts it until the
+// mount ends. A tree refused for anything but a keep the host does not hold falls back with no second view.
+#[test]
+fn a_declined_part_keeps_its_content_and_a_bad_tree_gets_one_view() {
+    for carrier in CARRIERS {
+        DREW.with_borrow_mut(Vec::clear);
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.cache", setup: plugin_cache })]);
+        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "cache" }));
+        world.settle();
+        world.harness.wait_for("cached body");
+        world.emit("session.tool.called", json!({ "id": "call_1", "input": {}, "executed": true }));
+        world.settle();
+        assert!(!world.frame().text().contains("cached body"), "{carrier:?}: declined, the tree stays");
+        assert_eq!(ledger().content, 1, "{carrier:?}: the declined part's handle went: {:?}", ledger());
+        let done = json!([{ "type": "text", "text": "done" }]);
+        world.emit("session.tool.success", json!({ "id": "call_1", "content": done, "executed": true }));
+        world.settle();
+        let screen = world.frame().text();
+        assert!(screen.contains("cached body"), "{carrier:?}: the handle is gone:\n{screen}");
+        assert!(world.mount_of("call_1").is_some_and(|shown| shown.shows), "{carrier:?}");
+
+        // A duplicate id is the plugin's error: one view, and the part falls back.
+        let world = World::rules(carrier, ungrouped(), false);
+        world.emit("session.tool.input.started", json!({ "id": "call_2", "name": "probe" }));
+        world.settle();
+        ARMED.set(Some(("call_2".to_owned(), Fault::Bad)));
+        let views = DREW.with_borrow(Vec::len);
+        world.emit("session.tool.called", json!({ "id": "call_2", "input": {}, "executed": true }));
+        world.settle();
+        ARMED.set(None);
+        assert_eq!(DREW.with_borrow(Vec::len) - views, 1, "{carrier:?}: a bad tree was asked again");
+        assert!(world.mount_of("call_2").is_some_and(|shown| !shown.shows), "{carrier:?}");
+        let views = DREW.with_borrow(Vec::len);
+        ARMED.set(Some(("call_3".to_owned(), Fault::Bad)));
+        world.emit("session.tool.input.started", json!({ "id": "call_3", "name": "probe" }));
+        world.settle();
+        ARMED.set(None);
+        assert_eq!(DREW.with_borrow(Vec::len) - views, 1, "{carrier:?}: a first, whole view was asked again");
     }
 }

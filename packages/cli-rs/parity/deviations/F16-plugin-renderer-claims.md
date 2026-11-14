@@ -26,8 +26,8 @@ whether the message streams and the fence closed. The host's own row is the fall
 - A view that returns `None` leaves that revision to the host's row: the tool view, or the code view.
 - A view that panics fails the plugin (`F16-plugin-panic-no-effects`): the route mounts again, and every part of that
   plugin shows the host's row, as when the user disables it. A toast says `Plugin failed: <id>`.
-- A view that returns a tree the host refuses twice in a row leaves that part to the host's row for the rest of its
-  mount (a fence's mount also ends at a theme change, when Markdown builds the block again). The plugin stays active,
+- A view that returns a tree the host refuses leaves that part to the host's row for the rest of its mount (a keep the
+  host does not hold is first asked for once more as a whole tree) (a fence's mount also ends at a theme change, when Markdown builds the block again). The plugin stays active,
   and its other parts keep their trees.
 - A view that takes longer than the overrun limit (100 ms; P4c's limits) is treated by carrier, as P4c treats every
   overrun (synthesis 4.4): a built-in in process leaves that part to the host's row and stays active, and the overrun

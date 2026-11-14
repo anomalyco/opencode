@@ -2,7 +2,8 @@
 //! calls of one tool, or the Markdown fences of one language, and draws each claimed part in the transcript with a
 //! keyed tree ([`v2::Node`]), as a surface does. The host's own row is the fallback: it draws the part whenever the
 //! claim declines it (its view returns `None`), and when the claim cannot (its plugin failed, a view took longer than
-//! the overrun limit, it returned a tree the host refused twice in a row, the plugin is disabled or reloads).
+//! the overrun limit, it returned a tree the host refused, the plugin is disabled or reloads). A tree refused for a keep
+//! the host does not hold is asked for once more, whole.
 //!
 //! Each claimed part is a mount ([`v2::MountId`]) with a generation of its own; what the view gave the host (content,
 //! memo values) goes with the part. The view gets the part as it is now ([`Part`]), and the surface input with the
