@@ -34,6 +34,8 @@ export type Reply = typeof Reply.Type
 export interface AssertInput extends Omit<Request, "id" | "message"> {
   readonly id?: ID
   readonly agent?: Agent.ID
+  /** Previously emitted tool action, retained for matching existing rules. */
+  readonly legacyAction?: string
 }
 
 /** The requester fields of a permission request made by a tool call. */
@@ -92,11 +94,23 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Permissi
 export type Error = BlockedError | CorrectedError
 
 export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {
+  return evaluateActions({ action }, resource, ...rulesets)
+}
+
+export function evaluateActions(
+  input: Pick<AssertInput, "action" | "legacyAction">,
+  resource: string,
+  ...rulesets: Permission.Ruleset[]
+): Permission.Rule {
+  const actions = input.legacyAction ? [input.action, input.legacyAction] : [input.action]
   return (
     rulesets
       .flat()
-      .findLast((rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource)) ?? {
-      action,
+      .findLast(
+        (rule) =>
+          actions.some((action) => Wildcard.match(action, rule.action)) && Wildcard.match(resource, rule.resource),
+      ) ?? {
+      action: input.action,
       resource: "*",
       effect: "ask",
     }
@@ -126,6 +140,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pe
 interface Pending {
   readonly request: Request
   readonly agent?: Agent.ID
+  readonly legacyAction?: string
   readonly deferred: Deferred.Deferred<void, DeclinedError | CorrectedError>
 }
 
@@ -173,19 +188,23 @@ const layer = Layer.effect(
       return merge(agent?.permissions ?? missingAgentPermissions, session.permissions ?? [])
     })
 
-    function denied(input: Pick<Request, "action" | "resources">, rules: Permission.Ruleset) {
-      return input.resources.some((resource) => evaluate(input.action, resource, rules).effect === "deny")
+    function denied(input: AssertInput, rules: Permission.Ruleset) {
+      return input.resources.some((resource) => evaluateActions(input, resource, rules).effect === "deny")
     }
 
     function relevant(input: AssertInput, rules: Permission.Ruleset) {
-      return rules.filter((rule) => Wildcard.match(input.action, rule.action))
+      return rules.filter(
+        (rule) =>
+          Wildcard.match(input.action, rule.action) ||
+          (input.legacyAction !== undefined && Wildcard.match(input.legacyAction, rule.action)),
+      )
     }
 
     const evaluateInput = Effect.fnUntraced(function* (input: AssertInput) {
       const rules = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
       const all = [...rules, ...(yield* savedRules())]
-      const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
+      const effects = input.resources.map((resource) => evaluateActions(input, resource, all).effect)
       const effect: Permission.Effect = effects.includes("ask") ? "ask" : "allow"
       const event = yield* hooks.trigger("permission", "evaluate", {
         sessionID: input.sessionID,
@@ -200,7 +219,7 @@ const layer = Layer.effect(
       if (event.effect !== "ask" || unattended === undefined)
         return { effect: event.effect, message: event.message, rules: all }
       const settled = [...all, ...unattended]
-      const allowed = input.resources.every((resource) => evaluate(input.action, resource, settled).effect === "allow")
+      const allowed = input.resources.every((resource) => evaluateActions(input, resource, settled).effect === "allow")
       if (allowed) return { effect: "allow" as const, rules: all }
       return {
         effect: "deny" as const,
@@ -226,11 +245,11 @@ const layer = Layer.effect(
       }
     }
 
-    const create = (request: Request, agent?: Agent.ID) =>
+    const create = (request: Request, agent?: Agent.ID, legacyAction?: string) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
           const deferred = yield* Deferred.make<void, DeclinedError | CorrectedError>()
-          const item = { request, agent, deferred }
+          const item = { request, agent, legacyAction, deferred }
           if (closed) {
             yield* Deferred.fail(deferred, new DeclinedError())
             return item
@@ -249,7 +268,7 @@ const layer = Layer.effect(
       if (closed) return { id: input.id ?? ID.create(), effect: "deny" as const }
       const result = yield* evaluateInput(input)
       const value = request(input, result.message)
-      if (result.effect === "ask") yield* create(value, input.agent)
+      if (result.effect === "ask") yield* create(value, input.agent, input.legacyAction)
       return { id: value.id, effect: result.effect }
     })
 
@@ -268,7 +287,7 @@ const layer = Layer.effect(
               })
             }
             if (result.effect === "allow") return
-            const item = yield* create(request(input, result.message), input.agent)
+            const item = yield* create(request(input, result.message), input.agent, input.legacyAction)
             return yield* restore(Deferred.await(item.deferred)).pipe(
               // Deliberate defect tunnel: leaves wrap execution in blanket `mapError`, which
               // must not convert a user's decline into model-facing tool output. The decline
@@ -349,9 +368,11 @@ const layer = Layer.effect(
           if (input.reply !== "always" || !existing.request.save?.length) return
 
           for (const [id, item] of pending) {
-            const result = yield* evaluateInput({ ...item.request, agent: item.agent }).pipe(
-              Effect.catchTag("Session.NotFoundError", () => Effect.undefined),
-            )
+            const result = yield* evaluateInput({
+              ...item.request,
+              agent: item.agent,
+              legacyAction: item.legacyAction,
+            }).pipe(Effect.catchTag("Session.NotFoundError", () => Effect.undefined))
             if (result?.effect !== "allow") continue
             yield* bus.publish(Permission.Event.Replied, {
               sessionID: item.request.sessionID,

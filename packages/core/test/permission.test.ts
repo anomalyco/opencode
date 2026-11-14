@@ -148,6 +148,22 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("matches normalized MCP actions and existing hyphenated rules", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "mcp-atlassian_get-page", resource: "*", effect: "deny" }])
+      const service = yield* Permission.Service
+      const input = assertion({
+        action: "mcp_atlassian_get_page",
+        legacyAction: "mcp-atlassian_get-page",
+      })
+      expect(yield* service.assertNotDenied(input).pipe(Effect.flip)).toBeInstanceOf(Permission.BlockedError)
+      yield* setRules([{ action: "mcp-atlassian_get-page", resource: "*", effect: "allow" }])
+      expect(yield* service.allows(input)).toBe(true)
+      yield* setRules([{ action: "mcp_atlassian_get_page", resource: "*", effect: "deny" }])
+      expect(yield* service.assertNotDenied(input).pipe(Effect.flip)).toBeInstanceOf(Permission.BlockedError)
+    }),
+  )
+
   it.effect("checks for a deny without asking", () =>
     Effect.gen(function* () {
       yield* setup([])
@@ -764,10 +780,7 @@ describe("shell scanner permission impact", () => {
       name: "assignment redirect prefix",
       shell: "bash",
       command: "FOO=bar > output; printf done",
-      grants: [
-        ["printf *"],
-        ["FOO=bar > *", "printf *"],
-      ],
+      grants: [["printf *"], ["FOO=bar > *", "printf *"]],
       repeat: [
         ["ask", "allow"],
         ["ask", "allow"],
@@ -779,10 +792,7 @@ describe("shell scanner permission impact", () => {
       name: "PowerShell method prefix",
       shell: "pwsh",
       command: '[IO.File]::Delete("C:\\first")',
-      grants: [
-        ["[IO.File]::Delete(*"],
-        ["[IO.File]::Delete(*"],
-      ],
+      grants: [["[IO.File]::Delete(*"], ["[IO.File]::Delete(*"]],
       repeat: [
         ["allow", "allow"],
         ["allow", "allow"],

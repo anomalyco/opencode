@@ -17,12 +17,11 @@ import { effectiveName, normalizedName } from "./runtime.js"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
-/**
- * Registry namespace and permission action names for MCP tools.
- */
+/** Registry namespace and permission action names for MCP tools. */
 export const namespace = (server: string) => normalizedName({ name: server })
-export const name = (server: string, tool: string) =>
+export const legacyName = (server: string, tool: string) =>
   effectiveName({ name: tool, options: { namespace: namespace(server) } })
+export const name = (server: string, tool: string) => legacyName(server, tool).replace(/[^a-zA-Z0-9_]/g, "_")
 
 export interface Interface {
   /**
@@ -60,8 +59,11 @@ export const layer = Layer.effect(
                 output: (tool.outputSchema ?? {}) as JsonSchema.JsonSchema,
                 execute: (input, context) =>
                   Effect.gen(function* () {
+                    const action = name(tool.server, tool.name)
+                    const legacyAction = legacyName(tool.server, tool.name)
                     yield* permission.assert({
-                      action: name(tool.server, tool.name),
+                      action,
+                      ...(action === legacyAction ? {} : { legacyAction }),
                       resources: ["*"],
                       save: ["*"],
                       metadata: { input: input ?? {} },
