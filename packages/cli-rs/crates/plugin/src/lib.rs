@@ -338,6 +338,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             failure: failure.clone(),
             call: RefCell::default(),
             revoked: RefCell::default(),
+            mount: RefCell::default(),
         });
         let mut api = abi::Registered::new(setup.id(), None);
         api.set_waker(activation.waker());
@@ -465,13 +466,30 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             let call: surface::Call = Rc::new(move |host, view| called.call("view", host, |read| view(read)).is_some());
             let failing = scope.clone();
             let fail: surface::Fail = Rc::new(move |error| {
-                let layer = failing.layer.borrow_mut().take();
-                crate::fail(&failing.host, &failing.id, &failing.failure, layer, &failing.activation, error);
+                let revoked = failing.revoked.take();
+                crate::fail(&failing.host, &failing.id, &failing.failure, revoked, &failing.activation, error);
             });
-            let commands = match &surface.place {
-                abi::v2::Place::Route(name) => route::commands(&scoped, name),
+            // A route's commands belong to each of its mounts, so what they ask for ends with that mount.
+            let routed: Vec<(abi::Command, abi::CommandFn)> = match &surface.place {
+                abi::v2::Place::Route(name) => api
+                    .commands()
+                    .filter(|(command, _)| matches!(&command.scope, abi::Scope::Route(route) if route == name))
+                    .map(|(command, run)| (command.clone(), run.clone()))
+                    .collect(),
                 abi::v2::Place::Slot(_) => Vec::new(),
             };
+            let owning = scope.clone();
+            let commands: surface::Commands = Rc::new(move |alive: &Weak<()>| {
+                routed
+                    .iter()
+                    .map(|(command, run)| {
+                        let (run, scope, alive) = (run.clone(), owning.clone(), alive.clone());
+                        tui_command(command, move |input| {
+                            scope.run_owned(&alive, "run-command", |host| run(host, input));
+                        })
+                    })
+                    .collect()
+            });
             setup.surface(surface.clone(), commands, call, fail, &activation);
         }
         // Disposal removes the plugin's commands, runs its dispose callbacks, then drops its replies and wakes.
@@ -521,6 +539,9 @@ struct Scope {
     /// What a panic revokes at once, before deactivation: the commands' keymap layer and the event and delta
     /// subscriptions.
     revoked: RefCell<Vec<Disposer>>,
+    /// The mount the running call belongs to, while a command of a 2.0 surface's route runs: what it asks for, such
+    /// as a fetch, ends with that mount. `None` for the plugin's own calls, whose work lives with the plugin.
+    mount: RefCell<Option<Weak<()>>>,
 }
 
 /// What one call of an in-process plugin asked for: the effects that wait for it to return, the storage it wrote, and
@@ -594,6 +615,16 @@ impl Scope {
         if self.call(export, &*host, handler).is_some() {
             self.activation.invalidate();
         }
+    }
+
+    /// [`Scope::run`] for a command that belongs to the mount `alive` stands for.
+    fn run_owned(self: &Rc<Self>, alive: &Weak<()>, export: &str, handler: impl FnOnce(&Scoped<'_>)) {
+        if alive.upgrade().is_none() {
+            return;
+        }
+        let outer = self.mount.replace(Some(alive.clone()));
+        self.run(export, handler);
+        *self.mount.borrow_mut() = outer;
     }
 
     /// Runs a mount handler: a claim or route may mount and unmount after its plugin was disposed, which hears of it
@@ -976,8 +1007,12 @@ impl Scoped<'_> {
     fn request(&self, send: impl FnOnce(&dyn Host, Reply) + 'static) -> abi::RequestId {
         let id = next_request();
         let scope = Rc::downgrade(self.scope);
+        // A request a mount's command asked for ends with the mount: a reply for a mount that closed, also one opened
+        // again since, is dropped when it arrives.
+        let mount = self.scope.mount.borrow().clone();
+        let live = move || mount.as_ref().is_none_or(|mount| mount.upgrade().is_some());
         self.defer(move |host| {
-            if scope.upgrade().is_none_or(|scope| scope.activation.disposed()) {
+            if scope.upgrade().is_none_or(|scope| scope.activation.disposed()) || !live() {
                 return;
             }
             send(
@@ -987,6 +1022,9 @@ impl Scoped<'_> {
                     // The reply runs on the effect queue, in order with the effects queued before it.
                     defer(&host, move |_| {
                         let Some(scope) = scope.upgrade().filter(|scope| !scope.activation.disposed()) else { return };
+                        if !live() {
+                            return;
+                        }
                         let replies = scope.replies.borrow().clone();
                         scope.run("on-reply", |host| replies.iter().for_each(|run| run(host, id, result.clone())));
                     });
@@ -1197,7 +1235,7 @@ impl Setup<'_> {
     pub(crate) fn surface(
         &mut self,
         surface: abi::v2::Surface,
-        commands: Vec<TuiCommand>,
+        commands: surface::Commands,
         call: surface::Call,
         fail: surface::Fail,
         activation: &Rc<Activation>,
@@ -1218,7 +1256,8 @@ impl Setup<'_> {
                         fail.clone(),
                     );
                     activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
-                    Box::new(route::View::wrap(host, Box::new(mounted), commands.clone()))
+                    let commands = commands(&mounted.alive());
+                    Box::new(route::View::wrap(host, Box::new(mounted), commands))
                 });
             }
             abi::v2::Place::Slot(at) => {
