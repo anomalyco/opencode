@@ -228,6 +228,38 @@ fn numbered_code_matches_typescript() {
     assert_parity(&app.render(), "U.4a/code");
 }
 
+/// `code::view` finishes its view, which frees the parse tree kept for appends. It paints as a view built in its theme,
+/// before and after a theme switch, the same as a view that keeps its tree because its text was set after it was built.
+#[test]
+fn a_finished_code_view_paints_and_restyles_as_a_kept_one() {
+    let (old, new) = (theme("opencode", ThemeMode::Dark), theme("tokyonight", ThemeMode::Dark));
+    let source = corpus("code");
+    let built = |theme: &Theme| {
+        let (app, _) = app(60, 10);
+        app.root().add(&code::view(&app, theme, &code::syntax_theme(theme), Some("typescript"), &source));
+        app.render()
+    };
+    let (before, after) = (built(&old), built(&new));
+    assert_ne!(before.cells, after.cells, "the themes paint differently");
+    for kept in [false, true] {
+        let (app, _) = app(60, 10);
+        let view =
+            code::view(&app, &old, &code::syntax_theme(&old), Some("typescript"), if kept { "" } else { &source });
+        if kept {
+            view.set_code(source.as_str());
+        }
+        app.root().add(&view);
+        // A highlight of changed text lands from a worker.
+        let settled = |want: &Capture| {
+            app.wait_until(std::time::Duration::from_secs(2), || app.render().cells == want.cells);
+            app.render().cells
+        };
+        assert_eq!(settled(&before), before.cells, "kept={kept}");
+        view.fg(new.text.base).syntax_theme(code::syntax_theme(&new));
+        assert_eq!(settled(&after), after.cells, "kept={kept}");
+    }
+}
+
 #[test]
 fn code_wraps_at_a_word_as_core_does() {
     let (app, theme) = app(20, 3);
