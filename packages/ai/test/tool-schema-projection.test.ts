@@ -359,7 +359,11 @@ describe("tool schema projections", () => {
             tools: [{ name: "lookup", description: "Lookup data.", inputSchema: original }],
           }),
         ).pipe(Effect.map((prepared) => prepared.body.tools?.[0]?.function.parameters))
-      const gemini = { ...original, required: ["mode"] }
+      const gemini = {
+        ...original,
+        required: ["mode"],
+        properties: { mode: { type: "string", enum: ["fast", "safe"] } },
+      }
       const moonshot = { ...original, properties: { mode: { type: "string", enum: ["fast", "safe"] } } }
 
       expect(yield* parameters(route.model({ id: "google/Gemini-3.8-Flash" }))).toEqual(gemini)
