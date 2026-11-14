@@ -118,9 +118,11 @@ impl RouteView for Home {
         crate::features::update_notification::restyle(tui);
         self.prompt.restyle(tui);
         self.forms.restyle();
-        // Plugin claims take the theme when they render, so the footer renders them again where it is.
-        self.footer.clear();
-        *self.slot.borrow_mut() = Rc::new(footer_slot(tui, &self.footer));
+        // The footer's plugin claims take the theme in place; one that cannot mounts again with the footer.
+        if !self.slot.borrow().restyle(tui) {
+            self.footer.clear();
+            *self.slot.borrow_mut() = Rc::new(footer_slot(tui, &self.footer));
+        }
         true
     }
 }
