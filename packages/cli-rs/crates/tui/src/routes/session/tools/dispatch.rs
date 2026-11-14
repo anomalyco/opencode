@@ -32,7 +32,7 @@ pub struct Tool {
     body: View,
     view: RefCell<Option<(&'static str, Box<dyn ToolView>)>>,
     /// The plugin claim of the call's tool (Pr), and whether its tree shows in the body instead of the view.
-    claim: RefCell<Option<(claim::Mount, bool)>>,
+    claim: Rc<RefCell<Option<(claim::Mount, bool)>>>,
     /// `ToolImages`: the call's image results under its row.
     images: Images,
 }
@@ -86,7 +86,18 @@ impl Tool {
         let body = View::new(cx.app).column().shrink(0.0);
         let images = Images::new(cx, 3);
         let root = View::new(cx.app).column().shrink(0.0).child(&body).child(images.root());
-        Self { root, body, view: RefCell::default(), claim: RefCell::default(), images }
+        let claim: Rc<RefCell<Option<(claim::Mount, bool)>>> = Rc::default();
+        // A claimed call changes height when its claim draws more or less, or falls back: the reader stays put.
+        let (claimed, reflowed, laid) = (Rc::downgrade(&claim), cx.reflowed.clone(), Cell::new(None));
+        root.on_resize(move |_, rect| {
+            if let (Some(before), Some(claim)) = (laid.replace(Some(rect.height)), claimed.upgrade())
+                && rect.height != before
+                && claim.borrow().is_some()
+            {
+                reflowed(rect.screen_y, rect.height - before);
+            }
+        });
+        Self { root, body, view: RefCell::default(), claim, images }
     }
 
     pub fn root(&self) -> &View {
