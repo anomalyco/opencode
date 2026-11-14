@@ -1014,7 +1014,7 @@ fn the_image_preview_ends_with_the_viewer() {
         "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAECAIAAAA8r+mnAAAAFUlEQVR42mO4Y2MDRzZRd+CIgXoSAKBcLGFZ7ECVAAAAAElFTkSuQmCC",
     )
     .unwrap();
-    let preview = Some("prompt-image-viewer".to_owned());
+    let preview = Some("opencode.diffs/images".to_owned());
     for abi in [false, true] {
         for replaced in [false, true] {
             let h = image_route(png.clone(), abi);
@@ -1107,4 +1107,65 @@ fn a_remount_keeps_the_viewer_and_its_way_back() {
         h.keys(&["q"]);
         h.wait("q did not go back to stats", || h.tui.route() == stats);
     });
+}
+
+// Expected (TS's close clears the viewer's dialogs; carbon's review of P6c, 4): the source and base dialogs end with
+// the viewer, so none is left on screen once its route goes, on both carriers.
+#[test]
+fn the_viewers_dialogs_end_with_it() {
+    on_both(|| {
+        for base in [false, true] {
+            let h = route(2, 4, 120, 30);
+            h.keys(&["d"]);
+            h.wait_for("Diff source");
+            if base {
+                h.keys(&["down", "down", "down", "return"]);
+                h.wait_for("Base branch");
+            }
+            h.tui.navigate(Route::Home);
+            h.settle();
+            assert!(!h.tui.dialogs.is_open(), "a dialog outlived the viewer (base: {base}):\n{}", h.app.text());
+        }
+    });
+}
+
+// Expected (carbon's review of P6c, 4): a plugin's image preview takes only images the host decodes, as an image node
+// would, and has the key `images`, which `Dialog::Close` closes.
+#[test]
+fn a_plugin_image_preview_is_bounded_and_keyed() {
+    let h = route(1, 4, 120, 30);
+    let setup = |setup: &mut opencode_plugin::abi::Setup| {
+        let command = |name: &str| opencode_plugin::abi::Command { name: name.into(), ..Default::default() };
+        let images = |data: String| {
+            abi_dialog_images(opencode_plugin::abi::Images {
+                images: vec![opencode_plugin::abi::Image { data, name: None }],
+                index: 0,
+            })
+        };
+        setup.command(command("probe.huge"), move |host, _| {
+            let mut huge = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+            huge.extend(5000u32.to_be_bytes().into_iter().chain(5000u32.to_be_bytes()));
+            host.dialog(images(opencode_plugin::abi::base64::encode(&huge)))
+        });
+        setup.command(command("probe.png"), move |host, _| {
+            let png = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAECAIAAAA8r+mnAAAAFUlEQVR42mO4Y2MDRzZRd+CIgXoSAKBcLGFZ7ECVAAAAAElFTkSuQmCC";
+            host.dialog(images(png.to_owned()))
+        });
+        setup.command(command("probe.close"), |host, _| {
+            host.dialog(opencode_plugin::abi::Dialog::Close { key: "images".into() })
+        });
+        Ok(())
+    };
+    opencode_tui::plugins::host::add(&h.tui, opencode_plugin::abi::Plugin { id: "probe", setup }.into());
+    h.dispatch("probe.huge");
+    h.settle();
+    assert!(!h.tui.dialogs.is_open(), "an image past the host's bounds opened a preview");
+    h.dispatch("probe.png");
+    h.wait("the preview did not open", || h.tui.dialogs.key() == Some("probe/images".to_owned()));
+    h.dispatch("probe.close");
+    h.wait("Dialog::Close did not close the preview", || !h.tui.dialogs.is_open());
+}
+
+fn abi_dialog_images(images: opencode_plugin::abi::Images) -> opencode_plugin::abi::Dialog {
+    opencode_plugin::abi::Dialog::Images(images)
 }

@@ -7,6 +7,8 @@ use super::viewer::Viewer;
 
 /// The width of the shortcut column.
 const SHORTCUT_WIDTH: u16 = 17;
+/// The help panel's key.
+pub const KEY: &str = "help";
 
 /// `diff.help` and a click on the help shortcut (`openHelpDialog`).
 pub fn open(host: &dyn Host, viewer: &Viewer) {
@@ -30,7 +32,7 @@ pub fn open(host: &dyn Host, viewer: &Viewer) {
     let rows: usize = groups.iter().map(|(_, rows)| rows.len() + 2).sum();
     let height = (rows as i64 - 1).min(i64::from(host.info().size.1) - 6).max(1);
     host.dialog(Dialog::Panel(Panel {
-        key: "help".to_owned(),
+        key: KEY.to_owned(),
         size: PanelSize::Medium,
         title: vec![Span::new("Diff shortcuts")],
         subtitle: None,

@@ -83,15 +83,26 @@ pub fn show(tui: &Tui, id: &str, generation: u64, dialog: abi::Dialog) {
         abi::Dialog::Alert(alert) => tell(tui, owner, alert),
         abi::Dialog::ErrorDetails(details) => detail(tui, owner, details),
         abi::Dialog::Images(images) => {
+            // An image past what the host decodes is left out, as an image node of it would show nothing.
             let shown: Vec<(String, Option<String>)> = images
                 .images
                 .into_iter()
+                .filter(|image| {
+                    let decodes = abi::base64::decode(&image.data)
+                        .is_some_and(|bytes| opencode_plugin::surface::within_bounds(&bytes));
+                    if !decodes {
+                        log::warn!("plugin {id}: an image of its preview is not one the host decodes");
+                    }
+                    decodes
+                })
                 .map(|image| (format!("data:application/octet-stream;base64,{}", image.data), image.name))
                 .collect();
-            // The plugin's preview ends with its activation, as its other dialogs do (F16); the host's own do not.
+            // The plugin's preview ends with its activation, as its other dialogs do (F16), and has the key `images`;
+            // the host's own previews do neither.
             if !shown.is_empty() {
+                let key = Some(format!("{id}/images"));
                 own(tui, owner, |on_close| {
-                    crate::dialogs::image_preview::show_closing(tui, shown, images.index, Some(on_close))
+                    crate::dialogs::image_preview::show_closing(tui, shown, images.index, Some(on_close), key)
                 });
             }
         }
