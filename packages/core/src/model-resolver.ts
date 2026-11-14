@@ -13,9 +13,14 @@ import {
 } from "@opencode/ai/effect"
 import { Auth, mergeTransport } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
+import { TuiEvent } from "@opencode/schema/tui-event"
 import { AISDK } from "./aisdk.js"
+import { Bus } from "./bus.js"
+import { Config } from "./config.js"
 import { Credential } from "./credential.js"
 import { Integration } from "./integration.js"
+import { IntegrationConnection } from "./integration/connection.js"
+import { UsageLimits } from "./usage-limits.js"
 import { Capabilities, Compatibility, ID, Info, Model, Ref, VariantID } from "./model.js"
 import type { RuntimeInfo } from "./model.js"
 import { Npm } from "@opencode/util/npm"
@@ -469,17 +474,88 @@ export const layer = Layer.effect(
     const providers = yield* Provider.Service
     const models = yield* Model.Service
     const integrations = yield* Integration.Service
+    const config = yield* Config.Service
+    const usageLimits = yield* UsageLimits.Service
+    const bus = yield* Bus.Service
     const npm = yield* Npm.Service
     const aisdk = yield* AISDK.Service
+    const lastBalanced = new Map<string, string | undefined>()
     const dependencies: Dependencies = {
       loadPackage: (specifier) => Provider.loadPackage(specifier, npm),
       loadAISDK: (model) => aisdk.model(model),
     }
     const prepare = Effect.fn("ModelResolver.prepare")(function* (selected: Info, variant?: VariantID) {
       const provider = yield* providers.get(selected.providerID)
-      const connection = yield* integrations.connection.active(
-        provider?.integrationID ?? Integration.ID.make(selected.providerID),
-      )
+      const integrationID = provider?.integrationID ?? Integration.ID.make(selected.providerID)
+      const active = yield* integrations.connection.active(integrationID)
+      let connection = active
+      // Auto-balance OpenCode Go accounts when enabled and more than one is available.
+      const entries = yield* config.entries()
+      const toggle = Config.latest(entries, "experimental")?.auto_balance_accounts === true
+      if (toggle && selected.providerID === "opencode-go" && integrationID === Integration.ID.make("opencode")) {
+        const integration = yield* integrations.get(integrationID)
+        const connections = integration?.connections ?? []
+        const credentialConnections = connections.filter((item) => item.type === "credential")
+        if (credentialConnections.length >= 2) {
+          const now = Date.now()
+          const scored = (yield* Effect.forEach(
+            credentialConnections,
+            (conn) =>
+              Effect.gen(function* () {
+                const resolved = yield* integrations.connection
+                  .resolve(conn)
+                  .pipe(Effect.catch(() => Effect.succeed(undefined)))
+                if (!resolved || resolved.type === "external") return undefined
+                const goUsage = yield* usageLimits.go(resolved).pipe(Effect.catch(() => Effect.succeed(undefined)))
+                if (!goUsage) return undefined
+                if (goUsage.rolling.limited || goUsage.weekly.limited || goUsage.monthly.limited) return undefined
+                const monthly = goUsage.monthly
+                const score = monthly.percent / Math.max(1, monthly.resetsAt - now)
+                return { conn, score, monthlyPercent: monthly.percent, resetsAt: monthly.resetsAt }
+              }),
+            { concurrency: 4 },
+          )).filter((item): item is NonNullable<typeof item> => item !== undefined)
+          if (scored.length > 0) {
+            const minScore = Math.min(...scored.map((item) => item.score))
+            const best = scored.filter((item) => item.score === minScore)
+            // Duplicate usage (same percent & reset) means indistinguishable accounts: fall back to the selected/default.
+            const duplicate =
+              best.length > 1 ||
+              new Set(best.map((item) => `${item.monthlyPercent}:${item.resetsAt}`)).size < best.length
+            if (!duplicate) {
+              connection = best[0].conn
+            } else {
+              const activeMatch = active
+                ? scored.find((item) => IntegrationConnection.key(item.conn) === IntegrationConnection.key(active))
+                : undefined
+              if (activeMatch) connection = activeMatch.conn
+            }
+          }
+        }
+      }
+      const balanceKey = connection ? IntegrationConnection.key(connection) : undefined
+      const activeKey = active ? IntegrationConnection.key(active) : undefined
+      if (toggle && selected.providerID === "opencode-go" && connection && active && balanceKey !== activeKey) {
+        if (lastBalanced.get(integrationID) !== balanceKey) {
+          lastBalanced.set(integrationID, balanceKey)
+          const label = "label" in connection ? connection.label : undefined
+          yield* bus
+            .publish(TuiEvent.ToastShow, {
+              title: "OpenCode Go",
+              message: label
+                ? `Auto-balanced to account "${label}" for this request.`
+                : "Auto-balanced to another account for this request.",
+              variant: "info",
+              duration: 5000,
+              source: "opencode-go-auto-balance",
+            })
+            .pipe(Effect.catch(() => Effect.void))
+        }
+      } else if (!toggle) {
+        lastBalanced.delete(integrationID)
+      } else if (selected.providerID === "opencode-go" && balanceKey && activeKey && balanceKey === activeKey) {
+        lastBalanced.set(integrationID, balanceKey)
+      }
       const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
       const selectedVariant = yield* withVariant(selected, variant)
       const runtimeInfo: RuntimeInfo = {
@@ -620,5 +696,5 @@ function usesAPIKeyAuth(packageName: string | undefined) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Provider.node, Model.node, Integration.node, Npm.node, AISDK.node],
+  deps: [Provider.node, Model.node, Integration.node, Config.node, UsageLimits.node, Bus.node, Npm.node, AISDK.node],
 })

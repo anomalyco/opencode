@@ -49,6 +49,10 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
       description:
         'How long a location can go without session activity before its services are unloaded. Running sessions and background jobs keep a location loaded. Set to false to never unload (default: "60 minutes")',
     }),
+  auto_balance_accounts: Schema.Boolean.pipe(optional).annotate({
+    description:
+      "Automatically choose the OpenCode Go account with the least usage per remaining time when several are connected. Defaults to false.",
+  }),
   policies: ConfigPolicy.Info.pipe(Schema.Array, optional).annotate({
     description: "Deprecated: use top-level policies. Ordered policies controlling access to configured resources",
   }),

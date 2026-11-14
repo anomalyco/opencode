@@ -3,6 +3,7 @@ import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Agent } from "@opencode/core/agent"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
+import { UsageLimits } from "@opencode/core/usage-limits"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
@@ -89,7 +90,7 @@ const fixture = Effect.fn(function* () {
       Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer), Layer.fresh)),
       Effect.provideService(HttpClient.HttpClient, http),
     )
-  }).pipe(Effect.provide(SessionModelRequest.layer), Effect.provide(ModelResolver.layer))
+  }).pipe(Effect.provide(SessionModelRequest.layer), Effect.provide(ModelResolver.layer.pipe(Layer.provide(Layer.succeed(UsageLimits.Service, UsageLimits.Service.of({ get: () => Effect.succeed(undefined), go: () => Effect.succeed(undefined) }))))))
   const stop = Effect.gen(function* () {
     replies.push(Response.json({ message: "Conversation complete", error: {} }, { status: 400 }))
     expect((yield* send).find((event) => event.type === "finish")?.reason.normalized).toBe("stop")

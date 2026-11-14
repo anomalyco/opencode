@@ -12,6 +12,7 @@ import { playSoundById } from "@/shell/notifications/sound"
 import type { createNotificationCoordinator } from "@/shell/notifications/coordinator"
 import { ServerConnection } from "@/runtime/server/registry"
 import { sessionIDHasOpenTab, useTabs } from "@/shell/tabs/tabs"
+import { showToast } from "./toast"
 import { useServer } from "@/runtime/server/current"
 import {
   INITIAL_LEGACY_MIGRATION_STATE,
@@ -403,6 +404,19 @@ export function createServerNotificationState(input: {
   }
 
   const unsub = input.sdk.event.listen((event) => {
+    if (event.type === "tui.toast.show") {
+      if ((event.data as { source?: string }).source !== "opencode-go-auto-balance") return
+      const variant =
+        event.data.variant === "info" ? "default" : event.data.variant === "warning" ? "error" : event.data.variant
+      showToast({
+        title: event.data.title,
+        description: event.data.message,
+        variant,
+        duration: event.data.duration,
+      })
+      return
+    }
+
     if (event.type === "session.deleted") {
       updateManual(event.data.sessionID, false)
 

@@ -7,12 +7,13 @@ import { classifyProviderFailure } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/testing"
 import { describe, expect } from "bun:test"
 // import { DateTime, Deferred, Effect, Schedule } from "effect"
-import { DateTime, Effect, Schedule } from "effect"
+import { DateTime, Effect, Layer, Schedule } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { exportJWK, generateKeyPair, SignJWT } from "jose"
 import { App } from "@opencode/core/app"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
+import { UsageLimits } from "@opencode/core/usage-limits"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
@@ -257,7 +258,11 @@ describe("ChatGPTPlugin", () => {
       yield* addPlugin()
       yield* addLegacyPlugin()
       const integrations = yield* Integration.Service
-      expect((yield* integrations.get(Integration.ID.make("openai")))?.methods.map((method) => method.type === "oauth" && method.id)).toEqual([
+      expect(
+        (yield* integrations.get(Integration.ID.make("openai")))?.methods.map(
+          (method) => method.type === "oauth" && method.id,
+        ),
+      ).toEqual([
         Integration.MethodID.make("chatgpt-token-sharing"),
         Integration.MethodID.make("chatgpt-browser"),
         Integration.MethodID.make("chatgpt-headless"),
@@ -815,7 +820,12 @@ describe("ChatGPTPlugin", () => {
         "gpt-4.99",
       ])
         expect(yield* models.get(Provider.ID.openai, Model.ID.make(id))).toBeUndefined()
-      expect((yield* models.available()).filter((model) => model.providerID === Provider.ID.openai).map((model) => model.id).sort()).toEqual(
+      expect(
+        (yield* models.available())
+          .filter((model) => model.providerID === Provider.ID.openai)
+          .map((model) => model.id)
+          .sort(),
+      ).toEqual(
         [
           "gpt-5.5",
           "gpt-5.5-fast",
@@ -1059,7 +1069,18 @@ describe("ChatGPTPlugin", () => {
         expect(yield* resolve(baseID)).toEqual({ type: "summary" })
         expect(yield* resolve(modelID)).toEqual({ type: "native" })
         expect(yield* resolve(variantID, Model.VariantID.make("high"))).toEqual({ type: "native" })
-      }).pipe(Effect.provide(ModelResolver.layer)),
+      }).pipe(
+        Effect.provide(
+          ModelResolver.layer.pipe(
+            Layer.provide(
+              Layer.succeed(
+                UsageLimits.Service,
+                UsageLimits.Service.of({ get: () => Effect.succeed(undefined), go: () => Effect.succeed(undefined) }),
+              ),
+            ),
+          ),
+        ),
+      ),
     )
   }
 
@@ -1138,7 +1159,18 @@ describe("ChatGPTPlugin", () => {
             ],
           }[connection],
         )
-      }).pipe(Effect.provide(ModelResolver.layer)),
+      }).pipe(
+        Effect.provide(
+          ModelResolver.layer.pipe(
+            Layer.provide(
+              Layer.succeed(
+                UsageLimits.Service,
+                UsageLimits.Service.of({ get: () => Effect.succeed(undefined), go: () => Effect.succeed(undefined) }),
+              ),
+            ),
+          ),
+        ),
+      ),
     )
   }
 

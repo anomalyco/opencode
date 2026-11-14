@@ -4,9 +4,13 @@ import { OpenAIChat } from "@opencode/ai/protocols"
 import { compileRequest } from "@opencode/ai/testing"
 import { ConfigProvider, Effect, Layer } from "effect"
 import { Headers } from "effect/http"
+import { FetchHttpClient } from "effect/http"
 import { AISDKNative } from "@opencode/core/aisdk-native"
 import { Credential } from "@opencode/core/credential"
+import { Config } from "@opencode/core/config"
+import { Bus } from "@opencode/core/bus"
 import { Integration } from "@opencode/core/integration"
+import { UsageLimits } from "@opencode/core/usage-limits"
 import { Compatibility, ID, Info, Model, VariantID } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { Variant } from "@opencode/core/variant"
@@ -400,7 +404,17 @@ describe("ModelResolver", () => {
       },
       model: () => Effect.die("unused"),
     })
-    const layer = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(providers, models, integrations, npm, aisdk)))
+    const config = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
+    const usageLimits = Layer.mock(UsageLimits.Service)({
+      get: () => Effect.succeed(undefined),
+      go: () => Effect.succeed(undefined),
+    })
+    const bus = Layer.mock(Bus.Service, { publish: (() => Effect.void) as any })
+    const layer = ModelResolver.layer.pipe(
+      Layer.provide(
+        Layer.mergeAll(providers, models, integrations, config, usageLimits, bus, npm, aisdk, FetchHttpClient.layer),
+      ),
+    )
 
     return withConfigEnv({}, () =>
       Effect.gen(function* () {
@@ -1622,4 +1636,107 @@ describe("ModelResolver", () => {
       expect(ModelResolver.hasPackage(model(undefined))).toBe(false)
     }),
   )
+})
+
+describe("ModelResolver auto-balance", () => {
+  const run = (usage: (key: string) => any) =>
+    Effect.gen(function* () {
+      const providerID = Provider.ID.make("opencode-go")
+      const provider = Provider.Info.make({
+        ...Provider.Info.empty(providerID),
+        integrationID: Integration.ID.make("opencode"),
+        activation: "enabled",
+        package: "",
+      })
+      const selected = model(Provider.aisdk("@ai-sdk/openai"), { providerID })
+      const conn1 = { type: "credential" as const, id: "cred1", label: "a", method: "key" as const, status: undefined }
+      const conn2 = { type: "credential" as const, id: "cred2", label: "b", method: "key" as const, status: undefined }
+      let lastResolved: string | undefined
+      const integrations = Layer.mock(Integration.Service, {
+        revision: () => 0,
+        get: () => Effect.succeed({ connections: [conn1, conn2] } as any),
+        connection: {
+          active: () => Effect.succeed(conn1 as any),
+          resolve: (conn: any) => {
+            lastResolved = conn.id
+            return Effect.succeed({
+              type: "key" as const,
+              key: conn.id === "cred1" ? "k1" : "k2",
+              metadata: { orgID: "org" },
+            })
+          },
+          key: (conn: any) => conn.id,
+          activate: () => Effect.void,
+          external: () => Effect.die("unused"),
+          update: () => Effect.die("unused"),
+          remove: () => Effect.die("unused"),
+          status: () => Effect.die("unused"),
+        },
+        oauth: {
+          connect: () => Effect.die("unused"),
+          status: () => Effect.die("unused"),
+          complete: () => Effect.die("unused"),
+          cancel: () => Effect.die("unused"),
+        },
+        command: {
+          connect: () => Effect.die("unused"),
+          status: () => Effect.die("unused"),
+          cancel: () => Effect.die("unused"),
+        },
+      })
+      const layer = ModelResolver.layer.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.mock(Provider.Service, { get: () => Effect.succeed(provider) }),
+            Layer.mock(Model.Service, { get: () => Effect.succeed(selected) }),
+            integrations,
+            Layer.mock(Config.Service, {
+              entries: () =>
+                Effect.succeed([{ type: "document", info: { experimental: { auto_balance_accounts: true } } }] as any),
+            }),
+            Layer.mock(UsageLimits.Service, {
+              get: () => Effect.succeed(undefined),
+              go: (cred: any) => Effect.succeed(usage(cred.key)),
+            }),
+            Layer.mock(Bus.Service, { publish: (() => Effect.void) as any }),
+            Layer.mock(Npm.Service, { add: () => Effect.die("unused"), which: () => Effect.die("unused") }),
+            Layer.mock(AISDK.Service, {
+              hook: { sdk: () => Effect.die("unused"), language: () => Effect.die("unused") },
+              model: () => Effect.die("unused"),
+            }),
+            FetchHttpClient.layer,
+          ),
+        ),
+      )
+      const resolver = yield* Effect.provide(ModelResolver.Service, layer)
+      const resolved = yield* resolver.resolveModel(selected)
+      expect(resolved).toBeDefined()
+      return lastResolved
+    })
+
+  it.effect("picks the opencode go account with the least usage per remaining time", () => {
+    const now = Date.now()
+    return run((key) => ({
+      rolling: { percent: key === "k1" ? 90 : 10, limited: false, resetsAt: now + 1000 },
+      weekly: { percent: key === "k1" ? 90 : 10, limited: false, resetsAt: now + 1000 },
+      monthly: { percent: key === "k1" ? 90 : 10, limited: false, resetsAt: now + 100000 },
+    })).pipe(Effect.map((id) => expect(id).toBe("cred2")))
+  })
+
+  it.effect("skips rate-limited windows when balancing opencode go accounts", () => {
+    const now = Date.now()
+    return run((key) =>
+      key === "k1"
+        ? {
+            rolling: { percent: 100, limited: true, resetsAt: now + 1000 },
+            weekly: { percent: 5, limited: false, resetsAt: now + 1000 },
+            monthly: { percent: 5, limited: false, resetsAt: now + 100000 },
+          }
+        : {
+            rolling: { percent: 40, limited: false, resetsAt: now + 1000 },
+            weekly: { percent: 40, limited: false, resetsAt: now + 1000 },
+            monthly: { percent: 40, limited: false, resetsAt: now + 100000 },
+          },
+    ).pipe(Effect.map((id) => expect(id).toBe("cred2")))
+  })
 })
