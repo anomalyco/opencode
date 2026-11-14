@@ -132,9 +132,13 @@ export function resolvePickerTarget(policy: PickerPolicy, path: string, home: st
 
 export function displayInputDirectory(path: string, home: string) {
   const displayed = displayPickerPath(path, "", home)
-  const separator = displayed.includes("\\") ? "\\" : "/"
+  const separator = pickerDisplaySeparator(displayed)
 
   return displayed.endsWith(separator) ? displayed : displayed + separator
+}
+
+export function pickerDisplaySeparator(displayed: string) {
+  return displayed.includes("\\") ? "\\" : "/"
 }
 
 // `abort(key)` and `clear()` abort the task's signal and resolve its promise with undefined at once, so a task that

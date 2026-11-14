@@ -32,6 +32,7 @@ import {
   createDirectorySearch,
   displayInputDirectory,
   displayPickerPath,
+  pickerDisplaySeparator,
   shortenPickerRecentPath,
   pickerBreadcrumbs,
   pickerParent,
@@ -711,6 +712,11 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
                           <Icon name={suggestion.type === "directory" ? "folder" : "open-file"} />
                           <span class="directory-picker-item-name">
                             {pickerBreadcrumbs(suggestion.absolute, home()).at(-1)?.label}
+                            {suggestion.type === "directory"
+                              ? pickerDisplaySeparator(
+                                  displayPickerPath(suggestion.absolute, comboboxView().input, home()),
+                                )
+                              : ""}
                           </span>
                           <bdi dir="ltr" class="directory-picker-item-path">
                             {shortenPickerRecentPath(pickerParent(suggestion.absolute), home())}
