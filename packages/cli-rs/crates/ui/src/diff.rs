@@ -121,26 +121,86 @@ pub fn view_painted(
     gutter_padding: u32,
     paints: &Paints,
 ) -> View {
-    let (column, parts) = build(app, &look(theme), syntax, patch, view, filetype, wrap, gutter_padding);
-    for part in parts {
-        paints.keep(move |theme| {
-            let look = look(theme);
-            match &part {
+    let patch = Patch::new(app, theme, syntax, patch, view, filetype, wrap, gutter_padding);
+    let column = patch.view().clone();
+    paints.keep(move |theme| patch.restyle(theme, &crate::code::syntax_theme(theme)));
+    column
+}
+
+/// A [`view`] that changes in place: its theme, unified or split, and the patch it shows. Its column stays, so it
+/// keeps its place in its parent, and a theme or a view keeps the diffs, their code and its highlight.
+pub struct Patch {
+    column: View,
+    parts: RefCell<Vec<Part>>,
+}
+
+impl Patch {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        app: &App,
+        theme: &Theme,
+        syntax: &SyntaxTheme,
+        patch: &str,
+        view: DiffView,
+        filetype: Option<&str>,
+        wrap: WrapMode,
+        gutter_padding: u32,
+    ) -> Self {
+        let (column, parts) = build(app, &look(theme), syntax, patch, view, filetype, wrap, gutter_padding);
+        Self { column, parts: RefCell::new(parts) }
+    }
+
+    /// The column the patch shows in.
+    pub fn view(&self) -> &View {
+        &self.column
+    }
+
+    /// Shows the hunks unified or split.
+    pub fn set_view(&self, view: DiffView) {
+        for part in self.parts.borrow().iter() {
+            if let Part::Diff(diff) = part {
+                diff.view(view);
+            }
+        }
+    }
+
+    /// Shows `patch` instead, as [`Patch::new`] would; the column stays and the hunks in it are built again.
+    #[allow(clippy::too_many_arguments)]
+    pub fn set_patch(
+        &self,
+        app: &App,
+        theme: &Theme,
+        syntax: &SyntaxTheme,
+        patch: &str,
+        view: DiffView,
+        filetype: Option<&str>,
+        wrap: WrapMode,
+        gutter_padding: u32,
+    ) {
+        self.column.clear();
+        *self.parts.borrow_mut() =
+            fill(&self.column, app, &look(theme), syntax, patch, view, filetype, wrap, gutter_padding);
+    }
+
+    /// Paints the patch in `theme`, whose syntax theme is `syntax`.
+    pub fn restyle(&self, theme: &Theme, syntax: &SyntaxTheme) {
+        let look = look(theme);
+        for part in self.parts.borrow().iter() {
+            match part {
                 Part::Header(row, text) => {
                     row.bg(look.hunk_header_bg);
                     text.fg(look.hunk_header).bg(look.hunk_header_bg);
                 }
                 Part::Diff(diff) => {
-                    diff.syntax_theme(crate::code::syntax_theme(theme)).colors(look.colors);
+                    diff.syntax_theme(syntax.clone()).colors(look.colors);
                     let (left, right) = diff.code_views();
                     for code in [left, right] {
                         code.fg(look.text);
                     }
                 }
             }
-        });
+        }
     }
-    column
 }
 
 /// A widget of a patch view that takes the theme's colors.
@@ -321,11 +381,28 @@ fn build(
     wrap: WrapMode,
     gutter_padding: u32,
 ) -> (View, Vec<Part>) {
+    let column = View::new(app).width(Length::Percent(100.0));
+    let parts = fill(&column, app, look, syntax, patch, view, filetype, wrap, gutter_padding);
+    (column, parts)
+}
+
+/// Adds the hunks of `patch` to `column`, as [`build`] does.
+#[allow(clippy::too_many_arguments)]
+fn fill(
+    column: &View,
+    app: &App,
+    look: &Look,
+    syntax: &SyntaxTheme,
+    patch: &str,
+    view: DiffView,
+    filetype: Option<&str>,
+    wrap: WrapMode,
+    gutter_padding: u32,
+) -> Vec<Part> {
     crate::grammars::register();
     let mut parts = Vec::new();
     let gutter =
         DiffGutter { padding_left: 1 + gutter_padding, min_digits: Some(last_line(patch).to_string().len() as u32) };
-    let column = View::new(app).width(Length::Percent(100.0));
     for (index, hunk) in split_hunks(patch).into_iter().enumerate() {
         if index > 0 {
             let header = format!(" {}", hunk.header.unwrap_or_default());
@@ -349,7 +426,7 @@ fn build(
         column.add(&diff);
         parts.push(Part::Diff(diff));
     }
-    (column, parts)
+    parts
 }
 
 /// The largest line number the patch's `@@` lines reach on either side, at least 1.

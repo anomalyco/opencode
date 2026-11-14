@@ -179,13 +179,12 @@ pub trait Host: 'static {
         None
     }
     /// The widget of an [`abi::Node::Markdown`]. By default, Markdown in the page theme without plugin fences.
-    fn markdown(&self, text: &str) -> AnyWidget {
+    fn markdown(&self, text: &str) -> opentui::widget::Markdown {
         let theme = self.theme();
         let syntax = opencode_ui::code::syntax_theme(&theme);
         let renderers = CodeBlockRenderers::default();
         let markdown = opencode_ui::markdown::view(self.app(), &theme, &syntax, &renderers, true, false);
-        markdown.set_markdown(text);
-        markdown.as_any()
+        markdown.set_markdown(text)
     }
 
     // What the renders of the one API (O-67) read, on both paths.
