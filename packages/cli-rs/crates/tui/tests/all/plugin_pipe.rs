@@ -2443,6 +2443,10 @@ fn a_hostile_project_loads_nothing_into_the_js_host() {
     assert_eq!(seen["env"], serde_json::Value::Null, "the project's .env reached the JS host");
     assert_ne!(Path::new(seen["cwd"].as_str().unwrap()), project.as_path(), "Bun started in the project");
     assert_eq!(Path::new(seen["directory"].as_str().unwrap()), project.as_path());
+    // The project's `bin/bun` behind a relative or empty `PATH` entry is never the Bun found, also when the project is
+    // the home directory, which the check against a project's own files leaves out.
+    let path = std::env::join_paths([Path::new("bin"), Path::new("")]).unwrap();
+    assert_eq!(opencode_plugin::pipe::find_in("bun", &path, &project, Some(&project)), None);
 }
 
 // Expected (carbon-5): a fetch whose reply is more than the JS host takes ends with an error, where the plugin's await
