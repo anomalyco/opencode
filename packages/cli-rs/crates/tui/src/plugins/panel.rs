@@ -197,13 +197,17 @@ fn pick(tui: &Tui, owner: Owner, select: abi::Select) {
                 .map(|action| (action.key.clone(), action.command.clone(), action.rowless, action.primary))
                 .collect()
         };
-        // As do its title, placeholder, size and search (review carbon-5).
+        // As do its title, placeholder, size and search (review carbon-5), and P6c's query, filter, focus, note and
+        // whether it has an empty text (carbon's review of P6c, 5).
         let same = |picker: &Picker| {
             let shown = picker.shown.borrow();
             keys(&shown.actions) == keys(&select.actions)
                 && shown.binds == select.binds
                 && (&shown.title, &shown.placeholder, shown.size, &shown.search)
                     == (&select.title, &select.placeholder, select.size, &select.search)
+                && (&shown.query, shown.query_delay, shown.filterless, &shown.focus, &shown.note)
+                    == (&select.query, select.query_delay, select.filterless, &select.focus, &select.note)
+                && shown.empty.is_some() == select.empty.is_some()
         };
         let handle = picker.as_ref().and_then(|picker| picker.handle.borrow().clone());
         match (picker, handle) {
@@ -274,7 +278,7 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
                     props.on_filter = Some(query(&tui, &picker));
                 }
                 if shown.empty.is_some() {
-                    let (empty, app, theme) = (Rc::downgrade(&picker), cx.app.clone(), cx.theme.page());
+                    let (empty, app, theme) = (Rc::downgrade(&picker), cx.app.clone(), cx.theme.clone());
                     let view: Rc<dyn Fn() -> AnyWidget> = Rc::new(move || {
                         let span = empty.upgrade().and_then(|picker| picker.shown.borrow().empty.clone());
                         let text = span.map(|span| styled(&app, &theme, &span)).unwrap_or_else(|| Text::new(&app, ""));
@@ -284,7 +288,7 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
                     props.no_match_view = Some(view);
                 }
                 if let Some(note) = &shown.note {
-                    props.footer = Some(styled(&cx.app, &cx.theme.page(), note).as_any());
+                    props.footer = Some(styled(&cx.app, &cx.theme, note).as_any());
                 }
                 props.focus_target = shown.focus.clone();
                 props.preserve_selection = shown.key.is_some();
@@ -813,7 +817,17 @@ fn panel(tui: &Tui, owner: Owner, panel: abi::Panel) {
     let mine = tui.reads.owner.borrow().as_ref().is_some_and(|(id, _)| *id == owner.0);
     if mine && tui.dialogs.key().as_deref() == Some(key.as_str()) {
         let live = tui.reads.panel.borrow_mut().take();
+        // A change of its close label or its height builds it again (carbon's review of P6c, 5).
         if let Some(live) = live.filter(|live| live.key == key) {
+            let same = {
+                let shown = live.shown.borrow();
+                (&shown.close, shown.height) == (&panel.close, panel.height)
+            };
+            if !same {
+                *live.shown.borrow_mut() = panel.clone();
+                *tui.reads.panel.borrow_mut() = Some(live);
+                return show_panel(tui, owner, panel, key);
+            }
             live.update(tui, panel);
             tui.dialogs.set_size(size);
             tui.dialogs.set_centered(centered);
@@ -823,6 +837,12 @@ fn panel(tui: &Tui, owner: Owner, panel: abi::Panel) {
             return;
         }
     }
+    show_panel(tui, owner, panel, key);
+}
+
+/// Shows `panel` under `key` as a new dialog.
+fn show_panel(tui: &Tui, owner: Owner, panel: abi::Panel, key: String) {
+    let (centered, size) = (panel.centered, dialog_size(panel.size));
     let options = DialogOptions::new(size).key(key.clone());
     let built = owner.clone();
     own(tui, owner, |on_close| {
@@ -856,7 +876,9 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Pa
             ..HeaderProps::default()
         },
     );
-    let scroll = ScrollBox::new(app).scrollbars(false).height(panel.height.map_or(1, u32::from));
+    // A set height is at most the screen less 6 rows, as TS's help sets it.
+    let set = |app: &App, height: u16| u32::from(height).min(u32::from(app.size().1).saturating_sub(6)).max(1);
+    let scroll = ScrollBox::new(app).scrollbars(false).height(panel.height.map_or(1, |height| set(app, height)));
     let content = View::new(app).shrink(0.0);
     // A bare panel is the dialog's frame and its body, which no box sizes or scrolls (TS `Dialog` around a plugin's
     // own view); its header and footer are built and never shown.
@@ -911,10 +933,13 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Pa
         padding: if panel.bleed { 2 } else { 0 },
     })));
     // A terminal that only gets shorter resizes no body widget, so the box follows the screen too.
-    let screen = fit.clone();
+    let (screen, sized, height) = (fit.clone(), scroll.clone(), panel.height);
     let resize = app.on_resize(move |cx, _, _| {
         if let Some(fit) = &*screen.borrow() {
             fit.apply(cx.app());
+        }
+        if let Some(height) = height {
+            sized.height(set(cx.app(), height));
         }
     });
     let binds: Rc<RefCell<Option<Disposer>>> = Rc::default();
