@@ -610,8 +610,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI स्थापना गर्न असफल भयो: {{error}}",
   "command.project.copyID": "परियोजना ID प्रतिलिपि गर्नुहोस्",
   "command.session.copyID": "सत्र ID प्रतिलिपि गर्नुहोस्",
-  "server.row.incompatible":
-    "यो सर्भरमा OpenCode {{version}} चलिरहेको छ, जुन यस एपसँग मिल्दैन। जारी राख्न यसलाई OpenCode V2 मा अद्यावधिक गर्नुहोस्।",
   "toast.session.copyID.failed.title": "सत्र ID प्रतिलिपि गर्न असफल भयो",
   "toast.session.copyID.failed.description": "सत्र ID प्रतिलिपि गर्दा त्रुटि भयो",
   "toast.project.copyID.failed.title": "परियोजना ID प्रतिलिपि गर्न असफल भयो",
@@ -620,8 +618,6 @@ export const dict = {
   "error.page.description.status": "सर्भरले HTTP {{status}} प्रतिक्रिया फर्कायो।",
   "error.page.action.reload": "पुनः लोड गर्नुहोस्",
   "session.error.incompatible": "यो सर्भर संस्करण समर्थित छैन",
-  "session.error.incompatible.description":
-    "{{server}} मा OpenCode {{version}} चलिरहेको छ, जुन यस एपसँग मिल्दैन। जारी राख्न सर्भरलाई OpenCode V2 मा अद्यावधिक गर्नुहोस्।",
   "session.background.moveInline": "चलिरहेको काम पृष्ठभूमिमा सार्न {{keybind}} थिच्नुहोस्",
   "dialog.server.menu.hide": "परियोजना सूचीबाट लुकाउनुहोस्",
   "dialog.server.menu.show": "परियोजना सूचीमा देखाउनुहोस्",

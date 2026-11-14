@@ -680,8 +680,6 @@ export const dict = {
   "desktop.cli.failed.message": "Не удалось установить CLI: {{error}}",
   "command.project.copyID": "Копировать идентификатор проекта",
   "command.session.copyID": "Копировать идентификатор сеанса",
-  "server.row.incompatible":
-    "На этом сервере работает OpenCode {{version}}, несовместимый с приложением. Чтобы продолжить, обновите его до OpenCode V2.",
   "toast.session.copyID.failed.title": "Не удалось скопировать идентификатор сеанса",
   "toast.session.copyID.failed.description": "При копировании идентификатора сеанса произошла ошибка",
   "toast.project.copyID.failed.title": "Не удалось скопировать идентификатор проекта",
@@ -690,8 +688,6 @@ export const dict = {
   "error.page.description.status": "Сервер вернул HTTP-ответ {{status}}.",
   "error.page.action.reload": "Перезагрузить",
   "session.error.incompatible": "Эта версия сервера не поддерживается",
-  "session.error.incompatible.description":
-    "На сервере {{server}} работает OpenCode {{version}}, несовместимый с приложением. Чтобы продолжить, обновите сервер до OpenCode V2.",
   "session.background.moveInline": "Нажмите {{keybind}}, чтобы перенести текущую работу в фоновый режим",
   "session.background.runningCount.few": "{{count}} задачи выполняются в фоновом режиме",
   "session.background.runningCount.many": "{{count}} задач выполняются в фоновом режиме",

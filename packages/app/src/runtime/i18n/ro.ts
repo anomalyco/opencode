@@ -612,8 +612,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI nu a putut fi instalat: {{error}}",
   "command.project.copyID": "Copiază ID-ul proiectului",
   "command.session.copyID": "Copiază ID-ul sesiunii",
-  "server.row.incompatible":
-    "Acest server rulează OpenCode {{version}}, care nu este compatibil cu această aplicație. Actualizați-l la OpenCode V2 pentru a continua.",
   "toast.session.copyID.failed.title": "ID-ul sesiunii nu a putut fi copiat",
   "toast.session.copyID.failed.description": "A apărut o eroare la copierea ID-ului sesiunii",
   "toast.project.copyID.failed.title": "ID-ul proiectului nu a putut fi copiat",
@@ -622,8 +620,6 @@ export const dict = {
   "error.page.description.status": "Serverul a returnat un răspuns HTTP {{status}}.",
   "error.page.action.reload": "Reîncarcă",
   "session.error.incompatible": "Această versiune de server nu este acceptată",
-  "session.error.incompatible.description":
-    "{{server}} rulează OpenCode {{version}}, care nu este compatibil cu această aplicație. Actualizați serverul la OpenCode V2 pentru a continua.",
   "session.background.moveInline": "Apăsați {{keybind}} pentru a muta activitatea în curs în fundal",
   "session.background.runningCount.few": "{{count}} elemente rulează în fundal",
   "dialog.server.menu.hide": "Ascunde din lista de proiecte",

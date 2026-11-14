@@ -616,8 +616,6 @@ export const dict = {
   "desktop.cli.failed.message": "Αποτυχία εγκατάστασης του CLI: {{error}}",
   "command.project.copyID": "Αντιγραφή ID έργου",
   "command.session.copyID": "Αντιγραφή ID συνεδρίας",
-  "server.row.incompatible":
-    "Αυτός ο διακομιστής εκτελεί το OpenCode {{version}}, το οποίο δεν είναι συμβατό με αυτήν την εφαρμογή. Αναβαθμίστε τον σε OpenCode V2 για να συνεχίσετε.",
   "toast.session.copyID.failed.title": "Αποτυχία αντιγραφής του ID συνεδρίας",
   "toast.session.copyID.failed.description": "Παρουσιάστηκε σφάλμα κατά την αντιγραφή του ID συνεδρίας",
   "toast.project.copyID.failed.title": "Αποτυχία αντιγραφής του ID έργου",
@@ -626,8 +624,6 @@ export const dict = {
   "error.page.description.status": "Ο διακομιστής επέστρεψε απόκριση HTTP {{status}}.",
   "error.page.action.reload": "Επαναφόρτωση",
   "session.error.incompatible": "Αυτή η έκδοση διακομιστή δεν υποστηρίζεται",
-  "session.error.incompatible.description":
-    "Ο διακομιστής {{server}} εκτελεί το OpenCode {{version}}, το οποίο δεν είναι συμβατό με αυτήν την εφαρμογή. Αναβαθμίστε τον διακομιστή σε OpenCode V2 για να συνεχίσετε.",
   "session.background.moveInline": "Πατήστε {{keybind}} για να μετακινήσετε την εργασία που εκτελείται στο παρασκήνιο",
   "dialog.server.menu.hide": "Απόκρυψη από τη λίστα έργων",
   "dialog.server.menu.show": "Εμφάνιση στη λίστα έργων",

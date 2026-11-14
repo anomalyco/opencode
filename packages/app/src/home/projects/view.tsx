@@ -25,7 +25,6 @@ import {
   isServerHealthy,
   isServerIncompatible,
   isServerUnauthorized,
-  selectServerVersion,
   type ServerHealth,
 } from "@/runtime/server/health-machine"
 import { ProjectMenuItems } from "./menu"
@@ -405,7 +404,7 @@ function HomeServerRow(props: {
       value={
         authentication()
           ? props.language.t("server.status.authentication")
-          : props.language.t("server.row.incompatible", { version: selectServerVersion(props.health) ?? "1" })
+          : props.language.t("server.row.incompatible")
       }
     >
       <div

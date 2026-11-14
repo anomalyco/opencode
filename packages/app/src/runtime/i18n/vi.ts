@@ -617,8 +617,6 @@ export const dict = {
   "desktop.cli.failed.message": "Không thể cài đặt CLI: {{error}}",
   "command.project.copyID": "Sao chép ID dự án",
   "command.session.copyID": "Sao chép ID phiên",
-  "server.row.incompatible":
-    "Máy chủ này đang chạy OpenCode {{version}}, không tương thích với ứng dụng này. Hãy nâng cấp lên OpenCode V2 để tiếp tục.",
   "toast.session.copyID.failed.title": "Không thể sao chép ID phiên",
   "toast.session.copyID.failed.description": "Đã xảy ra lỗi khi sao chép ID phiên",
   "toast.project.copyID.failed.title": "Không thể sao chép ID dự án",
@@ -627,8 +625,6 @@ export const dict = {
   "error.page.description.status": "Máy chủ trả về phản hồi HTTP {{status}}.",
   "error.page.action.reload": "Tải lại",
   "session.error.incompatible": "Phiên bản máy chủ này không được hỗ trợ",
-  "session.error.incompatible.description":
-    "{{server}} đang chạy OpenCode {{version}}, không tương thích với ứng dụng này. Hãy nâng cấp máy chủ lên OpenCode V2 để tiếp tục.",
   "session.background.moveInline": "Nhấn {{keybind}} để chuyển tác vụ đang chạy sang nền",
   "dialog.server.menu.hide": "Ẩn khỏi danh sách dự án",
   "dialog.server.menu.show": "Hiển thị trong danh sách dự án",

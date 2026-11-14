@@ -614,8 +614,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI quraşdırmaq mümkün olmadı: {{error}}",
   "command.project.copyID": "Layihə ID-sini kopyala",
   "command.session.copyID": "Sessiya ID-sini kopyala",
-  "server.row.incompatible":
-    "Bu server bu tətbiqlə uyğun olmayan OpenCode {{version}} versiyasını işlədir. Davam etmək üçün onu OpenCode V2-yə yeniləyin.",
   "toast.session.copyID.failed.title": "Sessiya ID-sini kopyalamaq mümkün olmadı",
   "toast.session.copyID.failed.description": "Sessiya ID-si kopyalanarkən xəta baş verdi",
   "toast.project.copyID.failed.title": "Layihə ID-sini kopyalamaq mümkün olmadı",
@@ -624,8 +622,6 @@ export const dict = {
   "error.page.description.status": "Server HTTP {{status}} cavabı qaytardı.",
   "error.page.action.reload": "Yenidən yüklə",
   "session.error.incompatible": "Bu server versiyası dəstəklənmir",
-  "session.error.incompatible.description":
-    "{{server}} bu tətbiqlə uyğun olmayan OpenCode {{version}} versiyasını işlədir. Davam etmək üçün serveri OpenCode V2-yə yeniləyin.",
   "session.background.moveInline": "İşləyən işi arxa plana keçirmək üçün {{keybind}} basın",
   "dialog.server.menu.hide": "Layihə siyahısından gizlət",
   "dialog.server.menu.show": "Layihə siyahısında göstər",

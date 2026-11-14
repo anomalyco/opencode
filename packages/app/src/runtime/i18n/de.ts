@@ -831,8 +831,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI konnte nicht installiert werden: {{error}}",
   "command.project.copyID": "Projekt-ID kopieren",
   "command.session.copyID": "Sitzungs-ID kopieren",
-  "server.row.incompatible":
-    "Auf diesem Server wird OpenCode {{version}} ausgeführt, das mit dieser App nicht kompatibel ist. Aktualisieren Sie ihn auf OpenCode V2, um fortzufahren.",
   "toast.session.copyID.failed.title": "Sitzungs-ID konnte nicht kopiert werden",
   "toast.session.copyID.failed.description": "Beim Kopieren der Sitzungs-ID ist ein Fehler aufgetreten",
   "toast.project.copyID.failed.title": "Projekt-ID konnte nicht kopiert werden",
@@ -841,8 +839,6 @@ export const dict = {
   "error.page.description.status": "Der Server hat eine HTTP-Antwort mit dem Status {{status}} zurückgegeben.",
   "error.page.action.reload": "Neu laden",
   "session.error.incompatible": "Diese Serverversion wird nicht unterstützt",
-  "session.error.incompatible.description":
-    "Auf {{server}} wird OpenCode {{version}} ausgeführt, das mit dieser App nicht kompatibel ist. Aktualisieren Sie den Server auf OpenCode V2, um fortzufahren.",
   "session.background.moveInline": "Drücken Sie {{keybind}}, um laufende Arbeit in den Hintergrund zu verschieben",
   "command.session.location.cycle": "Sitzungsort wechseln",
   "dialog.provider.anthropic.note": "Direkter Zugriff auf Claude-Modelle per API-Schlüssel",

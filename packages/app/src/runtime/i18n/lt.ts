@@ -621,8 +621,6 @@ export const dict = {
   "settings.general.section.general": "Bendra",
   "command.project.copyID": "Kopijuoti projekto ID",
   "command.session.copyID": "Kopijuoti seanso ID",
-  "server.row.incompatible":
-    "Šiame serveryje veikia OpenCode {{version}}, nesuderinama su šia programa. Norėdami tęsti, atnaujinkite serverį į OpenCode V2.",
   "toast.session.copyID.failed.title": "Nepavyko nukopijuoti seanso ID",
   "toast.session.copyID.failed.description": "Kopijuojant seanso ID įvyko klaida",
   "toast.project.copyID.failed.title": "Nepavyko nukopijuoti projekto ID",
@@ -631,8 +629,6 @@ export const dict = {
   "error.page.description.status": "Serveris pateikė HTTP {{status}} atsakymą.",
   "error.page.action.reload": "Įkelti iš naujo",
   "session.error.incompatible": "Ši serverio versija nepalaikoma",
-  "session.error.incompatible.description":
-    "Serveryje {{server}} veikia OpenCode {{version}}, nesuderinama su šia programa. Norėdami tęsti, atnaujinkite serverį į OpenCode V2.",
   "session.background.moveInline": "Paspauskite {{keybind}}, kad perkeltumėte vykdomą darbą į foną",
   "session.background.runningCount.few": "{{count}} elementai vykdomi fone",
   "session.background.runningCount.many": "{{count}} elementų vykdoma fone",

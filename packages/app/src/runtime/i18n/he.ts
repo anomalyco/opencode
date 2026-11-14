@@ -606,8 +606,6 @@ export const dict = {
   "provider.disconnect.toast.failed.description": "הניתוק של \u2068{{provider}}\u2069 נכשל.",
   "command.project.copyID": "העתק מזהה פרויקט",
   "command.session.copyID": "העתק מזהה הפעלה",
-  "server.row.incompatible":
-    "שרת זה מריץ את OpenCode \u2068{{version}}\u2069, שאינו תואם ליישום זה. יש לשדרג אותו ל-OpenCode V2 כדי להמשיך.",
   "toast.session.copyID.failed.title": "העתקת מזהה ההפעלה נכשלה",
   "toast.session.copyID.failed.description": "אירעה שגיאה בעת העתקת מזהה ההפעלה",
   "toast.project.copyID.failed.title": "העתקת מזהה הפרויקט נכשלה",
@@ -616,8 +614,6 @@ export const dict = {
   "error.page.description.status": "השרת החזיר תגובת HTTP במצב \u2068{{status}}\u2069.",
   "error.page.action.reload": "טען מחדש",
   "session.error.incompatible": "גרסת השרת הזו אינה נתמכת",
-  "session.error.incompatible.description":
-    "\u2068{{server}}\u2069 מריץ את OpenCode \u2068{{version}}\u2069, שאינו תואם ליישום זה. יש לשדרג את השרת ל-OpenCode V2 כדי להמשיך.",
   "session.background.moveInline": "יש ללחוץ על \u2068{{keybind}}\u2069 כדי להעביר עבודה פעילה לרקע",
   "session.background.runningCount.two": "{{count}} פריטים פועלים ברקע",
   "desktop.menu.installCli": "התקנת CLI...",

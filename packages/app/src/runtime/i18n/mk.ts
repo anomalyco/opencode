@@ -609,8 +609,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI не може да се инсталира: {{error}}",
   "command.project.copyID": "Копирај ID на проектот",
   "command.session.copyID": "Копирај ID на сесијата",
-  "server.row.incompatible":
-    "Овој сервер користи OpenCode {{version}}, кој не е компатибилен со апликацијава. Надградете го на OpenCode V2 за да продолжите.",
   "toast.session.copyID.failed.title": "Копирањето на ID на сесијата не успеа",
   "toast.session.copyID.failed.description": "Настана грешка при копирањето на ID на сесијата",
   "toast.project.copyID.failed.title": "Копирањето на ID на проектот не успеа",
@@ -619,8 +617,6 @@ export const dict = {
   "error.page.description.status": "Серверот врати HTTP одговор {{status}}.",
   "error.page.action.reload": "Превчитај",
   "session.error.incompatible": "Оваа верзија на серверот не е поддржана",
-  "session.error.incompatible.description":
-    "{{server}} користи OpenCode {{version}}, кој не е компатибилен со апликацијава. Надградете го серверот на OpenCode V2 за да продолжите.",
   "session.background.moveInline": "Притиснете {{keybind}} за да ја преместите тековната работа во заднина",
   "dialog.server.menu.hide": "Скриј од списокот на проекти",
   "dialog.server.menu.show": "Прикажи во списокот на проекти",

@@ -608,8 +608,6 @@ export const dict = {
   "desktop.cli.failed.message": "Instalimi i CLI-së dështoi: {{error}}",
   "command.project.copyID": "Kopjo ID-në e projektit",
   "command.session.copyID": "Kopjo ID-në e sesionit",
-  "server.row.incompatible":
-    "Ky server po ekzekuton OpenCode {{version}}, i cili nuk përputhet me këtë aplikacion. Për ta vazhduar, përmirësojeni në OpenCode V2.",
   "toast.session.copyID.failed.title": "Kopjimi i ID-së së sesionit dështoi",
   "toast.session.copyID.failed.description": "Ndodhi një gabim gjatë kopjimit të ID-së së sesionit",
   "toast.project.copyID.failed.title": "Kopjimi i ID-së së projektit dështoi",
@@ -618,8 +616,6 @@ export const dict = {
   "error.page.description.status": "Serveri ktheu një përgjigje HTTP {{status}}.",
   "error.page.action.reload": "Ringarko",
   "session.error.incompatible": "Ky version i serverit nuk mbështetet",
-  "session.error.incompatible.description":
-    "{{server}} po ekzekuton OpenCode {{version}}, i cili nuk përputhet me këtë aplikacion. Për ta vazhduar, përmirësoni serverin në OpenCode V2.",
   "session.background.moveInline": "Shtypni {{keybind}} për ta zhvendosur punën në ekzekutim në sfond",
   "dialog.server.menu.hide": "Fshih nga lista e projekteve",
   "dialog.server.menu.show": "Shfaq në listën e projekteve",

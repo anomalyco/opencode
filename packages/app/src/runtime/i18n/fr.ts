@@ -843,8 +843,6 @@ export const dict = {
   "desktop.cli.failed.message": "Échec de l'installation de la CLI : {{error}}",
   "command.project.copyID": "Copier l'ID du projet",
   "command.session.copyID": "Copier l'ID de la session",
-  "server.row.incompatible":
-    "Ce serveur exécute OpenCode {{version}}, qui n'est pas compatible avec cette application. Mettez-le à niveau vers OpenCode V2 pour continuer.",
   "toast.session.copyID.failed.title": "Échec de la copie de l'ID de la session",
   "toast.session.copyID.failed.description": "Une erreur s'est produite lors de la copie de l'ID de la session",
   "toast.project.copyID.failed.title": "Échec de la copie de l'ID du projet",
@@ -853,8 +851,6 @@ export const dict = {
   "error.page.description.status": "Le serveur a renvoyé une réponse HTTP {{status}}.",
   "error.page.action.reload": "Recharger",
   "session.error.incompatible": "Cette version du serveur n'est pas prise en charge",
-  "session.error.incompatible.description":
-    "{{server}} exécute OpenCode {{version}}, qui n'est pas compatible avec cette application. Mettez le serveur à niveau vers OpenCode V2 pour continuer.",
   "session.background.moveInline": "Appuyez sur {{keybind}} pour placer la tâche en cours en arrière-plan",
   "session.background.runningCount.many": "{{count}} de tâches en cours d'exécution en arrière-plan",
   "command.session.location.cycle": "Changer l’emplacement de la session",

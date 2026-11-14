@@ -608,8 +608,6 @@ export const dict = {
   "desktop.cli.failed.message": "Չհաջողվեց տեղադրել CLI-ն՝ {{error}}",
   "command.project.copyID": "Պատճենել նախագծի ID-ն",
   "command.session.copyID": "Պատճենել նիստի ID-ն",
-  "server.row.incompatible":
-    "Այս սերվերում աշխատում է OpenCode {{version}}-ը, որն անհամատեղելի է այս հավելվածի հետ։ Շարունակելու համար թարմացրեք այն OpenCode V2-ի։",
   "toast.session.copyID.failed.title": "Չհաջողվեց պատճենել նիստի ID-ն",
   "toast.session.copyID.failed.description": "Նիստի ID-ն պատճենելիս սխալ առաջացավ",
   "toast.project.copyID.failed.title": "Չհաջողվեց պատճենել նախագծի ID-ն",
@@ -618,8 +616,6 @@ export const dict = {
   "error.page.description.status": "Սերվերը վերադարձրեց HTTP {{status}} պատասխան։",
   "error.page.action.reload": "Վերբեռնել կրկին",
   "session.error.incompatible": "Սերվերի այս տարբերակը չի աջակցվում",
-  "session.error.incompatible.description":
-    "{{server}}-ում աշխատում է OpenCode {{version}}-ը, որն անհամատեղելի է այս հավելվածի հետ։ Շարունակելու համար սերվերը թարմացրեք OpenCode V2-ի։",
   "session.background.moveInline": "Սեղմեք {{keybind}}՝ ընթացիկ աշխատանքը հետին պլան տեղափոխելու համար",
   "dialog.server.menu.hide": "Թաքցնել նախագծերի ցանկից",
   "dialog.server.menu.show": "Ցույց տալ նախագծերի ցանկում",

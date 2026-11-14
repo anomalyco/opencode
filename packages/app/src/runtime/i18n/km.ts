@@ -607,8 +607,6 @@ export const dict = {
   "desktop.cli.failed.message": "មិនអាចដំឡើង CLI បានទេ៖ {{error}}",
   "command.project.copyID": "ចម្លង ID គម្រោង",
   "command.session.copyID": "ចម្លង ID សម័យ",
-  "server.row.incompatible":
-    "ម៉ាស៊ីនមេនេះកំពុងដំណើរការ OpenCode {{version}} ដែលមិនត្រូវគ្នាជាមួយកម្មវិធីនេះទេ។ ដំឡើងកំណែទៅ OpenCode V2 ដើម្បីបន្ត។",
   "toast.session.copyID.failed.title": "មិនអាចចម្លង ID សម័យបានទេ",
   "toast.session.copyID.failed.description": "មានកំហុសកើតឡើង ខណៈពេលចម្លង ID សម័យ",
   "toast.project.copyID.failed.title": "មិនអាចចម្លង ID គម្រោងបានទេ",
@@ -617,8 +615,6 @@ export const dict = {
   "error.page.description.status": "ម៉ាស៊ីនមេបានឆ្លើយតប HTTP {{status}}។",
   "error.page.action.reload": "ផ្ទុកឡើងវិញ",
   "session.error.incompatible": "កំណែម៉ាស៊ីនមេនេះមិនត្រូវបានគាំទ្រទេ",
-  "session.error.incompatible.description":
-    "{{server}} កំពុងដំណើរការ OpenCode {{version}} ដែលមិនត្រូវគ្នាជាមួយកម្មវិធីនេះទេ។ ដំឡើងកំណែម៉ាស៊ីនមេទៅ OpenCode V2 ដើម្បីបន្ត។",
   "session.background.moveInline": "ចុច {{keybind}} ដើម្បីផ្លាស់ទីការងារដែលកំពុងដំណើរការទៅផ្ទៃខាងក្រោយ",
   "dialog.server.menu.hide": "លាក់ពីបញ្ជីគម្រោង",
   "dialog.server.menu.show": "បង្ហាញក្នុងបញ្ជីគម្រោង",

@@ -614,8 +614,6 @@ export const dict = {
   "desktop.cli.failed.message": "No s'ha pogut instal·lar la CLI: {{error}}",
   "command.project.copyID": "Copia l'ID del projecte",
   "command.session.copyID": "Copia l'ID de la sessió",
-  "server.row.incompatible":
-    "Aquest servidor executa OpenCode {{version}}, que no és compatible amb aquesta aplicació. Actualitzeu-lo a OpenCode V2 per continuar.",
   "toast.session.copyID.failed.title": "No s'ha pogut copiar l'ID de la sessió",
   "toast.session.copyID.failed.description": "S'ha produït un error en copiar l'ID de la sessió",
   "toast.project.copyID.failed.title": "No s'ha pogut copiar l'ID del projecte",
@@ -624,8 +622,6 @@ export const dict = {
   "error.page.description.status": "El servidor ha retornat una resposta HTTP {{status}}.",
   "error.page.action.reload": "Torna a carregar",
   "session.error.incompatible": "Aquesta versió del servidor no és compatible",
-  "session.error.incompatible.description":
-    "{{server}} executa OpenCode {{version}}, que no és compatible amb aquesta aplicació. Actualitzeu el servidor a OpenCode V2 per continuar.",
   "session.background.moveInline": "Premeu {{keybind}} per moure la feina en curs al segon pla",
   "session.background.runningCount.many": "{{count}} d'elements en curs en segon pla",
   "dialog.server.menu.hide": "Amaga de la llista de projectes",

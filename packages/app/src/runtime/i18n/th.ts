@@ -670,8 +670,6 @@ export const dict = {
   "desktop.cli.failed.message": "ติดตั้ง CLI ไม่สำเร็จ: {{error}}",
   "command.project.copyID": "คัดลอก ID โปรเจกต์",
   "command.session.copyID": "คัดลอก ID เซสชัน",
-  "server.row.incompatible":
-    "เซิร์ฟเวอร์นี้กำลังใช้งาน OpenCode {{version}} ซึ่งไม่เข้ากันกับแอปนี้ โปรดอัปเกรดเป็น OpenCode V2 เพื่อดำเนินการต่อ",
   "toast.session.copyID.failed.title": "คัดลอก ID เซสชันไม่สำเร็จ",
   "toast.session.copyID.failed.description": "เกิดข้อผิดพลาดขณะคัดลอก ID เซสชัน",
   "toast.project.copyID.failed.title": "คัดลอก ID โปรเจกต์ไม่สำเร็จ",
@@ -680,8 +678,6 @@ export const dict = {
   "error.page.description.status": "เซิร์ฟเวอร์ตอบกลับด้วย HTTP {{status}}",
   "error.page.action.reload": "โหลดใหม่",
   "session.error.incompatible": "ไม่รองรับเซิร์ฟเวอร์เวอร์ชันนี้",
-  "session.error.incompatible.description":
-    "{{server}} กำลังใช้งาน OpenCode {{version}} ซึ่งไม่เข้ากันกับแอปนี้ โปรดอัปเกรดเซิร์ฟเวอร์เป็น OpenCode V2 เพื่อดำเนินการต่อ",
   "session.background.moveInline": "กด {{keybind}} เพื่อย้ายงานที่กำลังทำงานไปยังเบื้องหลัง",
   "dialog.server.menu.hide": "ซ่อนจากรายการโปรเจกต์",
   "dialog.server.menu.show": "แสดงในรายการโปรเจกต์",

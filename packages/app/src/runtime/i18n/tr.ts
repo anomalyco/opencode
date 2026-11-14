@@ -627,8 +627,6 @@ export const dict = {
 
   "command.project.copyID": "Proje kimliğini kopyala",
   "command.session.copyID": "Oturum kimliğini kopyala",
-  "server.row.incompatible":
-    "Bu sunucu, bu uygulamayla uyumlu olmayan OpenCode {{version}} sürümünü çalıştırıyor. Devam etmek için OpenCode V2'ye yükseltin.",
   "toast.session.copyID.failed.title": "Oturum kimliği kopyalanamadı",
   "toast.session.copyID.failed.description": "Oturum kimliği kopyalanırken bir hata oluştu",
   "toast.project.copyID.failed.title": "Proje kimliği kopyalanamadı",
@@ -637,8 +635,6 @@ export const dict = {
   "error.page.description.status": "Sunucu bir HTTP {{status}} yanıtı döndürdü.",
   "error.page.action.reload": "Yeniden yükle",
   "session.error.incompatible": "Bu sunucu sürümü desteklenmiyor",
-  "session.error.incompatible.description":
-    "{{server}}, bu uygulamayla uyumlu olmayan OpenCode {{version}} sürümünü çalıştırıyor. Devam etmek için sunucuyu OpenCode V2'ye yükseltin.",
   "session.background.moveInline": "Çalışan işi arka plana taşımak için {{keybind}} tuşuna basın",
 
   "command.session.background": "Arka plana taşı",

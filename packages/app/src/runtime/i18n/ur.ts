@@ -618,8 +618,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI انسٹال نہیں ہو سکا: \u2068{{error}}\u2069",
   "command.project.copyID": "پروجیکٹ ID کاپی کریں",
   "command.session.copyID": "سیشن ID کاپی کریں",
-  "server.row.incompatible":
-    "یہ سرور OpenCode \u2068{{version}}\u2069 چلا رہا ہے، جو اس ایپ کے ساتھ مطابقت نہیں رکھتا۔ جاری رکھنے کے لیے اسے OpenCode V2 پر اپ گریڈ کریں۔",
   "toast.session.copyID.failed.title": "سیشن ID کاپی کرنے میں ناکام",
   "toast.session.copyID.failed.description": "سیشن ID کاپی کرتے وقت ایک خرابی پیش آ گئی",
   "toast.project.copyID.failed.title": "پروجیکٹ ID کاپی کرنے میں ناکام",
@@ -628,8 +626,6 @@ export const dict = {
   "error.page.description.status": "سرور نے HTTP \u2068{{status}}\u2069 جواب دیا۔",
   "error.page.action.reload": "دوبارہ لوڈ کریں",
   "session.error.incompatible": "سرور کا یہ ورژن تعاون یافتہ نہیں ہے",
-  "session.error.incompatible.description":
-    "\u2068{{server}}\u2069 پر OpenCode \u2068{{version}}\u2069 چل رہا ہے، جو اس ایپ کے ساتھ مطابقت نہیں رکھتا۔ جاری رکھنے کے لیے سرور کو OpenCode V2 پر اپ گریڈ کریں۔",
   "session.background.moveInline": "جاری کام کو پس منظر میں منتقل کرنے کے لیے \u2068{{keybind}}\u2069 دبائیں",
   "dialog.server.menu.hide": "پروجیکٹ کی فہرست سے چھپائیں",
   "dialog.server.menu.show": "پروجیکٹ کی فہرست میں دکھائیں",

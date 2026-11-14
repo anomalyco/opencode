@@ -621,8 +621,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI 설치 실패: {{error}}",
   "command.project.copyID": "프로젝트 ID 복사",
   "command.session.copyID": "세션 ID 복사",
-  "server.row.incompatible":
-    "이 서버에서 실행 중인 OpenCode {{version}}은(는) 이 앱과 호환되지 않습니다. 계속하려면 OpenCode V2로 업그레이드하세요.",
   "toast.session.copyID.failed.title": "세션 ID 복사 실패",
   "toast.session.copyID.failed.description": "세션 ID를 복사하는 중 오류가 발생했습니다",
   "toast.project.copyID.failed.title": "프로젝트 ID 복사 실패",
@@ -631,8 +629,6 @@ export const dict = {
   "error.page.description.status": "서버가 HTTP {{status}} 응답을 반환했습니다.",
   "error.page.action.reload": "다시 로드",
   "session.error.incompatible": "이 서버 버전은 지원되지 않습니다",
-  "session.error.incompatible.description":
-    "{{server}}에서 실행 중인 OpenCode {{version}}은(는) 이 앱과 호환되지 않습니다. 계속하려면 서버를 OpenCode V2로 업그레이드하세요.",
   "session.background.moveInline": "{{keybind}} 키를 눌러 실행 중인 작업을 백그라운드로 이동",
   "dialog.server.menu.hide": "프로젝트 목록에서 숨기기",
   "dialog.server.menu.show": "프로젝트 목록에 표시",

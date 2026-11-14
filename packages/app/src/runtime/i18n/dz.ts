@@ -561,8 +561,6 @@ export const dict = {
   "toast.migration.failed.title": "གནས་སྡུད་གནས་སྤོ་འཐུས་ཤོར་བྱུང་ཡོདཔ།",
   "command.project.copyID": "ལས་གཞིའི་ཨའི་ཌི་འདྲ་བཤུས་འབད།",
   "command.session.copyID": "ལཱ་ཡུན་གྱི་ཨའི་ཌི་འདྲ་བཤུས་འབད།",
-  "server.row.incompatible":
-    "སར་བར་འདི་གིས་ གློག་རིམ་འདི་དང་མཐུན་འགྱུར་མེད་པའི་ OpenCode {{version}} གཡོག་བཀོལ་དོ། འཕྲོ་མཐུད་ཀྱི་དོན་ལུ་ OpenCode V2 ལུ་ཡར་སེང་འབད།",
   "toast.session.copyID.failed.title": "ལཱ་ཡུན་གྱི་ཨའི་ཌི་འདྲ་བཤུས་འབད་མ་ཚུགས།",
   "toast.session.copyID.failed.description": "ལཱ་ཡུན་གྱི་ཨའི་ཌི་འདྲ་བཤུས་འབདཝ་ད་ འཛོལ་བ་ཅིག་བྱུང་ནུག།",
   "toast.project.copyID.failed.title": "ལས་གཞིའི་ཨའི་ཌི་འདྲ་བཤུས་འབད་མ་ཚུགས།",
@@ -571,8 +569,6 @@ export const dict = {
   "error.page.description.status": "སར་བར་གྱིས་ HTTP {{status}} ལན་ཅིག་སྤྲོད་ནུག།",
   "error.page.action.reload": "ཡང་བསྐྱར་མངོན་གསལ།",
   "session.error.incompatible": "སར་བར་ཐོན་རིམ་འདི་ལུ་རྒྱབ་སྐྱོར་མེད།",
-  "session.error.incompatible.description":
-    "{{server}} གིས་ གློག་རིམ་འདི་དང་མཐུན་འགྱུར་མེད་པའི་ OpenCode {{version}} གཡོག་བཀོལ་དོ། འཕྲོ་མཐུད་ཀྱི་དོན་ལུ་ སར་བར་འདི་ OpenCode V2 ལུ་ཡར་སེང་འབད།",
   "session.background.moveInline": "གཡོག་བཀོལ་དོ་ཡོད་པའི་ལཱ་འདི་རྒྱབ་ཁར་སྤོ་ནིའི་དོན་ལུ་ {{keybind}} ཨེབ།",
   "command.session.background": "རྒྱབ་ཁར་སྤོ།",
   "settings.tab.preferences": "དགའ་གདམ་ཚུ།",

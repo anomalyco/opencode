@@ -606,8 +606,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI gurup bolmady: {{error}}",
   "command.project.copyID": "Taslama ID-sini nusgala",
   "command.session.copyID": "Sessiýa ID-sini nusgala",
-  "server.row.incompatible":
-    "Bu serwer şu programma bilen gabat gelmeýän OpenCode {{version}} wersiýasyny işledýär. Dowam etmek üçin ony OpenCode V2-ä täzeläň.",
   "toast.session.copyID.failed.title": "Sessiýa ID-sini nusgalap bolmady",
   "toast.session.copyID.failed.description": "Sessiýa ID-si nusgalananda ýalňyşlyk ýüze çykdy",
   "toast.project.copyID.failed.title": "Taslama ID-sini nusgalap bolmady",
@@ -616,8 +614,6 @@ export const dict = {
   "error.page.description.status": "Serwer HTTP {{status}} jogabyny gaýtardy.",
   "error.page.action.reload": "Täzeden ýükle",
   "session.error.incompatible": "Bu serwer wersiýasy goldanylmaýar",
-  "session.error.incompatible.description":
-    "{{server}} şu programma bilen gabat gelmeýän OpenCode {{version}} wersiýasyny işledýär. Dowam etmek üçin serweri OpenCode V2-ä täzeläň.",
   "session.background.moveInline": "Işleýän işi fona geçirmek üçin {{keybind}} basyň",
   "dialog.server.menu.hide": "Taslama sanawyndan gizläň",
   "dialog.server.menu.show": "Taslama sanawynda görkeziň",

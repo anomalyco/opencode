@@ -612,8 +612,6 @@ export const dict = {
   "desktop.cli.failed.message": "Neizdevās instalēt CLI: {{error}}",
   "command.project.copyID": "Kopēt projekta ID",
   "command.session.copyID": "Kopēt sesijas ID",
-  "server.row.incompatible":
-    "Šajā serverī darbojas OpenCode {{version}}, kas nav saderīga ar šo lietotni. Lai turpinātu, jauniniet serveri uz OpenCode V2.",
   "toast.session.copyID.failed.title": "Neizdevās kopēt sesijas ID",
   "toast.session.copyID.failed.description": "Kopējot sesijas ID, radās kļūda",
   "toast.project.copyID.failed.title": "Neizdevās kopēt projekta ID",
@@ -622,8 +620,6 @@ export const dict = {
   "error.page.description.status": "Serveris atgrieza HTTP {{status}} atbildi.",
   "error.page.action.reload": "Ielādēt atkārtoti",
   "session.error.incompatible": "Šī servera versija netiek atbalstīta",
-  "session.error.incompatible.description":
-    "Serverī {{server}} darbojas OpenCode {{version}}, kas nav saderīga ar šo lietotni. Lai turpinātu, jauniniet serveri uz OpenCode V2.",
   "session.background.moveInline": "Nospiediet {{keybind}}, lai pārvietotu aktīvo darbu fonā",
   "session.background.runningCount.zero": "Fonā tiek veikti {{count}} darbi",
   "dialog.server.menu.hide": "Paslēpt projektu sarakstā",

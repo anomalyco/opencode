@@ -806,8 +806,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI:n asennus epäonnistui: {{error}}",
   "command.project.copyID": "Kopioi projektin tunnus",
   "command.session.copyID": "Kopioi istunnon tunnus",
-  "server.row.incompatible":
-    "Tässä palvelimessa on käytössä OpenCode {{version}}, joka ei ole yhteensopiva tämän sovelluksen kanssa. Jatka päivittämällä palvelin OpenCode V2:een.",
   "toast.session.copyID.failed.title": "Istunnon tunnuksen kopiointi epäonnistui",
   "toast.session.copyID.failed.description": "Istunnon tunnusta kopioitaessa tapahtui virhe",
   "toast.project.copyID.failed.title": "Projektin tunnuksen kopiointi epäonnistui",
@@ -816,8 +814,6 @@ export const dict = {
   "error.page.description.status": "Palvelin palautti HTTP {{status}} -vastauksen.",
   "error.page.action.reload": "Lataa uudelleen",
   "session.error.incompatible": "Tätä palvelinversiota ei tueta",
-  "session.error.incompatible.description":
-    "Palvelimessa {{server}} on käytössä OpenCode {{version}}, joka ei ole yhteensopiva tämän sovelluksen kanssa. Jatka päivittämällä palvelin OpenCode V2:een.",
   "session.background.moveInline": "Siirrä käynnissä oleva työ taustalle painamalla {{keybind}}",
   "command.session.location.cycle": "Vaihda istunnon sijaintia",
   "dialog.provider.anthropic.note": "Suora pääsy Claude-malleihin API-avaimella",

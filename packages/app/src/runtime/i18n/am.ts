@@ -595,8 +595,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLIን መጫን አልተሳካም፦ {{error}}",
   "command.project.copyID": "የፕሮጀክት IDን ቅዳ",
   "command.session.copyID": "የክፍለ ጊዜ IDን ቅዳ",
-  "server.row.incompatible":
-    "ይህ አገልጋይ OpenCode {{version}}ን እያስኬደ ነው፣ ይህም ከዚህ መተግበሪያ ጋር ተኳሃኝ አይደለም። ለመቀጠል ወደ OpenCode V2 ያሻሽሉት።",
   "toast.session.copyID.failed.title": "የክፍለ ጊዜ IDን መቅዳት አልተሳካም",
   "toast.session.copyID.failed.description": "የክፍለ ጊዜ IDን ሲቀዳ ስህተት ተፈጥሯል",
   "toast.project.copyID.failed.title": "የፕሮጀክት IDን መቅዳት አልተሳካም",
@@ -605,8 +603,6 @@ export const dict = {
   "error.page.description.status": "አገልጋዩ የHTTP {{status}} ምላሽ መልሷል።",
   "error.page.action.reload": "ዳግም ጫን",
   "session.error.incompatible": "ይህ የአገልጋይ ስሪት አይደገፍም",
-  "session.error.incompatible.description":
-    "{{server}} OpenCode {{version}}ን እያስኬደ ነው፣ ይህም ከዚህ መተግበሪያ ጋር ተኳሃኝ አይደለም። ለመቀጠል አገልጋዩን ወደ OpenCode V2 ያሻሽሉት።",
   "session.background.moveInline": "እየሄደ ያለውን ሥራ ወደ ዳራ ለማንቀሳቀስ {{keybind}}ን ይጫኑ",
   "dialog.server.menu.hide": "ከፕሮጀክት ዝርዝር ደብቅ",
   "dialog.server.menu.show": "በፕሮጀክት ዝርዝር ውስጥ አሳይ",

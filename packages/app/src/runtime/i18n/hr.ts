@@ -619,8 +619,6 @@ export const dict = {
   "settings.workspaces.sessions.few": "{{count}} sesije u {{project}}",
   "command.project.copyID": "Kopiraj ID projekta",
   "command.session.copyID": "Kopiraj ID sesije",
-  "server.row.incompatible":
-    "Ovaj poslužitelj koristi OpenCode {{version}}, koji nije kompatibilan s ovom aplikacijom. Nadogradite ga na OpenCode V2 kako biste nastavili.",
   "toast.session.copyID.failed.title": "Kopiranje ID-a sesije nije uspjelo",
   "toast.session.copyID.failed.description": "Došlo je do pogreške pri kopiranju ID-a sesije",
   "toast.project.copyID.failed.title": "Kopiranje ID-a projekta nije uspjelo",
@@ -629,8 +627,6 @@ export const dict = {
   "error.page.description.status": "Poslužitelj je vratio HTTP odgovor {{status}}.",
   "error.page.action.reload": "Ponovno učitaj",
   "session.error.incompatible": "Ova verzija poslužitelja nije podržana",
-  "session.error.incompatible.description":
-    "{{server}} koristi OpenCode {{version}}, koji nije kompatibilan s ovom aplikacijom. Nadogradite poslužitelj na OpenCode V2 kako biste nastavili.",
   "session.background.moveInline": "Pritisnite {{keybind}} za premještanje aktivnog rada u pozadinu",
   "session.background.runningCount.few": "{{count}} stavke izvršavaju se u pozadini",
   "dialog.server.menu.hide": "Sakrij s popisa projekata",

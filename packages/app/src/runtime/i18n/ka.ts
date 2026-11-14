@@ -607,8 +607,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI-ის დაყენება ვერ მოხერხდა: {{error}}",
   "command.project.copyID": "პროექტის ID-ის კოპირება",
   "command.session.copyID": "სესიის ID-ის კოპირება",
-  "server.row.incompatible":
-    "ამ სერვერზე გაშვებულია OpenCode {{version}}, რომელიც ამ აპთან თავსებადი არ არის. გასაგრძელებლად განაახლეთ OpenCode V2-მდე.",
   "toast.session.copyID.failed.title": "სესიის ID-ის კოპირება ვერ მოხერხდა",
   "toast.session.copyID.failed.description": "სესიის ID-ის კოპირებისას შეცდომა მოხდა",
   "toast.project.copyID.failed.title": "პროექტის ID-ის კოპირება ვერ მოხერხდა",
@@ -617,8 +615,6 @@ export const dict = {
   "error.page.description.status": "სერვერმა დააბრუნა HTTP {{status}} პასუხი.",
   "error.page.action.reload": "ხელახლა ჩატვირთვა",
   "session.error.incompatible": "სერვერის ეს ვერსია მხარდაჭერილი არ არის",
-  "session.error.incompatible.description":
-    "{{server}}-ზე გაშვებულია OpenCode {{version}}, რომელიც ამ აპთან თავსებადი არ არის. გასაგრძელებლად განაახლეთ სერვერი OpenCode V2-მდე.",
   "session.background.moveInline": "მიმდინარე სამუშაოს ფონურ რეჟიმში გადასატანად დააჭირეთ {{keybind}}-ს",
   "dialog.server.menu.hide": "პროექტების სიიდან დამალვა",
   "dialog.server.menu.show": "პროექტების სიაში ჩვენება",

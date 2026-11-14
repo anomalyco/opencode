@@ -614,8 +614,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI se nepodařilo nainstalovat: {{error}}",
   "command.project.copyID": "Kopírovat ID projektu",
   "command.session.copyID": "Kopírovat ID relace",
-  "server.row.incompatible":
-    "Tento server používá OpenCode {{version}}, který není kompatibilní s touto aplikací. Chcete-li pokračovat, upgradujte jej na OpenCode V2.",
   "toast.session.copyID.failed.title": "ID relace se nepodařilo zkopírovat",
   "toast.session.copyID.failed.description": "Při kopírování ID relace došlo k chybě",
   "toast.project.copyID.failed.title": "ID projektu se nepodařilo zkopírovat",
@@ -624,8 +622,6 @@ export const dict = {
   "error.page.description.status": "Server vrátil odpověď HTTP {{status}}.",
   "error.page.action.reload": "Načíst znovu",
   "session.error.incompatible": "Tato verze serveru není podporována",
-  "session.error.incompatible.description":
-    "{{server}} používá OpenCode {{version}}, který není kompatibilní s touto aplikací. Chcete-li pokračovat, upgradujte server na OpenCode V2.",
   "session.background.moveInline": "Stisknutím {{keybind}} přesunete probíhající práci na pozadí",
   "session.background.runningCount.few": "Na pozadí probíhají {{count}} položky",
   "session.background.runningCount.many": "Na pozadí probíhá {{count}} položky",

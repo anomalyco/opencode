@@ -607,8 +607,6 @@ export const dict = {
   "desktop.cli.failed.message": "Tað eydnaðist ikki at seta CLI upp: {{error}}",
   "command.project.copyID": "Avrita verkætlanar-ID",
   "command.session.copyID": "Avrita setu-ID",
-  "server.row.incompatible":
-    "Hesin ambætarin koyrir OpenCode {{version}}, sum ikki samsvarar við hetta forritið. Dagfør hann til OpenCode V2 fyri at halda fram.",
   "toast.session.copyID.failed.title": "Tað eydnaðist ikki at avrita setu-ID",
   "toast.session.copyID.failed.description": "Ein villa kom fyri, meðan setu-ID varð avritað",
   "toast.project.copyID.failed.title": "Tað eydnaðist ikki at avrita verkætlanar-ID",
@@ -617,8 +615,6 @@ export const dict = {
   "error.page.description.status": "Ambætarin svaraði við HTTP {{status}}.",
   "error.page.action.reload": "Les inn aftur",
   "session.error.incompatible": "Henda ambætaraútgávan verður ikki stuðlað",
-  "session.error.incompatible.description":
-    "{{server}} koyrir OpenCode {{version}}, sum ikki samsvarar við hetta forritið. Dagfør ambætaran til OpenCode V2 fyri at halda fram.",
   "session.background.moveInline": "Trýst á {{keybind}} fyri at flyta arbeiðið, ið koyrir, í bakgrundina",
   "dialog.server.menu.hide": "Fjal úr verkætlanarlistanum",
   "dialog.server.menu.show": "Vís í verkætlanarlistanum",

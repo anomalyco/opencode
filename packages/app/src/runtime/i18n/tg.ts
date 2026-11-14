@@ -610,8 +610,6 @@ export const dict = {
   "desktop.cli.failed.message": "Насб кардани CLI муяссар нашуд: {{error}}",
   "command.project.copyID": "Нусхабардории ID-и лоиҳа",
   "command.session.copyID": "Нусхабардории ID-и сессия",
-  "server.row.incompatible":
-    "Ин сервер OpenCode {{version}}-ро иҷро мекунад, ки бо ин барнома мувофиқ нест. Барои идома онро ба OpenCode V2 навсозӣ кунед.",
   "toast.session.copyID.failed.title": "Нусхабардории ID-и сессия муяссар нашуд",
   "toast.session.copyID.failed.description": "Ҳангоми нусхабардории ID-и сессия хато рӯй дод",
   "toast.project.copyID.failed.title": "Нусхабардории ID-и лоиҳа муяссар нашуд",
@@ -620,8 +618,6 @@ export const dict = {
   "error.page.description.status": "Сервер ҷавоби HTTP {{status}} баргардонд.",
   "error.page.action.reload": "Аз нав бор кардан",
   "session.error.incompatible": "Ин версияи сервер дастгирӣ намешавад",
-  "session.error.incompatible.description":
-    "{{server}} OpenCode {{version}}-ро иҷро мекунад, ки бо ин барнома мувофиқ нест. Барои идома серверро ба OpenCode V2 навсозӣ кунед.",
   "session.background.moveInline": "Барои ба замина гузаронидани кори иҷрошаванда {{keybind}}-ро пахш кунед",
   "dialog.server.menu.hide": "Аз рӯйхати лоиҳаҳо пинҳон кунед",
   "dialog.server.menu.show": "Дар рӯйхати лоиҳаҳо нишон диҳед",

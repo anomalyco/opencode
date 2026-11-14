@@ -610,8 +610,6 @@ export const dict = {
   "provider.disconnect.toast.failed.description": "قطع اتصال از \u2068{{provider}}\u2069 ناموفق بود.",
   "command.project.copyID": "کپی شناسه پروژه",
   "command.session.copyID": "کپی شناسه جلسه",
-  "server.row.incompatible":
-    "این سرور OpenCode \u2068{{version}}\u2069 را اجرا می‌کند که با این برنامه سازگار نیست. برای ادامه، آن را به OpenCode V2 ارتقا دهید.",
   "toast.session.copyID.failed.title": "کپی شناسه جلسه ناموفق بود",
   "toast.session.copyID.failed.description": "هنگام کپی شناسه جلسه خطایی رخ داد",
   "toast.project.copyID.failed.title": "کپی شناسه پروژه ناموفق بود",
@@ -620,8 +618,6 @@ export const dict = {
   "error.page.description.status": "سرور پاسخ HTTP با وضعیت \u2068{{status}}\u2069 برگرداند.",
   "error.page.action.reload": "بارگیری مجدد",
   "session.error.incompatible": "این نسخه سرور پشتیبانی نمی‌شود",
-  "session.error.incompatible.description":
-    "\u2068{{server}}\u2069 نسخه OpenCode \u2068{{version}}\u2069 را اجرا می‌کند که با این برنامه سازگار نیست. برای ادامه، سرور را به OpenCode V2 ارتقا دهید.",
   "session.background.moveInline": "برای انتقال کار در حال اجرا به پس‌زمینه، \u2068{{keybind}}\u2069 را فشار دهید",
   "desktop.menu.installCli": "نصب CLI...",
   "desktop.cli.installed.title": "CLI نصب شد",

@@ -612,8 +612,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI o‘rnatib bo‘lmadi: {{error}}",
   "command.project.copyID": "Loyiha ID-sini nusxalash",
   "command.session.copyID": "Sessiya ID-sini nusxalash",
-  "server.row.incompatible":
-    "Bu server ushbu ilovaga mos kelmaydigan OpenCode {{version}} versiyasini ishlatmoqda. Davom etish uchun uni OpenCode V2 versiyasiga yangilang.",
   "toast.session.copyID.failed.title": "Sessiya ID-sini nusxalab bo‘lmadi",
   "toast.session.copyID.failed.description": "Sessiya ID-sini nusxalashda xatolik yuz berdi",
   "toast.project.copyID.failed.title": "Loyiha ID-sini nusxalab bo‘lmadi",
@@ -622,8 +620,6 @@ export const dict = {
   "error.page.description.status": "Server HTTP {{status}} javobini qaytardi.",
   "error.page.action.reload": "Qayta yuklash",
   "session.error.incompatible": "Bu server versiyasi qo‘llab-quvvatlanmaydi",
-  "session.error.incompatible.description":
-    "{{server}} ushbu ilovaga mos kelmaydigan OpenCode {{version}} versiyasini ishlatmoqda. Davom etish uchun serverni OpenCode V2 versiyasiga yangilang.",
   "session.background.moveInline": "Bajarilayotgan ishni fonga o‘tkazish uchun {{keybind}} tugmasini bosing",
   "dialog.server.menu.hide": "Loyihalar ro‘yxatidan yashirish",
   "dialog.server.menu.show": "Loyihalar ro‘yxatida ko‘rsatish",

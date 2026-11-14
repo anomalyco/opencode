@@ -613,8 +613,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI не можа да бъде инсталиран: {{error}}",
   "command.project.copyID": "Копиране на идентификатора на проекта",
   "command.session.copyID": "Копиране на идентификатора на сесията",
-  "server.row.incompatible":
-    "Този сървър работи с OpenCode {{version}}, който не е съвместим с приложението. Надстройте го до OpenCode V2, за да продължите.",
   "toast.session.copyID.failed.title": "Идентификаторът на сесията не можа да бъде копиран",
   "toast.session.copyID.failed.description": "Възникна грешка при копирането на идентификатора на сесията",
   "toast.project.copyID.failed.title": "Идентификаторът на проекта не можа да бъде копиран",
@@ -623,8 +621,6 @@ export const dict = {
   "error.page.description.status": "Сървърът върна HTTP отговор {{status}}.",
   "error.page.action.reload": "Презареждане",
   "session.error.incompatible": "Тази версия на сървъра не се поддържа",
-  "session.error.incompatible.description":
-    "{{server}} работи с OpenCode {{version}}, който не е съвместим с приложението. Надстройте сървъра до OpenCode V2, за да продължите.",
   "session.background.moveInline": "Натиснете {{keybind}}, за да преместите текущата работа във фонов режим",
   "dialog.server.menu.hide": "Скриване от списъка с проекти",
   "dialog.server.menu.show": "Показване в списъка с проекти",

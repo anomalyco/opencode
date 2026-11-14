@@ -701,8 +701,6 @@ export const dict = {
   "desktop.cli.failed.message": "Не вдалося інсталювати CLI: {{error}}",
   "command.project.copyID": "Копіювати ідентифікатор проєкту",
   "command.session.copyID": "Копіювати ідентифікатор сеансу",
-  "server.row.incompatible":
-    "На цьому сервері працює OpenCode {{version}}, несумісний із застосунком. Щоб продовжити, оновіть його до OpenCode V2.",
   "toast.session.copyID.failed.title": "Не вдалося скопіювати ідентифікатор сеансу",
   "toast.session.copyID.failed.description": "Під час копіювання ідентифікатора сеансу сталася помилка",
   "toast.project.copyID.failed.title": "Не вдалося скопіювати ідентифікатор проєкту",
@@ -711,8 +709,6 @@ export const dict = {
   "error.page.description.status": "Сервер повернув HTTP-відповідь {{status}}.",
   "error.page.action.reload": "Перезавантажити",
   "session.error.incompatible": "Ця версія сервера не підтримується",
-  "session.error.incompatible.description":
-    "На сервері {{server}} працює OpenCode {{version}}, несумісний із застосунком. Щоб продовжити, оновіть сервер до OpenCode V2.",
   "session.background.moveInline": "Натисніть {{keybind}}, щоб перемістити поточну роботу у фоновий режим",
   "dialog.server.menu.hide": "Сховати зі списку проєктів",
   "dialog.server.menu.show": "Показати у списку проєктів",

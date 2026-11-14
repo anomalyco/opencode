@@ -628,8 +628,6 @@ export const dict = {
   "provider.disconnect.toast.failed.description": "فشل قطع الاتصال بـ \u2068{{provider}}\u2069.",
   "command.project.copyID": "نسخ معرّف المشروع",
   "command.session.copyID": "نسخ معرّف الجلسة",
-  "server.row.incompatible":
-    "يعمل هذا الخادم بإصدار OpenCode \u2068{{version}}\u2069، وهو غير متوافق مع هذا التطبيق. رقِّه إلى OpenCode V2 للمتابعة.",
   "toast.session.copyID.failed.title": "فشل نسخ معرّف الجلسة",
   "toast.session.copyID.failed.description": "حدث خطأ أثناء نسخ معرّف الجلسة",
   "toast.project.copyID.failed.title": "فشل نسخ معرّف المشروع",
@@ -638,8 +636,6 @@ export const dict = {
   "error.page.description.status": "أعاد الخادم استجابة HTTP بالحالة \u2068{{status}}\u2069.",
   "error.page.action.reload": "إعادة التحميل",
   "session.error.incompatible": "إصدار هذا الخادم غير مدعوم",
-  "session.error.incompatible.description":
-    "يعمل \u2068{{server}}\u2069 بإصدار OpenCode \u2068{{version}}\u2069، وهو غير متوافق مع هذا التطبيق. رقِّ الخادم إلى OpenCode V2 للمتابعة.",
   "session.background.moveInline": "اضغط على \u2068{{keybind}}\u2069 لنقل العمل الجاري إلى الخلفية",
   "session.background.runningCount.zero": "العناصر قيد التشغيل في الخلفية: {{count}}",
   "session.background.runningCount.two": "عدد العناصر قيد التشغيل في الخلفية: {{count}}",

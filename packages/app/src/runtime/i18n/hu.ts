@@ -618,8 +618,6 @@ export const dict = {
   "settings.general.section.general": "Általános",
   "command.project.copyID": "Projektazonosító másolása",
   "command.session.copyID": "Munkamenet-azonosító másolása",
-  "server.row.incompatible":
-    "Ez a kiszolgáló az OpenCode {{version}} verzióját futtatja, amely nem kompatibilis ezzel az alkalmazással. A folytatáshoz frissítse OpenCode V2-re.",
   "toast.session.copyID.failed.title": "Nem sikerült másolni a munkamenet-azonosítót",
   "toast.session.copyID.failed.description": "Hiba történt a munkamenet-azonosító másolásakor",
   "toast.project.copyID.failed.title": "Nem sikerült másolni a projektazonosítót",
@@ -628,8 +626,6 @@ export const dict = {
   "error.page.description.status": "A kiszolgáló HTTP {{status}} választ adott.",
   "error.page.action.reload": "Újratöltés",
   "session.error.incompatible": "Ez a kiszolgálóverzió nem támogatott",
-  "session.error.incompatible.description":
-    "A(z) {{server}} az OpenCode {{version}} verzióját futtatja, amely nem kompatibilis ezzel az alkalmazással. A folytatáshoz frissítse a kiszolgálót OpenCode V2-re.",
   "session.background.moveInline": "Nyomja meg a(z) {{keybind}} billentyűt a futó munka háttérbe helyezéséhez",
   "dialog.server.menu.hide": "Elrejtés a projektlistából",
   "dialog.server.menu.show": "Megjelenítés a projektlistában",

@@ -611,8 +611,6 @@ export const dict = {
   "settings.general.section.general": "Almennt",
   "command.project.copyID": "Afrita auðkenni verkefnis",
   "command.session.copyID": "Afrita auðkenni setu",
-  "server.row.incompatible":
-    "Þessi netþjónn keyrir OpenCode {{version}}, sem er ekki samhæft þessu forriti. Uppfærðu hann í OpenCode V2 til að halda áfram.",
   "toast.session.copyID.failed.title": "Ekki tókst að afrita auðkenni setu",
   "toast.session.copyID.failed.description": "Villa kom upp við að afrita auðkenni setu",
   "toast.project.copyID.failed.title": "Ekki tókst að afrita auðkenni verkefnis",
@@ -621,8 +619,6 @@ export const dict = {
   "error.page.description.status": "Netþjónninn skilaði HTTP {{status}} svari.",
   "error.page.action.reload": "Endurhlaða",
   "session.error.incompatible": "Þessi útgáfa netþjónsins er ekki studd",
-  "session.error.incompatible.description":
-    "{{server}} keyrir OpenCode {{version}}, sem er ekki samhæft þessu forriti. Uppfærðu netþjóninn í OpenCode V2 til að halda áfram.",
   "session.background.moveInline": "Ýttu á {{keybind}} til að færa verk sem er í gangi í bakgrunn",
   "dialog.server.menu.hide": "Fela á verkefnalista",
   "dialog.server.menu.show": "Sýna á verkefnalista",

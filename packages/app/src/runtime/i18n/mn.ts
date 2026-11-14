@@ -612,8 +612,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI-г суулгаж чадсангүй: {{error}}",
   "command.project.copyID": "Төслийн ID-г хуулах",
   "command.session.copyID": "Сессийн ID-г хуулах",
-  "server.row.incompatible":
-    "Энэ сервер уг апптай нийцэхгүй OpenCode {{version}} хувилбарыг ажиллуулж байна. Үргэлжлүүлэхийн тулд OpenCode V2 болгон шинэчилнэ үү.",
   "toast.session.copyID.failed.title": "Сессийн ID-г хуулж чадсангүй",
   "toast.session.copyID.failed.description": "Сессийн ID-г хуулах үед алдаа гарлаа",
   "toast.project.copyID.failed.title": "Төслийн ID-г хуулж чадсангүй",
@@ -622,8 +620,6 @@ export const dict = {
   "error.page.description.status": "Сервер HTTP {{status}} хариу буцаалаа.",
   "error.page.action.reload": "Дахин ачаалах",
   "session.error.incompatible": "Энэ серверийн хувилбар дэмжигдэхгүй",
-  "session.error.incompatible.description":
-    "{{server}} уг апптай нийцэхгүй OpenCode {{version}} хувилбарыг ажиллуулж байна. Үргэлжлүүлэхийн тулд серверийг OpenCode V2 болгон шинэчилнэ үү.",
   "session.background.moveInline": "Ажиллаж буй ажлыг арын горимд шилжүүлэхийн тулд {{keybind}} дарна уу",
   "dialog.server.menu.hide": "Төслийн жагсаалтаас нуух",
   "dialog.server.menu.show": "Төслийн жагсаалтад харуулах",

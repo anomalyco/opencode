@@ -606,8 +606,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI ස්ථාපනය කිරීමට අසමත් විය: {{error}}",
   "command.project.copyID": "ව්‍යාපෘති ID පිටපත් කරන්න",
   "command.session.copyID": "සැසි ID පිටපත් කරන්න",
-  "server.row.incompatible":
-    "මෙම සේවාදායකයේ OpenCode {{version}} ධාවනය වන අතර එය මෙම යෙදුම සමඟ නොගැළපේ. ඉදිරියට යාමට එය OpenCode V2 වෙත උත්ශ්‍රේණි කරන්න.",
   "toast.session.copyID.failed.title": "සැසි ID පිටපත් කිරීමට අසමත් විය",
   "toast.session.copyID.failed.description": "සැසි ID පිටපත් කිරීමේදී දෝෂයක් ඇති විය",
   "toast.project.copyID.failed.title": "ව්‍යාපෘති ID පිටපත් කිරීමට අසමත් විය",
@@ -616,8 +614,6 @@ export const dict = {
   "error.page.description.status": "සේවාදායකය HTTP {{status}} ප්‍රතිචාරයක් ලබා දුන්නේය.",
   "error.page.action.reload": "නැවත පූරණය කරන්න",
   "session.error.incompatible": "මෙම සේවාදායක අනුවාදයට සහාය නොදක්වයි",
-  "session.error.incompatible.description":
-    "{{server}} හි OpenCode {{version}} ධාවනය වන අතර එය මෙම යෙදුම සමඟ නොගැළපේ. ඉදිරියට යාමට සේවාදායකය OpenCode V2 වෙත උත්ශ්‍රේණි කරන්න.",
   "session.background.moveInline": "ධාවනය වන කාර්යය පසුබිමට ගෙන යාමට {{keybind}} ඔබන්න",
   "dialog.server.menu.hide": "ව්‍යාපෘති ලැයිස්තුවෙන් සඟවන්න",
   "dialog.server.menu.show": "ව්‍යාපෘති ලැයිස්තුවේ පෙන්වන්න",

@@ -603,8 +603,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI paigaldamine ebaõnnestus: {{error}}",
   "command.project.copyID": "Kopeeri projekti ID",
   "command.session.copyID": "Kopeeri seansi ID",
-  "server.row.incompatible":
-    "See server käitab OpenCode'i versiooni {{version}}, mis ei ühildu selle rakendusega. Jätkamiseks uuenda server OpenCode V2-le.",
   "toast.session.copyID.failed.title": "Seansi ID kopeerimine ebaõnnestus",
   "toast.session.copyID.failed.description": "Seansi ID kopeerimisel tekkis viga",
   "toast.project.copyID.failed.title": "Projekti ID kopeerimine ebaõnnestus",
@@ -613,8 +611,6 @@ export const dict = {
   "error.page.description.status": "Server tagastas HTTP-vastuse {{status}}.",
   "error.page.action.reload": "Laadi uuesti",
   "session.error.incompatible": "Seda serveriversiooni ei toetata",
-  "session.error.incompatible.description":
-    "{{server}} käitab OpenCode'i versiooni {{version}}, mis ei ühildu selle rakendusega. Jätkamiseks uuenda server OpenCode V2-le.",
   "session.background.moveInline": "Vajuta {{keybind}}, et teisaldada käimasolev töö taustale",
   "dialog.server.menu.hide": "Peida projektide loendist",
   "dialog.server.menu.show": "Kuva projektide loendis",

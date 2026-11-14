@@ -610,8 +610,6 @@ export const dict = {
   "desktop.cli.failed.message": "CLI ইনস্টল করা যায়নি: {{error}}",
   "command.project.copyID": "প্রকল্পের ID কপি করুন",
   "command.session.copyID": "সেশনের ID কপি করুন",
-  "server.row.incompatible":
-    "এই সার্ভারে OpenCode {{version}} চলছে, যা এই অ্যাপের সঙ্গে সামঞ্জস্যপূর্ণ নয়। চালিয়ে যেতে এটিকে OpenCode V2-এ আপগ্রেড করুন।",
   "toast.session.copyID.failed.title": "সেশন ID কপি করা যায়নি",
   "toast.session.copyID.failed.description": "সেশন ID কপি করার সময় একটি ত্রুটি ঘটেছে",
   "toast.project.copyID.failed.title": "প্রকল্প ID কপি করা যায়নি",
@@ -620,8 +618,6 @@ export const dict = {
   "error.page.description.status": "সার্ভারটি HTTP {{status}} প্রতিক্রিয়া দিয়েছে।",
   "error.page.action.reload": "পুনরায় লোড করুন",
   "session.error.incompatible": "এই সার্ভার সংস্করণটি সমর্থিত নয়",
-  "session.error.incompatible.description":
-    "{{server}}-এ OpenCode {{version}} চলছে, যা এই অ্যাপের সঙ্গে সামঞ্জস্যপূর্ণ নয়। চালিয়ে যেতে সার্ভারটি OpenCode V2-এ আপগ্রেড করুন।",
   "session.background.moveInline": "চলমান কাজটি পটভূমিতে সরাতে {{keybind}} চাপুন",
   "dialog.server.menu.hide": "প্রকল্পের তালিকা থেকে লুকান",
   "dialog.server.menu.show": "প্রকল্পের তালিকায় দেখান",
