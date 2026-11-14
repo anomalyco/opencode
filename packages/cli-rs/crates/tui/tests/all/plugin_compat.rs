@@ -28,7 +28,19 @@ fn probe(config: Config) -> (Pipe, PathBuf) {
     let pipe = open(&[("v2probe", Some(options))], config, (80, 30));
     pipe.active(PROBE);
     pipe.settle();
+    drawn(&pipe);
     (pipe, log)
+}
+
+/// Waits until the probe's claims that read the host drew. A first render that read what the host has not pushed
+/// waits for it without the JS host saying so to a ping (its mount is neither dirty nor in flight), so they may draw
+/// after a settle.
+fn drawn(pipe: &Pipe) {
+    pipe.harness.wait("the probe's claims drew", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        line(pipe, "v2probe commands").is_some() && line(pipe, "v2probe route").is_some()
+    });
+    pipe.settle();
 }
 
 /// A call log of this test's own, empty.
@@ -46,6 +58,16 @@ fn calls(log: &Path) -> Vec<Value> {
         .map(|line| serde_json::from_str(line).unwrap())
         .filter(|call: &Value| call.get("setup").is_none())
         .collect()
+}
+
+/// [`calls`] once there are `count`: a plugin's code after an answer it awaited runs some promise turns after the call
+/// that answered it, which a settle's ping may pass.
+fn logged(pipe: &Pipe, log: &Path, count: usize) -> Vec<Value> {
+    pipe.harness.wait(&format!("{count} calls logged"), || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        calls(log).len() >= count
+    });
+    calls(log)
 }
 
 /// The toasts shown since the last call, oldest first, as `title: message`.
@@ -166,7 +188,7 @@ fn a_select_answers_the_value_picked() {
     pipe.harness.app.press("down");
     pipe.harness.app.press("return");
     pipe.settle();
-    assert_eq!(calls(&log), [json!({ "picked": { "n": 2 } })]);
+    assert_eq!(logged(&pipe, &log, 1), [json!({ "picked": { "n": 2 } })]);
 }
 
 // Expected (the audit's most used dialogs): `confirm`, `prompt` and `alert` show the host's dialogs, and each promise
@@ -176,20 +198,24 @@ fn confirm_prompt_and_alert_answer_their_promises() {
     let Some(config) = config() else { return };
     let (pipe, log) = probe(config);
     let app = &pipe.harness.app;
+    // Each next dialog opens in the plugin's code after the answer it awaited, some promise turns after the answer.
+    let shows = |text: &str| {
+        pipe.harness.wait(text, || {
+            app.advance(Duration::from_millis(1));
+            app.text().contains(text)
+        })
+    };
     pipe.harness.tui.keymap.dispatch("v2probe.ask", None);
-    pipe.settle();
-    assert!(app.text().contains("Go on?"), "{}", app.text());
+    shows("Go on?");
     app.press("return");
-    pipe.settle();
-    assert!(app.text().contains("Name it"), "{}", app.text());
+    shows("Name it");
     app.type_text("abc");
     app.press("return");
-    pipe.settle();
-    assert!(app.text().contains("It told."), "{}", app.text());
+    shows("It told.");
     app.press("return");
     pipe.settle();
     let expected = [json!({ "confirmed": true }), json!({ "prompted": "abc" }), json!({ "alerted": true })];
-    assert_eq!(calls(&log), expected);
+    assert_eq!(logged(&pipe, &log, expected.len()), expected);
 }
 
 // Expected (the audit's most used layout): a plugin's route draws its bordered, titled box with its padding, the data
@@ -199,6 +225,9 @@ fn a_route_draws_a_bordered_box_and_a_scroll_with_its_data() {
     let Some(config) = config() else { return };
     let (pipe, _log) = probe(config);
     pipe.harness.tui.keymap.dispatch("v2probe.page", None);
+    pipe.settle();
+    // The page registers a command as it renders: the reload that makes remounts it once the command's 250 ms passed.
+    std::thread::sleep(Duration::from_millis(400));
     pipe.settle();
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
     let screen = pipe.harness.app.text();
@@ -216,7 +245,7 @@ fn a_route_draws_a_bordered_box_and_a_scroll_with_its_data() {
 
 // Expected (OpenTUI's reconciler as TS runs it): a node with `visible={false}` draws nothing; a span takes its `style`
 // and `href` alone, so its `fg` prop leaves it in the text's color; a claim of a path the host does not publish goes to
-// its nearest published ancestor, appended; a read an installed package's JSX makes once, as it mounts, shows the
+// its nearest published ancestor, appended, so a `replace` there replaces nothing; a read an installed package's JSX makes once, as it mounts, shows the
 // host's value, which came after that render; and text outside a `<text>` crashes the render as OpenTUI's does.
 #[test]
 fn a_render_draws_by_the_reconcilers_rules() {
@@ -225,11 +254,9 @@ fn a_render_draws_by_the_reconcilers_rules() {
     let screen = pipe.harness.app.text();
     assert!(!screen.contains("hidden text"), "{screen}");
     assert_eq!(line(&pipe, "v2probe degraded").as_deref(), Some("v2probe degraded claim"), "{screen}");
-    assert_eq!(
-        line(&pipe, "v2probe dir ").as_deref(),
-        Some(&*format!("v2probe dir {}", support::DIRECTORY)),
-        "{screen}"
-    );
+    // The degraded `replace` replaced nothing: the footer's own version is still there.
+    assert!(screen.lines().any(|line| line.trim() == "local"), "{screen}");
+    assert_eq!(line(&pipe, "v2probe commands").as_deref(), Some("v2probe commands true"), "{screen}");
     let (x, y) = pipe.harness.find("0: |");
     let cell = pipe.harness.app.render().cell(u32::from(x + 3), u32::from(y)).unwrap().fg;
     assert_eq!(cell, pipe.harness.tui.page().text.muted, "a span took its fg prop");
@@ -278,7 +305,7 @@ fn a_replaced_dialog_answers_nothing() {
     }
     pipe.harness.app.press("return");
     pipe.settle();
-    assert_eq!(calls(&log), [json!({ "picked": null }), json!({ "picked": { "n": 1 } })]);
+    assert_eq!(logged(&pipe, &log, 2), [json!({ "picked": null }), json!({ "picked": { "n": 1 } })]);
 }
 
 // Expected (`ui.dialog.show`, the audit's most common gap): the plugin's own JSX shows in the host's panel dialog and
@@ -295,18 +322,21 @@ fn a_dialog_of_its_own_shows_its_jsx_and_closes() {
     assert!(screen.contains("Own dialog") && screen.contains("shown 0"), "{screen}");
     let (x, y) = pipe.harness.find("bump it");
     pipe.harness.app.click(x, y);
-    pipe.settle();
-    assert!(pipe.harness.app.text().contains("shown 1"), "{}", pipe.harness.app.text());
+    // The layer sends the changed dialog in a microtask after the click's handler.
+    pipe.harness.wait("the dialog follows its signal", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        pipe.harness.app.text().contains("shown 1")
+    });
     pipe.harness.app.press("escape");
     pipe.settle();
     assert!(!pipe.harness.app.text().contains("Own dialog"), "{}", pipe.harness.app.text());
-    assert_eq!(calls(&log), [json!({ "closed": true })]);
+    assert_eq!(logged(&pipe, &log, 1), [json!({ "closed": true })]);
     tui.keymap.dispatch("v2probe.show", None);
     pipe.settle();
     tui.keymap.dispatch("v2probe.unshow", None);
     pipe.settle();
     assert!(!pipe.harness.app.text().contains("Own dialog"), "{}", pipe.harness.app.text());
-    assert_eq!(calls(&log), [json!({ "closed": true }), json!({ "closed": true })]);
+    assert_eq!(logged(&pipe, &log, 2), [json!({ "closed": true }), json!({ "closed": true })]);
 }
 
 // Expected: a command a component registers (the page's, after setup) runs while the component is mounted, though
@@ -319,6 +349,9 @@ fn a_components_command_lives_with_its_mount_across_a_reload() {
     let tui = &pipe.harness.tui;
     assert_eq!(line(&pipe, "v2probe route").as_deref(), Some("v2probe route home"));
     tui.keymap.dispatch("v2probe.page", None);
+    pipe.settle();
+    // The reload the page's command made, and the remount after it, settle within the 250 ms a command lingers.
+    std::thread::sleep(Duration::from_millis(400));
     pipe.settle();
     let quiet = opencode_plugin::pipe::crossed();
     std::thread::sleep(Duration::from_millis(400));
@@ -413,5 +446,6 @@ fn a_project_v2_plugin_waits_for_approval() {
     pipe.active(PROBE);
     pipe.settle();
     assert!(marker.exists(), "the approved module did not run");
+    drawn(&pipe);
     assert_eq!(footer(&pipe), "v2probe 0: |");
 }
