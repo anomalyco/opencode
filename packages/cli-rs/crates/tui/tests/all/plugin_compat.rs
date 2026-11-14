@@ -425,27 +425,106 @@ fn a_v2_plugin_that_floods_fails_alone() {
 #[test]
 fn a_project_v2_plugin_waits_for_approval() {
     let Some(config) = config() else { return };
-    let root = opencode_util::temp::tempdir().unwrap();
-    let work = root.path().join("work");
-    std::fs::create_dir_all(work.join(".git")).unwrap();
-    let dir = work.join(".opencode/plugins/v2probe");
-    copy(&Path::new(EXAMPLES).join("v2probe"), &dir);
-    let marker = dir.parent().unwrap().join(".v2probe.log.jsonl");
-    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
-    external_with(&harness.tui, external, Some(config));
-    let pipe = Pipe { harness, root };
-    pipe.settle();
-    let target = dir.to_string_lossy().into_owned();
+    let (pipe, dir, marker) = project(&[], config);
     assert_eq!(footer(&pipe), "", "it drew before approval");
     assert!(!marker.exists(), "the module ran before approval");
-    let tui = &pipe.harness.tui;
-    let Some((Ok(artifact), _)) = opencode_tui::plugins::host::held(tui, &target) else { panic!("nothing is held") };
-    assert!(artifact.script, "{artifact:?}");
-    opencode_tui::plugins::host::decide(tui, &target, &artifact, Decision::Approved).unwrap();
+    approve(&pipe, &dir);
     pipe.active(PROBE);
     pipe.settle();
     assert!(marker.exists(), "the approved module did not run");
     drawn(&pipe);
     assert_eq!(footer(&pipe), "v2probe 0: |");
+}
+
+// Expected (bigboi P8-1): what runs is what was approved. A save between the approval and the JS host's import (here
+// while the JS host is busy with another plugin's command) runs neither the saved module nor its setup: the approved
+// files run, and the saved ones wait for a decision of their own.
+#[test]
+fn a_save_after_approval_runs_nothing_unapproved() {
+    let Some(config) = config() else { return };
+    let (pipe, dir, marker) = project(&["probe"], config);
+    pipe.active("example.probe");
+    let tui = &pipe.harness.tui;
+    tui.keymap.dispatch("probe.hold", Some("1500"));
+    approve(&pipe, &dir);
+    let file = dir.join("tui.tsx");
+    let source = std::fs::read_to_string(&file).unwrap();
+    std::fs::write(&file, source.replace("const MODULE = true", "const MODULE = \"saved\"")).unwrap();
+    pipe.settle();
+    opencode_tui::plugins::host::reconcile(tui);
+    pipe.settle();
+    let ran = std::fs::read_to_string(&marker).unwrap_or_default();
+    assert_eq!(ran.lines().collect::<Vec<_>>(), [r#"{"module":true}"#], "an unapproved module ran");
+    assert_eq!(listed(&pipe, &dir, PROBE), Some(Status::Pending));
+}
+
+/// The status of the project plugin `dir`: listed by its directory until it loads, then by `id`.
+fn listed(pipe: &Pipe, dir: &Path, id: &str) -> Option<Status> {
+    let target = dir.to_string_lossy();
+    let entries = pipe.harness.tui.plugins.entries().into_iter();
+    entries.filter(|entry| entry.id == target || entry.id == id).map(|entry| entry.status).next()
+}
+
+// Expected (bigboi P8-1): a project plugin's approved files import only from among themselves, the layer's modules and
+// the runtime's: a module outside them is refused before it runs, and the plugin fails, saying why.
+#[test]
+fn a_project_plugin_imports_nothing_outside_its_approved_files() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let work = root.path().join("work");
+    let dir = work.join(".opencode/plugins/reach");
+    std::fs::create_dir_all(work.join(".git")).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
+    let marker = root.path().join("outside.ran");
+    let shared = format!("require(\"node:fs\").writeFileSync({:?}, \"ran\")\nexport const note = 1\n", marker);
+    let outside = work.join(".opencode/shared.ts");
+    std::fs::write(&outside, shared).unwrap();
+    // By its absolute path, which resolves wherever the importing file is.
+    let module = format!(
+        "import {{ note }} from {outside:?}\nexport default {{ id: \"example.reach\", setup() {{ void note }} }}\n"
+    );
+    std::fs::write(dir.join("tui.ts"), module).unwrap();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.settle();
+    approve(&pipe, &dir);
+    pipe.settle();
+    assert!(!marker.exists(), "a module outside the approved files ran");
+    let status = listed(&pipe, &dir, "example.reach");
+    let refused =
+        matches!(&status, Some(Status::Failed(error)) if error.contains("outside the plugin's approved files"));
+    assert!(refused, "{status:?}");
+}
+
+/// A project with the V2 probe as its plugin, unapproved, whose module writes to the file returned last; the pipe's
+/// example plugins `globals` are the user's.
+fn project(globals: &[&str], config: Config) -> (Pipe, PathBuf, PathBuf) {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let work = root.path().join("work");
+    std::fs::create_dir_all(work.join(".git")).unwrap();
+    let dir = work.join(".opencode/plugins/v2probe");
+    copy(&Path::new(EXAMPLES).join("v2probe"), &dir);
+    let marker = root.path().join("module.jsonl");
+    std::fs::write(dir.join("marker.txt"), marker.to_string_lossy().as_bytes()).unwrap();
+    let config_dir = root.path().join("config");
+    for name in globals {
+        copy(&Path::new(EXAMPLES).join(name), &config_dir.join("plugins").join(name));
+    }
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = External { config_dir, cwd: work, dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.settle();
+    (pipe, dir, marker)
+}
+
+/// Approves the project plugin `dir` as it is held.
+fn approve(pipe: &Pipe, dir: &Path) {
+    let tui = &pipe.harness.tui;
+    let target = dir.to_string_lossy().into_owned();
+    let Some((Ok(artifact), _)) = opencode_tui::plugins::host::held(tui, &target) else { panic!("nothing is held") };
+    assert!(artifact.script, "{artifact:?}");
+    opencode_tui::plugins::host::decide(tui, &target, &artifact, Decision::Approved).unwrap();
 }

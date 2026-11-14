@@ -37,6 +37,9 @@ pub enum Down {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         options: Option<serde_json::Value>,
         setup: bool,
+        /// `dir` is the approved copy of a project's plugin (P8): what its files import must be in it.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        confined: bool,
     },
     /// Runs the setup of the module the load `load` described. Answered as a load with `setup`.
     Setup { seq: u64, load: u64 },

@@ -21,6 +21,7 @@ import path from "node:path"
 import { Console } from "node:console"
 import { existsSync, readFileSync, realpathSync, writeSync } from "node:fs"
 import { pathToFileURL } from "node:url"
+import { isBuiltin } from "node:module"
 import { plugin as runtime } from "bun"
 import { context as compat, modules, reported } from "./compat.js"
 
@@ -40,13 +41,29 @@ process.stdout.write = ((chunk: unknown, encoding?: unknown, callback?: unknown)
 // The modules a V2 plugin imports from the TS client are the compatibility layer's, also from a package's own
 // `node_modules`, as the TS client's runtime plugin support gives its own (P8). Virtual modules, since Bun resolves the
 // JSX runtime a `@jsxImportSource` pragma names without a plugin's `onResolve`.
+// The approved copies of project plugins (P8), each a root its own files may import from alone: a module of the
+// layer and the runtime's own aside, an import that resolves outside it is refused (bigboi P8-1).
+const confined = new Set<string>()
+
 runtime({
   name: "opencode-compat",
   setup(build) {
     for (const [name, exports] of Object.entries(modules))
       build.module(name, () => ({ exports, loader: "object" }))
+    build.onResolve({ filter: /.*/ }, (args) => {
+      const importer = args.importer
+      const root = importer ? [...confined].find((root) => importer.startsWith(root)) : undefined
+      if (!root || args.path in modules || builtin(args.path)) return undefined
+      const resolved = Bun.resolveSync(args.path, path.dirname(importer.split("?")[0]!))
+      if (resolved.startsWith(root) || builtin(resolved)) return undefined
+      throw new Error(`${args.path} is outside the plugin's approved files`)
+    })
   },
 })
+
+function builtin(specifier: string) {
+  return isBuiltin(specifier) || specifier === "bun" || specifier.startsWith("bun:")
+}
 
 // Frames go out with blocking writes (review carbon-5): a client that reads nothing stops the JS host in its write,
 // which is the pipe's back-pressure, rather than letting it buffer without bound; and no frame is cut at exit.
@@ -817,6 +834,7 @@ async function handle(message: Json) {
     case "hello":
       return
     case "load":
+      if (message.confined) for (const root of [message.dir, realpathSync(message.dir)]) confined.add(root + path.sep)
       return load(message.seq, message.target, message.dir, message.options, message.setup)
     case "setup": {
       const plugin = described.get(message.load)

@@ -416,13 +416,28 @@ impl Loader {
     ) -> bool {
         let name = target.target.as_str();
         // A project's TypeScript plugin runs only once the user approved its files, as a native build does: until then
-        // nothing of it reaches the JS host, which does not start for it.
-        if target.project
-            && let Err(changed) = self.approved(host, registry, name, Artifact::tree(dir))
-        {
-            scripts.forget(name);
-            return changed;
-        }
+        // nothing of it reaches the JS host, which does not start for it. What the JS host imports is a copy of exactly
+        // the approved files (bigboi P8-1); a save since the approval holds the plugin back for a decision on it.
+        let staged = match target.project {
+            true => match self.approved(host, registry, name, Artifact::tree(dir)) {
+                Ok(artifact) => match self.approvals.staging().and_then(|root| artifact.stage(&root)) {
+                    Ok(staged) => Some(staged),
+                    Err(error) => {
+                        log::warn!("plugin {name}: {error}");
+                        scripts.forget(name);
+                        let changed = Artifact::tree(dir);
+                        let decision = changed.as_ref().ok().and_then(|changed| self.approvals.decision(changed));
+                        return self.hold(host, registry, name, changed, decision);
+                    }
+                },
+                Err(changed) => {
+                    scripts.forget(name);
+                    return changed;
+                }
+            },
+            false => None,
+        };
+        let dir = staged.as_deref().unwrap_or(dir);
         // Safe mode holds it as it holds a library (review carbon-1). A crash or a client no parent guards does not:
         // nothing of it runs in this process.
         let was_held = registry.held(name);
@@ -434,7 +449,7 @@ impl Loader {
             }
             return !was_held;
         }
-        match scripts.step(name, dir, target.options.as_deref()) {
+        match scripts.step(name, dir, target.options.as_deref(), staged.is_some()) {
             Step::Same => false,
             // Its setup runs only when it starts enabled (review carbon-8).
             Step::Described(id) => {

@@ -165,6 +165,8 @@ pub(crate) enum Step {
 /// A target's load.
 struct Load {
     dir: PathBuf,
+    /// `dir` is a project plugin's approved copy (P8).
+    confined: bool,
     options: Option<String>,
     digest: u64,
     state: Loading,
@@ -421,7 +423,8 @@ impl Scripts {
     }
 
     /// Where `target`, the plugin directory `dir` with `options`, stands; sends its load when it is new or changed.
-    pub(crate) fn step(self: &Rc<Self>, target: &str, dir: &Path, options: Option<&str>) -> Step {
+    /// `confined`: `dir` is a project plugin's approved copy, whose imports must stay in it.
+    pub(crate) fn step(self: &Rc<Self>, target: &str, dir: &Path, options: Option<&str>, confined: bool) -> Step {
         if let Some(stopped) = self.stopped.borrow().clone() {
             return Step::Failed(stopped, 0);
         }
@@ -447,6 +450,7 @@ impl Scripts {
             target.to_owned(),
             Load {
                 dir: dir.to_owned(),
+                confined,
                 options: options_text,
                 digest,
                 state: Loading::Waiting(seq),
@@ -457,7 +461,7 @@ impl Scripts {
         let options = options.and_then(|options| serde_json::from_str(options).ok());
         // Nothing of it is set up before the loader knows it is enabled (review carbon-8).
         let dir = dir.to_string_lossy().into_owned();
-        let load = Down::Load { seq, target: target.to_owned(), dir, options, setup: false };
+        let load = Down::Load { seq, target: target.to_owned(), dir, options, setup: false, confined };
         self.send(load, Some(Waiting::Load(target.to_owned())));
         Step::Starting
     }
@@ -482,6 +486,7 @@ impl Scripts {
             id: id.clone(),
             target: target.to_owned(),
             dir: load.dir.clone(),
+            confined: load.confined,
             options: load.options.clone(),
             seq: 0,
             manifest: opencode_plugin_abi::Manifest { id: id.clone(), ..Default::default() },
@@ -758,6 +763,7 @@ impl Scripts {
                             id,
                             target: target.clone(),
                             dir: load.dir.clone(),
+                            confined: load.confined,
                             options: load.options.clone(),
                             seq,
                             manifest,

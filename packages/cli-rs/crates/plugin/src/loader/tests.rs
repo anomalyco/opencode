@@ -1770,6 +1770,29 @@ fn a_typescript_plugins_artifact_is_its_files() {
     assert!(approval::Artifact::tree(&dir.join("tui.ts")).is_err());
 }
 
+// Expected (bigboi P8-1): a TypeScript plugin's approved files are staged as a copy named by their hash, made of the
+// bytes it hashed: the copy's own hash is the approved one, a save after the approval is refused rather than copied,
+// and a copy made before is used again.
+#[test]
+fn a_typescript_plugin_is_staged_only_as_it_was_approved() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let (dir, staging) = (root.path().join("probe"), root.path().join("staged"));
+    std::fs::create_dir_all(dir.join("node_modules/dep")).unwrap();
+    std::fs::write(dir.join("tui.ts"), "export default {}\n").unwrap();
+    std::fs::write(dir.join("node_modules/dep/index.js"), "module.exports = 1\n").unwrap();
+    let approved = approval::Artifact::tree(&dir).unwrap();
+    let staged = approved.stage(&staging).unwrap();
+    assert_eq!(staged, staging.join(&approved.sha256));
+    assert_eq!(approval::Artifact::tree(&staged).unwrap().sha256, approved.sha256);
+    assert_eq!(std::fs::read_to_string(staged.join("node_modules/dep/index.js")).unwrap(), "module.exports = 1\n");
+    assert_eq!(approved.stage(&staging).unwrap(), staged);
+    std::fs::write(dir.join("tui.ts"), "export default { saved: true }\n").unwrap();
+    std::fs::remove_dir_all(&staged).unwrap();
+    let refused = approved.stage(&staging).unwrap_err();
+    assert!(refused.contains("changed since it was approved"), "{refused}");
+    assert_eq!(std::fs::read_dir(&staging).unwrap().count(), 0, "a refused copy was left");
+}
+
 // Expected (carbon-2): a TypeScript plugin's subdirectories are watched, so a save of a module in one reloads it; its
 // dependencies are not, as an install touches the directory itself.
 #[test]

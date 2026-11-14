@@ -63,6 +63,8 @@ pub(crate) struct Loaded {
     pub id: String,
     pub target: String,
     pub dir: PathBuf,
+    /// `dir` is a project plugin's approved copy (P8), what its imports must stay in.
+    pub confined: bool,
     pub options: Option<String>,
     /// The load whose setup the JS host ran.
     pub seq: u64,
@@ -218,6 +220,7 @@ impl Guest {
             dir: self.loaded.dir.to_string_lossy().into_owned(),
             options: self.loaded.options.as_deref().and_then(|options| serde_json::from_str(options).ok()),
             setup: true,
+            confined: self.loaded.confined,
         };
         self.send(load, Some(Waiting::Activate(Rc::downgrade(self))));
     }
@@ -266,6 +269,7 @@ impl Guest {
                 id: self.loaded.id.clone(),
                 target: self.loaded.target.clone(),
                 dir: self.loaded.dir.clone(),
+                confined: self.loaded.confined,
                 options: self.loaded.options.clone(),
                 seq: handed,
                 manifest,
