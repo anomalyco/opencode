@@ -448,12 +448,10 @@ fn mounted_owner(weak: &Weak<Surface>) -> Option<Rc<dyn Host>> {
     weak.upgrade()?.owner.upgrade()
 }
 
-/// The text tool call `part` returned, as the transcript shows it: its content items, a file by its name; `None`
-/// while the host has not loaded the call or it is still streaming its input.
+/// The text tool call `part` returned, as the transcript shows it: its content items, a file by its name; nothing
+/// while it streams its input or runs, and `None` while the host has not loaded it.
 fn part_output(host: &dyn Host, part: &v2::PartRef) -> Option<String> {
-    use opencode_plugin_abi::types::{
-        SessionMessageAssistantContentItem, SessionMessageAssistantToolState, SessionMessageInfo, ToolContent,
-    };
+    use opencode_plugin_abi::types::{SessionMessageAssistantContentItem, SessionMessageInfo, ToolContent};
     let mut found = None;
     host.read(&mut |read| {
         read.messages(&part.session, &mut |messages| {
@@ -464,20 +462,19 @@ fn part_output(host: &dyn Host, part: &v2::PartRef) -> Option<String> {
                 }),
                 _ => None,
             });
-            found =
-                tool.filter(|tool| !matches!(tool.state, SessionMessageAssistantToolState::Streaming(_))).map(|tool| {
-                    opencode_ui::tool_info::tool_display_content(&tool.state)
-                        .iter()
-                        .filter_map(|content| match content {
-                            ToolContent::Text(text) => Some(text.text.clone()),
-                            ToolContent::File(file) => {
-                                Some(file.name.clone().flatten().unwrap_or_else(|| file.uri.clone()))
-                            }
-                            ToolContent::Unknown(_) => None,
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                });
+            found = tool.map(|tool| {
+                opencode_ui::tool_info::tool_display_content(&tool.state)
+                    .iter()
+                    .filter_map(|content| match content {
+                        ToolContent::Text(text) => Some(text.text.clone()),
+                        ToolContent::File(file) => {
+                            Some(file.name.clone().flatten().unwrap_or_else(|| file.uri.clone()))
+                        }
+                        ToolContent::Unknown(_) => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            });
         });
     });
     found
