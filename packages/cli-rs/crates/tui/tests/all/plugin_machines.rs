@@ -1,5 +1,6 @@
 //! The shared fixture of the plugin work (O-124, phase Pt), Rust reader: `parity/machines/plugins.json` holds the
-//! life of a plugin as the user sees it, as states with an expected observation and named actions. The TS reader is
+//! life of a plugin as the user sees it, and of the same plugin found in a project (phase Pa), as states with an
+//! expected observation and named actions. The TS reader is
 //! `parity/machines/plugins.test.tsx`. This drives the real TUI through every legal path to the file's depth and its
 //! seeded walks, each on a fresh mount, observing after every action, in OpenTUI's shape
 //! (`packages/rust/crates/opentui/tests/interaction_machines.rs`). Then it drops, repeats or swaps one action inside
@@ -99,14 +100,16 @@ impl Backend for Builds {
 /// The TUI on home with the life plugin in its plugins directory, as the user drives it.
 struct Life {
     harness: Harness,
-    loader: Loader,
+    loader: Rc<Loader>,
     build: std::path::PathBuf,
     builds: Cell<u8>,
     _root: opencode_util::temp::TempDir,
 }
 
 impl Life {
-    fn open() -> Self {
+    /// The life plugin in the config's plugins directory, or with `project` in the project's, where it waits for
+    /// approval (rich-plugins 3.9).
+    fn open(project: bool) -> Self {
         ARMED.set(false);
         let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
         let root = opencode_util::temp::tempdir().unwrap();
@@ -114,11 +117,14 @@ impl Life {
         std::fs::create_dir(root.path().join(".git")).unwrap();
         let config = root.path().join("config");
         // The manager labels an external plugin by its directory, so the reader finds its row as in TS.
-        let dir = config.join("plugins").join("parity.life");
+        let plugins = if project { root.path().join(".opencode/plugins") } else { config.join("plugins") };
+        let dir = plugins.join("parity.life");
         std::fs::create_dir_all(&dir).unwrap();
         let build = dir.join(entry_file());
         std::fs::write(&build, [1]).unwrap();
-        let loader = Loader::new(Rc::new(Builds), config, root.path().to_path_buf(), Vec::new());
+        let loader = Rc::new(Loader::new(Rc::new(Builds), config, root.path().to_path_buf(), Vec::new()));
+        // The plugin manager's question reaches this loader.
+        harness.tui.plugins.set_loader(loader.clone());
         loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
         let life = Self { harness, loader, build, builds: Cell::new(1), _root: root };
         life.settle();
@@ -144,6 +150,19 @@ impl Life {
             }
             "flip" | "throw" | "arm" | "dialog" | "confirm" | "alert" => {
                 self.palette(&format!("Life {action}"), true);
+            }
+            // The plugin manager's question: Enter on the row asks, Decline is active at first, and the list comes
+            // back once it is answered.
+            "approve" | "decline" => {
+                self.manager();
+                self.harness.app.press("enter");
+                self.settle();
+                if action == "approve" {
+                    self.harness.app.press("right");
+                }
+                self.harness.app.press("enter");
+                self.settle();
+                self.harness.app.press("escape");
             }
             "escape" | "enter" => self.harness.app.press(action),
             // The leader starts a key sequence, which the line shows while it is pending.
@@ -207,6 +226,8 @@ impl Life {
         let row = screen.lines().find(|line| line.contains("parity.life") && !line.contains("Plugin failed"));
         let row = match row {
             Some(row) if row.contains("failed") => "failed",
+            Some(row) if row.contains("pending") => "pending",
+            Some(row) if row.contains("declined") => "declined",
             Some(row) if row.contains("inactive") => "off",
             Some(_) => "on",
             None => "none",
@@ -294,9 +315,10 @@ fn traces<'a>(corpus: &Value, machine: &'a Value, walks: bool) -> Vec<Vec<&'a st
 }
 
 /// Replays `path` on a fresh TUI. An action a state has no edge for does nothing. The first difference that is not
-/// a known row, or `None`; a known row ends the path.
+/// a known row, or `None`; a known row ends the path, unless the machine says this client follows it on (`continue`).
 fn replay(machine: &Value, path: &[&str], known: &mut ExpectedFailures) -> Option<String> {
-    let life = Life::open();
+    let life = Life::open(machine == &CORPUS["machines"]["project"]);
+    let follows = machine["continue"] == true;
     let mut state = machine["initial"].as_str().unwrap();
     for (index, action) in ["mount"].into_iter().chain(path.iter().copied()).enumerate() {
         let next = match index {
@@ -309,7 +331,11 @@ fn replay(machine: &Value, path: &[&str], known: &mut ExpectedFailures) -> Optio
         let (expected, actual) = (machine["states"][next][0].as_str().unwrap(), life.observe());
         if actual != expected {
             if known.has(&format!("{state} {action} {actual}")) {
-                return None;
+                if !follows {
+                    return None;
+                }
+                state = next;
+                continue;
             }
             return Some(format!("{state} + {action}: expected {expected:?}, got {actual:?}"));
         }
@@ -358,17 +384,17 @@ fn faulted<'a>(cycles: &[Vec<&'a str>]) -> BTreeSet<Vec<&'a str>> {
     out
 }
 
-/// Replays `paths` of the life machine, and panics with the shrunk path of the first difference that is not a known
+/// Replays `paths` of the machine `name`, and panics with the shrunk path of the first difference that is not a known
 /// row of `rows`. Returns the known rows it met.
-fn check(paths: impl IntoIterator<Item = Vec<&'static str>>, rows: &[&Value]) -> ExpectedFailures {
-    let machine = &CORPUS["machines"]["life"];
+fn check(name: &str, paths: impl IntoIterator<Item = Vec<&'static str>>, rows: &[&Value]) -> ExpectedFailures {
+    let machine = &CORPUS["machines"][name];
     let mut known = ExpectedFailures::new(rows);
     for path in paths {
         let Some(failure) = replay(machine, &path, &mut known) else { continue };
         let path = shrink(path, |candidate| {
             replay(machine, candidate, &mut ExpectedFailures::new(rows)).as_ref() == Some(&failure)
         });
-        panic!("life {path:?}: {failure}");
+        panic!("{name} {path:?}: {failure}");
     }
     known
 }
@@ -380,14 +406,23 @@ static CORPUS: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| serde_js
 #[test]
 fn the_plugin_life_follows_the_shared_fixture() {
     let life = &CORPUS["machines"]["life"];
-    check(traces(&CORPUS, life, false), &[&life["xfail"]]).check();
+    check("life", traces(&CORPUS, life, false), &[&life["xfail"]]).check();
 }
 
 // Expected: the same along the file's seeded walks.
 #[test]
 fn the_plugin_life_follows_the_shared_fixture_on_walks() {
     let life = &CORPUS["machines"]["life"];
-    check(traces(&CORPUS, life, true), &[&life["xfail"]]);
+    check("life", traces(&CORPUS, life, true), &[&life["xfail"]]);
+}
+
+// Expected (rich-plugins 3.9): a plugin in the project's plugins directory, as the user sees it. TS shows it at once;
+// this client lists it pending, and declined once declined, which the file's exact rows say (deviation
+// F16-project-plugin-approval), and once approved it is the plugin TS shows.
+#[test]
+fn a_project_plugin_follows_the_shared_fixture() {
+    let project = &CORPUS["machines"]["project"];
+    check("project", traces(&CORPUS, project, false), &[&project["xfail"]]).check();
 }
 
 // Expected: the same after one action of two normal cycles is dropped, repeated or swapped. An action a state has no
@@ -400,5 +435,5 @@ fn the_plugin_life_recovers_from_a_dropped_repeated_or_swapped_action() {
         .iter()
         .map(|cycle| cycle.as_str().unwrap().split(' ').collect())
         .collect();
-    check(faulted(&cycles), &[&CORPUS["machines"]["life"]["xfail"], &CORPUS["faults"]["life"]["xfail"]]);
+    check("life", faulted(&cycles), &[&CORPUS["machines"]["life"]["xfail"], &CORPUS["faults"]["life"]["xfail"]]);
 }

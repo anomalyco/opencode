@@ -1,5 +1,5 @@
 {
-  "about": "The life of a plugin as the user sees it (rich-plugins 4.14, O-124), written by hand and never captured. The plugin is parity/plugins/life (TS) and its Rust twin in crates/tui/tests/all/plugin_machines.rs. An observation is line/palette/row/dialog: the plugin's line in home.footer (A, B or -), whether the palette finds its commands (yes or no), its row in the plugin manager (on, off or failed), and which of its dialogs shows (prompt, confirm, alert or -). While a dialog shows, the readers open neither the palette nor the manager, which would replace it, so the first three are ?. Actions: toggle is enter on its row in the plugin manager; flip, throw, arm, dialog, confirm and alert run its palette commands Life flip, Life throw, Life arm (the next setup throws), Life dialog (opens its prompt), Life confirm (asks whether to flip the line) and Life alert (flips the line once it closes); leader presses the leader key (ctrl+x), which starts a key sequence: the plugin reads the pending keys (Rust ABI 1.6 keymap_pending, TS keymap.pending) and its line shows them, so the observation is the line and its keys, as A+ctrl+x/?/?/-, the rest not read while a key would continue the sequence; enter answers the confirm yes; escape closes a dialog, which answers the confirm no, or ends a pending key sequence; reload puts a new build of the plugin in place. TS is the specification: an enable whose setup throws shows the error in a toast and leaves the row as it was, and a plugin's dialog stays open when it reloads; answered after the reload, it reaches nothing the user sees. A row in xfail is a known difference, [client, deviation file or finding:<name>, 'state action observation'].",
+  "about": "The life of a plugin as the user sees it (rich-plugins 4.14, O-124), written by hand and never captured. The plugin is parity/plugins/life (TS) and its Rust twin in crates/tui/tests/all/plugin_machines.rs. An observation is line/palette/row/dialog: the plugin's line in home.footer (A, B or -), whether the palette finds its commands (yes or no), its row in the plugin manager (on, off, failed, pending or declined), and which of its dialogs shows (prompt, confirm, alert or -). While a dialog shows, the readers open neither the palette nor the manager, which would replace it, so the first three are ?. Actions: toggle is enter on its row in the plugin manager; flip, throw, arm, dialog, confirm and alert run its palette commands Life flip, Life throw, Life arm (the next setup throws), Life dialog (opens its prompt), Life confirm (asks whether to flip the line) and Life alert (flips the line once it closes); leader presses the leader key (ctrl+x), which starts a key sequence: the plugin reads the pending keys (Rust ABI 1.6 keymap_pending, TS keymap.pending) and its line shows them, so the observation is the line and its keys, as A+ctrl+x/?/?/-, the rest not read while a key would continue the sequence; enter answers the confirm yes; escape closes a dialog, which answers the confirm no, or ends a pending key sequence; reload puts a new build of the plugin in place. TS is the specification: an enable whose setup throws shows the error in a toast and leaves the row as it was, and a plugin's dialog stays open when it reloads; answered after the reload, it reaches nothing the user sees. A row in xfail is a known difference, [client, deviation file or finding:<name>, 'state action observation'].",
   "depth": 4,
   "seeds": 8,
   "steps": 12,
@@ -57,6 +57,22 @@
         ["rust", "F16-plugin-dialog-ends-with-activation", "confirmB reload A/yes/on/-"],
         ["rust", "F16-plugin-dialog-ends-with-activation", "alertA reload A/yes/on/-"],
         ["rust", "F16-plugin-dialog-ends-with-activation", "alertB reload A/yes/on/-"]
+      ]
+    },
+    "project": {
+      "about": "The same plugin found in the project's .opencode/plugins instead of the config: the client starts in the project, and nothing names the plugin in its config. approve and decline answer the plugin manager's question about it (Enter on its row, then Approve or Decline); TS has no such question, so for TS they do nothing. TS loads the plugin at once. Rust lists it pending until it is approved, and declined once it is declined (rich-plugins 3.9; deviation F16-project-plugin-approval); approved, it is the plugin TS shows. The xfail rows are those observations, and since Rust then follows TS again, a known row here does not end the path (continue).",
+      "initial": "found",
+      "continue": true,
+      "states": {
+        "found": ["A/yes/on/-", { "approve": "approved", "decline": "declined" }],
+        "declined": ["A/yes/on/-", { "approve": "approved" }],
+        "approved": ["A/yes/on/-", { "toggle": "off", "flip": "approvedB" }],
+        "approvedB": ["B/yes/on/-", { "toggle": "off", "flip": "approved" }],
+        "off": ["-/no/off/-", { "toggle": "approved" }]
+      },
+      "xfail": [
+        ["rust", "F16-project-plugin-approval", "found mount -/no/pending/-"],
+        ["rust", "F16-project-plugin-approval", "found decline -/no/declined/-"]
       ]
     }
   },
