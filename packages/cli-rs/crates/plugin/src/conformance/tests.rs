@@ -167,6 +167,7 @@ fn run(header: &Header, load: &Load<'_>) -> Vec<Entry> {
         },
         || {
             let mut route: Option<RouteMount> = None;
+            let mut claimed: Option<crate::claim::Mount> = None;
             for step in &header.script {
                 match step {
                     Step::Load { options } => {
@@ -193,9 +194,20 @@ fn run(header: &Header, load: &Load<'_>) -> Vec<Entry> {
                         host.app.advance(Duration::from_millis(1));
                         host.app.render();
                     }
-                    Step::Close => {
+                    Step::Claim { tool } => {
                         host.app().root().clear();
                         route = None;
+                        claimed = registry.tool_claims().find(tool).map(|claim| {
+                            let mount = claim.mount(host.app(), "call_1", 40);
+                            mount.show(pending(tool));
+                            host.app().root().add(mount.root());
+                            mount
+                        });
+                        host.app.render();
+                    }
+                    Step::Close => {
+                        host.app().root().clear();
+                        (route, claimed) = (None, None);
                     }
                     Step::Advance => host.app.advance(Duration::from_millis(1)),
                     Step::Disable | Step::Enable => {
@@ -203,12 +215,12 @@ fn run(header: &Header, load: &Load<'_>) -> Vec<Entry> {
                     }
                     Step::Mode { light } => host.mode.set(if *light { ThemeMode::Light } else { ThemeMode::Dark }),
                     Step::Observe => {
-                        let seen = observe(&host, &registry, route.is_some());
+                        let seen = observe(&host, &registry, route.is_some() || claimed.is_some());
                         recorder.borrow_mut().observe(seen);
                     }
                 }
             }
-            drop(route);
+            drop((route, claimed));
             registry.deactivate_all();
         },
     );
@@ -230,6 +242,22 @@ fn load_plugin(
             native::from_api(&dynamic(host), api, entry, options)
         }
     }
+}
+
+/// A call of `tool` in session `ses_1` as it starts, its input streaming.
+fn pending(tool: &str) -> abi::claim::Part {
+    let call = serde_json::from_value(json!({
+        "type": "tool", "id": "call_1", "name": tool, "state": { "status": "streaming", "input": "" },
+        "time": { "created": 1 },
+    }))
+    .unwrap();
+    abi::claim::Part::Tool(Box::new(abi::claim::ToolPart {
+        session: "ses_1".into(),
+        message: "msg_1".into(),
+        state: abi::claim::State::Pending,
+        permission: false,
+        tool: call,
+    }))
 }
 
 /// What the user sees: the toasts since the last look, the plugin's status in the plugin manager, and the route's
@@ -837,7 +865,7 @@ mod player {
             }
             (abi::OK, reply) => {
                 let mut reply = with(|player| later(reply, player.future)).unwrap_or_default();
-                if kind == Kind::View {
+                if matches!(kind, Kind::View | Kind::Claim) {
                     with(|player| player.normal.reply(&mut reply, true));
                 }
                 match reply.get("bytes").and_then(Value::as_str) {
@@ -1133,9 +1161,15 @@ fn the_protocol_machine_refuses_what_the_header_forbids() {
             )],
         ),
         (
-            "a scroll event of a surface without a handler",
-            vec![call(r#"{"type":"scrolled","surface":0,"event":{"type":"user-scroll","scroll":"x"}}"#)],
+            "input to a surface without a handler",
+            vec![call(r#"{"type":"input","to":{"type":"surface","surface":0},"event":{"type":"paste","text":"x"}}"#)],
         ),
+        (
+            "input to a layer the manifest lacks",
+            vec![call(r#"{"type":"input","to":{"type":"layer","layer":0},"event":{"type":"paste","text":"x"}}"#)],
+        ),
+        ("a claim's view of a claim the manifest lacks", vec![call(r#"{"type":"claim","claim":0}"#)]),
+        ("a search the manifest lacks", vec![call(r#"{"type":"search","name":"s","query":"","options":[]}"#)]),
         ("a view of a mount that ended", vec![call(unmount), ok("null"), call(view)]),
         (
             "a call after a panic",
