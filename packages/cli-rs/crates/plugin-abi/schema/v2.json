@@ -323,6 +323,36 @@
             }
           },
           "required": ["type", "key"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "animate": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "canvas"
+            }
+          },
+          "required": ["type"]
         }
       ],
       "description": "A node of a surface's tree."

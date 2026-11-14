@@ -78,6 +78,7 @@ pub const KINDS: &[&str] = &[
     "view",
     "update",
     "unmount",
+    "draw",
 ];
 
 /// The index of `kind` in [`KINDS`], or the last index past it for a kind it does not list.

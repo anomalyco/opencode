@@ -1,7 +1,8 @@
 //! Contract 2.0 of the rich-plugin design (`rich-plugins/synthesis.md` 4.1 to 4.6), as phase P1 builds it: a keyed
 //! tree of host-owned widgets per surface, which the host reconciles by key ([`Node`], [`Node::Keep`]), mounts with
 //! generations ([`MountId`]), content by handle ([`Source`]), a host-scrolled [`Node::Scroll`], and the palette in a
-//! surface's input ([`SurfaceInput`]).
+//! surface's input ([`SurfaceInput`]). P5 adds [`Node::Canvas`], drawn by a retained display list
+//! ([`crate::canvas`]) that [`Surface::draw`] returns.
 //!
 //! P1 runs it on the linked path only: a built-in registers a surface with [`crate::Setup::surface`] and the host
 //! calls its view with Rust values. The C ABI of 2.0 is P4's; until then a surface of an external plugin is never
@@ -124,7 +125,60 @@ pub enum Node {
     /// The subtree last adopted under id `key` in this mount, unchanged ([`View::memo`]). A key the host does not
     /// hold in the last accepted tree is a contract error: the host refuses the tree whole.
     Keep { key: String },
+    /// Cells the plugin draws itself (P5): its surface's [`Surface::draw`] returns a display list
+    /// ([`crate::canvas`]), which the host keeps under the canvas's id while the id stays in the mount and replays on
+    /// every frame it paints. The host asks for a list when the canvas is first laid out, when its size or `version`
+    /// changes, and once a painted frame while `animate` is set and the canvas shows; never while it is hidden. Its
+    /// cells cannot be selected or copied. A canvas must have an id.
+    Canvas {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        #[serde(default, skip_serializing_if = "is_default_layout")]
+        layout: Layout,
+        /// The plugin's own count of what the canvas shows: a change asks for a list in the next frame.
+        #[serde(default, skip_serializing_if = "is_zero_version")]
+        version: u64,
+        #[serde(default, skip_serializing_if = "is_false")]
+        animate: bool,
+    },
 }
+
+/// What a surface's [`Surface::draw`] gets: the host's reads, the mount, the canvas's id and the frame it draws for.
+pub struct Draw<'a> {
+    pub read: &'a dyn Read,
+    pub mount: &'a MountId,
+    pub canvas: &'a str,
+    pub frame: Frame,
+}
+
+/// The frame a canvas draws for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Frame {
+    /// The canvas's size in cells, as laid out in this frame.
+    pub width: u16,
+    pub height: u16,
+    pub cause: Cause,
+    /// For [`Cause::Animate`], the time since the last frame of this animation; the time the canvas was hidden, or
+    /// not animating, is not counted. Zero for the other causes.
+    pub dt: std::time::Duration,
+}
+
+/// Why the host asks a canvas for a list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Cause {
+    /// The canvas is laid out for the first time.
+    First,
+    /// Its size changed.
+    Resized,
+    /// Its [`Node::Canvas`] `version` changed.
+    Version,
+    /// A frame of its animation.
+    Animate,
+}
+
+/// A surface's canvas draw: the list for the canvas [`Draw::canvas`] names, or `None` to keep the one the host holds.
+pub type DrawFn = Rc<dyn Fn(&mut Draw<'_>) -> Option<crate::canvas::List>>;
 
 /// What a text-bearing node shows: text inline, content sent once ([`View::content`]), or a transcript part's own
 /// output, which never crosses to the plugin.
@@ -225,16 +279,23 @@ pub struct Surface {
     /// The view reads [`SurfaceInput::palette`], so a theme change calls it again.
     pub palette: bool,
     pub view: ViewFn,
+    /// Draws the surface's canvases ([`Node::Canvas`]); without it a canvas shows nothing.
+    pub draw: Option<DrawFn>,
 }
 
 impl Surface {
     pub fn new(name: impl Into<String>, place: Place, view: impl Fn(&mut View<'_>) -> Node + 'static) -> Self {
-        Self { name: name.into(), place, palette: false, view: Rc::new(view) }
+        Self { name: name.into(), place, palette: false, view: Rc::new(view), draw: None }
     }
 
     /// The surface whose view reads the palette.
     pub fn palette(self) -> Self {
         Self { palette: true, ..self }
+    }
+
+    /// The surface whose canvases `draw` draws.
+    pub fn draw(self, draw: impl Fn(&mut Draw<'_>) -> Option<crate::canvas::List> + 'static) -> Self {
+        Self { draw: Some(Rc::new(draw)), ..self }
     }
 }
 
@@ -477,6 +538,27 @@ impl Node {
         Node::Scroll { id: None, height: None, follow: false, layout: Layout::default(), children }
     }
 
+    /// A canvas with id `id`, still and at version 0.
+    pub fn canvas(id: impl Into<String>) -> Self {
+        Node::Canvas { id: Some(id.into()), layout: Layout::default(), version: 0, animate: false }
+    }
+
+    /// A canvas at `value`: a new version asks for a list. Anything else is unchanged.
+    pub fn version(mut self, value: u64) -> Self {
+        if let Node::Canvas { version, .. } = &mut self {
+            *version = value;
+        }
+        self
+    }
+
+    /// A canvas that animates while `on`. Anything else is unchanged.
+    pub fn animate(mut self, on: bool) -> Self {
+        if let Node::Canvas { animate, .. } = &mut self {
+            *animate = on;
+        }
+        self
+    }
+
     /// The node with id `key`; a slot and a keep are unchanged.
     pub fn with_id(mut self, key: impl Into<String>) -> Self {
         if let Some(id) = self.id_mut() {
@@ -493,7 +575,8 @@ impl Node {
             | Node::Markdown { id, .. }
             | Node::Spinner { id, .. }
             | Node::Scroll { id, .. }
-            | Node::Diff { id, .. } => id.as_deref(),
+            | Node::Diff { id, .. }
+            | Node::Canvas { id, .. } => id.as_deref(),
             Node::Keep { key } => Some(key),
             Node::Slot { .. } => None,
         }
@@ -506,7 +589,8 @@ impl Node {
             | Node::Markdown { id, .. }
             | Node::Spinner { id, .. }
             | Node::Scroll { id, .. }
-            | Node::Diff { id, .. } => Some(id),
+            | Node::Diff { id, .. }
+            | Node::Canvas { id, .. } => Some(id),
             Node::Keep { .. } | Node::Slot { .. } => None,
         }
     }
@@ -519,9 +603,13 @@ impl Node {
         }
     }
 
-    /// The node with `layout`; only a box, a text and a scroll have one.
+    /// The node with `layout`; only a box, a text, a scroll and a canvas have one.
     pub fn layout(mut self, value: Layout) -> Self {
-        if let Node::Box { layout, .. } | Node::Text { layout, .. } | Node::Scroll { layout, .. } = &mut self {
+        if let Node::Box { layout, .. }
+        | Node::Text { layout, .. }
+        | Node::Scroll { layout, .. }
+        | Node::Canvas { layout, .. } = &mut self
+        {
             *layout = value;
         }
         self
@@ -611,6 +699,10 @@ fn yes() -> bool {
 }
 
 fn is_zero(value: &u16) -> bool {
+    *value == 0
+}
+
+fn is_zero_version(value: &u64) -> bool {
     *value == 0
 }
 
