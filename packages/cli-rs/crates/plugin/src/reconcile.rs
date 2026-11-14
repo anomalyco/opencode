@@ -616,6 +616,25 @@ impl Tree {
         find(&self.nodes, id)
     }
 
+    /// Of the nodes whose widgets are on `path`, widget ids from the nearest, the id of the nearest, kept subtrees
+    /// included: one walk, where [`Self::widget`] for each id would be one walk an id.
+    pub fn nearest(&self, path: &[u32]) -> Option<String> {
+        fn walk<'a>(nodes: &'a [Mounted], path: &[u32], best: &mut Option<(usize, &'a str)>) {
+            for node in nodes {
+                if let (Some(id), Some(widget)) = (node.node.id(), &node.widget)
+                    && let Some(at) = path.iter().position(|step| *step == widget.id())
+                    && best.is_none_or(|(nearest, _)| at < nearest)
+                {
+                    *best = Some((at, id));
+                }
+                walk(&node.children, path, best);
+            }
+        }
+        let mut best = None;
+        walk(&self.nodes, path, &mut best);
+        best.map(|(_, id)| id.to_owned())
+    }
+
     /// The ids of the boxes that can take the focus: none in a hidden box, which OpenTUI focuses not (review carbon-5).
     pub fn focusable(&self) -> Vec<String> {
         fn walk(nodes: &[Mounted], out: &mut Vec<String>) {

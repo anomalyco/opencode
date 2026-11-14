@@ -459,12 +459,15 @@ impl Surface {
         let found = Rc::downgrade(&mounted);
         let lookup: interact::Lookup =
             Rc::new(move |id: &str| found.upgrade().and_then(|mounted| mounted.state.borrow().tree.widget(id)));
+        let found = Rc::downgrade(&mounted);
+        let nearest: interact::Nearest =
+            Rc::new(move |path: &[u32]| found.upgrade().and_then(|mounted| mounted.state.borrow().tree.nearest(path)));
         let owned = Owner::mount(
             &input.plugin,
             &surface.name,
             owner.clone(),
             mounted.root.clone(),
-            lookup,
+            (lookup, nearest),
             input.deliver.clone(),
             mounted.alive(),
         );

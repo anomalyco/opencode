@@ -41,6 +41,8 @@ use crate::Host;
 pub(crate) type Deliver = Rc<dyn Fn(&dyn Host, &Rc<Owner>, &Event) -> Handled>;
 /// The widget of a node of the owner's tree, by id.
 pub(crate) type Lookup = Rc<dyn Fn(&str) -> Option<AnyWidget>>;
+/// Of the owner's nodes whose widgets are on a path of widget ids, nearest first, the id of the nearest.
+pub(crate) type Nearest = Rc<dyn Fn(&[u32]) -> Option<String>>;
 
 /// What one owner holds of the input.
 pub struct Owner {
@@ -56,6 +58,7 @@ pub struct Owner {
     /// Where a layer of its surface's own scope holds (`LayerScope::Surface`).
     held: RefCell<Held>,
     lookup: Option<Lookup>,
+    nearest: Option<Nearest>,
     alive: Cell<bool>,
     /// What it held is gone.
     ended: Cell<bool>,
@@ -182,17 +185,17 @@ pub fn ledger(host: &dyn Host) -> Ledger {
 }
 
 impl Owner {
-    /// A mount's owner: its surface, its root, its tree's lookup and its handler.
+    /// A mount's owner: its surface, its root, its tree's lookups and its handler.
     pub(crate) fn mount(
         plugin: &str,
         surface: &str,
         host: Weak<dyn Host>,
         root: View,
-        lookup: Lookup,
+        (lookup, nearest): (Lookup, Nearest),
         deliver: Option<Deliver>,
         mount: Weak<()>,
     ) -> Rc<Self> {
-        Rc::new(Self::new(plugin, surface, host, Some(root), Some(lookup), deliver, Some(mount)))
+        Rc::new(Self::new(plugin, surface, host, Some(root), Some((lookup, nearest)), deliver, Some(mount)))
     }
 
     /// An activation's owner, which has no surface.
@@ -205,10 +208,11 @@ impl Owner {
         surface: &str,
         host: Weak<dyn Host>,
         root: Option<View>,
-        lookup: Option<Lookup>,
+        lookups: Option<(Lookup, Nearest)>,
         deliver: Option<Deliver>,
         mount: Option<Weak<()>>,
     ) -> Self {
+        let (lookup, nearest) = lookups.unzip();
         Self {
             plugin: plugin.to_owned(),
             surface: surface.to_owned(),
@@ -217,6 +221,7 @@ impl Owner {
             held: RefCell::new(root.clone().map_or(Held::Route, Held::Within)),
             root,
             lookup,
+            nearest,
             alive: Cell::new(true),
             ended: Cell::new(false),
             composer: Cell::new(false),
@@ -466,22 +471,13 @@ impl Owner {
 
     /// Where the focus is, for this owner.
     pub fn focused(&self) -> input::Focused {
-        let (Some(host), Some(_), Some(lookup)) = (self.host.upgrade(), &self.root, &self.lookup) else {
+        let (Some(host), Some(_), Some(nearest)) = (self.host.upgrade(), &self.root, &self.nearest) else {
             return input::Focused::default();
         };
         let path: Vec<u32> =
             std::iter::successors(host.app().focused(), |widget| widget.parent()).map(|widget| widget.id()).collect();
         // The nearest node with an id that holds the focus.
-        let node = self
-            .ids
-            .borrow()
-            .iter()
-            .filter_map(|id| {
-                let at = lookup(id).and_then(|widget| path.iter().position(|step| *step == widget.id()))?;
-                Some((at, id.clone()))
-            })
-            .min_by_key(|(at, _)| *at)
-            .map(|(_, id)| id);
+        let node = nearest(&path);
         input::Focused { node, surface: self.scope_view().is_some_and(|view| path.contains(&view.id())) }
     }
 
@@ -917,17 +913,7 @@ impl Router {
             std::iter::successors(Some(source.clone()), |widget| widget.parent()).map(|widget| widget.id()).collect();
         let owners: Vec<Rc<Owner>> = self.owners.borrow().iter().filter_map(Weak::upgrade).collect();
         owners.into_iter().filter(|owner| owner.alive() && owner.plugin == plugin).find_map(|owner| {
-            let lookup = owner.lookup.as_ref()?;
-            let node = owner
-                .ids
-                .borrow()
-                .iter()
-                .filter_map(|id| {
-                    let widget = lookup(id)?.id();
-                    Some((path.iter().position(|step| *step == widget)?, id.clone()))
-                })
-                .min_by_key(|(at, _)| *at)
-                .map(|(_, id)| id)?;
+            let node = owner.nearest.as_ref()?(&path)?;
             Some(input::Dragged { surface: owner.surface.clone(), node })
         })
     }
