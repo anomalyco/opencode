@@ -2,6 +2,7 @@ export * as ClaudeSessionHooks from "./session.js"
 
 import { AssistantMessage, ToolMessage, type ToolResultPart } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
+import type { Session } from "@opencode/schema/session"
 import { Effect, Schema } from "effect"
 import { SessionModelRequest } from "../../../session/model-request.js"
 import type { ClaudeIO } from "./claude/io.js"
@@ -21,6 +22,25 @@ const flagToolError = (part: ToolResultPart): ToolResultPart => {
   }
   return { ...part, providerMetadata: { ...part.providerMetadata, [ClaudeProvider.ID]: flags } }
 }
+
+// Decided once per session and saved: a session whose budget changed would cut its images differently, and Claude Code
+// would fork it and replay the history. A fork shares its source's Claude history, so it keeps the source's budget.
+const largeImages: (
+  ctx: Context,
+  status: ClaudeStatus.Interface,
+  io: ClaudeIO.Interface,
+  sessionID: Session.ID,
+) => Effect.Effect<boolean> = Effect.fn("ClaudeSessionHooks.largeImages")(function* (ctx, status, io, sessionID) {
+  const key = `images/${sessionID}`
+  const saved = yield* ctx.storage.get(key)
+  if (typeof saved === "boolean") return saved
+  const session = yield* ctx.session.get({ sessionID }).pipe(Effect.orDie)
+  const large = session.fork
+    ? yield* largeImages(ctx, status, io, session.fork.sessionID)
+    : yield* ClaudeProvider.firstParty(ctx, status, io)
+  yield* ctx.storage.set(key, large)
+  return large
+})
 
 export const register = Effect.fn("ClaudeSessionHooks.register")(function* (
   ctx: Context,
@@ -65,8 +85,11 @@ export const register = Effect.fn("ClaudeSessionHooks.register")(function* (
         kind,
         (event) =>
           Effect.gen(function* () {
-            if (yield* ClaudeProvider.firstParty(ctx, status, io)) return
-            event.messages = [...SessionModelRequest.boundImages(event.messages)]
+            const bounded = SessionModelRequest.boundImages(event.messages)
+            // Within the default budget both budgets send the same, so there is nothing to decide yet.
+            if (bounded === event.messages) return
+            if (yield* largeImages(ctx, status, io, event.sessionID)) return
+            event.messages = [...bounded]
           }),
         { providerID: ClaudeProvider.ID },
       ),

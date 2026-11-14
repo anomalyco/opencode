@@ -436,19 +436,9 @@ describe("ClaudeAgentPlugin session hooks", () => {
   )
 
   // Nine 3 MiB images: 27 MiB is past the default 25 MiB budget, which cuts the oldest four.
-  const removedImages = Effect.fn(function* (account?: AccountInfo, env?: Record<string, string>) {
-    const onConnect = FakeClaude.expectStartup({ account })
-    const claude = FakeClaude.make(account ? [onConnect] : [])
-    yield* addPlugin(FakeIO.make({ claude, env }))
-    yield* addAgents
-    if (account) {
-      yield* connect
-      yield* Effect.promise(() => claude.reached(onConnect))
-      yield* eventually(claudeModels, (models) => models.length > 0)
-      claude.check()
-    }
+  const removedImages = Effect.fn(function* (sessionID: Session.ID) {
     const hooks = yield* PluginHooks.Service
-    const event = hookEvent((yield* newSession).id)
+    const event = hookEvent(sessionID)
     event.messages = Array.from({ length: 9 }, (_, i) =>
       Message.user({
         type: "media",
@@ -460,27 +450,80 @@ describe("ClaudeAgentPlugin session hooks", () => {
     return context.messages.filter((message) => message.content[0]?.type === "text").length
   })
 
+  const connectedAs = Effect.fn(function* (account: AccountInfo, env?: Record<string, string>) {
+    const onConnect = FakeClaude.expectStartup({ account })
+    const claude = FakeClaude.make([onConnect])
+    yield* addPlugin(FakeIO.make({ claude, env }))
+    yield* addAgents
+    yield* connect
+    yield* Effect.promise(() => claude.reached(onConnect))
+    yield* eventually(claudeModels, (models) => models.length > 0)
+    claude.check()
+  })
+
   it.live("lets images grow past the default budget on Anthropic's own API", () =>
     Effect.gen(function* () {
-      expect(yield* removedImages(apiKey)).toBe(0)
+      yield* connectedAs(apiKey)
+      expect(yield* removedImages((yield* newSession).id)).toBe(0)
     }),
   )
 
   it.live("keeps the default image budget on a cloud platform", () =>
     Effect.gen(function* () {
-      expect(yield* removedImages({ apiProvider: "bedrock" })).toBe(4)
+      yield* connectedAs({ apiProvider: "bedrock" })
+      expect(yield* removedImages((yield* newSession).id)).toBe(4)
     }),
   )
 
   it.live("keeps the default image budget through a custom base URL", () =>
     Effect.gen(function* () {
-      expect(yield* removedImages(apiKey, { ANTHROPIC_BASE_URL: "https://gateway.example" })).toBe(4)
+      yield* connectedAs(apiKey, { ANTHROPIC_BASE_URL: "https://gateway.example" })
+      expect(yield* removedImages((yield* newSession).id)).toBe(4)
     }),
   )
 
-  it.live("keeps the default image budget until Claude Code reports its API", () =>
+  it.live("checks Claude Code's API before the first request instead of assuming the default budget", () =>
     Effect.gen(function* () {
-      expect(yield* removedImages()).toBe(4)
+      // Nothing has checked yet, as after a restart with a saved model list.
+      const onRequest = FakeClaude.expectStartup({ account: apiKey })
+      const claude = FakeClaude.make([onRequest])
+      yield* addPlugin(FakeIO.make({ claude }))
+      yield* addAgents
+      expect(yield* removedImages((yield* newSession).id)).toBe(0)
+      claude.check()
+    }),
+  )
+
+  it.live("keeps the default image budget when Claude Code can't be checked", () =>
+    Effect.gen(function* () {
+      yield* addPlugin({ ...FakeIO.make({ claude: FakeClaude.make([]) }), which: () => undefined })
+      yield* addAgents
+      expect(yield* removedImages((yield* newSession).id)).toBe(4)
+    }),
+  )
+
+  it.live("keeps a session's image budget, and its forks', when Claude Code's API changes", () =>
+    Effect.gen(function* () {
+      const onConnect = FakeClaude.expectStartup({ account: { apiProvider: "bedrock" } })
+      const onReconnect = FakeClaude.expectStartup({ account: apiKey })
+      const claude = FakeClaude.make([onConnect, onReconnect])
+      yield* addPlugin(FakeIO.make({ claude }))
+      yield* addAgents
+      yield* connect
+      yield* Effect.promise(() => claude.reached(onConnect))
+      yield* eventually(claudeModels, (models) => models.length > 0)
+      const sessions = yield* Session.Service
+      const session = yield* newSession
+      yield* sessions.prompt({ sessionID: session.id, text: "Fork context", resume: false })
+      yield* SessionInbox.promote((yield* Database.Service).db, yield* Bus.Service, session.id, "steer")
+      expect(yield* removedImages(session.id)).toBe(4)
+
+      yield* connect
+      yield* Effect.promise(() => claude.reached(onReconnect))
+      claude.check()
+      expect(yield* removedImages((yield* newSession).id)).toBe(0)
+      expect(yield* removedImages(session.id)).toBe(4)
+      expect(yield* removedImages((yield* sessions.fork({ sessionID: session.id })).id)).toBe(4)
     }),
   )
 
