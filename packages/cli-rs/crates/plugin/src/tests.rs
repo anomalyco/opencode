@@ -1000,6 +1000,9 @@ fn mail_scenario(before: &[MailOp], inside: &[(usize, MailOp)]) -> Result<(usize
         return Err("a wake was still in flight after the host settled".to_owned());
     }
     let failing = run.applied.iter().any(|op| matches!(op, MailOp::Report | MailOp::FailingUpdate));
+    if run.hints.is_empty() && !woken.is_empty() {
+        return Err(format!("the wake handlers ran at {woken:?} with no wake of the waker"));
+    }
     if !failing {
         if arrived != run.sent {
             return Err(format!("arrived {arrived:?}, sent {:?}", run.sent));
