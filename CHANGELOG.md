@@ -82,6 +82,7 @@ Release notes for OpenCode V2, newest first.
 #### Bug fixes
 
 - Recent sessions now keep stable recency ordering through list reloads, renames, and completed runs.
+- Home periodically refreshes its session index so sessions created by another server using the same database appear without restarting the app.
 - Fixed browser panes not retrying after server plugins finish loading.
 - Fixed mention suggestions being recreated while typing.
 - Fixed SSH prompts failing to advance or close after connection.

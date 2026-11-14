@@ -12,7 +12,7 @@ import {
   sessionHref,
   T0,
 } from "../utils/app"
-import { mockOpenCodeServer, mockServers } from "../utils/mock-server"
+import { currentSession, mockOpenCodeServer, mockServers } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { mockRemoteServer, mockWorkspace, newSessionLocation } from "../utils/workspace"
 import { APP_READY_TIMEOUT, expectAppVisible } from "../utils/waits"
@@ -51,6 +51,45 @@ test("Home keeps the session list in every interface mode", async ({ page }) => 
     await expect(search).toBeVisible()
     await expect(row(page, earlier.title)).toBeVisible()
   }
+})
+
+test("Home refreshes sessions after the active list interval", async ({ page }) => {
+  const workspace = await mockWorkspace(page, {
+    name: "HomeExternal",
+    sessions: [{ id: "ses_home_initial", title: "Already listed" }],
+    seed: { tabs: [] },
+  })
+  const added = session({
+    id: "ses_home_external",
+    title: "Created by another server",
+    directory: workspace.directory,
+    projectID: workspace.projectID,
+  })
+  let listRequests = 0
+
+  await page.clock.install()
+  await page.goto("/")
+  await expect(row(page, "Already listed")).toBeVisible()
+  await expect(row(page, added.title)).toHaveCount(0)
+
+  await page.route(/\/api\/session\?/, async (route) => {
+    if (route.request().method() !== "GET") return route.fallback()
+
+    const requestURL = new URL(route.request().url())
+    if (requestURL.searchParams.get("parentID") !== "null") return route.fallback()
+
+    listRequests += 1
+    await route.fulfill({
+      json: {
+        data: [...workspace.sessions, added].map((item) => currentSession(item, workspace.directory)),
+        cursor: { next: undefined },
+      },
+    })
+  })
+
+  await page.clock.fastForward(30_000)
+  await expect.poll(() => listRequests).toBeGreaterThan(0)
+  await expect(row(page, added.title)).toBeVisible()
 })
 
 test("a working Home session keeps its project avatar and shows its activity ring at the end of the row", async ({
