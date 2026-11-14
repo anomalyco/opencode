@@ -254,8 +254,12 @@ impl State {
         }
         let location = self.location(host);
         let query = vec![("location[directory]".to_owned(), location.directory)];
-        let fetch =
-            Fetch { method: "GET".to_owned(), path: "/api/experimental/usage/limits".to_owned(), query, body: None };
+        let fetch = Fetch {
+            method: "GET".to_owned(),
+            path: "/api/experimental/usage/limits".to_owned(),
+            query,
+            ..Fetch::default()
+        };
         self.limits = Some(host.fetch(fetch));
     }
 
@@ -502,14 +506,14 @@ fn family(read: &dyn Read, session: &str) -> Vec<String> {
 fn children(parent: &str, cursor: Option<&str>) -> Fetch {
     let mut query = vec![("limit".to_owned(), PAGE_SIZE.to_string()), ("parentID".to_owned(), parent.to_owned())];
     query.extend(cursor.map(|cursor| ("cursor".to_owned(), cursor.to_owned())));
-    Fetch { method: "GET".to_owned(), path: "/api/session".to_owned(), query, body: None }
+    Fetch { method: "GET".to_owned(), path: "/api/session".to_owned(), query, ..Fetch::default() }
 }
 
 /// A page of `session`'s messages (TS `client.message.list`).
 fn messages(session: &str, cursor: Option<&str>) -> Fetch {
     let mut query = vec![("limit".to_owned(), PAGE_SIZE.to_string())];
     query.extend(cursor.map(|cursor| ("cursor".to_owned(), cursor.to_owned())));
-    Fetch { method: "GET".to_owned(), path: format!("/api/session/{session}/message"), query, body: None }
+    Fetch { method: "GET".to_owned(), path: format!("/api/session/{session}/message"), query, ..Fetch::default() }
 }
 
 /// `Date.now()`.
