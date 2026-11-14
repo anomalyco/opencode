@@ -764,8 +764,21 @@ fn install_keys(tui: &Rc<Tui>) {
             })
         })
         .bindings(["app.exit"]);
+    // The reserved chord, which no plugin sees (synthesis 3.8), takes a plugin's route back home: TS's diff viewer binds
+    // `app.exit` to close itself, and the chord is `app.exit`'s. Elsewhere it is `app.exit`'s still.
+    let leave = KeymapLayer::new(vec![
+        TuiCommand::inline(
+            opencode_plugin::abi::interact::RESERVED,
+            bind!(weak, |tui, _, _| tui.navigate(Route::Home)),
+        )
+        .title("Close")
+        .group("System"),
+    ])
+    .enabled(Condition::when(bind!(weak, |tui| matches!(tui.route(), Route::Plugin { .. }))))
+    .priority(1);
     let layers = [
         commands,
+        leave,
         // Part of `appBindingCommands` (`app.tsx:150-186`); E.20 binds its own commands.
         KeymapLayer::default().bindings([COMMAND_PALETTE_COMMAND, "help.show", "opencode.settings"]),
         // `appGlobalBindingCommands` (`app.tsx:117`).
