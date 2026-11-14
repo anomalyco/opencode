@@ -44,6 +44,10 @@ const REPORT: usize = 4096;
 pub(crate) struct Mailbox {
     state: Mutex<State>,
     wake: Arc<Wake>,
+    /// The bytes of the messages and keys it holds at most: the content bytes a plugin may hold (synthesis 4.2,
+    /// review carbon 4.4). A message of the linked carrier is a Rust value whose size the host cannot know: it counts
+    /// its key alone.
+    bytes: u64,
 }
 
 #[derive(Default)]
@@ -57,6 +61,8 @@ struct State {
     refusing: bool,
     /// The first panic report, and the place it took: the messages put in before it go first.
     panic: Option<(String, u64)>,
+    /// The bytes of the messages and keys that wait ([`Mailbox::bytes`]).
+    held: u64,
     high: usize,
     refused: u64,
 }
@@ -91,7 +97,8 @@ pub(crate) fn rows() -> usize {
 
 impl Mailbox {
     pub fn new(id: &str, wake: Arc<Wake>) -> Arc<Self> {
-        let mailbox = Arc::new(Self { state: Mutex::default(), wake });
+        let bytes = crate::limits::get().plugin_content;
+        let mailbox = Arc::new(Self { state: Mutex::default(), wake, bytes });
         MAILBOXES.with(|boxes| {
             let mut boxes = boxes.borrow_mut();
             boxes.retain(|(known, mailbox)| known != id && mailbox.strong_count() > 0);
@@ -119,9 +126,17 @@ impl Mailbox {
             }
             let waiting =
                 key.and_then(|key| state.entries.iter().position(|(known, ..)| known.as_deref() == Some(key)));
+            let size = size(key, &message);
+            let freed = waiting.map_or(0, |index| size_of(&state.entries[index]));
+            if state.held - freed + size > self.bytes {
+                state.refused += 1;
+                return Err((Refused::Full, message));
+            }
+            state.held = state.held - freed + size;
             match waiting {
                 Some(index) => Some(std::mem::replace(&mut state.entries[index].1, message)),
                 None if state.entries.len() >= abi::BOUND => {
+                    state.held -= size;
                     state.refused += 1;
                     return Err((Refused::Full, message));
                 }
@@ -150,7 +165,9 @@ impl Mailbox {
             if state.closed || state.refusing {
                 return abi::CLOSED;
             }
-            if !waiting && state.entries.len() >= abi::BOUND {
+            // A message past the bytes is refused before it is read.
+            let past = state.held.saturating_add((key.len() + message.len()) as u64) > self.bytes && !waiting;
+            if !waiting && state.entries.len() >= abi::BOUND || past {
                 drop(state);
                 return self.refuse_full();
             }
@@ -194,6 +211,7 @@ impl Mailbox {
         let dropped = {
             let mut state = self.state();
             state.refusing = true;
+            state.held = 0;
             std::mem::take(&mut state.entries)
         };
         drop(dropped);
@@ -206,6 +224,7 @@ impl Mailbox {
             let mut state = self.state();
             state.closed = true;
             state.panic = None;
+            state.held = 0;
             std::mem::take(&mut state.entries)
         };
         drop(dropped);
@@ -222,10 +241,17 @@ impl Mailbox {
         self.state().closed
     }
 
+    /// Whether it holds all the entries, or all the bytes, it may.
+    pub fn full(&self) -> bool {
+        let state = self.state();
+        state.entries.len() >= abi::BOUND || state.held >= self.bytes
+    }
+
     /// The messages that wait, in order, and a thread's panic report.
     #[cfg(test)]
     pub fn take(&self) -> (Vec<Message>, Option<String>) {
         let mut state = self.state();
+        state.held = 0;
         let messages = state.entries.drain(..).map(|(_, message, _)| message).collect();
         (messages, state.panic.take().map(|(report, _)| report))
     }
@@ -244,7 +270,9 @@ impl Mailbox {
         if bound.is_some_and(|bound| *place >= bound) {
             return None;
         }
-        state.entries.pop_front().map(|(_, message, _)| message)
+        let entry = state.entries.pop_front()?;
+        state.held -= size_of(&entry);
+        Some(entry.1)
     }
 
     /// A thread's panic report.
@@ -256,6 +284,19 @@ impl Mailbox {
         let state = self.state();
         Stats { waiting: state.entries.len(), high: state.high, refused: state.refused, closed: state.closed }
     }
+}
+
+/// What a message under `key` counts of the mailbox's bytes: its key, and its text when it is JSON.
+fn size(key: Option<&str>, message: &Message) -> u64 {
+    let text = match message {
+        Message::Json(text) => text.len(),
+        _ => 0,
+    };
+    (key.map_or(0, str::len) + text) as u64
+}
+
+fn size_of((key, message, _): &(Option<String>, Message, u64)) -> u64 {
+    size(key.as_deref(), message)
 }
 
 /// The mailbox of an in-process plugin: Rust values, no bytes.
@@ -292,6 +333,30 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
 
     use super::*;
+
+    // Expected (fixed row; review carbon 4.4): a mailbox holds the content bytes a plugin may hold of messages and keys:
+    // past them a send is `Full` and nothing is stored, and a message taken out frees its bytes.
+    #[test]
+    fn a_mailbox_holds_its_bytes_at_most() {
+        let _limits =
+            crate::limits::set(crate::limits::Limits { plugin_content: 100, ..crate::limits::Limits::default() });
+        let mailbox = Mailbox::new("test.bytes", Arc::new(Wake::new(None)));
+        let forty = format!("\"{}\"", "x".repeat(38));
+        assert_eq!(mailbox.put_json(b"", forty.as_bytes()), abi::OK);
+        assert_eq!(mailbox.put_json(b"", forty.as_bytes()), abi::OK);
+        assert_eq!(mailbox.put_json(b"", forty.as_bytes()), abi::FULL, "past the bytes");
+        assert_eq!(mailbox.stats().waiting, 2);
+        assert!(mailbox.take_one(None).is_some());
+        assert_eq!(mailbox.put_json(b"", forty.as_bytes()), abi::OK, "freed");
+        // A key's bytes count, and a replace counts the difference.
+        let twenty = format!("\"{}\"", "x".repeat(18));
+        assert_eq!(mailbox.put_json(b"k", twenty.as_bytes()), abi::FULL, "80 bytes and 21");
+        assert!(mailbox.take_one(None).is_some());
+        assert_eq!(mailbox.put_json(b"k", twenty.as_bytes()), abi::OK, "40 bytes and 21");
+        assert_eq!(mailbox.put_json(b"k", b"1"), abi::OK, "a replace by 2 bytes");
+        assert_eq!(mailbox.put_json(b"k", forty.as_bytes()), abi::OK, "a replace by 41 bytes");
+        assert_eq!(mailbox.put_json(b"k", format!("{forty}{}", " ".repeat(20)).as_bytes()), abi::FULL, "by 61");
+    }
 
     // Expected (4.2): closing frees what waited, at once, and refuses every send after; the first panic report of an
     // open mailbox is kept, cut to its bound, and one after the close is not.
