@@ -8,11 +8,16 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { RGBA } from "@opentui/core"
 import { createSignal } from "solid-js"
-import { appendFileSync } from "node:fs"
+import { appendFileSync, existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 
-// The module's own code runs as it is imported: it says so, so a test can tell it never ran before approval.
-appendFileSync(path.join(import.meta.dir, "..", ".v2probe.log.jsonl"), JSON.stringify({ module: true }) + "\n")
+// The module's own code runs as it is imported: it says so, so a test can tell it never ran before approval, and which
+// version of it ran. The file it writes to is the one `marker.txt` beside it names, if any: a project's plugin runs
+// from a copy of its files.
+const MODULE = true
+const named = path.join(import.meta.dir, "marker.txt")
+const marker = existsSync(named) ? readFileSync(named, "utf8").trim() : path.join(import.meta.dir, "..", ".v2probe.log.jsonl")
+appendFileSync(marker, JSON.stringify({ module: MODULE }) + "\n")
 
 export default Plugin.define({
   id: "example.v2probe",
