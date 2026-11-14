@@ -1,19 +1,24 @@
 //! `/btw` (E.14, row F03, `feature-plugins/prompt/btw.tsx`): `session.aside` asks a one-shot side question with
 //! the session's context through `session.generate`, without adding to the conversation, and shows the answer
 //! in a large dialog. While answers are pending, a `/btw` spinner shows in `prompt.footer.status`. It is a plugin of
-//! the one API (O-67).
+//! the one API (O-67): the spinner is a contract 2.0 surface (P6a), and the answer a dialog of the API both majors
+//! share, whose body is a node of 1.x (2.0 has no keyed dialog).
 
 use opencode_api::client::Client;
 use opencode_api::generated::{SessionGenerateInput, SessionGenerateOutput};
+use opencode_plugin::abi::v2::{self, Place, Surface};
 use opencode_plugin::abi::{
-    self, Action, Command, Dialog, Host, Layout, Node, Panel, PanelAction, PanelBind, PanelSize, Placement, Render,
-    RequestId, Span, Toast, Variant,
+    self, Action, Command, Dialog, Host, Layout, Node, Panel, PanelAction, PanelBind, PanelSize, Placement, RequestId,
+    Span, Toast, Variant,
 };
 use opencode_plugin::slot;
 
 use super::fetch::{data, fetch_of};
+use super::kept;
 
 use crate::prelude::*;
+
+const SPINNER: &str = "spinner";
 
 // `session.generate` exposes the session's tools but runs no tool loop, so a tool call would surface as an
 // empty answer.
@@ -47,17 +52,20 @@ struct Answer {
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     let state = Rc::new(State::default());
     let shown = state.clone();
-    setup.slot(Placement::append(slot::PROMPT_FOOTER_STATUS), move |_, _, changed| {
+    // The spinner shows what the plugin's own state holds: its handlers' work (`woken`).
+    let spinner = Surface::new("spinner", Place::Slot(Placement::append(slot::PROMPT_FOOTER_STATUS)), move |cx| {
+        let changed = &cx.input.changed;
         if !(changed.all || changed.woken) {
-            return Render::Keep;
+            return kept(SPINNER);
         }
         match shown.pending.borrow().is_empty() {
-            true => Render::Hide,
-            false => Render::Show(
-                Node::row(vec![Node::Spinner { label: "/btw".to_owned() }]).layout(Layout::default().shrink(false)),
-            ),
+            true => super::hidden(SPINNER),
+            false => v2::Node::row(vec![v2::Node::Spinner { id: None, label: "/btw".to_owned() }])
+                .layout(Layout::default().shrink(false))
+                .with_id(SPINNER),
         }
     });
+    setup.surface(spinner);
     let aside = state.clone();
     let command = Command {
         name: "session.aside".to_owned(),

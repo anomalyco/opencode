@@ -5,13 +5,17 @@
 //! - otherwise the `agents` and `commands` hints, which read as disabled while the session pane does not own the input;
 //! - in shell mode, `esc exit shell mode`.
 //!
-//! It is a plugin of the one API (O-67). Each mount of a session's footer counts in [`Goals`], which reads the goal.
+//! It is a plugin of the one API (O-67), on contract 2.0 (P6a). Each mount of a session's footer counts in [`Goals`],
+//! which reads the goal: the surface hears its mounts begin and end ([`Event::Mount`]).
 
-use opencode_plugin::abi::{self, Changed, Click, Layout, Node, Placement, PromptInput, Render, SlotInput, Span, Wrap};
+use opencode_plugin::abi::interact::{Event, Handled};
+use opencode_plugin::abi::v2::{Node, Place, Surface};
+use opencode_plugin::abi::{self, Changed, Click, Layout, Placement, PromptInput, SlotInput, Span, Wrap};
 use opencode_plugin::slot;
 use unicode_width::UnicodeWidthStr;
 
 use super::goal::{self, Goal, Goals};
+use super::kept;
 use super::sidebar_context::{self, Last, Usage, money};
 
 use crate::prelude::*;
@@ -20,19 +24,25 @@ pub fn plugin() -> abi::Plugin {
     abi::Plugin { id: "opencode.prompt.footer", setup }
 }
 
+const ROOT: &str = "footer";
+
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     let goals = Rc::new(Goals::default());
     goals.register(setup);
     let shown = goals.clone();
     let footer: RefCell<Footer> = RefCell::default();
-    setup.slot(Placement::append(slot::PROMPT_FOOTER), move |read, input, changed| {
-        footer.borrow_mut().render(read, input, changed, &shown)
-    });
-    setup.on_mount(Placement::append(slot::PROMPT_FOOTER), move |host, input, mounted| {
-        if let Some(session) = &input.session_id {
-            goals.mounted(host, session, mounted);
+    let surface = Surface::new("footer", Place::Slot(Placement::append(slot::PROMPT_FOOTER)), move |cx| {
+        const NONE: SlotInput = SlotInput { session_id: None, prompt: None, width: 0, height: 0 };
+        footer.borrow_mut().render(cx.read, cx.input.slot.as_ref().unwrap_or(&NONE), &cx.input.changed, &shown)
+    })
+    .mounts()
+    .on(move |host, event| {
+        if let Event::Mount { mounted, slot: Some(SlotInput { session_id: Some(session), .. }) } = event {
+            goals.mounted(host, session, *mounted);
         }
+        Handled::Pass
     });
+    setup.surface(surface);
     Ok(())
 }
 
@@ -72,10 +82,13 @@ struct Keys {
 }
 
 impl Footer {
-    fn render(&mut self, read: &dyn abi::Read, input: &SlotInput, changed: &Changed, goals: &Goals) -> Render {
-        let fresh = changed.all || self.input.as_ref() != Some(input);
+    fn render(&mut self, read: &dyn abi::Read, input: &SlotInput, changed: &Changed, goals: &Goals) -> Node {
+        // The footer's own size is not its input: the terminal's width is (`changed.size`).
+        let same = |last: &SlotInput| last.session_id == input.session_id && last.prompt == input.prompt;
+        let fresh = changed.all || !self.input.as_ref().is_some_and(same);
         if fresh {
-            *self = Footer { input: Some(input.clone()), width: read.info().size.0, ..Footer::default() };
+            let input = SlotInput { width: 0, height: 0, ..input.clone() };
+            *self = Footer { input: Some(input), width: read.info().size.0, ..Footer::default() };
         } else if changed.size {
             self.width = read.info().size.0;
         }
@@ -110,11 +123,11 @@ impl Footer {
             interactive: read.interactive(),
         };
         if !fresh && self.shown.as_ref() == Some(&model) {
-            return Render::Keep;
+            return kept(ROOT);
         }
         let node = view(&model, input.session_id.as_deref().unwrap_or_default());
         self.shown = Some(model);
-        Render::Show(node)
+        node.with_id(ROOT)
     }
 }
 
