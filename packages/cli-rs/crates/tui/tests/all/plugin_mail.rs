@@ -343,6 +343,11 @@ fn a_stop_flag_ends_a_thread_and_a_failure_closes_the_mailbox() {
         assert!(done.recv_timeout(Duration::from_secs(10)).is_ok(), "{carrier:?}: a thread ran on after the failure");
         let sender = mail(|mail| mail.sender.clone()).unwrap();
         assert_eq!(sender.send((3, 1)), Err(SendError::Closed((3, 1))), "{carrier:?}");
+        // A failed plugin's mailbox shows closed, and a disabled one has none, on every carrier (review carbon-7).
+        let stats = opencode_plugin::mailbox::stats(ID);
+        assert!(stats.is_some_and(|stats| stats.closed), "{carrier:?}: {stats:?}");
+        tui.plugins.toggle(&host(tui), ID, false);
+        assert_eq!(opencode_plugin::mailbox::stats(ID), None, "{carrier:?}");
     }
 }
 
