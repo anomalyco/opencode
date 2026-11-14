@@ -2,13 +2,14 @@
 //! the C ABI's byte shims.
 //!
 //! Two test plugins, `test.flood.a` and `test.flood.b`, each take messages from a thread and log each update; `a` also
-//! has a key on its route. Every update costs [`COST`] on the monitor's clock, which nothing else moves, so the frame
-//! budget is exact. The oracles are the plugins' own log, a list of what each send was accepted, and the 4.2 rule
-//! written here over that log, frame by frame:
+//! has a key on its route, whose handler logs it. Every update costs [`COST`] and the key's handler [`KEY_COST`] on the
+//! monitor's clock, which nothing else moves, so the frame budget is exact. The oracles are the plugins' own log, a list
+//! of what each send was accepted, and the 4.2 rule written here over that log, frame by frame:
 //!
 //! - what got `Ok` arrives once, in its thread's order; nothing else arrives;
 //! - a plugin with mail when a frame starts gets at least one update in it; each update after its first in the frame
-//!   starts while its own updates in the frame are under the per-plugin budget and all plugins' under the total;
+//!   starts while its own calls in the frame (its handler's too) are under the per-plugin budget and all plugins'
+//!   under the total;
 //! - a plugin with mail left after a frame stopped for the budget: its own, or all plugins';
 //! - a key's handler runs before the updates of its turn;
 //! - while the total budget is not reached, everything `b` sees equals a twin run in which `a` sent nothing.
@@ -27,6 +28,8 @@ use opencode_tui::{Deps, Route};
 const PLUGINS: [&str; 2] = ["test.flood.a", "test.flood.b"];
 /// What one update costs on the monitor's clock: a plugin's millisecond takes four.
 const COST: Duration = Duration::from_micros(300);
+/// What the key's handler costs on the monitor's clock: it counts in its plugin's frame budget.
+const KEY_COST: Duration = Duration::from_micros(400);
 const FRAME: Duration = Duration::from_millis(1);
 
 /// What the plugins logged, in order, and the frames the test painted.
@@ -39,7 +42,7 @@ enum Event {
 
 thread_local! {
     static LOG: RefCell<Vec<Event>> = const { RefCell::new(Vec::new()) };
-    /// The monitor's clock, past its start: only updates move it.
+    /// The monitor's clock, past its start: only updates and the key's handler move it.
     static CLOCK: Cell<Duration> = const { Cell::new(Duration::ZERO) };
     static SENDERS: RefCell<[Option<abi::Sender<u32>>; 2]> = const { RefCell::new([None, None]) };
 }
@@ -64,7 +67,10 @@ fn setup_a(setup: &mut abi::Setup) -> Result<(), String> {
         scope: abi::Scope::Route("flood".into()),
         ..abi::Command::default()
     };
-    setup.command(key, |_, _| log(Event::Key));
+    setup.command(key, |_, _| {
+        log(Event::Key);
+        CLOCK.with(|clock| clock.set(clock.get() + KEY_COST));
+    });
     setup.surface(v2::Surface::new("flood", v2::Place::Route("flood".into()), |_| {
         v2::Node::text(vec![abi::Span::new("flood")])
     }));
@@ -135,8 +141,8 @@ impl Flood {
             frames_of_b: Vec::new(),
             failure: Some(Failure { property, site: property, step, detail }),
         };
-        // The plugin of each update in the frame now open.
-        let mut updates: Vec<usize> = Vec::new();
+        // What each plugin's calls took in the frame now open, and its updates in it.
+        let (mut spent, mut updates) = ([Duration::ZERO; 2], [0usize; 2]);
         // After the commands, frames until the scheduler has handed everything over: the first takes the wakes still
         // waiting for the UI thread.
         let mut more = 0;
@@ -178,26 +184,25 @@ impl Flood {
                             return fail("backlog", step, detail);
                         }
                         // The update was allowed when it started: the plugin's first in the frame, or with its own
-                        // and all plugins' updates in the frame under their budgets.
-                        let own = COST * updates.iter().filter(|known| **known == plugin).count() as u32;
-                        let all = COST * updates.len() as u32;
-                        if own > Duration::ZERO && (own >= FRAME || all >= self.all) {
+                        // and all plugins' calls in the frame under their budgets.
+                        let (own, all) = (spent[plugin], spent[0] + spent[1]);
+                        if updates[plugin] > 0 && (own >= FRAME || all >= self.all) {
                             let detail = format!(
                                 "plugin {plugin}'s update {number} started at {own:?} of its own, {all:?} of all"
                             );
                             return fail("budget", step, detail);
                         }
-                        updates.push(plugin);
+                        spent[plugin] += COST;
+                        updates[plugin] += 1;
                         if plugin == 1 {
                             frames_of_b.last_mut().unwrap().push(number);
                         }
                     }
                     Event::Frame => {
                         for plugin in 0..2 {
-                            let own = COST * updates.iter().filter(|known| **known == plugin).count() as u32;
-                            let all = COST * updates.len() as u32;
+                            let (own, all) = (spent[plugin], spent[0] + spent[1]);
                             // Every send woke the UI thread before this frame's paint, which drained it.
-                            if !waiting[plugin].is_empty() && own == Duration::ZERO {
+                            if !waiting[plugin].is_empty() && updates[plugin] == 0 {
                                 return fail("budget", step, format!("plugin {plugin} had mail and got no update"));
                             }
                             if !waiting[plugin].is_empty() && own < FRAME && all < self.all {
@@ -208,10 +213,10 @@ impl Flood {
                                 return fail("budget", step, detail);
                             }
                         }
-                        updates.clear();
+                        (spent, updates) = ([Duration::ZERO; 2], [0; 2]);
                         frames_of_b.push(Vec::new());
                     }
-                    Event::Key if command == Command::Key => {}
+                    Event::Key if command == Command::Key => spent[0] += KEY_COST,
                     Event::Key => return fail("backlog", step, "a key outside its own turn".to_owned()),
                 }
             }
@@ -249,7 +254,7 @@ impl Model for Flood {
             return run.failure;
         }
         // Under the total budget, `a`'s flood changes nothing `b` sees: a twin without `a`'s sends.
-        if self.all > 2 * (FRAME + COST) {
+        if self.all > 2 * (FRAME + COST) + KEY_COST {
             let quiet: Vec<Command> =
                 commands.iter().filter(|command| !matches!(command, Command::Send(0, _))).copied().collect();
             let twin = self.run_all(&quiet);

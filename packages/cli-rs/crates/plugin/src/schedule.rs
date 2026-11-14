@@ -111,8 +111,11 @@ pub(crate) fn drain(app: &App, woken: Option<&Rc<Activation>>) {
                     .sum::<Duration>();
                 (updates, spent, all)
             });
-            // At least one a frame; then while its own and all plugins' updates stay under the budget.
-            if updates > 0 && (spent >= limits.frame || all >= limits.all) {
+            // What the monitor counted of the plugin's calls in the frame, its handlers and views too, when the host
+            // times them; else its updates as the scheduler timed them.
+            let (counted, counted_all) = activation.spent().unwrap_or((spent, all));
+            // At least one a frame; then while its own and all plugins' calls stay under the budget.
+            if updates > 0 && (counted >= limits.frame || counted_all >= limits.all) {
                 continue;
             }
             let start = clock();

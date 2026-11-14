@@ -51,7 +51,7 @@ pub(crate) struct Activation {
     /// A wake of the plugin's waker waits for its wake handlers, which run once its messages are handed over.
     hinted: Cell<bool>,
     /// Times its updates against the frame budget ([`crate::schedule`]); the defaults until the host sets it.
-    monitor: RefCell<Option<Rc<crate::contain::Monitor>>>,
+    monitor: RefCell<Option<(Rc<crate::contain::Monitor>, crate::contain::Slot)>>,
 }
 
 /// What one [`Activation::step`] did.
@@ -97,9 +97,16 @@ impl Activation {
         })
     }
 
-    /// Times its updates against `monitor`'s frame budget and clock.
-    pub fn set_monitor(&self, monitor: Rc<crate::contain::Monitor>) {
-        *self.monitor.borrow_mut() = Some(monitor);
+    /// Schedules its updates by `monitor`, which times the plugin's calls in `slot`: its frame budget and clock, and
+    /// what the plugin's calls took in a frame.
+    pub fn set_monitor(&self, monitor: Rc<crate::contain::Monitor>, slot: crate::contain::Slot) {
+        *self.monitor.borrow_mut() = Some((monitor, slot));
+    }
+
+    /// What the plugin's calls took in the frame now (its handlers, views, `layout` and updates), and all plugins'
+    /// calls, as the monitor counts them; `None` while the host has set no monitor.
+    pub(crate) fn spent(&self) -> Option<(std::time::Duration, std::time::Duration)> {
+        self.monitor.borrow().as_ref().map(|(monitor, slot)| monitor.spent(*slot))
     }
 
     /// Its ID, which no other activation gets.
@@ -115,7 +122,7 @@ impl Activation {
     /// The frame budget and the clock its updates are scheduled by.
     pub(crate) fn budget(&self) -> (crate::contain::Limits, Rc<dyn Fn() -> std::time::Instant>) {
         match self.monitor.borrow().clone() {
-            Some(monitor) => (monitor.limits(), Rc::new(move || monitor.now())),
+            Some((monitor, _)) => (monitor.limits(), Rc::new(move || monitor.now())),
             None => crate::schedule::default_budget(),
         }
     }
