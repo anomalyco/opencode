@@ -179,9 +179,10 @@ impl Activation {
         *self.on_wake.borrow_mut() = Some(run);
     }
 
-    /// A wake arrived: the activation is ready, and the scheduler hands the plugin what its threads sent, in order, one
-    /// `update` a message under the frame budget, then a thread's panic report; then, for an [`abi::Waker`]'s wake,
-    /// runs the plugin's wake handlers, or renders the claims again ([`Activation::step`], [`crate::schedule`]).
+    /// A wake arrived: the activation is ready, and as the next paint starts, after the input read with the wake, the
+    /// scheduler hands the plugin what its threads sent, in order, one `update` a message under the frame budget, then
+    /// a thread's panic report; then, for an [`abi::Waker`]'s wake, runs the plugin's wake handlers, or renders the
+    /// claims again ([`Activation::step`], [`crate::schedule`]).
     ///
     /// The wake is consumed first, in one step: a send or a wake from now on posts another, so none is lost between
     /// what this one sees and what it handles.
@@ -194,7 +195,7 @@ impl Activation {
         self.hinted.set(self.hinted.get() || hinted);
         let Some(host) = self.host.upgrade() else { return };
         crate::schedule::ready(self);
-        crate::schedule::drain(host.app(), Some(self));
+        crate::schedule::arm(host.app());
     }
 
     /// One update of the scheduler's turn: the next message to the message handler; once none waits, a thread's panic

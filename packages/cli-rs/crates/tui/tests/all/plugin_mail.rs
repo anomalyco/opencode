@@ -353,8 +353,10 @@ fn a_stop_flag_ends_a_thread_and_a_failure_closes_the_mailbox() {
             })
             .unwrap();
         spawner.spawn("boom", |_| panic!("a mail thread panicked")).unwrap();
+        // The report is handled as a paint starts.
         harness.wait("the panic failed the plugin", || {
             harness.app.advance(Duration::from_millis(1));
+            harness.app.render();
             tui.plugins.entries().iter().any(|entry| entry.id == ID && entry.status != opencode_plugin::Status::Active)
         });
         let status = tui.plugins.entries().into_iter().find(|entry| entry.id == ID).unwrap().status;

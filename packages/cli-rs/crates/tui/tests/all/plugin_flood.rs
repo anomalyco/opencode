@@ -11,7 +11,9 @@
 //!   starts while its own calls in the frame (its handler's too) are under the per-plugin budget and all plugins'
 //!   under the total;
 //! - a plugin with mail left after a frame stopped for the budget: its own, or all plugins';
-//! - a key's handler runs before the updates of its turn;
+//! - a key's handler runs before the updates of its turn, also when the poll that read it handed a wake first, as
+//!   OpenTUI's poll does when both are ready (review bigboi 1);
+//! - an app runs one drain a frame at most, however many wakes reached it before the paint (review bigboi 7);
 //! - while the total budget is not reached, everything `b` sees equals a twin run in which `a` sent nothing.
 
 use crate::plugin_surface::{CARRIERS, Carrier, builtin};
@@ -110,8 +112,10 @@ fn open(carrier: Carrier, all: Duration) -> Harness {
 enum Command {
     /// Plugin `0`'s thread sends `1` numbered messages, and is joined.
     Send(usize, u32),
-    /// The user presses the key of `a`'s route.
+    /// The user presses the key of `a`'s route, read by the poll that also hands the wakes waiting: the wake first.
     Key,
+    /// A poll hands the wakes waiting, with no input.
+    Poll,
     /// The UI thread paints a frame.
     Frame,
 }
@@ -137,6 +141,7 @@ impl Flood {
         let mut numbers = [0u32; 2];
         let mut frames_of_b = vec![Vec::new()];
         let mut seen = 0;
+        let mut drains = opencode_plugin::schedule::work().drains;
         let fail = |property: &'static str, step: usize, detail: String| Run {
             frames_of_b: Vec::new(),
             failure: Some(Failure { property, site: property, step, detail }),
@@ -163,11 +168,21 @@ impl Flood {
                     .unwrap();
                     waiting[plugin].extend(accepted);
                 }
-                Command::Key => harness.app.press("k"),
+                Command::Key => {
+                    harness.app.app().dispatch(opentui::prelude::Event::Wake);
+                    harness.app.press("k");
+                }
+                Command::Poll => harness.app.event(opentui::prelude::Event::Wake),
                 Command::Frame => {
                     harness.app.render();
                     log(Event::Frame);
                 }
+            }
+            // A drain runs only as a paint starts, once a frame.
+            let ran = opencode_plugin::schedule::work().drains - drains;
+            drains += ran;
+            if ran > u64::from(command == Command::Frame) {
+                return fail("backlog", step, format!("{command:?} ran {ran} drains"));
             }
             // Check what the step logged.
             let events: Vec<Event> = LOG.with(|log| log.borrow()[seen..].to_vec());
@@ -243,6 +258,7 @@ impl Model for Flood {
             .map(|_| match rng.below(100) {
                 0..40 => Command::Send(rng.below(2), *rng.pick(&[1, 3, 10, 40, 300])),
                 40..55 => Command::Key,
+                55..65 => Command::Poll,
                 _ => Command::Frame,
             })
             .collect()
@@ -301,6 +317,29 @@ fn a_flood_drains_in_turn_under_the_frame_budget() {
 #[test]
 fn a_plugin_that_went_idle_keeps_its_spend_for_the_frame() {
     let commands = [Command::Send(0, 1), Command::Key, Command::Key, Command::Send(0, 1), Command::Frame];
+    for carrier in CARRIERS {
+        let failure = Flood { carrier, all: Duration::from_millis(4) }.run(&commands);
+        assert_eq!(failure, None, "{carrier:?}");
+    }
+}
+
+// Expected (fixed row; review bigboi 1): a poll that reads a key hands the wake of an accepted send first, as OpenTUI's
+// poll does when both are ready; the key's handler still runs before the update.
+#[test]
+fn a_key_read_with_a_wake_runs_before_the_update() {
+    for carrier in CARRIERS {
+        let failure = Flood { carrier, all: Duration::from_millis(4) }.run(&[Command::Send(0, 1), Command::Key]);
+        assert_eq!(failure, None, "{carrier:?}");
+    }
+}
+
+// Expected (fixed row; review bigboi 7): thirty wakes that reach an app whose budget is spent, each in a poll of its
+// own before the paint, ask for one drain; the paint runs it once and the frame after hands the mail over.
+#[test]
+fn wakes_before_a_paint_ask_for_one_drain() {
+    let mut commands = vec![Command::Send(0, 40), Command::Frame];
+    commands.extend((0..30).flat_map(|_| [Command::Send(0, 1), Command::Poll]));
+    commands.push(Command::Frame);
     for carrier in CARRIERS {
         let failure = Flood { carrier, all: Duration::from_millis(4) }.run(&commands);
         assert_eq!(failure, None, "{carrier:?}");

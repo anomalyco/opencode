@@ -986,8 +986,7 @@ fn mail_scenario(before: &[MailOp], inside: &[(usize, MailOp)]) -> Result<(usize
         }));
     });
     host.app.advance(std::time::Duration::from_millis(1));
-    crate::activation::BETWEEN.with(|hook| hook.borrow_mut().take());
-    // Updates past the frame budget wait for the next frame (Pl).
+    // The updates run as a paint starts; those past the frame budget wait for the next frame (Pl).
     for _ in 0..20 {
         if in_flight() == 0 && !crate::schedule::busy(&host.app) {
             break;
@@ -995,6 +994,7 @@ fn mail_scenario(before: &[MailOp], inside: &[(usize, MailOp)]) -> Result<(usize
         host.app.advance(std::time::Duration::from_millis(1));
         host.app.render();
     }
+    crate::activation::BETWEEN.with(|hook| hook.borrow_mut().take());
     let run = run.borrow();
     let status = registry.entries().into_iter().find(|entry| entry.id == MODEL).unwrap().status;
     let (arrived, woken) = seen(|seen| (seen.arrived.clone(), seen.woken.clone()));
