@@ -2,7 +2,9 @@
 //! with line numbers in a block; before that, one line.
 
 use super::diagnostics;
-use super::dispatch::{Block, BlockTool, Header, Inline, InlineTool, Props, Status, content_width, format_path};
+use super::dispatch::{
+    Block, BlockTool, Header, Inline, InlineTool, Props, Status, content_width, fingerprint, format_path,
+};
 use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 
@@ -10,8 +12,8 @@ pub struct Write {
     root: View,
     inline: InlineTool,
     block: BlockTool,
-    /// The content, path, and diagnostics the block shows.
-    shown: RefCell<Option<(String, String, Option<serde_json::Value>)>>,
+    /// The fingerprint of the content, path, and diagnostics the block shows.
+    shown: Cell<Option<u64>>,
     /// Restyles the block's children in place.
     paints: Paints,
 }
@@ -21,7 +23,7 @@ impl Write {
         let inline = InlineTool::new(cx);
         let block = BlockTool::new(cx);
         let root = View::new(cx.app).column().shrink(0.0).child(inline.root()).child(block.root());
-        Self { root, inline, block, shown: RefCell::default(), paints: Paints::default() }
+        Self { root, inline, block, shown: Cell::default(), paints: Paints::default() }
     }
 
     pub fn root(&self) -> &View {
@@ -56,19 +58,16 @@ impl Write {
             width: content_width(cx),
         });
         let path = path.unwrap_or_default();
-        let shown = (
-            props.input_str("content").unwrap_or_default().to_owned(),
-            path.to_owned(),
-            props.metadata.get("diagnostics").cloned(),
-        );
-        if self.shown.borrow().as_ref() == Some(&shown) {
+        let content = props.input_str("content").unwrap_or_default();
+        let shown = fingerprint(&(content, path, props.metadata.get("diagnostics")));
+        if self.shown.get() == Some(shown) {
             return;
         }
         let children = self.block.children();
         children.clear();
         self.paints.clear();
         let filetype = opentui::syntax::filetype_for_path(path);
-        let code = opencode_ui::code::view_painted(cx.app, cx.theme, filetype, &shown.0, &self.paints);
+        let code = opencode_ui::code::view_painted(cx.app, cx.theme, filetype, content, &self.paints);
         let numbered = opencode_ui::code::numbered(cx.app, cx.theme, &code);
         children.add(&numbered);
         self.paints.keep(move |theme| {
@@ -78,6 +77,6 @@ impl Write {
             children.add(&errors);
         }
         self.block.show_children(true);
-        *self.shown.borrow_mut() = Some(shown);
+        self.shown.set(Some(shown));
     }
 }
