@@ -1257,7 +1257,7 @@ impl Setup<'_> {
                     );
                     activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
                     let commands = commands(&mounted.alive());
-                    Box::new(route::View::wrap(host, Box::new(mounted), commands))
+                    Box::new(route::View::fill(host, Box::new(mounted), commands))
                 });
             }
             abi::v2::Place::Slot(at) => {

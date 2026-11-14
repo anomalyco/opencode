@@ -169,40 +169,15 @@ impl Mount {
                 // TS's `<Slot>` is a fragment, so the node's own layout places it in the slot's parent: the root takes
                 // it, and the node fills the root, which stretches it across.
                 let mut inner = node.clone();
-                let mut taken = abi::Layout::default();
                 if let abi::Node::Box { layout, .. } | abi::Node::Text { layout, .. } = &mut inner {
-                    taken = *layout;
-                    layout.width = None;
-                    layout.grow = false;
-                    layout.margin = None;
-                    // The root takes the heights too, so a percent is of the slot's parent once; the node fills the
-                    // root's height, and with a maximum it shrinks to the root's, also when it asked not to shrink.
-                    // Yoga lets an item shrink below its content.
-                    let (sized, capped) =
-                        (layout.height.is_some() || layout.min_height.is_some(), layout.max_height.is_some());
-                    (layout.height, layout.min_height, layout.max_height) = (None, None, None);
-                    if sized {
-                        layout.grow = true;
+                    let taken = take_layout(layout);
+                    if self.layout.get() != Some(taken) {
+                        root_layout(&self.root, &taken);
+                        self.layout.set(Some(taken));
                     }
-                    if capped {
-                        layout.shrink = Some(true);
-                    }
-                }
-                if self.layout.get() != Some(taken) {
-                    // A new layout starts the root's over, so nothing of an earlier node's stays.
-                    self.root
-                        .width(Length::Auto)
-                        .grow(0.0)
-                        .shrink(0.0)
-                        .min_width(Length::Undefined)
-                        .height(Length::Auto)
-                        .min_height(Length::Undefined)
-                        .max_height(Length::Undefined);
-                    [Edge::Top, Edge::Right, Edge::Bottom, Edge::Left]
-                        .into_iter()
-                        .for_each(|edge| drop(self.root.margin_edge(edge, 0)));
-                    lay_out(&self.root, &taken);
-                    self.layout.set(Some(taken));
+                } else if self.layout.get() != Some(abi::Layout::default()) {
+                    root_layout(&self.root, &abi::Layout::default());
+                    self.layout.set(Some(abi::Layout::default()));
                 }
                 let owner = self.owner.clone();
                 let act: Act = Rc::new(move |action| act(&owner, action));
@@ -254,6 +229,38 @@ impl Drop for Mount {
             on_mount(&*host, &self.input.borrow(), false);
         }
     }
+}
+
+/// Takes from a claim's node the layout its slot root takes instead: its width and growth, its heights, so a percent
+/// is of the slot's parent once, and its margins. The node then fills the root's height, and with a maximum shrinks to
+/// the root's, also when it asked not to shrink: Yoga lets an item shrink below its content.
+pub(crate) fn take_layout(layout: &mut abi::Layout) -> abi::Layout {
+    let taken = *layout;
+    layout.width = None;
+    layout.grow = false;
+    layout.margin = None;
+    let (sized, capped) = (layout.height.is_some() || layout.min_height.is_some(), layout.max_height.is_some());
+    (layout.height, layout.min_height, layout.max_height) = (None, None, None);
+    if sized {
+        layout.grow = true;
+    }
+    if capped {
+        layout.shrink = Some(true);
+    }
+    taken
+}
+
+/// Lays a slot root out as `layout` says, from the root's own defaults, so nothing of an earlier layout stays.
+pub(crate) fn root_layout(root: &View, layout: &abi::Layout) {
+    root.width(Length::Auto)
+        .grow(0.0)
+        .shrink(0.0)
+        .min_width(Length::Undefined)
+        .height(Length::Auto)
+        .min_height(Length::Undefined)
+        .max_height(Length::Undefined);
+    [Edge::Top, Edge::Right, Edge::Bottom, Edge::Left].into_iter().for_each(|edge| drop(root.margin_edge(edge, 0)));
+    lay_out(root, layout);
 }
 
 /// Whether a claim in slot `path` may show slot `nested`: a published slot inside it.
