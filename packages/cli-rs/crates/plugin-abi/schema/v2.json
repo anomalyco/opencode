@@ -138,6 +138,9 @@
             "type": {
               "const": "box"
             },
+            "visible": {
+              "type": "boolean"
+            },
             "focusable": {
               "type": "boolean"
             },
@@ -721,10 +724,86 @@
               "type": "null"
             }
           ]
+        },
+        "changed": {
+          "$ref": "#/$defs/Changed"
         }
       },
       "required": ["width", "height", "palette"],
       "description": "What a surface's view gets besides the plugin's own state."
+    },
+    "Changed": {
+      "type": "object",
+      "properties": {
+        "all": {
+          "type": "boolean"
+        },
+        "sessions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "lists": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "locations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LocationRef"
+          }
+        },
+        "local": {
+          "type": "boolean"
+        },
+        "size": {
+          "type": "boolean"
+        },
+        "woken": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "description": "What changed since a surface's last view, as a 1.x render hears it."
+    },
+    "LocationRef": {
+      "type": "object",
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "workspace": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["directory"],
+      "description": "A location: a directory, and a workspace in it."
     },
     "PanelInput": {
       "type": "object",
