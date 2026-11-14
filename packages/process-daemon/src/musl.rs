@@ -1,6 +1,6 @@
 use std::ffi::{c_char, c_int, c_uint, c_void};
 
-/// Zig 0.16 assumes musl provides `statx` (added in musl 1.2.5), so libghostty
+/// Zig 0.17 assumes musl provides `statx` (added in musl 1.2.5), so libghostty
 /// references it, but Rust's self-contained musl is older. Forward to the raw
 /// syscall exactly as musl's own wrapper does.
 ///

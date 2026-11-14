@@ -58,12 +58,12 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
         with:
-          version: 0.16.0
+          version: 0.17.0
       - name: Install Rust
         run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt --component clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          key: core-${{ matrix.os }}-zig-0.16.0
+          key: core-${{ matrix.os }}-zig-0.17.0
           workspaces: packages/process-daemon -> target
           cache-workspace-crates: true
       - run: cargo fmt --check
@@ -108,28 +108,18 @@ jobs:
       - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
         if: matrix.arch == 'x64'
         with:
-          version: 0.16.0
+          version: 0.17.0
           cache-key: ${{ matrix.target }}
-      # Zig 0.16 crashes when building Ghostty on the native ARM64 host.
+      # Zig 0.16 crashed when building Ghostty on the native ARM64 host.
       # Use x64-hosted compilers on this ARM64 runner, but execute ARM64 tests natively.
       - name: Install x64 Zig for ARM64 cross-compilation
         if: matrix.arch == 'arm64'
         run: |
           $archive = Join-Path $env:RUNNER_TEMP 'zig-x64.zip'
-          Invoke-WebRequest 'https://ziglang.org/download/0.16.0/zig-x86_64-windows-0.16.0.zip' -OutFile $archive
-          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne '68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e') { throw 'Zig archive checksum mismatch' }
+          Invoke-WebRequest 'https://ziglang.org/download/0.17.0/zig-x86_64-windows-0.17.0.zip' -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne 'b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428') { throw 'Zig archive checksum mismatch' }
           Expand-Archive $archive -DestinationPath $env:RUNNER_TEMP
-          Join-Path $env:RUNNER_TEMP 'zig-x86_64-windows-0.16.0' >> $env:GITHUB_PATH
-      - name: Fix Zig 0.16 ARM64 function-pointer alignment
-        if: matrix.arch == 'arm64'
-        run: |
-          # ARM64 function pointers require 4-byte alignment, unlike *anyopaque.
-          # Zig 0.16's Windows stack-trace helper omits the required alignment assertion.
-          $file = Join-Path $env:RUNNER_TEMP 'zig-x86_64-windows-0.16.0/lib/std/debug/SelfInfo/Windows.zig'
-          $source = [System.IO.File]::ReadAllText($file)
-          $old = '@ptrCast(try si.loadNtdllProc(@tagName(proc)))'
-          if (!$source.Contains($old)) { throw 'Zig alignment workaround no longer matches; re-evaluate it' }
-          [System.IO.File]::WriteAllText($file, $source.Replace($old, '@ptrCast(@alignCast(try si.loadNtdllProc(@tagName(proc))))'))
+          Join-Path $env:RUNNER_TEMP 'zig-x86_64-windows-0.17.0' >> $env:GITHUB_PATH
       - name: Install Rust toolchain and target
         run: rustup toolchain install $env:RUSTUP_TOOLCHAIN --force-non-host --profile minimal --component rustfmt --component clippy --target $env:CARGO_BUILD_TARGET
       - name: Verify runner and compiler architecture
@@ -148,7 +138,7 @@ jobs:
       # No cache-on-failure: a timed-out run once saved a partial cache that broke re-runs.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          key: windows-${{ matrix.target }}-zig-0.16.0
+          key: windows-${{ matrix.target }}-zig-0.17.0
           workspaces: packages/process-daemon -> target
           # The native Ghostty build is now an output of the workspace crate.
           cache-workspace-crates: true
