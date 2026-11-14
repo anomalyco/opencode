@@ -1,0 +1,543 @@
+import { cp, lstat, readFile, realpath, rename, rm, stat } from "node:fs/promises"
+import path from "node:path"
+import electron, { app, type Session } from "electron"
+import { Schema } from "effect"
+import type { Log, Storage } from "@opencode/plugin/gui/main"
+import { guardSession } from "../session-guard"
+import { extensionAccess, extensionCompatibility } from "./compatibility"
+import { browserUserAgent, cookieDetails, parseCookieFile, PROBE_COOKIE, type CookieRead } from "./cookie"
+import { createExtensionApis } from "./extension-api"
+import { clearStaging, download, stageExtension, swapIn } from "./install"
+import { createCookieMirror, type CookieMirror } from "./link"
+import { cookiesPersist } from "./probe"
+import { createPreviews } from "./previews"
+import {
+  displayName,
+  extensionIcon,
+  extensionID,
+  extensionFiles,
+  extensionPage,
+  extensionPages,
+  parseCrx,
+  pinKey,
+  readManifest,
+  storeDownloadURL,
+  storeTarget,
+  unzip,
+  type ExtensionFiles,
+  type Manifest,
+} from "./extensions"
+import type { ImportResult, InstallResult, ProfileExtension } from "./ipc"
+import { chromiumProfileDirectory, listSources, profileExtensions, readSource, windowsIcons } from "./sources"
+
+/** The partition every page of the desktop browser shares, on disk under the app's user data. */
+export const PARTITION = "persist:opencode-browser"
+
+const StoredExtension = Schema.Struct({
+  id: Schema.String,
+  directory: Schema.String,
+  enabled: Schema.Boolean,
+  source: Schema.Literals(["folder", "store", "browser"]),
+})
+
+type StoredExtension = typeof StoredExtension.Type
+
+export type Profile = Awaited<ReturnType<typeof createBrowserProfile>>
+
+/**
+ * The desktop browser's one profile, for the whole desktop app rather than a session, project or server: its cookies,
+ * site data and extensions. Pages of a server on this machine browse in it directly. Pages of another server need that
+ * server's network, which Chromium sets per partition, so they browse in their own partition. `link` keeps that
+ * partition's cookies in step with the profile's only while the user shares sign-ins with remote servers.
+ */
+export async function createBrowserProfile(input: {
+  signal: AbortSignal
+  storage: Storage
+  log: Log
+  changed: () => void
+  cookiesChanged: () => void
+}) {
+  const session = electron.session.fromPartition(PARTITION)
+  const previews = createPreviews(session, input.signal)
+  session.setUserAgent(browserUserAgent(session.getUserAgent()))
+  // Each tab's download handler by its web contents ID; the pane fills it. Guarded before any extension loads or pane
+  // exists, so no page of the profile ever has Electron's default handlers, which grant every permission.
+  const downloads = new Map<number, (item: Electron.DownloadItem) => void>()
+  const unguard = guardSession(session, downloads)
+  const persistent = cookiesPersist(session)
+  let settling: ReturnType<typeof setTimeout> | undefined
+
+  // A page sets or clears cookies in bursts; the cookie count hears once the burst settles. The start-up probe is no
+  // one's cookie, so it never moves the count.
+  const cookiesChanged = (_event: Electron.Event, cookie: Electron.Cookie) => {
+    if (cookie.domain?.replace(/^\./, "") === PROBE_COOKIE.host) return
+    clearTimeout(settling)
+    settling = setTimeout(input.cookiesChanged, 400)
+  }
+
+  session.cookies.on("changed", cookiesChanged)
+  const stored = input.storage.store("extensions", { schema: Schema.Array(StoredExtension), initial: [] })
+  const directory = path.join(app.getPath("userData"), "browser-extensions")
+  // Off until the user turns it on: a remote server's operator could use every sign-in and write cookies back.
+  const sharing = input.storage.store("remote-sign-ins", { schema: Schema.Boolean, initial: false })
+  // Remote servers' partitions, each with its cookie mirror while sign-ins are shared.
+  const links = new Map<Session, CookieMirror | undefined>()
+
+  const mirror = async (other: Session) => {
+    if (links.get(other) || !links.has(other)) return
+    const started = createCookieMirror({ profile: session, other })
+    links.set(other, started)
+    await started.started
+  }
+
+  const unmirror = async (other: Session, forget: boolean) => {
+    const current = links.get(other)
+
+    if (!current) return
+
+    if (links.has(other)) links.set(other, undefined)
+    await current.stop(forget)
+  }
+
+  const errors = new Map<string, string>()
+  const details = new Map<string, ProfileExtension>()
+  // Browser icons by application path, read once; undefined for an application without one.
+  const icons = new Map<string, string | undefined>()
+
+
+  // What each package's files show, read once per directory and version: describing runs after every change.
+  const scans = new Map<string, Promise<ExtensionFiles>>()
+
+  const compatibilityOf = async (folder: string, manifest: Manifest) => {
+    const key = `${folder}\n${manifest.version}`
+    const scan = scans.get(key) ?? extensionFiles(folder, manifest)
+    scans.set(key, scan)
+
+    return extensionCompatibility(manifest, await scan)
+  }
+
+  const describe = async (record: StoredExtension): Promise<ProfileExtension | undefined> => {
+    const manifest = await readManifest(record.directory)
+
+    if (!manifest) return undefined
+    const pages = extensionPages(manifest)
+    const page = (file: string | undefined) => extensionPage(record.id, file)
+
+    return {
+      id: record.id,
+      name: await displayName(record.directory, manifest),
+      version: manifest.version,
+      enabled: record.enabled,
+      source: record.source,
+      icon: await extensionIcon(record.directory, manifest),
+      popup: page(pages.popup),
+      options: page(pages.options),
+      error: errors.get(record.id),
+      compatibility: await compatibilityOf(record.directory, manifest),
+      access: extensionAccess(manifest),
+    }
+  }
+
+  const refresh = async () => {
+    const described = await Promise.all(stored.value.map(describe))
+    details.clear()
+    described.forEach((item) => {
+      if (item) details.set(item.id, item)
+    })
+    input.changed()
+  }
+
+  // What creation set up before its first await. A step that fails releases it at once, so the next request, which
+  // tries again, starts clean instead of stacking another cookie listener.
+  const release = () => {
+    unguard()
+    session.cookies.off("changed", cookiesChanged)
+    clearTimeout(settling)
+    previews.dispose()
+  }
+
+  const apis = await createExtensionApis({
+    session,
+    partition: PARTITION,
+    directory,
+    storage: input.storage,
+    log: input.log,
+    changed: input.changed,
+  }).catch((cause: unknown) => {
+    release()
+    throw cause
+  })
+
+  const load = async (record: StoredExtension) => {
+    if (session.extensions.getExtension(record.id)) return
+
+    const loaded = await session.extensions.loadExtension(record.directory, { allowFileAccess: false }).then(
+      (extension) => extension,
+      (cause: unknown) => {
+        errors.set(record.id, cause instanceof Error ? cause.message : String(cause))
+        input.log.write("warn", "browser extension failed to load", { id: record.id, cause: String(cause) })
+      },
+    )
+
+    if (loaded) errors.delete(record.id)
+  }
+
+  const unload = () =>
+    session.extensions.getAllExtensions().forEach((extension) => session.extensions.removeExtension(extension.id))
+
+  await clearStaging(directory)
+    .then(() => Promise.all(stored.value.filter((record) => record.enabled).map(load)))
+    .then(refresh)
+    .catch((cause: unknown) => {
+      apis.dispose()
+      unload()
+      release()
+      throw cause
+    })
+
+  /**
+   * Loads a directory as a new extension and remembers it, or reports why it is not one. One that will not work here,
+   * or that asks for access the user has not seen, loads only with `force`; until then a copy this app made is
+   * deleted again.
+   */
+  const add = async (folder: string, source: StoredExtension["source"], force = false): Promise<InstallResult> => {
+    const manifest = await readManifest(folder)
+
+    if (!manifest || manifest.theme !== undefined) return { type: "failed", reason: "manifest" }
+    const compatibility = await compatibilityOf(folder, manifest)
+    const access = extensionAccess(manifest)
+    // Installing one again, such as an update, keeps it, as the user added it before.
+    const known = stored.value.find((record) => record.directory === folder)
+    const review = compatibility.level === "unsupported" ? "unsupported" : access.length > 0 ? "review" : undefined
+
+    // Chromium keeps the loaded copy's files open; the new one loads in its place.
+    if (known && session.extensions.getExtension(known.id)) session.extensions.removeExtension(known.id)
+
+    if (review && !force && !known) {
+      const name = await displayName(folder, manifest)
+      const icon = await extensionIcon(folder, manifest)
+
+      if (source !== "folder") await rm(folder, { recursive: true, force: true }).catch(() => undefined)
+
+      return { type: review, name, icon, compatibility, access }
+    }
+
+    const extension = await session.extensions.loadExtension(folder, { allowFileAccess: false }).then(
+      (value) => value,
+      (cause: unknown) => (cause instanceof Error ? cause : new Error(String(cause))),
+    )
+
+    if (extension instanceof Error) return { type: "failed", reason: "load", message: extension.message }
+    const record = { id: extension.id, directory: folder, enabled: true, source }
+    stored.set([...stored.value.filter((item) => item.id !== record.id), record])
+    errors.delete(record.id)
+    await refresh()
+    const described = details.get(record.id)
+
+    return described ? { type: "installed", extension: described } : { type: "failed", reason: "manifest" }
+  }
+
+  /**
+   * Puts a new copy of an extension at `folder` and adds it. `fill` writes the copy into a staging directory, and only
+   * a copy with a manifest takes the old one's place. A failure at any step removes what it wrote and leaves the
+   * previous copy in place, loaded as it was.
+   */
+  const replace = async (
+    folder: string,
+    source: "store" | "browser",
+    force: boolean | undefined,
+    fill: (staging: string) => Promise<boolean>,
+  ): Promise<InstallResult> => {
+    const failed: InstallResult = { type: "failed", reason: source === "store" ? "download" : "manifest" }
+    const staging = await stageExtension(directory, fill)
+
+    if (!staging) return failed
+    const previous = stored.value.find((record) => record.directory === folder)
+
+    // Chromium keeps the loaded copy's files open, and Windows moves no open file.
+    if (previous && session.extensions.getExtension(previous.id)) session.extensions.removeExtension(previous.id)
+    const swapped = await swapIn(staging, folder)
+
+    if (!swapped) {
+      await rm(staging, { recursive: true, force: true }).catch(() => undefined)
+
+      if (previous?.enabled) await load(previous)
+
+      return failed
+    }
+
+    const result = await add(folder, source, force)
+
+    if (result.type === "installed" || (result.type !== "failed" && !swapped.backup)) {
+      if (swapped.backup) void rm(swapped.backup, { recursive: true, force: true }).catch(() => undefined)
+
+      return result
+    }
+
+    // The new copy did not load: it goes, and the previous one, if any, comes back as it was.
+    await rm(folder, { recursive: true, force: true }).catch(() => undefined)
+
+    if (swapped.backup) await rename(swapped.backup, folder).catch(() => undefined)
+
+    if (previous?.enabled) await load(previous)
+    await refresh()
+
+    return result
+  }
+
+  const importCookies = async (read: CookieRead): Promise<ImportResult> => {
+    // Imported sign-ins would be gone at the next start.
+    if (!(await persistent)) return { type: "failed", reason: "storage" }
+    const now = Date.now() / 1000
+    const writes = read.cookies.flatMap((cookie) => cookieDetails(cookie, now) ?? [])
+
+    const results = await Promise.all(
+      writes.map((cookie) =>
+        session.cookies.set(cookie).then(
+          () => true,
+          () => false,
+        ),
+      ),
+    )
+
+    await session.cookies.flushStore()
+    const imported = results.filter(Boolean).length
+
+    return {
+      type: "imported",
+      imported,
+      skipped: (read.skipped ?? 0) + read.cookies.length - writes.length,
+      protected: read.protected,
+      failed: read.failed + writes.length - imported,
+    }
+  }
+
+  return {
+    session,
+    partition: PARTITION,
+    /** Each tab's download handler by its web contents ID, which the profile's one `will-download` listener calls. */
+    downloads,
+    previews,
+    /** The pane's tabs and windows as extensions see them; the pane registers each tab of the profile. */
+    extensionTabs: apis.tabs,
+    /** Extensions loaded now, whose pages may open in a tab. */
+    extensionIDs: () => session.extensions.getAllExtensions().map((extension) => extension.id),
+    extensions: () =>
+      stored.value.flatMap((record) => {
+        const described = details.get(record.id)
+        const loaded = session.extensions.getExtension(record.id)
+        const action = loaded ? apis.action(loaded) : undefined
+
+        if (!described) return []
+
+        return action ? [{ ...described, action }] : [described]
+      }),
+    /** The user chose an extension in a window's extensions menu; see `ExtensionApis.click`. */
+    clickExtension: apis.click,
+    /** The browsers to import from, the one used last first, each with its application's icon. */
+    async sources() {
+      const listed = await listSources()
+
+      const missing = listed.flatMap((source) =>
+        source.application && !icons.has(source.application) ? [source.application] : [],
+      )
+
+      // Each application's icon is read once; an application without one is not asked again either.
+      const read = await applicationIcons(missing)
+      missing.forEach((file) => icons.set(file, read.get(file)))
+
+      return listed.map((source) => ({
+        id: source.id,
+        name: source.name,
+        engine: source.engine,
+        profiles: source.profiles,
+        icon: source.application ? icons.get(source.application) : undefined,
+      }))
+    },
+    async importBrowser(source: string, profile: string): Promise<ImportResult> {
+      const read = await readSource(source, profile)
+
+      if ("failure" in read) return { type: "failed", reason: read.failure }
+
+      return importCookies(read)
+    },
+    async importFile(file: string): Promise<ImportResult> {
+      // A cookie export is a few megabytes at most; anything far larger is not one.
+      const size = await stat(file).then(
+        (info) => (info.isFile() ? info.size : Infinity),
+        () => Infinity,
+      )
+
+      const text = size <= 32 * 1024 * 1024 ? await readFile(file, "utf8").catch(() => undefined) : undefined
+
+      if (text === undefined) return { type: "failed", reason: "read" }
+      const read = parseCookieFile(text)
+
+      return read ? importCookies(read) : { type: "failed", reason: "format" }
+    },
+    async summary() {
+      const saved = await persistent
+      const cookies = await session.cookies.get({})
+
+      return { cookies: cookies.length, persistent: saved }
+    },
+    async clear() {
+      await session.clearStorageData()
+      await session.clearCache()
+      // Remote servers' pages sign out too, whether or not they shared the profile's sign-ins.
+      await Promise.all([...links.keys()].map((other) => other.clearStorageData()))
+    },
+    async browserExtensions(source: string, profile: string) {
+      const folder = await chromiumProfileDirectory(source, profile)
+      const found = folder ? await profileExtensions(folder) : []
+
+      const listed = await Promise.all(
+        found.map(async (item) => {
+          const manifest = await readManifest(item.directory)
+
+          if (!manifest || manifest.theme !== undefined) return []
+
+          return [
+            {
+              id: item.id,
+              name: await displayName(item.directory, manifest),
+              version: manifest.version,
+              icon: await extensionIcon(item.directory, manifest),
+              installed: stored.value.some((record) => record.id === item.id),
+              compatibility: await compatibilityOf(item.directory, manifest),
+              access: extensionAccess(manifest),
+            },
+          ]
+        }),
+      )
+
+      return listed.flat().toSorted((a, b) => a.name.localeCompare(b.name))
+    },
+    async install(
+      request:
+        | { kind: "folder"; path: string; force?: boolean }
+        | { kind: "store"; url: string; force?: boolean }
+        | { kind: "browser"; source: string; profile: string; id: string; force?: boolean },
+    ): Promise<InstallResult> {
+      if (request.kind === "folder") return add(request.path, "folder", request.force)
+
+      if (request.kind === "browser") {
+        const folder = await chromiumProfileDirectory(request.source, request.profile)
+        const found = folder ? (await profileExtensions(folder)).find((item) => item.id === request.id) : undefined
+
+        if (!found) return { type: "failed", reason: "manifest" }
+
+        // A copy, so the other browser updating or removing it leaves this one working. Links are left out, so the
+        // copy holds only the package's own files.
+        return replace(path.join(directory, request.id), "browser", request.force, (staging) =>
+          cp(found.directory, staging, {
+            recursive: true,
+            filter: async (item) => path.basename(item) !== "_metadata" && !(await lstat(item)).isSymbolicLink(),
+          }).then(() => true),
+        )
+      }
+
+      const target = storeTarget(request.url)
+
+      const crx = target
+        ? await download(session, storeDownloadURL(target, process.versions.chrome ?? "140.0.0.0"))
+        : undefined
+
+      const parsed = crx ? parseCrx(crx) : undefined
+
+      // The developer's key names the package: one that names another extension is not the one the user asked for.
+      if (!target || !parsed || (parsed.key && extensionID(parsed.key) !== target.id))
+        return { type: "failed", reason: "download" }
+      const key = parsed.key
+
+      return replace(path.join(directory, target.id), "store", request.force, async (staging) => {
+        await unzip(parsed.zip, staging)
+
+        return !key || pinKey(staging, key)
+      })
+    },
+    async remove(id: string) {
+      const record = stored.value.find((item) => item.id === id)
+
+      if (session.extensions.getExtension(id)) session.extensions.removeExtension(id)
+      apis.forget(id)
+      apis.uninstall(id)
+      stored.set(stored.value.filter((item) => item.id !== id))
+      errors.delete(id)
+
+      // Only copies this app made are deleted; a folder the user loaded stays where it is.
+      if (record && record.source !== "folder" && path.dirname(record.directory) === directory)
+        await rm(record.directory, { recursive: true, force: true }).catch(() => undefined)
+      await refresh()
+    },
+    async enable(id: string, enabled: boolean) {
+      const record = stored.value.find((item) => item.id === id)
+
+      if (!record) return
+      const next = { ...record, enabled }
+      stored.set(stored.value.map((item) => (item.id === id ? next : item)))
+
+      if (enabled) await load(next)
+
+      if (!enabled && session.extensions.getExtension(id)) session.extensions.removeExtension(id)
+
+      if (!enabled) apis.forget(id)
+      await refresh()
+    },
+    /** Whether remote servers' pages share the profile's sign-ins; see `link`. */
+    remoteSignIns: () => sharing.value,
+    /**
+     * Turns sharing sign-ins with remote servers on or off for every linked partition at once. Turning it off stops
+     * each mirror and removes the shared cookies from the remote partitions.
+     */
+    async shareSignIns(enabled: boolean) {
+      sharing.set(enabled)
+      await Promise.all([...links.keys()].map((other) => (enabled ? mirror(other) : unmirror(other, true))))
+      input.changed()
+    },
+    /**
+     * Registers the partition of a remote server's pages, which need that server's network. Only while the user
+     * shares sign-ins with remote servers (`remoteSignIns`) does its cookie store mirror the profile's, both ways;
+     * otherwise it gets no cookie of the profile and writes none back. Returns the unlink. Site storage and extensions
+     * stay with the profile: Chromium shares neither across partitions, and in-memory partitions cannot load
+     * extensions.
+     */
+    async link(other: Session) {
+      other.setUserAgent(session.getUserAgent())
+      links.set(other, undefined)
+
+      if (sharing.value) await mirror(other)
+
+      return () => {
+        void unmirror(other, false)
+        links.delete(other)
+      }
+    },
+    dispose() {
+      links.forEach((_mirror, other) => void unmirror(other, false))
+      links.clear()
+      apis.dispose()
+      unload()
+      release()
+    },
+  }
+}
+
+/** Applications' icons as the system shows them, by path; a file the system has no icon for is left out. */
+async function applicationIcons(files: readonly string[]) {
+  if (process.platform === "win32") return windowsIcons(files)
+
+  // On macOS `getFileIcon` answers by file type, the generic application icon for every bundle. Quick Look draws the
+  // bundle's own icon, but only at its real path: Safari's /Applications entry is a symlink into a system volume.
+  const read = await Promise.all(
+    files.map(async (file) => {
+      const image = await realpath(file)
+        .then((bundle) => electron.nativeImage.createThumbnailFromPath(bundle, { width: 64, height: 64 }))
+        .catch(() => undefined)
+
+      return image && !image.isEmpty() ? [[file, image.toDataURL()] as const] : []
+    }),
+  )
+
+  return new Map(read.flat())
+}

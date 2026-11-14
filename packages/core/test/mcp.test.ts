@@ -3110,7 +3110,7 @@ it.effect("does not call MCP when permission is blocked", () =>
     })
     expect(execution.content).toEqual([{ type: "text", text: "Search is disabled in this workspace" }])
     expect(execution.metadata).toEqual({
-      toolCalls: [{ tool: "demo.search", status: "error" }],
+      toolCalls: [{ tool: "demo.search", status: "error", error: "Search is disabled in this workspace" }],
       error: true,
     })
     expect(

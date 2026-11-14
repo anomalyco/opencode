@@ -21,7 +21,7 @@ import {
 } from "./pane-machine"
 import type { TerminalProps } from "./props"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "./runtime-adapters"
-import { consumeTerminalMetaKey, terminalKeyInput } from "./terminal-key-event"
+import { consumeTerminalMetaKey, terminalKeyInput, terminalLinkTarget } from "./terminal-key-event"
 import { TerminalQuote } from "./quote"
 
 type TerminalColors = {
@@ -156,6 +156,7 @@ export const Terminal = (props: TerminalProps) => {
   const appearance = plugin.appearance
   const keybinds = plugin.keybinds
   const system = plugin.system
+  const links = plugin.links
   const desktop = plugin.desktop
   const theme = useTheme()
   let container!: HTMLDivElement
@@ -308,18 +309,15 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   const handleLinkClick = (t: Term, event: MouseEvent) => {
-    if (!event.shiftKey && !event.ctrlKey && !event.metaKey) return
-
-    if (event.altKey) return
-
-    if (event.button !== 0) return
-
     const text = getHoveredLinkText(t)
+    const target = terminalLinkTarget(event, text)
 
-    if (!text) return
+    if (!target || !text) return
 
     event.preventDefault()
     event.stopImmediatePropagation()
+
+    if (target === "app" && links.open({ href: text, session: plugin.sessions.current() })) return
     system.openExternal(text)
   }
 

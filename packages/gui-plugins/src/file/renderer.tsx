@@ -894,9 +894,9 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   })
 
   // Opens files the agent references as side panel tabs, inside or outside the workspace, or as
-  // a browser tab for HTML when the desktop can load the file directly.
+  // a browser tab for HTML when the desktop can load the file directly. Web links are not files.
   ctx.add(LinkHandler, {
-    match: () => true,
+    match: (link) => !/^https?:\/\//i.test(link.href),
     exists: linkExists,
     open(link) {
       const session = sessions.current()

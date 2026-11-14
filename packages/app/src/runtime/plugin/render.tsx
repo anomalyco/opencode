@@ -14,6 +14,7 @@ import {
   type ParentProps,
 } from "solid-js"
 import { Portal, render } from "solid-js/web"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import {
   MarkdownProvider,
   useMarkdown,
@@ -185,6 +186,35 @@ export function PluginLinks(props: ParentProps<{ session: MountedSession; active
       </SourcesProvider>
     </Links>
   )
+}
+
+/**
+ * Offers a plain click on a web link in the session screen (its conversation and side panels) to the LinkHandler
+ * contributions first, as `Links.open({ href, session })`. A click with a modifier key, or one no handler takes, keeps
+ * the link's own behavior: the system browser.
+ */
+export function createWebLinks(session: () => MountedSession) {
+  const host = usePluginHost()
+
+  makeEventListener(document, "click", (event) => {
+    const href = webLink(event)
+
+    if (href && host.links.open({ href, session: session() })) event.preventDefault()
+  })
+}
+
+function webLink(event: MouseEvent) {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+    return
+  const anchor = event.target instanceof Element ? event.target.closest("a[href]") : null
+
+  // `data-pane-row` holds the conversation and the side panels; dialogs and menus render outside it.
+  if (!(anchor instanceof HTMLAnchorElement) || !anchor.closest("[data-pane-row]") || anchor.hasAttribute("download"))
+    return
+
+  // Only a link written as an absolute web address: a fragment or relative link resolves against the app's own
+  // origin, which is http in development, and is no web page to open beside the session.
+  return /^https?:\/\//i.test(anchor.getAttribute("href")?.trim() ?? "") ? anchor.href : undefined
 }
 
 /**

@@ -1761,6 +1761,15 @@ Permission hooks follow these rules:
 - An explicit configured `deny` is final and does not invoke the hook.
 - A hook may change `effect` to `allow`, `ask`, or `deny`.
 - `message` appears in an escalated permission request or becomes the denial reason.
+- An `ask` that a hook sets always prompts, even when the user saved an "always" approval for the request.
+- `experimental.approved` is true when the user's saved approvals allow every resource. A hook that asks only because of its own rules can leave `effect` unchanged then. Experimental fields may change without compatibility guarantees.
+
+```ts
+await ctx.permission.hook("evaluate", async (event) => {
+  if (event.action !== "browser" || event.experimental?.approved) return
+  event.effect = "ask"
+})
+```
 
 #### Reference
 
@@ -1774,6 +1783,7 @@ interface PermissionEvaluation {
   readonly source?: { type: "tool"; messageID: string; id: string }
   effect: "allow" | "ask" | "deny"
   message?: string
+  readonly experimental?: { readonly approved: boolean }
 }
 ```
 

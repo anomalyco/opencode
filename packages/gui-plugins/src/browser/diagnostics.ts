@@ -16,7 +16,7 @@ import {
 
 const levels = ["debug", "info", "warning", "error"] as const
 
-export function createDiagnostics(cdp: Cdp) {
+export function createDiagnostics(cdp: Cdp, displayURL: (url: string) => string) {
   const messages: Browser.ConsoleEntry[] = []
   // Every hop by its public id, oldest first.
   const requests = new Map<string, Hop>()
@@ -43,7 +43,7 @@ export function createDiagnostics(cdp: Cdp) {
       textTruncated: text.length > 2_000,
     }
 
-    messages.push(source ? { ...entry, source } : entry)
+    messages.push(source ? { ...entry, source: { ...source, url: displayURL(source.url) } } : entry)
 
     if (messages.length > 500) {
       messages.shift()
@@ -148,7 +148,7 @@ export function createDiagnostics(cdp: Cdp) {
   })
 
   cdp.on("Network.requestWillBeSent", (event, sessionID) =>
-    apply(`${sessionID ?? ""}:${event.requestId}`, { type: "request", id: `${scope}:${++sequence}`, sessionID, event }),
+    apply(`${sessionID ?? ""}:${event.requestId}`, { type: "request", id: `${scope}:${++sequence}`, sessionID, event: { ...event, request: { ...event.request, url: displayURL(event.request.url) } } }),
   )
   cdp.on("Network.requestWillBeSentExtraInfo", (event, sessionID) =>
     apply(`${sessionID ?? ""}:${event.requestId}`, { type: "request.extra", headers: event.headers }),

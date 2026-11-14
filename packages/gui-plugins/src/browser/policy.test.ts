@@ -1,11 +1,19 @@
 import { expect, test } from "bun:test"
+import { Browser } from "@opencode/plugin-browser/rpc"
 import {
+  agentFrame,
+  agentFrames,
+  agentRefusal,
   allowedDestination,
   committedLoad,
   destinationOrigin,
+  downloadOwner,
+  excludedFrames,
+  DOWNLOAD_GRACE_MS,
   fileURLWithin,
   localFileURL,
   normalizeURL,
+  pagePermission,
   refusal,
 } from "./policy"
 
@@ -105,4 +113,232 @@ test("a media URL whose viewer committed has loaded, while a download or network
   expect(committedLoad(stopped, false)).toBe(false)
   expect(committedLoad(refused, true)).toBe(false)
   expect(committedLoad(new Error("ERR_FAILED"), true)).toBe(false)
+})
+
+test("only the pages of a loaded extension open, so its popup and options can show in a tab", () => {
+  const extensions = ["nngceckbapebfimnlniiiahkandclblb"]
+
+  expect(
+    [
+      "chrome-extension://nngceckbapebfimnlniiiahkandclblb/popup/index.html",
+      "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/popup.html",
+      "chrome://settings",
+    ].map((url) => allowedDestination(url, { extensions })),
+  ).toEqual([true, false, false])
+  expect(allowedDestination("chrome-extension://nngceckbapebfimnlniiiahkandclblb/popup/index.html")).toBe(false)
+  expect(refusal("chrome-extension://nngceckbapebfimnlniiiahkandclblb/options.html", { extensions })).toBeUndefined()
+})
+
+const extensionPage = "chrome-extension://nngceckbapebfimnlniiiahkandclblb/options.html"
+
+const web = { url: "https://example.com/", origin: "https://example.com" }
+
+test("the agent cannot open an extension page in a tab", () => {
+  expect(agentRefusal({ type: "navigate", url: extensionPage }, web)).toStartWith(
+    `Agent browser tools cannot open extension pages such as ${extensionPage}`,
+  )
+  expect(agentRefusal({ type: "tabs.open", url: ` ${extensionPage}` }, web)).toStartWith(
+    "Agent browser tools cannot open extension pages",
+  )
+  expect(agentRefusal({ type: "navigate", url: "moz-extension://x/popup.html" }, web)).toBeDefined()
+})
+
+test("the agent cannot read or act on an extension page, even one the user opened", () => {
+  const opened = { url: extensionPage, origin: "chrome-extension://nngceckbapebfimnlniiiahkandclblb" }
+
+  for (const type of [
+    "evaluate",
+    "snapshot",
+    "click",
+    "fill",
+    "screenshot",
+    "console",
+    "network.list",
+    "files.list",
+    "dialog",
+    "wait",
+  ])
+    expect(agentRefusal({ type }, opened)).toStartWith(`This tab shows an extension page (${extensionPage})`)
+  // A blank page or blob an extension opened runs as that extension too.
+  expect(agentRefusal({ type: "evaluate" }, { url: "about:blank", origin: opened.origin })).toBeDefined()
+  expect(agentRefusal({ type: "evaluate" }, { url: `blob:${opened.origin}/0b6f7c2e`, origin: "null" })).toBeDefined()
+
+  // Taking the tab elsewhere is allowed; the page checks again where it lands.
+  for (const type of ["navigate", "back", "forward", "stop"])
+    expect(agentRefusal({ type, url: "https://example.com/" }, opened)).toBeUndefined()
+})
+
+test("an extension's frame in a web page is no frame the agent can list or target", () => {
+  const frames = agentFrames({
+    root: {
+      frame: { id: "main", url: "https://example.com/", securityOrigin: "https://example.com" },
+      childFrames: [
+        { frame: { id: "ad", parentId: "main", url: "https://ads.example/", name: "ad" } },
+        {
+          frame: { id: "overlay", parentId: "main", url: "about:blank", securityOrigin: "chrome-extension://abc" },
+          childFrames: [{ frame: { id: "inner", parentId: "overlay", url: "https://example.com/inner" } }],
+        },
+      ],
+    },
+    children: [
+      // Out-of-process frames: the extension's own, one nested in it, and a web one.
+      { parentID: "main", tree: { frame: { id: "autofill", url: "chrome-extension://abc/menu.html" } } },
+      { parentID: "autofill", tree: { frame: { id: "nested", url: "https://example.org/" } } },
+      { parentID: "ad", tree: { frame: { id: "video", url: "https://video.example/" } } },
+    ],
+    extensions: new Set(),
+  })
+
+  expect(frames.map((frame) => frame.id)).toEqual(["main", "ad", "video"])
+  expect(Browser.extensionOrigin("chrome-extension://abc")).toBe(true)
+  expect(Browser.extensionOrigin("https://example.com")).toBe(false)
+})
+
+test("a frameID the agent passes resolves only to a frame it may use, and names an extension's frame", () => {
+  const root = {
+    frame: { id: "main", url: "https://example.com/", securityOrigin: "https://example.com" },
+    childFrames: [
+      { frame: { id: "same", parentId: "main", url: "https://example.com/inner" } },
+      {
+        frame: { id: "opened", parentId: "main", url: "about:blank", securityOrigin: "chrome-extension://abc" },
+        childFrames: [{ frame: { id: "inside", parentId: "opened", url: "https://example.com/x" } }],
+      },
+    ],
+  }
+
+  const children = [{ parentID: "main", tree: { frame: { id: "cross", url: "https://other.example/" } } }]
+
+  // Neither the extension's target nor a web target below it contributes frames to the agent's visible trees.
+  const extensions = excludedFrames(["overlay", "cross-now-extension"], [
+    { frame: { id: "overlay", url: "chrome-extension://abc/menu.html" }, childFrames: [
+      { frame: { id: "nested-extension", url: "chrome-extension://abc/nested.html" } },
+    ] },
+    { frame: { id: "nested-web", url: "https://example.com/nested" }, childFrames: [
+      { frame: { id: "grandchild", url: "about:blank" } },
+    ] },
+  ])
+
+  const access = (frameID: string, known = extensions) =>
+    agentFrame({ root, children, extensions: known }, frameID).type
+
+  expect(agentFrame({ root, children, extensions }, "same")).toEqual({
+    type: "frame",
+    frame: { id: "same", parentID: "main", url: "https://example.com/inner", name: "" },
+  })
+  expect(access("cross")).toBe("frame")
+  expect(access("main")).toBe("frame")
+  expect(access("overlay")).toBe("extension")
+
+  for (const id of ["nested-extension", "nested-web", "grandchild"]) expect(access(id)).toBe("extension")
+  expect(access("opened")).toBe("extension")
+  expect(access("inside")).toBe("extension")
+  expect(access("made-up")).toBe("unavailable")
+  // A web frame that now shows an extension's document is refused, even though its last tree read was a web page.
+  expect(access("cross", new Set(["cross"]))).toBe("extension")
+  expect(agentFrame({ root, children, extensions }, "overlay")).toMatchObject({
+    message: expect.stringContaining("Agent browser tools cannot use extension frames"),
+  })
+})
+
+test("a web tab stays fully usable by the agent", () => {
+  for (const type of ["evaluate", "snapshot", "click", "screenshot", "files.get"])
+    expect(agentRefusal({ type }, web)).toBeUndefined()
+  expect(agentRefusal({ type: "navigate", url: "https://example.org/" }, web)).toBeUndefined()
+  expect(
+    agentRefusal({ type: "tabs.open", url: "localhost:3000" }, { url: "about:blank", origin: "null" }),
+  ).toBeUndefined()
+})
+
+test("workspace roots with %, #, ?, spaces and non-ASCII names match their files, and a URL that cannot be read never throws", () => {
+  // The address Chromium gives a file: every path segment percent-encoded.
+  const fileURL = (path: string) => `file://${path.split("/").map(encodeURIComponent).join("/")}`
+
+  for (const root of [
+    "/work/100%-done",
+    "/work/a#b",
+    "/work/what?",
+    "/work/my project",
+    "/work/日本語",
+    "/work/a%2fb",
+  ]) {
+    expect(fileURLWithin(fileURL(`${root}/index.html`), [root])).toBe(true)
+    expect(fileURLWithin(fileURL(`${root}-other/index.html`), [root])).toBe(false)
+  }
+
+  // Before, decoding the root threw URIError for "100%-done", before the request guard could answer.
+  expect(() => fileURLWithin("file:///elsewhere/x.html", ["/work/100%-done"])).not.toThrow()
+  // A folder named "a%2fb" is not the folder "a/b", and an escaped separator never counts as one.
+  expect(fileURLWithin("file:///work/a/b/x.html", ["/work/a%2fb"])).toBe(false)
+  expect(fileURLWithin("file:///work/a%2Fb/x.html", ["/work/a/b"])).toBe(false)
+  expect(fileURLWithin("file:///work/a/..%2F..%2Fsecret", ["/work/a"])).toBe(false)
+  // Escapes that do not decode are outside, not an exception.
+  expect(fileURLWithin("file:///work/bad%zz/x.html", ["/work/bad%zz"])).toBe(false)
+  expect(fileURLWithin("file:///work/bad%C3/x.html", ["/work"])).toBe(false)
+  expect(refusal("file:///work/bad%zz/x.html", { fileRoots: ["/work"] })).toBe("browser.address.workspace")
+})
+
+test("a frame inside one known to show an extension's document is left out with it", () => {
+  // "opened" is a blank frame an extension opened: its tree still reads as the page's, only its context says otherwise.
+  const trees = {
+    root: {
+      frame: { id: "main", url: "https://example.com/", securityOrigin: "https://example.com" },
+      childFrames: [
+        {
+          frame: { id: "opened", parentId: "main", url: "about:blank", securityOrigin: "https://example.com" },
+          childFrames: [{ frame: { id: "web", parentId: "opened", url: "https://example.com/x" } }],
+        },
+      ],
+    },
+    children: [{ parentID: "web", tree: { frame: { id: "deeper", url: "https://other.example/" } } }],
+    extensions: new Set(["opened"]),
+  }
+
+  expect(agentFrames(trees).map((frame) => frame.id)).toEqual(["main"])
+
+  for (const id of ["opened", "web", "deeper"]) expect(agentFrame(trees, id).type).toBe("extension")
+  expect(agentFrame(trees, "main").type).toBe("frame")
+})
+
+test("an extension's page gets only the clipboard and notifications its manifest declares; a web page gets nothing", () => {
+  const declared = (id: string) => (id === "pw" ? ["clipboardWrite", "storage"] : [])
+  const page = "chrome-extension://pw/popup.html"
+
+  expect(pagePermission("clipboard-sanitized-write", page, declared)).toBe(true)
+  expect(pagePermission("clipboard-sanitized-write", "blob:chrome-extension://pw/0b6f7c2e", declared)).toBe(true)
+  expect(pagePermission("clipboard-read", page, declared)).toBe(false)
+  expect(pagePermission("notifications", page, declared)).toBe(false)
+  expect(pagePermission("media", page, declared)).toBe(false)
+  expect(pagePermission("clipboard-sanitized-write", "chrome-extension://other/popup.html", declared)).toBe(false)
+
+  for (const permission of ["clipboard-sanitized-write", "clipboard-read", "notifications", "geolocation"])
+    expect(pagePermission(permission, "https://example.com/", () => ["clipboardWrite", "notifications"])).toBe(false)
+
+  expect(pagePermission("notifications", "", declared)).toBe(false)
+})
+
+test("only a download the agent's command caused is the agent's", () => {
+  const web = ["https://example.com/", "https://example.com"]
+
+  const download = (input: Partial<Parameters<typeof downloadOwner>[0]>) =>
+    downloadOwner({ now: 100_000, agentRunning: false, page: web, chain: ["https://example.com/a.csv"], ...input })
+
+  expect(download({ agentRunning: true })).toBe("agent")
+  // A click the agent made, whose response became a download after the command returned.
+  expect(download({ agentEndedAt: 99_000 })).toBe("agent")
+  // The user clicked or typed in the tab since: their download.
+  expect(download({ agentEndedAt: 99_000, userInputAt: 99_500 })).toBe("user")
+  expect(download({ agentEndedAt: 100_000 - DOWNLOAD_GRACE_MS - 1 })).toBe("user")
+  expect(download({})).toBe("user")
+  // An extension's page or download is never the agent's, even while it acts in the tab.
+  expect(download({ agentRunning: true, page: ["chrome-extension://pw/vault.html", "chrome-extension://pw"] })).toBe(
+    "user",
+  )
+  expect(download({ agentRunning: true, chain: ["blob:chrome-extension://pw/0b6f7c2e"] })).toBe("user")
+})
+
+test("the user still opens extension pages the agent may not", () => {
+  const extensions = ["nngceckbapebfimnlniiiahkandclblb"]
+
+  expect(refusal(extensionPage, { extensions })).toBeUndefined()
+  expect(agentRefusal({ type: "navigate", url: extensionPage }, web)).toBeDefined()
 })

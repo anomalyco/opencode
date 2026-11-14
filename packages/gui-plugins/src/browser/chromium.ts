@@ -1,9 +1,12 @@
+import { homedir } from "node:os"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
 import type { Embeds } from "@opencode/plugin/gui/main"
+import { CAPTURE_DEADLINE_MS, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
+import { CodedError } from "./errors"
 import { createBrowserFiles } from "./files"
 import { createDiagnostics } from "./diagnostics"
 import { loadIcon } from "./icon"
@@ -14,6 +17,7 @@ import {
   documentIcon,
   documentTab,
   isDocumentClosed,
+  isNavigationPending,
   transitionDocument,
   type DocumentEvent,
 } from "./page-machine"
@@ -39,25 +43,35 @@ import {
 } from "./dialog-machine"
 import type { BrowserNetwork } from "./network"
 import {
+  agentFrame,
+  agentFrames,
+  agentRefusal,
   allowedDestination,
   committedLoad,
   destinationOrigin,
-  fileURLWithin,
+  downloadOwner,
+  excludedFrames,
+  extensionURL,
   localFileURL,
   normalizeURL,
   refusal,
   type Policy,
 } from "./policy"
 import type { PaneElement } from "./ipc"
+import { previewAddress, previewFile, reloadAddress } from "./preview"
+import { previewScheme } from "./scheme"
+import { workspaceFile } from "./workspace-file"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 
 /** State every page of the pane shares: the element ref allocator and the owner of the app-wide trace. */
 export type Shared = { ref: () => string; trace?: SharedTrace }
 
-// Captures and downloads belong to the tab, not whichever document it now shows; navigate replaces it anyway.
+// Captures and downloads belong to the tab, not whichever document it now shows; navigate replaces it anyway. A wait
+// reads whichever document is current, often the one a click just navigated to.
 const retainedOperations: readonly Browser.Method[] = [
   "navigate",
+  "wait",
   "files.list",
   "files.get",
   "trace.stop",
@@ -149,6 +163,9 @@ function zoomStep(current: number, direction: "in" | "out" | "reset") {
   return zoomSteps.findLast((step) => step < current - 0.001) ?? current
 }
 
+/** Who may have caused a tab's download: the agent's commands running now, when the last ended, the user's last input. */
+type Activity = { agentRuns: number; agentEndedAt?: number; userInputAt?: number }
+
 /** Ends a running command's wait when it is interrupted. */
 type Interrupted = ReturnType<typeof Promise.withResolvers<never>>
 
@@ -193,6 +210,8 @@ export function createBrowserPage(
     shortcut?: (shortcut: PageShortcut) => void
     /** The page took keyboard focus. */
     focused?: () => void
+    /** The page left the screen: another tab or a preview took its place, or the pane closed. */
+    hidden?: () => void
     fail: () => void
     /** Adopts a page the document opened; a background one leaves the current tab selected. */
     popup: (options: Electron.BrowserWindowConstructorOptions, background: boolean) => WebContents
@@ -201,13 +220,21 @@ export function createBrowserPage(
     popupOptions?: Electron.BrowserWindowConstructorOptions
     /** Directories whose files may load as file:// documents; empty when the server is remote. */
     fileRoots?: () => ReadonlyArray<string>
+    /** This binding's non-local origin for workspace previews; absent for remote workspaces. */
+    previewHost?: string
+    /** Extensions whose `chrome-extension://` pages may open, such as their popups and options. */
+    extensions?: () => ReadonlyArray<string>
     shared: Shared
     embeds: Embeds
   },
 ) {
   const policy: Policy = {
+    home: homedir(),
     get fileRoots() {
       return options.fileRoots?.() ?? []
+    },
+    get extensions() {
+      return options.extensions?.() ?? []
     },
   }
 
@@ -221,20 +248,27 @@ export function createBrowserPage(
       webSecurity: true,
       webviewTag: false,
       devTools: false,
-      backgroundThrottling: false,
       // Agent navigation, including in hidden tabs, must not take the user's keyboard focus.
       focusOnNavigation: false,
     },
   })
 
   const contents = view.webContents
+  const preview = (url: string) => previewFile(url, options.previewHost, policy.fileRoots ?? [])
+  const displayURL = (url: string) => preview(url) ?? (/^(?:oc-preview|file):/i.test(url) ? "about:blank" : url)
   const detachNetwork = options.network?.attach(contents)
+  contents.on("before-mouse-event", (_event, mouse) => {
+    // The agent's own input arrives while its command runs.
+    if (mouse.type === "mouseDown" && activity.agentRuns === 0) activity.userInputAt = Date.now()
+  })
   contents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return
 
+    if (activity.agentRuns === 0) activity.userInputAt = Date.now()
+
     if (pageReload(input, process.platform === "darwin")) {
       event.preventDefault()
-      contents.reload()
+      void reload().catch((error: Error) => publish(error.message))
 
       return
     }
@@ -303,9 +337,9 @@ export function createBrowserPage(
 
   const cdp = createCdp(contents)
   const documents = new Map<string, string>()
-  const sourceURLs = () => [...new Set([contents.getURL(), ...documents.values()])].sort()
+  const sourceURLs = () => [...new Set([state().url, ...documents.values()])].sort()
   const files = createBrowserFiles(sourceURLs)
-  const diagnostics = createDiagnostics(cdp)
+  const diagnostics = createDiagnostics(cdp, displayURL)
   const profiling = createProfiling(contents, cdp, files, sourceURLs, options.shared)
   const refs = new Map<string, Element>()
   // Elements the user picked. Their refs outlive later snapshots, so a comment keeps pointing at
@@ -316,17 +350,38 @@ export function createBrowserPage(
   const sessions = new Map<string, string>()
   const parents = new Map<string, string>()
   const contexts = new Map<string, { id: number; sessionID?: string }>()
+  // Frames that show an extension's document, which no agent frameID may reach: an extension's out-of-process frame by
+  // the session it attached with (a web frame's own session may detach after its replacement attached), and a frame
+  // whose document has an extension's origin.
+  const extensionTargets = new Map<string, string>()
+  const extensionContexts = new Set<string>()
+  const extensionFrames = () => new Set([...extensionTargets.values(), ...extensionContexts])
+
+  const attachFrames = (sessionID?: string) =>
+    cdp.send("Target.setAutoAttach", {
+      autoAttach: true,
+      waitForDebuggerOnStart: false,
+      flatten: true,
+      filter: [{ type: "iframe", exclude: false }, { exclude: true }],
+    }, sessionID)
+
+  const activity: Activity = { agentRuns: 0 }
+  // Set by the agent's first command; until then the tab renders as any other.
+  let agentDriven = false
   let dialogGate = createDialogGateState()
   // Running commands by run id: the controller that stops their remaining steps, and the wait an interruption ends.
   const runs = new Map<number, { controller: AbortController; interrupted: Interrupted }>()
   let revision = 0
   cdp.on("Page.frameNavigated", ({ frame }) => {
-    documents.set(frame.id, frame.url)
+    documents.set(frame.id, displayURL(frame.url))
     revision++
   })
-  cdp.on("Page.frameDetached", ({ frameId }) => {
+  cdp.on("Page.frameDetached", ({ frameId, reason }) => {
     documents.delete(frameId)
     revision++
+
+    // A swap moves the frame to another process, where it may now show an extension's document; keep what is known.
+    if (reason === "remove") extensionContexts.delete(frameId)
   })
 
   const state = () =>
@@ -392,27 +447,49 @@ export function createBrowserPage(
     return next.reply
   }
 
+  // Chromium uses the document URL as the title of untitled files; don't persist its internal origin as a title.
+  const pageTitle = (address = state().url) => {
+    const title = contents.getTitle()
+
+    return /^oc-preview:/i.test(title) ? address : title
+  }
+
   contents.on("did-start-loading", () => dispatch({ type: "loading.started" }))
-  contents.on("did-stop-loading", () => dispatch({ type: "loading.stopped", title: contents.getTitle() }))
+  contents.on("did-stop-loading", () => dispatch({ type: "loading.stopped", title: pageTitle() }))
   contents.on("did-start-navigation", (event) =>
     dispatch({
       type: "navigation.started",
-      url: event.url,
+      url: displayURL(event.url),
       isMainFrame: event.isMainFrame,
       isSameDocument: event.isSameDocument,
     }),
   )
   contents.on("did-navigate", (_event, url, status, statusText) =>
-    dispatch({ type: "navigation.committed", url, status, statusText, title: contents.getTitle() }),
+    dispatch({ type: "navigation.committed", url: displayURL(url), status, statusText, title: pageTitle(displayURL(url)) }),
   )
+  // Only agent-driven tabs need fresh frames while hidden. A cross-site commit can replace the renderer
+  // we woke on the first agent command, so wake its replacement too.
+  contents.on("did-navigate", () => {
+    if (agentDriven) contents.setBackgroundThrottling(false)
+  })
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
     dispatch({ type: "navigation.failed", code, description, url, isMainFrame }),
   )
-  contents.on("did-navigate-in-page", (_event, url, isMainFrame) =>
-    dispatch({ type: "navigation.in-page", url, title: contents.getTitle(), isMainFrame }),
-  )
+  contents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
+    if (!isMainFrame) return
+    const report = (address: string) => dispatch({ type: "navigation.in-page", url: address, title: pageTitle(address), isMainFrame })
+
+    if (!/^(?:oc-preview|file):/i.test(url)) return report(url)
+    const file = preview(url)
+
+    if (!file) return
+    // History API routes never pass the protocol handler. Keep the last validated address for virtual routes.
+    void workspaceFile(file, policy.fileRoots ?? []).then((target) => {
+      if (target && !closed() && !contents.isDestroyed() && contents.getURL() === url) report(file)
+    })
+  })
   contents.on("dom-ready", () => dispatch({ type: "document.ready" }))
-  contents.on("page-title-updated", () => dispatch({ type: "title.updated", title: contents.getTitle() }))
+  contents.on("page-title-updated", () => dispatch({ type: "title.updated", title: pageTitle() }))
   contents.on("page-favicon-updated", (_event, favicons) => dispatch({ type: "icon.updated", favicons }))
   contents.on("focus", () => {
     if (!closed()) options.focused?.()
@@ -423,10 +500,6 @@ export function createBrowserPage(
   contents.debugger.on("detach", () => {
     if (!closed()) options.fail()
   })
-  contents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
-  contents.session.setPermissionCheckHandler(() => false)
-  contents.session.setDevicePermissionHandler(() => false)
-  contents.session.setDisplayMediaRequestHandler((_request, callback) => callback({}))
   contents.on("content-bounds-updated", (event) => event.preventDefault())
 
   // Sub-frames keep Chromium's own rules so blob:/data: viewers and sandboxed previews still load,
@@ -434,9 +507,11 @@ export function createBrowserPage(
   const guard = (event: Electron.Event<{ url: string; isMainFrame: boolean }>) => {
     if (event.url === "about:blank") return
 
-    if (event.isMainFrame ? allowedDestination(event.url, policy) : !localFileURL(event.url)) return
+    const local = /^file:/i.test(event.url) || event.url.toLowerCase().startsWith(`${previewScheme}:`)
 
-    if (!event.isMainFrame && fileURLWithin(event.url, policy.fileRoots ?? [])) return
+    if (local && preview(event.url)) return
+
+    if (!local && (!event.isMainFrame || allowedDestination(event.url, policy))) return
     event.preventDefault()
     // The same reason a typed address gets, so a blocked link and a blocked address read alike.
     publish(refusal(event.url, policy) ?? "ERR_BLOCKED_BY_CLIENT")
@@ -446,7 +521,8 @@ export function createBrowserPage(
   contents.on("will-redirect", guard)
   // Links opened with Cmd or Ctrl arrive as background tabs, and stay behind the current one as in the system browser.
   contents.setWindowOpenHandler(({ url, disposition }) =>
-    url === "about:blank" || destinationOrigin(url)
+    url === "about:blank" || destinationOrigin(url) || extensionURL(url, policy.extensions ?? []) ||
+    preview(url)
       ? {
           action: "allow",
           outlivesOpener: true,
@@ -468,8 +544,19 @@ export function createBrowserPage(
       : { action: "deny" },
   )
 
-  const download = (_event: Electron.Event, item: Electron.DownloadItem, source: WebContents) => {
-    if (source !== contents) return
+  // Called from the session's one download listener (`guardSession`) for a download this page started. One the user
+  // started is left to the system's save flow, so it goes where they save it and the agent never reads it.
+  const download = (item: Electron.DownloadItem) => {
+    const owner = downloadOwner({
+      now: Date.now(),
+      agentRunning: activity.agentRuns > 0,
+      agentEndedAt: activity.agentEndedAt,
+      userInputAt: activity.userInputAt,
+      page: [contents.mainFrame.url, contents.mainFrame.origin],
+      chain: item.getURLChain(),
+    })
+
+    if (owner === "user") return
 
     try {
       const file = files.add(item.getFilename(), item.getMimeType() || "application/octet-stream", [
@@ -493,12 +580,31 @@ export function createBrowserPage(
     }
   }
 
-  contents.session.on("will-download", download)
   cdp.on("Runtime.executionContextCreated", ({ context }, sessionID) => {
     // SAFETY: CDP documents a page execution context's auxData as `{ frameId, isDefault, type }`.
     const aux = context.auxData as { frameId?: string; isDefault?: boolean } | undefined
 
-    if (aux?.frameId && aux.isDefault) contexts.set(aux.frameId, { id: context.id, sessionID })
+    if (!aux?.frameId || !aux.isDefault) return
+
+    // A frame that becomes an extension's document, as about:blank opened by one does, is no target for the agent.
+    if (Browser.extensionOrigin(context.origin)) {
+      contexts.delete(aux.frameId)
+      extensionContexts.add(aux.frameId)
+      const own = sessions.get(aux.frameId)
+
+      // An out-of-process web frame that turned into one in place leaves the frame list and stops reporting its console
+      // and network. It stays refused until the page removes it, even if it shows a web page again.
+      if (own) {
+        sessions.delete(aux.frameId)
+        parents.delete(aux.frameId)
+        void cdp.send("Target.detachFromTarget", { sessionId: own }).catch(() => undefined)
+      }
+
+      return
+    }
+
+    contexts.set(aux.frameId, { id: context.id, sessionID })
+    extensionContexts.delete(aux.frameId)
   })
   cdp.on("Runtime.executionContextDestroyed", ({ executionContextId }, sessionID) => {
     contexts.forEach((context, key) => {
@@ -507,6 +613,20 @@ export function createBrowserPage(
   })
   cdp.on("Target.attachedToTarget", ({ sessionId, targetInfo }, parentSessionID) => {
     if (targetInfo.type !== "iframe") return
+
+    // An extension's frame, such as an autofill overlay, stays out of `sessions`: no frame list, snapshot, picker or
+    // diagnostics reaches it. Site isolation gives it a process, and so a target, of its own. The context its first
+    // document had in the embedding page's process is dropped, so its frameID cannot reach that page instead.
+    if (Browser.extensionOrigin(targetInfo.url) || (parentSessionID && extensionTargets.has(parentSessionID)) ||
+      (targetInfo.parentFrameId && extensionContexts.has(targetInfo.parentFrameId))) {
+      extensionTargets.set(sessionId, targetInfo.targetId)
+      contexts.delete(targetInfo.targetId)
+      // Descendant iframe targets are excluded even if their own document is a web page. Do not enable diagnostics.
+      void attachFrames(sessionId).catch(() => undefined)
+
+      return
+    }
+
     const parentID = targetInfo.parentFrameId ?? Array.from(sessions).find(([, id]) => id === parentSessionID)?.[0]
 
     if (parentID) parents.set(targetInfo.targetId, parentID)
@@ -514,16 +634,7 @@ export function createBrowserPage(
     void Promise.all([
       diagnostics.enable(sessionId),
       cdp.send("Page.enable", {}, sessionId),
-      cdp.send(
-        "Target.setAutoAttach",
-        {
-          autoAttach: true,
-          waitForDebuggerOnStart: false,
-          flatten: true,
-          filter: [{ type: "iframe", exclude: false }, { exclude: true }],
-        },
-        sessionId,
-      ),
+      attachFrames(sessionId),
     ]).catch(() => undefined)
     void dispatchPicker({ type: "frame.attached", sessionID: sessionId })
   })
@@ -533,6 +644,9 @@ export function createBrowserPage(
     ({ backendNodeId }, sessionID) => void dispatchPicker({ type: "node.picked", backendID: backendNodeId, sessionID }),
   )
   cdp.on("Target.detachedFromTarget", ({ sessionId }) => {
+    // Only the session that showed the extension's document clears it: the frame keeps its target ID across a swap, and
+    // the web session it replaced may detach after the extension's attached.
+    extensionTargets.delete(sessionId)
     sessions.forEach((id, frameID) => {
       if (id === sessionId) {
         sessions.delete(frameID)
@@ -543,7 +657,7 @@ export function createBrowserPage(
   cdp.on("Page.javascriptDialogOpening", (event) =>
     dispatchDialog({
       type: "dialog.opened",
-      url: event.url,
+      url: displayURL(event.url),
       dialogType: event.type,
       message: event.message.slice(0, Browser.MAX_TEXT),
       defaultPrompt: event.defaultPrompt ?? "",
@@ -556,10 +670,16 @@ export function createBrowserPage(
   // A hidden page cannot be picked from, and a comment's frozen still already shows the
   // picked element, so hiding ends the picker, any pick in progress, and the highlight.
   embed.on("visible", (visible) => {
-    if (!visible) void dispatchPicker({ type: "embed.hidden" })
+    if (visible) return
+    void dispatchPicker({ type: "embed.hidden" })
+
+    if (!closed()) options.hidden?.()
   })
 
   const load = (url: string) => {
+    const destination = localFileURL(url) ? previewAddress(url, options.previewHost, policy.fileRoots ?? []) : url
+
+    if (!destination) return Promise.reject(new Error("Workspace preview is unavailable."))
     let committed = false
 
     const commit = () => {
@@ -569,11 +689,18 @@ export function createBrowserPage(
     contents.once("did-navigate", commit)
 
     return contents
-      .loadURL(url)
+      .loadURL(destination)
       .catch((error: Error) => {
         if (!committedLoad(error, committed)) throw error
       })
       .finally(() => contents.off("did-navigate", commit))
+  }
+
+  const reload = async () => {
+    const address = reloadAddress(contents.getURL(), state().url, options.previewHost, policy.fileRoots ?? [])
+
+    if (address) return void await load(address)
+    contents.reload()
   }
 
   const ready = Promise.all([
@@ -590,12 +717,7 @@ export function createBrowserPage(
     diagnostics.enable(),
     cdp.send("Page.enable"),
     cdp.send("DOM.enable"),
-    cdp.send("Target.setAutoAttach", {
-      autoAttach: true,
-      waitForDebuggerOnStart: false,
-      flatten: true,
-      filter: [{ type: "iframe", exclude: false }, { exclude: true }],
-    }),
+    attachFrames(),
   ]).then(() => undefined)
 
   return {
@@ -649,8 +771,15 @@ export function createBrowserPage(
     },
     /** Reports the page's icon and zoom when either changed since the last report. */
     detail,
-    async execute(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
+    /** Takes a download this page started; see `guardSession`. */
+    download,
+    /**
+     * Runs one command, the agent's or the user's. The agent's never opens, reads or acts on an extension page, which
+     * would run with that extension's privileges; every agent operation reaches the page through here.
+     */
+    async execute(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
       await ready
+
       // Registers the run before any further await, and listens for its abort in the same turn, so a dialog or a
       // cancellation that arrives while it still inspects its target interrupts it.
       const reply = dispatchDialog({ type: "run.started", actionType: command.action.type, aborted: signal.aborted })
@@ -664,12 +793,26 @@ export function createBrowserPage(
       const cancel = () => dispatchDialog({ type: "run.cancelled", runID })
       signal.addEventListener("abort", cancel, { once: true })
 
+      if (origin === "agent") {
+        activity.agentRuns++
+
+        if (!agentDriven) {
+          agentDriven = true
+          contents.setBackgroundThrottling(false)
+        }
+      }
+
       try {
-        return await Promise.race([perform(command, run.controller.signal), run.interrupted.promise])
+        return await Promise.race([perform(command, run.controller.signal, origin), run.interrupted.promise])
       } finally {
         signal.removeEventListener("abort", cancel)
         runs.delete(runID)
         dispatchDialog({ type: "run.finished", runID })
+
+        if (origin === "agent") {
+          activity.agentRuns--
+          activity.agentEndedAt = Date.now()
+        }
       }
     },
     async dispose() {
@@ -679,7 +822,6 @@ export function createBrowserPage(
       void dispatchPicker({ type: "disposed" })
       clearTimeout(pickerTimer)
       detachNetwork?.()
-      contents.session.off("will-download", download)
       await profiling.dispose()
       cdp.dispose()
       refs.clear()
@@ -691,7 +833,42 @@ export function createBrowserPage(
     },
   }
 
-  async function perform(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
+  async function perform(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user") {
+    if (origin === "user") return attempt(command, signal)
+    const refused = agentRefusal(command.action, mainDocument())
+
+    if (refused) throw new Error(refused)
+    const used = actionFrames(command.action)
+    const framed = await extensionFrameRefusal(used)
+
+    if (framed) throw new Error(framed)
+    const result = await attempt(command, signal)
+    // A redirect, or a navigation while it ran, may have brought an extension page in, in the tab or in a frame the
+    // action used; its result stays here.
+    const moved = agentRefusal({ type: "snapshot" }, mainDocument()) ?? (await extensionFrameRefusal(used))
+
+    if (moved) throw new Error(moved)
+
+    return result
+  }
+
+  function mainDocument() {
+    return { url: contents.mainFrame.url, origin: contents.mainFrame.origin }
+  }
+
+  async function mainContext() {
+    const context = contexts.get((await cdp.send("Page.getFrameTree")).frameTree.frame.id)
+
+    if (!context)
+      throw new CodedError(
+        Browser.FailureCode.documentChanged,
+        "The page's JavaScript context is unavailable; it may be loading. Wait for it with browser.wait({tabID}), then retry.",
+      )
+
+    return context
+  }
+
+  async function attempt(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
     if (isPickerActive(pickerState) && pointerOperations.includes(command.action.type))
       await dispatchPicker({ type: "pointer.command" })
 
@@ -707,7 +884,8 @@ export function createBrowserPage(
       command.generation !== documentGeneration(documentState) &&
       !retainedOperations.includes(command.action.type)
     )
-      throw new Error(
+      throw new CodedError(
+        Browser.FailureCode.documentChanged,
         "The document changed before this operation ran. Call browser.tabs.list({}) to check its current URL, then browser.snapshot({tabID}) for fresh refs. Reconsider the action before retrying on the new page.",
       )
     abortError(signal)
@@ -747,7 +925,9 @@ export function createBrowserPage(
           signal.removeEventListener("abort", cancel)
         }
 
-        abortError(signal)
+        // The load event comes just before Chromium says the tab stopped loading; report the tab after that. A frame that
+        // still loads after a moment is reported as loading, which it is.
+        await waitFor(() => !contents.isLoading(), signal, 2_000).catch(() => abortError(signal))
 
         return result(state())
       }
@@ -761,7 +941,7 @@ export function createBrowserPage(
         if (action.type === "forward" && contents.navigationHistory.canGoForward())
           contents.navigationHistory.goForward()
 
-        if (action.type === "reload") contents.reload()
+        if (action.type === "reload") await reload()
 
         if (action.type === "stop") contents.stop()
 
@@ -780,12 +960,10 @@ export function createBrowserPage(
           throw new Error(
             "Pass either ref or frameID to browser.evaluate, not both. A ref already runs in its element's frame.",
           )
-        const context = action.frameID ? contexts.get(action.frameID) : undefined
-
-        if (action.frameID && !context)
-          throw new Error(
-            "Frame context is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab, or omit frameID to target the main frame.",
-          )
+        const context = action.frameID ? await frameContext(action.frameID) : undefined
+        // Pinned to the main frame's current document, so a navigation to an extension page meanwhile fails the call
+        // instead of running the script there.
+        const main = action.frameID || action.ref ? undefined : await mainContext()
         const element = action.ref ? target(action.ref) : undefined
         const objectId = element ? await resolve(element) : undefined
 
@@ -809,7 +987,7 @@ export function createBrowserPage(
               "Runtime.evaluate",
               {
                 expression: action.script,
-                contextId: context?.id,
+                contextId: (context ?? main)?.id,
                 awaitPromise: true,
                 returnByValue: true,
                 userGesture: true,
@@ -924,35 +1102,56 @@ export function createBrowserPage(
           throw new Error(
             'browser.wait requires non-empty text for condition "text" or "textGone". Use condition "load" without text to wait for loading.',
           )
-        await waitFor(
-          async () => {
-            if (action.condition === "load") return !contents.isLoading()
-            const context = action.frameID ? contexts.get(action.frameID) : undefined
+        const frameID = action.frameID
 
-            if (action.frameID && !context)
-              throw new Error(
-                "Frame context is unavailable. Call browser.frames({tabID}) and use a frameID from this tab.",
-              )
+        // The frame is checked once; its context is read on each poll, so one that turns into an extension's
+        // document while this waits fails the wait.
+        if (frameID) await agentFrameOf(frameID)
+        // Whether a check failed; otherwise the wait ran out of time, which the server reports as met: false.
+        const checks = { failed: false }
 
-            const value = await cdp.send(
-              "Runtime.evaluate",
-              {
-                expression: `document.body?.innerText.includes(${JSON.stringify(action.text)}) ?? false`,
-                returnByValue: true,
-                contextId: context?.id,
-              },
-              context?.sessionID,
+        const holds = async () => {
+          if (action.condition === "load") return !contents.isLoading()
+          // A navigation to an extension page while this waits ends it: the text would be that page's.
+          const page = agentRefusal({ type: "wait" }, mainDocument())
+
+          if (page) throw new Error(page)
+          const context = frameID ? contexts.get(frameID) : undefined
+
+          if (frameID && (!context || extensionFrames().has(frameID))) {
+            // Names an extension's document by what it is, when that is why the context went.
+            await agentFrameOf(frameID)
+            throw new Error(
+              "Frame context is unavailable. Call browser.frames({tabID}) and use a frameID from this tab.",
             )
+          }
 
-            return Boolean(value.result.value) === (action.condition === "text")
-          },
+          const value = await cdp.send(
+            "Runtime.evaluate",
+            {
+              expression: `document.body?.innerText.includes(${JSON.stringify(action.text)}) ?? false`,
+              returnByValue: true,
+              contextId: context?.id,
+            },
+            context?.sessionID,
+          )
+
+          return Boolean(value.result.value) === (action.condition === "text")
+        }
+
+        await waitFor(
+          () =>
+            holds().catch((error: Error) => {
+              checks.failed = true
+              throw error
+            }),
           signal,
           action.timeoutMs,
-        ).catch((error) => {
-          if (signal.aborted) throw error
-          throw new Error(
-            `browser.wait failed for condition ${JSON.stringify(action.condition)} (timeoutMs: ${action.timeoutMs ?? 10_000}). Inspect browser.snapshot({tabID}) and check text/frameID before retrying; timeoutMs can be increased up to 30000 for a genuinely slow page. Details: ${error instanceof Error ? error.message : String(error)}`,
-          )
+        ).catch((cause: Error) => {
+          if (signal.aborted) throw cause
+          const text = `browser.wait failed for condition ${JSON.stringify(action.condition)} (timeoutMs: ${action.timeoutMs ?? 10_000}). Inspect browser.snapshot({tabID}) and check text/frameID before retrying; timeoutMs can be increased up to 30000 for a genuinely slow page. Details: ${cause.message}`
+
+          throw checks.failed ? new Error(text, { cause }) : new CodedError(Browser.FailureCode.unmet, text, { cause })
         })
         break
       }
@@ -962,52 +1161,23 @@ export function createBrowserPage(
           throw new Error(
             "Choose either ref for an element screenshot or fullPage:true for the whole page. Remove the other argument before retrying.",
           )
-        await waitFor(() => view.getVisible() && win.isVisible() && !win.isMinimized(), signal, 3_000).catch(
-          (error) => {
-            if (signal.aborted) throw error
-            throw new Error(
-              "Screenshot needs a visible tab. Call browser.tabs.focus and keep its desktop window visible.",
-            )
-          },
-        )
-        const element = action.ref ? await rect(target(action.ref), true) : undefined
-        const metrics = await cdp.send("Page.getLayoutMetrics")
 
-        const bounds = element
-          ? {
-              ...element,
-              x: element.x + metrics.cssVisualViewport.pageX,
-              y: element.y + metrics.cssVisualViewport.pageY,
-            }
-          : action.fullPage
-            ? metrics.cssContentSize
-            : {
-                x: metrics.cssVisualViewport.pageX,
-                y: metrics.cssVisualViewport.pageY,
-                width: metrics.cssVisualViewport.clientWidth,
-                height: metrics.cssVisualViewport.clientHeight,
-              }
-
-        const pixelRatio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
-        const scale = Math.min(1, (action.maxWidth ?? 2000) / (bounds.width * pixelRatio))
-
-        if (bounds.width <= 0 || bounds.height <= 0)
-          throw new Error(
-            "Element or page has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport.",
-          )
-
-        if (bounds.width * bounds.height * (scale * pixelRatio) ** 2 > 16_000_000)
-          throw new Error("Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.")
-        const format = action.format ?? "jpeg"
-
-        const capture = await cdp.send("Page.captureScreenshot", {
-          format,
-          quality: format === "png" ? undefined : (action.quality ?? 80),
-          captureBeyondViewport: true,
-          clip: { ...bounds, scale },
+        const blocked = undrawable({
+          platform: process.platform,
+          minimized: win.isMinimized(),
+          visible: win.isVisible(),
+          appHidden: process.platform === "darwin" && electron.app.isHidden(),
         })
 
-        const id = await files.save(`screenshot.${format}`, `image/${format}`, Buffer.from(capture.data, "base64"), [
+        if (blocked) throw new Error(undrawableMessage(blocked))
+        // Capture the document a navigation in flight lands on, not the one it leaves. One that is still going after
+        // the wait leaves the current document in place, which is then what the tab shows.
+        await waitFor(() => !isNavigationPending(documentState), signal, 10_000).catch(() => abortError(signal))
+        // A frame rendered after the last navigation or action.
+        await painted()
+        const capture = await screenshot(action, signal)
+
+        const id = await files.save(`screenshot.${capture.format}`, `image/${capture.format}`, capture.data, [
           ...captureSources,
           ...sourceURLs(),
         ])
@@ -1128,7 +1298,7 @@ export function createBrowserPage(
   async function inspect(action: Browser.Action): Promise<Browser.Target> {
     // Most CDP queries cannot run while a JavaScript dialog blocks the renderer.
     if (action.type === "dialog")
-      return selectDialogTarget(dialogGate, documentGeneration(documentState), contents.getURL())
+      return selectDialogTarget(dialogGate, documentGeneration(documentState), state().url)
 
     const fileIDs =
       action.type === "heap.compare" ? [action.before, action.after] : "fileID" in action ? [action.fileID] : []
@@ -1145,17 +1315,7 @@ export function createBrowserPage(
       return profiling.target(action.type === "trace.stop" ? "trace" : "cpu")
     const tree = await frames()
     tree.forEach((frame) => documents.set(frame.id, frame.url))
-
-    const refs =
-      action.type === "drag"
-        ? [action.from, action.to]
-        : action.type === "fill_form"
-          ? action.fields.map((field) => field.ref)
-          : "ref" in action && action.ref
-            ? [action.ref]
-            : []
-
-    const selected = refs.map(target)
+    const selected = actionRefs(action).map(target)
 
     const frameIDs = selected.length
       ? selected.map((element) => element.frameID)
@@ -1163,13 +1323,7 @@ export function createBrowserPage(
         ? [action.frameID]
         : []
 
-    const urls = frameIDs.map((id) => {
-      const frame = tree.find((frame) => frame.id === id)
-
-      if (!frame) throw new Error("Frame is unavailable. Call browser.frames({tabID}) and use a current frameID.")
-
-      return frame.url
-    })
+    const urls = await Promise.all(frameIDs.map(async (id) => (await agentFrameOf(id)).url))
 
     const capture = ["screenshot", "lighthouse", "trace.start", "cpu.start", "heap.snapshot"].includes(action.type)
 
@@ -1182,19 +1336,34 @@ export function createBrowserPage(
               ? sourceURLs()
               : urls.length
                 ? urls
-                : [contents.getURL()],
+                : [state().url],
         ),
       ].sort(),
       key: JSON.stringify([documentGeneration(documentState), revision, selected]),
     }
   }
 
-  function target(ref: Browser.Ref): Element {
+  function actionRefs(action: Browser.Action) {
+    if (action.type === "drag") return [action.from, action.to]
+
+    if (action.type === "fill_form") return action.fields.map((field) => field.ref)
+
+    return "ref" in action && action.ref ? [action.ref] : []
+  }
+
+  /** The element a ref names: one from this tab's newest snapshot, or one the user picked. */
+  function lookup(ref: Browser.Ref) {
     const key = ref.replace(/^@/, "")
-    const value = refs.get(key) ?? picked.get(key)
+
+    return refs.get(key) ?? picked.get(key)
+  }
+
+  function target(ref: Browser.Ref): Element {
+    const value = lookup(ref)
 
     if (!value)
-      throw new Error(
+      throw new CodedError(
+        Browser.FailureCode.staleRef,
         "Element ref is stale or belongs to another tab. Call browser.snapshot({tabID}) and use a ref from that tab's newest snapshot. Do not reuse refs after navigation or a newer snapshot.",
       )
 
@@ -1202,38 +1371,63 @@ export function createBrowserPage(
   }
 
   async function frames() {
+    return agentFrames(await frameTrees()).map((frame) => ({ ...frame, url: frame.parentID ? displayURL(frame.url) : state().url }))
+  }
+
+  async function frameTrees() {
     const root = await cdp.send("Page.getFrameTree")
-    const result: { id: string; parentID?: string; url: string; name: string }[] = []
-
-    const walk = (tree: Protocol.Page.FrameTree, parentID?: string) => {
-      if (!result.some((frame) => frame.id === tree.frame.id))
-        result.push(
-          tree.frame.parentId || parentID
-            ? {
-                id: tree.frame.id,
-                parentID: tree.frame.parentId ?? parentID,
-                url: tree.frame.url,
-                name: tree.frame.name ?? "",
-              }
-            : { id: tree.frame.id, url: tree.frame.url, name: tree.frame.name ?? "" },
-        )
-      tree.childFrames?.forEach((child) => walk(child, tree.frame.id))
-    }
-
-    walk(root.frameTree)
 
     const children = await Promise.all(
-      Array.from(sessions, async ([id, sessionID]) => ({
-        id,
-        tree: await cdp.send("Page.getFrameTree", {}, sessionID).catch(() => undefined),
-      })),
+      Array.from(sessions, async ([id, sessionID]) => {
+        const tree = await cdp.send("Page.getFrameTree", {}, sessionID).catch(() => undefined)
+
+        return tree ? [{ parentID: parents.get(id) ?? root.frameTree.frame.id, tree: tree.frameTree }] : []
+      }),
     )
 
-    children.forEach(({ id, tree }) => {
-      if (tree) walk(tree.frameTree, parents.get(id) ?? root.frameTree.frame.id)
-    })
+    const excluded = await Promise.all(Array.from(extensionTargets.keys(), async (sessionID) => {
+      const tree = await cdp.send("Page.getFrameTree", {}, sessionID).catch(() => undefined)
 
-    return result
+      return tree ? [tree.frameTree] : []
+    }))
+
+    return { root: root.frameTree, children: children.flat(), extensions: excludedFrames(extensionFrames(), excluded.flat()) }
+  }
+
+  /** The frame an agent's frameID names; every operation that takes one resolves it here. */
+  async function agentFrameOf(frameID: string) {
+    const access = agentFrame(await frameTrees(), frameID)
+
+    if (access.type !== "frame") throw new Error(access.message)
+
+    return { ...access.frame, url: access.frame.parentID ? displayURL(access.frame.url) : state().url }
+  }
+
+  async function frameContext(frameID: string) {
+    await agentFrameOf(frameID)
+    const context = contexts.get(frameID)
+
+    if (!context)
+      throw new Error(
+        "Frame context is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab, or omit frameID to target the main frame.",
+      )
+
+    return context
+  }
+
+  /** Why the agent may not use these frames: one shows an extension's document, perhaps since the call began. */
+  async function extensionFrameRefusal(frameIDs: readonly string[]) {
+    if (!frameIDs.length) return undefined
+    const trees = await frameTrees()
+
+    return frameIDs.map((frameID) => agentFrame(trees, frameID)).find((access) => access.type === "extension")?.message
+  }
+
+  /** The frames an action reaches: its frameID, or the frames of the element refs it names. */
+  function actionFrames(action: Browser.Action) {
+    const elements = actionRefs(action).flatMap((ref) => lookup(ref)?.frameID ?? [])
+
+    return "frameID" in action && action.frameID ? [action.frameID, ...elements] : elements
   }
 
   async function call(element: Element, functionDeclaration: string, args: unknown[] = []) {
@@ -1267,7 +1461,8 @@ export function createBrowserPage(
     const object = await cdp.send("DOM.resolveNode", { backendNodeId: element.backendID }, element.sessionID)
 
     if (!object.object.objectId)
-      throw new Error(
+      throw new CodedError(
+        Browser.FailureCode.staleRef,
         "Element is no longer available. Call browser.snapshot({tabID}) and use a fresh ref; the page may have replaced the element.",
       )
 
@@ -1277,9 +1472,8 @@ export function createBrowserPage(
   async function rect(element: Element, scroll = false) {
     if (scroll) {
       await cdp.send("DOM.scrollIntoViewIfNeeded", { backendNodeId: element.backendID }, element.sessionID)
-      // Force a compositor update after scrolling. requestAnimationFrame can
-      // stall in a hidden WebContentsView, even with background throttling off.
-      await contents.capturePage(undefined, { stayHidden: false, stayAwake: true })
+      // Input is routed by the last rendered frame, so let one render at the new scroll position.
+      await painted(element.sessionID)
     }
 
     const bounds = Schema.Struct({ x: Schema.Finite, y: Schema.Finite, width: Schema.Finite, height: Schema.Finite })
@@ -1327,6 +1521,115 @@ export function createBrowserPage(
     while (id && !sessions.has(id)) id = tree.find((frame) => frame.id === id)?.parentID
 
     return id ? sessions.get(id) : undefined
+  }
+
+  async function screenshot(action: Extract<Browser.Action, { type: "screenshot" }>, signal: AbortSignal) {
+    const element = action.ref ? await rect(target(action.ref), true) : undefined
+    const metrics = await cdp.send("Page.getLayoutMetrics")
+    const viewport = metrics.cssVisualViewport
+    // Chromium renders beyond the viewport only for a tab it presents on screen.
+    const onscreen = view.getVisible() && win.isVisible() && !win.isMinimized()
+
+    if (action.fullPage && !onscreen)
+      throw new Error(
+        "A full-page screenshot needs this tab on screen in the Review pane, and it is not shown now. Omit fullPage to capture the viewport, which works while the tab is hidden, and scroll to capture the rest.",
+      )
+
+    if (action.fullPage) return beyondViewport(action, metrics.cssContentSize)
+
+    if (
+      element &&
+      onscreen &&
+      (element.x < 0 ||
+        element.y < 0 ||
+        element.x + element.width > viewport.clientWidth ||
+        element.y + element.height > viewport.clientHeight)
+    )
+      return beyondViewport(action, { ...element, x: element.x + viewport.pageX, y: element.y + viewport.pageY })
+
+    // Otherwise the viewport, or the element's part of it, copied from the tab's last frame; hidden tabs keep rendering.
+    const clip = element && {
+      x: Math.max(0, element.x),
+      y: Math.max(0, element.y),
+      width: Math.min(viewport.clientWidth, element.x + element.width) - Math.max(0, element.x),
+      height: Math.min(viewport.clientHeight, element.y + element.height) - Math.max(0, element.y),
+    }
+
+    if (clip && (clip.width <= 0 || clip.height <= 0))
+      throw new Error(
+        "Element has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport.",
+      )
+    const zoom = contents.getZoomFactor()
+
+    const image = await surface(
+      clip && {
+        x: Math.round(clip.x * zoom),
+        y: Math.round(clip.y * zoom),
+        width: Math.max(1, Math.round(clip.width * zoom)),
+        height: Math.max(1, Math.round(clip.height * zoom)),
+      },
+      signal,
+    )
+
+    const maxWidth = action.maxWidth ?? 2000
+    const scaled = image.getSize().width > maxWidth ? image.resize({ width: maxWidth, quality: "good" }) : image
+
+    // A rendered frame encodes only as PNG or JPEG, so WebP comes back as JPEG.
+    return action.format === "png"
+      ? { format: "png", data: scaled.toPNG() }
+      : { format: "jpeg", data: scaled.toJPEG(action.quality ?? 80) }
+  }
+
+  async function beyondViewport(
+    action: Extract<Browser.Action, { type: "screenshot" }>,
+    bounds: { x: number; y: number; width: number; height: number },
+  ) {
+    const pixelRatio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
+    const scale = Math.min(1, (action.maxWidth ?? 2000) / (bounds.width * pixelRatio))
+
+    if (bounds.width <= 0 || bounds.height <= 0)
+      throw new Error(
+        "Element or page has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport.",
+      )
+
+    if (bounds.width * bounds.height * (scale * pixelRatio) ** 2 > 16_000_000)
+      throw new Error("Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.")
+    const format = action.format ?? "jpeg"
+
+    const capture = await cdp.send("Page.captureScreenshot", {
+      format,
+      quality: format === "png" ? undefined : (action.quality ?? 80),
+      captureBeyondViewport: true,
+      clip: { ...bounds, scale },
+    })
+
+    return { format, data: Buffer.from(capture.data, "base64") }
+  }
+
+  // Right after a document commits, Chromium has no frame of it for a few frames and rejects the copy, so it retries.
+  // A window that draws nothing never answers the copy at all, so every attempt shares one deadline.
+  async function surface(
+    area: Electron.Rectangle | undefined,
+    signal: AbortSignal,
+    deadline = performance.now() + CAPTURE_DEADLINE_MS,
+  ): Promise<Electron.NativeImage> {
+    const expired = AbortSignal.timeout(Math.max(1, Math.round(deadline - performance.now())))
+
+    const image = await Promise.race([
+      contents.capturePage(area, { stayHidden: true }).catch((error: Error) => error),
+      new Promise<undefined>((resolve) => expired.addEventListener("abort", () => resolve(undefined), { once: true })),
+    ])
+
+    if (image && !(image instanceof Error) && !image.isEmpty()) return image
+    abortError(signal)
+
+    if (!image) throw new Error(undrawableMessage("stalled"))
+
+    if (performance.now() + 100 >= deadline)
+      throw new Error(`Capture failed: ${image instanceof Error ? image.message : "Chromium returned an empty frame"}`)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    return surface(area, signal, deadline)
   }
 
   async function point(element: Element) {
@@ -1473,9 +1776,10 @@ export function createBrowserPage(
   async function snapshot(action: Extract<Browser.Action, { type: "snapshot" | "find" }>) {
     const tree = await frames()
     const selected = action.type === "snapshot" && action.ref ? target(action.ref) : undefined
-    const frameID = selected?.frameID ?? action.frameID ?? tree[0]?.id
+    const named = selected?.frameID ?? action.frameID
+    const frameID = named ? (await agentFrameOf(named)).id : tree[0]?.id
 
-    if (!frameID || !tree.some((frame) => frame.id === frameID))
+    if (!frameID)
       throw new Error(
         "Frame is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab; omit frameID for the main frame.",
       )
@@ -1789,8 +2093,8 @@ export function createBrowserPage(
     return name ? { ...labeled, name } : labeled
   }
 
-  // Wait until the compositor shows the picked highlight without the hover tooltip, so the
-  // renderer's still of the page includes it. A stalled page must not hold the comment back.
+  // Waits until the compositor drew a new frame: the picked highlight without its hover tooltip, a scroll before input
+  // is routed by position, or the page before a screenshot copies it. A stalled page must not hold any of them back.
   async function painted(sessionID?: string) {
     await Promise.race([
       cdp

@@ -12,7 +12,7 @@ import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createMemo, createSignal, For, onCleanup, Show, untrack, type Accessor, type JSX } from "solid-js"
+import { createMemo, createSignal, For, Index, onCleanup, Show, untrack, type Accessor, type JSX } from "solid-js"
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import {
   createKeyed,
@@ -22,7 +22,7 @@ import {
   type MountedSession,
   type SessionScreen,
 } from "@opencode/plugin/gui"
-import { addressParts, connection, loopback } from "./address"
+import { addressParts, connection, externalAction } from "./address"
 import {
   ADDRESS_HINT_MAX_LENGTH,
   addressSuggestions,
@@ -34,7 +34,10 @@ import {
   type AddressEvent,
 } from "./address-machine"
 import { commentNote, pageNote } from "./comment"
+import { Glyph } from "./choices"
 import { bare, highlight, type Visit } from "./history"
+import { SignInOffer } from "./import-prompt"
+import type definition from "./index"
 import type { Model } from "./model"
 import {
   capturesEscape,
@@ -47,6 +50,7 @@ import {
   type OverlayEvent,
 } from "./overlay-machine"
 import { PageIcon } from "./page-icon"
+import { BrowserProfile, type ProfileExtension } from "./profile/ipc"
 import {
   initialSiteState,
   SITE_CLEAR_TIMEOUT_MS,
@@ -59,13 +63,16 @@ import {
 
 const RECENT = 5
 
+/** An element a component reads after render, such as a button a native view anchors to. */
+type ElementRef = { element?: HTMLElement }
+
 export default function SessionBrowserPane(props: {
   tab: Accessor<PanelTab>
   session: MountedSession
   screen: SessionScreen
   model: Model
 }) {
-  const plugin = usePlugin()
+  const plugin = usePlugin<typeof definition>()
   const keybinds = plugin.keybinds
   const desktop = plugin.desktop
   const embeds = plugin.embeds
@@ -77,6 +84,38 @@ export default function SessionBrowserPane(props: {
   const failed = () => !!state()?.loadError
   const suspended = () => props.model.suspended(props.session)
   const command = (action: Browser.Action) => props.model.command(props.session, action)
+  const profile = plugin.use(BrowserProfile)
+  // The pane offers to import sign-ins until the user imports or declines once, and keeps the offer's confirmation of
+  // an import until the user closes it.
+  const [confirming, setConfirming] = createSignal(false)
+  const offering = () => !plugin.stores.preferences.value.welcomed || confirming()
+
+  const extensions = () => {
+    const current = profile()
+
+    return current.status === "active" ? (current.value.state()?.extensions ?? []) : []
+  }
+
+  // The extensions button, which an extension's popup opens under.
+  const extensionsButton: ElementRef = {}
+
+  // An extension's button opens its popup or tells it of the click; one without a button opens its options page.
+  const chooseExtension = (extension: ProfileExtension) => {
+    const current = profile()
+    const rect = extensionsButton.element?.getBoundingClientRect()
+
+    const fallback = () => {
+      const page = extension.options ?? extension.popup
+
+      if (page) props.model.openURL(props.session, page)
+    }
+
+    if (current.status !== "active" || !rect) return fallback()
+    const anchor = { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+    void current.value.click({ id: extension.id, anchor }).then((handled) => {
+      if (!handled) fallback()
+    }, fallback)
+  }
 
   const page = () => {
     const tab = state()
@@ -197,15 +236,18 @@ export default function SessionBrowserPane(props: {
 
   // A loopback address opens on the machine that runs the server; the system browser here reaches it only when the
   // server runs here too.
-  const reachable = () => {
-    const url = address()
+  const reachable = () => externalAction(address(), props.session.server.local)
 
-    if (!URL.canParse(url)) return false
-    const parsed = new URL(url)
+  const externalLabel = () => address().startsWith("file:") ? "external.reveal" : "external.open"
 
-    if (parsed.protocol === "file:") return props.session.server.local
+  const openExternal = () => {
+    const tab = state()
 
-    return /^https?:$/.test(parsed.protocol) && (props.session.server.local || !loopback(parsed.hostname))
+    if (!tab || !reachable()) return
+
+    if (externalAction(tab.url, props.session.server.local) === "reveal") return props.model.revealFile(props.session, tab.id)
+
+    if (externalAction(tab.url, props.session.server.local) === "browser") system.openExternal(tab.url)
   }
 
   const closeOverlay = () => dispatchOverlay({ type: "overlay.cancelled" })
@@ -219,6 +261,15 @@ export default function SessionBrowserPane(props: {
   // Navigates the tab and keeps the address in the field until the page reports where it went. Ends editing here rather
   // than on blur: a click elsewhere, such as a recent page, may have blurred the field already.
   const go = (url: string) => dispatchAddress({ type: "navigated", url, epoch: epoch() })
+
+  // Cookies came in: the offer stays to say so, and the page loads again with them, so a signed-out site opens signed
+  // in.
+  const imported = () => {
+    const tab = state()
+    setConfirming(true)
+
+    if (tab && address()) command({ type: "reload", tabID: tab.id })
+  }
 
   const submitOverlay = (value: string) => dispatchOverlay({ type: "overlay.submitted", value, context: context() })
   const openNote = () => dispatchOverlay({ type: "note.opened", context: context() })
@@ -608,15 +659,15 @@ export default function SessionBrowserPane(props: {
                     icon={<Icon name="outline-globe-plus" />}
                   />
                 </Tooltip>
-                <Tooltip placement="top" value={plugin.t(reachable() ? "external.open" : "external.unavailable")}>
+                <Tooltip placement="top" value={plugin.t(reachable() ? externalLabel() : "external.unavailable")}>
                   <IconButton
                     type="button"
                     variant="ghost-muted"
                     size="small"
-                    aria-label={plugin.t("external.open")}
+                    aria-label={plugin.t(externalLabel())}
                     disabled={!reachable()}
                     onPointerDown={(event) => event.preventDefault()}
-                    onClick={() => system.openExternal(address())}
+                    onClick={openExternal}
                     icon={<Icon name={newIcons() ? "outline-square-arrow" : "outline-arrow-up-right"} />}
                   />
                 </Tooltip>
@@ -660,6 +711,61 @@ export default function SessionBrowserPane(props: {
               icon={<Icon name="outline-browser-annotate" />}
             />
           </Tooltip>
+          {/* Extensions load into the profile, where pages of a server on this computer browse. */}
+          <Show when={props.session.server.local && extensions().length > 0}>
+            <Menu gutter={4} modal={false} placement="bottom-end">
+              <Tooltip placement="top" value={plugin.t("extensions.menu")}>
+                <Menu.Trigger
+                  as={IconButton}
+                  ref={(element: HTMLElement) => {
+                    extensionsButton.element = element
+                  }}
+                  variant="ghost-muted"
+                  size="large"
+                  data-action="browser-extensions"
+                  icon={<Icon name="extensions" />}
+                  aria-label={plugin.t("extensions.menu")}
+                />
+              </Tooltip>
+              <Menu.Portal>
+                <Menu.Content class="w-[220px]">
+                  <Index each={extensions()}>
+                    {(extension) => (
+                      <Menu.Item
+                        disabled={
+                          !extension().enabled ||
+                          extension().action?.enabled === false ||
+                          !(extension().action ?? extension().popup ?? extension().options)
+                        }
+                        onSelect={() => chooseExtension(extension())}
+                      >
+                        <Glyph image={extension().action?.icon ?? extension().icon} fallback="extensions" class="!size-4" />
+                        <span class="min-w-0 flex-1 truncate">{extension().action?.title ?? extension().name}</span>
+                        <Show when={extension().action?.badge}>
+                          {(badge) => (
+                            <span
+                              class="shrink-0 rounded-[3px] px-1 text-[10px] font-[530] leading-[14px]"
+                              classList={{ "text-v2-text-text-muted": !extension().action?.badgeColor }}
+                              style={{
+                                "background-color": extension().action?.badgeColor,
+                                color: extension().action?.badgeColor ? (extension().action?.badgeTextColor ?? "#ffffff") : undefined,
+                              }}
+                            >
+                              {badge()}
+                            </span>
+                          )}
+                        </Show>
+                      </Menu.Item>
+                    )}
+                  </Index>
+                  <Menu.Separator />
+                  <Menu.Item onSelect={() => plugin.layout.settings("browser")}>
+                    {plugin.t("extensions.manage")}
+                  </Menu.Item>
+                </Menu.Content>
+              </Menu.Portal>
+            </Menu>
+          </Show>
           <Menu gutter={4} modal={false} placement="bottom-end">
             <Tooltip placement="top" value={plugin.t("options")}>
               <Menu.Trigger
@@ -698,9 +804,11 @@ export default function SessionBrowserPane(props: {
                 <Menu.Item disabled={!address()} onSelect={copyLink}>
                   {plugin.t("link.copy")}
                 </Menu.Item>
-                <Menu.Item disabled={!reachable()} onSelect={() => system.openExternal(address())}>
-                  {plugin.t("external.menu")}
+                <Menu.Item disabled={!reachable()} onSelect={openExternal}>
+                  {plugin.t(address().startsWith("file:") ? "external.reveal" : "external.menu")}
                 </Menu.Item>
+                <Menu.Separator />
+                <Menu.Item onSelect={() => plugin.layout.settings("browser")}>{plugin.t("settings.open")}</Menu.Item>
                 <Menu.Separator />
                 <Menu.Item disabled={props.model.visits().length === 0} onSelect={() => props.model.clearHistory()}>
                   {plugin.t("history.clear")}
@@ -710,7 +818,7 @@ export default function SessionBrowserPane(props: {
           </Menu>
         </div>
       </div>
-      <Show when={error() && !failed()}>
+      <Show when={error()}>
         <div
           class="shrink-0 px-3 py-1.5 text-12-regular text-v2-state-fg-danger border-b border-v2-border-border-muted"
           role="alert"
@@ -718,6 +826,10 @@ export default function SessionBrowserPane(props: {
         >
           {error()}
         </div>
+      </Show>
+      {/* Above a page, where a signed-out site is the reason to import; the new tab page shows the offer as a card. */}
+      <Show when={offering() && !empty() && !suspended()}>
+        <SignInOffer variant="bar" imported={imported} closed={() => setConfirming(false)} />
       </Show>
       <embeds.View
         id={embed()}
@@ -730,7 +842,10 @@ export default function SessionBrowserPane(props: {
       >
         <div ref={box} aria-hidden="true" class="pointer-events-none absolute inset-0" />
         <Show when={empty() && !failed() && !suspended()}>
-          <div dir="auto" class="size-full overflow-y-auto">
+          <div dir="auto" data-scrollable class="size-full overflow-y-auto">
+            <Show when={offering()}>
+              <SignInOffer variant="card" imported={imported} closed={() => setConfirming(false)} />
+            </Show>
             <Show
               when={recent().length > 0}
               fallback={

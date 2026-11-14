@@ -19,6 +19,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./rpc": "./src/rpc.ts",
+    "./workspace": "./src/workspace.ts",
     "./proxy": "./src/proxy.ts"
   },
   "scripts": {

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
-import { browserFailure, protocolError } from "./errors"
+import { undrawableMessage } from "./capture"
+import { browserFailure, CodedError, protocolError } from "./errors"
 
 const tabID = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
 
@@ -30,9 +31,31 @@ test("native protocol errors keep the cause and give a valid recovery operation"
   expect(unsupported.message).toContain("does not support or allow")
   expect(unsupported.message).toContain("do not retry unchanged")
   expect(unsupported.cause).toBeInstanceOf(Error)
-  const failure = browserFailure({ type: "screenshot", tabID }, new Error("UnknownVizError"))
-  expect(failure.message).toContain("browser.tabs.focus({tabID})")
+  const failure = browserFailure({ type: "screenshot", tabID }, new Error("Capture failed: UnknownVizError"))
+  expect(failure.message).not.toContain("browser.tabs.focus")
+  expect(failure.message).toContain("browser.reload({tabID})")
   expect(failure.message).toContain("report the capture failure")
+  const minimized = browserFailure({ type: "screenshot", tabID }, new Error(undrawableMessage("minimized")))
+  expect(minimized.message).not.toContain("stuck")
+})
+
+test("a changed document, a stale ref and an unmet wait reach the server as codes, not words", () => {
+  const evaluate: Browser.Action = { type: "evaluate", tabID, script: "1" }
+  const code = (cause: Error) => browserFailure(evaluate, cause).code
+
+  expect(code(protocolError("Runtime.evaluate", new Error("Cannot find context with specified id")))).toBe(
+    Browser.FailureCode.documentChanged,
+  )
+  expect(code(protocolError("DOM.resolveNode", new Error("Could not find node with given id")))).toBe(
+    Browser.FailureCode.staleRef,
+  )
+  expect(code(new CodedError(Browser.FailureCode.unmet, "Condition was not met within 10 ms."))).toBe(
+    Browser.FailureCode.unmet,
+  )
+  // The same words in any other error carry no code.
+  expect(code(new Error("The document changed before this operation ran. Condition was not met within 10 ms."))).toBe(
+    "operation_failed",
+  )
 })
 
 test("long page errors retain the operation context without classifying script text as a navigation error", () => {

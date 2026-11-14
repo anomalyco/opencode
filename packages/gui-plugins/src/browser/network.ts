@@ -69,51 +69,71 @@ export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function*
       contents.on("login", login)
       contents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp")
 
-      return () => contents.off("login", login)
+      return () => void contents.off("login", login)
     },
-    /**
-     * Fetches a page icon through the server's network, as the page loaded it. Resolves undefined for anything but a
-     * small image: a failure, a timeout, another content type, or more than `MAX_ICON_BYTES`.
-     */
+    /** Fetches a page icon through the server's network, as the page loaded it. */
     icon: (url: string) =>
-      new Promise<{ mime: string; data: Buffer } | undefined>((resolve) => {
-        const request = net.request({ url, session: partition, useSessionCookies: true, redirect: "follow" })
-        const chunks: Buffer[] = []
-
-        const finish = (value?: { mime: string; data: Buffer }) => {
-          clearTimeout(timeout)
-          resolve(value)
-        }
-
-        const fail = () => {
-          request.abort()
-          finish()
-        }
-
-        const timeout = setTimeout(fail, 5_000)
-        request.on("login", (auth, callback) => {
-          if (auth.isProxy && auth.host === proxy.host && auth.port === proxy.port)
-            return callback(proxy.credentials.username, proxy.credentials.password)
-          callback()
-        })
-        request.on("response", (response) => {
-          const header = response.headers["content-type"]
-          const mime = (Array.isArray(header) ? header[0] : header)?.split(";")[0]?.trim().toLowerCase() ?? ""
-
-          if (response.statusCode !== 200 || !mime.startsWith("image/")) return fail()
-          response.on("data", (chunk) => {
-            chunks.push(chunk)
-
-            if (chunks.reduce((size, item) => size + item.length, 0) > MAX_ICON_BYTES) fail()
-          })
-          response.on("end", () => finish({ mime, data: Buffer.concat(chunks) }))
-          response.on("error", fail)
-        })
-        request.on("error", fail)
-        request.end()
+      fetchIcon(url, partition, (auth, callback) => {
+        if (auth.isProxy && auth.host === proxy.host && auth.port === proxy.port)
+          return callback(proxy.credentials.username, proxy.credentials.password)
+        callback()
       }),
   }
 })
+
+/**
+ * The network of a server on this machine: the same one this desktop has, so pages load directly in the partition,
+ * with the system's proxy settings, rather than through the server's tunnel.
+ */
+export function createDirectNetwork(partition: Electron.Session): BrowserNetwork {
+  return {
+    attach: () => () => undefined,
+    icon: (url) => fetchIcon(url, partition, (_auth, callback) => callback()),
+  }
+}
+
+/**
+ * Resolves undefined for anything but a small image: a failure, a timeout, another content type, or more than
+ * `MAX_ICON_BYTES`.
+ */
+function fetchIcon(
+  url: string,
+  partition: Electron.Session,
+  login: (auth: Electron.AuthInfo, callback: (username?: string, password?: string) => void) => void,
+) {
+  return new Promise<{ mime: string; data: Buffer } | undefined>((resolve) => {
+    const request = net.request({ url, session: partition, useSessionCookies: true, redirect: "follow" })
+    const chunks: Buffer[] = []
+
+    const finish = (value?: { mime: string; data: Buffer }) => {
+      clearTimeout(timeout)
+      resolve(value)
+    }
+
+    const fail = () => {
+      request.abort()
+      finish()
+    }
+
+    const timeout = setTimeout(fail, 5_000)
+    request.on("login", login)
+    request.on("response", (response) => {
+      const header = response.headers["content-type"]
+      const mime = (Array.isArray(header) ? header[0] : header)?.split(";")[0]?.trim().toLowerCase() ?? ""
+
+      if (response.statusCode !== 200 || !mime.startsWith("image/")) return fail()
+      response.on("data", (chunk) => {
+        chunks.push(chunk)
+
+        if (chunks.reduce((size, item) => size + item.length, 0) > MAX_ICON_BYTES) fail()
+      })
+      response.on("end", () => finish({ mime, data: Buffer.concat(chunks) }))
+      response.on("error", fail)
+    })
+    request.on("error", fail)
+    request.end()
+  })
+}
 
 /** Icons larger than this are not worth reducing; sites list a favicon of a few kilobytes. */
 const MAX_ICON_BYTES = 256 * 1024

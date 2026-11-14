@@ -549,3 +549,29 @@ it.effect("interrupted execute sends its latest progress rows before it settles"
     ])
   }),
 )
+
+test("execute records an inner call's error message, also when the program catches it", async () => {
+  const fail = {
+    name: "fail",
+    description: "Fail",
+    input: Schema.Struct({ size: Schema.Number }),
+    output: Schema.String,
+    execute: ({ size }) => Effect.fail(new Tool.Error({ message: `failed: ${"x".repeat(size)}` })),
+  } satisfies Info<Schema.Struct<{ size: typeof Schema.Number }>, typeof Schema.String>
+  const result = await Effect.runPromise(
+    createCodeMode(new Map<string, Info>([["fail", fail]])).execute(
+      {
+        code: 'try { await tools.fail({ size: 3 }) } catch {} ; await tools.fail({ size: 5000 }).catch(() => {}); return "done"',
+      },
+      context,
+    ),
+  )
+  expect(result.output.output).toBe("done")
+  const calls = result.output.toolCalls
+  expect(calls.map((call) => call.status)).toEqual(["error", "error"])
+  expect(calls[0]?.error).toBe("failed: xxx")
+  // Bounded: a long message keeps its start.
+  expect(calls[1]?.error).toStartWith("failed: xxxx")
+  expect(calls[1]?.error?.length).toBe(2_001)
+  expect(result.metadata?.toolCalls).toEqual(calls)
+})

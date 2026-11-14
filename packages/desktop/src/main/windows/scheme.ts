@@ -1,4 +1,5 @@
 import electron, { type BrowserWindow } from "electron"
+import { schemes } from "@opencode/gui-plugins/schemes"
 
 export const rendererProtocol = "oc"
 
@@ -34,6 +35,7 @@ export function isRendererUrl(value?: string, html = false) {
 // before it loads anything else.
 export function registerRendererScheme() {
   electron.protocol.registerSchemesAsPrivileged([
+    ...schemes,
     {
       scheme: rendererProtocol,
       privileges: {

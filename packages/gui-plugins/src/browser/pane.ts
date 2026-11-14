@@ -1,4 +1,5 @@
 import { NodeHttpClient } from "@effect/platform-node"
+import { homedir } from "node:os"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { OpenCode } from "@opencode/client/effect"
 import { SessionID } from "@opencode/schema/session-id"
@@ -9,8 +10,9 @@ import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure } from "./errors"
-import { createBrowserNetwork, type BrowserNetwork } from "./network"
-import { destinationOrigin, fileURLWithin, refusal } from "./policy"
+import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
+import { agentRefusal, destinationOrigin, refusal } from "./policy"
+import type { Profile } from "./profile"
 import { createRefs } from "./refs"
 import type { PaneEvent } from "./ipc"
 import {
@@ -36,6 +38,8 @@ import {
   type PaneState,
 } from "./pane-machine"
 import { createBrowserRestoreStore } from "./restore"
+import { guardSession } from "./session-guard"
+import { workspaceFile } from "./workspace-file"
 
 type Target = { readonly server: string; readonly session: string; readonly restore?: Browser.State }
 
@@ -44,6 +48,9 @@ type Handle = {
   window: number
   win: BrowserWindow
   partition: string
+  /** The pages browse in the desktop profile itself, with this machine's network; else in a linked partition. */
+  shared: boolean
+  previewHost?: string
   abort: AbortController
   registered: ReturnType<typeof Promise.withResolvers<void>>
   cleanup: () => void
@@ -68,10 +75,14 @@ export function createBrowserPane(input: {
   /** The declared store of reserved element refs. */
   readonly refs: Persisted<number, number>
   readonly embeds: Embeds
+  /** The desktop browser's one profile: cookies, site data and extensions for every session. */
+  readonly profile: Profile
   readonly emit: (window: number, value: { readonly binding: string; readonly event: PaneEvent }) => void
 }) {
   const machine: PaneMachine = { state: createPaneState() }
   const handles = new Map<string, Handle>()
+  // Release each tab's registration with the profile's extensions.
+  const grants = new WeakMap<BrowserPage, () => void>()
   const restore = createBrowserRestoreStore(input.storage)
   const shared: Shared = { ref: createRefs(input.refs) }
   // Page disposals in flight. Finishing a trace or CPU profile can hold a page open, and the pane's own disposal waits
@@ -80,6 +91,9 @@ export function createBrowserPane(input: {
   const disposals = new WeakMap<BrowserPage, Promise<void>>()
   // Keep long-lived RPC requests off Chromium's shared HTTP connection pool.
   const runtime = ManagedRuntime.make(NodeHttpClient.layerNodeHttp)
+  // Each page's download handler by its web contents ID. The profile guards its own session and owns this map; a remote
+  // server's partition gets its own guard at registration, handing downloads to the same map.
+  const downloads = input.profile.downloads
 
   return {
     async register(window: number, binding: string, target: Target) {
@@ -96,15 +110,14 @@ export function createBrowserPane(input: {
       if (win.isDestroyed() || win.webContents.isDestroyed()) throw new Error("browser.pane.owner.unavailable")
       const sessionID = SessionID.make(target.session)
       const storageKey = `${target.server}\n${sessionID}`
-      const partition = `opencode-browser-${crypto.randomUUID()}`
+      // A server on this machine reaches the same network as this desktop, so its pages browse in the profile. Another
+      // server's pages need its network through a proxy, which Chromium sets per partition.
+      const shared = server.sameMachine
+      const partition = shared ? input.profile.partition : `opencode-browser-${crypto.randomUUID()}`
 
-      // Navigation guards cover documents; subresources (img, script, fetch) also must not read
-      // file: URLs outside the roots. One listener per partition covers every page in this attachment.
-      electron.session
-        .fromPartition(partition)
-        .webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (details, callback) =>
-          callback({ cancel: !fileURLWithin(details.url, selectFileRoots(machine.state, binding)) }),
-        )
+      const remote = shared ? undefined : electron.session.fromPartition(partition)
+      const preview = shared ? input.profile.previews.grant(() => selectFileRoots(machine.state, binding)) : undefined
+      const unguard = remote ? guardSession(remote, downloads) : () => undefined
 
       const closed = () => dispatchBinding(binding, { type: "owner.closed" })
 
@@ -119,9 +132,14 @@ export function createBrowserPane(input: {
         window,
         win,
         partition,
+        shared,
+        previewHost: preview?.host,
         abort: new AbortController(),
         registered: Promise.withResolvers(),
         cleanup: () => {
+          preview?.release()
+          unguard()
+
           if (win.isDestroyed()) return
           win.webContents.off("destroyed", closed)
           win.webContents.off("did-start-navigation", navigate)
@@ -167,7 +185,19 @@ export function createBrowserPane(input: {
 
             const attachment = { sessionID, connectionID: crypto.randomUUID() }
             const rpc = client.rpc(Browser.Definition)
-            handle.network = yield* createBrowserNetwork({ rpc, attachment, location: options.location, partition })
+
+            if (shared) handle.network = createDirectNetwork(input.profile.session)
+
+            if (!shared) {
+              handle.network = yield* createBrowserNetwork({ rpc, attachment, location: options.location, partition })
+              // Only when the user chose to share sign-ins with remote servers do they carry over, both ways, so a page
+              // of a remote server is signed in where the profile is; otherwise `link` leaves the partition apart.
+              yield* Effect.acquireRelease(
+                Effect.promise(() => input.profile.link(electron.session.fromPartition(partition))),
+                (unlink) => Effect.sync(unlink),
+              )
+            }
+
             const connected = yield* Deferred.make<void>()
             const outbound = yield* Queue.unbounded<Effect.Effect<void>>()
 
@@ -207,7 +237,7 @@ export function createBrowserPane(input: {
                       dispatchBinding(binding, { type: "request.targeted", requestID, tabID: command.action.tabID })
                     reply(
                       requestID,
-                      await execute(binding, command, abort.signal).then(
+                      await execute(binding, command, abort.signal, "agent").then(
                         (result) => ({ type: "success" as const, result }),
                         (cause: unknown) => browserFailure(command.action, cause),
                       ),
@@ -329,20 +359,34 @@ export function createBrowserPane(input: {
       owned(window, binding)
       await page(binding, tabID)?.clearSite()
     },
+    async reveal(window: number, binding: string, tabID: Browser.TabID) {
+      owned(window, binding)
+      const tab = page(binding, tabID)
+      const url = tab?.state().url
+      const file = url && await workspaceFile(url, selectFileRoots(machine.state, binding))
+
+      if (!file || !tab || page(binding, tabID) !== tab || tab.state().url !== url) throw new Error("browser.address.workspace")
+      // Reveal a regular file in its folder; never hand even a validated file to its executable association.
+      electron.shell.showItemInFolder(file.path)
+    },
     async command(window: number, binding: string, command: Browser.Action) {
       owned(window, binding)
       const url = command.type === "navigate" || command.type === "tabs.open" ? command.url : undefined
 
       // The window explains a refused address by its code; the agent's commands get main's own message instead.
       const reason =
-        url === undefined ? undefined : refusal(url, { fileRoots: selectFileRoots(machine.state, binding) })
+        url === undefined
+          ? undefined
+          : refusal(url, { fileRoots: selectFileRoots(machine.state, binding), extensions: extensions(binding), home: homedir() })
 
       if (reason) throw new Error(reason)
       // A navigation that the next one replaced, such as a second submit or a redirect, rejects with ERR_ABORTED while
       // the tab goes on loading. It is not a failed request; a page that fails to load reports its own error.
-      await execute(binding, { action: command, files: [] }, new AbortController().signal).catch((error: Error) => {
-        if (!("code" in error) || error.code !== "ERR_ABORTED") throw error
-      })
+      await execute(binding, { action: command, files: [] }, new AbortController().signal, "user").catch(
+        (error: Error) => {
+          if (!("code" in error) || error.code !== "ERR_ABORTED") throw error
+        },
+      )
     },
     async close(window: number, binding: string) {
       owned(window, binding)
@@ -367,6 +411,13 @@ export function createBrowserPane(input: {
 
   function dispatchBinding(binding: string, event: BindingEvent) {
     dispatch({ type: "binding", binding, event })
+
+    // Extensions hear which tab is active in a window.
+    if (event.type === "tab.focused" && handles.get(binding)?.shared) {
+      const focused = page(binding, event.tabID)
+
+      if (focused) input.profile.extensionTabs.activated(focused.contents.id)
+    }
   }
 
   function perform(effect: PaneEffect) {
@@ -428,7 +479,14 @@ export function createBrowserPane(input: {
     input.emit(handle.window, { binding, event })
   }
 
+  /** Extensions whose pages may open in the binding's tabs: the profile's, which only the profile partition loads. */
+  function extensions(binding: string) {
+    return handles.get(binding)?.shared ? input.profile.extensionIDs() : []
+  }
+
   function release(page: BrowserPage) {
+    grants.get(page)?.()
+    downloads.delete(page.contents.id)
     const done = page.dispose()
     const settled = done.catch(() => undefined)
     disposals.set(page, done)
@@ -511,6 +569,8 @@ export function createBrowserPane(input: {
       restore: options.restore,
       popupOptions: options.popupOptions,
       fileRoots: () => selectFileRoots(machine.state, binding),
+      previewHost: handle.previewHost,
+      extensions: () => extensions(binding),
       shared,
       embeds: input.embeds,
       fail,
@@ -536,6 +596,9 @@ export function createBrowserPane(input: {
       focused: () => {
         if (focused()) emit(binding, { type: "focused", tabID: id })
       },
+      hidden: () => {
+        if (handle.shared) input.profile.extensionTabs.hidden(page.contents.id)
+      },
       popup: (popupOptions, background) => {
         const popup = create(binding, { initialize: false, popupOptions })
 
@@ -545,7 +608,12 @@ export function createBrowserPane(input: {
       },
     })
 
+    if (handle.shared) {
+      grants.set(page, input.profile.extensionTabs.register(extensionTab(binding, id, page, win, focused)))
+    }
+
     handle.pages.set(attempt, page)
+    downloads.set(page.contents.id, page.download)
     dispatchBinding(binding, { type: "tab.opened", tabID: id, attempt, tab: options.restore ?? page.state() })
     // Straight to the window, not through the server report: the embed is local to this desktop.
     emit(binding, { type: "embed", tabID: id, embed: page.embed })
@@ -556,6 +624,58 @@ export function createBrowserPane(input: {
     return page
   }
 
+  /**
+   * A tab as extensions drive it, through the same paths and address policy as the window's and the agent's commands:
+   * `chrome.tabs.create` opens a tab in this pane, `update` navigates or focuses it, `remove` closes it.
+   */
+  function extensionTab(
+    binding: string,
+    tabID: Browser.TabID,
+    page: BrowserPage,
+    win: BrowserWindow,
+    focused: () => boolean,
+  ) {
+    const guarded = (url: string) => {
+      if (/^file:/i.test(url)) throw new Error("Extensions do not have file access.")
+      const reason = refusal(url, { fileRoots: selectFileRoots(machine.state, binding), extensions: extensions(binding) })
+
+      if (reason) throw new Error(`This browser does not open ${url}.`)
+
+      return url
+    }
+
+    return {
+      contents: page.contents,
+      window: win,
+      focused,
+      open: async (url: string, active: boolean) => {
+        const opened = await execute(
+          binding,
+          { action: { type: "tabs.open", url: guarded(url), focus: active }, files: [] },
+          new AbortController().signal,
+          "user",
+        )
+
+        const created = Option.getOrUndefined(Schema.decodeUnknownOption(Schema.Struct({ id: Browser.TabID }))(opened.value))
+        const contents = created ? load(binding, created.id)?.contents : undefined
+
+        if (!contents) throw new Error("The tab did not open.")
+
+        return contents
+      },
+      focus: () => dispatchBinding(binding, { type: "tab.focused", tabID }),
+      close: () => dispatchBinding(binding, { type: "tab.closed", tabID }),
+      navigate: async (url: string) => {
+        await execute(
+          binding,
+          { action: { type: "navigate", tabID, url: guarded(url) }, files: [] },
+          new AbortController().signal,
+          "user",
+        )
+      },
+    }
+  }
+
   /** Reports the page's state after a command, which may have changed it without a page event yet. */
   function refresh(binding: string, tabID: Browser.TabID, page: BrowserPage) {
     const attempt = selectPageAttempt(machine.state, binding, tabID)
@@ -564,7 +684,7 @@ export function createBrowserPane(input: {
     dispatchBinding(binding, { type: "tab.published", tabID, attempt, tab: page.state() })
   }
 
-  async function execute(binding: string, command: Browser.Command, signal: AbortSignal) {
+  async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user") {
     const action = command.action
 
     if (signal.aborted)
@@ -582,6 +702,10 @@ export function createBrowserPane(input: {
     }
 
     if (action.type === "tabs.open") {
+      // The page refuses the agent's navigation to an extension page too; refusing first leaves no blank tab behind.
+      const refused = origin === "agent" ? agentRefusal(action, { url: "about:blank", origin: "null" }) : undefined
+
+      if (refused) throw new Error(refused)
       const page = create(binding)
       const tabID = page.state().id
 
@@ -590,7 +714,7 @@ export function createBrowserPane(input: {
 
       // A new page already loads about:blank, so only another address needs a navigation.
       if (action.url !== undefined)
-        await page.execute({ action: { type: "navigate", tabID, url: action.url }, files: [] }, signal)
+        await page.execute({ action: { type: "navigate", tabID, url: action.url }, files: [] }, signal, origin)
       refresh(binding, tabID, page)
 
       return { value: page.state(), files: [] }
@@ -622,7 +746,7 @@ export function createBrowserPane(input: {
 
     if (!target) throw new Error("Browser tab is unavailable. Call browser.tabs.list({}) and use an existing tabID.")
     await target.ready
-    const result = await target.execute(command, signal)
+    const result = await target.execute(command, signal, origin)
     refresh(binding, action.tabID, target)
 
     return result
