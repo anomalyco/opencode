@@ -3,10 +3,11 @@ export * as PlanPlugin from "./plan.js"
 import { Message, ToolFailure } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Agent } from "@opencode/schema/agent"
-import type { SessionEvent } from "@opencode/schema/session-event"
+import { SessionEvent } from "@opencode/schema/session-event"
 import { Global } from "@opencode/util/global"
 import { Effect, Stream } from "effect"
 import path from "path"
+import { Bus } from "../bus.js"
 import { Permission } from "../permission.js"
 
 const plan = Agent.ID.make("plan")
@@ -28,6 +29,7 @@ export const Plugin = define({
   id: "opencode.plan",
   effect: Effect.fn(function* (ctx) {
     const global = yield* Global.Service
+    const bus = yield* Bus.Service
     const directory = path.join(global.home, ".opencode", "plan")
     const enterReminder = enter(directory)
     yield* ctx.agent.transform((editor) => {
@@ -63,13 +65,15 @@ export const Plugin = define({
       // Before the user's prompt, matching where agent-switch reminders land.
       const at = event.messages.at(-1)?.role === "user" ? event.messages.length - 1 : event.messages.length
       event.messages.splice(at, 0, Message.user(text))
-      return ctx.session
-        .synthetic({ sessionID: event.sessionID, text, resume: false })
-        .pipe(
-          Effect.catchCause((cause) =>
-            Effect.logWarning("failed to persist Plan mode reminder", { sessionID: event.sessionID, cause }),
-          ),
-        )
+      // Record the reminder straight into the durable log. Admitting it through the inbox
+      // (ctx.session.synthetic) leaves a pending steer item that the next idle boundary
+      // promotes into a fresh turn answering the reminder again; when auto-compaction keeps
+      // stripping the reminder from history, that cycle repeats forever (#62628).
+      return bus.publish(SessionEvent.Synthetic, { sessionID: event.sessionID, text }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("failed to persist Plan mode reminder", { sessionID: event.sessionID, cause }),
+        ),
+      )
     })
 
     yield* ctx.event.subscribe({ types: ["session.created", "session.agent.selected"] }).pipe(
