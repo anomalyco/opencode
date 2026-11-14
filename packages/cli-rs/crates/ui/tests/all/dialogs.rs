@@ -179,6 +179,32 @@ fn replace_closes_the_previous_dialog_and_restores_focus_after_the_last() {
     assert!(input.is_focused());
 }
 
+// Expected (plugins-pt R3-b): an open dialog holds the stack, and with it the keymap, until its owner releases it;
+// the release runs no close handler. A prompt's layers hold its `DialogCx` too.
+#[test]
+fn a_release_frees_the_open_dialog_without_its_close_handler() {
+    for name in ["alert", "prompt"] {
+        let kit = kit(70, 16);
+        let closed = Rc::new(RefCell::new(0));
+        let count = closed.clone();
+        kit.dialogs.replace(
+            move |cx| match name {
+                "alert" => {
+                    alert::alert(cx, alert::AlertProps { title: "A".into(), message: "B".into(), on_confirm: None })
+                }
+                _ => prompt::prompt(cx, prompt::PromptProps { title: "A".into(), ..Default::default() }).0,
+            },
+            Some(Box::new(move || *count.borrow_mut() += 1)),
+            Default::default(),
+        );
+        kit.dialogs.release();
+        let keymap = Rc::downgrade(&kit.keymap);
+        drop(kit);
+        assert_eq!(keymap.strong_count(), 0, "the keymap outlived the {name}");
+        assert_eq!(*closed.borrow(), 0, "the release ran the {name}'s close handler");
+    }
+}
+
 fn toasts(kit: &Kit) -> toast::Toasts {
     toast::Toasts::new(&kit.app, theme(), &kit.app.root())
 }
