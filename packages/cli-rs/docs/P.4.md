@@ -446,7 +446,19 @@ to the contract, for any plugin:
 - A panel's `close` is its header's close label, and `height` a set height for its body; one with a height and no
   actions has no footer row.
 - `Node::Diff`'s `wrap` and `padding`; the box builders `padding_sides` and `clip`; `abi::image_size`.
+- `Read::image_size(bytes)`: the size the host's own decoder gets from the bytes, its bounds included, or none where an
+  image node of them would show nothing (`abi::image_size` reads only the header). Over the C ABI: the read
+  `image-size`, with the bytes in base64.
 - A sticky box paints over the siblings it is pinned above, as CSS's sticky does.
+
+These are additive on the wire: a plugin built before them sends and reads what it did. They are not additive in Rust
+source, and 2.0's Rust SDK is not released, so this is a deliberate break of it: a plugin that writes `Fetch`,
+`Select`, `Panel`, `PanelInput` or `interact::Bind` out whole no longer compiles (E0063, a missing field). Write the
+fields it sets and take the rest from the default, `Fetch { method, path, query, ..Fetch::default() }`, as the
+examples do. A `Node::Diff` literal writes the two new fields (`wrap: Default::default(), padding: 0`), or uses
+`Node::diff(content)`. A `match` over `Dialog` needs an arm for `Dialog::Images`, or a `_` arm. Before the SDK is
+published, its request types get builders and its read-back types `#[non_exhaustive]`, so that later fields are
+additive in source too (O-125(6) protects the wire, which these keep).
 
 ### Storage
 
