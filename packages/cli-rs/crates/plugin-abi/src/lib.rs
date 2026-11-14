@@ -1755,8 +1755,13 @@ pub mod base64 {
 }
 
 /// 2.0 (P6c): the width and height in pixels the header of a PNG, GIF, JPEG or WebP image names, as the host reads it
-/// before it decodes a [`v2::Node::Image`]; `None` for other bytes.
+/// before it decodes a [`v2::Node::Image`]; `None` for other bytes, and for a header that names no pixels. It reads
+/// only the header: [`Read::image_size`] is what the host decodes.
 pub fn image_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    header_size(bytes).filter(|&(width, height)| width > 0 && height > 0)
+}
+
+fn header_size(bytes: &[u8]) -> Option<(u32, u32)> {
     let at = |from: usize, len: usize| bytes.get(from..from + len);
     let be = |from: usize, len: usize| Some(at(from, len)?.iter().fold(0u32, |n, byte| n << 8 | u32::from(*byte)));
     let le =
@@ -1781,17 +1786,30 @@ pub fn image_size(bytes: &[u8]) -> Option<(u32, u32)> {
     if !bytes.starts_with(&[0xff, 0xd8]) {
         return None;
     }
-    // JPEG: the segments up to the first start of frame, which holds the size.
+    // JPEG: the segments up to the first start of frame, which holds the size. A marker may follow fill bytes of 0xff
+    // (ITU-T T.81 B.1.1.2), and the standalone markers (TEM, RST0 to RST7) have no length.
     let mut from = 2;
     loop {
         if *bytes.get(from)? != 0xff {
             return None;
         }
+        while *bytes.get(from + 1)? == 0xff {
+            from += 1;
+        }
         let marker = *bytes.get(from + 1)?;
         if (0xc0..=0xcf).contains(&marker) && ![0xc4, 0xc8, 0xcc].contains(&marker) {
             return Some((be(from + 7, 2)?, be(from + 5, 2)?));
         }
-        from += 2 + be(from + 2, 2)? as usize;
+        if marker == 0x01 || (0xd0..=0xd7).contains(&marker) {
+            from += 2;
+            continue;
+        }
+        // A length covers itself, so one under 2 names no segment.
+        let len = be(from + 2, 2)? as usize;
+        if len < 2 {
+            return None;
+        }
+        from += 2 + len;
     }
 }
 
@@ -4565,6 +4583,32 @@ pub fn panic_message(panic: &(dyn std::any::Any + Send)) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Expected (carbon's review of P6c, 6 and CM10): the header reader names the size of each format, past a JPEG's fill
+    // bytes and standalone markers, and nothing for a header of no pixels or a segment length under 2.
+    #[test]
+    fn image_size_reads_each_format_header() {
+        let png = |width: u32, height: u32| {
+            let mut bytes = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+            bytes.extend(width.to_be_bytes().into_iter().chain(height.to_be_bytes()));
+            bytes
+        };
+        assert_eq!(image_size(&png(8, 4)), Some((8, 4)));
+        assert_eq!(image_size(&png(0, 4)), None, "a header of no pixels");
+        assert_eq!(image_size(b"GIF89a\x03\0\x05\0"), Some((3, 5)));
+        let webp = |chunk: &[u8], body: &[u8]| [b"RIFF\0\0\0\0WEBP".as_slice(), chunk, b"\0\0\0\0", body].concat();
+        assert_eq!(image_size(&webp(b"VP8 ", b"\0\0\0\x9d\x01\x2a\x07\0\x09\0")), Some((7, 9)));
+        let bits: u32 = (7 - 1) | ((9 - 1) << 14);
+        assert_eq!(image_size(&webp(b"VP8L", &[[0x2f].as_slice(), &bits.to_le_bytes()].concat())), Some((7, 9)));
+        assert_eq!(image_size(&webp(b"VP8X", b"\0\0\0\0\x06\0\0\x08\0\0")), Some((7, 9)));
+        let frame = b"\xff\xc0\x00\x11\x08\x00\x09\x00\x07";
+        let jpeg = |middle: &[u8]| [b"\xff\xd8".as_slice(), middle, frame].concat();
+        assert_eq!(image_size(&jpeg(b"\xff\xe0\x00\x04\0\0")), Some((7, 9)));
+        assert_eq!(image_size(&jpeg(b"\xff\xe0\x00\x04\0\0\xff")), Some((7, 9)), "a fill byte");
+        assert_eq!(image_size(&jpeg(b"\xff\xd0")), Some((7, 9)), "a standalone marker");
+        assert_eq!(image_size(&jpeg(b"\xff\xe0\x00\x00")), None, "a length under 2");
+        assert_eq!(image_size(b"not an image"), None);
+    }
 
     /// The registrations a test's setup made.
     impl std::ops::Deref for Setup<'_> {

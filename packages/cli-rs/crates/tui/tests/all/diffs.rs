@@ -1265,3 +1265,100 @@ fn a_select_and_a_panel_shown_again_show_their_new_fields() {
     h.dispatch("probe.panel");
     h.wait_for("shut B");
 }
+
+impl Diffs {
+    /// Emits `kind` of `ses_a`, with `extra` in its data, and waits for the store to hear it.
+    fn turn_event(&self, kind: &str, extra: Value) {
+        let turn = self.turns.get() + 1;
+        self.turns.set(turn);
+        let mut data = json!({ "sessionID": "ses_a" });
+        data.as_object_mut().unwrap().extend(extra.as_object().cloned().unwrap_or_default());
+        self.memory.emit(&json!({
+            "id": format!("evt_{turn}"), "created": turn, "type": kind,
+            "durable": { "aggregateID": "ses_a", "seq": turn, "version": 1 }, "data": data,
+        }));
+        self.settle();
+        self.app.advance(Duration::from_millis(20));
+        self.settle();
+    }
+}
+
+// Expected (TS reloads Last turn as the session goes idle; carbon's review of P6c, 6 and CM1): a failed or a user's
+// interrupted turn loads the diff again; one interrupted by the server's shutdown, which a restart recovers, does not;
+// a turn whose end the connection may have lost loads it again on the reconnect, or once the UI caught up with
+// signals it skipped. On both carriers.
+#[test]
+fn every_end_of_a_turn_loads_last_turn_again_and_a_shutdown_does_not() {
+    on_both(|| {
+        let h = mount(support::session_route("ses_a"));
+        h.wait_for("Review");
+        h.tui.keymap.dispatch("diff.open", None);
+        h.wait_for("src/main.rs");
+        let reloads = |h: &Diffs, events: &[(&str, Value)]| {
+            let reads = h.diff_reads();
+            for (kind, extra) in events {
+                h.turn_event(kind, extra.clone());
+            }
+            h.app.wait_until(Duration::from_millis(500), || h.diff_reads() > reads)
+        };
+        let started = ("session.execution.started", json!({}));
+        let failed = ("session.execution.failed", json!({ "error": { "type": "unknown", "message": "no" } }));
+        let interrupted = |reason: &str| ("session.execution.interrupted", json!({ "reason": reason }));
+        assert!(reloads(&h, &[started.clone(), failed]), "a failed turn did not load again");
+        assert!(reloads(&h, &[started.clone(), interrupted("user")]), "an interrupted turn did not load again");
+        assert!(!reloads(&h, &[started.clone(), interrupted("shutdown")]), "a shutdown loaded again");
+        assert!(reloads(&h, &[("server.connected", json!({}))]), "a reconnect did not load the turn it lost");
+        assert!(!reloads(&h, &[("server.connected", json!({}))]), "a reconnect loaded with no turn running");
+        // Posted to the UI as the pump posts signals, so the start is heard before the skip.
+        let started: opencode_api::generated::V2Event = serde_json::from_value(json!({
+            "id": "evt_lagged", "created": 99, "type": "session.execution.started",
+            "durable": { "aggregateID": "ses_a", "seq": 99, "version": 1 }, "data": { "sessionID": "ses_a" },
+        }))
+        .unwrap();
+        opencode_tui::features::events::testing::signal(&h.tui, started);
+        let reads = h.diff_reads();
+        opencode_tui::features::events::testing::lagged(&h.tui);
+        h.wait("skipped signals did not load the turn again", || h.diff_reads() > reads);
+    });
+}
+
+// Expected (TS's `reportedBases()`; carbon's review of P6c, 6): opened in Uncommitted, the base picker marks the base
+// the server reports once it arrives, though it opened before, on both carriers.
+#[test]
+fn the_base_picker_marks_the_base_reported_after_it_opened() {
+    on_both(|| {
+        let location = json!({ "directory": DIRECTORY });
+        let base =
+            json!({ "location": location, "data": { "name": "main", "ref": "refs/heads/main", "source": "default" } });
+        let branches = json!({ "location": location, "data": ["dev", "main"] });
+        let memory = Memory::new(
+            [
+                MemoryRoute::json("GET", "/api/vcs/base", 200, &base),
+                MemoryRoute::json("GET", "/api/vcs/branch", 200, &branches),
+            ]
+            .into_iter()
+            .chain(routes(json!([hunk_file(0, 4)])))
+            .collect(),
+        );
+        let config = json!({ "animations": false, "diffs": { "source": "working" } });
+        let deps = Deps {
+            config: support::config(support::decode(&config.to_string())),
+            route: Route::Home,
+            events: true,
+            abi_builtins: ABI.with(Cell::get),
+            ..support::deps(Arc::new(memory.clone()))
+        };
+        let h = Diffs { harness: support::mount(120, 30, deps), memory, turns: Cell::new(0) };
+        h.wait_for("/project");
+        h.tui.keymap.dispatch("diff.open", None);
+        h.wait_for("≡ f0000.rs");
+        h.keys(&["d"]);
+        h.wait_for("Diff source");
+        // The source list opens on Uncommitted, the one above Base.
+        h.keys(&["down", "return"]);
+        h.wait_for("Base branch");
+        h.wait_for("dev");
+        let marked = |h: &Diffs| h.app.text().lines().any(|line| line.contains("▪") && line.contains("main"));
+        h.wait("the reported base is not marked", || marked(&h));
+    });
+}

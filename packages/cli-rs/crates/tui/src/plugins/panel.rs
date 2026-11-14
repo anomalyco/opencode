@@ -197,8 +197,8 @@ fn pick(tui: &Tui, owner: Owner, select: abi::Select) {
                 .map(|action| (action.key.clone(), action.command.clone(), action.rowless, action.primary))
                 .collect()
         };
-        // As do its title, placeholder, size and search (review carbon-5), and P6c's query, filter, focus, note and
-        // whether it has an empty text (carbon's review of P6c, 5).
+        // As do its title, placeholder, size and search (review carbon-5), and P6c's query, filter, focus, note, current
+        // row and whether it has an empty text (carbon's review of P6c, 5 and 6).
         let same = |picker: &Picker| {
             let shown = picker.shown.borrow();
             keys(&shown.actions) == keys(&select.actions)
@@ -208,6 +208,7 @@ fn pick(tui: &Tui, owner: Owner, select: abi::Select) {
                 && (&shown.query, shown.query_delay, shown.filterless, &shown.focus, &shown.note)
                     == (&select.query, select.query_delay, select.filterless, &select.focus, &select.note)
                 && shown.empty.is_some() == select.empty.is_some()
+                && shown.current == select.current
         };
         let handle = picker.as_ref().and_then(|picker| picker.handle.borrow().clone());
         match (picker, handle) {

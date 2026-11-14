@@ -194,6 +194,16 @@ pub struct Viewer {
     pub contents: Contents,
     /// The last view shows this state: a wake that changed nothing of it keeps the tree.
     pub drawn: bool,
+    /// A turn of its session started, in `turn` mode, whose end it has not heard.
+    pub running: bool,
+}
+
+/// A turn event, as the viewer hears it.
+pub enum Turn<'a> {
+    Started(&'a str),
+    Ended(&'a str),
+    /// The connection came back, or the UI skipped signals: an end may have gone unheard.
+    Reconnected,
 }
 
 /// What of a viewer's own state its view shows, beside its input: an event that leaves it as it was keeps the view.
@@ -262,6 +272,7 @@ impl Viewer {
             tree_mark: (None, 0),
             contents: Contents::default(),
             drawn: false,
+            running: false,
             place,
         }
     }
@@ -650,12 +661,23 @@ impl Viewer {
         self.forget(host);
     }
 
-    /// A turn of `session` ended: in `turn` mode the viewer of that session loads again, and says whether it did (TS's
-    /// `createEffect` on `session.status`, running to idle). It hears the end itself: the status read when the UI hears
-    /// of an event may already be idle again, for a turn that started and ended before then (`steps/flakes-8.md`).
-    pub fn turn_ended(&mut self, host: &dyn Host, diffs: &Diffs, session: &str) -> bool {
-        let ended = self.mode == Mode::Turn && self.session() == Some(session);
+    /// What a turn event says to the viewer: in `turn` mode the viewer of that session loads again when one of its
+    /// turns ends (TS's `createEffect` on `session.status`, running to idle), and says whether it did. It hears the
+    /// end itself: the status read when the UI hears of an event may already be idle again, for a turn that started
+    /// and ended before then (`steps/flakes-8.md`). A turn it saw start whose end the connection may have lost (a
+    /// reconnect, or signals the UI skipped) loads it again too (carbon's review of P6c, 6).
+    pub fn turn(&mut self, host: &dyn Host, diffs: &Diffs, turn: Turn<'_>) -> bool {
+        let mine = |session: &str| self.mode == Mode::Turn && self.session() == Some(session);
+        let ended = match turn {
+            Turn::Started(session) => {
+                self.running |= mine(session);
+                false
+            }
+            Turn::Ended(session) => mine(session),
+            Turn::Reconnected => self.running,
+        };
         if ended {
+            self.running = false;
             self.load(host, diffs);
         }
         ended

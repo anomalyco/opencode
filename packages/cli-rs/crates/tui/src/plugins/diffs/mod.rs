@@ -9,7 +9,7 @@
 //! the dialogs are surfaces, a layer, an overlay and host dialogs. One viewer shows at a time: its state lives from
 //! its mount's begin to its end.
 
-use opencode_api::generated::V2Event;
+use opencode_api::generated::{SessionExecutionInterruptedDataReason, V2Event};
 use opencode_plugin::abi::interact::{Button, Event, Handled, OpenPanel, PointerKind};
 use opencode_plugin::abi::v2::{Place, ScrollEvent, Surface};
 use opencode_plugin::abi::{self, Command, Dialog, Host, RequestId};
@@ -25,7 +25,7 @@ mod view;
 pub mod viewer;
 
 use load::Asked;
-use viewer::{Memory, Mode, Preview, Showing, Viewer};
+use viewer::{Memory, Mode, Preview, Showing, Turn, Viewer};
 
 use crate::prelude::*;
 
@@ -51,7 +51,14 @@ const PICK_SOURCE: &str = "opencode.diffs.pick_source";
 const PICK_BASE: &str = "opencode.diffs.pick_base";
 const QUERY_BASE: &str = "opencode.diffs.query_base";
 /// The events that end a turn, after which the last turn's diff loads again.
-const ENDED: [&str; 3] = ["session.execution.succeeded", "session.execution.failed", "session.execution.interrupted"];
+/// The events of a turn, and the connection's, after which the last turn's diff may load again.
+const TURNS: [&str; 5] = [
+    "session.execution.started",
+    "session.execution.succeeded",
+    "session.execution.failed",
+    "session.execution.interrupted",
+    "server.connected",
+];
 
 /// What a command of a click or a dialog does to the viewer on screen, with its input.
 type Clicked = fn(&Diffs, &dyn Host, &mut Viewer, Option<&str>);
@@ -136,14 +143,22 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         });
     }
     let observed = diffs.clone();
-    setup.on_event(&ENDED, move |host, event| {
-        let session = match event {
-            V2Event::SessionExecutionSucceeded(event) => &event.data.session_id.0,
-            V2Event::SessionExecutionFailed(event) => &event.data.session_id.0,
-            V2Event::SessionExecutionInterrupted(event) => &event.data.session_id.0,
+    setup.on_event(&TURNS, move |host, event| {
+        let turn = match event {
+            V2Event::SessionExecutionStarted(event) => Turn::Started(&event.data.session_id.0),
+            V2Event::SessionExecutionSucceeded(event) => Turn::Ended(&event.data.session_id.0),
+            V2Event::SessionExecutionFailed(event) => Turn::Ended(&event.data.session_id.0),
+            // A shutdown leaves the turn to the restart's recovery: it has not ended (`store/src/connection.rs`).
+            V2Event::SessionExecutionInterrupted(event)
+                if event.data.reason == SessionExecutionInterruptedDataReason::Shutdown =>
+            {
+                return;
+            }
+            V2Event::SessionExecutionInterrupted(event) => Turn::Ended(&event.data.session_id.0),
+            V2Event::ServerConnected(_) => Turn::Reconnected,
             _ => return,
         };
-        observed.with_viewer(host, |viewer| viewer.turn_ended(host, &observed, session));
+        observed.with_viewer(host, |viewer| viewer.turn(host, &observed, turn));
     });
     let replied = diffs.clone();
     setup.on_reply(move |host, id, reply| replied.reply(host, id, reply));
