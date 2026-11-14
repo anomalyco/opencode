@@ -448,6 +448,10 @@ impl Host for Tui {
         self.prompt.current.borrow().upgrade().is_some_and(|prompt| prompt.shown() && prompt.focused())
     }
 
+    fn focus_moved(&self) {
+        crate::frame::follow_focus(self);
+    }
+
     fn focus_composer(&self) {
         let prompt = self.prompt.current.borrow().upgrade();
         if let Some(prompt) = prompt.filter(|prompt| prompt.shown()) {

@@ -993,3 +993,40 @@ fn a_folder_closes_and_opens_on_a_click() {
         h.wait_for("≡ f0000.rs");
     });
 }
+
+// Expected (carbon's review of P6c, 1; TS focuses the panel as its file menu opens): with the composer focused, a right
+// press on a card's heading in the docked panel opens the file menu with the input, so return marks the file and
+// escape closes only the menu; the panel then has the input, its footer lit, and a click on the session gives the
+// composer the input back. On both carriers.
+#[test]
+fn the_docked_file_menu_takes_the_input() {
+    on_both(|| {
+        let h = mount(support::session_route("ses_a"));
+        h.wait_for("Review");
+        h.tui.keymap.dispatch("diff.open", None);
+        h.wait_for("focus prompt");
+        let footer = |h: &Diffs| {
+            h.settle();
+            let (x, y) = h.find("focus prompt");
+            let capture = h.app.render();
+            let cell = capture.cell(u32::from(x), u32::from(y)).unwrap();
+            (cell.fg, cell.attributes)
+        };
+        let lit = footer(&h);
+        h.dispatch("pane.focus.left");
+        h.open_menu();
+        h.keys(&["return"]);
+        h.wait_for("1/1");
+        h.assert_menu_closed();
+        assert_eq!(footer(&h), lit, "the panel does not have the input");
+        let (x, y) = h.find("src/main.rs");
+        h.app.mouse(MouseEventKind::Down(MouseButton::Right), x, y);
+        h.wait_for("Mark incomplete");
+        h.keys(&["escape"]);
+        h.assert_menu_closed();
+        assert!(h.tui.panels.current().is_some(), "escape closed the panel, not the menu");
+        h.app.click(4, 6);
+        h.keys(&["x"]);
+        assert_eq!(h.text(), "x", "the click on the session did not give the composer the input");
+    });
+}
