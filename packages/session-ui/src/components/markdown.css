@@ -1,19 +1,18 @@
+/* Matches the composer's session mention (packages/app/src/composer/editor/editor.css). */
 .markdown-session-link {
   display: inline;
-  padding: 1px 5px;
+  padding: 0;
   border: 0;
-  border-radius: 4px;
-  background: var(--v2-background-bg-layer-02);
-  box-shadow: inset 0 0 0 1px var(--v2-border-border-base);
-  color: var(--v2-text-text-accent);
+  border-radius: 2px;
+  background: none;
+  color: var(--v2-text-text-muted);
   font: inherit;
+  font-weight: var(--font-weight-medium);
+  text-align: start;
   cursor: pointer;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
 }
 
 .markdown-session-link:hover {
-  color: var(--v2-text-text-accent-hover);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -27,9 +26,25 @@
   font-family: var(--font-family-mono);
 }
 
+/* Pele colors a diagram from these, in a message and maximized. */
+:is([data-component="markdown-mermaid"], [data-component="diagram-preview"]) {
+  --pele-bg: var(--v2-background-bg-layer-02);
+  --pele-fg: var(--v2-text-text-base);
+  --pele-muted: var(--v2-text-text-muted);
+  --pele-line: var(--v2-icon-icon-muted);
+  --pele-surface: var(--v2-background-bg-base);
+  --pele-surface-alt: var(--v2-background-bg-layer-03);
+  --pele-border: var(--v2-border-border-strong);
+  --pele-accent: var(--v2-text-text-accent);
+  --pele-critical: var(--v2-state-fg-danger);
+  --pele-error: var(--v2-state-fg-danger);
+  --pele-font: var(--font-family-sans);
+  --pele-font-mono: var(--font-family-mono);
+  --pele-radius: 6px;
+}
+
 [data-component="markdown"] {
   --markdown-inline-code-path-color: var(--v2-text-text-code-path);
-  --markdown-inline-code-color: var(--v2-text-text-code-accent);
   --markdown-inline-code-bg-mix: 8%;
   --markdown-shell-code-background: var(--v2-background-bg-layer-02);
   --markdown-shell-code-border: var(--v2-border-border-muted);
@@ -288,19 +303,6 @@
   }
 
   [data-component="markdown-mermaid"] {
-    --pele-bg: var(--v2-background-bg-layer-02);
-    --pele-fg: var(--v2-text-text-base);
-    --pele-muted: var(--v2-text-text-muted);
-    --pele-line: var(--v2-icon-icon-muted);
-    --pele-surface: var(--v2-background-bg-base);
-    --pele-surface-alt: var(--v2-background-bg-layer-03);
-    --pele-border: var(--v2-border-border-strong);
-    --pele-accent: var(--v2-text-text-accent);
-    --pele-critical: var(--v2-state-fg-danger);
-    --pele-error: var(--v2-state-fg-danger);
-    --pele-font: var(--font-family-sans);
-    --pele-font-mono: var(--font-family-mono);
-    --pele-radius: 6px;
     min-height: 96px;
     margin: 12px 0 24px;
     padding: 16px;
@@ -317,6 +319,28 @@
     max-width: 100%;
     height: auto;
     margin: 0 auto;
+  }
+
+  [data-slot="markdown-mermaid-maximize"] {
+    display: none;
+    position: absolute;
+    top: 4px;
+    inset-inline-end: 4px;
+    transition: opacity 0.15s ease;
+    z-index: 1;
+
+    @media (hover: hover) {
+      opacity: 0;
+    }
+  }
+
+  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-mermaid-maximize"] {
+    display: block;
+  }
+
+  [data-component="markdown-code"]:hover > [data-slot="markdown-mermaid-maximize"],
+  [data-slot="markdown-mermaid-maximize"]:focus-within {
+    opacity: 1;
   }
 
   [data-component="markdown-code"][data-mermaid-pending="true"] > pre,
@@ -425,11 +449,17 @@
       background-color 200ms ease-out;
   }
 
-  a.external-link > code[data-inline-code-kind="url"] {
-    color: var(--markdown-inline-code-color);
+  /* Code inside a link reads as part of its label, so it takes the link's colour and hover. */
+  a code {
+    color: inherit;
+    padding: 0;
+    border-radius: 0;
     background: none;
+  }
+
+  a.external-link > code[data-inline-code-kind="url"] {
     text-decoration: underline;
-    text-decoration-color: color-mix(in oklch, var(--markdown-inline-code-color) 25%, transparent);
+    text-decoration-color: color-mix(in oklch, currentColor 25%, transparent);
     text-underline-offset: 2px;
   }
 

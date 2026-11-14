@@ -1,7 +1,6 @@
 import type { SessionInfo } from "@opencode/client/promise"
 import type { ServerCtx } from "@/runtime/server/runtime"
 import type { Platform } from "@/runtime/platform/platform"
-import { VoiceGates } from "./gates"
 import { TranscriptTail } from "./tail"
 import { VoiceTools } from "./tools"
 import { VoiceFailure, VoiceTransport } from "./transport"
@@ -19,7 +18,6 @@ import {
 import {
   createVoiceDelegationState,
   delegating,
-  hasDelegation,
   responseEvent,
   transitionVoiceDelegation,
   type VoiceDelegationEffect,
@@ -32,6 +30,7 @@ import {
   type VoiceReplyEffect,
   type VoiceReplyEvent,
 } from "./reply-machine"
+import { INITIAL_VOICE_GATE_STATE, transitionVoiceGate, voiceGateDelay } from "./gate-machine"
 
 /** Runs one call's transports, tools and delegations for the call machine in `context.tsx`. */
 export function createVoiceCall(input: {
@@ -45,7 +44,9 @@ export function createVoiceCall(input: {
   dispatch: (event: VoiceCallEvent<ServerCtx>) => void
 }) {
   const tail = new TranscriptTail()
-  let gates = new VoiceGates()
+  let gates = INITIAL_VOICE_GATE_STATE
+  // Reused by every meter tick, so a quiet tick allocates nothing.
+  const speech = { type: "speech" as const, user: false, assistant: false, now: 0 }
   const tools = new VoiceTools(input.ctx, { open: input.open, tabs: input.tabs })
 
   // The attempt's transport, from the start of its join until it drops or the call ends.
@@ -66,17 +67,19 @@ export function createVoiceCall(input: {
   async function join(attempt: number, viewing: VoiceViewedSession, muted: boolean) {
     // The call may have dropped or ended while the previous transport closed.
     if (!isConnecting(input.call(), attempt)) throw new VoiceFailure("connection")
-    gates = new VoiceGates()
+    gates = transitionVoiceGate(gates, { type: "reset" })
 
     const transport = new VoiceTransport({
-      api: input.ctx.sdk.api,
+      voice: input.ctx.sdk.api.experimental.voice,
       event: (event) => {
-        if (connection?.transport === transport && !transport.abort.signal.aborted) eventReceived(attempt, event)
+        if (connection?.transport === transport) eventReceived(attempt, event)
       },
       levels: (mic, speaker) => {
         if (connection?.transport !== transport) return
-        gates.user(!isMuted(input.call()) && mic > 0.015)
-        gates.assistant(speaker > 0.005)
+        speech.user = !isMuted(input.call()) && mic > 0.015
+        speech.assistant = speaker > 0.005
+        speech.now = Date.now()
+        gates = transitionVoiceGate(gates, speech)
         input.dispatch({ type: "level.updated", attempt, mic, speaker })
       },
       dropped: () => {
@@ -88,11 +91,11 @@ export function createVoiceCall(input: {
 
     if (input.platform.requestMicrophone && !(await input.platform.requestMicrophone()))
       throw new VoiceFailure("microphone")
-    transport.abort.signal.throwIfAborted()
+    transport.signal.throwIfAborted()
     await input.platform.setVoiceCallActive?.(true)
-    transport.abort.signal.throwIfAborted()
+    transport.signal.throwIfAborted()
     await transport.join(viewing, tail.lines)
-    transport.abort.signal.throwIfAborted()
+    transport.signal.throwIfAborted()
     transport.mute(muted)
   }
 
@@ -116,9 +119,7 @@ export function createVoiceCall(input: {
       const text = tail.append(speaker, event.delta ?? "")
       const utterance = tail.latest
 
-      if (speaker === "user") gates.user(true)
-
-      if (speaker === "assistant") gates.assistant(true)
+      gates = transitionVoiceGate(gates, { type: "heard", speaker, now: Date.now() })
 
       if (utterance !== undefined) input.dispatch({ type: "caption.updated", attempt, utterance, speaker, text })
 
@@ -129,13 +130,15 @@ export function createVoiceCall(input: {
       const id = event.delegation.id
       const viewing = viewedSession(input.call())
 
-      // A repeated event must not capture the transcript again: that would clear this delegation's reservation.
-      if (!viewing || hasDelegation(delegations, id)) return
+      // A repeated event is harmless: the tail keeps the reservation and the delegation machine ignores it.
+      if (!viewing) return
       dispatch({ type: "delegation.created", id, sessionID: viewing.id, transcript: tail.capture(id) })
 
       return
     }
 
+    // The transport already dropped the call for a fatal error; any other one rejected a single client event.
+    if (event.type === "error") console.warn("[voice] Live rejected a client event", event.error)
     const next = responseEvent(event)
 
     if (next) dispatch(next)
@@ -158,8 +161,7 @@ export function createVoiceCall(input: {
             type: "delegation.timeout",
             id: effect.id,
             attempt: effect.attempt,
-            // The transport aborts as soon as its data channel closes.
-            channelOpen: !!connection && !connection.transport.abort.signal.aborted,
+            channelOpen: !!connection?.transport.canSend,
           }),
         effect.ms,
       )
@@ -174,7 +176,7 @@ export function createVoiceCall(input: {
       if (!transport) return
       const abort = new AbortController()
       handles.set(effect.id, { ...handles.get(effect.id), abort })
-      void runRound(effect, AbortSignal.any([abort.signal, transport.abort.signal]))
+      void runRound(effect, AbortSignal.any([abort.signal, transport.signal]))
 
       return
     }
@@ -191,7 +193,7 @@ export function createVoiceCall(input: {
         effect.outputs.forEach((output) =>
           transport.send({ type: "response.item.create", item: { type: "function_call_output", ...output } }),
         )
-        transport.send({ type: "response.create" })
+        transport.send({ type: "response.create", event_id: effect.requestID })
         dispatchReply({ type: "sessions.dirty", sessionIDs: tools.replies.sessions })
       })
 
@@ -213,7 +215,7 @@ export function createVoiceCall(input: {
     // Responses final text goes to Live directly; never append it again.
     dispatchReply({ type: "replies.heard", heard: tools.answered(effect.id) })
     tail.accept(effect.id)
-    gates.answer()
+    gates = transitionVoiceGate(gates, { type: "answer", now: Date.now() })
   }
 
   async function runRound(effect: Extract<VoiceDelegationEffect, { type: "round" }>, signal: AbortSignal) {
@@ -268,9 +270,11 @@ export function createVoiceCall(input: {
     }
 
     if (effect.type === "hold") {
+      gates = transitionVoiceGate(gates, { type: "hold", now: Date.now() })
+
       // The gates move with speech, so each wait ends by asking them again.
       const check = () => {
-        const ms = gates.delay()
+        const ms = voiceGateDelay(gates, Date.now())
 
         if (!ms) return dispatchReply({ type: "gate.opened", attempt: effect.attempt })
         replyTimer = setTimeout(check, ms)
@@ -291,6 +295,7 @@ export function createVoiceCall(input: {
 
     if (effect.type === "wait.clear") {
       clearTimeout(replyTimer)
+      gates = transitionVoiceGate(gates, { type: "release" })
 
       return
     }
@@ -300,8 +305,7 @@ export function createVoiceCall(input: {
     send(connection.attempt, "dropped", (transport) => {
       transport.send({ type: "session.commentary.append", delegation_id: null, content: replyCommentary(reply) })
       tools.replies.heard(reply.sessionID, [reply.messageID])
-      gates.released()
-      gates.answer()
+      gates = transitionVoiceGate(gates, { type: "announced", now: Date.now() })
       dispatchReply({ type: "announce.succeeded", attempt: effect.attempt, reply })
     })
   }
@@ -312,6 +316,7 @@ export function createVoiceCall(input: {
     connection = undefined
     dispatchReply({ type: "call.disconnected" })
     dispatch({ type: "call.reset" })
+    tail.clearReservations()
 
     if (!transport) return Promise.resolve()
 

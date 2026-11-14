@@ -1,5 +1,4 @@
-import { createMemo, Match, on, Show, Switch } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createMemo, Match, Show, Switch } from "solid-js"
 import { Button } from "@opencode/ui/button"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Icon } from "@opencode/ui/icon"
@@ -7,23 +6,49 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { showToast } from "@opencode/ui/toast"
+import { createCopyFeedback } from "@opencode/session-ui/copy"
 import { Markdown } from "@opencode/session-ui/markdown"
 import { usePlugin, type MountedSession } from "@opencode/plugin/gui"
+import type { BtwFailure } from "./machine"
 import type { BtwModel } from "./model"
 
 export default function SessionBtwPanel(props: { btw: BtwModel; session: MountedSession; id: string }) {
   const ctx = usePlugin()
   const i18n = useI18n()
-  const system = ctx.system
-  const chat = () => props.btw.entry(props.session, props.id)
+  const view = createMemo(() => props.btw.view(props.session, props.id))
+
+  const chat = createMemo(() => {
+    const current = view()
+
+    return current.phase === "loading" || current.phase === "missing" ? undefined : current
+  })
+
+  const running = createMemo(() => view().phase === "running")
+
+  const failure = createMemo(() => {
+    const current = view()
+
+    return current.phase === "failed" ? current.failure : undefined
+  })
+
+  const answered = createMemo(() => {
+    const current = view()
+
+    return current.phase === "answered" ? current : undefined
+  })
+
   const question = () => chat()?.question
-  const answer = () => chat()?.answer
-  // New primitive tokens clear the copied mark when text changes without being proxied by the store.
-  const shownQuestion = createMemo(on(question, () => Symbol()))
-  const shownAnswer = createMemo(on(answer, () => Symbol()))
-  const [copied, setCopied] = createStore<{ question?: symbol; answer?: symbol }>({})
-  const isQuestionCopied = () => copied.question === shownQuestion()
-  const isAnswerCopied = () => copied.answer === shownAnswer()
+
+  const failureDetail = (value: BtwFailure) => {
+    if (value.reason === "empty") return ctx.t("error.empty")
+
+    if (value.reason === "timeout") return ctx.t("error.timeout")
+
+    if (value.reason === "error") return value.message
+
+    return undefined
+  }
+
   const timefmt = createMemo(() => new Intl.DateTimeFormat(i18n.locale(), { timeStyle: "short" }))
   const numfmt = createMemo(() => new Intl.NumberFormat(i18n.locale()))
 
@@ -63,7 +88,7 @@ export default function SessionBtwPanel(props: { btw: BtwModel; session: Mounted
   })
 
   const durationLabel = createMemo(() => {
-    const ms = chat()?.duration
+    const ms = answered()?.duration
 
     if (ms === undefined || !(ms >= 0)) return ""
     const total = Math.round(ms / 1000)
@@ -77,26 +102,6 @@ export default function SessionBtwPanel(props: { btw: BtwModel; session: Mounted
   })
 
   const answerMeta = createMemo(() => [agentLabel(), modelLabel(), durationLabel()].filter(Boolean).join(" \u00B7 "))
-
-  const copyQuestion = () => {
-    const value = question()
-
-    if (!value) return
-    void system.copy(value).then(
-      () => setCopied("question", shownQuestion()),
-      () => showToast({ title: ctx.t("common.requestFailed") }),
-    )
-  }
-
-  const copy = () => {
-    const value = answer()
-
-    if (!value) return
-    void system.copy(value).then(
-      () => setCopied("answer", shownAnswer()),
-      () => showToast({ title: ctx.t("common.requestFailed") }),
-    )
-  }
 
   return (
     <div class="flex h-full min-h-0 flex-col bg-v2-background-bg-base" data-slot="session-btw-panel">
@@ -127,27 +132,17 @@ export default function SessionBtwPanel(props: { btw: BtwModel; session: Mounted
                     </span>
                   </Show>
                 </span>
-                <Tooltip
-                  appearance="compact"
-                  value={isQuestionCopied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
-                  placement="top"
-                  gutter={4}
-                >
-                  <IconButton
-                    size="normal"
-                    variant="ghost-muted"
-                    icon={<Icon name={isQuestionCopied() ? "check" : "outline-copy"} size="small" />}
-                    aria-label={isQuestionCopied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={copyQuestion}
-                  />
-                </Tooltip>
+                <CopyButton
+                  text={question()}
+                  label={i18n.t("ui.message.copyMessage")}
+                  copiedLabel={i18n.t("ui.message.copied")}
+                />
               </div>
             </Show>
           </div>
 
           <Switch>
-            <Match when={props.btw.pending(props.id)}>
+            <Match when={running()}>
               <div
                 data-component="session-working"
                 role="status"
@@ -156,36 +151,29 @@ export default function SessionBtwPanel(props: { btw: BtwModel; session: Mounted
                 <TextShimmer text={ctx.t("session.timeline.working")} active />
               </div>
             </Match>
-            <Match when={props.btw.error(props.session, props.id)}>
-              <div class="flex flex-col items-start gap-3 pt-4">
-                <div class="text-13-regular text-text-weak">{ctx.t("error")}</div>
-                <Button size="small" variant="outline" onClick={() => props.btw.retry(props.session, props.id)}>
-                  {ctx.t("retry")}
-                </Button>
-              </div>
+            <Match when={failure()}>
+              {(current) => (
+                <div class="flex flex-col items-start gap-3 pt-4">
+                  <div class="flex flex-col gap-1">
+                    <div class="text-13-regular text-text-weak">{ctx.t("error")}</div>
+                    <Show when={failureDetail(current())}>
+                      {(detail) => <div class="text-12-regular text-text-weak break-words">{detail()}</div>}
+                    </Show>
+                  </div>
+                  <Button size="small" variant="outline" onClick={() => props.btw.retry(props.session, props.id)}>
+                    {ctx.t("retry")}
+                  </Button>
+                </div>
+              )}
             </Match>
-            <Match when={answer()}>
-              {(text) => (
+            <Match when={answered()}>
+              {(reply) => (
                 <div data-component="text-part">
                   <div data-slot="text-part-body">
-                    <Markdown text={text()} class="text-14-regular" />
+                    <Markdown text={reply().answer} class="text-14-regular" />
                   </div>
                   <div data-slot="text-part-copy-wrapper">
-                    <Tooltip
-                      appearance="compact"
-                      value={isAnswerCopied() ? ctx.t("common.copied") : ctx.t("copy")}
-                      placement="top"
-                      gutter={4}
-                    >
-                      <IconButton
-                        size="normal"
-                        variant="ghost-muted"
-                        icon={<Icon name={isAnswerCopied() ? "check" : "outline-copy"} size="small" />}
-                        aria-label={isAnswerCopied() ? ctx.t("common.copied") : ctx.t("copy")}
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={copy}
-                      />
-                    </Tooltip>
+                    <CopyButton text={reply().answer} label={ctx.t("copy")} copiedLabel={ctx.t("common.copied")} />
                     <Show when={answerMeta()}>
                       <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
                         {answerMeta()}
@@ -199,5 +187,43 @@ export default function SessionBtwPanel(props: { btw: BtwModel; session: Mounted
         </div>
       </div>
     </div>
+  )
+}
+
+function CopyButton(props: { text?: string; label: string; copiedLabel: string }) {
+  const ctx = usePlugin()
+
+  const system = ctx.system
+
+  return (
+    <Show when={props.text} keyed>
+      {(text) => {
+        const copy = createCopyFeedback({
+          write: system.copy,
+          onError: () => showToast({ title: ctx.t("common.requestFailed") }),
+        })
+
+        const label = () => (copy.copied() ? props.copiedLabel : props.label)
+
+        return (
+          <Tooltip
+            appearance="compact"
+            value={label()}
+            placement="top"
+            gutter={4}
+            forceOpen={copy.copied() || undefined}
+          >
+            <IconButton
+              size="normal"
+              variant="ghost-muted"
+              icon={<Icon name={copy.copied() ? "check" : "outline-copy"} size="small" />}
+              aria-label={label()}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => copy.copy(text)}
+            />
+          </Tooltip>
+        )
+      }}
+    </Show>
   )
 }

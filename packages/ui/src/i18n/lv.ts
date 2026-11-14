@@ -168,6 +168,7 @@ export const dict = {
   "ui.common.dismiss": "Aizvērt",
   "ui.common.close": "Aizvērt",
   "ui.common.next": "Tālāk",
+  "ui.common.continue": "Turpināt",
   "ui.common.submit": "Iesniegt",
   "ui.common.showMore": "Rādīt vairāk",
   "ui.permission.deny": "Liegt",

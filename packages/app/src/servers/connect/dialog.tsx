@@ -4,56 +4,43 @@ import { Divider } from "@opencode/ui/divider"
 import { Icon } from "@opencode/ui/icon"
 import { TextInput } from "@opencode/ui/text-input"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { type Component, Show, Suspense, createMemo, lazy, untrack } from "solid-js"
+import { type Component, type ComponentProps, Show, Suspense, createMemo, lazy, untrack } from "solid-js"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
 import { isServerUnauthorized } from "@/runtime/server/health-machine"
-import { usePlatform } from "@/runtime/platform/platform"
-import { cameraHint, createCameraAvailability } from "./camera"
-import { createServerConnectController } from "./controller"
+import { createServerConnectController, type ServerConnectControllerOptions } from "./controller"
 import type { ServerConnectField, ServerOriginal } from "./machine"
 import { ConnectMethodSwitch } from "./method"
 import "@/settings/settings.css"
 
 const PairingScanner = lazy(() => import("./scanner").then((module) => ({ default: module.PairingScanner })))
 
-export const DialogServer: Component<{
+type DialogLifecycle = Pick<
+  Extract<ServerConnectControllerOptions, { surface: "dialog" }>,
+  "surface" | "closing" | "onClose"
+>
+
+export function DialogServer(props: {
   mode: "add" | "edit"
   server?: ServerConnection.Http
   onSave?: (server: ServerConnection.Http) => void
-}> = (props) => {
-  const dialog = useDialog()
+  createForm?: (dialog: DialogLifecycle) => ReturnType<typeof createServerConnectController>
+  scanner?: Component<ComponentProps<typeof PairingScanner>>
+}) {
   const language = useLanguage()
-  const platform = usePlatform()
-  const servers = useServers()
-  const global = useGlobal()
-  const tabs = useTabs()
-  const camera = createCameraAvailability()
-  const edited = props.mode === "edit" ? props.server : undefined
+  const dialog = useDialog()
+  const Scanner = props.scanner ?? PairingScanner
 
-  const originalOf = (server: ServerConnection.Http): ServerOriginal => ({
-    url: server.http.url,
-    displayName: server.displayName,
-    password: server.http.password,
-    unauthorized: isServerUnauthorized(global.servers.health[ServerConnection.key(server)]),
-  })
+  const createForm =
+    props.createForm ??
+    ((dialog: DialogLifecycle) => createRegistryForm(dialog, props.mode === "edit" ? props.server : undefined))
 
-  const original = createMemo(() => {
-    const server = servers.list.find(
-      (item): item is ServerConnection.Http => item.type === "http" && item.http.url === edited?.http.url,
-    )
-
-    return server && originalOf(server)
-  })
-
-  const form = createServerConnectController({
+  const form = createForm({
     surface: "dialog",
-    target: edited ? { kind: "edit", original: untrack(original) ?? originalOf(edited) } : { kind: "add" },
-    original,
-    removeTabs: (key) => tabs.removeServer(key),
-    // Close first: onSave may open the next dialog, such as the folder picker an interrupted action continues with.
+    closing: () => dialog.closing,
+    // onSave may open the next dialog, such as the folder picker an interrupted action continues with.
     onClose: (saved) => {
       dialog.close()
 
@@ -101,12 +88,9 @@ export const DialogServer: Component<{
           when={!view().scanning}
           fallback={
             <Suspense fallback={<p role="status">{language.t("server.connect.camera.starting")}</p>}>
-              <PairingScanner
-                onCancel={() => {
-                  form.dispatch({ type: "scan.cancelled" })
-                  void camera.refetch()
-                }}
+              <Scanner
                 redeem={form.redeem}
+                onCancel={() => form.dispatch({ type: "scan.cancelled" })}
                 onScan={(link) => form.dispatch({ type: "scan.completed", link })}
               />
             </Suspense>
@@ -206,22 +190,18 @@ export const DialogServer: Component<{
                 </span>
               </div>
             </Show>
-            <Show when={view().draft.method === "link" && platform.platform === "web"}>
-              <Show
-                when={camera.available.latest || camera.available.loading}
-                fallback={<span class="settings-server-dialog-hint">{language.t(cameraHint())}</span>}
+            <Show when={view().showScan}>
+              <Button
+                variant="neutral"
+                size="large"
+                class="!w-full self-stretch"
+                disabled={!view().canScan}
+                onClick={() => form.dispatch({ type: "scan.started" })}
               >
-                <Button
-                  variant="neutral"
-                  size="large"
-                  class="!w-full self-stretch"
-                  disabled={view().disabled || !camera.available.latest}
-                  onClick={() => form.dispatch({ type: "scan.started" })}
-                >
-                  {language.t("server.connect.scan")}
-                </Button>
-              </Show>
+                {language.t("server.connect.scan")}
+              </Button>
             </Show>
+            <Show when={view().cameraHint}>{(hint) => <span class="settings-server-dialog-hint">{hint()}</span>}</Show>
             <ConnectMethodSwitch
               method={view().draft.method}
               disabled={view().disabled}
@@ -242,4 +222,32 @@ export const DialogServer: Component<{
       </Show>
     </Dialog>
   )
+}
+
+function createRegistryForm(dialog: DialogLifecycle, edited: ServerConnection.Http | undefined) {
+  const servers = useServers()
+  const global = useGlobal()
+  const tabs = useTabs()
+
+  const originalOf = (server: ServerConnection.Http): ServerOriginal => ({
+    url: server.http.url,
+    displayName: server.displayName,
+    password: server.http.password,
+    unauthorized: isServerUnauthorized(global.servers.health[ServerConnection.key(server)]),
+  })
+
+  const original = createMemo(() => {
+    const server = servers.list.find(
+      (item): item is ServerConnection.Http => item.type === "http" && item.http.url === edited?.http.url,
+    )
+
+    return server && originalOf(server)
+  })
+
+  return createServerConnectController({
+    ...dialog,
+    target: edited ? { kind: "edit", original: untrack(original) ?? originalOf(edited) } : { kind: "add" },
+    original,
+    removeTabs: (key) => tabs.removeServer(key),
+  })
 }

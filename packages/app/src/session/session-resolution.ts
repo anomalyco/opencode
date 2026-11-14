@@ -23,17 +23,36 @@ type SessionStore<T> = {
 // Resolution is imperative rather than a resource on purpose: a resource created here would be
 // created inside the router's navigation transition, and suspending that transition deadlocks the
 // URL commit and double-mounts the session header portals from the transition's shadow render.
-export function createSessionResolution<T>(
+// `pending` names a new session whose creation another owner (the tab promotion) still runs.
+export function createSessionResolution<T, P = never>(
   sessionID: () => string | undefined,
   sessions: () => SessionStore<T>,
-  options?: { children?: boolean; connected?: () => boolean },
+  options?: { children?: boolean; connected?: () => boolean; pending?: (sessionID: string) => P | undefined },
 ) {
-  const [state, setState] = createSignal(createSessionResolutionState<T, SessionStore<T>>())
+  const [state, setState] = createSignal(createSessionResolutionState<T, SessionStore<T>, P>())
   const connected = createMemo(() => options?.connected?.() ?? true)
   // Without a live connection or child sessions to load, cached metadata is already complete.
   const refresh = !!options?.children || !!options?.connected
+  let timer: ReturnType<typeof setTimeout> | undefined
 
   const run = (effect: SessionResolutionEffect<SessionStore<T>>) => {
+    if (effect.type === "timer.clear") {
+      clearTimeout(timer)
+      timer = undefined
+
+      return
+    }
+
+    if (effect.type === "timer.start") {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        timer = undefined
+        dispatch({ type: "resolve.timed-out", attempt: effect.attempt })
+      }, effect.delayMs)
+
+      return
+    }
+
     const store = effect.target.scope
     const id = effect.target.sessionID
 
@@ -47,14 +66,21 @@ export function createSessionResolution<T>(
     store
       .sync(id, options?.children ? { children: true } : undefined)
       .then(() =>
-        dispatch({ type: "sync.settled", target: effect.target, attempt: effect.attempt, session: store.get(id) }),
+        dispatch({
+          type: "sync.settled",
+          target: effect.target,
+          attempt: effect.attempt,
+          session: untrack(() => store.get(id)),
+        }),
       )
       .catch((error) => dispatch({ type: "sync.failed", target: effect.target, attempt: effect.attempt, error }))
   }
 
-  const dispatch = (event: SessionResolutionEvent<T, SessionStore<T>>) => {
-    const result = transitionSessionResolution(untrack(state), event)
-    setState(() => result.state)
+  const dispatch = (event: SessionResolutionEvent<T, SessionStore<T>, P>) => {
+    const previous = untrack(state)
+    const result = transitionSessionResolution(previous, event)
+
+    if (result.state !== previous) setState(() => result.state)
     result.effects.forEach(run)
   }
 
@@ -71,10 +97,33 @@ export function createSessionResolution<T>(
       }
 
       const target = { scope: store, sessionID: id }
+      const pending = createMemo(() => options?.pending?.(id))
       const cached = createMemo(() => store.get(id))
-      dispatch({ type: "target.changed", target, cached: cached(), connected: connected(), refresh })
+      dispatch({
+        type: "target.changed",
+        target,
+        pending: pending(),
+        cached: cached(),
+        connected: connected(),
+        refresh,
+      })
 
-      // Owned by this target's run, so both are disposed before the next target is dispatched.
+      // Owned by this target's run, so all are disposed before the next target is dispatched.
+      createComputed(
+        on(
+          pending,
+          (value) =>
+            dispatch({
+              type: "pending.changed",
+              target,
+              pending: value,
+              cached: untrack(cached),
+              connected: untrack(connected),
+              refresh,
+            }),
+          { defer: true },
+        ),
+      )
       createComputed(on(cached, (session) => dispatch({ type: "cache.changed", target, session }), { defer: true }))
       createComputed(
         on(

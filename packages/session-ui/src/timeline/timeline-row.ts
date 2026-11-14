@@ -18,7 +18,8 @@ export type PartGroup =
     }
   | {
       key: string
-      type: "file" | "read"
+      /** `events`: subagents and background shells counted in one row, in the New timeline. */
+      type: "file" | "read" | "events"
       refs: PartRef[]
     }
 
@@ -43,12 +44,6 @@ export namespace TimelineRow {
 
   export class TurnDivider extends Data.TaggedClass("TurnDivider")<{
     userMessageID: string
-  }> {}
-
-  export class NewMessages extends Data.TaggedClass("NewMessages")<{
-    userMessageID: string
-    partID: string
-    read: boolean
   }> {}
 
   export class AssistantPart extends Data.TaggedClass("AssistantPart")<{
@@ -103,6 +98,11 @@ export namespace TimelineRow {
     files: readonly string[]
   }> {}
 
+  /** How long a turn the user stopped worked, in the New timeline where the setting hides all the agent's activity. */
+  export class Worked extends Data.TaggedClass("Worked")<{
+    userMessageID: string
+  }> {}
+
   /** Where the host shows the active turn's live status when undelivered input waits below it. */
   export class Activity extends Data.TaggedClass("Activity")<{
     userMessageID: string
@@ -114,13 +114,13 @@ export namespace TimelineRow {
     | Shell
     | Notice
     | TurnDivider
-    | NewMessages
     | AssistantPart
     | Thinking
     | Error
     | Retry
     | CompactionQueued
     | TurnDiff
+    | Worked
     | Activity
 
   export const key: (row: TimelineRow) => string = Match.typeTags<TimelineRow>()({
@@ -129,7 +129,6 @@ export namespace TimelineRow {
     Shell: (row) => `shell:${row.messageID}`,
     Notice: (row) => `notice:${row.messageID}`,
     TurnDivider: (row) => `turn-divider:${row.userMessageID}`,
-    NewMessages: (row) => `new-messages:${row.partID}`,
     // Keyed by part identity alone: a page boundary can truncate the leading turn,
     // and its rows regroup under the real user message once older history loads.
     // The group key already carries the owning message and part IDs.
@@ -139,6 +138,7 @@ export namespace TimelineRow {
     Retry: (row) => `retry:${row.userMessageID}`,
     CompactionQueued: (row) => `compaction-queued:${row.inboxID}`,
     TurnDiff: (row) => `turn-diff:${row.messageID}`,
+    Worked: (row) => `worked:${row.userMessageID}`,
     // One live status exists at a time; it keeps its identity when the active turn changes.
     Activity: () => "activity",
   })
@@ -152,8 +152,6 @@ export namespace TimelineRow {
     Shell: (row) => (other: TimelineRow) => Predicate.isTagged(other, "Shell") && other.messageID === row.messageID,
     Notice: (row) => (other: TimelineRow) => Predicate.isTagged(other, "Notice") && other.messageID === row.messageID,
     TurnDivider: () => (other: TimelineRow) => Predicate.isTagged(other, "TurnDivider"),
-    NewMessages: (row) => (other: TimelineRow) =>
-      Predicate.isTagged(other, "NewMessages") && other.partID === row.partID && other.read === row.read,
     AssistantPart: (row) => (other: TimelineRow) =>
       Predicate.isTagged(other, "AssistantPart") &&
       other.previousAssistantPart === row.previousAssistantPart &&
@@ -178,6 +176,7 @@ export namespace TimelineRow {
       other.from === row.from &&
       other.files.length === row.files.length &&
       other.files.every((file, index) => file === row.files[index]),
+    Worked: () => (other: TimelineRow) => Predicate.isTagged(other, "Worked"),
     Activity: () => (other: TimelineRow) => Predicate.isTagged(other, "Activity"),
   })
 
@@ -212,7 +211,6 @@ export type TimelineRowMap = {
   Shell: { userMessageID: string; messageID: string }
   Notice: { userMessageID: string; messageID: string }
   TurnDivider: { userMessageID: string }
-  NewMessages: { userMessageID: string; partID: string; read: boolean }
   AssistantPart: {
     userMessageID: string
     group: PartGroup
@@ -229,5 +227,6 @@ export type TimelineRowMap = {
   }
   CompactionQueued: { userMessageID: string; inboxID: string }
   TurnDiff: { userMessageID: string; messageID: string; from: string; files: readonly string[] }
+  Worked: { userMessageID: string }
   Activity: { userMessageID: string }
 }

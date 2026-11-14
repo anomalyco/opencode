@@ -1760,7 +1760,7 @@ test("direct footer counts queued and steering work while running", async () => 
     const frame = app.captureCharFrame()
     const transparent = RGBA.fromValues(0, 0, 0, 0).toInts()
     const statusline = footerStatusline(app.renderer.root)
-    expect(frame).toContain("esc stop · ctrl+x q 2 pending · ↓ 1 subagent · ctrl+b background · Build")
+    expect(frame).toContain("ctrl+x q 2 pending · ↓ 1 subagent · Build")
     expect(frame).toMatch(/opencode · ctrl\+p menu *$/m)
     expect(frame).not.toContain("1 agent")
     expect(statusline.backgroundColor.toInts()).toEqual(transparent)
@@ -1990,7 +1990,6 @@ test.each(["ctrl+g", "none"])("context actions use only configured bindings (%s)
         "session.interrupt": "ctrl+i",
         "session.queued_prompts": queued,
         "session.child.first": "ctrl+j",
-        "session.background": "none",
         "command.palette.show": "ctrl+y",
       },
     }),
@@ -2034,7 +2033,7 @@ test("identity and context precede the provider and a non-fitting provider block
   }
 })
 
-test("direct footer keeps compact work, model detail, and context ahead of cost and rich labels", async () => {
+test("direct footer keeps work, model detail, context, and cost in priority order", async () => {
   const app = await renderFooter({
     currentAgent: "Plan",
     subagents: {
@@ -2055,7 +2054,7 @@ test("direct footer keeps compact work, model detail, and context ahead of cost 
     await app.renderOnce()
     const statusline = footerStatusline(app.renderer.root)
     expect(app.captureCharFrame().split("\n")[statusline.y].trimEnd()).toBe(
-      "\u25aa esc stop · ↓ 1 sub · ctrl+b bg · Plan · a-model-name-long-enough… · 16% ctx",
+      "\u25aa esc stop · ↓ 1 sub · Plan · a-model-name-long-enough… · 159.6K (16%) · $4.23",
     )
   } finally {
     app.cleanup()
@@ -2125,6 +2124,22 @@ test.each(["Build", "Plan"])("working marker matches the %s label and prompt rai
   }
 })
 
+test("configured agent color paints the label, prompt rail, and working marker", async () => {
+  const app = await renderFooter({
+    agents: [{ id: "build", name: "Build", mode: "primary", hidden: false, color: "#ff79c6" }],
+    state: { phase: "running" },
+  })
+  try {
+    await app.renderOnce()
+    const spans = app.captureSpans().lines.flatMap((line) => line.spans)
+    for (const text of ["Build", "\u2503", "\u25aa"]) {
+      expect(spans.find((span) => span.text.includes(text))?.fg.toInts()).toEqual([255, 121, 198, 255])
+    }
+  } finally {
+    app.cleanup()
+  }
+})
+
 test("spinner repaints keep the prompt instance, cursor state, and footer height stable", async () => {
   const app = await renderFooter({
     tuiConfig: createTuiResolvedConfig({ animations: true }),
@@ -2170,7 +2185,7 @@ test("direct footer reserves the working indicator beside complete status text",
   }
 })
 
-test("direct footer always offers backgrounding for a foreground subagent", async () => {
+test("direct footer never offers backgrounding for a subagent", async () => {
   const app = await renderFooter({
     subagents: {
       tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" })],
@@ -2185,7 +2200,8 @@ test("direct footer always offers backgrounding for a foreground subagent", asyn
     await app.renderOnce()
     const frame = app.captureCharFrame()
 
-    expect(frame).toContain("↓ 1 subagent · ctrl+b background · Build · gpt-5 · ctrl+p menu")
+    expect(frame).toContain("↓ 1 subagent · Build · gpt-5 · ctrl+p menu")
+    expect(frame).not.toContain("ctrl+b")
     expect(frame).not.toContain("queued")
   } finally {
     app.cleanup()

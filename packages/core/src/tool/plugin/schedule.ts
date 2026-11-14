@@ -7,6 +7,7 @@ import type { Session } from "@opencode/schema/session"
 import { DateTime, Effect, Option, Schema } from "effect"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
+import { Flag } from "../../flag.js"
 import PROMPT_SCHEDULE from "../../plugin/command/schedule.txt"
 import { Schedule } from "../../schedule.js"
 
@@ -52,7 +53,8 @@ export const Plugin = {
       ctx.event,
       Effect.andThen(ctx.tool.reload(), ctx.command.reload()),
     )
-    const enabled = () => Config.latest(loaded.entries, "experimental")?.schedules === true
+    const flags = yield* Flag.Service
+    const enabled = () => flags.resolve(loaded.entries).schedules.enabled
 
     // A request keeps the tools it started with after config reloads, so each call rechecks the flag.
     const allowed = (sessionID: Session.ID) =>

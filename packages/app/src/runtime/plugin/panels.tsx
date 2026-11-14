@@ -2,15 +2,17 @@ import {
   batch,
   createEffect,
   createMemo,
+  createRenderEffect,
+  createSignal,
   For,
   mergeProps,
   on,
   onCleanup,
   Show,
+  untrack,
   type Accessor,
   type JSX,
 } from "solid-js"
-import { createStore } from "solid-js/store"
 import { Schema } from "effect"
 import { createMediaQuery } from "@solid-primitives/media"
 import {
@@ -30,6 +32,13 @@ import { Contribution } from "./render"
 import { usePluginAttachment } from "./attachment"
 import { legacyKeys, panelKey } from "./panel-keys"
 import { closedEntry, createSideFocus, type ClosedTabs } from "./closed-tabs"
+import {
+  createNewTabsState,
+  selectPaneNewTabs,
+  selectShownNewTab,
+  transitionNewTabs,
+  type NewTabsEvent,
+} from "./new-tab-machine"
 
 type Tabs = Accessor<{
   tabs(): SessionTabs
@@ -39,6 +48,7 @@ type Tabs = Accessor<{
   setActive(tab: string | undefined): void
   close(tab: string): void
   remap(rewrite: (tab: string) => string): void
+  target(pane: SessionPane, plugin?: string, index?: number): void
 }>
 
 export type RegionEntry = {
@@ -320,62 +330,6 @@ export function createRegion(input: {
     return entry ? paneOf(entry) : "side"
   })
 
-  // The host's new tab views, each listing the launchers in a pane until the user closes it or a tab selected from it
-  // replaces it. They belong to the session they opened in. A split or bottom pane closes with its last tab, and its
-  // New tabs go with it.
-  type NewTab = { id: string; pane: SessionPane; session: string }
-
-  const [state, setState] = createStore<{
-    adding: NewTab[]
-    // The New tab each pane shows over its selected tab; none shows the selected tab.
-    chosen: Partial<Record<SessionPane, string>>
-  }>({ adding: [], chosen: {} })
-
-  let serial = 0
-
-  const live = (value: NewTab) =>
-    value.session === input.view().key && (value.pane === "side" || panes[value.pane].keys().length > 0)
-
-  const newTabs = (pane: SessionPane) => state.adding.filter((value) => value.pane === pane && live(value))
-
-  // A pane with no tab of its own shows its newest New tab.
-  const shownNewTab = (pane: SessionPane) => {
-    const list = newTabs(pane)
-    const chosen = list.find((value) => value.id === state.chosen[pane])
-
-    if (chosen) return chosen
-
-    if (panes[pane].active() !== undefined) return undefined
-
-    return list.at(-1)
-  }
-
-  createEffect(() => {
-    if (state.adding.some((value) => !live(value))) setState("adding", (list) => list.filter(live))
-  })
-
-  // A tab that selects itself while a New tab shows replaces that New tab, as one a launcher in it opens does. The other
-  // New tabs stay. Selecting a tab in the strip unchooses the New tab first, and the pane falling back to another tab
-  // after its selected tab closes or moves away keeps it.
-  for (const pane of ["side", "split", "bottom"] as const) {
-    createEffect(
-      on(
-        () => ({
-          key: panes[pane].active(),
-          keys: panes[pane].keys(),
-          chosen: state.chosen[pane],
-          shown: shownNewTab(pane)?.id,
-        }),
-        (next, prev) => {
-          if (!prev?.shown || !next.key || next.key === prev.key || next.chosen !== prev.chosen) return
-
-          if (prev.key && !next.keys.includes(prev.key)) return
-          setState("adding", (list) => list.filter((value) => value.id !== prev.shown))
-        },
-      ),
-    )
-  }
-
   const empty = createMemo(() => strip().length === 0)
 
   // Focus leaves before the close starts, back to where it was; otherwise the panel hands it to its toggle.
@@ -393,22 +347,43 @@ export function createRegion(input: {
     input.onEmptied?.()
   }
 
-  // Closing the shown New tab shows the New tab after it, else the one before, as a browser does. Closing the last New
-  // tab of a strip with no tabs closes the region, as closing its last tab does.
-  const dismissNewTab = (id: string) =>
-    batch(() => {
-      const closing = state.adding.find((value) => value.id === id)
+  // The host's New tab views (`new-tab-machine.ts`). The side region reports whether it is open on screen.
+  const [newTabsState, setNewTabsState] = createSignal(createNewTabsState())
+  const [sideOpen, setSideOpen] = createSignal(false)
 
-      if (closing && state.chosen[closing.pane] === id) {
-        const list = newTabs(closing.pane)
-        const index = list.findIndex((value) => value.id === id)
-        setState("chosen", closing.pane, (list[index + 1] ?? list[index - 1])?.id)
-      }
+  const dispatchNewTabs = (event: NewTabsEvent) => {
+    const next = transitionNewTabs(untrack(newTabsState), event)
 
-      setState("adding", (list) => list.filter((value) => value.id !== id))
+    setNewTabsState(next.state)
 
-      if (empty() && !state.adding.some(live)) emptied()
-    })
+    if (next.effects.length > 0) emptied()
+  }
+
+  // Feeds the machine the region's tabs each time they change: a tab that selects itself replaces the New tab its pane
+  // shows, a split or bottom pane takes its New tabs when it closes, and an open, empty side region opens one.
+  createRenderEffect(() =>
+    dispatchNewTabs({
+      type: "sync",
+      snapshot: {
+        session: input.view().key,
+        empty: empty(),
+        regionActive: active(),
+        sideOpen: sideOpen(),
+        panes: {
+          side: { active: panes.side.active(), keys: panes.side.keys() },
+          split: { active: panes.split.active(), keys: panes.split.keys() },
+          bottom: { active: panes.bottom.active(), keys: panes.bottom.keys() },
+        },
+      },
+    }),
+  )
+
+  const newTabs = (pane: SessionPane) => selectPaneNewTabs(newTabsState(), pane)
+
+  const shownNewTab = (pane: SessionPane) => selectShownNewTab(newTabsState(), pane, panes[pane].active())
+
+  // Closing the last New tab of a strip with no tabs closes the region, as closing its last tab does.
+  const dismissNewTab = (id: string) => batch(() => dispatchNewTabs({ type: "dismiss", id, empty: untrack(empty) }))
 
   return {
     /** Whether a key event belongs to the side region rather than the session around it. */
@@ -434,37 +409,34 @@ export function createRegion(input: {
     /** Selects a tab and shows it over the New tab its pane showed, which stays in the strip. */
     select(key: string) {
       batch(() => {
-        setState("chosen", paneOfKey(key), undefined)
+        dispatchNewTabs({ type: "select.tab", pane: paneOfKey(key) })
         input.tabs().setActive(key)
       })
     },
-    /** The live new tab views of a pane, in strip order. */
+    /** The new tab views of a pane, by id in strip order. */
     newTabs,
-    /** The new tab view a pane shows: the chosen one, else the newest while the pane selects no tab. */
+    /** The id of the new tab view a pane shows: the chosen one, else the newest while the pane selects no tab. */
     shownNewTab,
     newTab: (pane: SessionPane) => shownNewTab(pane) !== undefined,
     selectNewTab(pane: SessionPane, id: string) {
-      setState("chosen", pane, id)
+      dispatchNewTabs({ type: "select.new", pane, id })
     },
     /** Adds a new tab view in a pane, by default the one holding the selected tab, and shows it. */
     openNewTab(pane: SessionPane = activePane()) {
-      const id = `new:${++serial}`
-
-      batch(() => {
-        setState("adding", (list) => [...list, { id, pane, session: input.view().key }])
-        setState("chosen", pane, id)
-      })
+      dispatchNewTabs({ type: "open", pane })
     },
     dismissNewTab,
     /** Closes the shown new tab view in the given or active pane; returns whether one was showing. */
     closeNewTab(pane: SessionPane = activePane()) {
-      const value = shownNewTab(pane)
+      const id = shownNewTab(pane)
 
-      if (!value) return false
-      dismissNewTab(value.id)
+      if (!id) return false
+      dismissNewTab(id)
 
       return true
     },
+    /** The side region reports whether it is open on screen, which opens a New tab in an empty one. */
+    syncSideOpen: (open: boolean) => void setSideOpen(open),
     /** Opens or closes the side region for the user. Opening moves focus into it once it lands; closing gives focus back. */
     toggle() {
       const side = input.side()
@@ -488,21 +460,27 @@ export function createRegion(input: {
       if (entry) entry.provider.enter?.(panelInput(input.view, input.screen, { tab: entry.tab }))
       settled(() => {
         const root = document.getElementById("review-panel")
+        const current = document.activeElement
 
-        if (root && !root.contains(document.activeElement)) root.focus({ preventScroll: true, focusVisible: false })
+        // Focus the reader moved during the motion, such as into a menu they opened, stays where they put it.
+        if (!root || root.contains(current) || (current !== focused && current !== document.body)) return
+        root.focus({ preventScroll: true, focusVisible: false })
       })
     },
     close(key: string) {
       const entry = byKey().get(key)
       const last = stored().length === 1 && stored()[0] === key
       const closed = entry && closedEntry(key, entry.provider, panelInput(input.view, input.screen, { tab: entry.tab }))
+      const index = stored().indexOf(key)
 
-      if (closed) input.closed.push(input.view(), closed)
+      if (closed)
+        input.closed.push(input.view(), { ...closed, pane: paneOfKey(key), index: index === -1 ? undefined : index })
       // New tabs left in the strip keep the region open.
       batch(() => {
         input.tabs().close(key)
 
-        if (last && !state.adding.some(live)) emptied()
+        // The strip is empty now, so a split or bottom pane closed and only the side pane's New tabs remain.
+        if (last && selectPaneNewTabs(untrack(newTabsState), "side").length === 0) emptied()
       })
 
       if (entry)
@@ -521,13 +499,17 @@ export function createRegion(input: {
 
       return input.closed.list(input.view()).filter((entry) => !!entry.file && !open.has(entry.key))
     }),
-    /** Brings back the closed tab under `key`, or the newest one. */
-    reopen(key?: string) {
+    /** When the tab `reopen()` brings back closed. */
+    lastClosedTime: () => input.closed.list(input.view())[0]?.closed,
+    /** Brings back the closed tab under `key`, or the newest one, where it closed or in `pane`. */
+    reopen(key?: string, pane?: SessionPane) {
       const entry = input.closed.take(input.view(), key)
 
       if (!entry) return
       const plugin = entry.key.slice(0, entry.key.indexOf(":"))
       const provider = providers().find((item) => item.plugin === plugin)?.value
+
+      if (!stored().includes(entry.key)) input.tabs().target(pane ?? entry.pane ?? "side", plugin, entry.index)
 
       if (!provider?.restore) return input.open(entry.key)
       provider.restore({

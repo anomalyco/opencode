@@ -93,8 +93,6 @@ export type TimelineProjectionInput = {
   queuedCompactionIDs?: readonly string[]
   turnDiffs?: boolean
   previousRows?: TimelineRow.TimelineRow[]
-  newMessages?: ReadonlySet<string>
-  newMessagesRead?: boolean
 }
 
 export function createTimelineProjection(input: TimelineProjectionInput) {
@@ -113,11 +111,7 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
     input.turnDiffs,
   )
 
-  const rows = reuseTimelineRows(
-    input.previousRows,
-    withNewMessages(projection.rows, input.newMessages, input.newMessagesRead),
-  )
-
+  const rows = reuseTimelineRows(input.previousRows, projection.rows)
   const rowByKey = new Map(rows.map((row) => [TimelineRow.key(row), row] as const))
   const messageRowIndex = new Map<string, number>()
   const messageLastRowIndex = new Map<string, number>()
@@ -142,7 +136,6 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
     rows,
     sessionMessageByID,
     userContextByID: indexUserContext(input.sessionMessages),
-    previousSelectionByID: indexPreviousSelection(input.sessionMessages),
   }
 }
 
@@ -157,15 +150,12 @@ export function createReactiveTimelineProjection(input: {
   queuedCompactionIDs?: Accessor<readonly string[]>
   /** Summarize each finished turn's changed files after it. */
   turnDiffs?: Accessor<boolean>
-  newMessages?: Accessor<ReadonlySet<string>>
-  newMessagesRead?: Accessor<boolean>
 }) {
   const sessionMessageByID = createMemo(
     () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
   )
 
   const userContextByID = createMemo(() => indexUserContext(input.sessionMessages()))
-  const previousSelectionByID = createMemo(() => indexPreviousSelection(input.sessionMessages()))
   const assistantMessagesByParent = createMemo(() => indexAssistantMessages(input.sessionMessages()))
 
   // Row structure depends on the empty/non-empty boundary, not each text delta.
@@ -223,7 +213,7 @@ export function createReactiveTimelineProjection(input: {
   })
 
   const rows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) =>
-    reuseTimelineRows(previous, withNewMessages(projection().rows, input.newMessages?.(), input.newMessagesRead?.())),
+    reuseTimelineRows(previous, projection().rows),
   )
 
   const rowByKey = createMemo(() => new Map(rows().map((row) => [TimelineRow.key(row), row] as const)))
@@ -266,32 +256,7 @@ export function createReactiveTimelineProjection(input: {
     rows,
     sessionMessageByID,
     userContextByID,
-    previousSelectionByID,
   }
-}
-
-function withNewMessages(rows: TimelineRow.TimelineRow[], parts?: ReadonlySet<string>, read = false) {
-  if (!parts?.size) return rows
-
-  for (const [index, row] of rows.entries()) {
-    if (!Predicate.isTagged(row, "Thinking") && !Predicate.isTagged(row, "AssistantPart")) continue
-
-    const first = Predicate.isTagged(row, "Thinking")
-      ? row.ref
-      : row.group.type === "part"
-        ? row.group.ref
-        : row.group.refs[0]
-
-    if (!first || !parts.has(first.partID)) continue
-
-    return [
-      ...rows.slice(0, index),
-      new TimelineRow.NewMessages({ userMessageID: row.userMessageID, partID: first.partID, read }),
-      ...rows.slice(index),
-    ]
-  }
-
-  return rows
 }
 
 export namespace Timeline {
@@ -933,45 +898,6 @@ function indexUserContext(messages: SessionMessageInfo[]) {
     model = message.model
 
     if (userID) result.set(userID, { agent, model })
-  })
-
-  return result
-}
-
-/**
- * The agent and model the previous user message chose, for each user message after the first. A message whose
- * metadata names neither chose what its first reply ran with; later replies, which a steer's switch reconfigures,
- * do not count, so a waiting steer can tell whether it changes the agent or model of the turn it joins.
- */
-function indexPreviousSelection(messages: SessionMessageInfo[]) {
-  const result = new Map<string, UserSelection>()
-  let agent = ""
-  let model: ModelRef = { id: "", providerID: "" }
-  let previous: { chosen: Partial<UserSelection>; current: UserSelection } | undefined
-
-  messages.forEach((message) => {
-    if (message.type === "agent-switched") agent = message.agent
-
-    if (message.type === "model-switched") model = message.model
-
-    if (message.type === "assistant") {
-      agent = message.agent
-      model = message.model
-
-      if (previous) {
-        previous.chosen.agent ??= message.agent
-        previous.chosen.model ??= message.model
-      }
-    }
-
-    if (message.type !== "user") return
-
-    if (previous)
-      result.set(message.id, {
-        agent: previous.chosen.agent ?? previous.current.agent,
-        model: previous.chosen.model ?? previous.current.model,
-      })
-    previous = { chosen: localSelection(message), current: { agent, model } }
   })
 
   return result

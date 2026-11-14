@@ -2,8 +2,8 @@ import type { AnyAuthClient, GoogleAuthOptions } from "google-auth-library"
 import { Effect, Redacted } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
 import { Auth, MissingCredentialError } from "../route/auth.js"
-import type { CompactionOperations, Route, RouteDefaultsInput } from "../route/client.js"
-import { ProviderConfigurationError, ProviderID } from "../schema/index.js"
+import type { CompactionOperations, Route } from "../route/client.js"
+import { ProviderConfigurationError, ProviderID, type RequestOptions } from "../schema/index.js"
 
 const SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 const id = ProviderID.make("google-vertex")
@@ -117,7 +117,7 @@ export const oauth = (input: OAuthOptions, project?: string) => {
 export const oauthRoute = <Body, Prepared, Compact extends CompactionOperations | undefined>(
   route: Route<Body, Prepared, Compact>,
   label: string,
-  input: RouteDefaultsInput &
+  input: RequestOptions &
     OAuthOptions & { readonly baseURL?: string; readonly location?: string; readonly project?: string },
   url: (project: string, location: string) => string,
 ) => {

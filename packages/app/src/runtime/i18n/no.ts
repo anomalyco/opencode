@@ -356,11 +356,11 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "Se over 70 flere leverandører",
 
   "dialog.provider.viewAll": "Vis flere leverandører",
-
   "provider.connect.title": "Koble til {{provider}}",
+
   "provider.connect.method.apiKey": "API-nøkkel",
   "provider.connect.status.inProgress": "Autorisering pågår…",
-  "provider.connect.status.waiting": "Venter på autorisering…",
+  "provider.connect.status.waiting": "Venter på autorisering",
   "provider.connect.status.failed": "Autorisering mislyktes: {{error}}",
   "provider.connect.apiKey.description":
     "Skriv inn API-nøkkelen din for {{provider}} for å koble til kontoen din og bruke {{provider}}-modeller i OpenCode.",
@@ -793,7 +793,6 @@ export const dict = {
   "session.new.project.search": "Søk etter prosjekter",
   "session.new.project.add": "Legg til prosjekt",
   "session.new.workspace.runIn": "Kjør sesjonen i",
-  "session.new.workspace.triggerLocal": "Lokalt",
   "session.new.workspace.local": "Lokalt depot",
   "session.new.git.none": "Ingen Git",
 
@@ -889,7 +888,6 @@ export const dict = {
   "session.background.moveInline": "Trykk på {{keybind}} for å flytte pågående arbeid til bakgrunnen",
   "command.session.location.cycle": "Bytt øktplassering",
   "dialog.provider.anthropic.note": "Direkte tilgang til Claude-modeller via API-nøkkel",
-  "provider.connect.title.anthropicProMax": "Logg på med Anthropic",
   "prompt.toast.uploading.percent": "{{percent}} %",
   "prompt.toast.uploading.cancelFile": "Avbryt opplasting av {{filename}}",
   "prompt.toast.uploadFailed.title": "Opplasting mislyktes",

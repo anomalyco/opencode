@@ -78,6 +78,7 @@ const SURFACES = {
 
 // The default theme's tokens for each scheme, so the in-context mocks show both at once whatever the lab shows.
 const THEMES = (() => {
+  // SAFETY: this is the bundled desktop theme; JSON imports widen its hex palette values to strings.
   const theme = resolveThemeV2(oc2 as DesktopTheme)
 
   return { dark: themeV2ToCss(theme.dark), light: themeV2ToCss(theme.light) }
@@ -89,7 +90,7 @@ type Args = {
   starred: boolean
   name: string
   size: number
-  surface: string
+  surface: keyof typeof SURFACES
   animate: boolean
 }
 
@@ -98,6 +99,13 @@ export default {
   id: "ui-project-icon-styles",
   parameters: {
     layout: "fullscreen",
+    gridPreview: () => (
+      <div class="grid size-full grid-cols-4 place-content-center justify-items-center gap-6 p-8">
+        <For each={PROJECT_ICON_STYLES.slice(0, 12)}>
+          {(style) => <Icon style={style} name="atlas" size={88} animate={false} />}
+        </For>
+      </div>
+    ),
     docs: {
       description: {
         component: docs,
@@ -129,7 +137,7 @@ export default {
     size: 88,
     surface: "dark",
     animate: true,
-  },
+  } satisfies Args,
 }
 
 export const Gallery = {
@@ -140,21 +148,35 @@ export const ContactSheet = {
   render: (args: Args) => <ContactSheetView args={args} />,
 }
 
+function filteredStyles(args: Args, starred: readonly string[]) {
+  return PROJECT_ICON_STYLES.filter(
+    (style) =>
+      (args.style === "all" || style.id === args.style) &&
+      (args.family === "all" || style.family === args.family) &&
+      (!args.starred || starred.includes(style.id)),
+  )
+}
+
 function GalleryView(props: { args: Args }) {
   const surface = () => (props.args.surface === "light" ? SURFACES.light : SURFACES.dark)
   const names = () => (props.args.name ? [props.args.name, ...NAMES.slice(1)] : NAMES)
-  const [state, setState] = createStore({ style: "mesh", name: NAMES[0], hover: "", starred: readStars() })
 
-  createEffect(on(() => state.starred.length, () => writeStars(state.starred), { defer: true }))
+  const [state, setState] = createStore({
+    style: props.args.style === "all" ? "mesh" : props.args.style,
+    name: props.args.name || NAMES[0],
+    hover: "",
+    starred: readStars(),
+  })
 
-  const styles = createMemo(() =>
-    PROJECT_ICON_STYLES.filter(
-      (style) =>
-        (props.args.style === "all" || style.id === props.args.style) &&
-        (props.args.family === "all" || style.family === props.args.family) &&
-        (!props.args.starred || state.starred.includes(style.id)),
+  createEffect(
+    on(
+      () => state.starred.length,
+      () => writeStars(state.starred),
+      { defer: true },
     ),
   )
+
+  const styles = createMemo(() => filteredStyles(props.args, state.starred))
 
   const families = createMemo(() =>
     PROJECT_ICON_FAMILIES.map((family) => ({
@@ -168,7 +190,9 @@ function GalleryView(props: { args: Args }) {
   const starred = (style: ProjectIconStyle) => state.starred.includes(style.id)
 
   const toggleStar = (style: ProjectIconStyle) =>
-    setState("starred", (list) => (list.includes(style.id) ? list.filter((id) => id !== style.id) : [...list, style.id]))
+    setState("starred", (list) =>
+      list.includes(style.id) ? list.filter((id) => id !== style.id) : [...list, style.id],
+    )
 
   createEffect(
     on(
@@ -343,10 +367,7 @@ function InContext(props: { style: ProjectIconStyle; scheme: "dark" | "light"; a
   })
 
   return (
-    <div
-      data-scheme={props.scheme}
-      style={`${THEMES[props.scheme]} color-scheme: ${props.scheme}; flex-shrink: 0;`}
-    >
+    <div data-scheme={props.scheme} style={`${THEMES[props.scheme]} color-scheme: ${props.scheme}; flex-shrink: 0;`}>
       <div
         style={{
           width: "480px",
@@ -382,7 +403,9 @@ function InContext(props: { style: ProjectIconStyle; scheme: "dark" | "light"; a
           </For>
         </div>
         <div style={{ display: "grid", "grid-template-columns": "168px 1fr", height: "264px" }}>
-          <div style={{ display: "flex", "flex-direction": "column", gap: "2px", padding: "4px 8px", overflow: "hidden" }}>
+          <div
+            style={{ display: "flex", "flex-direction": "column", gap: "2px", padding: "4px 8px", overflow: "hidden" }}
+          >
             <For each={["Home", "Search sessions"]}>
               {(label, i) => (
                 <div style={{ display: "flex", "align-items": "center", gap: "6px", height: "28px", padding: "0 6px" }}>
@@ -400,7 +423,9 @@ function InContext(props: { style: ProjectIconStyle; scheme: "dark" | "light"; a
               {(name, i) => (
                 <Tab active={i() === 3}>
                   {avatar(name)}
-                  <span style={text(i() === 3 ? "base" : "faint", { "font-weight": 500, "text-transform": "uppercase" })}>
+                  <span
+                    style={text(i() === 3 ? "base" : "faint", { "font-weight": 500, "text-transform": "uppercase" })}
+                  >
                     {name}
                   </span>
                 </Tab>
@@ -542,7 +567,9 @@ function readStars(): string[] {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(STARS_KEY) ?? "[]")
 
-    return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : []
+    return Array.isArray(value)
+      ? PROJECT_ICON_STYLES.filter((style) => value.includes(style.id)).map((style) => style.id)
+      : []
   } catch {
     return []
   }
@@ -557,9 +584,18 @@ function writeStars(ids: readonly string[]) {
 // Every style × six names at 32, 20 and 16 px, in three columns: the proof still for review.
 function ContactSheetView(props: { args: Args }) {
   const surface = () => (props.args.surface === "light" ? SURFACES.light : SURFACES.dark)
-  const names = NAMES.slice(0, 6)
-  const third = Math.ceil(PROJECT_ICON_STYLES.length / 3)
-  const columns = [0, 1, 2].map((i) => PROJECT_ICON_STYLES.slice(i * third, (i + 1) * third))
+  const names = () => [props.args.name || NAMES[0], ...NAMES.slice(1, 6)]
+  const starred = readStars()
+
+  const columns = createMemo(() => {
+    const styles = filteredStyles(props.args, starred)
+
+    const third = Math.ceil(styles.length / 3)
+
+    return Array.from({ length: third ? Math.ceil(styles.length / third) : 0 }, (_, i) =>
+      styles.slice(i * third, (i + 1) * third),
+    )
+  })
 
   return (
     <div
@@ -574,7 +610,7 @@ function ContactSheetView(props: { args: Args }) {
         "line-height": "16px",
       }}
     >
-      <For each={columns}>
+      <For each={columns()} fallback="No styles match.">
         {(column) => (
           <div style={{ display: "flex", "flex-direction": "column", gap: "10px" }}>
             <For each={column}>
@@ -584,7 +620,7 @@ function ContactSheetView(props: { args: Args }) {
                   <For each={SIZES}>
                     {(size) => (
                       <div style={{ display: "flex", gap: "8px", "align-items": "flex-end" }}>
-                        <For each={names}>
+                        <For each={names()}>
                           {(name) => <Icon style={style} name={name} size={size} animate={props.args.animate} />}
                         </For>
                       </div>

@@ -5,15 +5,17 @@ import { useCheckServerHealth } from "@/runtime/server/health"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { replaceServerConnection } from "@/servers/registry/management"
 import {
-  createServerConnectState,
   selectServerConnectView,
+  startServerConnect,
   transitionServerConnect,
+  type ServerCameraSupport,
   type ServerConnectEffect,
   type ServerConnectEvent,
   type ServerConnectTarget,
   type ServerOriginal,
 } from "./machine"
 import { useRedeemPairing } from "./redeem"
+import { redeemPairingLink } from "./pairing"
 
 export type ServerConnectControllerOptions =
   | { readonly surface: "screen"; readonly target: Extract<ServerConnectTarget, { kind: "connect" }> }
@@ -25,17 +27,40 @@ export type ServerConnectControllerOptions =
       readonly removeTabs: (key: ServerConnection.Key) => void
       /** Closes the dialog. `saved` is the server a successful save stored. */
       readonly onClose: (saved: ServerConnection.Http | undefined) => void
+      /** True once the dialog starts closing, so a check that finishes during its exit animation saves nothing. */
+      readonly closing?: Accessor<boolean>
     }
 
-export function createServerConnectController(options: ServerConnectControllerOptions) {
-  const language = useLanguage()
+type ServerConnectIO = {
+  camera: ServerCameraSupport
+  probeCamera: () => Promise<boolean>
+  pageHref?: string
+  check: ReturnType<typeof useCheckServerHealth>
+  exchange: typeof redeemPairingLink
+  servers: Pick<ReturnType<typeof useServers>, "list" | "add" | "remove">
+}
+
+function useServerConnectIO(): ServerConnectIO {
   const platform = usePlatform()
-  const servers = useServers()
-  const check = useCheckServerHealth()
+
+  return {
+    camera: cameraSupport(platform.platform),
+    probeCamera,
+    pageHref: platform.platform === "web" ? location.href : undefined,
+    check: useCheckServerHealth(),
+    exchange: redeemPairingLink,
+    servers: useServers(),
+  }
+}
+
+export function createServerConnectController(options: ServerConnectControllerOptions, io = useServerConnectIO()) {
+  const language = useLanguage()
   // Shared with the scanner, so a retry after a failed check reuses the token of a spent one-time code.
-  const redeem = useRedeemPairing()
-  const [machine, setMachine] = createSignal(createServerConnectState(options.target))
+  const redeem = useRedeemPairing(io.exchange, io.pageHref)
+  const initial = startServerConnect(options.target, io.camera)
+  const [machine, setMachine] = createSignal(initial.state)
   let timer: ReturnType<typeof setTimeout> | undefined
+  let cameraTimer: ReturnType<typeof setTimeout> | undefined
 
   const dispatch = (event: ServerConnectEvent) => {
     const prev = untrack(machine)
@@ -60,6 +85,24 @@ export function createServerConnectController(options: ServerConnectControllerOp
       return
     }
 
+    if (effect.type === "camera.probe") {
+      clearTimeout(cameraTimer)
+      cameraTimer = setTimeout(() => dispatch({ type: "camera.timed-out", attempt: effect.attempt }), effect.timeoutMs)
+      void Promise.try(io.probeCamera).then(
+        (available) => dispatch({ type: "camera.settled", attempt: effect.attempt, available }),
+        () => dispatch({ type: "camera.settled", attempt: effect.attempt, available: false }),
+      )
+
+      return
+    }
+
+    if (effect.type === "camera.timer.stop") {
+      clearTimeout(cameraTimer)
+      cameraTimer = undefined
+
+      return
+    }
+
     if (effect.type === "connect.http") {
       const failed = () =>
         dispatch({
@@ -68,7 +111,7 @@ export function createServerConnectController(options: ServerConnectControllerOp
           error: { type: "connection-failed", url: effect.http.url },
         })
 
-      void Promise.try(() => check(effect.http)).then(
+      void Promise.try(() => io.check(effect.http)).then(
         (result) =>
           result.type === "healthy"
             ? dispatch({ type: "submit.succeeded", attempt: effect.attempt, http: effect.http })
@@ -93,6 +136,7 @@ export function createServerConnectController(options: ServerConnectControllerOp
 
     if (effect.type === "save") {
       const action = effect.action
+      const servers = io.servers
 
       if (action.type === "connect") {
         // Signing in again keeps the name the user gave this server.
@@ -130,12 +174,12 @@ export function createServerConnectController(options: ServerConnectControllerOp
     if (effect.preferredUrl && effect.preferredUrl !== redeemed.pairing.url) {
       const http = { url: effect.preferredUrl, password }
 
-      if ((await check(http)).type === "healthy") return { type: "submit.succeeded", attempt: effect.attempt, http }
+      if ((await io.check(http)).type === "healthy") return { type: "submit.succeeded", attempt: effect.attempt, http }
     }
 
     const http = { url: redeemed.pairing.url, password }
 
-    if ((await check(http)).type === "healthy") return { type: "submit.succeeded", attempt: effect.attempt, http }
+    if ((await io.check(http)).type === "healthy") return { type: "submit.succeeded", attempt: effect.attempt, http }
 
     return { type: "submit.failed", attempt: effect.attempt, error: { type: "connection-failed", url: http.url } }
   }
@@ -144,15 +188,46 @@ export function createServerConnectController(options: ServerConnectControllerOp
   if (options.surface === "dialog" && options.original)
     createEffect(on(options.original, (original) => dispatch({ type: "original.synced", original })))
 
+  if (options.surface === "dialog" && options.closing) {
+    const closing = options.closing
+    createEffect(() => {
+      if (closing()) dispatch({ type: "disposed" })
+    })
+  }
+
   onCleanup(() => dispatch({ type: "disposed" }))
+  initial.effects.forEach(run)
 
   const view = createMemo(() =>
     selectServerConnectView(machine(), {
       surface: options.surface,
-      pageHref: platform.platform === "web" ? location.href : undefined,
+      pageHref: io.pageHref,
       t: (key) => language.t(key),
     }),
   )
 
   return { view, dispatch, redeem }
+}
+
+function cameraSupport(platform: string): ServerCameraSupport {
+  if (platform !== "web") return "none"
+
+  if (!window.isSecureContext) return "insecure"
+
+  if (!navigator.mediaDevices?.getUserMedia || !navigator.mediaDevices.enumerateDevices) return "unavailable"
+
+  return "probe"
+}
+
+async function probeCamera() {
+  const denied = await navigator.permissions?.query({ name: "camera" }).then(
+    (permission) => permission.state === "denied",
+    () => false,
+  )
+
+  if (denied) return false
+
+  const devices = await navigator.mediaDevices.enumerateDevices()
+
+  return devices.some((device) => device.kind === "videoinput")
 }

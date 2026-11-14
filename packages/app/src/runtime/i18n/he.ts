@@ -148,7 +148,7 @@ export const dict = {
   "provider.connect.title": "חבר את {{provider}}",
   "provider.connect.method.apiKey": "מפתח API",
   "provider.connect.status.inProgress": "האישור מתבצע…",
-  "provider.connect.status.waiting": "ממתין לאישור…",
+  "provider.connect.status.waiting": "ממתין לאישור",
   "provider.connect.status.failed": "ההרשאה נכשלה: {{error}}",
   "provider.connect.apiKey.description":
     "הזן את מפתח ה-API של {{provider}} כדי לחבר את החשבון ולהשתמש במודלים של {{provider}} ב-OpenCode.",
@@ -345,7 +345,6 @@ export const dict = {
   "session.new.project.search": "חיפוש פרויקטים",
   "session.new.project.add": "הוסף פרויקט",
   "session.new.workspace.runIn": "הפעל את ההפעלה ב:",
-  "session.new.workspace.triggerLocal": "מקומי",
   "session.new.workspace.local": "מאגר מקומי",
   "session.new.git.none": "אין Git",
   "session.header.open.finder": "Finder",
@@ -819,7 +818,6 @@ export const dict = {
 
   "command.session.location.cycle": "מעבר מחזורי בין מיקומי ההפעלה",
   "dialog.provider.anthropic.note": "גישה ישירה לדגמי Claude באמצעות מפתח API",
-  "provider.connect.title.anthropicProMax": "התחברות באמצעות Anthropic",
   "prompt.toast.uploading.percent": "\u2068{{percent}}\u2069%",
   "prompt.toast.uploading.cancelFile": "ביטול ההעלאה של \u2068{{filename}}\u2069",
   "prompt.toast.uploadFailed.title": "ההעלאה נכשלה",
