@@ -22,8 +22,9 @@ else
     zig='zig 0.17.1'
 fi
 target=x86_64-pc-windows-msvc
-# .cargo/config.toml's directory, unless the shell names another one.
-header=${OPENTUI_LIB_DIR:-$HOME/.cache/opentui-native/x86_64-linux}/opentui.h
+# .cargo/config.toml's directory for the pin, unless the shell names another one.
+pinned=$(sed -n 's/^OPENTUI_LIB_DIR = { value = "\([^"]*\)".*/\1/p' .cargo/config.toml)
+header=${OPENTUI_LIB_DIR:-$pinned}/opentui.h
 
 export CARGO_TARGET_DIR="$here/target/check-windows"
 tools=$CARGO_TARGET_DIR/tools

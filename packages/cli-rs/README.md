@@ -30,12 +30,14 @@ a `cli starting` line with the version and the source commit of the build.
 The client takes OpenTUI's Rust crates from `packages/rust` of
 [`anomalyco/opentui`](https://github.com/anomalyco/opentui), pinned by git `rev` in `Cargo.toml`. Cargo fetches that
 commit, but the checkout has no native library, and the bindings accept only the `opentui.h` they were generated
-from. `.cargo/config.toml` points `OPENTUI_LIB_DIR` at `~/.cache/opentui-native/x86_64-linux`, which
-native-hardening's `abi-artifacts.py` fills with artifacts built at the matching OpenTUI commit. Fill it once, then
-build:
+from. `.cargo/config.toml` points `OPENTUI_LIB_DIR` at the pin's own directory,
+`~/.cache/opentui-native/<short rev>/x86_64-linux`, which native-hardening's `abi-artifacts.py` fills with artifacts
+built at the matching OpenTUI commit. Each pin has its own directory, so a re-pin leaves other branches' builds alone.
+Fill it once, then build:
 
 ```sh
-python3 /home/simon/src/opendocs/native-hardening/tools/abi-artifacts.py
+python3 /home/simon/src/opendocs/native-hardening/tools/abi-artifacts.py \
+  --client packages/cli-rs/Cargo.toml --dest ~/.cache/opentui-native/32e9e414e/x86_64-linux
 bun run --cwd packages/cli-rs cargo build --bin opencode-native
 ```
 
