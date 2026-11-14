@@ -590,7 +590,6 @@ impl Model for Canvases {
             let animating = was_animating && reference.animating();
             let asked = match command {
                 Command::Open | Command::Show(true) | Command::Size(..) => reference.laid_out(),
-                Command::Version if reference.drawable() && animating => Some(v2::Cause::Animate),
                 Command::Version if reference.drawable() => Some(v2::Cause::Version),
                 _ => None,
             }
@@ -1300,7 +1299,7 @@ fn tall_setup(setup: &mut abi::Setup) -> Result<(), String> {
         v2::Node::column(vec![scroll]).with_id("tall")
     };
     setup.surface(v2::Surface::new("tall", v2::Place::Route("tall".into()), view).draw(|cx| {
-        TALL.with(|frames| frames.borrow_mut().push(cx.frame.cause));
+        TALL.with(|frames| frames.borrow_mut().push((cx.frame.cause, cx.frame.width, cx.frame.height)));
         let mut list = List::new();
         list.fill(0, 0, cx.frame.width, cx.frame.height, abi::Rgba::new(200, 0, 0, 255));
         Some(list)
@@ -1309,30 +1308,32 @@ fn tall_setup(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 thread_local! {
-    static TALL: RefCell<Vec<v2::Cause>> = const { RefCell::new(Vec::new()) };
+    static TALL: RefCell<Vec<(v2::Cause, u16, u16)>> = const { RefCell::new(Vec::new()) };
 }
 
 // Expected (the client's motion rules): an animating canvas that a frame does not paint, because its scroll shows
-// other rows, is not drawn and asks for no frame; scrolled into view it animates, and scrolled out again it rests
-// within two frames.
+// other rows, is not drawn and asks for no frame; scrolled into view it is drawn in that paint, at its whole size
+// while it shows in part, and animates; scrolled out again it rests within two frames.
 #[test]
 fn an_animating_canvas_out_of_view_rests() {
     TALL.with(|frames| frames.borrow_mut().clear());
     let harness = open_tui(80, 24, vec![abi::Plugin { id: "test.tall", setup: tall_setup }.into()]);
     harness.tui.navigate(Route::Plugin { id: "test.tall".to_owned(), name: "tall".to_owned() });
-    let causes = || TALL.with(|frames| frames.borrow().clone());
+    let causes = || TALL.with(|frames| frames.borrow().iter().map(|(cause, _, _)| *cause).collect::<Vec<_>>());
     for _ in 0..4 {
         let _ = frame(&harness, Duration::from_millis(16));
     }
-    assert_eq!(causes(), [v2::Cause::First], "a canvas out of view was animated");
+    assert_eq!(causes(), [], "a canvas out of view was drawn");
     assert!(!harness.app.needs_frame());
     let row = (0..24).find(|y| harness.app.render().row(*y).contains("row 0")).unwrap() as u16;
+    // One row at a time, so the canvas shows in part before it shows whole: it is drawn at its whole size.
     for _ in 0..10 {
         harness.app.scroll(2, row + 1, true);
-    }
-    for _ in 0..4 {
         let _ = frame(&harness, Duration::from_millis(16));
     }
+    let sizes: Vec<(u16, u16)> = TALL.with(|frames| frames.borrow().iter().map(|(_, w, h)| (*w, *h)).collect());
+    assert!(sizes.iter().all(|size| *size == (10, 2)), "{sizes:?}");
+    assert_eq!(causes().first(), Some(&v2::Cause::First), "drawn in the paint that shows it");
     assert!(causes().iter().filter(|cause| **cause == v2::Cause::Animate).count() >= 3, "{:?}", causes());
     for _ in 0..10 {
         harness.app.scroll(2, row + 1, false);
@@ -1404,11 +1405,10 @@ fn a_canvas_at_a_slots_root_takes_its_layout() {
     assert!(screen.contains("§badge§"), "{screen}");
 }
 
-// Expected: arming a canvas's hook moves nothing. A canvas with no width of its own in a row has none in layout
-// (OpenTUI's resize reports one cell, so the canvas gets one draw before its first paint shows it has no room); the
-// hook, which flips its width for each version, must not give it any, so the versions draw nothing.
+// Expected: a canvas with no width of its own in a row has no room in layout (OpenTUI's `rect()` and resize report
+// one cell; its painter gets none), so neither its first showing nor its versions draw it.
 #[test]
-fn a_version_leaves_the_canvas_its_size() {
+fn a_canvas_with_no_width_is_not_drawn() {
     PAD.with(|cell| *cell.borrow_mut() = Pad { auto: true, ..Pad::default() });
     let harness = open_tui(80, 24, vec![abi::Plugin { id: ID, setup }.into()]);
     apply(&harness, &Command::Open);
@@ -1416,18 +1416,14 @@ fn a_version_leaves_the_canvas_its_size() {
     for _ in 0..3 {
         apply(&harness, &Command::Version);
         let _ = frame(&harness, Duration::from_millis(16));
-        let _ = frame(&harness, Duration::from_millis(16));
     }
-    let draws: Vec<(u16, u16, v2::Cause)> =
-        pad(|pad| pad.draws.iter().map(|drawn| (drawn.frame.width, drawn.frame.height, drawn.frame.cause)).collect());
-    assert_eq!(draws, [(1, 4, v2::Cause::First)]);
+    assert_eq!(pad(|pad| pad.draws.len()), 0);
 }
 
-// Expected (OpenTUI's answer to P5's finding 3): a canvas given a width of 0 has no room, which its paint sees though
-// OpenTUI's resize reports one cell. It gets the one draw that resize asks for, then none: a version while it has no
-// room draws nothing. Given one cell, which OpenTUI reports as the same size and so resizes nothing, its paint finds
-// room and the next frame draws the version it missed, and shows it. A resize that leaves a dimension of none draws
-// nothing; one to more than a cell either way gives room in its own frame.
+// Expected (OpenTUI's answer to P5's finding 3): a canvas given a width of 0 has no room, which its painter sees
+// though OpenTUI's resize reports one cell: it is not drawn, and a version while it has no room draws nothing. Given
+// one cell, which OpenTUI reports as the same size and so resizes nothing, the paint that shows it draws the version
+// it missed. A resize that leaves a dimension of none draws nothing; one to more than a cell draws in its frame.
 #[test]
 fn a_canvas_without_room_is_not_drawn_and_catches_up() {
     PAD.with(|cell| *cell.borrow_mut() = Pad::default());
@@ -1439,34 +1435,33 @@ fn a_canvas_without_room_is_not_drawn_and_catches_up() {
     let _ = frame(&harness, Duration::from_millis(1));
     apply(&harness, &Command::Size(0, 4));
     let _ = frame(&harness, Duration::from_millis(16));
-    assert_eq!(causes(0), [(12, v2::Cause::First), (1, v2::Cause::Resized)]);
     apply(&harness, &Command::Version);
     for _ in 0..3 {
         let _ = frame(&harness, Duration::from_millis(16));
     }
-    assert_eq!(causes(2), [], "a canvas with no room was drawn");
+    assert_eq!(causes(0), [(12, v2::Cause::First)], "a canvas with no room was drawn");
     apply(&harness, &Command::Size(1, 4));
-    let _ = frame(&harness, Duration::from_millis(16));
     let shown = frame(&harness, Duration::from_millis(16));
-    assert_eq!(causes(2), [(1, v2::Cause::Version)], "the version missed is drawn once there is room");
+    assert_eq!(causes(1), [(1, v2::Cause::Resized)], "a canvas with room again is drawn in the paint that shows it");
     let held = pad(|pad| match &pad.draws.last().unwrap().returned {
         Returned::Art(shapes) => Held::Art(shapes.clone()),
         other => panic!("{other:?}"),
     });
     assert_eq!(differs(&shown, Some(&held), (1, 4)), None);
 
-    // Without room again, a taller canvas still has none across: no draw. Wider than a cell, it has room at once and
-    // is drawn in the frame of its resize.
     apply(&harness, &Command::Size(0, 4));
     let _ = frame(&harness, Duration::from_millis(16));
     let seen = pad(|pad| pad.draws.len());
     apply(&harness, &Command::Size(0, 6));
     let _ = frame(&harness, Duration::from_millis(16));
-    let _ = frame(&harness, Duration::from_millis(16));
     assert_eq!(causes(seen), [], "a canvas with no room across was drawn");
+    apply(&harness, &Command::Version);
+    apply(&harness, &Command::Size(1, 4));
+    let _ = frame(&harness, Duration::from_millis(16));
+    assert_eq!(causes(seen), [(1, v2::Cause::Version)], "a canvas back at its size draws the version it missed");
     apply(&harness, &Command::Size(12, 6));
     let _ = frame(&harness, Duration::from_millis(16));
-    assert_eq!(causes(seen), [(12, v2::Cause::Resized)], "a canvas with room again was drawn late");
+    assert_eq!(causes(seen + 1), [(12, v2::Cause::Resized)]);
 }
 
 /// How the contained canvas's next draw fails: a panic, or 150 ms on the monitor's clock.
