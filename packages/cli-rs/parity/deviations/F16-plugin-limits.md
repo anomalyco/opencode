@@ -18,10 +18,13 @@ carrier and for built-ins too:
 - What the host holds for a plugin (its trees' nodes, its content, its decoded images) has a limit per plugin and one
   for all plugins. Content past it is not kept, and a node that shows it reads `⋯ its content is past what the plugin
   may hold`.
-- An image is admitted by its header and decodes on a worker; it shows once decoded. One past the bytes or pixels of
-  an image, or past the decoded bytes its plugin may hold, reads `⋯ image too large`.
+- An image is admitted by its bytes and header and decodes on one of two workers; it shows once decoded. One past the
+  bytes of an image, 2,048 pixels on a side, or the decoded bytes its plugin may hold, reads `⋯ image too large`.
+- The rows all trees build in one frame are shared by every plugin: a revision the frame has no rows left for shows a
+  frame later, and a list's items mount over the frames after (a first view shows in its frame).
 - A plugin's updates run in turn with other plugins' under the frame budget, after the input that came before them;
-  the rest run in the next frames.
+  the rest run in the next frames. A mailbox full at the end of more than 12 of the last 120 frames makes its plugin
+  slow, with one notice: "Its mailbox is full".
 
 `OPENCODE_PLUGIN_LIMITS` sets the budget as before; the limits of host work are the client's.
 
