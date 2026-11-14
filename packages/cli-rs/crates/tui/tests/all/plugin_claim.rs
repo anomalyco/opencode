@@ -2504,3 +2504,36 @@ fn a_resize_views_a_claimed_part_once() {
         assert_eq!(views.len(), 2, "{carrier:?}: {views:?}");
     }
 }
+
+// Expected (`work`; deep run seed 511): a theme change views each claimed fence once and a call whose claim does not
+// read the palette not at all, and mounts the fence once: Markdown's restyle builds its blocks again for each style it
+// sets, and a claimed fence waits for the last.
+#[test]
+fn a_theme_change_views_a_claimed_fence_once() {
+    for carrier in CARRIERS {
+        let world = World::open(carrier);
+        let mut expected = Expected::new();
+        for command in [Command::Start(0), Command::Text, Command::Text, Command::Text] {
+            world.send(&command, &mut expected);
+        }
+        let views = ledger().views;
+        let before = mounted().iter().filter(|shown| shown.id.key.starts_with("fence-")).count();
+        let generations = mounted().len();
+        world.send(&Command::Theme(false), &mut expected);
+        assert_eq!(ledger().views - views, 1, "{carrier:?}: claim views for one theme change");
+        let after: Vec<_> = mounted().into_iter().filter(|shown| shown.id.key.starts_with("fence-")).collect();
+        assert_eq!((before, after.len(), generations), (1, 1, 2), "{carrier:?}: {after:?}");
+        assert_eq!(stream_whole(&world, &expected), Ok(2), "{carrier:?}");
+    }
+}
+
+// Expected (deep run seed 511): an overrun armed on the fence fires at the one view a theme change makes, and the
+// fence that view falls back is the one that shows.
+#[test]
+fn an_overrun_at_a_theme_change_falls_the_fence_back() {
+    let commands =
+        [Command::Text, Command::Text, Command::Text, Command::Arm(Fault::Overrun, FENCE), Command::Theme(false)];
+    for carrier in CARRIERS {
+        assert_eq!(ClaimModel { carrier }.run(&commands), None, "{carrier:?}");
+    }
+}
