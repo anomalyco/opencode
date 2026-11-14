@@ -1,5 +1,6 @@
 export * as CodeModeTool from "./tool.js"
 
+import { ToolFailure } from "@opencode/ai/effect"
 import { CodeMode, Namespace, Tool } from "@opencode/codemode"
 import type {
   Content,
@@ -10,10 +11,13 @@ import type {
   Namespace as ToolNamespace,
   Result,
 } from "@opencode/schema/tool"
-import { Context, Effect, Ref, Schema, Semaphore } from "effect"
+import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
+import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
+import { Permission } from "../permission.js"
 import { CodeModeCatalog } from "./catalog.js"
-import { CodeModeWeb } from "./web.js"
+import { CodeModeExecution } from "./execution.js"
+import { CodeModeFetch } from "./fetch.js"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -70,8 +74,9 @@ export type Inventory = {
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
   "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
+  "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
   "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
-  "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
+  "Inside `execute`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
   'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
   "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
   "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
@@ -80,11 +85,13 @@ const description = [
 export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
+  permission: Permission.Interface,
 ) => {
   return {
     name: "execute",
     description,
     input: CodeMode.Input,
+    freeform: { type: "text" },
     output: ExecuteOutput,
     execute: ({ code }, context) =>
       Effect.gen(function* () {
@@ -92,9 +99,26 @@ export const create = (
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
         const lock = Semaphore.makeUnsafe(1)
+        // Each update replaces the last, so send at most one per 100 ms; a trailing one carries the latest rows.
+        // A success drops a pending one when the scope closes, since the result carries the final rows.
+        const scope = yield* Effect.scope
+        const publishedAt = yield* Ref.make(Number.NEGATIVE_INFINITY)
+        const trailing = yield* Ref.make(false)
+        const publish = Effect.gen(function* () {
+          yield* Ref.set(trailing, false)
+          yield* Ref.set(publishedAt, yield* Clock.currentTimeMillis)
+          yield* context.progress({ toolCalls: yield* Ref.get(calls) })
+        })
         const record = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
           lock.withPermit(
-            Ref.updateAndGet(calls, update).pipe(Effect.tap((toolCalls) => context.progress({ toolCalls }))),
+            Effect.gen(function* () {
+              yield* Ref.update(calls, update)
+              if (yield* Ref.get(trailing)) return
+              const wait = (yield* Ref.get(publishedAt)) + 100 - (yield* Clock.currentTimeMillis)
+              if (wait <= 0) return yield* publish
+              yield* Ref.set(trailing, true)
+              yield* Effect.sleep(wait).pipe(Effect.andThen(lock.withPermit(publish)), Effect.forkIn(scope))
+            }),
           )
         const result = yield* runtime(inventory)
           .execute(code)
@@ -103,20 +127,31 @@ export const create = (
               executeTool: (name, tool, input) =>
                 Effect.gen(function* () {
                   const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-                  const executed = yield* executeTool(name, tool, input, context)
-                  const content =
-                    typeof executed.content === "string"
-                      ? [{ type: "text" as const, text: executed.content }]
-                      : (executed.content ?? [])
+                  // The program sees the same failure text the model gets for a direct call.
+                  const executed = yield* executeTool(name, tool, input, {
+                    ...context,
+                    // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
+                    progress: () => Effect.void,
+                    // A stop is the execute call's to handle: a nested call never fails it with its own error.
+                    cancel: undefined,
+                  }).pipe(
+                    Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
+                  )
+                  const content = resultContent(executed)
                   const outputFileParts = outputFiles(content)
                   if (outputFileParts.length > 0)
                     yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
-                  if (executed.output !== undefined) return executed.output
-                  const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
-                  return text === "" ? null : text
+                  return resultValue(executed)
                 }),
               hooks: progressHooks(record),
             }),
+            // A failed or interrupted call keeps its last progress, so send pending rows before it settles.
+            Effect.onError(() =>
+              lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
+            ),
+            // Readers outlive the fetch call that returned them, up to the end of this program's scope.
+            Effect.provideService(CodeModeExecution.Service, { ...context, signal: yield* Effect.abortSignal }),
+            Effect.provideService(Permission.Service, permission),
           )
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
@@ -147,7 +182,7 @@ export const create = (
           content,
           metadata,
         }
-      }),
+      }).pipe(Effect.scoped),
   } satisfies Info
 }
 
@@ -178,7 +213,7 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
     "extension.before": (call) => {
       switch (call.name) {
         case "fetch":
-          return start(call, { tool: call.name, status: "running", input: CodeModeWeb.display(call.args) })
+          return start(call, { tool: call.name, status: "running", input: CodeModeFetch.display(call.args) })
         default:
           return Effect.void
       }
@@ -200,7 +235,10 @@ export const catalog = (inventory: Inventory) => {
       type: "tool",
       name: tool.path.split(".").at(-1) ?? tool.path,
       description: tool.description,
-      signature: tool.signature,
+      // Rendered only for the tools the catalog shows.
+      get signature() {
+        return tool.signature
+      },
       pinned: pinned.has(tool.path),
     }
   return {
@@ -232,11 +270,45 @@ function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | 
 
 // Inventories are immutable snapshots, so tool definitions, schemas, and the search index are built
 // once per inventory and shared by its catalog and every execution.
-const runtimes = new WeakMap<Inventory, CodeMode.Runtime<Run>>()
+const runtimes = new WeakMap<Inventory, CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service>>()
 
 function runtime(inventory: Inventory) {
   const cached = runtimes.get(inventory)
   if (cached) return cached
+  const tools = inventoryTools(inventory)
+  const created = CodeMode.make<typeof tools, [typeof CodeModeFetch.extension]>({
+    tools,
+    extensions: [CodeModeFetch.extension],
+    hooks: runHooks,
+  })
+  runtimes.set(inventory, created)
+  return created
+}
+
+/**
+ * Runs one program over `inventory` alone with no model step and no `fetch`, binding `bindings` as outer globals.
+ */
+export const check = (
+  inventory: Inventory,
+  code: string,
+  bindings: Readonly<Record<string, CodeMode.DataValue>>,
+  limits: CodeMode.ExecutionLimits,
+  executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<Result, Error>,
+) =>
+  CodeMode.make({
+    tools: inventoryTools(inventory),
+    hooks: runHooks,
+    limits,
+  })
+    .execute(code, bindings)
+    .pipe(
+      Effect.provideService(Run, {
+        executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(resultValue)),
+        hooks: {},
+      }),
+    )
+
+function inventoryTools(inventory: Inventory) {
   // A path may carry namespace metadata, a callable tool, child tools, or all three.
   const root: ToolNode = { children: new Map() }
   for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
@@ -245,14 +317,26 @@ function runtime(inventory: Inventory) {
     getNode(root, qualifiedName(registration)).tool = Tool.make({
       description: child.description,
       input: child.inputSchema,
+      freeform: registration.freeform !== undefined,
       output: child.outputSchema ?? Schema.NullOr(Schema.String),
       execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
     })
   }
-  const tools = renderTools(root)
-  const created = CodeMode.make<typeof tools>({ tools, extensions: [CodeModeWeb.extension], hooks: runHooks })
-  runtimes.set(inventory, created)
-  return created
+  return renderTools(root)
+}
+
+function resultContent(executed: Result) {
+  return typeof executed.content === "string"
+    ? [{ type: "text" as const, text: executed.content }]
+    : (executed.content ?? [])
+}
+
+function resultValue(executed: Result) {
+  if (executed.output !== undefined) return executed.output
+  const text = resultContent(executed)
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
+    .join("\n")
+  return text === "" ? null : text
 }
 
 const runHooks = {
@@ -316,7 +400,7 @@ function flattenTools(node: ToolNode, path: ReadonlyArray<string>, tools: Tools)
   for (const [name, child] of node.children) flattenTools(child, [...path, name], tools)
 }
 
-function qualifiedName(registration: Info) {
+export function qualifiedName(registration: Info) {
   const normalized = normalizedName(registration)
   if (registration.options?.namespace === undefined) return normalized
   return `${registration.options.namespace}.${normalized}`
@@ -344,9 +428,10 @@ function formatResult(result: CodeMode.Result) {
   return [output, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
 }
 
+// Compact JSON: indentation adds tokens on every later step without helping the model. Clients pretty-print it.
 function formatValue(value: CodeMode.DataValue) {
   if (typeof value === "string") return value
-  return JSON.stringify(value, null, 2) ?? String(value)
+  return JSON.stringify(value) ?? String(value)
 }
 
 function outputFiles(content: ReadonlyArray<Content>): Array<typeof ExecuteFile.Type> {

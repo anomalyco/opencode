@@ -186,11 +186,11 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "Переглянути ще понад 70 провайдерів",
 
   "dialog.provider.viewAll": "Показати більше провайдерів",
-
   "provider.connect.title": "Підключити {{provider}}",
+
   "provider.connect.method.apiKey": "Ключ API",
   "provider.connect.status.inProgress": "Авторизація виконується…",
-  "provider.connect.status.waiting": "Очікування авторизації…",
+  "provider.connect.status.waiting": "Очікування авторизації",
   "provider.connect.status.failed": "Авторизація не вдалася: {{error}}",
   "provider.connect.apiKey.description":
     "Введіть ключ API {{provider}}, щоб підключити обліковий запис і використовувати моделі {{provider}} у OpenCode.",
@@ -412,7 +412,6 @@ export const dict = {
   "session.new.project.search": "Пошук проєктів",
   "session.new.project.add": "Додати проєкт",
   "session.new.workspace.runIn": "Запустити сесію в",
-  "session.new.workspace.triggerLocal": "Локально",
   "session.new.workspace.local": "Локальний репозиторій",
   "session.new.git.none": "Немає Git",
 
@@ -836,6 +835,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "Перенесення даних {{current}}/{{total}}",
   "home.workspaceTip": "Розпочніть наступну сесію в новому робочому просторі, щоб ізолювати зміни",
   "session.tab.add": "Додати вкладку",
+  "session.tab.closeOthers": "Закрити інші вкладки",
   "session.queue.attachments.one": "Ще {{count}} вкладення",
   "session.queue.attachments.other": "Ще {{count}} вкладення",
   "settings.backToSettings": "Назад до налаштувань",
@@ -912,7 +912,6 @@ export const dict = {
   "workspace.delete.location": "Розташування",
   "command.session.location.cycle": "Змінити розташування сеансу",
   "dialog.provider.anthropic.note": "Прямий доступ до моделей Claude за допомогою ключа API",
-  "provider.connect.title.anthropicProMax": "Увійти через Anthropic",
   "prompt.toast.uploading.cancelFile": "Скасувати завантаження файлу {{filename}}",
   "prompt.toast.uploadFailed.title": "Не вдалося завантажити файл",
   "prompt.toast.uploading.percent": "{{percent}}%",

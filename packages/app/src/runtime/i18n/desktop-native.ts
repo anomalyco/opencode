@@ -1,3 +1,5 @@
+import { flow, Option, Schema } from "effect"
+
 export const DESKTOP_NATIVE_LOCALES = [
   "en",
   "zh",
@@ -231,6 +233,15 @@ const normalizeScript = (script?: string) => (script === "Aran" ? "Arab" : scrip
 
 export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.microphoneUsage": "OpenCode uses your microphone for voice calls.",
+  "desktop.documentsFolderUsage":
+    "OpenCode uses files in your Documents folder for projects you open and commands you run there.",
+  "desktop.desktopFolderUsage": "OpenCode uses files on your Desktop for projects you open and commands you run there.",
+  "desktop.downloadsFolderUsage":
+    "OpenCode uses files in your Downloads folder for projects you open and commands you run there.",
+  "desktop.networkVolumesUsage":
+    "OpenCode uses files on network volumes for projects you open and commands you run there.",
+  "desktop.removableVolumesUsage":
+    "OpenCode uses files on removable volumes for projects you open and commands you run there.",
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "File",
   "desktop.menu.edit": "Edit",
@@ -302,6 +313,9 @@ export const DESKTOP_NATIVE_ENGLISH = {
 
   "desktop.picker.error.notSelected": "File was not selected by the picker",
   "desktop.picker.error.sizeLimit": "Selected attachments exceed the {{limit}} MB limit",
+
+  "desktop.contextMenu.spellcheck": "Spellcheck",
+  "desktop.contextMenu.spellcheckLanguages": "Spellcheck Languages",
 } as const
 
 export type DesktopNativeKey = keyof typeof DESKTOP_NATIVE_ENGLISH
@@ -310,6 +324,7 @@ export type DesktopNativeMessages = Record<DesktopNativeKey, string>
 
 export type DesktopNativeBundle = { locale: DesktopNativeLocale; messages: DesktopNativeMessages }
 
+// SAFETY: DESKTOP_NATIVE_ENGLISH is a const literal, so its own keys are exactly DesktopNativeKey.
 export const DESKTOP_NATIVE_KEYS = Object.keys(DESKTOP_NATIVE_ENGLISH) as DesktopNativeKey[]
 
 export const DESKTOP_NATIVE_MAX_PAYLOAD_BYTES = 64 * 1024
@@ -320,35 +335,24 @@ export function createDesktopNativeBundle(
 ): DesktopNativeBundle {
   return {
     locale,
+    // SAFETY: the entries map every DesktopNativeKey to a string, which is exactly DesktopNativeMessages.
     messages: Object.fromEntries(DESKTOP_NATIVE_KEYS.map((key) => [key, translate(key)])) as DesktopNativeMessages,
   }
 }
 
-export function parseDesktopNativeBundle(value: unknown): DesktopNativeBundle | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
+const DesktopNativeBundleSchema = Schema.Struct({
+  locale: Schema.Literals(DESKTOP_NATIVE_LOCALES),
+  messages: Schema.Record(Schema.Literals(DESKTOP_NATIVE_KEYS), Schema.String),
+}).check(
+  Schema.makeFilter(
+    (bundle) => new TextEncoder().encode(JSON.stringify(bundle)).byteLength <= DESKTOP_NATIVE_MAX_PAYLOAD_BYTES,
+  ),
+)
 
-  try {
-    if (new TextEncoder().encode(JSON.stringify(value)).byteLength > DESKTOP_NATIVE_MAX_PAYLOAD_BYTES) return undefined
-  } catch {
-    return undefined
-  }
+const decodeDesktopNativeBundle = Schema.decodeUnknownOption(DesktopNativeBundleSchema, { onExcessProperty: "error" })
 
-  const bundle = value as { locale?: unknown; messages?: unknown }
-
-  if (!DESKTOP_NATIVE_LOCALES.some((locale) => locale === bundle.locale)) return undefined
-
-  if (!bundle.messages || typeof bundle.messages !== "object" || Array.isArray(bundle.messages)) return undefined
-  const messages = bundle.messages as Record<string, unknown>
-  const keys = Object.keys(messages)
-
-  if (keys.length !== DESKTOP_NATIVE_KEYS.length) return undefined
-
-  if (!DESKTOP_NATIVE_KEYS.every((key) => typeof messages[key] === "string")) return undefined
-
-  if (!keys.every((key) => key in DESKTOP_NATIVE_ENGLISH)) return undefined
-
-  return bundle as DesktopNativeBundle
-}
+/** Validates a bundle the renderer sent over IPC: a supported locale, exactly the native keys, and a bounded size. */
+export const parseDesktopNativeBundle = flow(decodeDesktopNativeBundle, Option.getOrUndefined)
 
 export function formatDesktopNativeMessage(message: string, params?: Record<string, string | number>) {
   if (!params) return message

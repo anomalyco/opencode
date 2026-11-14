@@ -153,7 +153,7 @@ export const dict = {
   "provider.connect.title": "{{provider}} সংযোগ করুন",
   "provider.connect.method.apiKey": "API কী",
   "provider.connect.status.inProgress": "অনুমোদন চলছে…",
-  "provider.connect.status.waiting": "অনুমোদনের জন্য অপেক্ষা করা হচ্ছে…",
+  "provider.connect.status.waiting": "অনুমোদনের জন্য অপেক্ষা করা হচ্ছে",
   "provider.connect.status.failed": "অনুমোদন ব্যর্থ হয়েছে: {{error}}",
   "provider.connect.apiKey.description":
     "আপনার অ্যাকাউন্ট সংযোগ করতে আপনার {{provider}} API কী লিখুন এবং OpenCode-এ {{provider}} মডেলগুলি ব্যবহার করুন৷",
@@ -341,7 +341,6 @@ export const dict = {
   "session.new.project.search": "অনুসন্ধান প্রকল্প",
   "session.new.project.add": "প্রকল্প যোগ করুন",
   "session.new.workspace.runIn": "সেশন চালান",
-  "session.new.workspace.triggerLocal": "স্থানীয়",
   "session.new.workspace.local": "স্থানীয় সংগ্রহস্থল",
   "session.new.git.none": "না Git",
   "session.header.open.finder": "Finder",
@@ -749,6 +748,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "ডেটা স্থানান্তরিত হচ্ছে {{current}}/{{total}}",
   "home.workspaceTip": "পরিবর্তনগুলিকে বিচ্ছিন্ন রাখতে একটি নতুন কর্মক্ষেত্রে পরবর্তী সেশন শুরু করুন৷",
   "session.tab.add": "ট্যাব যোগ করুন",
+  "session.tab.closeOthers": "অন্য ট্যাবগুলো বন্ধ করুন",
   "session.queue.attachments.one": "প্লাস {{count}} সংযুক্তি",
   "session.queue.attachments.other": "প্লাস {{count}}টি সংযুক্তি৷",
   "settings.backToSettings": "সেটিংসে ফিরে যান",
@@ -824,7 +824,6 @@ export const dict = {
 
   "command.session.location.cycle": "সেশনের অবস্থান পর্যায়ক্রমে বদলান",
   "dialog.provider.anthropic.note": "API কী-এর মাধ্যমে Claude মডেলে সরাসরি অ্যাক্সেস",
-  "provider.connect.title.anthropicProMax": "Anthropic দিয়ে লগ ইন করুন",
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "{{filename}}-এর আপলোড বাতিল করুন",
   "prompt.toast.uploadFailed.title": "আপলোড ব্যর্থ হয়েছে",

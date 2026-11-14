@@ -1,18 +1,24 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Effect, Layer, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { AIError, LLMEvent, Media, SpeechEvent, TranscriptionEvent } from "../src/effect.js"
-import { RequestExecutor } from "../src/route.js"
+import { AIError, LLMEvent, Media } from "../src/effect.js"
+import { SpeechEvent, TranscriptionEvent } from "../src/experimental.js"
+import { RequestExecutor, type StreamOptions } from "../src/route.js"
 import { AI } from "../src/index.js"
-import { AssemblyAI, OpenAI, Replicate, Runway } from "../src/providers.js"
+import { AssemblyAI, OpenAI, XAI } from "../src/providers.js"
 import { handlerLayer, json } from "./lib/http.js"
 import { finishChunk, toolCallChunk } from "./lib/openai-chunks.js"
 import { sseEvents } from "./lib/sse.js"
 
 const openai = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" })
+const xai = XAI.configure({ apiKey: "test", baseURL: "https://xai.test/v1" })
+const assemblyai = AssemblyAI.configure({ apiKey: "test", baseURL: "https://assemblyai.test" }).transcription(
+  "universal-2",
+)
+const audio = Media.url("https://audio.test/hello.mp3")
 
 const chatBody = sseEvents(
   { choices: [{ delta: { content: "Hello" } }] },
@@ -21,9 +27,9 @@ const chatBody = sseEvents(
 )
 
 /**
- * Executor layer that answers chat completions with SSE text, image generations with one base64 PNG, Runway video
- * tasks with a queued submission that succeeds on the second poll, speech with raw audio or SSE audio deltas, OpenAI
- * transcription with JSON or SSE text deltas, AssemblyAI transcripts that complete on the first poll, and `slow.test`
+ * Executor layer that answers chat completions with SSE text, image generations with one base64 PNG, xAI video
+ * requests with a pending submission that succeeds on the second poll, speech with raw audio or SSE audio deltas, OpenAI
+ * transcription with JSON or SSE text deltas, AssemblyAI transcripts that complete on the second poll, and `slow.test`
  * chat completions that send one text delta and never finish.
  */
 const executor = (seen: Array<string>) =>
@@ -50,13 +56,6 @@ const executor = (seen: Array<string>) =>
               : input.respond(JSON.stringify({ data: [{ b64_json: "AQID" }], output_format: "png" }), {
                   headers: { "content-type": "application/json" },
                 })
-          if (web.url.startsWith("https://replicate.test"))
-            return json(input, {
-              id: "p_1",
-              status: "succeeded",
-              output: "https://replicate.test/a.webp",
-              urls: { get: "https://replicate.test/p_1", cancel: "https://replicate.test/p_1/cancel" },
-            })
           if (web.url.startsWith("https://slow.test"))
             return input.respond(
               new ReadableStream({
@@ -99,19 +98,28 @@ const executor = (seen: Array<string>) =>
             return input.respond(JSON.stringify({ id: "tr_1", status: "queued" }), {
               headers: { "content-type": "application/json" },
             })
-          if (web.url.endsWith("/v2/transcript/tr_1"))
-            return input.respond(JSON.stringify({ id: "tr_1", status: "completed", text: "Hello there." }), {
-              headers: { "content-type": "application/json" },
-            })
-          if (web.url.endsWith("/text_to_video"))
-            return input.respond(JSON.stringify({ id: "task_1" }), { headers: { "content-type": "application/json" } })
-          if (web.url.endsWith("/tasks/task_1")) {
-            const polls = seen.filter((url) => url.endsWith("/tasks/task_1")).length
+          if (web.url.endsWith("/v2/transcript/tr_1")) {
+            const polls = seen.filter((url) => url.endsWith("/v2/transcript/tr_1")).length
             return input.respond(
               JSON.stringify(
                 polls === 1
-                  ? { status: "RUNNING", progress: 0.5 }
-                  : { status: "SUCCEEDED", output: ["https://runway.test/out.mp4"], cost: { credits: 5 } },
+                  ? { id: "tr_1", status: "processing" }
+                  : { id: "tr_1", status: "completed", text: "Hello there." },
+              ),
+              { headers: { "content-type": "application/json" } },
+            )
+          }
+          if (web.url.endsWith("/videos/generations"))
+            return input.respond(JSON.stringify({ request_id: "req_1" }), {
+              headers: { "content-type": "application/json" },
+            })
+          if (web.url.endsWith("/videos/req_1")) {
+            const polls = seen.filter((url) => url.endsWith("/videos/req_1")).length
+            return input.respond(
+              JSON.stringify(
+                polls === 1
+                  ? { status: "pending", progress: 50 }
+                  : { status: "done", video: { url: "https://vidgen.x.ai/out.mp4" } },
               ),
               { headers: { "content-type": "application/json" } },
             )
@@ -130,29 +138,27 @@ describe("AI promise client", () => {
     const seen: Array<string> = []
     const ai = AI.make({ layer: executor(seen) })
 
-    const request = ai.llm.request({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })
-    const text = await ai.llm.generate(request)
+    const request = ai.request({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })
+    const text = await ai.generate(request)
     expect(text.text).toBe("Hello world")
-    expect((await ai.llm.generate({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })).text).toBe(
-      "Hello world",
-    )
+    expect((await ai.generate({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })).text).toBe("Hello world")
 
     const image = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
-    expect(image.image).toBeInstanceOf(Media.Asset)
-    expect(image.image.mediaType).toBe("image/png")
-    expect(await ai.run(image.image.bytes())).toEqual(Uint8Array.from([1, 2, 3]))
+    expect(image.images[0]).toBeInstanceOf(Media.Asset)
+    expect(image.images[0].mediaType).toBe("image/png")
+    expect(await ai.run(image.images[0].bytes())).toEqual(Uint8Array.from([1, 2, 3]))
     const requested = await ai.image.generate(
       ai.image.request({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" }),
     )
-    expect(requested.image.mediaType).toBe("image/png")
+    expect(requested.images[0].mediaType).toBe("image/png")
 
     const deltas: Array<string> = []
-    for await (const event of ai.llm.stream(request)) {
+    for await (const event of ai.stream(request)) {
       if (LLMEvent.is.textDelta(event)) deltas.push(event.text)
     }
     expect(deltas).toEqual(["Hello", " world"])
     const directDeltas: Array<string> = []
-    for await (const event of ai.llm.stream({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })) {
+    for await (const event of ai.stream({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })) {
       if (LLMEvent.is.textDelta(event)) directDeltas.push(event.text)
     }
     expect(directDeltas).toEqual(deltas)
@@ -173,58 +179,103 @@ describe("AI promise client", () => {
       "https://openai.test/v1/images/generations",
     ])
 
-    const generation = await ai.image.start({
-      model: Replicate.configure({ apiKey: "test", baseURL: "https://replicate.test" }).image("owner/model"),
-      prompt: "A lighthouse",
-    })
-    expect((await generation.await()).image.source).toMatchObject({ url: "https://replicate.test/a.webp" })
     await ai.dispose()
   })
 
-  test("starts, awaits, and resumes video generations over the same runtime", async () => {
+  test("starts video jobs and reads their status and result by token over the same runtime", async () => {
     const seen: Array<string> = []
     const ai = AI.make({ layer: executor(seen) })
-    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
+    const model = xai.video("grok-imagine-video-1.5")
 
-    const generation = await ai.video.start({ model, prompt: "A kite" })
-    expect(generation.id).toBe("task_1")
-    expect(generation.status).toBe("queued")
-    expect(generation.token).toEqual({ taskID: "task_1" })
+    const job = await ai.video.start({ model, prompt: "A kite" })
+    expect(job).toEqual({ id: "req_1" })
 
-    const refreshed = await generation.refresh()
-    expect(refreshed.status).toBe("running")
-    expect(refreshed.progress).toBe(0.5)
-
-    const response = await refreshed.await({ poll: { interval: 10 } })
+    // The ID is plain text: store it and read the job back from any process.
+    const id = job.id
+    expect(await ai.video.status(model, id)).toEqual({ status: "running", progress: 0.5 })
+    expect(await ai.video.status(model, id)).toEqual({ status: "completed" })
+    const response = await ai.video.result(model, id)
     expect(response.video).toBeInstanceOf(Media.Asset)
-    expect(response.video.source).toMatchObject({ type: "url", url: "https://runway.test/out.mp4" })
-    expect(response.usage).toEqual({ type: "credits", credits: 5 })
+    expect(response.video.source).toMatchObject({ type: "url", url: "https://vidgen.x.ai/out.mp4" })
+    expect(await ai.video.cancel(model, id).catch((error: unknown) => error)).toMatchObject({
+      reason: { _tag: "UnsupportedOperation" },
+    })
 
-    const resumed = await ai.video.resume(model, JSON.parse(JSON.stringify(generation.token)))
-    expect(resumed.status).toBe("completed")
-    expect((await resumed.await()).videos).toHaveLength(1)
+    expect(seen).toEqual([
+      "https://xai.test/v1/videos/generations",
+      "https://xai.test/v1/videos/req_1",
+      "https://xai.test/v1/videos/req_1",
+      "https://xai.test/v1/videos/req_1",
+    ])
+    await ai.dispose()
+  })
 
-    const events: Array<string> = []
-    for await (const event of ai.video.stream({ model, prompt: "A kite" }, { poll: { interval: 10 } })) {
-      events.push(event.type)
+  test("rejects image job calls on an inline route without a request", async () => {
+    const seen: Array<string> = []
+    const ai = AI.make({ layer: executor(seen) })
+    const model = openai.image("gpt-image-2")
+    const reasons = await Promise.all(
+      [
+        ai.image.start({ model, prompt: "A lighthouse" }),
+        ai.image.status(model, "job_1"),
+        ai.image.result(model, "job_1"),
+        ai.image.cancel(model, "job_1"),
+      ].map((call) => call.then(() => undefined).catch((error: unknown) => error)),
+    )
+    expect(reasons).toEqual(
+      ["start", "status", "result", "cancel"].map((operation) =>
+        expect.objectContaining({
+          reason: expect.objectContaining({ _tag: "UnsupportedOperation", operation: `image.${operation}` }),
+        }),
+      ),
+    )
+    expect(seen).toEqual([])
+    await ai.dispose()
+  })
+
+  test("forwards per-call options to generate, stream, and loop, and checks compaction support", async () => {
+    const seen: Array<string> = []
+    const ai = AI.make({ layer: executor([]) })
+    const options: StreamOptions = {
+      http: (request, handler) => {
+        seen.push(request.url)
+        return handler(request)
+      },
     }
-    expect(events).toEqual(["video", "finish"])
+    const request = { model: openai.chat("gpt-4o-mini"), prompt: "Say hello." }
 
-    expect(seen[0]).toBe("https://runway.test/v1/text_to_video")
-    expect(seen.filter((url) => url.endsWith("/tasks/task_1")).length).toBeGreaterThanOrEqual(5)
+    expect((await ai.generate(request, options)).text).toBe("Hello world")
+    await Array.fromAsync(ai.stream(request, options))
+    await Array.fromAsync(ai.loop({ ...request, tools: [] }, options))
+    expect(seen).toEqual(Array(3).fill("https://openai.test/v1/chat/completions"))
+
+    const responses = ai.request({ model: openai.responses("gpt-5"), prompt: "Hello" })
+    expect(ai.canCompact(responses)).toBe(true)
+    expect(ai.canCompact(responses, { mechanism: "trigger" })).toBe(true)
+    expect(ai.canCompact(ai.request(request))).toBe(false)
+    await ai.dispose()
+  })
+
+  test("exposes a generation's snapshot and terminal state", async () => {
+    const ai = AI.make({ layer: executor([]) })
+    const generation = await ai.experimental.transcription.start({ model: assemblyai, audio })
+    expect(generation.snapshot).toEqual({ id: "tr_1", status: "queued" })
+    expect(generation.terminal).toBe(false)
+    const refreshed = await generation.refresh()
+    expect(refreshed.terminal).toBe(false)
+    expect((await refreshed.refresh()).terminal).toBe(true)
     await ai.dispose()
   })
 
   test("observes a started generation's events and fetches its result", async () => {
     const ai = AI.make({ layer: executor([]) })
-    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
-    const generation = await ai.video.start({ model, prompt: "A kite" })
+    const generation = await ai.experimental.transcription.start({ model: assemblyai, audio })
 
     const events: Array<string> = []
     for await (const event of generation.events({ poll: { interval: 10 } })) events.push(event.type)
     expect(events).toEqual(["generation-progress", "generation-finished"])
     expect(generation.status).toBe("queued")
-    expect((await generation.result()).video.source).toMatchObject({ url: "https://runway.test/out.mp4" })
+    expect((await generation.result()).text).toBe("Hello there.")
     await ai.dispose()
   })
 
@@ -239,6 +290,14 @@ describe("AI promise client", () => {
       expect(asset.mediaType).toBe("image/png")
       await ai.write(asset, join(dir, "copy.png"))
       expect(await ai.bytes(await ai.file(join(dir, "copy.png")))).toEqual(png)
+
+      // A failed download leaves the existing file as it was and cleans up its temporary file.
+      const failed = await ai
+        .write(Media.url("https://cdn.test/expired.png"), join(dir, "copy.png"))
+        .catch((error: unknown) => error)
+      expect(failed instanceof AIError && failed.reason.http?.status).toBe(404)
+      expect(await ai.bytes(await ai.file(join(dir, "copy.png")))).toEqual(png)
+      expect((await readdir(dir)).sort()).toEqual(["copy.png", "source.bin"])
     } finally {
       await rm(dir, { recursive: true })
       await ai.dispose()
@@ -251,11 +310,16 @@ describe("AI promise client", () => {
     const bytes = Media.bytes(Uint8Array.from([0x49, 0x44, 0x33]), "audio/mpeg")
 
     expect(
-      (await ai.transcription.generate({ model: openai.transcription("gpt-4o-mini-transcribe"), audio: bytes })).text,
+      (
+        await ai.experimental.transcription.generate({
+          model: openai.transcription("gpt-4o-mini-transcribe"),
+          audio: bytes,
+        })
+      ).text,
     ).toBe("Hello there.")
 
     const deltas: Array<string> = []
-    for await (const event of ai.transcription.stream({
+    for await (const event of ai.experimental.transcription.stream({
       model: openai.transcription("gpt-4o-mini-transcribe"),
       audio: bytes,
     }))
@@ -265,7 +329,7 @@ describe("AI promise client", () => {
     const model = AssemblyAI.configure({ apiKey: "test", baseURL: "https://assemblyai.test" }).transcription(
       "universal-2",
     )
-    const generation = await ai.transcription.start({ model, audio })
+    const generation = await ai.experimental.transcription.start({ model, audio })
     expect(generation.token).toEqual({ transcriptID: "tr_1" })
     expect((await generation.await({ poll: { interval: 10 } })).text).toBe("Hello there.")
     await ai.dispose()
@@ -275,11 +339,12 @@ describe("AI promise client", () => {
     const ai = AI.make({ layer: executor([]) })
     const model = openai.speech("gpt-4o-mini-tts")
 
-    const response = await ai.speech.generate({ model, text: "Hello", voice: "coral", format: "pcm" })
+    const response = await ai.experimental.speech.generate({ model, text: "Hello", voice: "coral", format: "pcm" })
     expect(await ai.run(response.audio.bytes())).toEqual(Uint8Array.from([1, 2, 3]))
 
     const events: Array<SpeechEvent> = []
-    for await (const event of ai.speech.stream({ model, text: "Hello", voice: "coral" })) events.push(event)
+    for await (const event of ai.experimental.speech.stream({ model, text: "Hello", voice: "coral" }))
+      events.push(event)
     expect(events.map((event) => event.type)).toEqual(["audio-delta", "audio-delta", "finish"])
     const finish = events.find(SpeechEvent.is.finish)
     expect(await ai.run(finish!.audio.bytes())).toEqual(Uint8Array.from([1, 2, 3]))
@@ -289,14 +354,14 @@ describe("AI promise client", () => {
   test("rethrows AIError unchanged and honors abort signals", async () => {
     const ai = AI.make({ layer: executor([]) })
 
-    const failure = await ai.llm
-      .generate(ai.llm.request({ model: openai.responses("gpt-5"), prompt: "Hello" }))
+    const failure = await ai
+      .generate(ai.request({ model: openai.responses("gpt-5"), prompt: "Hello" }))
       .then(() => undefined)
       .catch((error: unknown) => error)
     expect(failure).toBeInstanceOf(AIError)
     expect(failure instanceof AIError && failure.reason.http?.status).toBe(404)
 
-    const invalidLLM = await ai.llm
+    const invalidLLM = await ai
       // @ts-expect-error Invalid input must reject with AIError instead of throwing synchronously.
       .generate({ model: openai.responses("gpt-5"), messages: [{ role: "bogus" }] })
       .catch((error: unknown) => error)
@@ -309,8 +374,8 @@ describe("AI promise client", () => {
 
     const controller = new AbortController()
     controller.abort()
-    const aborted = await ai.llm
-      .generate(ai.llm.request({ model: openai.chat("gpt-4o-mini"), prompt: "Hello" }), { signal: controller.signal })
+    const aborted = await ai
+      .generate(ai.request({ model: openai.chat("gpt-4o-mini"), prompt: "Hello" }), { signal: controller.signal })
       .then(() => "completed")
       .catch(() => "aborted")
     expect(aborted).toBe("aborted")
@@ -332,13 +397,14 @@ describe("AI promise client", () => {
     const inFlight = new AbortController()
     setTimeout(() => inFlight.abort(reason), 10)
     expect(
-      await ai.llm
-        .generate({ model: slow, prompt: "Hello" }, { signal: inFlight.signal })
-        .catch((error: unknown) => error),
+      await ai.generate({ model: slow, prompt: "Hello" }, { signal: inFlight.signal }).catch((error: unknown) => error),
     ).toBe(reason)
 
     const preAborted = await Array.fromAsync(
-      ai.speech.stream({ model: openai.speech("gpt-4o-mini-tts"), text: "Hello" }, { signal: aborted.signal }),
+      ai.experimental.speech.stream(
+        { model: openai.speech("gpt-4o-mini-tts"), text: "Hello" },
+        { signal: aborted.signal },
+      ),
     ).catch((error: unknown) => error)
     expect(preAborted).toBe(aborted.signal.reason)
     expect(preAborted).toMatchObject({ name: "AbortError" })
@@ -346,7 +412,7 @@ describe("AI promise client", () => {
     const midStream = new AbortController()
     const deltas: Array<string> = []
     const midStreamFailure = await Array.fromAsync(
-      ai.llm.stream({ model: slow, prompt: "Hello" }, { signal: midStream.signal }),
+      ai.stream({ model: slow, prompt: "Hello" }, { signal: midStream.signal }),
       (event) => {
         if (!LLMEvent.is.textDelta(event)) return
         deltas.push(event.text)
@@ -357,8 +423,7 @@ describe("AI promise client", () => {
     expect(midStreamFailure).toBe(midStream.signal.reason)
     expect(midStreamFailure).toMatchObject({ name: "AbortError" })
 
-    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
-    const generation = await ai.video.start({ model, prompt: "A kite" })
+    const generation = await ai.experimental.transcription.start({ model: assemblyai, audio })
     const polling = new AbortController()
     const events: Array<string> = []
     const eventsFailure = await Array.fromAsync(
@@ -379,7 +444,7 @@ describe("AI promise client", () => {
     const slow = OpenAI.configure({ apiKey: "test", baseURL: "https://slow.test/v1" }).chat("gpt-4o-mini")
     const controller = new AbortController()
     const deltas: Array<string> = []
-    for await (const event of ai.llm.stream({ model: slow, prompt: "Hello" }, { signal: controller.signal })) {
+    for await (const event of ai.stream({ model: slow, prompt: "Hello" }, { signal: controller.signal })) {
       if (!LLMEvent.is.textDelta(event)) continue
       deltas.push(event.text)
       break
@@ -414,8 +479,9 @@ describe("AI promise client", () => {
       ),
     })
     const read_file = AI.tool({
+      name: "read_file",
       description: "Read a file.",
-      parameters: Schema.Struct({ path: Schema.String }),
+      input: Schema.Struct({ path: Schema.String }),
       execute: async ({ path }) => {
         if (path === "missing.txt") throw new Error(`No such file: ${path}`)
         if (path === "empty.txt") return
@@ -424,7 +490,7 @@ describe("AI promise client", () => {
     })
 
     const events = await Array.fromAsync(
-      ai.llm.loop({ model: openai.chat("gpt-4o-mini"), prompt: "Read the files.", tools: { read_file } }),
+      ai.loop({ model: openai.chat("gpt-4o-mini"), prompt: "Read the files.", tools: [read_file] }),
     )
 
     expect(events.filter(LLMEvent.is.toolResult).map((event) => event.result)).toEqual([
@@ -438,6 +504,47 @@ describe("AI promise client", () => {
       expect.objectContaining({ tool_call_id: "call-3", content: "null" }),
     ])
     expect(events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["Hello", " world"])
+    await ai.dispose()
+  })
+
+  test("collects a stream and a loop into their final results", async () => {
+    const ai = AI.make({
+      layer: RequestExecutor.layer.pipe(
+        Layer.provide(
+          handlerLayer((input) =>
+            Effect.succeed(
+              input.respond(
+                JSON.parse(input.text).messages.some((message: { role: string }) => message.role === "tool")
+                  ? chatBody
+                  : sseEvents(
+                      toolCallChunk("call-1", "read_file", JSON.stringify({ path: "a.txt" })),
+                      finishChunk("tool_calls"),
+                    ),
+                { headers: { "content-type": "text/event-stream" } },
+              ),
+            ),
+          ),
+        ),
+      ),
+    })
+    const read_file = AI.tool({
+      name: "read_file",
+      description: "Read a file.",
+      input: Schema.Struct({ path: Schema.String }),
+      execute: async () => "hello",
+    })
+    const model = openai.chat("gpt-4o-mini")
+
+    const looped = await ai.collect(ai.loop({ model, prompt: "Read the file.", tools: [read_file] }))
+    expect(looped.text).toBe("Hello world")
+    expect(looped.steps).toHaveLength(2)
+    expect(looped.messages.map((message) => message.role)).toEqual(["assistant", "tool", "assistant"])
+    expect(looped.finishReason.normalized).toBe("stop")
+
+    const streamed = await ai.collect(ai.stream({ model, prompt: "Read the file." }))
+    expect(streamed.steps).toHaveLength(1)
+    expect(streamed.messages).toEqual([streamed.steps[0].message])
+    expect(streamed.finishReason.normalized).toBe("tool-calls")
     await ai.dispose()
   })
 
@@ -460,7 +567,7 @@ describe("AI promise client", () => {
       ),
     })
 
-    const response = await ai.llm.generateObject({
+    const response = await ai.generate({
       model: openai.chat("gpt-4o-mini"),
       prompt: "Pick a city.",
       schema: Schema.Struct({ city: Schema.String }),
@@ -470,11 +577,56 @@ describe("AI promise client", () => {
     await ai.dispose()
   })
 
-  test("the default client is created lazily and can be disposed", async () => {
-    expect(typeof AI.ai.llm.generate).toBe("function")
+  test("compacts through the endpoint and the trigger, and rejects unsupported routes with AIError", async () => {
+    const checkpoint = { type: "compaction", id: "cmp_1", encrypted_content: "opaque" }
+    const paths: Array<string> = []
+    const ai = AI.make({
+      layer: RequestExecutor.layer.pipe(
+        Layer.provide(
+          handlerLayer((input) =>
+            Effect.gen(function* () {
+              const path = new URL((yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)).url).pathname
+              paths.push(path)
+              if (path === "/v1/responses/compact")
+                return json(input, {
+                  object: "response.compaction",
+                  output: [checkpoint],
+                  usage: { input_tokens: 100, output_tokens: 10, total_tokens: 110 },
+                })
+              expect(JSON.parse(input.text).input.at(-1)).toEqual({ type: "compaction_trigger" })
+              return input.respond(
+                sseEvents({ type: "response.completed", response: { id: "resp_1", output: [checkpoint] } }),
+                { headers: { "content-type": "text/event-stream" } },
+              )
+            }),
+          ),
+        ),
+      ),
+    })
+    const request = ai.request({ model: openai.responses("gpt-5"), prompt: "Hello" })
+
+    const compacted = await ai.compact(request)
+    expect(compacted.replacement.flatMap((message) => message.content.map((part) => part.type))).toEqual(["compaction"])
+    expect(compacted.usage?.totalTokens).toBe(110)
+
+    const triggered = await ai.compact(request, { mechanism: "trigger" })
+    expect(triggered.checkpoint).toMatchObject({ id: "cmp_1", encrypted: "opaque" })
+    expect(triggered.responseID).toBe("resp_1")
+    expect(paths).toEqual(["/v1/responses/compact", "/v1/responses"])
+
+    const unsupported = await ai
+      // @ts-expect-error Untyped callers on routes without a compact endpoint must reject with AIError.
+      .compact(ai.request({ model: openai.chat("gpt-4o-mini"), prompt: "Hello" }))
+      .catch((error: unknown) => error)
+    expect(unsupported instanceof AIError && unsupported.reason._tag).toBe("UnsupportedOperation")
+    expect(paths).toHaveLength(2)
+    await ai.dispose()
+  })
+
+  test("the default client is created lazily", () => {
+    expect(typeof AI.ai.generate).toBe("function")
     expect(typeof AI.ai.image.generate).toBe("function")
     expect(typeof AI.ai.video.start).toBe("function")
-    expect(typeof AI.ai.speech.generate).toBe("function")
-    await AI.ai.dispose()
+    expect(typeof AI.ai.experimental.speech.generate).toBe("function")
   })
 })

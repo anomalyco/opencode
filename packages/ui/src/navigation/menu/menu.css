@@ -160,6 +160,11 @@
   }
 }
 
+/* Like a native menu, an item stays highlighted while the pointer is in the submenu it opened. */
+[data-component="menu-v2-content"]:not(:has([data-highlighted])) [data-component="menu-v2-item"][data-expanded] {
+  background: var(--menu-v2-hover);
+}
+
 [data-slot="menu-v2-separator"] {
   height: 1px;
   width: calc(100% + 4px);
@@ -257,6 +262,10 @@
     }
   }
 
+  &:not(:has([data-highlighted])) [data-component="menu-v2-item"][data-expanded] {
+    background: var(--surface-raised-base-hover);
+  }
+
   [data-slot="menu-v2-separator"] {
     width: calc(100% + 8px);
     height: 1px;
@@ -274,16 +283,5 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     font-variant-numeric: normal;
-  }
-}
-
-@keyframes menu-v2-in {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
   }
 }

@@ -61,18 +61,23 @@ function ensureSprite() {
 export interface IconProps extends ComponentProps<"svg"> {
   name: IconName | (string & {})
   size?: "small" | "normal" | "large"
+  /** Preview a specific artwork set. By default the icon follows the app's New icons setting. */
+  artwork?: "current" | "experimental"
 }
 
 export function Icon(props: IconProps) {
-  const [split, rest] = splitProps(props, ["name", "size"])
+  const [split, rest] = splitProps(props, ["name", "size", "artwork"])
 
   const iconName = (): IconName => {
     return isIconName(split.name) ? split.name : "plus"
   }
 
   const icon = () => getIcon(iconName())
+
   // Names without new artwork keep today's under the experiment.
-  const next = () => newIconsEnabled() && getNewIcon(iconName()) !== undefined
+  const next = () =>
+    (split.artwork ? split.artwork === "experimental" : newIconsEnabled()) && getNewIcon(iconName()) !== undefined
+
   // New artwork is drawn on a 16px grid, so it stays at 16px where today's small icons shrink to 14px.
   const pixelSize = () => (split.size === "large" ? 20 : split.size === "small" && !next() ? 14 : 16)
   onMount(ensureSprite)

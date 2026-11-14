@@ -166,6 +166,13 @@ function occupy(port: number, cancel = false) {
   })
 }
 
+// A server without its own config directory reads the developer's global config, whose remote MCP servers would
+// reach the network.
+const isolated = Effect.gen(function* () {
+  const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-openai-oauth-")))
+  return yield* ServerFetch.make({ ...options, config: { ...options.config, directory: config.path } })
+})
+
 const connectOpenAI = (
   handler: Handler,
   input: { methodID: string; credentialID?: string } = { methodID: "chatgpt-browser" },
@@ -235,7 +242,7 @@ it.live("activates credentials through the HttpApi", () =>
 
 it.live("forwards the OAuth credentialID from the HttpApi payload to ChatGPT authorization", () =>
   Effect.gen(function* () {
-    const handler = yield* ServerFetch.make(options)
+    const handler = yield* isolated
     const created = yield* Effect.promise(() =>
       handler(
         new Request("http://opencode.local/api/credential", {
@@ -474,7 +481,7 @@ it.live("returns 404 when a previously readable file is deleted", () =>
 it.live("cancels a stale OpenAI OAuth callback server before falling back", () =>
   Effect.gen(function* () {
     const requests = yield* occupy(1455, true)
-    const handler = yield* ServerFetch.make(options)
+    const handler = yield* isolated
     const response = yield* connectOpenAI(handler)
 
     expect(response.status).toBe(200)
@@ -487,7 +494,7 @@ it.live("cancels a stale OpenAI OAuth callback server before falling back", () =
 it.live("falls back to port 1457 when OpenAI OAuth port 1455 remains busy", () =>
   Effect.gen(function* () {
     const requests = yield* occupy(1455)
-    const handler = yield* ServerFetch.make(options)
+    const handler = yield* isolated
     const response = yield* connectOpenAI(handler)
 
     expect(response.status).toBe(200)
@@ -503,7 +510,7 @@ it.live(
     Effect.gen(function* () {
       yield* occupy(1455)
       yield* occupy(1457)
-      const handler = yield* ServerFetch.make(options)
+      const handler = yield* isolated
       const response = yield* connectOpenAI(handler)
 
       expect(response.status).toBe(400)

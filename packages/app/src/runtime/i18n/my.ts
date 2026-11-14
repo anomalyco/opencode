@@ -149,10 +149,9 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "နောက်ထပ်ပံ့ပိုးပေးသူ 70+ ကိုကြည့်ပါ။",
   "dialog.provider.viewAll": "နောက်ထပ်ဝန်ဆောင်မှုပေးသူများကို ပြပါ။",
   "provider.connect.title": "{{provider}} ကို ချိတ်ဆက်ပါ။",
-  "provider.connect.title.anthropicProMax": "Anthropic ဖြင့် အကောင့်ဝင်ပါ",
   "provider.connect.method.apiKey": "API သော့",
   "provider.connect.status.inProgress": "ခွင့်ပြုချက် လုပ်ဆောင်နေသည်…",
-  "provider.connect.status.waiting": "ခွင့်ပြုချက်ကို စောင့်ဆိုင်းနေသည်…",
+  "provider.connect.status.waiting": "ခွင့်ပြုချက်ကို စောင့်ဆိုင်းနေသည်",
   "provider.connect.status.failed": "ခွင့်ပြုချက် မအောင်မြင်ပါ- {{error}}",
   "provider.connect.apiKey.description":
     "သင့်အကောင့်ကို ချိတ်ဆက်ရန်နှင့် OpenCode တွင် {{provider}} မော်ဒယ်များကို အသုံးပြုရန် သင်၏ {{provider}} API သော့ကို ထည့်သွင်းပါ။",
@@ -349,7 +348,6 @@ export const dict = {
   "session.new.project.search": "ရှာဖွေရေး ပရောဂျက်များ",
   "session.new.project.add": "ပရောဂျက်ကို ထည့်ပါ။",
   "session.new.workspace.runIn": "စက်ရှင်ကို ဖွင့်ပါ။",
-  "session.new.workspace.triggerLocal": "ပြည်တွင်း",
   "session.new.workspace.local": "စက်တွင်းသိုလှောင်မှု",
   "session.new.git.none": "Git မရှိပါ။",
   "session.header.open.finder": "ရှာဖွေသူ",
@@ -757,6 +755,7 @@ export const dict = {
   "home.workspaceTip":
     "ပြင်ဆင်မှုများကို ထိန်းသိမ်းထားရန် အလုပ်အပ်ရန် အသစ်သော အလုပ်ဌာနတွင် နောက်ဆုံးအစည်းအဝေးကို စတင်ပါ",
   "session.tab.add": "တက်ထည့်ရန်",
+  "session.tab.closeOthers": "အခြားတဘ်များကို ပိတ်ပါ။",
   "session.queue.attachments.one": "နောက်ထပ် ပူးတွဲဖိုင် {{count}} ခု",
   "session.queue.attachments.other": "နောက်ထပ် ပူးတွဲဖိုင် {{count}} ခု",
   "settings.backToSettings": "ဆက်တင်များသို့ ပြန်သွားရန်",

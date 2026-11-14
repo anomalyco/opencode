@@ -531,6 +531,31 @@ test("raw JSON schemas pass input through when they cannot be imported", async (
   })
 })
 
+test("raw JSON schema validation does not keep the caller alive", async () => {
+  // The session runner executes tools from Effect.fn closures over its Location's services. Building the codec must
+  // not leave anything process-wide that reaches the caller's stack frames once the Location is gone.
+  const call = async () => {
+    const services = { name: "location services" }
+    const tool: Info = {
+      name: "raw-retention",
+      description: "Raw retention tool",
+      input: { type: "object", properties: { value: { type: "string" } }, required: ["value"] },
+      execute: () => Effect.succeed({ content: services.name }),
+    }
+    const run = Effect.fn("LocationCaller.run")(function* () {
+      return yield* execute(tool, { value: "ok" }, context)
+    })
+    expect(await Effect.runPromise(run())).toMatchObject({ content: [{ type: "text", text: "location services" }] })
+    return new WeakRef(services)
+  }
+  const services = await call()
+  for (let attempt = 0; attempt < 50 && services.deref() !== undefined; attempt++) {
+    Bun.gc(true)
+    await Bun.sleep(10)
+  }
+  expect(services.deref()).toBeUndefined()
+})
+
 test("missing external input schemas fall back to an empty schema", () => {
   const tool = {
     name: "external",

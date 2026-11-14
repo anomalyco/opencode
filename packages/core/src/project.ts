@@ -63,8 +63,14 @@ export const root = Effect.fn("Project.root")(
   Effect.orElseSucceed(() => undefined),
 )
 
-const ACTIVATE_INTERVAL = 60_000
+export const ACTIVATE_INTERVAL = 60_000
 const SWEEP_INTERVAL = Duration.hours(1)
+
+export interface Options {
+  readonly now?: () => number
+}
+
+const Now = Context.Reference<() => number>("@opencode/Project/Now", { defaultValue: () => Date.now })
 
 export interface ListInput {
   /** Includes archived Projects when true. */
@@ -76,11 +82,16 @@ export interface ResolveOptions {
   readonly persist?: boolean
 }
 
+export interface ActivateOptions {
+  /** Forks unthrottled persistence writes into `forkIn` instead of blocking the caller. */
+  readonly forkIn?: Scope.Scope
+}
+
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<ReadonlyArray<Info>>
   readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
   /** Records Project activity for recency ordering, at most once per minute per Project. */
-  readonly activate: (projectID: ID) => Effect.Effect<void>
+  readonly activate: (projectID: ID, options?: ActivateOptions) => Effect.Effect<void>
   /** Resolves the owning Project, persisting it unless `persist` is false. */
   readonly resolve: (input: AbsolutePath, options?: ResolveOptions) => Effect.Effect<Resolved>
   /** Archives Projects whose known directories are all gone; resolving a Project unarchives it. */
@@ -118,6 +129,7 @@ function fromRow(row: typeof ProjectTable.$inferSelect): Info {
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const now = yield* Now
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
     const proc = yield* AppProcess.Service
@@ -273,20 +285,26 @@ const layer = Layer.effect(
     })
 
     const activated = new Map<ID, number>()
-    const activate = Effect.fn("Project.activate")(function* (projectID: ID) {
-      const now = Date.now()
-      if (now - (activated.get(projectID) ?? 0) < ACTIVATE_INTERVAL) return
-      activated.set(projectID, now)
+    const persistActivate = Effect.fn("Project.activate")(function* (projectID: ID, timestamp: number) {
       const row = yield* db
         .update(ProjectTable)
         // Activity is not a metadata edit, so keep time_updated out of the implicit bump.
-        .set({ time_active: now, time_updated: sql`${ProjectTable.time_updated}` })
+        .set({ time_active: timestamp, time_updated: sql`${ProjectTable.time_updated}` })
         .where(eq(ProjectTable.id, projectID))
         .returning()
         .get()
         .pipe(Effect.orDie)
       if (row) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(row))
     })
+    const activate = (projectID: ID, options?: ActivateOptions): Effect.Effect<void> =>
+      Effect.suspend(() => {
+        const timestamp = now()
+        const last = activated.get(projectID)
+        if (last !== undefined && timestamp - last < ACTIVATE_INTERVAL) return Effect.void
+        activated.set(projectID, timestamp)
+        const write = persistActivate(projectID, timestamp)
+        return options?.forkIn ? write.pipe(Effect.forkIn(options.forkIn), Effect.asVoid) : write
+      })
 
     const cached = Effect.fnUntraced(function* (dir: string) {
       return yield* fs.readFileString(path.join(dir, "opencode")).pipe(
@@ -490,11 +508,15 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({
-  service: Service,
-  layer: layer,
-  deps: [Bus.node, Database.node, FSUtil.node, Git.node, AppProcess.node],
-})
+export function configured(options?: Options) {
+  return makeGlobalNode({
+    service: Service,
+    layer: options?.now ? layer.pipe(Layer.provide(Layer.succeed(Now, options.now))) : layer,
+    deps: [Bus.node, Database.node, FSUtil.node, Git.node, AppProcess.node],
+  })
+}
+
+export const node = configured()
 
 export const sweepNode = makeGlobalNode({
   name: "project-archive-sweep",

@@ -6,6 +6,7 @@ import {
   Show,
   children,
   createEffect,
+  onCleanup,
   splitProps,
 } from "solid-js"
 import { useDialogLayer } from "../../context/dialog"
@@ -113,7 +114,9 @@ export function Dialog(props: DialogProps) {
   ])
 
   const layer = useDialogLayer()
+  let focusTimer: ReturnType<typeof setTimeout> | undefined
   createEffect(() => layer?.setBackdropDismiss(!local.preventBackdropDismiss))
+  onCleanup(() => clearTimeout(focusTimer))
 
   return (
     <div
@@ -147,7 +150,10 @@ export function Dialog(props: DialogProps) {
             // Kobalte attaches its focus trap after this event, so focusing now would leave the trap with no element
             // to return to. Deferring, as Kobalte's own autofocus does, also lets children that focus themselves on
             // mount keep that focus.
-            setTimeout(() => {
+            clearTimeout(focusTimer)
+            focusTimer = setTimeout(() => {
+              // A dialog that closed in the meantime must not pull focus back from where its close returned it.
+              if (layer?.closing() || !content.isConnected) return
               const autofocus = content.querySelector<HTMLElement>("[autofocus]")
               const active = document.activeElement
 

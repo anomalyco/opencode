@@ -1,4 +1,4 @@
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
@@ -6,7 +6,7 @@ import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { BedrockAuth, type Credentials } from "../protocols/utils/bedrock-auth.js"
 import { claudeVersion } from "../protocols/utils/claude-model.js"
-import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("amazon-bedrock")
@@ -14,11 +14,17 @@ export const id = ProviderID.make("amazon-bedrock")
 export type OpenAIOptionsInput = OpenAIProviderOptionsInput
 export type MessagesOptionsInput = AnthropicMessages.ProviderOptionsInput
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> & {
+export type Config = Omit<RequestOptions, "providerOptions"> & {
   /** Bedrock API key. Falls back to `AWS_BEARER_TOKEN_BEDROCK`; bearer auth takes precedence over SigV4. */
   readonly apiKey?: string
   /** `sigv4` ignores `apiKey` fallbacks from the environment; `bearer` requires a token. */
   readonly auth?: "bearer" | "sigv4"
+  /**
+   * Mantle serves each model under one path prefix and rejects it on the others. Responses and Chat default to
+   * `https://bedrock-mantle.<region>.api.aws/v1`, which serves open-weight models such as `openai.gpt-oss-120b`.
+   * Others, including GPT models such as `openai.gpt-5.4`, need `.../openai/v1`; each AWS model card lists the base
+   * URL under Programmatic Access. Messages defaults to `.../anthropic/v1`.
+   */
   readonly baseURL?: string
   /** Static SigV4 credentials. When omitted the AWS default credential chain resolves them per request. */
   readonly credentials?: Credentials
@@ -32,6 +38,7 @@ export type Settings<Options = OpenAIProviderOptionsInput> = ProviderPackage.Set
   Options & {
     readonly apiKey?: string
     readonly auth?: "bearer" | "sigv4"
+    /** See {@link Config.baseURL}: GPT models such as `openai.gpt-5.4` need `https://bedrock-mantle.<region>.api.aws/openai/v1`. */
     readonly baseURL?: string
     readonly credentials?: Credentials
     readonly profile?: string
@@ -48,7 +55,7 @@ const responsesRoute = Route.make({
   protocol: OpenResponses.protocol,
   endpoint: Endpoint.path(OpenResponses.PATH),
   transport: OpenResponses.httpTransport,
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
 const chatRoute = OpenAIChat.route.with({
@@ -66,7 +73,7 @@ const messagesRoute = Route.make({
     // Mantle rejects mid-conversation `output_config` on Opus 5.0; support starts at 5.1+.
     supportsEffortUpdates: (request) => {
       if (!(AnthropicMessages.protocol.supportsEffortUpdates?.(request) ?? false)) return false
-      if (request.model.compatibility?.supportsEffortUpdates !== undefined) return true
+      if (request.model.capabilities?.reasoning?.updates !== undefined) return true
       const version = claudeVersion(request.model.id)
       return version !== undefined && (version.major > 5 || (version.major === 5 && version.minor >= 1))
     },
@@ -145,6 +152,9 @@ export const configure = (input: Config = {}) => {
 }
 
 export const provider = configure()
+export const chat = provider.chat
+export const messages = provider.messages
+export const responses = provider.responses
 
 const fromSettings = ({
   apiKey,
@@ -163,7 +173,7 @@ const fromSettings = ({
     auth,
     baseURL,
     credentials,
-    generation: topP === undefined ? undefined : { topP },
+    topP,
     headers,
     http: body === undefined ? undefined : { body },
     profile,

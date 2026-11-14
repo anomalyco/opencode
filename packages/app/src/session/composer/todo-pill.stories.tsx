@@ -5,7 +5,7 @@ import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { createMemo, onMount } from "solid-js"
 import { SessionPreview } from "@/session/story-model"
 import type { SessionActivityItem } from "./activity-chips"
-import { sessionTodos, type Todo } from "./todos"
+import { sessionTodos, todoFinished, type Todo } from "./todos"
 
 const timelineDetail = timelinePresets[2].value
 
@@ -19,14 +19,24 @@ const plan = [
   "Run the app typecheck",
 ]
 
-// `progress` todos are done, the next one is in progress and the rest are pending.
-const todosAt = (progress: number): Todo[] =>
+type Scenario = "plan" | "cancelled" | "parallel" | "pending"
+
+// `progress` todos are done, the next one is in progress and the rest are pending. `cancelled` drops the last todo,
+// and `parallel` runs the two after `progress` at once.
+const todosAt = (progress: number, scenario: Scenario): Todo[] =>
   plan.map((content, index) => ({
     content,
-    status: index < progress ? "completed" : index === progress ? "in_progress" : "pending",
+    status:
+      index < progress
+        ? "completed"
+        : (scenario !== "pending" && index === progress) || (scenario === "parallel" && index === progress + 1)
+          ? "in_progress"
+          : scenario === "cancelled" && index === plan.length - 1
+            ? "cancelled"
+            : "pending",
   }))
 
-const activity: { subagents: SessionActivityItem[]; shells: SessionActivityItem[] } = {
+const activity = {
   subagents: [
     {
       key: "ses_child_audit",
@@ -47,7 +57,7 @@ const activity: { subagents: SessionActivityItem[]; shells: SessionActivityItem[
       started: Date.now() - 341_000,
     },
   ],
-}
+} satisfies { subagents: SessionActivityItem[]; shells: SessionActivityItem[] }
 
 function document(todos: Todo[]): SessionDocument {
   const messages: SessionMessageInfo[] = [
@@ -86,10 +96,11 @@ function document(todos: Todo[]): SessionDocument {
   return { sessionID: CURRENT_SESSION_ID, messages, status: { type: "busy" }, diffs: [] }
 }
 
-type PreviewArgs = { progress: number; open: boolean; activity: boolean }
+type PreviewArgs = { progress: number; scenario: Scenario; open: boolean; activity: boolean }
 
 function Preview(props: PreviewArgs) {
-  const value = createMemo(() => document(todosAt(props.progress)))
+  const value = createMemo(() => document(todosAt(props.progress, props.scenario)))
+  const todos = createMemo(() => sessionTodos(value().messages))
 
   onMount(() =>
     setTimeout(() => {
@@ -105,7 +116,7 @@ function Preview(props: PreviewArgs) {
       document={value()}
       timelineDetail={timelineDetail}
       activity={props.activity ? activity : undefined}
-      todos={{ items: sessionTodos(value().messages), open: props.open }}
+      todos={todos().every(todoFinished) ? undefined : { items: todos(), open: props.open }}
     />
   )
 }
@@ -114,9 +125,10 @@ export default {
   title: "OpenCode/Session/Todo pill",
   id: "session-todo-pill",
   render: (args: PreviewArgs) => <Preview {...args} />,
-  args: { progress: 3, open: false, activity: true },
+  args: { progress: 3, scenario: "plan", open: false, activity: true },
   argTypes: {
     progress: { control: { type: "range", min: 0, max: 7, step: 1 } },
+    scenario: { control: { type: "select" }, options: ["plan", "cancelled", "parallel", "pending"] },
     open: { control: { type: "boolean" } },
     activity: { control: { type: "boolean" } },
   },
@@ -136,3 +148,11 @@ export const Collapsed = {}
 export const Open = { args: { open: true } }
 
 export const WithoutActivity = { args: { activity: false } }
+
+export const Cancelled = { args: { scenario: "cancelled", open: true } }
+
+export const SeveralInProgress = { args: { scenario: "parallel", open: true } }
+
+export const PendingPlan = { args: { scenario: "pending", progress: 0 } }
+
+export const FinishedPlan = { args: { progress: plan.length } }

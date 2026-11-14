@@ -8,6 +8,8 @@ export default {
   id: "current-session-error-card",
   component: SessionTimeline,
   parameters: { layout: "fullscreen" },
+  args: { width: 480 },
+  argTypes: { width: { control: { type: "range", min: 320, max: 960, step: 10 } } },
 }
 
 const document = {
@@ -43,12 +45,12 @@ const document = {
 } satisfies SessionDocument
 
 export const ProviderErrors = {
-  render: () => (
+  render: (args: { width: number }) => (
     <CurrentSessionTimelineStory
       title="Provider errors"
       description="Short and wrapped provider errors in the production timeline."
       document={document}
-      width="480px"
+      width={`${args.width}px`}
     />
   ),
 }
@@ -89,12 +91,44 @@ const executionErrorsDocument = {
 } satisfies SessionDocument
 
 export const ExecutionErrors = {
-  render: () => (
+  render: (args: { width: number }) => (
     <CurrentSessionTimelineStory
       title="Execution errors"
       description="Pre-step and between-step session execution failures surfaced from the idle marker."
       document={executionErrorsDocument}
-      width="480px"
+      width={`${args.width}px`}
+    />
+  ),
+}
+
+const linkDocument = {
+  sessionID: CURRENT_SESSION_ID,
+  messages: [
+    ...thinkingDocument.messages,
+    {
+      id: "msg_story_error_link",
+      type: "assistant",
+      agent: "build",
+      model: STORY_MODEL,
+      content: [],
+      error: {
+        type: "provider.transport",
+        message: "Could not connect to http://localhost:11434/api. Check that Ollama is running.",
+      },
+      time: { created: STORY_TIME + 33_000, completed: STORY_TIME + 34_000 },
+    },
+  ],
+  status: { type: "idle" },
+  diffs: [],
+} satisfies SessionDocument
+
+export const LinkedError = {
+  render: (args: { width: number }) => (
+    <CurrentSessionTimelineStory
+      title="Linked error"
+      description="A provider error whose message includes a URL."
+      document={linkDocument}
+      width={`${args.width}px`}
     />
   ),
 }

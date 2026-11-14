@@ -1,4 +1,4 @@
-import { createMemo, For, Show } from "solid-js"
+import { createEffect, createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import type { SessionUserActions } from "../actions"
@@ -6,27 +6,33 @@ import { CurrentUserMessageDisplay } from "./message-content"
 import { CurrentSessionProviders } from "../storybook/current-session-story"
 import { CURRENT_SESSION_ID, STORY_MODEL, STORY_TIME } from "../storybook/current-session-fixtures"
 
+const statuses = ["delivered", "starting", "steering", "stranded", "queued", "sending"] as const
+
+type Args = { status: (typeof statuses)[number]; voice: boolean; text: boolean; grouped: boolean; fails: boolean }
+
 export default {
   title: "OpenCode/Conversation/Prompt message",
   id: "current-prompt-message",
   parameters: { layout: "fullscreen" },
+  args: { status: "steering", voice: false, text: true, grouped: false, fails: false } satisfies Args,
+  argTypes: { status: { options: statuses } },
 }
 
 export const Pending = {
-  render: () => {
-    const statuses = ["delivered", "starting", "steering", "stranded", "queued"] as const
+  render: (args: Args) => {
+    const [state, setState] = createStore({ ...args, failures: 0 })
 
-    const [state, setState] = createStore<{
-      status: (typeof statuses)[number]
-      voice: boolean
-      text: boolean
-      grouped: boolean
-    }>({
-      status: "steering",
-      voice: false,
-      text: true,
-      grouped: false,
-    })
+    // Frame controls and host callbacks can still change the fixture after a panel edit.
+    for (const key of ["status", "voice", "text", "grouped", "fails"] as const) {
+      createEffect(() => setState({ [key]: args[key] }))
+    }
+
+    // A failing host rejects, like a server error, and leaves the message as it was.
+    const attempt = async (apply: () => void) => {
+      if (!state.fails) return apply()
+      setState("failures", (count) => count + 1)
+      throw new Error("Request failed")
+    }
 
     const message = createMemo<SessionMessageUser>(() => ({
       id: "msg_pending_prompt_story",
@@ -46,16 +52,12 @@ export const Pending = {
     }))
 
     const actions = {
-      revert: async () => {},
-      fork: async () => {},
+      revert: () => attempt(() => {}),
+      fork: () => attempt(() => {}),
       pending: {
         status: () => (state.status === "delivered" ? undefined : state.status),
-        queue: async () => {
-          setState("status", "queued")
-        },
-        remove: async () => {
-          setState("status", "delivered")
-        },
+        queue: () => attempt(() => setState("status", "queued")),
+        remove: () => attempt(() => setState("status", "delivered")),
       },
     } satisfies SessionUserActions
 
@@ -102,6 +104,15 @@ export const Pending = {
             />{" "}
             Grouped prompts
           </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={state.fails}
+              onChange={(event) => setState("fails", event.currentTarget.checked)}
+            />{" "}
+            Actions fail
+          </label>
+          <output aria-label="Failed actions">{state.failures}</output>
         </div>
         <CurrentSessionProviders document={document()}>
           <Show when={state.grouped && state.text}>
@@ -130,3 +141,9 @@ export const Pending = {
     )
   },
 }
+
+export const SendingAttachment = { ...Pending, args: { status: "sending", text: false } }
+
+export const DeliveredVoice = { ...Pending, args: { status: "delivered", voice: true } }
+
+export const StrandedSteer = { ...Pending, args: { status: "stranded", grouped: true } }

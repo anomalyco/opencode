@@ -72,7 +72,7 @@ const desktop = [
 ]
 
 export const dict = {
-  ...Object.fromEntries(DESKTOP_NATIVE_KEYS.map((key, index) => [key, desktop[index]])),
+  ...Object.fromEntries(desktop.map((value, index) => [DESKTOP_NATIVE_KEYS[index], value])),
   "command.category.suggested": "Tillögur",
   "command.category.view": "Skoða",
   "command.category.project": "Verkefni",
@@ -161,7 +161,7 @@ export const dict = {
   "provider.connect.title": "Tengdu {{provider}}",
   "provider.connect.method.apiKey": "API lykill",
   "provider.connect.status.inProgress": "Heimild í gangi…",
-  "provider.connect.status.waiting": "Bíður eftir heimild…",
+  "provider.connect.status.waiting": "Bíður eftir heimild",
   "provider.connect.status.failed": "Heimild mistókst: {{error}}",
   "provider.connect.apiKey.description":
     "Sláðu inn API-lykilinn þinn fyrir {{provider}} til að tengja reikninginn og nota líkön frá {{provider}} í OpenCode.",
@@ -348,7 +348,6 @@ export const dict = {
   "session.new.project.search": "Leita að verkefnum",
   "session.new.project.add": "Bæta við verkefni",
   "session.new.workspace.runIn": "Keyra setu í",
-  "session.new.workspace.triggerLocal": "Staðbundið",
   "session.new.workspace.local": "Staðbundin geymsla",
   "session.new.git.none": "Engin Git",
   "session.header.open.finder": "Finder",
@@ -730,6 +729,7 @@ export const dict = {
   "dialog.server.menu.remove": "Fjarlægja",
   "home.workspaceTip": "Byrjaðu næstu lotu á nýju vinnusvæði til að halda breytingum einangruðum",
   "session.tab.add": "Bæta við flipa",
+  "session.tab.closeOthers": "Loka öðrum flipum",
   "session.queue.attachments.one": "Auk {{count}} viðhengi",
   "session.queue.attachments.other": "Auk {{count}} viðhengja",
   "settings.backToSettings": "Til baka í stillingar",
@@ -821,7 +821,6 @@ export const dict = {
   "toast.migration.progress.working.progress": "Flytja gögn {{current}}/{{total}}",
   "command.session.location.cycle": "Skipta um staðsetningu setu",
   "dialog.provider.anthropic.note": "Beinn aðgangur að Claude-líkönum með API-lykli",
-  "provider.connect.title.anthropicProMax": "Skrá inn með Anthropic",
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "Hætta við upphleðslu á {{filename}}",
   "prompt.toast.uploadFailed.title": "Upphleðsla mistókst",

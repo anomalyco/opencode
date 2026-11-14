@@ -1,5 +1,6 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { DialogProvider } from "@opencode/ui/context/dialog"
+import { ResizeHandle } from "@opencode/ui/resize-handle"
 import {
   batch,
   createSignal,
@@ -52,7 +53,7 @@ import { createModel } from "./model"
 import SessionBrowserPane from "./panel"
 import { BrowserPane, type PaneEvent } from "./ipc"
 import { pageShortcut } from "./keys"
-import { refusal } from "./policy"
+import { normalizeURL, refusal } from "./policy"
 import { type BuiltinLayout } from "@opencode/plugin/gui/builtin"
 
 /** The renderer host pieces the pane runs on, passed in by `packages/app/component-tests/browser-pane.spec.ts`. */
@@ -63,6 +64,8 @@ type PaneHost = {
     dialog: () => boolean
     moving: () => boolean
   }): Embeds
+  /** The host's panel motion, whose resize drags hide native views like flights do. */
+  panelMotion: { panelsMoving(): boolean; setPanelResizing(dragging: boolean): void }
   LanguageProvider: Component<{ locale: string; children: JSX.Element }>
   UiI18nBridge: ParentComponent
   useLanguage(): { t(key: string): string }
@@ -83,11 +86,15 @@ type PaneFixtureState = {
   covered: boolean
   /** A panel is in flight, as the host's panel motion reports it. */
   moving: boolean
+  /** The pane box's width, which its resize handle drags. */
+  width: number
   /** Whether a host dialog is open over the app. */
   dialog: boolean
   captures: number
   holdCapture: boolean
   picker: Record<string, boolean | undefined>
+  /** Main drops picker requests unanswered, as when the tab has no page or no registration yet. */
+  dropInspect: boolean
   highlights: { sessionKey: string; ref?: Browser.Ref }[]
   comments: ComposerNote[]
   /** The page's zoom as main last reported it. */
@@ -98,6 +105,26 @@ type PaneFixtureState = {
   external: string[]
   /** Cookies the page's address can read. */
   cookies: number
+  /** Main fails the next cookie read, as when the pane is suspended. */
+  failSite: boolean
+  selection: string
+}
+
+export type BrowserScenario = "Page" | "Empty" | "Recent" | "Loading" | "Failed" | "Suspended"
+
+type ElementRect = Pick<DOMRect, "x" | "y" | "width" | "height">
+
+type StoryHost = Pick<PaneHost, "useLanguage"> & {
+  scenario: BrowserScenario
+  Page: Component<{ url: string; zoom: number; picking: boolean; pick: (rect: ElementRect) => void }>
+  Frame: ParentComponent<{
+    loading: boolean
+    finish: () => void
+    suspended: boolean
+    reconnect: () => void
+    external: string | undefined
+    comments: readonly ComposerNote[]
+  }>
 }
 
 // A 16px blue square, as main reports a page icon.
@@ -127,34 +154,57 @@ export function mountBrowserPane(input: PaneHost) {
   host.style.cssText = "position:fixed;inset:0;z-index:1000;background:#181818;color:#eee;padding:24px"
   document.body.appendChild(host)
 
-  function Fixture() {
+  const Fixture = browserPaneFixture(input)
+
+  return render(
+    () => (
+      <input.LanguageProvider locale="en">
+        <input.UiI18nBridge>
+          <Fixture />
+        </input.UiI18nBridge>
+      </input.LanguageProvider>
+    ),
+    host,
+  )
+}
+
+// Both hosts exercise the real model and pane. The lab draws an in-memory document where the component tests
+// measure native embed layouts and captures.
+export function browserPaneFixture(input: PaneHost | StoryHost) {
+  return function Fixture() {
     const language = input.useLanguage()
     const messages = new Map(Object.entries(browserEn))
+
+    const scenario = "scenario" in input ? input.scenario : undefined
 
     const [store, setStore] = createStore<PaneFixtureState>({
       session: "Alpha",
       mounted: true,
       visible: true,
-      url: undefined,
-      loading: false,
+      url: scenario === "Empty" || scenario === "Recent" ? "about:blank" : undefined,
+      loading: scenario === "Loading",
       generation: 0,
       delayNavigation: false,
       pendingURL: undefined,
-      loadErrors: {},
-      error: undefined,
+      loadErrors: scenario === "Failed" ? { Alpha: "ERR_CONNECTION_REFUSED" } : {},
+      error: scenario === "Suspended" ? "browser.pane.suspended" : undefined,
       layouts: {},
       covered: false,
       moving: false,
+      width: 640,
       dialog: false,
       captures: 0,
       holdCapture: false,
       picker: {},
+      dropInspect: false,
       highlights: [],
       comments: [],
       zoom: 1,
-      history: { visits: [] },
+      history: { visits: scenario === "Recent" ? structuredClone(visits) : [] },
       external: [],
       cookies: 3,
+      failSite: false,
+      selection: "default",
     })
 
     // Each capture waits until the fixture releases it, so a spec can observe the pending state.
@@ -191,10 +241,12 @@ export function mountBrowserPane(input: PaneHost) {
       },
       embed: (id, layout) => setStore("layouts", id, layout),
       capture: async () => {
-        setStore("captures", (count) => count + 1)
+        const count = store.captures + 1
+        setStore("captures", count)
 
         if (store.holdCapture) await new Promise<void>((resolve) => held.push(resolve))
-        const canvas = new OffscreenCanvas(4, 4)
+        // Each capture is a pixel wider than the last, so a spec can tell which one a still shows.
+        const canvas = new OffscreenCanvas(3 + count, 4)
         const paint = canvas.getContext("2d")
 
         if (paint) {
@@ -207,12 +259,30 @@ export function mountBrowserPane(input: PaneHost) {
     }
 
     // SAFETY: the host embeds call only `embed`, `capture` and `on` on their bridge (`runtime/plugin/embeds.tsx`).
-    const embeds = input.createEmbeds({
-      bridge: bridge as Bridge,
-      zoom: () => 1,
-      dialog: () => store.dialog,
-      moving: () => store.moving,
-    })
+    const embeds: Embeds =
+      "createEmbeds" in input
+        ? input.createEmbeds({
+            bridge: bridge as Bridge,
+            zoom: () => (store.selection === "zoomed" ? 1.25 : 1),
+            dialog: () => store.dialog,
+            moving: () => store.moving || input.panelMotion.panelsMoving(),
+          })
+        : {
+            capture: async () => undefined,
+            View: (props) => (
+              <div class={props.class}>
+                <Show when={props.id && props.visible && !store.loading && !model.suspended({ key: store.session })}>
+                  <input.Page
+                    url={store.url ?? current().url}
+                    zoom={store.zoom}
+                    picking={!!store.picker[store.session]}
+                    pick={pick}
+                  />
+                </Show>
+                {props.children}
+              </div>
+            ),
+          }
 
     const t = (key: string, params?: Readonly<Partial<Record<string, string | number>>>) =>
       (messages.get(key) ?? language.t(key)).replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
@@ -222,7 +292,7 @@ export function mountBrowserPane(input: PaneHost) {
     const base = {
       id: "browser",
       keybinds: { keybind: () => [], keys: (bind: string) => bind.split("+") },
-      desktop: { zoom: () => 1 },
+      desktop: { zoom: () => (store.selection === "zoomed" ? 1.25 : 1) },
       embeds,
       t,
       // English plural forms, as the host picks them.
@@ -281,6 +351,9 @@ export function mountBrowserPane(input: PaneHost) {
       composer: { attach: (note: ComposerNote) => setStore("comments", (items) => [...items, note]) },
     } as unknown as SessionScreen
 
+    const back: string[] = []
+    const forward: string[] = []
+
     const report = (key = store.session) => {
       const tab = tabs.find((item) => item.title === key)
 
@@ -292,6 +365,8 @@ export function mountBrowserPane(input: PaneHost) {
             {
               ...tab,
               url: store.url ?? tab.url,
+              canGoBack: back.length > 0,
+              canGoForward: forward.length > 0,
               loading: store.loading,
               generation: store.generation,
               loadError: store.loadErrors[key],
@@ -309,6 +384,14 @@ export function mountBrowserPane(input: PaneHost) {
         bindings.set(value.session, value.binding)
         queueMicrotask(() => {
           report(value.session)
+
+          // A suspended attachment reports its retained inventory once. The next interaction can reconnect it.
+          if (store.error === "browser.pane.suspended") {
+            setStore("error", undefined)
+
+            return
+          }
+
           const tab = tabs.find((item) => item.title === value.session)
 
           if (tab) emit(value.session, { type: "embed", tabID: tab.id, embed: `embed-${tab.title}` })
@@ -326,14 +409,31 @@ export function mountBrowserPane(input: PaneHost) {
         if (command.type === "navigate" || command.type === "reload") setStore("loadErrors", store.session, undefined)
 
         if (command.type === "navigate") {
+          const url = normalizeURL(command.url)
+
           if (store.delayNavigation) {
-            setStore("pendingURL", command.url)
+            setStore("pendingURL", url)
 
             return
           }
 
-          setStore({ url: command.url, loading: false, generation: store.generation + 1 })
+          back.push(store.url ?? current().url)
+          forward.length = 0
+          setStore({ url, loading: false, generation: store.generation + 1 })
         }
+
+        if (command.type === "back" || command.type === "forward") {
+          const stack = command.type === "back" ? back : forward
+          const url = stack.pop()
+
+          if (url) {
+            const other = command.type === "back" ? forward : back
+            other.push(store.url ?? current().url)
+            setStore({ url, loading: false, generation: store.generation + 1 })
+          }
+        }
+
+        if (command.type === "reload") setStore({ loading: false, generation: store.generation + 1 })
 
         if (command.type === "stop") setStore("loading", false)
         report()
@@ -343,6 +443,8 @@ export function mountBrowserPane(input: PaneHost) {
         const key = Array.from(bindings).find((item) => item[1] === value.binding)?.[0]
 
         if (!key) throw new Error("Unknown picker binding")
+
+        if (store.dropInspect) return
         setStore("picker", key, value.enabled)
         emit(key, { type: "inspect", tabID: value.tabID, active: value.enabled })
       },
@@ -360,7 +462,14 @@ export function mountBrowserPane(input: PaneHost) {
         setStore("zoom", next)
         emit(store.session, { type: "page", tabID: value.tabID, zoom: next })
       },
-      site: async () => ({ cookies: store.cookies }),
+      site: async () => {
+        if (store.failSite) {
+          setStore("failSite", false)
+          throw new Error("browser.pane.unavailable")
+        }
+
+        return { cookies: store.cookies }
+      },
       // Main deletes the site's data and reloads the page.
       clearSite: async () => {
         setStore({ cookies: 0, generation: store.generation + 1 })
@@ -390,7 +499,7 @@ export function mountBrowserPane(input: PaneHost) {
         state: () => "visible",
         open() {},
         close() {},
-        side: { opened: () => true, toggle() {}, menu: () => [] },
+        side: { opened: () => true, toggle() {}, menu: () => [], width: () => undefined, resize() {} },
       },
       links: { open() {} },
       stores: {
@@ -412,7 +521,16 @@ export function mountBrowserPane(input: PaneHost) {
     const plugin = fake as unknown as Context & SetupContext<typeof definition>
     const model = createModel(plugin)
 
-    const pick = () => {
+    const pick = (rect?: ElementRect) => {
+      const selector = () => {
+        if (store.selection === "fallback") return ""
+
+        if (store.selection === "long")
+          return `main > section[data-label="إعدادات"] > ${".nested-selector".repeat(24)} > button.primary`
+
+        return "main > button.primary"
+      }
+
       setStore("picker", store.session, false)
       emit(store.session, {
         type: "inspect",
@@ -420,14 +538,37 @@ export function mountBrowserPane(input: PaneHost) {
         active: false,
         element: {
           ref: Browser.Ref.make("e7"),
-          selector: "main > button.primary",
+          selector: selector(),
           label: "button.primary",
           role: "button",
           name: "Save changes",
-          rect: { x: 48, y: 40, width: 160, height: 36 },
+          rect: rect ?? { x: 48, y: store.selection === "low" ? 180 : 40, width: 160, height: 36 },
         },
       })
     }
+
+    if ("Frame" in input)
+      return (
+        <PluginContext.Provider value={plugin}>
+          <PanelContext.Provider value={panel}>
+            <input.Frame
+              loading={store.loading}
+              finish={() => {
+                setStore("loading", false)
+                report()
+              }}
+              suspended={model.suspended({ key: store.session })}
+              reconnect={() => model.command({ key: store.session }, { type: "reload", tabID: current().id })}
+              comments={store.comments}
+              external={store.external.at(-1)}
+            >
+              <Show when={session()}>
+                {(view) => <SessionBrowserPane tab={current} session={view()} screen={screen} model={model} />}
+              </Show>
+            </input.Frame>
+          </PanelContext.Provider>
+        </PluginContext.Provider>
+      )
 
     return (
       <PluginContext.Provider value={plugin}>
@@ -512,8 +653,16 @@ export function mountBrowserPane(input: PaneHost) {
               )}
             </For>
             <button onClick={() => setStore("dialog", (open) => !open)}>Toggle dialog</button>
-            <button onClick={pick}>Pick element</button>
+            <button onClick={() => pick()}>Pick element</button>
+            <button onClick={() => setStore("dropInspect", true)}>Drop picker requests</button>
+            <select
+              aria-label="Picked element scenario"
+              onChange={(event) => setStore("selection", event.currentTarget.value)}
+            >
+              <For each={["default", "long", "fallback", "low", "zoomed"]}>{(value) => <option>{value}</option>}</For>
+            </select>
             <button onClick={() => setStore("history", { visits })}>Seed history</button>
+            <button onClick={() => setStore("failSite", true)}>Fail next site read</button>
             <button onClick={() => emit(store.session, { type: "page", tabID: current().id, icon, zoom: store.zoom })}>
               Page icon
             </button>
@@ -533,10 +682,19 @@ export function mountBrowserPane(input: PaneHost) {
           </For>
           <p>Highlights: {store.highlights.map((item) => item.ref ?? "clear").join(",")}</p>
           <p>Highlight owners: {store.highlights.map((item) => item.sessionKey).join(",")}</p>
-          <div style={{ position: "relative", width: "640px", height: "360px", border: "1px solid #555" }}>
+          <div style={{ position: "relative", width: `${store.width}px`, height: "360px", border: "1px solid #555" }}>
             <Show when={store.mounted && session()}>
               {(view) => <SessionBrowserPane tab={() => current()} session={view()} screen={screen} model={model} />}
             </Show>
+            <ResizeHandle
+              data-testid="pane-resize-handle"
+              direction="horizontal"
+              size={store.width}
+              min={320}
+              max={800}
+              onResize={(width) => setStore("width", width)}
+              onDraggingChange={input.panelMotion.setPanelResizing}
+            />
           </div>
           <ul data-testid="fixture-comments">
             <For each={store.comments}>
@@ -548,6 +706,7 @@ export function mountBrowserPane(input: PaneHost) {
               )}
             </For>
           </ul>
+          <div data-testid="fixture-comment-metadata">{JSON.stringify(store.comments)}</div>
           <Show when={store.covered}>
             {/* Floating content portals into <body> like a menu or hover card over the page. */}
             <Portal mount={document.body}>
@@ -580,17 +739,6 @@ export function mountBrowserPane(input: PaneHost) {
       </PluginContext.Provider>
     )
   }
-
-  return render(
-    () => (
-      <input.LanguageProvider locale="en">
-        <input.UiI18nBridge>
-          <Fixture />
-        </input.UiI18nBridge>
-      </input.LanguageProvider>
-    ),
-    host,
-  )
 }
 
 type StripTabs = {
@@ -602,6 +750,8 @@ type StripTabs = {
   setActive(tab: string | undefined): void
   close(tab: string): void
   remap(rewrite: (tab: string) => string): void
+  /** Where the next new tab lands; the fixture keeps every tab in the side pane, in open order. */
+  target(pane: "side" | "split" | "bottom", plugin?: string, index?: number): void
 }
 
 type PaneClient = IpcClient<(typeof BrowserPane)["spec"]>
@@ -626,7 +776,7 @@ type RegionHost = {
   PluginHostProvider: Component<
     ParentProps<{
       definitions: Accessor<readonly Entry[]>
-      disabled: Accessor<ReadonlySet<string> | undefined>
+      disabled: Accessor<ReadonlySet<string>>
       /** The HostApis the fixture provides, by context property; the host provides links and dialogs itself. */
       apis: { readonly [api: string]: (plugin: string) => object | undefined }
       /** Runs once the app interface mounts; the fixture's is always mounted. */
@@ -839,7 +989,7 @@ export function mountBrowserRegion(input: RegionHost) {
       },
       stored: (session) =>
         strip(session.key).all.flatMap((key) => (key.startsWith(`${plugin}:`) ? [key.slice(plugin.length + 1)] : [])),
-      side: { opened: () => true, toggle() {}, menu: () => [] },
+      side: { opened: () => true, toggle() {}, menu: () => [], width: () => undefined, resize() {} },
       sidebar: { opened: () => true },
       scroll: { get: () => undefined, set() {} },
       settings() {},
@@ -1041,6 +1191,7 @@ export function mountBrowserRegion(input: RegionHost) {
 
             if (next.length !== all.length || next.some((key, index) => key !== all[index])) setAll(view().key, next)
           },
+          target() {},
         }),
         side: () => ({ opened: () => store.opened, toggle: () => setStore("opened", (opened) => !opened) }),
       })

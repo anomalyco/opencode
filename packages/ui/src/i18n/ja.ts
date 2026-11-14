@@ -74,10 +74,6 @@ export const dict = {
   "dialog.usageExceeded.freeTier.description":
     "OpenCode Go にサブスクライブして、最高のオープンソースモデルに安定してアクセスできます。月額 $10。",
   "dialog.usageExceeded.freeTier.actionLabel": "サブスクライブ",
-  "dialog.usageExceeded.accountRateLimit.title": "Go の制限に達しました",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "使用制限に達しました。今すぐこのモデルを使い続けるには、利用可能な残高からの使用を有効にしてください",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "設定を開く",
 
   "ui.sessionTurn.status.delegating": "作業を委任中",
   "ui.sessionTurn.status.planning": "次のステップを計画中",
@@ -174,6 +170,7 @@ export const dict = {
   "ui.common.dismiss": "閉じる",
   "ui.common.close": "閉じる",
   "ui.common.next": "次へ",
+  "ui.common.continue": "続行",
   "ui.common.submit": "送信",
   "ui.common.showMore": "さらに表示",
 

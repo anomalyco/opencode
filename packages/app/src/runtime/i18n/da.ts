@@ -37,6 +37,7 @@ export const dict = {
   "dialog.server.menu.remove": "Fjern",
   "home.workspaceTip": "Start næste session i et nyt arbejdsområde for at holde ændringer isoleret",
   "session.tab.add": "Tilføj fane",
+  "session.tab.closeOthers": "Luk andre faner",
   "session.queue.attachments.one": "Plus {{count}} vedhæftning",
   "session.queue.attachments.other": "Plus {{count}} vedhæftede filer",
   "settings.backToSettings": "Tilbage til indstillinger",
@@ -289,11 +290,11 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "Se mere end 70 yderligere udbydere",
 
   "dialog.provider.viewAll": "Vis flere udbydere",
-
   "provider.connect.title": "Forbind {{provider}}",
+
   "provider.connect.method.apiKey": "API-nøgle",
   "provider.connect.status.inProgress": "Godkendelse i gang…",
-  "provider.connect.status.waiting": "Venter på godkendelse…",
+  "provider.connect.status.waiting": "Venter på godkendelse",
   "provider.connect.status.failed": "Godkendelse mislykkedes: {{error}}",
   "provider.connect.apiKey.description":
     "Indtast din API-nøgle til {{provider}} for at forbinde din konto og bruge modeller fra {{provider}} i OpenCode.",
@@ -499,7 +500,6 @@ export const dict = {
   "session.new.project.search": "Søg efter projekter",
   "session.new.project.add": "Tilføj projekt",
   "session.new.workspace.runIn": "Kør session i",
-  "session.new.workspace.triggerLocal": "Lokal",
   "session.new.workspace.local": "Lokalt repository",
   "session.new.git.none": "Ingen Git",
 
@@ -881,7 +881,6 @@ export const dict = {
   "session.background.moveInline": "Tryk på {{keybind}} for at flytte igangværende arbejde til baggrunden",
   "command.session.location.cycle": "Skift mellem sessionsplaceringer",
   "dialog.provider.anthropic.note": "Direkte adgang til Claude-modeller via API-nøgle",
-  "provider.connect.title.anthropicProMax": "Log ind med Anthropic",
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "Annuller upload af {{filename}}",
   "prompt.toast.uploadFailed.title": "Upload mislykkedes",

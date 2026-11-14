@@ -349,6 +349,29 @@ export function fromPromise(plugin: Plugin) {
               image: adaptApiMethod(GenerateEndpoints["generate.image"], host.experimental.generate.image),
               decisions: adaptApiMethod(GenerateEndpoints["generate.decisions"], host.experimental.generate.decisions),
             },
+            artifact: {
+              reload: () => run(host.experimental.artifact.reload()),
+              transform: (callback) =>
+                register(
+                  host.experimental.artifact.transform((editor) => {
+                    callback({
+                      add: (definition) =>
+                        editor.add({
+                          id: definition.id,
+                          name: definition.name,
+                          capabilities: definition.capabilities,
+                          prompt: definition.prompt,
+                          create: (input) => attempt((signal) => definition.create(input, { signal })),
+                          read: (id) => attempt((signal) => definition.read(id, { signal })),
+                          update: (id, input) => attempt((signal) => definition.update(id, input, { signal })),
+                          delete: (id) => attempt((signal) => definition.delete(id, { signal })),
+                        }),
+                      remove: editor.remove,
+                      default: editor.default,
+                    })
+                  }),
+                ),
+            },
           },
           generate: {
             text: adaptApiMethod(GenerateEndpoints["generate.text"], host.generate.text),
@@ -418,17 +441,23 @@ export function fromPromise(plugin: Plugin) {
                           ...input,
                           authorize: (answer, context) =>
                             Effect.promise(() => input.authorize(answer, context)).pipe(
-                              Effect.map((authorization) =>
-                                authorization.mode === "auto"
-                                  ? {
-                                      ...authorization,
-                                      callback: Effect.promise(() => authorization.callback),
-                                    }
-                                  : {
-                                      ...authorization,
-                                      callback: (code) => Effect.promise(() => authorization.callback(code)),
-                                    },
-                              ),
+                              Effect.map((authorization) => {
+                                if (authorization.mode === "code")
+                                  return {
+                                    ...authorization,
+                                    callback: (code: string) => Effect.promise(() => authorization.callback(code)),
+                                  }
+                                const submit = authorization.submit
+                                return {
+                                  ...authorization,
+                                  callback: Effect.promise(() => authorization.callback),
+                                  // A rejected paste keeps its own error, which the dialog shows as is.
+                                  submit: submit
+                                    ? (redirect: string) =>
+                                        Effect.tryPromise({ try: () => submit(redirect), catch: (error) => error })
+                                    : undefined,
+                                }
+                              }),
                             ),
                           refresh:
                             refresh === undefined
@@ -512,6 +541,7 @@ export function fromPromise(plugin: Plugin) {
                         update(value)
                         Object.assign(tool, value, {
                           output: value.output,
+                          freeform: value.freeform,
                           options: value.options,
                           execute: (input: Parameters<Info["execute"]>[0], context: Tool.Context) =>
                             executePromiseTool(value, input, context),
@@ -642,7 +672,8 @@ export function fromPromise(plugin: Plugin) {
 
         yield* Effect.acquireRelease(
           Effect.promise(() => Promise.resolve(plugin.setup(context2))),
-          (cleanup) => (cleanup ? Effect.promise(() => Promise.resolve(cleanup())) : Effect.void),
+          // JavaScript plugins may return anything, such as a v1-style hooks object; only a function is a cleanup.
+          (cleanup) => (typeof cleanup === "function" ? Effect.promise(() => Promise.resolve(cleanup())) : Effect.void),
         )
       }),
   })
@@ -669,11 +700,33 @@ const toolHook: {
 
 const executePromiseTool = (tool: Info, input: any, context: Tool.Context) =>
   Effect.tryPromise({
-    try: (signal) =>
-      tool.execute(input, {
-        ...context,
-        signal,
-        progress: (update) => Effect.runPromise(context.progress(update), { signal }),
-      }),
+    try: (interrupted) => {
+      // `signal` aborts when the call is interrupted, and also when the user stops the call once the tool has read
+      // it. Reading it awaits `cancel`, which tells the step this tool stops on its own instead of being interrupted.
+      const stopped = new AbortController()
+      const finished = new AbortController()
+      const signal = AbortSignal.any([interrupted, stopped.signal])
+      // `cancel` stays out of the promise context; promise tools stop through `signal`.
+      const { cancel, ...rest } = context
+      let listening = false
+      const listen = () => {
+        if (listening || !cancel) return
+        listening = true
+        Effect.runPromise(cancel, { signal: AbortSignal.any([interrupted, finished.signal]) }).then(
+          () => stopped.abort(),
+          () => {},
+        )
+      }
+      return Promise.resolve(
+        tool.execute(input, {
+          ...rest,
+          get signal() {
+            listen()
+            return signal
+          },
+          progress: (update) => Effect.runPromise(context.progress(update), { signal: interrupted }),
+        }),
+      ).finally(() => finished.abort())
+    },
     catch: toolError,
   })

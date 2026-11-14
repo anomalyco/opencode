@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Money } from "@opencode/schema/money"
-import { Effect, Fiber, Layer, Ref, Scope, Stream } from "effect"
+import { Effect, Exit, Fiber, Layer, Ref, Scope, Stream, Tracer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
@@ -278,12 +278,23 @@ describe("ModelsDev Service", () => {
                 responses: {
                   base_url: "https://api.acme.test/v1",
                   sdk: { aisdk: "@ai-sdk/openai", opencodeai: "@opencode/ai/providers/openai/responses" },
+                  capabilities: { tools: { freeform: ["text", "future-grammar", "lark"] } },
                 },
-                "chat-completions": { base_url: "https://other.acme.test/v1", sdk: { aisdk: "@ai-sdk/openai" } },
+                "chat-completions": {
+                  base_url: "https://other.acme.test/v1",
+                  sdk: { aisdk: "@ai-sdk/openai" },
+                  capabilities: { tools: { freeform: ["regex"] } },
+                },
               },
             }),
             "acme-fallback": sourceModel("acme-fallback", {
-              api: { messages: { base_url: "https://claude.acme.test/v1", sdk: { aisdk: "@ai-sdk/anthropic" } } },
+              api: {
+                messages: {
+                  base_url: "https://claude.acme.test/v1",
+                  sdk: { aisdk: "@ai-sdk/anthropic" },
+                  capabilities: { tools: { freeform: ["future-grammar"] } },
+                },
+              },
             }),
           },
         },
@@ -316,8 +327,11 @@ describe("ModelsDev Service", () => {
       const acmeModel = (id: string) => acme?.models.find((model) => model.id === id)
       expect(acmeModel("acme-responses")?.package).toBe("@opencode/ai/providers/openai/responses")
       expect(acmeModel("acme-responses")?.settings).toBeUndefined()
+      expect(acmeModel("acme-responses")?.capabilities.freeform).toEqual(["text", "lark"])
+      expect(acmeModel("acme-1")?.capabilities.freeform).toBeUndefined()
       // Without an opencode package, the AI SDK package maps to the native one as before.
       expect(acmeModel("acme-fallback")?.package).toBe("@opencode/ai/providers/anthropic")
+      expect(acmeModel("acme-fallback")?.capabilities.freeform).toEqual([])
       expect(acmeModel("acme-fallback")?.settings).toEqual({ baseURL: "https://claude.acme.test/v1" })
 
       const azureModel = (id: string) => azure?.models.find((model) => model.id === id)
@@ -496,11 +510,52 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.effect("skips non-chat models whose only opencode package serves another type", () =>
+    Effect.gen(function* () {
+      const api = (opencodeai: string) => ({
+        "chat-completions": { base_url: "https://api.acme.test/v1", sdk: { opencodeai } },
+      })
+      const chatPackage = "@opencode/ai/providers/openai-compatible"
+      const [acme] = yield* ModelsDev.decodeSnapshot(
+        JSON.stringify({
+          acme: {
+            ...fixture.acme,
+            models: {
+              chat: sourceModel("chat", { api: api(chatPackage) }),
+              "image-chat-only": sourceModel("image-chat-only", { type: "image", api: api(chatPackage) }),
+              image: sourceModel("image", {
+                type: "image",
+                api: {
+                  ...api(chatPackage),
+                  images: api("@opencode/ai/providers/openai-compatible/images")["chat-completions"],
+                },
+              }),
+              "decision-chat-only": sourceModel("decision-chat-only", { type: "decision", api: api(chatPackage) }),
+              "decision-image-only": sourceModel("decision-image-only", {
+                type: "decision",
+                api: api("@opencode/ai/providers/openrouter/images"),
+              }),
+              decision: sourceModel("decision", {
+                type: "decision",
+                api: api("@opencode/ai/providers/openrouter/decisions"),
+              }),
+            },
+          },
+        }),
+      )
+      expect(acme?.models.map((item) => [item.id, item.type, item.package ?? acme.info.package])).toEqual([
+        [Model.ID.make("chat"), "chat", chatPackage],
+        [Model.ID.make("image"), "image", "@opencode/ai/providers/openai-compatible/images"],
+        [Model.ID.make("decision"), "decision", "@opencode/ai/providers/openrouter/decisions"],
+      ])
+    }),
+  )
+
   it.live("drops model types opencode doesn't keep", () =>
     Effect.gen(function* () {
       const cache = makeCache()
       const api = {
-        images: { base_url: "https://api.acme.test/v1", sdk: { opencodeai: "@opencode/ai/providers/openai" } },
+        images: { base_url: "https://api.acme.test/v1", sdk: { opencodeai: "@opencode/ai/providers/openai/images" } },
       }
       const model = (id: string, type: string) => ({
         id,
@@ -953,6 +1008,14 @@ describe("ModelsDev Service", () => {
 
   it.live("refresh(false) revalidates with the stored ETag and treats 304 as unchanged", () =>
     Effect.gen(function* () {
+      const spans: Tracer.NativeSpan[] = []
+      const tracer = Tracer.make({
+        span(options) {
+          const span = new Tracer.NativeSpan(options)
+          spans.push(span)
+          return span
+        },
+      })
       const cache = makeCache()
       const state = yield* Ref.make<MockState>({ ...initialState, etag: 'W/"v1"' })
       const body = yield* provided(
@@ -965,6 +1028,7 @@ describe("ModelsDev Service", () => {
           cache.values.set(metaKey, { ...meta, updatedAt: Date.now() - 10 * 60 * 1000 })
           const body = cache.values.get(cacheKey)
           yield* Ref.update(state, (s) => ({ ...s, status: 304 }))
+          spans.length = 0
           const bus = yield* Bus.Service
           const event = yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
             Stream.take(1),
@@ -981,13 +1045,36 @@ describe("ModelsDev Service", () => {
           expect(event._tag).toBe("None")
           expect(yield* svc.get()).toEqual(fixtureSnapshot)
           return body
-        }),
+        }).pipe(Effect.provideService(Tracer.Tracer, tracer)),
       )
       const final = yield* Ref.get(state)
       expect(final.calls.map((call) => call.ifNoneMatch)).toEqual([undefined, 'W/"v1"'])
       expect(cache.values.get(cacheKey)).toBe(body)
       expect(cache.values.get(metaKey)).toMatchObject({ etag: 'W/"v1"' })
       expect(Date.now() - (cache.values.get(metaKey) as { updatedAt: number }).updatedAt).toBeLessThan(60 * 1000)
+      const fetchSpans = spans.filter((span) => span.name === "ModelsDev.fetchApi")
+      expect(fetchSpans).toHaveLength(1)
+      for (const span of spans.filter((span) => span.name.startsWith("ModelsDev."))) {
+        if (span.status._tag === "Ended") {
+          expect(Exit.isFailure(span.status.exit)).toBe(false)
+        }
+      }
+
+      spans.length = 0
+      yield* provided(
+        state,
+        cache,
+        Effect.gen(function* () {
+          const svc = yield* ModelsDev.Service
+          yield* svc.refresh(true)
+          expect(yield* svc.get()).toEqual(fixtureSnapshot)
+        }).pipe(Effect.provideService(Tracer.Tracer, tracer)),
+      )
+      const unrequested304 = spans.find((span) => span.name === "ModelsDev.fetchApi")
+      expect(unrequested304?.status._tag).toBe("Ended")
+      if (unrequested304?.status._tag === "Ended") {
+        expect(Exit.isFailure(unrequested304.status.exit)).toBe(true)
+      }
     }),
   )
 

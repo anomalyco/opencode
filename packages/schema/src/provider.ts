@@ -16,6 +16,7 @@ export const ID = Schema.String.pipe(
     google: schema.make("google"),
     googleVertex: schema.make("google-vertex"),
     githubCopilot: schema.make("github-copilot"),
+    claudeAgent: schema.make("claude-agent"),
     amazonBedrock: schema.make("amazon-bedrock"),
     azure: schema.make("azure"),
     openrouter: schema.make("openrouter"),
@@ -52,9 +53,23 @@ export const CacheTTL = Schema.TemplateLiteral([Schema.Number, Schema.Literals([
   .annotate({ identifier: "Provider.CacheTTL" })
 export type CacheTTL = typeof CacheTTL.Type
 
+/** Keep-alive requests for this provider's or model's sessions; overrides the top-level `warming`. */
+export const CacheWarming = Schema.Union([
+  Schema.Boolean,
+  Schema.Struct({
+    // Settings hold JSON, so durations stay strings here; the warming plugin parses them.
+    interval: Schema.Union([Schema.Literal("auto"), Schema.String])
+      .pipe(optional)
+      .annotate({ description: 'Duration such as "4 minutes", or "auto" (default) for 90% of the model\'s cache.ttl' }),
+    duration: Schema.String.pipe(optional).annotate({ description: 'Duration such as "30 minutes"' }),
+  }),
+]).annotate({ identifier: "Provider.CacheWarming" })
+export type CacheWarming = typeof CacheWarming.Type
+
 /** Prompt-cache settings. `ttl` is sent to the provider as given; each provider accepts its own set. */
 export const Cache = Schema.Struct({
   ttl: CacheTTL.pipe(optional),
+  warming: CacheWarming.pipe(optional),
 }).annotate({ identifier: "Provider.Cache" })
 export type Cache = typeof Cache.Type
 
@@ -63,6 +78,14 @@ export const Encoding = Schema.Literals(["zstd", "gzip", "none"]).annotate({ ide
 export type Encoding = typeof Encoding.Type
 
 const Timeout = Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional)
+
+/** Client certificate for gateways that require mutual TLS. Values are PEM text; use `{file:...}` to read a file. */
+export const Tls = Schema.Struct({
+  cert: Schema.String.annotate({ description: "PEM client certificate, usually `{file:/path/to/client.pem}`" }),
+  key: Schema.String.annotate({ description: "PEM private key, usually `{file:/path/to/client.key}`" }),
+  passphrase: Schema.String.pipe(optional).annotate({ description: "Passphrase for an encrypted private key" }),
+}).annotate({ identifier: "Provider.Tls" })
+export type Tls = typeof Tls.Type
 
 // The named fields are the settings OpenCode reads itself; every other key is a provider option for the provider package.
 export const Settings = Schema.StructWithRest(
@@ -74,6 +97,7 @@ export const Settings = Schema.StructWithRest(
     cache: Cache.pipe(optional),
     transport: Transport.pipe(optional),
     encoding: Encoding.pipe(optional),
+    tls: Tls.pipe(optional),
   }),
   [Schema.Record(Schema.String, Schema.Any)],
 ).annotate({ identifier: "Provider.Settings" })
