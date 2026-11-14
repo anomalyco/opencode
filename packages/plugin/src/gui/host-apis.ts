@@ -747,6 +747,16 @@ export interface MountedSession extends SessionRef {
  * and every action through them targets the session routed at that moment. Read it where you act, or pass it to the
  * views that render inside it; a `MountedSession` you keep never acts on another session.
  */
+export interface Timeline {
+  /**
+   * Reveals a user message in the routed session's timeline, paging older history in when the message is not loaded
+   * yet. Does nothing while the timeline is not mounted.
+   */
+  revealMessage(messageID: string): void
+  /** Returns the routed session's timeline to its latest message and resumes following it. */
+  jumpToLatest(): void
+}
+
 export interface SessionScreen {
   /** The routed workspace's files. */
   readonly file: Files
@@ -754,6 +764,8 @@ export interface SessionScreen {
   readonly comment: Comments
   /** The routed session's composer. */
   readonly composer: Composer
+  /** The routed session's timeline navigation. */
+  readonly timeline: Timeline
 }
 
 /** The session screen, while it routes the mounted session. */
