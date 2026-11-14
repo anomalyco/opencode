@@ -47,6 +47,7 @@
 
 #![allow(unsafe_code)]
 
+mod schema;
 pub mod v2;
 
 use std::borrow::Cow;
@@ -400,7 +401,6 @@ impl Placement {
 /// `interactive.500`), `#rrggbb`, or an [`Rgba`]. On the wire it is that text, an [`Rgba`] as `#rrggbbaa`. An
 /// unknown token draws in `text.base`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(untagged)]
 pub enum Color {
     Rgba(Rgba),
@@ -465,7 +465,6 @@ impl<'de> Deserialize<'de> for Rgba {
 
 /// Styled text.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Span {
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -972,7 +971,6 @@ impl Overflow {
 
 /// What a click on a node runs.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Click {
     pub action: Action,
     /// On the press of the left button, or on its release.
@@ -992,7 +990,6 @@ impl Click {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum Press {
     Down,
@@ -1001,7 +998,6 @@ pub enum Press {
 
 /// What a click asks the host to do, after the event that caused it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum Action {
     /// Runs a registered command, the plugin's or the host's, palette or not, as [`Host::dispatch`] does.
@@ -1013,7 +1009,6 @@ pub enum Action {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum Justify {
     #[default]
@@ -1026,7 +1021,6 @@ pub enum Justify {
 
 /// Where a box's children sit across its row or column.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum Align {
     #[default]
@@ -1050,7 +1044,6 @@ impl Justify {
 
 /// How a node takes space in its parent's row or column.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Layout {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub width: Option<Width>,
@@ -1125,7 +1118,6 @@ impl Layout {
 
 /// A length in cells (rows, for a height) or in percent of the parent's.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum Width {
     Cells(u16),
@@ -1133,7 +1125,6 @@ pub enum Width {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum Wrap {
     #[default]

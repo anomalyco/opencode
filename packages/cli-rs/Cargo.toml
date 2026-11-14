@@ -56,8 +56,6 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls-no-p
 rustix = { version = "1", features = ["fs", "process"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-platform-verifier = "0.7"
-# The plugin contract's JSON Schema, generated from its types; only opencode-plugin-abi's `schema` feature builds it.
-schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
 sha1 = "0.11"
