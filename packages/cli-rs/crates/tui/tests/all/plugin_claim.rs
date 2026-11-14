@@ -239,9 +239,11 @@ impl Expected {
 
     /// The fence's lines, once it opened.
     fn fence(&self) -> Option<Vec<String>> {
+        // The transcript gives Markdown the text trimmed (`message-parts.tsx:191`), so an open fence's last line ends
+        // without the spaces that end the text so far.
         let text: String = CHUNKS[..self.chunks].concat();
-        let (_, body) = text.split_once("```probe\n")?;
-        let code = body.split_once("```\n").map_or(body, |(code, _)| code);
+        let (_, body) = text.trim().split_once("```probe\n")?;
+        let code = body.split_once("```").map_or(body, |(code, _)| code);
         // Markdown holds back an open fence with no code yet: the host has no block to hand over.
         (!code.is_empty()).then(|| code.lines().map(|line| format!("| {line}")).collect())
     }
@@ -540,17 +542,9 @@ fn region_diff(frame: &Capture, shown: &Shown, node: &v2::Node, theme: &Theme) -
     let row = |capture: &Capture, x: u32, y: u32| -> String {
         (x..x + width).filter_map(|x| capture.cell(x, y)).map(|cell| cell.symbol.as_str()).collect()
     };
-    // A blank cell paints no foreground, so its foreground is not compared: a text written in place to spans that end in
-    // a space paints that cell's foreground white where a fresh mount paints `text.base` (a finding of this phase,
-    // in the reconcile's text writes or in OpenTUI, not in the claims).
-    let same = |a: Option<&opentui::testing::Cell>, b: Option<&opentui::testing::Cell>| match (a, b) {
-        (Some(a), Some(b)) if a.symbol == " " && a.attributes.is_empty() => {
-            (&a.symbol, a.bg, a.attributes) == (&b.symbol, b.bg, b.attributes)
-        }
-        _ => a == b,
-    };
+    // Every cell, a blank one's foreground too: a space a text draws takes the text's color, a cell past its end none.
     (0..height).find_map(|y| {
-        let x = (0..width).find(|&x| !same(frame.cell(x0 + x, y0 + y), twin.cell(x, y)))?;
+        let x = (0..width).find(|&x| frame.cell(x0 + x, y0 + y) != twin.cell(x, y))?;
         Some(format!(
             "{} row {y}:\n  shown {:?}\n  fresh {:?}\n  first cell {x}: {:?} against {:?}",
             shown.id.key,
