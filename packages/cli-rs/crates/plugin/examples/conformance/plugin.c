@@ -35,6 +35,9 @@ typedef struct instance {
     unsigned long long pads;
     unsigned draws;
     unsigned claimed;
+    unsigned bumps;
+    /* One more than the bumps `kept` showed last; 0 for none. */
+    unsigned kept;
     int search_toast;
 } instance;
 
@@ -132,8 +135,8 @@ static void send(const opencode_host_api *host, const char *key, const char *mes
 }
 
 static const char *const COMMANDS[] = {
-    "conf.toast", "conf.store", "conf.send", "conf.wake", "conf.panic", "conf.dup",
-    "conf.read",  "conf.pad",   "conf.down", "conf.step", "conf.where", "conf.ui",
+    "conf.toast", "conf.store", "conf.send", "conf.wake",  "conf.panic", "conf.dup",  "conf.read",
+    "conf.pad",   "conf.down",  "conf.step", "conf.where", "conf.ui",    "conf.bump", "conf.message",
 };
 
 /* The scroll `items` of the surface `rows`, as a verb or a read names it. */
@@ -162,7 +165,7 @@ static int32_t create(const opencode_host_api *host, opencode_bytes options, voi
     /* As the Rust SDK's `storage_key` does: the host serves the key from here on, also during setup. */
     ask(host, "{\"type\":\"storage-key\",\"key\":\"count\"}", NULL, 0);
     *out_instance = self;
-    char manifest[2048] = "{\"id\":\"conformance\",\"commands\":[";
+    char manifest[4096] = "{\"id\":\"conformance\",\"commands\":[";
     for (size_t index = 0; index < sizeof COMMANDS / sizeof COMMANDS[0]; index++) {
         char command[192];
         snprintf(command, sizeof command,
@@ -175,7 +178,9 @@ static int32_t create(const opencode_host_api *host, opencode_bytes options, voi
             "\"surfaces\":[{\"name\":\"conf\",\"place\":{\"type\":\"route\",\"name\":\"conf\"}},"
             "{\"name\":\"pad\",\"place\":{\"type\":\"route\",\"name\":\"pad\"},\"draw\":true},"
             "{\"name\":\"rows\",\"place\":{\"type\":\"route\",\"name\":\"rows\"},"
-            "\"notify\":[{\"type\":\"scroll\",\"id\":\"items\"}],\"layout\":true,\"handler\":true}],\"messages\":true,"
+            "\"notify\":[{\"type\":\"scroll\",\"id\":\"items\"}],\"layout\":true,\"handler\":true},"
+            "{\"name\":\"kept\",\"place\":{\"type\":\"route\",\"name\":\"kept\"},\"handler\":true,\"mounts\":true}],"
+            "\"messages\":true,"
             "\"claims\":[{\"target\":{\"type\":\"fence\",\"name\":\"conf-fence\"}},"
             "{\"target\":{\"type\":\"tool\",\"name\":\"conf-tool\"}}],\"searches\":[\"conf.find\"],"
             "\"layers\":[{\"scope\":\"global\",\"keys\":[{\"key\":\"ctrl+g\",\"name\":\"conf\"},"
@@ -210,6 +215,18 @@ static void ui(const opencode_host_api *host) {
     ask(host, "{\"type\":\"close-overlay\",\"surface\":\"rows\"}", NULL, 0);
     char message[96];
     snprintf(message, sizeof message, "ui %s %s %s", focused ? "true" : "false", rect ? "true" : "false", mode);
+    toast(host, "info", message);
+}
+
+static int string_after(opencode_bytes request, const char *needle, char *out, size_t room);
+
+/* `conf.message` (P6a): a read of one message, and its ID or none. */
+static void read_message(const opencode_host_api *host) {
+    char answer[512], id[64], message[96] = "message none";
+    int32_t status = ask(host, "{\"type\":\"message\",\"session\":\"ses_a\",\"message\":\"msg_1\"}", answer, sizeof answer);
+    if (status == OPENCODE_OK && string_after(bytes(answer), "\"id\":\"", id, sizeof id)) {
+        snprintf(message, sizeof message, "message %s", id);
+    }
     toast(host, "info", message);
 }
 
@@ -262,6 +279,10 @@ static int32_t command(instance *self, opencode_bytes request, opencode_owned *o
         toast(host, "info", message);
     } else if (names(request, "conf.ui")) {
         ui(host);
+    } else if (names(request, "conf.bump")) {
+        self->bumps += 1;
+    } else if (names(request, "conf.message")) {
+        read_message(host);
     } else if (names(request, "conf.read")) {
         int light = OFFERS(host, theme_mode) && host->theme_mode(host->ctx) == OPENCODE_THEME_LIGHT;
         char answer[16];
@@ -338,6 +359,24 @@ static int32_t rows(opencode_owned *out) {
     return OPENCODE_OK;
 }
 
+/* The view of the route `kept` (P6a): its root kept while it would show the bumps it showed last, unless the host says
+ * everything changed; a hidden box beside. */
+static int32_t kept(instance *self, opencode_bytes request, opencode_owned *out) {
+    if (find(request, "\"all\":true") == NULL && self->kept == self->bumps + 1) {
+        *out = owned("{\"node\":{\"type\":\"keep\",\"key\":\"kept-root\"}}");
+        return OPENCODE_OK;
+    }
+    self->kept = self->bumps + 1;
+    char reply[512];
+    snprintf(reply, sizeof reply,
+             "{\"node\":{\"type\":\"box\",\"id\":\"kept-root\",\"children\":[{\"type\":\"text\",\"id\":\"kept\","
+             "\"spans\":[{\"text\":\"kept %u\"}]},{\"type\":\"box\",\"id\":\"hidden\",\"visible\":false,\"children\":["
+             "{\"type\":\"text\",\"spans\":[{\"text\":\"hidden\"}]}]}]}}",
+             self->bumps);
+    *out = owned(reply);
+    return OPENCODE_OK;
+}
+
 /* The layout of `rows`: `where` painted while `items` is scrolled down. Its geometry's scrolls hold the first
  * "offset", as the only scroll it is told of. */
 static int32_t layout(opencode_bytes request, opencode_owned *out) {
@@ -366,7 +405,11 @@ static int string_after(opencode_bytes request, const char *needle, char *out, s
 static int32_t input(instance *self, opencode_bytes request, opencode_owned *out) {
     char said[96], text[64];
     int consume = 1;
-    if (find(request, "\"bind\":\"conf\"") != NULL) {
+    if (is(request, "mount")) {
+        /* A mount of `kept` begins or ends (P6a). */
+        snprintf(said, sizeof said, "mount %s", find(request, "\"mounted\":true") != NULL ? "begins" : "ends");
+        consume = 0;
+    } else if (find(request, "\"bind\":\"conf\"") != NULL) {
         snprintf(said, sizeof said, "key conf");
     } else if (is(request, "paste") && string_after(request, "\"text\":\"", text, sizeof text)) {
         snprintf(said, sizeof said, "paste %s", text);
@@ -492,6 +535,9 @@ static int32_t call(void *raw, opencode_bytes request, opencode_owned *out) {
         /* The mount names its surface. */
         if (find(request, "\"surface\":\"rows\"") != NULL) {
             return rows(out);
+        }
+        if (find(request, "\"surface\":\"kept\"") != NULL) {
+            return kept(self, request, out);
         }
         return find(request, "\"surface\":\"pad\"") != NULL ? pad(self, out) : view(self, request, out);
     }

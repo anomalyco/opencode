@@ -711,6 +711,7 @@ pub const READS: &[&str] = &[
     "session",
     "family",
     "messages",
+    "message",
     "models",
     "model",
     "limits",

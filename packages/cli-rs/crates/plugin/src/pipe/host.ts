@@ -138,6 +138,8 @@ interface Surface {
   // P2: the mount's handler (its keys, pointer, scroll and input events) and the key layers each mount registers.
   on?: (event: Json) => unknown
   layers: Json[]
+  // P6a: the handler hears each mount begin and end (a "mount" event).
+  mounts: boolean
   view: (cx: ViewContext) => Json
 }
 
@@ -324,8 +326,10 @@ function view(plugin: Plugin, mount: Mount) {
   if (!mount.whole && text === mount.last && given.length === 0 && released.length === 0) return
   mount.rev += 1
   mount.inflight = true
-  mount.staged = used
-  mount.stagedNested = nested
+  // A keep of the whole tree (P6a) holds every value of the adopted one: the table stays as it is (review carbon-2).
+  const root = node?.type === "keep"
+  mount.staged = root ? new Map(mount.memo) : used
+  mount.stagedNested = root ? new Map(mount.nested) : nested
   mount.last = text
   frame(TREE, {
     id: plugin.id,
@@ -337,7 +341,7 @@ function view(plugin: Plugin, mount: Mount) {
     node,
     content: given,
     released,
-    memo: used.size,
+    memo: mount.staged.size,
   })
 }
 
@@ -385,7 +389,13 @@ function context(plugin: Plugin) {
       name: string,
       place: Json,
       view: Surface["view"],
-      options?: { palette?: boolean; notify?: Json[]; on?: (event: Json) => unknown; layers?: Json[] },
+      options?: {
+        palette?: boolean
+        notify?: Json[]
+        on?: (event: Json) => unknown
+        layers?: Json[]
+        mounts?: boolean
+      },
     ) {
       plugin.surfaces.push({
         name,
@@ -395,6 +405,7 @@ function context(plugin: Plugin) {
         notify: options?.notify ?? [],
         on: options?.on,
         layers: options?.layers ?? [],
+        mounts: !!options?.mounts,
       })
     },
     // A key layer of the activation, as contract 2.0's `Setup::layer`. What the handler returns is advisory: the host
@@ -493,6 +504,7 @@ function manifest(plugin: Plugin) {
       ...(surface.notify.length ? { notify: surface.notify } : {}),
       ...(surface.on ? { handler: true } : {}),
       ...(surface.layers.length ? { layers: surface.layers } : {}),
+      ...(surface.mounts ? { mounts: true } : {}),
     })),
   }
 }
