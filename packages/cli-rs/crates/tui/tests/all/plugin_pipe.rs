@@ -2376,3 +2376,33 @@ fn a_failed_js_plugin_holds_nothing() {
     pipe.settle();
     assert_eq!(limits::held(LAB), limits::Held::default(), "held once failed");
 }
+
+// Expected (bigboi P8-9): a plugin directory is read to hash it once, not again for each reconcile the JS host's
+// answers start: four plugins load reading each tree about once in all, and reconciles that change no file read none.
+#[test]
+fn the_js_hosts_answers_hash_no_plugin_again() {
+    let Some(config) = config() else { return };
+    let size = |name: &str| -> u64 {
+        let dir = Path::new(EXAMPLES).join(name);
+        std::fs::read_dir(dir).unwrap().flatten().filter_map(|entry| entry.metadata().ok()).map(|meta| meta.len()).sum()
+    };
+    let names = ["probe", "twin", "lab", "v2probe"];
+    let total: u64 = names.iter().map(|name| size(name)).sum();
+    let before = opencode_plugin::loader::approval::hashed();
+    let pipe = open(&names.map(|name| (name, None)), config, (80, 30));
+    for id in ["example.probe", "example.twin", "example.lab", "example.v2probe"] {
+        pipe.active(id);
+    }
+    pipe.settle();
+    let started = opencode_plugin::loader::approval::hashed() - before;
+    assert!(started <= 2 * total, "the start read {started} bytes of plugins of {total}");
+    for _ in 0..5 {
+        opencode_tui::plugins::host::reconcile(&pipe.harness.tui);
+        pipe.settle();
+    }
+    assert_eq!(
+        opencode_plugin::loader::approval::hashed() - before,
+        started,
+        "a reconcile that changed nothing hashed"
+    );
+}
