@@ -1479,7 +1479,7 @@ pub enum Request {
     },
     /// 2.0: runs the [`Setup::messages`] handler with a message a thread sent, in the order the mailbox holds them.
     Message {
-        message: Raw,
+        message: serde_json::Value,
     },
 }
 
@@ -1495,17 +1495,6 @@ pub struct ViewReply {
     pub released: Vec<v2::ContentRef>,
     #[serde(default, skip_serializing_if = "is_zero_usize")]
     pub memo: usize,
-}
-
-/// JSON text carried as it is.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct Raw(pub Box<serde_json::value::RawValue>);
-
-impl PartialEq for Raw {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.get() == other.0.get()
-    }
 }
 
 /// A fence for the render of [`Setup::code_block`] that [`Manifest::fences`] names by `index`. The host matches a fence
@@ -3399,7 +3388,7 @@ impl Registered {
             }
             Request::Message { message } => {
                 let run = self.message.as_ref().ok_or("no message handler")?;
-                run(&self.host, mail::Message::Json(message.0));
+                run(&self.host, mail::Message::Json(message));
                 Ok(serde_json::Value::Null)
             }
         }

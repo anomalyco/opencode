@@ -101,10 +101,9 @@ impl Mailbox {
 
     /// [`Mailbox::put`] of JSON text from the C ABI: an [`abi::ERROR`] for one that is not JSON.
     pub fn put_json(&self, key: &[u8], message: &[u8]) -> i32 {
-        let (Ok(key), Ok(text)) = (std::str::from_utf8(key), String::from_utf8(message.to_vec())) else {
+        let (Ok(key), Ok(json)) = (std::str::from_utf8(key), serde_json::from_slice(message)) else {
             return abi::ERROR;
         };
-        let Ok(json) = serde_json::value::RawValue::from_string(text) else { return abi::ERROR };
         match self.put((!key.is_empty()).then_some(key), Message::Json(json)) {
             Ok(()) => abi::OK,
             Err((Refused::Full, _)) => abi::FULL,
@@ -158,15 +157,15 @@ impl Link for Mailbox {
     fn send(&self, key: Option<&str>, message: Outgoing) -> Result<(), (Refused, Outgoing)> {
         let message = match message {
             Outgoing::Value(value) => Message::Value(value),
-            Outgoing::Json(text) => match serde_json::value::RawValue::from_string(text) {
+            Outgoing::Json(text) => match serde_json::from_str(&text) {
                 Ok(json) => Message::Json(json),
-                Err(_) => return Err((Refused::Closed, Outgoing::Json(String::new()))),
+                Err(_) => return Err((Refused::Closed, Outgoing::Json(text))),
             },
         };
         self.put(key, message).map_err(|(refused, message)| {
             let message = match message {
                 Message::Value(value) => Outgoing::Value(value),
-                Message::Json(json) => Outgoing::Json(json.get().to_owned()),
+                Message::Json(json) => Outgoing::Json(json.to_string()),
             };
             (refused, message)
         })
