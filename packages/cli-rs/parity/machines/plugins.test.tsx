@@ -1,5 +1,5 @@
 // The shared fixture of the plugin work (rich-plugins 4.14, O-124), TypeScript reader: the TS TUI is driven through
-// the life and project machines of plugins.json, with parity/plugins/life loaded as a local plugin or found in a
+// the life, project and manager machines of plugins.json, with parity/plugins/life loaded as a local plugin or found in a
 // project, each path on a fresh app,
 // observing after every action. The Rust reader is crates/tui/tests/all/plugin_machines.rs; both read the file and
 // neither reads the other. `bun run test` in packages/cli-rs, which CI runs, covers each edge once and the seeded walks;
@@ -44,6 +44,8 @@ function parse(source: (typeof machines.machines)[keyof typeof machines.machines
 const machine = parse(machines.machines.life)
 // The same plugin found in the project's plugins directory, with nothing in the config naming it.
 const project = parse(machines.machines.project)
+// The plugin manager's keys (phase P2); its reader sends no action that the state has no edge for.
+const managerKeys = parse(machines.machines.manager)
 let runs = 0
 
 // A fresh app with a copy of the plugin, which resolves packages/tui's dependencies (as `copyPlugin` does). In the
@@ -214,15 +216,63 @@ async function observe(setup: Fixture) {
   return `${line}/${listed}/${status}/-`
 }
 
-// Replays `path` of `machine` on a fresh app. An action a state has no edge for does nothing. The first difference
-// that is not a known row, or undefined; a known row ends the path, unless the machine says to follow it on.
+// The manager's footer offers to show or hide the built-in rows; undefined while it is closed.
+function internal(frame: string) {
+  return ["show", "hide"].find((word) => frame.includes(`${word} internal`))
+}
+
+// An action of the manager machine: /plugins, escape, ctrl+a, or enter on the selected row.
+async function actManager(app: App, action: string) {
+  const setup = app.setup
+  const frame = setup.captureCharFrame()
+  if (action === "open") {
+    await setup.mockInput.typeText("/plugins")
+    await until(setup, (frame) => frame.includes("/plugins"), "/plugins in the prompt")
+    setup.mockInput.pressEnter()
+    await until(setup, (frame) => internal(frame) !== undefined && row(frame) !== undefined, "the plugin manager")
+    return
+  }
+  if (action === "escape") {
+    setup.mockInput.pressEscape()
+    await until(setup, (frame) => internal(frame) === undefined, "the plugin manager closing")
+    return
+  }
+  if (action === "internal") {
+    const before = internal(frame)
+    setup.mockInput.pressKey("a", { ctrl: true })
+    await until(setup, (frame) => internal(frame) !== before, "the internal rows")
+    return
+  }
+  const before = row(frame)
+  setup.mockInput.pressEnter()
+  await until(setup, (frame) => row(frame) !== before, "the toggle's outcome")
+}
+
+// dialog/internal/life, as plugins.json writes them for the manager machine.
+function observeManager(setup: Fixture) {
+  const frame = setup.captureCharFrame()
+  const shown = internal(frame)
+  if (!shown) return `-/?/${frame.includes("life plugin:") ? "on" : "off"}`
+  // The built-in rows may push the life row below the screen.
+  if (shown === "hide") return "list/hide/?"
+  const found = row(frame)
+  return `list/${shown}/${found === undefined ? "none" : found.includes("inactive") ? "off" : "on"}`
+}
+
+// Replays `path` of `machine` on a fresh app. An action a state has no edge for does nothing; the manager machine's
+// reader does not send it. The first difference that is not a known row, or undefined; a known row ends the path,
+// unless the machine says to follow it on.
 async function replay(machine: Machine, path: string[], known: Set<string>, seen: Set<string>) {
   await using app = await open(machine === project)
+  const keyed = machine === managerKeys
   let state = machine.initial
   for (const [index, action] of ["mount", ...path].entries()) {
-    const next = index === 0 ? state : (machine.states[state][1][action] ?? state)
-    if (index > 0) await act(app, action)
-    const [expected, actual] = [machine.states[next][0], await observe(app.setup)]
+    const edge = machine.states[state][1][action]
+    const next = index === 0 ? state : (edge ?? state)
+    if (index > 0 && !keyed) await act(app, action)
+    if (index > 0 && keyed && edge !== undefined) await actManager(app, action)
+    const observed = keyed ? observeManager(app.setup) : await observe(app.setup)
+    const [expected, actual] = [machine.states[next][0], observed]
     if (actual !== expected) {
       const key = `${state} ${action} ${actual}`
       if (known.has(key)) {
@@ -268,7 +318,7 @@ function paths(machine: Machine, state = machine.initial, path: string[] = []): 
 }
 
 // The file's seeded walks, as OpenTUI's reader makes them.
-function walks() {
+function walks(machine: Machine) {
   const out: string[][] = []
   for (let seed = 0; seed < machines.seeds; seed++) {
     let [state, n, walk] = [machine.initial, seed, [] as string[]]
@@ -285,8 +335,8 @@ function walks() {
 }
 
 // Two normal cycles, each with one action dropped, repeated, or swapped with the next.
-function faulted() {
-  const cycles = machines.faults.life.cycles.map((cycle) => cycle.split(" "))
+function faulted(name: "life" | "manager") {
+  const cycles = machines.faults[name].cycles.map((cycle) => cycle.split(" "))
   const out = new Map<string, string[]>()
   for (const a of cycles)
     for (const b of cycles) {
@@ -328,13 +378,31 @@ test("a project plugin follows the shared fixture", async () => {
 }, 600_000)
 
 test("the plugin life follows the shared fixture on walks", async () => {
-  await check(walks(), known(machine.xfail))
+  await check(walks(machine), known(machine.xfail))
 }, 600_000)
 
 test.if(deep)(
   "the plugin life recovers from a dropped, repeated or swapped action",
   async () => {
-    await check(faulted(), known(machine.xfail, machines.faults.life.xfail))
+    await check(faulted("life"), known(machine.xfail, machines.faults.life.xfail))
+  },
+  600_000,
+)
+
+test("the plugin manager's keys follow the shared fixture", async () => {
+  const rows = known(managerKeys.xfail)
+  const seen = await check(deep ? paths(managerKeys) : cover(managerKeys), rows, managerKeys)
+  expect([...rows].filter((row) => !seen.has(row))).toEqual([])
+}, 600_000)
+
+test("the plugin manager's keys follow the shared fixture on walks", async () => {
+  await check(walks(managerKeys), known(managerKeys.xfail), managerKeys)
+}, 600_000)
+
+test.if(deep)(
+  "the plugin manager's keys recover from a dropped, repeated or swapped action",
+  async () => {
+    await check(faulted("manager"), known(managerKeys.xfail, machines.faults.manager.xfail), managerKeys)
   },
   600_000,
 )

@@ -78,11 +78,28 @@
         ["rust", "F16-project-plugin-approval", "found mount -/no/pending/-"],
         ["rust", "F16-project-plugin-approval", "found decline -/no/declined/-"]
       ]
+    },
+    "manager": {
+      "about": "The plugin manager's keys as the user presses them (phase P2), with the life plugin loaded: open is /plugins, escape closes it, internal is ctrl+a, which shows or hides the built-in rows, and toggle is enter on the life row, which the manager selects as it opens with the built-ins hidden. An observation is dialog/internal/life: list or - for the manager on screen or not; show or hide as its footer offers (? while it is closed); and the life plugin on or off, from its row while the manager is open and from its line in home.footer while it is closed; while the built-in rows show, the life row may be below the screen, so it is ?. A reader does not send an action that the state has no edge for.",
+      "initial": "closedOn",
+      "states": {
+        "closedOn": ["-/?/on", { "open": "listOn" }],
+        "listOn": ["list/show/on", { "escape": "closedOn", "internal": "internalOn", "toggle": "listOff" }],
+        "internalOn": ["list/hide/?", { "escape": "closedOn", "internal": "listOn" }],
+        "listOff": ["list/show/off", { "escape": "closedOff", "internal": "internalOff", "toggle": "listOn" }],
+        "internalOff": ["list/hide/?", { "escape": "closedOff", "internal": "listOff" }],
+        "closedOff": ["-/?/off", { "open": "listOff" }]
+      },
+      "xfail": []
     }
   },
   "faults": {
     "life": {
       "cycles": ["toggle toggle", "flip flip", "arm toggle toggle toggle"],
+      "xfail": []
+    },
+    "manager": {
+      "cycles": ["open escape", "open toggle toggle escape", "open internal internal escape"],
       "xfail": []
     }
   }
