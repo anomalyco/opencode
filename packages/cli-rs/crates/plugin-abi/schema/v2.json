@@ -486,6 +486,16 @@
         },
         "strikethrough": {
           "type": "boolean"
+        },
+        "link": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": ["text"],
