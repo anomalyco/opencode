@@ -601,9 +601,10 @@ fn a_claimed_part_is_equal_on_every_carrier() {
     let linked = claimed(Run::In(Carrier::Linked));
     // The guard: each checkpoint sees a new frame, and the claim draws.
     assert!(linked.windows(2).all(|pair| pair[0].1.0 != pair[1].1.0), "a checkpoint saw what the one before did");
-    // The finished call and the fence each hold their card's one memo value; the declined call holds none.
+    // Each claimed part holds its card's one memo value until its mount ends: the finished call, the fence, and the
+    // declined call, whose library keeps its table too.
     let (_, (_, _, status)) = linked.last().unwrap();
-    assert!(status.ends_with(", 2)"), "{status}");
+    assert!(status.ends_with(", 3)"), "{status}");
     for run in [Run::In(CARRIERS[1]), Run::Library] {
         let other = claimed(run);
         for ((name, linked), (_, other)) in linked.iter().zip(&other) {
