@@ -30,10 +30,9 @@ const stderr = (text: string) => process.stderr.write(text.endsWith("\n") ? text
 for (const level of ["log", "info", "warn", "error", "debug", "trace"] as const) {
   console[level] = (...args: unknown[]) => stderr(args.map((arg) => (typeof arg === "string" ? arg : Bun.inspect(arg))).join(" "))
 }
-process.stdout.write = ((chunk: unknown) => {
-  stderr(typeof chunk === "string" ? chunk : Buffer.from(chunk as Uint8Array).toString())
-  return true
-}) as typeof process.stdout.write
+// The whole stream, also for a library that holds on to it or waits for its callback.
+process.stdout.write = ((chunk: unknown, encoding?: unknown, callback?: unknown) =>
+  (process.stderr.write as Function)(chunk, encoding, callback)) as typeof process.stdout.write
 
 function frame(kind: number, message: unknown) {
   const body = Buffer.from(JSON.stringify(message))

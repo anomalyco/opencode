@@ -1185,7 +1185,8 @@ fn a_project_library_gone_in_the_middle_of_a_reconcile_stops_its_plugin() {
 
 /// An artifact at `path` with `sha256`, for the store's tests.
 fn artifact(path: &std::path::Path, sha256: &str) -> approval::Artifact {
-    approval::Artifact { target: path.parent().unwrap().to_path_buf(), path: path.to_path_buf(), sha256: sha256.into() }
+    let target = path.parent().unwrap().to_path_buf();
+    approval::Artifact { target, path: path.to_path_buf(), sha256: sha256.into(), script: false }
 }
 
 // Expected (bigboi-4, carbon-3): two clients that decide at once on different plugins lose nothing: each update reads,
@@ -1657,4 +1658,35 @@ fn a_crashed_project_build_is_held_in_one_row() {
     assert!(answer(&loader, &target, approval::Decision::Approved));
     loader.reconcile(&dynamic(&host), &registry);
     assert_eq!((rows(&registry), fake.loads.get()), (vec![Status::Inactive], 0));
+}
+
+// Expected (the artifact of a project's TypeScript plugin, P7): its hash follows what its files hold and where they are,
+// and a dependency's size; a save that changes nothing, a hidden file, and another time on a file of its own do not
+// change it. A file that is not a directory is no such artifact.
+#[test]
+fn a_typescript_plugins_artifact_is_its_files() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let dir = root.path().join("probe");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::create_dir_all(dir.join("node_modules/dep")).unwrap();
+    std::fs::write(dir.join("tui.ts"), "export default {}\n").unwrap();
+    std::fs::write(dir.join("src/a.ts"), "export const a = 1\n").unwrap();
+    std::fs::write(dir.join("node_modules/dep/index.js"), "module.exports = 1\n").unwrap();
+    let hash = || approval::Artifact::tree(&dir).unwrap().sha256;
+    let first = hash();
+    let artifact = approval::Artifact::tree(&dir).unwrap();
+    assert!(artifact.script);
+    assert_eq!(artifact.path, std::fs::canonicalize(&dir).unwrap());
+    std::fs::write(dir.join("tui.ts"), "export default {}\n").unwrap();
+    std::fs::write(dir.join(".log.jsonl"), "{}\n").unwrap();
+    assert_eq!(hash(), first, "a save that changed nothing, or a hidden file, changed the hash");
+    std::fs::write(dir.join("src/a.ts"), "export const a = 2\n").unwrap();
+    let changed = hash();
+    assert_ne!(changed, first, "a changed file kept the hash");
+    std::fs::rename(dir.join("src/a.ts"), dir.join("src/b.ts")).unwrap();
+    assert_ne!(hash(), changed, "a moved file kept the hash");
+    let moved = hash();
+    std::fs::write(dir.join("node_modules/dep/index.js"), "module.exports = 22\n").unwrap();
+    assert_ne!(hash(), moved, "a changed dependency kept the hash");
+    assert!(approval::Artifact::tree(&dir.join("tui.ts")).is_err());
 }
