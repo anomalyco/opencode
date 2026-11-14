@@ -22,7 +22,14 @@ export function metaFrame(cursor: number) {
 
 export function chunks(data: string) {
   const out: string[] = []
-  for (let i = 0; i < data.length; i += REPLAY_CHUNK) out.push(data.slice(i, i + REPLAY_CHUNK))
+  for (let start = 0; start < data.length; ) {
+    let end = Math.min(start + REPLAY_CHUNK, data.length)
+    // A split between the halves of a surrogate pair encodes as U+FFFD, so keep the pair together.
+    const last = data.charCodeAt(end - 1)
+    if (end < data.length && last >= 0xd800 && last <= 0xdbff) end--
+    out.push(data.slice(start, end))
+    start = end
+  }
   return out
 }
 
