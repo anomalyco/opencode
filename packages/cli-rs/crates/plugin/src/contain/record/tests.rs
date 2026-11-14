@@ -59,7 +59,7 @@ fn a_torn_read_names_nobody() {
     // As if the UI thread had left and was entering the next call: the call word is new, the state still old.
     record.word(W_STATE).store(generation << 2 | IDLE, Ordering::Release);
     assert_eq!(record.running(), None);
-    record.word(W_CALL).store(0xdead_beef, Ordering::Release);
+    record.word(W_CALL).store((0x1234 << 32) | (1 << 8) | 7, Ordering::Release);
     record.word(W_STATE).store(generation << 2 | RUNNING, Ordering::Release);
     assert_eq!(record.running(), None, "a call word that fails its checksum names nobody");
 }
@@ -143,4 +143,36 @@ fn a_handed_over_record_is_the_same_record() {
     assert!(!record.leave(generation));
     let stranger = opencode_util::page::private_file(dir.path(), SIZE).unwrap();
     assert!(Record::open(stranger).is_err());
+}
+
+// Expected (carbon 1): the watchdog never pairs one call's identity or start with another call's generation, however
+// the UI thread's stores and its reads interleave. Each call here has slot and start that follow from its generation.
+#[test]
+fn a_running_call_is_read_whole_under_contention() {
+    let (_dir, record) = record();
+    let record = std::sync::Arc::new(record);
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let writer = {
+        let (record, stop) = (record.clone(), stop.clone());
+        std::thread::spawn(move || {
+            let mut next = 1u64;
+            while !stop.load(Ordering::Relaxed) {
+                let generation = record.enter((next % 100) as u16, 1, next * 3);
+                assert_eq!(generation, next);
+                assert!(record.leave(generation));
+                next += 1;
+            }
+        })
+    };
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(300);
+    let mut seen = 0;
+    while std::time::Instant::now() < deadline {
+        if let Some(running) = record.running() {
+            seen += 1;
+            assert_eq!((running.slot, running.started), ((running.generation % 100) as u16, running.generation * 3));
+        }
+    }
+    stop.store(true, Ordering::Relaxed);
+    writer.join().unwrap();
+    assert!(seen > 0, "no call was seen running");
 }
