@@ -292,6 +292,92 @@ pub fn set_console_mode(handle: impl AsHandle, mode: u32) -> io::Result<()> {
     Ok(())
 }
 
+/// Whether a child this process spawns inherits `file`'s handle; its value then names the same file there.
+pub fn set_inheritable(file: &std::fs::File, inherit: bool) -> io::Result<()> {
+    use windows_sys::Win32::Foundation::{HANDLE_FLAG_INHERIT, SetHandleInformation};
+    let flags = if inherit { HANDLE_FLAG_INHERIT } else { 0 };
+    // SAFETY: a plain call on an open handle.
+    if unsafe { SetHandleInformation(file.as_raw_handle(), HANDLE_FLAG_INHERIT, flags) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+/// A job whose processes end when its last handle closes: a parent that dies, however, takes its client along.
+pub struct KillOnCloseJob(OwnedHandle);
+
+impl KillOnCloseJob {
+    pub fn new() -> io::Result<KillOnCloseJob> {
+        use windows_sys::Win32::System::JobObjects::{
+            CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+            JobObjectExtendedLimitInformation, SetInformationJobObject,
+        };
+        // SAFETY: an anonymous job; the handle is owned below.
+        let job = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+        if job.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `CreateJobObjectW` returned a handle this function owns.
+        let job = unsafe { OwnedHandle::from_raw_handle(job) };
+        // SAFETY: all-zero is a valid value of this plain struct.
+        let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { std::mem::zeroed() };
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        // SAFETY: the struct and its size match the information class.
+        let set = unsafe {
+            SetInformationJobObject(
+                job.as_raw_handle(),
+                JobObjectExtendedLimitInformation,
+                std::ptr::from_ref(&limits).cast(),
+                size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            )
+        };
+        if set == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(KillOnCloseJob(job))
+    }
+
+    /// Puts `child` in the job.
+    pub fn assign(&self, child: &std::process::Child) -> io::Result<()> {
+        use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
+        // SAFETY: both handles are open.
+        if unsafe { AssignProcessToJobObject(self.0.as_raw_handle(), child.as_raw_handle()) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+}
+
+/// A console control event that ends the session: the console closes, the user logs off, the system shuts down.
+pub fn ends_session(event: u32) -> bool {
+    use windows_sys::Win32::System::Console::{CTRL_CLOSE_EVENT, CTRL_LOGOFF_EVENT, CTRL_SHUTDOWN_EVENT};
+    matches!(event, CTRL_CLOSE_EVENT | CTRL_LOGOFF_EVENT | CTRL_SHUTDOWN_EVENT)
+}
+
+/// Calls `handler` with each console control event, before the handlers registered earlier; it returns whether it
+/// handled the event. Once a process; later calls do nothing.
+pub fn on_console_control(handler: fn(u32) -> bool) -> io::Result<()> {
+    static HANDLER: std::sync::OnceLock<fn(u32) -> bool> = std::sync::OnceLock::new();
+    unsafe extern "system" fn route(event: u32) -> BOOL {
+        BOOL::from(HANDLER.get().is_some_and(|handler| handler(event)))
+    }
+    if HANDLER.set(handler).is_err() {
+        return Ok(());
+    }
+    // SAFETY: `route` is a valid handler for the life of the process.
+    if unsafe { SetConsoleCtrlHandler(Some(route), 1) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+/// Waits up to `timeout` for process `pid` to end, without taking its status. False when it still runs, or when it
+/// cannot be opened.
+pub fn wait_pid(pid: u32, timeout: Duration) -> bool {
+    use windows_sys::Win32::System::Threading::PROCESS_SYNCHRONIZE;
+    open(pid, PROCESS_SYNCHRONIZE).and_then(|process| wait_handle(process, Some(timeout))).unwrap_or(false)
+}
+
 /// The console modes of standard input and output, saved so a parent can put them back after a child that changed
 /// them died.
 pub struct ConsoleModes {
@@ -302,6 +388,13 @@ pub struct ConsoleModes {
 impl ConsoleModes {
     pub fn save() -> ConsoleModes {
         ConsoleModes { input: console_mode(io::stdin()), output: console_mode(io::stdout()) }
+    }
+
+    /// Turns on escape sequences on the console output, so a reset written next is interpreted, not printed.
+    pub fn interpret_escapes(&self) {
+        if let Some(mode) = self.output {
+            let _ = set_console_mode(io::stdout(), vt_output_mode(mode));
+        }
     }
 
     /// Puts both modes back and drops the input the console holds: keys typed for a client that is gone.

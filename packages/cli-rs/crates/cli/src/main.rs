@@ -32,7 +32,8 @@ fn main() -> ExitCode {
     // Before any thread starts: the TUI may run under a parent that restarts it after a plugin crash.
     let raw = match contain::start(std::env::args_os().collect()) {
         Ok(raw) => raw,
-        Err(code) => return code,
+        // The client's whole code: on Windows it may not fit in a byte.
+        Err(code) => std::process::exit(code),
     };
     // Bun decodes the arguments the same way, with U+FFFD for bytes that are not UTF-8. Nothing reads the raw
     // arguments again.

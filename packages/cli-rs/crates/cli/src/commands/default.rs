@@ -88,8 +88,8 @@ pub fn run(context: &Context, args: &RootArgs) -> error::Result<()> {
         environment: local.then(opencode_store::environment::session_environment),
         contain: opencode_tui::plugins::contain::Contain {
             record: crate::contain::record(),
-            skip: crate::contain::skip(),
-            resume: crate::contain::resume(),
+            watch: true,
+            unsupervised: crate::contain::unsupervised(),
         },
         ..Args::default()
     };

@@ -1,10 +1,11 @@
-//! The parent's rules (synthesis 4.5), apart from real processes: which arguments the next client gets, when the
-//! parent stops restarting, and the second-crash rule. `restart` with real processes is in the P-PTY scenarios.
+//! The parent's rules (synthesis 4.5), apart from real clients: which arguments the next client gets, what it is told,
+//! when the parent stops restarting, and the second-crash rule. The loop runs over a fake system; one row runs a real
+//! parent in a process of its own, as signals need. `restart` with real clients is in the P-PTY scenarios.
 
 use std::ffi::OsString;
 use std::time::{Duration, Instant};
 
-use opencode_plugin::contain::{Left, Record, record};
+use opencode_plugin::contain::{Artifact, Snapshot, record};
 
 use super::*;
 
@@ -12,154 +13,277 @@ fn os(args: &[&str]) -> Vec<OsString> {
     args.iter().map(OsString::from).collect()
 }
 
-fn named(id: &str, session: Option<&str>) -> Left {
-    Left {
-        plugin: Some(id.to_owned()),
-        call: Some("render-slot".to_owned()),
-        session: session.map(str::to_owned),
-        ..Left::default()
+fn fault(id: &str) -> Artifact {
+    Artifact::external(id, &format!("/plugins/{id}"), "00000000deadbeef")
+}
+
+fn named(id: &str) -> Crash {
+    Crash { artifact: Some(fault(id)), call: Some("render-slot".to_owned()), hang: false }
+}
+
+/// The parse of `args` as `main` does it.
+fn parsed(args: &[OsString]) -> Box<crate::parse::Invocation> {
+    let args: Vec<String> = args.iter().skip(1).map(|arg| arg.to_string_lossy().into_owned()).collect();
+    match crate::parse::parse(&args, "opencode-native") {
+        crate::parse::Outcome::Run(invocation) => invocation,
+        _ => panic!("{args:?} does not run"),
     }
 }
 
-// Expected: the next client opens the record's session, and gets no `--prompt` (the first client sent it), no
-// `--continue` and no other `--session`; what follows `--` stays last.
+fn restart_of(args: &[OsString]) -> Restart {
+    tui(args).unwrap()
+}
+
+// Expected (bigboi, carbon 7): the next client's command line parses to the first one's, without `--prompt` and
+// `--continue`, with the record's session, whatever spelling the first used: grouped shorts, a boolean literal after
+// `--continue`, `=` forms, a directory that looks like a flag.
 #[test]
-fn the_next_client_resumes_the_session_and_sends_no_prompt_again() {
-    let raw = os(&["opencode-native", "--prompt", "hi", "-c", "/work", "--session=ses_old", "--auto", "-s", "ses_x"]);
-    assert_eq!(arguments(&raw, Some("ses_1")), os(&["opencode-native", "/work", "--auto", "--session", "ses_1"]));
-    let raw = os(&["opencode-native", "--prompt=hello", "--", "--prompt"]);
-    assert_eq!(arguments(&raw, None), os(&["opencode-native", "--", "--prompt"]));
-    assert_eq!(arguments(&os(&["opencode-native", "--continue"]), None), os(&["opencode-native"]));
+fn the_next_client_parses_to_the_first_without_its_prompt() {
+    for line in [
+        &["opencode-native", "--prompt", "hi", "-c", "/work", "--session=ses_old", "--auto"][..],
+        &["opencode-native", "-cs", "ses_x", "--yolo"],
+        &["opencode-native", "--continue", "false", "dir"],
+        &["opencode-native", "--continue=true", "--standalone", "--log-level", "debug", "--print-logs"],
+        &["opencode-native", "--server", "http://127.0.0.1:4096", "--", "--prompt"],
+        &["opencode-native"],
+    ] {
+        let raw = os(line);
+        let first = parsed(&raw);
+        for session in [None, Some("ses_1")] {
+            let next = arguments(&raw[0], &restart_of(&raw), session);
+            let again = parsed(&next);
+            let (a, b) = (&first.cli, &again.cli);
+            assert_eq!(
+                (b.root.directory.as_deref(), b.root.session.as_deref(), b.root.prompt.as_deref(), b.root.continue_),
+                (a.root.directory.as_deref(), session, None, false),
+                "{line:?} -> {next:?}"
+            );
+            assert_eq!(
+                (b.root.permissions.auto(), b.global.print_logs, b.global.log_level),
+                (a.root.permissions.auto(), a.global.print_logs, a.global.log_level),
+                "{line:?}"
+            );
+            assert_eq!(
+                (again.server.standalone, again.server.server.as_deref()),
+                (first.server.standalone, first.server.server.as_deref()),
+                "{line:?}"
+            );
+        }
+    }
 }
 
 // Expected (4.5): at most 2 automatic restarts in 60 s; a third crash in that time stops the parent, and a crash
 // 60 s after the first counts afresh.
 #[test]
 fn two_restarts_a_minute_then_the_parent_stops() {
-    let raw = os(&["opencode-native"]);
     let start = Instant::now();
     let mut policy = Policy::default();
-    assert!(policy.next(start, &raw, &named("a.one", None)).is_ok());
-    assert!(policy.next(start + Duration::from_secs(30), &raw, &named("a.two", None)).is_ok());
-    let stopped = policy.next(start + Duration::from_secs(59), &raw, &named("a.three", None));
+    assert!(policy.next(start, &named("a.one")).is_ok());
+    assert!(policy.next(start + Duration::from_secs(30), &named("a.two")).is_ok());
+    let stopped = policy.next(start + Duration::from_secs(59), &named("a.three"));
     assert_eq!(
         stopped,
         Err("opencode-native crashed 3 times in 60 s (last in plugin a.three); not restarting".to_owned())
     );
     let mut policy = Policy::default();
     for minute in 0..5 {
-        assert!(policy.next(start + Duration::from_secs(61 * minute), &raw, &Left::default()).is_ok(), "{minute}");
+        assert!(policy.next(start + Duration::from_secs(61 * minute), &named("a.one")).is_ok(), "{minute}");
     }
 }
 
-// Expected (4.5, the second-crash rule): a crash that names no plugin restarts normally; a second one within 10
-// minutes starts with every external plugin off. One 10 minutes later is a first one again.
+// Expected (4.5, the second-crash rule; bigboi, carbon 5): only the crash at hand is handed over, never earlier ones,
+// which the crash list keeps until the user's enable or a rebuild ends them. A crash that names no plugin restarts
+// normally; a second one within 10 minutes starts that one client in safe mode. One 10 minutes later is a first one
+// again, and a named crash between them does not count.
 #[test]
-fn a_second_unnamed_crash_in_ten_minutes_turns_every_external_plugin_off() {
-    let raw = os(&["opencode-native"]);
+fn the_handoff_is_this_crash_and_safe_mode_follows_two_unnamed() {
     let start = Instant::now();
-    let skips = |policy: &mut Policy, at: Duration| {
-        policy.next(start + at, &raw, &Left::default()).unwrap();
-        policy.skip.iter().filter(|id| *id == "*").count()
-    };
+    let unnamed = Crash::default();
     let mut policy = Policy::default();
-    assert_eq!(skips(&mut policy, Duration::ZERO), 0);
-    assert_eq!(skips(&mut policy, Duration::from_secs(599)), 1);
-    let mut policy = Policy::default();
-    assert_eq!(skips(&mut policy, Duration::ZERO), 0);
-    assert_eq!(skips(&mut policy, Duration::from_secs(600)), 0);
-    // A named crash in between does not count as one.
-    let mut policy = Policy::default();
-    policy.next(start, &raw, &named("a.one", None)).unwrap();
-    assert_eq!(skips(&mut policy, Duration::from_secs(120)), 0);
-}
-
-/// A client the fake loop starts: it writes a record as a client would, then ends with `end`.
-struct Script {
-    ends: Vec<(End, Option<Left>)>,
-    spawned: Vec<(Vec<OsString>, Resume)>,
-    restored: usize,
-}
-
-/// Runs the loop over fake clients numbered from `base` up: process IDs no real client has, one range a test, so the
-/// records are the test's own.
-fn run(raw: &[OsString], base: u32, ends: Vec<(End, Option<Left>)>) -> (Result<Vec<OsString>, ExitCode>, Script) {
-    let script = std::cell::RefCell::new(Script { ends, spawned: Vec::new(), restored: 0 });
-    let result = supervise_with(
-        raw,
-        |args, resume| {
-            let mut script = script.borrow_mut();
-            script.spawned.push((args.to_vec(), resume.clone()));
-            Spawned::Started(base + script.spawned.len() as u32)
-        },
-        |pid| {
-            let mut script = script.borrow_mut();
-            let (end, left) = script.ends.remove(0);
-            if let Some(left) = left {
-                let record = Record::create(&record::path(pid)).unwrap();
-                record.name(0, left.plugin.as_deref().unwrap_or_default());
-                record.set_session(left.session.as_deref());
-                record.set_draft(left.draft.as_deref().unwrap_or_default());
-                if left.plugin.is_some() {
-                    record.enter(0, record::kind(left.call.as_deref().unwrap_or("setup")), 0);
-                }
-            }
-            end
-        },
-        || script.borrow_mut().restored += 1,
+    assert_eq!(policy.next(start, &named("a.one")), Ok(Handoff { crash: Some(named("a.one")), safe: false }));
+    assert_eq!(
+        policy.next(start + Duration::from_secs(70), &named("a.two")),
+        Ok(Handoff { crash: Some(named("a.two")), safe: false })
     );
-    (result, script.into_inner())
+    let safe = |policy: &mut Policy, at: u64| policy.next(start + Duration::from_secs(at), &unnamed).unwrap().safe;
+    let mut policy = Policy::default();
+    assert!(!safe(&mut policy, 0));
+    assert!(safe(&mut policy, 599));
+    assert!(safe(&mut policy, 1000), "within 10 minutes of the one before");
+    let mut policy = Policy::default();
+    assert!(!safe(&mut policy, 0));
+    assert!(!safe(&mut policy, 600));
+    let mut policy = Policy::default();
+    policy.next(start, &named("a.one")).unwrap();
+    assert!(!safe(&mut policy, 120));
 }
 
-// Expected: a crash restores the terminal and starts the next client with the dead one's record to resume from; an
-// ordinary exit ends the parent with the client's code, and every record is gone by then.
+/// A client of the fake system: what it does to its record before it ends, and how it ends.
+struct Client {
+    end: End,
+    crash: Option<Crash>,
+    snapshot: Option<Snapshot>,
+    terminal: bool,
+}
+
+fn client(end: End) -> Client {
+    Client { end, crash: None, snapshot: None, terminal: true }
+}
+
+#[derive(Default)]
+struct Fake {
+    dir: Option<opencode_util::temp::TempDir>,
+    clients: Vec<Client>,
+    started: Vec<(Vec<OsString>, Handoff, Option<Snapshot>)>,
+    records: Vec<Arc<Record>>,
+    restored: Vec<bool>,
+    /// The parent is asked to end while client N runs.
+    ending_at: Option<usize>,
+    fail_records_from: Option<usize>,
+    made: usize,
+}
+
+impl System for Fake {
+    fn record(&mut self) -> io::Result<Record> {
+        self.made += 1;
+        if self.fail_records_from.is_some_and(|from| self.made >= from) {
+            return Err(io::Error::other("no room"));
+        }
+        Record::create(self.dir.get_or_insert_with(|| opencode_util::temp::tempdir().unwrap()).path())
+    }
+
+    fn spawn(&mut self, args: &[OsString], record: &Arc<Record>) -> Spawned {
+        if self.clients.is_empty() {
+            return Spawned::Failed;
+        }
+        self.started.push((args.to_vec(), record.handoff(), record.snapshot()));
+        self.records.push(record.clone());
+        Spawned::Started(self.started.len() as u32)
+    }
+
+    fn wait(&mut self, _: u32) -> End {
+        let client = self.clients.remove(0);
+        let record = self.records.last().unwrap();
+        if let Some(snapshot) = &client.snapshot {
+            record.publish(snapshot);
+        }
+        if client.terminal {
+            record.set_terminal();
+        }
+        if let Some(crash) = &client.crash
+            && let Some(artifact) = &crash.artifact
+        {
+            record.name(0, artifact);
+            record.enter(0, record::kind(crash.call.as_deref().unwrap_or("setup")), 0);
+        }
+        client.end
+    }
+
+    fn restore(&mut self, took: bool) {
+        self.restored.push(took);
+    }
+
+    fn ending(&self) -> bool {
+        self.ending_at.is_some_and(|at| self.started.len() >= at)
+    }
+}
+
+fn snapshot(session: Option<&str>, draft: &str) -> Snapshot {
+    Snapshot { session: session.map(str::to_owned), draft: draft.to_owned(), dropped: false }
+}
+
+// Expected (bigboi 7, 8): a crash restores the terminal and starts the next client with a new record that holds the
+// crash and the dead client's snapshot; the next client opens that session and sends no prompt again. A client that
+// crashes before it publishes anything hands on the snapshot it was given. An ordinary exit ends the parent with the
+// client's code.
 #[test]
 fn the_parent_restarts_after_a_crash_and_ends_with_the_client() {
     let raw = os(&["opencode-native", "--prompt", "hi"]);
-    let (result, script) = run(
-        &raw,
-        3_900_000_000,
-        vec![(End::Crash(139), Some(named("a.one", Some("ses_1")))), (End::Exit(7), Some(Left::default()))],
+    let mut fake = Fake {
+        clients: vec![
+            Client {
+                crash: Some(named("a.one")),
+                snapshot: Some(snapshot(Some("ses_1"), "half a thought")),
+                ..client(End::Crash(139))
+            },
+            Client { terminal: false, ..client(End::Crash(134)) },
+            client(End::Exit(7)),
+        ],
+        ..Fake::default()
+    };
+    assert_eq!(supervise_with(&raw, &restart_of(&raw), &mut fake), Err(7));
+    assert_eq!(fake.restored, [true, false]);
+    assert_eq!(fake.started[0], (raw.clone(), Handoff::default(), None));
+    let kept = Some(snapshot(Some("ses_1"), "half a thought"));
+    assert_eq!(
+        fake.started[1],
+        (
+            os(&["opencode-native", "--session=ses_1"]),
+            Handoff { crash: Some(named("a.one")), safe: false },
+            kept.clone()
+        )
     );
-    assert_eq!(result, Err(ExitCode::from(7)));
-    assert_eq!(script.restored, 1);
-    assert_eq!(script.spawned.len(), 2);
-    assert_eq!(script.spawned[0], (raw.clone(), Resume::default()));
-    assert_eq!(script.spawned[1].0, os(&["opencode-native", "--session", "ses_1"]));
-    let resume = script.spawned[1].1.clone();
-    assert_eq!(resume, Resume { record: Some(record::path(3_900_000_001)), skip: vec!["a.one".to_owned()] });
-    assert!(!record::path(3_900_000_001).exists() && !record::path(3_900_000_002).exists());
+    assert_eq!(
+        fake.started[2],
+        (os(&["opencode-native", "--session=ses_1"]), Handoff { crash: Some(Crash::default()), safe: false }, kept)
+    );
 }
 
-// Expected: after the limit of restarts the parent ends with the crash's code and starts nothing more; a client that
-// died without a record (a crash before the record existed) is restarted as unnamed.
+// Expected: after the limit of restarts the parent ends with the crash's code and starts nothing more, having put the
+// terminal back each time.
 #[test]
 fn the_parent_stops_with_the_crash_code() {
     let raw = os(&["opencode-native"]);
-    let crash = || (End::Crash(134), None);
-    let (result, script) = run(&raw, 3_900_000_200, vec![crash(), crash(), crash()]);
-    assert_eq!(result, Err(ExitCode::from(134)));
-    assert_eq!((script.spawned.len(), script.restored), (3, 3));
-    assert_eq!(script.spawned[2].1.skip, ["*"]);
+    let mut fake = Fake { clients: (0..4).map(|_| client(End::Crash(134))).collect(), ..Fake::default() };
+    assert_eq!(supervise_with(&raw, &restart_of(&raw), &mut fake), Err(134));
+    assert_eq!((fake.started.len(), fake.restored.len()), (3, 3));
+    assert!(fake.started[2].1.safe);
 }
 
-// Expected: a parent that cannot start its first client runs it itself; one that cannot start a later one fails.
+// Expected (bigboi 9): a client that crashes after the parent was asked to end is not restarted, and the terminal it
+// left is still put back.
+#[test]
+fn a_parent_asked_to_end_restores_and_restarts_nothing() {
+    let raw = os(&["opencode-native"]);
+    let mut fake =
+        Fake { clients: vec![client(End::Crash(75)), client(End::Exit(0))], ending_at: Some(1), ..Fake::default() };
+    assert_eq!(supervise_with(&raw, &restart_of(&raw), &mut fake), Err(75));
+    assert_eq!((fake.started.len(), fake.restored.as_slice()), (1, &[true][..]));
+}
+
+// Expected: a parent that cannot start its first client, or make its first record, runs the client itself, without a
+// parent; one that cannot start or make a record for a later one ends with the crash.
 #[test]
 fn a_client_that_cannot_start() {
     let raw = os(&["opencode-native", "--prompt", "hi"]);
-    let first = supervise_with(&raw, |_, _| Spawned::Failed, |_| End::Exit(0), || {});
-    assert_eq!(first, Ok(raw.clone()));
-    let mut spawned = 0;
-    let later = supervise_with(
-        &raw,
-        |_, _| {
-            spawned += 1;
-            if spawned == 1 { Spawned::Started(3_900_000_100) } else { Spawned::Failed }
-        },
-        |_| End::Crash(139),
-        || {},
-    );
-    assert_eq!(later, Err(ExitCode::FAILURE));
+    let restart = restart_of(&raw);
+    assert_eq!(supervise_with(&raw, &restart, &mut Fake::default()), Ok(raw.clone()));
+    let mut fake = Fake { clients: vec![client(End::Exit(0))], fail_records_from: Some(1), ..Fake::default() };
+    assert_eq!(supervise_with(&raw, &restart, &mut fake), Ok(raw.clone()));
+    assert!(fake.started.is_empty());
+    let mut fake = Fake { clients: vec![client(End::Crash(139))], ..Fake::default() };
+    assert_eq!(supervise_with(&raw, &restart, &mut fake), Err(1));
+    let mut fake = Fake {
+        clients: vec![client(End::Crash(139)), client(End::Exit(0))],
+        fail_records_from: Some(2),
+        ..Fake::default()
+    };
+    assert_eq!(supervise_with(&raw, &restart, &mut fake), Err(139));
+}
+
+// Expected (carbon 7): only a command line that runs the TUI gets a parent; `wanted` asks this before
+// `OPENCODE_PLUGIN_PARENT`.
+#[test]
+fn only_the_tui_gets_a_parent() {
+    let runs = |line: &[&str]| tui(&os(line)).is_some();
+    let verdicts = [
+        runs(&["opencode-native"]),
+        runs(&["opencode-native", "/work", "-c"]),
+        runs(&["opencode-native", "session", "list"]),
+        runs(&["opencode-native", "--help"]),
+        runs(&["opencode-native", "--version"]),
+    ];
+    assert_eq!(verdicts, [true, true, false, false, false]);
 }
 
 // Expected: how a client ended decides the restart. A fatal signal, a kill and the watchdog's and a panic's exit codes
@@ -172,7 +296,7 @@ fn a_fault_is_a_crash_and_a_request_is_an_end() {
         (libc::SIGSEGV, End::Crash(139)),
         (libc::SIGABRT, End::Crash(134)),
         (libc::SIGKILL, End::Crash(137)),
-        (libc::SIGBUS, End::Crash(135)),
+        (libc::SIGBUS, End::Crash(128 + libc::SIGBUS)),
         (libc::SIGTERM, End::Exit(143)),
         (libc::SIGINT, End::Exit(130)),
         (libc::SIGHUP, End::Exit(129)),
@@ -186,17 +310,61 @@ fn a_fault_is_a_crash_and_a_request_is_an_end() {
     }
 }
 
-// Expected: a client that dies of a crash after the parent was asked to end (SIGTERM, or the terminal hung up) is not
-// restarted: the parent ends with its code.
+/// Set in the process the next row starts: it runs a real parent.
+#[cfg(unix)]
+const PROBE: &str = "OPENCODE_CONTAIN_PROBE";
+
+// Expected (bigboi 9, carbon 3, 8): a real parent passes a SIGTERM sent to it alone on to its client, which ends with
+// it, and the parent then ends with the client's code. The parent runs in a process of its own (this test binary
+// again), as its signal dispositions are the process's.
 #[cfg(unix)]
 #[test]
-fn a_parent_asked_to_end_restarts_nothing() {
-    use std::sync::atomic::Ordering;
-    // A kill is a crash, and leaves no core file.
-    let killed = || std::process::Command::new("sh").args(["-c", "kill -KILL $$"]).spawn().unwrap().id() as i32;
-    assert_eq!(sys::wait(killed()), End::Crash(137));
-    sys::ENDING.store(true, Ordering::Relaxed);
-    let ending = sys::wait(killed());
-    sys::ENDING.store(false, Ordering::Relaxed);
-    assert_eq!(ending, End::Exit(137));
+#[allow(unsafe_code)]
+fn a_real_parent_passes_a_term_on() {
+    use std::io::BufRead;
+    if std::env::var_os(PROBE).is_some() {
+        let raw = os(&["opencode-native"]);
+        match supervise_with(&raw, &restart_of(&raw), &mut sys::Unix::new()) {
+            Ok(_) => {
+                println!("client {}", std::process::id());
+                loop {
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+            }
+            Err(code) => std::process::exit(code),
+        }
+    }
+    let mut probe = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["contain::tests::a_real_parent_passes_a_term_on", "--exact", "--nocapture", "--test-threads=1"])
+        .env(PROBE, "1")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut lines = std::io::BufReader::new(probe.stdout.take().unwrap()).lines();
+    let client: libc::pid_t = loop {
+        let line = lines.next().expect("the probe's client").unwrap();
+        // libtest writes the test name first, on the same line.
+        if let Some((_, pid)) = line.split_once("client ") {
+            break pid.parse().unwrap();
+        }
+    };
+    // SAFETY: a signal to the probe, this test's own child.
+    unsafe { libc::kill(probe.id() as libc::pid_t, libc::SIGTERM) };
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let status = loop {
+        if let Some(status) = probe.try_wait().unwrap() {
+            break status;
+        }
+        if Instant::now() > deadline {
+            let _ = probe.kill();
+            // SAFETY: the probe's client, which is not this process.
+            unsafe { libc::kill(client, libc::SIGKILL) };
+            panic!("the parent did not end: the client never got the signal");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    assert_eq!(status.code(), Some(143));
+    // SAFETY: a probe of a PID; the parent reaped its client, so nothing answers.
+    assert_eq!(unsafe { libc::kill(client, 0) }, -1, "the client outlived its parent");
 }
