@@ -1738,7 +1738,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
 
 /// The nodes of `node` that carry an id, with what each keep holds again in the host's tree (`kept`): a library's memo
 /// table keeps a value for each memo inside a kept one.
-fn keyed(node: &v2::Node, kept: &dyn Fn(&str) -> usize) -> usize {
+pub(crate) fn keyed(node: &v2::Node, kept: &dyn Fn(&str) -> usize) -> usize {
     match node {
         v2::Node::Keep { key } => kept(key).max(1),
         _ => usize::from(node.id().is_some()) + node.children().iter().map(|child| keyed(child, kept)).sum::<usize>(),

@@ -173,7 +173,10 @@ impl Loader {
             };
             let alias = |known: &Target| {
                 known.project && !target.project && {
-                    let file = |target: &Target| target.library().and_then(|file| identity(&file));
+                    // A library's file, or a TypeScript plugin's directory (review carbon-1).
+                    let file = |target: &Target| {
+                        target.library().or_else(|| target.local.clone()).and_then(|file| identity(&file))
+                    };
                     file(known).is_some_and(|known| file(&target) == Some(known))
                 }
             };
@@ -213,6 +216,15 @@ impl Loader {
             .filter_map(|dir| dir.ancestors().take(3).find(|dir| dir.is_dir()).map(Path::to_path_buf))
             .collect();
         for target in self.targets() {
+            // A TypeScript plugin's modules may sit in its subdirectories, whose saves reload it too (review carbon-2);
+            // its dependencies change by an install, which touches the directory itself.
+            if self.scripted(&target)
+                && let Some(local) = &target.local
+            {
+                let mut found = Vec::new();
+                subdirectories(local, &mut found, 0);
+                dirs.extend(found);
+            }
             let Some(local) = target.local else { continue };
             let dir = if local.is_dir() { local } else { local.parent().map(Path::to_path_buf).unwrap_or(local) };
             dirs.push(dir);
@@ -411,8 +423,30 @@ impl Loader {
             scripts.forget(name);
             return changed;
         }
+        // Safe mode holds it as it holds a library (review carbon-1). A crash or a client no parent guards does not:
+        // nothing of it runs in this process.
+        let was_held = registry.held(name);
+        if !registry.admit_script(name) {
+            scripts.forget(name);
+            if self.seen.borrow_mut().remove(name).is_some() {
+                registry.unload(host, name);
+                return true;
+            }
+            return !was_held;
+        }
         match scripts.step(name, dir, target.options.as_deref()) {
             Step::Same => false,
+            // Its setup runs only when it starts enabled (review carbon-8).
+            Step::Described(id) => {
+                match registry.starts_enabled(name, &id) {
+                    true => scripts.set_up(name),
+                    false => {
+                        scripts.inactive(name);
+                        return self.script(host, registry, target, scripts, dir, listed);
+                    }
+                }
+                false
+            }
             Step::Starting if registry.loaded(name) => false,
             Step::Starting => {
                 let status = Status::Skipped(STARTING.to_owned());
@@ -432,6 +466,8 @@ impl Loader {
             Step::Failed(error, digest) => self.fail(&**host, registry, listed, name, digest, error),
             Step::Ready(definition, error, digest) => {
                 if registry.id_taken(&definition.id, name) {
+                    // What the JS host set up of it goes (review carbon-2).
+                    scripts.forget(name);
                     let error = format!("plugin ID {} is already registered", definition.id);
                     return self.fail(&**host, registry, listed, name, digest, error);
                 }
@@ -629,6 +665,19 @@ impl Loader {
 /// The project root of `cwd`: the nearest ancestor with `.git` or `.hg`, else `cwd`.
 pub fn project_root(cwd: &Path) -> PathBuf {
     cwd.ancestors().find(|dir| dir.join(".git").exists() || dir.join(".hg").exists()).unwrap_or(cwd).to_path_buf()
+}
+
+/// The subdirectories of `dir`, `node_modules` and `.git` left out, to a depth of 8 and at most 64 in all.
+fn subdirectories(dir: &Path, found: &mut Vec<PathBuf>, depth: usize) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        if depth >= 8 || found.len() >= 64 || name == "node_modules" || name == ".git" || !entry.path().is_dir() {
+            continue;
+        }
+        found.push(entry.path());
+        subdirectories(&entry.path(), found, depth + 1);
+    }
 }
 
 /// What tells a file from another however it is named: its device and inode, or its file index on Windows.

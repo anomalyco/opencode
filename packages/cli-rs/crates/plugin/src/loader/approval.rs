@@ -79,9 +79,10 @@ impl Artifact {
     }
 
     /// The TypeScript plugin directory `target`, which the JS host would run: its real path, and the SHA-256 of what it
-    /// holds. Each file's path and bytes count, in name order, its dependencies in `node_modules` too (what the JS host
-    /// would import); hidden entries do not count. The JS host reads the files itself, so a change after the hash is what
-    /// the next reconcile sees: the watcher's, which holds the new files back.
+    /// holds. Each file's path and bytes count, in name order, hidden ones and its dependencies in `node_modules` too:
+    /// whatever the JS host may import from it (review carbon-1). The JS host reads the files itself, so a change after
+    /// the hash is what the next reconcile sees: the watcher's, which holds the new files back. A file outside the
+    /// directory that the plugin imports is not part of it.
     pub fn tree(target: &Path) -> Result<Self, String> {
         let error = |error: std::io::Error| format!("{}: {error}", target.display());
         let path = std::fs::canonicalize(target).map_err(error)?;
@@ -132,9 +133,6 @@ fn walk(
     entries.sort_by_key(|entry| entry.file_name());
     for entry in entries {
         let name = entry.file_name();
-        if name.to_string_lossy().starts_with('.') {
-            continue;
-        }
         let (path, inner) = (entry.path(), relative.join(&name));
         let metadata = std::fs::metadata(&path).map_err(error)?;
         context.update(encode(&inner).as_bytes());
