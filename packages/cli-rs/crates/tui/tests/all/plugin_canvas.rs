@@ -631,13 +631,7 @@ impl Model for Canvases {
                 Command::Open | Command::Home => {
                     (reference.held, reference.asked) = (None, None);
                     let on_route = matches!(harness.tui.route(), Route::Plugin { .. });
-                    reference.mounted = (on_route && !reference.dead).then(|| pad(|pad| pad.generation));
-                    if let Some(generation) = reference.mounted {
-                        if generation <= reference.highest {
-                            return fail("lifecycle", "mount", format!("generation {generation} opened again"));
-                        }
-                        reference.highest = generation;
-                    }
+                    reference.mounted = (on_route && !reference.dead).then_some(0);
                 }
                 Command::Show(shown) => {
                     if *shown != reference.shown {
@@ -652,6 +646,16 @@ impl Model for Canvases {
                 _ => {}
             }
             let first = frame(&harness, Duration::from_millis(1));
+            // A route's first view runs in the turn's deferred work (P4), so a mount's generation is known after it.
+            if matches!(command, Command::Open | Command::Home)
+                && let Some(mounted) = reference.mounted.as_mut()
+            {
+                *mounted = pad(|pad| pad.generation);
+                if *mounted <= reference.highest {
+                    return fail("lifecycle", "mount", format!("generation {mounted} opened again"));
+                }
+                reference.highest = *mounted;
+            }
             let draws: Vec<Drawn> = pad(|pad| pad.draws[seen..].to_vec());
             let animating = was_animating && reference.animating();
             let asked = match command {
@@ -963,8 +967,8 @@ thread_local! {
     static FIXED: RefCell<Option<Vec<Shape>>> = const { RefCell::new(None) };
 }
 
-// Expected: a canvas without an id is refused as a scroll without one is, since a node with state must have one:
-// the host asks again for a whole tree, and a second refusal in a row fails the plugin, which never drew.
+// Expected: a canvas without an id is refused as a scroll without one is, since a node with state must have one; a
+// refusal other than an unknown keep breaks the contract and fails the plugin at once (P4), which never drew.
 #[test]
 fn a_canvas_without_an_id_is_refused() {
     PAD.with(|cell| *cell.borrow_mut() = Pad { unkeyed: true, ..Pad::default() });
@@ -976,7 +980,7 @@ fn a_canvas_without_an_id_is_refused() {
         "{:?}",
         status(&harness, ID)
     );
-    assert_eq!(pad(|pad| (pad.views, pad.draws.len())), (2, 0));
+    assert_eq!(pad(|pad| (pad.views, pad.draws.len())), (1, 0));
     assert_eq!(host::ledger(), Ledger::default());
 }
 
