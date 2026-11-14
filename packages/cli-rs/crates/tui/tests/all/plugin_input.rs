@@ -37,6 +37,9 @@ pub struct Probe {
     /// The panel's view.
     pub panel: Option<input::PanelInput>,
     pub views: usize,
+    /// The rows of the rich select, and the word of their footers.
+    pub rows: Vec<String>,
+    pub footer: String,
 }
 
 thread_local! {
@@ -73,6 +76,31 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         host.overlay(Overlay { surface: "menu".into(), anchor: Anchor::Point { x: 4, y: 3 }, width: 24, height: 4 });
     });
     setup.command(command("input.focus"), |host, input| host.focus(input.unwrap_or("a")));
+    // The rich select: its rows follow the probe's `rows`, and it is shown again under its key as they change.
+    setup.command(command("input.select"), |host, _| host.dialog(abi::Dialog::Select(select())));
+    setup.command(command("input.reselect"), |host, _| {
+        if host.dialog_open("pick") {
+            host.dialog(abi::Dialog::Select(select()));
+        }
+    });
+    setup.command(command("input.picked"), |_, input| {
+        probe(|probe| probe.log.push(format!("picked {}", input.unwrap_or("-"))));
+    });
+    setup.command(command("input.row"), |_, input| {
+        probe(|probe| probe.log.push(format!("row {}", input.unwrap_or("-"))));
+    });
+    setup.command(command("input.update"), |_, input| {
+        probe(|probe| probe.log.push(format!("update {}", input.unwrap_or("-"))));
+    });
+    setup.command(command("input.details"), |host, _| {
+        host.dialog(abi::Dialog::ErrorDetails(abi::ErrorDetails {
+            title: "Probe error".into(),
+            error: "it broke".into(),
+            source: Some("probe.rs".into()),
+            context: Some("Status: failed".into()),
+            back: Some(abi::Action::Command { name: "input.picked".into(), input: Some("back".into()) }),
+        }));
+    });
     let side = v2::Surface::new("side", v2::Place::Panel("side".into()), side)
         .layers(vec![
             Layer {
@@ -188,6 +216,53 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
+/// The probe's rich select: a row of each of its `rows`, one with its own action, one that toggles `test.other`, one
+/// that toggles the probe itself (which the host refuses), with a footer action, a key, and live footers.
+fn select() -> abi::Select {
+    let (rows, footer) = probe(|probe| (probe.rows.clone(), probe.footer.clone()));
+    let command = |name: &str| abi::Action::Command { name: name.into(), input: None };
+    let options = rows
+        .iter()
+        .map(|row| {
+            let mut option = abi::SelectOption::new(format!("row {row}"), row.clone());
+            option.footer = Some(format!("{footer} {row}"));
+            option.footer_color = Some(abi::Color::from("text.muted"));
+            match row.as_str() {
+                "beta" => option.action = Some(command("input.row")),
+                "other" => option.toggle = Some("test.other".into()),
+                "self" => option.toggle = Some(ID.into()),
+                "spin" => option.gutter = Some(abi::Gutter::Spinner),
+                _ => option.gutter = Some(abi::Gutter::Span(abi::Span::new("x"))),
+            }
+            option
+        })
+        .collect();
+    abi::Select {
+        title: "Pick".into(),
+        placeholder: None,
+        options,
+        current: None,
+        action: command("input.picked"),
+        key: Some("pick".into()),
+        actions: vec![abi::SelectAction {
+            title: "update".into(),
+            key: Some("ctrl+u".into()),
+            action: command("input.update"),
+            hidden: vec!["beta".into()],
+            primary: false,
+        }],
+        binds: vec![abi::PanelBind { key: "ctrl+e".into(), title: "echo".into(), action: command("input.picked") }],
+    }
+}
+
+/// The other plugin a select's row toggles: a line in the home footer while it is active.
+pub fn other(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.slot(abi::Placement::append("session.prompt.right"), |_, _, _| {
+        abi::Render::Show(abi::Node::text([abi::Span::new("OTHER ON")]))
+    });
+    Ok(())
+}
+
 fn side(cx: &mut v2::View<'_>) -> v2::Node {
     let panel = cx.input.panel;
     probe(|probe| {
@@ -214,6 +289,7 @@ fn side(cx: &mut v2::View<'_>) -> v2::Node {
             .interact(interact(true, false, None)),
     ])
     .with_id("side")
+    .interact(interact(true, false, None))
 }
 
 pub fn open() -> Harness {
@@ -227,7 +303,7 @@ pub fn open_with(prepare: impl FnOnce(&mut Probe)) -> Harness {
         prepare(probe);
     });
     let deps = Deps {
-        builtins: vec![abi::Plugin { id: ID, setup }.into()],
+        builtins: vec![abi::Plugin { id: ID, setup }.into(), abi::Plugin { id: "test.other", setup: other }.into()],
         ..support::deps(Arc::new(support::Fake::new(|seen| support::base(seen, support::DIRECTORY))))
     };
     let harness = support::mount(120, 30, deps);
@@ -492,4 +568,113 @@ fn a_hold_key_holds_the_keys_after_it_until_the_time_passes() {
     settle(&harness);
     assert_eq!(taken(), ["side: key mode [-]", "side: key down [menu]"]);
     assert_eq!(interact::ledger(&*harness.tui).held, 0);
+}
+
+fn rows(rows: &[&str], footer: &str) {
+    probe(|probe| {
+        probe.rows = rows.iter().map(|row| (*row).to_owned()).collect();
+        probe.footer = footer.to_owned();
+    });
+}
+
+/// Whether plugin `id` is active.
+fn active(harness: &Harness, id: &str) -> bool {
+    harness.tui.plugins.entries().iter().any(|entry| entry.id == id && entry.active)
+}
+
+// Expected (the rich select, 4.10): a select shown again under its key while it is open changes in place, keeping the
+// filter and the selected row; footers and colors are the plugin's, live; a plugin that finds it closed shows nothing.
+#[test]
+fn a_rich_select_changes_in_place_and_keeps_its_filter() {
+    let harness = open();
+    rows(&["alpha", "beta", "gamma"], "old");
+    run(&harness, "input.select", None);
+    harness.app.type_text("gam");
+    settle(&harness);
+    rows(&["alpha", "beta", "gamma", "delta"], "new");
+    run(&harness, "input.reselect", None);
+    let screen = harness.app.text();
+    assert!(screen.contains("row gamma") && screen.contains("new gamma"), "{screen}");
+    assert!(!screen.contains("row alpha"), "the filter went: {screen}");
+    assert!(screen.contains("gam"), "{screen}");
+    // Picking the row runs the select's action and leaves it open: it has a key.
+    harness.app.press("enter");
+    settle(&harness);
+    assert_eq!(taken(), ["picked gamma"]);
+    assert!(harness.app.text().contains("row gamma"));
+    harness.app.press("escape");
+    settle(&harness);
+    run(&harness, "input.reselect", None);
+    assert!(!harness.app.text().contains("Pick"), "a closed select opened again");
+}
+
+// Expected (4.10): a row's own action runs instead of the select's; a footer action runs with the selected row's
+// value and is hidden on the rows it names; an extra key runs with the selected row.
+#[test]
+fn a_rich_select_runs_row_actions_footer_actions_and_keys() {
+    let harness = open();
+    rows(&["alpha", "beta"], "f");
+    run(&harness, "input.select", None);
+    harness.app.press("ctrl+u");
+    settle(&harness);
+    harness.app.press("ctrl+e");
+    settle(&harness);
+    harness.app.press("down");
+    settle(&harness);
+    harness.app.press("enter");
+    settle(&harness);
+    // `update` is hidden on `beta`: its key goes on to the list.
+    harness.app.press("ctrl+u");
+    settle(&harness);
+    assert_eq!(taken(), ["update alpha", "picked alpha", "row beta"]);
+}
+
+// Expected (3.6): a row may toggle another plugin, which the host does after the key and labels from the plugin's
+// real state; a row that names its own plugin is refused.
+#[test]
+fn a_select_row_toggles_another_plugin_but_never_its_own() {
+    let harness = open();
+    assert!(active(&harness, "test.other"));
+    rows(&["other", "self"], "f");
+    run(&harness, "input.select", None);
+    let screen = harness.app.text();
+    assert!(screen.contains("enabled") && screen.contains("disable"), "{screen}");
+    harness.app.press("enter");
+    settle(&harness);
+    assert!(!active(&harness, "test.other"));
+    run(&harness, "input.reselect", None);
+    assert!(harness.app.text().contains("disabled"), "{}", harness.app.text());
+    harness.app.press("down");
+    settle(&harness);
+    harness.app.press("enter");
+    settle(&harness);
+    assert!(active(&harness, ID), "a row toggled its own plugin");
+}
+
+// Expected (the error view): the host's own error details show the plugin's error, and escape runs its back action.
+#[test]
+fn error_details_show_and_go_back() {
+    let harness = open();
+    run(&harness, "input.details", None);
+    let screen = harness.app.text();
+    assert!(screen.contains("Probe error") && screen.contains("it broke"), "{screen}");
+    harness.app.press("escape");
+    settle(&harness);
+    assert!(!harness.app.text().contains("Probe error"));
+    assert_eq!(taken(), ["picked back"]);
+}
+
+// Expected: no layer may bind the reserved chord; a pointer drag without a consumed press reaches nobody.
+#[test]
+fn the_reserved_chord_and_an_uncaptured_drag_reach_no_plugin() {
+    let harness = open();
+    run(&harness, "input.panel", None);
+    taken();
+    harness.app.press("ctrl+c");
+    settle(&harness);
+    assert!(!taken().iter().any(|line| line.contains("key c")));
+    let (x, y) = support::at(&harness.app.text(), "AAAA").unwrap();
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), x + 1, y);
+    settle(&harness);
+    assert!(!taken().iter().any(|line| line.contains("Drag")));
 }
