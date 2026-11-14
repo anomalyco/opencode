@@ -7,14 +7,14 @@ import { appendFileSync, writeSync } from "node:fs"
 import path from "node:path"
 
 // The module's own code runs as it is imported: it says so, so a test can tell it never ran before approval.
-appendFileSync(path.join(import.meta.dir, ".log.jsonl"), JSON.stringify({ module: true }) + "\n")
+appendFileSync(path.join(import.meta.dir, "..", ".probe.log.jsonl"), JSON.stringify({ module: true }) + "\n")
 
 export default {
   id: "example.probe",
   setup(api: any) {
     const carrier = api[Symbol.for("opencode.carrier")]
-    // Without the option (a project's plugin has none), beside the module, in a hidden file its hash leaves out.
-    const file = api.options.log ?? path.join(import.meta.dir, ".log.jsonl")
+    // Without the option (a project's plugin has none), beside its directory: a file in it is part of its hash.
+    const file = api.options.log ?? path.join(import.meta.dir, "..", ".probe.log.jsonl")
     const log = (entry: unknown) => appendFileSync(file, JSON.stringify(entry) + "\n")
     let rows = 3
     let hoard: unknown[] = []

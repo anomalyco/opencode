@@ -416,16 +416,20 @@ fn a_plugin_that_throws_fails_alone_with_no_effects() {
 /// Kills, by a command of the probe, the JS host; then checks that the probe alone failed with `cause`, that the old
 /// process is gone, and that the twin, set up again on a new JS host, shows its last whole tree until its new one comes.
 fn ends_the_js_host(command: &str, input: Option<&str>, cause: &str, config: Config) {
+    let setup = config.limits.setup;
     let (pipe, _log) = probe_and_twin(config, false);
     let pid = pipe.scripts().pid().unwrap();
     twin_open(&pipe);
     toasts(&pipe.harness);
+    let begun = Instant::now();
     pipe.harness.tui.keymap.dispatch(command, input);
     pipe.harness.wait(&format!("{command} ended the JS host"), || {
         pipe.harness.app.advance(Duration::from_millis(1));
         whole_or_placeholder(&pipe.harness.app.text());
         pipe.scripts().pid().is_some_and(|now| now != pid) || failed(&pipe, PROBE).is_some()
     });
+    // Judged by the handler's limit: nothing the setups answered is still owed (a load answered with its ID was).
+    assert!(begun.elapsed() < setup, "the end took the setup's limit");
     pipe.settle();
     let error = failed(&pipe, PROBE).unwrap_or_default();
     assert!(error.contains(cause), "{error}");
@@ -960,7 +964,7 @@ fn prints_of_a_plugin_and_its_dependencies_never_reach_the_protocol() {
         pipe.harness.tui.keymap.dispatch("printer.print", None);
         pipe.settle();
     }
-    let log = std::fs::read_to_string(printer.join(".log.jsonl")).unwrap();
+    let log = std::fs::read_to_string(printer.with_file_name(".printer.log.jsonl")).unwrap();
     assert_eq!(log.lines().filter(|line| line.contains("printed")).count(), 3, "{log}");
     assert_eq!(log.lines().filter(|line| line.contains("written")).count(), 3, "a write's callback never ran: {log}");
     twin_open(&pipe);
@@ -1035,7 +1039,7 @@ impl Project {
 
     /// The setups and cleanups the probe logged itself, and the times its module's own code ran.
     fn log(&self) -> (usize, usize, usize) {
-        let text = std::fs::read_to_string(self.dir.join(".log.jsonl")).unwrap_or_default();
+        let text = std::fs::read_to_string(self.dir.with_file_name(".probe.log.jsonl")).unwrap_or_default();
         (text.matches("\"setup\"").count(), text.matches("\"cleanup\"").count(), text.matches("\"module\"").count())
     }
 }
@@ -1540,7 +1544,7 @@ fn keys(config: Config) -> (Pipe, PathBuf) {
     external_with(&harness.tui, External { config_dir, cwd: root.path().to_path_buf(), dev: Vec::new() }, Some(config));
     let pipe = Pipe { harness, root };
     pipe.active(KEYS);
-    let log = pipe.root.path().join("config/plugins/keys/.log.jsonl");
+    let log = pipe.root.path().join("config/plugins/.keys.log.jsonl");
     (pipe, log)
 }
 
@@ -1548,7 +1552,7 @@ fn keys(config: Config) -> (Pipe, PathBuf) {
 fn heard(log: &Path) -> Vec<String> {
     let text = std::fs::read_to_string(log).unwrap_or_default();
     let _ = std::fs::remove_file(log);
-    let entries = text.lines().map(|line| serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(line));
+    let entries = text.lines().map(serde_json::from_str::<serde_json::Map<String, serde_json::Value>>);
     entries.flat_map(Result::unwrap).map(|(owner, what)| format!("{owner}: {}", what.as_str().unwrap_or(""))).collect()
 }
 
@@ -1655,4 +1659,377 @@ fn a_mode_ends_with_the_js_host_that_set_it() {
     burst(&pipe, &plain("dx"));
     assert_eq!(pipe.harness.text(), "X:");
     assert_eq!(heard(&log), ["any: any d", "any: any x", "setup: hold"]);
+}
+
+// Review carbon: rows that fail without each fix.
+
+const LAB: &str = "example.lab";
+
+/// The lab and the twin on one JS host, on Home, where the lab's slot shows.
+fn lab(config: Config) -> Pipe {
+    let pipe = open(&[("lab", None), ("twin", None)], config, (100, 30));
+    pipe.active(LAB);
+    pipe.active(twin::ID);
+    shows(&pipe, "lab c=0");
+    pipe
+}
+
+/// Whether the keymap has command `id`.
+fn registered(pipe: &Pipe, id: &str) -> bool {
+    pipe.harness.tui.keymap.commands().iter().any(|command| command.id == id)
+}
+
+/// Waits for a toast that starts with `start`, and returns it.
+fn toasted(pipe: &Pipe, start: &str) -> String {
+    let current =
+        || pipe.harness.tui.toasts.current().map(|toast| toast.message).filter(|message| message.starts_with(start));
+    quietly(pipe, &format!("a toast {start:?}"), || current().is_some());
+    current().unwrap()
+}
+
+// Expected (carbon-8): the setup context says the client's version and channel, and the theme's mode.
+#[test]
+fn the_setup_context_says_the_client_and_its_theme() {
+    let Some(mut config) = config() else { return };
+    (config.version, config.channel) = ("9.9.9".to_owned(), "beta".to_owned());
+    let pipe = lab(config);
+    pipe.harness.tui.keymap.dispatch("lab.context", None);
+    assert_eq!(toasted(&pipe, "9.9.9"), "9.9.9 beta dark");
+}
+
+// Expected (carbon-8, carbon-9 CM5, CM6): a stored key the manifest declares is written, answered and watched; once
+// unwatched, a change of it is not pushed.
+#[test]
+fn a_stored_value_is_answered_watched_and_unwatched() {
+    let Some(config) = config() else { return };
+    let pipe = lab(config);
+    let tui = &pipe.harness.tui;
+    tui.keymap.dispatch("lab.store", Some("x"));
+    let stored = toasted(&pipe, "stored");
+    assert!(stored.contains(r#"\"text\":\"x\""#), "{stored}");
+    shows(&pipe, r#"note="{\"text\":\"x\"}""#);
+    tui.keymap.dispatch("lab.unwatch", None);
+    pipe.settle();
+    toasts(&pipe.harness);
+    tui.keymap.dispatch("lab.store", Some("y"));
+    assert!(toasted(&pipe, "stored").contains(r#"\"text\":\"y\""#));
+    shows(&pipe, "note=null");
+    pipe.settle();
+    toasts(&pipe.harness);
+    assert!(!pipe.harness.app.text().contains(r#"\"y\""#), "{}", pipe.harness.app.text());
+}
+
+// Expected (carbon-8): a plugin watches at most 64 reads, its note and 63 of the 70 others; the rest are not answered.
+#[test]
+fn a_plugin_watches_at_most_64_reads() {
+    let Some(config) = config() else { return };
+    let pipe = lab(config);
+    pipe.harness.tui.keymap.dispatch("lab.watches", None);
+    assert_eq!(toasted(&pipe, "watches"), "watches 63");
+}
+
+/// Runs `command` of the lab, which ends it, and checks it alone failed with `cause` and whether the JS host `ended`.
+fn lab_fails(command: &str, cause: &str, ended: bool) {
+    let Some(config) = config() else { return };
+    let pipe = lab(config);
+    let tui = &pipe.harness.tui;
+    let (pid, started) = (pipe.scripts().pid(), pipe::crossed().started);
+    tui.keymap.dispatch(command, None);
+    // Queued behind it: never started when it ended the JS host, or ran before its view did.
+    tui.keymap.dispatch("twin.bump", Some("1"));
+    tui.keymap.dispatch("twin.bump", Some("1"));
+    quietly(&pipe, "the lab failed", || failed(&pipe, LAB).is_some());
+    pipe.settle();
+    let error = failed(&pipe, LAB).unwrap();
+    assert!(error.contains(cause), "{error}");
+    assert_eq!(pipe::crossed().started - started, u64::from(ended), "{error}");
+    assert_eq!(pipe.scripts().pid() == pid, !ended);
+    assert_eq!(pipe.status(twin::ID), Some(Status::Active));
+    // The twin answers: its state is its own, or new after an end.
+    tui.navigate(Route::Plugin { id: twin::ID.to_owned(), name: "twin".to_owned() });
+    pipe.settle();
+    let total = |pipe: &Pipe| header(pipe).split(' ').nth(1).and_then(|total| total.parse::<u32>().ok()).unwrap();
+    let before = total(&pipe);
+    assert!(ended || before == 2, "{}", pipe.harness.app.text());
+    tui.keymap.dispatch("twin.bump", Some("1"));
+    pipe.settle();
+    assert_eq!(total(&pipe), before + 1);
+}
+
+// Expected (carbon-5): an effect that is not JSON fails its plugin alone; the JS host stays.
+#[test]
+fn an_effect_that_is_not_json_fails_its_plugin_alone() {
+    lab_fails("lab.bigint", "not JSON", false);
+}
+
+// Expected (carbon-5): a view that is not JSON fails its plugin alone; the JS host stays.
+#[test]
+fn a_view_that_is_not_json_fails_its_plugin_alone() {
+    lab_fails("lab.bigview", "BigInt", false);
+}
+
+// Expected (carbon-3): a view that ends the JS host fails its own plugin, not one whose call waited behind it.
+#[test]
+fn a_view_that_ends_the_js_host_fails_its_plugin_alone() {
+    lab_fails("lab.exit", "ended the JS host", true);
+}
+
+// Expected (carbon-7): a memo within a kept memo stays known: the inner subtree is built once, though its outer one was
+// kept, then built again.
+#[test]
+fn a_memo_within_a_kept_memo_stays_known() {
+    let Some(config) = config() else { return };
+    let pipe = lab(config);
+    let tui = &pipe.harness.tui;
+    tui.keymap.dispatch("lab.c", None);
+    shows(&pipe, "lab c=1");
+    tui.keymap.dispatch("lab.a", None);
+    shows(&pipe, "lab a=1");
+    tui.keymap.dispatch("lab.inner", None);
+    assert_eq!(toasted(&pipe, "inner"), "inner 1");
+}
+
+// Expected (carbon-7, carbon-9 CM2): content a view releases goes, and so does what a JS host that ended gave: the host
+// holds the content of the trees it shows, however many views and restarts.
+#[test]
+fn released_content_and_a_restarted_hosts_content_go() {
+    let Some(mut config) = config() else { return };
+    config.ends = 10;
+    let pipe = lab(config);
+    let tui = &pipe.harness.tui;
+    let held = opencode_plugin::surface::ledger().content;
+    for round in 1..=4 {
+        tui.keymap.dispatch("lab.c", None);
+        shows(&pipe, &format!("lab c={round}"));
+    }
+    assert_eq!(opencode_plugin::surface::ledger().content, held, "a released handle was kept");
+    for _ in 0..2 {
+        let pid = pipe.scripts().pid().unwrap();
+        pipe.scripts().kill();
+        quietly(&pipe, "the end was noticed", || pipe.scripts().pid().is_some_and(|now| now != pid));
+        shows(&pipe, "lab c=0");
+        pipe.settle();
+    }
+    assert_eq!(opencode_plugin::surface::ledger().content, held, "an ended JS host's content was kept");
+}
+
+// Expected (carbon-7): a slot that showed no rows reserves none when it mounts again: the prompt does not move while its
+// first tree is on its way.
+#[test]
+fn a_slot_of_no_rows_reserves_none_again() {
+    let Some(config) = config() else { return };
+    let pipe = lab(config);
+    let tui = &pipe.harness.tui;
+    tui.keymap.dispatch("lab.zero", None);
+    quietly(&pipe, "the slot went", || !pipe.harness.app.text().contains("lab c="));
+    pipe.settle();
+    let at = |pipe: &Pipe| support::at(&pipe.harness.app.text(), "Ask anything");
+    let before = at(&pipe);
+    tui.navigate(Route::Plugin { id: twin::ID.to_owned(), name: "twin".to_owned() });
+    pipe.settle();
+    tui.navigate(Route::Home);
+    pipe.harness.app.render();
+    assert_eq!(at(&pipe), before, "the placeholder reserved rows:\n{}", pipe.harness.app.text());
+}
+
+// Expected (carbon-3): a new version whose import ends the JS host fails its plugin once: the running version is not
+// set up again from the files that ended it, so the JS host starts once more, and the others stay.
+#[test]
+fn a_new_version_that_ends_the_js_host_starts_it_once() {
+    let Some(config) = config() else { return };
+    let pipe = open(&[("reloader", None), ("twin", None)], config, (80, 30));
+    pipe.active("example.reloader");
+    pipe.active(twin::ID);
+    let started = pipe::crossed().started;
+    let file = pipe.root.path().join("config/plugins/reloader/tui.ts");
+    let source = std::fs::read_to_string(&file).unwrap();
+    std::fs::write(&file, format!("process.exit(7)\n{source}")).unwrap();
+    opencode_tui::plugins::host::reconcile(&pipe.harness.tui);
+    quietly(&pipe, "the reloader failed", || failed(&pipe, "example.reloader").is_some());
+    pipe.settle();
+    assert_eq!(pipe::crossed().started, started + 1);
+    assert!(failed(&pipe, "example.reloader").unwrap().contains("ended the JS host"));
+    assert_eq!(pipe.status(twin::ID), Some(Status::Active));
+}
+
+// Expected (carbon-2): a plugin directory that moves frees its ID on the JS host: the plugin loads from the new one.
+#[test]
+fn a_moved_plugin_loads_from_its_new_directory() {
+    let Some(config) = config() else { return };
+    let pipe = open(&[("reloader", None)], config, (80, 30));
+    pipe.active("example.reloader");
+    let plugins = pipe.root.path().join("config/plugins");
+    std::fs::rename(plugins.join("reloader"), plugins.join("moved")).unwrap();
+    opencode_tui::plugins::host::reconcile(&pipe.harness.tui);
+    pipe.settle();
+    pipe.active("example.reloader");
+    toasts(&pipe.harness);
+    pipe.harness.tui.keymap.dispatch("reloader.say", None);
+    assert_eq!(toasted(&pipe, "v"), "v1");
+}
+
+// Expected (carbon-2): a plugin directory whose path holds `#` and `%` loads: the JS host imports it by URL.
+#[test]
+fn a_plugin_whose_path_holds_url_characters_loads() {
+    let Some(config) = config() else { return };
+    let pipe = open(&[], config, (80, 30));
+    copy(&Path::new(EXAMPLES).join("reloader"), &pipe.root.path().join("config/plugins/re#loader%20"));
+    opencode_tui::plugins::host::reconcile(&pipe.harness.tui);
+    pipe.active("example.reloader");
+}
+
+// Expected (carbon-2): a plugin set up again on a new JS host that registers other commands is loaded again with them,
+// and the new activation answers: the old one's end does not deactivate it.
+#[test]
+fn a_setup_again_that_registers_others_keeps_the_new_activation() {
+    let Some(config) = config() else { return };
+    let file = std::env::temp_dir().join(format!("dyn-{}-{:?}", std::process::id(), std::thread::current().id()));
+    std::fs::write(&file, "1").unwrap();
+    let pipe = open(&[("dyn", Some(serde_json::json!({ "file": file.to_string_lossy() })))], config, (80, 30));
+    pipe.active("example.dyn");
+    std::fs::write(&file, "2").unwrap();
+    let pid = pipe.scripts().pid().unwrap();
+    pipe.scripts().kill();
+    quietly(&pipe, "the end was noticed", || pipe.scripts().pid().is_some_and(|now| now != pid));
+    quietly(&pipe, "dyn.c2 was registered", || registered(&pipe, "dyn.c2"));
+    pipe.settle();
+    toasts(&pipe.harness);
+    pipe.harness.tui.keymap.dispatch("dyn.c2", None);
+    assert_eq!(toasted(&pipe, "dyn"), "dyn.c2");
+    let _ = std::fs::remove_file(&file);
+}
+
+// Expected (carbon-8): a plugin a directive disables is described and not set up: none of its setup runs until it is
+// enabled, and then it answers.
+#[test]
+fn a_disabled_plugin_is_not_set_up_until_enabled() {
+    let Some(config) = config() else { return };
+    let log =
+        std::env::temp_dir().join(format!("disabled-{}-{:?}.log", std::process::id(), std::thread::current().id()));
+    let _ = std::fs::remove_file(&log);
+    let root = opencode_util::temp::tempdir().unwrap();
+    let config_dir = root.path().join("config");
+    let dir = config_dir.join("plugins/probe");
+    copy(&Path::new(EXAMPLES).join("probe"), &dir);
+    let entries = serde_json::json!({ "plugins": [
+        { "package": dir.to_string_lossy(), "options": { "log": log.to_string_lossy() } },
+        "-example.probe",
+    ] });
+    let deps = Deps {
+        route: Route::Home,
+        config: support::config(support::decode(&entries.to_string())),
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount(80, 30, deps);
+    external_with(&harness.tui, External { config_dir, cwd: root.path().to_path_buf(), dev: Vec::new() }, Some(config));
+    let pipe = Pipe { harness, root };
+    quietly(&pipe, "the probe is listed", || pipe.status(PROBE).is_some());
+    pipe.settle();
+    assert_eq!(pipe.status(PROBE), Some(Status::Inactive));
+    assert_eq!(setups(&log), 0, "a disabled plugin's setup ran");
+    let host = opencode_tui::plugins::host::host(&pipe.harness.tui);
+    assert!(pipe.harness.tui.plugins.set_active(&host, PROBE, true));
+    pipe.active(PROBE);
+    quietly(&pipe, "probe.step was registered", || registered(&pipe, "probe.step"));
+    pipe.settle();
+    assert_eq!(setups(&log), 1);
+    pipe.harness.tui.keymap.dispatch("probe.step", Some("1"));
+    assert_eq!(toasted(&pipe, "step"), "step 1");
+    let _ = std::fs::remove_file(&log);
+}
+
+// Expected (carbon-1): safe mode holds a TypeScript plugin as it holds a library: nothing of it runs, and no JS host
+// starts for it.
+#[test]
+fn safe_mode_holds_a_typescript_plugin() {
+    let Some(config) = config() else { return };
+    let log = std::env::temp_dir().join(format!("safe-{}-{:?}.log", std::process::id(), std::thread::current().id()));
+    let _ = std::fs::remove_file(&log);
+    let root = opencode_util::temp::tempdir().unwrap();
+    let config_dir = root.path().join("config");
+    let dir = config_dir.join("plugins/probe");
+    copy(&Path::new(EXAMPLES).join("probe"), &dir);
+    let entries = serde_json::json!({ "plugins": [{ "package": dir.to_string_lossy(), "options": { "log": log.to_string_lossy() } }] });
+    let deps = Deps {
+        route: Route::Home,
+        config: support::config(support::decode(&entries.to_string())),
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount(80, 30, deps);
+    harness.tui.plugins.set_safe();
+    external_with(&harness.tui, External { config_dir, cwd: root.path().to_path_buf(), dev: Vec::new() }, Some(config));
+    let pipe = Pipe { harness, root };
+    for _ in 0..50 {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert_eq!(pipe.scripts().pid(), None, "a JS host started in safe mode");
+    assert_eq!(setups(&log), 0);
+    assert_ne!(pipe.status(PROBE), Some(Status::Active));
+}
+
+// Expected (carbon-4, synthesis 3.8): the reserved chord is never held: during a command's hold it reaches the host at
+// once (here it clears the prompt), and the keys the hold kept are dropped.
+#[test]
+fn the_reserved_chord_goes_through_a_hold() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe_and_twin(config, false);
+    pipe.settle();
+    pipe.harness.app.type_text("xy");
+    pipe.settle();
+    pipe.harness.tui.keymap.dispatch("probe.hold", Some("300"));
+    pipe.harness.app.type_text("ab");
+    pipe.harness.app.app().dispatch(Event::Key(KeyEvent::new(KeyCode::Char('c'), Modifiers::CTRL)));
+    assert_eq!(pipe.harness.text(), "", "the reserved chord was held");
+    pipe.settle();
+    pipe.harness.app.type_text("z");
+    pipe.settle();
+    assert_eq!(pipe.harness.text(), "z", "what the hold kept came after the chord");
+}
+
+// Expected (carbon-6): the JS host exits once the client that started it is gone, though its input stays open: here
+// its parent, a shell, exits at once and something else holds its input.
+#[cfg(target_os = "linux")]
+#[test]
+fn the_js_host_exits_when_its_client_is_gone() {
+    let Some(bun) = bun() else { return };
+    let host = Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/src/pipe/host.ts");
+    // The shell lives until the JS host started as its child, then exits.
+    let script = format!(
+        "sleep 12 </dev/null 2>/dev/null | {} {} >/dev/null 2>&1 & echo $!; sleep 1",
+        bun.display(),
+        host.display()
+    );
+    let output =
+        std::process::Command::new("sh").arg("-c").arg(script).stderr(std::process::Stdio::null()).output().unwrap();
+    let pid: u32 = String::from_utf8_lossy(&output.stdout).trim().parse().unwrap();
+    let begun = Instant::now();
+    let alive = || {
+        let state = std::fs::read_to_string(format!("/proc/{pid}/stat")).unwrap_or_default();
+        !state.is_empty() && !state.contains(") Z ")
+    };
+    while alive() && begun.elapsed() < Duration::from_secs(10) {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(!alive(), "the JS host {pid} outlived its client");
+}
+
+// Expected (carbon-9, CM9): a plugin directory without a TUI module is listed as skipped, and nothing of it runs.
+#[test]
+fn a_directory_without_a_tui_module_is_skipped() {
+    let Some(config) = config() else { return };
+    let pipe = open(&[("twin", None)], config, (80, 30));
+    pipe.active(twin::ID);
+    let dir = pipe.root.path().join("config/plugins/server-only");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("server.ts"), "export default {}\n").unwrap();
+    opencode_tui::plugins::host::reconcile(&pipe.harness.tui);
+    let target = dir.to_string_lossy().into_owned();
+    let skipped = || {
+        let entries = pipe.harness.tui.plugins.entries();
+        entries
+            .into_iter()
+            .any(|entry| entry.target.as_deref() == Some(target.as_str()) && matches!(entry.status, Status::Skipped(_)))
+    };
+    quietly(&pipe, "the directory was skipped", skipped);
 }
