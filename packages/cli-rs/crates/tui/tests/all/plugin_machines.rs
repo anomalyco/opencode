@@ -249,6 +249,41 @@ impl Life {
     }
 }
 
+impl Life {
+    /// Runs an action of the manager machine: `/plugins`, escape, ctrl+a, or enter on the selected row.
+    fn act_manager(&self, action: &str) {
+        match action {
+            "open" => drop(self.harness.tui.keymap.dispatch("plugins.list", None)),
+            "escape" => self.harness.app.press("escape"),
+            "internal" => self.harness.app.press("ctrl+a"),
+            "toggle" => self.harness.app.press("enter"),
+            _ => panic!("unknown action {action}"),
+        }
+        self.settle();
+    }
+
+    /// `dialog/internal/life`, as `parity/machines/plugins.json` writes them for the manager machine.
+    fn observe_manager(&self) -> String {
+        let screen = self.harness.app.text();
+        let internal = ["show", "hide"].into_iter().find(|word| screen.contains(&format!("{word} internal")));
+        let Some(internal) = internal else {
+            let life = if screen.contains("life plugin:") { "on" } else { "off" };
+            return format!("-/?/{life}");
+        };
+        // The built-in rows may push the life row below the screen.
+        if internal == "hide" {
+            return "list/hide/?".to_owned();
+        }
+        let row = screen.lines().find(|line| line.contains("parity.life") && !line.contains("Plugin failed"));
+        let life = match row {
+            Some(row) if row.contains("inactive") => "off",
+            Some(_) => "on",
+            None => "none",
+        };
+        format!("list/{internal}/{life}")
+    }
+}
+
 /// The known differences of this client: `state action observation`.
 struct ExpectedFailures {
     known: BTreeSet<String>,
@@ -327,21 +362,28 @@ fn traces<'a>(corpus: &Value, machine: &'a Value, walks: bool) -> Vec<Vec<&'a st
     out
 }
 
-/// Replays `path` on a fresh TUI. An action a state has no edge for does nothing. The first difference that is not
-/// a known row, or `None`; a known row ends the path, unless the machine says this client follows it on (`continue`).
+/// Replays `path` on a fresh TUI. An action a state has no edge for does nothing; the manager machine's reader does
+/// not send it. The first difference that is not a known row, or `None`; a known row ends the path, unless the machine
+/// says this client follows it on (`continue`).
 fn replay(machine: &Value, path: &[&str], known: &mut ExpectedFailures) -> Option<String> {
     let life = Life::open(machine == &CORPUS["machines"]["project"]);
+    let manager = machine == &CORPUS["machines"]["manager"];
     let follows = machine["continue"] == true;
     let mut state = machine["initial"].as_str().unwrap();
     for (index, action) in ["mount"].into_iter().chain(path.iter().copied()).enumerate() {
+        let edge = machine["states"][state][1][action].as_str();
         let next = match index {
             0 => state,
-            _ => machine["states"][state][1][action].as_str().unwrap_or(state),
+            _ => edge.unwrap_or(state),
         };
-        if index > 0 {
-            life.act(action);
+        match (index, manager) {
+            (0, _) => {}
+            (_, true) if edge.is_some() => life.act_manager(action),
+            (_, true) => {}
+            (_, false) => life.act(action),
         }
-        let (expected, actual) = (machine["states"][next][0].as_str().unwrap(), life.observe());
+        let actual = if manager { life.observe_manager() } else { life.observe() };
+        let expected = machine["states"][next][0].as_str().unwrap();
         if actual != expected {
             if known.has(&format!("{state} {action} {actual}")) {
                 if !follows {
@@ -442,11 +484,36 @@ fn a_project_plugin_follows_the_shared_fixture() {
 // edge for does nothing. The known rows are the machine's and the fault trials' own.
 #[test]
 fn the_plugin_life_recovers_from_a_dropped_repeated_or_swapped_action() {
-    let cycles: Vec<Vec<&str>> = CORPUS["faults"]["life"]["cycles"]
+    check(
+        "life",
+        faulted(&cycles("life")),
+        &[&CORPUS["machines"]["life"]["xfail"], &CORPUS["faults"]["life"]["xfail"]],
+    );
+}
+
+/// The fault trials' normal cycles of machine `name`.
+fn cycles(name: &str) -> Vec<Vec<&'static str>> {
+    CORPUS["faults"][name]["cycles"]
         .as_array()
         .unwrap()
         .iter()
         .map(|cycle| cycle.as_str().unwrap().split(' ').collect())
-        .collect();
-    check("life", faulted(&cycles), &[&CORPUS["machines"]["life"]["xfail"], &CORPUS["faults"]["life"]["xfail"]]);
+        .collect()
+}
+
+// Expected (P2, the shared fixture's rows for the manager's keys): after every legal path to depth 4 the plugin
+// manager shows what the file says, and the known rows are exactly the differences.
+#[test]
+fn the_plugin_manager_keys_follow_the_shared_fixture() {
+    let manager = &CORPUS["machines"]["manager"];
+    check("manager", traces(&CORPUS, manager, false), &[&manager["xfail"]]).check();
+}
+
+// Expected: the same along the file's seeded walks, and after one action of two normal cycles is dropped, repeated or
+// swapped.
+#[test]
+fn the_plugin_manager_keys_follow_the_shared_fixture_on_walks_and_faults() {
+    let manager = &CORPUS["machines"]["manager"];
+    check("manager", traces(&CORPUS, manager, true), &[&manager["xfail"]]);
+    check("manager", faulted(&cycles("manager")), &[&manager["xfail"], &CORPUS["faults"]["manager"]["xfail"]]);
 }
