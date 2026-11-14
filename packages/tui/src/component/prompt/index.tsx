@@ -956,28 +956,34 @@ export function Prompt(props: PromptProps) {
     }
   })
 
+  function canEnterShellMode() {
+    return (
+      inputTarget() !== undefined &&
+      !disabled() &&
+      store.mode === "normal" &&
+      !auto()?.visible &&
+      input?.visualCursor.offset === 0
+    )
+  }
+
+  function enterShellMode() {
+    setStore("placeholder", randomIndex(shell().length))
+    setStore("mode", "shell")
+  }
+
   Keymap.createLayer(() => {
     return {
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
-        return (
-          inputTarget() !== undefined &&
-          !disabled() &&
-          store.mode === "normal" &&
-          !auto()?.visible &&
-          input?.visualCursor.offset === 0
-        )
+        return canEnterShellMode()
       })(),
       commands: [
         {
           bind: "!",
           title: "Shell mode",
           group: "Prompt",
-          run: () => {
-            setStore("placeholder", randomIndex(shell().length))
-            setStore("mode", "shell")
-          },
+          run: enterShellMode,
         },
       ],
     }
@@ -1441,8 +1447,13 @@ export function Prompt(props: PromptProps) {
 
   async function pasteInputText(text: string, changed: () => boolean) {
     const normalizedText = stripAnsiSequences(text).replace(/\r\n?/g, "\n")
-    const pastedContent = normalizedText.trim()
-    const attachments = await resolvePastedAttachments(pastedContent, terminalEnvironment.platform)
+    const shellPaste =
+      normalizedText.startsWith("!") && !normalizedText.startsWith("![") && canEnterShellMode()
+    const insertedText = shellPaste ? normalizedText.slice(1) : normalizedText
+    const pastedContent = insertedText.trim()
+    const attachments = shellPaste
+      ? undefined
+      : await resolvePastedAttachments(pastedContent, terminalEnvironment.platform)
     if (changed()) return
     if (attachments) {
       attachments.forEach((attachment) => {
@@ -1456,7 +1467,7 @@ export function Prompt(props: PromptProps) {
     }
 
     const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
-    if ((lineCount >= 3 || pastedContent.length > 150) && config.prompt?.paste !== "full") {
+    if (!shellPaste && (lineCount >= 3 || pastedContent.length > 150) && config.prompt?.paste !== "full") {
       const extmark = input.extmarks.getAllForTypeId(promptPartTypeId).find((extmark) => {
         const ref = store.extmarkToPart.get(extmark.id)
         return (
@@ -1470,7 +1481,9 @@ export function Prompt(props: PromptProps) {
       return
     }
 
-    input.insertText(normalizedText)
+    if (shellPaste) enterShellMode()
+
+    input.insertText(insertedText)
 
     setTimeout(() => {
       if (!input || input.isDestroyed) return

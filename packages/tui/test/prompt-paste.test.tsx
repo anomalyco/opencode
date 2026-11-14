@@ -51,3 +51,70 @@ test.each(["whole", "fragment"])("undo submits the restored %s paste chip", asyn
   setup.mockInput.pressEnter()
   expect(await prompted.promise).toBe(kind === "whole" ? `${pasted} ` : "[Pasted ~4 ")
 })
+
+test("pasting a leading ! enters shell mode and submits to the shell", async () => {
+  takeDraft(undefined)
+  const sessionID = `ses_paste_shell_${crypto.randomUUID()}`
+  let shellCommand: string | undefined
+  let promptCalls = 0
+  await using setup = await createAppFixture({
+    args: { sessionID },
+    fetch: async (url, request) => {
+      const location = { directory }
+      if (url.pathname === "/api/agent") return json({ location, data: [agent("build")] })
+      if (url.pathname === "/api/model") return json({ location, data: [model("Paste Model")] })
+      if (url.pathname === `/api/session/${sessionID}`) return json({ data: session(sessionID) })
+      if (url.pathname.endsWith("/message") || url.pathname.endsWith("/inbox")) return json({ data: [], cursor: {} })
+      if (url.pathname === `/api/session/${sessionID}/shell`) {
+        shellCommand = (await request.json()).command
+        return json({ data: {} })
+      }
+      if (url.pathname.endsWith("/prompt")) {
+        promptCalls += 1
+        return json({ data: {} })
+      }
+    },
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("Paste Model"))
+  const text = () => setup.renderer.currentFocusedEditor?.plainText
+  await setup.mockInput.pasteBracketedText("!gh workflow run ci.yml")
+  await setup.waitFor(() => text() === "gh workflow run ci.yml")
+  expect(text()).toBe("gh workflow run ci.yml")
+  expect(shellCommand).toBeUndefined()
+  setup.mockInput.pressEnter()
+  await setup.waitFor(() => shellCommand !== undefined)
+  expect(shellCommand).toBe("gh workflow run ci.yml")
+  expect(promptCalls).toBe(0)
+})
+
+test("pasting a Markdown image stays in chat", async () => {
+  takeDraft(undefined)
+  const sessionID = `ses_paste_markdown_${crypto.randomUUID()}`
+  const prompted = Promise.withResolvers<string>()
+  let shellCalls = 0
+  await using setup = await createAppFixture({
+    args: { sessionID },
+    fetch: async (url, request) => {
+      const location = { directory }
+      if (url.pathname === "/api/agent") return json({ location, data: [agent("build")] })
+      if (url.pathname === "/api/model") return json({ location, data: [model("Paste Model")] })
+      if (url.pathname === `/api/session/${sessionID}`) return json({ data: session(sessionID) })
+      if (url.pathname.endsWith("/message") || url.pathname.endsWith("/inbox")) return json({ data: [], cursor: {} })
+      if (url.pathname === `/api/session/${sessionID}/shell`) {
+        shellCalls += 1
+        return json({ data: {} })
+      }
+      if (url.pathname.endsWith("/prompt")) {
+        prompted.resolve((await request.json()).text)
+        return json({ data: {} })
+      }
+    },
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("Paste Model"))
+  await setup.mockInput.pasteBracketedText("![alt](x)")
+  setup.mockInput.pressEnter()
+  expect(await prompted.promise).toBe("![alt](x)")
+  expect(shellCalls).toBe(0)
+})
