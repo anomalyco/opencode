@@ -278,6 +278,22 @@ fn shapes(rng: &mut Rng, width: u16, height: u16, depth: u8) -> Vec<Shape> {
 }
 
 /// The list of `shapes`, written with the SDK's builder.
+/// What the host holds for the list of `shapes`: its bytes, and a cell as OpenTUI records it for each cell.
+fn held_for(shapes: &[Shape]) -> i64 {
+    fn cells(shapes: &[Shape]) -> usize {
+        shapes
+            .iter()
+            .map(|shape| match shape {
+                Shape::Cell(..) => 1,
+                Shape::Cells(_, _, _, run) => run.len(),
+                Shape::Clip(_, _, _, _, inner) => cells(inner),
+                _ => 0,
+            })
+            .sum()
+    }
+    (encode(shapes).as_bytes().len() + cells(shapes) * opencode_plugin::canvas::CELL) as i64
+}
+
 fn encode(shapes: &[Shape]) -> List {
     fn write(list: &mut List, shapes: &[Shape]) {
         for shape in shapes {
@@ -736,7 +752,7 @@ impl Model for Canvases {
                 return fail("work", "idle", "a frame with nothing to animate wants another".into());
             }
             let bytes = match &reference.held {
-                Some(Held::Art(shapes)) if reference.showing() => Some(encode(shapes).as_bytes().len() as i64),
+                Some(Held::Art(shapes)) if reference.showing() => Some(held_for(shapes)),
                 _ => None,
             };
             let expected = Ledger {
@@ -1408,8 +1424,8 @@ fn full_tui(width: u16, height: u16, canvases: usize, mode: Mode) -> Harness {
 
 // The gate of P5 (synthesis 4.4, 6; S2's limit; bigboi 3): host time a frame for full-screen canvases that draw a new
 // screen of cells at 60 fps. Ignored; a release build runs it with `--ignored plugin_canvas::a_full_screen_canvas
-// --nocapture`. `TestApp` turns on OpenTUI's `OT_SCENE_DEBUG_VERIFY`, which repaints every still frame, so every
-// number is with it on. It prints, in µs, p50 and p99 of each stage, paired within each frame: the whole frame, the
+// --nocapture`. `TestApp` turns on OpenTUI's `OT_SCENE_DEBUG_VERIFY`, which repaints every still frame in full, as no
+// app does: each layout runs with it on and again with it off (`TestApp::set_verify`). It prints, in µs, p50 and p99 of each stage, paired within each frame: the whole frame, the
 // plugin's draws, the host's checks and replays, and the rest (OpenTUI's layout, paint and output), for a new screen
 // each frame, the same screen each frame (no output), kept lists and no lists; for one canvas at the parity
 // harness's size and at 200x60, two canvases sharing 200x60, and two of 200x60 side by side. Then a key of the route
@@ -1419,10 +1435,15 @@ fn full_tui(width: u16, height: u16, canvases: usize, mode: Mode) -> Harness {
 #[ignore]
 fn a_full_screen_canvas_at_60_fps() {
     const FRAMES: usize = 600;
-    for (width, height, canvases) in [(100, 30, 1), (200, 60, 1), (200, 60, 2), (400, 60, 2)] {
-        let mut line = format!("canvas-gate {width}x{height} canvases={canvases}");
+    let layouts = [(100, 30, 1), (200, 60, 1), (200, 60, 2), (400, 60, 2)];
+    for (verify, (width, height, canvases)) in
+        [true, false].into_iter().flat_map(|verify| layouts.map(|at| (verify, at)))
+    {
+        let on = if verify { "on" } else { "off" };
+        let mut line = format!("canvas-gate verify={on} {width}x{height} canvases={canvases}");
         for mode in [Mode::Animate, Mode::Same, Mode::Still, Mode::Empty] {
             let harness = full_tui(width, height, canvases, mode);
+            harness.app.set_verify(verify);
             let work = host::work();
             let mut stages = timed(&harness, FRAMES);
             let done = host::work().since(work);
@@ -1442,6 +1463,7 @@ fn a_full_screen_canvas_at_60_fps() {
         }
         if canvases == 1 {
             let harness = full_tui(width, height, 1, Mode::Still);
+            harness.app.set_verify(verify);
             let mut keyed = Vec::new();
             for _ in 0..FRAMES / 4 {
                 harness.app.advance(Duration::from_millis(16));
@@ -2262,11 +2284,11 @@ fn a_list_is_charged_by_the_cells_it_touches() {
     let work = host::work();
     let _ = harness.app.render();
     let done = host::work().since(work);
-    assert_eq!((done.replays, done.ops), (1, 0), "{done:?}");
+    assert_eq!((done.replays, done.ops, done.recorded), (1, 0, 0), "{done:?}");
 }
 
-// Expected (bigboi 2): a kept list is charged again at a new size: a run of 30 cells in a canvas of 12 records 12 of
-// them, and the same list kept at 20 records 20.
+// Expected (bigboi 2): a kept list is charged again at a new size: a run of 30 cells in a canvas of 12 records one
+// record of 12 of them, and the same list kept at 20 one record of 20.
 #[test]
 fn a_kept_list_is_charged_at_its_new_size() {
     let pen = Pen(Some(abi::Rgba::new(255, 255, 255, 255)), None, 0);
@@ -2280,11 +2302,12 @@ fn a_kept_list_is_charged_at_its_new_size() {
         let _ = frame(&harness, Duration::from_millis(16));
         host::work().since(work).recorded
     };
-    let record = opencode_plugin::canvas::RECORD as u64;
-    assert_eq!(recorded(), 12 * record);
+    // One record of the cells the row shows.
+    let (record, cell) = (opencode_plugin::canvas::RECORD as u64, opencode_plugin::canvas::CELL as u64);
+    assert_eq!(recorded(), record + 12 * cell);
     apply(&harness, &Command::Next(Next::Keep));
     apply(&harness, &Command::Size(20, 4));
-    assert_eq!(recorded(), 20 * record);
+    assert_eq!(recorded(), record + 20 * cell);
     FIXED.with(|cell| *cell.borrow_mut() = None);
 }
 
@@ -2541,4 +2564,24 @@ fn seeded_lists_have_the_cells_a_rasterizer_computes() {
         }
     }
     FIXED.with(|cell| *cell.borrow_mut() = None);
+}
+
+// Expected (OpenTUI's `Painter::cells`): a run of cells is recorded as one record of cells for each row it shows in,
+// cut to the canvas: a run of 30 in rows of 10 from (5, 1) in a canvas of 12 by 3 shows in two rows, seven cells each,
+// on the drawn and the replayed frame; the cells beside and below are blank. A lone cell is a record of one.
+#[test]
+fn a_run_is_a_record_a_row() {
+    let mut list = List::new();
+    list.cells(5, 1, 10, (0..30).map(|index| (char::from(b'a' + index as u8 % 26), list::Style::new())));
+    list.cell(0, 0, 'z', list::Style::new());
+    let harness = cells_tui(list);
+    let (record, cell) = (opencode_plugin::canvas::RECORD as u64, opencode_plugin::canvas::CELL as u64);
+    for step in ["drawn", "replayed"] {
+        let work = host::work();
+        let frame = frame_after_one(&harness);
+        let done = host::work().since(work);
+        assert_eq!((done.recorded, done.ops), (3 * record + 15 * cell, 15), "{step}: {done:?}");
+        let rows = canvas_rows(&frame, 12, 3);
+        assert_eq!(rows, ["z           ", "     abcdefg", "     klmnopq"], "{step}");
+    }
 }
