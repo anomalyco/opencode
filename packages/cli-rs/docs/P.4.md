@@ -504,22 +504,36 @@ saved, as in TS.
 
 ### TypeScript plugins on the JS host (P7)
 
-With `OPENCODE_PLUGIN_JS=1` and Bun found (`OPENCODE_BUN`, or `bun` on the path), a directory target without a native
-build runs on the JS host: one Bun process for every TypeScript TUI plugin, started with the first one
+With Bun found (`OPENCODE_BUN`, or `bun` on the path), unless `OPENCODE_PLUGIN_JS=0`, a directory target without a
+native build runs on the JS host: one Bun process for every TypeScript TUI plugin, started with the first one
 (`crates/plugin/src/pipe`, rich-plugins 3.7 and 4.3). It loads the directory's TUI module as TS does (`package.json`
 `name` and `exports`, else `tui.ts` and its kin) by file URL and describes its V2 `{ id, setup }` default export; its
 setup runs only once the loader knows the plugin is enabled, so a plugin that `cli.json` disables runs nothing. Each
 load imports the plugin's modules afresh, its helpers included, and a reload's setup runs on a candidate: the running
-version answers until the candidate's setup returned, and stays when it throws. The setup context has what maps onto
-contract 2.0 without Solid: `options`, `app` (the client's version and channel), `themeMode` (as the theme changes),
-`keymap.layer` commands (with their scope), `ui.toast` (with its session), `data.on` (with a disposer); and, under
-`Symbol.for("opencode.carrier")`, the carrier the V2 compatibility layer (P8) builds the rest on:
-`surface(name, place, view, { palette, notify, on, layers, mounts })` with views that return contract 2.0 trees
-(`memo`, nested too, `content`, `release`, a box's `visible`, a keep of the root that keeps the memo table) on a route,
-a slot, a panel or an overlay, and whose `on` hears each mount begin and end with `mounts` (P6a). A view's input has a
-slot surface's `slot` and no `changed`: the JS host views again when what the plugin watches changes; `layer(layer, handler)`; `command`, `on`,
-`storage(keys)`, `effect` (any host request, P2's `open-panel`, `overlay`, `focus`, `set-mode`, `release-keys` among
-them), `watch`/`unwatch`/`read` (snapshots, at most 64), `invalidate`, `fetch`.
+version answers until the candidate's setup returned, and stays when it throws.
+
+The setup gets the V2 context TS gives it, from the V2 compatibility layer (P8, `crates/plugin/src/pipe/compat`, bundled
+into `compat.js` by `script/gen/js-host.ts`), and its imports of `@opencode/plugin/tui`, `solid-js`, `solid-js/store`,
+`@opentui/solid` (and its JSX runtimes) and `@opentui/core` get the layer's, also from a package's own `node_modules`.
+A slot claim, a route and the session panel are 2.0 surfaces: each mount renders the plugin's JSX with Solid's universal
+renderer into plain nodes, and its view reads them into a 2.0 tree (boxes with their borders, padding, margins, sizes and
+absolute positions, text with its spans, scroll boxes, Markdown, code, fields); a click runs the node's pointer handler.
+`data` and the small reads (`ui.router.current`, `keymap.pending`, tabs, the model) are snapshots the host pushes for
+what the plugin reads; the verbs (`keymap.dispatch`, `ui.toast`, the dialogs, navigation, storage writes) are the
+carrier's effects; `client` is the generated client over the host's `fetch`. What does not map warns once in a toast
+and does nothing, or throws in the render that used it (`F16-v2-compat-layer`). An async setup that waits on the host
+hands the plugin over at the wait; what it registers after, and what its components register, reaches the host as a
+manifest, which it takes as a reload of the registrations.
+
+Under `Symbol.for("opencode.carrier")` the context also has the carrier the layer is built on:
+`surface(name, place, view, { palette, notify, on, layers, mounts, unmount })` with views that return contract 2.0
+trees (`memo`, nested too, `content`, `release`, a box's `visible`, a keep of the root that keeps the memo table) on a
+route, a slot, a panel or an overlay, and whose `on` hears each mount begin and end with `mounts` (P6a). A view's
+input has a slot surface's `slot` and no `changed`: the JS host views again when what the plugin watches changes;
+`layer(layer, handler)`;
+`command`, `on`, `storage(keys)`, `effect` (any host request, P2's `open-panel`, `overlay`, `focus`, `set-mode`,
+`release-keys` among them), `watch`/`unwatch`/`read` (snapshots, at most 64), `invalidate`, `fetch`.
+`OPENCODE_JS_HOST_TRACE=<file>` appends every frame the JS host reads and writes to the file.
 
 A project's TypeScript plugin waits for approval as a native build does (below): its artifact is the directory and a
 SHA-256 of every file in it, hidden ones and `node_modules` included, and nothing of it reaches the JS host before. A
