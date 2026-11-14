@@ -32,6 +32,12 @@ pub struct Probe {
     pub listen: bool,
     /// The global listener consumes every key.
     pub swallow: bool,
+    /// The two later global listeners log the keys they see.
+    pub listen_more: bool,
+    /// The panel passes a press, which captures nothing.
+    pub pass_press: bool,
+    /// Node `b` takes pointer events.
+    pub pointer_b: bool,
     /// The `x` bind holds the keys after it.
     pub hold: bool,
     /// The panel's view.
@@ -75,6 +81,8 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         host.overlay(Overlay { surface: "menu".into(), anchor: Anchor::Point { x: 4, y: 3 }, width: 24, height: 4 });
     });
     setup.command(command("input.focus"), |host, input| host.focus(input.unwrap_or("a")));
+    // Changes nothing: the plugin's surfaces draw again after it, with what the probe says now.
+    setup.command(command("input.redraw"), |_, _| {});
     // The rich select: its rows follow the probe's `rows`, and it is shown again under its key as they change.
     setup.command(command("input.select"), |host, _| host.dialog(abi::Dialog::Select(select())));
     setup.command(command("input.reselect"), |host, _| {
@@ -144,6 +152,9 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
                     _ => Handled::Consume,
                 },
                 Event::Pointer(pointer) if pointer.kind == PointerKind::WheelDown => Handled::Pass,
+                Event::Pointer(pointer) if pointer.kind == PointerKind::Down && probe(|probe| probe.pass_press) => {
+                    Handled::Pass
+                }
                 _ => Handled::Consume,
             }
         });
@@ -204,6 +215,18 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         }
         if probe(|probe| probe.swallow) { Handled::Consume } else { Handled::Pass }
     });
+    // Two more global listeners: one newer at the same priority, one above it.
+    for (name, priority) in [("newer", 0), ("above", 1)] {
+        setup.layer(
+            Layer { scope: LayerScope::Global, priority, any: true, ..Layer::default() },
+            move |host, event| {
+                if probe(|probe| probe.listen_more) {
+                    log(name, host, event);
+                }
+                Handled::Pass
+            },
+        );
+    }
     // `x` in the composer: taken, or passed on to the composer, which types it.
     setup.layer(
         Layer { scope: LayerScope::Composer, keys: vec![Bind::new("x", "cx")], ..Layer::default() },
@@ -256,7 +279,7 @@ fn select() -> abi::Select {
 
 /// The other plugin a select's row toggles: a line in the home footer while it is active.
 pub fn other(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.slot(abi::Placement::append("session.prompt.right"), |_, _, _| {
+    setup.slot(abi::Placement::append("session.composer.top"), |_, _, _| {
         abi::Render::Show(abi::Node::text([abi::Span::new("OTHER ON")]))
     });
     Ok(())
@@ -283,9 +306,11 @@ fn side(cx: &mut v2::View<'_>) -> v2::Node {
             true,
             Some("#ff0000"),
         )),
-        v2::Node::row(vec![v2::Node::text(vec![abi::Span::new("BBBB")])])
-            .with_id("b")
-            .interact(interact(true, false, None)),
+        v2::Node::row(vec![v2::Node::text(vec![abi::Span::new("BBBB")])]).with_id("b").interact(interact(
+            true,
+            probe(|probe| probe.pointer_b),
+            None,
+        )),
     ])
     .with_id("side")
     .interact(interact(true, false, None))
@@ -470,6 +495,15 @@ fn a_mode_ends_with_its_scope_and_on_the_reserved_chord() {
     settle(&harness);
     assert!(composer(&harness).ends_with('e'), "{}", composer(&harness));
     assert!(!taken().iter().any(|line| line.contains("ctrl+c")), "a listener saw the reserved chord");
+    assert_eq!(interact::ledger(&*harness.tui).modes, base.modes, "an ended mode stayed past the next key");
+    // A panel's mode ends as the focus leaves the panel, with no key after it.
+    run(&harness, "input.panel", None);
+    harness.app.press("m");
+    settle(&harness);
+    assert_eq!(interact::ledger(&*harness.tui).modes, base.modes + 1);
+    opencode_plugin::Host::focus_composer(&*harness.tui);
+    settle(&harness);
+    assert_eq!(interact::ledger(&*harness.tui).modes, base.modes, "a mode stayed past its scope's blur");
 }
 
 // Expected (the `Any` listener): a global listener sees every key in the base mode before the host's layers, and one
@@ -676,4 +710,50 @@ fn the_reserved_chord_and_an_uncaptured_drag_reach_no_plugin() {
     harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), x + 1, y);
     settle(&harness);
     assert!(!taken().iter().any(|line| line.contains("Drag")));
+}
+
+// Expected (the listeners' order): listeners run by priority, the newest first among equals, before any layer.
+#[test]
+fn listeners_run_by_priority_then_newest_first() {
+    let harness = open_with(|probe| {
+        probe.listen = true;
+        probe.listen_more = true;
+    });
+    harness.app.type_text("q");
+    settle(&harness);
+    assert_eq!(taken(), ["above: any q [-]", "newer: any q [-]", "global: any q [-]"]);
+}
+
+// Expected (capture): a press the plugin passes captures nothing, so the drag after it reaches no plugin.
+#[test]
+fn a_passed_press_captures_nothing() {
+    let harness = open_with(|probe| probe.pass_press = true);
+    run(&harness, "input.panel", None);
+    let (x, y) = support::at(&harness.app.text(), "AAAA").unwrap();
+    taken();
+    harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), x + 2, y);
+    settle(&harness);
+    assert!(!interact::ledger(&*harness.tui).capture);
+    let log: Vec<String> = taken().into_iter().filter(|line| !line.contains("hover")).collect();
+    assert_eq!(log, ["side: Down a 1,0 [-]"]);
+}
+
+// Expected (`reconcile-fresh` for input): a box whose pointer flag changes is wired again, so its events follow the
+// tree the host accepted last.
+#[test]
+fn a_box_that_gains_pointer_events_gets_them() {
+    let harness = open();
+    run(&harness, "input.panel", None);
+    let (x, y) = support::at(&harness.app.text(), "BBBB").unwrap();
+    taken();
+    harness.app.click(x + 1, y);
+    settle(&harness);
+    assert_eq!(taken(), Vec::<String>::new());
+    probe(|probe| probe.pointer_b = true);
+    run(&harness, "input.redraw", None);
+    harness.app.click(x + 1, y);
+    settle(&harness);
+    let log: Vec<String> = taken().into_iter().filter(|line| !line.contains("hover")).collect();
+    assert_eq!(log, ["side: Down b 1,0 [-]", "side: Up b 1,0 [-]"]);
 }
