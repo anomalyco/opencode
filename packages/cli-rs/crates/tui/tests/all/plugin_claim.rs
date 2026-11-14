@@ -2090,6 +2090,14 @@ fn a_part_that_falls_back_above_the_reader_leaves_the_reader_in_place() {
         assert!(world.mount_of("call_0").is_some_and(|shown| !shown.shows), "{carrier:?}: call_0 did not fall back");
         let after = rows(world.frame().text());
         assert_eq!(after, before, "{carrier:?}: the reader moved");
+        // A part below the reader's rows changes nothing above it.
+        assert!(!before.iter().any(|row| row.starts_with("call_8:")), "{carrier:?}: call_8 is on screen: {before:?}");
+        ARMED.set(Some(("call_8".to_owned(), Fault::Bad)));
+        world.emit("session.tool.progress", json!({ "id": "call_8", "metadata": { "n": 1 } }));
+        world.settle();
+        ARMED.set(None);
+        assert!(world.mount_of("call_8").is_some_and(|shown| !shown.shows), "{carrier:?}: call_8 did not fall back");
+        assert_eq!(rows(world.frame().text()), before, "{carrier:?}: a part below moved the reader");
 
         // At the tail, the transcript stays at its bottom.
         let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.tall", setup: plugin_tall })]);
