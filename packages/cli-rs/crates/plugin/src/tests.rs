@@ -755,3 +755,41 @@ fn a_claim_root_takes_each_layout_as_mounted_fresh() {
         assert_eq!((0..6).filter(|y| red(*y)).collect::<Vec<_>>(), painted, "{index}");
     }
 }
+
+thread_local! {
+    /// Whether `test.fails`' view panics.
+    static PANICS: Cell<bool> = const { Cell::new(false) };
+}
+
+// Expected (`ledger`): a 2.0 surface whose plugin fails shows nothing and holds no content or memo from then on, also
+// on a host that does not mount its route again, as this one: the mount itself goes when its slot does.
+#[test]
+fn a_failed_surface_drops_what_it_held() {
+    use abi::v2;
+    fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+        setup.surface(v2::Surface::new("fails", v2::Place::Slot(abi::Placement::append(slot::HOME_FOOTER)), |cx| {
+            let body = cx.memo("body", 1, |cx| {
+                let handle = cx.content("held bytes");
+                v2::Node::Markdown { id: None, source: v2::Source::Content(handle) }
+            });
+            assert!(!PANICS.get(), "the view panics");
+            v2::Node::column(vec![body])
+        }));
+        Ok(())
+    }
+    PANICS.set(false);
+    let host = host();
+    let registry = Registry::define(vec![abi::Plugin { id: "test.fails", setup }.into()], []);
+    registry.activate(&dynamic(&host));
+    let parent = View::new(host.app()).column().width(30);
+    let mount = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    host.app().root().add(&parent);
+    assert!(rows(&host).iter().any(|row| row.contains("held bytes")));
+    assert_eq!(surface::ledger(), surface::Ledger { mounts: 1, content: 1, content_bytes: 10, memo_entries: 1 });
+    PANICS.set(true);
+    mount.sync(&*host, Some(&abi::Changed::default()));
+    assert!(!rows(&host).iter().any(|row| row.contains("held bytes")));
+    assert_eq!(surface::ledger(), surface::Ledger { mounts: 1, ..surface::Ledger::default() });
+    drop(mount);
+    assert_eq!(surface::ledger(), surface::Ledger::default());
+}
