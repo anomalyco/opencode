@@ -120,6 +120,8 @@ thread_local! {
     static LEDGER: Cell<Ledger> = Cell::new(Ledger::default());
     /// A claimed part's tree is being adopted: its Markdown builds now, and draws its fences as code.
     static ADOPTING: Cell<u32> = const { Cell::new(0) };
+    /// The width of the Markdown that builds now, which a new fence takes until it is laid out.
+    static FENCE_WIDTH: Cell<Option<u16>> = const { Cell::new(None) };
     static LIVE: RefCell<Vec<Weak<Core>>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -143,6 +145,15 @@ pub struct Shown {
     pub id: v2::MountId,
     pub rect: Rect,
     pub shows: bool,
+}
+
+/// Runs `build`, which builds Markdown `width` cells wide: a fence claimed there gets that width before its layout,
+/// rather than the terminal's, so its first view is at its own width. A width of 0 is not known.
+pub fn with_fence_width<T>(width: u16, build: impl FnOnce() -> T) -> T {
+    let outer = FENCE_WIDTH.replace((width > 0).then_some(width));
+    let built = build();
+    FENCE_WIDTH.set(outer);
+    built
 }
 
 /// Every claimed part mounted on this thread, oldest first.
@@ -727,7 +738,8 @@ pub(crate) fn fence(claim: Rc<Registered>) -> crate::CodeBlockRender {
             Some(held) => held,
             None => {
                 let key = format!("fence-{}", KEYS.fetch_add(1, Ordering::Relaxed));
-                let core = Core::new(claim.clone(), block.app, &key, block.app.size().0);
+                let width = FENCE_WIDTH.get().unwrap_or(block.app.size().0);
+                let core = Core::new(claim.clone(), block.app, &key, width);
                 // The fence holds the widget's children and not the widget, whose handlers hold the fence.
                 let slot = View::new(block.app).column().shrink(0.0).visible(false);
                 let widget = View::new(block.app).column().shrink(0.0).child(&core.root).child(&slot);
