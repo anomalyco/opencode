@@ -1919,3 +1919,49 @@ fn a_claimed_call_sends_its_view_no_result() {
         assert!(results.iter().all(|(_, content, _)| *content == 0), "{carrier:?}: a view saw the result: {results:?}");
     }
 }
+
+thread_local! {
+    /// The width below which `claim.narrow` draws, and the inputs its views got: width and height.
+    static NARROW: Cell<u16> = const { Cell::new(0) };
+    static INPUTS: RefCell<Vec<(u16, u16)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Claims `narrow` calls and `narrow` fences while the part is narrower than [`NARROW`], and declines wider ones.
+fn plugin_narrow(setup: &mut abi::Setup) -> Result<(), String> {
+    let view = |cx: &mut v2::View<'_>, part: &Part| {
+        INPUTS.with_borrow_mut(|inputs| inputs.push((cx.input.width, cx.input.height)));
+        (cx.input.width < NARROW.get())
+            .then(|| v2::Node::text(vec![abi::Span::new(format!("narrow {} at {}", key(part), cx.input.width))]))
+    };
+    setup.claim(Claim::tool("narrow", view));
+    setup.claim(Claim::fence("narrow", view));
+    Ok(())
+}
+
+// Expected (4.2 with 4.11, review finding M8): a claim's view sees the inputs it can read as they are now. A part the
+// claim declined at one width is asked again at another, for a call and a fence alike, and the claim draws it when it
+// accepts; a part has no height of its own, so a resize of the terminal's height leaves nothing stale.
+#[test]
+fn a_part_is_viewed_again_at_a_new_width_and_gets_no_height() {
+    for carrier in CARRIERS {
+        INPUTS.with_borrow_mut(Vec::clear);
+        NARROW.set(90);
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.narrow", setup: plugin_narrow })]);
+        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "narrow" }));
+        world.emit("session.text.started", json!({ "ordinal": 0 }));
+        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```narrow\nfits\n```\n\nAfter.\n" }));
+        world.settle();
+        let screen = world.frame().text();
+        assert!(!screen.contains("narrow call_1") && screen.contains("fits"), "{carrier:?}: drew wide:\n{screen}");
+        world.harness.app.resize(WIDTH - 20, HEIGHT);
+        for _ in 0..3 {
+            world.settle();
+        }
+        let screen = world.frame().text();
+        assert!(screen.contains("narrow call_1 at"), "{carrier:?}: the call was not asked again:\n{screen}");
+        assert!(screen.contains("narrow fence at"), "{carrier:?}: the fence was not asked again:\n{screen}");
+        world.harness.app.resize(WIDTH - 20, HEIGHT - 9);
+        world.settle();
+        assert!(INPUTS.with_borrow(|inputs| inputs.iter().all(|(_, height)| *height == 0)), "{carrier:?}");
+    }
+}

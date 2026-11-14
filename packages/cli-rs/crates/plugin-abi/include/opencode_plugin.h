@@ -197,7 +197,8 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *      "running" | "completed" | "error", "permission", "tool": the transcript's tool part without what the call
  *      returned, which a "part-output" source names, and without metadata over 4096 bytes of JSON}, or a fence
  *      {"type": "fence", "language", "info", "code", "streaming", "closed"}. A null node leaves the part to the
- *      host's own row. The rest is as for "view"; each part is a mount of its own.
+ *      host's own row. The rest is as for "view", but "height" is 0: a part is as tall as its tree. Each part is a
+ *      mount of its own.
  *   {"type": "unmount", "mount"}                               -> null
  *   {"type": "message", "message": "<json text>"}              -> null
  *   2.0 (P3), for a surface the manifest says has them:

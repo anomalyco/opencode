@@ -5,10 +5,11 @@
 //! the overrun limit, it returned a tree the host refused twice in a row, the plugin is disabled or reloads).
 //!
 //! Each claimed part is a mount ([`v2::MountId`]) with a generation of its own; what the view gave the host (content,
-//! memo values) goes with the part. The view gets the part as it is now ([`Part`]): its state and everything the
-//! transcript shows of it. It runs in the frame that first shows the part and again when the part changes; while the
-//! part streams (the same state with new content) the host runs it at most once a frame, with the newest content, and
-//! keeps the last tree it accepted until then. A part that leaves the transcript forgets its tree.
+//! memo values) goes with the part. The view gets the part as it is now ([`Part`]), and the surface input with the
+//! part's width; its height is 0, as a part is as tall as its tree. It runs in the frame that first shows the part,
+//! again when the part or its width changes, and while the part streams (the same state with new content) at most
+//! once a frame, with the newest content, whichever row shows the part until then. A part that leaves the transcript
+//! forgets its tree.
 //!
 //! A plugin registers claims with [`crate::Setup::claim`], on either carrier: in process with Rust values, and over the
 //! C ABI as [`crate::Manifest::claims`] and [`crate::Request::Claim`], answered by a [`Reply`].

@@ -507,7 +507,8 @@ impl Core {
             true => self.claim.palette(host, theme),
             false => v2::Palette::default(),
         };
-        let input = v2::SurfaceInput { width, height: host.app().size().1, palette, full, panel: None };
+        // A part is as tall as its tree: a claim gets no height, which a resize could leave stale.
+        let input = v2::SurfaceInput { width, height: 0, palette, full, panel: None };
         let (held, mut memo) = {
             let mut state = self.state.borrow_mut();
             (state.memo_entries(), std::mem::take(&mut state.memo))
