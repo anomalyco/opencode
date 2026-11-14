@@ -46,7 +46,7 @@ fn mail<T>(f: impl FnOnce(&mut Mail) -> T) -> T {
 }
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-    let sender = setup.messages(|_, note: Note| mail(|mail| mail.arrived.push(note)));
+    let sender = setup.messages(|_, note: Note| mail(|mail| mail.arrived.push(note)))?;
     let spawner = setup.spawner();
     mail(|mail| (mail.sender, mail.spawner) = (Some(sender), Some(spawner)));
     Ok(())
@@ -110,6 +110,7 @@ fn on_thread(sends: Vec<(Option<u32>, Note)>) -> Vec<Sent> {
                         assert_eq!(back, note, "Closed gave back another message");
                         Sent::Closed
                     }
+                    Err(SendError::Unencodable(back)) => panic!("{back:?} did not encode"),
                 }
             })
             .collect()

@@ -6,7 +6,12 @@
 //! silence: [`Sender::send`] puts the message at the end, or hands it back as [`SendError::Full`] at once, and as
 //! [`SendError::Closed`] once the plugin has left `active` (it was disabled, failed, or replaced). [`Sender::replace`]
 //! keeps one entry a key: the newer message takes the place of the one that waits, so a flood of progress holds one
-//! entry. A thread decides what `Full` means: wait, merge, or give up.
+//! entry; an empty key is no key. A thread decides what `Full` means: wait, merge, or give up.
+//!
+//! A message is what JSON carries: a library gets it as JSON, so on every carrier a send first writes the message as
+//! JSON and reads it back as `M`, on the sending thread, and hands back one that does not come back as itself
+//! ([`SendError::Unencodable`]: a `NaN`, a map with keys that are not strings, a serializer that fails). The host
+//! keeps the sender's JSON text as it is, so what one carrier delivers, the other does too.
 //!
 //! [`Spawner::spawn`] starts a thread named after the plugin, with a [`Stop`] flag that is set when the plugin leaves
 //! `active`, and catches a panic on it: the host fails the plugin and says so once. A thread cannot be killed; it ends
@@ -30,12 +35,14 @@ pub enum SendError<M> {
     Full(M),
     /// The plugin has left `active`: it was disabled, failed, or replaced, and its threads should end.
     Closed(M),
+    /// The message does not cross as JSON and come back as itself. Nothing was stored.
+    Unencodable(M),
 }
 
 impl<M> SendError<M> {
     pub fn into_inner(self) -> M {
         match self {
-            SendError::Full(message) | SendError::Closed(message) => message,
+            SendError::Full(message) | SendError::Closed(message) | SendError::Unencodable(message) => message,
         }
     }
 }
@@ -46,6 +53,8 @@ impl<M> SendError<M> {
 pub enum Refused {
     Full,
     Closed,
+    /// The host could not read the message.
+    Unencodable,
 }
 
 /// A message on its way to the host: a Rust value in process, JSON text over the C ABI.
@@ -59,7 +68,8 @@ pub enum Outgoing {
 #[doc(hidden)]
 pub enum Message {
     Value(Box<dyn Any + Send>),
-    Json(serde_json::Value),
+    /// JSON text, as the sender wrote it.
+    Json(String),
 }
 
 /// The host's side of a plugin's threads, callable from any thread.
@@ -76,23 +86,32 @@ pub trait Link: Send + Sync {
 }
 
 /// A [`Link`] that the plugin's disposal revokes: once revoked, every send is `Closed`, every flag is set, and no
-/// thread reaches the host again, so none outlives what the host gave it.
+/// thread reaches the host again, so none outlives what the host gave it. The guard is held only across a call into
+/// the host, never across the author's own code, so a revocation waits for host calls alone.
 #[doc(hidden)]
 #[derive(Clone, Default)]
-pub struct Revocable(Arc<RwLock<Option<Arc<dyn Link>>>>);
+pub struct Revocable(Arc<Revoked>);
+
+#[derive(Default)]
+#[doc(hidden)]
+pub struct Revoked {
+    /// The link takes JSON text: it is fixed when the link is made, so a send reads it without the guard.
+    json: bool,
+    link: RwLock<Option<Arc<dyn Link>>>,
+}
 
 impl Revocable {
     pub fn new(link: Arc<dyn Link>) -> Self {
-        Self(Arc::new(RwLock::new(Some(link))))
+        Self(Arc::new(Revoked { json: link.json(), link: RwLock::new(Some(link)) }))
     }
 
     /// Makes every later use of every clone see a stopped plugin, once the uses in progress have returned.
     pub fn revoke(&self) {
-        self.0.write().unwrap_or_else(PoisonError::into_inner).take();
+        self.0.link.write().unwrap_or_else(PoisonError::into_inner).take();
     }
 
     fn with<T>(&self, f: impl FnOnce(Option<&dyn Link>) -> T) -> T {
-        f(self.0.read().unwrap_or_else(PoisonError::into_inner).as_deref())
+        f(self.0.link.read().unwrap_or_else(PoisonError::into_inner).as_deref())
     }
 }
 
@@ -108,7 +127,7 @@ impl<M> Clone for Sender<M> {
     }
 }
 
-impl<M: Serialize + Send + 'static> Sender<M> {
+impl<M: Serialize + DeserializeOwned + Send + 'static> Sender<M> {
     #[doc(hidden)]
     pub fn new(link: Revocable) -> Self {
         Self { link, _message: PhantomData }
@@ -120,33 +139,43 @@ impl<M: Serialize + Send + 'static> Sender<M> {
     }
 
     /// Puts `message` in the place of the one that waits under `key`, or at the end when none waits: the handler gets
-    /// the last one sent under a key, and nothing older after it. A new key in a full mailbox is `Full`.
+    /// the last one sent under a key, and nothing older after it. A new key in a full mailbox is `Full`. An empty `key`
+    /// is no key: this is [`Sender::send`].
     pub fn replace(&self, key: &str, message: M) -> Result<(), SendError<M>> {
-        self.post(Some(key), message)
+        self.post(Some(key).filter(|key| !key.is_empty()), message)
     }
 
     fn post(&self, key: Option<&str>, message: M) -> Result<(), SendError<M>> {
-        self.link.with(|link| {
-            let Some(link) = link else { return Err(SendError::Closed(message)) };
-            if !link.json() {
-                return match link.send(key, Outgoing::Value(Box::new(message))) {
-                    Ok(()) => Ok(()),
-                    Err((refused, Outgoing::Value(value))) => {
-                        let message =
-                            *value.downcast::<M>().unwrap_or_else(|_| unreachable!("the host returned another value"));
-                        Err(refused.with(message))
-                    }
-                    Err((_, Outgoing::Json(_))) => unreachable!("the host returned another kind of message"),
-                };
-            }
-            let json =
-                serde_json::to_string(&message).unwrap_or_else(|error| panic!("a message did not serialize: {error}"));
-            match link.send(key, Outgoing::Json(json)) {
-                Ok(()) => Ok(()),
-                Err((refused, _)) => Err(refused.with(message)),
-            }
-        })
+        // The author's code runs here, before the guard: a slow or failing serializer never holds a revocation up.
+        let Some(json) = encoded(&message) else { return Err(SendError::Unencodable(message)) };
+        let outgoing = if self.link.0.json { Outgoing::Json(json) } else { Outgoing::Value(Box::new(message)) };
+        let refused = self.link.with(|link| match link {
+            Some(link) => link.send(key, outgoing).err(),
+            None => Some((Refused::Closed, outgoing)),
+        });
+        // A refused message comes back after the guard, so dropping it runs no author code under it either.
+        let (refused, outgoing) = match refused {
+            None => return Ok(()),
+            Some(refused) => refused,
+        };
+        let message = match outgoing {
+            Outgoing::Value(value) => match value.downcast::<M>() {
+                Ok(message) => *message,
+                Err(_) => unreachable!("the host returned another value"),
+            },
+            Outgoing::Json(json) => match serde_json::from_str::<M>(&json) {
+                Ok(message) => message,
+                Err(_) => unreachable!("an encoded message reads back"),
+            },
+        };
+        Err(refused.with(message))
     }
+}
+
+/// `message` as JSON text, when it reads back as an `M`.
+fn encoded<M: Serialize + DeserializeOwned>(message: &M) -> Option<String> {
+    let json = serde_json::to_string(message).ok()?;
+    serde_json::from_str::<M>(&json).ok().map(|_| json)
 }
 
 impl Refused {
@@ -154,6 +183,7 @@ impl Refused {
         match self {
             Refused::Full => SendError::Full(message),
             Refused::Closed => SendError::Closed(message),
+            Refused::Unencodable => SendError::Unencodable(message),
         }
     }
 }
@@ -202,18 +232,18 @@ impl Spawner {
     }
 }
 
-/// The handler [`crate::Setup::messages`] registers, which decodes a delivered message as `M`. A message of another
-/// type, from the sender of an earlier registration, is dropped.
+/// The handler [`crate::Setup::messages`] registers, which decodes a delivered message as `M`. Every sender checked
+/// that its message reads back as `M`, so one that does not is a broken contract: the handler panics, which fails the
+/// plugin, and is never a quiet drop.
 pub(crate) fn handler<M: DeserializeOwned + 'static>(
     run: impl Fn(&dyn crate::Host, M) + 'static,
 ) -> impl Fn(&dyn crate::Host, Message) + 'static {
     move |host, message| {
         let message = match message {
-            Message::Value(value) => value.downcast::<M>().ok().map(|message| *message),
-            Message::Json(json) => serde_json::from_value::<M>(json).ok(),
+            Message::Value(value) => *value.downcast::<M>().unwrap_or_else(|_| panic!("a message of another type")),
+            Message::Json(json) => serde_json::from_str::<M>(&json)
+                .unwrap_or_else(|error| panic!("a message that does not read as the plugin's type: {error}")),
         };
-        if let Some(message) = message {
-            run(host, message);
-        }
+        run(host, message);
     }
 }

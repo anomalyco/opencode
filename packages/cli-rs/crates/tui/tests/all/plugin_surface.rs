@@ -1263,3 +1263,52 @@ fn a_card_left_out_is_built_again_when_it_comes_back() {
         assert!(fulls[1..].iter().all(|full| !full), "{carrier:?}: a whole tree was asked for again: {fulls:?}");
     }
 }
+
+thread_local! {
+    /// Whether `test.dup`'s next view repeats an id, and whether each of its views was asked for a whole tree.
+    static DUP: RefCell<(bool, Vec<bool>)> = const { RefCell::new((false, Vec::new())) };
+}
+
+/// A route of two texts, which a command makes share one id.
+fn duplicating(setup: &mut abi::Setup) -> Result<(), String> {
+    let arm = abi::Command { name: "dup.arm".into(), ..abi::Command::default() };
+    setup.command(arm, |_, _| DUP.with(|dup| dup.borrow_mut().0 = true));
+    setup.surface(v2::Surface::new("dup", v2::Place::Route("dup".into()), |cx| {
+        let repeat = DUP.with(|dup| {
+            let mut dup = dup.borrow_mut();
+            dup.1.push(cx.input.full);
+            dup.0
+        });
+        let second = if repeat { "a" } else { "b" };
+        v2::Node::column(vec![
+            v2::Node::text(vec![abi::Span::new("one")]).with_id("a"),
+            v2::Node::text(vec![abi::Span::new("two")]).with_id(second),
+        ])
+    }));
+    Ok(())
+}
+
+// Expected (review carbon-4, 3.4): only a keep the host lost track of is mended by asking for a whole tree; a tree with
+// an id twice breaks the contract, fails the plugin at once, and no view runs after it. On both carriers.
+#[test]
+fn a_duplicate_id_fails_the_plugin_without_a_retry() {
+    for carrier in CARRIERS {
+        DUP.with(|dup| *dup.borrow_mut() = (false, Vec::new()));
+        let deps = Deps {
+            route: Route::Home,
+            builtins: vec![builtin(carrier, abi::Plugin { id: "test.dup", setup: duplicating })],
+            ..support::deps(Arc::new(support::empty()))
+        };
+        let harness = support::mount(60, 20, deps);
+        harness.tui.navigate(Route::Plugin { id: "test.dup".into(), name: "dup".into() });
+        settle(&harness);
+        let before = DUP.with(|dup| dup.borrow().1.len());
+        harness.tui.keymap.dispatch("dup.arm", None);
+        settle(&harness);
+        let views = DUP.with(|dup| dup.borrow().1[before..].to_vec());
+        assert_eq!(views, [false], "{carrier:?}: a whole tree was asked for after a duplicate id");
+        let status = harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "test.dup").unwrap().status;
+        let broke = matches!(&status, opencode_plugin::Status::Failed(error) if error.contains("broke the contract"));
+        assert!(broke, "{carrier:?}: {status:?}");
+    }
+}

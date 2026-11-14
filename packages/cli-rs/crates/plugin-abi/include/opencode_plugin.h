@@ -9,8 +9,32 @@
  * table marked "any thread".
  *
  * Versions. A minor version only appends: each table starts with its own size, and an entry past the other side's
- * `size` is absent. Nothing is removed inside a major. A plugin that needs a newer host minor sets
- * `requires_minor`; a host older than that refuses it, as it refuses a major it does not serve.
+ * `size` is absent; read an entry only when `size >= offsetof(table, entry) + sizeof(entry)`, so a plugin built against
+ * a later header still loads on an earlier host. Nothing is removed inside a major. A plugin that needs a newer host
+ * minor sets `requires_minor`; a host older than that refuses it, as it refuses a major it does not serve. A 2.x host
+ * gives a 1.x library (`opencode_plugin_v1`) the table of ABI 1.4, which ends before `send`.
+ *
+ * What the host takes from the plugin, and what the plugin must keep to:
+ *
+ * - Borrowed bytes (`opencode_bytes`) are valid, and unchanged, for the length of the call that passes them only. They
+ *   are not NUL-terminated. A null `ptr` means no bytes, with `len` 0.
+ * - A buffer the plugin returns (`opencode_owned`) is one it allocated: `ptr` to `len` initialized bytes inside an
+ *   allocation of `cap >= len` bytes, or `ptr` null with `len` 0. The host copies it out and hands that exact
+ *   descriptor back to the plugin's `free` once, whatever the status, also when it refuses it. The host refuses,
+ *   unread, a null `ptr` with a length, a `len` past `cap`, and a buffer over 256 MiB. The same holds the other way for
+ *   the host's buffers and its `free`.
+ * - Tables are aligned for their types. The plugin's table, and the host's `features` bytes, live as long as the
+ *   library and the instance respectively.
+ * - `call` and `theme_mode` of the host table are for the host's UI thread, the thread that calls the plugin; from
+ *   another thread `call` answers OPENCODE_ERROR and `theme_mode` dark. Only the entries marked "any thread" are for
+ *   the plugin's own threads.
+ * - Nothing may unwind out of an exported function or into the host: catch C++ exceptions and Rust panics at the edge
+ *   and answer OPENCODE_PANIC.
+ * - A plugin's threads use the host table only until `destroy` returns. A plugin without `destroy`, or whose `create`
+ *   did not answer OPENCODE_OK, gets no `destroy`: it must stop its threads itself, before `create` returns in the
+ *   second case. The host keeps the table and its context of such an instance for the life of the process.
+ * - In process nothing protects the host from a plugin that writes through a bad pointer, or whose allocator fails:
+ *   such a fault ends the client, which restarts without the plugin.
  */
 
 #ifndef OPENCODE_PLUGIN_H
@@ -29,8 +53,11 @@ extern "C" {
 
 /* Status codes. With OPENCODE_OK an output buffer holds the JSON result; otherwise the error text. */
 #define OPENCODE_OK 0
+/* The callee answers with an error. From the plugin, this is an answer: what the call asked the host for happens, and
+ * the host then fails a 2.x plugin (a 1.x plugin's error is logged). From the host's `call`, the request was refused. */
 #define OPENCODE_ERROR 1
-/* The callee panicked (or threw); the output holds the message. The host fails the plugin. */
+/* The callee panicked (or threw); the output holds the message. Nothing the call asked for happens, its storage writes
+ * are put back, and the host fails the plugin. */
 #define OPENCODE_PANIC 2
 /* `send`: the mailbox holds OPENCODE_BOUND entries, and nothing was stored. */
 #define OPENCODE_FULL 3
@@ -103,9 +130,21 @@ typedef struct opencode_plugin_api {
     int32_t (*describe)(opencode_owned *out);
 } opencode_plugin_api;
 
+/* What makes the entry visible from the library: exported from a DLL on Windows, and of default visibility where a
+ * build hides symbols by default (`-fvisibility=hidden`). Define it before including this header to change it. */
+#ifndef OPENCODE_EXPORT
+#if defined(_WIN32) || defined(__CYGWIN__)
+#define OPENCODE_EXPORT __declspec(dllexport)
+#elif defined(__GNUC__) || defined(__clang__)
+#define OPENCODE_EXPORT __attribute__((visibility("default")))
+#else
+#define OPENCODE_EXPORT
+#endif
+#endif
+
 /* The entry every 2.x plugin exports. A 1.x plugin exports `opencode_plugin_v1` with the same table; the host serves
  * it ABI 1.4. */
-const opencode_plugin_api *opencode_plugin_v2(void);
+OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
 
 /*
  * The message schema. Every message is a JSON object; a request is tagged by "type". Fields with a default may be
@@ -134,12 +173,13 @@ const opencode_plugin_api *opencode_plugin_v2(void);
  *   2.0:
  *   {"type": "view", "surface": index, "mount": {"surface", "key", "generation"},
  *    "input": {"width", "height", "palette": {"mode", "colors"}, "full"?}, "next": n}
- *                                     -> {"node": tree, "content"?: [[handle, text]], "memo"?: n}
+ *                                     -> {"node": tree, "content"?: [[handle, content]], "memo"?: n}
+ *      `memo` is how many values the plugin's memo table for the mount holds, at most the tree's nodes with an id.
  *      `content` is what the view gave the host this time, numbered next + 1, next + 2, ...; a node names it as
  *      {"content": handle}. A tree may name a subtree the last accepted tree had under an id as
  *      {"type": "keep", "key": id}. With "full" set, the host holds no tree to keep from.
  *   {"type": "unmount", "mount"}                               -> null
- *   {"type": "message", "message": json}                       -> null
+ *   {"type": "message", "message": "<json text>"}              -> null
  *
  * 2.0 tree nodes ("type"): "box" {"id"?, "row"?, "gap"?, "padding"?, "justify"?, "align"?, "bg"?, "layout"?,
  *   "on_click"?, "children"}, "text" {"id"?, "spans", "fg"?, "wrap"?, "truncate"?, "selectable"?, "hover_fg"?,
@@ -152,7 +192,13 @@ const opencode_plugin_api *opencode_plugin_v2(void);
  *   "storage-merge", "storage-key", "open-route", "color", "session", "family", "messages", "models", "model",
  *   "limits", "providers", "info", "mcp-servers", "integrations", "vcs", "route", "dispatch", "attention",
  *   "navigate", "fetch", "dialog", "copy", "interactive", "shortcut", "dialog-open". Effects wait until the
- *   plugin's call returns; a call that fails, or whose result the host refuses, has none.
+ *   plugin's call returns. A call that panics, or whose answer the host refuses (it cannot decode it, the tree breaks
+ *   the contract, a handler answers anything but null), has none, and fails the plugin. A call that answers
+ *   OPENCODE_ERROR keeps them (see above). A render or a view ("fence", "slot", "route", "render-fence", "render",
+ *   "render-route", "view") reads only: the host answers OPENCODE_ERROR to any request of it that asks for something.
+ *
+ * Content in a view reply is a JSON string when its bytes are UTF-8, else {"base64": "..."} (RFC 4648, padded).
+ * A message the host delivers ("message") is the JSON text the sender wrote, as a JSON string.
  */
 
 #ifdef __cplusplus
