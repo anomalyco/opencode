@@ -30,6 +30,7 @@ mod more_tools;
 mod navigate;
 mod permission;
 mod plugin_approval;
+mod plugin_canvas;
 mod plugin_carriers;
 mod plugin_contain;
 mod plugin_fetch;
