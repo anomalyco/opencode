@@ -110,6 +110,15 @@ export default Plugin.define({
           run: () => context.ui.router.navigate({ type: "plugin", name: "page", data: { n: 3 } }),
         },
         { id: "v2probe.home", run: () => context.ui.router.navigate({ type: "home" }) },
+        // Two reloads of the registrations, apart (carbon-2).
+        {
+          id: "v2probe.twice",
+          run: () => {
+            const layer = (id: string) => () => ({ mode: "global", commands: [{ id, run: () => log({ ran: id }) }] })
+            context.keymap.layer(layer("v2probe.first"))
+            setTimeout(() => context.keymap.layer(layer("v2probe.second")), 30)
+          },
+        },
         {
           id: "v2probe.unmapped",
           run: () => {
@@ -162,9 +171,8 @@ export default Plugin.define({
         </box>
       ),
     })
-    // A path the host does not publish: the claim goes to its nearest published ancestor, appended, as in TS, so it
-    // replaces nothing there.
-    context.ui.slot({ replace: "home.footer.custom", render: () => <text>v2probe degraded claim</text> })
+    // A `replace` of a path the host does not publish, which never degrades, as in TS: it shows nowhere.
+    context.ui.slot({ replace: "home.footer.custom", render: () => <text>v2probe missing replace</text> })
     // Always shown: the route as the host pushes it, which follows navigation.
     context.ui.slot({
       append: "app",

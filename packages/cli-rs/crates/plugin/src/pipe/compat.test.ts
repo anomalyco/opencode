@@ -260,3 +260,110 @@ test("a dialog's scrollbox says it does not scroll", () => {
   fake.commands.get("t.scroll.compat.dialog-scroll")!()
   expect(fake.toasts()).toEqual(["t.scroll: scrolling a <scrollbox> in ui.dialog.show is not supported by opencode-native yet"])
 })
+
+// Carbon-3: a dialog that replaced another is a panel of its own, so its close (escape) closes it and calls its
+// `onClose`; a render that throws in a dialog closes it, as TS's boundary clears it.
+test("a replacing dialog closes, and a crashing one closes at once", () => {
+  const fake = host()
+  const ctx = plugin("t.show", fake)
+  const closed: string[] = []
+  ctx.ui.dialog.show(() => h("text", { children: "A" }), () => closed.push("A"))
+  ctx.ui.dialog.show(() => h("text", { children: "B" }), () => closed.push("B"))
+  const panels = fake.effects.filter((effect) => effect.dialog?.type === "panel").map((effect) => effect.dialog.key)
+  expect(new Set(panels).size).toBe(2)
+  fake.push(`dialog-open:${panels.at(-1)}`, true)
+  fake.push(`dialog-open:${panels.at(-1)}`, false)
+  expect(closed).toEqual(["A", "B"])
+  ctx.ui.dialog.show(() => {
+    throw new Error("")
+  })
+  const last = fake.effects.at(-1)
+  expect(last.dialog?.type).toBe("close")
+})
+
+// Carbon-4: a change a view makes to another mount is drawn: only the mount being drawn takes its own changes in.
+test("a change to another mount while one is drawn is not lost", async () => {
+  const fake = host()
+  let invalidations = 0
+  fake.invalidate = () => void invalidations++
+  const ctx = plugin("t.views", fake)
+  const [value, setValue] = solid.createSignal("old")
+  ctx.ui.slot({ append: "home.footer", render: () => h("text", { children: () => `a ${value()}` }) })
+  ctx.ui.slot({
+    append: "sidebar.content",
+    render: () => {
+      setValue("new")
+      return h("text", { children: "b" })
+    },
+  })
+  const a = view(fake, 0, "a")
+  expect(text(a.draw())).toBe("a old")
+  view(fake, 1, "b").draw()
+  await turn()
+  expect(invalidations).toBeGreaterThan(0)
+  expect(text(a.draw())).toBe("a new")
+})
+
+// Carbon-4: a hook one plugin's render used that does not map is reported for it alone.
+test("an unmapped hook is reported for the plugin that used it", () => {
+  const fake = host()
+  const solidRuntime = modules["@opentui/solid"] as Json
+  const loud = plugin("t.loud", fake)
+  const quiet = plugin("t.quiet", fake)
+  loud.ui.slot({ append: "home.footer", render: () => (solidRuntime.useKeyboard(() => {}), h("text", { children: "x" })) })
+  quiet.ui.slot({ append: "sidebar.content", render: () => h("text", { children: "y" }) })
+  view(fake, 0, "a").draw()
+  view(fake, 1, "b").draw()
+  expect(fake.toasts()).toEqual(["t.loud: useKeyboard is not supported by opencode-native yet"])
+})
+
+// Carbon-4: a claim goes to the host as it is: a `replace` of a path the host does not publish is the host's to
+// suppress, as TS's is, not an append to its ancestor.
+test("a claim keeps its kind and path", () => {
+  const fake = host()
+  plugin("t.slots", fake).ui.slot({ replace: "home.footer.custom", render: () => h("text", { children: "z" }) })
+  expect(fake.surfaces[0].place).toEqual({ type: "slot", kind: "replace", path: "home.footer.custom" })
+})
+
+// Carbon-5: numbers a render computes stay in the ABI's domains, so no tree is one the host cannot read.
+test("numbers are rounded and clamped", () => {
+  const fake = host()
+  plugin("t.numbers", fake).ui.slot({
+    append: "home.footer",
+    render: () =>
+      h("box", {
+        gap: 1.5,
+        width: 999999,
+        height: "auto%",
+        position: "absolute",
+        top: 70000,
+        zIndex: 1.5,
+        children: h("text", { children: "n" }),
+      }),
+  })
+  const box = view(fake, 0, "a").draw().children[0]
+  expect(box.gap).toBe(2)
+  expect(box.layout.width).toEqual({ cells: 65535 })
+  expect(box.layout.height).toBeUndefined()
+  expect(box.layout.absolute.top).toBe(32767)
+  expect(box.layout.absolute.z).toBe(2)
+})
+
+// Carbon-4: TS's attention defaults; the host's commands run by dispatch, and the layer's own are not listed.
+test("attention, listed commands and the mouse button", async () => {
+  const fake = host((key) =>
+    key === "keymap-commands" ? [{ name: "session.new" }, { name: "t.misc.compat.press" }] : [],
+  )
+  const ctx = plugin("t.misc", fake)
+  await ctx.attention.notify({ message: "done" })
+  const attention = fake.effects.find((effect) => effect.type === "attention")
+  expect([attention.notify, attention.sound?.when]).toEqual(["blurred", "always"])
+  ctx.keymap.commands()
+  await turn()
+  const listed = ctx.keymap.commands()
+  expect(listed.map((command: Json) => command.name)).toEqual(["session.new"])
+  listed[0].run()
+  await turn()
+  expect(fake.effects.at(-1)).toEqual({ type: "dispatch", name: "session.new" })
+  expect((modules["@opentui/core"] as Json).MouseButton.LEFT).toBe(0)
+})

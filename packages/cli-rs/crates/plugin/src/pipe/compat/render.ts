@@ -223,6 +223,8 @@ export function mount(
   const fail = (error: unknown) => {
     if (mounted.crashed !== undefined) return
     mounted.crashed = error instanceof Error ? error.message : String(error)
+    // Nothing of a render that threw is shown, also not what it drew before it threw (carbon-3).
+    root.children = []
     queueMicrotask(() => {
       dispose()
       root.children = []
@@ -252,7 +254,7 @@ type Json = any
 
 export interface Reading {
   // The action a click on `node` runs: a command of the plugin that calls `handler`.
-  press(node: VNode, handler: (event: unknown) => unknown): Json
+  press(node: VNode, handler: (event: unknown) => unknown, kind: "down" | "up"): Json
   // What the reader could not carry, by name.
   dropped: Set<string>
 }
@@ -344,7 +346,7 @@ function node(at: VNode, reading: Reading): Json {
         id: idOf(at),
         value: String(props.value ?? props.initialValue ?? ""),
         placeholder: props.placeholder,
-        lines: at.tag === "textarea" ? Math.max(1, Number(props.height) || 3) : undefined,
+        lines: at.tag === "textarea" ? clamp(Number(props.height) || 3, 1, 65535) : undefined,
         layout,
       })
     default:
@@ -374,7 +376,7 @@ function boxOf(at: VNode, layout: Json, click: Json, reading: Reading): Json {
   return compact({
     type: "box",
     row: String(props.flexDirection ?? "column").startsWith("row") ? true : undefined,
-    gap: number(props.gap ?? (String(props.flexDirection ?? "").startsWith("row") ? props.columnGap : props.rowGap)),
+    gap: cells(props.gap ?? (String(props.flexDirection ?? "").startsWith("row") ? props.columnGap : props.rowGap)),
     padding: pad && symmetric ? [pad.left, pad.top] : undefined,
     padding_sides: pad && !symmetric ? pad : undefined,
     justify: justify(props.justifyContent),
@@ -451,7 +453,9 @@ function clickOf(at: VNode, reading: Reading) {
   const up = at.props.onMouseUp ?? at.props.onClick
   const handler = down ?? up
   if (typeof handler !== "function") return undefined
-  return { action: reading.press(at, handler), on: down ? "down" : "up" }
+  // The contract runs one click a node: the press, when there is one (carbon-4).
+  if (down && up) reading.dropped.add("onMouseUp beside onMouseDown")
+  return { action: reading.press(at, handler, down ? "down" : "up"), on: down ? "down" : "up" }
 }
 
 function layoutOf(props: Json, reading: Reading) {
@@ -475,7 +479,7 @@ function layoutOf(props: Json, reading: Reading) {
           right: offset(props.right),
           bottom: offset(props.bottom),
           left: offset(props.left),
-          z: Number(props.zIndex) || undefined,
+          z: Number.isFinite(Number(props.zIndex)) ? clamp(Number(props.zIndex), -2147483648, 2147483647) || undefined : undefined,
         })
       : undefined,
   })
@@ -522,18 +526,27 @@ function align(value: unknown) {
   return ({ "flex-start": "start", center: "center", "flex-end": "end" } as Json)[String(value)]
 }
 
+// Numbers within the ABI's domains (carbon-5): a fraction rounds, and a value past a field's range is its end, so no
+// computed size makes a tree the host cannot read.
+const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, Math.round(value)))
+
 function length(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) return { cells: Math.max(0, Math.round(value)) }
-  if (typeof value === "string" && value.endsWith("%")) return { percent: Number(value.slice(0, -1)) }
-  return undefined
+  if (typeof value === "number" && Number.isFinite(value)) return { cells: clamp(value, 0, 65535) }
+  if (typeof value !== "string" || !value.endsWith("%")) return undefined
+  const percent = Number(value.slice(0, -1))
+  return Number.isFinite(percent) ? { percent: Math.min(100, Math.max(0, percent)) } : undefined
 }
 
 function offset(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : undefined
+  return typeof value === "number" && Number.isFinite(value) ? clamp(value, -32768, 32767) : undefined
 }
 
 function number(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : undefined
+  return typeof value === "number" && Number.isFinite(value) ? clamp(value, -32768, 32767) : undefined
+}
+
+function cells(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? clamp(value, 0, 65535) : undefined
 }
 
 // A color as the host takes it: the theme's token, `#rrggbbaa`, or `#rrggbb` text.

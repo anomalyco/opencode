@@ -114,7 +114,12 @@ fn a_v2_plugins_commands_arrive_once_each_in_order() {
         pipe.settle();
     }
     assert_eq!(calls(&log), sent);
-    // The last item shows; a restart resets the plugin's state, as it resets any plugin's on the JS host.
+    // The last item shows; a restart resets the plugin's state, as it resets any plugin's on the JS host. The restarted
+    // footer's first render waits for its reads, which a settle does not (`drawn`).
+    pipe.harness.wait("the restarted footer drew", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        footer(&pipe).ends_with("33|")
+    });
     let shown = footer(&pipe);
     assert!(shown.starts_with("v2probe ") && shown.ends_with("33|"), "{shown}");
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
@@ -244,17 +249,18 @@ fn a_route_draws_a_bordered_box_and_a_scroll_with_its_data() {
 }
 
 // Expected (OpenTUI's reconciler as TS runs it): a node with `visible={false}` draws nothing; a span takes its `style`
-// and `href` alone, so its `fg` prop leaves it in the text's color; a claim of a path the host does not publish goes to
-// its nearest published ancestor, appended, so a `replace` there replaces nothing; a read an installed package's JSX makes once, as it mounts, shows the
-// host's value, which came after that render; and text outside a `<text>` crashes the render as OpenTUI's does.
+// and `href` alone, so its `fg` prop leaves it in the text's color; a `replace` of a path the host does not publish shows
+// nowhere, as TS's never degrades; a read an installed package's JSX makes once, as it mounts, shows the host's value,
+// which came after that render; and text outside a `<text>` crashes the render as OpenTUI's does.
 #[test]
 fn a_render_draws_by_the_reconcilers_rules() {
     let Some(config) = config() else { return };
     let (pipe, _log) = probe(config);
     let screen = pipe.harness.app.text();
     assert!(!screen.contains("hidden text"), "{screen}");
-    assert_eq!(line(&pipe, "v2probe degraded").as_deref(), Some("v2probe degraded claim"), "{screen}");
-    // The degraded `replace` replaced nothing: the footer's own version is still there.
+    // A `replace` of a path the host does not publish never degrades (TS `structure.ts`, carbon-4): it shows nowhere,
+    // and the footer's own version is still there.
+    assert_eq!(line(&pipe, "v2probe missing"), None, "{screen}");
     assert!(screen.lines().any(|line| line.trim() == "local"), "{screen}");
     assert_eq!(line(&pipe, "v2probe commands").as_deref(), Some("v2probe commands true"), "{screen}");
     let (x, y) = pipe.harness.find("0: |");
@@ -384,6 +390,24 @@ fn a_components_command_lives_with_its_mount_across_a_reload() {
     std::thread::sleep(Duration::from_millis(400));
     pipe.settle();
     assert!(!matches!(tui.keymap.dispatch("v2probe.onpage", None), opentui::keymap::RunResult::Ok), "it stayed");
+}
+
+// Expected (carbon-2): two reloads of a plugin's registrations that both come before the host took the first leave the
+// plugin working: the commands of both run.
+#[test]
+fn two_quick_reloads_leave_the_plugin_working() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe(config);
+    let tui = &pipe.harness.tui;
+    tui.keymap.dispatch("v2probe.twice", None);
+    // Both reloads wait for the UI thread, which takes them in one go.
+    std::thread::sleep(Duration::from_millis(300));
+    pipe.settle();
+    for name in ["v2probe.first", "v2probe.second"] {
+        tui.keymap.dispatch(name, None);
+        pipe.settle();
+    }
+    assert_eq!(logged(&pipe, &log, 2), [json!({ "ran": "v2probe.first" }), json!({ "ran": "v2probe.second" })]);
 }
 
 // Expected (containment): a render that spins ends the JS host by the progress rule; the plugin fails, named, and the

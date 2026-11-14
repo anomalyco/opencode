@@ -1350,7 +1350,10 @@ mod tests {
         let directory = command.get_envs().find(|(name, _)| *name == "OPENCODE_DIRECTORY").and_then(|(_, value)| value);
         assert_eq!(directory, Some(std::ffi::OsStr::new("/work")));
         let inherits = |name: &str| inherited(std::ffi::OsStr::new(name));
-        assert!(!inherits("BUN_OPTIONS") && !inherits("NODE_OPTIONS") && !inherits("PWN_FROM_ENV"));
+        // `BUN_BE_BUN` would make even a compiled host read a project's `bunfig.toml` and `.env`.
+        for name in ["BUN_OPTIONS", "BUN_BE_BUN", "NODE_OPTIONS", "PWN_FROM_ENV"] {
+            assert!(!inherits(name), "{name}");
+        }
         assert!(inherits("HOME") && inherits("XDG_CONFIG_HOME") && inherits("OPENCODE_CHANNEL"));
     }
 }
