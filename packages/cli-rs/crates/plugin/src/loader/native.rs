@@ -1471,14 +1471,11 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
                 guest.fail(error);
             }
         });
-        let place = surface::Place { name: claim.name.clone(), at, palette: claim.palette };
-        setup.surface(
-            place,
-            Rc::new(Remote { guest: guest.clone(), index, draw: claim.draw }),
-            commands,
-            fail,
-            &guest.activation,
-        );
+        // P3's `layout` and scroll events cross the C ABI in a later phase: a library's surface names nothing yet.
+        let place = surface::Place { name: claim.name.clone(), at, palette: claim.palette, notify: Vec::new() };
+        let calls = crate::behave::Calls { plugin: setup.id().to_owned(), ..crate::behave::Calls::default() };
+        let viewer = Rc::new(Remote { guest: guest.clone(), index, draw: claim.draw });
+        setup.surface(place, viewer, commands, fail, calls, &guest.activation);
     }
     // 2.0: what the plugin's threads send runs `Message`, one call each, when its manifest says it takes messages; a
     // thread's panic fails the plugin, once.

@@ -20,6 +20,7 @@ use opentui::style::Color;
 use opentui::syntax::SyntaxTheme;
 
 use crate::canvas::{Canvas, Drawer};
+use crate::list::List;
 use crate::node::{Act, bordered, color, edges_of, lay_out, styled};
 use crate::{Host, SlotMount};
 
@@ -82,13 +83,30 @@ fn count(f: impl FnOnce(&mut Work)) {
 pub const MAX_DEPTH: u16 = 64;
 
 /// The layout levels a node's own widget takes: a scroll box is four views, a patch a column of diffs of code views,
-/// and Markdown a few levels of its own.
+/// and Markdown a few levels of its own; a list is a scroll box and a wrapper per item.
 fn weight(node: &Node) -> u16 {
     match node {
-        Node::Box { .. } | Node::Text { .. } | Node::Spinner { .. } | Node::Slot { .. } | Node::Canvas { .. } => 1,
+        Node::Box { .. }
+        | Node::Text { .. }
+        | Node::Spinner { .. }
+        | Node::Slot { .. }
+        | Node::Canvas { .. }
+        | Node::Image { .. } => 1,
+        Node::Input { .. } | Node::Code { .. } => 2,
         Node::Scroll { .. } | Node::Diff { .. } | Node::Markdown { .. } => 4,
+        Node::List { .. } => 5,
         Node::Keep { .. } => 0,
     }
+}
+
+/// [`weight`], for the list's data.
+pub(crate) fn weight_of(node: &Node) -> u16 {
+    weight(node)
+}
+
+/// Counts a subtree adopted through a keep.
+pub(crate) fn count_kept() {
+    count(|work| work.kept += 1);
 }
 
 /// Whether every size of `layout` in percent is a finite number of 0 or more.
@@ -116,8 +134,8 @@ pub enum Refused {
     /// A size in percent that is not a finite number of 0 or more, which OpenTUI's layout refuses with an error that
     /// ends the TUI.
     Number,
-    /// A scroll or a canvas without an id: a node with state must have one (synthesis 4.2), or another scroll's
-    /// offset, or another canvas's list, could pass to it.
+    /// A node with state, verbs or events without an id (synthesis 4.2): a scroll, a canvas, a list or its item, an
+    /// input, an anchor, a split, a diff with hunks. Without one another node's state could pass to it.
     Unkeyed,
 }
 impl std::fmt::Display for Refused {
@@ -129,7 +147,7 @@ impl std::fmt::Display for Refused {
             Refused::Content(content) => write!(f, "content {} is not the mount's", content.0),
             Refused::Deep => write!(f, "the tree nests deeper than {MAX_DEPTH} layout levels"),
             Refused::Number => write!(f, "a size in percent is not a finite number of 0 or more"),
-            Refused::Unkeyed => write!(f, "a scroll or a canvas has no id"),
+            Refused::Unkeyed => write!(f, "a node with state has no id"),
         }
     }
 }
@@ -146,6 +164,8 @@ pub struct Env<'a> {
     pub source: &'a dyn Fn(&Source) -> Option<Rc<str>>,
     /// Whether the mount holds content `ContentRef`.
     pub content: &'a dyn Fn(ContentRef) -> bool,
+    /// The bytes of a source, for an image; `None` when the host has none.
+    pub bytes: &'a dyn Fn(&Source) -> Option<Rc<[u8]>>,
     /// The host asked for a whole tree, after a refusal: a keep names a subtree the view did not vouch for again.
     pub full: bool,
     /// How the mount's canvases call their plugin; `None` where nothing draws them.
@@ -155,7 +175,7 @@ pub struct Env<'a> {
 /// A mounted tree: the widgets of the last accepted tree, in a parent the owner gives each call.
 #[derive(Default)]
 pub struct Tree {
-    nodes: Vec<Mounted>,
+    pub(crate) nodes: Vec<Mounted>,
     theme: Option<Theme>,
     /// Every id the tree holds.
     ids: HashMap<String, Held>,
@@ -163,28 +183,33 @@ pub struct Tree {
     slots_changed: bool,
 }
 
-/// What the tree holds under an id: the nearest ancestor with an id, and the layout levels its subtree takes.
+/// What the tree holds under an id: the nearest ancestor with an id, the layout levels its subtree takes, and the
+/// list and item whose data holds it, for an id inside a list.
 #[derive(Clone, Debug)]
-struct Held {
-    above: Option<String>,
-    depth: u16,
+pub(crate) struct Held {
+    pub above: Option<String>,
+    pub depth: u16,
+    pub item: Option<(String, String)>,
 }
 
-struct Mounted {
-    /// The node as it was adopted; a box's and a scroll's children are in `children`, not here.
-    node: Node,
+pub(crate) struct Mounted {
+    /// The node as it was adopted; a box's and a scroll's children are in `children`, not here, and a list's items
+    /// in its [`List`].
+    pub node: Node,
     /// The widget it put in its parent; `None` for a slot, whose claims go into the parent itself.
-    widget: Option<AnyWidget>,
-    children: Vec<Mounted>,
-    extra: Extra,
+    pub widget: Option<AnyWidget>,
+    pub children: Vec<Mounted>,
+    pub extra: Extra,
     /// It or a node under it shows a tool call's output, which the host reads again each revision.
     dynamic: bool,
 }
 
-enum Extra {
+pub(crate) enum Extra {
     Box {
         view: View,
         click: Option<Rc<RefCell<abi::Click>>>,
+        /// The split's width, which the user's drag sets; it stays while the box's id does.
+        split: Option<Rc<crate::behave::SplitState>>,
     },
     Text {
         text: Rc<Text>,
@@ -195,13 +220,45 @@ enum Extra {
     Scroll(ScrollBox),
     /// The patch, and the text it shows.
     Diff(Patch, Rc<str>),
+    /// An added file over 3,000 lines, in chunks mounted near the view.
+    Chunked(Rc<opencode_ui::diff::Chunked>),
     /// The Markdown, and the text it shows.
     Markdown(opentui::widget::Markdown, Rc<str>),
     Slot(Option<SlotMount>),
     Canvas(Canvas),
+    /// The field, the value the tree gave it last, and the commands its events run.
+    Input(Field, RefCell<String>, Rc<RefCell<(Option<String>, Option<String>)>>),
+    List(Box<List>),
+    /// The code and the text it shows.
+    Code(opentui::widget::Code, Rc<str>),
+    /// The image and the bytes it shows.
+    Image(opentui::widget::ImageView, Option<Rc<[u8]>>),
     /// In the tree before, a subtree that the tree being adopted holds again; its widget moved to wherever the tree
     /// has its id now.
     Taken,
+}
+
+/// An input of one line or many.
+#[derive(Clone)]
+pub(crate) enum Field {
+    Line(opentui::widget::Input),
+    Lines(opentui::widget::Textarea),
+}
+
+impl Field {
+    fn set(&self, text: &str) {
+        match self {
+            Field::Line(input) => drop(input.set_value(text)),
+            Field::Lines(area) => drop(area.set_text(text)),
+        }
+    }
+
+    fn widget(&self) -> AnyWidget {
+        match self {
+            Field::Line(input) => input.as_any(),
+            Field::Lines(area) => area.as_any(),
+        }
+    }
 }
 
 /// The ids of the tree before that a tree being adopted holds again: the ones it keeps, and the ones it has a node
@@ -264,6 +321,39 @@ impl Tree {
         Ok(())
     }
 
+    /// Whether the tree holds a list.
+    pub(crate) fn has_lists(&self) -> bool {
+        fn any(nodes: &[Mounted]) -> bool {
+            nodes.iter().any(|node| matches!(node.extra, Extra::List(_)) || any(&node.children))
+        }
+        any(&self.nodes)
+    }
+
+    /// After a solve: each list's window, nested lists included. Whether one changed.
+    pub(crate) fn resolve_lists(&mut self, env: &Env<'_>) -> bool {
+        fn walk(nodes: &mut [Mounted], env: &Env<'_>) -> bool {
+            let mut changed = false;
+            for node in nodes {
+                if let Extra::List(list) = &mut node.extra {
+                    changed |= list.resolve(env);
+                    for item in &mut list.items {
+                        if let Some(mounted) = &mut item.mounted {
+                            changed |= walk(&mut mounted.tree.nodes, env);
+                        }
+                    }
+                }
+                changed |= walk(&mut node.children, env);
+            }
+            changed
+        }
+        walk(&mut self.nodes, env)
+    }
+
+    /// Counts every widget of the tree as removed, for a parent dropped whole.
+    pub(crate) fn count_removed(&self) {
+        self.nodes.iter().for_each(count_removed);
+    }
+
     /// Removes every widget of the tree from `parent`.
     pub fn clear(&mut self, parent: &View) {
         let mut changed = false;
@@ -321,6 +411,7 @@ impl Tree {
         }
         match &find(&self.nodes, id)?.extra {
             Extra::Scroll(scroll) => Some(scroll.scroll_position()),
+            Extra::List(list) => Some(list.scroll.scroll_position()),
             _ => None,
         }
     }
@@ -346,13 +437,23 @@ impl Tree {
             moves: HashSet<&'a str>,
         }
         impl<'a> Walk<'a, '_> {
-            fn nodes(&mut self, nodes: &'a [Node], above: u16) -> Result<(), Refused> {
+            /// `item` is the list and the item whose data the nodes are in: a keep there names a node of that item,
+            /// and an id there is reconciled within the item.
+            fn nodes(
+                &mut self,
+                nodes: &'a [Node],
+                above: u16,
+                item: Option<(&'a str, &'a str)>,
+            ) -> Result<(), Refused> {
                 for node in nodes {
                     if let Node::Keep { key } = node {
                         if self.env.full {
                             return Err(Refused::Kept(key.clone()));
                         }
                         let held = self.tree.ids.get(key).ok_or_else(|| Refused::Unknown(key.clone()))?;
+                        if held.item.as_ref().map(|(list, item)| (list.as_str(), item.as_str())) != item {
+                            return Err(Refused::Unknown(key.clone()));
+                        }
                         if !self.keeps.insert(key) || self.ids.contains(key.as_str()) {
                             return Err(Refused::Duplicate(key.clone()));
                         }
@@ -369,36 +470,46 @@ impl Tree {
                         if !self.ids.insert(id) || self.keeps.contains(id) {
                             return Err(Refused::Duplicate(id.to_owned()));
                         }
-                        // A node of another kind under the id is built new where the subtree is reconciled.
-                        if self.tree.ids.contains_key(id) {
+                        // A node of another kind under the id is built new where the subtree is reconciled. A node in
+                        // a list's item is reconciled within its item, and one that was is built new elsewhere.
+                        if item.is_none() && self.tree.ids.get(id).is_some_and(|held| held.item.is_none()) {
                             self.moves.insert(id);
                         }
                     }
-                    match node {
-                        Node::Scroll { id: None, .. } | Node::Canvas { id: None, .. } => return Err(Refused::Unkeyed),
-                        Node::Box { layout, .. }
-                        | Node::Text { layout, .. }
-                        | Node::Scroll { layout, .. }
-                        | Node::Canvas { layout, .. }
-                            if !sizes_ok(layout) =>
-                        {
-                            return Err(Refused::Number);
-                        }
-                        Node::Markdown { source: Source::Content(content), .. }
-                        | Node::Diff { content: Source::Content(content), .. }
-                            if !(self.env.content)(*content) =>
-                        {
-                            return Err(Refused::Content(*content));
-                        }
-                        _ => {}
+                    let unkeyed = node.id().is_none()
+                        && match node {
+                            Node::Scroll { .. } | Node::Canvas { .. } | Node::List { .. } | Node::Input { .. } => true,
+                            Node::Box { anchor, split, .. } => anchor.is_some() || split.is_some(),
+                            Node::Diff { hunks, .. } => hunks.is_some(),
+                            _ => false,
+                        };
+                    if unkeyed {
+                        return Err(Refused::Unkeyed);
                     }
-                    self.nodes(node.children(), depth)?;
+                    if node.layout_of().is_some_and(|layout| !sizes_ok(layout)) {
+                        return Err(Refused::Number);
+                    }
+                    if let Node::Markdown { source: Source::Content(content), .. }
+                    | Node::Diff { content: Source::Content(content), .. }
+                    | Node::Code { content: Source::Content(content), .. }
+                    | Node::Image { content: Source::Content(content), .. } = node
+                        && !(self.env.content)(*content)
+                    {
+                        return Err(Refused::Content(*content));
+                    }
+                    self.nodes(node.children(), depth, item)?;
+                    if let (Node::List { items, .. }, Some(list)) = (node, node.id()) {
+                        for entry in items {
+                            let key = entry.node.id().ok_or(Refused::Unkeyed)?;
+                            self.nodes(std::slice::from_ref(&entry.node), depth, Some((list, key)))?;
+                        }
+                    }
                 }
                 Ok(())
             }
         }
         let mut walk = Walk { tree: self, env, ids: HashSet::new(), keeps: HashSet::new(), moves: HashSet::new() };
-        walk.nodes(nodes, 0)?;
+        walk.nodes(nodes, 0, None)?;
         let moves = walk.moves.iter().map(|id| (*id).to_owned()).collect();
         if walk.keeps.is_empty() {
             return Ok(Plan { keeps: HashSet::new(), moves });
@@ -457,9 +568,13 @@ fn collect_ids(nodes: &[Mounted], above: Option<&str>, ids: &mut HashMap<String,
     let mut deepest = 0;
     for node in nodes {
         let id = node.node.id();
-        let depth = weight(&node.node) + collect_ids(&node.children, id.or(above), ids);
+        let mut inner = collect_ids(&node.children, id.or(above), ids);
+        if let (Extra::List(list), Some(id)) = (&node.extra, id) {
+            inner = inner.max(list.collect_ids(id, ids));
+        }
+        let depth = weight(&node.node) + inner;
         if let Some(id) = id {
-            ids.insert(id.to_owned(), Held { above: above.map(str::to_owned), depth });
+            ids.insert(id.to_owned(), Held { above: above.map(str::to_owned), depth, item: None });
         }
         deepest = deepest.max(depth);
     }
@@ -579,7 +694,7 @@ impl Pass<'_, '_> {
                         }
                     }
                     Change::InPlace => {
-                        let Extra::Box { view, click } = &old.extra else { unreachable!() };
+                        let Extra::Box { view, click, .. } = &old.extra else { unreachable!() };
                         if bg_of(&old.node) != bg_of(new) {
                             view.bg(fill(theme, bg_of(new)));
                         }
@@ -593,20 +708,32 @@ impl Pass<'_, '_> {
                         count(|work| work.set += 1);
                     }
                     Change::Replace => {
-                        // Its own widget is built again; the children move into it as they are reconciled.
+                        // Its own widget is built again; the children move into it as they are reconciled. A split
+                        // keeps the width the user dragged it to.
                         let mut built = self.shell(new);
-                        let Extra::Box { view, .. } = &built.extra else { unreachable!() };
-                        let view = view.clone();
+                        if let (Extra::Box { split: Some(was), .. }, Extra::Box { split: Some(now), .. }) =
+                            (&old.extra, &built.extra)
+                        {
+                            now.take_from(was);
+                        }
+                        let Extra::Box { view, split, .. } = &built.extra else { unreachable!() };
+                        let (view, split) = (view.clone(), split.clone());
                         built.children = self.children(&view, std::mem::take(&mut old.children), children);
                         built.dynamic = built.children.iter().any(|child| child.dynamic);
+                        if let Some(split) = split {
+                            split.first(built.children.first().and_then(|child| child.widget.clone()));
+                        }
                         return Err(Box::new((old, built)));
                     }
                 }
-                let Extra::Box { view, .. } = &old.extra else { unreachable!() };
-                let view = view.clone();
+                let Extra::Box { view, split, .. } = &old.extra else { unreachable!() };
+                let (view, split) = (view.clone(), split.clone());
                 let olds = std::mem::take(&mut old.children);
                 old.children = self.children(&view, olds, children);
                 old.dynamic = old.children.iter().any(|child| child.dynamic);
+                if let Some(split) = split {
+                    split.first(old.children.first().and_then(|child| child.widget.clone()));
+                }
                 Ok(old)
             }
             (Node::Scroll { .. }, Node::Scroll { height, follow, children, .. }) => {
@@ -633,9 +760,10 @@ impl Pass<'_, '_> {
                         scroll.height(*height);
                     }
                     scroll.sticky(*follow);
-                    old.node = shell(new);
                     count(|work| work.set += 1);
                 }
+                // `notify_top` and `user_scroll` are the behaviors' to read; no widget holds them.
+                old.node = shell(new);
                 let content = scroll.content_view().clone();
                 let olds = std::mem::take(&mut old.children);
                 old.children = self.children(&content, olds, children);
@@ -674,6 +802,114 @@ impl Pass<'_, '_> {
                 if self.restyle {
                     self.restyle(&old);
                 }
+                Ok(old)
+            }
+            // A patch that is or becomes chunked is built again when its text changes.
+            (Node::Diff { content: was, filetype: had, .. }, Node::Diff { content, filetype, .. })
+                if matches!(old.extra, Extra::Chunked(..))
+                    || ((was != content || had != filetype) && opencode_ui::diff::chunks(&self.text(content))) =>
+            {
+                let same = was == content && had == filetype && !matches!(content, Source::PartOutput(_));
+                // A chunked patch has no restyle of its own: a new theme builds it again.
+                if same && !self.restyle && matches!(old.extra, Extra::Chunked(..)) {
+                    old.node = new.clone();
+                    return Ok(old);
+                }
+                let built = self.build(new);
+                Err(Box::new((old, built)))
+            }
+            (
+                Node::Input { lines: had, layout: laid, .. },
+                Node::Input { value, placeholder, lines, on_change, on_submit, layout, .. },
+            ) => {
+                if had != lines || laid != layout {
+                    let built = self.build(new);
+                    return Err(Box::new((old, built)));
+                }
+                let Node::Input { placeholder: shown, .. } = &old.node else { unreachable!() };
+                let placeholder_changed = shown != placeholder;
+                let Extra::Input(field, given, commands) = &old.extra else { unreachable!() };
+                *commands.borrow_mut() = (on_change.clone(), on_submit.clone());
+                // The text is the host's: a value the tree did not change leaves what the user typed.
+                if *given.borrow() != *value {
+                    field.set(value);
+                    *given.borrow_mut() = value.clone();
+                    count(|work| work.set += 1);
+                }
+                if placeholder_changed {
+                    match field {
+                        Field::Line(input) => drop(input.placeholder(placeholder)),
+                        Field::Lines(area) => drop(area.placeholder(placeholder)),
+                    }
+                    count(|work| work.set += 1);
+                }
+                old.node = new.clone();
+                if self.restyle {
+                    self.restyle(&old);
+                }
+                Ok(old)
+            }
+            (Node::List { row: was, layout: laid, .. }, Node::List { row, layout, items, .. }) => {
+                if was != row || laid != layout {
+                    let built = self.build(new);
+                    return Err(Box::new((old, built)));
+                }
+                let restyle = self.restyle;
+                let Extra::List(list) = &mut old.extra else { unreachable!() };
+                list.reconcile(self.env, items, restyle);
+                old.node = shell(new);
+                Ok(old)
+            }
+            (
+                Node::Code { content: was, filetype: had, numbers: numbered, layout: laid, .. },
+                Node::Code { content, filetype, numbers, layout, .. },
+            ) => {
+                if laid != layout {
+                    let built = self.build(new);
+                    return Err(Box::new((old, built)));
+                }
+                let reread = was != content || matches!(content, Source::PartOutput(_));
+                let (filetype_changed, numbers_changed) = (had != filetype, numbered != numbers);
+                let text = reread.then(|| self.text(content));
+                let Extra::Code(code, shown) = &mut old.extra else { unreachable!() };
+                if filetype_changed {
+                    code.filetype(filetype.as_deref());
+                    count(|work| work.set += 1);
+                }
+                if numbers_changed {
+                    code.line_numbers(*numbers);
+                    count(|work| work.set += 1);
+                }
+                if let Some(text) = text.filter(|text| text != shown) {
+                    code.set_code(text.to_string());
+                    *shown = text;
+                    count(|work| work.set += 1);
+                }
+                old.node = new.clone();
+                old.dynamic = dynamic(new, &[]);
+                if self.restyle {
+                    self.restyle(&old);
+                }
+                Ok(old)
+            }
+            (Node::Image { content: was, fit: had, layout: laid, .. }, Node::Image { content, fit, layout, .. }) => {
+                if laid != layout {
+                    let built = self.build(new);
+                    return Err(Box::new((old, built)));
+                }
+                let (reread, fit_changed) = (was != content, had != fit);
+                let bytes = reread.then(|| (self.env.bytes)(content));
+                let Extra::Image(image, shown) = &mut old.extra else { unreachable!() };
+                if fit_changed {
+                    image.fit(image_fit(*fit));
+                    count(|work| work.set += 1);
+                }
+                if let Some(bytes) = bytes.filter(|bytes| bytes != shown) {
+                    show_image(image, bytes.as_deref());
+                    *shown = bytes;
+                    count(|work| work.set += 1);
+                }
+                old.node = new.clone();
                 Ok(old)
             }
             (Node::Diff { .. }, Node::Diff { .. }) | (Node::Markdown { .. }, Node::Markdown { .. }) => {
@@ -798,6 +1034,9 @@ impl Pass<'_, '_> {
             _ if self.restyle => self.restyle(mounted),
             _ => {}
         }
+        if let (true, Extra::List(list)) = (self.restyle, &mut mounted.extra) {
+            list.restyle(self.env);
+        }
         let restyle = self.restyle;
         for child in &mut mounted.children {
             if restyle || child.dynamic {
@@ -820,6 +1059,10 @@ impl Pass<'_, '_> {
             }
             (Node::Text { .. }, Extra::Text { .. }) => paint_text(mounted, theme),
             (Node::Spinner { .. }, Extra::Spinner(spinner)) => spinner.set_color(theme.interactive().step(200)),
+            (Node::Input { .. }, Extra::Input(field, ..)) => paint_field(field, theme),
+            (Node::Code { .. }, Extra::Code(code, _)) => {
+                code.fg(theme.text.base).line_number_fg(theme.text.muted).syntax_theme((*self.syntax()).clone());
+            }
             _ => return,
         }
         count(|work| work.set += 1);
@@ -897,6 +1140,7 @@ impl Pass<'_, '_> {
                 padding_sides,
                 wrap,
                 overflow,
+                split,
                 ..
             } => {
                 let view = View::new(app);
@@ -948,7 +1192,8 @@ impl Pass<'_, '_> {
                 }
                 let click = on_click.clone().map(|click| clickable(&view, click, env.act));
                 lay_out(&view, layout);
-                (view.as_any(), Extra::Box { view, click })
+                let split = split.map(|split| crate::behave::SplitState::attach(&view, split));
+                (view.as_any(), Extra::Box { view, click, split })
             }
             Node::Text { spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click, .. } => {
                 let base = color(theme, fg.as_ref()).unwrap_or(theme.text.base);
@@ -1001,20 +1246,73 @@ impl Pass<'_, '_> {
                 }
                 (scroll.as_any(), Extra::Scroll(scroll))
             }
+            Node::Input { value, placeholder, lines, on_change, on_submit, layout, .. } => {
+                let field = match lines {
+                    None => Field::Line(opentui::widget::Input::new(app).placeholder(placeholder).set_value(value)),
+                    Some(rows) => Field::Lines(
+                        opentui::widget::Textarea::new(app)
+                            .placeholder(placeholder)
+                            .set_text(value)
+                            .height(u32::from(*rows))
+                            .shrink(0.0),
+                    ),
+                };
+                paint_field(&field, theme);
+                let commands = Rc::new(RefCell::new((on_change.clone(), on_submit.clone())));
+                let run = |which: fn(&(Option<String>, Option<String>)) -> Option<String>| {
+                    let (commands, act) = (commands.clone(), env.act.clone());
+                    move |_: &mut Cx<'_>, text: &str| {
+                        if let Some(name) = which(&commands.borrow()) {
+                            act(&abi::Action::Command { name, input: Some(text.to_owned()) });
+                        }
+                    }
+                };
+                let (change, submit) = (run(|commands| commands.0.clone()), run(|commands| commands.1.clone()));
+                match &field {
+                    Field::Line(input) => drop(input.on_change(change).on_submit(submit)),
+                    Field::Lines(area) => drop(area.on_change(change).on_submit(submit)),
+                }
+                let widget = field.widget();
+                lay_out(&widget, layout);
+                (widget, Extra::Input(field, RefCell::new(value.clone()), commands))
+            }
+            Node::List { row, layout, .. } => {
+                let list = List::new(app, *row);
+                lay_out(&list.scroll, layout);
+                if layout.grow {
+                    list.scroll.basis(0);
+                }
+                (list.scroll.as_any(), Extra::List(Box::new(list)))
+            }
+            Node::Code { content, filetype, numbers, layout, .. } => {
+                let text = self.text(content);
+                let code = opencode_ui::code::view(app, theme, &self.syntax(), filetype.as_deref(), &text)
+                    .line_numbers(*numbers)
+                    .line_number_fg(theme.text.muted);
+                lay_out(&code, layout);
+                count(|work| work.parses += 1);
+                (code.as_any(), Extra::Code(code, text))
+            }
+            Node::Image { content, fit, layout, .. } => {
+                let bytes = (env.bytes)(content);
+                let image = opentui::widget::ImageView::new(app).fit(image_fit(*fit));
+                show_image(&image, bytes.as_deref());
+                lay_out(&image, layout);
+                (image.as_any(), Extra::Image(image, bytes))
+            }
             Node::Diff { content, view, filetype, .. } => {
                 let text = self.text(content);
-                let patch = Patch::new(
-                    app,
-                    theme,
-                    &self.syntax(),
-                    &text,
-                    diff_view(*view),
-                    filetype.as_deref(),
-                    WrapMode::Word,
-                    0,
-                );
                 count(|work| work.parses += 1);
-                (patch.view().as_any(), Extra::Diff(patch, text))
+                let syntax = self.syntax();
+                match opencode_ui::diff::Chunked::new(app, theme, &syntax, &text, filetype.as_deref(), 0) {
+                    Some(chunked) => (chunked.root().as_any(), Extra::Chunked(Rc::new(chunked))),
+                    None => {
+                        let view = diff_view(*view);
+                        let patch =
+                            Patch::new(app, theme, &syntax, &text, view, filetype.as_deref(), WrapMode::Word, 0);
+                        (patch.view().as_any(), Extra::Diff(patch, text))
+                    }
+                }
             }
             Node::Canvas { id, layout, version, animate } => {
                 let canvas = Canvas::new(app, id.as_deref().unwrap_or_default(), env.draw.cloned(), *version, *animate);
@@ -1101,7 +1399,9 @@ fn matches(old: &[Mounted], new: &[Node]) -> Vec<Option<usize>> {
 fn dynamic(node: &Node, children: &[Mounted]) -> bool {
     matches!(
         node,
-        Node::Diff { content: Source::PartOutput(_), .. } | Node::Markdown { source: Source::PartOutput(_), .. }
+        Node::Diff { content: Source::PartOutput(_), .. }
+            | Node::Markdown { source: Source::PartOutput(_), .. }
+            | Node::Code { content: Source::PartOutput(_), .. }
     ) || children.iter().any(|child| child.dynamic)
 }
 
@@ -1127,6 +1427,9 @@ fn count_removed(node: &Mounted) {
     }
     if !matches!(node.extra, Extra::Slot(_)) {
         count(|work| work.removed += 1);
+    }
+    if let Extra::List(list) = &node.extra {
+        list.count_removed();
     }
     node.children.iter().for_each(count_removed);
 }
@@ -1156,6 +1459,9 @@ fn shell(node: &Node) -> Node {
             padding_sides,
             wrap,
             overflow,
+            sticky,
+            anchor,
+            split,
             ..
         } => Node::Box {
             id: id.clone(),
@@ -1172,9 +1478,21 @@ fn shell(node: &Node) -> Node {
             padding_sides: *padding_sides,
             wrap: *wrap,
             overflow: *overflow,
+            sticky: *sticky,
+            anchor: anchor.clone(),
+            split: *split,
         },
-        Node::Scroll { id, height, follow, layout, .. } => {
-            Node::Scroll { id: id.clone(), height: *height, follow: *follow, layout: *layout, children: Vec::new() }
+        Node::Scroll { id, height, follow, layout, notify_top, user_scroll, .. } => Node::Scroll {
+            id: id.clone(),
+            height: *height,
+            follow: *follow,
+            layout: *layout,
+            children: Vec::new(),
+            notify_top: notify_top.clone(),
+            user_scroll: *user_scroll,
+        },
+        Node::List { id, row, layout, .. } => {
+            Node::List { id: id.clone(), row: *row, items: Vec::new(), layout: *layout }
         }
         _ => node.clone(),
     }
@@ -1201,35 +1519,80 @@ fn click_of(node: &Node) -> Option<&abi::Click> {
     }
 }
 
-/// A box changes in place when only its background and its click (one to another) change; its children are
-/// reconciled apart.
+/// A box changes in place when only its background, its click (one to another) and its anchor change; its children
+/// are reconciled apart.
 fn box_change(old: &Node, new: &Node) -> Change {
-    let (Node::Box { bg, on_click, .. }, Node::Box { bg: bg2, on_click: on_click2, .. }) = (old, new) else {
+    let (Node::Box { bg, on_click, anchor, .. }, Node::Box { bg: bg2, on_click: on_click2, anchor: anchor2, .. }) =
+        (old, new)
+    else {
         return Change::Replace;
     };
-    // Everything but the background and the click, children aside, must stay.
+    // Everything but the background, the click and the anchor, children aside, must stay.
     let rest = |node: &Node| match node {
-        Node::Box { id, row, gap, padding, justify, align, layout, border, padding_sides, wrap, overflow, .. } => {
-            Some((
-                id.clone(),
-                *row,
-                *gap,
-                *padding,
-                *justify,
-                *align,
-                *layout,
-                border.clone(),
-                *padding_sides,
-                *wrap,
-                *overflow,
-            ))
-        }
+        Node::Box {
+            id,
+            row,
+            gap,
+            padding,
+            justify,
+            align,
+            layout,
+            border,
+            padding_sides,
+            wrap,
+            overflow,
+            sticky,
+            split,
+            ..
+        } => Some((
+            (id.clone(), *row, *gap, *padding, *justify, *align, *layout),
+            (border.clone(), *padding_sides, *wrap, *overflow, *sticky, *split),
+        )),
         _ => None,
     };
     if rest(old) != rest(new) || on_click.is_some() != on_click2.is_some() {
         return Change::Replace;
     }
-    if bg == bg2 && on_click == on_click2 { Change::Same } else { Change::InPlace }
+    if bg == bg2 && on_click == on_click2 && anchor == anchor2 { Change::Same } else { Change::InPlace }
+}
+
+/// Paints an input in `theme`'s form field colors.
+fn paint_field(field: &Field, theme: &Theme) {
+    let (text, background) = (&theme.text.formfield, &theme.background.formfield);
+    match field {
+        Field::Line(input) => drop(
+            input
+                .colors(text.base, background.base)
+                .focused_colors(text.focused, background.focused)
+                .placeholder_color(theme.text.muted),
+        ),
+        Field::Lines(area) => drop(
+            area.colors(text.base, background.base)
+                .focused_colors(text.focused, background.focused)
+                .placeholder_color(theme.text.muted),
+        ),
+    }
+}
+
+fn image_fit(fit: opencode_plugin_abi::v2::Fit) -> opentui::native::ImageFit {
+    match fit {
+        opencode_plugin_abi::v2::Fit::Contain => opentui::native::ImageFit::Contain,
+        opencode_plugin_abi::v2::Fit::Cover => opentui::native::ImageFit::Cover,
+        opencode_plugin_abi::v2::Fit::Fill => opentui::native::ImageFit::Fill,
+    }
+}
+
+/// Shows `bytes` in `image`, or nothing when there are none or they do not decode.
+fn show_image(image: &opentui::widget::ImageView, bytes: Option<&[u8]>) {
+    match bytes {
+        Some(bytes) => {
+            if let Err(error) = image.load(bytes) {
+                log::warn!("an image node does not decode: {error}");
+                image.image(None);
+            }
+        }
+        None => drop(image.image(None)),
+    }
 }
 
 /// A text changes in place when its spans, its color and its click (one to another) change, and nothing else;
@@ -1305,7 +1668,7 @@ fn clickable(widget: &impl Widget, click: abi::Click, act: &Act) -> Rc<RefCell<a
 
 /// A text's colors off and under the pointer, and whether the pointer is over it, which a text written in place
 /// keeps.
-struct Hover {
+pub(crate) struct Hover {
     colors: Cell<(Color, Color)>,
     over: Cell<bool>,
 }

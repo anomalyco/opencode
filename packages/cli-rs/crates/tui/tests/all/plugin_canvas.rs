@@ -992,7 +992,7 @@ fn a_canvas_without_an_id_is_refused() {
     apply(&harness, &Command::Open);
     let _ = frame(&harness, Duration::from_millis(1));
     assert!(
-        matches!(status(&harness, ID), opencode_plugin::Status::Failed(ref error) if error.contains("a scroll or a canvas has no id")),
+        matches!(status(&harness, ID), opencode_plugin::Status::Failed(ref error) if error.contains("a node with state has no id")),
         "{:?}",
         status(&harness, ID)
     );
@@ -1527,6 +1527,8 @@ fn tall_setup(setup: &mut abi::Setup) -> Result<(), String> {
             follow: false,
             layout: abi::Layout::default(),
             children: rows,
+            notify_top: None,
+            user_scroll: false,
         };
         v2::Node::column(vec![scroll]).with_id("tall")
     };

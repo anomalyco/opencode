@@ -19,6 +19,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Align, Border, Click, Color, Edges, Justify, Layout, Overflow, Read, Rgba, Span, ThemeMode, Wrap};
 
+mod geometry;
+pub use geometry::*;
+
 /// What a surface draws: a node of a keyed tree. A node may carry an `id`, unique in its mount; the host keeps the
 /// widget of a node whose id and kind stay, and writes only what changed. Without an id a node is matched by its kind
 /// and place among the siblings without one.
@@ -60,6 +63,15 @@ pub enum Node {
         /// Whether what does not fit in the box draws outside it.
         #[serde(default, skip_serializing_if = "is_visible")]
         overflow: Overflow,
+        /// P3: pinned to this edge of its scroll while its parent is in view, never past the parent's end.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sticky: Option<geometry::Edge>,
+        /// P3: one of a group of its scroll's anchors; it needs an id.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        anchor: Option<Anchor>,
+        /// P3: a row whose first child the user resizes by dragging; it needs an id, which keeps the width.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        split: Option<Split>,
     },
     /// Styled text; `fg` draws spans without their own, by default `text.base`.
     Text {
@@ -110,8 +122,15 @@ pub enum Node {
         layout: Layout,
         #[serde(default)]
         children: Vec<Node>,
+        /// P3: `layout` is called when the top anchor of this group changes.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        notify_top: Option<String>,
+        /// P3: the surface hears [`ScrollEvent::UserScroll`] when the user moves it.
+        #[serde(default, skip_serializing_if = "is_false")]
+        user_scroll: bool,
     },
-    /// A patch in the host's diff view: its own highlighting, colors and line numbers.
+    /// A patch in the host's diff view: its own highlighting, colors and line numbers. An added file over 3,000
+    /// lines mounts its chunks near the view.
     Diff {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,
@@ -121,6 +140,64 @@ pub enum Node {
         /// The language to highlight as, such as `rust`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         filetype: Option<String>,
+        /// P3: the first row of each hunk is anchor `{id}#{index}` of this group; it needs an id.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        hunks: Option<String>,
+    },
+    /// P3: a text field whose text and cursor are the host's. It runs command `on_change` with the text as its input
+    /// after each edit, and `on_submit` on enter (one line) or the submit key. A changed `value` replaces the text.
+    Input {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        value: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        placeholder: String,
+        /// Rows of a field of many lines; one line when `None`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        lines: Option<u16>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_change: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_submit: Option<String>,
+        #[serde(default, skip_serializing_if = "is_default_layout")]
+        layout: Layout,
+    },
+    /// P3: a list the host scrolls and windows: only the items near the view have widgets. An item is the unit of
+    /// reconcile: a [`Node::Keep`] in a list names one of its items or a node inside the same item.
+    List {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        /// Items left to right (a tab strip), which the host does not window; top to bottom by default.
+        #[serde(default, skip_serializing_if = "is_false")]
+        row: bool,
+        #[serde(default)]
+        items: Vec<ListItem>,
+        #[serde(default, skip_serializing_if = "is_default_layout")]
+        layout: Layout,
+    },
+    /// P3: source code in the host's code view, highlighted as `filetype` with the host's grammars and theme.
+    Code {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        content: Source,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        filetype: Option<String>,
+        /// Line numbers in a gutter.
+        #[serde(default, skip_serializing_if = "is_false")]
+        numbers: bool,
+        #[serde(default, skip_serializing_if = "is_default_layout")]
+        layout: Layout,
+    },
+    /// P3: an image from content bytes (PNG, JPEG, WebP or GIF), in the host's image view.
+    Image {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        content: Source,
+        #[serde(default, skip_serializing_if = "is_contain")]
+        fit: Fit,
+        #[serde(default, skip_serializing_if = "is_default_layout")]
+        layout: Layout,
     },
     /// The subtree last adopted under id `key` in this mount, unchanged ([`View::memo`]). A key the host does not
     /// hold in the last accepted tree is a contract error: the host refuses the tree whole.
@@ -283,11 +360,25 @@ pub struct Surface {
     pub view: ViewFn,
     /// Draws the surface's canvases ([`Node::Canvas`]); without it a canvas shows nothing.
     pub draw: Option<DrawFn>,
+    /// P3: called after geometry is final, in a frame where something in `notify` changed.
+    pub layout: Option<LayoutFn>,
+    pub notify: Vec<Notify>,
+    /// P3: hears where a step landed and that the user scrolled.
+    pub on_scroll: Option<ScrollFn>,
 }
 
 impl Surface {
     pub fn new(name: impl Into<String>, place: Place, view: impl Fn(&mut View<'_>) -> Node + 'static) -> Self {
-        Self { name: name.into(), place, palette: false, view: Rc::new(view), draw: None }
+        Self {
+            name: name.into(),
+            place,
+            palette: false,
+            view: Rc::new(view),
+            draw: None,
+            layout: None,
+            notify: Vec::new(),
+            on_scroll: None,
+        }
     }
 
     /// The surface whose view reads the palette.
@@ -298,6 +389,16 @@ impl Surface {
     /// The surface whose canvases `draw` draws.
     pub fn draw(self, draw: impl Fn(&mut Draw<'_>) -> Option<crate::canvas::List> + 'static) -> Self {
         Self { draw: Some(Rc::new(draw)), ..self }
+    }
+
+    /// The surface with a `layout` call, told about `notify` and each scroll's `notify_top`.
+    pub fn layout(self, notify: Vec<Notify>, layout: impl Fn(&Geometry) -> LayoutReply + 'static) -> Self {
+        Self { layout: Some(Rc::new(layout)), notify, ..self }
+    }
+
+    /// The surface with a handler of its scrolls' events.
+    pub fn on_scroll(self, handler: impl Fn(&dyn crate::Host, &ScrollEvent) + 'static) -> Self {
+        Self { on_scroll: Some(Rc::new(handler)), ..self }
     }
 }
 
@@ -426,6 +527,11 @@ impl Memo {
                             built.insert(id, node);
                         }
                         walk(node.children(), staged, keeps, built);
+                        if let Node::List { items, .. } = node {
+                            for item in items {
+                                walk(std::slice::from_ref(&item.node), staged, keeps, built);
+                            }
+                        }
                     }
                 }
             }
@@ -508,6 +614,9 @@ impl Node {
             padding_sides: None,
             wrap: false,
             overflow: Overflow::Visible,
+            sticky: None,
+            anchor: None,
+            split: None,
         }
     }
 
@@ -537,7 +646,54 @@ impl Node {
 
     /// A scroll box of `children`.
     pub fn scroll(children: Vec<Node>) -> Self {
-        Node::Scroll { id: None, height: None, follow: false, layout: Layout::default(), children }
+        Node::Scroll {
+            id: None,
+            height: None,
+            follow: false,
+            layout: Layout::default(),
+            children,
+            notify_top: None,
+            user_scroll: false,
+        }
+    }
+
+    /// A list of `items` top to bottom, windowed by the host.
+    pub fn list(items: Vec<ListItem>) -> Self {
+        Node::List { id: None, row: false, items, layout: Layout::default() }
+    }
+
+    /// A patch of `content` in the unified view.
+    pub fn diff(content: Source) -> Self {
+        Node::Diff { id: None, content, view: DiffView::Unified, filetype: None, hunks: None }
+    }
+
+    /// A one-line text field showing `value`.
+    pub fn input(value: impl Into<String>) -> Self {
+        Node::Input {
+            id: None,
+            value: value.into(),
+            placeholder: String::new(),
+            lines: None,
+            on_change: None,
+            on_submit: None,
+            layout: Layout::default(),
+        }
+    }
+
+    /// The box pinned to `edge` of its scroll while its parent is in view; anything else is unchanged.
+    pub fn sticky(mut self, edge: Edge) -> Self {
+        if let Node::Box { sticky, .. } = &mut self {
+            *sticky = Some(edge);
+        }
+        self
+    }
+
+    /// The box as an anchor of `group` with `variant`; anything else is unchanged.
+    pub fn anchor(mut self, group: impl Into<String>, variant: impl Into<String>) -> Self {
+        if let Node::Box { anchor, .. } = &mut self {
+            *anchor = Some(Anchor::new(group, variant));
+        }
+        self
     }
 
     /// A canvas with id `id`, still and at version 0.
@@ -578,7 +734,11 @@ impl Node {
             | Node::Spinner { id, .. }
             | Node::Scroll { id, .. }
             | Node::Diff { id, .. }
-            | Node::Canvas { id, .. } => id.as_deref(),
+            | Node::Canvas { id, .. }
+            | Node::Input { id, .. }
+            | Node::List { id, .. }
+            | Node::Code { id, .. }
+            | Node::Image { id, .. } => id.as_deref(),
             Node::Keep { key } => Some(key),
             Node::Slot { .. } => None,
         }
@@ -592,8 +752,42 @@ impl Node {
             | Node::Spinner { id, .. }
             | Node::Scroll { id, .. }
             | Node::Diff { id, .. }
-            | Node::Canvas { id, .. } => Some(id),
+            | Node::Canvas { id, .. }
+            | Node::Input { id, .. }
+            | Node::List { id, .. }
+            | Node::Code { id, .. }
+            | Node::Image { id, .. } => Some(id),
             Node::Keep { .. } | Node::Slot { .. } => None,
+        }
+    }
+
+    /// The layout of a node that has one.
+    pub fn layout_of(&self) -> Option<&Layout> {
+        match self {
+            Node::Box { layout, .. }
+            | Node::Text { layout, .. }
+            | Node::Scroll { layout, .. }
+            | Node::Input { layout, .. }
+            | Node::List { layout, .. }
+            | Node::Code { layout, .. }
+            | Node::Image { layout, .. }
+            | Node::Canvas { layout, .. } => Some(layout),
+            _ => None,
+        }
+    }
+
+    /// The layout of a node that has one, to change.
+    pub fn layout_mut(&mut self) -> Option<&mut Layout> {
+        match self {
+            Node::Box { layout, .. }
+            | Node::Text { layout, .. }
+            | Node::Scroll { layout, .. }
+            | Node::Input { layout, .. }
+            | Node::List { layout, .. }
+            | Node::Code { layout, .. }
+            | Node::Image { layout, .. }
+            | Node::Canvas { layout, .. } => Some(layout),
+            _ => None,
         }
     }
 
@@ -605,13 +799,9 @@ impl Node {
         }
     }
 
-    /// The node with `layout`; only a box, a text, a scroll and a canvas have one.
+    /// The node with `layout`, when it has one.
     pub fn layout(mut self, value: Layout) -> Self {
-        if let Node::Box { layout, .. }
-        | Node::Text { layout, .. }
-        | Node::Scroll { layout, .. }
-        | Node::Canvas { layout, .. } = &mut self
-        {
+        if let Some(layout) = self.layout_mut() {
             *layout = value;
         }
         self
@@ -675,6 +865,9 @@ impl From<crate::Node> for Node {
                 padding_sides,
                 wrap,
                 overflow,
+                sticky: None,
+                anchor: None,
+                split: None,
             },
             crate::Node::Text { spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click } => {
                 Node::Text { id: None, spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click }
@@ -726,6 +919,10 @@ fn is_word(value: &Wrap) -> bool {
 
 fn is_unified(value: &DiffView) -> bool {
     *value == DiffView::Unified
+}
+
+fn is_contain(value: &Fit) -> bool {
+    *value == Fit::Contain
 }
 
 fn is_visible(value: &Overflow) -> bool {
@@ -839,6 +1036,7 @@ mod tests {
                 content: Source::Content(ContentRef(3)),
                 view: DiffView::Split,
                 filetype: Some("rust".into()),
+                hunks: None,
             },
             Node::scroll(vec![Node::Markdown {
                 id: None,

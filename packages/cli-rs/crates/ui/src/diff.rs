@@ -182,6 +182,20 @@ impl Patch {
             fill(&self.column, app, &look(theme), syntax, patch, view, filetype, wrap, gutter_padding);
     }
 
+    /// The first row of each hunk: the first hunk's diff, then each later hunk's `@@` row.
+    pub fn hunk_rows(&self) -> Vec<AnyWidget> {
+        let parts = self.parts.borrow();
+        parts
+            .iter()
+            .enumerate()
+            .filter_map(|(index, part)| match part {
+                Part::Diff(diff) if index == 0 => Some(diff.as_any()),
+                Part::Header(row, _) => Some(row.as_any()),
+                Part::Diff(_) => None,
+            })
+            .collect()
+    }
+
     /// Paints the patch in `theme`, whose syntax theme is `syntax`.
     pub fn restyle(&self, theme: &Theme, syntax: &SyntaxTheme) {
         let look = look(theme);
@@ -262,6 +276,12 @@ pub fn split_added(patch: &str, size: usize) -> Option<Vec<AddedChunk>> {
     Some(chunks.collect())
 }
 
+/// Whether [`Chunked::new`] takes `patch`: it adds one whole file of more than 3,000 lines.
+pub fn chunks(patch: &str) -> bool {
+    split_added(patch, CHUNK_LINES)
+        .is_some_and(|chunks| chunks.iter().map(|chunk| chunk.rows).sum::<usize>() > CHUNKED_MIN_LINES)
+}
+
 /// `VirtualAddedPatch`: an added file over 3,000 lines in chunks of 128 rows, unwrapped so each chunk is exactly its
 /// rows tall. Only the chunks [`Chunked::show`] puts in view are mounted; the others are blank rows of their height.
 /// Each chunk is highlighted on its own (deviation `H06-chunked-diff-highlights`).
@@ -326,11 +346,12 @@ impl Chunked {
     }
 
     /// Mounts the chunks that rows `top..top + height` of the file overlap, and one on each side, and unmounts the
-    /// others.
-    pub fn show(&self, top: i64, height: i64) {
+    /// others; whether it mounted or unmounted any.
+    pub fn show(&self, top: i64, height: i64) -> bool {
         let size = CHUNK_LINES as i64;
         let (first, last) = (top.div_euclid(size) - 1, (top + height).div_euclid(size) + 1);
         let mut mounted = self.mounted.borrow_mut();
+        let mut changed = false;
         for (index, ((slot, patch), diff)) in self.chunks.iter().zip(mounted.iter_mut()).enumerate() {
             let near = (first..=last).contains(&(index as i64));
             match (near, diff.is_some()) {
@@ -338,14 +359,17 @@ impl Chunked {
                     let made = (self.make)(patch);
                     slot.add(&made);
                     *diff = Some(made);
+                    changed = true;
                 }
                 (false, true) => {
                     slot.clear();
                     *diff = None;
+                    changed = true;
                 }
                 _ => {}
             }
         }
+        changed
     }
 
     /// The patch lines of the mounted chunks.
