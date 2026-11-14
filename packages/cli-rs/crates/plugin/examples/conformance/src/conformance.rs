@@ -7,20 +7,24 @@
 //!   toasts "stored 1"; `conf.send` sends "ping", then "a" and "b" under the key `k`, and toasts "sent"; `conf.wake`
 //!   wakes the host, whose wake toasts "woken"; `conf.panic` toasts "before panic" and panics with "boom"; `conf.dup`
 //!   makes the next view hold the id `count` twice; `conf.read` toasts "read", the theme mode and whether the host is
-//!   interactive; `conf.pad` moves the canvas `pad` to its next version.
+//!   interactive; `conf.pad` moves the canvas `pad` to its next version; `conf.down` scrolls `items` by 2 rows,
+//!   `conf.step` steps it to the next anchor of `items`, and `conf.where` toasts where it is (P3).
 //! - A route surface `conf`: a column `root` of a text `count`, "views N, messages M" (the views run and the messages
 //!   arrived, in this instance), and a Markdown node `fixed` of the content "# fixed", memoized: built once a mount and
 //!   kept after.
 //! - A route surface `pad` (P5): a column `pad-root` of a canvas `pad`, 20 by 1 cells, at the version `conf.pad`
 //!   counts. Its draw writes one text at its corner, "draw N CAUSE", in the terminal's colors: the draws run in this
 //!   instance, and why the host asked.
+//! - A route surface `rows` (P3): a column `rows-root` of a text `where` and a scroll `items`, 3 rows high, of six boxes
+//!   `i0` to `i5`, each an anchor of group `items` holding "item N". Its `layout` is told of `items`, and paints
+//!   `where` on `#203040` while `items` is scrolled down; its scroll handler toasts "landed ID" where a step landed.
 //! - Options that hold `fail-setup` make setup fail with "setup refused", before it registers anything.
 
 use std::cell::Cell;
 use std::rc::Rc;
 
 use opencode_plugin_abi::canvas::{List, Style};
-use opencode_plugin_abi::{Command, Layout, Setup, Span, ThemeMode, Toast, Variant, Width, v2};
+use opencode_plugin_abi::{Command, Host, Layout, Setup, Span, ThemeMode, Toast, Variant, Width, v2};
 
 #[derive(Default)]
 struct State {
@@ -73,6 +77,16 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     });
     let padded = state.clone();
     setup.command(command("conf.pad"), move |_, _| padded.pads.set(padded.pads.get() + 1));
+    let items = || v2::Target::node("rows", "items");
+    setup.command(command("conf.down"), move |host, _| host.scroll(items(), v2::Scroll::By { rows: 2 }));
+    setup.command(command("conf.step"), move |host, _| {
+        host.scroll(items(), v2::Scroll::Step { group: "items".to_owned(), by: 1, inset: 0 });
+    });
+    setup.command(command("conf.where"), move |host, _| {
+        let place = host.scroll_state(&items());
+        let place = place.map_or("nowhere".to_owned(), |state| format!("offset {} of {}", state.offset, state.extent));
+        host.toast(Toast::new(Variant::Info, place));
+    });
     setup.on_wake(|host| host.toast(Toast::new(Variant::Info, "woken")));
     setup.surface(v2::Surface::new("conf", v2::Place::Route("conf".to_owned()), move |view| {
         state.views.set(state.views.get() + 1);
@@ -104,5 +118,37 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         list.text(0, 0, &format!("draw {} {cause}", drawn.draws.get()), Style::new());
         Some(list)
     }));
+    setup.surface(rows());
     Ok(())
+}
+
+/// The surface `rows`: a scroll of anchored items, its `layout` and its scroll handler.
+fn rows() -> v2::Surface {
+    let surface = v2::Surface::new("rows", v2::Place::Route("rows".to_owned()), |_| {
+        let item = |index: usize| {
+            v2::Node::column(vec![v2::Node::text(vec![Span::new(format!("item {index}"))])])
+                .with_id(format!("i{index}"))
+                .anchor("items", "")
+        };
+        let mut items = v2::Node::scroll((0..6).map(item).collect()).with_id("items");
+        if let v2::Node::Scroll { height, .. } = &mut items {
+            *height = Some(3);
+        }
+        v2::Node::column(vec![v2::Node::text(vec![Span::new("where")]).with_id("where"), items]).with_id("rows-root")
+    });
+    let notify = vec![v2::Notify::Scroll { id: "items".to_owned() }];
+    surface
+        .layout(notify, |geometry| {
+            let down = geometry.scrolls.iter().any(|(id, state)| id == "items" && state.offset > 0);
+            let paints = match down {
+                true => vec![v2::Paint { node: "where".to_owned(), bg: "#203040".into() }],
+                false => Vec::new(),
+            };
+            v2::LayoutReply { paints, again: false }
+        })
+        .on_scroll(|host: &dyn Host, event| {
+            if let v2::ScrollEvent::Landed { anchor, .. } = event {
+                host.toast(Toast::new(Variant::Info, format!("landed {}", anchor.id)));
+            }
+        })
 }
