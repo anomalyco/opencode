@@ -1,11 +1,14 @@
 //! The sidebar footer (E.14, row F08, `feature-plugins/sidebar/footer.tsx`): the "Getting started" card while
 //! no provider is connected and it was not dismissed (from 22 rows), then the location as `directory:branch`,
 //! which brightens under the pointer and opens the working directory menu (E.20) on a click. It is a plugin of the
-//! one API (O-67).
+//! one API (O-67), on contract 2.0 (P6a).
 
-use opencode_plugin::abi::{self, Click, Command, Justify, Layout, Node, Placement, Render, Span, Wrap};
+use opencode_plugin::abi::v2::{Node, Place, Surface};
+use opencode_plugin::abi::{self, Click, Command, Justify, Layout, Placement, Span, Wrap};
 use opencode_plugin::slot;
 use serde_json::json;
+
+use super::kept;
 
 pub fn plugin() -> abi::Plugin {
     abi::Plugin { id: "opencode.sidebar.footer", setup }
@@ -14,21 +17,23 @@ pub fn plugin() -> abi::Plugin {
 /// The hidden command the card's close button runs.
 const DISMISS: &str = "sidebar.footer.dismiss";
 const KEY: &str = "getting-started";
+const ROOT: &str = "footer";
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key(KEY);
     setup.command(Command { name: DISMISS.to_owned(), ..Command::default() }, |host, _| {
         host.storage_merge(KEY, serde_json::Map::from_iter([("dismissed".to_owned(), json!(true))]));
     });
-    setup.slot(Placement::append(slot::SIDEBAR_FOOTER), |read, input, changed| {
+    setup.surface(Surface::new("footer", Place::Slot(Placement::append(slot::SIDEBAR_FOOTER)), |cx| {
         // The card follows the terminal height and the stored dismissal, the location the session.
-        let session = input.session_id.as_deref().unwrap_or_default();
+        let session = cx.input.slot.as_ref().and_then(|slot| slot.session_id.as_deref()).unwrap_or_default();
+        let changed = &cx.input.changed;
         if !(changed.all || changed.local || changed.size || changed.session(session) || !changed.locations.is_empty())
         {
-            return Render::Keep;
+            return kept(ROOT);
         }
-        Render::Show(view(read, session))
-    });
+        view(cx.read, session).with_id(ROOT)
+    }));
     Ok(())
 }
 
