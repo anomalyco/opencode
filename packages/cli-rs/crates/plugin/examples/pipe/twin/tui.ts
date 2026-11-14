@@ -44,7 +44,7 @@ export default {
         id: "twin",
         layout: { grow: true },
         children: [
-          { type: "text", id: "header", spans: [{ text: `twin ${total}` }] },
+          { type: "text", id: "header", spans: [{ text: `twin ${total} · ${cx.input.width}` }] },
           { type: "scroll", id: "cards", layout: { grow: true }, children: cards },
         ],
       }
