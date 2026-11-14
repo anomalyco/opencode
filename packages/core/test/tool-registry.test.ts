@@ -213,6 +213,86 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("honors callable Standard Schema input validation and JSON schema", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const schema = Schema.Struct({ keyword: Schema.optionalKey(Schema.String) })
+      const input = Schema.toStandardSchemaV1(schema, { parseOptions: { onExcessProperty: "error" } })
+      const jsonSchema = Schema.toJsonSchemaDocument(schema).schema
+      Object.assign(input["~standard"], {
+        jsonSchema: { input: () => jsonSchema, output: () => jsonSchema },
+      })
+      const executed: unknown[] = []
+      yield* service.transform((editor) =>
+        editor.add({
+          name: "search",
+          description: "Search by keyword",
+          input,
+          options: { codemode: false },
+          execute: (args) =>
+            Effect.sync(() => {
+              executed.push(args)
+              return { content: JSON.stringify(args) }
+            }),
+        }),
+      )
+
+      expect(
+        yield* executeTool(service, {
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "invalid-search", name: "search", input: { query: "x" } },
+        }),
+      ).toMatchObject({
+        status: "error",
+        error: { message: expect.stringContaining("query: Expected no excess property") },
+      })
+      expect(executed).toEqual([])
+      expect((yield* service.snapshot()).definitions.find((tool) => tool.name === "search")?.inputSchema).toEqual(
+        jsonSchema,
+      )
+      expect(
+        yield* executeTool(service, {
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "valid-search", name: "search", input: { keyword: "x" } },
+        }),
+      ).toMatchObject({ status: "completed", content: [{ type: "text", text: '{"keyword":"x"}' }] })
+      expect(executed).toEqual([{ keyword: "x" }])
+    }),
+  )
+
+  it.effect("converts callable Effect Standard Schemas without a JSON schema converter", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* service.transform((editor) =>
+        editor.add({
+          name: "search",
+          description: "Search by keyword",
+          input: Schema.toStandardSchemaV1(Schema.Struct({ keyword: Schema.String })),
+          options: { codemode: false },
+          execute: (args) => Effect.succeed({ content: args.keyword }),
+        }),
+      )
+
+      expect((yield* service.snapshot()).definitions.find((tool) => tool.name === "search")?.inputSchema).toMatchObject(
+        {
+          type: "object",
+          properties: { keyword: { type: "string" } },
+          required: ["keyword"],
+          additionalProperties: false,
+        },
+      )
+      expect(
+        yield* executeTool(service, {
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "search", name: "search", input: { keyword: "x" } },
+        }),
+      ).toMatchObject({ status: "completed", content: [{ type: "text", text: "x" }] })
+    }),
+  )
+
   it.effect("skips invalid updates without dropping the existing definition", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
