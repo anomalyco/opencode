@@ -170,7 +170,8 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *    "claims"?: [{"target": {"type": "tool" | "fence", "name"}, "palette"?}],
  *    "messages"?: bool, "layers"?: [layer], "searches"?: [name], "plugins"?: bool}
  *   A layer is {"scope": "surface" | {"node": id} | "composer" | "global", "priority"?, "mode"?,
- *    "keys"?: [{"key", "name", "title"?, "hold"?}], "any"?, "paste"?}.
+ *    "keys"?: [{"key", "name", "title"?, "hold"?, "command"?}], "any"?, "paste"?}. 2.0 (P6c): a key's "command" names
+ *    the user's keybind that takes it; "key" is used when the host knows no keybind of that name.
  *
  * Requests from the host (`call`), with their results:
  *   {"type": "command", "name", "input"}                      -> null
@@ -233,7 +234,8 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  * 2.0 tree nodes ("type"): "box" {"id"?, "row"?, "gap"?, "padding"?, "justify"?, "align"?, "bg"?, "layout"?,
  *   "on_click"?, "children", "visible"?}, "text" {"id"?, "spans", "fg"?, "wrap"?, "truncate"?, "selectable"?, "hover_fg"?,
  *   "layout"?, "on_click"?}, "slot" {"path"}, "markdown" {"id"?, "source"}, "spinner" {"id"?, "label"},
- *   "scroll" {"id"?, "height"?, "follow"?, "layout"?, "children"}, "diff" {"id"?, "content", "view"?, "filetype"?},
+ *   "scroll" {"id"?, "height"?, "follow"?, "layout"?, "children"}, "diff" {"id"?, "content", "view"?, "filetype"?,
+ *   "hunks"?, "wrap"?, "padding"?},
  *   "canvas" {"id", "layout"?, "version"?, "animate"?}, "keep" {"key"}. A source is {"text": text},
  *   {"content": handle} or {"part-output": {"session", "part"}}. A tree the host cannot decode, such as one with a
  *   kind it does not know, fails the plugin and leaves no effect.
@@ -247,12 +249,16 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   "transcript", 2.0 (P2) "rect", "focused", "input-mode", 2.0 (P6a) "message" {"session", "message"} (one
  *   message, or null), 2.0 (P6b) "plugins", which answers [{"key", "id", "target"?, "origin": "builtin" | "added" |
  *   "configured" | "external", "status": "active" | "inactive" | "skipped" | "failed" | "pending" | "declined",
- *   "active"?, "slow"?}] and no error text. Those that ask for something: "toast", "storage-set",
+ *   "active"?, "slow"?}] and no error text, 2.0 (P6c) "setting" {"name"}, which answers the user's setting of that name
+ *   (one of "diffs.source", "diffs.view", "diffs.fullscreen", "diffs.tree", "diffs.single") or null. Those that ask
+ *   for something: "toast", "storage-set",
  *   "storage-merge", "open-route", "dispatch", "attention", "navigate", "fetch", "dialog", "copy", 1.5
  *   "composer-edit", 1.6 "set-variant", "set-model", "tab", "clear-selection", "foreground", "title", "set-theme",
  *   "install-theme", 2.0 (P3) "scroll" {"target", "verb"}, 2.0 (P2) "open-panel", "close-panel", "overlay",
  *   "close-overlay", "focus", "blur", "set-mode", "release-keys" (none of P2's during `create`, which has no input
- *   yet). `crates/plugin-abi/schema/v2.json` has the types of P3's (Target, Scroll, ScrollState, AnchorAt, Geometry,
+ *   yet), 2.0 (P6c) "set-setting" {"name", "value"}. A "fetch" with "bytes" answers the body's bytes in base64 as a
+ *   JSON string; a "dialog" may be {"type": "images", "images": [{"data": base64, "name"?}], "index"?}, a select may
+ *   have "query", "query_delay", "filterless", "empty" and "note", and a panel "close" and "height". `crates/plugin-abi/schema/v2.json` has the types of P3's (Target, Scroll, ScrollState, AnchorAt, Geometry,
  *   LayoutReply, ScrollEvent, TranscriptView). Effects wait until the plugin's call returns. A call that panics, or
  *   whose answer the host refuses (it cannot decode it, the tree breaks the contract, a handler answers anything but
  *   null), has none, and fails the plugin. A call that answers OPENCODE_ERROR keeps them (see above). A render of 1.4
