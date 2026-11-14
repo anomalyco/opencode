@@ -143,7 +143,12 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
 const ranTool = (item: SessionMessage.AssistantContent) =>
   item.type === "tool" && (item.time.ran !== undefined || item.state.status === "completed")
 
-const assistant = (message: SessionMessage.Assistant, model: Model.Ref, providerMetadataKey: string) => {
+const assistant = (
+  message: SessionMessage.Assistant,
+  model: Model.Ref,
+  providerMetadataKey: string,
+  replayReasoning: boolean,
+) => {
   const sameProvider = message.model.providerID === model.providerID
   const sameModel = sameProvider && message.model.id === model.id
   // A failed stream is retried from what had already happened: the local calls that ran and everything
@@ -187,7 +192,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
           .some((after) => after.type === "tool" || (after.type === "text" && after.text.trim() !== ""))
       )
         return []
-      return sameModel
+      return sameModel && replayReasoning
         ? [
             {
               type: "reasoning",
@@ -242,7 +247,12 @@ const modelSwitched = (message: SessionMessage.ModelSelected, model: Model.Ref):
   return [Message.effort({ effort: to.effort, previous: from.effort })]
 }
 
-function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMetadataKey: string): Message[] {
+function toLLMMessage(
+  message: SessionMessage.Info,
+  model: Model.Ref,
+  providerMetadataKey: string,
+  replayReasoning: boolean,
+): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "idle":
@@ -288,7 +298,7 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
         }),
       ]
     case "assistant":
-      return assistant(message, model, providerMetadataKey)
+      return assistant(message, model, providerMetadataKey, replayReasoning)
     case "compaction": {
       if (message.status !== "completed") return []
       // History selection only keeps native windows the target model can replay.
@@ -317,4 +327,6 @@ export const toLLMMessages = (
   messages: readonly SessionMessage.Info[],
   model: Model.Ref,
   providerMetadataKey: string = model.providerID,
-) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))
+  /** False leaves out the provider state of reasoning, for a provider that rejected it. */
+  replayReasoning = true,
+) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey, replayReasoning))

@@ -720,6 +720,11 @@ const invalidRequest = () =>
     reason: new InvalidRequestError({ message: "Invalid request" }),
   })
 
+const reasoningRejected = () =>
+  new AIError({
+    reason: new InvalidRequestError({ message: "invalid encrypted view", classification: "reasoning-rejected" }),
+  })
+
 const payloadTooLarge = () =>
   new AIError({
     reason: new InvalidRequestError({ message: "Too large", classification: "payload-too-large" }),
@@ -6272,6 +6277,48 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.runPrompt("Reject continuation twice").pipe(Effect.flip)).toBe(failure)
 
     expect(s.requests).toHaveLength(2)
+    expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+  })
+
+  // Bedrock returns OpenAI reasoning as an opaque block with no readable text.
+  const redactedReasoning = (id: string) =>
+    TestLLM.stop(
+      LLMEvent.reasoningStart({ id }),
+      LLMEvent.reasoningEnd({ id, providerMetadata: { openai: { redactedData: "encrypted-state" } } }),
+      LLMEvent.textStart({ id: `${id}-text` }),
+      LLMEvent.textDelta({ id: `${id}-text`, text: "Answer" }),
+      LLMEvent.textEnd({ id: `${id}-text` }),
+    )
+
+  scenario("rebuilds once without reasoning provider state after the provider rejects it", function* (s) {
+    yield* s.llm.push(redactedReasoning("rejected-reasoning"))
+    yield* s.runPrompt("Think first")
+    yield* s.llm.push(Stream.fail(reasoningRejected()))
+    yield* s.llm.push(TestLLM.text("Recovered", "reasoning-recovery"))
+
+    yield* s.runPrompt("Continue")
+
+    expect(s.requests).toHaveLength(3)
+    expect(s.requests[1]?.messages[1]?.content).toEqual([
+      { type: "reasoning", text: "", providerMetadata: { openai: { redactedData: "encrypted-state" } } },
+      { type: "text", text: "Answer" },
+    ])
+    expect(s.requests[2]?.messages[1]?.content).toEqual([{ type: "text", text: "Answer" }])
+    expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+    expect((yield* s.context).at(-1)).toMatchObject(
+      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
+    )
+  })
+
+  scenario("bounds repeated reasoning rejection to one immediate recovery", function* (s) {
+    yield* s.llm.push(redactedReasoning("rejected-reasoning-twice"))
+    yield* s.runPrompt("Think first")
+    const failure = reasoningRejected()
+    yield* s.llm.push(Stream.fail(failure), Stream.fail(failure))
+
+    expect(yield* s.runPrompt("Continue").pipe(Effect.flip)).toBe(failure)
+
+    expect(s.requests).toHaveLength(3)
     expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
   })
 
