@@ -289,15 +289,19 @@ export function createSessionTimelineRowRenderer(input: {
 
   const phase = (messageID: string) => viewTurnPhase(input.projection.turnPhaseByID().get(messageID) ?? IDLE_TURN_PHASE)
 
+  // The turn's duration and finish time both end at its last completed step.
+  const lastCompleted = (messageID: string) =>
+    input.projection
+      .assistantMessagesByParent()
+      .get(messageID)
+      ?.findLast((message) => message.time.completed !== undefined)
+
   const duration = (messageID: string) => {
     const user = input.projection.messageByID().get(messageID)
 
     if (user?.type !== "user") return null
 
-    const message = input.projection
-      .assistantMessagesByParent()
-      .get(messageID)
-      ?.findLast((message) => message.time.completed !== undefined)
+    const message = lastCompleted(messageID)
 
     if (message?.time.completed === undefined || message.time.completed < user.time.created) return undefined
 
@@ -578,6 +582,7 @@ export function createSessionTimelineRowRenderer(input: {
                 showAssistantCopyPartID={copyContentID(row().userMessageID)}
                 turnDurationMs={duration(row().userMessageID)}
                 turnTokensPerSecond={turnTokensPerSecond()}
+                turnCompletedAt={lastCompleted(row().userMessageID)?.time.completed}
                 sources={turnSourcesValue()}
                 onOpenSources={() => sourcesHost?.open(row().userMessageID)}
                 defaultOpen={defaultOpen()}

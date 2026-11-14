@@ -59,6 +59,8 @@ import type {
 } from "@opencode/client/promise"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { agentLabel } from "./agent-label"
+import { messageTime } from "./message-time"
+import { useToday } from "./relative-time"
 import { isInterruptedError } from "../timeline/turn-phase-machine"
 import { attached, imageAttachmentPlaceholderStyle, typeLabel } from "../components/message-file"
 import {
@@ -312,30 +314,8 @@ export function CurrentUserMessageDisplay(props: {
     return agent ? [{ label: agent }] : []
   })
 
-  // The menu names the day relatively: Today and Yesterday, then the date this year, then the date with its year.
-  const sent = createMemo(() => {
-    const created = new Date(props.message.time.created)
-    const now = new Date()
-    const midnight = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-    const days = Math.round((midnight(now) - midnight(created)) / 86_400_000)
-    const time = new Intl.DateTimeFormat(i18n.locale(), { timeStyle: "short" }).format(created)
-
-    if (days === 0 || days === 1) {
-      const day = new Intl.RelativeTimeFormat(i18n.locale(), { numeric: "auto" }).format(-days, "day")
-
-      return `${day[0]?.toLocaleUpperCase(i18n.locale())}${day.slice(1)}, ${time}`
-    }
-
-    if (created.getFullYear() === now.getFullYear())
-      return new Intl.DateTimeFormat(i18n.locale(), {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      }).format(created)
-
-    return new Intl.DateTimeFormat(i18n.locale(), { dateStyle: "medium", timeStyle: "short" }).format(created)
-  })
+  const today = useToday()
+  const sent = createMemo(() => messageTime(props.message.time.created, today(), i18n.locale()))
 
   // A waiting steer reads agent · model · Pending; mobile shows the agent and model in the composer instead.
   const metaLabels = createMemo(() => (mobile() ? [] : [...agentItems(), ...modelItems(data, props.model)]))
@@ -1148,6 +1128,8 @@ export function AssistantTextContent(props: {
   showCopy: boolean
   turnDurationMs?: number | null
   turnTokensPerSecond?: number
+  /** When the turn's last step completed, the end of `turnDurationMs`; shown as the footer's finish time. */
+  turnCompletedAt?: number
   /** The finished turn's web searches and fetches, shown as a chip in its footer. */
   sources?: TurnSources
   onOpenSources?: () => void
@@ -1263,6 +1245,20 @@ export function AssistantTextContent(props: {
                   <span dir="auto">{label()}</span>
                 </span>
               )}
+            </Show>
+            <Show when={props.turnCompletedAt ?? props.message.time.completed}>
+              {(completed) => {
+                const today = useToday()
+
+                return (
+                  <span data-slot="text-part-meta-time">
+                    <span aria-hidden="true">{"\u00B7"}</span>
+                    <time dateTime={new Date(completed()).toISOString()} dir="auto">
+                      {messageTime(completed(), today(), i18n.locale(), { bareToday: true })}
+                    </time>
+                  </span>
+                )
+              }}
             </Show>
           </span>
         </Show>
