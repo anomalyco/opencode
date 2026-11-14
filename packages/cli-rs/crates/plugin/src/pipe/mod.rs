@@ -62,6 +62,8 @@ pub struct Config {
     /// The client's version and channel, which a plugin's setup context reads as `app`.
     pub version: String,
     pub channel: String,
+    /// The directory the client works in, a project's perhaps: told to the JS host as data, never where Bun starts.
+    pub directory: PathBuf,
 }
 
 impl Config {
@@ -75,23 +77,97 @@ impl Config {
             hold: Duration::from_millis(50),
             version: "local".to_owned(),
             channel: "latest".to_owned(),
+            directory: std::env::current_dir().unwrap_or_default(),
         }
     }
 
-    /// The JS host, unless `OPENCODE_PLUGIN_JS` is `0`, when Bun is found: `OPENCODE_BUN`, or `bun` on the path.
+    /// The JS host, unless `OPENCODE_PLUGIN_JS` is `0`, when Bun is found: `OPENCODE_BUN`, an absolute path, or `bun`
+    /// on the path ([`find`]).
     pub fn from_env() -> Option<Self> {
-        if std::env::var("OPENCODE_PLUGIN_JS").ok().as_deref() == Some("0") {
+        Self::from_vars(|name| std::env::var_os(name))
+    }
+
+    /// [`Config::from_env`] over the environment `var` reads.
+    pub fn from_vars(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Option<Self> {
+        if var("OPENCODE_PLUGIN_JS").as_deref() == Some(std::ffi::OsStr::new("0")) {
             return None;
         }
-        let bun = std::env::var_os("OPENCODE_BUN").map(PathBuf::from).or_else(|| find("bun"))?;
-        Some(Self::new(bun))
+        let directory = std::env::current_dir().unwrap_or_default();
+        let bun = match var("OPENCODE_BUN") {
+            Some(bun) => Some(PathBuf::from(bun)).filter(|bun| bun.is_absolute()),
+            None => find_in("bun", &var("PATH")?, &directory, var("HOME").map(PathBuf::from).as_deref()),
+        }?;
+        Some(Self { directory, ..Self::new(bun) })
     }
 }
 
 /// `name` on the `PATH`.
 pub fn find(name: &str) -> Option<PathBuf> {
+    let directory = std::env::current_dir().ok()?;
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    find_in(name, &std::env::var_os("PATH")?, &directory, home.as_deref())
+}
+
+/// `name` in the entries of `path`, as the client in `directory` finds it (carbon-1): only in an absolute entry, as a
+/// relative or empty one is the working directory, and not inside `directory` (unless that is the home directory,
+/// which is no project): a project's own `bun` would run as soon as the client opened it.
+pub fn find_in(name: &str, path: &std::ffi::OsStr, directory: &Path, home: Option<&Path>) -> Option<PathBuf> {
     let file = format!("{name}{}", std::env::consts::EXE_SUFFIX);
-    std::env::split_paths(&std::env::var_os("PATH")?).map(|dir| dir.join(&file)).find(|path| path.is_file())
+    let real = |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let project = (Some(real(directory)) != home.map(real)).then(|| real(directory));
+    std::env::split_paths(path)
+        .filter(|dir| dir.is_absolute())
+        .map(|dir| dir.join(&file))
+        .filter(|path| path.is_file())
+        .find(|path| project.as_ref().is_none_or(|project| !real(path).starts_with(project)))
+}
+
+/// Bun with the JS host's script in `dir`, its private directory, which it starts in (carbon-1): no `bunfig.toml` (a
+/// `preload`), `.env` or other file of the project it works for is read as Bun starts, and only the variables
+/// [`inherited`] allows reach it. The project's directory is told as data (`OPENCODE_DIRECTORY`).
+fn command(config: &Config, dir: &Path) -> std::process::Command {
+    let mut command = std::process::Command::new(&config.bun);
+    command.current_dir(dir).env_clear().envs(std::env::vars_os().filter(|(name, _)| inherited(name)));
+    command.arg("--no-env-file").arg(format!("--config={}", dir.join("bunfig.toml").display()));
+    command.args(&config.args).arg(dir.join("host.ts"));
+    command.env("OPENCODE_VERSION", &config.version).env("OPENCODE_CHANNEL", &config.channel);
+    command.env("OPENCODE_DIRECTORY", &config.directory);
+    command
+}
+
+/// The variables of the client's environment the JS host gets (carbon-1): what locates the user, the language, the
+/// temporary directory and the proxy, and the client's own; not Bun's or Node's options, which could load code.
+fn inherited(name: &std::ffi::OsStr) -> bool {
+    let name = name.to_string_lossy().to_ascii_uppercase();
+    const NAMES: &[&str] = &[
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "LANG",
+        "TZ",
+        "TMPDIR",
+        "TEMP",
+        "TMP",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NO_PROXY",
+        "ALL_PROXY",
+        "SYSTEMROOT",
+        "WINDIR",
+        "COMSPEC",
+        "PATHEXT",
+        "USERPROFILE",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "PROGRAMDATA",
+        "SYSTEMDRIVE",
+    ];
+    NAMES.contains(&name.as_str())
+        || name.starts_with("LC_")
+        || name.starts_with("XDG_")
+        || name.starts_with("OPENCODE_")
 }
 
 /// What crossed the pipe, counted outside any plugin and any mount (4.14, `work`).
@@ -676,15 +752,15 @@ impl Scripts {
             let dir = opencode_util::temp::tempdir()?;
             std::fs::write(dir.path().join("host.ts"), SOURCE)?;
             std::fs::write(dir.path().join("compat.js"), COMPAT)?;
+            std::fs::write(dir.path().join("bunfig.toml"), "")?;
             *self.script.borrow_mut() = Some(dir);
         }
-        let script = self.script.borrow().as_ref().map(|dir| dir.path().join("host.ts")).unwrap_or_default();
-        let mut command = std::process::Command::new(&self.config.bun);
-        command.args(&self.config.args).arg(script);
-        command.env("OPENCODE_VERSION", &self.config.version).env("OPENCODE_CHANNEL", &self.config.channel);
-        let proxy = host.app().proxy();
-        let id = self.id;
-        Child::spawn(command, self.config.limits, move || post(&proxy, id))
+        let dir = self.script.borrow().as_ref().map(|dir| dir.path().to_path_buf()).unwrap_or_default();
+        Child::spawn(command(&self.config, &dir), self.config.limits, {
+            let proxy = host.app().proxy();
+            let id = self.id;
+            move || post(&proxy, id)
+        })
     }
 
     /// Takes what the JS host sent.
@@ -1220,5 +1296,59 @@ pub(crate) fn evaluate(
             log::warn!("plugin {id}: a watched read failed: {error}");
             serde_json::Value::Null
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Expected (carbon-1): Bun is found only in an absolute `PATH` entry outside the project the client works in (an
+    // empty or relative entry is that directory); a home directory is no project.
+    #[test]
+    fn bun_is_never_the_projects_own() {
+        let root = opencode_util::temp::tempdir().unwrap();
+        let (project, tools) = (root.path().join("work"), root.path().join("tools"));
+        let file = format!("bun{}", std::env::consts::EXE_SUFFIX);
+        for dir in [project.join("bin"), tools.clone()] {
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join(&file), "").unwrap();
+        }
+        let find = |entries: &[&Path], home: Option<&Path>| {
+            find_in("bun", &std::env::join_paths(entries).unwrap(), &project, home)
+        };
+        assert_eq!(find(&[Path::new("bin"), Path::new(""), &tools], None), Some(tools.join(&file)));
+        assert_eq!(find(&[Path::new("bin"), Path::new("")], None), None);
+        assert_eq!(find(&[&project.join("bin")], None), None);
+        assert_eq!(find(&[&project.join("bin")], Some(&project)), Some(project.join("bin").join(&file)));
+    }
+
+    // Expected (carbon-1, carbon-6): `OPENCODE_PLUGIN_JS=0` turns the JS host off; `OPENCODE_BUN` counts only as an
+    // absolute path; Bun starts in the JS host's own directory, reads no `.env` and no project `bunfig.toml`, and gets
+    // of the client's environment only what locates the user and the client.
+    #[test]
+    fn the_js_host_starts_apart_from_the_project() {
+        let vars = |off: bool, bun: &'static str| {
+            move |name: &str| match name {
+                "OPENCODE_PLUGIN_JS" if off => Some("0".into()),
+                "OPENCODE_BUN" => Some(bun.into()),
+                _ => None,
+            }
+        };
+        assert!(Config::from_vars(vars(true, "/opt/bun/bin/bun")).is_none());
+        let found = Config::from_vars(vars(false, "/opt/bun/bin/bun")).map(|config| config.bun);
+        assert_eq!(found, Some(PathBuf::from("/opt/bun/bin/bun")));
+        assert!(Config::from_vars(vars(false, "bin/bun")).is_none());
+        let config = Config { directory: PathBuf::from("/work"), ..Config::new(PathBuf::from("/opt/bun/bin/bun")) };
+        let dir = Path::new("/private/js-host");
+        let command = command(&config, dir);
+        assert_eq!(command.get_current_dir(), Some(dir));
+        let args: Vec<_> = command.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect();
+        assert_eq!(args[..2], ["--no-env-file".to_owned(), format!("--config={}", dir.join("bunfig.toml").display())]);
+        let directory = command.get_envs().find(|(name, _)| *name == "OPENCODE_DIRECTORY").and_then(|(_, value)| value);
+        assert_eq!(directory, Some(std::ffi::OsStr::new("/work")));
+        let inherits = |name: &str| inherited(std::ffi::OsStr::new(name));
+        assert!(!inherits("BUN_OPTIONS") && !inherits("NODE_OPTIONS") && !inherits("PWN_FROM_ENV"));
+        assert!(inherits("HOME") && inherits("XDG_CONFIG_HOME") && inherits("OPENCODE_CHANNEL"));
     }
 }
