@@ -1398,10 +1398,20 @@ fn a_full_queue_is_back_pressure_and_ends_nothing() {
     }
     pipe.settle();
     assert!(calls(&log).is_empty(), "{:?}", calls(&log));
-    // Busy, it reads nothing for a while: the bumps fill its queue, then the overflow, then are refused.
+    // Busy, it reads nothing for a while: eight bumps fill its queue and the pipe, and wait in the overflow; none is
+    // refused.
+    let refused = pipe::crossed().refused_sends;
+    tui.keymap.dispatch("probe.hold", Some("400"));
+    let middle = "y".repeat(20 << 10);
+    for _ in 0..8 {
+        tui.keymap.dispatch("twin.bump", Some(&middle));
+    }
+    pipe.settle();
+    assert_eq!(pipe::crossed().refused_sends, refused, "a burst within the overflow was refused");
+    assert!(header(&pipe).starts_with("twin 9 "), "{}", header(&pipe));
+    // Then more than the overflow holds: the rest is refused.
     let refused = pipe::crossed().refused_sends;
     tui.keymap.dispatch("probe.hold", Some("700"));
-    let middle = "y".repeat(20 << 10);
     for _ in 0..30 {
         tui.keymap.dispatch("twin.bump", Some(&middle));
     }
@@ -1412,8 +1422,8 @@ fn a_full_queue_is_back_pressure_and_ends_nothing() {
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
     assert_eq!(pipe.status(twin::ID), Some(Status::Active));
     // Every bump that was not refused ran, once, in order.
-    assert!(header(&pipe).starts_with(&format!("twin {} ", 1 + 30 - refused)), "{}", header(&pipe));
-    assert_eq!(calls(&log), vec![serde_json::json!({ "hold": 700 })]);
+    assert!(header(&pipe).starts_with(&format!("twin {} ", 9 + 30 - refused)), "{}", header(&pipe));
+    assert_eq!(calls(&log), vec![serde_json::json!({ "hold": 400 }), serde_json::json!({ "hold": 700 })]);
 }
 
 // Expected (bigboi-5): the keys a holding command held reach the composer after the effects of its answer: here the
