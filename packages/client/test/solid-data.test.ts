@@ -1790,3 +1790,79 @@ async function wait(check: () => boolean) {
     await Bun.sleep(10)
   }
 }
+
+test.each(["text", "reasoning"] as const)("keeps one %s part when its start is redelivered", (kind) => {
+  const fixture = activityFixture(() => Response.json({ data: {} }))
+  const target = { sessionID: "ses_replay", assistantMessageID: "msg_replay" }
+  const event = { id: "evt_start", created: 1, durable: { aggregateID: target.sessionID, seq: 1, version: 1 as const } }
+  try {
+    fixture.emit({
+      ...event,
+      type: "session.step.started",
+      data: { ...target, agent: "build", model: { providerID: "demo", id: "model" }, started: 0 },
+    })
+    const started: OpenCodeEvent = {
+      ...event,
+      type: `session.${kind}.started`,
+      data: { ...target, ordinal: 0 },
+    }
+    fixture.emit(started)
+    fixture.emit({
+      id: "evt_delta",
+      created: 2,
+      type: `session.${kind}.delta`,
+      data: { ...target, ordinal: 0, delta: "first" },
+    })
+    fixture.emit(started)
+    expect(fixture.data.session.message.get(target.sessionID, target.assistantMessageID)).toMatchObject({
+      type: "assistant",
+      content: [{ type: kind, text: "first" }],
+    })
+  } finally {
+    fixture.dispose()
+  }
+})
+
+test.each(["text", "reasoning"] as const)("keeps an older %s end from changing the next block", (kind) => {
+  const fixture = activityFixture(() => Response.json({ data: {} }))
+  const target = { sessionID: "ses_replay", assistantMessageID: "msg_replay" }
+  let sequence = 0
+  const part = (stage: "started" | "ended", ordinal: number, text = ""): OpenCodeEvent => ({
+    id: `evt_${++sequence}`,
+    created: sequence,
+    durable: { aggregateID: target.sessionID, seq: sequence, version: 1 },
+    type: `session.${kind}.${stage}`,
+    data: { ...target, ordinal, text },
+  })
+  try {
+    fixture.emit({
+      id: "evt_step",
+      created: 0,
+      durable: { aggregateID: target.sessionID, seq: 0, version: 1 },
+      type: "session.step.started",
+      data: { ...target, agent: "build", model: { providerID: "demo", id: "model" }, started: 0 },
+    })
+    fixture.emit(part("started", 0))
+    const ended = part("ended", 0, "first")
+    fixture.emit(ended)
+    fixture.emit(part("started", 1))
+    fixture.emit(ended)
+    expect(fixture.data.session.message.get(target.sessionID, target.assistantMessageID)).toMatchObject({
+      type: "assistant",
+      content: [
+        { type: kind, text: "first" },
+        { type: kind, text: "" },
+      ],
+    })
+    fixture.emit(part("ended", 1, "second"))
+    expect(fixture.data.session.message.get(target.sessionID, target.assistantMessageID)).toMatchObject({
+      type: "assistant",
+      content: [
+        { type: kind, text: "first" },
+        { type: kind, text: "second" },
+      ],
+    })
+  } finally {
+    fixture.dispose()
+  }
+})
