@@ -582,20 +582,14 @@ fn full_screen_is_saved_only_when_the_panel_toggles() {
     }
 }
 
-// Expected (P6c, a select's `query`): the base picker asks the server for the branches of what is typed, once it stayed
-// 150 ms, and shows its empty text when none match.
-#[test]
-fn the_base_picker_searches_the_server_as_the_user_types() {
+/// The route over two files with the base picker open, whose server lists `branches` for any search.
+fn base_picker(branches: Value) -> Diffs {
     let files: Vec<Value> = (0..2).map(|index| hunk_file(index, 4)).collect();
+    let list = json!({ "location": { "directory": DIRECTORY }, "data": branches });
     let memory = Memory::new(
         routes(Value::Array(files))
             .into_iter()
-            .chain([MemoryRoute::json(
-                "GET",
-                "/api/vcs/branch",
-                200,
-                &json!({ "location": { "directory": DIRECTORY }, "data": [] }),
-            )])
+            .chain([MemoryRoute::json("GET", "/api/vcs/branch", 200, &list)])
             .collect(),
     );
     let config = json!({ "animations": false, "diffs": { "source": "branch" } });
@@ -612,18 +606,43 @@ fn the_base_picker_searches_the_server_as_the_user_types() {
     h.keys(&["d"]);
     h.wait_for("Diff source");
     h.keys(&["down", "down", "down", "return"]);
-    h.wait_for("No branches found");
-    let searched = |search: &str| {
-        h.memory.requests().iter().any(|logged| {
+    h
+}
+
+impl Diffs {
+    /// Whether the base picker asked the server for the branches of `search`.
+    fn searched(&self, search: &str) -> bool {
+        self.memory.requests().iter().any(|logged| {
             logged.path == "/api/vcs/branch" && logged.query.get("search").is_some_and(|values| values == &[search])
         })
-    };
+    }
+}
+
+// Expected (P6c, a select's `query`): the base picker asks the server for the branches of what is typed, once it stayed
+// 150 ms, and shows its empty text when none match.
+#[test]
+fn the_base_picker_searches_the_server_as_the_user_types() {
+    let h = base_picker(json!([]));
+    h.wait_for("No branches found");
     h.app.type_text("rel");
     h.settle();
-    assert!(!searched("rel"), "the search did not wait");
+    assert!(!h.searched("rel"), "the search did not wait");
     h.app.advance(Duration::from_millis(200));
-    h.wait("the picker did not search the server", || searched("rel"));
+    h.wait("the picker did not search the server", || h.searched("rel"));
     h.wait_for("No branches found");
+}
+
+// Expected (P6c, a select's `query`): the picker shows the branches the server found for what is typed, though their
+// names do not hold it; the host does not filter them again.
+#[test]
+fn the_base_picker_shows_what_the_server_found() {
+    let h = base_picker(json!(["refs/heads/trunk-x"]));
+    h.wait_for("trunk-x");
+    h.app.type_text("zz");
+    h.app.advance(Duration::from_millis(200));
+    h.wait("the picker did not search the server", || h.searched("zz"));
+    h.app.advance(Duration::from_millis(50));
+    assert!(h.settle().contains("trunk-x"), "{}", h.app.text());
 }
 
 // Expected (P6c's gate, the wheel step): a wheel step that ends no selection keeps the viewer's tree whole, as today's
