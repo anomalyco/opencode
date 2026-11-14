@@ -1874,6 +1874,9 @@ test("the Windows titlebar menu swaps one submenu for the next as the pointer mo
   const parents = ["File", "Edit", "View"].map((name) => page.getByRole("menuitem", { name, exact: true }))
   const submenus = page.locator('[role="menu"].desktop-app-menu-sub')
 
+  // Keep the hover delay from elapsing while Playwright moves the pointer and checks the old submenu.
+  await holdClock(page)
+
   for (const [index, parent] of parents.entries()) {
     const box = (await parent.boundingBox())!
     // Down and to the left, away from the open submenu, so the pointer isn't heading for it.

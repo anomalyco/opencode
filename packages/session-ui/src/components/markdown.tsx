@@ -206,7 +206,7 @@ function MarkdownCopyButton(props: { labels: CodeLabels; copied: boolean }) {
   const label = () => (props.copied ? props.labels.copied : props.labels.copy)
 
   return (
-    <Tooltip placement="top" value={label()}>
+    <Tooltip placement="top" value={label()} forceOpen={props.copied || undefined}>
       <IconButton
         type="button"
         size="normal"

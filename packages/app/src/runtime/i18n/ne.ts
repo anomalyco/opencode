@@ -153,7 +153,7 @@ export const dict = {
   "provider.connect.title": "जडान गर्नुहोस् {{provider}}",
   "provider.connect.method.apiKey": "API कुञ्जी",
   "provider.connect.status.inProgress": "प्राधिकरण जारी छ…",
-  "provider.connect.status.waiting": "प्राधिकरणको लागि पर्खँदै…",
+  "provider.connect.status.waiting": "प्राधिकरणको लागि पर्खँदै",
   "provider.connect.status.failed": "प्राधिकरण असफल भयो: {{error}}",
   "provider.connect.apiKey.description":
     "आफ्नो खाता जडान गर्न आफ्नो {{provider}} API कुञ्जी प्रविष्ट गर्नुहोस् र OpenCode मा {{provider}} मोडेलहरू प्रयोग गर्नुहोस्।",
@@ -825,7 +825,6 @@ export const dict = {
 
   "command.session.location.cycle": "सेसनको स्थान क्रमशः बदल्नुहोस्",
   "dialog.provider.anthropic.note": "API कुञ्जीमार्फत Claude मोडेलहरूमा प्रत्यक्ष पहुँच",
-  "provider.connect.title.anthropicProMax": "Anthropic मार्फत लगइन गर्नुहोस्",
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "{{filename}} को अपलोड रद्द गर्नुहोस्",
   "prompt.toast.uploadFailed.title": "अपलोड असफल भयो",

@@ -1926,7 +1926,7 @@ export function ConsoleCopy(props: { text: string; label: string }) {
 
   return (
     <div data-slot="bash-copy">
-      <Tooltip value={label()} placement="top">
+      <Tooltip value={label()} placement="top" forceOpen={copy.copied() || undefined}>
         <IconButton
           icon={<Icon name={copy.copied() ? "check" : "outline-copy"} size="small" />}
           size="normal"
@@ -2125,7 +2125,11 @@ function ExecuteDetailsSection(props: {
       <header data-slot="execute-details-section-header">
         <span data-slot="execute-details-section-label">{props.label}</span>
         <Show when={props.meta}>{(meta) => <span data-slot="execute-details-section-meta">{meta()}</span>}</Show>
-        <Tooltip value={copy.copied() ? i18n.t("ui.message.copied") : props.copyLabel} placement="top">
+        <Tooltip
+          value={copy.copied() ? i18n.t("ui.message.copied") : props.copyLabel}
+          placement="top"
+          forceOpen={copy.copied() || undefined}
+        >
           <IconButton
             icon={<Icon name={copy.copied() ? "check" : "outline-copy"} size="small" />}
             size="normal"

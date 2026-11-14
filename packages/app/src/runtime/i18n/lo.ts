@@ -148,10 +148,9 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "ເບິ່ງ 70+ ຜູ້ໃຫ້ບໍລິການເພີ່ມເຕີມ",
   "dialog.provider.viewAll": "ສະແດງຜູ້ໃຫ້ບໍລິການເພີ່ມເຕີມ",
   "provider.connect.title": "ເຊື່ອມຕໍ່ {{provider}}",
-  "provider.connect.title.anthropicProMax": "ເຂົ້າສູ່ລະບົບດ້ວຍ Anthropic",
   "provider.connect.method.apiKey": "ລະຫັດ API",
   "provider.connect.status.inProgress": "ກໍາລັງດໍາເນີນຢູ່…",
-  "provider.connect.status.waiting": "ລໍຖ້າການອະນຸຍາດ…",
+  "provider.connect.status.waiting": "ລໍຖ້າການອະນຸຍາດ",
   "provider.connect.status.failed": "ການອະນຸຍາດລົ້ມເຫລວ: {{error}}",
   "provider.connect.apiKey.description":
     "ໃສ່ລະຫັດ API {{provider}} ຂອງທ່ານເພື່ອເຊື່ອມຕໍ່ບັນຊີຂອງທ່ານ ແລະໃຊ້ຕົວແບບ {{provider}} ໃນ OpenCode.",

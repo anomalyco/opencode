@@ -162,12 +162,11 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "Lihat 70+ penyedia lainnya",
 
   "dialog.provider.viewAll": "Tampilkan lebih banyak penyedia",
-
   "provider.connect.title": "Hubungkan {{provider}}",
-  "provider.connect.title.anthropicProMax": "Masuk dengan Anthropic",
+
   "provider.connect.method.apiKey": "Kunci API",
   "provider.connect.status.inProgress": "Otorisasi sedang berlangsung…",
-  "provider.connect.status.waiting": "Menunggu otorisasi…",
+  "provider.connect.status.waiting": "Menunggu otorisasi",
   "provider.connect.status.failed": "Otorisasi gagal: {{error}}",
   "provider.connect.apiKey.description":
     "Masukkan kunci API {{provider}} untuk menghubungkan akun Anda dan gunakan model {{provider}} di OpenCode.",

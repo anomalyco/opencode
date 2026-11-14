@@ -134,17 +134,15 @@ function MetaItems(props: { items: MetaItem[]; slot: "user-message" | "text-part
 
 function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
-    icon: "check" | "copy"
+    copied: boolean
     label: JSX.Element
     size?: "small" | "normal"
   },
 ) {
-  const icon = () => (props.icon === "copy" ? "outline-copy" : props.icon)
-
   return (
-    <Tooltip appearance="compact" value={props.label} placement="top" gutter={4}>
+    <Tooltip appearance="compact" value={props.label} placement="top" gutter={4} forceOpen={props.copied || undefined}>
       <IconButton
-        icon={<Icon name={icon()} size="small" />}
+        icon={<Icon name={props.copied ? "check" : "outline-copy"} size="small" />}
         size={props.size ?? "normal"}
         variant="ghost-muted"
         disabled={props.disabled}
@@ -1248,7 +1246,7 @@ export function AssistantTextContent(props: {
         data-copy-always-visible={data.copyAlwaysVisible ? "" : undefined}
       >
         <MessageActionButton
-          icon={copy.copied() ? "check" : "copy"}
+          copied={copy.copied()}
           size="small"
           label={copy.copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
           onMouseDown={(event) => event.preventDefault()}
