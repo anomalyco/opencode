@@ -20,11 +20,13 @@ Every plugin call, of a built-in and of an external plugin, is timed (synthesis 
 When a native build is among the plugin targets, the TUI runs under a parent process (synthesis 4.5). When a plugin
 crashes or hangs the client, the parent restores the terminal and starts the client again on the same session, with
 the draft, and one toast names the plugin and the call: `Plugin failed: <id>`, "It crashed the client in `<call>` and
-is disabled", with Enable again. A hang first shows a line over the frozen screen at 0.5 s. The plugin stays
-disabled, listed failed, until the user enables it or its build changes. A crash that names no plugin restarts the
-client with a notice; a second one within 10 minutes restarts it with every external plugin off. The command line
-is the same as TS's: the parent passes what the new client skips and resumes from in memory after a fork, or in the
-environment (`OPENCODE_PLUGIN_SKIP`, `OPENCODE_PLUGIN_RESUME`) to a spawned client.
+is disabled", with Enable again. A hang first shows a line over the frozen screen at 0.5 s. The build that crashed is
+never opened again: it stays listed failed until the user enables it or another build replaces it. A crash that
+names no plugin restarts the client with a notice; a second one within 10 minutes of the same parent restarts it with
+every external plugin off, for that client only. At most 2 restarts in 60 s; a third crash ends the parent with a
+message. The command line is the same as TS's: the parent hands the new client a private run record, in memory after
+a fork, or as an inherited handle named by `OPENCODE_PLUGIN_RECORD` to a spawned client. A TUI that should have a
+parent and has none (`OPENCODE_PLUGIN_PARENT=0` aside) opens no external plugin and lists it as needing a restart.
 
 ## Reason
 
