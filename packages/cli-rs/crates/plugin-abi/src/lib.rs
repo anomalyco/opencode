@@ -18,8 +18,19 @@
 //! - A newer plugin on an older host uses what the host offers: the host answers an unknown [`HostRequest`] with an
 //!   error, and a plugin that cannot work without a newer host sets [`PluginApi::requires_minor`], which the host
 //!   refuses with a message naming both versions.
-//! - The major version is for a deliberate breaking change. A major mismatch is the only thing that refuses a
-//!   plugin outright. The entry symbol carries the major version (`opencode_plugin_v1`).
+//! - The major version is for a deliberate breaking change. A major the host does not serve is the only thing that
+//!   refuses a plugin outright. The entry symbol carries the major version ([`ENTRY`], `opencode_plugin_v2`).
+//! - Nothing is removed inside a major: an entry, a request or a field that a later 2.x replaces stays as an alias
+//!   until 3.0, because a compiled library cannot follow a rename (decision O-125 (6)).
+//! - A plugin that needs an optional feature of the host lists it in [`Metadata::requires`]; a host without it
+//!   refuses the plugin at load and names the feature. The host lists its own in [`HostApi::features`].
+//!
+//! # 2.0
+//!
+//! ABI 2.0 is ABI 1.4 with the contract 2.0 of the rich-plugin design on the C ABI: keyed surfaces ([`v2`],
+//! [`Request::View`]), and threads that send messages to the UI thread through a bounded mailbox ([`mail`],
+//! [`HostApi::send`]). Every 1.4 request and entry is still there. The host loads 1.x libraries as before, through
+//! [`ENTRY_V1`], and serves them ABI 1.4; they get no surfaces and no mailbox.
 //!
 //! A plugin written in Rust is a `cdylib` that depends on this crate and calls [`export_plugin!`] with a setup
 //! function. The setup registers the P.1 surface through [`Setup`]: commands, code-fence renderers, slot claims,
@@ -47,8 +58,11 @@
 
 #![allow(unsafe_code)]
 
+pub mod mail;
 mod schema;
 pub mod v2;
+
+pub use mail::{BOUND, SendError, Sender, Spawner, Stop};
 
 use std::borrow::Cow;
 use std::ffi::c_void;
@@ -63,9 +77,18 @@ use types::{
     V2Event, VcsInfo,
 };
 
-/// The major version: changes only with a deliberate breaking change, and a mismatch refuses the plugin.
-pub const ABI_MAJOR: u32 = 1;
-/// The minor version: grows when entries are appended. 1.0 is the core; 1.1 adds [`PluginApi::describe`]; 1.2 adds
+/// The major version: changes only with a deliberate breaking change, and a major the host does not serve refuses the
+/// plugin.
+pub const ABI_MAJOR: u32 = 2;
+/// The minor version of [`ABI_MAJOR`]. 2.0 adds [`HostApi::send`], [`HostApi::report`], [`HostApi::stopped`] and
+/// [`HostApi::features`], [`Metadata::requires`], [`Manifest::surfaces`] and [`Manifest::messages`], and
+/// [`Request::View`], [`Request::Unmount`] and [`Request::Message`].
+pub const ABI_MINOR: u32 = 0;
+
+/// The symbol every 2.x plugin exports, of type [`EntryFn`].
+pub const ENTRY: &str = "opencode_plugin_v2";
+
+/// The last minor of ABI 1, which the host serves a 1.x library. 1.0 is the core; 1.1 adds [`PluginApi::describe`]; 1.2 adds
 /// [`HostApi::theme_mode`]; 1.3 adds [`HostApi::wake`]; 1.4 adds [`Manifest::render`], [`Request::RenderFence`],
 /// [`Request::Render`], [`Request::Event`], [`HostRequest::Color`], the session and catalog reads,
 /// [`HostRequest::Info`], [`HostRequest::Route`], [`HostRequest::Dispatch`], [`HostRequest::Attention`], and the
@@ -78,11 +101,14 @@ pub const ABI_MAJOR: u32 = 1;
 /// composer: [`HostRequest::Composer`] and [`HostRequest::ComposerEdit`]. 1.6 adds the small reads and verbs: a claim's
 /// size in [`SlotInput`], the streaming deltas ([`Setup::on_deltas`]), the model's variants, the session tabs, the
 /// keymap's state, the mouse selection, a program in the foreground, a link on a [`Span`], the terminal title, the
-/// theme, and [`PanelSize::XLarge`] (see [`HostRequest`] from [`HostRequest::Variants`] on).
-pub const ABI_MINOR: u32 = 6;
+/// theme, and [`PanelSize::XLarge`] (see [`HostRequest`] from [`HostRequest::Variants`] on). 2.0 has all of 1.6.
+pub const V1_MINOR: u32 = 6;
 
-/// The symbol every plugin exports, of type [`EntryFn`].
-pub const ENTRY: &str = "opencode_plugin_v1";
+/// The symbol every 1.x plugin exports.
+pub const ENTRY_V1: &str = "opencode_plugin_v1";
+
+/// The optional features this crate's host side knows. None in 2.0: everything 2.0 has is in every 2.0 host.
+pub const FEATURES: &[&str] = &[];
 
 /// Status codes of [`PluginApi::create`], [`PluginApi::call`], and [`HostApi::call`]. With [`OK`] the output buffer
 /// holds the JSON result; otherwise it holds the error text.
@@ -90,6 +116,10 @@ pub const OK: i32 = 0;
 pub const ERROR: i32 = 1;
 /// The callee panicked; the output holds the panic message.
 pub const PANIC: i32 = 2;
+/// [`HostApi::send`]: the mailbox holds [`BOUND`] entries, and nothing was stored.
+pub const FULL: i32 = 3;
+/// [`HostApi::send`]: the plugin has left `active`, and nothing was stored.
+pub const CLOSED: i32 = 4;
 
 pub type EntryFn = unsafe extern "C" fn() -> *const PluginApi;
 
@@ -177,6 +207,20 @@ pub struct HostApi {
     /// so a plugin makes sure no thread calls it after that. A Rust plugin reads it as [`Setup::waker`], whose
     /// [`Waker`] the SDK revokes in `destroy`.
     pub wake: Option<unsafe extern "C" fn(ctx: *mut c_void)>,
+    // 2.0
+    /// Puts `message`, JSON text, in the plugin's mailbox: at the end with an empty `key`, else in the place of the
+    /// entry that waits under `key`. Returns [`OK`], [`FULL`] or [`CLOSED`] at once and never blocks; [`ERROR`] for a
+    /// message that is not JSON. The host then runs [`Request::Message`] on its UI thread. Callable from any thread
+    /// until `destroy` returns, as `wake` is.
+    pub send: Option<unsafe extern "C" fn(ctx: *mut c_void, key: Bytes, message: Bytes) -> i32>,
+    /// A thread of the plugin panicked with `message`, text: the host fails the plugin and says so once. Callable
+    /// from any thread until `destroy` returns.
+    pub report: Option<unsafe extern "C" fn(ctx: *mut c_void, message: Bytes)>,
+    /// 1 once the plugin has left `active`, else 0: its threads should end. Callable from any thread until `destroy`
+    /// returns.
+    pub stopped: Option<unsafe extern "C" fn(ctx: *mut c_void) -> u32>,
+    /// The host's optional features, a JSON array of names, valid while the instance lives.
+    pub features: Bytes,
 }
 
 /// [`HostApi::theme_mode`] results.
@@ -269,6 +313,10 @@ pub struct Metadata {
     /// requests during setup; older hosts ignore it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    /// 2.0: the optional host features the plugin cannot work without. A host that lacks one refuses the plugin at
+    /// load and names it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requires: Vec<String>,
 }
 
 /// Everything a plugin registered in its setup.
@@ -305,6 +353,48 @@ pub struct Manifest {
     /// 1.6: the plugin has [`Setup::on_deltas`] handlers, which [`Request::Deltas`] runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub deltas: bool,
+    /// 2.0: the surfaces of [`Setup::surface`], in order; [`Request::View`] names one by index.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub surfaces: Vec<SurfaceClaim>,
+    /// 2.0: the plugin has a [`Setup::messages`] handler, which [`Request::Message`] runs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub messages: bool,
+}
+
+/// A surface of contract 2.0 as the manifest lists it ([`v2::Surface`] without its view).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SurfaceClaim {
+    pub name: String,
+    pub place: SurfacePlace,
+    /// The view reads [`v2::SurfaceInput::palette`]: only such a view gets the palette, and a theme change calls it.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub palette: bool,
+}
+
+/// [`v2::Place`] on the wire.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum SurfacePlace {
+    Route { name: String },
+    Slot { kind: SlotKind, path: String },
+}
+
+impl From<&v2::Place> for SurfacePlace {
+    fn from(place: &v2::Place) -> Self {
+        match place {
+            v2::Place::Route(name) => SurfacePlace::Route { name: name.clone() },
+            v2::Place::Slot(at) => SurfacePlace::Slot { kind: at.kind, path: at.path.clone() },
+        }
+    }
+}
+
+impl From<&SurfacePlace> for v2::Place {
+    fn from(place: &SurfacePlace) -> Self {
+        match place {
+            SurfacePlace::Route { name } => v2::Place::Route(name.clone()),
+            SurfacePlace::Slot { kind, path } => v2::Place::Slot(Placement::new(*kind, path.clone())),
+        }
+    }
 }
 
 /// What [`Manifest::render`] is for the render requests of ABI 1.4.
@@ -1375,6 +1465,47 @@ pub enum Request {
     Deltas {
         events: Vec<V2Event>,
     },
+    /// 2.0: runs the view of the surface [`Manifest::surfaces`] names by index, for `mount`, with `input`. The content
+    /// it gives the host is numbered after `next`. Result: [`ViewReply`].
+    View {
+        surface: usize,
+        mount: v2::MountId,
+        input: v2::SurfaceInput,
+        next: u64,
+    },
+    /// 2.0: `mount` ended; the plugin drops what it kept for it, such as its [`v2::Memo`] table.
+    Unmount {
+        mount: v2::MountId,
+    },
+    /// 2.0: runs the [`Setup::messages`] handler with a message a thread sent, in the order the mailbox holds them.
+    Message {
+        message: Raw,
+    },
+}
+
+/// What [`Request::View`] returns: the tree, the content the view gave the host with its handles, and how many values
+/// the mount's [`v2::Memo`] table holds after the view.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ViewReply {
+    pub node: v2::Node,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub content: Vec<(v2::ContentRef, String)>,
+    /// The handles the view released ([`v2::View::release`]), after the content it gave.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub released: Vec<v2::ContentRef>,
+    #[serde(default, skip_serializing_if = "is_zero_usize")]
+    pub memo: usize,
+}
+
+/// JSON text carried as it is.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Raw(pub Box<serde_json::value::RawValue>);
+
+impl PartialEq for Raw {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.get() == other.0.get()
+    }
 }
 
 /// A fence for the render of [`Setup::code_block`] that [`Manifest::fences`] names by `index`. The host matches a fence
@@ -2122,10 +2253,11 @@ pub trait Read {
     fn composer(&self) -> Option<Composer> {
         None
     }
-    /// 1.5: the host's ABI minor version, so a plugin can fall back where an older host lacks a request, such as a
-    /// [`Dialog::Select`] for a [`Dialog::Confirm`] below 5. In process it is this crate's [`ABI_MINOR`].
+    /// 1.5: the host's minor of ABI 1, so a plugin can fall back where an older host lacks a request, such as a
+    /// [`Dialog::Select`] for a [`Dialog::Confirm`] below 5. A host of ABI 2 has all of 1.x and answers [`V1_MINOR`], as
+    /// does a host in process.
     fn abi_minor(&self) -> u32 {
-        ABI_MINOR
+        V1_MINOR
     }
     /// 1.6: the variant IDs of the model the next prompt uses (TS `ui.model.variant.list()`); its variant is
     /// [`Read::model`]'s.
@@ -2324,8 +2456,8 @@ impl HostHandle {
         let size = unsafe { std::ptr::addr_of!((*self.api).size).read() };
         // SAFETY: `size` covers the core, a prefix of the table.
         let core = (size >= size_of::<HostApiV1_1>()).then(|| unsafe { &*self.api.cast::<HostApiV1_1>() })?;
-        // A host of another major version is no host this SDK can talk to.
-        (core.major == ABI_MAJOR).then_some(core)
+        // A host of a major version this SDK does not speak (1 or the current) is no host it can talk to.
+        matches!(core.major, 1 | ABI_MAJOR).then_some(core)
     }
 
     /// Whether the table's `size` covers the entry that ends at `end`.
@@ -2365,6 +2497,67 @@ impl HostHandle {
         let ctx = Ctx(core.ctx);
         // SAFETY: `ctx` is valid until `destroy` returns, and `destroy` revokes the waker first.
         Some(Waker::new(move || unsafe { wake(ctx.get()) }))
+    }
+
+    /// What the plugin's threads reach the host through; `None` from a host older than 2.0.
+    fn link(&self) -> Option<Arc<dyn mail::Link>> {
+        let core = self.covers(std::mem::offset_of!(HostApi, features) + size_of::<Bytes>())?;
+        // SAFETY: `size` covers the entries.
+        let (send, report, stopped) = unsafe {
+            let api = self.api;
+            (
+                std::ptr::addr_of!((*api).send).read()?,
+                std::ptr::addr_of!((*api).report).read()?,
+                std::ptr::addr_of!((*api).stopped).read()?,
+            )
+        };
+        Some(Arc::new(AbiLink { ctx: Ctx(core.ctx), send, report, stopped }))
+    }
+
+    /// The host's optional features; none from a host older than 2.0.
+    fn features(&self) -> Vec<String> {
+        let Some(_) = self.covers(std::mem::offset_of!(HostApi, features) + size_of::<Bytes>()) else {
+            return Vec::new();
+        };
+        // SAFETY: `size` covers the entry, and the host keeps its bytes while the instance lives.
+        let bytes = unsafe { std::ptr::addr_of!((*self.api).features).read().as_slice() };
+        serde_json::from_slice(bytes).unwrap_or_default()
+    }
+}
+
+/// [`mail::Link`] over the C ABI: the host's entries, with its `ctx`, from any thread.
+struct AbiLink {
+    ctx: Ctx,
+    send: unsafe extern "C" fn(*mut c_void, Bytes, Bytes) -> i32,
+    report: unsafe extern "C" fn(*mut c_void, Bytes),
+    stopped: unsafe extern "C" fn(*mut c_void) -> u32,
+}
+
+impl mail::Link for AbiLink {
+    fn json(&self) -> bool {
+        true
+    }
+
+    fn send(&self, key: Option<&str>, message: mail::Outgoing) -> Result<(), (mail::Refused, mail::Outgoing)> {
+        let mail::Outgoing::Json(json) = &message else { return Err((mail::Refused::Closed, message)) };
+        let key = key.unwrap_or_default();
+        // SAFETY: `ctx` is valid until `destroy` returns, and `destroy` revokes this link first.
+        let status = unsafe { (self.send)(self.ctx.get(), Bytes::new(key.as_bytes()), Bytes::new(json.as_bytes())) };
+        match status {
+            OK => Ok(()),
+            FULL => Err((mail::Refused::Full, message)),
+            _ => Err((mail::Refused::Closed, message)),
+        }
+    }
+
+    fn report(&self, message: &str) {
+        // SAFETY: as for `send`.
+        unsafe { (self.report)(self.ctx.get(), Bytes::new(message.as_bytes())) };
+    }
+
+    fn stopped(&self) -> bool {
+        // SAFETY: as for `send`.
+        unsafe { (self.stopped)(self.ctx.get()) != 0 }
     }
 }
 
@@ -2449,7 +2642,7 @@ impl Read for HostHandle {
     }
 
     fn abi_minor(&self) -> u32 {
-        self.core().map_or(0, |core| core.minor)
+        self.core().map_or(0, |core| if core.major >= 2 { V1_MINOR } else { core.minor })
     }
 
     fn variants(&self) -> Vec<String> {
@@ -2905,9 +3098,36 @@ impl Setup<'_> {
     }
 
     /// Registers a surface of contract 2.0 ([`v2`]): a route or a slot claim whose view returns a keyed tree, which
-    /// the host reconciles. In process only until the C ABI of 2.0; the host mounts no surface of an external plugin.
+    /// the host reconciles. Over the C ABI from 2.0 ([`Request::View`]).
     pub fn surface(&mut self, surface: v2::Surface) {
+        let claim =
+            SurfaceClaim { name: surface.name.clone(), place: (&surface.place).into(), palette: surface.palette };
+        self.registered.manifest.surfaces.push(claim);
         self.registered.surfaces.push(surface);
+    }
+
+    /// Registers what the plugin's threads send: `run` gets each message on the UI thread, in the order the mailbox
+    /// holds them, as the plugin's `update`, with the host of a command; the plugin's claims and surfaces render again
+    /// after it. The [`Sender`] it returns sends from any thread (see [`mail`]). A plugin has one message type: a
+    /// second call replaces the handler, which then drops what the first [`Sender`] sends. A sender of a host older
+    /// than 2.0 is closed.
+    pub fn messages<M>(&mut self, run: impl Fn(&dyn Host, M) + 'static) -> Sender<M>
+    where
+        M: Serialize + serde::de::DeserializeOwned + Send + 'static,
+    {
+        self.registered.manifest.messages = true;
+        self.registered.message = Some(Rc::new(mail::handler(run)));
+        Sender::new(self.registered.link.clone())
+    }
+
+    /// What starts the plugin's threads, each with the plugin's [`Stop`] flag and a panic caught and reported.
+    pub fn spawner(&self) -> Spawner {
+        Spawner::new(&self.registered.manifest.id, self.registered.link.clone())
+    }
+
+    /// The host's optional features, for a plugin that uses one when it is there.
+    pub fn features(&self) -> &[String] {
+        &self.registered.features
     }
 }
 
@@ -2935,7 +3155,17 @@ pub struct Registered {
     deltas: Vec<DeltasFn>,
     disposers: Vec<DisposeFn>,
     surfaces: Vec<v2::Surface>,
+    /// The handler of [`Setup::messages`].
+    message: Option<MessageFn>,
+    /// What the plugin's threads reach the host through; disposal revokes it.
+    link: mail::Revocable,
+    features: Vec<String>,
+    /// The [`v2::Memo`] table of each mount, by generation, for the views of [`Request::View`].
+    memos: std::cell::RefCell<std::collections::HashMap<u64, v2::Memo>>,
 }
+
+/// A registered handler of [`Setup::messages`].
+pub type MessageFn = Rc<dyn Fn(&dyn Host, mail::Message)>;
 
 impl Registered {
     /// The registrations of a plugin the host runs in process: without an ABI host, so a [`Setup`] of its own
@@ -2959,13 +3189,25 @@ impl Registered {
         self.waker = Some(waker);
     }
 
-    /// Disposes the plugin: revokes its waker, waiting for the wakes in progress, then runs the dispose callbacks, last
-    /// registered first, with `host` (the registration's own without one). A callback that panics does not keep the
-    /// others from running.
+    /// Sets what the plugin's threads reach the host through ([`Setup::messages`], [`Setup::spawner`]), for a plugin
+    /// the host runs in process.
+    pub fn set_link(&mut self, link: Arc<dyn mail::Link>) {
+        self.link = mail::Revocable::new(link);
+    }
+
+    /// The handler of [`Setup::messages`].
+    pub fn message(&self) -> Option<&MessageFn> {
+        self.message.as_ref()
+    }
+
+    /// Disposes the plugin: revokes its waker and its threads' link, waiting for the uses in progress, then runs the
+    /// dispose callbacks, last registered first, with `host` (the registration's own without one). A callback that
+    /// panics does not keep the others from running.
     pub fn dispose(&mut self, host: Option<&dyn Host>) {
         if let Some(waker) = &self.waker {
             waker.revoke();
         }
+        self.link.revoke();
         let (disposers, own) = (std::mem::take(&mut self.disposers), self.host);
         let host = host.unwrap_or(&own);
         for run in disposers.into_iter().rev() {
@@ -2986,6 +3228,7 @@ impl Registered {
         if let Some(waker) = &self.waker {
             waker.revoke();
         }
+        self.link.revoke();
         self.disposers.clear();
     }
 
@@ -3062,6 +3305,8 @@ impl Registered {
             options,
             host,
             waker: host.waker(),
+            link: host.link().map(mail::Revocable::new).unwrap_or_default(),
+            features: host.features(),
             ..Self::default()
         }
     }
@@ -3129,6 +3374,34 @@ impl Registered {
                 self.deltas.iter().for_each(|run| run(&self.host, &events));
                 Ok(serde_json::Value::Null)
             }
+            Request::View { surface, mount, input, next } => {
+                let surface = self.surfaces.get(surface).ok_or("no such surface")?;
+                let mut memo = self.memos.borrow_mut().remove(&mount.generation).unwrap_or_default();
+                let (mut next, mut content, mut released) = (next, Vec::new(), Vec::new());
+                let mut give = |bytes: Vec<u8>| {
+                    next += 1;
+                    content.push((v2::ContentRef(next), String::from_utf8_lossy(&bytes).into_owned()));
+                    v2::ContentRef(next)
+                };
+                let mut release = |handle| released.push(handle);
+                let node =
+                    (surface.view)(&mut v2::View::new(&self.host, &input, &mount, &mut memo, &mut give, &mut release));
+                // The table keeps what the returned tree holds. A tree the host refuses is followed by a request for a
+                // whole one, whose view starts with an empty table.
+                memo.finish(std::slice::from_ref(&node));
+                let reply = ViewReply { node, content, released, memo: memo.len() };
+                self.memos.borrow_mut().insert(mount.generation, memo);
+                json(serde_json::to_value(reply))
+            }
+            Request::Unmount { mount } => {
+                self.memos.borrow_mut().remove(&mount.generation);
+                Ok(serde_json::Value::Null)
+            }
+            Request::Message { message } => {
+                let run = self.message.as_ref().ok_or("no message handler")?;
+                run(&self.host, mail::Message::Json(message.0));
+                Ok(serde_json::Value::Null)
+            }
         }
     }
 }
@@ -3140,35 +3413,61 @@ pub struct Plugin {
     pub setup: fn(&mut Setup) -> Result<(), String>,
 }
 
-/// Exports a plugin: `export_plugin!("my.plugin", setup)` with `fn setup(setup: &mut Setup) -> Result<(), String>`.
-/// It exports the current [`PluginApi`], with the crate's version as its [`Metadata`]. It requires a 1.4 host, which
-/// sends the render requests [`Setup`] answers; an older host refuses it with a message naming both versions.
+/// Exports a plugin from its setup, `fn setup(setup: &mut Setup) -> Result<(), String>`: `plugin!(setup)` with the
+/// crate's package name as the plugin's ID, or `plugin!(id = "my.plugin", setup)`. The macro holds every `unsafe` the
+/// C ABI needs: it exports [`ENTRY`] with the current [`PluginApi`], catches every panic at the edge, and describes
+/// the plugin with the crate's version, so the author writes none.
+#[macro_export]
+macro_rules! plugin {
+    // A plugin that cannot work without the optional host features it names (`Metadata::requires`).
+    (id = $id:expr, requires = [$($feature:expr),* $(,)?], $setup:path) => {
+        $crate::export_plugin!(@entry opencode_plugin_v2, $crate::ABI_MAJOR, $crate::ABI_MINOR, 0, $id, $setup, [$($feature),*]);
+    };
+    (id = $id:expr, $setup:path) => {
+        $crate::export_plugin!($id, $setup);
+    };
+    ($setup:path) => {
+        $crate::export_plugin!(env!("CARGO_PKG_NAME"), $setup);
+    };
+}
+
+/// Exports a plugin: `export_plugin!("my.plugin", setup)`, which [`plugin!`] calls. It exports the current
+/// [`PluginApi`] as [`ENTRY`], with the crate's version as its [`Metadata`].
 ///
-/// A plugin that cannot work without what a newer minor adds, such as the composer of 1.5, asks for that host instead,
-/// and an older host refuses it the same way rather than run it with its requests refused:
+/// A plugin of ABI 1.x that cannot work without what a newer 1.x minor adds, such as the composer of 1.5, asks for that
+/// host, and an older host refuses it with a message naming both versions rather than run it with its requests refused:
 ///
 /// ```ignore
 /// export_plugin!("my.plugin", setup, requires_minor = 5);
 /// ```
 ///
-/// Below 4 it requires 4. A plugin that can do without reads [`Read::abi_minor`] and falls back instead.
+/// That form exports [`ENTRY_V1`] at [`V1_MINOR`]; below 4 it requires 4. A plugin that can do without reads
+/// [`Read::abi_minor`] and falls back instead.
 #[macro_export]
 macro_rules! export_plugin {
     ($id:expr, $setup:path) => {
-        $crate::export_plugin!(@version $crate::ABI_MAJOR, $crate::ABI_MINOR, 4, $id, $setup);
+        $crate::export_plugin!(@entry opencode_plugin_v2, $crate::ABI_MAJOR, $crate::ABI_MINOR, 0, $id, $setup, []);
     };
     ($id:expr, $setup:path, requires_minor = $requires:expr) => {
-        $crate::export_plugin!(
-            @version $crate::ABI_MAJOR, $crate::ABI_MINOR, $crate::runtime::requires($requires), $id, $setup
-        );
+        $crate::export_plugin!(@version 1, $crate::V1_MINOR, $crate::runtime::requires($requires), $id, $setup);
     };
-    // A plugin that pretends to be built against another version, for the loader's tests.
+    // A plugin built against ABI 1.x, or that pretends to be built against another version, for the loader's tests.
     (@version $major:expr, $minor:expr, $requires:expr, $id:expr, $setup:path) => {
+        $crate::export_plugin!(@entry opencode_plugin_v1, $major, $minor, $requires, $id, $setup, []);
+    };
+    // The same through the entry of ABI 2.
+    (@version2 $major:expr, $minor:expr, $requires:expr, $id:expr, $setup:path) => {
+        $crate::export_plugin!(@entry opencode_plugin_v2, $major, $minor, $requires, $id, $setup, []);
+    };
+    (@entry $symbol:ident, $major:expr, $minor:expr, $requires:expr, $id:expr, $setup:path, [$($feature:expr),*]) => {
+        // A panic is caught at the edge only when it unwinds; with `abort` it would end the client.
+        #[cfg(panic = "abort")]
+        compile_error!("an opencode plugin must be built with panic = \"unwind\"");
         #[unsafe(no_mangle)]
-        pub extern "C" fn opencode_plugin_v1() -> *const $crate::PluginApi {
+        pub extern "C" fn $symbol() -> *const $crate::PluginApi {
             $crate::export_plugin!(@create $id, $setup);
             unsafe extern "C" fn describe(out: *mut $crate::Owned) -> i32 {
-                unsafe { $crate::runtime::describe($id, env!("CARGO_PKG_VERSION"), out) }
+                unsafe { $crate::runtime::describe($id, env!("CARGO_PKG_VERSION"), &[$($feature),*], out) }
             }
             static API: $crate::PluginApi = $crate::PluginApi {
                 size: ::std::mem::size_of::<$crate::PluginApi>(),
@@ -3231,7 +3530,7 @@ macro_rules! export_plugin {
         #[allow(unsafe_code)]
         unsafe extern "C" fn describe(out: *mut $crate::Owned) -> i32 {
             // SAFETY: the loader passes what `PluginApi::describe` documents.
-            unsafe { $crate::runtime::describe($id, env!("CARGO_PKG_VERSION"), out) }
+            unsafe { $crate::runtime::describe($id, env!("CARGO_PKG_VERSION"), &[], out) }
         }
         ($crate::export_plugin!(@loopback $id, $setup), describe)
     }};
@@ -3300,9 +3599,10 @@ pub mod runtime {
 
     /// # Safety
     /// `out` must be valid for writes.
-    pub unsafe fn describe(id: &str, version: &str, out: *mut Owned) -> i32 {
+    pub unsafe fn describe(id: &str, version: &str, requires: &[&str], out: *mut Owned) -> i32 {
         guard(out, || {
-            let metadata = Metadata { version: Some(version.to_owned()), id: Some(id.to_owned()) };
+            let requires = requires.iter().map(|feature| (*feature).to_owned()).collect();
+            let metadata = Metadata { version: Some(version.to_owned()), id: Some(id.to_owned()), requires };
             serde_json::to_vec(&metadata).map_err(|error| error.to_string())
         })
     }
@@ -3406,6 +3706,10 @@ mod tests {
             free,
             theme_mode: Some(light),
             wake: None,
+            send: None,
+            report: None,
+            stopped: None,
+            features: Bytes::new(&[]),
         };
         assert_eq!(HostHandle { api: &current }.mode(), Some(ThemeMode::Light));
         let null = HostApi { theme_mode: None, ..current };
@@ -3421,8 +3725,8 @@ mod tests {
         OK
     }
 
-    // Expected (carbon-p0a-9): a table of another major version is no host: nothing is called and its minor reads 0;
-    // in process the host's minor is this crate's.
+    // Expected (carbon-p0a-9): a table of another major version is no host: nothing is called and its minor reads 0.
+    // The minor a plugin reads is of ABI 1: a 1.x host's own, and all of 1.x from a host of ABI 2 and in process.
     #[test]
     fn a_host_of_another_major_is_no_host() {
         let calls = std::sync::atomic::AtomicUsize::new(0);
@@ -3436,13 +3740,19 @@ mod tests {
             free: Some(free),
             theme_mode: Some(light),
             wake: Some(wake),
+            send: None,
+            report: None,
+            stopped: None,
+            features: Bytes::new(&[]),
         };
         let host = HostHandle { api: &api };
         assert_eq!(host.request(&HostRequest::Route), Err("no host".to_owned()));
         assert_eq!((host.abi_minor(), host.mode(), host.waker().is_none()), (0, None, true));
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
-        let current = HostHandle { api: &HostApi { major: ABI_MAJOR, minor: 5, ..api } };
-        assert_eq!(current.abi_minor(), 5);
+        let older = HostHandle { api: &HostApi { major: 1, minor: 5, ..api } };
+        assert_eq!(older.abi_minor(), 5);
+        let current = HostHandle { api: &HostApi { major: ABI_MAJOR, minor: 0, ..api } };
+        assert_eq!(current.abi_minor(), V1_MINOR);
         struct InProcess;
         impl Read for InProcess {
             fn theme_mode(&self) -> ThemeMode {
@@ -3452,7 +3762,7 @@ mod tests {
                 None
             }
         }
-        assert_eq!(InProcess.abi_minor(), ABI_MINOR);
+        assert_eq!(InProcess.abi_minor(), V1_MINOR);
         assert_eq!((runtime::requires(0), runtime::requires(4), runtime::requires(5)), (4, 4, 5));
     }
 
@@ -3471,6 +3781,10 @@ mod tests {
             free: Some(free),
             theme_mode: Some(light),
             wake: Some(wake),
+            send: None,
+            report: None,
+            stopped: None,
+            features: Bytes::new(&[]),
         };
         let host = HostHandle { api: &api };
         assert_eq!(host.request(&HostRequest::Route), Err("no host".to_owned()));
@@ -3505,6 +3819,10 @@ mod tests {
             free,
             theme_mode: None,
             wake: Some(wake),
+            send: None,
+            report: None,
+            stopped: None,
+            features: Bytes::new(&[]),
         };
         let waker = HostHandle { api: &api }.waker().unwrap();
         std::thread::spawn(move || waker.wake()).join().unwrap();
@@ -3533,6 +3851,10 @@ mod tests {
             free: None,
             theme_mode: None,
             wake: None,
+            send: None,
+            report: None,
+            stopped: None,
+            features: Bytes::new(&[]),
         };
         assert_eq!(HostHandle { api: &api }.request(&set), Err("the host takes no requests".to_owned()));
         let api = HostApi { call: Some(call), ..api };
@@ -3962,6 +4284,10 @@ mod tests {
                 free: Some(release),
                 theme_mode: None,
                 wake: None,
+                send: None,
+                report: None,
+                stopped: None,
+                features: Bytes::new(&[]),
             };
             HostHandle { api: &api }.storage_merge("view", fields.clone());
         }
@@ -4209,6 +4535,10 @@ mod tests {
             free: Some(free_vec),
             theme_mode: None,
             wake: None,
+            send: None,
+            report: None,
+            stopped: None,
+            features: Bytes::new(&[]),
         };
         let host = HostHandle { api: &api };
         assert_eq!(host.abi_minor(), 4);
@@ -4363,6 +4693,10 @@ mod tests {
             free: Some(free_buffer),
             theme_mode: None,
             wake: None,
+            send: None,
+            report: None,
+            stopped: None,
+            features: Bytes::new(&[]),
         };
         let host = HostHandle { api: &api };
         assert_eq!((host.variants(), host.tabs_enabled(), host.tabs()), (Vec::new(), false, Vec::new()));

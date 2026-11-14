@@ -31,6 +31,78 @@ pub(crate) type Commands = Rc<dyn Fn(&Weak<()>) -> Vec<opencode_ui::keymap::TuiC
 /// another, also one opened again under the same key.
 static CONTENT: AtomicU64 = AtomicU64::new(1);
 
+/// The handle the next content gets, for a view in a library, which numbers its content from it.
+pub(crate) fn next_content() -> u64 {
+    CONTENT.load(Ordering::Relaxed)
+}
+
+/// A library numbered `count` handles from [`next_content`]: none is given again.
+pub(crate) fn took_content(from: u64, count: u64) {
+    CONTENT.fetch_max(from.saturating_add(count), Ordering::Relaxed);
+}
+
+/// A surface as the host mounts it: its name, where it shows, and whether its view reads the palette.
+#[derive(Clone)]
+pub(crate) struct Place {
+    pub name: String,
+    pub at: v2::Place,
+    pub palette: bool,
+}
+
+/// Runs a surface's view for one mount, on either carrier.
+pub(crate) trait Viewer {
+    /// One call of the view: its tree, or `None` when the call failed, which failed the plugin.
+    fn view(&self, host: &dyn Host, viewing: Viewing<'_>) -> Option<Viewed>;
+    /// The mount ended.
+    fn forget(&self, _host: &dyn Host, _mount: &v2::MountId) {}
+}
+
+/// What a view is given: the mount and its input, the mount's memo table in the host, and where the content it gives
+/// and releases goes.
+pub(crate) struct Viewing<'a> {
+    pub mount: &'a v2::MountId,
+    pub input: &'a v2::SurfaceInput,
+    pub memo: &'a mut v2::Memo,
+    pub give: &'a mut dyn FnMut(ContentRef, Vec<u8>),
+    pub release: &'a mut dyn FnMut(ContentRef),
+}
+
+/// What a view returned.
+pub(crate) struct Viewed {
+    pub node: Node,
+    /// The values the memo table of a library holds after the view; `None` for a table in the host.
+    pub memo: Option<usize>,
+}
+
+/// A view in process: the plugin's own function, as one call of it, on the mount's memo table in the host.
+pub(crate) struct Linked {
+    view: v2::ViewFn,
+    call: Call,
+}
+
+impl Linked {
+    pub fn new(view: v2::ViewFn, call: Call) -> Self {
+        Self { view, call }
+    }
+}
+
+impl Viewer for Linked {
+    fn view(&self, host: &dyn Host, viewing: Viewing<'_>) -> Option<Viewed> {
+        let Viewing { mount, input, memo, give, release } = viewing;
+        let mut node = None;
+        let called = (self.call)(host, &mut |read| {
+            let mut content = |bytes: Vec<u8>| {
+                let handle = ContentRef(CONTENT.fetch_add(1, Ordering::Relaxed));
+                give(handle, bytes);
+                handle
+            };
+            node = Some((self.view)(&mut v2::View::new(read, input, mount, memo, &mut content, release)));
+        });
+        called.then_some(())?;
+        Some(Viewed { node: node?, memo: None })
+    }
+}
+
 /// What the mounts of 2.0 surfaces hold now, counted per thread outside any mount.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Ledger {
@@ -61,8 +133,7 @@ fn book(f: impl FnOnce(&mut Ledger)) {
 pub(crate) struct Surface {
     root: View,
     owner: Weak<dyn Host>,
-    view: v2::ViewFn,
-    call: Call,
+    viewer: Rc<dyn Viewer>,
     fail: Fail,
     /// The slot it renders in; empty for a route.
     path: String,
@@ -88,8 +159,8 @@ struct Called {
     nodes: Vec<Node>,
     staged: Staged,
     memo: v2::Memo,
-    /// The memo values the mount held before the call.
-    held: i64,
+    /// The values a library's own table holds after the call; `None` when the table is `memo`.
+    remote: Option<usize>,
 }
 
 /// The content a view gave, which goes with its tree when the host refuses it.
@@ -102,6 +173,8 @@ struct Staged {
 struct State {
     tree: Tree,
     memo: v2::Memo,
+    /// The memo values the ledger counts for the mount, in the host's table or the library's.
+    booked: i64,
     /// The content the accepted views gave and did not release.
     content: HashMap<ContentRef, Rc<[u8]>>,
     /// The last accepted tree, keeps as they came.
@@ -116,11 +189,11 @@ impl Surface {
     pub fn new(
         host: &dyn Host,
         owner: Weak<dyn Host>,
-        surface: &v2::Surface,
+        surface: &Place,
         key: &str,
         path: &str,
         slot_input: &SlotInput,
-        call: Call,
+        viewer: Rc<dyn Viewer>,
         fail: Fail,
     ) -> Rc<Self> {
         static GENERATION: AtomicU64 = AtomicU64::new(1);
@@ -137,8 +210,7 @@ impl Surface {
         let mounted = Rc::new(Self {
             root,
             owner: owner.clone(),
-            view: surface.view.clone(),
-            call,
+            viewer,
             fail,
             path: path.to_owned(),
             slot_input: slot_input.clone(),
@@ -206,7 +278,7 @@ impl Surface {
                 self.wipe();
                 return;
             };
-            let (mut memo, held) = (called.memo, called.held);
+            let (mut memo, remote) = (called.memo, called.remote);
             let result = self.adopt(host, &theme, called.nodes, &called.staged, full);
             let mut state = self.state.borrow_mut();
             match result {
@@ -214,17 +286,18 @@ impl Surface {
                     if let Some(last) = &state.last {
                         memo.finish(last);
                     }
-                    book(|ledger| ledger.memo_entries += memo.len() as i64 - held);
-                    state.memo = memo;
-                    state.refused = false;
+                    let size = remote.unwrap_or(memo.len()) as i64;
+                    book(|ledger| ledger.memo_entries += size - state.booked);
+                    (state.memo, state.booked, state.refused) = (memo, size, false);
                     return;
                 }
                 Err(refused) => {
                     // Nothing of the refused call stays: the content it gave is dropped, its releases with it, and
-                    // the memo values go, as the next view builds whole.
+                    // the memo values go, as the next view builds whole (a library's own table too, as it is asked
+                    // for a whole tree).
                     memo.clear();
-                    book(|ledger| ledger.memo_entries -= held);
-                    state.memo = memo;
+                    book(|ledger| ledger.memo_entries -= state.booked);
+                    (state.memo, state.booked) = (memo, 0);
                     if state.refused {
                         drop(state);
                         self.wipe();
@@ -243,7 +316,7 @@ impl Surface {
         let mut state = self.state.borrow_mut();
         state.tree.clear(&self.root);
         state.last = None;
-        let (content, memo) = (std::mem::take(&mut state.content), state.memo.len() as i64);
+        let (content, memo) = (std::mem::take(&mut state.content), std::mem::take(&mut state.booked));
         state.memo.clear();
         book(|ledger| {
             ledger.content -= content.len() as i64;
@@ -269,7 +342,8 @@ impl Surface {
 
     /// What the view returned and asked for; `None` when the call failed.
     fn call_view(&self, host: &dyn Host, theme: &Theme, full: bool) -> Option<Called> {
-        let palette = self.palette_of(host, theme);
+        // Only a surface that says it reads the palette gets it, on either carrier.
+        let palette = if self.palette { self.palette_of(host, theme) } else { v2::Palette::default() };
         let rect = self.root.rect();
         // Before its first frame a surface has no size of its own; the terminal's stands in.
         let (width, height) = match (rect.width as u16, rect.height as u16) {
@@ -280,37 +354,31 @@ impl Surface {
         let input = v2::SurfaceInput { width, height, palette, full };
         // The view works on the mount's table; what it stages there the host keeps only with its tree.
         let mut memo = std::mem::take(&mut self.state.borrow_mut().memo);
-        let held = memo.len() as i64;
-        let mut staged = Staged::default();
-        let mut node = None;
-        let view = self.view.clone();
-        let called = (self.call)(host, &mut |read| {
-            let given = RefCell::new(HashMap::new());
-            let mut content = |bytes: Vec<u8>| {
-                let handle = ContentRef(CONTENT.fetch_add(1, Ordering::Relaxed));
-                given.borrow_mut().insert(handle, Rc::from(bytes));
-                handle
-            };
-            // A release is the plugin's word that it names the handle no more, so it holds also when the tree is
-            // refused: the plugin forgot the handle either way.
-            let mut release = |handle| {
-                if given.borrow_mut().remove(&handle).is_none()
-                    && let Some(bytes) = self.state.borrow_mut().content.remove(&handle)
-                {
-                    book(|ledger| {
-                        ledger.content -= 1;
-                        ledger.content_bytes -= bytes.len() as i64;
-                    });
-                }
-            };
-            node = Some(view(&mut v2::View::new(read, &input, &self.id, &mut memo, &mut content, &mut release)));
-            staged = Staged { given: given.take() };
-        });
-        if !called {
+        let given = RefCell::new(HashMap::new());
+        let mut give = |handle, bytes: Vec<u8>| {
+            given.borrow_mut().insert(handle, Rc::from(bytes));
+        };
+        // A release is the plugin's word that it names the handle no more, so it holds also when the tree is
+        // refused: the plugin forgot the handle either way.
+        let mut release = |handle| {
+            if given.borrow_mut().remove(&handle).is_none()
+                && let Some(bytes) = self.state.borrow_mut().content.remove(&handle)
+            {
+                book(|ledger| {
+                    ledger.content -= 1;
+                    ledger.content_bytes -= bytes.len() as i64;
+                });
+            }
+        };
+        let viewing =
+            Viewing { mount: &self.id, input: &input, memo: &mut memo, give: &mut give, release: &mut release };
+        let viewed = self.viewer.view(host, viewing);
+        let Some(viewed) = viewed else {
             self.state.borrow_mut().memo = memo;
             return None;
-        }
-        Some(Called { nodes: vec![node?], staged, memo, held })
+        };
+        let staged = Staged { given: given.take() };
+        Some(Called { nodes: vec![viewed.node], staged, memo, remote: viewed.memo })
     }
 
     /// Adopts `nodes`, with the content `staged` gives, or refuses them and changes nothing.
@@ -409,9 +477,12 @@ impl Surface {
 
 impl Drop for Surface {
     fn drop(&mut self) {
+        if let Some(host) = self.owner.upgrade() {
+            self.viewer.forget(&*host, &self.id);
+        }
         let state = self.state.get_mut();
         let bytes: usize = state.content.values().map(|bytes| bytes.len()).sum();
-        let (content, memo) = (state.content.len() as i64, state.memo.len() as i64);
+        let (content, memo) = (state.content.len() as i64, state.booked);
         book(|ledger| {
             ledger.mounts -= 1;
             ledger.content -= content;
