@@ -37,6 +37,7 @@ mod plugin_carriers;
 mod plugin_claim;
 mod plugin_contain;
 mod plugin_fetch;
+mod plugin_flood;
 mod plugin_gate;
 pub mod plugin_input;
 mod plugin_limits;
