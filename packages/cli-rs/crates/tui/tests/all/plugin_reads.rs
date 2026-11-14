@@ -233,6 +233,10 @@ fn home_on(
         ..support::deps(Arc::new(memory.clone()))
     };
     let h = support::mount(width, 30, deps);
+    // The budget's verdicts are not the reads these rows check: on the wall clock a loaded machine's stall in a call
+    // (memory reclaim, swap), which is no wait on a run queue, would fail the reader. A call here takes no time.
+    let now = std::time::Instant::now();
+    h.tui.plugins.monitor().set_clock(move || now);
     let create: unsafe extern "C" fn(*const abi::HostApi, abi::Bytes, *mut *mut c_void, *mut abi::Owned) -> i32 =
         abi::export_plugin!(@loopback "p0b", reader);
     let definition = match loopback {
@@ -530,12 +534,7 @@ fn a_call_reads_one_snapshot() {
     for loopback in [false, true] {
         let (h, _memory, _root) = home(loopback, 160, json!({ "tabs": { "enabled": true } }));
         h.wait_for("p0b w160 ");
-        // The call below waits 200 ms on purpose, over the budget of one call (100 ms), which would fail the plugin.
-        let monitor = h.tui.plugins.monitor();
-        monitor.set_limits(opencode_plugin::contain::Limits {
-            overrun: std::time::Duration::from_secs(10),
-            ..monitor.limits()
-        });
+        // The call below waits 200 ms on purpose; the harness charges a call no time.
         h.tui.keymap.dispatch("p0b.script", Some("open ses_a;open ses_b"));
         let loaded = |id: &str| h.tui.data.read(|state| state.session(&SessionID(id.to_owned())).is_some());
         assert!(h.app.wait_until(WAIT, || loaded("ses_a") && loaded("ses_b")), "loopback {loopback}");
