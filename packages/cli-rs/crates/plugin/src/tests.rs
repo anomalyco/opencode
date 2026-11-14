@@ -14,6 +14,8 @@ struct TestHost {
     keymap: DialogKeymap,
     /// The registry nested slots mount from.
     registry: std::cell::RefCell<std::rc::Weak<Registry>>,
+    /// How many times the host was told a plugin failed.
+    failed: Cell<usize>,
 }
 
 impl Host for TestHost {
@@ -32,6 +34,10 @@ impl Host for TestHost {
     fn slot(&self, parent: &View, path: &str, input: &SlotInput) -> Option<SlotMount> {
         Some(self.registry.borrow().upgrade()?.mount(self, parent, path, input, |_| {}))
     }
+
+    fn failed(&self, _: &str) {
+        self.failed.set(self.failed.get() + 1);
+    }
 }
 
 /// `host` as the registry takes it.
@@ -44,6 +50,7 @@ fn host() -> Rc<TestHost> {
         app: TestApp::new(40, 6),
         keymap: DialogKeymap::new(Keybinds::defaults(), Options::default()),
         registry: Default::default(),
+        failed: Cell::new(0),
     })
 }
 
@@ -842,4 +849,206 @@ fn a_rebuilt_nested_slot_unmounts_before_it_mounts() {
     mount.sync(&*host, Some(&abi::Changed::default()));
     assert_eq!(OUTER_VIEWS.get(), 2);
     assert_eq!(MOUNTS.with(|mounts| mounts.borrow().clone()), [true, false, true]);
+}
+
+// The wake and the mailbox as a model with fault operators (reviews bigboi-2, -11; carbon-1). A real in-process
+// activation runs; its wake is handled in steps (`Activation::woken`), and the model puts a send, a wake of the plugin's
+// waker, a thread's report or a failing update into every gap between those steps, after zero, one or two of them
+// before the frame. After the host settles it checks: every message accepted arrived once, in order; the last wake of
+// the waker was followed by a run of the plugin's wake handlers; never more than one `Woken` was in flight; and a
+// failure was reported once, with the first cause.
+
+const MODEL: &str = "model.mail";
+/// The message whose `update` panics.
+const FAILING: u32 = u32::MAX;
+
+#[derive(Default)]
+struct MailSeen {
+    arrived: Vec<u32>,
+    /// The clock at each run of the plugin's wake handlers.
+    woken: Vec<u64>,
+    clock: u64,
+    tools: Option<(abi::Sender<u32>, abi::Waker)>,
+}
+
+thread_local! {
+    static MAIL_SEEN: std::cell::RefCell<MailSeen> = std::cell::RefCell::default();
+}
+
+fn seen<T>(f: impl FnOnce(&mut MailSeen) -> T) -> T {
+    MAIL_SEEN.with(|seen| f(&mut seen.borrow_mut()))
+}
+
+fn mail_model(setup: &mut abi::Setup) -> Result<(), String> {
+    let sender = setup.messages(|_, number: u32| {
+        assert!(number != FAILING, "update failed");
+        seen(|seen| seen.arrived.push(number));
+    })?;
+    setup.on_wake(|_| {
+        seen(|seen| {
+            seen.clock += 1;
+            let clock = seen.clock;
+            seen.woken.push(clock);
+        })
+    });
+    let waker = setup.waker().ok_or("no waker")?;
+    seen(|seen| seen.tools = Some((sender, waker)));
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MailOp {
+    Send,
+    Hint,
+    Report,
+    FailingUpdate,
+}
+
+/// What the model did and expects.
+#[derive(Default)]
+struct MailRun {
+    sent: Vec<u32>,
+    hints: Vec<u64>,
+    next: u32,
+    in_flight: Vec<usize>,
+    /// What was applied: an injection whose step never came (no wake ran) was not.
+    applied: Vec<MailOp>,
+}
+
+thread_local! {
+    /// The mailbox of the model's running activation.
+    static MODEL_BOX: std::cell::RefCell<Option<std::sync::Arc<crate::mailbox::Mailbox>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The `Woken`s posted and not handled yet. The model holds the activation's mailbox: a failure retires it.
+fn in_flight() -> usize {
+    let mailbox = MODEL_BOX.with(|held| held.borrow().clone()).unwrap();
+    let wake = mailbox.wake();
+    wake.posted.load(std::sync::atomic::Ordering::SeqCst) - wake.handled.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+fn mail_op(run: &mut MailRun, op: MailOp) {
+    let (sender, waker) = seen(|seen| seen.tools.clone()).unwrap();
+    run.applied.push(op);
+    match op {
+        MailOp::Send => {
+            run.next += 1;
+            if sender.send(run.next).is_ok() {
+                run.sent.push(run.next);
+            }
+        }
+        MailOp::Hint => {
+            let clock = seen(|seen| {
+                seen.clock += 1;
+                seen.clock
+            });
+            run.hints.push(clock);
+            waker.wake();
+        }
+        MailOp::Report => {
+            MODEL_BOX.with(|held| held.borrow().clone()).unwrap().panicked("a thread panicked".to_owned())
+        }
+        MailOp::FailingUpdate => drop(sender.send(FAILING)),
+    }
+    run.in_flight.push(in_flight());
+}
+
+/// Runs `before` on an idle host, then a frame whose wake meets each of `inside` at its step; then lets the host
+/// settle. Returns what went wrong, if anything, with the failure count and status.
+fn mail_scenario(before: &[MailOp], inside: &[(usize, MailOp)]) -> Result<(usize, Status), String> {
+    let host = host();
+    seen(|seen| *seen = MailSeen::default());
+    let registry = Registry::define(vec![abi::Plugin { id: MODEL, setup: mail_model }.into()], []);
+    registry.activate(&dynamic(&host));
+    MODEL_BOX.with(|held| *held.borrow_mut() = crate::mailbox::current(MODEL));
+    let run = Rc::new(std::cell::RefCell::new(MailRun::default()));
+    for op in before {
+        mail_op(&mut run.borrow_mut(), *op);
+    }
+    let mut pending: Vec<(usize, MailOp)> = inside.to_vec();
+    let hooked = run.clone();
+    crate::activation::BETWEEN.with(|hook| {
+        *hook.borrow_mut() = Some(Box::new(move |step| {
+            let now: Vec<MailOp> = pending.iter().filter(|(at, _)| *at == step).map(|(_, op)| *op).collect();
+            pending.retain(|(at, _)| *at != step);
+            for op in now {
+                mail_op(&mut hooked.borrow_mut(), op);
+            }
+        }));
+    });
+    host.app.advance(std::time::Duration::from_millis(1));
+    crate::activation::BETWEEN.with(|hook| hook.borrow_mut().take());
+    for _ in 0..20 {
+        if in_flight() == 0 {
+            break;
+        }
+        host.app.advance(std::time::Duration::from_millis(1));
+    }
+    let run = run.borrow();
+    let status = registry.entries().into_iter().find(|entry| entry.id == MODEL).unwrap().status;
+    let (arrived, woken) = seen(|seen| (seen.arrived.clone(), seen.woken.clone()));
+    if let Some(flight) = run.in_flight.iter().chain([&in_flight()]).find(|flight| **flight > 1) {
+        return Err(format!("{flight} wakes in flight"));
+    }
+    if in_flight() != 0 {
+        return Err("a wake was still in flight after the host settled".to_owned());
+    }
+    let failing = run.applied.iter().any(|op| matches!(op, MailOp::Report | MailOp::FailingUpdate));
+    if !failing {
+        if arrived != run.sent {
+            return Err(format!("arrived {arrived:?}, sent {:?}", run.sent));
+        }
+        if let Some(hint) = run.hints.last()
+            && woken.last().is_none_or(|last| last < hint)
+        {
+            return Err(format!("the wake at {hint} was lost: the handlers ran at {woken:?}"));
+        }
+    } else if !matches!(status, Status::Failed(_)) {
+        return Err(format!("a fault left the plugin {status:?}"));
+    }
+    if arrived.iter().any(|number| !run.sent.contains(number)) {
+        return Err(format!("arrived {arrived:?}, which was never accepted: {:?}", run.sent));
+    }
+    Ok((host.failed.get(), status))
+}
+
+#[test]
+fn the_wake_and_the_mailbox_lose_nothing_in_any_gap() {
+    use MailOp::*;
+    let befores: [&[MailOp]; 4] = [&[], &[Send], &[Hint], &[Send, Hint]];
+    let mut injections: Vec<Vec<(usize, MailOp)>> = vec![Vec::new()];
+    for first in 0..4 {
+        for a in [Send, Hint] {
+            injections.push(vec![(first, a)]);
+            for second in first..4 {
+                for b in [Send, Hint] {
+                    injections.push(vec![(first, a), (second, b)]);
+                }
+            }
+        }
+    }
+    for before in befores {
+        for inside in &injections {
+            if let Err(error) = mail_scenario(before, inside) {
+                panic!("before {before:?}, inside {inside:?}: {error}");
+            }
+        }
+    }
+    // A fault in any gap fails the plugin once, and nothing arrives that was not accepted.
+    for before in befores {
+        for at in 0..4 {
+            for fault in [Report, FailingUpdate] {
+                let (failed, _) = mail_scenario(before, &[(at, fault), (at, Send)])
+                    .unwrap_or_else(|error| panic!("before {before:?}, {fault:?} at {at}: {error}"));
+                // With nothing before the frame no wake runs, so nothing is injected.
+                let expected = usize::from(!before.is_empty());
+                assert_eq!(failed, expected, "before {before:?}, {fault:?} at {at}: reported {failed} times");
+            }
+        }
+    }
+    // A failing update and a thread's report in one wake: the update is handled first, its failure is the one
+    // reported, once.
+    let (failed, status) = mail_scenario(&[FailingUpdate, Report], &[]).unwrap();
+    assert_eq!(failed, 1);
+    assert!(matches!(&status, Status::Failed(error) if error.contains("update failed")), "{status:?}");
 }

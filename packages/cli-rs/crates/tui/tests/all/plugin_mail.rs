@@ -345,3 +345,108 @@ fn a_stop_flag_ends_a_thread_and_a_failure_closes_the_mailbox() {
         assert_eq!(sender.send((3, 1)), Err(SendError::Closed((3, 1))), "{carrier:?}");
     }
 }
+
+/// A message whose serializer waits until the test lets it go, up to five seconds.
+#[derive(Debug)]
+struct Slow;
+
+thread_local! {
+    static SLOW: RefCell<(Option<abi::Sender<Slow>>, Vec<u128>, Option<abi::Sender<u128>>)> = RefCell::default();
+}
+
+static SERIALIZING: std::sync::Mutex<Option<(std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> =
+    std::sync::Mutex::new(None);
+
+impl serde::Serialize for Slow {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        if let Some((started, release)) = SERIALIZING.lock().unwrap().take() {
+            started.send(()).unwrap();
+            let _ = release.recv_timeout(Duration::from_secs(5));
+        }
+        serializer.serialize_unit()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Slow {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        <()>::deserialize(deserializer).map(|()| Slow)
+    }
+}
+
+fn slow_setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let sender = setup.messages(|_, _: Slow| {})?;
+    SLOW.with(|slow| slow.borrow_mut().0 = Some(sender));
+    Ok(())
+}
+
+fn wide_setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let sender = setup.messages(|_, number: u128| SLOW.with(|slow| slow.borrow_mut().1.push(number)))?;
+    SLOW.with(|slow| slow.borrow_mut().2 = Some(sender));
+    Ok(())
+}
+
+fn open_with(carrier: Carrier, id: &'static str, setup: fn(&mut abi::Setup) -> Result<(), String>) -> Harness {
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![builtin(carrier, abi::Plugin { id, setup })],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount(60, 20, deps);
+    frame(&harness);
+    harness
+}
+
+// Expected (review bigboi-1): a send runs the author's serializer before it takes the guard that disposal waits for,
+// so disabling a plugin does not wait for a slow serializer on one of its threads. On both carriers.
+#[test]
+fn disabling_does_not_wait_for_a_serializer() {
+    for carrier in CARRIERS {
+        let harness = open_with(carrier, "test.slow", slow_setup);
+        let sender = SLOW.with(|slow| slow.borrow().0.clone()).unwrap();
+        let (started, serializing) = std::sync::mpsc::channel();
+        let (release, released) = std::sync::mpsc::channel();
+        *SERIALIZING.lock().unwrap() = Some((started, released));
+        let thread = std::thread::spawn(move || matches!(sender.send(Slow), Err(SendError::Closed(_))));
+        serializing.recv_timeout(Duration::from_secs(10)).unwrap();
+        let begun = std::time::Instant::now();
+        harness.tui.plugins.toggle(&host(&harness.tui), "test.slow", false);
+        let took = begun.elapsed();
+        release.send(()).unwrap();
+        assert!(took < Duration::from_secs(2), "{carrier:?}: disabling waited {took:?} for a serializer");
+        assert!(thread.join().unwrap(), "{carrier:?}: a send after disabling was not Closed");
+    }
+}
+
+// Expected (reviews bigboi-5, carbon-4): an integer past 64 bits, which JSON text carries but a JSON number of the host
+// would not, arrives as itself on both carriers.
+#[test]
+fn a_wide_integer_arrives_as_itself_on_both_carriers() {
+    for carrier in CARRIERS {
+        SLOW.with(|slow| slow.borrow_mut().1.clear());
+        let harness = open_with(carrier, "test.wide", wide_setup);
+        let sender = SLOW.with(|slow| slow.borrow().2.clone()).unwrap();
+        let wide = u128::from(u64::MAX) + 7;
+        std::thread::spawn(move || sender.send(wide).unwrap()).join().unwrap();
+        frame(&harness);
+        assert_eq!(SLOW.with(|slow| slow.borrow().1.clone()), [wide], "{carrier:?}");
+    }
+}
+
+// Expected (review bigboi-11): an empty key is no key on both carriers: two replaces under it are two messages.
+#[test]
+fn an_empty_key_is_no_key_on_both_carriers() {
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        let sender = mail(|mail| mail.sender.clone()).unwrap();
+        std::thread::spawn(move || {
+            sender.replace("", (1, 1)).unwrap();
+            sender.replace("", (1, 2)).unwrap();
+            sender.replace("k", (2, 1)).unwrap();
+            sender.replace("k", (2, 2)).unwrap();
+        })
+        .join()
+        .unwrap();
+        frame(&harness);
+        assert_eq!(mail(|mail| std::mem::take(&mut mail.arrived)), [(1, 1), (1, 2), (2, 2)], "{carrier:?}");
+    }
+}
