@@ -1662,6 +1662,7 @@ impl Setup<'_> {
 
     /// Registers a surface of contract 2.0, on any place: each showing is a new mount ([`surface::Surface`]), whose
     /// views run through `call`; the activation of `owners` draws its mounts again, and an overlay is one of `owners`.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn surface(
         &mut self,
         surface: surface::Place,
