@@ -89,6 +89,20 @@ async function parse(pkg: string): Promise<Target | undefined> {
   }
 }
 
+// A bare registry name is recorded as the `latest` tag, but Arborist resolves the tag
+// to the highest version that satisfies `engines.node`. Bun reports a Node version newer
+// than most plugins declare, so the tag resolves to an old release whose peers conflict
+// with the current tree and the install fails with ERESOLVE, while an explicit version
+// installs fine. Pin the tag to the registry's current `latest` before reifying.
+const resolveSpec = (pkg: string, target: Target | undefined, dir: string) =>
+  Effect.gen(function* () {
+    if (target?.type !== "registry" || target.spec !== "latest") return pkg
+    const { manifest } = yield* Effect.promise(() => import("pacote"))
+    const options = { ...(yield* NpmConfig.load(dir)), ignoreScripts: true }
+    const version = yield* Effect.tryPromise(() => manifest(`${target.name}@latest`, options)).pipe(Effect.option)
+    return Option.isSome(version) && version.value.version ? `${target.name}@${version.value.version}` : pkg
+  })
+
 function key(pkg: string, target: Target | undefined) {
   if (target?.type === "git")
     return `git-${target.slug}-${createHash("sha256").update(pkg).digest("hex").slice(0, 12)}`
@@ -268,6 +282,7 @@ const layer = Layer.effect(
       }
 
       yield* mkdir(dir)
+      const spec = yield* resolveSpec(pkg, target, dir)
       const startedAt = yield* Clock.currentTimeMillis
       // Arborist keys lockfile entries relative to the root's real path. When the cache
       // directory is reached through a symlink (macOS `/var` → `/private/var`, a linked
@@ -277,7 +292,7 @@ const layer = Layer.effect(
       const root = yield* fs.realPath(dir).pipe(Effect.mapError((cause) => new InstallFailedError({ dir, cause })))
       const staging = path.join(root, `.staging-${startedAt}-${randomUUID()}`)
       const staged = yield* Effect.gen(function* () {
-        const tree = yield* reify({ dir: staging, config: dir, add: [pkg], update })
+        const tree = yield* reify({ dir: staging, config: dir, add: [spec], update })
         const installed = tree.edgesOut.values().next().value?.to
         const installedNameValue = installed?.name ?? (yield* installedName(pkg, staging, target))
         const result = yield* metadata(
