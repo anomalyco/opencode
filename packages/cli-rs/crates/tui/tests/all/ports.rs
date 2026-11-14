@@ -125,10 +125,23 @@ pub(crate) fn unpack(name: &str, into: &Path) {
     let tarball = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../parity/plugins/npm")
         .join(format!("{}.tgz", name.replace('/', "__")));
+    pinned(&tarball);
     std::fs::create_dir_all(into).unwrap();
     let status =
         Command::new("tar").arg("-xzf").arg(&tarball).arg("-C").arg(into).arg("--strip-components=1").status().unwrap();
     assert!(status.success(), "cannot unpack {}", tarball.display());
+}
+
+/// Panics unless `tarball`'s SHA-512 is the one `integrity.json` beside it pins (carbon-6): what runs is what was
+/// checked against the registry.
+pub(crate) fn pinned(tarball: &Path) {
+    use base64::Engine;
+    let pins: Value =
+        serde_json::from_slice(&std::fs::read(tarball.with_file_name("integrity.json")).unwrap()).unwrap();
+    let name = tarball.file_name().unwrap().to_string_lossy();
+    let digest = ring::digest::digest(&ring::digest::SHA512, &std::fs::read(tarball).unwrap());
+    let actual = format!("sha512-{}", base64::engine::general_purpose::STANDARD.encode(digest.as_ref()));
+    assert_eq!(pins[name.as_ref()].as_str(), Some(actual.as_str()), "{name} is not the pinned tarball");
 }
 
 /// The TUI on `first`, or on session `ses_p`, with each of `carriers`' plugins, over `handler`; `None` without Bun for

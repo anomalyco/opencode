@@ -226,6 +226,8 @@ interface Plugin {
   definition: { id: string; setup: (context: Json) => unknown }
   active: boolean
   failed: boolean
+  // Its activation ended (a reload or a disable): what it still does fails no other one (carbon-5).
+  deactivated?: boolean
   setting: boolean
   activation: number
   setupEffects: Request[]
@@ -271,7 +273,7 @@ function mountKey(id: Json) {
 }
 
 function fail(plugin: Plugin, error: string) {
-  if (plugin.failed) return
+  if (plugin.failed || plugin.deactivated) return
   plugin.failed = true
   plugin.active = false
   send({ type: "fail", id: plugin.id, error })
@@ -527,6 +529,8 @@ function context(plugin: Plugin) {
     readError: (key: string) => plugin.readErrors.get(key),
     // The plugin's state changed outside a call: its surfaces view again.
     invalidate: () => viewAll(plugin),
+    // P8: what runs as the activation ends, such as the layer closing a dialog of the plugin's own.
+    cleanup: (cleanup: () => unknown) => cleanUp(plugin, cleanup),
     fetch(request: Json): Promise<Json> {
       return effect(plugin, { type: "fetch", ...request }).then(
         (id) => new Promise((resolve) => plugin.replies.set(id, resolve)),
@@ -659,7 +663,7 @@ async function setup(seq: number, plugin: Plugin) {
     if (!state.settled)
       void done.then(() => {
         if (state.threw) return fail(plugin, `setup threw: ${message(state.error)}`)
-        if (typeof state.cleanup === "function") plugin.cleanups.push(state.cleanup as () => unknown)
+        if (typeof state.cleanup === "function") cleanUp(plugin, state.cleanup as () => unknown)
         changed(plugin)
       })
   } catch (error) {
@@ -671,7 +675,7 @@ async function setup(seq: number, plugin: Plugin) {
     send({ type: "done", seq, error: `setup threw: ${message(state.error)}` })
     return
   }
-  if (typeof state.cleanup === "function") plugin.cleanups.push(state.cleanup as () => unknown)
+  if (typeof state.cleanup === "function") cleanUp(plugin, state.cleanup as () => unknown)
   plugin.setting = false
   plugin.active = true
   generations.set(seq, plugin)
@@ -765,9 +769,20 @@ function forget(target: string) {
   }
 }
 
+// Keeps `cleanup` for the plugin's deactivation, or runs it now when its activation already ended, as an async setup
+// that settles after it does (carbon-5).
+function cleanUp(plugin: Plugin, cleanup: () => unknown) {
+  if (!plugin.deactivated) return void plugin.cleanups.push(cleanup)
+  try {
+    const done = cleanup()
+    if (done instanceof Promise) done.catch(() => undefined)
+  } catch {}
+}
+
 function deactivate(plugin: Plugin) {
   generations.delete(plugin.activation)
   plugin.active = false
+  plugin.deactivated = true
   for (const mount of plugin.mounts.values()) {
     try {
       plugin.surfaces[mount.surface]?.unmount?.(mount.id)

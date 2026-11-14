@@ -6,7 +6,7 @@ import { CodeRenderable, type Renderable } from "@opentui/core"
 import { Database } from "bun:sqlite"
 import type { ServerWebSocket } from "bun"
 import { mkdtemp, rm } from "node:fs/promises"
-import { mkdirSync, rmSync } from "node:fs"
+import { mkdirSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { createAppFixture } from "../../../tui/test/fixture/app"
@@ -176,6 +176,10 @@ function unpackNpm(config: Record<string, unknown>) {
     rmSync(into, { recursive: true, force: true })
     mkdirSync(into, { recursive: true })
     const tarball = `${parity}plugins/npm/${name.replace("/", "__")}.tgz`
+    // What runs is what was checked against the registry (carbon-6): the pin in `integrity.json`.
+    const pins = JSON.parse(readFileSync(`${parity}plugins/npm/integrity.json`, "utf8"))
+    const digest = `sha512-${new Bun.CryptoHasher("sha512").update(readFileSync(tarball)).digest("base64")}`
+    if (pins[`${name.replace("/", "__")}.tgz`] !== digest) throw new Error(`${tarball} is not the pinned tarball`)
     const tar = Bun.spawnSync(["tar", "-xzf", tarball, "-C", into, "--strip-components=1"])
     if (tar.exitCode !== 0) throw new Error(`cannot unpack ${tarball}: ${tar.stderr.toString()}`)
   }

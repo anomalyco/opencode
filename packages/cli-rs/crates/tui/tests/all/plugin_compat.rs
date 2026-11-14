@@ -392,6 +392,38 @@ fn a_components_command_lives_with_its_mount_across_a_reload() {
     assert!(!matches!(tui.keymap.dispatch("v2probe.onpage", None), opentui::keymap::RunResult::Ok), "it stayed");
 }
 
+// Expected (carbon-5): a handler of an activation a reload ended that rejects late fails nothing: the reloaded plugin
+// stays active.
+#[test]
+fn a_late_rejection_of_a_reloaded_plugin_fails_nothing() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe(config);
+    let tui = &pipe.harness.tui;
+    tui.keymap.dispatch("v2probe.reject", None);
+    pipe.settle();
+    let file = pipe.root.path().join("config/plugins/v2probe/tui.tsx");
+    let source = std::fs::read_to_string(&file).unwrap();
+    std::fs::write(&file, format!("{source}\n// reloaded\n")).unwrap();
+    opencode_tui::plugins::host::reconcile(tui);
+    pipe.settle();
+    std::thread::sleep(Duration::from_millis(600));
+    pipe.settle();
+    assert_eq!(pipe.status(PROBE), Some(Status::Active));
+}
+
+// Expected (carbon-2): a store a plugin makes after its setup takes its first write, which the host stores, rather than
+// refusing it as a key the plugin's manifest does not list yet.
+#[test]
+fn a_store_made_after_setup_takes_its_first_write() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe(config);
+    pipe.harness.tui.keymap.dispatch("v2probe.late", None);
+    assert_eq!(logged(&pipe, &log, 1), [json!({ "stored": true })]);
+    let host = opencode_tui::plugins::host::host(&pipe.harness.tui);
+    let stored = opencode_plugin::Host::storage_read(&*host, "plugin.example.v2probe.late");
+    assert_eq!(stored.and_then(|text| serde_json::from_str::<Value>(&text).ok()), Some(json!({ "count": 42 })));
+}
+
 // Expected (carbon-2): two reloads of a plugin's registrations that both come before the host took the first leave the
 // plugin working: the commands of both run.
 #[test]

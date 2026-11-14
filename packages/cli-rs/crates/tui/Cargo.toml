@@ -33,6 +33,8 @@ rand.workspace = true
 
 [dev-dependencies]
 bytes.workspace = true
+# The pinned SHA-512 of the published packages the P8 rows unpack.
+ring.workspace = true
 opencode-latex.workspace = true
 opencode-mermaid.workspace = true
 opencode-parity.workspace = true

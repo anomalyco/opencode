@@ -31,7 +31,7 @@ use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 use std::time::{Duration, Instant};
 
-use opencode_plugin_abi::HostRequest;
+use opencode_plugin_abi::{HostRequest, Request};
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
 
@@ -680,6 +680,16 @@ impl Scripts {
         log::warn!("a message of {size} bytes for the JS host has no room; it is not sent");
         count(|crossed| crossed.refused_sends += 1);
         let seq = message.seq();
+        // A fetch's reply too large to send is answered in its place as a failed one, so what awaits it ends (carbon-5).
+        if let Down::Call { seq, id, activation, call: Request::Reply { id: reply, .. }, route } = message {
+            let result = Err(format!("the reply is {size} bytes, more than the JS host takes"));
+            let call = Request::Reply { id: reply.clone(), result };
+            let answer = Down::Call { seq: *seq, id: id.clone(), activation: *activation, call, route: route.clone() };
+            if !self.overflow.borrow().0.is_empty() || !self.encode(&answer) {
+                self.overflow.borrow_mut().0.push_back((answer, 0));
+            }
+            return;
+        }
         if let Some(seq) = seq {
             // In the message's place: after what waits before it.
             let skipped = Down::Skipped { seq };

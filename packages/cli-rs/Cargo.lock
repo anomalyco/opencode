@@ -884,6 +884,7 @@ dependencies = [
  "opentui",
  "rand",
  "regex",
+ "ring",
  "serde",
  "serde_json",
  "tokio",

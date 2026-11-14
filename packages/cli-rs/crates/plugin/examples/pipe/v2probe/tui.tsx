@@ -110,6 +110,23 @@ export default Plugin.define({
           run: () => context.ui.router.navigate({ type: "plugin", name: "page", data: { n: 3 } }),
         },
         { id: "v2probe.home", run: () => context.ui.router.navigate({ type: "home" }) },
+        // A handler that rejects later, after a reload perhaps (carbon-5).
+        {
+          id: "v2probe.reject",
+          run: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 300))
+            throw new Error("late")
+          },
+        },
+        // A store made after setup, written at once (carbon-2).
+        {
+          id: "v2probe.late",
+          run: async () => {
+            const [, update] = context.storage.store("late", { initial: { count: 0 } })
+            await update((draft: { count: number }) => void (draft.count = 42))
+            log({ stored: true })
+          },
+        },
         // Two reloads of the registrations, apart (carbon-2).
         {
           id: "v2probe.twice",
