@@ -417,6 +417,11 @@ fn a_malformed_table_is_refused_without_reading_it() {
     let api = PluginApi { free: Some(abi::runtime::free), ..api };
     let library = Library::from_table(&api, ABI_MAJOR, V1_MINOR).unwrap();
     assert!(library.destroy.is_none() && library.describe.is_none());
+    // A table must carry the major of the entry it came through: 2 through `opencode_plugin_v2`, 1 through `_v1`.
+    let v1 = PluginApi { major: 1, minor: 4, ..api };
+    assert!(Library::from_table(&v1, ABI_MAJOR).err().unwrap().starts_with("plugin ABI 1.4 is not supported"));
+    assert!(Library::from_table(&api, 1).err().unwrap().starts_with("plugin ABI 2.0 is not supported"));
+    assert_eq!(Library::from_table(&v1, 1).unwrap().major, 1);
 }
 
 // Expected: a plugin's own thread wakes the host (ABI 1.3), which asks its mounted claim for its rows again without a
@@ -2881,7 +2886,16 @@ fn a_result_the_host_refuses_has_no_effects() {
         assert_eq!((entry.active, failed, command), (true, 1, false), "{bytes:?}");
     }
 
+    // A view's content must be numbered after the mount's, as the host numbers it in process.
     let host = host();
+    let registry = panicking(&host, true);
+    CORRUPT.set(Some(br#"{"node":{"type":"text","spans":[]},"content":[[99,"stray"]]}"#));
+    drop(registry.route(&*host, "panicky", "v"));
+    CORRUPT.set(None);
+    let entry = registry.entries().into_iter().find(|entry| entry.id == "panicky").unwrap();
+    assert!(matches!(&entry.status, Status::Failed(error) if error.contains("content handles")), "{:?}", entry.status);
+
+    let host = crate::loader::tests::host();
     let registry = panicking(&host, true);
     CORRUPT.set(Some(br#"{"node":{"type":"wormhole","depth":7}}"#));
     let route = registry.route(&*host, "panicky", "v");
