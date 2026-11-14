@@ -1028,7 +1028,14 @@ impl abi::Read for Scoped<'_> {
     }
 
     fn focused(&self) -> abi::interact::Focused {
-        self.scope.owner().focused()
+        // A call of the plugin's own (a command) reads the mount that has the focus, if one does.
+        match self.scope.current.borrow().clone() {
+            Some(owner) => owner.focused(),
+            None => {
+                let mounts = self.scope.activation.owners().into_iter().rev();
+                mounts.map(|owner| owner.focused()).find(|focused| focused.surface).unwrap_or_default()
+            }
+        }
     }
 
     fn mode(&self) -> Option<String> {
