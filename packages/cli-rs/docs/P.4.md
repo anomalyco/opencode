@@ -294,14 +294,19 @@ A view hears what changed since the mount's last view (`SurfaceInput::changed`, 
 `Changed`: `all` on the first view and on a whole tree, the change batch that called it, `local` or `size` for a change
 of the host's own state or of the surface's room, and `woken` after the plugin's own handlers, a wake, or a `layout`
 that asked to draw again. A view that reads the host's state and finds nothing it shows changed returns `Node::Keep` of
-its last tree's root (so its root needs an id); the host then keeps the mount as it is, with no work and no frame. A
-box with `visible: false` takes no room, not even a gap, as TS's `visible`; a slot surface whose root box is hidden
-shows nothing in its slot, as a 1.x render's `Render::Hide`. A slot surface's view gets its slot's input as a 1.x claim
-does (`SurfaceInput::slot`: the session, the prompt's state). A change of the host's own state since the last view is
-`local`, also when the view runs for another cause first. A surface that asks (`Surface::mounts`) hears each mount
-begin, before its first view, and end, as `Event::Mount` with the slot's input, as a 1.x `on_mount` or
-`on_route_mount`; the plugin hears it, not the mount, so what its handler starts (a fetch) is the plugin's and outlives
-that mount.
+its last tree's root (so its root needs an id); the host then keeps the mount as it is, with no work and no frame,
+unless the tree shows a tool call's output (`PartOutput`, which the host reads again each revision) or is not in the
+theme of the moment: then the keep is adopted as any tree is. A box with `visible: false` takes no room, not even a
+gap, as TS's `visible`; a change of it shows or hides the box's widget in place, so what a nested slot put in it
+stays. A slot surface whose root box is hidden shows nothing in its slot, as a 1.x render's `Render::Hide`. A slot
+surface's view gets its slot's input as a 1.x claim does (`SurfaceInput::slot`: the session, the prompt's state). A
+change of the host's own state since the last view is `local`, also when the view runs for another cause first. A
+surface that asks (`Surface::mounts`) hears each mount begin, before its first view, and end, as `Event::Mount` with
+the mount's id and the slot's input, as a 1.x `on_mount` or `on_route_mount`; a new mount may begin before the one it
+replaces ends, also with equal input, and the id tells them apart. The plugin hears it, not the mount, so what its
+handler starts (a fetch) is the plugin's and outlives that mount. `Read::message(session, id)` reads one message: over
+the C ABI only that message crosses, where `Read::messages` copies the session's list, so a view that hears a message
+change in place reads what changed.
 
 ### Contract 2.0 input and surfaces (P2)
 
