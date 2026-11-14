@@ -1066,17 +1066,19 @@ fn prints_of_a_plugin_and_its_dependencies_never_reach_the_protocol() {
     let pid = pipe.scripts().pid();
     pipe.settle();
     assert!(pipe.harness.app.text().contains("the printer is here"), "{}", pipe.harness.app.text());
+    // A tree of the start may be dropped, for a mount that ended or an input replaced as the screen laid out.
+    let dropped = pipe::crossed().dropped;
     for _ in 0..3 {
         pipe.harness.tui.keymap.dispatch("printer.print", None);
         pipe.settle();
     }
+    assert_eq!(pipe::crossed().dropped, dropped, "a print dropped a tree");
     let log = std::fs::read_to_string(printer.with_file_name(".printer.log.jsonl")).unwrap();
     assert_eq!(log.lines().filter(|line| line.contains("printed")).count(), 3, "{log}");
     assert_eq!(log.lines().filter(|line| line.contains("written")).count(), 3, "a write's callback never ran: {log}");
     twin_open(&pipe);
     assert_eq!(pipe.scripts().pid(), pid, "a print ended the JS host");
     assert_eq!(pipe.status("example.printer"), Some(Status::Active));
-    assert_eq!(pipe::crossed().dropped, 0);
 }
 
 // The approval of a project's TypeScript plugin (O-125 (1), Pa's rules), over the pipe.
