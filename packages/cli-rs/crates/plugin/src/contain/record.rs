@@ -85,6 +85,8 @@ pub const KINDS: &[&str] = &[
     // P2: a key, paste, pointer, hover or close event to a surface's or a layer's handler, and a select's search.
     "handle",
     "search",
+    // P6b: the handlers of a change of the plugins the host lists.
+    "on-plugins",
 ];
 
 /// The index of `kind` in [`KINDS`], or the last index past it for a kind it does not list.

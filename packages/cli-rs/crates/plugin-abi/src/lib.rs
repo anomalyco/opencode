@@ -356,6 +356,9 @@ pub struct Manifest {
     /// 1.6: the plugin has [`Setup::on_deltas`] handlers, which [`Request::Deltas`] runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub deltas: bool,
+    /// 2.0 (P6b): the plugin has [`Setup::on_plugins`] handlers, which [`Request::Plugins`] runs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub plugins: bool,
     /// 2.0: the surfaces of [`Setup::surface`], in order; [`Request::View`] names one by index.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub surfaces: Vec<SurfaceClaim>,
@@ -1428,6 +1431,58 @@ fn is_zero_usize(value: &usize) -> bool {
     *value == 0
 }
 
+/// 2.0 (P6b): a TUI plugin as the host lists it, from [`Read::plugins`]: a built-in, a plugin of the `plugins`
+/// config or directories, or one of those that did not load. Only the host enables or disables one, on the user's
+/// pick of a [`SelectOption::toggle`] row (synthesis 3.6).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PluginEntry {
+    /// The plugin's ID; the configured target of one that never loaded.
+    pub id: String,
+    /// Where it comes from: its `plugins` target or path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    pub origin: PluginOrigin,
+    pub status: PluginStatus,
+    /// Why it is skipped, or what failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// It has an activation, failed or not (TS `registered().active`): a toggle disables it.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub active: bool,
+    /// What its calls cost, while it is slow (synthesis 4.4).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slow: Option<String>,
+}
+
+/// Where a [`PluginEntry`] comes from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PluginOrigin {
+    Builtin,
+    /// Added by the host after the built-ins, such as a test plugin.
+    Added,
+    /// A `plugins` entry or a found directory that did not load: there is no plugin to enable.
+    Configured,
+    /// Loaded from a build.
+    External,
+}
+
+/// What a [`PluginEntry`] is doing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PluginStatus {
+    Active,
+    Inactive,
+    /// Configured and not loaded; [`PluginEntry::error`] says why.
+    Skipped,
+    /// It failed to load or while it ran; [`PluginEntry::error`] says how.
+    Failed,
+    /// Found in a project and waiting for the user's approval (rich-plugins 3.9); a toggle asks.
+    Pending,
+    /// Found in a project, and the user declined this build; a toggle asks again.
+    Declined,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Member {
     pub id: String,
@@ -1565,6 +1620,8 @@ pub enum Request {
         query: String,
         options: Vec<SelectOption>,
     },
+    /// 2.0 (P6b): runs the [`Setup::on_plugins`] handlers after the plugins the host lists changed.
+    Plugins,
 }
 
 /// Whose handler a [`Request::Input`] calls: a surface's, which [`Manifest::surfaces`] names by index, for the mount
@@ -1860,6 +1917,8 @@ pub enum HostRequest {
     Theme,
     /// 1.6: [`Read::themes`].
     Themes,
+    /// 2.0 (P6b): [`Read::plugins`].
+    Plugins,
     /// 1.6: [`Host::set_theme`]; answers whether it will.
     SetTheme {
         name: String,
@@ -2246,6 +2305,12 @@ pub struct ErrorDetails {
     pub context: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub back: Option<Action>,
+    /// 2.0 (P6b): the reference the user quotes to report it (TS `diagnosticRef`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<String>,
+    /// 2.0 (P6b): the plugin's name for the view, which [`Read::dialog_open`] answers for while it shows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
 }
 
 /// A [`Dialog::Confirm`]. `Confirm` is active as it opens; the arrows and tab move between the buttons, and enter or a
@@ -2317,6 +2382,12 @@ pub struct Select {
     /// query as the select opens.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub search: Option<String>,
+    /// 2.0 (P6b): the dialog's width; [`PanelSize::Medium`] when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<PanelSize>,
+    /// 2.0 (P6b): the value of the option selected as the list opens, without `current`'s mark.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focus: Option<String>,
 }
 
 impl Select {
@@ -2333,6 +2404,8 @@ impl Select {
             actions: Vec::new(),
             binds: Vec::new(),
             search: None,
+            size: None,
+            focus: None,
         }
     }
 }
@@ -2363,10 +2436,15 @@ pub struct SelectOption {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<Action>,
     /// 2.0: picking this row enables or disables the plugin with this id, which the host does, and only the host
-    /// (synthesis 3.6): it draws the footer's `enable` or `disable` from the plugin's state, refuses the caller's own
-    /// id and the plugin manager's, and runs it after the key, if the row still names that plugin.
+    /// (synthesis 3.6): it draws the footer's `enable` or `disable` hint from the plugin's state, naming the plugin
+    /// unless the row's title is its id, refuses the caller's own id and the plugin manager's, and runs it after the
+    /// key, if the row still names that plugin. For a project plugin waiting for approval (P6b), the host asks the user
+    /// to approve or decline the build it holds, and shows the select again on that row once the question closes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub toggle: Option<String>,
+    /// 2.0 (P6b): what the filter matches instead of the title (TS `searchText`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search_text: Option<String>,
 }
 
 /// 2.0: a mark left of a [`SelectOption`]'s title.
@@ -2395,6 +2473,13 @@ pub struct SelectAction {
     /// Runs with no row and no value, so it shows and runs also while no row matches (TS `selection: "none"`).
     #[serde(default, skip_serializing_if = "is_false")]
     pub rowless: bool,
+    /// 2.0 (P6b): the name of the user's keybind for it, such as `dialog.plugins.check`: the config's key for that name
+    /// runs it and shows beside it, and `key` when the config has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// 2.0 (P6b): shown dimmed, and its key does nothing (TS `disabled`).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub disabled: bool,
 }
 
 impl SelectOption {
@@ -2562,7 +2647,7 @@ pub trait Read {
     fn shortcut(&self, _name: &str) -> Option<String> {
         None
     }
-    /// Whether the plugin's [`Panel`] `key` is open.
+    /// Whether the plugin's [`Panel`] `key` is open; 2.0: also its [`Select`] or [`ErrorDetails`] of that key.
     fn dialog_open(&self, _key: &str) -> bool {
         false
     }
@@ -2652,6 +2737,10 @@ pub trait Read {
     /// base mode, also after the host ended the mode.
     fn mode(&self) -> Option<String> {
         None
+    }
+    /// 2.0 (P6b): the TUI plugins, in the host's order; [`Setup::on_plugins`] hears when they change.
+    fn plugins(&self) -> Vec<PluginEntry> {
+        Vec::new()
     }
 }
 
@@ -3098,6 +3187,10 @@ impl Read for HostHandle {
     fn mode(&self) -> Option<String> {
         self.read(&HostRequest::InputMode).flatten()
     }
+
+    fn plugins(&self) -> Vec<PluginEntry> {
+        self.read(&HostRequest::Plugins).unwrap_or_default()
+    }
 }
 
 impl Host for HostHandle {
@@ -3525,6 +3618,13 @@ impl Setup<'_> {
         self.registered.wakes.push(Rc::new(run));
     }
 
+    /// 2.0 (P6b): calls `run` on the UI thread after the TUI plugins [`Read::plugins`] lists changed: one was enabled,
+    /// disabled, loaded, approved or declined, failed, or became slow. Changes that come together run it once.
+    pub fn on_plugins(&mut self, run: impl Fn(&dyn Host) + 'static) {
+        self.registered.manifest.plugins = true;
+        self.registered.plugins.push(Rc::new(run));
+    }
+
     /// Calls `run` once with the [`Fence::key`] of each block whose output ([`Fenced::Lines`] or [`Fenced::Keep`]) the
     /// host no longer shows, as the block goes or falls back to the code view: the plugin drops the state it kept for
     /// that block. A key whose render returned [`Fenced::Code`] without output shown before does not come back here. It runs on the UI thread, after the event that freed the block.
@@ -3642,6 +3742,8 @@ pub struct Registered {
     mounts: Vec<(usize, MountFn)>,
     route_mounts: Vec<(String, RouteMountFn)>,
     wakes: Vec<WakeFn>,
+    /// The handlers of [`Setup::on_plugins`].
+    plugins: Vec<WakeFn>,
     fence_gone: Vec<FenceGoneFn>,
     deltas: Vec<DeltasFn>,
     disposers: Vec<DisposeFn>,
@@ -3769,6 +3871,11 @@ impl Registered {
         &self.wakes
     }
 
+    /// The handlers of [`Setup::on_plugins`].
+    pub fn plugins(&self) -> &[WakeFn] {
+        &self.plugins
+    }
+
     /// The handlers of [`Setup::on_fence_gone`].
     pub fn fence_gone(&self) -> &[FenceGoneFn] {
         &self.fence_gone
@@ -3879,6 +3986,10 @@ impl Registered {
             }
             Request::Wake => {
                 self.wakes.iter().for_each(|run| run(&self.host));
+                Ok(serde_json::Value::Null)
+            }
+            Request::Plugins => {
+                self.plugins.iter().for_each(|run| run(&self.host));
                 Ok(serde_json::Value::Null)
             }
             Request::RouteMount { name, mounted } => {
@@ -4670,6 +4781,8 @@ mod tests {
                     actions: Vec::new(),
                     binds: Vec::new(),
                     search: None,
+                    size: Some(PanelSize::Large),
+                    focus: Some("a".into()),
                 }),
             },
         ];
@@ -4957,6 +5070,8 @@ mod tests {
             actions: Vec::new(),
             binds: Vec::new(),
             search: None,
+            size: None,
+            focus: None,
         });
         let json = r#"{"type":"select","title":"Subagents","options":[{"title":"Child","value":"ses_1","description":"running"}],"action":{"type":"command","name":"x.open"}}"#;
         assert_eq!(serde_json::to_string(&select).unwrap(), json);
@@ -4974,6 +5089,14 @@ mod tests {
         assert!(setup.manifest().wake);
         assert_eq!(setup.handle(serde_json::from_str(r#"{"type":"wake"}"#).unwrap()).unwrap(), serde_json::Value::Null);
         assert_eq!(runs.get(), 2);
+        // P6b: the plugins' change runs the plugins handlers alone, and a manifest without one does not name it.
+        assert!(!serde_json::to_string(setup.manifest()).unwrap().contains("plugins"));
+        let heard = runs.clone();
+        setup.on_plugins(move |_| heard.set(heard.get() + 10));
+        assert!(setup.manifest().plugins);
+        assert_eq!(serde_json::to_string(&Request::Plugins).unwrap(), r#"{"type":"plugins"}"#);
+        assert_eq!(setup.handle(Request::Plugins).unwrap(), serde_json::Value::Null);
+        assert_eq!(runs.get(), 12);
     }
 
     // Expected: what 1.5 adds reads back as written and leaves out what is unset, so a 1.4 box, layout and dialog keep
