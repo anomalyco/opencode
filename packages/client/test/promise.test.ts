@@ -100,7 +100,10 @@ test("nests a method under client.experimental exactly when its route is experim
   // Every field reads as "x" so path params resolve; request options stay unset.
   const input = new Proxy(
     {},
-    { get: (_target, key) => (key === "signal" || key === "headers" || key === "onActivity" ? undefined : "x") },
+    {
+      get: (_target, key) =>
+        key === "signal" || key === "headers" || key === "onActivity" || key === "timeout" ? undefined : "x",
+    },
   )
   const routes: Array<{ readonly method: string; readonly experimentalRoute: boolean }> = []
   const deprecated: Array<string> = []
@@ -1049,6 +1052,14 @@ test("session methods use the public HTTP contract", async () => {
           headers: { "content-type": "text/event-stream" },
         })
       }
+      if (url.endsWith("/wait")) {
+        return new Response(
+          `: heartbeat\n\n: heartbeat\n\ndata: ${JSON.stringify({ message: modelSwitchedMessage })}\n\n`,
+          {
+            headers: { "content-type": "text/event-stream" },
+          },
+        )
+      }
       if (url.includes("/prompt")) return Response.json(admission)
       if (url.includes("/generate"))
         return Response.json({
@@ -1092,7 +1103,7 @@ test("session methods use the public HTTP contract", async () => {
     resume: false,
   })
   await client.session.compact({ sessionID: "ses_test" })
-  await client.experimental.session.wait({ sessionID: "ses_test" })
+  const waited = await client.experimental.session.wait({ sessionID: "ses_test" })
   const context = await client.session.context({ sessionID: "ses_test" })
   const log = []
   for await (const item of client.experimental.session.log({ sessionID: "ses_test", after: 0 })) log.push(item)
@@ -1111,6 +1122,7 @@ test("session methods use the public HTTP contract", async () => {
   expect(context).toEqual([])
   expect(log).toEqual([modelSwitchedEvent, synced])
   expect(message).toEqual(modelSwitchedMessage)
+  expect(waited).toEqual({ message: modelSwitchedMessage })
   expect(requests.map((request) => [request.init?.method, request.url])).toEqual([
     ["GET", "http://localhost:3000/api/session?limit=10&order=desc&parentID=null"],
     ["GET", "http://localhost:3000/api/session/active"],

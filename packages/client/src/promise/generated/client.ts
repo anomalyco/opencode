@@ -334,6 +334,8 @@ export interface RequestOptions {
   readonly headers?: RequestInit["headers"]
   /** Reports every chunk a streaming response receives, including keepalive comments that yield no event. */
   readonly onActivity?: () => void
+  /** Rejects with a Timeout ClientError when the call has not finished after this many milliseconds. */
+  readonly timeout?: number
 }
 
 interface RequestDescriptor {
@@ -371,7 +373,13 @@ export function make(options: ClientOptions) {
       url,
       init: {
         method: descriptor.method,
-        signal: requestOptions?.signal,
+        signal:
+          requestOptions?.timeout === undefined
+            ? requestOptions?.signal
+            : AbortSignal.any([
+                ...(requestOptions.signal ? [requestOptions.signal] : []),
+                AbortSignal.timeout(requestOptions.timeout),
+              ]),
         headers,
         body:
           descriptor.body === undefined
@@ -388,7 +396,7 @@ export function make(options: ClientOptions) {
       const prepared = prepare(descriptor, requestOptions)
       return await fetch(prepared.url, prepared.init)
     } catch (cause) {
-      throw new ClientError("Transport", { cause })
+      throw transportError(cause)
     }
   }
 
@@ -434,7 +442,7 @@ export function make(options: ClientOptions) {
           try {
             next = await reader.read()
           } catch (cause) {
-            throw new ClientError("Transport", { cause })
+            throw transportError(cause)
           }
           if (!next.done) requestOptions?.onActivity?.()
           buffer += decoder.decode(next.value, { stream: !next.done })
@@ -471,6 +479,12 @@ export function make(options: ClientOptions) {
       }
     },
   })
+
+  // The server keeps a one-shot stream alive with heartbeat comments, which `sse` skips, until it sends the result.
+  const unary = async <A>(descriptor: RequestDescriptor, requestOptions?: RequestOptions): Promise<A> => {
+    for await (const value of sse<A>(descriptor, requestOptions)) return value
+    throw new ClientError("MalformedResponse", { detail: "The stream ended without a result" })
+  }
 
   const client = {
     server: {
@@ -1108,14 +1122,17 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
-        wait: (input: ExperimentalSessionWaitInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalSessionWaitOutput>(
+        wait: (
+          input: ExperimentalSessionWaitInput,
+          requestOptions?: RequestOptions,
+        ): Promise<ExperimentalSessionWaitOutput> =>
+          unary<ExperimentalSessionWaitOutput>(
             {
               method: "POST",
               path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/wait`,
-              successStatus: 204,
+              successStatus: 200,
               declaredStatuses: [400, 401, 404, 503],
-              empty: true,
+              empty: false,
             },
             requestOptions,
           ),
@@ -2820,7 +2837,7 @@ async function json(response: Response): Promise<unknown> {
   try {
     text = await response.text()
   } catch (cause) {
-    throw new ClientError("Transport", { cause })
+    throw transportError(cause)
   }
   if (text === "") throw new ClientError("MalformedResponse")
   try {
@@ -2845,4 +2862,10 @@ function declared(body: DeclaredErrorBody) {
 
 function isContentType(response: Response, expected: string) {
   return response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() === expected
+}
+
+function transportError(cause: unknown) {
+  return new ClientError(cause instanceof DOMException && cause.name === "TimeoutError" ? "Timeout" : "Transport", {
+    cause,
+  })
 }

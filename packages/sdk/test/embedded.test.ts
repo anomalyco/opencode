@@ -658,7 +658,8 @@ it.live(
         expect(calls).toEqual(["create"])
 
         yield* Deferred.succeed(createRelease, undefined)
-        yield* opencode.experimental.session.wait({ sessionID: session.id })
+        const waited = yield* opencode.experimental.session.wait({ sessionID: session.id })
+        expect(waited.message?.type).toBe("assistant")
         // Provisioning settled, the workspace connected, and the turn completed. The
         // memory driver rejects the actual spawn, which surfaces to the model as an
         // ordinary tool error before the final text response.

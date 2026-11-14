@@ -5,6 +5,7 @@ import type { RpcCallOptions, RpcEventPayload, SelectedEvent, SubscribeOptions }
 import { Effect, Schema, SchemaAST, Stream } from "effect"
 import type { Scope } from "effect"
 import { HttpApiEndpoint, HttpApiSchema } from "effect/http-api"
+import { UnarySse } from "@opencode/protocol/unary-sse"
 import { define } from "../effect/plugin.js"
 import type { ToolFailures, ToolHooks } from "../effect/tool.js"
 import { AssertInput } from "../permission.js"
@@ -182,7 +183,9 @@ function compileEndpoint(endpoint: HttpApiEndpoint.Top) {
     endpoint.headers,
     ...payloadSchemas,
   ].filter((schema): schema is Schema.Top => schema !== undefined) as Array<RuntimeSchema>
-  const success = (successSchemas[0] ?? HttpApiSchema.NoContent) as RuntimeSchema
+  const declared = successSchemas[0] ?? HttpApiSchema.NoContent
+  // A one-shot SSE response carries a single data event, which the in-process host returns directly.
+  const success = (UnarySse.data(declared) ?? declared) as RuntimeSchema
   const noContent = HttpApiSchema.isNoContent(success.ast)
   const type = Schema.toType(success).ast
   const data = SchemaAST.isObjects(success.ast)

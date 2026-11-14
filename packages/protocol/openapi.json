@@ -2752,8 +2752,96 @@
         ],
         "security": [],
         "responses": {
-          "204": {
-            "description": "<No Content>"
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "event": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SessionWaitResultEncoded"
+                    }
+                  },
+                  "required": ["event", "data"],
+                  "additionalProperties": false
+                },
+                "x-effect-stream": {
+                  "encoding": "sse",
+                  "causeSchema": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": ["Fail"]
+                            },
+                            "error": {
+                              "not": {}
+                            }
+                          },
+                          "required": ["_tag", "error"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": ["Die"]
+                            },
+                            "defect": {}
+                          },
+                          "required": ["_tag", "defect"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": ["Interrupt"]
+                            },
+                            "fiberId": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["_tag", "fiberId"],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "errorSchema": {
+                    "not": {}
+                  },
+                  "failureEvent": "effect/http-api/stream/failure"
+                }
+              }
+            }
           },
           "400": {
             "description": "InvalidRequestError",
@@ -2796,7 +2884,7 @@
             }
           }
         },
-        "description": "Wait for a session agent loop to become idle.",
+        "description": "Wait for a session agent loop to become idle. The response is an event stream that sends a heartbeat comment every 15 seconds while the session runs, so idle-connection timeouts never end the wait, then one data event with the result.",
         "summary": "Wait for session"
       }
     },
@@ -23936,6 +24024,43 @@
           }
         ]
       },
+      "Session.Message.Info_1": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Session.Message.AgentSelected"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.ModelSelected"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.LocationSwitched"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.User"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Synthetic"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.System"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Skill"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Shell_1"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Assistant"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Compaction"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Idle"
+          }
+        ]
+      },
       "Session.Message.LocationSwitched": {
         "type": "object",
         "properties": {
@@ -24075,6 +24200,80 @@
               {
                 "type": "string",
                 "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "output": {
+                "type": "string"
+              },
+              "cursor": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "truncated": {
+                "type": "boolean"
+              }
+            },
+            "required": ["output", "cursor", "size", "truncated"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "time", "type", "shellID", "command", "status"],
+        "additionalProperties": false
+      },
+      "Session.Message.Shell_1": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Session.Message.ID"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              },
+              "completed": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
+          },
+          "type": {
+            "type": "string",
+            "enum": ["shell"]
+          },
+          "shellID": {
+            "$ref": "#/components/schemas/Shell.ID"
+          },
+          "command": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["running", "exited", "timeout", "killed"]
+          },
+          "exit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN", "Infinity", "-Infinity"]
               }
             ]
           },
@@ -24895,6 +25094,30 @@
         },
         "required": ["info", "messages"],
         "additionalProperties": false
+      },
+      "SessionWaitResult": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Session.Message.Info_1"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The session's latest assistant message once it is idle."
+          }
+        },
+        "additionalProperties": false
+      },
+      "SessionWaitResultEncoded": {
+        "type": "string",
+        "contentMediaType": "application/json",
+        "contentSchema": {
+          "$ref": "#/components/schemas/SessionWaitResult"
+        }
       },
       "SessionsCursor": {
         "type": "string",
