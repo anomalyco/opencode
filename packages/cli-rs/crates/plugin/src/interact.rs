@@ -19,7 +19,7 @@
 //! | mode m | the owner's scope loses the focus, the reserved chord, `set_mode(None)`, the owner ends | no mode | the mode is gone for good |
 //! | no capture | a press on a pointer node, consumed | captured | its drags reach it |
 //! | captured | release, the owner ends, the node leaves its tree, the focus moves, a host dialog opens | no capture | |
-//! | any | the owner ends | gone | its layers, listeners, mode, capture, hold and overlays go; a focus inside it goes to the composer |
+//! | any | the owner ends | gone | its layers, listeners, mode, capture, hold and overlays go |
 
 use std::any::Any;
 use std::cell::{Cell, RefCell};
@@ -350,12 +350,8 @@ impl Owner {
         let Some(name) = mode.filter(|_| self.alive() && self.mode_holds()) else { return };
         let ended = Rc::new(Cell::new(false));
         let (owner, flag) = (Rc::downgrade(self), ended.clone());
-        // Once its scope has not held, the mode stays ended: a focus that comes back does not bring it back.
-        let active = Condition::when(move || {
-            let holds = !flag.get() && owner.upgrade().is_some_and(|owner| owner.mode_holds());
-            flag.set(!holds);
-            holds
-        });
+        // A blur of its scope prunes it (`blurs`), so a focus that comes back does not bring it back.
+        let active = Condition::when(move || !flag.get() && owner.upgrade().is_some_and(|owner| owner.mode_holds()));
         let disposer = host.keymap().push_mode(&self.mode_key(Some(name)), active);
         *self.mode.borrow_mut() = Some(Mode { name: name.to_owned(), ended, disposer });
         if let Some(router) = host.router() {
@@ -448,7 +444,8 @@ impl Owner {
         self.alive.set(false);
     }
 
-    /// Ends the owner: everything it holds of the input goes. A focus inside its surface goes to the composer.
+    /// Ends the owner: everything it holds of the input goes. The host gives a focus that was inside it to the
+    /// composer as it mounts the route again, and an overlay's close does too.
     pub(crate) fn end(self: &Rc<Self>) {
         self.alive.set(false);
         if self.ended.replace(true) {
@@ -456,7 +453,6 @@ impl Owner {
         }
         let Some(host) = self.host.upgrade() else { return };
         let host = &*host;
-        let focused = self.within().is_some_and(|view| focus_within(host.app(), view.id()));
         self.layers.take().into_iter().for_each(Disposer::dispose);
         if let Some(mode) = self.mode.borrow_mut().take() {
             mode.disposer.dispose();
@@ -484,9 +480,6 @@ impl Owner {
             for (plugin, surface) in owned {
                 router.close(host, &plugin, &surface, false);
             }
-        }
-        if focused {
-            host.focus_composer();
         }
     }
 }
