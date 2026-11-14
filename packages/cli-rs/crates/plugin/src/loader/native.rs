@@ -607,8 +607,10 @@ impl Instance {
         let options = options.unwrap_or_default();
         // SAFETY: the pointers are valid for the call, and the table and its context outlive the instance.
         let (status, bytes) = unsafe {
-            let status = (library.create)(api.as_ptr(), Bytes::new(options.as_bytes()), &mut handle, &mut out);
-            (status, received(out, library.free))
+            let status = crate::contain::catch(|| {
+                (library.create)(api.as_ptr(), Bytes::new(options.as_bytes()), &mut handle, &mut out)
+            });
+            (status.unwrap_or(abi::PANIC), received(out, library.free))
         };
         // SAFETY: allocated above; only shared references reach it from here on.
         let context = unsafe { shared.as_ref() };
@@ -664,8 +666,8 @@ impl Instance {
         let mut out = Owned::EMPTY;
         // SAFETY: `handle` is live until drop; `out` goes back to the library's `free`.
         let (status, bytes) = unsafe {
-            let status = (self.library.call)(self.handle, Bytes::new(&json), &mut out);
-            (status, received(out, self.library.free))
+            let status = crate::contain::catch(|| (self.library.call)(self.handle, Bytes::new(&json), &mut out));
+            (status.unwrap_or(abi::PANIC), received(out, self.library.free))
         };
         let bytes = bytes.map_err(|error| Failed::Refused(format!("returned a bad result: {error}")))?;
         carry(|crossed| {
@@ -710,7 +712,7 @@ impl Drop for Instance {
             return;
         };
         // SAFETY: `handle` came from `create` and is destroyed once; the plugin catches its own panics.
-        unsafe { destroy(self.handle) };
+        let _ = crate::contain::catch(|| unsafe { destroy(self.handle) });
         // What its dispose callbacks asked for still happens, as in process; their fetches reach no activation.
         shared.drain();
         // SAFETY: allocated in `create`; `destroy` has returned, so the plugin holds no pointer into them any more.
