@@ -541,6 +541,13 @@ pub(crate) fn session_interactive(tui: &Tui) -> bool {
     tui.frame.session().is_none_or(|session| session.active.get() == Pane::Session) && !fullscreen_panel(tui)
 }
 
+/// Makes the session pane the active one, for a focus of the composer that does not go through [`focus_session`].
+pub(crate) fn activate_session(tui: &Tui) {
+    if let Some(session) = tui.frame.session() {
+        session.set_active(tui, Pane::Session);
+    }
+}
+
 /// `focusSession`.
 pub(crate) fn focus_session(tui: &Tui) {
     if let Some(session) = tui.frame.session() {

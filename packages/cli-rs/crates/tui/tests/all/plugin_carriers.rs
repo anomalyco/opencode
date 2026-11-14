@@ -66,16 +66,16 @@ struct Board {
 }
 
 fn open(run: Run) -> Board {
-    open_on(run, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) })
+    open_on(run, 80, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) })
 }
 
-/// [`open`] with `deps`, such as a session on screen.
-fn open_on(run: Run, mut deps: Deps) -> Board {
+/// [`open`] `width` cells wide with `deps`, such as a session on screen.
+fn open_on(run: Run, width: u16, mut deps: Deps) -> Board {
     let plugin = abi::Plugin { id: ID, setup: board::setup };
     if let Run::In(carrier) = run {
         deps.builtins.push(builtin(carrier, plugin));
     }
-    let harness = support::mount(80, 30, deps);
+    let harness = support::mount(width, 30, deps);
     // The meter animates only while the client's animations run.
     opencode_ui::motion::set_running(&harness.app, true);
     let root = matches!(run, Run::Library).then(|| {
@@ -419,13 +419,14 @@ fn input_is_equal_on_every_carrier() {
 // Expected (`carrier-equal` for panels, overlays, focus, a hold and the reads, P2): beside a session, the board's panel
 // opens with the focus, focuses its pad and reads it back with its place, holds a key and releases it at once, so the
 // key after it is heard in the same step; its overlay opens under the pad, closes on its own key and, on escape, tells
-// the panel; the panel closes; a select lists what the plugin's search finds. Frames, toasts and status are the same on
+// the panel; it gives the focus back, and closes; a select lists what the plugin's search finds. Frames, toasts and status are the same on
 // every carrier.
 #[test]
 fn panels_overlays_and_reads_are_equal_on_every_carrier() {
     let run = |run: Run| {
         let session = support::Fake::new(|seen| support::base(seen, support::DIRECTORY));
-        let board = open_on(run, support::deps(Arc::new(session)));
+        // Wide enough for the panel beside the session, whose composer takes the focus the panel gives back.
+        let board = open_on(run, 120, support::deps(Arc::new(session)));
         let (app, tui) = (&board.harness.app, &board.harness.tui);
         let mut seen = Vec::new();
         let step = |name: &'static str, seen: &mut Vec<_>| {
@@ -449,7 +450,11 @@ fn panels_overlays_and_reads_are_equal_on_every_carrier() {
         settle(&board.harness);
         app.press("escape");
         step("escape", &mut seen);
-        app.press("q");
+        // A key after the blur is the composer's.
+        app.press("b");
+        app.press("w");
+        step("blur", &mut seen);
+        tui.keymap.dispatch("board.unnotes", None);
         step("close", &mut seen);
         tui.keymap.dispatch("board.pick", None);
         settle(&board.harness);
@@ -461,7 +466,7 @@ fn panels_overlays_and_reads_are_equal_on_every_carrier() {
     let at = |name: &str| &linked.iter().find(|seen| seen.0 == name).unwrap().1;
     let heard = |name: &str| at(name).lines().find_map(|line| Some(line.split_once("heard")?.1.trim().to_owned()));
     assert!(at("open").contains("notes focused=true"), "the panel did not open with the focus: {}", at("open"));
-    assert_eq!(heard("hold").as_deref(), Some("where:pad rect:Some((80, 1)) hold where:pad"), "focus, reads, a hold");
+    assert_eq!(heard("hold").as_deref(), Some("where:pad rect:60x1 hold where:pad"), "focus, reads, a hold");
     assert!(at("menu").contains("MENU here"), "the overlay did not open: {}", at("menu"));
     assert!(!at("shut").contains("MENU here"), "the overlay's key did not close it");
     assert!(
@@ -470,6 +475,9 @@ fn panels_overlays_and_reads_are_equal_on_every_carrier() {
         heard("escape")
     );
     assert!(!at("escape").contains("MENU here"));
+    assert!(at("hold").contains("notes focused=true at pad"), "the view did not read its focus: {}", at("hold"));
+    assert_eq!(heard("blur"), heard("escape"), "blur kept the focus: {}", at("blur"));
+    assert!(at("blur").contains("notes focused=false at"), "the panel did not hear it lost the focus: {}", at("blur"));
     assert!(!at("close").contains("notes focused"), "the panel did not close");
     let search = at("search");
     assert!(search.contains("card 3") && !search.contains("card 4"), "the search did not list the rows: {search}");

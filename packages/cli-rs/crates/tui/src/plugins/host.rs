@@ -424,6 +424,8 @@ impl Host for Tui {
     fn focus_composer(&self) {
         let prompt = self.prompt.current.borrow().upgrade();
         if let Some(prompt) = prompt.filter(|prompt| prompt.shown()) {
+            // The composer is the session pane's: a panel that had the input is told it lost it.
+            crate::frame::activate_session(self);
             opencode_plugin::interact::refocus(self, || self.app.focus(&prompt.textarea));
         }
     }
