@@ -8,7 +8,8 @@ runs the TUI with its library beside the configured plugins, and builds it again
 reloads the new library. `opencode-native plugin test <library, crate or plugin dir> [--route NAME] [--size WxH]
 [--command NAME[=INPUT]] [--wait TEXT]...` loads a native plugin into the TUI on the headless renderer, with no server,
 and prints a text frame of Home or of the plugin's route, then one after each step; it fails when the plugin fails,
-the route is not its own, or a command does not run. Each takes `-h`. Neither is in `--help`: `main` takes them
+the route is not its own, or a command does not run. `opencode-native plugin test <library> --conformance` replays the
+golden transcripts of the C ABI against the library instead, a line a transcript. Each takes `-h`. Neither is in `--help`: `main` takes them
 before it parses the line, so the command table still matches the TypeScript tree (`src/tests/tree.rs`).
 `plugin list`, `add`, `check`, `update` and `remove` still go to the TypeScript CLI.
 
