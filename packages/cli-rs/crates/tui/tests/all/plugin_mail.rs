@@ -18,11 +18,13 @@ use crate::support::{self, Harness};
 
 use std::cell::RefCell;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use opencode_plugin::abi::{self, SendError};
 use opencode_tui::plugins::host::host;
 use opencode_tui::{Deps, Route};
+use opentui::app::ProxyError;
 
 const ID: &str = "test.mail";
 
@@ -608,4 +610,58 @@ fn a_mailbox_full_at_the_end_of_13_frames_is_a_backlog() {
         let report = monitor.report(ID).unwrap_or_default();
         assert!(!report.contains("backlog"), "{carrier:?}: a backlog 120 frames after it ended: {report}");
     }
+}
+
+// Expected (the thread leak the orchestrator found): a full UI queue leaves one thread a plugin to deliver its wake.
+// Another thread keeps the queue full; the plugin's drain takes what woke it before that `Woken` arrives, and each
+// update sends one more message. Those sends wait for the `Woken` on its way and start no other thread, however many
+// frames run. Once the queue has room that `Woken` arrives, and a later send wakes the plugin again. On both carriers.
+#[test]
+fn a_full_queue_starts_one_wake_thread_a_plugin() {
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        let full = Arc::new(AtomicBool::new(true));
+        let fillers: Vec<_> = (0..3)
+            .map(|_| {
+                let (full, proxy) = (full.clone(), harness.app.proxy());
+                std::thread::spawn(
+                    move || while full.load(Ordering::Relaxed) && proxy.send(()) != Err(ProxyError::Closed) {},
+                )
+            })
+            .collect();
+        mail(|mail| mail.refill = u32::MAX);
+        mail(|mail| mail.sender.clone()).unwrap().send((7, 0)).unwrap();
+        let before = wake_threads();
+        let mut most = 0;
+        for _ in 0..60 {
+            harness.app.advance(Duration::from_millis(1));
+            harness.app.render();
+            most = most.max(wake_threads().saturating_sub(before));
+        }
+        // One delivers the wake; one more may still be ending, having just delivered the one before.
+        assert!(most <= 2, "{carrier:?}: {most} threads deliver one plugin's wake");
+        full.store(false, Ordering::Relaxed);
+        fillers.into_iter().for_each(|filler| filler.join().unwrap());
+        mail(|mail| mail.refill = 0);
+        harness.wait("the refills ended", || {
+            harness.app.advance(Duration::from_millis(1));
+            harness.app.render();
+            !opencode_plugin::schedule::busy(&harness.app)
+        });
+        let arrived = mail(|mail| mail.arrived.len());
+        mail(|mail| mail.sender.clone()).unwrap().send((8, 0)).unwrap();
+        harness.wait("a send after the flood arrived", || {
+            harness.app.advance(Duration::from_millis(1));
+            harness.app.render();
+            mail(|mail| mail.arrived.len()) > arrived
+        });
+    }
+}
+
+/// The threads of this process that deliver a plugin's wake through a full UI queue.
+fn wake_threads() -> usize {
+    let tasks = std::fs::read_dir("/proc/self/task").into_iter().flatten().flatten();
+    tasks
+        .filter(|task| std::fs::read_to_string(task.path().join("comm")).is_ok_and(|name| name.trim() == "plugin-wake"))
+        .count()
 }
