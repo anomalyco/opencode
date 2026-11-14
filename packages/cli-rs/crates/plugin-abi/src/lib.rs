@@ -60,6 +60,7 @@
 
 pub mod canvas;
 pub mod interact;
+pub mod claim;
 pub mod mail;
 mod schema;
 pub mod v2;
@@ -3578,6 +3579,13 @@ impl Setup<'_> {
         self.registered.manifest.layers.push(layer.clone());
         self.registered.layers.push((layer, Rc::new(handler)));
     }
+
+    /// Registers a renderer claim of contract 2.0 ([`claim`]): the tool calls of one tool, or the fences of one
+    /// language, drawn in the transcript with a keyed tree, and the host's own row where the claim declines. At one
+    /// tool or language the plugin last in activation order wins. In process only until the C ABI of 2.0.
+    pub fn claim(&mut self, claim: claim::Claim) {
+        self.registered.claims.push(claim);
+    }
 }
 
 /// What a plugin registered, which the host keeps while the plugin is active; the plugin registers through a
@@ -3613,6 +3621,7 @@ pub struct Registered {
     memos: std::cell::RefCell<std::collections::HashMap<u64, v2::Memo>>,
     layers: Vec<(interact::Layer, interact::HandlerFn)>,
     searches: Vec<(String, SearchFn)>,
+    claims: Vec<claim::Claim>,
 }
 
 /// A registered handler of [`Setup::messages`].
@@ -3754,6 +3763,11 @@ impl Registered {
     /// The layers of [`Setup::layer`], with their handlers.
     pub fn layers(&self) -> &[(interact::Layer, interact::HandlerFn)] {
         &self.layers
+    }
+
+    /// The renderer claims of [`Setup::claim`].
+    pub fn claims(&self) -> &[claim::Claim] {
+        &self.claims
     }
 
     /// The event handlers, with the types each takes.
