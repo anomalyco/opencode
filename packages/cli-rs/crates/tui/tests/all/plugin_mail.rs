@@ -321,6 +321,16 @@ fn a_stop_flag_ends_a_thread_and_a_failure_closes_the_mailbox() {
         assert!(done.recv_timeout(Duration::from_secs(10)).is_ok(), "{carrier:?}: it never saw the flag");
         tui.plugins.toggle(&host(tui), ID, true);
         let spawner = mail(|mail| mail.spawner.clone()).unwrap();
+        // A failure stops the plugin's threads too, though nothing disposes it.
+        let (ended, done) = std::sync::mpsc::channel();
+        spawner
+            .spawn("waits", move |stop| {
+                while !stop.stopped() {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                ended.send(()).unwrap();
+            })
+            .unwrap();
         spawner.spawn("boom", |_| panic!("a mail thread panicked")).unwrap();
         harness.wait("the panic failed the plugin", || {
             harness.app.advance(Duration::from_millis(1));
@@ -329,6 +339,7 @@ fn a_stop_flag_ends_a_thread_and_a_failure_closes_the_mailbox() {
         let status = tui.plugins.entries().into_iter().find(|entry| entry.id == ID).unwrap().status;
         let expected = "thread boom panicked: a mail thread panicked".to_owned();
         assert_eq!(status, opencode_plugin::Status::Failed(expected), "{carrier:?}");
+        assert!(done.recv_timeout(Duration::from_secs(10)).is_ok(), "{carrier:?}: a thread ran on after the failure");
         let sender = mail(|mail| mail.sender.clone()).unwrap();
         assert_eq!(sender.send((3, 1)), Err(SendError::Closed((3, 1))), "{carrier:?}");
     }

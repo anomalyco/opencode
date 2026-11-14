@@ -1212,3 +1212,54 @@ fn a_revision_crosses_bytes_that_follow_the_change() {
     });
     assert_eq!(theme.calls, 1, "a theme of another name crossed more than its one view: {theme:?}");
 }
+
+thread_local! {
+    /// The card `test.hide` leaves out, and whether each of its views was asked for a whole tree.
+    static HIDE: RefCell<(Option<usize>, Vec<bool>)> = const { RefCell::new((None, Vec::new())) };
+}
+
+/// A route of three memoized cards, one of which a command hides and shows again, unchanged.
+fn hiding(setup: &mut abi::Setup) -> Result<(), String> {
+    let hide = abi::Command { name: "hide.toggle".into(), ..abi::Command::default() };
+    setup.command(hide, |_, input| {
+        let card = input.and_then(|input| input.parse().ok());
+        HIDE.with(|hide| hide.borrow_mut().0 = card);
+    });
+    setup.surface(v2::Surface::new("hide", v2::Place::Route("hide".into()), |cx| {
+        let hidden = HIDE.with(|hide| {
+            let mut hide = hide.borrow_mut();
+            hide.1.push(cx.input.full);
+            hide.0
+        });
+        let cards = (0..3)
+            .filter(|index| Some(*index) != hidden)
+            .map(|index| cx.memo(format!("card-{index}"), 0u32, |_| v2::Node::text(vec![abi::Span::new("card")])))
+            .collect();
+        v2::Node::column(cards).with_id("cards")
+    }));
+    Ok(())
+}
+
+// Expected (`keep-full`, on both carriers): a card a view left out is not kept for the next view, which builds it
+// when it comes back, so the host refuses nothing and asks for no whole tree after the first.
+#[test]
+fn a_card_left_out_is_built_again_when_it_comes_back() {
+    for carrier in CARRIERS {
+        HIDE.with(|hide| *hide.borrow_mut() = (None, Vec::new()));
+        let deps = Deps {
+            route: Route::Home,
+            builtins: vec![builtin(carrier, abi::Plugin { id: "test.hide", setup: hiding })],
+            ..support::deps(Arc::new(support::empty()))
+        };
+        let harness = support::mount(60, 20, deps);
+        harness.tui.navigate(Route::Plugin { id: "test.hide".into(), name: "hide".into() });
+        settle(&harness);
+        for input in [Some("1"), None, Some("2"), None] {
+            harness.tui.keymap.dispatch("hide.toggle", input);
+            settle(&harness);
+        }
+        let fulls = HIDE.with(|hide| hide.borrow().1.clone());
+        assert!(fulls.len() >= 5 && fulls[0], "{carrier:?}: {fulls:?}");
+        assert!(fulls[1..].iter().all(|full| !full), "{carrier:?}: a whole tree was asked for again: {fulls:?}");
+    }
+}
