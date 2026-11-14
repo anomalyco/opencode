@@ -11,7 +11,6 @@ import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
-import { SubagentCompletion } from "../../session/subagent-completion.js"
 import { SubagentJob } from "../../session/subagent-job.js"
 
 export const name = "subagent"
@@ -20,8 +19,8 @@ const backgroundResult = (sessionID: SessionSchema.ID) => ({
   sessionID,
   status: "running" as const,
   output: [
-    `The subagent is working in the background (sessionID: ${sessionID}). You will be notified automatically when it finishes.`,
-    "DO NOT sleep, poll for progress, ask the subagent for status, or duplicate this subagent's work; avoid working with the same files or topics it is using.",
+    `The subagent is working in the background (sessionID: ${sessionID}). You will receive a <subagent> message when it goes idle, and again after each later round of work.`,
+    "DO NOT sleep, poll, proactively check on its progress, or duplicate this subagent's work.",
     "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
     "To send it follow-ups or change its instructions while it runs, call subagent again with this sessionID.",
   ].join("\n"),
@@ -41,24 +40,19 @@ export const Input = Schema.Struct({
   sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
     description: "Send a follow-up to an existing subagent, running or finished. Omit to start a new one.",
   }),
-  background: Schema.optionalKey(Schema.Boolean).annotate({
-    description:
-      "Run the subagent in the background and return immediately. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress.",
-  }),
 })
 
 export const Output = Schema.Struct({
   sessionID: SessionSchema.ID,
-  status: Schema.Literals(["completed", "running"]),
+  status: Schema.Literal("running"),
   output: Schema.String,
 })
 export const description = [
   "Spawns an agent in a child session to work on the specified task.",
-  "The output includes a sessionID you can pass back later to continue that specific conversation with the subagent.",
+  "Subagents always run in the background: the call returns immediately with a sessionID, and you receive a `<subagent>` message each time the child goes idle, including after later work.",
+  "Keep working on non-overlapping tasks, or briefly tell the user what you launched and end your response. Do not sleep, poll, or proactively check on the child's progress.",
   "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
-  "Foreground (default) runs the subagent to completion and returns its final response.",
-  "Background mode (background=true) launches it asynchronously and returns immediately; you are notified when it finishes.",
-  "Use background only for independent work that can run while you continue elsewhere.",
+  "Pass the returned sessionID to continue that specific child conversation. A follow-up to a running child joins its current run.",
 ].join("\n")
 
 export const Plugin = {
@@ -197,11 +191,13 @@ export const Plugin = {
                     ),
                   ))
 
-              const background = input.background === true
+              // A child that is not draining yet must be admitted without waking: the job's resume
+              // owns the start, so the period cannot run before its boundary is registered.
+              const running =
+                existing !== undefined &&
+                ((yield* sessions.active).has(existing.id) || (yield* jobs.get(existing.id))?.status === "running")
               yield* context.progress({ sessionID: child.id, status: "running" })
 
-              // Standard prompt admission outside the job: Job.start joining a running child skips
-              // its run effect, and the default wake starts an idle child or steers a running one.
               yield* sessions
                 .prompt({
                   sessionID: child.id,
@@ -209,7 +205,7 @@ export const Plugin = {
                     existing === undefined
                       ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
                       : input.prompt,
-                  ...(background && existing === undefined ? { resume: false } : {}),
+                  ...(running ? {} : { resume: false }),
                 })
                 .pipe(
                   Effect.mapError(
@@ -225,42 +221,11 @@ export const Plugin = {
                 description: input.description,
               }
               yield* subagents.start(recovery)
-
-              if (background) {
-                yield* subagents.background(recovery)
-                return backgroundResult(child.id)
-              }
-
-              const result = yield* jobs.block({ id: child.id, sessionID: context.sessionID }).pipe(
-                Effect.onInterrupt(() =>
-                  Effect.all([sessions.interrupt(child.id), jobs.cancel(child.id)], {
-                    discard: true,
-                  }),
-                ),
-              )
-              if (result?.type === "backgrounded") {
-                yield* subagents.notify(recovery, result.info.started_at)
-                return backgroundResult(child.id)
-              }
-              // Failure surfaces keep the sessionID visible so the model can continue the child.
-              if (result?.info.status === "error")
-                return yield* new ToolFailure({
-                  message: `Subagent failed (sessionID: ${child.id}): ${result.info.error ?? "unknown error"}`,
-                })
-              if (result?.info.status === "cancelled")
-                return yield* new ToolFailure({ message: `Subagent cancelled (sessionID: ${child.id})` })
-              return {
-                sessionID: child.id,
-                status: "completed" as const,
-                output: result?.info.output ?? SubagentCompletion.NO_TEXT,
-              }
+              return backgroundResult(child.id)
             }).pipe(
               Effect.map((output) => ({
                 output,
-                content:
-                  output.status === "completed"
-                    ? `<subagent sessionID="${output.sessionID}" state="completed">\n${output.output}\n</subagent>`
-                    : output.output,
+                content: output.output,
                 metadata: { sessionID: output.sessionID, status: output.status },
               })),
             ),

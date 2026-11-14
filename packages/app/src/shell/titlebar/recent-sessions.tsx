@@ -17,6 +17,7 @@ import { arrayMove } from "@/runtime/array-move"
 import { useLanguage } from "@/runtime/i18n/language"
 import { Persistence } from "@/runtime/persistence/schema"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { rawTime } from "@/runtime/server/data"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import { sessionTreeIDs } from "@/session/requests/session-request-tree"
@@ -31,17 +32,23 @@ import {
   dedupePins,
   INITIAL_RECENT_PAGE_STATE,
   RECENT_PAGE_LIMIT,
+  RECENT_RELOAD_DELAY_MS,
+  RECENT_VISIBLE_LIMIT,
   mergeRecentSessions,
   partitionRecentSessions,
   recentPageFailed,
   recentPageHasMore,
   recentPageLoaded,
+  recentPageLoadingMore,
+  recentReloadsOn,
+  recentRowUnread,
   recentSessionEndpoints,
   recentSessionKey,
   removePin,
   reorderPins,
   splitRecentSessionKey,
   transitionRecentPage,
+  windowRecentSessions,
   type RecentPageEffect,
   type RecentPageEvent,
   type RecentPageState,
@@ -60,8 +67,8 @@ const RecentSidebarState = Persistence.struct({
 type Connection = { conn: ServerConnection.Any; ctx: ServerCtx; server: ServerConnection.Key }
 
 /**
- * The experimental Recent sessions sidebar: pinned sessions first, then every server's newest root sessions in one
- * recency list. The desktop titlebar renders it in place of the side tabs only while the setting is on and available.
+ * The experimental Recent sessions sidebar: pinned sessions first, then every server's root sessions from the last
+ * 7 days in one recency list, at most 30 until Show more reveals older ones. The desktop titlebar renders it in place of the side tabs only while the setting is on and available.
  */
 export function RecentSessions() {
   const global = useGlobal()
@@ -81,8 +88,15 @@ export function RecentSessions() {
   // Whether each row shows its unread dot, keyed like the rows.
   const [unread, setUnread] = createStore<Record<string, boolean>>({})
 
+  // `revealed` counts the rows Show more added beyond the 7-day window. `now` ticks each minute so the window moves.
+  const [view, setView] = createStore({ revealed: 0, now: Date.now() })
+
+  const clock = setInterval(() => setView("now", Date.now()), 60_000)
+  onCleanup(() => clearInterval(clock))
+
   const controllers = new Map<AbortController, string>()
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
+  const reloads = new Map<string, ReturnType<typeof setTimeout>>()
   const hydrationControllers = new Map<string, AbortController>()
   const statuses = new Map<string, { ctx: ServerCtx; status: string }>()
   let attempt = 0
@@ -109,6 +123,27 @@ export function RecentSessions() {
 
     clearTimeout(timer)
     timers.delete(server)
+  }
+
+  const cancelReload = (server: string) => {
+    clearTimeout(reloads.get(server))
+    reloads.delete(server)
+  }
+
+  // Order follows each server's last snapshot, so the moments the iOS app reloads its list reload page one here:
+  // run end, a new root session, archive and unarchive, and the window coming back. Bursts coalesce per server.
+  const reload = (item: Connection) => {
+    cancelReload(item.server)
+    reloads.set(
+      item.server,
+      setTimeout(() => {
+        reloads.delete(item.server)
+
+        if (disposed || !isCurrent(item) || item.ctx.sdk.connection.status() !== "connected") return
+
+        dispatch(item, { type: "reload", attempt: ++attempt })
+      }, RECENT_RELOAD_DELAY_MS),
+    )
   }
 
   const abortPages = (server: string) => {
@@ -170,6 +205,7 @@ export function RecentSessions() {
           batch(() => {
             item.ctx.data.session.forget(sessionID)
             forget(item.server, sessionID)
+            global.sessionPreferences.forget(item.server, sessionID)
             setHydration(produce((cache) => void delete cache[key]))
             removePinKey(key)
           })
@@ -187,6 +223,7 @@ export function RecentSessions() {
     abortPages(server)
     abortHydration(server)
     clearTimer(server)
+    cancelReload(server)
     setPages(produce((current) => void delete current[server]))
     clearHydration(server)
   }
@@ -235,7 +272,7 @@ export function RecentSessions() {
           if (page?.status !== "loading" || page.attempt !== effect.attempt) return
 
           batch(() => {
-            if (page.kind === "refresh") {
+            if (page.kind === "refresh" || page.kind === "reload") {
               const covered = new Map(response.data.map((info) => [info.id, info]))
 
               for (const key of state.pins) {
@@ -245,7 +282,8 @@ export function RecentSessions() {
                 const info = covered.get(pin.sessionID)
 
                 if (info) rememberPin(item, key, info)
-                else hydrate(item, key, pin.sessionID)
+                // Live events keep other pins current while connected; only a reconnect may have missed some.
+                else if (page.kind === "refresh") hydrate(item, key, pin.sessionID)
               }
             }
 
@@ -279,6 +317,9 @@ export function RecentSessions() {
   }
 
   function load(item: Connection, kind: "first" | "next" | "refresh") {
+    // A first page or reconnect refresh is already a fresh snapshot, so a pending reload would only repeat it.
+    if (kind !== "next") cancelReload(item.server)
+
     dispatch(item, { type: "load", kind, attempt: ++attempt })
   }
 
@@ -287,6 +328,20 @@ export function RecentSessions() {
     controllers.forEach((_, controller) => controller.abort())
     hydrationControllers.forEach((controller) => controller.abort())
     timers.forEach((timer) => clearTimeout(timer))
+    reloads.forEach((timer) => clearTimeout(timer))
+  })
+
+  const reloadAll = () => connections().forEach(reload)
+
+  const onVisible = () => {
+    if (document.visibilityState === "visible") reloadAll()
+  }
+
+  window.addEventListener("focus", reloadAll)
+  document.addEventListener("visibilitychange", onVisible)
+  onCleanup(() => {
+    window.removeEventListener("focus", reloadAll)
+    document.removeEventListener("visibilitychange", onVisible)
   })
 
   // The store is local and long-lived; drop duplicates a previous version or a manual edit left behind.
@@ -314,7 +369,11 @@ export function RecentSessions() {
       // A replaced controller owns no old requests or pin snapshots, even before it reconnects.
       if (replaced) dropServer(item.server)
 
-      if (status !== "connected") return
+      if (status !== "connected") {
+        cancelReload(item.server)
+
+        return
+      }
 
       if (!untrack(() => pages[item.server])) {
         load(item, "first")
@@ -341,11 +400,8 @@ export function RecentSessions() {
     connections().flatMap((item) => {
       const fetched = pages[item.server]
 
-      return mergeRecentSessions(
-        item.server,
-        fetched?.sessions ?? [],
-        item.ctx.data.session.known(),
-        item.ctx.data.session.apply,
+      return mergeRecentSessions(item.server, fetched?.sessions ?? [], item.ctx.data.session.known(), (rows) =>
+        item.ctx.data.session.apply(rows, { reloads: true }),
       )
     }),
   )
@@ -363,7 +419,7 @@ export function RecentSessions() {
 
         if (!value) return
 
-        const session = item.ctx.data.session.apply([value])[0]
+        const session = item.ctx.data.session.apply([value], { reloads: true })[0]
 
         if (session) result.set(key, { key, server: item.server, session })
       })
@@ -412,6 +468,16 @@ export function RecentSessions() {
             forget(item.server, event.data.sessionID)
             setHydration(produce((cache) => void delete cache[key]))
           })
+        }),
+      )
+    })
+  })
+
+  createEffect(() => {
+    connections().forEach((item) => {
+      onCleanup(
+        item.ctx.data.listen(({ details }) => {
+          if (recentReloadsOn(details, item.ctx.data.session.get)) reload(item)
         }),
       )
     })
@@ -477,18 +543,29 @@ export function RecentSessions() {
       open: openSessions(),
       resolvePin: (key) => hydratedItems().get(key),
       archived,
+      hidden: global.sessionPreferences.hidden,
     }),
   )
 
   const pinned = () => partition().pinned
-  const recent = () => partition().recent
+
+  const windowed = createMemo(() =>
+    windowRecentSessions({
+      items: partition().recent,
+      now: view.now,
+      revealed: view.revealed,
+      serversHaveMore: connections().some((item) => recentPageHasMore(pages[item.server])),
+    }),
+  )
+
+  const recent = () => windowed().visible
   const rows = createMemo(() => [...pinned(), ...recent()])
 
   const firstPageLoading = createMemo(() => {
     if (!servers.hydrated()) return true
 
     // Adding a server should not blank the rows already shown while its first page loads.
-    if (pinned().length > 0 || recent().length > 0) return false
+    if (pinned().length > 0 || partition().recent.length > 0) return false
 
     return connections().some((item) => {
       if (item.ctx.sdk.connection.status() !== "connected") return false
@@ -499,13 +576,7 @@ export function RecentSessions() {
     })
   })
 
-  const loadingMore = createMemo(() =>
-    connections().some((item) => {
-      const value = pages[item.server]
-
-      return value?.status === "loading" && value.kind !== "first" && value.sessions.length > 0
-    }),
-  )
+  const loadingMore = createMemo(() => connections().some((item) => recentPageLoadingMore(pages[item.server])))
 
   const failed = createMemo(() => connections().some((item) => recentPageFailed(pages[item.server])))
 
@@ -519,13 +590,15 @@ export function RecentSessions() {
     })
   }
 
-  const empty = createMemo(() => pinned().length === 0 && recent().length === 0 && !firstPageLoading())
+  const empty = createMemo(
+    () => pinned().length === 0 && recent().length === 0 && !windowed().hasMore && !firstPageLoading(),
+  )
 
   // Every server with a cursor loads its next page together, and the merged list re-sorts. Newly loaded rows can
   // therefore appear above rows already shown: one merged recency order is kept rather than holding rows back until
   // every server reaches the same age. A short page or a missing next cursor ends that server's list; a failed page
-  // keeps its cursor so the next scroll retries it.
-  const loadMore = () => {
+  // keeps its cursor so the next Show more retries it.
+  const loadMore = (retry: boolean) => {
     connections().forEach((item) => {
       const current = pages[item.server]
 
@@ -534,7 +607,7 @@ export function RecentSessions() {
       if (item.ctx.sdk.connection.status() !== "connected") return
 
       if (current.status === "failed") {
-        dispatch(item, { type: "retry", attempt: ++attempt })
+        if (retry) dispatch(item, { type: "retry", attempt: ++attempt })
 
         return
       }
@@ -545,35 +618,19 @@ export function RecentSessions() {
     })
   }
 
-  let viewport: HTMLDivElement | undefined
-  let fillFrame: number | undefined
+  const showMore = () => {
+    setView("revealed", (value) => value + RECENT_VISIBLE_LIMIT)
+    loadMore(true)
+  }
 
-  // A short list cannot scroll, so a scroll event never asks for the next page. Fill the viewport once per render
-  // until rows overflow it or every server with a cursor is exhausted.
+  // Show more can reveal more rows than are loaded; fetch further pages until they are, or every server is exhausted.
+  // A failed page waits for the next Show more instead of retrying here.
   createEffect(() => {
-    connections().forEach((item) => pages[item.server]?.status)
-    void items()
+    if (view.revealed === 0 || loadingMore()) return
 
-    if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
-    fillFrame = requestAnimationFrame(() => {
-      fillFrame = undefined
+    if (windowed().limit <= partition().recent.length) return
 
-      if (disposed || !viewport || loadingMore()) return
-
-      if (viewport.scrollHeight > viewport.clientHeight) return
-
-      const more = connections().some((item) => {
-        const current = pages[item.server]
-
-        return current?.status === "ready" && recentPageHasMore(current)
-      })
-
-      if (more) loadMore()
-    })
-  })
-
-  onCleanup(() => {
-    if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
+    untrack(() => loadMore(false))
   })
 
   const reorderPinned = (nextVisible: readonly string[]) => {
@@ -634,6 +691,7 @@ export function RecentSessions() {
 
       removePinKey(item.key)
       forget(item.server, current.id)
+      global.sessionPreferences.forget(item.server, current.id)
     })
     void startTransition(() => {
       tabs.select(tabs.addSessionTab({ server: ServerConnection.Key.make(item.server), sessionId: current.id }))
@@ -692,7 +750,12 @@ export function RecentSessions() {
         if (state.pins.includes(item.key)) {
           setHydration(item.key, {
             ...item.session,
-            time: { ...item.session.time, archived: item.session.time.archived ?? Date.now() },
+            // The row's time may be a send bump; the snapshot goes back through `apply` and must stay raw.
+            time: {
+              ...item.session.time,
+              updated: rawTime(item.session),
+              archived: item.session.time.archived ?? Date.now(),
+            },
           })
         }
 
@@ -719,6 +782,7 @@ export function RecentSessions() {
       .then(() => {
         forget(item.server, item.session.id)
         removePinKey(item.key)
+        ids.forEach((id) => global.sessionPreferences.forget(item.server, id))
         notifySessionTabsRemoved({
           server: ServerConnection.Key.make(item.server),
           directory: item.session.location.directory,
@@ -775,18 +839,7 @@ export function RecentSessions() {
       data-shortcut-hints={hints() ? "" : undefined}
       class="flex min-h-0 flex-1 flex-col [app-region:no-drag]"
     >
-      <div
-        ref={(element) => (viewport = element)}
-        data-scrollable
-        class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-1"
-        onScroll={(event) => {
-          const element = event.currentTarget
-
-          if (element.scrollTop + element.clientHeight < element.scrollHeight - 160) return
-
-          loadMore()
-        }}
-      >
+      <div data-scrollable class="no-scrollbar flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-1">
         <Show
           when={!firstPageLoading()}
           fallback={
@@ -826,7 +879,7 @@ export function RecentSessions() {
               </DragDropProvider>
             </div>
           </Show>
-          <Show when={recent().length > 0}>
+          <Show when={recent().length > 0 || windowed().hasMore}>
             <div role="group" aria-labelledby="sidebar-recent-list" class="flex shrink-0 flex-col gap-2 pb-2.5">
               <SectionHeader id="sidebar-recent-list" label={language.t("sidebar.recent.section.recent")} />
               <div data-titlebar-tab-list data-orientation="vertical" class="flex w-full min-w-0 flex-col">
@@ -834,6 +887,11 @@ export function RecentSessions() {
                   {(item) => row(item)}
                 </Key>
               </div>
+              <Show when={windowed().hasMore && !loadingMore()}>
+                <Button variant="ghost-muted" size="normal" class="w-full justify-start px-2" onClick={showMore}>
+                  {language.t("sidebar.inbox.showMore")}
+                </Button>
+              </Show>
             </div>
           </Show>
           <Show when={empty()}>
@@ -933,7 +991,8 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
   )
 
   // A busy session shows its progress indicator instead of the unread dot.
-  const unread = createMemo(() => status.unread() && !status.loading())
+  const muted = () => global.sessionPreferences.muted(server(), item().session.id)
+  const unread = createMemo(() => recentRowUnread(status.unread(), status.loading(), muted()))
 
   createEffect(() => props.onUnreadChange(unread()))
 
@@ -964,6 +1023,12 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
           {language.t("sidebar.recent.moveDown")}
         </Menu.Item>
       </Show>
+      <Menu.Item onSelect={() => global.sessionPreferences.update("muted", server(), item().session.id, !muted())}>
+        {language.t(muted() ? "sidebar.recent.unmute" : "sidebar.recent.mute")}
+      </Menu.Item>
+      <Menu.Item onSelect={() => global.sessionPreferences.update("hidden", server(), item().session.id, true)}>
+        {language.t("sidebar.recent.hide")}
+      </Menu.Item>
       <Menu.Separator />
       <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>
       <Menu.Item onSelect={props.onArchive}>{language.t("common.archive")}</Menu.Item>
@@ -979,6 +1044,7 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
       server={server()}
       session={item().session}
       preparing={false}
+      label={muted() ? language.t("sidebar.recent.muted") : undefined}
       unread={unread()}
       attention={status.attention()}
       loading={status.loading()}

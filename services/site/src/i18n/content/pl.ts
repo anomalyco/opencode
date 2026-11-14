@@ -44,11 +44,6 @@ export const content = {
       body: "Steruj OpenCode z własnych skryptów, zadań CI i narzędzi.",
       action: "Czytaj docs",
     },
-    ide: {
-      name: "Rozszerzenia IDE",
-      body: "Otwórz OpenCode w VS Code, Cursorze i Windsurfie albo w Zedzie i IDE JetBrains przez ACP.",
-      action: "Instaluj",
-    },
     mini: {
       name: "Mini",
       body: "Minimalny interfejs terminalowy. Odpowiedzi trafiają do historii terminala, a pod nimi jest jeden prompt.",
@@ -255,47 +250,6 @@ export const content = {
         "in-your-process": {
           title: "W Twoim procesie",
           body: "Uruchamia OpenCode w Twoim procesie, z Twoją konfiguracją i modelami.",
-        },
-      },
-    },
-    ide: {
-      title: "OpenCode | Integracje z edytorami VS Code, Cursor i Zed",
-      description:
-        "Używaj OpenCode w edytorze, z rozszerzeniem dla VS Code, Cursora, Windsurfa i VSCodium oraz opencode acp dla Zeda, IDE JetBrains i innych edytorów ACP.",
-      intro:
-        "Używaj OpenCode w swoim edytorze. W VS Code, Cursorze, Windsurfie i VSCodium uruchom opencode we wbudowanym terminalu, a rozszerzenie zainstaluje się samo. Zed, IDE JetBrains i inne edytory obsługujące Agent Client Protocol uruchamiają OpenCode przez opencode acp.",
-      features: {
-        "quick-launch": {
-          title: "Szybki start",
-          body: "Cmd+Esc lub Ctrl+Esc otwiera OpenCode w podzielonym terminalu.",
-        },
-        "new-session": {
-          title: "Nowa sesja",
-          body: "Cmd+Shift+Esc lub Ctrl+Shift+Esc zaczyna kolejną sesję.",
-        },
-        context: {
-          title: "Kontekst",
-          body: "Udostępnia OpenCode bieżące zaznaczenie lub kartę.",
-        },
-        "file-references": {
-          title: "Odwołania",
-          body: "Cmd+Option+K lub Alt+Ctrl+K wstawia @File#L37-42.",
-        },
-        "installs-itself": {
-          title: "Instaluje się samo",
-          body: "Uruchom opencode we wbudowanym terminalu, aby je dodać.",
-        },
-        "acp-editors": {
-          title: "Edytory ACP",
-          body: "Zed, IDE JetBrains, Avante.nvim i CodeCompanion.nvim.",
-        },
-        "open-vsx": {
-          title: "Open VSX",
-          body: "Dostępne też w Open VSX dla Cursora, Windsurfa i VSCodium.",
-        },
-        "same-agent": {
-          title: "Ten sam agent",
-          body: "OpenCode, którego używasz w terminalu, obok Twojego kodu.",
         },
       },
     },
@@ -554,7 +508,7 @@ export const content = {
     },
     colors: {
       title: "Kolory",
-      body: "Logo i logotyp używają jednego koloru w trzech stopniach krycia, z jaśniejszym kolorem na ciemne tła. Wartości poniżej to ten kolor na bieli lub #0B0B0B, tak jak pokazują go standardowe pliki. Kliknij wartość, aby ją skopiować.",
+      body: "Logo i logotyp używają jednego koloru w trzech stopniach krycia, z jaśniejszym kolorem na ciemne tła. Wartości poniżej to kolory użyte w standardowych plikach. Używaj ich wyłącznie w logo i logotypie, nie w innych tekstach ani tłach. Kliknij wartość, aby ją skopiować.",
       palettes: {
         light: {
           name: "Jasna",
@@ -1179,20 +1133,6 @@ export const content = {
     sdk: {
       more: {
         label: "Czytaj dokumentację SDK",
-      },
-    },
-    ide: {
-      links: {
-        "vs-code-marketplace": {
-          label: "VS Code Marketplace",
-        },
-        "open-vsx-cursor-windsurf-vscodium": {
-          label: "Open VSX (Cursor, Windsurf, VSCodium)",
-        },
-      },
-      lead: "Uruchom opencode we wbudowanym terminalu edytora, a rozszerzenie zainstaluje się samo, albo zainstaluj je ręcznie.",
-      more: {
-        label: "Skonfiguruj Zeda, IDE JetBrains i inne edytory ACP",
       },
     },
     mini: {

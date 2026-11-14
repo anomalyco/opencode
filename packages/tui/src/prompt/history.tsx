@@ -76,18 +76,6 @@ type CursorKey = string | null
 // it distinct from every real session instead of sharing the `undefined` map entry.
 const cursorKey = (sessionID: string | undefined): CursorKey => sessionID ?? null
 
-// Returns the next cursor position, or undefined when the move is not allowed: the composer
-// must hold the current item (or be empty) to start navigating, and the cursor never passes
-// the oldest entry or the newest one (0 is the empty draft).
-function nextIndex(items: PromptInfo[], index: number, direction: 1 | -1, input: string) {
-  const current = items.at(index)
-  if (!current) return undefined
-  if (current.text !== input && input.length) return undefined
-  const next = index + direction
-  if (Math.abs(next) > items.length || next > 0) return undefined
-  return next
-}
-
 // Keep the newest MAX_HISTORY_ENTRIES for each session independently. Session scope must
 // not let a busy session evict another session's recall; global scope still uses the same
 // per-session bound when a session-only file is loaded.
@@ -150,7 +138,7 @@ export function parsePromptInfo(value: unknown): PromptInfo | undefined {
   return info
 }
 
-export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
+const { use: useHistoryEntries, provider: PromptHistoryProvider } = createSimpleContext({
   name: "PromptHistory",
   init: () => {
     const paths = useTuiPaths()
@@ -180,18 +168,12 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
         )
     })
 
-    const [store, setStore] = createStore({ index: 0, history: [] as PromptHistoryEntry[] })
-    const sessionIndices = new Map<CursorKey, number>()
-    let lastScope: PromptHistoryScope | undefined
-    const sessionKey = (sessionID: string | undefined) => cursorKey(sessionID)
+    const [store, setStore] = createStore({ history: [] as PromptHistoryEntry[] })
 
-    // Switching scope in a live reload invalidates the cursor that the other scope owns.
-    // Reset the destination cursor rather than letting a stale index skip the newest item.
-    const prepareScope = (scope: PromptHistoryScope) => {
-      if (lastScope === scope) return
-      lastScope = scope
-      if (scope === "global") setStore("index", 0)
-      else sessionIndices.clear()
+    const has = (sessionID: string | undefined, scope: PromptHistoryScope) => {
+      if (scope === "global") return store.history.length > 0
+      const key = cursorKey(sessionID)
+      return store.history.some((entry) => cursorKey(entry.sessionID) === key)
     }
 
     return {
@@ -199,35 +181,12 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
       clearError() {
         setError(undefined)
       },
-      has(sessionID: string | undefined, scope: PromptHistoryScope) {
-        if (scope === "global") return store.history.length > 0
-        const key = sessionKey(sessionID)
-        return store.history.some((entry) => cursorKey(entry.sessionID) === key)
+      get entries() {
+        return store.history
       },
-      move(sessionID: string | undefined, direction: 1 | -1, input: string, scope: PromptHistoryScope) {
-        prepareScope(scope)
-        if (scope === "session") {
-          const key = sessionKey(sessionID)
-          const items = store.history.filter((entry) => cursorKey(entry.sessionID) === key).map((entry) => entry.prompt)
-          let index = sessionIndices.get(key) ?? 0
-          if (items.length > 0 && !items.at(index)) index = 0
-          const next = nextIndex(items, index, direction, input)
-          if (next === undefined) return undefined
-          sessionIndices.set(key, next)
-          return next === 0 ? emptyPrompt() : items.at(next)
-        }
-        // The global view is the newest 50 entries across all sessions. Session-scope
-        // retention can make the file longer than that, so slice the view rather than
-        // truncating the persisted history.
-        const items = store.history.slice(-MAX_HISTORY_ENTRIES).map((entry) => entry.prompt)
-        const next = nextIndex(items, store.index, direction, input)
-        if (next === undefined) return undefined
-        setStore("index", next)
-        return next === 0 ? emptyPrompt() : items.at(next)
-      },
+      has,
       append(sessionID: string | undefined, item: PromptInfo, scope: PromptHistoryScope) {
-        prepareScope(scope)
-        const key = sessionKey(sessionID)
+        const key = cursorKey(sessionID)
         const entry = { sessionID, prompt: structuredClone(unwrap(item)) }
         // Session scope dedupes against the session's own last prompt, because the recall
         // pool is the session's history and not the file's; global scope keeps the old
@@ -236,10 +195,6 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
           scope === "session"
             ? store.history.findLast((existing) => cursorKey(existing.sessionID) === key)?.prompt
             : store.history.at(-1)?.prompt
-        // A submit resets only the submitting composer's cursor. Other sessions keep their
-        // independent positions, and the home composer keeps its own null-keyed position.
-        if (scope === "session") sessionIndices.set(key, 0)
-        else setStore("index", 0)
         if (isDuplicateEntry(previous, entry.prompt)) return
         let trimmed = false
         setStore(
@@ -272,3 +227,92 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
     }
   },
 })
+
+export { PromptHistoryProvider }
+
+export type PromptHistoryOptions = {
+  // Accessors, not values: a live config reload and a session switch are observed on the
+  // next navigation instead of being captured once at setup.
+  sessionID?: () => string | undefined
+  scope?: () => PromptHistoryScope
+}
+
+// The provider keeps every retained entry; this hook is the per-composer view. Upstream
+// gives each Prompt instance its own cursor, which is exactly the per-session cursor the
+// session scope needs, so the view only has to filter the entries.
+export function usePromptHistory(currentDraft = emptyPrompt, options: PromptHistoryOptions = {}) {
+  const history = useHistoryEntries()
+  let index = 0
+  let draft: PromptInfo | undefined
+  let lastKey: CursorKey | undefined
+  let lastScope: PromptHistoryScope | undefined
+
+  const scope = () => options.scope?.() ?? "global"
+  const sessionID = () => options.sessionID?.()
+  const sessionKey = () => cursorKey(sessionID())
+
+  const items = () => {
+    if (scope() === "session") {
+      const key = sessionKey()
+      return history.entries
+        .filter((entry) => cursorKey(entry.sessionID) === key)
+        .map((entry) => entry.prompt)
+    }
+    // The global view is the newest 50 entries across all sessions. Session-scope
+    // retention can make the file longer than that, so slice the view rather than
+    // truncating the persisted history.
+    return history.entries.slice(-MAX_HISTORY_ENTRIES).map((entry) => entry.prompt)
+  }
+
+  function reset() {
+    index = 0
+    draft = undefined
+  }
+
+  // Switching scope or moving to another session invalidates the cursor that the old view
+  // owned. Reset rather than letting a stale index skip the newest item.
+  function syncView() {
+    const nextScope = scope()
+    const nextKey = sessionKey()
+    if (lastScope === nextScope && lastKey === nextKey) return
+    lastScope = nextScope
+    lastKey = nextKey
+    reset()
+  }
+
+  return {
+    get entries() {
+      return items()
+    },
+    error() {
+      return history.error()
+    },
+    clearError() {
+      history.clearError()
+    },
+    has() {
+      return history.has(sessionID(), scope())
+    },
+    move(direction: 1 | -1, input: string) {
+      syncView()
+      const entries = items()
+      const next = index + direction
+      if (next < -entries.length || next > 0) return
+      if (index < 0 && input && entries.at(index)?.text !== input) return
+      if (index === 0) draft = structuredClone({ ...currentDraft(), text: input })
+      index = next
+      if (next !== 0) {
+        const entry = entries.at(next)
+        return entry ? { ...emptyPrompt(), ...structuredClone(unwrap(entry)) } : undefined
+      }
+      const restored = draft
+      draft = undefined
+      return restored
+    },
+    reset,
+    append(item: PromptInfo, sessionIDArg = sessionID()) {
+      reset()
+      history.append(sessionIDArg, item, scope())
+    },
+  }
+}

@@ -313,7 +313,6 @@ function SessionScreenContent(props: {
             setVisibleRef={timeline.view.setVisibleRef}
             anchor={timeline.view.anchor}
             setRevealMessage={timeline.view.setRevealMessage}
-            setRevealPart={timeline.view.setRevealPart}
             reveal={timeline.view.reveal}
             setScrollToEnd={timeline.view.setScrollToEnd}
             setPage={timeline.view.setPage}
@@ -439,7 +438,6 @@ function SessionScreenContent(props: {
               screen={props.screen}
               model={model}
               suggestionBoundary={timeline.visible}
-              onReveal={timeline.actions.revealPart}
             />
           )}
         </Show>

@@ -28,7 +28,7 @@ export const sdkSnippet = [
 
 export type ProductSlug = "desktop" | "terminal" | "mobile" | "sdk"
 /** The products after the carousel's four, with pages of their own and cards on /product. */
-export type MoreSlug = "ide" | "mini"
+export type MoreSlug = "mini"
 /** Every product with a page. */
 export type PageSlug = ProductSlug | MoreSlug
 
@@ -72,17 +72,9 @@ export const products = [
 
 /**
  * The products /product lists after the carousel's four, in this order. Copy follows each one's
- * README and docs: IDE extensions is the VS Code extension (sdks/vscode, publisher sst-dev; docs
- * /docs/ide) plus `opencode acp` for ACP editors (docs /cli/acp), and Mini is `opencode mini`
- * (packages/tui/src/mini).
+ * README and docs: Mini is `opencode mini` (packages/tui/src/mini).
  */
 export const moreProducts = [
-  {
-    slug: "ide",
-    name: "IDE extensions",
-    body: "Open OpenCode in VS Code, Cursor and Windsurf, or in Zed and JetBrains IDEs through ACP.",
-    action: "Install",
-  },
   {
     slug: "mini",
     name: "Mini",
@@ -97,18 +89,15 @@ export const moreProducts = [
   isNew?: boolean
 }[]
 
-/** Every product with a page, including IDE extensions and Mini, which have pages (/ide, /mini) but aren't listed. */
+/** Every product with a page, including Mini, which has a page (/mini) but is not listed. */
 export const allProductPages = [...products, ...moreProducts]
 
 /**
  * The products listed on /product, in the site's product order: its grid (the home carousel's four),
- * the arrow keys on product pages, the footer, search and llms.txt. IDE extensions and Mini stay
- * reachable by URL only.
+ * the arrow keys on product pages, the footer, search and llms.txt. Mini stays reachable by URL
+ * only.
  */
-export const productPages = allProductPages.filter((product) => product.slug !== "ide" && product.slug !== "mini")
-
-/** The ACP docs: Zed, JetBrains IDEs and other ACP editors run `opencode acp`. */
-export const acpDocs = docsUrl("/cli/acp/")
+export const productPages = allProductPages.filter((product) => product.slug !== "mini")
 
 /**
  * Settings › Extensions card: OpenCode inside editors. The VS Code extension is sdks/vscode
@@ -122,20 +111,18 @@ export const extensions = {
 }
 
 /**
- * The Android app's status, the one switch for every Android mention on the site. "coming-soon"
- * lists Android as "Coming soon" with no link (download buttons, menus and sheets, the Download
- * sections), leads every visitor with the iPhone app, keeps Android out of the structured data's
- * operating systems, says "coming soon to Android" in the copy and redirects /download/<channel>/android*
- * to /mobile. When the Android app ships, set this to "available" and put its Google Play URL in
- * `mobileStores` below.
+ * The Android app's status, the one switch for every Android mention on the site. "available"
+ * links Google Play from the download buttons, menus and sheets and the Download sections, and
+ * lists Android in the structured data's operating systems and the copy. "coming-soon" lists
+ * Android as "Coming soon" with no link and leads every visitor with the iPhone app instead.
  */
-export const androidStatus = "coming-soon" as "coming-soon" | "available"
+export const androidStatus = "available" as "coming-soon" | "available"
 export const androidSoon = androidStatus === "coming-soon"
 
 /**
  * Where to get the mobile apps. iPhone is a public TestFlight beta until the App Store listing ships
- * (David, 5 Nov 2026); swap the link and label for the App Store URL then. Android has no listing yet,
- * so it opens the Mobile page's Download section. `soon` lists a store as "Coming soon", with no link.
+ * (David, 5 Nov 2026); swap the link and label for the App Store URL then. Android is on Google Play.
+ * `soon` lists a store as "Coming soon", with no link.
  */
 export const mobileStores = [
   {
@@ -151,7 +138,7 @@ export const mobileStores = [
     platform: "Android",
     label: "Google Play",
     device: "Android",
-    href: "/mobile#download",
+    href: "https://play.google.com/store/apps/details?id=ai.opencode.mobilecode",
     soon: androidSoon,
     beta: false,
   },
@@ -161,8 +148,8 @@ export const mobileStores = [
  * The changelog areas (keys in `/changelog?area=`) for each product: its product page lists the
  * newest entries with notes there and links to the changelog with the same filter. Core notes (the
  * shared server and agent) are on the changelog for everyone and would fill every product's list.
- * Mobile has no area in the release notes yet, so its page says it is new. IDE extensions and Mini
- * have no areas, so their pages leave the changelog out.
+ * Mobile has no area in the release notes yet, so its page says it is new. Mini has no
+ * area, so its page leaves the changelog out.
  */
 export const productAreas: Partial<Record<PageSlug, string[]>> = {
   desktop: ["desktop"],

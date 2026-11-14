@@ -390,7 +390,7 @@ export function createHomeSessionsController(home: HomeController) {
       .update({ sessionID: session.id, title: next }, { signal })
       .then(() => {
         ctx.data.session.remember({ ...(ctx.data.session.get(session.id) ?? session), title: next })
-        // Rename advances time.updated server-side, but the data layer's rename guard keeps the session where it was.
+        // Rename advances time.updated server-side; like the iOS app, the session moves when the list next reloads.
         queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) =>
           current?.map((item) => (item.id === session.id ? { ...item, title: next } : item)),
         )
@@ -658,7 +658,10 @@ function localDay(date: Date) {
   return date.getFullYear() * 10_000 + date.getMonth() * 100 + date.getDate()
 }
 
-function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof useLanguage>): HomeSessionGroup[] {
+export function groupSessions(
+  records: HomeSessionRecord[],
+  language: ReturnType<typeof useLanguage>,
+): HomeSessionGroup[] {
   const now = new Date()
   const today = localDay(now)
   const yesterday = localDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))

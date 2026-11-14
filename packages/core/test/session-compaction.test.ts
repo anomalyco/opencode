@@ -792,7 +792,9 @@ it.effect("summary updates include the retained tail in compaction hooks and the
 
     expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
     expect(requests).toHaveLength(1)
-    expect(requests[0].messages.slice(0, -1)).toEqual(expected)
+    // Hooks read the checkpoint's stored metadata; the model request does not carry it.
+    expect(expected[0]?.metadata).toEqual({ recent: "[User]: Previous exact request" })
+    expect(requests[0].messages.slice(0, -1)).toEqual(expected.map((message) => Message.make({ ...message })))
     expect(requests[0].messages.at(-1)?.content).toEqual([{ type: "text", text: SessionCompaction.buildPrompt(true) }])
     const store = yield* SessionStore.Service
     expect(yield* store.context(session.id)).toMatchObject([

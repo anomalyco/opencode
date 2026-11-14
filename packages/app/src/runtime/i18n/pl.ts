@@ -153,7 +153,7 @@ export const dict = {
   "provider.connect.title": "Połącz {{provider}}",
   "provider.connect.method.apiKey": "Klucz API",
   "provider.connect.status.inProgress": "Autoryzacja w toku…",
-  "provider.connect.status.waiting": "Oczekiwanie na autoryzację…",
+  "provider.connect.status.waiting": "Oczekiwanie na autoryzację",
   "provider.connect.status.failed": "Autoryzacja nie powiodła się: {{error}}",
   "provider.connect.apiKey.description":
     "Wprowadź swój klucz API {{provider}}, aby połączyć konto i używać modeli {{provider}} w OpenCode.",
@@ -858,7 +858,6 @@ export const dict = {
     "Spowoduje to trwałe usunięcie {{count}} drzew roboczych bez powiązanych sesji.",
   "command.session.location.cycle": "Zmień lokalizację sesji",
   "dialog.provider.anthropic.note": "Bezpośredni dostęp do modeli Claude za pomocą klucza API",
-  "provider.connect.title.anthropicProMax": "Zaloguj się przez Anthropic",
   "prompt.toast.uploading.cancelFile": "Anuluj przesyłanie pliku {{filename}}",
   "prompt.toast.uploadFailed.title": "Przesyłanie nie powiodło się",
   "prompt.toast.uploading.percent": "{{percent}}%",

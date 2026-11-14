@@ -175,6 +175,7 @@ export const dict = {
   "ui.common.dismiss": "Одбаци",
   "ui.common.close": "Затвори",
   "ui.common.next": "Следеће",
+  "ui.common.continue": "Настави",
   "ui.common.submit": "Пошаљи",
   "ui.common.showMore": "Прикажи више",
   "ui.permission.deny": "Дени",

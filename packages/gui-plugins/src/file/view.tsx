@@ -12,6 +12,7 @@ import { createKeyed, usePlugin, type LineRange, type MountedSession, type Sessi
 import { artifactKind } from "@opencode/util/artifact"
 import ArtifactView from "./artifact-view"
 import { useShared } from "./context"
+import { createPreviewFind, PreviewFindBar } from "./find"
 import { fileTabPath } from "./path"
 import {
   FILE_SCROLL_INTERACTED,
@@ -71,7 +72,7 @@ function FileCommentMenu(props: {
 /** The code view's scroll element and the animation frame that restores or stores its scroll. */
 type ScrollTarget = { element?: HTMLDivElement; frame?: number }
 
-type FindState = { find: FileSearchHandle | null }
+type FindState = { find: FileSearchHandle | null; root?: HTMLDivElement }
 
 /** The session the view shows and the one it showed before a switch, whose unsaved scroll a switch still stores. */
 type ShownSessions = { current: MountedSession; previous?: MountedSession }
@@ -417,7 +418,9 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
     ),
   })
 
-  // Mod+F finds in the shown file.
+  const previewFind = createPreviewFind({ root: () => state.root, active })
+
+  // Mod+F finds in the shown file, or in its preview.
   makeEventListener(
     window,
     "keydown",
@@ -430,6 +433,8 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
 
       event.preventDefault()
       event.stopPropagation()
+
+      if (previewFind.open()) return
       // Find scrolls to its matches; the stored scroll must not pull the view back.
       scrollSync.interacted()
       state.find?.focus()
@@ -523,7 +528,12 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
   )
 
   return (
-    <div class="relative h-full min-h-0 flex flex-col" classList={{ "mt-3": !artifact() }}>
+    <div
+      ref={(el) => (state.root = el)}
+      class="relative h-full min-h-0 flex flex-col"
+      classList={{ "mt-3": !artifact() }}
+    >
+      <PreviewFindBar find={previewFind} />
       <Switch>
         <Match when={current()?.loaded ? current()?.content : undefined}>
           {(value) => (
