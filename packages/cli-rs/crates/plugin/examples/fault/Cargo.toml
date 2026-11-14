@@ -10,6 +10,11 @@ publish = false
 name = "opencode_fault"
 crate-type = ["cdylib"]
 
+[features]
+# Builds the plugin under another ID, for a crash of a third plugin (`lib.rs`).
+b = []
+c = []
+
 [dependencies]
 opencode-plugin-abi = { path = "../../../plugin-abi" }
 
