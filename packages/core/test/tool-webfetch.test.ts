@@ -96,6 +96,22 @@ describe("WebFetchTool helpers", () => {
     )
   })
 
+  test("preserves anchors without href as text and inline code", () => {
+    const html = `<p><a id="section"></a>See <a>Overview</a> and <code>A<a>B</a>C</code>.</p>`
+    expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe("See Overview and `ABC`.")
+  })
+
+  test.each([
+    [`<a id="section"></a>`, ""],
+    [`<a>Overview</a>`, "Overview"],
+    [`<a><strong>Overview</strong></a>`, "**Overview**"],
+    [`<code>A<a>B</a>C</code>`, "`ABC`"],
+    [`<a href="/guide">Guide</a>`, "[Guide](/guide)"],
+    [`<a href="">Home</a>`, "[Home]()"],
+  ])("renders anchor destinations and children for %j", (html, expected) => {
+    expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(expected)
+  })
+
   test("preserves inline and preformatted code verbatim with safe fences", () => {
     const html = `<p>Use <code>say(\`hello\`)</code> now.</p><pre><code class="language-ts">const fence = \`\`\`\n&amp; stays decoded</code></pre>`
     expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(
