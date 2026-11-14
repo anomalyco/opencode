@@ -157,10 +157,11 @@ export function DialogPrompt(props: DialogPromptProps) {
         </Show>
       }
     >
-      <box gap={1}>
+      <box gap={1} flexShrink={1} minHeight={0}>
         {props.description?.()}
         <textarea
           height={1}
+          flexShrink={0}
           wrapMode="none"
           ref={(val: TextareaRenderable) => {
             textarea = val
