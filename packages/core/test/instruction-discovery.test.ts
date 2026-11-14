@@ -482,6 +482,65 @@ describe("ConfigInstructionPlugin.Plugin", () => {
     ),
   )
 
+  // Creating symlinks on Windows needs developer mode or elevation.
+  ;(process.platform === "win32" ? it.live.skip : it.live)(
+    "rescans a symlinked AGENTS.md when its target changes",
+    () =>
+      tmpdirScoped().pipe(
+        Effect.flatMap((tmp) => {
+          const link = path.join(tmp.path, "AGENTS.md")
+          const first = path.join(tmp.path, "real", "first.md")
+          const second = path.join(tmp.path, "real", "second.md")
+          return Effect.gen(function* () {
+            yield* Effect.promise(async () => {
+              await fs.mkdir(path.dirname(first))
+              await fs.writeFile(first, "first")
+              await fs.writeFile(second, "second")
+              await fs.symlink(first, link)
+            })
+            const discovery = yield* start()
+            const initialized = yield* readInitial(yield* discovery.load())
+            expect(initialized.text).toBe(`Instructions from: ${first}\nfirst`)
+
+            yield* Effect.promise(() => fs.writeFile(first, "first changed"))
+            yield* emitAndWait({ type: "update", path: first })
+            expect((yield* readUpdate(yield* discovery.load(), initialized)).text).toContain(
+              `Instructions from: ${first}\nfirst changed`,
+            )
+
+            yield* Effect.promise(() => fs.rm(first))
+            yield* emitAndWait({ type: "delete", path: first })
+            yield* Effect.promise(() => fs.writeFile(first, "first restored"))
+            yield* emitAndWait({ type: "create", path: first })
+            expect((yield* readUpdate(yield* discovery.load(), initialized)).text).toContain(
+              `Instructions from: ${first}\nfirst restored`,
+            )
+
+            yield* Effect.promise(async () => {
+              await fs.rm(link)
+              await fs.symlink(second, link)
+            })
+            yield* emitAndWait({ type: "create", path: link })
+            yield* Effect.promise(() => fs.writeFile(second, "second changed"))
+            yield* emitAndWait({ type: "update", path: second })
+            expect((yield* readUpdate(yield* discovery.load(), initialized)).text).toContain(
+              `Instructions from: ${second}\nsecond changed`,
+            )
+          }).pipe(
+            Effect.provide(
+              instructionLayer({
+                config: path.join(tmp.path, "global"),
+                locationServiceLayer: Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+                ),
+              }),
+            ),
+          )
+        }),
+      ),
+  )
+
   it.live("stops instruction candidates at the project root outside home", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((tmp) => {
