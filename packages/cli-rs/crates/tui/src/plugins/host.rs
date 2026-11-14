@@ -783,6 +783,13 @@ impl abi::Read for Reader<'_> {
         })
     }
 
+    fn sessions(&self) -> Vec<abi::Session> {
+        self.tui.data.read(|state| {
+            let sessions = state.sessions().into_iter();
+            sessions.map(|info| abi::Session { info: info.clone(), status: status(state.status(&info.id)) }).collect()
+        })
+    }
+
     fn messages(&self, id: &str, visit: &mut dyn FnMut(&[SessionMessageInfo])) {
         // The store's reads nest, so `visit` may read again.
         self.session(id, |state, id| visit(state.messages(id)));

@@ -1207,6 +1207,30 @@ pub struct Layout {
     /// 1.5: cells outside each edge; a negative margin moves the node over its neighbors.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub margin: Option<Edges>,
+    /// 2.0 (P8): out of its parent's flow, placed against its edges (TS `position: "absolute"`). An older host lays it
+    /// out in the flow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub absolute: Option<Absolute>,
+}
+
+/// 2.0 (P8): where an absolute node sits: cells from its parent's edges, a negative one outside them, and its paint
+/// order among its siblings (TS `top`, `right`, `bottom`, `left` and `zIndex`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Absolute {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top: Option<i16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub right: Option<i16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bottom: Option<i16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub left: Option<i16>,
+    #[serde(default, skip_serializing_if = "is_zero_i32")]
+    pub z: i32,
+}
+
+fn is_zero_i32(value: &i32) -> bool {
+    *value == 0
 }
 
 impl Layout {
@@ -1985,6 +2009,8 @@ pub enum HostRequest {
     Focused,
     /// 2.0 (P2): [`Read::mode`].
     InputMode,
+    /// 2.0 (P8): [`Read::sessions`].
+    Sessions,
 }
 
 /// 1.5: the composer on screen, from [`Read::composer`].
@@ -2597,6 +2623,11 @@ pub trait Read {
     fn family(&self, _id: &str) -> Family {
         Family::default()
     }
+    /// 2.0 (P8): every session the host has loaded, most recently updated first, and whether each runs (TS
+    /// `data.session.list()`).
+    fn sessions(&self) -> Vec<Session> {
+        Vec::new()
+    }
     /// Calls `visit` with the loaded messages of session `id`, oldest first; empty when none are loaded. In process
     /// the host lends its own list; over the C ABI the plugin gets a copy.
     fn messages(&self, _id: &str, visit: &mut dyn FnMut(&[SessionMessageInfo])) {
@@ -3056,6 +3087,10 @@ impl Read for HostHandle {
 
     fn family(&self, id: &str) -> Family {
         self.read(&HostRequest::Family { id: id.to_owned() }).unwrap_or_default()
+    }
+
+    fn sessions(&self) -> Vec<Session> {
+        self.read(&HostRequest::Sessions).unwrap_or_default()
     }
 
     fn messages(&self, id: &str, visit: &mut dyn FnMut(&[SessionMessageInfo])) {

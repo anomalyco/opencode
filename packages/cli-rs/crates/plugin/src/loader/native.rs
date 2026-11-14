@@ -986,6 +986,7 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
         }
         HostRequest::Session { id } => return read(ctx, |read| serde_json::to_value(read.session(&id))),
         HostRequest::Family { id } => return read(ctx, |read| serde_json::to_value(read.family(&id))),
+        HostRequest::Sessions => return read(ctx, |read| serde_json::to_value(read.sessions())),
         HostRequest::Messages { id } => {
             return read(ctx, |read| {
                 let mut value = Ok(serde_json::Value::Null);
@@ -1245,7 +1246,8 @@ fn effect(request: &HostRequest) -> bool {
         | HostRequest::Transcript
         | HostRequest::Rect { .. }
         | HostRequest::Focused
-        | HostRequest::InputMode => false,
+        | HostRequest::InputMode
+        | HostRequest::Sessions => false,
     }
 }
 
