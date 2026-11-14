@@ -33,6 +33,7 @@ import { createTwoFilesPatch } from "diff"
 import { Duration, Effect, Exit, Logger, Option, Schema, Scope } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { ACP } from "../../src/acp/agent"
+import { ACPConnection } from "../../src/acp/connection"
 import { ACPTurn } from "../../src/acp/turn"
 
 // The fake server sends and stores the wire form of each value.
@@ -152,6 +153,7 @@ export type WireOptions = {
     signal: AbortSignal,
   ) => CreateElicitationResponse | Promise<CreateElicitationResponse>
   readonly cancelDrainTimeout?: Duration.Input
+  readonly connectTimeout?: Duration.Input
 }
 
 type FormReply = {
@@ -438,10 +440,15 @@ export async function startWire(options: WireOptions = {}) {
       Effect.provide(FetchHttpClient.layer),
       Effect.flatMap((client) => ACP.connect(client, ndJsonStream(agentToClient.writable, clientToAgent.readable))),
       Scope.provide(agentScope),
-      (effect) =>
-        options.cancelDrainTimeout === undefined
-          ? effect
-          : Effect.provideService(effect, ACPTurn.CancelDrainTimeout, options.cancelDrainTimeout),
+      (effect) => {
+        const drain =
+          options.cancelDrainTimeout === undefined
+            ? effect
+            : Effect.provideService(effect, ACPTurn.CancelDrainTimeout, options.cancelDrainTimeout)
+        return options.connectTimeout === undefined
+          ? drain
+          : Effect.provideService(drain, ACPConnection.ConnectedTimeout, options.connectTimeout)
+      },
       Effect.provide(Logger.layer([Logger.make((log) => logs.push({ message: log.message, cause: log.cause }))])),
     ),
   )

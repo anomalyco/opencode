@@ -4,6 +4,7 @@ import type { Command } from "@opencode/schema/command"
 import type { Model } from "@opencode/schema/model"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Cause, Deferred, Effect, Exit, Schedule, Semaphore, Stream, SubscriptionRef } from "effect"
+import { ACPConnection } from "./connection"
 import { ACPError } from "./error"
 
 export const builtinCommands = new Map([
@@ -85,7 +86,9 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
   )
 
   const create = Effect.fnUntraced(function* (cwd: string) {
-    yield* Deferred.await(connected)
+    // The loads below do not need the stream, but the failure is reported here so that a silent
+    // connection fails once, at the first request, instead of on every request that follows.
+    yield* ACPConnection.awaitConnected(connected)
     return {
       cwd,
       catalog: yield* SubscriptionRef.make<Catalog>(yield* load(client, cwd)),
