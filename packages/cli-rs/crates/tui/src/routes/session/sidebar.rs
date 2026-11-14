@@ -125,11 +125,12 @@ pub fn mount(tui: &Tui, row: &View, session: &SessionID) -> Sidebar {
 
 impl Sidebar {
     /// Paints in the page theme again, keeping where it is and its scroll position. The plugin sections take the
-    /// theme when they render, so they render again.
+    /// theme in place; when one cannot, they mount again.
     pub fn restyle(&self, tui: &Tui) {
         let inner = &self.inner;
         inner.paint(&tui.page());
-        if inner.placed.get() != Place::Hidden {
+        let restyled = inner.slots.borrow().iter().fold(true, |done, slot| slot.restyle(tui) && done);
+        if !restyled && inner.placed.get() != Place::Hidden {
             inner.slots.borrow_mut().clear();
             inner.content.clear();
             inner.footer.clear();

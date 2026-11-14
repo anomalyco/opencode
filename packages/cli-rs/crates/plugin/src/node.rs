@@ -149,7 +149,11 @@ impl Mount {
     pub fn draw(&self, host: &dyn Host, changed: &abi::Changed) {
         let input = self.input.borrow().clone();
         let node = match (self.render)(host, &input, changed) {
-            abi::Render::Keep => return,
+            // A render that keeps what it showed still takes a new theme: its colors are tokens.
+            abi::Render::Keep => match self.shown.borrow().clone() {
+                Some(shown) if !self.tree.borrow().styled_in(&host.theme()) => shown,
+                _ => return,
+            },
             abi::Render::Hide => None,
             abi::Render::Show(node) if fits(&node) => Some(node),
             abi::Render::Show(_) => {

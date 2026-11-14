@@ -230,7 +230,7 @@ impl Prompt {
     }
 
     /// Paints in the page theme in place, as TS's prompt follows it: the text, cursor, undo history, mentions and
-    /// focus stay. The footer's plugin claims take the theme when they render, so they render again.
+    /// focus stay. The footer's plugin claims take the theme in place, or mount again when one cannot.
     pub fn restyle(&self, tui: &Tui) {
         let inner = &self.inner;
         let theme = tui.page();
@@ -239,7 +239,10 @@ impl Prompt {
         let old = inner.theme.replace(theme.clone());
         parts::restyle(inner, &old, &theme);
         inner.previews.restyle(&theme);
-        inner.footer_slots.borrow_mut().0 = None;
+        let restyled = inner.footer_slots.borrow().1.iter().fold(true, |done, slot| slot.restyle(tui) && done);
+        if !restyled {
+            inner.footer_slots.borrow_mut().0 = None;
+        }
         inner.refresh(tui);
         if let Some(complete) = inner.autocomplete.get() {
             complete.restyle(tui);

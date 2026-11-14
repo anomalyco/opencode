@@ -2021,6 +2021,19 @@ impl SlotMount {
     pub fn is_empty(&self) -> bool {
         self.claims.is_empty() && self.nested.as_ref().is_none_or(|nested| nested.appended.borrow().is_empty())
     }
+
+    /// Takes the host's theme in place: each claim keeps its widgets, its mount and their state. False when a claim
+    /// cannot, so the owner mounts the slot again.
+    pub fn restyle(&self, host: &dyn Host) -> bool {
+        let mut done = self.claims.iter().fold(true, |done, claim| claim.restyle(host) && done);
+        if let Some(nested) = &self.nested {
+            done = nested.appended.borrow().iter().fold(done, |done, (_, claim)| claim.restyle(host) && done);
+        }
+        if let Some(live) = self.live() {
+            settle(host, live);
+        }
+        done
+    }
 }
 
 /// The claims appended to a mounted slot, in claim order after a hidden marker that follows its content. A claim on a
