@@ -238,6 +238,41 @@ it.instance(
 )
 
 it.instance(
+  "nested repository without a commit does not block the snapshot",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    yield* exec(tmp.path, ["git", "init", "-q", "unborn"])
+    yield* write(`${tmp.path}/unborn/pending.txt`, "PENDING")
+    const snapshot = yield* Snapshot.Service
+    const before = yield* snapshot.track()
+    expect(before).toBeTruthy()
+
+    yield* exec(tmp.path, ["git", "init", "-q", "born"])
+    yield* write(`${tmp.path}/born/file.txt`, "BORN")
+    yield* exec(`${tmp.path}/born`, ["git", "add", "file.txt"])
+    yield* exec(`${tmp.path}/born`, [
+      "git",
+      "-c",
+      "user.name=test",
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-q",
+      "-m",
+      "born",
+    ])
+    yield* write(`${tmp.path}/b.txt`, "MODIFIED")
+    const files = (yield* snapshot.patch(before!)).files
+    expect(files).toContain(fwd(tmp.path, "b.txt"))
+    expect(files).toContain(fwd(tmp.path, "born"))
+    expect(files.filter((file) => file.includes("unborn"))).toEqual([])
+  }),
+  { git: true },
+)
+
+it.instance(
   "special characters in filenames",
   withTrackedSnapshot(({ tmp, snapshot, before }) =>
     Effect.gen(function* () {
