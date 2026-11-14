@@ -191,6 +191,8 @@ pub struct Monitor {
     /// A test set the clock: the record still takes the monotonic clock, which the watchdog reads.
     injected: Cell<bool>,
     frame: RefCell<Rc<dyn Fn() -> u64>>,
+    /// The time of the calls and host work nested in each host work that runs, innermost last ([`Monitor::host`]).
+    nested: RefCell<Vec<Duration>>,
     plugins: RefCell<Vec<Stats>>,
     /// The frame all plugins' calls are summed in, and their sum.
     all: Cell<Option<(u64, Duration)>>,
@@ -291,6 +293,7 @@ impl Monitor {
             queued: RefCell::new(Rc::new(queued)),
             injected: Cell::new(false),
             frame: RefCell::new(Rc::new(|| 0)),
+            nested: RefCell::default(),
             plugins: RefCell::default(),
             all: Cell::new(None),
             over_all: Cell::new(0),
@@ -425,15 +428,28 @@ impl Monitor {
     /// copying a decoded image in), timed apart from the plugin's calls: it is not in the plugin's frame budget, the
     /// limits of 4.2 bound it, and a slow plugin's details show it beside its calls (synthesis 4.4, "host time for
     /// plugin X").
+    /// Work of another plugin nested in it (a nested slot's view and the host's work for its nodes) is that plugin's,
+    /// and not this one's (review carbon 5.2).
     pub fn host(&self, slot: Slot, work: &mut dyn FnMut()) {
         let clock = self.clock.borrow().clone();
+        self.nested.borrow_mut().push(Duration::ZERO);
         let start = clock();
         work();
         let took = clock().saturating_duration_since(start);
+        let inner = self.nested.borrow_mut().pop().unwrap_or_default();
+        self.nest(took);
+        let own = took.saturating_sub(inner);
         let mut plugins = self.plugins.borrow_mut();
         let stats = &mut plugins[usize::from(slot.0)];
-        stats.host.add(took);
-        stats.host_total += took;
+        stats.host.add(own);
+        stats.host_total += own;
+    }
+
+    /// A call or host work of `took` ran: the host work it is nested in, if any, does not count it.
+    fn nest(&self, took: Duration) {
+        if let Some(outer) = self.nested.borrow_mut().last_mut() {
+            *outer += took;
+        }
     }
 
     /// What the plugin in `slot`'s calls took in the host's frame now, its handlers, views, `layout` and updates, and
@@ -454,6 +470,7 @@ impl Monitor {
 
     /// What the budget makes of a call of `kind` that took `took`.
     fn account(&self, slot: Slot, kind: &'static str, took: Duration) -> Timed {
+        self.nest(took);
         let limits = self.limits();
         let frame = self.frame();
         let mut plugins = self.plugins.borrow_mut();
