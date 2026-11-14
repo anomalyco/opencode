@@ -421,6 +421,10 @@
     margin-top: 12px;
     margin-bottom: 24px;
     overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    /* A wrapped line continues indented, so it can't be read as a line of its own. */
+    text-indent: 2ch hanging each-line;
 
     scrollbar-width: none;
     &::-webkit-scrollbar {
@@ -535,6 +539,15 @@
     border-radius: 4px;
     margin: 1.5rem 0;
     display: block;
+  }
+}
+
+/* In the session timeline, a top-level code block in a reply widens into the timeline's spare width, up to 160px a
+   side, keeping a 24px gutter at the timeline's edges. Blocks in lists stay in their column. */
+@container session-timeline (width > 0px) {
+  [data-component="text-part"] [data-markdown-block] > [data-component="markdown-code"] {
+    --markdown-code-bleed: clamp(0px, (100cqi - 100% - 48px) / 2, 160px);
+    margin-inline: calc(-1 * var(--markdown-code-bleed));
   }
 }
 

@@ -1198,6 +1198,8 @@ export function createTimelineVirtualizer(input: Input) {
               style={{
                 left: "calc((100% - var(--panel-hold-width, 100%)) / 2)",
                 width: "var(--panel-hold-width, 100%)",
+                // Code blocks in replies size their overflow against the timeline's width.
+                container: "session-timeline / inline-size",
               }}
             >
               <For each={virtualRowKeys()}>{(rowKey) => <VirtualRow rowKey={rowKey} />}</For>
