@@ -15,7 +15,7 @@ import { rm } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { EmbeddedTerminalRenderable, TextAttributes, type CapturedLine } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
-import { startFakeServer, type FakeServer, type Options } from "../lib/fake-server"
+import { startFakeServer, type FakeServer, type Logged, type Options } from "../lib/fake-server"
 import {
   buildRust,
   command,
@@ -57,6 +57,8 @@ export type PtyStep = {
   scrollback?: number
   // Resizes the pseudo-terminal and the emulator before the keys.
   resize?: { cols: number; rows: number }
+  // Sent to the program the harness started, after the keys.
+  signal?: NodeJS.Signals
   timeout?: number
 }
 
@@ -97,6 +99,9 @@ export type PtyCase = {
   rsOnly?: boolean
   // As in P-CLI: writes files into the sandbox before the command runs.
   setup?: (root: string, server: string | undefined) => Promise<void>
+  // Checks a side's run once the steps are done (and the program exited, with `exits`): returns what is wrong. For
+  // what both sides must do, which a comparison of two sides that share a defect cannot catch.
+  verify?: (run: { requests: Logged[]; exit: number | undefined; screen: string[] }) => string[]
 }
 
 export function definePty(value: PtyCase) {
@@ -178,6 +183,7 @@ export async function runPty(side: Side, value: PtyCase) {
       terminal.height = step.resize.rows
     }
     if (step.keys !== undefined) proc.terminal?.write(step.keys)
+    if (step.signal) proc.kill(step.signal)
     step.emit?.forEach((event) => server?.emit(event))
     const failure = await waitFor(step, { screen, osc: () => oscLog(output.text), exited })
     if (failure) {
@@ -202,6 +208,8 @@ export async function runPty(side: Side, value: PtyCase) {
   }
   const exit =
     value.exits && !failures.length ? await Promise.race([exited, Bun.sleep(10_000).then(() => undefined)]) : undefined
+  if (value.verify && !failures.length)
+    failures.push(...value.verify({ requests: server?.requests ?? [], exit: exit?.code, screen: await screen() }))
   if (exit === undefined) proc.kill("SIGKILL")
   await proc.exited
   proc.terminal?.close()
