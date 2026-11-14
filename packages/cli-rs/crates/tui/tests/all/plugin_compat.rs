@@ -1,7 +1,8 @@
 //! The V2 compatibility layer (P8): today's `{ id, setup }` TUI plugins, with JSX over OpenTUI's intrinsics, on the JS
 //! host. The probe is `crates/plugin/examples/pipe/v2probe/tui.tsx`, written against `@opencode/plugin/tui` as an npm
 //! plugin is; the three published packages are compared with their native ports in `ports.rs`, and with TS cell for cell
-//! in P-APP (`parity/scenarios/P.8`). Every row skips without Bun, unless `OPENCODE_RS_REQUIRE_TS=1`.
+//! in P-APP (`parity/scenarios/P.8`); `ports::measure_the_three_npm_plugins` measures them. Every row skips without
+//! Bun, unless `OPENCODE_RS_REQUIRE_TS=1`.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -9,7 +10,7 @@ use std::time::Duration;
 
 use opencode_plugin::Status;
 use opencode_plugin::loader::approval::Decision;
-use opencode_plugin::pipe::{self, Config, Fault};
+use opencode_plugin::pipe::{Config, Fault};
 use opencode_tui::plugins::host::{External, external_with};
 use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
@@ -151,6 +152,51 @@ fn a_select_answers_the_value_picked() {
     assert_eq!(calls(&log), [json!({ "picked": { "n": 2 } })]);
 }
 
+// Expected (the audit's most used dialogs): `confirm`, `prompt` and `alert` show the host's dialogs, and each promise
+// answers what the user did there.
+#[test]
+fn confirm_prompt_and_alert_answer_their_promises() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe(config);
+    let app = &pipe.harness.app;
+    pipe.harness.tui.keymap.dispatch("v2probe.ask", None);
+    pipe.settle();
+    assert!(app.text().contains("Go on?"), "{}", app.text());
+    app.press("return");
+    pipe.settle();
+    assert!(app.text().contains("Name it"), "{}", app.text());
+    app.type_text("abc");
+    app.press("return");
+    pipe.settle();
+    assert!(app.text().contains("It told."), "{}", app.text());
+    app.press("return");
+    pipe.settle();
+    let expected = [json!({ "confirmed": true }), json!({ "prompted": "abc" }), json!({ "alerted": true })];
+    assert_eq!(calls(&log), expected);
+}
+
+// Expected (the audit's most used layout): a plugin's route draws its bordered, titled box with its padding, the data
+// its navigation gave, and a scroll the wheel moves.
+#[test]
+fn a_route_draws_a_bordered_box_and_a_scroll_with_its_data() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe(config);
+    pipe.harness.tui.keymap.dispatch("v2probe.page", None);
+    pipe.settle();
+    assert_eq!(pipe.status(PROBE), Some(Status::Active));
+    let screen = pipe.harness.app.text();
+    assert_eq!(pipe.harness.tui.route(), Route::Plugin { id: PROBE.to_owned(), name: "page".to_owned() });
+    assert!(screen.contains("╭─Page") && screen.contains("data n=3"), "{screen}");
+    assert!(screen.contains("line 4") && !screen.contains("line 9"), "{screen}");
+    let (x, y) = pipe.harness.find("line 2");
+    for _ in 0..5 {
+        pipe.harness.app.scroll(x, y, true);
+    }
+    pipe.settle();
+    let screen = pipe.harness.app.text();
+    assert!(screen.contains("line 9") && !screen.contains("line 0"), "{screen}");
+}
+
 // Expected (containment): a render that spins ends the JS host by the progress rule; the plugin fails, named, and the
 // JS host starts again for the others.
 #[test]
@@ -220,43 +266,4 @@ fn a_project_v2_plugin_waits_for_approval() {
     pipe.settle();
     assert!(marker.exists(), "the approved module did not run");
     assert_eq!(footer(&pipe), "v2probe 0:");
-}
-
-/// The JS host's resident set and the carrier's own time on the UI thread, for the report (P8's measure): three
-/// published packages loaded unmodified, each drawing, over a fake server. Not a gate; run with `--ignored`.
-#[test]
-#[ignore]
-fn measure_the_three_npm_plugins() {
-    let Some(config) = config() else { return };
-    let root = opencode_util::temp::tempdir().unwrap();
-    let plugins = root.path().join("config/plugins");
-    for name in ["opencode-subagents-sidebar", "@mynameistito/opencode-force-input", "opencode-session-usage"] {
-        crate::ports::unpack(name, &plugins.join(name.replace('/', "__")));
-    }
-    let _ = pipe::crossed();
-    let deps = Deps { route: support::session_route("ses_p"), ..support::deps(Arc::new(support::empty())) };
-    let harness = support::mount(160, 40, deps);
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
-    external_with(&harness.tui, external, Some(config));
-    let pipe = Pipe { harness, root };
-    for id in ["subagents-sidebar", "mynameistito.opencode-force-input", "opencode.sidebar.limit"] {
-        pipe.active(id);
-    }
-    pipe.settle();
-    let resident = pipe.scripts().resident().unwrap_or_default();
-    let before = pipe::crossed();
-    let frames = 200;
-    let begun = std::time::Instant::now();
-    for _ in 0..frames {
-        pipe.harness.app.advance(Duration::from_millis(16));
-    }
-    let wall = begun.elapsed();
-    let after = pipe::crossed();
-    eprintln!(
-        "three npm plugins: JS host resident {} KiB; {frames} idle frames: carrier time {:?} ({:?} a frame), wall {:?}",
-        resident >> 10,
-        after.host - before.host,
-        (after.host - before.host) / frames,
-        wall / frames,
-    );
 }
