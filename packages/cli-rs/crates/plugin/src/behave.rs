@@ -729,11 +729,7 @@ impl Surface {
                         };
                         Resolve::To(match aim {
                             Aim::Row(row) => y - row,
-                            Aim::Nearest(inset) if y - inset < before => y - inset,
-                            Aim::Nearest(_) if y + height > before + viewport.height as i32 => {
-                                y + height - viewport.height as i32
-                            }
-                            Aim::Nearest(_) => before,
+                            Aim::Nearest(inset) => nearest(y, height, before, viewport.height as i32, inset),
                         })
                     });
                     match aim {
@@ -929,6 +925,19 @@ fn hashers() -> (impl Hasher, impl Hasher, impl Hasher) {
         std::collections::hash_map::DefaultHasher::new(),
         std::collections::hash_map::DefaultHasher::new(),
     )
+}
+
+/// The offset `scrollIntoView({ block: "nearest" })` gives rows `y..y + height` from offset `top`, below `inset` rows of
+/// a `viewport`: no move when the node is inside, or covers the view from above and below; otherwise the edge that is
+/// out comes in, but a node taller than the view shows its start (OpenTUI's `scroll_into_view` does the same).
+fn nearest(y: i32, height: i32, top: i32, viewport: i32, inset: i32) -> i32 {
+    let (start, end, view) = (top + inset, top + viewport, viewport - inset);
+    match (y < start, y + height > end) {
+        (true, true) | (false, false) => top,
+        (true, false) if height < view => y - inset,
+        (false, true) if height > view => y - inset,
+        _ => y + height - viewport,
+    }
 }
 
 fn step_group(verb: &Scroll) -> &str {
