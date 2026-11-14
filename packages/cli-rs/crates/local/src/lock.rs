@@ -356,13 +356,24 @@ mod tests {
         acquire(dir.path(), "k", &options).unwrap().release().unwrap();
     }
 
+    // The owner's heartbeat refreshes a lock it holds past the stale time. The beat is waited for, not raced: a contender
+    // that checks while a starved heartbeat thread is late finds the lock stale at this test's short stale time, which
+    // the default (60 s, a beat every 20 s) leaves room for.
     #[test]
     fn heartbeat_keeps_a_long_hold_fresh() {
         let dir = opencode_util::temp::tempdir().unwrap();
         let options = Options { stale: Duration::from_millis(300), ..quick() };
         let held = acquire(dir.path(), "k", &options).unwrap();
-        thread::sleep(Duration::from_millis(700));
-        assert!(matches!(acquire(dir.path(), "k", &options), Err(Error::Timeout(_))));
+        let heartbeat = held.path().join("heartbeat");
+        // As a hold past the stale time would leave it without a beat.
+        let backdated = SystemTime::now();
+        touch(&heartbeat, backdated - Duration::from_secs(5)).unwrap();
+        assert!(stale(held.path(), options.stale).unwrap());
+        let begun = Instant::now();
+        while fs::metadata(&heartbeat).unwrap().modified().unwrap() < backdated {
+            assert!(begun.elapsed() < Duration::from_secs(10), "the heartbeat never refreshed the lock");
+            thread::sleep(Duration::from_millis(10));
+        }
         held.release().unwrap();
     }
 
