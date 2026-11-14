@@ -31,14 +31,12 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     // The sessions of the mounted sidebars, latest last: TS registers `/subagents` in the sidebar component, so it
     // picks from the session that sidebar shows.
     let mounted: Rc<RefCell<Vec<String>>> = Rc::default();
-    let pick = Command {
-        name: "subagents-sidebar.pick".to_owned(),
-        title: "Subagents: open one".to_owned(),
-        group: Some("Session".to_owned()),
-        slash: Some("subagents".to_owned()),
-        palette: true,
-        ..Command::default()
-    };
+    let pick = Command::default()
+        .with_name("subagents-sidebar.pick".to_owned())
+        .with_title("Subagents: open one".to_owned())
+        .with_group(Some("Session".to_owned()))
+        .with_slash(Some("subagents".to_owned()))
+        .with_palette(true);
     let shown = mounted.clone();
     setup.command(pick, move |host, _| {
         let Some(session) = shown.borrow().last().cloned() else { return };
@@ -56,12 +54,12 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         host.dialog(Dialog::Select(Select::new("Subagents", options, action)));
     });
     // Route navigation, as the TS plugin does: the built-in session list navigates this way too.
-    setup.command(Command { name: OPEN.to_owned(), ..Command::default() }, |host, input| {
+    setup.command(Command::default().with_name(OPEN.to_owned()), |host, input| {
         if let Some(id) = input {
             host.navigate(Route::Session { id: id.to_owned() });
         }
     });
-    setup.command(Command { name: TOGGLE.to_owned(), ..Command::default() }, |host, _| {
+    setup.command(Command::default().with_name(TOGGLE.to_owned()), |host, _| {
         let open = open(host);
         host.storage_merge("view", json!({ "open": !open }).as_object().cloned().unwrap_or_default());
     });

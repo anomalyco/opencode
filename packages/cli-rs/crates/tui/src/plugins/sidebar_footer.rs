@@ -21,7 +21,7 @@ const ROOT: &str = "footer";
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key(KEY);
-    setup.command(Command { name: DISMISS.to_owned(), ..Command::default() }, |host, _| {
+    setup.command(Command::default().with_name(DISMISS.to_owned()), |host, _| {
         host.storage_merge(KEY, serde_json::Map::from_iter([("dismissed".to_owned(), json!(true))]));
     });
     setup.surface(Surface::new("footer", Place::Slot(Placement::append(slot::SIDEBAR_FOOTER)), |cx| {

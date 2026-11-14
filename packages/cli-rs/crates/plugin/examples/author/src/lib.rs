@@ -12,13 +12,11 @@ const COUNT: &str = "count";
 fn setup(setup: &mut Setup) -> Result<(), String> {
     setup.storage_key(COUNT);
     setup.command(
-        Command {
-            name: "author.count".to_owned(),
-            title: "Count".to_owned(),
-            slash: Some("count".to_owned()),
-            palette: true,
-            ..Command::default()
-        },
+        Command::default()
+            .with_name("author.count".to_owned())
+            .with_title("Count".to_owned())
+            .with_slash(Some("count".to_owned()))
+            .with_palette(true),
         |host, _| count(host),
     );
     setup.slot(Placement::append("sidebar.content"), |read, _, changed| sidebar(read, changed));

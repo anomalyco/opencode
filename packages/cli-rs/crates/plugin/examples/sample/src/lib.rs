@@ -17,7 +17,10 @@
 #[cfg(feature = "witness")]
 mod witness {
     #[used]
-    #[cfg_attr(any(target_os = "linux", target_os = "android", target_os = "freebsd"), unsafe(link_section = ".init_array"))]
+    #[cfg_attr(
+        any(target_os = "linux", target_os = "android", target_os = "freebsd"),
+        unsafe(link_section = ".init_array")
+    )]
     #[cfg_attr(target_vendor = "apple", unsafe(link_section = "__DATA,__mod_init_func"))]
     #[cfg_attr(windows, unsafe(link_section = ".CRT$XCU"))]
     static INIT: extern "C" fn() = init;
@@ -145,17 +148,15 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
 /// `/p0brun <shell command>` runs `sh -c <command>` in the foreground, twice with `/p0btwice`, and toasts how each
 /// ended and sets it as the title.
 fn pty(setup: &mut Setup) {
-    let title = Command { slash: Some("p0btitle".to_owned()), ..command("p0b.title", "Set the title", None) };
+    let title = command("p0b.title", "Set the title", None).with_slash(Some("p0btitle".to_owned()));
     setup.command(title, |host, _| host.set_title("p0b title"));
-    let long = Command { slash: Some("p0blong".to_owned()), ..command("p0b.long", "Set a long title", None) };
+    let long = command("p0b.long", "Set a long title", None).with_slash(Some("p0blong".to_owned()));
     setup.command(long, |host, _| host.set_title(&format!("p0b long {}", "é".repeat(3000))));
     let asked = Rc::new(std::cell::RefCell::new(Vec::new()));
     for (name, times) in [("p0brun", 1), ("p0btwice", 2)] {
-        let run = Command {
-            slash: Some(name.to_owned()),
-            arguments: true,
-            ..command(&format!("p0b.{name}"), "Run a program", None)
-        };
+        let run = command(&format!("p0b.{name}"), "Run a program", None)
+            .with_slash(Some(name.to_owned()))
+            .with_arguments(true);
         let asked = asked.clone();
         setup.command(run, move |host, input| {
             for _ in 0..times {
@@ -179,15 +180,12 @@ fn pty(setup: &mut Setup) {
 }
 
 fn command(name: &str, title: &str, slash: Option<&str>) -> Command {
-    Command {
-        name: name.to_owned(),
-        title: title.to_owned(),
-        group: Some("Sample".to_owned()),
-        slash: slash.map(str::to_owned),
-        keybind: None,
-        palette: true,
-        ..Command::default()
-    }
+    Command::default()
+        .with_name(name.to_owned())
+        .with_title(title.to_owned())
+        .with_group(Some("Sample".to_owned()))
+        .with_slash(slash.map(str::to_owned))
+        .with_palette(true)
 }
 
 /// Counts ticks on its own thread and wakes the host after each. Dropping it, when the host destroys the instance,

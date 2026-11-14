@@ -304,15 +304,13 @@ fn body(cx: &mut v2::View<'_>, contents: &mut super::viewer::Contents, file: usi
     if !image && !entry.patch.is_empty() {
         let handle = *contents.patches.entry(file).or_insert_with(|| cx.content(entry.patch.clone()));
         let view = if entry.status == tree::Status::Modified { shape.view } else { DiffView::Unified };
-        return Node::Diff {
-            id: Some(format!("d:{}", entry.file)),
-            content: Source::Content(handle),
-            view,
-            filetype: opentui::syntax::filetype_for_path(&entry.file).map(str::to_owned),
-            hunks: Some("hunk".to_owned()),
-            wrap: Wrap::Char,
-            padding: u16::from(shape.compact),
-        };
+        return Node::diff(Source::Content(handle))
+            .with_id(format!("d:{}", entry.file))
+            .with_view(view)
+            .with_filetype(opentui::syntax::filetype_for_path(&entry.file).map(str::to_owned))
+            .with_hunks(Some("hunk".to_owned()))
+            .with_diff_wrap(Wrap::Char)
+            .with_diff_padding(u16::from(shape.compact));
     }
     let text = match () {
         _ if shape.mode == Mode::Committed && image => {

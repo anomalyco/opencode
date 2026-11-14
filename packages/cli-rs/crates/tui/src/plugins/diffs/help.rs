@@ -31,20 +31,13 @@ pub fn open(host: &dyn Host, viewer: &Viewer) {
         .collect();
     let rows: usize = groups.iter().map(|(_, rows)| rows.len() + 2).sum();
     let height = (rows as i64 - 1).min(i64::from(host.info().size.1) - 6).max(1);
-    host.dialog(Dialog::Panel(Panel {
-        key: KEY.to_owned(),
-        size: PanelSize::Medium,
-        title: vec![Span::new("Diff shortcuts")],
-        subtitle: None,
-        body: Node::column(body).gap(1),
-        actions: Vec::new(),
-        binds: Vec::new(),
-        bleed: false,
-        centered: true,
-        bare: false,
-        close: Some("esc close".to_owned()),
-        height: Some(height as u16),
-    }));
+    host.dialog(Dialog::Panel(
+        Panel::new(KEY.to_owned(), vec![Span::new("Diff shortcuts")], Node::column(body).gap(1))
+            .with_size(PanelSize::Medium)
+            .with_centered(true)
+            .with_close(Some("esc close".to_owned()))
+            .with_height(Some(height as u16)),
+    ));
 }
 
 type Group = (&'static str, Vec<(String, &'static str)>);

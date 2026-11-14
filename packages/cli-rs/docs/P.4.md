@@ -453,14 +453,14 @@ to the contract, for any plugin:
   `image-size`, with the bytes in base64.
 - A sticky box paints over the siblings it is pinned above, as CSS's sticky does.
 
-These are additive on the wire: a plugin built before them sends and reads what it did. They are not additive in Rust
-source, and 2.0's Rust SDK is not released, so this is a deliberate break of it: a plugin that writes `Fetch`,
-`Select`, `Panel`, `PanelInput` or `interact::Bind` out whole no longer compiles (E0063, a missing field). Write the
-fields it sets and take the rest from the default, `Fetch { method, path, query, ..Fetch::default() }`, as the
-examples do. A `Node::Diff` literal writes the two new fields (`wrap: Default::default(), padding: 0`), or uses
-`Node::diff(content)`. A `match` over `Dialog` needs an arm for `Dialog::Images`, or a `_` arm. Before the SDK is
-published, its request types get builders and its read-back types `#[non_exhaustive]`, so that later fields are
-additive in source too (O-125(6) protects the wire, which these keep).
+These are additive on the wire: a plugin built before them sends and reads what it did. In Rust source they are a
+deliberate break of the unreleased 2.0 SDK, which closes the requests a plugin builds: `Command`, `Fetch`, `Select`,
+`SelectOption`, `Panel`, `Images`, `Image`, `interact::Bind`, `interact::Layer`, the read-back `interact::PanelInput`
+and the variant `Node::Diff` are `#[non_exhaustive]`, so a field a later 2.x adds breaks no plugin's source. A literal
+of one does not compile; a plugin builds it from its constructor (`Type::default()`, `Select::new`, `Panel::new`,
+`Node::diff`, ...) and its `with_` setters, one a field, as the examples do. A `match` over `Dialog` needs an arm for
+`Dialog::Images`, or a `_` arm. The crate's README lists the move and the types to close next (O-125(6) protects the
+wire, which these keep).
 
 ### Storage
 

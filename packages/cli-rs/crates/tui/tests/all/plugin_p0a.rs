@@ -485,12 +485,12 @@ fn a_dispose_callback_that_panics_leaves_no_effects() {
 fn witness() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         setup.storage_key("ran");
-        let command = abi::Command { name: "witness.ran".to_owned(), ..abi::Command::default() };
+        let command = abi::Command::default().with_name("witness.ran".to_owned());
         setup.command(command, |host, _| {
             let ran = host.storage_get("ran").and_then(|ran| ran["count"].as_u64()).unwrap_or(0);
             host.storage_set("ran", serde_json::json!({ "count": ran + 1 }));
         });
-        let alert = abi::Command { name: "witness.alert".to_owned(), ..abi::Command::default() };
+        let alert = abi::Command::default().with_name("witness.alert".to_owned());
         setup.command(alert, |host, _| {
             let message = "A dialog of another plugin.".to_owned();
             host.dialog(abi::Dialog::Alert(abi::Alert { title: "Witness says".to_owned(), message, action: None }));

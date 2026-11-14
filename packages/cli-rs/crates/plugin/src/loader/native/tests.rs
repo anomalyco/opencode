@@ -1020,7 +1020,7 @@ fn the_sample_fetch_and_panel_act_the_same_in_process_and_through_the_library() 
     in_process.activate(&dynamic(&host));
     let direct = fetched(&host, &in_process);
     assert_eq!(direct.0, ["sample fetch: none", "sample fetch: /api/sample"]);
-    assert_eq!(direct.1, [abi::Fetch { method: "GET".into(), path: "/api/sample".into(), ..abi::Fetch::default() }]);
+    assert_eq!(direct.1, [abi::Fetch::default().with_method("GET".into()).with_path("/api/sample".into())]);
     let bodies: Vec<_> = direct
         .2
         .iter()
@@ -1039,9 +1039,9 @@ fn the_sample_fetch_and_panel_act_the_same_in_process_and_through_the_library() 
 /// A plugin that fetches on `x.fetch` and toasts each reply, with a claim that keeps it mounted.
 fn replying(setup: &mut abi::Setup) -> Result<(), String> {
     setup.slot(abi::Placement::append("home.footer"), |_, _, _| abi::Render::Hide);
-    let command = abi::Command { name: "x.fetch".into(), ..abi::Command::default() };
+    let command = abi::Command::default().with_name("x.fetch".into());
     setup.command(command, |host, _| {
-        host.fetch(abi::Fetch { method: "GET".into(), path: "/slow".into(), ..abi::Fetch::default() });
+        host.fetch(abi::Fetch::default().with_method("GET".into()).with_path("/slow".into()));
     });
     setup.on_reply(|host, _, _| host.toast(abi::Toast::new(abi::Variant::Info, "reply")));
     Ok(())
@@ -1138,7 +1138,7 @@ fn the_sample_prompt_mounts_fetch_and_read_the_same_in_process_and_through_the_l
             "sample prompt: 1 mounts, /api/sample/ses_1, off, ctrl+p",
         ]
     );
-    let fetch = abi::Fetch { method: "GET".into(), path: "/api/sample/ses_1".into(), ..abi::Fetch::default() };
+    let fetch = abi::Fetch::default().with_method("GET".into()).with_path("/api/sample/ses_1".into());
     assert_eq!(direct.1, [fetch.clone(), fetch]);
     in_process.set_active(&dynamic(&host), "sample", false);
     let library = active(&host, &build("still"));
@@ -1359,8 +1359,8 @@ fn asking(setup: &mut abi::Setup) -> Result<(), String> {
     let run = |host: &dyn abi::Host| {
         host.foreground(abi::Foreground { command: "true".into(), ..abi::Foreground::default() });
     };
-    setup.command(abi::Command { name: "x.run".into(), ..abi::Command::default() }, move |host, _| run(host));
-    setup.command(abi::Command { name: "x.boom".into(), ..abi::Command::default() }, move |host, _| {
+    setup.command(abi::Command::default().with_name("x.run".into()), move |host, _| run(host));
+    setup.command(abi::Command::default().with_name("x.boom".into()), move |host, _| {
         run(host);
         panic!("boom");
     });
@@ -1460,7 +1460,7 @@ fn waking(setup: &mut abi::Setup) -> Result<(), String> {
     let ran = runs.clone();
     setup.on_wake(move |host| {
         ran.set(ran.get() + 1);
-        host.fetch(abi::Fetch { method: "GET".into(), path: "/api/woken".into(), ..abi::Fetch::default() });
+        host.fetch(abi::Fetch::default().with_method("GET".into()).with_path("/api/woken".into()));
     });
     setup.slot(abi::Placement::append("home.footer"), move |_, _, changed| {
         go.store(true, Ordering::Release);
@@ -1577,7 +1577,7 @@ thread_local! {
 /// Keeps its waker in [`KEPT`]; its command panics.
 fn keeping(setup: &mut abi::Setup) -> Result<(), String> {
     KEPT.set(Some(setup.waker().ok_or("no waker")?));
-    let panic = abi::Command { name: "keeping.panic".to_owned(), ..abi::Command::default() };
+    let panic = abi::Command::default().with_name("keeping.panic".to_owned());
     setup.command(panic, |_, _| panic!("keeping command panicked"));
     Ok(())
 }
@@ -1600,9 +1600,9 @@ fn a_failed_plugins_waker_lets_go_of_the_host() {
 
 /// A command that fetches, and one that panics.
 fn fetching(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = |name: &str| abi::Command { name: name.to_owned(), ..abi::Command::default() };
+    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
     setup.command(command("fetching.fetch"), |host, _| {
-        host.fetch(abi::Fetch { method: "GET".into(), path: "/fetched".into(), ..abi::Fetch::default() });
+        host.fetch(abi::Fetch::default().with_method("GET".into()).with_path("/fetched".into()));
     });
     setup.command(command("fetching.panic"), |_, _| panic!("fetching panicked"));
     Ok(())
@@ -1659,10 +1659,10 @@ fn lifecycle(setup: &mut abi::Setup) -> Result<(), String> {
     setup.on_dispose(|host| {
         LIFECYCLE_DISPOSED.set(LIFECYCLE_DISPOSED.get() + 1);
         host.toast(abi::Toast::new(abi::Variant::Info, "dispose"));
-        host.fetch(abi::Fetch { method: "GET".into(), path: "/disposed".into(), ..abi::Fetch::default() });
+        host.fetch(abi::Fetch::default().with_method("GET".into()).with_path("/disposed".into()));
     });
     setup.on_reply(|host, _, _| host.toast(abi::Toast::new(abi::Variant::Info, "reply")));
-    let panic = abi::Command { name: "lifecycle.panic".to_owned(), ..abi::Command::default() };
+    let panic = abi::Command::default().with_name("lifecycle.panic".to_owned());
     setup.command(panic, |_, _| panic!("lifecycle command panicked"));
     Ok(())
 }
@@ -1958,7 +1958,7 @@ fn leak(host: &dyn abi::Host, at: &str) {
     host.toast(abi::Toast::new(abi::Variant::Info, "leaked"));
     host.attention(abi::Attention { title: None, message: "leaked".into(), notify: None, sound: None });
     host.open_route("r");
-    host.fetch(abi::Fetch { method: "GET".into(), path: "/leaked".into(), ..abi::Fetch::default() });
+    host.fetch(abi::Fetch::default().with_method("GET".into()).with_path("/leaked".into()));
     host.dialog(abi::Dialog::Close { key: "leaked".into() });
     // 1.6
     host.set_variant(Some("high"));
@@ -1989,10 +1989,10 @@ fn panicky(setup: &mut abi::Setup) -> Result<(), String> {
     });
     leak(setup.host(), "setup");
     PANICKY_WAKER.set(setup.waker());
-    setup.command(abi::Command { name: "x.panic".into(), ..abi::Command::default() }, |host, _| leak(host, "command"));
-    let fetch = abi::Command { name: "x.fetch".into(), ..abi::Command::default() };
+    setup.command(abi::Command::default().with_name("x.panic".into()), |host, _| leak(host, "command"));
+    let fetch = abi::Command::default().with_name("x.fetch".into());
     setup.command(fetch, |host, _| {
-        host.fetch(abi::Fetch { method: "GET".into(), path: "/asked".into(), ..abi::Fetch::default() });
+        host.fetch(abi::Fetch::default().with_method("GET".into()).with_path("/asked".into()));
     });
     setup.on_reply(|host, _, _| leak(host, "reply"));
     setup.on_event(&["session.execution.succeeded"], |host, _| leak(host, "event"));
@@ -2741,8 +2741,7 @@ thread_local! {
 
 /// A plugin whose `late.run` toasts, then takes 150 ms on the injected clock; `late.ok` takes nothing.
 fn late(setup: &mut abi::Setup) -> Result<(), String> {
-    let command =
-        |name: &str| abi::Command { name: name.to_owned(), title: name.to_owned(), ..abi::Command::default() };
+    let command = |name: &str| abi::Command::default().with_name(name.to_owned()).with_title(name.to_owned());
     setup.command(command("late.ok"), |_, _| {});
     setup.command(command("late.run"), |host, _| {
         let seen = LATE_RECORD.with_borrow(|record| {
@@ -2805,7 +2804,7 @@ fn an_overrun_applies_its_effects_then_fails_an_external_plugin_only() {
 
 /// A plugin that replaces `home.footer`, draws `rep` fences and has a route; `replacer.panic` panics.
 fn replacer(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = abi::Command { name: "replacer.panic".into(), title: "panic".into(), ..abi::Command::default() };
+    let command = abi::Command::default().with_name("replacer.panic".into()).with_title("panic".into());
     setup.command(command, |_, _| panic!("replacer fault"));
     setup.slot(abi::Placement::new(abi::SlotKind::Replace, "home.footer"), |_, _, _| {
         abi::Render::Show(abi::Node::text([abi::Span::new("REPLACED")]))
@@ -2885,7 +2884,7 @@ fn timed_seen() {
 /// A built-in whose command takes 150 ms on the injected clock.
 fn timed(setup: &mut abi::Setup) -> Result<(), String> {
     timed_seen();
-    let command = abi::Command { name: "timed.slow".into(), title: "slow".into(), ..abi::Command::default() };
+    let command = abi::Command::default().with_name("timed.slow".into()).with_title("slow".into());
     setup.command(command, |_, _| {
         timed_seen();
         TIMED_NOW.set(TIMED_NOW.get() + Duration::from_millis(150));
@@ -2930,7 +2929,7 @@ thread_local! {
 /// A built-in that notes, in each of its calls, whether a panic there would unwind to the host's catch.
 fn noting(setup: &mut abi::Setup) -> Result<(), String> {
     MARKED.with_borrow_mut(|caught| caught.push(crate::contain::catching()));
-    let command = abi::Command { name: "noting.run".into(), title: "run".into(), ..abi::Command::default() };
+    let command = abi::Command::default().with_name("noting.run".into()).with_title("run".into());
     setup.command(command, |_, _| MARKED.with_borrow_mut(|caught| caught.push(crate::contain::catching())));
     setup.on_dispose(|_| MARKED.with_borrow_mut(|caught| caught.push(crate::contain::catching())));
     Ok(())
@@ -2956,9 +2955,9 @@ fn a_builtin_runs_inside_the_catch() {
 
 /// A plugin whose `fetcher.fetch` asks the server and whose `fetcher.panic` panics.
 fn fetcher(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = |name: &str| abi::Command { name: name.into(), title: name.into(), ..abi::Command::default() };
+    let command = |name: &str| abi::Command::default().with_name(name.into()).with_title(name.into());
     setup.command(command("fetcher.fetch"), |host, _| {
-        host.fetch(abi::Fetch { method: "GET".into(), path: "/late".into(), ..abi::Fetch::default() });
+        host.fetch(abi::Fetch::default().with_method("GET".into()).with_path("/late".into()));
     });
     setup.command(command("fetcher.panic"), |_, _| panic!("fetcher fault"));
     Ok(())

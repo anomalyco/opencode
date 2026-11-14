@@ -26,10 +26,10 @@ pub fn open(host: &dyn Host, viewer: &Viewer, memory: &Memory) {
         .chain([SelectOption::new(format!("{:<LABEL_WIDTH$}", "Base"), BASE).description(base)])
         .collect();
     let action = Action::Command { name: PICK_SOURCE.to_owned(), input: None };
-    host.dialog(Dialog::Select(Select {
-        key: Some(KEY.to_owned()),
-        current: Some(viewer.mode.key().to_owned()),
-        filterless: true,
-        ..Select::new("Diff source", options, action)
-    }));
+    host.dialog(Dialog::Select(
+        Select::new("Diff source", options, action)
+            .with_key(Some(KEY.to_owned()))
+            .with_current(Some(viewer.mode.key().to_owned()))
+            .with_filterless(true),
+    ));
 }

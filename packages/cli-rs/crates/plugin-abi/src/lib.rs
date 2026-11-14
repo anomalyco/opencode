@@ -455,6 +455,7 @@ fn is_zero(value: &u32) -> bool {
 
 /// A command: in the palette when `palette` is set, as `/slash`, and on `keybind` (such as `ctrl+shift+h`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Command {
     pub name: String,
     pub title: String,
@@ -471,6 +472,64 @@ pub struct Command {
     /// 1.4: where the command runs.
     #[serde(default, skip_serializing_if = "Scope::is_global")]
     pub scope: Scope,
+}
+
+/// 2.0 (P6c): a setter of each field, since `Command` is `#[non_exhaustive]`: a plugin builds it from
+/// `Command::default()` and sets what it needs, so a field a later 2.x adds is no break of its source.
+impl Command {
+    /// Sets [`Self::name`].
+    pub fn with_name(mut self, name: String) -> Self {
+        self.name = name;
+        self
+    }
+
+    /// Sets [`Self::title`].
+    pub fn with_title(mut self, title: String) -> Self {
+        self.title = title;
+        self
+    }
+
+    /// Sets [`Self::group`].
+    pub fn with_group(mut self, group: Option<String>) -> Self {
+        self.group = group;
+        self
+    }
+
+    /// Sets [`Self::slash`].
+    pub fn with_slash(mut self, slash: Option<String>) -> Self {
+        self.slash = slash;
+        self
+    }
+
+    /// Sets [`Self::keybind`].
+    pub fn with_keybind(mut self, keybind: Option<String>) -> Self {
+        self.keybind = keybind;
+        self
+    }
+
+    /// Sets [`Self::palette`].
+    pub fn with_palette(mut self, palette: bool) -> Self {
+        self.palette = palette;
+        self
+    }
+
+    /// Sets [`Self::description`].
+    pub fn with_description(mut self, description: Option<String>) -> Self {
+        self.description = description;
+        self
+    }
+
+    /// Sets [`Self::arguments`].
+    pub fn with_arguments(mut self, arguments: bool) -> Self {
+        self.arguments = arguments;
+        self
+    }
+
+    /// Sets [`Self::scope`].
+    pub fn with_scope(mut self, scope: Scope) -> Self {
+        self.scope = scope;
+        self
+    }
 }
 
 /// Where a [`Command`] runs: everywhere, or while the plugin's route of that name shows.
@@ -2357,6 +2416,7 @@ pub enum Route {
 /// sent or would leave the origin, `MalformedResponse: …` for a body that is not JSON, and `unsupported method …` or
 /// `the path … does not start with /` for a request the host does not send.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Fetch {
     /// `GET`, `POST`, `PUT`, `PATCH` or `DELETE`.
     pub method: String,
@@ -2372,6 +2432,51 @@ pub struct Fetch {
     /// base64 ([`base64::decode`]).
     #[serde(default, skip_serializing_if = "is_false")]
     pub bytes: bool,
+}
+
+/// 2.0 (P6c): a setter of each field, since `Fetch` is `#[non_exhaustive]`: a plugin builds it from
+/// `Fetch::default()` and sets what it needs, so a field a later 2.x adds is no break of its source.
+///
+/// ```
+/// let fetch = opencode_plugin_abi::Fetch::default().with_method("GET".to_owned()).with_path("/api/x".to_owned());
+/// assert_eq!(fetch.path, "/api/x");
+/// ```
+///
+/// A literal, even one that takes the rest from the default, does not compile outside the SDK:
+///
+/// ```compile_fail,E0639
+/// let fetch = opencode_plugin_abi::Fetch { path: "/api/x".to_owned(), ..Default::default() };
+/// ```
+impl Fetch {
+    /// Sets [`Self::method`].
+    pub fn with_method(mut self, method: String) -> Self {
+        self.method = method;
+        self
+    }
+
+    /// Sets [`Self::path`].
+    pub fn with_path(mut self, path: String) -> Self {
+        self.path = path;
+        self
+    }
+
+    /// Sets [`Self::query`].
+    pub fn with_query(mut self, query: Vec<(String, String)>) -> Self {
+        self.query = query;
+        self
+    }
+
+    /// Sets [`Self::body`].
+    pub fn with_body(mut self, body: Option<serde_json::Value>) -> Self {
+        self.body = body;
+        self
+    }
+
+    /// Sets [`Self::bytes`].
+    pub fn with_bytes(mut self, bytes: bool) -> Self {
+        self.bytes = bytes;
+        self
+    }
 }
 
 /// What [`Host::fetch`] returns, and [`Setup::on_reply`] gets back with the reply.
@@ -2418,19 +2523,53 @@ pub enum Dialog {
 }
 
 /// A [`Dialog::Images`].
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Images {
     pub images: Vec<Image>,
     #[serde(default, skip_serializing_if = "is_zero_usize")]
     pub index: usize,
 }
 
+/// 2.0 (P6c): a setter of each field, since `Images` is `#[non_exhaustive]`: a plugin builds it from
+/// `Images::default()` and sets what it needs, so a field a later 2.x adds is no break of its source.
+impl Images {
+    /// Sets [`Self::images`].
+    pub fn with_images(mut self, images: Vec<Image>) -> Self {
+        self.images = images;
+        self
+    }
+
+    /// Sets [`Self::index`].
+    pub fn with_index(mut self, index: usize) -> Self {
+        self.index = index;
+        self
+    }
+}
+
 /// An image of [`Images`]: its bytes in base64 ([`base64::encode`]), and the name the preview shows.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Image {
     pub data: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+}
+
+/// 2.0 (P6c): a setter of each field, since `Image` is `#[non_exhaustive]`: a plugin builds it from
+/// `Image::default()` and sets what it needs, so a field a later 2.x adds is no break of its source.
+impl Image {
+    /// Sets [`Self::data`].
+    pub fn with_data(mut self, data: String) -> Self {
+        self.data = data;
+        self
+    }
+
+    /// Sets [`Self::name`].
+    pub fn with_name(mut self, name: Option<String>) -> Self {
+        self.name = name;
+        self
+    }
 }
 
 /// A [`Dialog::ErrorDetails`].
@@ -2500,6 +2639,7 @@ pub struct Alert {
 
 /// A [`Dialog::Select`] (TS `dialog.select`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Select {
     pub title: String,
     /// The filter's placeholder.
@@ -2551,6 +2691,106 @@ pub struct Select {
     pub note: Option<Span>,
 }
 
+/// 2.0 (P6c): a setter of each field, since `Select` is `#[non_exhaustive]`: a plugin builds it from
+/// [`Select::new`] and sets what it needs, so a field a later 2.x adds is no break of its source.
+impl Select {
+    /// Sets [`Self::title`].
+    pub fn with_title(mut self, title: String) -> Self {
+        self.title = title;
+        self
+    }
+
+    /// Sets [`Self::placeholder`].
+    pub fn with_placeholder(mut self, placeholder: Option<String>) -> Self {
+        self.placeholder = placeholder;
+        self
+    }
+
+    /// Sets [`Self::options`].
+    pub fn with_options(mut self, options: Vec<SelectOption>) -> Self {
+        self.options = options;
+        self
+    }
+
+    /// Sets [`Self::current`].
+    pub fn with_current(mut self, current: Option<String>) -> Self {
+        self.current = current;
+        self
+    }
+
+    /// Sets [`Self::action`].
+    pub fn with_action(mut self, action: Action) -> Self {
+        self.action = action;
+        self
+    }
+
+    /// Sets [`Self::key`].
+    pub fn with_key(mut self, key: Option<String>) -> Self {
+        self.key = key;
+        self
+    }
+
+    /// Sets [`Self::actions`].
+    pub fn with_actions(mut self, actions: Vec<SelectAction>) -> Self {
+        self.actions = actions;
+        self
+    }
+
+    /// Sets [`Self::binds`].
+    pub fn with_binds(mut self, binds: Vec<PanelBind>) -> Self {
+        self.binds = binds;
+        self
+    }
+
+    /// Sets [`Self::search`].
+    pub fn with_search(mut self, search: Option<String>) -> Self {
+        self.search = search;
+        self
+    }
+
+    /// Sets [`Self::size`].
+    pub fn with_size(mut self, size: Option<PanelSize>) -> Self {
+        self.size = size;
+        self
+    }
+
+    /// Sets [`Self::focus`].
+    pub fn with_focus(mut self, focus: Option<String>) -> Self {
+        self.focus = focus;
+        self
+    }
+
+    /// Sets [`Self::query`].
+    pub fn with_query(mut self, query: Option<Action>) -> Self {
+        self.query = query;
+        self
+    }
+
+    /// Sets [`Self::query_delay`].
+    pub fn with_query_delay(mut self, query_delay: u16) -> Self {
+        self.query_delay = query_delay;
+        self
+    }
+
+    /// Sets [`Self::filterless`].
+    pub fn with_filterless(mut self, filterless: bool) -> Self {
+        self.filterless = filterless;
+        self
+    }
+
+    /// Sets [`Self::empty`].
+    pub fn with_empty(mut self, empty: Option<Span>) -> Self {
+        self.empty = empty;
+        self
+    }
+
+    /// Sets [`Self::note`].
+    pub fn with_note(mut self, note: Option<Span>) -> Self {
+        self.note = note;
+        self
+    }
+}
+
 impl Select {
     /// A select of `options` titled `title`, whose pick runs `action` with the option's value; the fields this crate
     /// adds later default, so a plugin built with this constructor needs no change for them.
@@ -2578,6 +2818,7 @@ impl Select {
 
 /// An option of a [`Select`].
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SelectOption {
     pub title: String,
     pub value: String,
@@ -2613,6 +2854,76 @@ pub struct SelectOption {
     /// 2.0 (P6b): what the filter matches beside the title and the category (TS `searchText`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub search_text: Option<String>,
+}
+
+/// 2.0 (P6c): a setter of each field, since `SelectOption` is `#[non_exhaustive]`: a plugin builds it from
+/// `SelectOption::default()` and sets what it needs, so a field a later 2.x adds is no break of its source.
+impl SelectOption {
+    /// Sets [`Self::title`].
+    pub fn with_title(mut self, title: String) -> Self {
+        self.title = title;
+        self
+    }
+
+    /// Sets [`Self::value`].
+    pub fn with_value(mut self, value: String) -> Self {
+        self.value = value;
+        self
+    }
+
+    /// Sets [`Self::description`].
+    pub fn with_description(mut self, description: Option<String>) -> Self {
+        self.description = description;
+        self
+    }
+
+    /// Sets [`Self::footer`].
+    pub fn with_footer(mut self, footer: Option<String>) -> Self {
+        self.footer = footer;
+        self
+    }
+
+    /// Sets [`Self::category`].
+    pub fn with_category(mut self, category: Option<String>) -> Self {
+        self.category = category;
+        self
+    }
+
+    /// Sets [`Self::disabled`].
+    pub fn with_disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// Sets [`Self::footer_color`].
+    pub fn with_footer_color(mut self, footer_color: Option<Color>) -> Self {
+        self.footer_color = footer_color;
+        self
+    }
+
+    /// Sets [`Self::gutter`].
+    pub fn with_gutter(mut self, gutter: Option<Gutter>) -> Self {
+        self.gutter = gutter;
+        self
+    }
+
+    /// Sets [`Self::action`].
+    pub fn with_action(mut self, action: Option<Action>) -> Self {
+        self.action = action;
+        self
+    }
+
+    /// Sets [`Self::toggle`].
+    pub fn with_toggle(mut self, toggle: Option<String>) -> Self {
+        self.toggle = toggle;
+        self
+    }
+
+    /// Sets [`Self::search_text`].
+    pub fn with_search_text(mut self, search_text: Option<String>) -> Self {
+        self.search_text = search_text;
+        self
+    }
 }
 
 /// 2.0: a mark left of a [`SelectOption`]'s title.
@@ -2667,6 +2978,7 @@ impl SelectOption {
 /// A dialog that shows a node, live: a panel shown again while its `key` is open changes in place and keeps where its
 /// body is scrolled. The host scrolls the body with the arrows, `j`/`k`, page up and down, home and end.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Panel {
     /// The plugin's own name for the panel; the host keeps keys of different plugins apart.
     pub key: String,
@@ -2702,6 +3014,101 @@ pub struct Panel {
     /// has no footer row (TS `DialogLayout` without a footer).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub height: Option<u16>,
+}
+
+/// 2.0 (P6c): a setter of each field, since `Panel` is `#[non_exhaustive]`: a plugin builds it from
+/// [`Panel::new`] and sets what it needs, so a field a later 2.x adds is no break of its source.
+impl Panel {
+    /// A panel of `key` with `title` over `body`, of the medium size and nothing more: set the rest with the
+    /// `with_` setters, as for every request a plugin builds (`#[non_exhaustive]`, so a later field is no break).
+    pub fn new(key: impl Into<String>, title: Vec<Span>, body: Node) -> Self {
+        Self {
+            key: key.into(),
+            size: PanelSize::default(),
+            title,
+            subtitle: None,
+            body,
+            actions: Vec::new(),
+            binds: Vec::new(),
+            bleed: false,
+            centered: false,
+            bare: false,
+            close: None,
+            height: None,
+        }
+    }
+
+    /// Sets [`Self::bare`].
+    pub fn with_bare(mut self, bare: bool) -> Self {
+        self.bare = bare;
+        self
+    }
+
+    /// Sets [`Self::key`].
+    pub fn with_key(mut self, key: String) -> Self {
+        self.key = key;
+        self
+    }
+
+    /// Sets [`Self::size`].
+    pub fn with_size(mut self, size: PanelSize) -> Self {
+        self.size = size;
+        self
+    }
+
+    /// Sets [`Self::title`].
+    pub fn with_title(mut self, title: Vec<Span>) -> Self {
+        self.title = title;
+        self
+    }
+
+    /// Sets [`Self::subtitle`].
+    pub fn with_subtitle(mut self, subtitle: Option<String>) -> Self {
+        self.subtitle = subtitle;
+        self
+    }
+
+    /// Sets [`Self::body`].
+    pub fn with_body(mut self, body: Node) -> Self {
+        self.body = body;
+        self
+    }
+
+    /// Sets [`Self::actions`].
+    pub fn with_actions(mut self, actions: Vec<PanelAction>) -> Self {
+        self.actions = actions;
+        self
+    }
+
+    /// Sets [`Self::binds`].
+    pub fn with_binds(mut self, binds: Vec<PanelBind>) -> Self {
+        self.binds = binds;
+        self
+    }
+
+    /// Sets [`Self::bleed`].
+    pub fn with_bleed(mut self, bleed: bool) -> Self {
+        self.bleed = bleed;
+        self
+    }
+
+    /// Sets [`Self::centered`].
+    pub fn with_centered(mut self, centered: bool) -> Self {
+        self.centered = centered;
+        self
+    }
+
+    /// Sets [`Self::close`].
+    pub fn with_close(mut self, close: Option<String>) -> Self {
+        self.close = close;
+        self
+    }
+
+    /// Sets [`Self::height`].
+    pub fn with_height(mut self, height: Option<u16>) -> Self {
+        self.height = height;
+        self
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -3701,7 +4108,7 @@ pub type DisposeFn = Box<dyn FnOnce(&dyn Host)>;
 /// # use opencode_plugin_abi::*;
 /// fn setup(setup: &mut Setup) -> Result<(), String> {
 ///     setup.host().toast(Toast::new(Variant::Info, "setup may show a toast"));
-///     setup.command(Command { name: "x.hello".into(), ..Command::default() }, |host, _| {
+///     setup.command(Command::default().with_name("x.hello".to_owned()), |host, _| {
 ///         host.toast(Toast::new(Variant::Info, "a command may too"));
 ///     });
 ///     Ok(())

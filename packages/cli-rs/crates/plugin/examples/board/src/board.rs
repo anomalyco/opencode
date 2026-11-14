@@ -119,21 +119,21 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     notes(setup, &board);
     // The plugin's own layer hears the key the route's handler passes.
     let global = board.clone();
-    let layer = Layer { scope: LayerScope::Global, keys: vec![Bind::new("h", "help")], ..Layer::default() };
+    let layer = Layer::default().with_scope(LayerScope::Global).with_keys(vec![Bind::new("h", "help")]);
     setup.layer(layer, move |_, _| {
         global.borrow_mut().keys.push("global".to_owned());
         Handled::Consume
     });
     let (keyed, viewed, drawn) = (board.clone(), board.clone(), board);
-    let base = Layer {
-        keys: vec![Bind::new("j", "bump"), Bind::new("h", "help"), Bind::new("m", "move"), Bind::new("p", "panic")],
-        ..Layer::default()
-    };
-    let moving = Layer {
-        mode: Some("move".to_owned()),
-        keys: vec![Bind::new("j", "shift"), Bind::new("m", "done")],
-        ..Layer::default()
-    };
+    let base = Layer::default().with_keys(vec![
+        Bind::new("j", "bump"),
+        Bind::new("h", "help"),
+        Bind::new("m", "move"),
+        Bind::new("p", "panic"),
+    ]);
+    let moving = Layer::default()
+        .with_mode(Some("move".to_owned()))
+        .with_keys(vec![Bind::new("j", "shift"), Bind::new("m", "done")]);
     let surface = v2::Surface::new("board", v2::Place::Route("board".into()), move |cx| view(&viewed, cx))
         .draw(move |cx| Some(meter(&drawn, cx.frame)))
         .layers(vec![base, moving])
@@ -163,7 +163,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
 /// The `files` route and its commands.
 fn files(setup: &mut Setup) {
     let target = || v2::Target::node("files", "list");
-    let route = |name: &str| Command { scope: opencode_plugin_abi::Scope::Route("files".into()), ..command(name) };
+    let route = |name: &str| command(name).with_scope(opencode_plugin_abi::Scope::Route("files".into()));
     setup.command(route("files.to"), move |host, input| {
         let node = format!("f{}", number(input));
         host.scroll(target(), v2::Scroll::To { node, align: v2::ScrollAlign::Start });
@@ -218,15 +218,10 @@ fn files_view(files: &Files) -> v2::Node {
                     1 + hunk * 10
                 ));
             }
-            let diff = v2::Node::Diff {
-                id: Some(format!("d{file}")),
-                content: v2::Source::Text(patch),
-                view: v2::DiffView::Unified,
-                filetype: None,
-                hunks: Some("hunk".into()),
-                wrap: Default::default(),
-                padding: 0,
-            };
+            let diff = v2::Node::diff(v2::Source::Text(patch))
+                .with_id(format!("d{file}"))
+                .with_view(v2::DiffView::Unified)
+                .with_hunks(Some("hunk".into()));
             let name = v2::Node::text(vec![Span::new(format!("file {file}"))]);
             let node = v2::Node::column(vec![name, diff]).with_id(format!("f{file}")).anchor("file", "");
             v2::ListItem::new(node, 5)
@@ -251,13 +246,13 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
     setup.command(command("board.pick"), |host, _| {
         let options = (0..CARDS).map(|card| SelectOption::new(format!("card {card}"), card.to_string())).collect();
         let action = Action::Command { name: "board.bump".into(), input: None };
-        host.dialog(Dialog::Select(Select { search: Some("cards".into()), ..Select::new("Cards", options, action) }));
+        host.dialog(Dialog::Select(Select::new("Cards", options, action).with_search(Some("cards".into()))));
     });
     let keys = vec![
         Bind::new("f", "focus"),
         Bind::new("w", "where"),
         Bind::new("r", "rect"),
-        Bind { hold: true, ..Bind::new("k", "hold") },
+        Bind::new("k", "hold").with_hold(true),
         Bind::new("v", "menu"),
         Bind::new("b", "blur"),
     ];
@@ -286,7 +281,7 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
             },
         ])
     })
-    .layers(vec![Layer { keys, ..Layer::default() }])
+    .layers(vec![Layer::default().with_keys(keys)])
     .on(move |host, event| {
         let heard = |text: String| heard.borrow_mut().keys.push(text);
         match event {
@@ -317,7 +312,7 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
         Handled::Consume
     });
     setup.surface(surface);
-    let shut = Layer { keys: vec![Bind::new("x", "shut")], ..Layer::default() };
+    let shut = Layer::default().with_keys(vec![Bind::new("x", "shut")]);
     let menu =
         v2::Surface::new("menu", v2::Place::Overlay("menu".into()), |_| v2::Node::text(vec![Span::new("MENU here")]))
             .layers(vec![shut])
@@ -373,15 +368,7 @@ fn view(board: &RefCell<Board>, cx: &mut v2::View<'_>) -> v2::Node {
                 let patch = format!("@@ -1 +1 @@\n-card {index}\n+card {index} is {value}\n");
                 v2::Node::column(vec![
                     v2::Node::text(vec![Span::new(format!("card {index}: {value}"))]).fg("text.muted"),
-                    v2::Node::Diff {
-                        id: None,
-                        content: v2::Source::Content(cx.content(patch)),
-                        view: v2::DiffView::Unified,
-                        filetype: None,
-                        hunks: None,
-                        wrap: Default::default(),
-                        padding: 0,
-                    },
+                    v2::Node::diff(v2::Source::Content(cx.content(patch))).with_view(v2::DiffView::Unified),
                 ])
             })
         })
@@ -422,7 +409,7 @@ fn meter(board: &RefCell<Board>, frame: v2::Frame) -> List {
 }
 
 fn command(name: &str) -> Command {
-    Command { name: name.to_owned(), title: name.to_owned(), ..Command::default() }
+    Command::default().with_name(name.to_owned()).with_title(name.to_owned())
 }
 
 fn number(input: Option<&str>) -> usize {

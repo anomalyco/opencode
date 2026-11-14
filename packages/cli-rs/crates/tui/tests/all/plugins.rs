@@ -408,7 +408,7 @@ fn the_list_comes_back_on_the_row_that_was_asked_about() {
 #[cfg(unix)]
 fn boom() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-        setup.command(abi::Command { name: "boom.boom".to_owned(), ..abi::Command::default() }, |_, _| panic!("boom"));
+        setup.command(abi::Command::default().with_name("boom.boom".to_owned()), |_, _| panic!("boom"));
         Ok(())
     }
     abi::Plugin { id: "test.boom", setup }
@@ -494,7 +494,7 @@ fn print_excerpt(title: &str, screen: &str) {
 fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("seen");
     setup.storage_key("step");
-    let command = |name: &str| abi::Command { name: name.to_owned(), ..abi::Command::default() };
+    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
     setup.command(command("probe.act"), |host, _| {
         host.dispatch("probe.first", None);
         host.storage_set("seen", json!({ "tick": 1 }));
@@ -637,7 +637,7 @@ thread_local! {
 
 /// `x.run` asks for `true` in the foreground; the reply goes to [`RAN`].
 fn running(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.command(abi::Command { name: "x.run".into(), ..abi::Command::default() }, |host, _| {
+    setup.command(abi::Command::default().with_name("x.run".into()), |host, _| {
         host.foreground(abi::Foreground { command: "true".into(), ..abi::Foreground::default() });
     });
     setup.on_reply(|_, _, result| RAN.set(Some(result)));
@@ -770,22 +770,16 @@ fn toggling_a_plugin_frees_the_view_and_the_manager() {
 /// A command `{id}.panel` that opens a panel with key `panel`, and one `{id}.close` that closes it.
 fn paneled<const SUB: bool>(setup: &mut abi::Setup) -> Result<(), String> {
     let id = if SUB { "owner/sub" } else { "owner" };
-    let command = |name: String| abi::Command { name, ..abi::Command::default() };
+    let command = |name: String| abi::Command::default().with_name(name);
     setup.command(command(format!("{id}.panel")), move |host, _| {
-        host.dialog(abi::Dialog::Panel(abi::Panel {
-            key: "panel".to_owned(),
-            size: abi::PanelSize::Medium,
-            title: vec![abi::Span::new(format!("{id} panel"))],
-            subtitle: None,
-            body: abi::Node::text([abi::Span::new("body")]),
-            actions: Vec::new(),
-            binds: Vec::new(),
-            bleed: false,
-            centered: false,
-            bare: false,
-            close: None,
-            height: None,
-        }));
+        host.dialog(abi::Dialog::Panel(
+            abi::Panel::new(
+                "panel".to_owned(),
+                vec![abi::Span::new(format!("{id} panel"))],
+                abi::Node::text([abi::Span::new("body")]),
+            )
+            .with_size(abi::PanelSize::Medium),
+        ));
     });
     setup
         .command(command(format!("{id}.close")), |host, _| host.dialog(abi::Dialog::Close { key: "panel".to_owned() }));

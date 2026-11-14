@@ -455,15 +455,15 @@ impl Generator<'_> {
                 hover_events: self.chance(20),
             },
             3 => v2::Node::Spinner { id: self.id(), label: (*self.rng.pick(&["wait", "load"])).to_owned() },
-            7 => v2::Node::Diff {
-                id: self.id(),
-                content: v2::Source::Text((*self.rng.pick(&PATCHES)).to_owned()),
-                view: *self.rng.pick(&[v2::DiffView::Unified, v2::DiffView::Split]),
-                filetype: self.chance(70).then(|| "rust".to_owned()),
-                hunks: None,
-                wrap: Default::default(),
-                padding: 0,
-            },
+            7 => {
+                let node = v2::Node::diff(v2::Source::Text((*self.rng.pick(&PATCHES)).to_owned()));
+                match self.id() {
+                    Some(id) => node.with_id(id),
+                    None => node,
+                }
+            }
+            .with_view(*self.rng.pick(&[v2::DiffView::Unified, v2::DiffView::Split]))
+            .with_filetype(self.chance(70).then(|| "rust".to_owned())),
             8 => v2::Node::Canvas {
                 id: self.id().or_else(|| self.scrolls.pop().map(str::to_owned)),
                 layout: self.layout(),
@@ -1064,15 +1064,12 @@ fn a_theme_change_rebuilds_nothing() {
     let mut tree = Tree::default();
     let mut nodes = cards(6, &[2], false);
     if let v2::Node::Box { children, .. } = &mut nodes[0] {
-        children.push(v2::Node::Diff {
-            id: Some("diff".into()),
-            content: v2::Source::Text("@@ -1,2 +1,2 @@\n-a\n+b\n c\n".into()),
-            view: v2::DiffView::Unified,
-            filetype: Some("rust".into()),
-            hunks: None,
-            wrap: Default::default(),
-            padding: 0,
-        });
+        children.push(
+            v2::Node::diff(v2::Source::Text("@@ -1,2 +1,2 @@\n-a\n+b\n c\n".into()))
+                .with_id("diff")
+                .with_view(v2::DiffView::Unified)
+                .with_filetype(Some("rust".into())),
+        );
         children.push(v2::Node::Spinner { id: None, label: "wait".into() });
     }
     apply(&host, &mut tree, &parent, &nodes).unwrap();
@@ -1235,15 +1232,7 @@ fn a_tree_with_unknown_content_is_refused() {
     let mut tree = Tree::default();
     apply(&host, &mut tree, &parent, &cards(2, &[], false)).unwrap();
     let frame = host.app.render();
-    let diff = v2::Node::Diff {
-        id: None,
-        content: v2::Source::Content(v2::ContentRef(7)),
-        view: v2::DiffView::Unified,
-        filetype: None,
-        hunks: None,
-        wrap: Default::default(),
-        padding: 0,
-    };
+    let diff = v2::Node::diff(v2::Source::Content(v2::ContentRef(7))).with_view(v2::DiffView::Unified);
     assert_eq!(
         apply(&host, &mut tree, &parent, &[v2::Node::column(vec![diff])]),
         Err(Refused::Content(v2::ContentRef(7)))
@@ -1470,17 +1459,7 @@ fn p0a_properties_change_as_a_fresh_mount_draws_them() {
 // setter; one whose view changes is set once and parses nothing.
 #[test]
 fn an_unchanged_patch_is_not_touched() {
-    let diff = |view| {
-        vec![v2::Node::Diff {
-            id: Some("d".into()),
-            content: v2::Source::Text(PATCHES[0].into()),
-            view,
-            filetype: None,
-            hunks: None,
-            wrap: Default::default(),
-            padding: 0,
-        }]
-    };
+    let diff = |view| vec![v2::Node::diff(v2::Source::Text(PATCHES[0].into())).with_id("d").with_view(view)];
     let host = host(0);
     let parent = root(&host);
     let mut tree = Tree::default();

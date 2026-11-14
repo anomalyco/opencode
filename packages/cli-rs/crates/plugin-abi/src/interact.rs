@@ -167,6 +167,7 @@ impl Interact {
 
 /// Keys a plugin takes while its scope holds, in a mode or in the base mode, above the layers of lower priority.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Layer {
     pub scope: LayerScope,
     /// Above or below the host's own layers of the same scope, which have priority 0.
@@ -186,6 +187,46 @@ pub struct Layer {
     pub paste: bool,
 }
 
+/// 2.0 (P6c): a setter of each field, since `Layer` is `#[non_exhaustive]`: a plugin builds it from
+/// `Layer::default()` and sets what it needs, so a field a later 2.x adds is no break of its source.
+impl Layer {
+    /// Sets [`Self::scope`].
+    pub fn with_scope(mut self, scope: LayerScope) -> Self {
+        self.scope = scope;
+        self
+    }
+
+    /// Sets [`Self::priority`].
+    pub fn with_priority(mut self, priority: i32) -> Self {
+        self.priority = priority;
+        self
+    }
+
+    /// Sets [`Self::mode`].
+    pub fn with_mode(mut self, mode: Option<String>) -> Self {
+        self.mode = mode;
+        self
+    }
+
+    /// Sets [`Self::keys`].
+    pub fn with_keys(mut self, keys: Vec<Bind>) -> Self {
+        self.keys = keys;
+        self
+    }
+
+    /// Sets [`Self::any`].
+    pub fn with_any(mut self, any: bool) -> Self {
+        self.any = any;
+        self
+    }
+
+    /// Sets [`Self::paste`].
+    pub fn with_paste(mut self, paste: bool) -> Self {
+        self.paste = paste;
+        self
+    }
+}
+
 /// Where a [`Layer`] holds.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -203,6 +244,7 @@ pub enum LayerScope {
 
 /// One key of a [`Layer`].
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Bind {
     /// The key, as the host's keybinds write one (`ctrl+a`, `escape`, `]`).
     pub key: String,
@@ -222,6 +264,40 @@ pub struct Bind {
     /// [`Read::shortcut`]: crate::Read::shortcut
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
+}
+
+/// 2.0 (P6c): a setter of each field, since `Bind` is `#[non_exhaustive]`: a plugin builds it from
+/// `Bind::default()` and sets what it needs, so a field a later 2.x adds is no break of its source.
+impl Bind {
+    /// Sets [`Self::key`].
+    pub fn with_key(mut self, key: String) -> Self {
+        self.key = key;
+        self
+    }
+
+    /// Sets [`Self::name`].
+    pub fn with_name(mut self, name: String) -> Self {
+        self.name = name;
+        self
+    }
+
+    /// Sets [`Self::title`].
+    pub fn with_title(mut self, title: Option<String>) -> Self {
+        self.title = title;
+        self
+    }
+
+    /// Sets [`Self::hold`].
+    pub fn with_hold(mut self, hold: bool) -> Self {
+        self.hold = hold;
+        self
+    }
+
+    /// Sets [`Self::command`].
+    pub fn with_command(mut self, command: Option<String>) -> Self {
+        self.command = command;
+        self
+    }
 }
 
 impl Bind {
@@ -261,6 +337,7 @@ pub struct Focused {
 
 /// What a docked panel surface ([`crate::v2::Place::Panel`]) is told about how it shows.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PanelInput {
     pub width: u16,
     /// Over the whole screen, rather than beside the session.
@@ -271,6 +348,34 @@ pub struct PanelInput {
     /// beside the session shows it full screen still.
     #[serde(default, skip_serializing_if = "is_false")]
     pub forced: bool,
+}
+
+/// 2.0 (P6c): a setter of each field, since `PanelInput` is `#[non_exhaustive]`: a plugin builds it from
+/// `PanelInput::default()` and sets what it needs, so a field a later 2.x adds is no break of its source.
+impl PanelInput {
+    /// Sets [`Self::width`].
+    pub fn with_width(mut self, width: u16) -> Self {
+        self.width = width;
+        self
+    }
+
+    /// Sets [`Self::fullscreen`].
+    pub fn with_fullscreen(mut self, fullscreen: bool) -> Self {
+        self.fullscreen = fullscreen;
+        self
+    }
+
+    /// Sets [`Self::focused`].
+    pub fn with_focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
+        self
+    }
+
+    /// Sets [`Self::forced`].
+    pub fn with_forced(mut self, forced: bool) -> Self {
+        self.forced = forced;
+        self
+    }
 }
 
 /// Opens the plugin's panel `surface` beside a session ([`Host::open_panel`]); one panel shows at a time.

@@ -85,20 +85,21 @@ fn segv() {
 fn setup(setup: &mut Setup) -> Result<(), String> {
     let (name, title, line) = BUILD;
     let waker = setup.waker();
-    let command = |name: String, title: String, slash: String| Command {
-        name,
-        title,
-        slash: Some(slash),
-        palette: true,
-        ..Command::default()
+    let command = |name: String, title: String, slash: String| {
+        Command::default().with_name(name).with_title(title).with_slash(Some(slash)).with_palette(true)
     };
     for (index, kind) in KINDS.into_iter().enumerate() {
-        setup.command(command(format!("{name}.{kind}"), format!("{title}: {kind}"), format!("{name}-{kind}")), move |_, _| {
-            fire(kind)
-        });
+        setup.command(
+            command(format!("{name}.{kind}"), format!("{title}: {kind}"), format!("{name}-{kind}")),
+            move |_, _| fire(kind),
+        );
         let waker = waker.clone();
         setup.command(
-            command(format!("{name}.render.{kind}"), format!("{title} in render: {kind}"), format!("{name}-render-{kind}")),
+            command(
+                format!("{name}.render.{kind}"),
+                format!("{title} in render: {kind}"),
+                format!("{name}-render-{kind}"),
+            ),
             move |_, _| {
                 ARMED.store(index as u8 + 1, Ordering::Relaxed);
                 // The line renders again, and fails.
@@ -108,7 +109,11 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
             },
         );
         setup.command(
-            command(format!("{name}.thread.{kind}"), format!("{title} on a thread: {kind}"), format!("{name}-thread-{kind}")),
+            command(
+                format!("{name}.thread.{kind}"),
+                format!("{title} on a thread: {kind}"),
+                format!("{name}-thread-{kind}"),
+            ),
             move |_, _| {
                 // Later than the command's return, so the record names no call of the plugin when it fires.
                 std::thread::spawn(move || {

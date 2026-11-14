@@ -498,12 +498,13 @@ impl Host for Tui {
     fn panel_input(&self, id: &str, surface: &str) -> Option<abi::interact::PanelInput> {
         let target = self.panels.current().filter(|target| target.plugin == id && target.name == surface)?;
         let session = crate::frame::panel_state(self, &target)?;
-        Some(abi::interact::PanelInput {
-            width: session.0,
-            fullscreen: self.panels.presentation() == crate::panel::Presentation::Fullscreen,
-            focused: session.1,
-            forced: !self.panels.can_split(),
-        })
+        Some(
+            abi::interact::PanelInput::default()
+                .with_width(session.0)
+                .with_fullscreen(self.panels.presentation() == crate::panel::Presentation::Fullscreen)
+                .with_focused(session.1)
+                .with_forced(!self.panels.can_split()),
+        )
     }
 
     fn watch(&self, push: Rc<dyn Fn(&abi::Changed)>) -> Option<Disposer> {

@@ -37,7 +37,7 @@ pub fn view(diffs: &Diffs, _: &mut v2::View<'_>) -> Node {
 
 /// Enter runs the menu.
 pub fn layer() -> Layer {
-    Layer { keys: vec![Bind::new("return", "run")], ..Layer::default() }
+    Layer::default().with_keys(vec![Bind::new("return", "run")])
 }
 
 /// The menu's keys and presses: Enter or a left click runs it, a right press closes it.

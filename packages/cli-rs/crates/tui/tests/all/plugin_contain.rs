@@ -135,12 +135,10 @@ fn probe<const P: u8>(setup: &mut abi::Setup) -> Result<(), String> {
     called(P, Kind::Setup);
     let count = Rc::new(Cell::new(0));
     let counted = count.clone();
-    let command = abi::Command {
-        name: format!("{}.run", id(P)),
-        title: format!("{} run", id(P)),
-        palette: true,
-        ..abi::Command::default()
-    };
+    let command = abi::Command::default()
+        .with_name(format!("{}.run", id(P)))
+        .with_title(format!("{} run", id(P)))
+        .with_palette(true);
     setup.command(command, move |_, _| {
         called(P, Kind::Command);
         counted.set(counted.get() + 1);
@@ -928,12 +926,10 @@ fn surface_call(at: At) {
 /// A built-in of contract 2.0: a surface in the home footer, a surface on route `page` and a command of that route.
 fn surfaces(setup: &mut abi::Setup) -> Result<(), String> {
     use abi::v2;
-    let command = abi::Command {
-        name: "s2.go".into(),
-        title: "go".into(),
-        scope: abi::Scope::Route("page".into()),
-        ..abi::Command::default()
-    };
+    let command = abi::Command::default()
+        .with_name("s2.go".into())
+        .with_title("go".into())
+        .with_scope(abi::Scope::Route("page".into()));
     setup.command(command, |_, _| surface_call(At::Command));
     setup.surface(v2::Surface::new("footer", v2::Place::Slot(abi::Placement::append("home.footer")), |cx| {
         surface_call(At::SlotView);

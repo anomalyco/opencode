@@ -25,13 +25,11 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         .and_then(|options| serde_json::from_str::<serde_json::Value>(options).ok())
         .is_none_or(|options| options.get("hint") != Some(&serde_json::Value::Bool(false)));
     for (bind, name) in BINDS {
-        let command = Command {
-            name: name.to_owned(),
-            title: "Force submit prompt".to_owned(),
-            group: Some("Prompt".to_owned()),
-            keybind: Some(bind.to_owned()),
-            ..Command::default()
-        };
+        let command = Command::default()
+            .with_name(name.to_owned())
+            .with_title("Force submit prompt".to_owned())
+            .with_group(Some("Prompt".to_owned()))
+            .with_keybind(Some(bind.to_owned()));
         setup.command(command, |host, _| force_submit(host));
     }
     setup.slot(Placement::append("prompt.footer.status"), move |read, input, changed| {

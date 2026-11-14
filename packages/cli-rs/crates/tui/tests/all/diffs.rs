@@ -656,7 +656,7 @@ fn a_setting_saves_only_what_it_takes() {
     h.keys(&["v"]);
     h.wait("the view was not saved", || diffs_setting(&h)["view"] == "unified");
     let setup = |setup: &mut opencode_plugin::abi::Setup| {
-        let command = opencode_plugin::abi::Command { name: "probe.set".into(), ..Default::default() };
+        let command = opencode_plugin::abi::Command::default().with_name("probe.set".into());
         setup.command(command, |host, _| {
             host.set_setting("diffs.view", json!("sideways"));
             host.set_setting("diffs.tree", json!("yes"));
@@ -1135,12 +1135,12 @@ fn the_viewers_dialogs_end_with_it() {
 fn a_plugin_image_preview_is_bounded_and_keyed() {
     let h = route(1, 4, 120, 30);
     let setup = |setup: &mut opencode_plugin::abi::Setup| {
-        let command = |name: &str| opencode_plugin::abi::Command { name: name.into(), ..Default::default() };
+        let command = |name: &str| opencode_plugin::abi::Command::default().with_name(name.into());
         let images = |data: String| {
-            abi_dialog_images(opencode_plugin::abi::Images {
-                images: vec![opencode_plugin::abi::Image { data, name: None }],
-                index: 0,
-            })
+            abi_dialog_images(
+                opencode_plugin::abi::Images::default()
+                    .with_images(vec![opencode_plugin::abi::Image::default().with_data(data)]),
+            )
         };
         setup.command(command("probe.huge"), move |host, _| {
             let mut huge = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
@@ -1185,12 +1185,12 @@ fn a_plugins_binds_take_what_they_may() {
     h.wait_for("/project");
     let setup = |setup: &mut opencode_plugin::abi::Setup| {
         let keys = vec![
-            Bind { key: "f8".into(), ..Bind::command("diff.next_hunk", "none") },
+            Bind::command("diff.next_hunk", "none").with_key("f8".into()),
             Bind::command("plugins.list", "steal"),
             Bind::new("", "empty"),
             Bind::new("f9", "kept"),
         ];
-        setup.layer(Layer { scope: LayerScope::Global, priority: 10, keys, ..Layer::default() }, |_, event| {
+        setup.layer(Layer::default().with_scope(LayerScope::Global).with_priority(10).with_keys(keys), |_, event| {
             if let opencode_plugin::abi::interact::Event::Key(key) = event {
                 HEARD.with(|heard| heard.borrow_mut().push(key.bind.clone().unwrap_or_default()));
             }
@@ -1218,34 +1218,25 @@ fn a_select_and_a_panel_shown_again_show_their_new_fields() {
     use opencode_plugin::abi::{Action, Dialog, Panel, PanelSize, Select, SelectOption, Span};
     let h = route(1, 4, 120, 30);
     let setup = |setup: &mut opencode_plugin::abi::Setup| {
-        let command = |name: &str| opencode_plugin::abi::Command { name: name.into(), ..Default::default() };
+        let command = |name: &str| opencode_plugin::abi::Command::default().with_name(name.into());
         setup.command(command("probe.select"), |host, _| {
             let second = SECOND.with(Cell::get);
             let options = if second { Vec::new() } else { vec![SelectOption::new("row one", "one")] };
             let action = Action::Command { name: "probe.select".into(), input: None };
-            host.dialog(Dialog::Select(Select {
-                key: Some("pick".into()),
-                empty: second.then(|| Span::new("Nothing here")),
-                note: second.then(|| Span::new("A note under")),
-                ..Select::new("Pick", options, action)
-            }));
+            host.dialog(Dialog::Select(
+                Select::new("Pick", options, action)
+                    .with_key(Some("pick".into()))
+                    .with_empty(second.then(|| Span::new("Nothing here")))
+                    .with_note(second.then(|| Span::new("A note under"))),
+            ));
         });
         setup.command(command("probe.panel"), |host, _| {
             let second = SECOND.with(Cell::get);
-            host.dialog(Dialog::Panel(Panel {
-                key: "info".into(),
-                size: PanelSize::Medium,
-                title: vec![Span::new("Info")],
-                subtitle: None,
-                body: opencode_plugin::abi::Node::text([Span::new("body")]),
-                actions: Vec::new(),
-                binds: Vec::new(),
-                bleed: false,
-                centered: false,
-                bare: false,
-                close: Some(if second { "shut B" } else { "shut A" }.into()),
-                height: None,
-            }));
+            host.dialog(Dialog::Panel(
+                Panel::new("info", vec![Span::new("Info")], opencode_plugin::abi::Node::text([Span::new("body")]))
+                    .with_size(PanelSize::Medium)
+                    .with_close(Some(if second { "shut B" } else { "shut A" }.into())),
+            ));
         });
         Ok(())
     };

@@ -160,11 +160,8 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
         return Err(format!("probe build {B} fails its setup"));
     }
     let count = Rc::new(Cell::new(0));
-    let command = |name: &str, title: &str| abi::Command {
-        name: name.to_owned(),
-        title: title.to_owned(),
-        palette: true,
-        ..abi::Command::default()
+    let command = |name: &str, title: &str| {
+        abi::Command::default().with_name(name.to_owned()).with_title(title.to_owned()).with_palette(true)
     };
     let (held, counted) = (token.clone(), count.clone());
     setup.command(command("probe.run", "Probe run"), move |_, _| {
@@ -176,20 +173,14 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(command("probe.panel", "Probe panel"), move |host, _| {
         let _ = &held;
         called(activation, B, Kind::Command(Which::Panel));
-        host.dialog(abi::Dialog::Panel(abi::Panel {
-            key: "panel".to_owned(),
-            size: abi::PanelSize::Medium,
-            title: vec![abi::Span::new("Probe panel")],
-            subtitle: None,
-            body: abi::Node::text([abi::Span::new(format!("probe panel b{B}"))]),
-            actions: Vec::new(),
-            binds: Vec::new(),
-            bleed: false,
-            centered: false,
-            bare: false,
-            close: None,
-            height: None,
-        }));
+        host.dialog(abi::Dialog::Panel(
+            abi::Panel::new(
+                "panel".to_owned(),
+                vec![abi::Span::new("Probe panel")],
+                abi::Node::text([abi::Span::new(format!("probe panel b{B}"))]),
+            )
+            .with_size(abi::PanelSize::Medium),
+        ));
     });
     let held = token.clone();
     setup.command(command("probe.prompt", "Probe prompt"), move |host, _| {
@@ -201,24 +192,11 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(command("probe.select", "Probe select"), move |host, _| {
         let _ = &held;
         called(activation, B, Kind::Command(Which::Select));
-        host.dialog(abi::Dialog::Select(abi::Select {
-            title: format!("Probe select b{B}"),
-            placeholder: None,
-            options: vec![abi::SelectOption::new("Probe option", "option")],
-            current: None,
-            action: confirmed(),
-            key: None,
-            actions: Vec::new(),
-            binds: Vec::new(),
-            search: None,
-            size: None,
-            focus: None,
-            query: None,
-            query_delay: 0,
-            filterless: false,
-            empty: None,
-            note: None,
-        }));
+        host.dialog(abi::Dialog::Select(abi::Select::new(
+            format!("Probe select b{B}"),
+            vec![abi::SelectOption::new("Probe option", "option")],
+            confirmed(),
+        )));
     });
     let held = token.clone();
     setup.command(command("probe.confirm", "Probe confirm"), move |host, _| {

@@ -77,7 +77,7 @@ impl Goals {
         setup.on_reply(move |host, id, result| goals.reply(host, id, result));
         for (name, text) in [(SHOW, None), (PAUSE, Some("pause")), (RESUME, Some("resume")), (CLEAR, Some("clear"))] {
             let goals = self.clone();
-            setup.command(Command { name: name.to_owned(), ..Command::default() }, move |host, session| {
+            setup.command(Command::default().with_name(name.to_owned()), move |host, session| {
                 let Some(session) = session else { return };
                 match text {
                     None => goals.show(host, session),
@@ -283,22 +283,13 @@ fn panel(session: &str, goal: &Goal) -> Panel {
     if let Some(reason) = &goal.reason {
         details.push(Node::text([Span::new(reason.clone())]).fg("text.muted"));
     }
-    Panel {
-        key: PANEL.to_owned(),
-        size: PanelSize::Medium,
-        title: vec![Span::new("Goal")],
-        subtitle: None,
-        body: Node::column(vec![
-            Node::text([Span::new(goal.objective.clone())]).fg("text.base"),
-            Node::column(details),
-        ])
-        .gap(1),
-        actions,
-        binds,
-        bleed: false,
-        centered: false,
-        bare: false,
-        close: None,
-        height: None,
-    }
+    Panel::new(
+        PANEL.to_owned(),
+        vec![Span::new("Goal")],
+        Node::column(vec![Node::text([Span::new(goal.objective.clone())]).fg("text.base"), Node::column(details)])
+            .gap(1),
+    )
+    .with_size(PanelSize::Medium)
+    .with_actions(actions)
+    .with_binds(binds)
 }

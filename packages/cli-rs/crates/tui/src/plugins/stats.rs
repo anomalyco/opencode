@@ -76,14 +76,12 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     });
     setup.surface(page);
     let (open, id) = (state.clone(), setup.id().to_owned());
-    let command = Command {
-        name: "stats.open".to_owned(),
-        title: "Usage statistics".to_owned(),
-        group: Some("System".to_owned()),
-        slash: Some("stats".to_owned()),
-        palette: true,
-        ..Command::default()
-    };
+    let command = Command::default()
+        .with_name("stats.open".to_owned())
+        .with_title("Usage statistics".to_owned())
+        .with_group(Some("System".to_owned()))
+        .with_slash(Some("stats".to_owned()))
+        .with_palette(true);
     setup.command(command, move |host, _| {
         let current = host.route();
         if matches!(&current, abi::Route::Plugin { id: open_id, name } if *open_id == id && name == ROUTE) {
@@ -93,13 +91,11 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         host.navigate(abi::Route::Plugin { id: id.clone(), name: ROUTE.to_owned() });
     });
     let back = state.clone();
-    let command = Command {
-        name: "stats.back".to_owned(),
-        title: "back".to_owned(),
-        keybind: Some("escape".to_owned()),
-        scope: Scope::Route(ROUTE.to_owned()),
-        ..Command::default()
-    };
+    let command = Command::default()
+        .with_name("stats.back".to_owned())
+        .with_title("back".to_owned())
+        .with_keybind(Some("escape".to_owned()))
+        .with_scope(Scope::Route(ROUTE.to_owned()));
     setup.command(command, move |host, _| host.navigate(back.previous.borrow().clone()));
     setup.on_reply(move |_, id, reply| {
         if state.request.get() == Some(id) {
