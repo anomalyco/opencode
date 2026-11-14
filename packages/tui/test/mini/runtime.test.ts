@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode } from "@opencode/client/promise"
+import path from "path"
 import { runInteractiveDeferredMode } from "../../src/mini/runtime"
 import type { LifecycleInput } from "../../src/mini/runtime.lifecycle"
 import type { FooterEvent, MiniHost } from "../../src/mini/types"
@@ -587,5 +588,91 @@ describe("run interactive runtime", () => {
     expect(catalogs.reference).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
     expect(catalogs.command).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
     expect(fileFind).toHaveBeenCalledWith({ query: "index", type: "file", ...query })
+  })
+
+  test("routes outside-base mention queries through list", async () => {
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const lifecycleStarted = defer<void>()
+    const painted = defer<void>()
+    const api = footer()
+    api.idle = () => painted.promise
+    let findFiles: ((query: string) => Promise<string[]>) | undefined
+    let mentions: string[] | undefined
+    stubCatalogLists(sdk, {
+      location: { directory: "/session", workspaceID: "work-1" },
+    })
+    const fileList = spyOn(sdk.file, "list").mockResolvedValue({
+      location: {
+        directory: "/session",
+        workspaceID: "work-1",
+        project: { id: "pro-1", directory: "/session", canonical: "/session" },
+      },
+      data: [{ path: "../sibling/other.ts", type: "file" }],
+    } as never)
+
+    const task = runInteractiveDeferredMode(
+      {
+        host: host(),
+        sdk,
+        directory: "/launch",
+        target: async () => ({
+          sessionID: "ses-outside",
+          location: {
+            directory: "/session",
+            workspaceID: "work-1",
+            project: { id: "location-project", directory: "/session", canonical: "/session" },
+          },
+          agent: undefined,
+          model: undefined,
+          variant: undefined,
+          resume: false,
+        }),
+        agent: undefined,
+        model: undefined,
+        variant: undefined,
+        files: [],
+        tuiConfig: createTuiResolvedConfig(),
+      },
+      {
+        createRuntimeLifecycle: async (input) => {
+          findFiles = input.findFiles
+          lifecycleStarted.resolve()
+          return {
+            footer: api,
+            onResize: () => () => {},
+            refreshTheme: () => {},
+            setTitle: () => {},
+            resetForReplay: () => Promise.resolve(),
+            close: () => Promise.resolve(),
+          }
+        },
+        streamTransport: Promise.resolve({
+          createSessionTransport: async (input) => {
+            mentions = await findFiles?.("../sibling/oth")
+            setTimeout(() => input.footer.close(), 0)
+            return {
+              runPromptTurn: async () => {},
+              admitPromptTurn: async () => {},
+              waitForIdle: async () => {},
+              interruptActiveTurn: async () => {},
+              selectSubagent: () => {},
+              replayOnResize: async () => false,
+              close: async () => {},
+            }
+          },
+          formatUnknownError: (error: unknown) => String(error),
+        }),
+      },
+    )
+
+    await lifecycleStarted.promise
+    painted.resolve()
+    await task
+
+    expect(mentions).toEqual(["../sibling/other.ts"])
+    expect(fileList).toHaveBeenCalledWith({
+      location: { directory: "/session" },
+      path: path.resolve("/session", "../sibling"),
+    })
   })
 })

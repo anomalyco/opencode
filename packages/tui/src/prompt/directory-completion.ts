@@ -1,6 +1,7 @@
 import type { KeymapCommand } from "@opencode/plugin/tui/context"
 import type { OpenCodeClient } from "@opencode/client"
 import { measureEditText, type WidthMethod } from "@opentui/core"
+import fuzzysort from "fuzzysort"
 import path from "path"
 import { parseSlashHead } from "./parse"
 
@@ -48,6 +49,65 @@ export function slashArgumentAutocomplete(
     type,
     index: measureEditText(beforeCursor.slice(0, head.end + 1), { widthMethod }),
   }
+}
+
+export type MentionSearch = { directory: string; prefix: string; fragment: string }
+
+export type MentionEntry = {
+  path: string
+  absolute: string
+  name: string
+  directory: boolean
+}
+
+export function mentionFileSearch(query: string, directory: string, home: string): MentionSearch | undefined {
+  if (!query) return
+  const outside = query === "~" || query.startsWith("~/") || query.startsWith("/") || /(?:^|\/)\.\.(?:\/|$)/.test(query)
+  if (!outside) return
+  const search = directoryAutocompleteSearch(query, directory, home)
+  return { directory: search.directory, prefix: search.prefix, fragment: search.query }
+}
+
+export async function mentionAutocomplete(
+  file: Pick<OpenCodeClient["file"], "list">,
+  location: { directory: string },
+  query: string,
+  home: string,
+  limit = 50,
+) {
+  const search = mentionFileSearch(query, location.directory, home)
+  if (!search) return
+  const result = await file.list({ location, path: search.directory })
+  const entries = result.data
+    .map((item): MentionEntry => {
+      // Resolve against the response location, not the listed directory, so the
+      // location itself (returned as "./") keeps its real directory name.
+      const absolute = path.resolve(result.location.directory, item.path)
+      return {
+        path: item.path,
+        absolute,
+        name: path.basename(absolute),
+        directory: item.type === "directory",
+      }
+    })
+    .filter((entry) => search.fragment.startsWith(".") || !entry.name.startsWith("."))
+
+  if (!search.fragment) {
+    return {
+      search,
+      entries: entries
+        .sort((a, b) => (a.directory === b.directory ? a.name.localeCompare(b.name) : a.directory ? -1 : 1))
+        .slice(0, limit),
+    }
+  }
+
+  const matches = fuzzysort.go(search.fragment, entries, { key: "name", limit }).map((item) => item.obj)
+  fuzzysort.cleanup()
+  return { search, entries: matches }
+}
+
+export function mentionFileName(prefix: string, absolute: string, directory: boolean) {
+  return prefix + path.basename(absolute) + (directory ? "/" : "")
 }
 
 export function directoryAutocompleteSearch(query: string, directory: string, home: string) {

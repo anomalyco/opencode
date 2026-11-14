@@ -51,6 +51,7 @@ import {
   pushPromptHistory,
 } from "./prompt.shared"
 import { parseFileLineRange, parseSlashHead, stripFileLineRange } from "../prompt/parse"
+import { mentionFileSearch, mentionFileName } from "../prompt/directory-completion"
 import { Keymap } from "../context/keymap"
 import { realignEditorPromptParts, resolveEditorSlashValue } from "./prompt.editor"
 import { FOOTER_COMPACT_WIDTH, FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
@@ -113,6 +114,7 @@ type MenuMode = false | "mention" | "slash"
 
 type PromptInput = {
   directory: Accessor<string>
+  home: string
   findFiles: (query: string) => Promise<string[]>
   agents: Accessor<RunAgent[]>
   references: Accessor<RunReference[]>
@@ -458,12 +460,16 @@ export function createPromptState(input: PromptInput): PromptState {
       }
 
       const next = parseFileLineRange(value)
+      const mention = mentionFileSearch(next.base, input.directory(), input.home)
       const list = await input.findFiles(next.base)
       return list.map((item): Auto => {
-        const url = pathToFileURL(path.resolve(input.directory(), item))
-        let filename = item
-        if (next.lineRange && !item.endsWith("/")) {
-          filename = `${item}#${next.lineRange.startLine}${next.lineRange.endLine ? `-${next.lineRange.endLine}` : ""}`
+        const directory = item.endsWith("/") || item.endsWith(path.sep)
+        const absolute = path.resolve(input.directory(), item)
+        const url = pathToFileURL(absolute)
+        const name = mention ? mentionFileName(mention.prefix, absolute, directory) : item
+        let filename = name
+        if (next.lineRange && !directory) {
+          filename = `${name}#${next.lineRange.startLine}${next.lineRange.endLine ? `-${next.lineRange.endLine}` : ""}`
           url.searchParams.set("start", String(next.lineRange.startLine))
           if (next.lineRange.endLine !== undefined) {
             url.searchParams.set("end", String(next.lineRange.endLine))
@@ -474,10 +480,10 @@ export function createPromptState(input: PromptInput): PromptState {
           kind: "mention",
           display: "@" + filename,
           value: filename,
-          directory: item.endsWith("/"),
+          directory,
           part: {
             type: "file",
-            mime: item.endsWith("/") ? "application/x-directory" : "text/plain",
+            mime: directory ? "application/x-directory" : "text/plain",
             filename,
             url: url.href,
             source: {

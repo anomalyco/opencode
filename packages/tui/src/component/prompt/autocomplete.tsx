@@ -41,7 +41,13 @@ import { Skill } from "@opencode/schema/skill"
 import { stringWidth } from "../../util/string-width"
 import { parseFileLineRange, stripFileLineRange } from "../../prompt/parse"
 import { moveSelection, reconcileSelectionWindow, revealSelectionOffset } from "../../ui/select-controller"
-import { directoryAutocomplete, slashArgumentAutocomplete } from "../../prompt/directory-completion"
+import {
+  directoryAutocomplete,
+  slashArgumentAutocomplete,
+  mentionAutocomplete,
+  mentionFileSearch,
+  mentionFileName,
+} from "../../prompt/directory-completion"
 
 export type AutocompleteRef = {
   onInput: (value: string) => void
@@ -262,12 +268,14 @@ export function Autocomplete(props: {
     item: FileSystemEntry,
     filePath: string,
     lineRange?: { startLine: number; endLine?: number },
+    name?: string,
   ) {
     const urlObj = pathToFileURL(filePath)
+    const text = name ?? item.path
     const filename =
       lineRange && item.type !== "directory"
-        ? `${item.path}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
-        : item.path
+        ? `${text}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
+        : text
 
     if (lineRange && item.type !== "directory") {
       urlObj.searchParams.set("start", String(lineRange.startLine))
@@ -375,6 +383,48 @@ export function Autocomplete(props: {
           resolved: true,
         }
       }
+      const mention = mentionFileSearch(base, requestLocation.directory ?? paths.cwd, paths.home)
+      if (mention) {
+        const result = await mentionAutocomplete(
+          client.api.file,
+          { ...requestLocation, directory: requestLocation.directory ?? paths.cwd },
+          base,
+          paths.home,
+          20,
+        ).then(
+          (result) => result,
+          () => undefined,
+        )
+        if (!result)
+          return info.value?.mode === input.visible
+            ? { ...info.value, failed: true }
+            : { options: [], failed: true, mode: input.visible, query: input.query, resolved: false }
+        return {
+          options: result.entries.map((entry): AutocompleteOption => {
+            const item: FileSystemEntry = { path: entry.path, type: entry.directory ? "directory" : "file" }
+            const { filename, part } = createFilePart(
+              item,
+              entry.absolute,
+              lineRange,
+              mentionFileName(result.search.prefix, entry.absolute, entry.directory),
+            )
+            return {
+              display: Locale.truncateMiddle(filename, width),
+              value: filename,
+              isDirectory: entry.directory,
+              path: entry.path,
+              onSelect: () => {
+                insertPart(filename, part)
+              },
+            }
+          }),
+          failed: false,
+          mode: input.visible,
+          query: input.query,
+          resolved: true,
+        }
+      }
+
       const result = await client.api.file.find({ query: base, limit: 20, location: requestLocation }).then(
         (result) => result,
         () => undefined,
@@ -389,7 +439,8 @@ export function Autocomplete(props: {
 
       options.push(
         ...result.data.map((item): AutocompleteOption => {
-          const { filename, part } = createFilePart(item, path.join(result.location.directory, item.path), lineRange)
+          const absolute = path.join(result.location.directory, item.path)
+          const { filename, part } = createFilePart(item, absolute, lineRange)
           return {
             display: Locale.truncateMiddle(filename, width),
             value: filename,
@@ -663,9 +714,10 @@ export function Autocomplete(props: {
 
     const displayText = (selected.value ?? selected.display).trimEnd()
     const selectedPath = displayText.startsWith("@") ? displayText.slice(1) : displayText
+    const terminated = selectedPath.endsWith("/") || selectedPath.endsWith(path.sep)
 
     if (store.visible === "directory") {
-      insertDirectory(selectedPath.endsWith(path.sep) ? selectedPath : selectedPath + path.sep)
+      insertDirectory(terminated ? selectedPath : selectedPath + path.sep)
       setStore("selected", 0)
       return
     }
@@ -676,7 +728,7 @@ export function Autocomplete(props: {
     const endCursor = input.logicalCursor
 
     input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
-    input.insertText("@" + selectedPath + "/")
+    input.insertText("@" + (terminated ? selectedPath : selectedPath + path.sep))
 
     setStore("selected", 0)
   }
