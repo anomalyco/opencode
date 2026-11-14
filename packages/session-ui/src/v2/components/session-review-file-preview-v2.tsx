@@ -4,11 +4,16 @@ import { DiffChanges } from "@opencode/ui/diff-changes"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { useFileComponent } from "@opencode/ui/context/file"
 import { useI18n } from "@opencode/ui/context/i18n"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { showToast } from "@opencode/ui/toast"
 import { mediaKindFromPath } from "../../pierre/media"
 import { previewSelectedLines } from "../../pierre/selection-bridge"
+import { writeClipboard } from "../../components/copy"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import type { PresentationFileContent, PresentationFileDiff } from "../../file-presentation"
-import { children, createMemo, Show, type JSX } from "solid-js"
+import { children, createMemo, createSignal, Show, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { normalize, text, type ViewDiff } from "../../components/session-diff"
 import type {
@@ -118,6 +123,58 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
   const comments = createMemo(() => (props.comments ?? []).filter((comment) => comment.file === props.file))
   const commentedLines = createMemo(() => comments().map((comment) => comment.selection))
   const lineCommentsEnabled = () => props.onLineComment != null
+
+  const [copying, setCopying] = createSignal(false)
+
+  const deletedContent = createMemo(() => {
+    if (view().status !== "deleted") return undefined
+
+    if ("before" in props.diff && props.diff.before !== undefined) return props.diff.before
+
+    if (view().fileDiff.isPartial || view().deletions === 0) return undefined
+
+    return text(view(), "deletions")
+  })
+
+  const snapshotContent = createMemo(() =>
+    view().status === "deleted" ? deletedContent() : "after" in props.diff ? props.diff.after : undefined,
+  )
+
+  const canCopy = () => snapshotContent() !== undefined || (view().status !== "deleted" && !!props.readFile)
+
+  const copyContents = async () => {
+    if (copying()) return
+    setCopying(true)
+
+    try {
+      const snapshot = snapshotContent()
+
+      const content =
+        snapshot !== undefined
+          ? { type: "text", content: snapshot }
+          : view().status === "deleted"
+            ? undefined
+            : await props.readFile?.(props.file)
+
+      if (content?.type !== "text" || content.content === undefined || content.content.includes("\0")) {
+        showToast({ variant: "error", title: i18n.t("ui.sessionReviewV2.copyUnavailable") })
+
+        return
+      }
+
+      if (!(await writeClipboard(content.content))) {
+        showToast({ variant: "error", title: i18n.t("ui.sessionReviewV2.copyFailed") })
+
+        return
+      }
+
+      showToast({ variant: "success", title: i18n.t("ui.sessionReviewV2.copiedFileContents") })
+    } catch {
+      showToast({ variant: "error", title: i18n.t("ui.sessionReviewV2.copyFailed") })
+    } finally {
+      setCopying(false)
+    }
+  }
 
   const commentsUi = createLineCommentControllerV2<SessionReviewComment>({
     comments,
@@ -231,6 +288,16 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
         <div data-slot="session-review-v2-file-diff">
           <DiffChanges changes={view()} />
         </div>
+        <Tooltip value={i18n.t(canCopy() ? "ui.sessionReviewV2.copyFileContents" : "ui.sessionReviewV2.copyUnavailable")}>
+          <IconButton
+            icon={<Icon name="copy" />}
+            variant="ghost"
+            size="small"
+            aria-label={i18n.t("ui.sessionReviewV2.copyFileContents")}
+            disabled={!canCopy() || copying()}
+            onClick={() => void copyContents()}
+          />
+        </Tooltip>
       </div>
       <div
         ref={(el) => {
