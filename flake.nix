@@ -3,10 +3,19 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    bun2nix = {
+      url = "github:nix-community/bun2nix/0f2a1f0b6f42cebe3b149bf62d38754c5e0e9729";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
-    { self, nixpkgs, ... }:
+    {
+      self,
+      nixpkgs,
+      bun2nix,
+      ...
+    }:
     let
       systems = [
         "aarch64-linux"
@@ -29,12 +38,20 @@
         };
       });
 
+      checks = forEachSystem (pkgs: {
+        bun-cache = import ./nix/check-bun-cache.nix {
+          inherit pkgs;
+          bun2nix = bun2nix.packages.${pkgs.stdenv.hostPlatform.system}.bun2nix;
+        };
+      });
+
       overlays = {
         default =
           final: _prev:
           let
             node_modules = final.callPackage ./nix/node_modules.nix {
               inherit rev;
+              bun2nix = bun2nix.packages.${final.stdenv.hostPlatform.system}.bun2nix;
             };
           in
           rec {
@@ -52,6 +69,7 @@
         let
           node_modules = pkgs.callPackage ./nix/node_modules.nix {
             inherit rev;
+            bun2nix = bun2nix.packages.${pkgs.stdenv.hostPlatform.system}.bun2nix;
           };
         in
         rec {
@@ -61,10 +79,6 @@
           };
           opencode-desktop = pkgs.callPackage ./nix/desktop.nix {
             inherit opencode;
-          };
-          # Updater derivation with fakeHash - build fails and reveals correct hash
-          node_modules_updater = node_modules.override {
-            hash = pkgs.lib.fakeHash;
           };
         }
       );
