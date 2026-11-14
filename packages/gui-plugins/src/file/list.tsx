@@ -60,6 +60,7 @@ export default function SessionFileList(props: {
   kinds?: ReadonlyMap<string, ChangeKind>
   id?: string
   role?: "listbox"
+  ariaLabel?: string
   optionID?: (path: string) => string
   onFileClick: (path: string) => void
   onFileDoubleClick?: (path: string) => void
@@ -142,6 +143,7 @@ export default function SessionFileList(props: {
         ref={setRoot}
         id={props.id}
         role={props.role}
+        aria-label={props.role ? props.ariaLabel : undefined}
         data-component="file-tree-v2"
         data-total-rows={props.files.length}
         style={{ position: "relative", height: `${virtualizer.getTotalSize()}px` }}

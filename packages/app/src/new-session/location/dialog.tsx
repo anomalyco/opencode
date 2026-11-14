@@ -511,7 +511,7 @@ function NewSessionLocationDialog(props: {
           viewportClass="command-palette-scroll"
           viewportRef={(el) => (resultsRef = el)}
         >
-          <div id={typeahead.listID} class="command-palette-results" role="listbox">
+          <div id={typeahead.listID} class="command-palette-results" role="listbox" aria-label={placeholder()}>
             <div class="command-palette-group">
               <Show when={title()}>
                 {(value) => (

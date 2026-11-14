@@ -426,7 +426,12 @@ function HomeSessionSearch(
             }}
           >
             <div class="flex flex-col pt-9">
-              <div id={HOME_SESSION_SEARCH_RESULTS_ID} role="listbox" class="flex flex-col gap-4 pt-4">
+              <div
+                id={HOME_SESSION_SEARCH_RESULTS_ID}
+                role="listbox"
+                aria-label={props.language.t("home.sessions.search.sessions")}
+                class="flex flex-col gap-4 pt-4"
+              >
                 <Show
                   when={!props.searchLoading}
                   fallback={

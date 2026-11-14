@@ -417,6 +417,7 @@ export const dict = {
   "dialog.directory.action.selectFile": "Select file",
   "dialog.directory.action.selectFolder": "Select folder",
   "dialog.directory.search.placeholder": "Search projects or enter ~/path…",
+  "dialog.directory.suggestions": "Directory suggestions",
   "dialog.directory.recent": "Recent",
   "dialog.directory.recentProject": "{{name}} ({{path}})",
   "dialog.directory.gitRepo": "git repo",

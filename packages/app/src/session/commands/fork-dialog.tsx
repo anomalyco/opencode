@@ -158,7 +158,7 @@ export function ForkDialog(props: {
               </div>
             }
           >
-            <div role="listbox" class="search-list-results" data-slot="search-list-results">
+            <div role="listbox" aria-label={language.t("common.search.placeholder")} class="search-list-results" data-slot="search-list-results">
               <For each={list.flat()}>
                 {(item) => (
                   <button

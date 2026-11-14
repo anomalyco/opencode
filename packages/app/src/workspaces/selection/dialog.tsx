@@ -637,7 +637,12 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
             </Button>
           </div>
           <Show when={comboboxView().listboxOpen}>
-            <div id="directory-picker-suggestions" role="listbox" class="directory-picker-suggestions">
+            <div
+              id="directory-picker-suggestions"
+              role="listbox"
+              aria-label={language.t("dialog.directory.suggestions")}
+              class="directory-picker-suggestions"
+            >
               <For each={comboboxView().items}>
                 {(suggestion, index) => (
                   <button
