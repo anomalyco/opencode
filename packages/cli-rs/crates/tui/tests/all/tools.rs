@@ -411,10 +411,10 @@ fn write_and_edit_blocks_keep_no_second_copy_of_the_text() {
         h.wait_for("end\n");
         measure.kept()
     };
-    // Measured: write 2.13 and edit 9.55 copies, and 3.19 and 10.64 with a copy in the block. Write's are OpenTUI's
-    // `Code`: its source, and the copy its kept highlighter diffs the next edit against. Edit's are OpenTUI's `Diff`:
-    // the patch, the text of each side, and per-line gutter maps.
-    for (name, bound) in [("write", 2.6), ("edit", 10.1)] {
+    // Measured: write 1.06 and edit 9.55 copies. Write's is OpenTUI's `Code`'s source; a view that is not finished
+    // keeps a second copy for its highlighter to diff the next edit against (2.13), and a copy in the block adds one
+    // more (3.19). Edit's are OpenTUI's `Diff`: the patch, the text of each side, and per-line gutter maps.
+    for (name, bound) in [("write", 1.6), ("edit", 10.1)] {
         // The first mount on a thread also fills caches that live for the process.
         kept(name, 4096);
         let (small, large) = (kept(name, 4096), kept(name, 69_632));

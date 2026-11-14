@@ -377,6 +377,7 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
                         .syntax_theme(syntax.clone())
                         .filetype(Some("diff"))
                         .set_code(patch.clone())
+                        .finish()
                         .wrap(WrapMode::Word)
                         .focusable(false);
                     content.add(&code.width(Length::percent(100.0)).shrink(0.0));
