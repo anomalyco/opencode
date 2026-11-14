@@ -399,6 +399,8 @@ pub enum Kind {
     Fence,
     /// A canvas's list (P5): bytes, not JSON.
     Draw,
+    /// What a `layout` returns (P3).
+    Layout,
     /// Anything else: a handler's `null`, or a 1.x render's rows, as JSON.
     Raw,
 }
@@ -411,6 +413,7 @@ impl Kind {
             Some("render" | "render-route") => Kind::Render,
             Some("render-fence") => Kind::Fence,
             Some("draw") => Kind::Draw,
+            Some("layout") => Kind::Layout,
             _ => Kind::Raw,
         }
     }
@@ -445,6 +448,7 @@ pub fn canonical(kind: Kind, status: i32, reply: Result<&[u8], &str>) -> Value {
         Kind::View => typed::<abi::ViewReply>(value),
         Kind::Render => typed::<abi::Render>(value),
         Kind::Fence => typed::<abi::Fenced>(value),
+        Kind::Layout => typed::<abi::v2::LayoutReply>(value),
         Kind::Draw | Kind::Raw => value,
     }
 }
@@ -577,8 +581,9 @@ pub fn diff(expected: &[Entry], got: &[Entry]) -> Option<String> {
 /// - After a call that panicked, a 2.x error, a reply the host cannot read (a handler's that is not `null`, a view's
 ///   that is no tree, a buffer refused unread), the instance is called no more, not even destroyed.
 /// - A 1.x instance gets no request of 2.0; a message only an instance whose manifest takes messages; a view only of a
-///   surface the manifest lists, and of no mount that ended.
-/// - A render of 1.4 on, a view or a draw reads only: every request of it that asks for something is answered
+///   surface the manifest lists, and of no mount that ended; a draw, a layout or a scroll event only of a surface that
+///   declares one.
+/// - A render of 1.4 on, a view, a draw or a layout reads only: every request of it that asks for something is answered
 ///   `ERROR`. A 1.3 render may ask.
 /// - Every request is one the contract names, and so is every host request ([`EFFECTS`], [`READS`]).
 #[derive(Default)]
@@ -591,8 +596,8 @@ pub struct Protocol {
 struct Instance {
     major: u32,
     state: State,
-    /// Whether each surface of the manifest draws.
-    surfaces: Vec<bool>,
+    /// The surfaces of the manifest.
+    surfaces: Vec<abi::SurfaceClaim>,
     messages: bool,
     ended: Vec<u64>,
 }
@@ -642,6 +647,7 @@ pub const EFFECTS: &[&str] = &[
     "title",
     "set-theme",
     "install-theme",
+    "scroll",
 ];
 
 /// The requests of the host table that read, or shape only the call's own effects, as `opencode_plugin.h` lists them.
@@ -678,6 +684,10 @@ pub const READS: &[&str] = &[
     "selection",
     "theme",
     "themes",
+    "scroll-state",
+    "anchors",
+    "top-anchor",
+    "transcript",
 ];
 
 /// The requests of the host, by their `type`: those of 1.x, and those 2.0 adds.
@@ -697,14 +707,25 @@ const REQUESTS_V1: &[&str] = &[
     "fence-gone",
     "deltas",
 ];
-const REQUESTS_V2: &[&str] = &["view", "draw", "unmount", "message"];
+const REQUESTS_V2: &[&str] = &["view", "draw", "unmount", "message", "layout", "scrolled"];
 
 /// The requests that run handlers, whose reply is `null`.
-const HANDLERS: &[&str] =
-    &["command", "event", "reply", "mount", "wake", "route-mount", "fence-gone", "deltas", "unmount", "message"];
+const HANDLERS: &[&str] = &[
+    "command",
+    "event",
+    "reply",
+    "mount",
+    "wake",
+    "route-mount",
+    "fence-gone",
+    "deltas",
+    "unmount",
+    "message",
+    "scrolled",
+];
 
 /// The requests that read only.
-const RENDERS: &[&str] = &["render-fence", "render", "render-route", "view", "draw"];
+const RENDERS: &[&str] = &["render-fence", "render", "render-route", "view", "draw", "layout"];
 
 impl Protocol {
     /// The first rule broken so far.
@@ -766,15 +787,19 @@ impl Protocol {
                 if kind == "message" && !known.messages {
                     return Err("a message to a plugin whose manifest takes none".to_owned());
                 }
-                if kind == "view" || kind == "draw" {
-                    let surface = request.get("surface").and_then(Value::as_u64).unwrap_or(u64::MAX);
-                    let draws = usize::try_from(surface).ok().and_then(|surface| known.surfaces.get(surface));
-                    match draws {
-                        None => return Err(format!("a {kind} of surface {surface} of {}", known.surfaces.len())),
-                        Some(false) if kind == "draw" => {
-                            return Err(format!("a draw of surface {surface}, which has none"));
-                        }
-                        Some(_) => {}
+                if let Some(surface) = request.get("surface") {
+                    let at = surface.as_u64().and_then(|at| usize::try_from(at).ok());
+                    let Some(claim) = at.and_then(|at| known.surfaces.get(at)) else {
+                        return Err(format!("a {kind} of surface {surface} of {}", known.surfaces.len()));
+                    };
+                    let declared = match kind.as_str() {
+                        "draw" => claim.draw,
+                        "layout" => claim.layout,
+                        "scrolled" => claim.on_scroll,
+                        _ => true,
+                    };
+                    if !declared {
+                        return Err(format!("a {kind} of surface {surface}, which has none"));
                     }
                 }
                 let generation = request.pointer("/mount/generation").and_then(Value::as_u64);
@@ -805,7 +830,7 @@ impl Protocol {
                             (abi::OK, Some(manifest)) => {
                                 instance.state = State::Live;
                                 if instance.major >= 2 {
-                                    instance.surfaces = manifest.surfaces.iter().map(|surface| surface.draw).collect();
+                                    instance.surfaces = manifest.surfaces;
                                     instance.messages = manifest.messages;
                                 }
                             }
@@ -817,6 +842,7 @@ impl Protocol {
                         let readable = match reply {
                             Ok(bytes) if *status == abi::OK => match kind.as_str() {
                                 "view" => serde_json::from_slice::<abi::ViewReply>(bytes).is_ok(),
+                                "layout" => serde_json::from_slice::<abi::v2::LayoutReply>(bytes).is_ok(),
                                 // A list's bytes, which the canvas checks.
                                 "draw" => true,
                                 kind if HANDLERS.contains(&kind) => serde_json::from_slice::<()>(bytes).is_ok(),
