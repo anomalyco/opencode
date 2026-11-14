@@ -646,7 +646,8 @@ export const layer = Layer.effect(
           ? undefined
           : (measured ? total(measured) : estimateRequest(prepared.request)) <= fit
             ? prepared.request
-            : estimateRequest(shrink.history) <= target
+            : // Without a retained tail, this is the same request the measured count already ruled out.
+              shrink.history !== prepared.request && estimateRequest(shrink.history) <= target
               ? shrink.history
               : undefined
         const request =
