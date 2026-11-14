@@ -1061,6 +1061,7 @@ export function createData(config: CreateDataInput) {
           assistant.cost = event.data.cost
           assistant.tokens = event.data.tokens
           if (event.data.snapshot) assistant.snapshot = { ...assistant.snapshot, end: event.data.snapshot }
+          if (event.data.files) assistant.snapshot = { ...assistant.snapshot, files: event.data.files }
         })
         return
       }
@@ -1082,6 +1083,7 @@ export function createData(config: CreateDataInput) {
             assistant.cost = event.data.cost
             assistant.tokens = event.data.tokens
           }
+          if (event.data.files) assistant.snapshot = { ...assistant.snapshot, files: event.data.files }
         })
         return
       case "session.text.started":
