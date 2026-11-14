@@ -394,6 +394,7 @@ fn the_list_comes_back_on_the_row_that_was_asked_about() {
 }
 
 /// A plugin whose command panics.
+#[cfg(unix)]
 fn boom() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         setup.command(abi::Command { name: "boom.boom".to_owned(), ..abi::Command::default() }, |_, _| panic!("boom"));

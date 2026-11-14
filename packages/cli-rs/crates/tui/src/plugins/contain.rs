@@ -241,13 +241,12 @@ pub fn sync(tui: &Tui) {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 
     // Expected (review bigboi, inherited): a change of the crash list that cannot be written says so and leaves the
     // file as it was, so a release that depends on it does not happen.
-    #[cfg(unix)]
     #[test]
     fn a_crash_list_that_cannot_be_written_says_so() {
         use std::os::unix::fs::PermissionsExt;
