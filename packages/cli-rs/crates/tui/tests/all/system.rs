@@ -335,7 +335,7 @@ fn plugin_manager_matches_typescript() {
 
     let app = TestApp::new(100, 40);
     let (mounted, _) = plugin_manager(&app, json!({}));
-    opencode_tui::dialogs::plugins::show(&mounted.tui);
+    mounted.tui.keymap.dispatch("plugins.list", None);
     wait_for(&app, "team.plugins");
     app.press("ctrl+a");
     wait_for(&app, "hide internal");
@@ -375,7 +375,7 @@ fn plugin_manager_follows_plugin_updated_under_its_error_view() {
             .filter(|seen| seen.path == "/api/plugin" && seen.query.get("location[directory]") == other.as_ref())
             .count()
     };
-    opencode_tui::dialogs::plugins::show(&tui);
+    tui.keymap.dispatch("plugins.list", None);
     wait_for(&app, "view error enter");
     app.press("enter");
     wait_for(&app, "Server plugin error");
@@ -394,7 +394,7 @@ fn plugin_manager_reads_the_active_location() {
     let app = TestApp::new(100, 30);
     let (mounted, _) = plugin_manager(&app, json!({}));
     opencode_tui::features::location::navigate_home(&mounted.tui, Some(opencode_store::Location::new("/tmp/other")));
-    opencode_tui::dialogs::plugins::show(&mounted.tui);
+    mounted.tui.keymap.dispatch("plugins.list", None);
     app.wait_until(WAIT, || mounted.requests("/api/plugin").len() == 2);
     assert_eq!(mounted.requests("/api/plugin")[1], "GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fother");
 }
@@ -433,7 +433,7 @@ fn plugin_manager_toggles_checks_and_updates() {
     let app = TestApp::new(100, 30);
     let (mounted, activations) = plugin_manager(&app, json!({}));
     let tui = &mounted.tui;
-    opencode_tui::dialogs::plugins::show(tui);
+    tui.keymap.dispatch("plugins.list", None);
     wait_for(&app, "disable enter");
     assert_eq!(activations(), 1);
 
@@ -483,7 +483,7 @@ fn plugin_manager_toggles_checks_and_updates() {
 fn a_configured_typescript_plugin_is_listed_as_skipped_with_its_reason() {
     let app = TestApp::new(100, 30);
     let (mounted, _) = plugin_manager(&app, json!({ "plugins": ["./broken.ts"] }));
-    opencode_tui::dialogs::plugins::show(&mounted.tui);
+    mounted.tui.keymap.dispatch("plugins.list", None);
     let screen = wait_for(&app, "skipped, local");
     assert!(screen.contains("./broken.ts"), "{screen}");
     // TUI rows sort by label: `./broken.ts` comes before `team.tui`.
