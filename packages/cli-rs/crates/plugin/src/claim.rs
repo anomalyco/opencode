@@ -463,9 +463,9 @@ impl Core {
             false => v2::Palette::default(),
         };
         let input = v2::SurfaceInput { width, height: host.app().size().1, palette, full, panel: None };
-        let (mut memo, held) = {
+        let (held, mut memo) = {
             let mut state = self.state.borrow_mut();
-            (std::mem::take(&mut state.memo), state.memo_entries())
+            (state.memo_entries(), std::mem::take(&mut state.memo))
         };
         book(|ledger| ledger.views += 1);
         let staged = RefCell::new(HashMap::new());
