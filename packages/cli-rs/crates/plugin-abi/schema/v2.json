@@ -450,6 +450,19 @@
             "layout": {
               "$ref": "#/$defs/Layout"
             },
+            "notify_top": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "user_scroll": {
+              "type": "boolean"
+            },
             "type": {
               "const": "list"
             }

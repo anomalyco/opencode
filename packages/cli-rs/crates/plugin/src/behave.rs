@@ -58,8 +58,26 @@ pub(crate) struct State {
     /// The scroll widgets whose wheel and resize arm the hook.
     hooked: HashSet<u32>,
     /// The signature of what the last `layout` call was told.
-    seen: Option<(u64, u64, u64)>,
+    seen: Option<Signature>,
     index: Option<Rc<Index>>,
+}
+
+/// Hashes of what a `layout` call was told: the rects and sizes of what it named, their offsets, the top anchors of
+/// `notify_top` scrolls, and those scrolls' sizes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Signature {
+    rects: u64,
+    offsets: u64,
+    tops: u64,
+    shape: u64,
+}
+
+impl Signature {
+    /// Whether a call told `self` must be told `next` too: nothing it named changed. A `notify_top` scroll's size
+    /// alone does not call.
+    fn calls(&self, next: &Signature) -> bool {
+        (self.rects, self.offsets, self.tops) == (next.rects, next.offsets, next.tops)
+    }
 }
 
 /// Where a pending `To` goes in this round.
@@ -156,9 +174,9 @@ impl Index {
                     self.scrolls.insert(id.to_owned(), scrolled(widget, notify_top.clone(), *user_scroll, false));
                     self.walk(&mounted.children, Some(id), Some(&widget.content_view().as_any()));
                 }
-                (Node::List { .. }, Extra::List(list)) => {
+                (Node::List { notify_top, user_scroll, .. }, Extra::List(list)) => {
                     let Some(id) = id else { continue };
-                    self.scrolls.insert(id.to_owned(), scrolled(&list.scroll, None, false, true));
+                    self.scrolls.insert(id.to_owned(), scrolled(&list.scroll, notify_top.clone(), *user_scroll, true));
                     for item in &list.items {
                         if let Some(mounted) = &item.mounted {
                             self.walk(&mounted.tree.nodes, Some(id), Some(&mounted.wrapper.as_any()));
@@ -227,7 +245,7 @@ thread_local! {
     static MOUNTS: RefCell<HashMap<(String, String), Weak<Surface>>> = RefCell::default();
     /// Whether the plugin call that runs is a handler of input.
     static HANDLER: Cell<bool> = const { Cell::new(false) };
-    static TRANSCRIPT: RefCell<Option<Published>> = const { RefCell::new(None) };
+    static TRANSCRIPT: RefCell<Option<(u64, Published)>> = const { RefCell::new(None) };
     static COUNTS: Cell<Counts> = Cell::new(Counts::default());
 }
 
@@ -405,16 +423,23 @@ pub struct Published {
 /// Publishes the transcript of `app` while the returned guard lives. Its moves and resizes arm the hook through
 /// [`transcript_moved`].
 pub fn publish_transcript(published: Published) -> Publication {
-    TRANSCRIPT.with(|transcript| *transcript.borrow_mut() = Some(published));
-    Publication(())
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    TRANSCRIPT.with(|transcript| *transcript.borrow_mut() = Some((id, published)));
+    Publication(id)
 }
 
-/// The transcript stays published while it lives.
-pub struct Publication(());
+/// The transcript stays published while it lives, or until a newer one is.
+pub struct Publication(u64);
 
 impl Drop for Publication {
     fn drop(&mut self) {
-        TRANSCRIPT.with(|transcript| transcript.borrow_mut().take());
+        TRANSCRIPT.with(|transcript| {
+            let mut transcript = transcript.borrow_mut();
+            if transcript.as_ref().is_some_and(|(id, _)| *id == self.0) {
+                *transcript = None;
+            }
+        });
     }
 }
 
@@ -425,7 +450,8 @@ pub fn transcript_moved(app: &App) {
 
 /// What the published transcript is now.
 pub(crate) fn transcript() -> Option<TranscriptView> {
-    let read = TRANSCRIPT.with(|transcript| transcript.borrow().as_ref().map(|published| published.read.clone()))?;
+    let read =
+        TRANSCRIPT.with(|transcript| transcript.borrow().as_ref().map(|(_, published)| published.read.clone()))?;
     Some(read())
 }
 
@@ -439,7 +465,7 @@ fn mount(plugin: &str, surface: &str) -> Option<Rc<Surface>> {
 pub(crate) fn scroll(plugin: &str, target: &Target, verb: &Scroll) {
     match target {
         Target::Transcript => {
-            let scroll = TRANSCRIPT.with(|transcript| transcript.borrow().as_ref().map(|it| it.scroll.clone()));
+            let scroll = TRANSCRIPT.with(|transcript| transcript.borrow().as_ref().map(|(_, it)| it.scroll.clone()));
             match (scroll, verb) {
                 (Some(scroll), Scroll::By { .. } | Scroll::Offset { .. } | Scroll::Edge { .. }) => scroll(verb),
                 (Some(_), _) => log::warn!("plugin {plugin}: the transcript takes By, Offset and Edge only"),
@@ -729,10 +755,11 @@ impl Surface {
         let Some(layout) = self.calls.layout.clone() else { return false };
         let Some((geometry, signature)) = self.geometry() else { return false };
         let mut behave = self.behave.borrow_mut();
-        if behave.seen == Some(signature) {
+        if behave.seen.is_some_and(|seen| seen.calls(&signature)) {
             return false;
         }
-        let moved_only = behave.seen.is_some_and(|seen| seen.0 == signature.0 && seen.2 == signature.2);
+        // A top anchor that changed because the offset moved is an offset's change, not a rect's.
+        let moved_only = behave.seen.is_some_and(|seen| seen.rects == signature.rects && seen.shape == signature.shape);
         behave.seen = Some(signature);
         let reached = std::mem::take(&mut behave.reached);
         drop(behave);
@@ -752,8 +779,8 @@ impl Surface {
         reply.again
     }
 
-    /// This frame's geometry of what the surface named, and its signature: rects and extents, offsets, top anchors.
-    fn geometry(&self) -> Option<(Geometry, (u64, u64, u64))> {
+    /// This frame's geometry of what the surface named, and its signature.
+    fn geometry(&self) -> Option<(Geometry, Signature)> {
         let notify = self.notify.clone();
         let transcript = notify.iter().any(|watch| *watch == Notify::Transcript).then(transcript).flatten();
         let mut tops = Vec::new();
@@ -810,11 +837,14 @@ impl Surface {
                     Notify::Group { .. } | Notify::Transcript => {}
                 }
             }
+            // A scroll's `notify_top` asks about its top anchor only; its size says whether more than offsets moved.
+            let mut shape = std::collections::hash_map::DefaultHasher::new();
             for (scroll, _) in &tops_of {
-                if let Some(scrolled) = index.scrolls.get(scroll)
-                    && !geometry.scrolls.iter().any(|(id, _)| id == scroll)
-                {
-                    geometry.scrolls.push((scroll.clone(), scrolled.state()));
+                let Some(scrolled) = index.scrolls.get(scroll) else { continue };
+                let state = scrolled.state();
+                (scroll, state.viewport, state.extent).hash(&mut shape);
+                if !geometry.scrolls.iter().any(|(id, _)| id == scroll) {
+                    geometry.scrolls.push((scroll.clone(), state));
                 }
             }
             for (scroll, group, anchors) in &groups {
@@ -835,7 +865,13 @@ impl Surface {
             geometry.groups = groups.clone();
             geometry.tops = tops.clone();
             geometry.transcript = transcript.clone();
-            Some((geometry, (rects.finish(), offsets.finish(), topped.finish())))
+            let signature = Signature {
+                rects: rects.finish(),
+                offsets: offsets.finish(),
+                tops: topped.finish(),
+                shape: shape.finish(),
+            };
+            Some((geometry, signature))
         })
     }
 
