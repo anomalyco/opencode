@@ -1,0 +1,950 @@
+//! System dialogs (E.18b): themes, status, pair, highlights, update and the home notice, the plugin manager,
+//! and error details.
+//!
+//! - P-COMP: `parity/component/E.18b-system.tsx` renders the TS dialogs alone; here they open over the whole TUI,
+//!   so the comparison covers the dialog panel (the cells with the panel background in the fixture).
+//! - `TestApp` and P-REQ: behavior, and the requests each dialog sends to a test transport. Pairing and updating
+//!   are only ever proven here: they change real state.
+
+use std::rc::Rc;
+use std::sync::Arc;
+use std::time::Duration;
+
+use opencode_local::cli_config::Info;
+use opencode_parity::{Fixture, compare, fixtures_dir};
+use opencode_plugin::abi;
+use opencode_tui::dialogs::highlights::Highlight;
+use opencode_tui::dialogs::{pair, settings, status, theme_list};
+use opencode_tui::features::{highlights, update_notification};
+use opencode_tui::{Deps, Route, Tui};
+use opentui::testing::TestApp;
+use serde_json::{Value, json};
+
+use crate::support::{self, Fake, Log, WAIT, wait_for};
+
+const DIRECTORY: &str = "/tmp/opencode/app";
+
+type Answer = Box<dyn Fn(&str, &str, &Value) -> Option<(u16, Value)> + Send + Sync>;
+
+/// Answers with `answer` (method, path, body), else an empty session list, else 404; logs every request.
+fn fake(answer: Answer) -> Fake {
+    Fake::new(move |seen| {
+        answer(&seen.method, &seen.path, &seen.body).unwrap_or_else(|| match seen.path.as_str() {
+            "/api/session" => (200, json!({ "data": [], "cursor": {} })),
+            _ => support::not_found(),
+        })
+    })
+}
+
+struct Mounted {
+    tui: Rc<Tui>,
+    log: Log,
+}
+
+impl Mounted {
+    /// The requests whose path starts with `prefix`, as `METHOD path?query`.
+    fn requests(&self, prefix: &str) -> Vec<String> {
+        let log = self.log.lock().unwrap();
+        log.iter()
+            .filter(|seen| seen.url().starts_with(prefix))
+            .map(|seen| format!("{} {}", seen.method, seen.url()))
+            .collect()
+    }
+}
+
+fn mount_with(app: &TestApp, info: Info, answer: Answer) -> Mounted {
+    let fake = fake(answer);
+    let log = fake.log();
+    let deps = Deps {
+        directory: DIRECTORY.into(),
+        config: support::config(info),
+        route: Route::Home,
+        ..support::deps(Arc::new(fake))
+    };
+    Mounted { tui: opencode_tui::mount(app, deps), log }
+}
+
+fn mount(app: &TestApp, info: Info) -> Rc<Tui> {
+    mount_with(app, info, Box::new(|_, _, _| None)).tui
+}
+
+/// Compares the dialog panel with the fixture: every cell inside the bounding box of the cells whose background is
+/// not the backdrop's (the fixture's top-left cell), so the footer band counts. `title` must be in the fixture.
+#[track_caller]
+fn assert_dialog(app: &TestApp, name: &str, title: &str) {
+    // Deferred work (a dialog built again, a read) may still be on its way.
+    app.wait_until(WAIT, || dialog_diff(app, name, title).is_ok());
+    if let Err(message) = dialog_diff(app, name, title) {
+        panic!("{message}");
+    }
+}
+
+fn dialog_diff(app: &TestApp, name: &str, title: &str) -> Result<(), String> {
+    let expected = Fixture::load(fixtures_dir().join(format!("{name}.json"))).unwrap();
+    let mut actual = Fixture::from_capture(&app.render());
+    let titled = (0..expected.height).any(|y| {
+        let row: String = (0..expected.width).map(|x| expected.cell(x, y).unwrap().symbol.clone()).collect();
+        row.contains(title)
+    });
+    assert!(titled, "{title:?} is not in {name}");
+    let backdrop = expected.cell(0, 0).unwrap().bg;
+    let inside: Vec<(u32, u32)> = (0..expected.height)
+        .flat_map(|y| (0..expected.width).map(move |x| (x, y)))
+        .filter(|&(x, y)| expected.cell(x, y).unwrap().bg != backdrop)
+        .collect();
+    let (left, right) = (inside.iter().map(|p| p.0).min().unwrap(), inside.iter().map(|p| p.0).max().unwrap());
+    let (top, bottom) = (inside.iter().map(|p| p.1).min().unwrap(), inside.iter().map(|p| p.1).max().unwrap());
+    for y in 0..expected.height {
+        for x in 0..expected.width {
+            if !(left..=right).contains(&x) || !(top..=bottom).contains(&y) {
+                *actual.cell_mut(x, y).unwrap() = expected.cell(x, y).unwrap().clone();
+            }
+        }
+    }
+    let comparison = compare(&expected, &actual);
+    if !comparison.is_equal() {
+        let path = std::env::temp_dir().join("opencode-parity").join(format!("{name}.json"));
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, actual.to_json()).unwrap();
+    }
+    if comparison.is_equal() {
+        return Ok(());
+    }
+    Err(format!("P-COMP {name} (panel {left}..={right} x {top}..={bottom}): {comparison}"))
+}
+
+fn theme(tui: &Tui) -> String {
+    tui.theme.borrow().selected().to_owned()
+}
+
+fn configured_theme(tui: &Tui) -> Option<String> {
+    tui.settings.info().theme.and_then(|theme| theme.name)
+}
+
+// Themes ------------------------------------------------------------------------------------------------------
+
+#[test]
+fn theme_list_matches_typescript_and_previews_in_the_dialog() {
+    let app = TestApp::new(80, 30);
+    let tui = mount(&app, support::component_info(json!({})));
+    tui.keymap.dispatch("theme.switch", None);
+    wait_for(&app, "Search themes");
+    assert_dialog(&app, "E.18b/themes", "Search themes");
+
+    // The move previews `opencode2`; the dialog is drawn again in it.
+    app.press("down");
+    app.wait_until(WAIT, || theme(&tui) == "opencode2");
+    app.render();
+    assert_dialog(&app, "E.18b/themes-down", "Search themes");
+
+    // Escape restores the opening theme and writes nothing.
+    app.press("escape");
+    assert!(!app.text().contains("Search themes"), "{}", app.text());
+    assert_eq!(theme(&tui), "opencode");
+    assert_eq!(configured_theme(&tui).as_deref(), Some("opencode"));
+
+    // A filter previews its first match; Enter keeps it and writes `theme.name`.
+    theme_list::show(&tui, None);
+    wait_for(&app, "Search themes");
+    app.type_text("tokyo");
+    app.wait_until(WAIT, || theme(&tui) == "tokyonight");
+    app.render();
+    assert_dialog(&app, "E.18b/themes-filter", "tokyo");
+    app.press("enter");
+    assert!(!app.text().contains("tokyonight"), "{}", app.text());
+    assert_eq!(theme(&tui), "tokyonight");
+    assert_eq!(configured_theme(&tui).as_deref(), Some("tokyonight"));
+}
+
+#[test]
+fn clearing_the_filter_previews_the_opening_theme_again() {
+    let app = TestApp::new(80, 30);
+    let tui = mount(&app, support::component_info(json!({})));
+    theme_list::show(&tui, None);
+    wait_for(&app, "Search themes");
+    app.type_text("nord");
+    app.wait_until(WAIT, || theme(&tui) == "nord");
+    for _ in 0.."nord".len() {
+        app.press("backspace");
+    }
+    app.wait_until(WAIT, || theme(&tui) == "opencode");
+    assert_eq!(theme(&tui), "opencode");
+    wait_for(&app, "Search themes");
+}
+
+#[test]
+fn settings_theme_opens_the_list_and_comes_back() {
+    let app = TestApp::new(80, 30);
+    let tui = mount(&app, support::component_info(json!({})));
+    settings::show(&tui, Some("theme.name"));
+    wait_for(&app, "opencode ↵");
+    app.press("enter");
+    wait_for(&app, "Search themes");
+
+    // Escape goes back to Settings on Theme, with the opening theme.
+    app.press("down");
+    app.wait_until(WAIT, || theme(&tui) == "opencode2");
+    app.press("escape");
+    wait_for(&app, "Search settings");
+    assert_eq!(theme(&tui), "opencode");
+    wait_for(&app, "opencode ↵");
+
+    // A pick goes back too, and Settings shows the new value.
+    app.press("enter");
+    wait_for(&app, "Search themes");
+    app.press("down");
+    app.wait_until(WAIT, || theme(&tui) == "opencode2");
+    app.press("enter");
+    wait_for(&app, "opencode2 ↵");
+    assert_eq!(configured_theme(&tui).as_deref(), Some("opencode2"));
+    assert_eq!(theme(&tui), "opencode2");
+}
+
+// Status ------------------------------------------------------------------------------------------------------
+
+fn location() -> Value {
+    json!({ "directory": DIRECTORY, "project": { "id": "proj_app", "directory": DIRECTORY, "canonical": DIRECTORY } })
+}
+
+fn servers() -> Value {
+    json!([
+        { "name": "linear", "status": { "status": "failed", "error": "MCP error -32000: Connection closed" } },
+        { "name": "github", "status": { "status": "connected" } },
+        { "name": "sentry", "status": { "status": "needs_auth", "error": "Authentication required" } },
+        { "name": "docs", "status": { "status": "disabled" } },
+        { "name": "figma", "status": { "status": "pending" } },
+    ])
+}
+
+fn mcp(list: Value) -> Answer {
+    Box::new(move |_, path, _| match path {
+        "/api/location" => Some((200, location())),
+        "/api/mcp" => Some((200, json!({ "location": location(), "data": list.clone() }))),
+        _ => None,
+    })
+}
+
+#[test]
+fn status_matches_typescript() {
+    let app = TestApp::new(80, 30);
+    let mounted = mount_with(&app, support::component_info(json!({})), mcp(servers()));
+    mounted.tui.keymap.dispatch("opencode.status", None);
+    wait_for(&app, "5 MCP servers");
+    assert_dialog(&app, "E.18b/status", "Status");
+    assert_eq!(mounted.requests("/api/mcp").len(), 1);
+
+    let app = TestApp::new(80, 30);
+    let tui = mount_with(&app, support::component_info(json!({})), mcp(json!([]))).tui;
+    status::show(&tui);
+    wait_for(&app, "No MCP servers");
+    assert_dialog(&app, "E.18b/status-empty", "Status");
+}
+
+// Plugins -----------------------------------------------------------------------------------------------------
+
+fn server_plugins() -> Value {
+    json!([
+        {
+            "id": "team.plugins",
+            "source": { "type": "package", "target": "git+ssh://git@github.com/example/team-plugins.git", "version": "dadba13", "outdated": true },
+            "features": { "server": true },
+            "state": { "status": "active" },
+        },
+        {
+            "id": "audit",
+            "source": { "type": "local", "path": format!("{DIRECTORY}/.opencode/plugins/audit.ts") },
+            "features": { "server": true },
+            "state": { "status": "failed", "error": "Cannot find module 'zod' from audit.ts", "ref": "err_audit" },
+        },
+        { "id": "opencode.core", "source": { "type": "builtin" }, "features": { "server": true }, "state": { "status": "active" } },
+        { "id": "theme.pack", "source": { "type": "package", "target": "theme-pack" }, "features": { "tui": true }, "state": { "status": "active" } },
+    ])
+}
+
+/// The plugin list, `check` with the package no longer outdated, and `update`.
+fn plugin_server() -> Answer {
+    Box::new(|method, path, _| match (method, path) {
+        ("GET", "/api/location") => Some((200, location())),
+        ("GET", "/api/plugin") => Some((200, json!({ "location": location(), "data": server_plugins() }))),
+        ("POST", "/api/plugin/check") => {
+            let mut plugins = server_plugins();
+            plugins[0]["source"]["outdated"] = json!(false);
+            Some((200, json!({ "location": location(), "data": plugins })))
+        }
+        ("POST", "/api/plugin/update") => Some((204, Value::Null)),
+        _ => None,
+    })
+}
+
+thread_local! {
+    /// The activations of [`team_plugin`] on this test's thread.
+    static ACTIVATIONS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// A TUI plugin besides the built-ins, which counts its activations in [`ACTIVATIONS`].
+fn team_plugin() -> abi::Plugin {
+    fn setup(_: &mut abi::Setup) -> Result<(), String> {
+        ACTIVATIONS.set(ACTIVATIONS.get() + 1);
+        Ok(())
+    }
+    abi::Plugin { id: "team.tui", setup }
+}
+
+/// The TUI with the plugin server and [`team_plugin`], and how often that plugin was activated.
+fn plugin_manager(app: &TestApp, extra: Value) -> (Mounted, fn() -> u32) {
+    let mounted = mount_with(app, support::component_info(extra), plugin_server());
+    ACTIVATIONS.set(0);
+    opencode_tui::plugins::host::add(&mounted.tui, team_plugin().into());
+    (mounted, || ACTIVATIONS.get())
+}
+
+fn active(tui: &Tui, id: &str) -> bool {
+    tui.plugins.entries().iter().any(|entry| entry.id == id && entry.status == opencode_plugin::Status::Active)
+}
+
+#[test]
+fn plugin_manager_matches_typescript() {
+    let app = TestApp::new(100, 30);
+    let (mounted, _) = plugin_manager(&app, json!({}));
+    mounted.tui.keymap.dispatch("plugins.list", None);
+    wait_for(&app, "team.plugins");
+    assert_dialog(&app, "E.18b/plugins", "Plugins");
+    // The startup read of the plugin manager (`syncServerPlugins`), then the dialog's.
+    assert_eq!(
+        mounted.requests("/api/plugin"),
+        [
+            "GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp",
+            "GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp"
+        ]
+    );
+
+    app.press("down");
+    assert_dialog(&app, "E.18b/plugins-failed", "Plugins");
+    app.press("down");
+    assert_dialog(&app, "E.18b/plugins-outdated", "Plugins");
+
+    // Enter on the failed server plugin opens its error, with the source path and the reference.
+    app.press("up");
+    app.press("enter");
+    wait_for(&app, "Server plugin error");
+    assert_dialog(&app, "E.18b/plugins-error", "Server plugin error");
+    // Escape goes back to the list on the same row.
+    app.press("escape");
+    wait_for(&app, "view error enter");
+    assert_dialog(&app, "E.18b/plugins-failed", "Plugins");
+
+    let app = TestApp::new(100, 40);
+    let (mounted, _) = plugin_manager(&app, json!({}));
+    opencode_tui::dialogs::plugins::show(&mounted.tui);
+    wait_for(&app, "team.plugins");
+    app.press("ctrl+a");
+    wait_for(&app, "hide internal");
+    assert_dialog(&app, "E.18b/plugins-internal", "Plugins");
+}
+
+// Expected (carbon-dialogs-7): the manager reads the server plugins again on `plugin.updated` while it shows an error,
+// as TS's subscription lives as long as the dialog.
+#[test]
+fn plugin_manager_follows_plugin_updated_under_its_error_view() {
+    use opencode_api::memory::{Memory, Route as MemoryRoute};
+    let failed = json!([{
+        "id": "audit", "source": { "type": "local", "path": format!("{DIRECTORY}/audit.ts") },
+        "features": { "server": true }, "state": { "status": "failed", "error": "Cannot find module" },
+    }]);
+    let memory = Memory::new(vec![
+        MemoryRoute::json("GET", "/api/location", 200, &location()),
+        MemoryRoute::json("GET", "/api/plugin", 200, &json!({ "location": location(), "data": failed })),
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
+    ]);
+    let app = TestApp::new(100, 30);
+    let deps = Deps {
+        directory: DIRECTORY.into(),
+        config: support::config(support::component_info(json!({}))),
+        route: Route::Home,
+        events: true,
+        ..support::deps(Arc::new(memory.clone()))
+    };
+    let tui = opencode_tui::mount(&app, deps);
+    // The manager reads `/tmp/other`; the plugin host reads the default location on the same event.
+    opencode_tui::features::location::navigate_home(&tui, Some(opencode_store::Location::new("/tmp/other")));
+    let reads = || {
+        let other = Some(vec!["/tmp/other".to_owned()]);
+        memory
+            .requests()
+            .iter()
+            .filter(|seen| seen.path == "/api/plugin" && seen.query.get("location[directory]") == other.as_ref())
+            .count()
+    };
+    opencode_tui::dialogs::plugins::show(&tui);
+    wait_for(&app, "view error enter");
+    app.press("enter");
+    wait_for(&app, "Server plugin error");
+    let before = reads();
+    memory.emit(&json!({ "id": "evt_plugins", "created": 1, "type": "plugin.updated", "data": {} }));
+    assert!(app.wait_until(WAIT, || reads() > before), "plugin.updated under the error view read nothing");
+    app.press("escape");
+    wait_for(&app, "view error enter");
+    let before = reads();
+    memory.emit(&json!({ "id": "evt_plugins_2", "created": 2, "type": "plugin.updated", "data": {} }));
+    assert!(app.wait_until(WAIT, || reads() > before), "the list stopped following plugin.updated");
+}
+
+#[test]
+fn plugin_manager_reads_the_active_location() {
+    let app = TestApp::new(100, 30);
+    let (mounted, _) = plugin_manager(&app, json!({}));
+    opencode_tui::features::location::navigate_home(&mounted.tui, Some(opencode_store::Location::new("/tmp/other")));
+    opencode_tui::dialogs::plugins::show(&mounted.tui);
+    app.wait_until(WAIT, || mounted.requests("/api/plugin").len() == 2);
+    assert_eq!(mounted.requests("/api/plugin")[1], "GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fother");
+}
+
+// Expected: the plugin manager and the diff viewer are host entries among the built-ins in TS order. Disabling the
+// viewer takes `diff.open` away; enabling it brings it back, and its route shows the viewer, not the missing route.
+#[test]
+fn the_host_entries_list_and_toggle_like_plugins() {
+    let app = TestApp::new(100, 30);
+    let (mounted, _) = plugin_manager(&app, json!({}));
+    let tui = &mounted.tui;
+    let builtins: Vec<String> = tui
+        .plugins
+        .entries()
+        .into_iter()
+        .filter(|entry| entry.source == opencode_plugin::Source::Builtin)
+        .map(|entry| entry.id)
+        .collect();
+    let at = |id: &str| builtins.iter().position(|known| known == id).unwrap();
+    assert!(at("opencode.notifications") < at("opencode.plugins") && at("opencode.plugins") < at("opencode.stats"));
+    assert_eq!(builtins.last().map(String::as_str), Some("opencode.diffs"));
+
+    let host = opencode_tui::plugins::host::host(tui);
+    assert!(tui.plugins.set_active(&host, "opencode.diffs", false));
+    assert!(!active(tui, "opencode.diffs"));
+    assert!(!matches!(tui.keymap.dispatch("diff.open", None), opentui::keymap::RunResult::Ok));
+    assert!(tui.plugins.set_active(&host, "opencode.diffs", true));
+    assert!(matches!(tui.keymap.dispatch("diff.open", None), opentui::keymap::RunResult::Ok));
+    assert_eq!(tui.route(), Route::Plugin { id: "opencode.diffs".to_owned(), name: "diff".to_owned() });
+    app.render();
+    assert!(!app.text().contains("Unknown plugin route"), "{}", app.text());
+}
+
+#[test]
+fn plugin_manager_toggles_checks_and_updates() {
+    let app = TestApp::new(100, 30);
+    let (mounted, activations) = plugin_manager(&app, json!({}));
+    let tui = &mounted.tui;
+    opencode_tui::dialogs::plugins::show(tui);
+    wait_for(&app, "disable enter");
+    assert_eq!(activations(), 1);
+
+    // Enter disables the TUI plugin and enables it again.
+    app.press("enter");
+    wait_for(&app, "enable enter");
+    assert!(!active(tui, "team.tui"));
+    assert!(app.text().contains("inactive"), "{}", app.text());
+    app.press("enter");
+    wait_for(&app, "disable enter");
+    assert!(active(tui, "team.tui"));
+    assert_eq!(activations(), 2);
+
+    // ctrl+u updates the outdated package, then reads the list again.
+    app.press("down");
+    app.press("down");
+    wait_for(&app, "update ctrl+u");
+    app.press("ctrl+u");
+    app.wait_until(WAIT, || mounted.requests("/api/plugin").len() == 4);
+    let update = mounted
+        .log
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|seen| seen.url().starts_with("/api/plugin/update"))
+        .map(|seen| seen.body.clone());
+    assert_eq!(update, Some(json!({ "targets": ["git+ssh://git@github.com/example/team-plugins.git"] })));
+
+    // ctrl+r checks for updates and takes the fresh flags.
+    app.press("ctrl+r");
+    wait_for(&app, "dadba13");
+    app.wait_until(WAIT, || !app.text().contains("update available"));
+    assert!(!app.text().contains("update available"), "{}", app.text());
+    assert_eq!(
+        mounted.requests("/api/plugin"),
+        [
+            "GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp",
+            "GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp",
+            "POST /api/plugin/update?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp",
+            "GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp",
+            "POST /api/plugin/check?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp",
+        ]
+    );
+}
+
+#[test]
+fn a_configured_typescript_plugin_is_listed_as_skipped_with_its_reason() {
+    let app = TestApp::new(100, 30);
+    let (mounted, _) = plugin_manager(&app, json!({ "plugins": ["./broken.ts"] }));
+    opencode_tui::dialogs::plugins::show(&mounted.tui);
+    let screen = wait_for(&app, "skipped, local");
+    assert!(screen.contains("./broken.ts"), "{screen}");
+    // TUI rows sort by label: `./broken.ts` comes before `team.tui`.
+    assert!(screen.contains("view error enter"), "{screen}");
+    app.press("enter");
+    let screen = wait_for(&app, "TUI plugin error");
+    assert!(screen.contains(opencode_plugin::SKIPPED), "{screen}");
+}
+
+// Pair --------------------------------------------------------------------------------------------------------
+
+/// `GET /api/info` and `POST /api/pair`, or a 503 for the pairing.
+fn pair_server(fails: bool) -> Answer {
+    Box::new(move |_, path, _| match path {
+        "/api/location" => Some((200, location())),
+        "/api/info" => Some((
+            200,
+            json!({
+                "version": "0.0.0-test", "pid": 4242,
+                "urls": ["http://127.0.0.1:4096/", "http://192.168.1.20:4096/"], "paths": { "tmp": "/tmp" },
+            }),
+        )),
+        "/api/pair" if fails => Some((503, json!({ "_tag": "ServiceUnavailable", "message": "Pairing is disabled" }))),
+        "/api/pair" => Some((200, json!({ "code": "XK7Q2M", "expires_in": 600 }))),
+        _ => None,
+    })
+}
+
+#[test]
+fn pair_matches_typescript() {
+    let app = TestApp::new(100, 40);
+    let mounted = mount_with(&app, support::component_info(json!({})), pair_server(false));
+    mounted.tui.keymap.dispatch("server.pair", None);
+    wait_for(&app, "expire in");
+    assert_dialog(&app, "E.18b/pair", "Pair");
+    // One info read and one pairing code; the test transport stands in for the service.
+    assert_eq!(mounted.requests("/api/pair"), ["POST /api/pair"]);
+    assert_eq!(mounted.requests("/api/info"), ["GET /api/info"]);
+
+    let app = TestApp::new(80, 30);
+    let tui = mount_with(&app, support::component_info(json!({})), pair_server(false)).tui;
+    pair::show(&tui);
+    wait_for(&app, "expire in");
+    assert_dialog(&app, "E.18b/pair-narrow", "Pair");
+
+    let app = TestApp::new(100, 40);
+    let tui = mount_with(&app, support::component_info(json!({})), pair_server(true)).tui;
+    pair::show(&tui);
+    wait_for(&app, "Could not load");
+    assert_dialog(&app, "E.18b/pair-error", "Pair");
+}
+
+// Expected (carbon-dialogs-6): a click on a link inside the dialog opens it, as TS `Link` does.
+#[test]
+fn a_pair_link_opens_on_click() {
+    let app = TestApp::new(100, 40);
+    let tui = mount_with(&app, support::component_info(json!({})), pair_server(false)).tui;
+    pair::show(&tui);
+    let screen = wait_for(&app, "expire in");
+    let capture = opencode_tui::features::links::testing::capture();
+    let (x, y) = support::at(&screen, "http://localhost:4096").unwrap();
+    app.click(x + 2, y);
+    assert_eq!(*capture.0.opened.borrow(), ["http://localhost:4096/auth/connect/XK7Q2M"]);
+}
+
+#[test]
+fn pair_links_follow_the_server_urls() {
+    let server = serde_json::from_value(json!({
+        "version": "1", "pid": 1, "urls": ["http://[::1]:4096", "https://box.example:443/"], "paths": { "tmp": "/tmp" },
+    }))
+    .unwrap();
+    let code = serde_json::from_value(json!({ "code": "AB", "expires_in": 90 })).unwrap();
+    let value = pair::pairing(&server, &code);
+    assert_eq!(value.links, ["http://[::1]:4096/auth/connect/AB", "https://box.example/auth/connect/AB"]);
+    assert_eq!(value.localhost.as_deref(), Some("http://localhost:4096/auth/connect/AB"));
+    // `Math.round(90 / 60)`.
+    assert_eq!(value.minutes, 2);
+    assert!(value.loopback);
+}
+
+#[test]
+fn pair_links_skip_server_urls_with_non_ascii_hosts() {
+    let url = "https://Bücher.example";
+    assert!(matches!(opencode_api::js::parse_url(url), Err(opencode_api::js::UrlError::NonAsciiHost(_))));
+    let server = serde_json::from_value(json!({
+        "version": "1", "pid": 1, "urls": [url, "https://box.example/"], "paths": { "tmp": "/tmp" },
+    }))
+    .unwrap();
+    let code = serde_json::from_value(json!({ "code": "AB", "expires_in": 90 })).unwrap();
+    let value = pair::pairing(&server, &code);
+    assert_eq!(value.links, ["https://box.example/auth/connect/AB"]);
+    assert_eq!(value.localhost, None);
+}
+
+// Expected (bigboi-dialogs-7): closing the export options frees them with what their confirm holds.
+#[test]
+fn closing_export_frees_its_select_and_callbacks() {
+    let app = TestApp::new(80, 24);
+    let tui = support::mount_empty(&app, Info::default(), None);
+    let marker = Rc::new(());
+    let held = marker.clone();
+    opencode_tui::dialogs::export::options(&tui, false, Rc::new(move |_, _| drop(held.clone())));
+    wait_for(&app, "Export session");
+    tui.dialogs.clear();
+    app.render();
+    assert_eq!(Rc::strong_count(&marker), 1, "the closed export dialog kept its confirm");
+}
+
+#[test]
+fn integration_links_open_only_on_the_web() {
+    let app = TestApp::new(80, 24);
+    let tui = support::mount_empty(&app, Info::default(), None);
+    let capture = opencode_tui::features::links::testing::capture();
+    let open = tui.local.open_url.borrow().clone();
+    assert!(open("file:///etc/passwd").is_err());
+    assert!(open("-a Calculator").is_err());
+    assert_eq!(open("https://example.com/?a=1&b=%PATH%"), Ok(()));
+    assert_eq!(*capture.0.opened.borrow(), ["https://example.com/?a=1&b=%PATH%"]);
+}
+
+// Highlights --------------------------------------------------------------------------------------------------
+
+fn release_highlights() -> Vec<Highlight> {
+    let item = |title: &str, body: &str| Highlight { title: title.to_owned(), body: body.to_owned() };
+    vec![
+        item("Session tabs", "Open sessions side by side and switch with `ctrl+tab`."),
+        item("Faster startup", "The TUI connects to the background service before it draws the first frame."),
+        item("Pair devices", "Run `/pair` to open this session on your phone, or scan the code."),
+    ]
+}
+
+#[test]
+fn highlights_match_typescript() {
+    let app = TestApp::new(80, 30);
+    let tui = mount(&app, support::component_info(json!({})));
+    let release = highlights::Release { version: "2.0.27".to_owned(), items: release_highlights() };
+    highlights::install_with(&tui, release, false);
+    tui.keymap.dispatch("opencode.highlights", None);
+    wait_for(&app, "What's new in 2.0.27");
+    assert_dialog(&app, "E.18b/highlights", "What's new");
+    app.press("enter");
+    assert!(!app.text().contains("What's new"), "{}", app.text());
+
+    let app = TestApp::new(80, 20);
+    let tui = mount(&app, support::component_info(json!({})));
+    let mut items = release_highlights();
+    items.extend(
+        release_highlights().into_iter().map(|item| Highlight { title: format!("{} again", item.title), ..item }),
+    );
+    opencode_tui::dialogs::highlights::show(&tui, "2.0.27", &items);
+    wait_for(&app, "What's new in 2.0.27");
+    app.press("down");
+    app.press("down");
+    assert_dialog(&app, "E.18b/highlights-scroll", "What's new");
+}
+
+/// A TUI over real roots in a temporary home, so the `highlights` storage and `prompt-history.jsonl` are real.
+fn mount_rooted(app: &TestApp, home: &std::path::Path, extra: Value) -> Rc<Tui> {
+    let deps = Deps {
+        directory: DIRECTORY.into(),
+        config: support::config(support::component_info(extra)),
+        roots: support::roots(support::xdg_paths(home), "test"),
+        route: Route::Home,
+        ..support::deps(Arc::new(fake(Box::new(|_, _, _| None))))
+    };
+    opencode_tui::mount(app, deps)
+}
+
+#[test]
+fn highlights_open_once_after_an_update_into_an_idle_home() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    let release = highlights::Release { version: "2.0.27".to_owned(), items: release_highlights() };
+
+    // A new install records the version silently.
+    let app = TestApp::new(80, 30);
+    let tui = mount_rooted(&app, home.path(), json!({}));
+    highlights::startup(&tui, &release, false);
+    let storage = tui.storage().unwrap();
+    app.wait_until(WAIT, || storage.load("highlights", &json!({})).unwrap() == json!({ "seen": "2.0.27" }));
+    assert!(!app.text().contains("What's new"), "{}", app.text());
+
+    // After an update, a user with history sees them once.
+    let state = tui.state_dir().unwrap();
+    std::fs::write(state.join("prompt-history.jsonl"), "").unwrap();
+    let update = highlights::Release { version: "2.0.28".to_owned(), ..release.clone() };
+    highlights::startup(&tui, &update, false);
+    wait_for(&app, "What's new in 2.0.28");
+    app.press("enter");
+    highlights::startup(&tui, &update, false);
+    app.wait_until(Duration::from_millis(300), || app.text().contains("What's new"));
+    assert!(!app.text().contains("What's new"), "{}", app.text());
+
+    // `--continue`, an open dialog, or `highlights: false` keeps it closed.
+    let next = highlights::Release { version: "2.0.29".to_owned(), ..release.clone() };
+    highlights::startup(&tui, &next, true);
+    status::show(&tui);
+    highlights::startup(&tui, &next, false);
+    tui.dialogs.clear();
+    let app = TestApp::new(80, 30);
+    let off = mount_rooted(&app, home.path(), json!({ "highlights": false }));
+    highlights::startup(&off, &next, false);
+    app.wait_until(Duration::from_millis(300), || app.text().contains("What's new"));
+    assert!(!app.text().contains("What's new"), "{}", app.text());
+    assert_eq!(storage.load("highlights", &json!({})).unwrap(), json!({ "seen": "2.0.28" }));
+}
+
+// Update ------------------------------------------------------------------------------------------------------
+
+type CheckDone = Box<dyn FnOnce(Result<Option<update_notification::Check>, String>)>;
+type ApplyDone = Box<dyn FnOnce(Result<(), String>)>;
+
+/// An updater that keeps its callbacks, so a test finishes each check and install when it wants. It never installs
+/// anything.
+#[derive(Default)]
+struct FakeUpdater {
+    checks: std::cell::RefCell<Vec<CheckDone>>,
+    applies: std::cell::RefCell<Vec<(String, ApplyDone)>>,
+}
+
+impl update_notification::Source for FakeUpdater {
+    fn remote(&self) -> bool {
+        false
+    }
+
+    fn check(&self, _installing: Box<dyn Fn(String)>, done: CheckDone) {
+        self.checks.borrow_mut().push(done);
+    }
+
+    fn apply(&self, version: &str, done: ApplyDone) {
+        self.applies.borrow_mut().push((version.to_owned(), done));
+    }
+}
+
+impl FakeUpdater {
+    fn finish_check(&self, result: Result<Option<update_notification::Check>, String>) {
+        let done = self.checks.borrow_mut().pop().expect("a check is running");
+        done(result);
+    }
+
+    fn finish_apply(&self, result: Result<(), String>) -> String {
+        let (version, done) = self.applies.borrow_mut().pop().expect("an install is running");
+        done(result);
+        version
+    }
+}
+
+/// Clicks the first cell of `text` in a fresh frame.
+fn click_on(app: &TestApp, text: &str) {
+    let frame = Fixture::from_capture(&app.render());
+    let rows: Vec<String> = (0..frame.height)
+        .map(|y| (0..frame.width).map(|x| frame.cell(x, y).unwrap().symbol.clone()).collect())
+        .collect();
+    let (x, y) = rows
+        .iter()
+        .enumerate()
+        .find_map(|(y, line)| line.find(text).map(|x| (line[..x].chars().count() as u16, y as u16)))
+        .unwrap_or_else(|| panic!("{text:?} is not on screen:\n{}", rows.join("\n")));
+    app.click(x, y);
+}
+
+fn with_updater(app: &TestApp, tui: Option<Rc<Tui>>) -> (Rc<Tui>, Rc<FakeUpdater>) {
+    let tui = tui.unwrap_or_else(|| mount(app, support::component_info(json!({}))));
+    let updater = Rc::new(FakeUpdater::default());
+    update_notification::set_source(&tui, updater.clone());
+    (tui, updater)
+}
+
+fn available(version: &str) -> update_notification::ClientNotice {
+    update_notification::ClientNotice { kind: update_notification::Kind::Available, version: version.to_owned() }
+}
+
+#[test]
+fn update_dialog_matches_typescript_through_an_install() {
+    let app = TestApp::new(80, 30);
+    let (tui, updater) = with_updater(&app, None);
+    update_notification::client_notice(&tui, available("2.0.28"));
+    wait_for(&app, "/update to install v2.0.28");
+    update_notification::open(&tui, update_notification::Origin::Notification);
+    wait_for(&app, "Update available");
+    assert_dialog(&app, "E.18b/update-available", "Update available");
+    // The notice's state needs no check.
+    assert!(updater.checks.borrow().is_empty());
+
+    app.press("enter");
+    wait_for(&app, "Installing OpenCode 2.0.28");
+    assert_dialog(&app, "E.18b/update-installing", "Updating OpenCode");
+    assert_eq!(updater.finish_apply(Ok(())), "2.0.28");
+    wait_for(&app, "Update successful");
+    assert_dialog(&app, "E.18b/update-installed", "Update");
+    let epilogue = opencode_tui::features::epilogue::text(&tui).unwrap_or_default();
+    assert!(epilogue.contains("2.0.28"), "{epilogue}");
+
+    // A failed install shows the error under "Update available".
+    let app = TestApp::new(80, 30);
+    let (tui, updater) = with_updater(&app, None);
+    update_notification::client_notice(&tui, available("2.0.28"));
+    update_notification::open(&tui, update_notification::Origin::Notification);
+    wait_for(&app, "Skip  Update");
+    app.press("enter");
+    wait_for(&app, "Installing");
+    updater.finish_apply(Err("npm exited with code 1".to_owned()));
+    wait_for(&app, "npm exited with code 1");
+    assert_dialog(&app, "E.18b/update-failed", "Update available");
+}
+
+#[test]
+fn update_choices_are_keyboard_navigable_buttons() {
+    // `dialog-update.test.tsx`: Left moves from Update to Skip, and Enter runs it. Tab wraps back to Update.
+    for (keys, installs) in
+        [(&["left"][..], false), (&["shift+tab"], false), (&["left", "tab"], true), (&["right"], false)]
+    {
+        let app = TestApp::new(80, 30);
+        let (tui, updater) = with_updater(&app, None);
+        update_notification::client_notice(&tui, available("2.0.28"));
+        update_notification::open(&tui, update_notification::Origin::Notification);
+        wait_for(&app, "Skip  Update");
+        for key in keys {
+            app.press(key);
+        }
+        if keys == ["left"] {
+            assert_dialog(&app, "E.18b/update-left", "Update available");
+        }
+        app.press("enter");
+        app.wait_until(WAIT, || !app.text().contains("Update available"));
+        assert_eq!(updater.applies.borrow().len(), usize::from(installs), "{keys:?}");
+        assert!(!app.text().contains("Update available"), "{keys:?}");
+    }
+}
+
+#[test]
+fn update_checks_show_their_result_as_typescript() {
+    let app = TestApp::new(80, 30);
+    let (tui, updater) = with_updater(&app, None);
+    tui.keymap.dispatch("opencode.update", None);
+    wait_for(&app, "Checking for updates");
+    assert_dialog(&app, "E.18b/update-checking", "Update");
+    updater.finish_check(Ok(None));
+    wait_for(&app, "already up to date");
+    assert_dialog(&app, "E.18b/update-current", "Update");
+
+    update_notification::open(&tui, update_notification::Origin::Manual);
+    wait_for(&app, "Checking");
+    updater.finish_check(Ok(Some(update_notification::Check::Unavailable(
+        "OpenCode was installed with Homebrew. Run `brew upgrade opencode` to update.".to_owned(),
+    ))));
+    wait_for(&app, "Homebrew");
+    assert_dialog(&app, "E.18b/update-unavailable", "Update");
+
+    // A check that finds an update offers it; a check of a closed dialog is dropped.
+    update_notification::open(&tui, update_notification::Origin::Manual);
+    wait_for(&app, "Checking");
+    updater.finish_check(Ok(Some(update_notification::Check::Notice(available("2.0.29")))));
+    wait_for(&app, "Skip  Update");
+    assert_eq!(tui.updates.state(), Some(update_notification::UpdateState::Available("2.0.29".to_owned())));
+
+    let app = TestApp::new(80, 30);
+    let (tui, updater) = with_updater(&app, None);
+    update_notification::open(&tui, update_notification::Origin::Manual);
+    wait_for(&app, "Checking");
+    tui.dialogs.clear();
+    updater.finish_check(Ok(Some(update_notification::Check::Notice(available("2.0.30")))));
+    assert_eq!(tui.updates.state(), None);
+    assert!(!app.text().contains("Update"), "{}", app.text());
+}
+
+#[test]
+fn the_home_notice_opens_the_dialog_and_skip_hides_it_for_good() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    let app = TestApp::new(80, 30);
+    let (tui, _updater) = with_updater(&app, Some(mount_rooted(&app, home.path(), json!({}))));
+    // Without an updater there is no notice and no `/update`; with one, the client's notice shows.
+    update_notification::client_notice(&tui, available("2.0.28"));
+    wait_for(&app, "/update to install v2.0.28");
+    click_on(&app, "/update");
+    wait_for(&app, "Update available");
+    assert_dialog(&app, "E.18b/update-available", "Update available");
+    // Skip dismisses the notice and remembers it.
+    click_on(&app, "Skip");
+    app.wait_until(WAIT, || !app.text().contains("to install v2.0.28"));
+    assert!(!app.text().contains("Update available"), "{}", app.text());
+    let storage = tui.storage().unwrap();
+    app.wait_until(WAIT, || {
+        storage.load("update-notifications", &json!({})).unwrap() == json!({ "versions": ["client:2.0.28"] })
+    });
+    assert_eq!(storage.load("update-notifications", &json!({})).unwrap(), json!({ "versions": ["client:2.0.28"] }));
+
+    // A later TUI on the same storage does not show it again, but shows a newer version.
+    let app = TestApp::new(80, 30);
+    let (tui, _updater) = with_updater(&app, Some(mount_rooted(&app, home.path(), json!({}))));
+    update_notification::client_notice(&tui, available("2.0.28"));
+    app.wait_until(Duration::from_millis(300), || app.text().contains("v2.0.28"));
+    assert!(!app.text().contains("v2.0.28"), "{}", app.text());
+    update_notification::client_notice(&tui, available("2.0.29"));
+    wait_for(&app, "/update to install v2.0.29");
+    update_notification::client_notice(
+        &tui,
+        update_notification::ClientNotice { kind: update_notification::Kind::Installed, version: "2.0.29".to_owned() },
+    );
+    wait_for(&app, "/exit restart to use v2.0.29");
+}
+
+// Expected (R2-1): the home notice draws its row again on each change, and frees the row it replaced.
+#[test]
+fn the_home_notice_frees_the_row_it_replaces() {
+    let app = TestApp::new(80, 30);
+    let (tui, _updater) = with_updater(&app, Some(mount(&app, support::component_info(json!({})))));
+    update_notification::client_notice(&tui, available("2.0.28"));
+    wait_for(&app, "to install v2.0.28");
+    let marker = Rc::new(());
+    // The text, its line, and the row.
+    support::mark_at(&app, "/update", 3, &marker);
+    update_notification::client_notice(&tui, available("2.0.29"));
+    wait_for(&app, "to install v2.0.29");
+    assert_eq!(Rc::strong_count(&marker), 1);
+}
+
+#[test]
+fn without_an_updater_there_is_no_update_command_or_notice() {
+    let app = TestApp::new(80, 30);
+    let tui = mount(&app, support::component_info(json!({})));
+    update_notification::client_notice(&tui, available("2.0.28"));
+    tui.keymap.dispatch("opencode.update", None);
+    app.wait_until(Duration::from_millis(300), || app.text().contains("Update"));
+    assert!(!app.text().contains("Update"), "{}", app.text());
+    assert!(!app.text().contains("2.0.28"), "{}", app.text());
+}
+
+// Expected (D2): toggling a built-in in `/plugins` mounts the route again under the dialog, yet once the dialog closes
+// the prompt takes typing, as in TS.
+#[test]
+fn the_prompt_takes_typing_after_a_plugin_manager_toggle() {
+    let h = support::mount(100, 30, support::deps(Arc::new(Fake::new(|seen| support::base(seen, support::DIRECTORY)))));
+    h.wait_for("Fix the parser");
+    toggle_a_plugin(&h);
+    h.app.press("escape");
+    h.wait_gone("enable enter");
+    h.app.type_text("xyz");
+    h.wait("the text reaches the prompt", || h.text().contains("xyz"));
+}
+
+/// Opens `/plugins`, shows the internal plugins, and turns the first off, which mounts the route again under the
+/// manager.
+pub(crate) fn toggle_a_plugin(h: &support::Harness) {
+    h.tui.keymap.dispatch("plugins.list", None);
+    h.wait_for("Plugins");
+    h.app.press("ctrl+a");
+    h.wait_for("hide internal");
+    h.app.press("enter");
+    h.wait_for("enable enter");
+}
+
+// Expected (D4): with the internal plugins shown, the search finds a built-in by its ID, as TS does.
+#[test]
+fn the_plugin_manager_search_finds_built_ins_once_they_show() {
+    let h = support::mount(100, 30, support::deps(Arc::new(Fake::new(|seen| support::base(seen, support::DIRECTORY)))));
+    h.wait_for("Fix the parser");
+    h.tui.keymap.dispatch("plugins.list", None);
+    h.wait_for("Plugins");
+    h.app.press("ctrl+a");
+    h.wait_for("hide internal");
+    h.app.type_text("btw");
+    h.wait_for("opencode.btw");
+    assert!(!h.app.text().contains("No results found"), "{}", h.app.text());
+}

@@ -1,0 +1,396 @@
+//! Tool rows (E.7b) over a fixture server: webfetch, websearch, subagent, execute, patch, todowrite,
+//! question, and skill, each running and finished; a subagent click opens the child session, and an
+//! execute click opens its dialog.
+
+use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use opencode_api::generated::SessionID;
+use opencode_local::cli_config::{Grouping, Info, Session, Verbosity};
+use opencode_tui::{Deps, Route};
+use opentui::prelude::Color;
+use serde_json::{Value, json};
+
+/// Serves the session, an empty child session, and their messages; logs every request.
+fn fake(messages: Vec<Value>) -> Fake {
+    Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+        ("GET", "/api/session/ses_t") => (200, json!({ "data": session("ses_t", "Tools") })),
+        ("GET", "/api/session/ses_child") => (200, json!({ "data": session("ses_child", "Child work") })),
+        ("GET", "/api/session/ses_t/message") => {
+            (200, json!({ "data": messages.iter().rev().collect::<Vec<_>>(), "cursor": {} }))
+        }
+        ("GET", "/api/session/ses_child/message") => (200, json!({ "data": [], "cursor": {} })),
+        _ => support::not_found(),
+    })
+}
+
+fn session(id: &str, title: &str) -> Value {
+    support::merge(support::session(id, title), json!({ "agent": "build" }))
+}
+
+fn turn(tools: Vec<Value>) -> Vec<Value> {
+    vec![
+        json!({ "id": "msg_1", "type": "user", "text": "Run the tools", "time": { "created": 1000 } }),
+        json!({
+            "id": "msg_2", "type": "assistant", "agent": "build",
+            "model": { "providerID": "provider", "id": "model" },
+            "time": { "created": 1500 }, "finish": "tool-calls",
+            "content": tools,
+        }),
+    ]
+}
+
+fn tool(id: &str, name: &str, state: Value) -> Value {
+    json!({
+        "type": "tool", "id": id, "name": name, "state": state,
+        "time": { "created": 1500, "ran": 1500, "completed": 2750 },
+    })
+}
+
+fn running(input: Value, metadata: Value) -> Value {
+    json!({ "status": "running", "input": input, "metadata": metadata })
+}
+
+fn completed(input: Value, output: &str, metadata: Value) -> Value {
+    json!({
+        "status": "completed", "input": input, "metadata": metadata,
+        "content": [{ "type": "text", "text": output }],
+    })
+}
+
+fn failed(input: Value, message: &str) -> Value {
+    json!({ "status": "error", "input": input, "error": { "type": "unknown", "message": message } })
+}
+
+struct Tools {
+    harness: Harness,
+    log: Log,
+}
+
+deref_harness!(Tools);
+
+fn open(width: u16, height: u16, messages: Vec<Value>) -> Tools {
+    let fake = fake(messages);
+    let log = fake.log();
+    let info = Info {
+        animations: Some(false),
+        session: Some(Session {
+            grouping: Some(Grouping::None),
+            verbosity: Some(Verbosity::Medium),
+            ..Session::default()
+        }),
+        ..Info::default()
+    };
+    let deps =
+        Deps { config: support::config(info), route: support::session_route("ses_t"), ..support::deps(Arc::new(fake)) };
+    Tools { harness: support::mount(width, height, deps), log }
+}
+
+impl Tools {
+    fn fg(&self, text: &str) -> Color {
+        let (x, y) = self.find(text);
+        self.app.render().cell(u32::from(x), u32::from(y)).unwrap().fg
+    }
+
+    fn click(&self, text: &str) {
+        let (x, y) = self.find(text);
+        self.app.click(x, y);
+        self.app.advance(Duration::from_millis(1));
+    }
+}
+
+#[test]
+fn inline_tools_show_running_and_finished_lines() {
+    let messages = turn(vec![
+        tool("c1", "webfetch", running(json!({ "url": "https://example.com" }), json!({}))),
+        tool("c2", "webfetch", completed(json!({ "url": "https://opencode.ai/docs" }), "# Docs", json!({}))),
+        tool("c3", "websearch", running(json!({}), json!({}))),
+        tool("c4", "websearch", completed(json!({ "query": "rust tui" }), "results", json!({ "provider": "exa" }))),
+        tool("c5", "skill", running(json!({}), json!({}))),
+        tool("c6", "skill", completed(json!({ "id": "x" }), "loaded", json!({ "name": "writing-doc" }))),
+        tool(
+            "c7",
+            "question",
+            running(json!({ "questions": [{ "question": "A?" }, { "question": "B?" }] }), json!({})),
+        ),
+        tool("c8", "todowrite", running(json!({ "todos": [] }), json!({}))),
+        tool("c9", "todowrite", completed(json!({ "todos": [] }), "", json!({}))),
+        tool("c10", "todowrite", failed(json!({}), "bad todos")),
+    ]);
+    let h = open(100, 40, messages);
+    h.wait_for_all(&[
+        "   % WebFetch https://example.com\n",
+        "   % WebFetch https://opencode.ai/docs\n",
+        "   ⋯ Searching web…\n",
+        "   ◈ Web Search via Exa \"rust tui\"\n",
+        "   ⋯ Loading skill…\n",
+        "   → Skill \"writing-doc\"\n",
+        "   → Asked 2 questions\n",
+        "   ⋯ Updating todos…\n",
+        "   ⚙ Cleared todos\n",
+        "   ⚙ Todo update failed\n",
+    ]);
+    let theme = h.tui.page();
+    assert_eq!(h.fg("Todo update failed"), theme.text.feedback.error.base);
+}
+
+#[test]
+fn blocks_list_todos_answers_and_patched_files() {
+    let patch = "Index: a.rs\n===\n--- a.rs\n+++ a.rs\n@@ -1 +1 @@\n-old\n+new\n";
+    let messages = turn(vec![
+        tool(
+            "c1",
+            "todowrite",
+            completed(
+                json!({ "todos": [
+                    { "content": "Write the views", "status": "completed" },
+                    { "content": "Prove them", "status": "in_progress" },
+                    { "content": "Drop legacy", "status": "cancelled" },
+                    { "content": "Report", "status": "pending" },
+                ] }),
+                "",
+                json!({}),
+            ),
+        ),
+        tool(
+            "c2",
+            "question",
+            completed(
+                json!({ "questions": [{ "question": "Which design?" }, { "question": "Ship it?" }] }),
+                "",
+                json!({ "answers": [["New", "Both"], []] }),
+            ),
+        ),
+        tool(
+            "c3",
+            "apply_patch",
+            completed(
+                json!({ "patchText": "*** Begin Patch" }),
+                "",
+                json!({ "files": [
+                    { "file": "a.rs", "type": "update", "patch": patch, "additions": 1, "deletions": 1 },
+                    { "file": "gone.rs", "type": "delete", "patch": "", "additions": 0, "deletions": 3 },
+                ] }),
+            ),
+        ),
+        tool(
+            "c4",
+            "apply_patch",
+            running(json!({ "patchText": "*** Begin Patch\n*** Add File: src/new.rs\n+x" }), json!({})),
+        ),
+        tool(
+            "c5",
+            "apply_patch",
+            failed(json!({ "patchText": "*** Update File: a.rs\n*** Update File: b.rs" }), "context mismatch"),
+        ),
+    ]);
+    let h = open(100, 60, messages);
+    h.wait_for_all(&[
+        "# Todos",
+        "[✓] Write the views",
+        "[•] Prove them",
+        "[-] Drop legacy",
+        "[ ] Report",
+        "# Questions",
+        "Which design?",
+        "New, Both",
+        "(no answer)",
+        "← Patched a.rs",
+        "# Deleted gone.rs",
+        "-3 lines",
+        "⋯ Patching src/new.rs",
+        "# Patch failed",
+        "context mismatch",
+    ]);
+    let theme = h.tui.page();
+    assert_eq!(h.fg("Prove them"), theme.text.feedback.warning.base);
+    assert_eq!(h.fg("Drop legacy"), theme.text.faint);
+    assert_eq!(h.fg("# Patch failed"), theme.text.feedback.error.base);
+    assert_eq!(h.fg("context mismatch"), theme.text.muted);
+    assert_eq!(h.fg("-3 lines"), theme.diff.text.removed);
+}
+
+/// A theme switch restyles these rows in place too: an open nested call stays open, the patch keeps its diff, and
+/// each cell equals the rows mounted in the new theme.
+#[test]
+fn a_theme_switch_restyles_these_rows_in_place() {
+    let patch = "Index: a.rs\n===\n--- a.rs\n+++ a.rs\n@@ -1 +1 @@\n-old\n+new\n";
+    let calls = json!([
+        { "tool": "read", "status": "completed", "input": { "path": "src/a.rs" } },
+        { "tool": "grep", "status": "error", "input": { "pattern": "TODO" } },
+    ]);
+    let messages = turn(vec![
+        tool("c1", "webfetch", completed(json!({ "url": "https://opencode.ai/docs" }), "# Docs", json!({}))),
+        tool("c2", "websearch", completed(json!({ "query": "rust tui" }), "results", json!({ "provider": "exa" }))),
+        tool("c3", "skill", completed(json!({ "id": "x" }), "loaded", json!({ "name": "writing-doc" }))),
+        tool(
+            "c4",
+            "todowrite",
+            completed(
+                json!({ "todos": [
+                    { "content": "Prove them", "status": "in_progress" },
+                    { "content": "Drop legacy", "status": "cancelled" },
+                ] }),
+                "",
+                json!({}),
+            ),
+        ),
+        tool(
+            "c5",
+            "question",
+            completed(json!({ "questions": [{ "question": "Ship it?" }] }), "", json!({ "answers": [["Yes"]] })),
+        ),
+        tool(
+            "c6",
+            "apply_patch",
+            completed(
+                json!({ "patchText": "*** Begin Patch" }),
+                "",
+                json!({ "files": [
+                    { "file": "a.rs", "type": "update", "patch": patch, "additions": 1, "deletions": 1 },
+                    { "file": "gone.rs", "type": "delete", "patch": "", "additions": 0, "deletions": 3 },
+                ] }),
+            ),
+        ),
+        tool("c7", "apply_patch", failed(json!({ "patchText": "*** Update File: a.rs" }), "context mismatch")),
+        tool("c8", "execute", completed(json!({ "code": "throw 1" }), "Error: boom", json!({ "toolCalls": calls }))),
+        tool(
+            "c9",
+            "task",
+            completed(json!({ "description": "Check the docs", "agent": "general" }), "done", json!({})),
+        ),
+    ]);
+    support::assert_restyles_in_place(
+        || open(100, 80, messages.clone()),
+        |h| {
+            h.wait_for_all(&["read [path=src/a.rs]", "-3 lines", "# Patch failed", "Check the docs"]);
+            h.click("read [path=src/a.rs]");
+        },
+        |screen| screen.contains("path: src/a.rs") && screen.contains("Skill \"writing-doc\""),
+    );
+}
+
+#[test]
+fn a_subagent_row_opens_its_child_session() {
+    let messages = turn(vec![
+        tool(
+            "c1",
+            "task",
+            running(
+                json!({ "description": "Survey the views", "subagent_type": "explore", "model": "provider/model#high" }),
+                json!({ "sessionID": "ses_child" }),
+            ),
+        ),
+        tool(
+            "c2",
+            "task",
+            completed(
+                json!({ "description": "Check the docs", "agent": "general" }),
+                "done",
+                json!({ "sessionID": "ses_child", "status": "running" }),
+            ),
+        ),
+        tool("c3", "task", completed(json!({ "description": "Resume", "sessionID": "ses_child" }), "done", json!({}))),
+    ]);
+    let h = open(100, 30, messages);
+    let screen = h.wait_for_all(&[
+        "   ⋯ Explore Subagent — Survey the views · provider/model (high)\n",
+        "   ✓ General Subagent — Check the docs\n",
+        "   ↳ Continue subagent — Resume\n",
+    ]);
+    assert!(!screen.contains("Background"), "{screen}");
+
+    h.click("Check the docs");
+    let found = h.app.wait_until(WAIT, || h.tui.route() == Route::Session { id: SessionID("ses_child".into()) });
+    assert!(found, "still on {:?}", h.tui.route());
+    h.wait_for("Child work");
+    assert!(support::lines(&h.log).iter().any(|line| line == "GET /api/session/ses_child/message"),);
+}
+
+#[test]
+fn a_subagent_row_follows_its_child_status() {
+    let messages = turn(vec![tool(
+        "c1",
+        "task",
+        completed(
+            json!({ "description": "Check the docs", "agent": "general" }),
+            "done",
+            json!({ "sessionID": "ses_child", "status": "running" }),
+        ),
+    )]);
+    let h = open(100, 30, messages);
+    h.wait_for("   ✓ General Subagent — Check the docs\n");
+    let child = support::merge(session("ses_child", "Child work"), json!({ "parentID": "ses_t" }));
+    h.tui.data.remember(serde_json::from_value(child).unwrap());
+    let child = SessionID("ses_child".into());
+    h.tui.data.set_status(&child, opencode_store::SessionStatus::Running);
+    h.wait_for("   ⋯ General Subagent — Check the docs\n");
+    h.tui.data.set_status(&child, opencode_store::SessionStatus::Idle);
+    h.wait_for("   ✓ General Subagent — Check the docs\n");
+}
+
+#[test]
+fn execute_lists_its_calls_and_opens_the_dialog() {
+    let calls = json!([
+        { "tool": "read", "status": "completed", "input": { "path": "src/a.rs" } },
+        { "tool": "grep", "status": "error", "input": { "pattern": "TODO" } },
+        { "tool": "glob", "status": "running" },
+    ]);
+    let messages = turn(vec![
+        tool("c1", "execute", running(json!({ "code": "await read()" }), json!({ "toolCalls": calls }))),
+        tool(
+            "c2",
+            "execute",
+            completed(
+                json!({ "code": "const a = 1\nreturn a" }),
+                "{\"a\":1}\n\nLogs:\nhello",
+                json!({ "toolCalls": [] }),
+            ),
+        ),
+        tool(
+            "c3",
+            "execute",
+            completed(json!({ "code": "throw 1" }), "Error: boom\n  at main", json!({ "error": true })),
+        ),
+    ]);
+    let h = open(120, 40, messages);
+    h.wait_for_all(&[
+        "   ⋯ execute\n",
+        "   › read [path=src/a.rs]\n",
+        "   ✗ grep [pattern=TODO]\n",
+        "   › glob\n",
+        "   ✓ execute\n",
+        "   ✗ execute\n",
+        "\n     ↳ Error: boom\n",
+        "\n         at main\n",
+    ]);
+    let theme = h.tui.page();
+    assert_eq!(h.fg("✗ execute"), theme.text.feedback.error.base);
+
+    // A nested call expands its inputs.
+    h.click("read [path=src/a.rs]");
+    h.wait_for("path: src/a.rs");
+
+    // The finished call opens the dialog with its code and output.
+    let (x, y) = h.find("✓ execute");
+    h.app.click(x + 2, y);
+    h.app.advance(Duration::from_millis(1));
+    let screen = h.wait_for("Completed · 1.3s");
+    for text in [
+        "Code",
+        "1 const a = 1",
+        "2 return a",
+        "Output",
+        "1 {",
+        "2   \"a\": 1",
+        "3 }",
+        "Logs:",
+        "copy code",
+        "copy output",
+    ] {
+        assert!(screen.contains(text), "{text:?} missing:\n{screen}");
+    }
+}

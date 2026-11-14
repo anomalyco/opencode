@@ -1,0 +1,761 @@
+//! The permission prompt (E.9a, row V17): `routes/session/permission.tsx`, `util/permission.ts`,
+//! `context/permission.tsx`, and the session route's permission parts (`routes/session/index.tsx:207-283`,
+//! `:1615-1622`).
+//!
+//! The session route owns one [`Permission`] in the region above the prompt. A root session prompts for the
+//! first pending request of itself and its descendants; a child session prompts for none. The prompt hides the
+//! session prompt while it shows. Ctrl+F (`permission.prompt.fullscreen`) moves it to a full-screen overlay. In
+//! `autoaccept` mode (`session.permissions` in `cli.json`, or `--auto`) every request is answered `once`
+//! instead.
+
+use std::collections::HashSet;
+
+use opencode_api::generated::{
+    PermissionID, PermissionReply, PermissionReplyInput, PermissionRequest, SessionMessageAssistantContentItem,
+};
+use opencode_local::cli_config::{DiffView as ConfigDiffView, Permissions};
+use opencode_store::State;
+pub use opencode_ui::permission::{Presentation, always_lines, presentation};
+use opentui::widget::{DiffView, Textarea};
+
+use crate::prelude::*;
+
+const FULLSCREEN: &str = "permission.prompt.fullscreen";
+
+pub struct Permission(Rc<Inner>);
+
+struct Inner {
+    tui: Weak<Tui>,
+    session: SessionID,
+    region: View,
+    /// The full-screen host, above the route and below dialogs.
+    overlay: View,
+    prompt: RefCell<Prompt>,
+    /// The family last read (`descendantSessionIDs`).
+    family: RefCell<Vec<SessionID>>,
+    /// Requests answered by `autoaccept`. It outlives the prompt, so a mode toggle while a reply is in flight
+    /// does not send it again; a failed reply removes its ID.
+    approved: RefCell<HashSet<PermissionID>>,
+    resize: Cell<Option<HandlerId>>,
+    settings: RefCell<Option<Disposer>>,
+}
+
+/// What the prompt shows. A shown variant owns its request and its keys, so replacing it releases both.
+#[derive(Default)]
+enum Prompt {
+    #[default]
+    Hidden,
+    /// `SessionQuestion` for the family's first request.
+    Asking { request: PermissionRequest, selected: usize, expanded: bool, _layer: DeferredDisposer },
+    /// `RejectPrompt`: a subagent's request asks what to do differently.
+    Rejecting { request: PermissionRequest, view: View, field: Textarea, paints: Paints, _layer: DeferredDisposer },
+}
+
+impl Prompt {
+    fn request(&self) -> Option<&PermissionRequest> {
+        match self {
+            Prompt::Hidden => None,
+            Prompt::Asking { request, .. } | Prompt::Rejecting { request, .. } => Some(request),
+        }
+    }
+}
+
+/// A key layer that goes once the current event is done: the prompt changes inside its own layer's commands, and
+/// the keymap must not lose a layer while it runs one.
+struct DeferredDisposer(App, Option<Disposer>);
+
+impl Drop for DeferredDisposer {
+    fn drop(&mut self) {
+        super::form::dispose_later(&self.0, self.1.take().into_iter().collect());
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Choice {
+    Once,
+    Always,
+    Reject,
+}
+
+impl Choice {
+    /// `permissionOptionLabel`.
+    fn label(self) -> &'static str {
+        match self {
+            Choice::Once => "Allow once",
+            Choice::Always => "Always allow",
+            Choice::Reject => "Reject",
+        }
+    }
+}
+
+impl Permission {
+    pub fn new(tui: &Tui, session: &SessionID) -> Self {
+        let overlay = View::new(&tui.app)
+            .absolute()
+            .position(Edge::Top, 0)
+            .position(Edge::Left, 0)
+            .position(Edge::Right, 0)
+            .position(Edge::Bottom, 0)
+            .z_index(2000)
+            .visible(false);
+        tui.app.root().add(&overlay);
+        let inner = Rc::new(Inner {
+            tui: tui.weak(),
+            session: session.clone(),
+            region: View::new(&tui.app).column().shrink(0.0),
+            overlay,
+            prompt: RefCell::default(),
+            family: RefCell::default(),
+            approved: RefCell::default(),
+            resize: Cell::new(None),
+            settings: RefCell::default(),
+        });
+        // Turning `autoaccept` on answers the shown request and hides it; the route syncs the prompt back in.
+        let weak = Rc::downgrade(&inner);
+        *inner.settings.borrow_mut() = Some(tui.settings.subscribe(move |tui| {
+            if tui.config().permissions == Permissions::Autoaccept && weak.upgrade().is_some_and(|inner| inner.shown())
+            {
+                tui.app.defer(bind!(tui.weak(), |tui, _| tui.sync_view()));
+            }
+        }));
+        inner.resize.set(Some(tui.app.on_resize(bind!(inner, |inner, _, _, _| {
+            if matches!(*inner.prompt.borrow(), Prompt::Asking { .. }) {
+                inner.render();
+            }
+        }))));
+        Self(inner)
+    }
+
+    pub fn root(&self) -> &View {
+        &self.0.region
+    }
+
+    /// Paints in the page theme again. The question draws again where it is; the rejection keeps its text field.
+    pub fn restyle(&self, tui: &Tui) {
+        let inner = &self.0;
+        if let Prompt::Rejecting { paints, .. } = &*inner.prompt.borrow() {
+            paints.restyle(&tui.page());
+            return;
+        }
+        inner.render();
+    }
+
+    /// Whether a request is prompted; the session prompt hides meanwhile.
+    pub fn active(&self) -> bool {
+        self.0.shown()
+    }
+
+    pub fn sync(&self, tui: &Tui, changes: &Changes) {
+        let inner = &self.0;
+        let (requests, family) = tui.data.read(|state| {
+            let family = family(state, &inner.session);
+            let requests: Vec<PermissionRequest> =
+                family.iter().flat_map(|id| state.permissions(id).unwrap_or_default()).cloned().collect();
+            (requests, family)
+        });
+        // TS reads the family's requests whenever the family or the connection changes (`routes/session/index.tsx:
+        // 331-348`); the store makes a finished read free, and reads a failed one again. TS ignores failures: a
+        // session still being created reads as not found.
+        if changes.all || family.iter().any(|id| changes.session(id)) || *inner.family.borrow() != family {
+            for id in &family {
+                super::form::quiet(tui, tui.data.permission_sync(id));
+            }
+            *inner.family.borrow_mut() = family;
+        }
+        if tui.config().permissions == Permissions::Autoaccept {
+            // `prompted` is empty in this mode (`index.tsx:208-215`): a request shown before it began goes.
+            if inner.shown() {
+                inner.show(tui, Prompt::Hidden);
+            }
+            inner.auto_approve(tui, &requests);
+            return;
+        }
+        let head = requests.into_iter().next();
+        let current = inner.prompt.borrow().request().map(|request| request.id.clone());
+        if head.as_ref().map(|request| &request.id) != current.as_ref() {
+            inner.ask(tui, head);
+            return;
+        }
+        // The presentation reads the tool call's input, which may still be arriving.
+        let refreshed = match (head, &mut *inner.prompt.borrow_mut()) {
+            (Some(head), Prompt::Asking { request, .. }) if changes.any_message(&head.session_id) => {
+                *request = head;
+                true
+            }
+            _ => false,
+        };
+        if refreshed {
+            inner.render();
+        }
+    }
+}
+
+impl Drop for Permission {
+    fn drop(&mut self) {
+        let inner = &self.0;
+        inner.overlay.detach();
+        inner.prompt.take();
+        let Some(tui) = inner.tui.upgrade() else { return };
+        if let Some(id) = inner.resize.take() {
+            tui.app.remove_handler(id);
+        }
+    }
+}
+
+/// `useToolPermission`: whether the tool call `part` waits on the session's first pending request, so the
+/// transcript draws it in the warning color. It takes the store's state, since the transcript asks while
+/// it reads the store.
+pub fn tool_pending(tui: &Tui, state: &State, session: &SessionID, part: &str) -> bool {
+    if tui.config().permissions == Permissions::Autoaccept {
+        return false;
+    }
+    state
+        .permissions(session)
+        .and_then(<[_]>::first)
+        .and_then(|request| request.source.as_ref())
+        .is_some_and(|source| source.r#type == "tool" && source.id == part)
+}
+
+/// The sessions whose requests a session prompts for: a root and its descendants, a child none.
+fn family(state: &State, session: &SessionID) -> Vec<SessionID> {
+    if state.session(session).is_some_and(|info| info.parent_id.is_some()) {
+        return Vec::new();
+    }
+    std::iter::once(session.clone()).chain(state.family(session).iter().filter(|id| *id != session).cloned()).collect()
+}
+
+impl Inner {
+    fn auto_approve(self: &Rc<Self>, tui: &Tui, requests: &[PermissionRequest]) {
+        for request in requests {
+            if !self.approved.borrow_mut().insert(request.id.clone()) {
+                continue;
+            }
+            let id = request.id.clone();
+            reply(
+                tui,
+                request,
+                PermissionReply::Once,
+                None,
+                Box::new(bind!(self, |inner| {
+                    inner.approved.borrow_mut().remove(&id);
+                })),
+            );
+        }
+    }
+
+    fn shown(&self) -> bool {
+        !matches!(*self.prompt.borrow(), Prompt::Hidden)
+    }
+
+    /// Asks `request` from the start, as TS remounts the question, or hides the prompt.
+    fn ask(self: &Rc<Self>, tui: &Tui, request: Option<PermissionRequest>) {
+        let next = match request {
+            Some(request) => Prompt::Asking {
+                _layer: self.layer(tui, self.question_layer(&request)),
+                request,
+                selected: 0,
+                expanded: false,
+            },
+            None => Prompt::Hidden,
+        };
+        self.show(tui, next);
+    }
+
+    fn reject(self: &Rc<Self>, tui: &Tui, request: PermissionRequest) {
+        let paints = Paints::default();
+        let (view, field) = self.reject_view(tui, &tui.page(), tui.app.size().0 < 80, &paints);
+        let _layer = self.layer(tui, self.reject_layer());
+        self.show(tui, Prompt::Rejecting { request, view, field, paints, _layer });
+    }
+
+    fn layer(&self, tui: &Tui, layer: KeymapLayer<u32>) -> DeferredDisposer {
+        let disposer = tui.keymap.layer(layer).inspect_err(|error| log::error!("permission keymap layer: {error}"));
+        DeferredDisposer(tui.app.clone(), disposer.ok())
+    }
+
+    /// Replaces the prompt, which drops the keys of the one before, and draws it.
+    fn show(self: &Rc<Self>, tui: &Tui, next: Prompt) {
+        let prompting = !matches!(next, Prompt::Hidden);
+        drop(self.prompt.replace(next));
+        // The session prompt hides; it must not keep the keys. An open dialog keeps its own.
+        if prompting && !tui.dialogs.is_open() {
+            tui.app.blur();
+        }
+        self.render();
+        if let Prompt::Rejecting { field, .. } = &*self.prompt.borrow() {
+            field.focus();
+        }
+    }
+
+    /// `SessionQuestion`'s layer.
+    fn question_layer(self: &Rc<Self>, request: &PermissionRequest) -> KeymapLayer<u32> {
+        let run = |action: fn(&Rc<Inner>)| bind!(self, |inner, _: Option<&str>, _: Option<&KeyEvent>| action(&inner));
+        let mut commands = vec![
+            TuiCommand::new("app.exit", run(Inner::dismiss))
+                .title("Reject permission")
+                .group("Permission")
+                .bind(Bind::Off),
+            TuiCommand::new(FULLSCREEN, run(Inner::toggle_fullscreen))
+                .title("Toggle permission fullscreen")
+                .group("Permission")
+                .bind(Bind::Off),
+        ];
+        if choices(request).len() > 1 {
+            commands.push(
+                TuiCommand::inline("left,h", run(|inner| inner.move_selection(-1)))
+                    .title("Previous option")
+                    .group("Permission"),
+            );
+            commands.push(
+                TuiCommand::inline("right,l", run(|inner| inner.move_selection(1)))
+                    .title("Next option")
+                    .group("Permission"),
+            );
+        }
+        commands.push(
+            TuiCommand::inline(
+                "return",
+                run(|inner| {
+                    let choice = match &*inner.prompt.borrow() {
+                        Prompt::Asking { request, selected, .. } => choices(request)[*selected],
+                        _ => return,
+                    };
+                    inner.select(choice);
+                }),
+            )
+            .title("Select option")
+            .group("Permission"),
+        );
+        commands.push(TuiCommand::inline("escape", run(Inner::dismiss)).title("Reject permission").group("Permission"));
+        KeymapLayer::new(commands).bindings(vec!["app.exit".to_owned(), FULLSCREEN.to_owned()])
+    }
+
+    /// `RejectPrompt`'s layer.
+    fn reject_layer(self: &Rc<Self>) -> KeymapLayer<u32> {
+        KeymapLayer::new(vec![
+            TuiCommand::new(
+                "app.exit",
+                bind!(self, |inner, _, event: Option<&KeyEvent>| {
+                    let ctrl_c = event.is_some_and(|event| event.matches("ctrl+c"));
+                    let field = match &*inner.prompt.borrow() {
+                        Prompt::Rejecting { field, .. } => Some(field.clone()),
+                        _ => None,
+                    };
+                    if let Some(field) = field.filter(|field| ctrl_c && !field.text().is_empty()) {
+                        field.set_text("");
+                        return;
+                    }
+                    inner.cancel_reject();
+                }),
+            )
+            .title("Cancel permission rejection")
+            .group("Permission"),
+            TuiCommand::inline("escape", bind!(self, |inner, _, _| inner.cancel_reject()))
+                .title("Cancel permission rejection")
+                .group("Permission"),
+            TuiCommand::inline("return", bind!(self, |inner, _, _| inner.confirm_reject()))
+                .title("Confirm permission rejection")
+                .group("Permission"),
+        ])
+    }
+
+    fn dismiss(self: &Rc<Self>) {
+        let minimized = match &mut *self.prompt.borrow_mut() {
+            Prompt::Asking { expanded, .. } if *expanded => {
+                *expanded = false;
+                true
+            }
+            _ => false,
+        };
+        if minimized {
+            self.render();
+            return;
+        }
+        self.select(Choice::Reject);
+    }
+
+    fn toggle_fullscreen(self: &Rc<Self>) {
+        if let Prompt::Asking { expanded, .. } = &mut *self.prompt.borrow_mut() {
+            *expanded = !*expanded;
+        }
+        self.render();
+    }
+
+    fn move_selection(self: &Rc<Self>, by: isize) {
+        if let Prompt::Asking { request, selected, .. } = &mut *self.prompt.borrow_mut() {
+            let count = choices(request).len() as isize;
+            *selected = (*selected as isize + by).rem_euclid(count) as usize;
+        }
+        self.render();
+    }
+
+    fn select(self: &Rc<Self>, choice: Choice) {
+        let Some(tui) = self.tui.upgrade() else { return };
+        let Some(request) = self.prompt.borrow().request().cloned() else { return };
+        let decision = match choice {
+            Choice::Once => PermissionReply::Once,
+            Choice::Always => PermissionReply::Always,
+            Choice::Reject => {
+                // A subagent's request asks what to do differently.
+                let child = tui
+                    .data
+                    .read(|state| state.session(&request.session_id).is_some_and(|info| info.parent_id.is_some()));
+                if child {
+                    self.reject(&tui, request);
+                    return;
+                }
+                PermissionReply::Reject
+            }
+        };
+        reply(&tui, &request, decision, None, Box::new(|| {}));
+    }
+
+    /// Back to the question, which starts over as TS remounts it.
+    fn cancel_reject(self: &Rc<Self>) {
+        let Some(tui) = self.tui.upgrade() else { return };
+        let request = self.prompt.borrow().request().cloned();
+        self.ask(&tui, request);
+    }
+
+    fn confirm_reject(self: &Rc<Self>) {
+        let Some(tui) = self.tui.upgrade() else { return };
+        let (request, message) = match &*self.prompt.borrow() {
+            Prompt::Rejecting { request, field, .. } => {
+                (request.clone(), Some(field.text()).filter(|text| !text.is_empty()))
+            }
+            _ => return,
+        };
+        reply(&tui, &request, PermissionReply::Reject, message, Box::new(|| {}));
+    }
+
+    fn render(self: &Rc<Self>) {
+        self.region.clear();
+        self.overlay.clear();
+        self.overlay.visible(false);
+        let Some(tui) = self.tui.upgrade() else { return };
+        let (request, selected, expanded) = match &*self.prompt.borrow() {
+            Prompt::Hidden => return,
+            Prompt::Rejecting { view, .. } => {
+                self.region.add(view);
+                tui.app.request_redraw();
+                return;
+            }
+            Prompt::Asking { request, selected, expanded, .. } => (request.clone(), *selected, *expanded),
+        };
+        let view = self.question_view(&tui, &request, selected, expanded);
+        if expanded {
+            // TS sets `top: -height + 1` from the region at the bottom of the screen, which keeps the first row.
+            view.absolute()
+                .position(Edge::Top, 1)
+                .position(Edge::Bottom, 1)
+                .position(Edge::Left, 2)
+                .position(Edge::Right, 2);
+            self.overlay.add(&view);
+            self.overlay.visible(true);
+        } else {
+            self.region.add(&view.max_height(15));
+        }
+        tui.app.request_redraw();
+    }
+
+    fn question_view(self: &Rc<Self>, tui: &Tui, request: &PermissionRequest, selected: usize, expanded: bool) -> View {
+        let app = &tui.app;
+        let theme = &tui.page();
+        let narrow = tui.app.size().0 < 80;
+        let choices = choices(request);
+        let selected = choices[selected.min(choices.len() - 1)];
+        let current = tui.data.read(|state| {
+            let (input, metadata) = source(state, request);
+            let directory = state.session(&request.session_id).map(|info| info.location.directory.0.clone());
+            let cwd = std::env::current_dir().unwrap_or_default();
+            let home = std::env::home_dir();
+            presentation(&request.action, &request.resources, request.metadata.as_ref(), &input, &metadata, &|path| {
+                opencode_ui::path::format(path, directory.as_deref(), &cwd, home.as_deref())
+            })
+        });
+
+        let title_row = View::new(app)
+            .row()
+            .gap(1)
+            .shrink(0.0)
+            .child(&Text::new(app, "△").fg(theme.text.feedback.warning.base))
+            .child(&Text::new(app, "Permission required").fg(theme.text.base));
+        let header = View::new(app).column().child(&title_row);
+        if request.action != "shell" && !current.title.is_empty() {
+            header.add(
+                &View::new(app)
+                    .row()
+                    .gap(1)
+                    .padding_edge(Edge::Left, 2)
+                    .shrink(0.0)
+                    .child(&Text::new(app, current.icon).fg(theme.text.muted).shrink(0.0))
+                    .child(&Text::new(app, current.title.clone()).fg(theme.text.base)),
+            );
+        }
+        let body = if selected == Choice::Always {
+            lines_view(app, &always_lines(&request.action, request.save.as_deref().unwrap_or_default()), |index| {
+                if index == 0 { theme.text.muted } else { theme.text.base }
+            })
+        } else {
+            presentation_body(tui, theme, request, &current)
+        };
+        let content = View::new(app)
+            .column()
+            .gap(1)
+            .padding_edge(Edge::Left, 1)
+            .padding_edge(Edge::Right, 3)
+            .padding_edge(Edge::Top, 1)
+            .padding_edge(Edge::Bottom, 1)
+            .grow(1.0)
+            .basis(Length::Auto)
+            .min_height(0)
+            .child(&View::new(app).padding_edge(Edge::Left, 1).shrink(0.0).child(&header))
+            .child(&body);
+
+        let actions = View::new(app).row().gap(1).shrink(0.0);
+        for (index, choice) in choices.iter().copied().enumerate() {
+            let focused = choice == selected;
+            let option = View::new(app)
+                .padding_x(1)
+                .bg(if focused {
+                    theme.background.action.primary.focused
+                } else {
+                    theme.background.action.primary.base
+                })
+                .child(&Text::new(app, choice.label()).fg(if focused {
+                    theme.text.action.primary.focused
+                } else {
+                    theme.text.action.primary.base
+                }));
+            option.on_hover(bind!(self, |inner, _, over| {
+                let moved = match &mut *inner.prompt.borrow_mut() {
+                    Prompt::Asking { selected, .. } if over && *selected != index => {
+                        *selected = index;
+                        true
+                    }
+                    _ => false,
+                };
+                if moved {
+                    inner.render();
+                }
+            }));
+            option.mouse_pointer(MousePointer::POINTER).on_click(bind!(self, |inner, _, _| {
+                if let Prompt::Asking { selected, .. } = &mut *inner.prompt.borrow_mut() {
+                    *selected = index;
+                }
+                inner.select(choice);
+            }));
+            actions.add(&option);
+        }
+        let hints = View::new(app).row().gap(2).shrink(0.0);
+        if let Some(key) = tui.keymap.shortcut(FULLSCREEN) {
+            hints.add(&hint(app, theme, &key, if expanded { "minimize" } else { "fullscreen" }));
+        }
+        if choices.len() > 1 {
+            hints.add(&hint(app, theme, "⇆", "select"));
+        }
+        hints.add(&hint(app, theme, "enter", "confirm"));
+
+        View::new(app)
+            .column()
+            .bg(theme.background.raised.base)
+            .border(BorderStyle::Heavy)
+            .border_sides(Sides::LEFT)
+            .border_color(theme.background.action.primary.focused)
+            .child(&content)
+            .child(&footer(app, theme, narrow).child(&actions).child(&hints))
+    }
+
+    fn reject_view(self: &Rc<Self>, tui: &Tui, theme: &Theme, narrow: bool, paints: &Paints) -> (View, Textarea) {
+        let app = &tui.app;
+        let (mark, title, subtitle) = (
+            Text::new(app, "△"),
+            Text::new(app, "Reject permission"),
+            Text::new(app, "Tell OpenCode what to do differently"),
+        );
+        let heading = View::new(app)
+            .column()
+            .gap(1)
+            .padding_edge(Edge::Left, 1)
+            .padding_edge(Edge::Right, 3)
+            .padding_edge(Edge::Top, 1)
+            .padding_edge(Edge::Bottom, 1)
+            .child(&View::new(app).row().gap(1).padding_edge(Edge::Left, 1).child(&mark).child(&title))
+            .child(&View::new(app).padding_edge(Edge::Left, 1).child(&subtitle));
+        let field = Textarea::new(app).mouse_pointer(MousePointer::DEFAULT).grow(1.0).basis(Length::Auto).min_width(1);
+        let confirm = hint(app, theme, "enter", "confirm");
+        confirm.mouse_pointer(MousePointer::POINTER).on_click(bind!(self, |inner, _, _| inner.confirm_reject()));
+        let cancel = hint(app, theme, "esc", "cancel");
+        cancel.mouse_pointer(MousePointer::POINTER).on_click(bind!(self, |inner, _, _| inner.cancel_reject()));
+        let actions = View::new(app).row().gap(2).shrink(0.0).child(&confirm).child(&cancel);
+        let bottom = footer(app, theme, narrow);
+        let view = View::new(app)
+            .column()
+            .border(BorderStyle::Heavy)
+            .border_sides(Sides::LEFT)
+            .child(&heading)
+            .child(&bottom.clone().child(&field).child(&actions));
+        let (painted, area) = (view.clone(), field.clone());
+        paints.add(theme, move |theme| {
+            mark.fg(theme.text.feedback.error.base);
+            title.fg(theme.text.base);
+            subtitle.fg(theme.text.muted);
+            area.colors(theme.text.base, Color::TRANSPARENT)
+                .focused_colors(theme.text.base, Color::TRANSPARENT)
+                .cursor_color(theme.text.base);
+            paint_hint(&confirm, theme, "enter", "confirm");
+            paint_hint(&cancel, theme, "esc", "cancel");
+            paint_footer(&bottom, theme);
+            painted.bg(theme.background.raised.base).border_color(theme.text.feedback.error.base);
+        });
+        (view, field)
+    }
+}
+
+fn choices(request: &PermissionRequest) -> Vec<Choice> {
+    if request.save.as_ref().is_some_and(|save| !save.is_empty()) {
+        return vec![Choice::Once, Choice::Always, Choice::Reject];
+    }
+    vec![Choice::Once, Choice::Reject]
+}
+
+/// Sends the reply; the store drops the request once the server took it. A failure shows as a toast.
+fn reply(
+    tui: &Tui,
+    request: &PermissionRequest,
+    decision: PermissionReply,
+    message: Option<String>,
+    failed: Box<dyn FnOnce()>,
+) {
+    let data = tui.data.clone();
+    let input = PermissionReplyInput {
+        session_id: request.session_id.clone(),
+        request_id: request.id.clone(),
+        decision,
+        message,
+    };
+    let weak = tui.weak();
+    tui.app.spawn(async move { data.permission_reply(input).await }, move |_, result| {
+        let Err(error) = result else { return };
+        failed();
+        if let Some(tui) = weak.upgrade() {
+            tui.toasts.error(error.to_string());
+        }
+    });
+}
+
+/// The footer row both stages share; it stacks below 80 columns.
+fn footer(app: &App, theme: &Theme, narrow: bool) -> View {
+    View::new(app)
+        .direction(if narrow { FlexDirection::Column } else { FlexDirection::Row })
+        .shrink(0.0)
+        .gap(1)
+        .padding_edge(Edge::Top, 1)
+        .padding_edge(Edge::Left, 2)
+        .padding_edge(Edge::Right, 3)
+        .padding_edge(Edge::Bottom, 1)
+        .bg(theme.decrease(&theme.background.raised.base, 1))
+        .justify(if narrow { Justify::Start } else { Justify::SpaceBetween })
+        .align_items(if narrow { Align::Start } else { Align::Center })
+}
+
+fn paint_footer(footer: &View, theme: &Theme) {
+    footer.bg(theme.decrease(&theme.background.raised.base, 1));
+}
+
+/// `key` in the text color, then `label` muted.
+/// `{key} <span muted>{label}</span>` in one text, so the space takes the key's color.
+fn hint(app: &App, theme: &Theme, key: &str, label: &str) -> Text {
+    let hint = Text::new(app, "").shrink(0.0);
+    paint_hint(&hint, theme, key, label);
+    hint
+}
+
+fn paint_hint(hint: &Text, theme: &Theme, key: &str, label: &str) {
+    hint.set_text(vec![format!("{key} ").fg(theme.text.base), label.to_owned().fg(theme.text.muted)]);
+}
+
+fn lines_view(app: &App, lines: &[String], color: impl Fn(usize) -> Color) -> View {
+    let view = View::new(app).column().gap(1).padding_edge(Edge::Left, 1);
+    for (index, line) in lines.iter().enumerate() {
+        view.add(&Text::new(app, line.clone()).fg(color(index)));
+    }
+    view
+}
+
+fn presentation_body(tui: &Tui, theme: &Theme, request: &PermissionRequest, current: &Presentation) -> View {
+    let app = &tui.app;
+    if request.action == "edit" {
+        return edit_body(tui, theme, current);
+    }
+    if request.action == "external_directory" {
+        let view = View::new(app).column().gap(1).padding_edge(Edge::Left, 1);
+        if current.lines.is_empty() {
+            return view;
+        }
+        let patterns = View::new(app).column();
+        for line in &current.lines {
+            patterns.add(&Text::new(app, line.clone()).fg(theme.text.base));
+        }
+        return view.child(&Text::new(app, "Patterns").fg(theme.text.muted)).child(&patterns);
+    }
+    let color = if matches!(request.action.as_str(), "shell" | "subagent" | "task") {
+        theme.text.base
+    } else {
+        theme.text.muted
+    };
+    let view = View::new(app).column().padding_edge(Edge::Left, 1);
+    for line in &current.lines {
+        view.add(&Text::new(app, line.clone()).fg(color));
+    }
+    view
+}
+
+/// `EditBody`: the diff, else the raw patch, else a note.
+fn edit_body(tui: &Tui, theme: &Theme, current: &Presentation) -> View {
+    let app = &tui.app;
+    let syntax = opencode_ui::code::syntax_theme(theme);
+    let scroll = || ScrollBox::new(app).height(Length::percent(100.0));
+    let column = View::new(app).column().gap(1).grow(1.0).basis(Length::Auto).min_height(0);
+    if let Some(diff) = &current.diff {
+        let view = match tui.config().info.diffs.as_ref().and_then(|diffs| diffs.view) {
+            Some(ConfigDiffView::Unified) => DiffView::Unified,
+            Some(ConfigDiffView::Split) => DiffView::Split,
+            _ if tui.app.size().0 > 120 => DiffView::Split,
+            _ => DiffView::Unified,
+        };
+        let file = current.file.as_deref().unwrap_or_default();
+        let filetype = opentui::syntax::filetype_for_path(file);
+        let diff = opencode_ui::diff::view(app, theme, &syntax, diff, view, filetype, WrapMode::Word, 0);
+        return column.child(&scroll().child(&diff));
+    }
+    if let Some(patch) = &current.patch {
+        let code = opencode_ui::code::view(app, theme, &syntax, Some("diff"), patch).fg(theme.text.muted);
+        return column.child(&scroll().child(&code));
+    }
+    column.child(
+        &View::new(app).padding_edge(Edge::Left, 1).child(&Text::new(app, "No diff provided").fg(theme.text.muted)),
+    )
+}
+
+/// The tool call's input and metadata once it stopped streaming (`PermissionPrompt`'s `source`).
+fn source(state: &State, request: &PermissionRequest) -> (Value, Value) {
+    let found = request.source.as_ref().and_then(|source| {
+        let Some(SessionMessageInfo::Assistant(message)) = state.message(&request.session_id, &source.message_id)
+        else {
+            return None;
+        };
+        message.content.iter().find_map(|item| match item {
+            SessionMessageAssistantContentItem::Tool(part) if part.id == source.id => {
+                serde_json::to_value(&part.state).ok()
+            }
+            _ => None,
+        })
+    });
+    match found {
+        Some(state) if state.get("status").and_then(Value::as_str) != Some("streaming") => {
+            (state.get("input").cloned().unwrap_or(Value::Null), state.get("metadata").cloned().unwrap_or(Value::Null))
+        }
+        _ => (Value::Null, Value::Null),
+    }
+}

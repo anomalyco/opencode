@@ -1,0 +1,36 @@
+[package]
+name = "opencode-plugin"
+description = "The Rust plugin API (P.1)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+opentui.workspace = true
+opencode-ui.workspace = true
+log.workspace = true
+# Native plugins (P.4): the C ABI, and dlopen.
+opencode-plugin-abi.workspace = true
+opencode-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+unicode-width.workspace = true
+opencode-api-types.workspace = true
+# The hash an approval of a project plugin names (rich-plugins 3.9).
+ring.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+# Who owns the approvals file, and opening it without following a link.
+libc.workspace = true
+
+[dev-dependencies]
+opencode-util.workspace = true
+# The LaTeX and Mermaid built-ins, run through the C ABI's byte shims in the loader's tests.
+opencode-latex.workspace = true
+opencode-mermaid.workspace = true
+# The frozen ABI 1.4 crate, whose types decode a newer plugin's requests as a 1.4 host does.
+opencode-plugin-abi-1-4 = { path = "examples/sample/abi-1-4" }

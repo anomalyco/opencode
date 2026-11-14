@@ -1,0 +1,873 @@
+//! Dialog stack and layout (U.3): `packages/tui/src/ui/dialog.tsx`.
+//!
+//! [`Dialogs`] is the `DialogProvider`: one host over the whole screen that shows the top entry inside the dimmed
+//! backdrop and panel, pushes the `modal` input mode while a dialog is open, and binds Escape and Ctrl+C to close
+//! it. A dialog's content is built by a closure that receives a [`DialogCx`]: the app, the keymap, the dialog
+//! surface of the theme, and layer registration tied to the entry's lifetime. [`header`], [`layout`], and
+//! [`footer`] are `DialogHeader`, `DialogLayout`, and `DialogFooter`.
+//!
+//! The kit draws the dialogs as the TUI does with the `new-designs` experiment on (`config/index.tsx:394-397`),
+//! the only design the Rust client implements.
+
+use crate::bind;
+use crate::keymap::{KeymapLayer, TuiKeymap};
+use crate::theme::{Surface, Theme};
+use opentui::keymap::{Condition, Disposer};
+use opentui::prelude::*;
+use std::any::Any;
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
+
+/// What the dialog kit's keymap focuses: widget ids ([`Widget::id`]).
+pub type FocusId = u32;
+/// The keymap dialogs register their layers with.
+pub type DialogKeymap = TuiKeymap<FocusId>;
+
+/// The input mode a dialog pushes; dialog layers declare it.
+pub const MODAL_MODE: &str = "modal";
+pub const DIALOG_INSET: u32 = 3;
+/// List rows reserve a 1-cell gutter for the `▌` bar or `●` marker.
+pub const DIALOG_LIST_INSET: u32 = DIALOG_INSET + 1;
+
+/// `DialogSize`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DialogSize {
+    #[default]
+    Medium,
+    Large,
+    XLarge,
+}
+
+impl DialogSize {
+    /// `dialogWidth`.
+    pub fn width(self) -> u32 {
+        match self {
+            Self::XLarge => 116,
+            Self::Large => 88,
+            Self::Medium => 60,
+        }
+    }
+}
+
+/// Options of [`Dialogs::replace`].
+#[derive(Clone, Debug, Default)]
+pub struct DialogOptions {
+    pub size: DialogSize,
+    /// Identifies the dialog, so callers can tell which one is open ([`Dialogs::key`]).
+    pub key: Option<String>,
+}
+
+impl DialogOptions {
+    pub fn new(size: DialogSize) -> Self {
+        Self { size, key: None }
+    }
+
+    pub fn key(mut self, key: impl Into<String>) -> Self {
+        self.key = Some(key.into());
+        self
+    }
+}
+
+type OnClose = Box<dyn FnOnce()>;
+type Build = Rc<dyn Fn(&Rc<DialogCx>) -> View>;
+type Keeper = Box<dyn Fn() -> Box<dyn Any>>;
+
+struct Entry {
+    on_close: Option<OnClose>,
+    key: Option<String>,
+    build: Build,
+    content: View,
+    cx: Rc<DialogCx>,
+}
+
+struct Inner {
+    app: App,
+    keymap: Rc<DialogKeymap>,
+    theme: RefCell<Theme>,
+    host: View,
+    backdrop: View,
+    panel: View,
+    stack: RefCell<Vec<Entry>>,
+    size: Cell<DialogSize>,
+    centered: Cell<bool>,
+    mode: RefCell<Option<Disposer>>,
+    layer: RefCell<Option<Disposer>>,
+    focus: RefCell<Option<AnyWidget>>,
+    dismiss: Cell<bool>,
+    /// A rebuild in the new theme is queued.
+    restyle: Cell<bool>,
+    rebuilding: Cell<bool>,
+}
+
+/// The dialog stack (`DialogProvider` and `useDialog()`). Cloning is cheap.
+#[derive(Clone)]
+pub struct Dialogs(Rc<Inner>);
+
+impl Dialogs {
+    /// Creates the host above everything else on `app.root()`. `theme` is the page theme; dialogs draw on its
+    /// dialog surface.
+    pub fn new(app: &App, keymap: Rc<DialogKeymap>, theme: Theme) -> Self {
+        let host = View::new(app).absolute().z_index(3000);
+        let backdrop = View::new(app)
+            .absolute()
+            .position(Edge::Left, 0)
+            .position(Edge::Top, 0)
+            .align_items(Align::Center)
+            .bg(Color::rgba(0, 0, 0, 150))
+            .visible(false);
+        let panel = View::new(app).padding_edge(Edge::Top, 1);
+        backdrop.add(&panel);
+        host.add(&backdrop);
+        app.root().add(&host);
+        let dialogs = Self(Rc::new(Inner {
+            app: app.clone(),
+            keymap,
+            theme: RefCell::new(theme),
+            host,
+            backdrop,
+            panel,
+            stack: RefCell::new(Vec::new()),
+            size: Cell::new(DialogSize::Medium),
+            centered: Cell::new(false),
+            mode: RefCell::new(None),
+            layer: RefCell::new(None),
+            focus: RefCell::new(None),
+            dismiss: Cell::new(false),
+            restyle: Cell::new(false),
+            rebuilding: Cell::new(false),
+        }));
+        dialogs.install();
+        dialogs
+    }
+
+    fn install(&self) {
+        let weak = Rc::downgrade(&self.0);
+        let open = Condition::when(bind!(weak, |inner| !inner.stack.borrow().is_empty()));
+        let close = |ctrl_c: bool, weak: Weak<Inner>| {
+            bind!(weak, |inner, _: Option<&str>, _: Option<&KeyEvent>| {
+                let dialogs = Dialogs(inner);
+                if dialogs.0.app.selected_text().is_some() {
+                    dialogs.0.app.clear_selection();
+                    return;
+                }
+                if ctrl_c && dialogs.clear_editor() {
+                    return;
+                }
+                dialogs.pop();
+            })
+        };
+        let layer = self.0.keymap.layer(
+            KeymapLayer::new(vec![
+                crate::keymap::TuiCommand::inline("escape", close(false, weak.clone()))
+                    .title("Close dialog")
+                    .group("Dialog"),
+                crate::keymap::TuiCommand::inline("ctrl+c", close(true, weak.clone()))
+                    .title("Close dialog")
+                    .group("Dialog"),
+            ])
+            .mode(MODAL_MODE)
+            .enabled(open),
+        );
+        *self.0.layer.borrow_mut() = layer.ok();
+
+        self.0.backdrop.on_mouse(bind!(weak, |inner, _cx, event| {
+            match event.kind {
+                // TS asks whether a selection exists. A press on text has started a drag by now, so a drag that
+                // starts inside the panel keeps the dialog open.
+                MouseEventKind::Down(_) => {
+                    inner.dismiss.set(inner.app.is_selecting() || inner.app.selected_text().is_some())
+                }
+                MouseEventKind::Up(_) => {
+                    if inner.dismiss.replace(false) {
+                        return;
+                    }
+                    Dialogs(inner).clear();
+                }
+                _ => {}
+            }
+        }));
+        self.0.panel.on_mouse(bind!(weak, |inner, cx, event| {
+            if !matches!(event.kind, MouseEventKind::Up(_)) {
+                return;
+            }
+            // A selection release bubbles on to the copy-on-select handler; the backdrop's flag keeps it open.
+            if inner.app.selected_text().is_some_and(|text| !text.is_empty()) {
+                return;
+            }
+            inner.dismiss.set(false);
+            cx.stop_propagation();
+        }));
+        self.0.app.on_resize(bind!(self.0, |inner, _cx, _, _| Dialogs(inner).layout_frame()));
+    }
+
+    /// Replaces the stack with one dialog, closing the ones open before (TS `replace`).
+    ///
+    /// `build` runs again when the theme changes while the dialog is open, so the dialog takes the new colors as
+    /// TS dialogs do reactively. The disposers of the old build run first, except [`DialogCx::on_dismiss`], and
+    /// what it put in [`DialogCx::keep`] carries over.
+    pub fn replace(
+        &self,
+        build: impl Fn(&Rc<DialogCx>) -> View + 'static,
+        on_close: Option<OnClose>,
+        options: DialogOptions,
+    ) {
+        if self.0.stack.borrow().is_empty() {
+            let focused = self.0.app.focused();
+            if focused.is_some() {
+                self.0.app.blur();
+            }
+            *self.0.focus.borrow_mut() = focused;
+        }
+        self.close_all();
+        self.0.size.set(options.size);
+        self.0.centered.set(false);
+        let cx = self.cx(None);
+        // The mode goes first, so layers registered while building see it.
+        if self.0.mode.borrow().is_none() {
+            *self.0.mode.borrow_mut() = Some(self.0.keymap.push_mode(MODAL_MODE, Condition::Always));
+        }
+        let build: Build = Rc::new(build);
+        let content = build(&cx);
+        cx.built.set(true);
+        self.0.panel.add(&content);
+        let focus = cx.focus.borrow_mut().take();
+        self.0.stack.borrow_mut().push(Entry { on_close, key: options.key, build, content, cx });
+        self.layout_frame();
+        if let Some(widget) = focus {
+            widget.focus();
+        }
+    }
+
+    fn cx(&self, kept: Option<Vec<Box<dyn Any>>>) -> Rc<DialogCx> {
+        let rebuilt = kept.is_some();
+        let kept = kept.unwrap_or_default();
+        Rc::new(DialogCx {
+            app: self.0.app.clone(),
+            dialogs: self.clone(),
+            keymap: self.0.keymap.clone(),
+            theme: self.0.theme.borrow().surface(Surface::Dialog),
+            layers: RefCell::new(Vec::new()),
+            editors: RefCell::new(Vec::new()),
+            focus: RefCell::new(None),
+            kept: RefCell::new(kept.into_iter().map(Some).collect()),
+            keepers: RefCell::new(Vec::new()),
+            rebuilt,
+            built: Cell::new(false),
+        })
+    }
+
+    /// Builds the open dialog again in the current theme, in place, with the state it kept.
+    fn restyle(&self) {
+        self.0.restyle.set(false);
+        let Some((build, old)) = self.0.stack.borrow().last().map(|entry| (entry.build.clone(), entry.cx.clone()))
+        else {
+            return;
+        };
+        if old.theme == self.0.theme.borrow().surface(Surface::Dialog) {
+            return;
+        }
+        let kept = old.keepers.borrow().iter().map(|save| save()).collect();
+        let focused = self.0.app.focused().is_some_and(|widget| {
+            let content = self.0.stack.borrow().last().map(|entry| entry.content.id());
+            std::iter::successors(Some(widget), |widget| widget.parent()).any(|widget| Some(widget.id()) == content)
+        });
+        self.0.rebuilding.set(true);
+        let layers = std::mem::take(&mut *old.layers.borrow_mut());
+        drop(layers);
+        old.editors.borrow_mut().clear();
+        let cx = self.cx(Some(kept));
+        let content = build(&cx);
+        cx.built.set(true);
+        self.0.rebuilding.set(false);
+        let previous = {
+            let mut stack = self.0.stack.borrow_mut();
+            let Some(entry) = stack.last_mut() else { return };
+            entry.cx = cx.clone();
+            std::mem::replace(&mut entry.content, content.clone())
+        };
+        previous.detach();
+        self.0.panel.add(&content);
+        self.layout_frame();
+        let focus = cx.focus.borrow_mut().take();
+        if let Some(widget) = focus.filter(|_| focused) {
+            widget.focus();
+        }
+    }
+
+    /// While a dialog is open: focuses `widget` once the last dialog closes, instead of what had focus before the
+    /// first opened (a prompt that shows again under a dialog reclaims focus afterwards).
+    pub fn refocus(&self, widget: &impl Widget) {
+        if !self.0.stack.borrow().is_empty() {
+            *self.0.focus.borrow_mut() = Some(widget.as_any());
+        }
+    }
+
+    /// Closes every dialog, calling their close handlers (TS `clear`).
+    pub fn clear(&self) {
+        self.close_all();
+        self.0.size.set(DialogSize::Medium);
+        self.0.centered.set(false);
+        self.finish();
+    }
+
+    /// Closes the top dialog, as Escape does.
+    pub fn pop(&self) {
+        let entry = self.0.stack.borrow_mut().pop();
+        if let Some(entry) = entry {
+            close(entry);
+        }
+        self.finish();
+    }
+
+    /// Closes every dialog without running its close handler, for an owner that ends with its app. An open dialog holds
+    /// the stack (its [`DialogCx`], and the closures and layers that close it), and the stack holds the keymap, so
+    /// until this runs neither is freed. Dropping an entry is not enough: a dialog's layers can hold its `DialogCx`.
+    pub fn release(&self) {
+        for mut entry in self.0.stack.take() {
+            entry.on_close = None;
+            close(entry);
+        }
+    }
+
+    fn close_all(&self) {
+        let entries = std::mem::take(&mut *self.0.stack.borrow_mut());
+        for entry in entries {
+            close(entry);
+        }
+    }
+
+    fn finish(&self) {
+        if !self.0.stack.borrow().is_empty() {
+            self.layout_frame();
+            return;
+        }
+        self.0.mode.borrow_mut().take();
+        self.0.backdrop.visible(false);
+        let focus = self.0.focus.borrow_mut().take();
+        if let Some(widget) = focus.filter(|widget| widget.is_shown()) {
+            widget.focus();
+        }
+    }
+
+    // Ctrl+C clears the focused editor of the top dialog before it closes the dialog.
+    fn clear_editor(&self) -> bool {
+        let cx = self.0.stack.borrow().last().map(|entry| entry.cx.clone());
+        cx.is_some_and(|cx| cx.editors.borrow().iter().any(|clear| clear()))
+    }
+
+    fn layout_frame(&self) {
+        let open = !self.0.stack.borrow().is_empty();
+        let (width, height) = self.0.app.size();
+        let centered = self.0.centered.get();
+        self.0
+            .backdrop
+            .size(u32::from(width), u32::from(height))
+            .justify(if centered { Justify::Center } else { Justify::Start })
+            .padding_edge(Edge::Top, if centered { 0.0 } else { f32::from(height) / 4.0 })
+            .visible(open);
+        // The open dialog drew its rows in the theme it was built in, so the panel keeps that background until it
+        // is built again.
+        let background = match self.0.stack.borrow().last() {
+            Some(entry) => entry.cx.theme.background.base,
+            None => self.0.theme.borrow().surface(Surface::Dialog).background.base,
+        };
+        self.0.panel.width(self.0.size.get().width()).max_width(i32::from(width) - 2).bg(background);
+    }
+
+    pub fn is_open(&self) -> bool {
+        !self.0.stack.borrow().is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.stack.borrow().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        !self.is_open()
+    }
+
+    /// The top dialog's key.
+    pub fn key(&self) -> Option<String> {
+        self.0.stack.borrow().last().and_then(|entry| entry.key.clone())
+    }
+
+    pub fn size(&self) -> DialogSize {
+        self.0.size.get()
+    }
+
+    pub fn set_size(&self, size: DialogSize) {
+        self.0.size.set(size);
+        self.layout_frame();
+    }
+
+    pub fn centered(&self) -> bool {
+        self.0.centered.get()
+    }
+
+    pub fn set_centered(&self, centered: bool) {
+        self.0.centered.set(centered);
+        self.layout_frame();
+    }
+
+    /// The page theme. The open dialog is built again in it after the current event, which may be a key the dialog
+    /// is still handling (TS restyles in place).
+    pub fn set_theme(&self, theme: Theme) {
+        *self.0.theme.borrow_mut() = theme;
+        if self.is_open() && !self.0.restyle.replace(true) {
+            self.0.app.defer(bind!(self.0, |inner, _| Dialogs(inner).restyle()));
+        }
+    }
+
+    pub fn keymap(&self) -> &Rc<DialogKeymap> {
+        &self.0.keymap
+    }
+
+    /// The host widget over the screen, for tests and for the TUI's paint order.
+    pub fn host(&self) -> &View {
+        &self.0.host
+    }
+}
+
+fn close(entry: Entry) {
+    entry.content.detach();
+    entry.cx.layers.borrow_mut().clear();
+    entry.cx.editors.borrow_mut().clear();
+    if let Some(on_close) = entry.on_close {
+        on_close();
+    }
+}
+
+/// What a dialog's content sees while it is built and while it is open.
+pub struct DialogCx {
+    pub app: App,
+    pub dialogs: Dialogs,
+    pub keymap: Rc<DialogKeymap>,
+    /// The dialog surface of the theme (TS `useTheme().surface("dialog")`).
+    pub theme: Theme,
+    layers: RefCell<Vec<Disposer>>,
+    editors: RefCell<Vec<Box<dyn Fn() -> bool>>>,
+    focus: RefCell<Option<AnyWidget>>,
+    /// What the previous build put in [`DialogCx::keep`], by call.
+    kept: RefCell<Vec<Option<Box<dyn Any>>>>,
+    keepers: RefCell<Vec<Keeper>>,
+    rebuilt: bool,
+    /// The build returned: [`DialogCx::keep`] keeps nothing made later, such as a redrawn part.
+    built: Cell<bool>,
+}
+
+impl DialogCx {
+    /// Carries state over when the dialog is built again in a new theme: `save` runs before that build, and the
+    /// build's call at the same position gets what it returned. `None` on the first build.
+    pub fn keep<T: 'static>(&self, save: impl Fn() -> T + 'static) -> Option<T> {
+        if self.built.get() {
+            return None;
+        }
+        let mut keepers = self.keepers.borrow_mut();
+        let slot = keepers.len();
+        keepers.push(Box::new(move || Box::new(save())));
+        let kept = self.kept.borrow_mut().get_mut(slot).and_then(Option::take)?;
+        kept.downcast().ok().map(|kept| *kept)
+    }
+
+    /// Keeps where `scroll` is scrolled through a build in a new theme.
+    pub fn keep_scroll(&self, scroll: &ScrollBox) {
+        let kept = scroll.clone();
+        if let Some((x, y)) = self.keep(move || kept.scroll_position()) {
+            scroll.scroll_to(x, y);
+        }
+    }
+
+    /// Whether this build replaces one in an older theme, so the state it would set up at opening is kept instead.
+    pub fn rebuilt(&self) -> bool {
+        self.rebuilt
+    }
+
+    /// Registers a keymap layer for as long as the dialog is open. A layer without a mode gets [`MODAL_MODE`].
+    pub fn layer(&self, mut layer: KeymapLayer<FocusId>) {
+        if layer.mode.is_none() {
+            layer.mode = Some(MODAL_MODE.to_owned());
+        }
+        match self.keymap.layer(layer) {
+            Ok(disposer) => self.layers.borrow_mut().push(disposer),
+            Err(error) => self.app.fail(opentui::Error::other(error)),
+        }
+    }
+
+    /// Ties a disposer to this build of the dialog: it runs when the dialog closes or is built again.
+    pub fn on_close(&self, disposer: Disposer) {
+        self.layers.borrow_mut().push(disposer);
+    }
+
+    /// Runs `run` when the dialog closes, but not when it is built again in a new theme.
+    pub fn on_dismiss(&self, run: impl FnOnce() + 'static) {
+        let dialogs = Rc::downgrade(&self.dialogs.0);
+        self.on_close(Disposer::new(move || {
+            if !dialogs.upgrade().is_some_and(|inner| inner.rebuilding.get()) {
+                run();
+            }
+        }));
+    }
+
+    /// Registers an editor for Ctrl+C: `clear` empties it and returns `true` when it has focus and text.
+    pub fn editor(&self, clear: impl Fn() -> bool + 'static) {
+        self.editors.borrow_mut().push(Box::new(clear));
+    }
+
+    /// Focuses `widget` once the dialog is on screen (TS focuses inputs on a 1 ms timer after mount).
+    pub fn focus(&self, widget: &impl Widget) {
+        *self.focus.borrow_mut() = Some(widget.as_any());
+    }
+
+    /// Terminal width, for layouts that narrow.
+    pub fn width(&self) -> u16 {
+        self.app.size().0
+    }
+}
+
+/// `DialogHeader` props.
+#[derive(Default)]
+pub struct HeaderProps {
+    pub title: String,
+    /// Replaces the title text, for example with a search input.
+    pub title_view: Option<AnyWidget>,
+    /// The close label; `esc` by default.
+    pub close_label: Option<String>,
+    /// Runs when the close label is clicked; [`Dialogs::clear`] by default.
+    pub on_close: Option<Rc<dyn Fn()>>,
+    pub gap: Option<u32>,
+    /// Muted line below the title.
+    pub description: Option<String>,
+}
+
+impl HeaderProps {
+    /// A header with the title text and the default close label.
+    pub fn new(title: impl Into<String>) -> Self {
+        Self { title: title.into(), ..Self::default() }
+    }
+}
+
+/// `DialogHeader`.
+pub fn header(cx: &DialogCx, props: HeaderProps) -> View {
+    let theme = &cx.theme;
+    let row = View::new(&cx.app).row().justify(Justify::SpaceBetween);
+    if let Some(gap) = props.gap {
+        row.gap(gap);
+    }
+    match props.title_view {
+        Some(view) => {
+            row.add(&view);
+        }
+        None => {
+            row.add(&Text::new(&cx.app, props.title).fg(theme.text.base));
+        }
+    }
+    let close = Text::new(&cx.app, props.close_label.as_deref().unwrap_or("esc")).fg(theme.text.muted).shrink(0.0);
+    let dialogs = cx.dialogs.clone();
+    let on_close = props.on_close;
+    close.mouse_pointer(MousePointer::POINTER).on_mouse(move |_cx, event| {
+        if matches!(event.kind, MouseEventKind::Up(_)) {
+            match &on_close {
+                Some(on_close) => on_close(),
+                None => dialogs.clear(),
+            }
+        }
+    });
+    row.add(&close);
+    match props.description.filter(|description| !description.is_empty()) {
+        Some(description) => View::new(&cx.app)
+            .child(&row)
+            .child(&Text::new(&cx.app, description).fg(theme.text.muted).wrap(WrapMode::Word)),
+        None => row,
+    }
+}
+
+/// `DialogLayout`: header, body, and footer, one blank row between each and one at the bottom, with the side
+/// padding.
+pub fn layout(cx: &DialogCx, header: &impl Widget, body: &impl Widget, footer: Option<FooterProps>) -> View {
+    layout_with(cx, header, body, footer, DIALOG_INSET, 1)
+}
+
+/// [`layout`] with the side padding and the blank rows between the body and the footer (`footerGap`).
+pub fn layout_with(
+    cx: &DialogCx,
+    header: &impl Widget,
+    body: &impl Widget,
+    footer: Option<FooterProps>,
+    inset: u32,
+    footer_gap: u32,
+) -> View {
+    let footer = footer.map(|props| self::footer(cx, props));
+    layout_view(cx, header, body, footer.as_ref(), inset, footer_gap)
+}
+
+/// [`layout_with`] with a footer the caller built, such as a view it refills.
+pub fn layout_view(
+    cx: &DialogCx,
+    header: &impl Widget,
+    body: &impl Widget,
+    footer: Option<&View>,
+    inset: u32,
+    footer_gap: u32,
+) -> View {
+    let root = View::new(&cx.app).padding_x(inset).padding_edge(Edge::Bottom, 1).gap(1);
+    root.add(header);
+    let wrapper = View::new(&cx.app).child(body);
+    // A gap of 0 lets a raised bleed body meet the footer band.
+    if footer.is_some() {
+        wrapper.padding_edge(Edge::Bottom, footer_gap.saturating_sub(1));
+        wrapper.margin_edge(Edge::Bottom, footer_gap.min(1) as i32 - 1);
+    }
+    root.add(&wrapper);
+    if let Some(footer) = footer {
+        root.add(footer);
+    }
+    root
+}
+
+/// `DialogFooterAction`.
+#[derive(Clone, Default)]
+pub struct FooterAction {
+    pub title: String,
+    /// Literal key label, such as `enter`.
+    pub key: Option<String>,
+    /// A command whose first shortcut is shown when `key` is not set; the action hides without one.
+    pub command: Option<String>,
+    pub on_trigger: Option<Rc<dyn Fn()>>,
+    pub disabled: bool,
+    /// Overrides the title and key color.
+    pub color: Option<Color>,
+}
+
+impl FooterAction {
+    pub fn new(title: impl Into<String>) -> Self {
+        Self { title: title.into(), ..Self::default() }
+    }
+
+    pub fn key(mut self, key: impl Into<String>) -> Self {
+        self.key = Some(key.into());
+        self
+    }
+
+    pub fn command(mut self, command: impl Into<String>) -> Self {
+        self.command = Some(command.into());
+        self
+    }
+
+    pub fn on_trigger(mut self, run: impl Fn() + 'static) -> Self {
+        self.on_trigger = Some(Rc::new(run));
+        self
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+}
+
+/// `DialogFooterProps`.
+#[derive(Default)]
+pub struct FooterProps {
+    /// Dialog-level actions on the left.
+    pub secondary: Vec<FooterAction>,
+    /// Actions on the selected item, or the dialog's main action, on the right.
+    pub primary: Vec<FooterAction>,
+    pub inset: Option<u32>,
+    /// Content before the secondary actions.
+    pub children: Vec<AnyWidget>,
+}
+
+/// `DialogFooter`: a raised band across the dialog, flush with its bottom, once it has anything to show. The
+/// secondary group wraps instead of overlapping the primary group, which keeps its width.
+pub fn footer(cx: &DialogCx, props: FooterProps) -> View {
+    let theme = &cx.theme;
+    let narrow = cx.width() < 60;
+    let resolve = |actions: Vec<FooterAction>| -> Vec<FooterAction> {
+        actions
+            .into_iter()
+            .filter_map(|mut action| {
+                // An action with neither shows its title alone; one with a command hides without a shortcut.
+                let Some(command) = action.command.as_deref().filter(|_| action.key.is_none()) else {
+                    return Some(action);
+                };
+                action.key = Some(cx.keymap.shortcut(command)?);
+                Some(action)
+            })
+            .collect()
+    };
+    let secondary = resolve(props.secondary);
+    let primary = resolve(props.primary);
+    // A hidden child is content that renders nothing in TS.
+    let band = !secondary.is_empty() || !primary.is_empty() || props.children.iter().any(|child| child.is_visible());
+    let root = View::new(&cx.app).row().justify(Justify::SpaceBetween).gap(2).shrink(0.0);
+    if band {
+        // Hoverable actions carry one cell of padding on each side; the band gives that cell back so labels keep
+        // their column.
+        let inset = DIALOG_INSET + props.inset.unwrap_or(0) - 1;
+        root.margin_edge(Edge::Left, -(DIALOG_INSET as i32))
+            .margin_edge(Edge::Right, -(DIALOG_INSET as i32))
+            .margin_edge(Edge::Bottom, -1)
+            .padding_x(inset)
+            .padding_y(1)
+            .bg(theme.background.raised.high);
+    } else if let Some(inset) = props.inset {
+        root.padding_x(inset);
+    }
+    let left = View::new(&cx.app)
+        .direction(if narrow { FlexDirection::Column } else { FlexDirection::Row })
+        .flex_wrap(Wrap::Wrap)
+        .shrink(1.0)
+        .min_width(0);
+    if !narrow {
+        left.column_gap(1);
+    }
+    for child in &props.children {
+        left.add(child);
+    }
+    for action in secondary {
+        left.add(&footer_item(cx, action, false));
+    }
+    let right = View::new(&cx.app).row().gap(1).shrink(0.0);
+    for action in primary {
+        right.add(&footer_item(cx, action, true));
+    }
+    root.child(&left).child(&right)
+}
+
+fn footer_item(cx: &DialogCx, action: FooterAction, primary: bool) -> AnyWidget {
+    let theme = &cx.theme;
+    let disabled = theme.text.action.primary.disabled;
+    let title_fg = if action.disabled { disabled } else { action.color.unwrap_or(theme.text.base) };
+    let mut spans = vec![action.title.clone().fg(title_fg)];
+    if let Some(key) = &action.key {
+        let key_fg = if action.disabled { disabled } else { action.color.unwrap_or(theme.text.muted) };
+        spans.push(format!(" {key}").fg(key_fg));
+    }
+    let text = Text::new(&cx.app, spans);
+    let band = View::new(&cx.app).padding_x(1).shrink(0.0).child(&text);
+    // The hover handler holds the child it paints, not its own widget, which it would keep alive forever.
+    let item = View::new(&cx.app).shrink(0.0).child(&band);
+    let hovered =
+        if primary { theme.background.action.primary.hovered } else { theme.background.action.secondary.hovered };
+    let enabled = !action.disabled;
+    item.on_hover(move |_cx, over| {
+        band.bg(if over && enabled { hovered } else { Color::TRANSPARENT });
+    });
+    item.mouse_pointer(crate::click_pointer(enabled));
+    item.on_mouse(move |_cx, event| {
+        if matches!(event.kind, MouseEventKind::Up(_))
+            && !action.disabled
+            && let Some(run) = &action.on_trigger
+        {
+            run();
+        }
+    });
+    item.as_any()
+}
+
+/// `DialogButton`.
+#[derive(Clone)]
+pub struct DialogButton {
+    pub label: String,
+    pub run: Rc<dyn Fn()>,
+}
+
+/// `DialogButtons`: a right-aligned row of buttons; the active one is highlighted, and hovering a button makes it
+/// active. The dialog binds the arrow keys and Enter through [`DialogButtons::step`] and [`DialogButtons::run`].
+#[derive(Clone)]
+pub struct DialogButtons {
+    pub view: View,
+    state: Rc<ButtonsState>,
+}
+
+struct ButtonsState {
+    buttons: Vec<(DialogButton, View, Text)>,
+    active: Cell<usize>,
+    theme: Theme,
+}
+
+impl DialogButtons {
+    pub fn new(cx: &DialogCx, buttons: Vec<DialogButton>, active: usize) -> Self {
+        let view = View::new(&cx.app).row().justify(Justify::End);
+        let buttons = buttons
+            .into_iter()
+            .map(|button| {
+                let label = Text::new(&cx.app, button.label.clone());
+                let item = View::new(&cx.app).padding_x(1).child(&label);
+                view.add(&item);
+                (button, item, label)
+            })
+            .collect();
+        let state = Rc::new(ButtonsState { buttons, active: Cell::new(active), theme: cx.theme.clone() });
+        if let Some(active) = cx.keep(bind!(state, |state| Some(state.active.get()))).flatten() {
+            state.active.set(active);
+        }
+        // The handlers hold the state weakly: it holds the views that hold them.
+        for (index, (_, item, _)) in state.buttons.iter().enumerate() {
+            item.on_hover(bind!(state, |state, _cx, over| if over {
+                state.set_active(index);
+            }));
+            item.mouse_pointer(MousePointer::POINTER).on_mouse(bind!(state, |state, _cx, event| {
+                if matches!(event.kind, MouseEventKind::Up(_)) {
+                    (state.buttons[index].0.run)();
+                }
+            }));
+        }
+        state.paint();
+        Self { view, state }
+    }
+
+    pub fn active(&self) -> usize {
+        self.state.active.get()
+    }
+
+    /// Moves the highlight by `by`, wrapping around.
+    pub fn step(&self, by: isize) {
+        let count = self.state.buttons.len() as isize;
+        if count > 0 {
+            self.state.set_active((self.active() as isize + by).rem_euclid(count) as usize);
+        }
+    }
+
+    /// Runs the active button.
+    pub fn run(&self) {
+        if let Some((button, _, _)) = self.state.buttons.get(self.active()) {
+            (button.run)();
+        }
+    }
+}
+
+impl ButtonsState {
+    fn set_active(&self, index: usize) {
+        self.active.set(index);
+        self.paint();
+    }
+
+    fn paint(&self) {
+        let theme = &self.theme;
+        for (index, (_, item, label)) in self.buttons.iter().enumerate() {
+            let active = self.active.get() == index;
+            item.bg(if active { theme.background.action.primary.focused } else { Color::TRANSPARENT });
+            label.fg(if active { theme.text.action.primary.focused } else { theme.text.muted });
+        }
+    }
+}
+
+/// Sends keys to the keymap before any widget, as the TUI's keymap provider does: a key the keymap handles does
+/// not reach the focused widget. The keymap's focus follows the app's first, so target layers see it.
+pub fn route_keys(app: &App, keymap: Rc<DialogKeymap>) -> HandlerId {
+    app.on_key_capture(move |cx, key| {
+        keymap.keymap().set_focus(focus_path(cx.app()));
+        let result = keymap.handle_key(key);
+        if result.prevent_default {
+            cx.prevent_default();
+        }
+        if result.handled || result.stop_propagation {
+            cx.stop_propagation();
+        }
+    })
+}
+
+/// The focused widget's id followed by its ancestors' ids, the path `Keymap::set_focus` takes.
+pub fn focus_path(app: &App) -> Vec<FocusId> {
+    std::iter::successors(app.focused(), |widget| widget.parent()).map(|widget| widget.id()).collect()
+}

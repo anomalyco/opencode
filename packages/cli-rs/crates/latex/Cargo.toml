@@ -1,0 +1,22 @@
+[package]
+name = "opencode-latex"
+description = "The LaTeX plugin (P.2)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+# The plugin depends on the plugin API alone; the host turns what it returns into widgets.
+[dependencies]
+opencode-plugin-abi.workspace = true
+unicode-segmentation = "1"
+
+[dev-dependencies]
+opencode-plugin.workspace = true
+opencode-ui.workspace = true
+opentui.workspace = true
+opencode-parity.workspace = true
+serde_json.workspace = true

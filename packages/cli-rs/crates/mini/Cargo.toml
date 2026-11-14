@@ -1,0 +1,28 @@
+[package]
+name = "opencode-mini"
+description = "mini: the split-footer interface (M.1 to M.4)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+opentui.workspace = true
+opencode-api.workspace = true
+opencode-ui.workspace = true
+opencode-store.workspace = true
+opencode-local.workspace = true
+opencode-util.workspace = true
+futures-util.workspace = true
+indexmap.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+unicode-width.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["event", "pipe", "stdio"] }

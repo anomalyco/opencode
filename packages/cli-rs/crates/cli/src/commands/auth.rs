@@ -1,0 +1,1692 @@
+//! `auth`: integrations and credentials (`packages/cli/src/commands/handlers/auth/*.ts`), and the
+//! integration picker of `packages/cli/src/ui/integration-picker.ts`. `mcp auth` (C.6) shares the
+//! connection, the OAuth login, and the form.
+
+use std::collections::HashSet;
+use std::future::Future;
+use std::io::{IsTerminal, Read};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+
+use indexmap::IndexMap;
+use opencode_api::client::Client;
+use opencode_api::error::Error as ApiError;
+use opencode_api::generated::{
+    ConnectionInfo, CredentialActivateInput, CredentialCreateInput, CredentialRemoveInput, CredentialValue,
+    ExperimentalIntegrationWellknownAddInput, FormAnswer, FormField, FormValue, FormWhen, FormWhenOp, FormWhenValue,
+    IntegrationAttemptMode, IntegrationAttemptStatus, IntegrationCommandAttemptStatus, IntegrationCommandCancelInput,
+    IntegrationCommandConnectInput, IntegrationCommandStatusInput, IntegrationConnectExternalInput,
+    IntegrationConnectKeyInput, IntegrationInfo, IntegrationListInput, IntegrationMethod, IntegrationOAuthMethod,
+    IntegrationOauthCancelInput, IntegrationOauthCompleteInput, IntegrationOauthConnectInput,
+    IntegrationOauthStatusInput, LocationQueryInput, SessionMessageShellExit,
+};
+use opencode_api::js::{UrlError, number_to_string, parse_number, parse_url};
+use opencode_ui::form;
+use opencode_util::{bail, err, error};
+use serde_json::{Value, json};
+
+use super::Context;
+use super::client::{Connected, connect, here, locale_compare, pretty};
+use crate::args::{
+    AuthAccountArgs, AuthArgs, AuthCommand, AuthExportArgs, AuthImportArgs, AuthListArgs, AuthLoginArgs, OutputFormat,
+};
+use crate::output::{Exit, print};
+use crate::prompt::{self, Cancelled, Choice, State, View};
+
+pub fn run(context: &Context, args: &AuthArgs) -> error::Result<()> {
+    match &args.command {
+        None => crate::help::print(&["auth"]),
+        Some(AuthCommand::List(args)) => caught(list(context, args)),
+        Some(AuthCommand::Login(args)) => prompted(login(context, args)),
+        Some(AuthCommand::Logout(args)) => prompted(account(context, args, Action::Logout)),
+        Some(AuthCommand::Export(args)) => caught(export(context, args)),
+        Some(AuthCommand::Import(args)) => caught(import(context, args)),
+        Some(AuthCommand::Switch(args)) => prompted(account(context, args, Action::Switch)),
+    }
+}
+
+// `list`, `export`, and `import` print the bare `errorMessage` of a failure and exit 1.
+fn caught(result: error::Result<()>) -> error::Result<()> {
+    let Err(error) = result else { return Ok(()) };
+    if error.is::<Exit>() {
+        return Err(error);
+    }
+    eprintln!("{}", opencode_ui::terminal_text(&error_message(&error)));
+    Err(Exit(1).into())
+}
+
+/// `handlePromptErrors`: a cancelled prompt ends with `└  Cancelled` and exit 130; any other failure with
+/// its message under `■`, `└  Failed`, and exit 1. All of it on stdout, as Clack writes.
+pub(super) fn prompted(result: error::Result<()>) -> error::Result<()> {
+    let Err(error) = result else { return Ok(()) };
+    if error.is::<Exit>() {
+        return Err(error);
+    }
+    if error.is::<Cancelled>() {
+        prompt::cancel("Cancelled");
+        return Err(Exit(130).into());
+    }
+    prompt::log::error(&error_message(&error));
+    prompt::outro("Failed");
+    Err(Exit(1).into())
+}
+
+/// `errorMessage`: a declared error's message, else the client error (`reason: detail`), else the text.
+pub(super) fn error_message(error: &error::Error) -> String {
+    error.downcast_ref::<ApiError>().map_or_else(|| format!("{error:#}"), ApiError::error_message)
+}
+
+/// `requireInteractive`: stdin and stdout are terminals.
+pub(super) fn require_interactive(message: &str) -> error::Result<()> {
+    if prompt::is_interactive() {
+        return Ok(());
+    }
+    bail!("{message}")
+}
+
+/// A connection and the runtime its requests run on. Prompts block the main thread between requests,
+/// so the runtime has a worker of its own that keeps the connection's I/O going.
+pub(super) struct Server {
+    connected: Connected,
+    runtime: tokio::runtime::Runtime,
+}
+
+impl Server {
+    pub fn connect(context: &Context) -> error::Result<Server> {
+        let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).enable_all().build()?;
+        let connected = runtime.block_on(connect(context))?;
+        Ok(Server { connected, runtime })
+    }
+
+    pub fn client(&self) -> &Client {
+        &self.connected.client
+    }
+
+    pub fn run<F: Future>(&self, future: F) -> F::Output {
+        self.runtime.block_on(future)
+    }
+}
+
+pub(super) fn location() -> error::Result<Option<LocationQueryInput>> {
+    Ok(Some(here()?))
+}
+
+/// `loadIntegrations`: waits for the plugins that add integrations, then the integrations, OpenCode Go first.
+pub(super) fn load_integrations(server: &Server) -> error::Result<Vec<IntegrationInfo>> {
+    let location = location()?;
+    let mut integrations = server.run(async {
+        super::client::wait_for_plugins(server.client(), location.clone()).await;
+        let list = server.client().integration_list(&IntegrationListInput { location }).await?;
+        Ok::<_, error::Error>(list.data)
+    })?;
+    integrations.sort_by_key(|integration| integration.id.as_str() != "opencode-go");
+    Ok(integrations)
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// list, export, import
+// ---------------------------------------------------------------------------------------------------------------
+
+fn list(context: &Context, args: &AuthListArgs) -> error::Result<()> {
+    let server = Server::connect(context)?;
+    let integrations: Vec<IntegrationInfo> =
+        load_integrations(&server)?.into_iter().filter(|integration| !integration.connections.is_empty()).collect();
+    if args.format == OutputFormat::Json {
+        let items: Vec<Value> = integrations
+            .iter()
+            .map(|integration| {
+                json!({ "id": integration.id, "name": integration.name, "connections": integration.connections })
+            })
+            .collect();
+        return print(&pretty(&Value::Array(items))?);
+    }
+    let rows: Vec<(&str, &str, &str)> = integrations
+        .iter()
+        .flat_map(|integration| {
+            integration.connections.iter().map(|connection| match connection {
+                ConnectionInfo::Credential(credential) => {
+                    (integration.name.as_str(), credential.label.as_str(), "stored")
+                }
+                ConnectionInfo::Env(env) => (integration.name.as_str(), env.name.as_str(), "environment"),
+                ConnectionInfo::Unknown(value) => {
+                    (integration.name.as_str(), value["name"].as_str().unwrap_or("undefined"), "environment")
+                }
+            })
+        })
+        .collect();
+    if rows.is_empty() {
+        return print("No authenticated integrations\n");
+    }
+    let width = rows.iter().map(|row| js_length(row.0)).max().unwrap_or(0) + 2;
+    let lines: Vec<String> = rows
+        .iter()
+        .map(|(integration, source, kind)| format!("{}{}{kind}", pad_end(integration, width), pad_end(source, 28)))
+        .collect();
+    print(&opencode_ui::terminal_text(&(lines.join("\n") + "\n")))
+}
+
+fn export(context: &Context, args: &AuthExportArgs) -> error::Result<()> {
+    let server = Server::connect(context)?;
+    let integration = match &args.target {
+        Some(target) => Some(resolve_integration(&load_integrations(&server)?, target)?.id.to_string()),
+        None => None,
+    };
+    // The credentials as the server sent them; `JSON.stringify` keeps every field.
+    let mut credentials = server.run(server.client().json::<Value>(Client::credential_list_call()?))?;
+    let credentials: Vec<Value> = match credentials["data"].take() {
+        Value::Array(items) => items,
+        _ => Vec::new(),
+    }
+    .into_iter()
+    .filter(|credential| integration.as_deref().is_none_or(|id| credential["integrationID"].as_str() == Some(id)))
+    .collect();
+    if std::io::stdout().is_terminal() {
+        eprintln!("Warning: the output contains secrets; redirect it to a file or pipe it to auth import");
+    }
+    print(&pretty(&Value::Array(credentials))?)
+}
+
+fn import(context: &Context, args: &AuthImportArgs) -> error::Result<()> {
+    if args.file.is_none() && std::io::stdin().is_terminal() {
+        bail!("Pipe auth export output into stdin or pass a file to import");
+    }
+    let text = match &args.file {
+        Some(file) => read_file(file)?,
+        None => {
+            let mut text = String::new();
+            std::io::stdin().read_to_string(&mut text)?;
+            text
+        }
+    };
+    let credentials = legacy::decode(&text).map_err(|error| err!("{error}"))?;
+    let server = Server::connect(context)?;
+    let existing = server.run(server.client().json::<Value>(Client::credential_list_call()?))?;
+    let existing = existing["data"].as_array().cloned().unwrap_or_default();
+    let ids: HashSet<&str> = existing.iter().filter_map(|credential| credential["id"].as_str()).collect();
+    let integrations: HashSet<&str> =
+        existing.iter().filter_map(|credential| credential["integrationID"].as_str()).collect();
+    let mut imported = 0;
+    for credential in &credentials {
+        if ids.contains(credential.id.as_str()) {
+            continue;
+        }
+        // Keep the destination's selections; only integrations new to it adopt the exported one.
+        // The value goes as it was exported, and the created credential is not read.
+        let input = CredentialCreateInput {
+            id: Some(credential.id.clone().into()),
+            integration_id: credential.integration_id.clone().into(),
+            label: Some(credential.label.clone()),
+            value: CredentialValue::Unknown(credential.value.clone()),
+            activate: Some(credential.active && !integrations.contains(credential.integration_id.as_str())),
+        };
+        match server.run(server.client().json::<Value>(Client::credential_create_call(&input)?)) {
+            Ok(_) => imported += 1,
+            Err(ApiError::Declared(error)) if error.status == 409 => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    let skipped = credentials.len() - imported;
+    eprintln!(
+        "Imported {imported} {}{}",
+        if imported == 1 { "credential" } else { "credentials" },
+        if skipped > 0 { format!(", skipped {skipped} already present") } else { String::new() }
+    );
+    Ok(())
+}
+
+// `Bun.file(file).text()`, with Bun's wording for the common failures.
+fn read_file(file: &str) -> error::Result<String> {
+    std::fs::read_to_string(file).map_err(|error| match error.kind() {
+        std::io::ErrorKind::NotFound => {
+            err!("ENOENT: no such file or directory, open '{file}'")
+        }
+        std::io::ErrorKind::PermissionDenied => {
+            err!("EACCES: permission denied, open '{file}'")
+        }
+        _ => error.into(),
+    })
+}
+
+/// `CredentialLegacy.Entry` decoding of an `auth export` file, with Effect Schema's messages. Entries come
+/// out in schema order; a legacy key credential's `configuration` merges into its `metadata`.
+mod legacy {
+    use serde_json::{Map, Value};
+
+    pub struct Entry {
+        pub id: String,
+        pub integration_id: String,
+        pub label: String,
+        pub active: bool,
+        pub value: Value,
+    }
+
+    pub fn decode(text: &str) -> Result<Vec<Entry>, String> {
+        let value: Value = serde_json::from_str(text).map_err(|_| "Expected a valid JSON string".to_owned())?;
+        let Value::Array(items) = value else { return Err("Expected array".to_owned()) };
+        items.iter().enumerate().map(|(index, item)| entry(item, &format!("[{index}]"))).collect()
+    }
+
+    fn fail(message: &str, at: &str) -> String {
+        format!("{message}\n  at {at}")
+    }
+
+    fn object<'v>(value: &'v Value, at: &str) -> Result<&'v Map<String, Value>, String> {
+        value.as_object().ok_or_else(|| fail("Expected object", at))
+    }
+
+    fn field<'v>(object: &'v Map<String, Value>, key: &str, at: &str) -> Result<&'v Value, String> {
+        object.get(key).ok_or_else(|| fail("Missing key", &format!("{at}[\"{key}\"]")))
+    }
+
+    fn string(object: &Map<String, Value>, key: &str, at: &str, name: &str) -> Result<String, String> {
+        field(object, key, at)?
+            .as_str()
+            .map(str::to_owned)
+            .ok_or_else(|| fail(&format!("Expected {name}"), &format!("{at}[\"{key}\"]")))
+    }
+
+    fn entry(item: &Value, at: &str) -> Result<Entry, String> {
+        let object = object(item, at)?;
+        let id = string(object, "id", at, "Credential.ID")?;
+        let integration_id = string(object, "integrationID", at, "Integration.ID")?;
+        let label = string(object, "label", at, "string")?;
+        let active = field(object, "active", at)?
+            .as_bool()
+            .ok_or_else(|| fail("Expected boolean", &format!("{at}[\"active\"]")))?;
+        let value = credential(field(object, "value", at)?, &format!("{at}[\"value\"]"))?;
+        Ok(Entry { id, integration_id, label, active, value })
+    }
+
+    fn credential(value: &Value, at: &str) -> Result<Value, String> {
+        let union = || {
+            fail(
+                "Expected { readonly \"type\": \"oauth\", ... } | { readonly \"type\": \"key\", ... } | { readonly \"type\": \"external\", ... }",
+                at,
+            )
+        };
+        let object = value.as_object().ok_or_else(union)?;
+        let tag = object.get("type").and_then(Value::as_str);
+        let mut out = Map::new();
+        out.insert("type".into(), Value::from(tag.unwrap_or_default()));
+        match tag {
+            Some("oauth") => {
+                out.insert("methodID".into(), string(object, "methodID", at, "Integration.MethodID")?.into());
+                out.insert("refresh".into(), string(object, "refresh", at, "string")?.into());
+                out.insert("access".into(), string(object, "access", at, "string")?.into());
+                let expires = field(object, "expires", at)?;
+                let at_expires = format!("{at}[\"expires\"]");
+                if !expires.is_number() {
+                    return Err(fail("Expected number", &at_expires));
+                }
+                if !expires.as_f64().is_some_and(|n| n.fract() == 0.0 && n >= 0.0) {
+                    return Err(fail("Expected an integer", &at_expires));
+                }
+                out.insert("expires".into(), expires.clone());
+                metadata(object, at, &mut out, None)?;
+            }
+            Some("key") => {
+                out.insert("key".into(), string(object, "key", at, "string")?.into());
+                let configuration = match object.get("configuration") {
+                    Some(configuration) => Some(answer(configuration, &format!("{at}[\"configuration\"]"))?),
+                    None => None,
+                };
+                metadata(object, at, &mut out, configuration)?;
+            }
+            Some("external") => {
+                out.insert("methodID".into(), string(object, "methodID", at, "Integration.MethodID")?.into());
+                metadata(object, at, &mut out, None)?;
+            }
+            _ => return Err(union()),
+        }
+        Ok(Value::Object(out))
+    }
+
+    fn metadata(
+        object: &Map<String, Value>,
+        at: &str,
+        out: &mut Map<String, Value>,
+        configuration: Option<Map<String, Value>>,
+    ) -> Result<(), String> {
+        let mut metadata = match object.get("metadata") {
+            Some(value) => Some(
+                value.as_object().cloned().ok_or_else(|| fail("Expected object", &format!("{at}[\"metadata\"]")))?,
+            ),
+            None => None,
+        };
+        // Form answers overrode metadata when both reached provider settings, so they keep precedence.
+        if let Some(configuration) = configuration {
+            let merged = metadata.get_or_insert_default();
+            merged.extend(configuration);
+        }
+        if let Some(metadata) = metadata {
+            out.insert("metadata".into(), Value::Object(metadata));
+        }
+        Ok(())
+    }
+
+    // `Form.Answer`: a record of strings, numbers, booleans, and string arrays.
+    fn answer(value: &Value, at: &str) -> Result<Map<String, Value>, String> {
+        let object = object(value, at)?;
+        for (key, value) in object {
+            let at = format!("{at}[\"{key}\"]");
+            match value {
+                Value::String(_) | Value::Number(_) | Value::Bool(_) => {}
+                Value::Array(items) => {
+                    if let Some(index) = items.iter().position(|item| !item.is_string()) {
+                        return Err(fail("Expected string", &format!("{at}[{index}]")));
+                    }
+                }
+                _ => return Err(fail("Expected Form.Value", &at)),
+            }
+        }
+        Ok(object.clone())
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// logout, switch
+// ---------------------------------------------------------------------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Action {
+    Logout,
+    Switch,
+}
+
+fn account(context: &Context, args: &AuthAccountArgs, action: Action) -> error::Result<()> {
+    if args.target.is_none() {
+        require_interactive("Pass an integration ID or name when running without an interactive terminal")?;
+    }
+    if args.credential.is_none() {
+        require_interactive("Pass a credential ID or label when running without an interactive terminal")?;
+    }
+    prompt::intro(match action {
+        Action::Logout => "Log out of an account",
+        Action::Switch => "Switch account",
+    });
+    let server = Server::connect(context)?;
+    let integrations = load_integrations(&server)?;
+    let integration = choose_integration(&integrations, args.target.as_deref())?;
+    let credential = choose_credential(integration, action, args.credential.as_deref())?;
+    let mut progress = prompt::spinner();
+    let (start, done, failed) = match action {
+        Action::Logout => (
+            "Removing credential...",
+            format!("Removed account from {}", integration.name),
+            "Failed to remove credential",
+        ),
+        Action::Switch => {
+            ("Switching account...", format!("Switched account for {}", integration.name), "Failed to switch account")
+        }
+    };
+    progress.start(start);
+    let result = server.run(async {
+        match action {
+            Action::Logout => {
+                server
+                    .client()
+                    .credential_remove(&CredentialRemoveInput { credential_id: credential.clone().into() })
+                    .await
+            }
+            Action::Switch => {
+                server
+                    .client()
+                    .credential_activate(&CredentialActivateInput { credential_id: credential.clone().into() })
+                    .await
+            }
+        }
+    });
+    if let Err(error) = result {
+        progress.stop_with(failed, 1);
+        return Err(error.into());
+    }
+    progress.stop(&done);
+    prompt::outro("Done");
+    Ok(())
+}
+
+fn choose_integration<'a>(
+    integrations: &'a [IntegrationInfo],
+    target: Option<&str>,
+) -> error::Result<&'a IntegrationInfo> {
+    if let Some(target) = target {
+        return resolve_integration(integrations, target);
+    }
+    let configured: Vec<&IntegrationInfo> =
+        integrations.iter().filter(|integration| !credentials(integration).is_empty()).collect();
+    if configured.is_empty() {
+        bail!("No stored credentials found");
+    }
+    let choices = configured
+        .iter()
+        .map(|integration| {
+            let labels: Vec<&str> = credentials(integration).iter().map(|credential| credential.1).collect();
+            Choice::new(integration.id.to_string(), integration.name.clone()).hint(labels.join(", "))
+        })
+        .collect();
+    let id = prompt::autocomplete("Select integration", choices).max_items(8).prompt()?;
+    let Some(id) = id else {
+        bail!("No integration selected");
+    };
+    configured
+        .into_iter()
+        .find(|integration| integration.id.as_str() == id)
+        .ok_or_else(|| err!("Integration not found: {id}"))
+}
+
+fn choose_credential(integration: &IntegrationInfo, action: Action, target: Option<&str>) -> error::Result<String> {
+    let credentials = credentials(integration);
+    if credentials.is_empty() {
+        let environment: Vec<&str> = integration
+            .connections
+            .iter()
+            .filter_map(|connection| match connection {
+                ConnectionInfo::Env(env) => Some(env.name.as_str()),
+                _ => None,
+            })
+            .collect();
+        if !environment.is_empty() && action == Action::Logout {
+            bail!(
+                "{} is authenticated through {}; unset the environment variable to disconnect",
+                integration.name,
+                environment.join(", ")
+            );
+        }
+        bail!("No stored credentials for {}", integration.name);
+    }
+    if let Some(target) = target {
+        if let Some((id, _)) = credentials.iter().find(|(id, _)| *id == target) {
+            return Ok(id.to_string());
+        }
+        let matches: Vec<&(&str, &str)> =
+            credentials.iter().filter(|(_, label)| label.to_lowercase() == target.to_lowercase()).collect();
+        if matches.len() == 1 {
+            return Ok(matches[0].0.to_string());
+        }
+        if matches.len() > 1 {
+            let ids: Vec<&str> = matches.iter().map(|(id, _)| *id).collect();
+            bail!("Credential label \"{target}\" is ambiguous. Use an ID: {}", ids.join(", "));
+        }
+        bail!("Credential not found for {}: {target}", integration.name);
+    }
+    let verb = match action {
+        Action::Logout => "log out",
+        Action::Switch => "switch to",
+    };
+    let choices = credentials
+        .iter()
+        .enumerate()
+        .map(|(index, (id, label))| {
+            let label = if index == 0 { format!("{label} (active)") } else { label.to_string() };
+            Choice::new(id.to_string(), label).hint(*id)
+        })
+        .collect();
+    prompt::autocomplete(format!("Select {} account to {verb}", integration.name), choices)
+        .max_items(8)
+        .prompt()?
+        .ok_or_else(|| err!("No credential selected"))
+}
+
+/// The stored credentials of an integration as `(id, label)`, the active one first.
+fn credentials(integration: &IntegrationInfo) -> Vec<(&str, &str)> {
+    integration
+        .connections
+        .iter()
+        .filter_map(|connection| match connection {
+            ConnectionInfo::Credential(credential) => Some((credential.id.as_str(), credential.label.as_str())),
+            _ => None,
+        })
+        .collect()
+}
+
+/// `resolveIntegration`: by ID (without trailing slashes), else by a unique name, ignoring case.
+pub(super) fn resolve_integration<'a>(
+    integrations: &'a [IntegrationInfo],
+    target: &str,
+) -> error::Result<&'a IntegrationInfo> {
+    let normalized = target.trim_end_matches('/');
+    if let Some(integration) = integrations.iter().find(|integration| integration.id.as_str() == normalized) {
+        return Ok(integration);
+    }
+    let matches: Vec<&IntegrationInfo> = integrations
+        .iter()
+        .filter(|integration| integration.name.to_lowercase() == normalized.to_lowercase())
+        .collect();
+    match matches.as_slice() {
+        [integration] => Ok(integration),
+        [] => bail!("Integration not found: {target}"),
+        _ => {
+            let ids: Vec<&str> = matches.iter().map(|integration| integration.id.as_str()).collect();
+            bail!("Integration name \"{target}\" is ambiguous: {}", ids.join(", "))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// login
+// ---------------------------------------------------------------------------------------------------------------
+
+// `login.ts`: these come first in the picker, in this order, under "Popular".
+const PRIORITY: [&str; 6] = ["opencode-go", "opencode", "openai", "github-copilot", "anthropic", "google"];
+
+fn login(context: &Context, args: &AuthLoginArgs) -> error::Result<()> {
+    if args.target.is_none() {
+        require_interactive("Pass an integration ID or name when running without an interactive terminal")?;
+    }
+    prompt::intro("Connect an integration");
+    let server = Server::connect(context)?;
+    let integration = find_integration(&server, args.target.as_deref())?;
+    let methods = connect_methods(&integration);
+    if methods.is_empty() {
+        bail!("{} has no interactive login methods", integration.name);
+    }
+    let method = choose_method(&methods, args.method.as_deref())?;
+    let form = match method {
+        IntegrationMethod::Oauth(method) => method.form.as_deref(),
+        IntegrationMethod::Key(method) => method.form.as_deref(),
+        IntegrationMethod::External(method) => method.form.as_deref(),
+        _ => None,
+    };
+    let answer = answer_form(form, &args.answer)?;
+    let _attempt = match method {
+        IntegrationMethod::Key(method) => {
+            key_login(&server, &integration, method.label.as_deref(), answer).map(|()| None)
+        }
+        IntegrationMethod::Command(method) => command_login(&server, &integration, method.id.as_str()).map(Some),
+        IntegrationMethod::External(method) => {
+            external_login(&server, &integration, method.id.as_str(), answer).map(|()| None)
+        }
+        IntegrationMethod::Oauth(method) => oauth_login(&server, &integration, method, answer, None).map(Some),
+        _ => bail!("Unsupported authentication method"),
+    }?;
+    prompt::outro("Done");
+    Ok(())
+}
+
+fn find_integration(server: &Server, target: Option<&str>) -> error::Result<IntegrationInfo> {
+    if let Some(target) = target
+        && is_web_url(target)?
+    {
+        let mut progress = prompt::spinner();
+        progress.start("Discovering authentication provider...");
+        let input = ExperimentalIntegrationWellknownAddInput { location: location()?, url: target.to_owned() };
+        match server.run(server.client().experimental_integration_wellknown_add(&input)) {
+            Ok(()) => progress.stop("Authentication provider discovered"),
+            Err(error) => {
+                progress.stop_with("Discovery failed", 1);
+                return Err(error.into());
+            }
+        }
+    }
+    let integrations = load_integrations(server)?;
+    if let Some(target) = target {
+        return resolve_integration(&integrations, target).cloned();
+    }
+    let choices = login_choices(&integrations);
+    if choices.is_empty() {
+        bail!("No authentication integrations are available");
+    }
+    let id = select_integration(choices, "integration")?;
+    resolve_integration(&integrations, &id).cloned()
+}
+
+// A target that is an http(s) URL names a provider to discover; a non-ASCII host cannot be one.
+fn is_web_url(target: &str) -> error::Result<bool> {
+    match parse_url(target) {
+        Err(error @ UrlError::NonAsciiHost(_)) => bail!("{error}"),
+        url => Ok(url.is_ok_and(|url| matches!(url.scheme(), "http" | "https"))),
+    }
+}
+
+fn login_choices(integrations: &[IntegrationInfo]) -> Vec<IntegrationChoice> {
+    let mcp = |integration: &IntegrationInfo| {
+        integration.metadata.as_ref().and_then(|metadata| metadata.get("source")).and_then(Value::as_str) == Some("mcp")
+    };
+    let priority = |integration: &IntegrationInfo| {
+        PRIORITY.iter().position(|id| *id == integration.id.as_str()).unwrap_or(PRIORITY.len())
+    };
+    let mut choices: Vec<&IntegrationInfo> =
+        integrations.iter().filter(|integration| !connect_methods(integration).is_empty()).collect();
+    choices.sort_by(|a, b| {
+        mcp(b)
+            .cmp(&mcp(a))
+            .then_with(|| priority(a).cmp(&priority(b)))
+            .then_with(|| locale_compare(&a.name, &b.name))
+            .then_with(|| locale_compare(a.id.as_str(), b.id.as_str()))
+    });
+    choices
+        .into_iter()
+        .map(|integration| IntegrationChoice {
+            value: integration.id.to_string(),
+            label: integration.name.clone(),
+            category: if mcp(integration) {
+                "MCP"
+            } else if priority(integration) < PRIORITY.len() {
+                "Popular"
+            } else {
+                "Services"
+            },
+            connected: !integration.connections.is_empty(),
+            hint: None,
+        })
+        .collect()
+}
+
+/// The methods a person can log in with (all but environment variables), API keys last.
+fn connect_methods(integration: &IntegrationInfo) -> Vec<&IntegrationMethod> {
+    let mut methods: Vec<&IntegrationMethod> = integration
+        .methods
+        .iter()
+        .filter(|method| !matches!(method, IntegrationMethod::Env(_) | IntegrationMethod::Unknown(_)))
+        .collect();
+    methods.sort_by_key(|method| matches!(method, IntegrationMethod::Key(_)));
+    methods
+}
+
+fn method_id(method: &IntegrationMethod) -> &str {
+    match method {
+        IntegrationMethod::Oauth(method) => method.id.as_str(),
+        IntegrationMethod::Command(method) => method.id.as_str(),
+        IntegrationMethod::External(method) => method.id.as_str(),
+        _ => "key",
+    }
+}
+
+fn choose_method<'a>(methods: &[&'a IntegrationMethod], target: Option<&str>) -> error::Result<&'a IntegrationMethod> {
+    if let Some(target) = target {
+        return resolve_method(methods, target);
+    }
+    if let [method] = methods {
+        return Ok(method);
+    }
+    require_interactive("Pass --method when running without an interactive terminal")?;
+    let choices = methods
+        .iter()
+        .map(|method| {
+            let label = match method {
+                IntegrationMethod::Key(method) => method.label.clone().unwrap_or_else(|| "API key".to_owned()),
+                IntegrationMethod::Oauth(method) => method.label.clone(),
+                IntegrationMethod::Command(method) => method.label.clone(),
+                IntegrationMethod::External(method) => method.label.clone(),
+                _ => String::new(),
+            };
+            Choice::new(method_id(method).to_owned(), label)
+        })
+        .collect();
+    let id = prompt::select("Select login method", choices).prompt()?;
+    resolve_method(methods, &id)
+}
+
+fn resolve_method<'a>(methods: &[&'a IntegrationMethod], target: &str) -> error::Result<&'a IntegrationMethod> {
+    let normalized = target.to_lowercase();
+    let matches: Vec<&'a IntegrationMethod> = methods
+        .iter()
+        .copied()
+        .filter(|method| {
+            let label = match method {
+                IntegrationMethod::Key(method) => {
+                    return normalized == "key"
+                        || method.label.as_ref().map(|label| label.to_lowercase()) == Some(normalized.clone());
+                }
+                IntegrationMethod::Oauth(method) => &method.label,
+                IntegrationMethod::Command(method) => &method.label,
+                IntegrationMethod::External(method) => &method.label,
+                _ => return false,
+            };
+            method_id(method) == target || label.to_lowercase() == normalized
+        })
+        .collect();
+    match matches.as_slice() {
+        [method] => Ok(method),
+        [] => {
+            let available: Vec<&str> = methods.iter().map(|method| method_id(method)).collect();
+            let available =
+                if available.is_empty() { String::new() } else { format!(". Available: {}", available.join(", ")) };
+            bail!("Authentication method not found: {target}{available}")
+        }
+        _ => bail!("Authentication method \"{target}\" is ambiguous"),
+    }
+}
+
+/// Runs `request` under a spinner that ends with `done` or, on failure, with `Authentication failed`.
+fn saving<T, E: Into<error::Error>>(
+    start: &str,
+    done: &str,
+    request: impl FnOnce() -> Result<T, E>,
+) -> error::Result<T> {
+    let mut progress = prompt::spinner();
+    progress.start(start);
+    match request() {
+        Ok(value) => {
+            progress.stop(done);
+            Ok(value)
+        }
+        Err(error) => {
+            progress.stop_with("Authentication failed", 1);
+            Err(error.into())
+        }
+    }
+}
+
+fn key_login(
+    server: &Server,
+    integration: &IntegrationInfo,
+    label: Option<&str>,
+    answer: Option<FormAnswer>,
+) -> error::Result<()> {
+    require_interactive("API key input requires an interactive terminal")?;
+    let message = label.map(str::to_owned).unwrap_or_else(|| format!("Enter your {} API key", integration.name));
+    let key = prompt::password(message).validate(required).prompt()?;
+    let input = IntegrationConnectKeyInput {
+        integration_id: integration.id.clone(),
+        location: location()?,
+        key,
+        answer,
+        label: None,
+    };
+    saving("Saving credential...", &format!("Connected to {}", integration.name), || {
+        server.run(server.client().integration_connect_key(&input))
+    })
+}
+
+fn external_login(
+    server: &Server,
+    integration: &IntegrationInfo,
+    method: &str,
+    answer: Option<FormAnswer>,
+) -> error::Result<()> {
+    let input = IntegrationConnectExternalInput {
+        integration_id: integration.id.clone(),
+        location: location()?,
+        method_id: method.into(),
+        answer,
+        label: None,
+    };
+    saving("Saving credential...", &format!("Connected to {}", integration.name), || {
+        server.run(server.client().integration_connect_external(&input))
+    })
+}
+
+/// The attempt's cancel request, sent when the login ends however it ends (the TS finalizer), and from the
+/// shutdown teardown when a signal ends the wait. Errors are ignored.
+pub(super) struct Attempt {
+    cancel: std::sync::Arc<dyn Fn() + Send + Sync>,
+    _registration: crate::signals::Registration,
+}
+
+impl Attempt {
+    fn new(cancel: impl Fn() + Send + Sync + 'static) -> Attempt {
+        let cancel: std::sync::Arc<dyn Fn() + Send + Sync> = std::sync::Arc::new(cancel);
+        let teardown = cancel.clone();
+        Attempt {
+            _registration: crate::signals::on_shutdown("cancel the login attempt", move || {
+                teardown();
+                prompt::cancel("Cancelled");
+            }),
+            cancel,
+        }
+    }
+}
+
+impl Drop for Attempt {
+    fn drop(&mut self) {
+        (self.cancel)();
+    }
+}
+
+/// `oauthLogin`: starts the attempt, shows its instructions and URL (opening it on a terminal), then takes
+/// a pasted code or waits for the browser. `label` names the new credential. The attempt is cancelled when
+/// the returned guard drops, as the TS finalizer does at the end of the command.
+pub(super) fn oauth_login(
+    server: &Server,
+    integration: &IntegrationInfo,
+    method: &IntegrationOAuthMethod,
+    answer: Option<FormAnswer>,
+    label: Option<String>,
+) -> error::Result<Attempt> {
+    let location = location()?;
+    let input = IntegrationOauthConnectInput {
+        integration_id: integration.id.clone(),
+        location: location.clone(),
+        method_id: method.id.clone(),
+        answer,
+        label,
+    };
+    let mut progress = prompt::spinner();
+    progress.start("Starting authorization...");
+    let attempt = match server.run(server.client().integration_oauth_connect(&input)) {
+        Ok(started) => started.data,
+        Err(error) => {
+            progress.stop_with("Authentication failed", 1);
+            return Err(error.into());
+        }
+    };
+    let ids = (integration.id.clone(), attempt.attempt_id.clone());
+    let guard = {
+        let client = server.client().clone();
+        let location = location.clone();
+        Attempt::new(move || {
+            let input = IntegrationOauthCancelInput {
+                integration_id: ids.0.clone(),
+                attempt_id: ids.1.clone(),
+                location: location.clone(),
+            };
+            let client = client.clone();
+            cancel_now(async move { client.integration_oauth_cancel(&input).await });
+        })
+    };
+    progress.stop("Authorization started");
+    prompt::log::info(&attempt.instructions);
+    prompt::log::info(&attempt.url);
+    if prompt::is_interactive() {
+        // Best effort: without a browser opener, the URL is printed above.
+        let _ = opencode_tui::features::links::open_url(&attempt.url);
+    }
+    let connected = format!("Connected to {}", integration.name);
+    if attempt.mode == IntegrationAttemptMode::Code {
+        require_interactive("This login requires an interactive terminal to enter the authorization code")?;
+        let code = prompt::text("Paste the authorization code").validate(required).prompt()?;
+        let input = IntegrationOauthCompleteInput {
+            integration_id: integration.id.clone(),
+            attempt_id: attempt.attempt_id.clone(),
+            location,
+            code: Some(code),
+        };
+        saving("Completing authorization...", &connected, || {
+            server.run(server.client().integration_oauth_complete(&input))
+        })?;
+        return Ok(guard);
+    }
+    // Waits that can last minutes use log lines, not a spinner, so Ctrl+C reaches the signal teardown,
+    // which cancels the attempt.
+    prompt::log::step("Waiting for authorization...");
+    let input = IntegrationOauthStatusInput {
+        integration_id: integration.id.clone(),
+        attempt_id: attempt.attempt_id.clone(),
+        location: location.clone(),
+    };
+    // An attempt with `paste` also takes the redirect URL from a browser that cannot reach this machine, while
+    // the status poll runs; whichever settles the attempt ends the prompt.
+    let paste = (attempt.paste == Some(true) && std::io::stdin().is_terminal() && std::io::stdout().is_terminal())
+        .then(|| {
+            let complete = IntegrationOauthCompleteInput {
+                integration_id: integration.id.clone(),
+                attempt_id: attempt.attempt_id.clone(),
+                location,
+                code: None,
+            };
+            PasteRedirect::start(server.client().clone(), complete)
+        });
+    let status = server.run(async {
+        loop {
+            if paste.as_ref().is_some_and(PasteRedirect::cancelled) {
+                return Err(Cancelled.into());
+            }
+            let status = server.client().integration_oauth_status(&input).await?.data;
+            if !matches!(status, IntegrationAttemptStatus::Pending(_)) {
+                return Ok::<_, error::Error>(status);
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    });
+    if let Some(paste) = paste {
+        paste.stop();
+    }
+    match status? {
+        IntegrationAttemptStatus::Complete(_) => {
+            prompt::log::success(&connected);
+            Ok(guard)
+        }
+        IntegrationAttemptStatus::Failed(failed) => bail!("{}", failed.message),
+        _ => bail!("Authorization expired"),
+    }
+}
+
+/// `pasteRedirect`: asks for the redirect URL and hands it to the attempt, which still settles through its status;
+/// a rejected URL asks again. It runs on a thread of its own until [`PasteRedirect::stop`] or a cancel.
+struct PasteRedirect {
+    stop: Arc<AtomicBool>,
+    cancelled: Arc<AtomicBool>,
+    thread: std::thread::JoinHandle<()>,
+}
+
+impl PasteRedirect {
+    fn start(client: Client, input: IntegrationOauthCompleteInput) -> Self {
+        let (stop, cancelled) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)));
+        let thread = std::thread::spawn({
+            let (stop, cancelled) = (stop.clone(), cancelled.clone());
+            move || {
+                let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else { return };
+                loop {
+                    let message = "If the browser can't reach this machine, paste the URL it was redirected to";
+                    let Ok(code) = prompt::text(message).validate(required).prompt_until(Some(stop.clone())) else {
+                        cancelled.store(!stop.load(Ordering::Relaxed), Ordering::Relaxed);
+                        return;
+                    };
+                    let input = IntegrationOauthCompleteInput { code: Some(code), ..input.clone() };
+                    match runtime.block_on(client.integration_oauth_complete(&input)) {
+                        Ok(()) => return,
+                        Err(error) => prompt::log::error(&error.to_string()),
+                    }
+                }
+            }
+        });
+        Self { stop, cancelled, thread }
+    }
+
+    /// Whether the user cancelled the prompt.
+    fn cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Relaxed)
+    }
+
+    /// Ends the prompt, as a cancel, and waits for it.
+    fn stop(self) {
+        self.stop.store(true, Ordering::Relaxed);
+        let _ = self.thread.join();
+    }
+}
+
+fn command_login(server: &Server, integration: &IntegrationInfo, method: &str) -> error::Result<Attempt> {
+    let location = location()?;
+    let input = IntegrationCommandConnectInput {
+        integration_id: integration.id.clone(),
+        location: location.clone(),
+        method_id: method.into(),
+        label: None,
+    };
+    let mut progress = prompt::spinner();
+    progress.start("Starting authentication command...");
+    let attempt = match server.run(server.client().integration_command_connect(&input)) {
+        Ok(started) => started.data,
+        Err(error) => {
+            progress.stop_with("Authentication failed", 1);
+            return Err(error.into());
+        }
+    };
+    let guard = {
+        let client = server.client().clone();
+        let input = IntegrationCommandCancelInput {
+            integration_id: integration.id.clone(),
+            attempt_id: attempt.attempt_id.clone(),
+            location: location.clone(),
+        };
+        Attempt::new(move || {
+            let client = client.clone();
+            let input = input.clone();
+            cancel_now(async move { client.integration_command_cancel(&input).await });
+        })
+    };
+    progress.stop("Authentication command started");
+    prompt::log::step("Waiting for authentication command...");
+    let input = IntegrationCommandStatusInput {
+        integration_id: integration.id.clone(),
+        attempt_id: attempt.attempt_id.clone(),
+        location,
+    };
+    // The status message accumulates the command's stderr; each completed line prints once.
+    let mut printed = 0;
+    let status = server.run(async {
+        loop {
+            let status = server.client().integration_command_status(&input).await?.data;
+            let IntegrationCommandAttemptStatus::Pending(pending) = &status else {
+                return Ok::<_, error::Error>(status);
+            };
+            if let Some(message) = &pending.message {
+                printed = print_completed_lines(message, printed);
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    })?;
+    match status {
+        IntegrationCommandAttemptStatus::Complete(_) => {
+            prompt::log::success(&format!("Connected to {}", integration.name));
+            Ok(guard)
+        }
+        IntegrationCommandAttemptStatus::Failed(failed) => bail!("{}", failed.message),
+        _ => bail!("Authentication expired"),
+    }
+}
+
+/// Prints the lines of `message` completed since `printed` (a byte offset) and returns the new offset.
+fn print_completed_lines(message: &str, printed: usize) -> usize {
+    let (end, output) = completed_lines(message, printed);
+    if !output.is_empty() {
+        prompt::log::message(output);
+    }
+    end
+}
+
+fn completed_lines(message: &str, printed: usize) -> (usize, &str) {
+    let end = message.rfind('\n').map_or(0, |index| index + 1);
+    if end <= printed {
+        return (printed, "");
+    }
+    (end, message.get(printed..end).unwrap_or("").trim())
+}
+
+/// Runs a cancel request to completion within 5 s, on a runtime of its own; errors are ignored.
+fn cancel_now(request: impl Future<Output = Result<(), ApiError>> + Send + 'static) {
+    let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else { return };
+    let _ = runtime.block_on(async { tokio::time::timeout(Duration::from_secs(5), request).await });
+}
+
+fn required(value: &str) -> Option<String> {
+    value.is_empty().then(|| "Required".to_owned())
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The form (`auth/form.ts`)
+// ---------------------------------------------------------------------------------------------------------------
+
+/// `answerForm`: answers from `--answer key=value`, the defaults of hidden fields, and prompts for the rest.
+/// `None` when the method has no form.
+pub(super) fn answer_form(fields: Option<&[FormField]>, input: &[String]) -> error::Result<Option<FormAnswer>> {
+    let mut supplied = IndexMap::new();
+    for item in input {
+        let Some(separator) = item.find('=').filter(|separator| *separator >= 1) else {
+            bail!("Expected --answer key=value");
+        };
+        let key = &item[..separator];
+        if !fields.is_some_and(|fields| fields.iter().any(|field| form::key(field) == key)) {
+            bail!("Unknown form field: {key}");
+        }
+        supplied.insert(key.to_owned(), item[separator + 1..].to_owned());
+    }
+    let Some(fields) = fields else { return Ok(None) };
+    let mut answer = FormAnswer::new();
+    for field in fields {
+        let key = form::key(field);
+        if let FormField::Unknown(raw) = field {
+            if let Some(value) = unknown_answer(field, raw, supplied.get(key), &answer)? {
+                answer.insert(key.to_owned(), value);
+            }
+            continue;
+        }
+        if !active(form::conditions(field), &answer) {
+            if supplied.contains_key(key) {
+                bail!("Form field is not active: {key}");
+            }
+            continue;
+        }
+        let external = matches!(field, FormField::External(_));
+        let value = match supplied.get(key) {
+            Some(provided) => Some(supplied_answer(field, provided)?),
+            None if field.hidden() == Some(true) => default(field),
+            None => answer_field(field)?,
+        };
+        if !external && let Some(invalid) = form::validate(field, value.as_ref()) {
+            bail!("{key}: {invalid}");
+        }
+        if let Some(value) = value {
+            answer.insert(key.to_owned(), value);
+        }
+    }
+    Ok(Some(answer))
+}
+
+fn supplied_answer(field: &FormField, input: &str) -> error::Result<FormValue> {
+    match field {
+        FormField::External(_) => {
+            bail!("External form field requires interactive confirmation: {}", form::key(field))
+        }
+        FormField::String(_) => Ok(FormValue::String(input.to_owned())),
+        _ => serde_json::from_str(input)
+            .ok()
+            .and_then(form_value)
+            .ok_or_else(|| err!("Expected a JSON value for form field: {}", form::key(field))),
+    }
+}
+
+/// A JSON value as a `Form.Value`; `None` for one it does not accept.
+fn form_value(value: Value) -> Option<FormValue> {
+    match value {
+        Value::String(text) => Some(FormValue::String(text)),
+        Value::Bool(value) => Some(FormValue::Bool(value)),
+        Value::Number(number) => number.as_f64().map(FormValue::Number),
+        Value::Array(items) => items
+            .into_iter()
+            .map(|item| item.as_str().map(str::to_owned))
+            .collect::<Option<Vec<_>>>()
+            .map(FormValue::Array),
+        _ => None,
+    }
+}
+
+/// The answer to a field of a type this client does not know (a newer server's). TS has no such variant and
+/// answers it as any field (`auth/form.ts:28-47`), reading its members from the JSON: it is skipped when its
+/// `when` does not hold, takes its `default` when hidden, and is otherwise prompted for as text
+/// (`form.ts:139-149`). `formValidateValue` then checks it with its last, multiselect branch
+/// (`tui/util/form.ts:73-75,105-109`), so only a selection passes. TS's text prompt returns a number, which never
+/// passes, and the branch throws for a non-empty selection on a field without `options`. Here the prompt takes a
+/// JSON value as `--answer` does, and a selection must be custom
+/// (`parity/deviations/V26-login-unfamiliar-field-answer.md`).
+fn unknown_answer(
+    field: &FormField,
+    raw: &Value,
+    provided: Option<&String>,
+    answer: &FormAnswer,
+) -> error::Result<Option<FormValue>> {
+    let key = form::key(field);
+    let flag = |name: &str| raw.get(name) == Some(&Value::Bool(true));
+    let when: Vec<FormWhen> =
+        raw.get("when").and_then(|when| serde_json::from_value(when.clone()).ok()).unwrap_or_default();
+    if !active(&when, answer) {
+        if provided.is_some() {
+            bail!("Form field is not active: {key}");
+        }
+        return Ok(None);
+    }
+    let value = match provided {
+        Some(provided) => Some(supplied_answer(field, provided)?),
+        None if flag("hidden") => raw.get("default").cloned().and_then(form_value),
+        None => {
+            require_interactive("Authentication form input requires an interactive terminal")?;
+            let text = |name: &str| raw.get(name).and_then(Value::as_str).filter(|text| !text.is_empty());
+            if let Some(description) = text("description") {
+                prompt::log::info(description);
+            }
+            let mut question = prompt::text(raw.get("title").and_then(Value::as_str).unwrap_or(key))
+                .validate(|input| (input.is_empty() && flag("required")).then(|| "Required".to_owned()));
+            if let Some(default) = raw.get("default") {
+                question = question.initial_value(default.to_string());
+            }
+            let input = question.prompt()?;
+            if input.is_empty() { None } else { Some(supplied_answer(field, &input)?) }
+        }
+    };
+    let Some(value) = value else {
+        return if flag("required") { Err(err!("{key}: Answer required")) } else { Ok(None) };
+    };
+    let empty = matches!(&value, FormValue::String(text) if text.is_empty())
+        || matches!(&value, FormValue::Array(items) if items.is_empty());
+    if empty && flag("required") {
+        bail!("{key}: Answer required");
+    }
+    let FormValue::Array(items) = &value else { bail!("{key}: Expected selections") };
+    if !items.is_empty() && !flag("custom") {
+        bail!("{key}: Select only available options");
+    }
+    Ok(Some(value))
+}
+
+// The answer kinds of a select: an option's value, Yes or No, "Type your own answer", and Skip.
+#[derive(Clone, PartialEq)]
+enum Pick {
+    Text(String),
+    Bool(bool),
+    Custom,
+    Skip,
+}
+
+fn answer_field(field: &FormField) -> error::Result<Option<FormValue>> {
+    require_interactive("Authentication form input requires an interactive terminal")?;
+    if let FormField::Unknown(_) = field {
+        return Ok(None);
+    }
+    let message = field.title().unwrap_or(field.key()).to_owned();
+    if let Some(description) = field.description() {
+        prompt::log::info(description);
+    }
+    match field {
+        FormField::External(external) => {
+            prompt::log::info(&external.url);
+            let _ = opencode_tui::features::links::open_url(&external.url);
+            let question =
+                if message.is_empty() { "Continue after completing this step?".to_owned() } else { message.clone() };
+            if !prompt::confirm(question).initial_value(true).prompt()? {
+                let step = if message.is_empty() { "External step" } else { &message };
+                bail!("{step} is required");
+            }
+            Ok(Some(FormValue::Bool(true)))
+        }
+        FormField::Boolean(boolean) => {
+            if boolean.required == Some(true) {
+                let value = prompt::confirm(message).initial_value(boolean.default.unwrap_or(true)).prompt()?;
+                return Ok(Some(FormValue::Bool(value)));
+            }
+            let choices = vec![
+                Choice::new(Pick::Bool(true), "Yes"),
+                Choice::new(Pick::Bool(false), "No"),
+                Choice::new(Pick::Skip, "Skip"),
+            ];
+            let initial = boolean.default.map_or(Pick::Skip, Pick::Bool);
+            match prompt::select(message, choices).initial_value(initial).prompt()? {
+                Pick::Bool(value) => Ok(Some(FormValue::Bool(value))),
+                _ => Ok(None),
+            }
+        }
+        FormField::Multiselect(multiselect) => {
+            let mut choices: Vec<Choice<Pick>> = multiselect
+                .options
+                .iter()
+                .map(|option| option_choice(&option.value, &option.label, &option.description))
+                .collect();
+            if multiselect.custom == Some(true) {
+                choices.push(Choice::new(Pick::Custom, "Type another value"));
+            }
+            let mut builder = prompt::multiselect(message, choices)
+                .required(multiselect.required == Some(true) || multiselect.min_items.unwrap_or(0) > 0);
+            if let Some(default) = &multiselect.default {
+                builder = builder.initial_values(default.iter().cloned().map(Pick::Text).collect());
+            }
+            let values = builder.prompt()?;
+            let mut selected: Vec<String> = values
+                .iter()
+                .filter_map(|value| match value {
+                    Pick::Text(text) => Some(text.clone()),
+                    _ => None,
+                })
+                .collect();
+            if values.contains(&Pick::Custom) {
+                selected.push(prompt::text("Enter value").validate(required).prompt()?);
+            }
+            let count = selected.len() as i64;
+            if let Some(min) = multiselect.min_items.filter(|min| count < *min) {
+                bail!("Select at least {min}");
+            }
+            if let Some(max) = multiselect.max_items.filter(|max| count > *max) {
+                bail!("Select at most {max}");
+            }
+            Ok(Some(FormValue::Array(selected)))
+        }
+        FormField::String(string) if string.options.is_some() => {
+            let mut choices: Vec<Choice<Pick>> = string
+                .options
+                .iter()
+                .flatten()
+                .map(|option| option_choice(&option.value, &option.label, &option.description))
+                .collect();
+            if string.custom == Some(true) {
+                choices.push(Choice::new(Pick::Custom, "Type your own answer"));
+            }
+            if string.required != Some(true) {
+                choices.push(Choice::new(Pick::Skip, "Skip"));
+            }
+            let mut select = prompt::select(message.clone(), choices);
+            if let Some(default) = &string.default {
+                select = select.initial_value(Pick::Text(default.clone()));
+            }
+            match select.prompt()? {
+                Pick::Skip => Ok(None),
+                Pick::Text(value) => Ok(Some(FormValue::String(value))),
+                _ => text_answer(field, message),
+            }
+        }
+        _ => text_answer(field, message),
+    }
+}
+
+fn option_choice(value: &str, label: &str, description: &Option<String>) -> Choice<Pick> {
+    let choice = Choice::new(Pick::Text(value.to_owned()), label);
+    match description {
+        Some(description) => choice.hint(description.clone()),
+        None => choice,
+    }
+}
+
+fn text_answer(field: &FormField, message: String) -> error::Result<Option<FormValue>> {
+    let (placeholder, initial) = match field {
+        FormField::String(field) => (field.placeholder.clone(), field.default.clone()),
+        FormField::Number(field) => (None, field.default.as_ref().map(shell_exit_text)),
+        FormField::Integer(field) => (None, field.default.as_ref().map(shell_exit_text)),
+        _ => (None, None),
+    };
+    let mut text = prompt::text(message).validate(|input| validate_text(field, input));
+    if let Some(placeholder) = placeholder {
+        text = text.placeholder(placeholder);
+    }
+    if let Some(initial) = initial {
+        text = text.initial_value(initial);
+    }
+    let value = text.prompt()?;
+    if value.is_empty() && !form::required(field) {
+        return Ok(None);
+    }
+    if matches!(field, FormField::String(_)) {
+        return Ok(Some(FormValue::String(value)));
+    }
+    Ok(Some(FormValue::Number(parse_number(&value).unwrap_or(f64::NAN))))
+}
+
+/// `validateText`, the checks of the text prompt (its messages differ from `formValidateValue`'s).
+fn validate_text(field: &FormField, value: &str) -> Option<String> {
+    if value.is_empty() {
+        return form::required(field).then(|| "Required".to_owned());
+    }
+    let bounds = match field {
+        FormField::Number(field) => Some((false, form::number(&field.minimum), form::number(&field.maximum))),
+        FormField::Integer(field) => Some((true, form::number(&field.minimum), form::number(&field.maximum))),
+        _ => None,
+    };
+    if let Some((integer, minimum, maximum)) = bounds {
+        let Some(number) = parse_number(value).filter(|number| number.is_finite()) else {
+            return Some("Expected a number".to_owned());
+        };
+        if integer && number.fract() != 0.0 {
+            return Some("Expected an integer".to_owned());
+        }
+        if let Some(minimum) = minimum.filter(|minimum| number < *minimum) {
+            return Some(format!("Must be at least {}", number_to_string(minimum)));
+        }
+        if let Some(maximum) = maximum.filter(|maximum| number > *maximum) {
+            return Some(format!("Must be at most {}", number_to_string(maximum)));
+        }
+        return None;
+    }
+    let FormField::String(field) = field else { return None };
+    let length = value.encode_utf16().count() as i64;
+    if let Some(min) = field.min_length.filter(|min| length < *min) {
+        return Some(format!("Must be at least {min} characters"));
+    }
+    if let Some(max) = field.max_length.filter(|max| length > *max) {
+        return Some(format!("Must be at most {max} characters"));
+    }
+    if let Some(pattern) = &field.pattern
+        && !regex::Regex::new(pattern).is_ok_and(|pattern| pattern.is_match(value))
+    {
+        return Some("Invalid format".to_owned());
+    }
+    use opencode_api::generated::FormStringFieldFormat as Format;
+    match &field.format {
+        Some(Format::Uri) => match parse_url(value) {
+            Err(error @ UrlError::NonAsciiHost(_)) => Some(error.to_string()),
+            Err(_) => Some("Expected a URL".to_owned()),
+            Ok(_) => None,
+        },
+        Some(Format::Email) if !form::email(value) => Some("Expected an email address".to_owned()),
+        Some(Format::Date) if !form::date(value) => Some("Expected a date".to_owned()),
+        Some(Format::DateTime) if !form::date_time(value) => Some("Expected a date and time".to_owned()),
+        _ => None,
+    }
+}
+
+fn shell_exit_text(value: &SessionMessageShellExit) -> String {
+    match value {
+        SessionMessageShellExit::Number(value) => number_to_string(*value),
+        SessionMessageShellExit::String(text) => text.clone(),
+        SessionMessageShellExit::Unknown(value) => value.to_string(),
+    }
+}
+
+fn default(field: &FormField) -> Option<FormValue> {
+    let number = |value: &Option<SessionMessageShellExit>| match value {
+        Some(SessionMessageShellExit::Number(value)) => Some(FormValue::Number(*value)),
+        Some(SessionMessageShellExit::String(text)) => Some(FormValue::String(text.clone())),
+        _ => None,
+    };
+    match field {
+        FormField::String(field) => field.default.clone().map(FormValue::String),
+        FormField::Number(field) => number(&field.default),
+        FormField::Integer(field) => number(&field.default),
+        FormField::Boolean(field) => field.default.map(FormValue::Bool),
+        FormField::Multiselect(field) => field.default.clone().map(FormValue::Array),
+        _ => None,
+    }
+}
+
+/// `active` in `auth/form.ts`: every `when` condition holds on the answers so far. An array answer matches
+/// when it includes the condition's value as a string.
+fn active(conditions: &[FormWhen], answer: &FormAnswer) -> bool {
+    conditions.iter().all(|condition| {
+        let Some(value) = answer.get(&condition.key) else { return false };
+        let matches = match (value, &condition.value) {
+            (FormValue::Array(items), want) => {
+                let want = match want {
+                    FormWhenValue::String(text) => text.clone(),
+                    FormWhenValue::Number(number) => number_to_string(*number),
+                    FormWhenValue::Bool(value) => value.to_string(),
+                    FormWhenValue::Unknown(value) => value.to_string(),
+                };
+                items.contains(&want)
+            }
+            (FormValue::String(a), FormWhenValue::String(b)) => a == b,
+            (FormValue::Number(a), FormWhenValue::Number(b)) => a == b,
+            (FormValue::Bool(a), FormWhenValue::Bool(b)) => a == b,
+            _ => false,
+        };
+        if condition.op == FormWhenOp::Eq { matches } else { !matches }
+    })
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The integration picker (`ui/integration-picker.ts`)
+// ---------------------------------------------------------------------------------------------------------------
+
+/// One row of the integration picker, under its category heading.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct IntegrationChoice {
+    pub value: String,
+    pub label: String,
+    pub category: &'static str,
+    pub connected: bool,
+    pub hint: Option<String>,
+}
+
+impl std::fmt::Display for IntegrationChoice {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.value)
+    }
+}
+
+/// `selectIntegration`: an autocomplete grouped by category, sized to the terminal, that matches the
+/// label, ID, or category. Enter on an empty match asks again.
+pub(super) fn select_integration(choices: Vec<IntegrationChoice>, kind: &str) -> error::Result<String> {
+    // `render_picker` draws the labels and hints itself, so they lose their control characters here.
+    let clean = |text: &str| opencode_ui::terminal_text(text).into_owned();
+    let options = choices
+        .into_iter()
+        .map(|choice| IntegrationChoice {
+            label: clean(&choice.label),
+            hint: choice.hint.as_deref().map(clean),
+            ..choice
+        })
+        .map(|choice| Choice::new(choice.clone(), choice.label.clone()))
+        .collect();
+    let result = prompt::autocomplete("", options)
+        .filter(|search, choice| {
+            let search = search.to_lowercase();
+            [&choice.value.label, &choice.value.value, choice.value.category]
+                .iter()
+                .any(|value| value.to_lowercase().contains(&search))
+        })
+        .validate(|value| value.is_none().then(|| format!("Select an {kind}")))
+        .render(|view| render_picker(view, kind))
+        .prompt()?;
+    result.map(|choice| choice.value).ok_or_else(|| err!("No {kind} selected"))
+}
+
+fn render_picker(view: &View<'_, IntegrationChoice>, kind: &str) -> String {
+    use prompt::{
+        S_BAR, S_BAR_END, S_RADIO_ACTIVE, S_RADIO_INACTIVE, bold, cyan, dim, gray, green, strikethrough, symbol, yellow,
+    };
+    let title = format!("{}\n{}  Select {kind}", gray(S_BAR()), symbol(view.state));
+    match view.state {
+        State::Submit => {
+            let label = view.value.map_or("", |choice| choice.label.as_str());
+            return format!("{title}\n{}  {}", gray(S_BAR()), dim(label));
+        }
+        State::Cancel => {
+            return format!("{title}\n{}  {}", gray(S_BAR()), strikethrough(&dim(view.user_input)));
+        }
+        _ => {}
+    }
+    let (rows, columns) = prompt::stdout_size();
+    let rows = rows.unwrap_or(24) as i64;
+    // Leave room for the category headings as well as Clack's title and footer.
+    let max_items = (rows - 14 - i64::from(view.state == State::Error)).clamp(2, 8);
+    let compact = rows < 18;
+    let length = view.filtered.len() as i64;
+    let cursor = view.cursor as i64;
+    let start = (cursor - 2.min(max_items - 1)).max(0).min((length - max_items).max(0));
+    let end = (start + max_items).min(length);
+    let visible = &view.filtered[start as usize..end.max(start) as usize];
+    let bar = cyan(S_BAR());
+    let mut lines = vec![
+        title,
+        format!(
+            "{bar}  {} {}",
+            dim("Search:"),
+            if view.is_navigating { dim(view.user_input) } else { view.user_input_with_cursor.clone() }
+        ),
+    ];
+    if visible.is_empty() && !view.user_input.is_empty() {
+        lines.push(format!("{bar}  {}", yellow(&format!("No {kind}s found"))));
+    }
+    if view.state == State::Error && !visible.is_empty() {
+        lines.push(format!("{}  {}", yellow(S_BAR()), yellow(view.error)));
+    }
+    if start > 0 {
+        lines.push(format!("{bar}  {}", dim("…")));
+    }
+    for (index, option) in visible.iter().enumerate() {
+        let choice = &option.value;
+        if index == 0 || visible[index - 1].value.category != choice.category {
+            if !compact {
+                lines.push(format!("{bar}  "));
+            }
+            lines.push(format!("{bar}  {}", bold(choice.category)));
+        }
+        let focused = start + index as i64 == cursor;
+        lines.push(format!(
+            "{bar}  {} {}{}{}",
+            if focused { green(S_RADIO_ACTIVE()) } else { dim(S_RADIO_INACTIVE()) },
+            if focused { choice.label.clone() } else { dim(&choice.label) },
+            if choice.connected { format!(" {}", green("✓")) } else { String::new() },
+            choice.hint.as_ref().map(|hint| format!(" {}", dim(&format!("({hint})")))).unwrap_or_default()
+        ));
+    }
+    if start + max_items < length {
+        lines.push(format!("{bar}  {}", dim("…")));
+    }
+    lines.push(format!(
+        "{bar}  {}",
+        dim(if columns.unwrap_or(80) < 50 {
+            "↑/↓ navigate • Enter select"
+        } else {
+            "↑/↓ to select • Enter: confirm • Type: to search"
+        })
+    ));
+    lines.push(cyan(S_BAR_END()));
+    lines.join("\n")
+}
+
+/// `text.length` in JavaScript: UTF-16 code units.
+pub(super) fn js_length(text: &str) -> usize {
+    text.encode_utf16().count()
+}
+
+/// `text.padEnd(width)`.
+pub(super) fn pad_end(text: &str, width: usize) -> String {
+    format!("{text}{}", " ".repeat(width.saturating_sub(js_length(text))))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uri_fields_reject_non_ascii_hosts() {
+        let field = FormField::String(opencode_api::generated::FormStringField {
+            format: Some(opencode_api::generated::FormStringFieldFormat::Uri),
+            ..Default::default()
+        });
+        let host = ": a host name must be ASCII; write an international name in its punycode (xn--) form";
+        for url in ["https://Bücher.example", "https://%42%C3%BCcher.example"] {
+            assert_eq!(validate_text(&field, url), Some(format!("{url}{host}")));
+        }
+        assert_eq!(validate_text(&field, "nope"), Some("Expected a URL".to_owned()));
+        assert_eq!(validate_text(&field, "https://xn--bcher-kva.example"), None);
+    }
+
+    #[test]
+    fn login_targets_with_non_ascii_hosts_are_not_integration_names() {
+        assert!(is_web_url("https://xn--bcher-kva.example").unwrap());
+        assert!(!is_web_url("anthropic").unwrap());
+        assert!(!is_web_url("ftp://example.com").unwrap());
+        for url in ["https://bücher.example", "https://Bücher.example", "https://%42%C3%BCcher.example"] {
+            assert_eq!(
+                is_web_url(url).unwrap_err().to_string(),
+                format!("{url}: a host name must be ASCII; write an international name in its punycode (xn--) form")
+            );
+        }
+    }
+
+    #[test]
+    fn answers_for_unfamiliar_field_types_are_validated_and_sent() {
+        let fields: Vec<FormField> = serde_json::from_str(
+            r#"[{"type":"future-choice","key":"region","hidden":true},{"type":"future-choice","key":"tags","hidden":true,"custom":true}]"#,
+        )
+        .unwrap();
+        let answer = |input: &str| answer_form(Some(&fields), &[input.to_owned()]).map_err(|error| error.to_string());
+        assert_eq!(answer("region=west").unwrap_err(), "Expected a JSON value for form field: region");
+        assert_eq!(answer(r#"region="west""#).unwrap_err(), "region: Expected selections");
+        assert_eq!(answer(r#"region=["west"]"#).unwrap_err(), "region: Select only available options");
+        let sent = answer("region=[]").unwrap().unwrap();
+        assert_eq!(sent.get("region"), Some(&FormValue::Array(Vec::new())));
+        let sent = answer(r#"tags=["a"]"#).unwrap().unwrap();
+        assert_eq!(sent.get("tags"), Some(&FormValue::Array(vec!["a".to_owned()])));
+    }
+
+    #[test]
+    fn unfamiliar_field_types_take_hidden_defaults_and_conditions_from_their_json() {
+        let answer = |fields: &str, input: &[&str]| {
+            let fields: Vec<FormField> = serde_json::from_str(fields).unwrap();
+            let input: Vec<String> = input.iter().map(|item| item.to_string()).collect();
+            answer_form(Some(&fields), &input).map(Option::unwrap).map_err(|error| error.to_string())
+        };
+        let sent = answer(r#"[{"type":"x","key":"a","hidden":true,"custom":true,"default":["b"]}]"#, &[]).unwrap();
+        assert_eq!(sent.get("a"), Some(&FormValue::Array(vec!["b".to_owned()])));
+        let error = answer(r#"[{"type":"x","key":"a","hidden":true,"default":"b"}]"#, &[]).unwrap_err();
+        assert_eq!(error, "a: Expected selections");
+        assert!(answer(r#"[{"type":"x","key":"a","hidden":true}]"#, &[]).unwrap().is_empty());
+        let error = answer(r#"[{"type":"x","key":"a","hidden":true,"required":true}]"#, &[]).unwrap_err();
+        assert_eq!(error, "a: Answer required");
+        let when = r#"[{"type":"x","key":"a","when":[{"key":"b","op":"eq","value":"c"}]}]"#;
+        assert!(answer(when, &[]).unwrap().is_empty());
+        assert_eq!(answer(when, &["a=[]"]).unwrap_err(), "Form field is not active: a");
+    }
+
+    #[test]
+    fn completed_lines_print_each_line_once() {
+        assert_eq!(completed_lines("partial", 0), (0, ""));
+        assert_eq!(completed_lines("one\ntw", 0), (4, "one"));
+        assert_eq!(completed_lines("one\ntwo\nthr", 4), (8, "two"));
+        assert_eq!(completed_lines("one\ntwo\nthr", 8), (8, ""));
+        // A status text the server replaced can put the printed offset inside a character.
+        assert_eq!(completed_lines("aé\nb\n", 2), (6, ""));
+    }
+
+    #[test]
+    fn legacy_exports_decode_with_effect_messages() {
+        let error = |text: &str| legacy::decode(text).err().unwrap();
+        assert_eq!(error("nope"), "Expected a valid JSON string");
+        assert_eq!(error("{}"), "Expected array");
+        assert_eq!(error("[1]"), "Expected object\n  at [0]");
+        assert_eq!(
+            error(r#"[{"id":"c","integrationID":"x","label":"l","active":true}]"#),
+            "Missing key\n  at [0][\"value\"]"
+        );
+        assert_eq!(
+            error(
+                r#"[{"id":"c","integrationID":"x","label":"l","active":true,"value":{"type":"key","key":"k","configuration":{"a":[1]}}}]"#
+            ),
+            "Expected string\n  at [0][\"value\"][\"configuration\"][\"a\"][0]"
+        );
+        assert_eq!(
+            error(r#"[{"id":5,"integrationID":"x","label":"l","active":true,"value":{"type":"key","key":"k"}}]"#),
+            "Expected Credential.ID\n  at [0][\"id\"]"
+        );
+        let entries = legacy::decode(
+            r#"[{"label":"L","id":"c","integrationID":"x","active":false,"value":{"key":"k","type":"key","metadata":{"a":1,"b":2},"configuration":{"b":3}}}]"#,
+        )
+        .unwrap();
+        assert_eq!(entries[0].value.to_string(), r#"{"type":"key","key":"k","metadata":{"a":1,"b":3}}"#);
+    }
+
+    #[test]
+    fn pad_end_counts_utf16_units() {
+        assert_eq!(pad_end("ab", 4), "ab  ");
+        assert_eq!(pad_end("abcde", 4), "abcde");
+    }
+}

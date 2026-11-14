@@ -1,0 +1,38 @@
+[package]
+name = "opencode-tui"
+description = "The full-screen TUI (T.1)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+opentui.workspace = true
+opencode-api.workspace = true
+opencode-local.workspace = true
+opencode-ui.workspace = true
+opencode-store.workspace = true
+opencode-plugin.workspace = true
+opencode-drive.workspace = true
+opencode-util = { workspace = true, features = ["ring"] }
+base64.workspace = true
+futures-util.workspace = true
+indexmap.workspace = true
+log.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+unicode-width.workspace = true
+url.workspace = true
+rand.workspace = true
+
+[dev-dependencies]
+bytes.workspace = true
+opencode-latex.workspace = true
+opencode-mermaid.workspace = true
+opencode-parity.workspace = true

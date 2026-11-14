@@ -1,0 +1,189 @@
+// P-CLI (plan 7.1): runs one command with the TS CLI and with `opencode-native`, each against its own fake
+// server, and compares exit code, stdout, stderr, and the requests after normalization.
+//
+//   bun run parity/cli/run.ts [--sides ts,rs] [scenario.cli.ts ...]
+//
+// Without files it runs every `parity/scenarios/**/*.cli.ts`. `--sides ts,ts` checks that a case is
+// deterministic. Each side's record goes to `$TMPDIR/opencode-parity/cli/<name>.<n>-<side>.json`. Cases run
+// one per core at a time; PARITY_CLI_JOBS changes that number.
+
+import { parseArgs } from "node:util"
+import { Glob } from "bun"
+import path from "node:path"
+import { availableParallelism, tmpdir } from "node:os"
+import { rm } from "node:fs/promises"
+import { startFakeServer, type Logged, type Options } from "../lib/fake-server"
+import {
+  buildRust,
+  command,
+  nameOf,
+  normalize,
+  parityRoot,
+  parseSides,
+  sandbox,
+  withServer,
+  type Context,
+  type Side,
+} from "./client"
+import { diffRecords } from "./diff"
+
+export type CliCase = {
+  args: string[]
+  // Runs this program on each side instead of the CLI (`args` and `server` are then unused).
+  command?: (side: Side) => string[]
+  // A fake server for `--server`; omit it for commands that need no server (`--version`, help).
+  server?: Options
+  env?: Record<string, string>
+  stdin?: string
+  // Leaves stdin an open pipe that never sends data, as spawn's default stdio gives a child.
+  stdinOpen?: boolean
+  timeout?: number
+  // Rust lacks the command so far: the case runs only with `--sides ts,ts`.
+  tsOnly?: boolean
+  // Compare only the first lines of stderr, when what follows names each client's own internals (a JS stack
+  // trace, the output of a different child process). The case says why.
+  stderrLines?: number
+  // Files written into the working directory before the run, by relative path.
+  files?: Record<string, string | Uint8Array>
+  // Replacements applied to stdout, stderr, and the request log after the normalizers, for values that differ
+  // per run (a `Date.now()` timestamp). Each says why in the scenario.
+  masks?: { pattern: RegExp; replacement: string }[]
+  // Sends `name` to the client once a request for `after` (a path) has reached the fake server.
+  signal?: { after: string; name: NodeJS.Signals }
+  // P-FILE: files read back after the run into the record (`null` when missing), by path under the sandbox
+  // root (`work/...` is the working directory, `home/.config/...` the XDG config).
+  collect?: string[]
+  // Writes files into the sandbox before the command runs, such as a service registration that names the
+  // fake server (`root` is the sandbox root, `server` the fake server's URL).
+  setup?: (root: string, server: string | undefined) => Promise<void>
+}
+
+export function defineCli(value: CliCase) {
+  return value
+}
+
+export type CliRecord = Awaited<ReturnType<typeof runCli>>
+
+export async function runCli(side: Side, value: CliCase) {
+  const box = await sandbox(value.env)
+  await Promise.all(
+    Object.entries(value.files ?? {}).map(([file, content]) => Bun.write(path.join(box.cwd, file), content)),
+  )
+  const server = value.server ? await startFakeServer(value.server) : undefined
+  await value.setup?.(box.root, server?.url)
+  const proc = Bun.spawn(value.command?.(side) ?? command(side, withServer(value.args, server?.url)), {
+    cwd: box.cwd,
+    env: box.env,
+    stdin: value.stdinOpen ? "pipe" : value.stdin === undefined ? "ignore" : new TextEncoder().encode(value.stdin),
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: value.timeout ?? 30_000,
+  })
+  if (value.signal && server) {
+    const signal = value.signal
+    void (async () => {
+      while (!server.requests.some((entry) => entry.path === signal.after) && proc.exitCode === null)
+        await Bun.sleep(20)
+      // Let the client finish handling the answer before the signal.
+      await Bun.sleep(200)
+      proc.kill(signal.name)
+    })()
+  }
+  const [stdout, stderr, exit] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ])
+  await server?.stop()
+  const files = value.collect
+    ? Object.fromEntries(
+        await Promise.all(
+          value.collect.map(async (file) => {
+            const handle = Bun.file(path.join(box.root, file))
+            return [file, (await handle.exists()) ? await handle.text() : null] as const
+          }),
+        ),
+      )
+    : undefined
+  await rm(box.root, { recursive: true, force: true })
+  const context = { server: server?.url, root: box.root }
+  const mask = (text: string) =>
+    (value.masks ?? []).reduce((current, item) => current.replace(item.pattern, item.replacement), text)
+  const requests = requestLog(server?.requests ?? [], context)
+  return {
+    exit,
+    ...(proc.signalCode ? { signal: proc.signalCode } : {}),
+    stdout: mask(normalize(stdout.replaceAll(spinnerFrame, ""), context)),
+    stderr: mask(
+      normalize(
+        value.stderrLines === undefined ? stderr : stderr.split("\n").slice(0, value.stderrLines).join("\n"),
+        context,
+      ),
+    ),
+    requests: { reads: requests.reads.map(mask), writes: requests.writes.map(mask) },
+    ...(files ? { files } : {}),
+  }
+}
+
+// A Clack spinner frame and the erase that follows it. Both clients draw one every 80 ms until the work ends,
+// so how many show depends on the machine's load; a terminal shows none of them once erased.
+const spinnerFrame = /(?:\x1b\[[0-9;]*m)?[◒◐◓◑](?:\x1b\[[0-9;]*m)?  [^\n\x1b]*\x1b\[999D(?:\x1b\[J)+/g
+
+// Plan 7.1 P-REQ: mutating requests in order, reads as a sorted set.
+export function requestLog(requests: Logged[], context: Context) {
+  const line = (entry: Logged) => {
+    // Decoded, so the normalizers see paths and IDs inside query values.
+    const query = Object.entries(entry.query)
+      .flatMap(([key, values]) => values.map((value) => `${key}=${value}`))
+      .join("&")
+    const target = `${entry.method} ${entry.path}${query ? `?${query}` : ""}${entry.unmatched ? " (unmatched)" : ""}`
+    return normalize(entry.body === undefined ? target : `${target} ${JSON.stringify(entry.body)}`, context)
+  }
+  return {
+    reads: [...new Set(requests.filter((entry) => entry.method === "GET").map(line))].toSorted(),
+    writes: requests.filter((entry) => entry.method !== "GET").map(line),
+  }
+}
+
+if (import.meta.main) {
+  const parsed = parseArgs({ args: Bun.argv.slice(2), options: { sides: { type: "string" } }, allowPositionals: true })
+  const sides = parseSides(parsed.values.sides)
+  const files = parsed.positionals.length
+    ? parsed.positionals.map((file) => path.resolve(file))
+    : [...new Glob("scenarios/**/*.cli.ts").scanSync({ cwd: parityRoot, absolute: true })].toSorted()
+  await buildRust(sides)
+  const run = async (file: string) => {
+    const value: CliCase = (await import(file)).default
+    const name = nameOf(file)
+    if (value.tsOnly && sides.includes("rs")) return { name, skipped: true, report: "" }
+    const records = await Promise.all(sides.map((side) => runCli(side, value)))
+    await Promise.all(
+      records.map((record, index) =>
+        Bun.write(
+          path.join(tmpdir(), "opencode-parity/cli", `${name}.${index}-${sides[index]}.json`),
+          JSON.stringify(record, null, 2) + "\n",
+        ),
+      ),
+    )
+    return { name, skipped: false, report: diffRecords(records[0], records[1], sides) }
+  }
+  // A case's timeout bounds that case only if the cases do not all share the CPU: started at once, every case
+  // took as long as the whole run, and a TS client compiling the CLI from source under load passed its budget.
+  const results: Awaited<ReturnType<typeof run>>[] = []
+  const next = files.entries()
+  await Promise.all(
+    Array.from({ length: Number(process.env.PARITY_CLI_JOBS ?? availableParallelism()) }, async () => {
+      for (const [index, file] of next) results[index] = await run(file)
+    }),
+  )
+  results.forEach((result) =>
+    console.log(
+      result.skipped
+        ? `skip ${result.name} (tsOnly)`
+        : result.report
+          ? `FAIL ${result.name}\n${result.report}`
+          : `ok   ${result.name}`,
+    ),
+  )
+  process.exit(results.some((result) => result.report) ? 1 : 0)
+}

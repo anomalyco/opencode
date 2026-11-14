@@ -1,0 +1,503 @@
+//! The TUI's theme state (`packages/tui/src/context/theme.tsx`): the active theme, the dark or light mode and its
+//! lock, the terminal palette behind `system`, and fallback to `opencode` when a theme fails to load.
+//!
+//! The state does no I/O. Methods queue [`Effect`]s (config writes, palette probes, the palette cache) and failed
+//! loads queue a [`ThemeError`]; the owner drains both after each call and carries them out.
+
+use indexmap::IndexMap;
+use serde_json::Value;
+
+use super::system::generate_system;
+use super::{Catalog, TerminalColors, Theme, ThemeMode, terminal_mode};
+
+/// `theme.mode` in `cli.json`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ModeSetting {
+    Dark,
+    Light,
+    /// Follow the terminal.
+    System,
+}
+
+impl ModeSetting {
+    /// The `cli.json` value; anything other than `dark`, `light`, or `system` is `None`.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "dark" => Some(Self::Dark),
+            "light" => Some(Self::Light),
+            "system" => Some(Self::System),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Dark => "dark",
+            Self::Light => "light",
+            Self::System => "system",
+        }
+    }
+
+    fn lock(self) -> Option<ThemeMode> {
+        match self {
+            Self::Dark => Some(ThemeMode::Dark),
+            Self::Light => Some(ThemeMode::Light),
+            Self::System => None,
+        }
+    }
+
+    fn from_lock(lock: Option<ThemeMode>) -> Self {
+        match lock {
+            Some(ThemeMode::Dark) => Self::Dark,
+            Some(ThemeMode::Light) => Self::Light,
+            None => Self::System,
+        }
+    }
+}
+
+/// Work the owner of a [`ThemeState`] carries out.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Effect {
+    /// Write `theme.name` to `cli.json`.
+    PersistName(String),
+    /// Write `theme.mode` to `cli.json`.
+    PersistMode(ModeSetting),
+    /// Ask the terminal for its palette (`getPalette({ size: 16 })`) and pass a usable answer to
+    /// [`ThemeState::palette`]. Queued only while `system` is active. The owner probes after the first paint and runs
+    /// one probe at a time, repeating once when another request arrived meanwhile.
+    ProbePalette,
+    /// Store the palette under the `system-theme` storage key as `{ colors }`.
+    CachePalette(TerminalColors),
+}
+
+/// A theme that failed to load: the theme-error toast shows `Failed to load theme: {name}` and the message.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ThemeError {
+    pub name: String,
+    pub message: String,
+}
+
+/// What the TUI knows when the theme state starts.
+#[derive(Clone, Debug)]
+pub struct ThemeStateOptions {
+    /// `theme.name` from `cli.json`.
+    pub name: Option<String>,
+    /// `theme.mode` from `cli.json`.
+    pub mode: Option<ModeSetting>,
+    /// The mode the terminal reported, if any.
+    pub terminal: Option<ThemeMode>,
+    /// The mode to use when neither config nor terminal decides.
+    pub fallback: ThemeMode,
+    /// The palette cached under `system-theme`, if any.
+    pub palette: Option<TerminalColors>,
+}
+
+pub struct ThemeState {
+    catalog: Catalog,
+    mode: ThemeMode,
+    lock: Option<ThemeMode>,
+    active: String,
+    terminal: Option<ThemeMode>,
+    palette: Option<TerminalColors>,
+    current: super::Loaded,
+    effects: Vec<Effect>,
+    error: Option<ThemeError>,
+}
+
+impl ThemeState {
+    pub fn new(options: ThemeStateOptions) -> Self {
+        let lock = options.mode.and_then(ModeSetting::lock);
+        let mut mode = lock.or(options.terminal).unwrap_or(options.fallback);
+        let palette = options.palette.filter(TerminalColors::usable);
+        // The terminal's reported mode wins over the cached palette's background (#62248).
+        if let Some(palette) = &palette {
+            mode = lock.or(options.terminal).or_else(|| terminal_mode(palette)).unwrap_or(mode);
+        }
+        let catalog = Catalog::default();
+        let current = catalog.load("opencode", mode).expect("the built-in opencode theme loads");
+        let mut state = Self {
+            catalog,
+            mode,
+            lock,
+            active: options.name.unwrap_or_else(|| "opencode".to_owned()),
+            terminal: options.terminal,
+            palette,
+            current,
+            effects: Vec::new(),
+            error: None,
+        };
+        state.apply_palette();
+        state.refresh_palette();
+        state
+    }
+
+    /// The resolved theme on the page surface.
+    pub fn theme(&self) -> &Theme {
+        &self.current.theme
+    }
+
+    /// The configured theme name, which may differ from the loaded one until a failed theme falls back.
+    pub fn selected(&self) -> &str {
+        &self.active
+    }
+
+    /// The mode the current theme resolved in.
+    pub fn mode(&self) -> ThemeMode {
+        self.current.mode
+    }
+
+    /// The modes the current theme supports.
+    pub fn modes(&self) -> &[ThemeMode] {
+        &self.current.modes
+    }
+
+    pub fn supports(&self, mode: ThemeMode) -> bool {
+        self.current.modes.contains(&mode)
+    }
+
+    /// Theme names in list order.
+    pub fn names(&self) -> Vec<String> {
+        self.catalog.names()
+    }
+
+    pub fn has(&self, name: &str) -> bool {
+        self.catalog.has(name)
+    }
+
+    /// Switches to `name` and persists it; false when no such theme exists.
+    pub fn set(&mut self, name: &str) -> bool {
+        if !self.has(name) {
+            return false;
+        }
+        self.active = name.to_owned();
+        self.refresh_palette();
+        self.effects.push(Effect::PersistName(name.to_owned()));
+        self.reload();
+        true
+    }
+
+    /// Locks `mode` (the current mode when `None`); false when the theme does not support it.
+    pub fn set_mode(&mut self, mode: Option<ThemeMode>, persist: bool) -> bool {
+        let mode = mode.unwrap_or(self.current.mode);
+        if !self.supports(mode) {
+            return false;
+        }
+        self.pin(mode, persist);
+        true
+    }
+
+    /// The terminal reported a mode change; ignored while the mode is locked.
+    pub fn terminal_mode(&mut self, mode: ThemeMode) {
+        self.terminal = Some(mode);
+        if self.lock.is_none() {
+            self.apply(mode);
+        }
+    }
+
+    /// The terminal answered a palette probe. Unusable answers are ignored.
+    pub fn palette(&mut self, colors: TerminalColors) {
+        if !colors.usable() {
+            return;
+        }
+        let mode = self.lock.or_else(|| terminal_mode(&colors)).unwrap_or(self.mode);
+        self.palette = Some(colors.clone());
+        self.mode = mode;
+        self.apply_palette();
+        self.effects.push(Effect::CachePalette(colors));
+    }
+
+    /// The palette the terminal reported at startup. It stands in for TS's first probe, which only `system` makes
+    /// (`refreshPalette` returns early), so other themes neither take it nor cache it. A cached palette still sets
+    /// their mode when the terminal reports none.
+    pub fn startup_palette(&mut self, colors: TerminalColors) {
+        if self.active == "system" {
+            self.palette(colors);
+        }
+    }
+
+    /// The terminal said its colors changed (`CSI ? 997 ; 1 n` or `; 2 n`), or the TUI got `SIGUSR2`.
+    pub fn colors_changed(&mut self) {
+        self.refresh_palette();
+    }
+
+    /// Custom themes were discovered (`discover`).
+    pub fn custom_themes(&mut self, themes: IndexMap<String, Value>) {
+        self.catalog.set_custom(themes);
+        self.reload();
+    }
+
+    /// A custom theme installed before discovery lists it from disk.
+    pub fn add_custom(&mut self, name: &str, source: Value) {
+        self.catalog.add_custom(name, source);
+        self.reload();
+    }
+
+    /// Custom theme discovery failed: TypeScript falls back to `opencode` without a toast.
+    pub fn discovery_failed(&mut self) {
+        self.active = "opencode".to_owned();
+        self.reload();
+    }
+
+    /// `cli.json` changed `theme.name`.
+    pub fn config_name(&mut self, name: &str) {
+        if name.is_empty() {
+            return;
+        }
+        self.active = name.to_owned();
+        self.refresh_palette();
+        self.reload();
+    }
+
+    /// `cli.json` changed `theme.mode`.
+    pub fn config_mode(&mut self, setting: ModeSetting) {
+        match setting.lock() {
+            Some(mode) => self.pin(mode, false),
+            None if self.lock.is_some() => self.free(false),
+            None => {}
+        }
+    }
+
+    /// Effects queued since the last call.
+    pub fn take_effects(&mut self) -> Vec<Effect> {
+        std::mem::take(&mut self.effects)
+    }
+
+    /// The last theme that failed to load, if not yet shown.
+    pub fn take_error(&mut self) -> Option<ThemeError> {
+        self.error.take()
+    }
+
+    fn pin(&mut self, mode: ThemeMode, persist: bool) {
+        self.lock = Some(mode);
+        self.apply(mode);
+        if persist {
+            self.effects.push(Effect::PersistMode(ModeSetting::from_lock(Some(mode))));
+        }
+    }
+
+    fn free(&mut self, persist: bool) {
+        self.lock = None;
+        self.apply(self.terminal.unwrap_or(self.mode));
+        if persist {
+            self.effects.push(Effect::PersistMode(ModeSetting::System));
+        }
+    }
+
+    fn apply(&mut self, mode: ThemeMode) {
+        if self.mode != mode {
+            self.mode = mode;
+            self.apply_palette();
+        }
+        self.refresh_palette();
+    }
+
+    /// Regenerates `system` from the palette for the current mode.
+    fn apply_palette(&mut self) {
+        let source = self.palette.as_ref().map(|palette| generate_system(palette, self.mode));
+        self.catalog.set_system(source);
+        self.reload();
+    }
+
+    fn refresh_palette(&mut self) {
+        if self.active == "system" && !self.effects.contains(&Effect::ProbePalette) {
+            self.effects.push(Effect::ProbePalette);
+        }
+    }
+
+    /// Loads the active theme, falling back to `opencode` with a [`ThemeError`] when it fails.
+    fn reload(&mut self) {
+        let name = if self.has(&self.active) { self.active.clone() } else { "opencode".to_owned() };
+        match self.catalog.load(&name, self.mode) {
+            Ok(loaded) => self.current = loaded,
+            Err(message) => {
+                self.error = Some(ThemeError { name, message });
+                self.active = "opencode".to_owned();
+                // A custom `opencode` replaces the built-in one; when it is the one that fails, the built-in one is
+                // the fallback (TS throws, deviation U01).
+                self.current = self.catalog.load("opencode", self.mode).unwrap_or_else(|message| {
+                    log::warn!("custom theme opencode: {message}; using the built-in opencode theme");
+                    Catalog::default().load("opencode", self.mode).expect("the built-in opencode theme loads")
+                });
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    impl ThemeState {
+        fn locked(&self) -> bool {
+            self.lock.is_some()
+        }
+
+        /// Locks the current mode and persists it.
+        fn lock(&mut self) {
+            self.pin(self.current.mode, true);
+        }
+
+        /// Follows the terminal again and persists `system`.
+        fn unlock(&mut self) {
+            self.free(true);
+        }
+    }
+
+    fn options() -> ThemeStateOptions {
+        ThemeStateOptions { name: None, mode: None, terminal: None, fallback: ThemeMode::Dark, palette: None }
+    }
+
+    fn palette(background: &str) -> TerminalColors {
+        TerminalColors {
+            palette: ["#000000", "#cc6666", "#b5bd68", "#f0c674", "#81a2be", "#b294bb", "#8abeb7", "#c5c8c6"]
+                .map(|hex| Some(hex.to_owned()))
+                .to_vec(),
+            default_background: Some(background.to_owned()),
+            default_foreground: Some("#c5c8c6".to_owned()),
+            ..TerminalColors::default()
+        }
+    }
+
+    #[test]
+    fn a_configured_mode_locks_until_unlocked() {
+        let mut state = ThemeState::new(ThemeStateOptions { mode: Some(ModeSetting::Light), ..options() });
+        assert_eq!((state.mode(), state.locked()), (ThemeMode::Light, true));
+        state.terminal_mode(ThemeMode::Dark);
+        assert_eq!(state.mode(), ThemeMode::Light);
+        state.unlock();
+        assert_eq!((state.mode(), state.locked()), (ThemeMode::Dark, false));
+        assert_eq!(state.take_effects(), [Effect::PersistMode(ModeSetting::System)]);
+        state.terminal_mode(ThemeMode::Light);
+        assert_eq!(state.mode(), ThemeMode::Light);
+        state.lock();
+        assert_eq!(state.take_effects(), [Effect::PersistMode(ModeSetting::Light)]);
+        state.config_mode(ModeSetting::System);
+        assert!(!state.locked());
+        assert!(state.take_effects().is_empty(), "config changes are not written back");
+    }
+
+    #[test]
+    fn the_terminal_mode_wins_over_a_cached_palette() {
+        let light = Some(palette("#ffffff"));
+        let state = ThemeState::new(ThemeStateOptions { palette: light.clone(), ..options() });
+        assert_eq!(state.mode(), ThemeMode::Light);
+        let state = ThemeState::new(ThemeStateOptions { palette: light, terminal: Some(ThemeMode::Dark), ..options() });
+        assert_eq!(state.mode(), ThemeMode::Dark);
+    }
+
+    // Expected: each terminal reply, with and without a cached light palette, starts in TS's mode, and only `system`
+    // caches the startup palette (TS `refreshPalette` returns early for other themes). Actual: every theme cached it,
+    // so a later terminal that answers nothing started in the last terminal's mode.
+    #[test]
+    fn the_startup_palette_is_cached_only_under_system() {
+        let light = |palette: TerminalColors| TerminalColors {
+            default_background: Some("#fdf6e3".to_owned()),
+            default_foreground: Some("#333333".to_owned()),
+            ..palette
+        };
+        let mode_only = light(TerminalColors::default());
+        let full = light(palette("#fdf6e3"));
+        let night = palette("#1d1f21");
+        let (dark, bright) = (Some(ThemeMode::Dark), Some(ThemeMode::Light));
+        // (reply, terminal mode, startup palette, cached palette, mode under `opencode` and `system`)
+        let cases = [
+            ("none or DA1 only", None, None, None, ThemeMode::Dark),
+            ("none or DA1 only, cached", None, None, Some(full.clone()), ThemeMode::Light),
+            ("mode", bright, Some(mode_only.clone()), None, ThemeMode::Light),
+            ("mode, cached dark", bright, Some(mode_only), Some(night.clone()), ThemeMode::Light),
+            ("full", bright, Some(full.clone()), None, ThemeMode::Light),
+            ("full dark, cached light", dark, Some(night), Some(full), ThemeMode::Dark),
+        ];
+        for (reply, terminal, startup, cached, want) in cases {
+            for name in ["opencode", "system"] {
+                let mut state = ThemeState::new(ThemeStateOptions {
+                    name: Some(name.to_owned()),
+                    terminal,
+                    palette: cached.clone(),
+                    ..options()
+                });
+                if let Some(colors) = startup.clone() {
+                    state.startup_palette(colors);
+                }
+                assert_eq!(state.mode(), want, "{reply} under {name}");
+                let caches = state.take_effects().iter().any(|effect| matches!(effect, Effect::CachePalette(_)));
+                assert_eq!(caches, name == "system" && startup.is_some(), "{reply} under {name}");
+            }
+        }
+    }
+
+    #[test]
+    fn set_switches_known_themes_and_respects_their_modes() {
+        let mut state = ThemeState::new(options());
+        assert!(!state.set("nope"));
+        assert!(state.set("aura"));
+        assert_eq!(state.take_effects(), [Effect::PersistName("aura".to_owned())]);
+        assert_eq!(state.modes(), [ThemeMode::Dark]);
+        assert!(!state.set_mode(Some(ThemeMode::Light), true), "aura has no light mode");
+        state.terminal_mode(ThemeMode::Light);
+        assert_eq!(state.mode(), ThemeMode::Dark, "a dark-only theme resolves dark");
+        let names = state.names();
+        assert_eq!(
+            (names.first().map(String::as_str), names.last().map(String::as_str)),
+            (Some("opencode2"), Some("system"))
+        );
+        assert_eq!(names.len(), 35);
+    }
+
+    #[test]
+    fn a_broken_custom_theme_falls_back_to_opencode_with_an_error() {
+        let mut state = ThemeState::new(ThemeStateOptions { name: Some("mine".to_owned()), ..options() });
+        let broken = serde_json::json!({ "theme": { "primary": "missing" } });
+        state
+            .custom_themes(IndexMap::from([("mine".to_owned(), broken), ("notes".to_owned(), serde_json::json!([1]))]));
+        let error = state.take_error().unwrap();
+        assert_eq!(error.name, "mine");
+        assert_eq!(error.message, "Color reference \"missing\" not found in defs or theme");
+        assert_eq!(state.selected(), "opencode");
+        assert!(!state.has("notes"), "values that are not themes are dropped");
+        assert!(state.take_error().is_none());
+    }
+
+    // Expected (O-89, deviation U01): a custom theme named `opencode` replaces the built-in one, and a broken one is
+    // the fallback that fails. TS throws there (`context/theme.tsx:298-308`); this falls back to the built-in
+    // `opencode` and logs why, for the broken theme itself and for another broken theme that falls back to it.
+    #[test]
+    fn a_broken_custom_opencode_falls_back_to_the_built_in_opencode() {
+        let builtin = ThemeState::new(options());
+        let broken = serde_json::json!({ "base": {} });
+        for name in ["opencode", "mine", "system"] {
+            let mut state = ThemeState::new(ThemeStateOptions { name: Some(name.to_owned()), ..options() });
+            let mine = serde_json::json!({ "theme": { "primary": "missing" } });
+            state.custom_themes(IndexMap::from([("opencode".to_owned(), broken.clone()), ("mine".to_owned(), mine)]));
+            assert_eq!(**state.theme(), **builtin.theme(), "{name}");
+            assert_eq!(state.selected(), "opencode", "{name}");
+        }
+    }
+
+    #[test]
+    fn system_follows_the_terminal_palette() {
+        let mut state = ThemeState::new(ThemeStateOptions {
+            name: Some("system".to_owned()),
+            palette: Some(palette("#1d1f21")),
+            ..options()
+        });
+        assert_eq!(state.take_effects(), [Effect::ProbePalette]);
+        assert_eq!(state.mode(), ThemeMode::Dark);
+        let dark_background = state.theme().background.base;
+        state.palette(palette("#fdf6e3"));
+        assert_eq!(state.mode(), ThemeMode::Light, "a light background switches an unlocked mode");
+        assert_eq!(state.take_effects(), [Effect::CachePalette(palette("#fdf6e3"))]);
+        assert_ne!(state.theme().background.base, dark_background);
+        state.palette(TerminalColors::default());
+        assert!(state.take_effects().is_empty(), "unusable palettes are ignored");
+        state.colors_changed();
+        assert_eq!(state.take_effects(), [Effect::ProbePalette]);
+    }
+
+    #[test]
+    fn without_a_palette_system_is_opencode() {
+        let state = ThemeState::new(ThemeStateOptions { name: Some("system".to_owned()), ..options() });
+        let opencode = ThemeState::new(options());
+        assert_eq!(**state.theme(), **opencode.theme());
+    }
+}

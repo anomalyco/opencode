@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/cli-rs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cargo": "cargo",
+    "generate": "bun run script/generate.ts",
+    "fixtures": "bun run parity/fixtures.ts",
+    "check:drift": "bun run script/drift.ts",
+    "parity:acp": "bun run parity/acp/run.ts",
+    "parity:cli": "bun run parity/cli/run.ts",
+    "parity:pty": "bun run parity/pty/run.ts",
+    "parity:sim": "bun run parity/sim/run.ts",
+    "live": "sh script/live.sh",
+    "parity:machines": "cd parity && PARITY_DEEP=1 bun test ./machines/plugins.test.tsx",
+    "parity:typecheck": "tsc --noEmit",
+    "test": "cd parity && bun test ./machines/plugins.test.tsx",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@opencode/httpapi-codegen": "workspace:*",
+    "@opencode/plugin": "workspace:*",
+    "@opencode/protocol": "workspace:*",
+    "@opencode/tui": "workspace:*",
+    "@opentui/core": "catalog:",
+    "@opentui/solid": "catalog:",
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native": "catalog:",
+    "effect": "catalog:",
+    "solid-js": "catalog:"
+  }
+}

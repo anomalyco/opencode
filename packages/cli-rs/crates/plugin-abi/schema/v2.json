@@ -1,0 +1,771 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "opencode plugin contract 2.0",
+  "description": "Generated from opencode_plugin_abi::v2 by `examples/schema.rs`; do not edit. The root is a Node, the tree a view returns; SurfaceInput and MountId are what a view gets.",
+  "$ref": "#/$defs/Node",
+  "$defs": {
+    "Node": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "row": {
+              "type": "boolean"
+            },
+            "gap": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "padding": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                }
+              ],
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "justify": {
+              "$ref": "#/$defs/Justify"
+            },
+            "align": {
+              "$ref": "#/$defs/Align"
+            },
+            "bg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "on_click": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Click"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Node"
+              }
+            },
+            "border": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Border"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "padding_sides": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Edges"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "wrap": {
+              "type": "boolean"
+            },
+            "overflow": {
+              "$ref": "#/$defs/Overflow"
+            },
+            "type": {
+              "const": "box"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "spans": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Span"
+              }
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "wrap": {
+              "$ref": "#/$defs/Wrap"
+            },
+            "truncate": {
+              "type": "boolean"
+            },
+            "selectable": {
+              "type": "boolean"
+            },
+            "hover_fg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "on_click": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Click"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "text"
+            }
+          },
+          "required": ["type", "spans"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "const": "slot"
+            }
+          },
+          "required": ["type", "path"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/Source"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "markdown"
+            }
+          },
+          "required": ["type", "source"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "spinner"
+            }
+          },
+          "required": ["type", "label"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "height": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "follow": {
+              "type": "boolean"
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Node"
+              }
+            },
+            "type": {
+              "const": "scroll"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/Source"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "view": {
+              "$ref": "#/$defs/DiffView"
+            },
+            "filetype": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "diff"
+            }
+          },
+          "required": ["type", "content"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "type": {
+              "const": "keep"
+            }
+          },
+          "required": ["type", "key"]
+        }
+      ],
+      "description": "A node of a surface's tree."
+    },
+    "Source": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": ["text"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/ContentRef"
+            }
+          },
+          "required": ["content"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "part-output": {
+              "$ref": "#/$defs/PartRef"
+            }
+          },
+          "required": ["part-output"],
+          "additionalProperties": false
+        }
+      ],
+      "description": "What a text-bearing node shows."
+    },
+    "ContentRef": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615,
+      "description": "Content a view gave the host (`View::content`)."
+    },
+    "PartRef": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "type": "string"
+        },
+        "part": {
+          "type": "string"
+        }
+      },
+      "required": ["session", "part"],
+      "description": "A tool call of a session, whose output a node shows."
+    },
+    "DiffView": {
+      "type": "string",
+      "enum": ["unified", "split"]
+    },
+    "SurfaceInput": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "palette": {
+          "$ref": "#/$defs/Palette"
+        },
+        "full": {
+          "type": "boolean"
+        }
+      },
+      "required": ["width", "height", "palette"],
+      "description": "What a surface's view gets besides the plugin's own state."
+    },
+    "Palette": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/Mode"
+        },
+        "colors": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Rgba"
+          }
+        }
+      },
+      "required": ["mode", "colors"],
+      "description": "Every token of the page theme, by its path."
+    },
+    "Mode": {
+      "type": "string",
+      "enum": ["dark", "light"]
+    },
+    "MountId": {
+      "type": "object",
+      "properties": {
+        "surface": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": ["surface", "key", "generation"],
+      "description": "One mount of a surface; a new generation each time."
+    },
+    "Span": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "fg": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Color"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bg": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Color"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "type": "boolean"
+        },
+        "dim": {
+          "type": "boolean"
+        },
+        "strikethrough": {
+          "type": "boolean"
+        },
+        "link": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["text"],
+      "description": "Styled text."
+    },
+    "Color": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Rgba"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "A theme token path (`text.muted`), a scale step (`interactive.500`), `#rrggbb`, or an Rgba."
+    },
+    "Rgba": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{8}$",
+      "description": "`#rrggbbaa`; the host writes lowercase."
+    },
+    "Layout": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Width"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "grow": {
+          "type": "boolean"
+        },
+        "shrink": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "min_width_zero": {
+          "type": "boolean"
+        },
+        "height": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Width"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "min_height": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Width"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_height": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Width"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "margin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Edges"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "description": "How a node takes space in its parent's row or column."
+    },
+    "Width": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "cells": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            }
+          },
+          "required": ["cells"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "percent": {
+              "type": "number"
+            }
+          },
+          "required": ["percent"],
+          "additionalProperties": false
+        }
+      ],
+      "description": "A size in cells or in percent of the parent."
+    },
+    "Edges": {
+      "type": "object",
+      "properties": {
+        "top": {
+          "type": "integer",
+          "minimum": -32768,
+          "maximum": 32767
+        },
+        "right": {
+          "type": "integer",
+          "minimum": -32768,
+          "maximum": 32767
+        },
+        "bottom": {
+          "type": "integer",
+          "minimum": -32768,
+          "maximum": 32767
+        },
+        "left": {
+          "type": "integer",
+          "minimum": -32768,
+          "maximum": 32767
+        }
+      },
+      "required": [],
+      "description": "Cells at each edge."
+    },
+    "Border": {
+      "type": "object",
+      "properties": {
+        "sides": {
+          "$ref": "#/$defs/Sides"
+        },
+        "style": {
+          "$ref": "#/$defs/BorderStyle"
+        },
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Color"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title_align": {
+          "$ref": "#/$defs/TitleAlign"
+        }
+      },
+      "required": [],
+      "description": "A border on a box's edge."
+    },
+    "Sides": {
+      "type": "object",
+      "properties": {
+        "top": {
+          "type": "boolean"
+        },
+        "right": {
+          "type": "boolean"
+        },
+        "bottom": {
+          "type": "boolean"
+        },
+        "left": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "description": "The sides a border draws; all of them when left out."
+    },
+    "BorderStyle": {
+      "type": "string",
+      "enum": ["single", "double", "rounded", "heavy"]
+    },
+    "TitleAlign": {
+      "type": "string",
+      "enum": ["left", "center", "right"]
+    },
+    "Overflow": {
+      "type": "string",
+      "enum": ["visible", "hidden"]
+    },
+    "Justify": {
+      "type": "string",
+      "enum": ["start", "end", "center", "space-between", "space-around"]
+    },
+    "Align": {
+      "type": "string",
+      "enum": ["stretch", "start", "center", "end"]
+    },
+    "Wrap": {
+      "type": "string",
+      "enum": ["word", "char", "none"]
+    },
+    "Click": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "on": {
+          "$ref": "#/$defs/Press"
+        }
+      },
+      "required": ["action", "on"],
+      "description": "What a click on a node runs."
+    },
+    "Press": {
+      "type": "string",
+      "enum": ["down", "up"]
+    },
+    "Action": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "input": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "command"
+            }
+          },
+          "required": ["type", "name"]
+        }
+      ],
+      "description": "What a click asks the host to do."
+    }
+  }
+}

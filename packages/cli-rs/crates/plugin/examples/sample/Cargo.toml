@@ -1,0 +1,49 @@
+# The sample native plugin (P.4): a `cdylib` on `opencode-plugin-abi`. The loader's tests build it with `cargo build`
+# and load the library. Not a workspace member.
+[package]
+name = "opencode-sample-plugin"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+# Draws "v2" instead of "v1", for the reload tests.
+v2 = []
+# A build whose setup fails, for the reload tests.
+setup-fails = []
+# Claims the `app` slot under the routes, for the TUI's slot test.
+app = []
+# Starts no ticker, so the slot changes only when the host draws it again for a change batch.
+still = []
+# The ABI 1.5 probe of P0a (`src/p0a.rs`): dialogs, the composer and a styled box.
+p0a = []
+# Adds `/p0btitle`, which sets the terminal title, and `/p0brun <shell command>`, which runs it in the foreground and
+# toasts how it ended, for the P-PTY scenarios `P.0b/*`.
+pty = []
+# A static constructor that appends a line to `opencode-sample-witness-<pid>` in the temp directory as the library
+# loads, before any of its code is called: the TUI's approval test sees whether the library was mapped at all.
+witness = []
+# Builds that pretend to target another ABI version, for the version tests.
+abi-1-0 = []
+minor-newer = []
+major-2 = []
+requires-future = []
+requires-1-5 = []
+# A 1.3 plugin (`src/v1_3.rs`) on the frozen 1.3 ABI crate, for the version tests.
+abi-1-3 = ["dep:abi-1-3"]
+# The same 1.3 plugin exported with the 1.0 table, without `describe`: the old wire behind the shortest table.
+abi-1-0-wire = ["abi-1-3"]
+# A 1.4 plugin (`src/v1_4.rs`) on the frozen 1.4 ABI crate, for the version tests.
+abi-1-4 = ["dep:abi-1-4"]
+
+[dependencies]
+opencode-plugin-abi = { path = "../../../plugin-abi" }
+serde_json = "1"
+abi-1-3 = { package = "opencode-plugin-abi-1-3", path = "abi-1-3", optional = true }
+abi-1-4 = { package = "opencode-plugin-abi-1-4", path = "abi-1-4", optional = true }
+
+[workspace]

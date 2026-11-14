@@ -1,0 +1,159 @@
+# Third-party crates in the shipped graph of opencode-cli for x86_64-unknown-linux-gnu (normal and build edges,
+# not dev, default features), one name per line (all versions of a crate share it), sorted. Third-party is every
+# crate but the workspace members and OpenTUI's opentui and opentui-sys. Marks: `build` (has a build script), `cc`
+# (the build script compiles C with `cc`), `proc-macro`, and a source other than crates.io: `git`, `path`
+# (vendored), `registry`. crates/cli/tests/deps.rs fails unless this file equals the graph. The [tests] section
+# lists what only tests and other workspace members add, and [optional] what non-default features add; a crate
+# from an earlier section is listed again when its marks there differ.
+#
+# Adding a line needs an orchestrator decision (O-58: an O- entry in decisions.md). A crate that leaves the graph
+# leaves this file in the same commit.
+
+aho-corasick
+atomic-waker
+base64
+bitflags
+block-buffer
+bytes
+cc
+cfg-if
+chacha20
+const-oid
+cpufeatures
+crypto-common
+data-encoding
+digest
+equivalent
+errno
+find-msvc-tools
+foldhash
+form_urlencoded
+futures-channel
+futures-core
+futures-sink
+futures-task
+futures-util
+getrandom build
+hashbrown
+http
+http-body
+http-body-util
+httparse build
+hybrid-array
+hyper
+hyper-rustls
+hyper-util
+idna
+idna_adapter
+indexmap
+ipnet
+itoa
+libc build
+linux-raw-sys
+log
+memchr
+mio
+once_cell
+openssl-probe
+percent-encoding
+pin-project-lite
+proc-macro2 build
+quote build
+rand
+rand_core
+regex
+regex-automata
+regex-syntax
+reqwest
+ring build cc
+rustix build
+rustls build
+rustls-native-certs
+rustls-pki-types
+rustls-platform-verifier
+rustls-webpki
+serde build
+serde_core build
+serde_derive proc-macro
+serde_json build
+sha1
+shlex
+signal-hook-registry
+slab
+smallvec
+socket2
+streaming-iterator
+subtle
+syn
+sync_wrapper
+thiserror build
+thiserror-impl proc-macro
+tokio
+tokio-macros proc-macro
+tokio-rustls
+tokio-tungstenite
+tokio-util
+tower
+tower-http
+tower-layer
+tower-service
+tracing
+tracing-core
+tree-sitter build cc
+tree-sitter-agda build cc
+tree-sitter-bash build cc
+tree-sitter-c build cc
+tree-sitter-c-sharp build cc
+tree-sitter-clojure-orchard build cc
+tree-sitter-cpp build cc
+tree-sitter-css build cc
+tree-sitter-diff build cc
+tree-sitter-elixir build cc
+tree-sitter-go build cc
+tree-sitter-haskell build cc
+tree-sitter-hcl build cc git
+tree-sitter-html build cc
+tree-sitter-java build cc
+tree-sitter-javascript build cc
+tree-sitter-json build cc
+tree-sitter-julia build cc
+tree-sitter-language build
+tree-sitter-lua build cc
+tree-sitter-make build cc
+tree-sitter-md build cc
+tree-sitter-nix build cc
+tree-sitter-php build cc
+tree-sitter-python build cc
+tree-sitter-r build cc
+tree-sitter-ruby build cc
+tree-sitter-rust build cc
+tree-sitter-scala build cc
+tree-sitter-toml-ng build cc
+tree-sitter-typescript build cc
+tree-sitter-vim build cc
+tree-sitter-vue-next build cc
+tree-sitter-xml build cc
+tree-sitter-yaml build cc
+tree-sitter-zig build cc
+try-lock
+tungstenite
+typenum
+unicode-ident
+unicode-segmentation
+unicode-width
+untrusted
+url
+utf8_iter
+utf_types
+want
+zeroize
+zmij build
+
+[tests]
+# Third-party crates only the rest of the workspace reaches, over normal, build and dev edges with default features:
+# tests, examples, and members opencode-cli does not ship. The same rules apply: a new line needs an orchestrator
+# decision. Empty: tests use only crates that ship.
+
+[optional]
+# Third-party crates only non-default features bring in, over normal, build and dev edges of the whole workspace
+# with --all-features. The same rules apply. Empty: every feature's crates ship by default.

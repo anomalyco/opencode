@@ -1,0 +1,36 @@
+[package]
+name = "opencode-api"
+description = "HTTP API client: generated types and methods, transports, events, and sockets."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+opencode-api-types.workspace = true
+opencode-util.workspace = true
+base64.workspace = true
+bytes.workspace = true
+futures-util.workspace = true
+idna_adapter.workspace = true
+log.workspace = true
+memchr.workspace = true
+percent-encoding.workspace = true
+rand.workspace = true
+reqwest.workspace = true
+rustls.workspace = true
+rustls-platform-verifier.workspace = true
+indexmap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+tokio-util.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

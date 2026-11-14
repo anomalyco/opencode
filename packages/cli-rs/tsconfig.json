@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@tsconfig/bun/tsconfig.json",
+  "compilerOptions": {
+    "types": ["bun"],
+    "jsx": "preserve",
+    "jsxImportSource": "@opentui/solid",
+    "noUnusedLocals": true,
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["script", "parity"],
+  // Oracle harnesses that import TUI sources need the TUI's Solid JSX settings; they run from packages/tui.
+  "exclude": ["parity/oracle/*/"]
+}

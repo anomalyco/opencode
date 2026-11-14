@@ -1,0 +1,21 @@
+# A plugin that fails on command, for containment (synthesis 4.5, P4c): the P-PTY restart scenarios install it and
+# drive a real crash and a real hang. Not a workspace member.
+[package]
+name = "opencode-fault-plugin"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "opencode_fault"
+crate-type = ["cdylib"]
+
+[features]
+# Builds the plugin under another ID, for a crash of a third plugin (`lib.rs`).
+b = []
+c = []
+
+[dependencies]
+opencode-plugin-abi = { path = "../../../plugin-abi" }
+
+[workspace]

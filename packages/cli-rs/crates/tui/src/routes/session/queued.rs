@@ -1,0 +1,287 @@
+//! Queued prompts (E.10b, row V14): the dock above the prompt (`QueuedPromptDock`,
+//! `routes/session/index.tsx:2481-2514`), `session.queued_prompts` (`:1409-1415`), and the pending actions the dock,
+//! the queued prompts dialog, the pending steer dialog, and an empty submit share (`requestPending`,
+//! `mutatePending`, and `undoPending`, `:760-787`).
+
+use opencode_api::generated::{
+    SessionInboxCancelInput, SessionInboxDelivery, SessionInboxInfo, SessionInboxUpdateInput, SessionInboxUser,
+    SessionMessageID,
+};
+use opencode_store::State;
+use std::collections::HashSet;
+
+use crate::prelude::*;
+use crate::prompt::editor::{Inner as PromptInner, Mode};
+
+/// What a pending action does to an inbox item (`PendingAction`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Action {
+    Steer,
+    Queue,
+    Cancel,
+}
+
+/// The session's queued prompts in admission order, as `(id, text)` (`queuedPrompts`).
+pub fn prompts(state: &State, session: &SessionID) -> Vec<(String, String)> {
+    users(state, session).map(|user| (user.id.0.clone(), user.payload.text.clone())).collect()
+}
+
+/// The IDs of the session's queued prompts, in admission order.
+pub fn ids<'a>(state: &'a State, session: &SessionID) -> impl Iterator<Item = &'a str> + use<'a> {
+    users(state, session).map(|user| user.id.as_str())
+}
+
+fn users<'a>(state: &'a State, session: &SessionID) -> impl Iterator<Item = &'a SessionInboxUser> + use<'a> {
+    state.pending(session).iter().filter_map(|item| match item {
+        SessionInboxInfo::User(user) if user.delivery == SessionInboxDelivery::Queue => Some(user),
+        _ => None,
+    })
+}
+
+/// The delivery of a pending user prompt (`pendingDelivery`).
+pub fn delivery(state: &State, session: &SessionID, message: &str) -> Option<SessionInboxDelivery> {
+    state.pending(session).iter().find_map(|item| match item {
+        SessionInboxInfo::User(user) if user.id.0 == message => Some(user.delivery.clone()),
+        _ => None,
+    })
+}
+
+thread_local! {
+    /// Inbox items with an action in flight (`createSingleFlight`); a second action on one of them does nothing.
+    static INFLIGHT: RefCell<HashSet<String>> = RefCell::default();
+}
+
+/// `mutatePending`: steers, queues, or cancels an inbox item, then calls `done` with whether it worked. A failure
+/// shows "Failed to <label> pending prompt". Returns false, without calling `done`, while another action on the
+/// item is in flight.
+pub fn mutate(
+    tui: &Tui,
+    session: &SessionID,
+    action: Action,
+    inbox: &str,
+    failure: Option<&'static str>,
+    done: impl FnOnce(&Tui, bool) + 'static,
+) -> bool {
+    if !INFLIGHT.with_borrow_mut(|inflight| inflight.insert(inbox.to_owned())) {
+        return false;
+    }
+    let client = tui.data.client().clone();
+    let (session, id) = (session.clone(), SessionMessageID(inbox.to_owned()));
+    let weak = tui.weak();
+    let key = inbox.to_owned();
+    tui.app.spawn(
+        async move {
+            let delivery = match action {
+                Action::Steer => SessionInboxDelivery::Steer,
+                Action::Queue => SessionInboxDelivery::Queue,
+                Action::Cancel => {
+                    let input = SessionInboxCancelInput { session_id: session, inbox_id: id };
+                    return client.session_inbox_cancel(&input).await;
+                }
+            };
+            let input = SessionInboxUpdateInput { session_id: session, inbox_id: id, delivery };
+            client.session_inbox_update(&input).await
+        },
+        move |_, result| {
+            INFLIGHT.with_borrow_mut(|inflight| inflight.remove(&key));
+            let Some(tui) = weak.upgrade() else { return };
+            if let Err(error) = &result {
+                let label = failure.unwrap_or(match action {
+                    Action::Steer => "steer",
+                    Action::Queue => "queue",
+                    Action::Cancel => "delete",
+                });
+                tui.toasts.show(
+                    ToastOptions::new(Variant::Error, error.to_string())
+                        .title(format!("Failed to {label} pending prompt")),
+                );
+            }
+            done(&tui, result.is_ok());
+        },
+    );
+    true
+}
+
+/// The dock and the `session.queued_prompts` command of one session view. Dropping it removes the command's layers.
+pub struct Queued(Rc<Inner>);
+
+pub(crate) struct Inner {
+    tui: Weak<Tui>,
+    pub(crate) session: SessionID,
+    root: View,
+    label: Text,
+    /// The number of queued prompts the dock shows.
+    count: Cell<usize>,
+    /// The session's prompt, which the undo appends to and checks for shell mode.
+    prompt: Weak<PromptInner>,
+    layers: RefCell<Vec<Disposer>>,
+    paints: Paints,
+}
+
+impl Queued {
+    pub fn new(tui: &Tui, session: &SessionID, prompt: Weak<PromptInner>) -> Self {
+        let app = &tui.app;
+        let theme = tui.page();
+        let label = Text::new(app, "").wrap(WrapMode::None).truncate(true).grow(1.0).shrink(1.0).min_width(0);
+        let body = View::new(app)
+            .row()
+            .width(Length::Percent(100.0))
+            .padding_edge(Edge::Top, 1)
+            .padding_edge(Edge::Bottom, 1)
+            .padding_edge(Edge::Left, 2)
+            .padding_edge(Edge::Right, 2)
+            .child(&label);
+        let root = View::new(app)
+            .column()
+            .shrink(0.0)
+            .margin_edge(Edge::Bottom, 1)
+            .border(BorderStyle::Heavy)
+            .border_sides(Sides::LEFT)
+            .visible(false)
+            .child(&body);
+        let hover = Rc::new(Cell::new(false));
+        let paint_body = {
+            let (body, hover) = (body.clone(), hover.clone());
+            move |theme: &Theme| {
+                let raised = &theme.background.raised.base;
+                body.bg(if hover.get() { theme.decrease(raised, 1) } else { *raised });
+            }
+        };
+        let paints = Paints::default();
+        paints.add(&theme, {
+            let (label, root, paint_body) = (label.clone(), root.clone(), paint_body.clone());
+            move |theme| {
+                label.fg(theme.text.muted);
+                root.border_color(theme.border.base);
+                paint_body(theme);
+            }
+        });
+        let live = tui.live_theme();
+        root.on_hover(move |_, hovered| {
+            hover.set(hovered);
+            paint_body(&live.get());
+        });
+        let inner = Rc::new(Inner {
+            tui: tui.weak(),
+            session: session.clone(),
+            root,
+            label,
+            count: Cell::new(0),
+            prompt,
+            layers: RefCell::default(),
+            paints,
+        });
+        inner.root.mouse_pointer(MousePointer::POINTER).on_click(bind!(inner, |inner, _, _| inner.open()));
+        inner.register(tui);
+        inner.update(tui);
+        Self(inner)
+    }
+
+    pub fn root(&self) -> &View {
+        &self.0.root
+    }
+
+    pub fn restyle(&self, tui: &Tui) {
+        self.0.paints.restyle(&tui.page());
+        self.0.update(tui);
+    }
+
+    /// Follows the session's inbox. `blocked` is true while a permission or form replaces the prompt, which hides
+    /// the dock as well (`disabled()`).
+    pub fn sync(&self, tui: &Tui, changes: &Changes, blocked: bool) {
+        if changes.pending(&self.0.session) {
+            self.0.update(tui);
+        }
+        self.0.root.visible(self.0.count.get() > 0 && !blocked);
+    }
+}
+
+impl Drop for Queued {
+    fn drop(&mut self) {
+        // The command may run while the view drops, so the layers go afterwards.
+        let layers = std::mem::take(&mut *self.0.layers.borrow_mut());
+        if let Some(tui) = self.0.tui.upgrade() {
+            tui.app.defer(move |_| drop(layers));
+        }
+    }
+}
+
+impl Inner {
+    fn register(self: &Rc<Self>, tui: &Tui) {
+        // The count of the last update: keymap conditions must not lock the store.
+        let queued = Condition::when(bind!(self, |inner| inner.count.get() > 0));
+        let command = TuiCommand::new("session.queued_prompts", bind!(self, |inner, _, _| inner.open()))
+            .title("View queued prompts")
+            .group("Prompt")
+            .bind(Bind::Off)
+            .palette()
+            .enabled(queued);
+        for layer in [KeymapLayer::global(vec![command]), KeymapLayer::default().bindings(["session.queued_prompts"])] {
+            match tui.keymap.layer(layer) {
+                Ok(disposer) => self.layers.borrow_mut().push(disposer),
+                Err(error) => log::error!("queued prompts keymap layer: {error}"),
+            }
+        }
+    }
+
+    /// `<count> queued · <first prompt on one line>`, or nothing without queued prompts.
+    fn update(&self, tui: &Tui) {
+        let (count, first) = tui.data.read(|state| {
+            let mut users = users(state, &self.session);
+            let first = users.next().map(|user| user.payload.text.replace('\n', " "));
+            (first.iter().count() + users.count(), first)
+        });
+        self.count.set(count);
+        let Some(first) = first else {
+            self.label.set_text("");
+            return;
+        };
+        let theme = tui.page();
+        let mut spans = vec![Span::styled(format!("{count} queued"), Style::new().fg(theme.text.base))];
+        if !first.is_empty() {
+            spans.push(Span::raw(format!(" · {first}")));
+        }
+        self.label.set_text(spans);
+    }
+
+    /// `openQueuedPrompts`.
+    fn open(self: &Rc<Self>) {
+        if let Some(tui) = self.tui.upgrade() {
+            crate::dialogs::queued::show(&tui, self);
+        }
+    }
+
+    /// `queued_prompt.undo`: takes a queued prompt back into the composer, unless the composer is in shell mode
+    /// with text. The cancel goes first, then the text, then the dialog closes and the composer takes focus.
+    pub(crate) fn undo(&self, tui: &Tui, inbox: &str) {
+        let Some(prompt) = self.prompt.upgrade() else { return };
+        let Some(restored) = tui.data.read(|state| {
+            users(state, &self.session).find(|user| user.id.as_str() == inbox).map(|user| {
+                let payload = &user.payload;
+                super::actions::projected(
+                    &payload.text,
+                    payload.files.as_deref(),
+                    payload.agents.as_deref(),
+                    payload.skills.as_deref(),
+                )
+            })
+        }) else {
+            return;
+        };
+        if prompt.mode.get() == Mode::Shell && !prompt.textarea.text().is_empty() {
+            tui.toasts.show(ToastOptions::new(Variant::Error, "Leave shell mode before undoing a queued prompt"));
+            return;
+        }
+        let session = self.session.clone();
+        mutate(tui, &self.session, Action::Cancel, inbox, Some("undo"), move |tui, undone| {
+            if !undone {
+                return;
+            }
+            super::actions::append_prompt(tui, &session, restored.clone());
+            tui.dialogs.clear();
+            if tui.route() == (crate::routes::Route::Session { id: session }) {
+                tui.app.focus(&prompt.textarea);
+            }
+        });
+    }
+}

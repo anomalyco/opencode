@@ -1,0 +1,799 @@
+//! Plugin manager dialog (E.18b): `packages/tui/src/feature-plugins/system/plugins.tsx`, the built-in
+//! `opencode.plugins` with `plugins.list` (`/plugins`). It reads and toggles the registry, so it is a host entry, not a
+//! plugin.
+//!
+//! TUI rows come from the plugin registry (`Registry::entries`): built-ins are internal and hidden until
+//! `ctrl+a`; a configured TypeScript plugin is listed as `skipped` with the reason as its error (F16), and an
+//! external native plugin that failed to load or crashed as `failed` with its error (P.4). Server rows
+//! come from `GET /api/plugin`. Enter toggles a TUI plugin through `Registry::set_active`, then the route mounts
+//! again so slots follow; on another row it opens the error, if any. A project plugin held back for approval
+//! (rich-plugins 3.9, not in TS) is listed `pending` or `declined`, and Enter asks to approve or decline the build held
+//! back at that moment.
+
+use opencode_api::generated::{
+    LocationQueryInput, PluginCheckInput, PluginInfo, PluginListInput, PluginSource, PluginState, PluginUpdateInput,
+    V2Event,
+};
+use opencode_api::js::locale_compare;
+use opencode_plugin::loader::approval::{Artifact, Decision};
+use opencode_plugin::{Source, Status};
+use opencode_ui::confirm::{ConfirmProps, confirm};
+use opencode_ui::motion::Spinner;
+use opencode_ui::select::{ActionRun, FooterHint, Group, Select, SelectAction, select};
+
+use super::error_details;
+
+use crate::prelude::*;
+
+pub const ID: &str = "opencode.plugins";
+
+/// The host entry: `plugins.list` in the global layer while it is active.
+pub fn activate(tui: &Rc<Tui>) -> Disposer {
+    let layer = KeymapLayer::global(vec![
+        TuiCommand::new("plugins.list", bind!(tui, |tui, _, _| show(&tui)))
+            .bind(Bind::Default)
+            .title("Plugins")
+            .group("System")
+            .palette()
+            .slash("plugins"),
+    ]);
+    tui.keymap.layer(layer).unwrap_or_else(|error| {
+        log::error!("plugin {ID} keymap layer: {error}");
+        Disposer::noop()
+    })
+}
+
+thread_local! {
+    /// The plugin managers shown, which a local reload refreshes while they are open.
+    static SHOWN: RefCell<Vec<Weak<Manager>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Refreshes `tui`'s plugin manager, if it is open, after the external plugins changed (TS's list follows the plugin
+/// store).
+pub fn refresh(tui: &Tui) {
+    let shown: Vec<Rc<Manager>> = SHOWN.with(|shown| {
+        let mut shown = shown.borrow_mut();
+        shown.retain(|manager| manager.strong_count() > 0);
+        shown.iter().filter_map(Weak::upgrade).collect()
+    });
+    shown.iter().filter(|manager| std::ptr::eq(manager.tui.as_ptr(), tui)).for_each(|manager| manager.refresh());
+}
+
+/// `PluginsDialog`, in place of any open dialog.
+pub fn show(tui: &Tui) {
+    let manager = Rc::new(Manager {
+        tui: tui.weak(),
+        directory: crate::features::location::active(tui).directory,
+        server: RefCell::new(None),
+        locked: Cell::new(false),
+        checking: Cell::new(false),
+        show_internal: Cell::new(false),
+        pending: RefCell::new(Vec::new()),
+        select: RefCell::new(None),
+        open: Cell::new(false),
+        following: RefCell::new(None),
+    });
+    SHOWN.with(|shown| {
+        let mut shown = shown.borrow_mut();
+        // A closed manager's weak handle still holds its allocation.
+        shown.retain(|manager| manager.strong_count() > 0);
+        shown.push(Rc::downgrade(&manager));
+    });
+    manager.open(None);
+    manager.refetch();
+    manager.follow();
+}
+
+#[derive(Clone)]
+enum Entry {
+    Tui {
+        key: String,
+        internal: bool,
+        /// `None` for an entry that never loaded, which cannot be toggled.
+        id: Option<String>,
+        target: String,
+        status: &'static str,
+        error: Option<String>,
+        /// Has an activation, failed or not: Enter disables it.
+        active: bool,
+        /// What its calls cost while it is slow (synthesis 4.4).
+        slow: Option<String>,
+    },
+    Server {
+        key: String,
+        internal: bool,
+        /// `source(plugin)`, formatted against the location.
+        source: String,
+        plugin: PluginInfo,
+    },
+}
+
+struct Manager {
+    tui: Weak<Tui>,
+    /// `context.location ?? data.location.default()`.
+    directory: String,
+    server: RefCell<Option<Vec<PluginInfo>>>,
+    locked: Cell<bool>,
+    checking: Cell<bool>,
+    show_internal: Cell<bool>,
+    /// Keys of server plugins with an update in flight.
+    pending: RefCell<Vec<String>>,
+    select: RefCell<Option<Select<String>>>,
+    /// The list (not the error view) is on screen.
+    open: Cell<bool>,
+    /// The `plugin.updated` subscription, which ends with the manager.
+    following: RefCell<Option<opentui::keymap::Disposer>>,
+}
+
+impl Manager {
+    fn location(&self) -> Option<LocationQueryInput> {
+        Some(LocationQueryInput { directory: Some(self.directory.clone()) })
+    }
+
+    /// Builds the list, focused on `focus` when given (back from an error).
+    fn open(self: &Rc<Self>, focus: Option<String>) {
+        let Some(tui) = self.tui.upgrade() else { return };
+        let manager = self.clone();
+        tui.dialogs.replace(
+            move |cx| {
+                // The rows follow the state, also as the filter changes after ctrl+a showed the internal ones.
+                let theme = cx.theme.clone();
+                let mut props = SelectProps::dynamic(
+                    "Plugins",
+                    Rc::new(bind!(manager, |manager, _: &str| manager.options(&theme), else Vec::new())),
+                );
+                props.preserve_selection = true;
+                props.locked = manager.locked.get();
+                props.focus_target = focus.clone();
+                props.bindings = vec![
+                    TuiCommand::inline(
+                        "ctrl+a",
+                        bind!(manager, |manager, _, _| {
+                            manager.show_internal.set(!manager.show_internal.get());
+                            manager.refresh();
+                        }),
+                    )
+                    .title("Toggle internal plugins")
+                    .group("Plugins"),
+                ];
+                props.dynamic_hints = Some(Rc::new(bind!(manager, |manager| {
+                    let focused = manager.focused();
+                    let mut hints = Vec::new();
+                    if focused.as_ref().and_then(held).is_some() {
+                        hints.push(FooterHint {
+                            title: "approve or decline".to_owned(),
+                            label: "enter".to_owned(),
+                            group: Some(Group::Primary),
+                        });
+                    }
+                    if focused.as_ref().and_then(error).is_some() && manager.toggleable(focused.as_ref()).is_none() {
+                        hints.push(FooterHint {
+                            title: "view error".to_owned(),
+                            label: "enter".to_owned(),
+                            group: Some(Group::Primary),
+                        });
+                    }
+                    let internal = if manager.show_internal.get() { "hide" } else { "show" };
+                    hints.push(FooterHint {
+                        title: format!("{internal} internal"),
+                        label: "ctrl+a".to_owned(),
+                        group: None,
+                    });
+                    hints
+                })));
+                props.on_select = Some(Rc::new(bind!(manager, |manager, option| {
+                    let entry = manager.entry(&option.value);
+                    if let Some(target) = entry.as_ref().and_then(held) {
+                        manager.review(target.to_owned(), option.value.clone());
+                        return;
+                    }
+                    if manager.toggleable(entry.as_ref()).is_some() {
+                        manager.toggle(entry.as_ref());
+                        return;
+                    }
+                    if let Some(entry) = entry.filter(|entry| error(entry).is_some()) {
+                        manager.detail(entry);
+                    }
+                })));
+                props.actions = manager.actions();
+                let (view, handle) = select(cx, props);
+                *manager.select.borrow_mut() = Some(handle.clone());
+                // The first footer was drawn before the hints could see the selection.
+                handle.refresh_footer();
+                manager.open.set(true);
+                let closed = manager.clone();
+                cx.on_close(opentui::keymap::Disposer::new(move || closed.open.set(false)));
+                view
+            },
+            None,
+            DialogOptions::new(DialogSize::Large),
+        );
+    }
+
+    fn actions(self: &Rc<Self>) -> Vec<SelectAction<String>> {
+        let weak = Rc::downgrade(self);
+        let with = |run: fn(&Rc<Manager>, Option<Entry>)| {
+            bind!(weak, |manager, option: &SelectOption<String>| {
+                let entry = manager.entry(&option.value);
+                run(&manager, entry);
+            })
+        };
+        let hidden = |test: fn(&Manager, Option<&Entry>) -> bool| {
+            Rc::new(bind!(weak, |manager, option: Option<&SelectOption<String>>| {
+                let entry = option.and_then(|option| manager.entry(&option.value));
+                test(&manager, entry.as_ref())
+            }, else true))
+        };
+        vec![
+            SelectAction {
+                title: Rc::new(bind!(weak, |manager, _| {
+                    if manager.checking.get() { "checking for updates" } else { "check for updates" }.to_owned()
+                }, else "check for updates".to_owned())),
+                hidden_when: Some(hidden(|manager, _| !manager.entries().iter().any(|entry| package(entry).is_some()))),
+                disabled: Some(Rc::new(bind!(weak, |manager, _| manager.checking.get()))),
+                run: ActionRun::Dialog(Rc::new(bind!(weak, |manager| manager.check()))),
+                ..SelectAction::new("dialog.plugins.check", "check for updates", |_| {})
+            },
+            SelectAction {
+                hidden_when: Some(hidden(|manager, entry| manager.toggleable(entry).and_then(error).is_none())),
+                ..SelectAction::new(
+                    "dialog.plugins.error",
+                    "view error",
+                    with(|manager, entry| {
+                        if let Some(entry) = entry.filter(|entry| error(entry).is_some()) {
+                            manager.detail(entry);
+                        }
+                    }),
+                )
+            },
+            SelectAction {
+                title: Rc::new(bind!(weak, |manager, option: Option<&SelectOption<String>>| {
+                        let entry = option.and_then(|option| manager.entry(&option.value));
+                        match manager.toggleable(entry.as_ref()).map(Manager::active) {
+                            Some(true) => "disable".to_owned(),
+                            Some(false) => "enable".to_owned(),
+                            None => "toggle".to_owned(),
+                        }
+                    }, else "toggle".to_owned())),
+                group: Some(Group::Primary),
+                hidden_when: Some(hidden(|manager, entry| manager.toggleable(entry).is_none())),
+                ..SelectAction::new("plugins.toggle", "toggle", with(|manager, entry| manager.toggle(entry.as_ref())))
+            },
+            SelectAction {
+                group: Some(Group::Primary),
+                hidden_when: Some(hidden(|manager, entry| !manager.updatable(entry))),
+                ..SelectAction::new("dialog.plugins.update", "update", with(|manager, entry| manager.update(entry)))
+            },
+        ]
+    }
+
+    /// Every row: the TUI plugins, then the server plugins, each sorted by label.
+    fn entries(&self) -> Vec<Entry> {
+        let Some(tui) = self.tui.upgrade() else { return Vec::new() };
+        let mut local: Vec<Entry> = tui.plugins.entries().into_iter().filter(|entry| entry.id != ID).map(row).collect();
+        // A package without a server part runs nothing there; its TUI part has its own row.
+        let mut server: Vec<Entry> = self
+            .server
+            .borrow()
+            .iter()
+            .flatten()
+            .filter(|plugin| plugin.features.server == Some(true) || matches!(plugin.state, PluginState::Failed(_)))
+            .map(|plugin| {
+                let source = source(plugin, &self.directory);
+                Entry::Server {
+                    key: format!("server:{}", plugin.id.as_ref().map_or(&source, |id| &id.0)),
+                    internal: matches!(plugin.source, PluginSource::Builtin(_)),
+                    source,
+                    plugin: plugin.clone(),
+                }
+            })
+            .collect();
+        local.sort_by(|a, b| locale_compare(&label(a), &label(b)));
+        server.sort_by(|a, b| locale_compare(&label(a), &label(b)));
+        local.extend(server);
+        local
+    }
+
+    fn visible(&self) -> Vec<Entry> {
+        self.entries()
+            .into_iter()
+            .filter(|entry| self.show_internal.get() || !internal(entry) || status(entry) == "failed")
+            .collect()
+    }
+
+    fn entry(&self, key: &str) -> Option<Entry> {
+        self.entries().into_iter().find(|entry| self.key(entry) == key)
+    }
+
+    fn key(&self, entry: &Entry) -> String {
+        match entry {
+            Entry::Tui { key, .. } | Entry::Server { key, .. } => key.clone(),
+        }
+    }
+
+    fn focused(&self) -> Option<Entry> {
+        let selected = self.select.borrow().as_ref()?.selected()?;
+        self.entry(&selected.value)
+    }
+
+    /// `focusedTui`: a TUI row with a plugin ID.
+    fn toggleable<'a>(&self, entry: Option<&'a Entry>) -> Option<&'a Entry> {
+        entry.filter(|entry| matches!(entry, Entry::Tui { id: Some(_), .. }))
+    }
+
+    /// TS `registered().active`: a plugin that failed while active is still active, so it can be disabled.
+    fn active(entry: &Entry) -> bool {
+        matches!(entry, Entry::Tui { active: true, .. })
+    }
+
+    fn updating(&self, entry: &Entry) -> bool {
+        self.pending.borrow().contains(&self.key(entry))
+            || package(entry).is_some_and(|package| package.updating == Some(true))
+    }
+
+    fn updatable(&self, entry: Option<&Entry>) -> bool {
+        entry.is_some_and(|entry| outdated(entry) && !self.updating(entry))
+    }
+
+    fn options(&self, theme: &Theme) -> Vec<SelectOption<String>> {
+        self.visible()
+            .into_iter()
+            .map(|entry| {
+                let mut option = SelectOption::new(label(&entry), self.key(&entry)).category(match entry {
+                    Entry::Tui { .. } => "TUI",
+                    Entry::Server { .. } => "Server",
+                });
+                option.search_text = Some(match &entry {
+                    Entry::Tui { target, .. } => target.clone(),
+                    Entry::Server { source, .. } => source.clone(),
+                });
+                let updating = self.updating(&entry);
+                option.footer = if updating { Some("updating".to_owned()) } else { footer(&entry) };
+                let failed = status(&entry) == "failed";
+                option.footer_color = Some(if failed {
+                    theme.text.feedback.error.base
+                } else if status(&entry) == "pending" {
+                    theme.text.feedback.warning.base
+                } else if outdated(&entry) {
+                    theme.text.feedback.info.base
+                } else {
+                    theme.text.muted
+                });
+                let error_color = theme.text.feedback.error.base;
+                if updating {
+                    option.gutter = Some(Rc::new(|app: &App, color: Color| Spinner::new(app).color(color).as_any()));
+                } else if failed {
+                    option.gutter =
+                        Some(Rc::new(move |app: &App, _: Color| Text::new(app, "x").fg(error_color).as_any()));
+                }
+                option
+            })
+            .collect()
+    }
+
+    /// Redraws the rows and the footer after the state changed.
+    fn refresh(&self) {
+        if !self.open.get() {
+            return;
+        }
+        let Some(tui) = self.tui.upgrade() else { return };
+        let select = self.select.borrow().clone();
+        if let Some(select) = select {
+            select.set_options(self.options(&super::session_list::dialog_theme(&tui)));
+        }
+    }
+
+    fn refetch(self: &Rc<Self>) {
+        let Some(tui) = self.tui.upgrade() else { return };
+        let client = tui.data.client().clone();
+        let input = PluginListInput { location: self.location() };
+        tui.app.spawn(
+            async move { client.plugin_list(&input).await },
+            bind!(self, |manager, _, result| {
+                match result {
+                    Ok(output) => {
+                        *manager.server.borrow_mut() = Some(output.data);
+                        manager.refresh();
+                    }
+                    Err(error) => log::warn!("plugin list: {error}"),
+                }
+            }),
+        );
+    }
+
+    /// Reads the server plugins again on `plugin.updated` while the list or its error view is open: the subscription
+    /// goes with the manager, which the open dialog owns (`plugins.tsx:39`).
+    fn follow(self: &Rc<Self>) {
+        let Some(tui) = self.tui.upgrade() else { return };
+        let subscription = crate::features::events::subscribe(
+            &tui,
+            ["plugin.updated"],
+            bind!(self, |manager, _, event| {
+                if matches!(event, V2Event::PluginUpdated(_)) {
+                    manager.refetch();
+                }
+            }),
+        );
+        self.following.replace(Some(subscription));
+    }
+
+    fn toggle(self: &Rc<Self>, entry: Option<&Entry>) {
+        let Some(Entry::Tui { id: Some(id), .. }) = self.toggleable(entry).cloned() else { return };
+        let Some(tui) = self.tui.upgrade() else { return };
+        if self.locked.get() {
+            return;
+        }
+        let active = entry.is_some_and(Manager::active);
+        let manager = self.clone();
+        // Deactivating disposes the plugin's keymap layers, so it waits until the key that asked for it is done.
+        tui.app.defer(move |_| {
+            let Some(tui) = manager.tui.upgrade() else { return };
+            match tui.plugins.toggle(&crate::plugins::host::host(&tui), &id, !active) {
+                None => {
+                    tui.toasts.error(format!("Failed to update plugin {id}"));
+                    return;
+                }
+                // TS shows why the setup failed, and the row stays as the last load listed it.
+                Some(Err(error)) => tui.toasts.error(error),
+                Some(Ok(())) => {}
+            }
+            // Slots and routes mount again with the plugin's claims.
+            tui.navigate(tui.route());
+            manager.refresh();
+        });
+    }
+
+    fn update(self: &Rc<Self>, entry: Option<Entry>) {
+        let Some(entry) = entry.filter(|entry| self.updatable(Some(entry))) else { return };
+        let Some(target) = package(&entry).map(|package| package.target.clone()) else { return };
+        let Some(tui) = self.tui.upgrade() else { return };
+        let key = self.key(&entry);
+        self.pending.borrow_mut().push(key.clone());
+        self.refresh();
+        let client = tui.data.client().clone();
+        let input = PluginUpdateInput { location: self.location(), targets: vec![target] };
+        tui.app.spawn(
+            async move { client.plugin_update(&input).await },
+            bind!(self, |manager, _, result| {
+                manager.pending.borrow_mut().retain(|pending| *pending != key);
+                match result {
+                    Ok(()) => manager.refetch(),
+                    Err(error) => {
+                        if let Some(tui) = manager.tui.upgrade() {
+                            tui.toasts.error(error.to_string());
+                        }
+                        manager.refresh();
+                    }
+                }
+            }),
+        );
+    }
+
+    /// The server re-checks package sources only at startup; the answer carries fresh `outdated` flags.
+    fn check(self: &Rc<Self>) {
+        if self.checking.replace(true) {
+            return;
+        }
+        let Some(tui) = self.tui.upgrade() else { return };
+        self.refresh();
+        let client = tui.data.client().clone();
+        let input = PluginCheckInput { location: self.location(), ..PluginCheckInput::default() };
+        tui.app.spawn(
+            async move { client.plugin_check(&input).await },
+            bind!(self, |manager, _, result| {
+                manager.checking.set(false);
+                match result {
+                    Ok(output) => *manager.server.borrow_mut() = Some(output.data),
+                    Err(error) => {
+                        if let Some(tui) = manager.tui.upgrade() {
+                            tui.toasts.error(error.to_string());
+                        }
+                    }
+                }
+                manager.refresh();
+            }),
+        );
+    }
+
+    /// Asks whether the build of the project plugin of `target` that the loader holds back now may run (rich-plugins
+    /// 3.9). The answer names that build, so it records nothing when the build changed meanwhile (bigboi-1, carbon-1).
+    /// Approve and Decline keep the answer for this build; Escape, Ctrl+C, the header and the backdrop leave it
+    /// pending (carbon-6). However the question closes, the list comes back on the row `key`.
+    fn review(self: &Rc<Self>, target: String, key: String) {
+        let Some(tui) = self.tui.upgrade() else { return };
+        let Some((held, unsaved)) = crate::plugins::host::held(&tui, &target) else { return };
+        let artifact = match held {
+            Ok(artifact) => artifact,
+            Err(error) => return tui.toasts.error(format!("This plugin cannot be approved: {error}")),
+        };
+        let decide = |decision: Decision| -> Rc<dyn Fn()> {
+            let (manager, target, artifact) = (self.clone(), target.clone(), artifact.clone());
+            Rc::new(move || {
+                let Some(tui) = manager.tui.upgrade() else { return };
+                let (target, artifact) = (target.clone(), artifact.clone());
+                // After the confirm has closed, and before the list comes back.
+                tui.app.defer(bind!(tui, |tui, _| {
+                    match crate::plugins::host::decide(&tui, &target, &artifact, decision) {
+                        Ok(true) => {}
+                        Ok(false) => tui.toasts.show(ToastOptions::new(
+                            Variant::Warning,
+                            "The plugin changed while you were asked, so nothing was saved. Review the new build.",
+                        )),
+                        Err(error) => tui.toasts.error(format!("The decision was not saved: {error}")),
+                    }
+                }));
+            })
+        };
+        let props = ConfirmProps {
+            title: "Run project plugin?".to_owned(),
+            message: question(&target, &artifact, unsaved.as_deref()),
+            on_confirm: Some(decide(Decision::Approved)),
+            on_cancel: Some(decide(Decision::Declined)),
+            confirm_label: Some("approve".to_owned()),
+            cancel_label: Some("decline".to_owned()),
+            dismiss: true,
+            cancel_first: true,
+        };
+        // The select is still handling the key that opened it.
+        let manager = self.clone();
+        tui.app.defer(bind!(tui, |tui, _| {
+            let (props, manager, key) = (props.clone(), manager.clone(), key.clone());
+            let back: Box<dyn FnOnce()> = Box::new(move || {
+                let Some(tui) = manager.tui.upgrade() else { return };
+                // Not over a dialog that replaced the question.
+                tui.app.defer(move |_| {
+                    if manager.tui.upgrade().is_some_and(|tui| !tui.dialogs.is_open()) {
+                        manager.open(Some(key));
+                    }
+                });
+            });
+            tui.dialogs.replace(
+                move |cx| confirm(cx, props.clone()),
+                Some(back),
+                DialogOptions::new(DialogSize::Medium),
+            );
+        }));
+    }
+
+    /// `DialogErrorDetails` for `entry`; Back returns to the list on it.
+    fn detail(self: &Rc<Self>, entry: Entry) {
+        let Some(tui) = self.tui.upgrade() else { return };
+        let runtime = match entry {
+            Entry::Tui { .. } => "tui",
+            Entry::Server { .. } => "server",
+        };
+        let source = plugin_source(&entry);
+        let props = error_details::Props {
+            title: format!("{} plugin error", if runtime == "tui" { "TUI" } else { "Server" }),
+            source: Some(source.clone()),
+            error: error(&entry).unwrap_or_else(|| "Unknown plugin error".to_owned()),
+            context: Some(format!("Plugin: {}\nStatus: failed\nRuntime: {runtime}\nSource: {source}", label(&entry))),
+            diagnostic_ref: match &entry {
+                Entry::Server { plugin: PluginInfo { state: PluginState::Failed(failed), .. }, .. } => {
+                    failed.r#ref.clone()
+                }
+                _ => None,
+            },
+            // The error view owns the manager while it is open.
+            on_back: Rc::new({
+                let (manager, key) = (self.clone(), self.key(&entry));
+                move || {
+                    let Some(tui) = manager.tui.upgrade() else { return };
+                    let (manager, key) = (manager.clone(), key.clone());
+                    tui.app.defer(move |_| manager.open(Some(key)));
+                }
+            }),
+        };
+        // The select is still handling the key that opened the error.
+        tui.app.defer(bind!(tui, |tui, _| {
+            tui.dialogs.replace(
+                bind!(tui, |tui, cx| error_details::view(&tui, cx, props.clone()), else View::new(&cx.app)),
+                None,
+                DialogOptions::new(DialogSize::Large),
+            );
+        }));
+    }
+}
+
+/// The question about `artifact`, found as plugin directory `target`: the library that would run, where it really is
+/// when that is outside the directory, and its hash (bigboi-1, carbon-1).
+fn question(target: &str, artifact: &Artifact, unsaved: Option<&str>) -> String {
+    let inside = std::fs::canonicalize(target).is_ok_and(|directory| artifact.path.starts_with(directory));
+    let elsewhere = if inside { "" } else { "\nIt is outside this plugin directory." };
+    let saved =
+        unsaved.map(|reason| format!("\nYour answer lasts until opencode exits: {reason}.")).unwrap_or_default();
+    format!(
+        "This project wants to run native code inside opencode:\n\n{target}\nLibrary: {}{elsewhere}\nSHA-256: {}…\n\n\
+         It runs with your permissions. Approve it only if you trust this project.{saved}",
+        artifact.path.display(),
+        artifact.short(),
+    )
+}
+
+fn label(entry: &Entry) -> String {
+    // Nothing of a held plugin is opened, so it has no ID: its directory names it.
+    let name = |target: &str| match held(entry) {
+        Some(_) => std::path::Path::new(target).file_name().map(|name| name.to_string_lossy().into_owned()),
+        None => None,
+    };
+    match entry {
+        Entry::Tui { id, target, .. } => id.clone().or_else(|| name(target)).unwrap_or_else(|| target.clone()),
+        Entry::Server { plugin, source, .. } => plugin.id.as_ref().map_or_else(|| source.clone(), |id| id.0.clone()),
+    }
+}
+
+fn plugin_source(entry: &Entry) -> String {
+    match entry {
+        Entry::Tui { target, .. } => target.clone(),
+        Entry::Server { source, .. } => source.clone(),
+    }
+}
+
+/// The package target, the local path relative to the location's directory, else the source type.
+fn source(plugin: &PluginInfo, directory: &str) -> String {
+    match &plugin.source {
+        PluginSource::Package(package) => package.target.clone(),
+        PluginSource::Local(local) => opencode_ui::path::format(
+            &local.path,
+            Some(directory),
+            &std::env::current_dir().unwrap_or_default(),
+            std::env::home_dir().as_deref(),
+        ),
+        other => other.tag().to_owned(),
+    }
+}
+
+fn internal(entry: &Entry) -> bool {
+    match entry {
+        Entry::Tui { internal, .. } | Entry::Server { internal, .. } => *internal,
+    }
+}
+
+fn is_local(entry: &Entry) -> bool {
+    match entry {
+        Entry::Server { plugin, .. } => matches!(plugin.source, PluginSource::Local(_)),
+        Entry::Tui { target, .. } => {
+            target.starts_with("file://")
+                || target.starts_with("./")
+                || target.starts_with("../")
+                || std::path::Path::new(target).is_absolute()
+        }
+    }
+}
+
+/// The row of a registry entry.
+fn row(entry: opencode_plugin::Entry) -> Entry {
+    let (status, error) = match &entry.status {
+        Status::Active => ("active", None),
+        Status::Inactive => ("inactive", None),
+        Status::Skipped(reason) => ("skipped", Some(reason.clone())),
+        Status::Failed(error) => ("failed", Some(error.clone())),
+        Status::Pending => ("pending", None),
+        Status::Declined => ("declined", None),
+    };
+    // Only a plugin with a definition can be toggled; an unloaded target cannot.
+    let loaded = entry.source != Source::Configured;
+    Entry::Tui {
+        key: format!("tui:{}", entry.target.as_ref().unwrap_or(&entry.id)),
+        internal: entry.source == Source::Builtin,
+        id: loaded.then(|| entry.id.clone()),
+        target: entry.target.unwrap_or(entry.id),
+        status,
+        error,
+        active: entry.active,
+        slow: entry.slow,
+    }
+}
+
+fn status(entry: &Entry) -> &str {
+    match entry {
+        Entry::Server { plugin, .. } => plugin.state.tag(),
+        Entry::Tui { status, .. } => status,
+    }
+}
+
+/// The target of a project plugin held back for approval, pending or declined.
+fn held(entry: &Entry) -> Option<&str> {
+    match entry {
+        Entry::Tui { target, status: "pending" | "declined", .. } => Some(target),
+        _ => None,
+    }
+}
+
+fn package(entry: &Entry) -> Option<&opencode_api::generated::PluginSourcePackage> {
+    match entry {
+        Entry::Server { plugin: PluginInfo { source: PluginSource::Package(package), .. }, .. } => Some(package),
+        _ => None,
+    }
+}
+
+fn outdated(entry: &Entry) -> bool {
+    package(entry).is_some_and(|package| package.outdated == Some(true))
+}
+
+fn footer(entry: &Entry) -> Option<String> {
+    let mut details = Vec::new();
+    if status(entry) != "active" {
+        details.push(status(entry).to_owned());
+    }
+    if is_local(entry) {
+        details.push("local".to_owned());
+    }
+    if let Some(version) = package(entry).and_then(|package| package.version.as_deref()) {
+        details.push(display_version(version));
+    }
+    if outdated(entry) {
+        details.push("update available".to_owned());
+    }
+    if let Entry::Tui { slow: Some(slow), .. } = entry {
+        details.push(slow.clone());
+    }
+    (!details.is_empty()).then(|| details.join(", "))
+}
+
+/// A commit hash shows as its first 7 characters.
+fn display_version(version: &str) -> String {
+    let hash = matches!(version.len(), 40 | 64) && version.chars().all(|c| c.is_ascii_hexdigit());
+    if hash { version[..7].to_owned() } else { version.to_owned() }
+}
+
+fn error(entry: &Entry) -> Option<String> {
+    match entry {
+        Entry::Server { plugin, .. } => match &plugin.state {
+            PluginState::Failed(failed) => Some(failed.error.clone()),
+            _ => None,
+        },
+        Entry::Tui { error, .. } => error.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn versions_and_labels_order_as_in_typescript() {
+        assert_eq!(display_version(&"a".repeat(40)), "aaaaaaa");
+        assert_eq!(display_version("1.2.3"), "1.2.3");
+        let mut labels = vec!["beta", "Alpha", "alpha"];
+        labels.sort_by(|a, b| locale_compare(a, b));
+        assert_eq!(labels, ["alpha", "Alpha", "beta"]);
+    }
+
+    // Expected (bigboi-1, bigboi-2, carbon-1): the question shows the library that would run and its hash, says when it
+    // lies outside the plugin directory, and says when the answer is not saved.
+    #[test]
+    fn the_question_names_the_library_and_says_what_is_not_saved() {
+        let root = opencode_util::temp::tempdir().unwrap();
+        let target = root.path().join("plugins/p");
+        std::fs::create_dir_all(&target).unwrap();
+        let inside = std::fs::canonicalize(&target).unwrap().join("plugin.so");
+        let artifact = |path: std::path::PathBuf| Artifact { target: target.clone(), path, sha256: "ab".repeat(32) };
+        let text = question(&target.to_string_lossy(), &artifact(inside.clone()), None);
+        assert!(text.contains(&format!("Library: {}", inside.display())), "{text}");
+        assert!(text.contains(&format!("SHA-256: {}…", "ab".repeat(8))), "{text}");
+        assert!(!text.contains("outside") && !text.contains("lasts until"), "{text}");
+        let text = question(&target.to_string_lossy(), &artifact("/shared/plugin.so".into()), Some("it is shared"));
+        assert!(text.contains("It is outside this plugin directory."), "{text}");
+        assert!(text.contains("Your answer lasts until opencode exits: it is shared."), "{text}");
+    }
+
+    // Expected: as in TS, a plugin that failed while active (a panic, or a failed rebuild with the previous
+    // version running) offers disable, and an inactive one enable.
+    #[test]
+    fn a_failed_active_plugin_can_be_disabled() {
+        let entry = |status: Status, active: bool| {
+            row(opencode_plugin::Entry {
+                id: "sample".to_owned(),
+                target: Some("sample.so".to_owned()),
+                source: Source::External,
+                status,
+                active,
+                slow: None,
+            })
+        };
+        assert!(Manager::active(&entry(Status::Failed("boom (previous version still active)".to_owned()), true)));
+        assert!(Manager::active(&entry(Status::Active, true)));
+        assert!(!Manager::active(&entry(Status::Inactive, false)));
+    }
+}

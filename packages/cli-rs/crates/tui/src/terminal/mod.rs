@@ -1,0 +1,437 @@
+//! The terminal pane on the persistent PTY socket (E.13a, rows W06 and A04).
+//!
+//! [`Terminals`] is `context/session-terminals.tsx`: whether the server offers terminals, each session's terminals,
+//! and the selected one per session in the `session-terminal-selection` storage key. The session frame shows the
+//! selected terminal in its right pane ([`pane::Pane`]). The commands are those of `component/session-frame.tsx`:
+//! `terminal.toggle`, `terminal.select`, `terminal.close`, and `session.terminal` (`/terminal`).
+
+pub mod palette;
+pub mod pane;
+
+use std::sync::{Arc, OnceLock};
+
+use indexmap::IndexMap;
+use opencode_api::generated::{
+    ExperimentalPersistentPtyCreateInput, ExperimentalPersistentPtyListInput, PersistentPtyInfo,
+};
+use opencode_api::pty::{Connector, Tungstenite};
+use opencode_local::serial::Serial;
+
+use crate::features::events::Handled;
+use crate::prelude::*;
+
+const SELECTION: &str = "session-terminal-selection";
+
+/// Shows the composer's terminal list (E.13b's `onTerminalPicker`).
+pub type Picker = Rc<dyn Fn(&Tui)>;
+
+/// Sends bytes to one terminal's input.
+pub type Writer = Rc<dyn Fn(&[u8])>;
+
+pub struct Terminals {
+    available: Cell<bool>,
+    /// The terminal to focus when its pane mounts; a terminal the user did not open shows without it.
+    focus: RefCell<Option<String>>,
+    /// Focus the next terminal pane, or the session once none is selected, after a focused terminal disconnected.
+    restore: Cell<bool>,
+    lists: RefCell<HashMap<String, Vec<PersistentPtyInfo>>>,
+    /// `{ sessions: { [sessionID]: ptyID | null } }`.
+    selection: RefCell<Value>,
+    writers: RefCell<HashMap<String, Writer>>,
+    pending: RefCell<HashMap<String, Vec<Vec<u8>>>>,
+    connector: RefCell<Arc<dyn Connector>>,
+    picker: RefCell<Option<Picker>>,
+    listener: RefCell<Option<Picker>>,
+    layer: RefCell<Option<(bool, bool, Disposer)>>,
+}
+
+impl Default for Terminals {
+    fn default() -> Self {
+        Self {
+            available: Cell::new(false),
+            focus: RefCell::default(),
+            restore: Cell::new(false),
+            lists: RefCell::default(),
+            selection: RefCell::new(json!({ "sessions": {} })),
+            writers: RefCell::default(),
+            pending: RefCell::default(),
+            connector: RefCell::new(Arc::new(Tungstenite)),
+            picker: RefCell::default(),
+            listener: RefCell::default(),
+            layer: RefCell::default(),
+        }
+    }
+}
+
+impl Terminals {
+    pub fn available(&self) -> bool {
+        self.available.get()
+    }
+
+    /// The session's terminals as last listed.
+    pub fn list(&self, session: &str) -> Vec<PersistentPtyInfo> {
+        self.lists.borrow().get(session).cloned().unwrap_or_default()
+    }
+
+    /// The selected terminal, if any, whether or not it is still listed.
+    pub fn selected_id(&self, session: &str) -> Option<String> {
+        self.selection.borrow()["sessions"][session].as_str().map(str::to_owned)
+    }
+
+    /// The selected terminal of a session, while the server offers terminals and lists it.
+    pub fn selected(&self, session: &str) -> Option<String> {
+        let id = self.selected_id(session).filter(|_| self.available())?;
+        self.lists.borrow().get(session)?.iter().any(|terminal| terminal.id.0 == id).then_some(id)
+    }
+
+    /// Replaces how sockets open; tests serve fake ones.
+    pub fn set_connector(&self, connector: Arc<dyn Connector>) {
+        *self.connector.borrow_mut() = connector;
+    }
+
+    pub(crate) fn connector(&self) -> Arc<dyn Connector> {
+        self.connector.borrow().clone()
+    }
+
+    /// Sets how `terminal.select` shows the composer's terminal list (E.13b).
+    pub fn set_picker(&self, picker: Option<Picker>) {
+        *self.picker.borrow_mut() = picker;
+    }
+
+    /// Sets what runs after a session's terminal list or selection changed (E.13b's composer list).
+    pub fn set_listener(&self, listener: Option<Picker>) {
+        *self.listener.borrow_mut() = listener;
+    }
+
+    fn changed(&self, tui: &Tui) {
+        let listener = self.listener.borrow().clone();
+        if let Some(listener) = listener {
+            listener(tui);
+        }
+        // The sidebar gives the right pane to a terminal that opens (`session-frame.tsx:93-117`).
+        tui.app.defer(bind!(tui.weak(), |tui, _| tui.sync_view()));
+    }
+
+    /// Whether the pane of `pty` should take focus when it mounts; clears the wish.
+    pub(crate) fn take_focus(&self, pty: &str) -> bool {
+        let wanted = self.focus.borrow().as_deref() == Some(pty) || self.restore.get();
+        if wanted {
+            self.focus.borrow_mut().take();
+            self.restore.set(false);
+        }
+        wanted
+    }
+
+    /// After a focused terminal's socket ended.
+    pub(crate) fn disconnected(&self, tui: &Tui) {
+        self.restore.set(true);
+        crate::frame::refresh(tui);
+    }
+
+    /// Whether the session should get focus back: a focused terminal disconnected and none is selected now.
+    pub(crate) fn take_restore(&self, selected: bool) -> bool {
+        if !self.restore.get() || selected {
+            return false;
+        }
+        self.restore.set(false);
+        true
+    }
+
+    /// Writes to a terminal's input, or keeps it until its pane mounts (the client MCP, E.13b).
+    pub fn write(&self, pty: &str, data: &[u8]) {
+        let writer = self.writers.borrow().get(pty).cloned();
+        match writer {
+            Some(writer) => writer(data),
+            None => self.pending.borrow_mut().entry(pty.to_owned()).or_default().push(data.to_vec()),
+        }
+    }
+
+    pub(crate) fn attach_writer(&self, pty: &str, writer: Writer) {
+        self.writers.borrow_mut().insert(pty.to_owned(), writer.clone());
+        let pending = self.pending.borrow_mut().remove(pty).unwrap_or_default();
+        pending.iter().for_each(|data| writer(data));
+    }
+
+    pub(crate) fn detach_writer(&self, pty: &str) {
+        self.writers.borrow_mut().remove(pty);
+    }
+}
+
+/// Reads the selection and registers the commands. `app::mount_with` calls it once.
+pub fn install(tui: &Rc<Tui>) {
+    if let Some(storage) = tui.storage() {
+        let value = storage.load(SELECTION, &json!({ "sessions": {} })).unwrap_or_else(|_| json!({ "sessions": {} }));
+        if value["sessions"].is_object() {
+            *tui.terminals.selection.borrow_mut() = value;
+        }
+    }
+    apply_layer(tui);
+}
+
+/// The capture handler that sends keys to a focused terminal before the keymap sees them, unless they are the leader
+/// or part of a leader sequence (`keymap.intercept` at priority 100). `app::install_keys` calls it before the
+/// keymap's own handler.
+pub fn install_keys(tui: &Rc<Tui>) {
+    tui.app.on_key_capture(bind!(tui, |tui, cx, key| {
+        let Some(pane) = crate::frame::terminal(&tui) else { return };
+        let Some(view) = pane.focused() else { return };
+        if tui.keymap.is_leader(key) || tui.keymap.leader_active() {
+            return;
+        }
+        cx.prevent_default();
+        cx.stop_propagation();
+        pane.key(&view, key);
+    }));
+}
+
+/// Server events: support on every `server.connected`, and fresh lists when a session's terminals change.
+pub(crate) fn event(tui: &Tui, event: &Handled) {
+    let session = match event {
+        Handled::ServerConnected(_) => return check(tui),
+        Handled::PersistentPtyAdded(event) => &event.data.session_id,
+        Handled::PersistentPtyRemoved(event) => &event.data.session_id,
+        Handled::PersistentPtyUpdated(event) => &event.data.session_id,
+        _ => return,
+    };
+    if tui.terminals.available() && tui.terminals.lists.borrow().contains_key(&session.0) {
+        refresh(tui, session, false, |_| {});
+    }
+}
+
+/// The session frame of `session` mounted: list its terminals (`createResource` in the frame).
+pub fn session_mounted(tui: &Tui, session: &SessionID) {
+    if tui.terminals.available() {
+        refresh(tui, session, false, |_| {});
+    }
+}
+
+/// Reads whether the server offers terminals; servers that predate the field do.
+fn check(tui: &Tui) {
+    let client = tui.data.client().clone();
+    tui.app.spawn(
+        async move { client.server_info().await },
+        bind!(tui, |tui, _, result| {
+            let available = match &result {
+                Ok(info) => {
+                    info.capabilities.as_ref().and_then(|capabilities| capabilities.persistent_pty) != Some(false)
+                }
+                Err(error) => {
+                    log::error!("Failed to read server terminal support: {error}");
+                    false
+                }
+            };
+            tui.terminals.available.set(available);
+            update_layer(&tui);
+            crate::frame::refresh(&tui);
+            if !available {
+                return;
+            }
+            let mut sessions: Vec<String> = tui.terminals.lists.borrow().keys().cloned().collect();
+            if let crate::routes::Route::Session { id } = tui.route()
+                && !sessions.contains(&id.0)
+            {
+                sessions.push(id.0);
+            }
+            for session in sessions {
+                refresh(&tui, &SessionID(session), false, |_| {});
+            }
+        }),
+    );
+}
+
+/// Lists a session's terminals, and clears its selection when the selected one is gone. `then` runs after. A failure
+/// is logged; for a command (`toast`) it also shows "Unable to load terminal", as the TS commands do.
+pub(crate) fn refresh(tui: &Tui, session: &SessionID, toast: bool, then: impl FnOnce(&Tui) + 'static) {
+    tui.terminals.lists.borrow_mut().entry(session.0.clone()).or_default();
+    let client = tui.data.client().clone();
+    let input = ExperimentalPersistentPtyListInput { session_id: session.clone() };
+    let session = session.0.clone();
+    tui.app.spawn(
+        async move { client.experimental_persistent_pty_list(&input).await },
+        bind!(tui, |tui, _, result| {
+            let list = match result {
+                Ok(list) => list,
+                Err(error) => {
+                    log::error!("Failed to refresh persistent terminal panes: {error}");
+                    if toast {
+                        tui.toasts.error("Unable to load terminal");
+                    }
+                    return;
+                }
+            };
+            let gone = tui
+                .terminals
+                .selected_id(&session)
+                .is_some_and(|selected| !list.iter().any(|terminal| terminal.id.0 == selected));
+            tui.terminals.lists.borrow_mut().insert(session.clone(), list);
+            if gone {
+                select(&tui, &session, None, true);
+            }
+            crate::frame::refresh(&tui);
+            update_layer(&tui);
+            tui.terminals.changed(&tui);
+            then(&tui);
+        }),
+    );
+}
+
+/// `selectTerminal`: a terminal must be listed; `focus: false` shows it without taking focus.
+pub fn select(tui: &Tui, session: &str, pty: Option<&str>, focus: bool) {
+    if let Some(pty) = pty
+        && !tui.terminals.list(session).iter().any(|terminal| terminal.id.0 == pty)
+    {
+        return;
+    }
+    *tui.terminals.focus.borrow_mut() = pty.filter(|_| focus).map(str::to_owned);
+    tui.terminals.selection.borrow_mut()["sessions"][session] = json!(pty);
+    if let Some(storage) = tui.storage() {
+        let session = session.to_owned();
+        let pty = pty.map(str::to_owned);
+        // One worker thread, so the selections land in the order they were made.
+        static WRITER: OnceLock<Serial> = OnceLock::new();
+        WRITER.get_or_init(|| Serial::new("terminal-selection")).run(move || {
+            let result = storage.update(SELECTION, &json!({ "sessions": {} }), |value| {
+                if !value["sessions"].is_object() {
+                    value["sessions"] = json!({});
+                }
+                value["sessions"][session] = json!(pty);
+            });
+            if let Err(error) = result {
+                log::error!("Failed to persist terminal selection: {error}");
+            }
+        });
+    }
+    crate::frame::refresh(tui);
+    update_layer(tui);
+    tui.terminals.changed(tui);
+}
+
+/// `newTerminal`: creates a terminal in the session's directory, then selects it (`focus: false` shows it without
+/// focus). `then` gets its ID, or `None` after the failure toast.
+pub(crate) fn create(tui: &Tui, session: &SessionID, focus: bool, then: impl FnOnce(&Tui, Option<String>) + 'static) {
+    let directory = tui.data.read(|state| state.session(session).map(|session| session.location.directory.0.clone()));
+    let client = tui.data.client().clone();
+    let input = ExperimentalPersistentPtyCreateInput {
+        session_id: session.clone(),
+        command: None,
+        args: Vec::new(),
+        cwd: directory,
+        title: "Terminal".to_owned(),
+        env: IndexMap::new(),
+        size: None,
+    };
+    let session = session.clone();
+    tui.app.spawn(
+        async move { client.experimental_persistent_pty_create(&input).await },
+        bind!(tui, |tui, _, result| {
+            match result {
+                Ok(terminal) => {
+                    let id = session.0.clone();
+                    refresh(&tui, &session, true, move |tui| {
+                        select(tui, &id, Some(&terminal.id.0), focus);
+                        then(tui, Some(terminal.id.0));
+                    });
+                }
+                Err(error) => {
+                    log::error!("Failed to create a terminal: {error}");
+                    tui.toasts.error("Unable to load terminal");
+                    then(&tui, None);
+                }
+            }
+        }),
+    );
+}
+
+fn session(tui: &Tui) -> Option<SessionID> {
+    match tui.route() {
+        crate::routes::Route::Session { id } if crate::frame::terminal_host(tui) => Some(id),
+        _ => None,
+    }
+}
+
+/// `terminal.toggle`: hides the shown terminal, else shows the newest one, else creates one.
+fn toggle(tui: &Tui) {
+    let Some(id) = session(tui) else { return };
+    tui.dialogs.clear();
+    if crate::frame::terminal_shown(tui) {
+        crate::frame::focus_session(tui);
+        select(tui, &id.0, None, true);
+        return;
+    }
+    let session = id.clone();
+    refresh(tui, &id, true, move |tui| match tui.terminals.list(&session.0).last() {
+        Some(terminal) => select(tui, &session.0, Some(&terminal.id.0), true),
+        None => create(tui, &session, true, |_, _| {}),
+    });
+}
+
+/// `terminal.select`: focuses the session and shows the composer's terminal list.
+fn pick(tui: &Tui) {
+    let Some(id) = session(tui) else { return };
+    tui.dialogs.clear();
+    if crate::frame::fullscreen_panel(tui) {
+        tui.panels.close(tui);
+    }
+    crate::frame::focus_session(tui);
+    let picker = tui.terminals.picker.borrow().clone();
+    if let Some(picker) = picker {
+        picker(tui);
+    }
+    refresh(tui, &id, true, |_| {});
+}
+
+/// `terminal.close`.
+fn close(tui: &Tui) {
+    let Some(id) = session(tui) else { return };
+    tui.dialogs.clear();
+    crate::frame::focus_session(tui);
+    select(tui, &id.0, None, true);
+}
+
+/// `session.terminal` (`/terminal`).
+fn new_terminal(tui: &Tui) {
+    let Some(id) = session(tui) else { return };
+    tui.dialogs.clear();
+    create(tui, &id, true, |_, _| {});
+}
+
+/// Registers the commands again, after the running command returns, when their titles or `terminal.close`'s enabled
+/// state would change.
+fn update_layer(tui: &Tui) {
+    tui.app.defer(bind!(tui, |tui, _| apply_layer(&tui)));
+}
+
+/// The command layer, which exists while the server offers terminals, as the TS commands do.
+fn apply_layer(tui: &Tui) {
+    let available = tui.terminals.available();
+    let shown = crate::frame::terminal_shown(tui);
+    if let Some((was_available, was_shown, _)) = tui.terminals.layer.borrow().as_ref()
+        && (*was_available, *was_shown) == (available, shown)
+    {
+        return;
+    }
+    tui.terminals.layer.borrow_mut().take();
+    if !available {
+        *tui.terminals.layer.borrow_mut() = Some((available, shown, Disposer::noop()));
+        return;
+    }
+    let weak = tui.weak();
+    let command =
+        |id: &str, run: fn(&Tui)| TuiCommand::new(id, bind!(weak, |tui, _, _| run(&tui))).group("Session").palette();
+    let in_session = Condition::when(bind!(weak, |tui| session(&tui).is_some()));
+    let commands = vec![
+        command("terminal.toggle", toggle).title(if shown { "Hide terminal pane" } else { "Show terminal pane" }),
+        command("terminal.select", pick).title("Select terminal"),
+        command("terminal.close", close).title("Close terminal pane").enabled(if shown {
+            Condition::Always
+        } else {
+            Condition::Never
+        }),
+        command("session.terminal", new_terminal).title("New terminal").bind(Bind::Off).slash("terminal"),
+    ];
+    let layer = KeymapLayer::global(commands).enabled(in_session);
+    match tui.keymap.layer(layer) {
+        Ok(disposer) => *tui.terminals.layer.borrow_mut() = Some((available, shown, disposer)),
+        Err(error) => log::error!("terminal keymap layer: {error}"),
+    }
+}

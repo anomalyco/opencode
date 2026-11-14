@@ -1,0 +1,85 @@
+/** @jsxImportSource @opentui/solid */
+// P-COMP fixtures of highlighted code, one per grammar of the default build but TypeScript (U.4a has it): each snippet
+// of the corpus below (written to parity/fixtures/U.4b/corpus.json for Rust) in <code conceal={false} fg={text.base}>,
+// with the TUI's parsers registered as routes/session/index.tsx registers them. crates/ui/tests/all/grammars.rs compares opencode_ui::code::view with them.
+import { addDefaultParsers } from "@opentui/core"
+import parsers from "../../../tui/src/parsers-config"
+import { useTheme, useThemes } from "../../../tui/src/context/theme"
+import { renderComponent } from "../lib/component"
+
+addDefaultParsers(parsers.parsers)
+
+const corpus: Record<string, string> = {
+  javascript:
+    "// Sum the values.\nexport const sum = (xs) => xs.reduce((a, b) => a + b, 0)\nclass Queue extends Array {\n  push(item) { return super.push(item) }\n}\nconst re = /ab+c/g, s = `n=${sum([1, 2])}`\nif (re.test(s)) console.log(null, true, MAX_SIZE)\n",
+  typescriptreact:
+    'import { Box } from "./box"\n\ntype Props = { title: string; width?: number }\n\nexport function View(props: Props) {\n  return <Box title={props.title} width={10}>hi</Box>\n}\n',
+  rust: "use std::fmt;\n\n/// A point.\n#[derive(Debug)]\npub struct Point { x: i32, y: Option<u8> }\n\nimpl fmt::Display for Point {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, \"{} {}\", self.x, 'c')\n    }\n}\n",
+  python:
+    "import os\nfrom typing import List\n\n# Count the files.\n@cache\ndef count(paths: List[str]) -> int:\n    return len([p for p in paths if os.path.isfile(p)])\n\nclass Box:\n    size = 3 if True else None\n",
+  go: 'package main\n\nimport "fmt"\n\n// Greet prints a name.\nfunc Greet(name string) error {\n    for i := 0; i < 2; i++ {\n        fmt.Println("hi", name, i, 4.5)\n    }\n    return nil\n}\n',
+  bash: '#!/usr/bin/env bash\nset -euo pipefail\n# Build each package.\nfor dir in packages/*; do\n  if [ -f "$dir/package.json" ]; then\n    echo "build ${dir}" && bun run --cwd "$dir" build\n  fi\ndone\nexport COUNT=$((1 + 2))\n',
+  json: '{\n  "name": "opencode",\n  "version": 2.5,\n  "private": true,\n  "tags": ["cli", null],\n  "nested": { "escape": "a\\nb" }\n}\n',
+  yaml: '# CI\nname: test\non: [push]\njobs:\n  unit:\n    runs-on: ubuntu-latest\n    timeout: 10\n    enabled: true\n    steps:\n      - run: bun test --timeout 5000\n        env: { CI: "1" }\n',
+  markdown:
+    "# Title\n\nSome **bold**, *italic* and `code`, a [link](https://x.y).\n\n```ts\nconst a: number = 1\n```\n\n- item\n> quote\n",
+  diff: "diff --git a/src/a.ts b/src/a.ts\nindex 1234567..89abcde 100644\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,3 +1,3 @@\n const a = 1\n-const b = 2\n+const b = 3\n",
+  html: '<!doctype html>\n<html lang="en">\n  <!-- page -->\n  <body class="app">\n    <a href="/docs">Docs &amp; more</a>\n    <input disabled>\n  </body>\n</html>\n',
+  css: "/* Layout */\n.app > main, #root {\n  display: flex;\n  margin: 0 auto;\n  color: #ff0000 !important;\n}\n@media (max-width: 600px) {\n  .app:hover { padding: 4px; }\n}\n",
+  zig: 'const std = @import("std");\n\n// Entry.\npub fn main() !void {\n    const x: u32 = 42;\n    if (x > 1) std.debug.print("{d}\\n", .{x});\n}\n',
+  c: '#include <stdio.h>\n\n/* Count to n. */\nstatic int count(const char *s, int n) {\n  for (int i = 0; i < n; i++) printf("%d\\n", i);\n  return s == NULL ? -1 : 0;\n}\n',
+  cpp: "#include <vector>\n\nnamespace app {\n// A box.\ntemplate <typename T> class Box {\npublic:\n  explicit Box(T v) : value(v) {}\n  auto get() const -> T { return value; }\n  T value;\n};\n}\n",
+  csharp:
+    'using System;\n\nnamespace App;\n\n// A point.\npublic record Point(int X, int Y) {\n    public override string ToString() => $"{X} {Y}";\n    public static bool Ok = true;\n}\n',
+  java: "package app;\n\nimport java.util.List;\n\n/** A list. */\n@Deprecated\npublic final class Names {\n  private static final int MAX = 10;\n  public int size(List<String> xs) { return xs.size(); }\n}\n",
+  ruby: 'require "json"\n\n# A greeter.\nclass Greeter < Base\n  attr_reader :name\n  def greet(times = 2)\n    times.times { |i| puts "hi #{@name} #{i}" }\n    nil\n  end\nend\n',
+  php: '<?php\nnamespace App;\n\n// A user.\nclass User extends Model {\n    public function name(int $n = 1): ?string {\n        $x = ["a" => true, "b" => null];\n        return "user {$this->id}";\n    }\n}\n',
+  scala:
+    "package app\n\n// A shape.\nsealed trait Shape\ncase class Circle(r: Double) extends Shape\n\nobject Main {\n  def area(s: Shape): Double = s match {\n    case Circle(r) => 3.14 * r * r\n  }\n}\n",
+  vue: '<template>\n  <!-- counter -->\n  <button :class="{ on }" @click="n++">{{ n }}</button>\n</template>\n<script setup>\nconst n = ref(0)\n</script>\n<style>\nbutton { color: red; }\n</style>\n',
+  hcl: '# Main bucket.\nresource "aws_s3_bucket" "main" {\n  bucket = "app-${var.env}"\n  count  = 2\n  tags = {\n    enabled = true\n  }\n}\n\nvariable "env" { default = null }\n',
+  haskell:
+    'module Main where\n\nimport Data.List (sort)\n\n-- | Sum the list.\ntotal :: [Int] -> Int\ntotal xs = foldr (+) 0 xs\n\nmain :: IO ()\nmain = print (total [1, 2, 3]) >> putStrLn "ok"\n',
+  julia:
+    'module App\n\n# Square each value.\nfunction squares(xs::Vector{Int})::Vector{Int}\n    return [x^2 for x in xs if x > 0]\nend\n\nconst MAX = 10\nprintln("n = $(MAX)", true, nothing)\nend\n',
+  lua: 'local M = {}\n\n-- Greet a name.\nfunction M.greet(name, times)\n  for i = 1, times or 2 do\n    print("hi " .. name, i, nil, true)\n  end\n  return #name\nend\n\nreturn M\n',
+  clojure:
+    '(ns app.core\n  (:require [clojure.string :as str]))\n\n;; Shout a name.\n(defn shout [name & {:keys [n] :or {n 1}}]\n  (str/upper-case (str name "!" n nil true)))\n\n(def ^:private max-size 10)\n',
+  toml: '# Package.\n[package]\nname = "opencode"\nversion = "0.1.0"\nedition = 2024\npublish = false\n\n[dependencies]\nserde = { version = "1", features = ["derive"] }\n',
+  nix: "{ pkgs ? import <nixpkgs> { } }:\n\n# The shell.\nlet\n  name = \"app\";\nin\npkgs.mkShell {\n  inherit name;\n  packages = with pkgs; [ bun zig ];\n  shellHook = ''echo ${name}'';\n}\n",
+  elixir:
+    'defmodule App.Greeter do\n  @moduledoc "Greets."\n\n  # Greet a name.\n  def greet(name, opts \\\\ []) when is_binary(name) do\n    times = Keyword.get(opts, :times, 2)\n    IO.puts("hi #{name} #{times}")\n    {:ok, nil}\n  end\nend\n',
+  r: "library(stats)\n\n# Scale a vector.\nscale_to <- function(x, to = 1L, na.rm = TRUE) {\n  if (is.null(x)) return(NA)\n  m <- max(x, na.rm = na.rm)\n  x / m * to\n}\nprint(scale_to(c(1, 2.5, 4)))\n",
+  make: "# Build.\nCC ?= cc\nSRC := $(wildcard src/*.c)\n.PHONY: all clean\nall: app\n\napp: $(SRC)\n\t$(CC) -o $@ $^\n\nclean:\n\trm -f app\n",
+  vim: "\" Settings.\nset number tabstop=4\nlet g:app_name = 'app'\n\nfunction! Greet(name) abort\n  if a:name ==# ''\n    return 0\n  endif\n  echo 'hi ' . a:name\nendfunction\n",
+  xml: '<?xml version="1.0" encoding="UTF-8"?>\n<!-- config -->\n<project name="app" default="build">\n  <property name="src" value="src"/>\n  <target name="build">\n    <echo>Build &amp; test</echo>\n    <![CDATA[ raw <text> ]]>\n  </target>\n</project>\n',
+  agda: "module Nat where\n\n-- Natural numbers.\ndata Nat : Set where\n  zero : Nat\n  suc  : Nat -> Nat\n\n_+_ : Nat -> Nat -> Nat\nzero  + m = m\nsuc n + m = suc (n + m)\n",
+}
+await Bun.write(new URL("../fixtures/U.4b/corpus.json", import.meta.url), JSON.stringify(corpus, null, 2) + "\n")
+
+function Snippet(props: { filetype: string }) {
+  const theme = useTheme()
+  const { currentSyntax: syntax } = useThemes()
+  return (
+    <code
+      conceal={false}
+      fg={theme.text.base}
+      filetype={props.filetype}
+      syntaxStyle={syntax()}
+      content={corpus[props.filetype]}
+    />
+  )
+}
+
+for (const filetype of Object.keys(corpus)) {
+  const first = corpus[filetype].split("\n")[0]
+  await renderComponent({
+    fixture: `U.4b/${filetype}`,
+    width: 60,
+    height: 12,
+    element: () => <Snippet filetype={filetype} />,
+    ready: (frame) => frame.includes(first),
+    // A grammar loads in the tree-sitter worker the first time; give it time before the frame settles again.
+    act: () => Bun.sleep(1500),
+  })
+}

@@ -1,0 +1,597 @@
+//! Models and usage (E.16) over the fixture server of `parity/fixtures/E.16/server.json`:
+//!
+//! - P-COMP: each dialog against the cells `parity/component/E.16-models.tsx` wrote from the TS dialog;
+//! - P-REQ: the dialogs and commands send reads only, never `/api/experimental/session/stats`;
+//! - P-FILE: `model.json` as the TS model preference repository reads and writes it, in a temp dir;
+//! - the commands and keys through the whole TUI.
+
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use opencode_api::client::Client;
+use opencode_api::transport::{BoxFuture, Request, Response, Transport};
+use opencode_local::model_pref::Model;
+use opencode_local::storage::Storage;
+use opencode_parity::fixtures_dir;
+use opencode_store::{Data, Options as StoreOptions};
+use opencode_tui::dialogs::go_upsell::{self, Offer};
+use opencode_tui::dialogs::model;
+use opencode_tui::dialogs::{agent, usage, usage_model, variant};
+use opencode_tui::local::{Files, Local};
+use opencode_tui::{Deps, Route};
+use opencode_ui::dialog::{DialogKeymap, Dialogs, route_keys};
+use opencode_ui::keymap::{Keybinds, Options};
+use opencode_ui::theme::{Catalog, Theme, ThemeMode};
+use opencode_ui::toast::Toasts;
+use opentui::prelude::*;
+use opentui::testing::TestApp;
+use serde_json::{Value, json};
+
+use crate::support::{self, Harness, WAIT, deref_harness};
+
+/// Serves the E.16 routes and records every request (method and path with query).
+struct Server {
+    routes: Value,
+    seen: Mutex<Vec<(String, String)>>,
+    /// The bodies of mutating requests, by path.
+    writes: Mutex<Vec<(String, Value)>>,
+}
+
+impl Server {
+    fn new() -> Arc<Self> {
+        let text = std::fs::read_to_string(fixtures_dir().join("E.16/server.json")).unwrap();
+        let mut server: Value = serde_json::from_str(&text).unwrap();
+        shift_resets(&mut server["routes"]);
+        Arc::new(Self { routes: server["routes"].clone(), seen: Mutex::default(), writes: Mutex::default() })
+    }
+
+    fn seen(&self) -> Vec<(String, String)> {
+        self.seen.lock().unwrap().clone()
+    }
+}
+
+impl Transport for Server {
+    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
+        let path = request.url.path().to_owned();
+        let query = request.url.query().map_or(String::new(), |q| format!("?{q}"));
+        self.seen.lock().unwrap().push((request.method.to_owned(), format!("{path}{query}")));
+        let location = json!({ "directory": "/project" });
+        let sent =
+            request.body.as_deref().and_then(|body| serde_json::from_slice::<Value>(body).ok()).unwrap_or(Value::Null);
+        if request.method != "GET" {
+            self.writes.lock().unwrap().push((path.clone(), sent.clone()));
+        }
+        let (status, body) = match (request.method, path.as_str()) {
+            // A prompt from home creates its session, then sends to it.
+            ("POST", "/api/session") => (
+                200,
+                json!({ "data": {
+                    "id": sent["id"], "projectID": "project", "cost": 0,
+                    "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+                    "time": { "created": 1, "updated": 1 }, "location": location,
+                } }),
+            ),
+            ("POST", path) if path.ends_with("/prompt") => (
+                200,
+                json!({ "data": {
+                    "id": sent["id"], "sessionID": path.split('/').nth(3), "time": { "created": 1 },
+                    "type": "user", "payload": { "text": sent["text"] }, "delivery": "steer",
+                } }),
+            ),
+            ("GET", "/api/config") => (200, json!([])),
+            ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+            ("GET", path) if self.routes.get(path).is_some() => {
+                (200, json!({ "location": location, "data": self.routes[path] }))
+            }
+            _ => (404, json!({})),
+        };
+        Box::pin(async move { Ok(support::respond(status, &body)) })
+    }
+}
+
+/// The TS fixtures render in UTC; the Rust dialogs use local time, so each `resetsAt` moves by the local offset.
+fn shift_resets(value: &mut Value) {
+    match value {
+        Value::Object(fields) => fields.iter_mut().for_each(|(key, field)| match field.as_i64() {
+            Some(at) if key == "resetsAt" => {
+                *field = json!(at - i64::from(opencode_util::time::Zone::Local.offset(at)) * 1000)
+            }
+            _ => shift_resets(field),
+        }),
+        Value::Array(items) => items.iter_mut().for_each(shift_resets),
+        _ => {}
+    }
+}
+
+fn preferences() -> Value {
+    let text = std::fs::read_to_string(fixtures_dir().join("E.16/server.json")).unwrap();
+    serde_json::from_str::<Value>(&text).unwrap()["preferences"].clone()
+}
+
+fn theme() -> Theme {
+    Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme
+}
+
+/// A temporary state directory holding the fixture's `model.json`.
+fn state() -> opencode_util::temp::TempDir {
+    let dir = opencode_util::temp::tempdir().unwrap();
+    std::fs::write(dir.path().join("model.json"), preferences().to_string()).unwrap();
+    dir
+}
+
+/// The dialog kit and [`Local`] on a bare app, the way the P-COMP script mounts the TS dialogs.
+struct Kit {
+    app: TestApp,
+    local: Rc<Local>,
+    fixture: Arc<Server>,
+    _state: opencode_util::temp::TempDir,
+}
+
+fn kit(width: u16, height: u16) -> Kit {
+    let app = support::dark_app(width, height);
+    let keymap = Rc::new(DialogKeymap::new(Keybinds::defaults(), Options::default()));
+    route_keys(&app, keymap.clone());
+    let toasts = Toasts::new(&app, theme(), &app.root());
+    let dialogs = Dialogs::new(&app, keymap, theme());
+    let fixture = Server::new();
+    let client = Client::with_transport("http://opencode.local", fixture.clone()).unwrap();
+    let state = state();
+    let data = Data::with_runtime(
+        client,
+        StoreOptions { directory: "/project".into(), ..StoreOptions::default() },
+        app.runtime(),
+    );
+    let local = Local::new(
+        &app,
+        data,
+        dialogs,
+        toasts,
+        Some(Files { state: state.path().to_owned(), storage: None }),
+        std::rc::Weak::new(),
+    );
+    local.load();
+    local.load_usage(false);
+    let loaded = app.wait_until(WAIT, || {
+        local.ready()
+            && local.catalog_ready()
+            && local.integrations().is_some()
+            && matches!(local.usage(), Some(Some(_)))
+            && !local.agents().is_empty()
+            && !local.providers(|providers| providers.is_empty())
+    });
+    assert!(loaded, "the catalog never loaded: {:?}", fixture.seen());
+    Kit { app, local, fixture, _state: state }
+}
+
+impl Kit {
+    fn wait_for(&self, text: &str) {
+        let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
+        assert!(found, "{text:?} never showed:\n{}", self.app.text());
+    }
+}
+
+#[test]
+fn model_dialog_matches_typescript_opened_and_filtered() {
+    // Tall enough for the whole list (parity/deviations/DLG13-model-scroll.md).
+    let kit = kit(90, 60);
+    model::show(&kit.local, None);
+    kit.wait_for("favorite");
+    support::wait_fixture(&kit.app, "E.16/model");
+    kit.app.type_text("gpt");
+    kit.wait_for("GPT-5 mini");
+    support::wait_fixture(&kit.app, "E.16/model-filter");
+}
+
+#[test]
+fn agent_and_variant_dialogs_match_typescript() {
+    let kit = kit(90, 34);
+    agent::show(&kit.local);
+    kit.wait_for("plan");
+    support::wait_fixture(&kit.app, "E.16/agent");
+    variant::show(&kit.local);
+    kit.wait_for("high");
+    support::wait_fixture(&kit.app, "E.16/variant");
+}
+
+#[test]
+fn usage_dialogs_match_typescript() {
+    let kit = kit(90, 34);
+    usage::show(&kit.local);
+    kit.wait_for("left");
+    support::wait_fixture(&kit.app, "E.16/usage");
+    kit.app.press("down");
+    kit.wait_for("Grok Code");
+    support::wait_fixture(&kit.app, "E.16/usage-down");
+    let sonnet = kit.local.models(|models| models[0].clone());
+    usage_model::show(&kit.local, sonnet);
+    kit.wait_for("remaining");
+    support::wait_fixture(&kit.app, "E.16/usage-model");
+}
+
+#[test]
+fn go_upsell_matches_typescript_when_compact() {
+    let kit = kit(80, 20);
+    go_upsell::show(
+        &kit.local,
+        Offer { reset: Some("3:00 PM".into()), can_continue: Rc::new(|| true), on_subscribe: Rc::new(|| {}) },
+    );
+    kit.wait_for("subscribe");
+    support::wait_fixture(&kit.app, "E.16/go-upsell");
+}
+
+#[test]
+fn dialogs_send_reads_only() {
+    let kit = kit(90, 34);
+    model::show(&kit.local, None);
+    kit.wait_for("favorite");
+    usage::show(&kit.local);
+    kit.wait_for("left");
+    let seen = kit.fixture.seen();
+    assert!(seen.iter().all(|(method, _)| method == "GET"), "{seen:?}");
+    assert!(seen.iter().all(|(_, path)| !path.contains("session/stats")), "{seen:?}");
+    let paths: Vec<&str> = seen.iter().map(|(_, path)| path.split('?').next().unwrap()).collect();
+    for read in [
+        "/api/model",
+        "/api/provider",
+        "/api/agent",
+        "/api/integration",
+        "/api/config",
+        "/api/experimental/usage/limits",
+    ] {
+        assert!(paths.contains(&read), "{read} was not read: {seen:?}");
+    }
+    // Every read names the location.
+    assert!(
+        seen.iter().all(|(_, path)| path.contains("location%5Bdirectory%5D=%2Fproject")
+            || path.contains("location[directory]=/project")),
+        "{seen:?}"
+    );
+}
+
+// The whole TUI, with real roots in a temp dir.
+
+struct Models {
+    harness: Harness,
+    fixture: Arc<Server>,
+    state: PathBuf,
+    _home: opencode_util::temp::TempDir,
+}
+
+deref_harness!(Models);
+
+fn mount() -> Models {
+    let home = opencode_util::temp::tempdir().unwrap();
+    let paths = support::home_paths(home.path());
+    std::fs::create_dir_all(&paths.state).unwrap();
+    std::fs::write(paths.state.join("model.json"), preferences().to_string()).unwrap();
+    let state = paths.state.clone();
+    let fixture = Server::new();
+    let deps = Deps { roots: support::roots(paths, "test"), route: Route::Home, ..support::deps(fixture.clone()) };
+    let harness = support::mount(100, 34, deps);
+    let local = harness.tui.local.clone();
+    let loaded = harness.app.wait_until(WAIT, || {
+        local.ready() && local.catalog_ready() && local.integrations().is_some() && !local.agents().is_empty()
+    });
+    assert!(loaded, "the catalog never loaded: {:?}", fixture.seen());
+    // Keys go to the home prompt once it shows its agent and model.
+    let harness = Models { harness, fixture, state, _home: home };
+    harness.wait_for("Build · Claude Sonnet");
+    harness.app.wait_until(Duration::from_millis(100), || false);
+    harness
+}
+
+impl Models {
+    fn model_json(&self) -> Value {
+        serde_json::from_str(&std::fs::read_to_string(self.state.join("model.json")).unwrap()).unwrap()
+    }
+
+    /// Waits until `model.json` satisfies `check` (writes run on a worker thread).
+    fn wait_file(&self, check: impl Fn(&Value) -> bool) -> Value {
+        let mut last = Value::Null;
+        let found = self.app.wait_until(WAIT, || {
+            last = self.model_json();
+            check(&last)
+        });
+        assert!(found, "model.json never matched: {last}");
+        last
+    }
+}
+
+fn model_ref(provider: &str, model: &str) -> Value {
+    json!({ "providerID": provider, "modelID": model })
+}
+
+#[test]
+fn leader_m_picks_a_model_and_saves_it_as_recent() {
+    let h = mount();
+    let local = h.tui.local.clone();
+    // On home the build agent's configured model and variant apply.
+    assert_eq!(local.current(), Some(Model::new("anthropic", "claude-sonnet")));
+    assert_eq!(local.variant().as_deref(), Some("high"));
+    h.app.press("ctrl+x");
+    h.app.press("m");
+    h.wait_for("Search models");
+    h.app.type_text("mini");
+    h.wait_for("GPT-5 mini");
+    h.app.press("return");
+    let file = h.wait_file(|file| file["recent"][0] == model_ref("openai", "gpt-5-mini"));
+    assert_eq!(file["recent"][1], model_ref("anthropic", "claude-haiku"));
+    assert_eq!(file["favorite"], json!([model_ref("openai", "gpt-5")]));
+    assert!(!h.tui.dialogs.is_open(), "no variants, so the dialog closes");
+    assert_eq!(local.current(), Some(Model::new("openai", "gpt-5-mini")));
+    assert_no_writes(&h.fixture);
+}
+
+#[test]
+fn the_model_picker_shows_no_usage_with_the_limits_loaded() {
+    let kit = kit(90, 60);
+    model::show(&kit.local, None);
+    kit.wait_for("favorite ctrl+f");
+    let screen = kit.app.text();
+    for text in ["usage ctrl+u", "per 1M", "left"] {
+        assert!(!screen.contains(text), "{text:?} showed:\n{screen}");
+    }
+    kit.app.press("ctrl+u");
+    kit.app.wait_until(Duration::from_millis(100), || false);
+    assert!(kit.app.text().contains("Search models"), "ctrl+u left the picker:\n{}", kit.app.text());
+}
+
+#[test]
+fn a_search_with_spaces_ranks_by_its_words_across_title_and_provider() {
+    let h = mount();
+    h.app.press("ctrl+x");
+    h.app.press("m");
+    h.wait_for("Search models");
+    // fuzzysort's default score sums each word's best key: "Grok Code" (OpenCode) before "Claude Haiku".
+    h.app.type_text("o c");
+    let screen = h.wait_for("Grok Code");
+    let at = |name: &str| screen.find(name).unwrap_or_else(|| panic!("no {name}:\n{screen}"));
+    assert!(at("Grok Code") < at("Claude Haiku"), "{screen}");
+    assert!(at("Claude Haiku") < at("Claude Sonnet"), "{screen}");
+}
+
+#[test]
+fn the_prompt_shows_and_submits_the_model_picked_in_the_dialog() {
+    let h = mount();
+    h.app.press("ctrl+x");
+    h.app.press("m");
+    h.wait_for("Search models");
+    h.app.type_text("mini");
+    h.wait_for("GPT-5 mini");
+    h.app.press("return");
+    // The home prompt's metadata row follows the choice.
+    h.wait_for("GPT-5 mini");
+    h.app.type_text("hello");
+    h.app.press("return");
+    let created =
+        h.app.wait_until(WAIT, || h.fixture.writes.lock().unwrap().iter().any(|(path, _)| path == "/api/session"));
+    let writes = h.fixture.writes.lock().unwrap().clone();
+    assert!(created, "no session was created: {writes:?}");
+    let (_, body) = writes.iter().find(|(path, _)| path == "/api/session").unwrap();
+    assert_eq!(body["model"], json!({ "providerID": "openai", "id": "gpt-5-mini" }), "{body}");
+    assert_eq!(body["agent"], "build", "{body}");
+}
+
+#[test]
+fn ctrl_f_favorites_the_selected_model() {
+    let h = mount();
+    h.app.press("ctrl+x");
+    h.app.press("m");
+    h.wait_for("Search models");
+    h.app.type_text("haiku");
+    h.wait_for("Claude Haiku");
+    h.app.press("ctrl+f");
+    h.wait_file(|file| file["favorite"][0] == model_ref("anthropic", "claude-haiku"));
+    // The favorite shows in the list at once: the row's action turns into unfavorite.
+    h.wait_for("unfavorite");
+    assert_no_writes(&h.fixture);
+}
+
+#[test]
+fn cycle_commands_move_through_recents_favorites_agents_and_variants() {
+    let h = mount();
+    let local = h.tui.local.clone();
+    // F2: the first recent model, since the current one is not recent.
+    h.app.press("f2");
+    assert_eq!(local.current(), Some(Model::new("anthropic", "claude-haiku")));
+    // A favorite cycle moves to the favorite and records it as recent.
+    h.tui.keymap.dispatch("model.cycle_favorite", None);
+    assert_eq!(local.current(), Some(Model::new("openai", "gpt-5")));
+    h.wait_file(|file| file["recent"][0] == model_ref("openai", "gpt-5"));
+    // GPT-5 has no variants.
+    h.tui.keymap.dispatch("variant.list", None);
+    h.wait_for("No variants available");
+    // The agent cycle: build, then plan, whose model is the one chosen for a new session.
+    h.tui.keymap.dispatch("agent.cycle", None);
+    assert_eq!(local.agent().map(|agent| agent.id.0).as_deref(), Some("plan"));
+    h.tui.keymap.dispatch("agent.cycle.reverse", None);
+    assert_eq!(local.agent().map(|agent| agent.id.0).as_deref(), Some("build"));
+    assert_eq!(local.current(), Some(Model::new("openai", "gpt-5")));
+    assert_no_writes(&h.fixture);
+}
+
+#[test]
+fn ctrl_t_cycles_the_variant_and_saves_it() {
+    let h = mount();
+    let local = h.tui.local.clone();
+    assert_eq!(local.variants(), ["low", "high"]);
+    // `high` is the last variant, so the cycle goes back to the default.
+    h.app.press("ctrl+t");
+    assert_eq!(local.variant(), None);
+    h.wait_file(|file| file["variant"]["anthropic/claude-sonnet"] == "default");
+    h.app.press("ctrl+t");
+    assert_eq!(local.variant().as_deref(), Some("low"));
+    h.wait_file(|file| file["variant"]["anthropic/claude-sonnet"] == "low");
+}
+
+// Expected: a `model.json` reload that read the file before a pending write landed does not undo the change the write
+// carries. Actual: the stale reload replaced the preferences, so a `ctrl+t` made while an earlier write's reload was
+// in flight fell back to the default variant (`high`), the `ctrl_t_cycles_the_variant_and_saves_it` flake.
+#[test]
+fn a_reload_that_read_the_file_before_a_pending_write_keeps_the_change() {
+    let h = mount();
+    let local = h.tui.local.clone();
+    // Holding the lock keeps the variant's write from landing.
+    let file = h.state.join("model.json");
+    let lock = opencode_local::lock::acquire(
+        &h.state.join("locks"),
+        &file.to_string_lossy(),
+        &opencode_local::lock::Options::default(),
+    )
+    .unwrap();
+    h.app.press("ctrl+t");
+    assert_eq!(local.variant(), None);
+    // Another writer touches the file: the watcher reloads it, without the variant.
+    let before = h.model_json();
+    std::fs::write(&file, before.to_string()).unwrap();
+    h.app.wait_until(Duration::from_millis(500), || false);
+    assert_eq!(local.variant(), None, "the reload kept the pending change");
+    lock.release().unwrap();
+    h.wait_file(|file| file["variant"]["anthropic/claude-sonnet"] == "default");
+    assert!(h.app.wait_until(WAIT, || local.variant().is_none()));
+    // Once the write landed, a reload applies again.
+    let mut changed = h.model_json();
+    changed["variant"]["anthropic/claude-sonnet"] = json!("low");
+    std::fs::write(&file, changed.to_string()).unwrap();
+    assert!(h.app.wait_until(WAIT, || local.variant().as_deref() == Some("low")));
+}
+
+#[test]
+fn leader_a_switches_the_agent() {
+    let h = mount();
+    h.app.press("ctrl+x");
+    h.app.press("a");
+    let screen = h.wait_for("Search agents");
+    assert!(!screen.contains("general"), "subagents are hidden:\n{screen}");
+    h.app.press("down");
+    h.app.press("return");
+    assert_eq!(h.tui.local.agent().map(|agent| agent.id.0).as_deref(), Some("plan"));
+    assert!(!h.tui.dialogs.is_open());
+}
+
+#[test]
+fn usage_opens_from_its_command_and_a_row_opens_its_limits() {
+    let h = mount();
+    h.tui.keymap.dispatch("usage.show", None);
+    h.wait_for("$0.50 left");
+    h.app.press("return");
+    let screen = h.wait_for("Usage › Claude Sonnet");
+    assert!(screen.contains("$9.50 used of $10"), "{screen}");
+    assert!(screen.contains("Only you"), "{screen}");
+    assert_no_writes(&h.fixture);
+}
+
+#[test]
+fn model_json_is_shared_with_the_typescript_client() {
+    let Some(oracle) = oracle() else { return };
+    let h = mount();
+    h.app.press("ctrl+x");
+    h.app.press("m");
+    h.wait_for("Search models");
+    h.app.type_text("haiku");
+    h.wait_for("Claude Haiku");
+    h.app.press("ctrl+f");
+    h.wait_file(|file| file["favorite"][0] == model_ref("anthropic", "claude-haiku"));
+    h.app.press("escape");
+    h.app.press("ctrl+t");
+    h.wait_file(|file| file["variant"]["anthropic/claude-sonnet"] == "default");
+    // TS reads what Rust wrote.
+    let read = run(&oracle, &["load", h.state.to_str().unwrap()]);
+    assert_eq!(
+        read,
+        json!({
+            "recent": [model_ref("anthropic", "claude-haiku")],
+            "favorite": [model_ref("anthropic", "claude-haiku"), model_ref("openai", "gpt-5")],
+            "variant": { "anthropic/claude-sonnet": "default" },
+        })
+    );
+    // TS writes under the same lock, and the running Rust TUI picks it up through its watcher.
+    run(&oracle, &["recent", h.state.to_str().unwrap(), "openai", "gpt-5-mini"]);
+    let local = h.tui.local.clone();
+    let reloaded = h.app.wait_until(WAIT, || local.recent().first() == Some(&Model::new("openai", "gpt-5-mini")));
+    assert!(reloaded, "the watcher never reloaded: {:?}", local.recent());
+    assert_eq!(local.favorite().len(), 2);
+}
+
+#[test]
+fn go_upsell_is_offered_once_a_day_and_remembers_dont_show() {
+    let h = mount();
+    let local = h.tui.local.clone();
+    let storage = Storage::new(&h.state, "test").unwrap();
+    let offer = || Offer { reset: None, can_continue: Rc::new(|| true), on_subscribe: Rc::new(|| {}) };
+    let now = 1_800_000_000_000.0;
+    go_upsell::offer(&local, offer(), now);
+    h.wait_for("Free limit reached");
+    let stored = storage.load("go-upsell", &json!({})).unwrap();
+    assert_eq!(stored, json!({ "lastSeenAt": now as i64 }));
+    // "dismiss" closes it; within the day it is not offered again.
+    h.app.press("left");
+    h.app.press("return");
+    assert!(!h.tui.dialogs.is_open());
+    go_upsell::offer(&local, offer(), now + 1000.0);
+    h.app.wait_until(Duration::from_millis(200), || false);
+    assert!(!h.tui.dialogs.is_open());
+    // A day later it is; "don't show again" is saved for every client.
+    go_upsell::offer(&local, offer(), now + 86_400_000.0);
+    h.wait_for("Free limit reached");
+    h.app.press("left");
+    h.app.press("left");
+    h.app.press("return");
+    let saved = h.app.wait_until(WAIT, || storage.load("go-upsell", &json!({})).unwrap()["dontShow"] == true);
+    assert!(saved, "{}", storage.load("go-upsell", &json!({})).unwrap());
+    assert_no_writes(&h.fixture);
+}
+
+// Expected (R2-1): the closed upsell is freed with every widget it showed.
+#[test]
+fn a_closed_go_upsell_is_freed() {
+    let h = mount();
+    let offer = Offer { reset: None, can_continue: Rc::new(|| true), on_subscribe: Rc::new(|| {}) };
+    go_upsell::offer(&h.tui.local, offer, 1_800_000_000_000.0);
+    h.wait_for("Free limit reached");
+    let marker = Rc::new(());
+    // The host, its backdrop and its panel stay for the next dialog.
+    assert!(support::mark(&h.app, h.tui.dialogs.host(), 2, &marker) > 0);
+    let (x, y) = h.find("dismiss");
+    h.app.hover(x, y);
+    h.app.click(x, y);
+    assert!(!h.tui.dialogs.is_open());
+    h.app.render();
+    assert_eq!(Rc::strong_count(&marker), 1);
+}
+
+fn assert_no_writes(fixture: &Server) {
+    let seen = fixture.seen();
+    assert!(seen.iter().all(|(method, _)| method == "GET"), "a dialog sent a mutating request: {seen:?}");
+    assert!(seen.iter().all(|(_, path)| !path.contains("session/stats")));
+}
+
+// The TypeScript side of P-FILE, when bun and the workspace's node_modules are there.
+fn oracle() -> Option<PathBuf> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let script = root.join("parity/oracle/E.16-model-json.ts");
+    let present = root.join("../../node_modules").is_dir() && Command::new("bun").arg("--version").output().is_ok();
+    if !present {
+        assert!(
+            std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
+            "OPENCODE_RS_REQUIRE_TS is set, but skipped: needs bun and the workspace node_modules"
+        );
+        eprintln!("skipped: needs bun and the workspace node_modules");
+        return None;
+    }
+    Some(script)
+}
+
+fn run(script: &Path, args: &[&str]) -> Value {
+    let output = Command::new("bun")
+        .arg(script)
+        .args(args)
+        .env("BUN_RUNTIME_TRANSPILER_CACHE_PATH", std::env::temp_dir().join("opencode-rs-e16-bun-cache"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    serde_json::from_str(String::from_utf8(output.stdout).unwrap().lines().last().unwrap()).unwrap()
+}

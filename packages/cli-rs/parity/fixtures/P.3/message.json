@@ -1,0 +1,3 @@
+{
+  "message": "Two diagrams.\n\n```mermaid\nflowchart LR\n  A[Idea] --> B{Ready?}\n  B -->|yes| C[(Store)]\n  B -->|no| A\n```\n\n```mermaid\nsequenceDiagram\n  Client->>Server: request\n  Server-->>Client: response\n```\n\nAfter the diagrams."
+}

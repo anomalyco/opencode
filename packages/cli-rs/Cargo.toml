@@ -1,0 +1,134 @@
+[workspace]
+members = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.dependencies]
+opencode-acp = { path = "crates/acp" }
+opencode-api = { path = "crates/api" }
+opencode-api-types = { path = "crates/api-types" }
+opencode-drive = { path = "crates/drive" }
+opencode-latex = { path = "crates/latex" }
+opencode-local = { path = "crates/local" }
+opencode-mermaid = { path = "crates/mermaid" }
+opencode-mini = { path = "crates/mini" }
+opencode-parity = { path = "crates/parity" }
+opencode-plugin = { path = "crates/plugin" }
+opencode-plugin-abi = { path = "crates/plugin-abi" }
+opencode-service = { path = "crates/service" }
+opencode-store = { path = "crates/store" }
+opencode-tui = { path = "crates/tui" }
+opencode-ui = { path = "crates/ui" }
+opencode-util = { path = "crates/util" }
+
+# OpenTUI's Rust crates (`packages/rust` of anomalyco/opentui), pinned by commit. The checkout has no native library;
+# see README.md.
+opentui = { git = "https://github.com/anomalyco/opentui", rev = "32e9e414e6fdcf2a8997e4b88810a6749bc9fbc4", features = ["static", "tokio", "tree-sitter"] }
+
+# Expected third-party crates, declared once so steps rarely edit manifests. A crate takes one with
+# `name.workspace = true` and adds features with `features = [...]`.
+base64 = "0.23"
+bytes = "1"
+futures-util = { version = "0.3", default-features = false, features = ["std", "sink"] }
+# The IDNA stub: `url` rejects non-ASCII hosts instead of pulling ICU4X (deviation A10-ascii-hosts). Pinned so a
+# `cargo update` cannot bring 1.2 back.
+idna_adapter = "=1.0.0"
+indexmap = { version = "2", features = ["serde"] }
+libc = "0.2"
+log = { version = "0.4", features = ["std"] }
+memchr = "2"
+notify = "8"
+percent-encoding = "2"
+rand = "0.10"
+regex = "1"
+ring = "0.17"
+# TLS is rustls on ring with the platform's roots, configured once in `opencode_api::transport`, for HTTP/1.1 only, as
+# Bun's fetch speaks.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json", "stream"] }
+rustix = { version = "1", features = ["fs", "process"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = "0.7"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
+sha1 = "0.11"
+thiserror = "2"
+tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "sync", "time", "io-util", "process", "fs", "net", "signal"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
+tokio-util = "0.7"
+unicode-width = "0.2"
+url = "2"
+# Win32 calls, for opencode-util's `win` module only (DW1); each use adds its features there.
+windows-sys = "0.61"
+
+# Tree-sitter grammars for opencode-ui's `grammars` feature (crates/ui/src/grammars), pinned to
+# the WASM releases packages/tui/src/parsers-config.ts loads where crates.io has them. The five opentui bundles take
+# its versions.
+tree-sitter-javascript = "0.25"
+tree-sitter-md = "0.5"
+tree-sitter-rust = "0.24"
+tree-sitter-typescript = "0.23"
+tree-sitter-zig = "1.1"
+tree-sitter-bash = "=0.25.0"
+tree-sitter-css = "=0.25.0"
+tree-sitter-diff = "=0.1.0"
+tree-sitter-go = "=0.25.0"
+tree-sitter-html = "=0.23.2"
+tree-sitter-json = "=0.24.8"
+tree-sitter-python = "=0.23.6"
+tree-sitter-yaml = "=0.7.2"
+tree-sitter-agda = "=1.3.3"
+tree-sitter-c = "=0.24.1"
+tree-sitter-c-sharp = "=0.23.1"
+tree-sitter-clojure-orchard = "0.2.9"
+tree-sitter-cpp = "=0.23.4"
+tree-sitter-elixir = "=0.3.5"
+tree-sitter-haskell = "=0.23.1"
+tree-sitter-hcl = { git = "https://github.com/tree-sitter-grammars/tree-sitter-hcl", tag = "v1.2.0" }
+tree-sitter-java = "=0.23.5"
+tree-sitter-julia = "=0.23.1"
+tree-sitter-lua = "=0.5.0"
+tree-sitter-make = "=1.1.1"
+tree-sitter-nix = "0.3.0"
+tree-sitter-php = "=0.24.2"
+tree-sitter-r = "=1.2.0"
+tree-sitter-ruby = "=0.23.1"
+tree-sitter-scala = "=0.24.0"
+tree-sitter-toml-ng = "=0.7.0"
+tree-sitter-vim = "0.4.0"
+tree-sitter-vue-next = "0.1.0"
+tree-sitter-xml = "=0.7.0"
+
+# Debug info stays in the object files instead of passing through the linker, and dependencies keep only file and line
+# tables. Backtraces still show file and line, and a test binary links in about half the time and memory. `test`
+# inherits this.
+[profile.dev]
+split-debuginfo = "unpacked"
+
+[profile.dev.package."*"]
+debug = "line-tables-only"
+
+# The idna_adapter stub debug-asserts that an ASCII host character is lowercase, and `idna` instantiates it.
+# tower-http resolves a redirect's `Location` with `Url::join` before reqwest consults its redirect policy, so
+# with `Policy::none()` a `Location` such as `https://B%C3%BCcher.example` still reaches the stub
+# (A10-ascii-hosts). Every other parse goes through `js::parse_url`/`join_url` first.
+[profile.dev.package.idna]
+debug-assertions = false
+
+[profile.dev.package.idna_adapter]
+debug-assertions = false
+
+[profile.release]
+debug = "line-tables-only"
+
+[profile.dist]
+inherits = "release"
+lto = "fat"
+codegen-units = 1

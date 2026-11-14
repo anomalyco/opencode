@@ -1,0 +1,153 @@
+//! D.1: the delegated commands run `OPENCODE_TS_BIN` with the same arguments, stdio, and exit code. A fake
+//! TypeScript binary records what it got, so nothing real is installed, removed, or served.
+#![cfg(unix)]
+
+use std::io::Write;
+use std::path::Path;
+use std::process::{Command, Output, Stdio};
+
+use opencode_service::ts_command::write_script;
+
+const FAKE: &str = r#"#!/bin/sh
+printf '%s\n' "$@" > "$DELEGATE_DIR/args"
+echo "$$" > "$DELEGATE_DIR/pid"
+echo "print-logs=$OPENCODE_PRINT_LOGS" > "$DELEGATE_DIR/env"
+cat
+echo "to stderr" >&2
+exit "${DELEGATE_EXIT:-0}"
+"#;
+
+struct Fake {
+    dir: opencode_util::temp::TempDir,
+}
+
+impl Fake {
+    fn new() -> Self {
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let bin = dir.path().join("opencode");
+        write_script(&bin, FAKE);
+        Self { dir }
+    }
+
+    fn run(&self, args: &[&str], stdin: &str, exit: u8) -> (Output, u32) {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_opencode-native"))
+            .args(args)
+            .env("OPENCODE_TS_BIN", self.dir.path().join("opencode"))
+            .env("XDG_DATA_HOME", self.dir.path())
+            .env("DELEGATE_DIR", self.dir.path())
+            .env("DELEGATE_EXIT", exit.to_string())
+            .env_remove("OPENCODE_PRINT_LOGS")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        child.stdin.take().unwrap().write_all(stdin.as_bytes()).unwrap();
+        (child.wait_with_output().unwrap(), pid)
+    }
+
+    fn read(&self, name: &str) -> String {
+        std::fs::read_to_string(self.dir.path().join(name)).unwrap_or_default()
+    }
+}
+
+#[test]
+fn every_delegated_command_gets_the_arguments_as_typed() {
+    let fake = Fake::new();
+    let cases: &[&[&str]] = &[
+        &["upgrade", "v1.2.3", "-m", "npm"],
+        &["update", "--method=brew"],
+        &["uninstall", "--dry-run", "-f"],
+        &["serve", "--port", "4096", "--cors", "a", "--cors", "b", "--service"],
+        &["--log-level", "debug", "plugin", "list", "--builtin"],
+        &["plugin", "add", "@scope/pkg@1"],
+        &["plugin", "check", "pkg", "--server", "http://127.0.0.1:1"],
+        &["plugin", "update"],
+        &["plugin", "remove", "pkg"],
+    ];
+    for args in cases {
+        let (output, _) = fake.run(args, "", 0);
+        assert!(output.status.success(), "{args:?}: {output:?}");
+        let recorded = fake.read("args");
+        assert_eq!(recorded.lines().collect::<Vec<_>>(), *args);
+    }
+}
+
+#[test]
+fn the_child_keeps_the_process_stdio_and_exit_code() {
+    let fake = Fake::new();
+    let (output, pid) = fake.run(&["--print-logs", "plugin", "list"], "piped input\n", 7);
+    assert_eq!(output.status.code(), Some(7));
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "piped input\n");
+    // `--print-logs` prints this process's "cli starting" line before the TypeScript binary takes over.
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("message=\"cli starting\"") && stderr.ends_with("\nto stderr\n"), "{stderr}");
+    // On Unix the TypeScript binary replaces the process, so `serve --service` registers this pid.
+    assert_eq!(fake.read("pid").trim(), pid.to_string());
+    assert_eq!(fake.read("env"), "print-logs=1\n");
+}
+
+#[test]
+fn usage_errors_and_bare_plugin_never_start_the_binary() {
+    let fake = Fake::new();
+    let (output, _) = fake.run(&["upgrade", "--method", "apt"], "", 0);
+    assert_eq!(output.status.code(), Some(1));
+    let (output, _) = fake.run(&["plugin"], "", 0);
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Manage plugins"));
+    assert!(!Path::new(&fake.dir.path().join("args")).exists());
+}
+
+#[test]
+fn a_missing_binary_says_how_to_fix_it() {
+    let data = opencode_util::temp::tempdir().unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_opencode-native"))
+        .args(["uninstall", "--dry-run"])
+        .env("OPENCODE_TS_BIN", "/nonexistent/opencode")
+        .env("XDG_DATA_HOME", data.path())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Failed to start /nonexistent/opencode: No such file or directory")
+            && stderr.contains("set OPENCODE_TS_BIN"),
+        "{stderr}"
+    );
+}
+
+// Ctrl+C reaches the whole foreground group. The CLI waits for the TS command to finish its own teardown
+// before it exits 130, so nothing it prints lands after the shell's prompt.
+#[test]
+fn an_interrupt_waits_for_the_remote_access_command() {
+    use std::os::unix::process::CommandExt;
+    let dir = opencode_util::temp::tempdir().unwrap();
+    let bin = dir.path().join("opencode");
+    write_script(
+        &bin,
+        "#!/bin/sh\ntrap 'sleep 0.5; echo done > \"$DELEGATE_DIR/teardown\"; exit 130' INT\necho > \"$DELEGATE_DIR/started\"\nwhile :; do sleep 0.05; done\n",
+    );
+    let mut child = Command::new(env!("CARGO_BIN_EXE_opencode-native"))
+        .args(["service", "set", "remote", "true"])
+        .env("OPENCODE_TS_BIN", &bin)
+        .env("HOME", dir.path())
+        .env("XDG_CONFIG_HOME", dir.path().join("config"))
+        .env("XDG_DATA_HOME", dir.path().join("data"))
+        .env("XDG_STATE_HOME", dir.path().join("state"))
+        .env("DELEGATE_DIR", dir.path())
+        .stdin(Stdio::null())
+        .process_group(0)
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !dir.path().join("started").exists() {
+        assert!(std::time::Instant::now() < deadline, "the fake never started");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let group = rustix::process::Pid::from_raw(child.id() as i32).unwrap();
+    rustix::process::kill_process_group(group, rustix::process::Signal::INT).unwrap();
+    let status = child.wait().unwrap();
+    assert_eq!(status.code(), Some(130));
+    assert_eq!(std::fs::read_to_string(dir.path().join("teardown")).unwrap_or_default(), "done\n");
+}

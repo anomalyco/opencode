@@ -1,0 +1,31 @@
+[package]
+name = "opencode-local"
+description = "Client-local files shared with the TypeScript client: paths, locks, config, and state."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+base64.workspace = true
+indexmap.workspace = true
+log.workspace = true
+opencode-api-types.workspace = true
+opencode-util.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha1.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["system"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { workspace = true, features = ["event"] }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+notify.workspace = true

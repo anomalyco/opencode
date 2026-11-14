@@ -181,6 +181,7 @@
     "**/.sst",
     "**/*.d.ts",
     "**/sdk.gen.ts",
+    "packages/cli-rs/**",
     "packages/plugins/figma/skills/**",
     ".agent/**",
     ".agents/**",

@@ -1,0 +1,32 @@
+// The working directory dialog (DLG42, T23): a click on the prompt footer's location opens "Working directory"
+// with "Copy path", "Open folder", and "Workspaces" (`ui/working-directory-actions.tsx`). Escape closes it. No
+// option is chosen: copying and opening reach the system, which the Rust tests cover with a sink.
+import { defineApp } from "../../lib/app"
+
+// The home prompt behind the dialog: its placeholder example is random.
+const placeholder = {
+  x: 16,
+  y: 16,
+  width: 84,
+  height: 1,
+  reason: "the placeholder example: random in TS and Rust",
+}
+
+export default defineApp({
+  config: { experimental: { "new-designs": true } },
+  steps: [
+    {
+      checkpoint: "home",
+      until: "/tmp/opencode/packages/tui:main",
+      masks: [placeholder],
+    },
+    { click: [16, 20] },
+    {
+      checkpoint: "dialog",
+      until: "Working directory",
+      masks: [placeholder],
+    },
+    { keys: ["escape"] },
+    { checkpoint: "closed", masks: [placeholder] },
+  ],
+})

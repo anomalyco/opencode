@@ -1,0 +1,31 @@
+[package]
+name = "opencode-service"
+description = "Finding, probing, and starting the OpenCode server."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+opencode-api.workspace = true
+opencode-local.workspace = true
+base64.workspace = true
+futures-util.workspace = true
+log.workspace = true
+opencode-util.workspace = true
+rand.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["time", "process", "io-util", "rt", "sync"] }
+url.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+
+[dev-dependencies]
+bytes.workspace = true
+reqwest.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }

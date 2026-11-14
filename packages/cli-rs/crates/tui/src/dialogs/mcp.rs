@@ -1,0 +1,352 @@
+//! MCP servers dialog (E.17b, row DLG11): `packages/tui/src/component/dialog-mcp.tsx`.
+//!
+//! "MCP servers": the servers of the current location by name, each with its status as the footer.
+//! Space (`dialog.mcp.toggle`) connects, disconnects, or retries the selected server; the
+//! `mcp.status.changed` event refreshes the list through the store. Enter shows a failed server's
+//! error. A server that needs sign-in through an integration goes to the integration flow (E.17a).
+
+use opencode_api::generated::{
+    ExperimentalMcpConnectInput, ExperimentalMcpDisconnectInput, LocationQueryInput, McpServer, McpServerStatus,
+};
+use opencode_store::{Catalog, Location};
+use opencode_ui::select::{FooterHint, Group, Select, SelectAction};
+use std::collections::HashSet;
+
+use super::error_details;
+use super::session_list::dialog_theme;
+
+use crate::prelude::*;
+
+/// Registers `mcp.list` (`/mcps`) and its binding as `app.tsx:158,967-975` do. With a server's name as its input
+/// (the sidebar's MCP section), it opens on that server, and on its error when it failed.
+pub fn install(tui: &Rc<Tui>) {
+    let command = TuiCommand::new(
+        "mcp.list",
+        bind!(tui, |tui, input: Option<&str>, _| show_server(&tui, input.map(str::to_owned), input.is_some())),
+    )
+    .bind(Bind::Off)
+    .title("MCP servers")
+    .group("Agent")
+    .palette()
+    .slash("mcps");
+    tui.keymap.install(
+        "mcp",
+        [
+            KeymapLayer::global(vec![command]),
+            // `appGlobalBindingCommands`.
+            KeymapLayer::global(Vec::new()).bindings(["mcp.list"]),
+        ],
+    );
+}
+
+/// Opens the dialog (`mcp.list`).
+pub fn show(tui: &Tui) {
+    show_server(tui, None, false);
+}
+
+/// Opens the dialog on `initial`; with `details`, a failed `initial` opens on its error (the
+/// sidebar's MCP section).
+pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
+    let mcp = Rc::new(Mcp {
+        tui: tui.weak(),
+        // `location.ref ?? data.location.default()`.
+        location: crate::features::location::active(tui),
+        loading: RefCell::new(HashSet::new()),
+        select: RefCell::new(None),
+    });
+    if details
+        && let Some(server) =
+            initial.as_ref().and_then(|name| mcp.server(name)).filter(|server| kind(&server.status) == "failed")
+    {
+        mcp.detail(server);
+        return;
+    }
+    let built = mcp.clone();
+    tui.dialogs.replace(
+        move |cx| {
+            let mcp = built.clone();
+            let weak = Rc::downgrade(&mcp);
+            let mut props = SelectProps::new("MCP servers", mcp.options(&cx.theme));
+            props.search_in_title = true;
+            props.title_placeholder = Some("Search MCP servers".to_owned());
+            props.preserve_selection = true;
+            props.on_select =
+                Some(Rc::new(bind!(weak, |mcp, option: &SelectOption<String>| mcp.select(&option.value))));
+            props.actions = vec![SelectAction {
+                title: Rc::new(bind!(weak, |mcp, option: Option<&SelectOption<String>>| {
+                    toggle_title(option.and_then(|option| mcp.server(&option.value)).as_ref()).to_owned()
+                }, else toggle_title(None).to_owned())),
+                ..SelectAction::new(
+                    "dialog.mcp.toggle",
+                    "connect",
+                    bind!(weak, |mcp, option: &SelectOption<String>| mcp.toggle(&option.value)),
+                )
+            }];
+            props.dynamic_hints = Some(Rc::new(bind!(weak, |mcp| {
+                if !mcp.focused().is_some_and(|server| focused_error(&server).is_some()) {
+                    return Vec::new();
+                }
+                vec![FooterHint { title: "view error".into(), label: "enter".into(), group: Some(Group::Primary) }]
+            })));
+            let (view, handle) = select::select(cx, props);
+            if let Some(name) = initial.as_ref().filter(|_| !cx.rebuilt()) {
+                handle.move_to(name);
+            }
+            *mcp.select.borrow_mut() = Some(handle);
+            // The footer reads the selection through the handle, which exists only now.
+            mcp.refresh();
+            if let Some(tui) = mcp.tui.upgrade() {
+                // Refreshes the list after each store flush that touched the location.
+                cx.on_close(tui.follow(&mcp, |mcp, _, changes| {
+                    if changes.location(&mcp.location) {
+                        mcp.refresh();
+                    }
+                }));
+            }
+            // The dialog owns the list; handlers hold weak references.
+            cx.on_close(Disposer::new(move || {
+                mcp.select.borrow_mut().take();
+            }));
+            view
+        },
+        None,
+        DialogOptions::default(),
+    );
+    mcp.load();
+}
+
+struct Mcp {
+    tui: Weak<Tui>,
+    location: Location,
+    /// Servers with a connect or disconnect in flight.
+    loading: RefCell<HashSet<String>>,
+    select: RefCell<Option<Select<String>>>,
+}
+
+impl Mcp {
+    /// Reads the list when the location has none yet.
+    fn load(self: &Rc<Self>) {
+        let Some(tui) = self.tui.upgrade() else { return };
+        let loaded =
+            tui.data.read(|state| state.location(Some(&self.location)).is_some_and(|data| data.mcp_server.is_some()));
+        if !loaded {
+            let weak = Rc::downgrade(self);
+            tui.app.spawn(tui.data.catalog_sync(Catalog::McpServer, Some(&self.location)), move |_, result| {
+                if let Err(error) = result {
+                    log::warn!("mcp list: {error}");
+                }
+                if let Some(mcp) = weak.upgrade() {
+                    mcp.refresh();
+                }
+            });
+        }
+    }
+
+    /// The location's servers by name.
+    fn servers(&self) -> Vec<McpServer> {
+        let Some(tui) = self.tui.upgrade() else { return Vec::new() };
+        let mut servers = tui.data.read(|state| {
+            state.location(Some(&self.location)).and_then(|data| data.mcp_server.clone()).unwrap_or_default()
+        });
+        servers.sort_by(|a, b| a.name.cmp(&b.name));
+        servers
+    }
+
+    fn server(&self, name: &str) -> Option<McpServer> {
+        self.servers().into_iter().find(|server| server.name == name)
+    }
+
+    /// The selected server (TS `focusedServer`).
+    fn focused(&self) -> Option<McpServer> {
+        let selected = self.select.borrow().as_ref()?.selected()?;
+        self.server(&selected.value)
+    }
+
+    fn options(&self, theme: &Theme) -> Vec<SelectOption<String>> {
+        let loading = self.loading.borrow();
+        self.servers()
+            .into_iter()
+            .map(|server| {
+                let status = kind(&server.status);
+                let pending = loading.contains(&server.name) || status == "pending";
+                let mut option = SelectOption::new(server.name.clone(), server.name);
+                // TS wraps "Connected ✓" in a bold span, which the row's `<text>` draws plain.
+                option.footer = Some(status_label(status, pending).to_owned());
+                option.footer_color = Some(if pending { theme.text.muted } else { status_color(theme, status) });
+                option
+            })
+            .collect()
+    }
+
+    fn refresh(&self) {
+        let Some(tui) = self.tui.upgrade() else { return };
+        let select = self.select.borrow().clone();
+        if let Some(select) = select {
+            select.set_options(self.options(&dialog_theme(&tui)));
+        }
+    }
+
+    /// Enter: the integration flow for a sign-in, else the error of a failed server.
+    fn select(self: &Rc<Self>, name: &str) {
+        let Some(server) = self.server(name) else { return };
+        if kind(&server.status) == "needs_auth"
+            && let Some(integration) = server.integration_id.clone()
+        {
+            // After the sign-in, back to the list on this server (#62245).
+            let name = name.to_owned();
+            let back: super::integration::OnConnected =
+                Rc::new(bind!(self.tui, |tui, _, _| show_server(&tui, Some(name.clone()), false)));
+            if let Some(tui) = self.tui.upgrade() {
+                tui.app.defer(bind!(tui, |tui, _| super::integration::show_auto_connect(
+                    &tui,
+                    &integration,
+                    Some(back.clone())
+                )));
+            }
+            return;
+        }
+        if status_error(&server.status).is_none() {
+            return;
+        }
+        self.detail(server);
+    }
+
+    /// Space: connect or disconnect. The `mcp.status.changed` event refreshes the list.
+    fn toggle(self: &Rc<Self>, name: &str) {
+        if self.loading.borrow().contains(name) {
+            return;
+        }
+        let Some(server) = self.server(name) else { return };
+        let status = kind(&server.status);
+        if status == "pending" {
+            return;
+        }
+        if status == "needs_auth" && server.integration_id.is_some() {
+            self.select(name);
+            return;
+        }
+        let Some(tui) = self.tui.upgrade() else { return };
+        self.loading.borrow_mut().insert(name.to_owned());
+        self.refresh();
+        let client = tui.data.client().clone();
+        let location = Some(LocationQueryInput { directory: Some(self.location.directory.clone()) });
+        let server = name.to_owned();
+        let connected = status == "connected";
+        let weak = Rc::downgrade(self);
+        let toasts = tui.weak();
+        tui.app.spawn(
+            async move {
+                if connected {
+                    let input = ExperimentalMcpDisconnectInput { server, location };
+                    return client.experimental_mcp_disconnect(&input).await;
+                }
+                let input = ExperimentalMcpConnectInput { server, location };
+                client.experimental_mcp_connect(&input).await
+            },
+            {
+                let name = name.to_owned();
+                move |_, result| {
+                    if let Err(error) = result
+                        && let Some(tui) = toasts.upgrade()
+                    {
+                        tui.toasts.error(error.to_string());
+                    }
+                    if let Some(mcp) = weak.upgrade() {
+                        mcp.loading.borrow_mut().remove(&name);
+                        mcp.refresh();
+                    }
+                }
+            },
+        );
+    }
+
+    /// The error view in place of the list; Escape goes back to the list on this server.
+    fn detail(self: &Rc<Self>, server: McpServer) {
+        let Some(tui) = self.tui.upgrade() else { return };
+        let mut context = format!("Status: {}\nConfiguration: mcp.servers.{}", kind(&server.status), server.name);
+        if let Some(integration) = &server.integration_id {
+            context.push_str(&format!("\nIntegration: {}", integration.0));
+        }
+        let props = error_details::Props {
+            title: format!("MCP server: {}", server.name),
+            source: None,
+            error: status_error(&server.status).unwrap_or("Unknown MCP connection error").to_owned(),
+            context: Some(context),
+            diagnostic_ref: None,
+            on_back: Rc::new({
+                let name = server.name.clone();
+                bind!(tui, |tui| {
+                    let name = name.clone();
+                    tui.app.defer(bind!(tui, |tui, _| show_server(&tui, Some(name), false)));
+                })
+            }),
+        };
+        tui.app.defer(bind!(tui, |tui, _| tui.dialogs.replace(
+            bind!(tui, |tui, cx| error_details::view(&tui, cx, props.clone()), else View::new(&cx.app)),
+            None,
+            DialogOptions::default()
+        )));
+    }
+}
+
+/// The status name (`status.status`); an unknown member keeps the name it arrived with.
+fn kind(status: &McpServerStatus) -> &str {
+    match status {
+        McpServerStatus::Connected(_) => "connected",
+        McpServerStatus::Pending(_) => "pending",
+        McpServerStatus::Disabled(_) => "disabled",
+        McpServerStatus::Failed(_) => "failed",
+        McpServerStatus::NeedsAuth(_) => "needs_auth",
+        McpServerStatus::Unknown(value) => value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default(),
+    }
+}
+
+/// `statusError`.
+fn status_error(status: &McpServerStatus) -> Option<&str> {
+    match status {
+        McpServerStatus::Failed(failed) => Some(&failed.error),
+        McpServerStatus::NeedsAuth(auth) => Some(&auth.error),
+        _ => None,
+    }
+}
+
+/// `focusedError`: a sign-in through an integration is not shown as an error.
+fn focused_error(server: &McpServer) -> Option<&str> {
+    if kind(&server.status) == "needs_auth" && server.integration_id.is_some() {
+        return None;
+    }
+    status_error(&server.status)
+}
+
+/// `Status`.
+fn status_label(status: &str, pending: bool) -> &'static str {
+    if pending {
+        return "Connecting …";
+    }
+    match status {
+        "connected" => "Connected ✓",
+        "failed" => "Failed !",
+        "needs_auth" => "Sign in required →",
+        _ => "Disabled ○",
+    }
+}
+
+/// `statusColor`.
+fn status_color(theme: &Theme, status: &str) -> Color {
+    match status {
+        "connected" => theme.text.feedback.success.base,
+        "failed" => theme.text.feedback.error.base,
+        "needs_auth" => theme.text.feedback.warning.base,
+        _ => theme.text.muted,
+    }
+}
+
+/// `toggleTitle`.
+fn toggle_title(server: Option<&McpServer>) -> &'static str {
+    match server.map(|server| kind(&server.status)) {
+        Some("connected") => "disconnect",
+        Some("failed") => "retry",
+        Some("needs_auth") => "sign in",
+        _ => "connect",
+    }
+}

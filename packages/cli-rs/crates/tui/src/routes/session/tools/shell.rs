@@ -1,0 +1,357 @@
+//! The shell tool (E.7a): `Shell` and `ShellDisplay` (`routes/session/index.tsx:2980-3154`), with
+//! `collapseShellOutput`, which `messages::shell` ports for shell messages.
+//!
+//! A V2 shell names its shell in the metadata, and its output comes from `GET /api/shell/{id}/output`:
+//! every second while the store lists the shell as running, once more when it exits, and on expand.
+
+use opencode_api::generated::ShellID;
+use opencode_ui::motion::Spinner;
+use opencode_ui::prompt_input::paste::strip_ansi;
+
+use super::dispatch::{Block, BlockTool, Header, Props, Status, content_width, format_path, paint_badge, status_badge};
+use crate::prelude::*;
+use crate::routes::session::messages::list::Context;
+use crate::routes::session::messages::shell::{Output, collapse_shell_output};
+
+/// Lines of command and output a collapsed block shows.
+const MAX_LINES: usize = 10;
+
+pub struct Shell(Rc<Inner>);
+
+struct Inner {
+    tui: Weak<Tui>,
+    app: App,
+    theme: Live,
+    block: BlockTool,
+    /// Restyles the body in place, so a running spinner keeps its frame.
+    paints: Paints,
+    body: View,
+    call: RefCell<Option<Call>>,
+    expanded: Cell<bool>,
+    output: RefCell<Output>,
+    was_running: Cell<bool>,
+    /// The store lists the shell as running; read where the store is not held.
+    listed: Cell<bool>,
+    interval: Cell<Option<TimerId>>,
+    painted: RefCell<Option<Paint>>,
+}
+
+/// The call's inputs, as `ShellDisplay` gets them.
+#[derive(Clone, PartialEq)]
+struct Call {
+    shell: Option<String>,
+    command: Option<String>,
+    workdir: String,
+    status: Status,
+    /// Completed, but the command still runs in the background.
+    background: bool,
+    /// The output of a call without a shell ID.
+    output: Option<String>,
+    permission: bool,
+    error: Option<String>,
+    width: i64,
+    /// Where the shell runs, for the output requests.
+    directory: Option<String>,
+}
+
+/// What the block shows, to skip unchanged repaints.
+#[derive(PartialEq)]
+struct Paint {
+    command: bool,
+    running: bool,
+    streaming: bool,
+    expanded: bool,
+    input: String,
+    output: String,
+    background: bool,
+    /// The spinner and command take the warning color.
+    permission: bool,
+}
+
+impl Shell {
+    pub fn new(cx: &Context<'_>) -> Self {
+        let block = BlockTool::new(cx);
+        let body = View::new(cx.app).column().gap(1);
+        block.children().add(&body);
+        block.show_children(true);
+        let inner = Rc::new(Inner {
+            tui: cx.tui.weak(),
+            app: cx.app.clone(),
+            theme: cx.tui.live_theme(),
+            block,
+            paints: Paints::default(),
+            body,
+            call: RefCell::default(),
+            expanded: Cell::new(false),
+            output: RefCell::default(),
+            was_running: Cell::new(false),
+            listed: Cell::new(false),
+            interval: Cell::new(None),
+            painted: RefCell::default(),
+        });
+        inner.block.on_click(bind!(inner, |inner| {
+            let expanded = !inner.expanded.get();
+            inner.expanded.set(expanded);
+            inner.refresh();
+            if expanded {
+                inner.load(!inner.background_running());
+            }
+            inner.watch();
+            inner.paint();
+        }));
+        Self(inner)
+    }
+
+    pub fn root(&self) -> &View {
+        self.0.block.root()
+    }
+
+    pub fn restyle(&self, cx: &Context<'_>) {
+        self.0.block.restyle();
+        self.0.paints.restyle(cx.theme);
+    }
+
+    pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
+        let shell = props.metadata.get("shellID").and_then(serde_json::Value::as_str).map(str::to_owned);
+        let status = props.status();
+        // A session can move while its shell still runs in the original location.
+        let directory = shell
+            .as_ref()
+            .and_then(|id| cx.state.shell(&ShellID(id.clone())).map(|shell| shell.location.directory.clone()))
+            .or(cx.directory.map(str::to_owned));
+        let stopped = stopped(props);
+        let call = Call {
+            output: match &stopped {
+                Some((output, _)) => Some(output.clone()),
+                None if shell.is_some() => None,
+                None => props.output.clone(),
+            },
+            shell,
+            command: props.input_str("command").map(str::to_owned),
+            workdir: format_path(cx, props.input_str("workdir")),
+            status,
+            background: status == Status::Completed
+                && props.metadata.get("status").and_then(serde_json::Value::as_str) == Some("running"),
+            permission: props.permission,
+            error: stopped.map(|(_, notice)| notice).or_else(|| props.error().map(str::to_owned)),
+            width: content_width(cx),
+            directory,
+        };
+        self.0.listed.set(call.shell.as_ref().is_some_and(|id| cx.state.shell(&ShellID(id.clone())).is_some()));
+        *self.0.call.borrow_mut() = Some(call);
+        self.0.watch();
+        self.0.paint();
+    }
+}
+
+/// `stoppedShell`: a call the user stopped fails with its output followed by a notice, which its metadata names. Its
+/// output shows like a finished call's and only the notice as the error. A plugin that rewrote the error gets it shown
+/// as is.
+fn stopped(props: &Props<'_>) -> Option<(String, String)> {
+    if props.status() != Status::Error || props.metadata.get("interrupted") != Some(&serde_json::Value::Bool(true)) {
+        return None;
+    }
+    let notice =
+        props.metadata.get("notice").and_then(serde_json::Value::as_str).filter(|notice| !notice.is_empty())?;
+    let output = props.error()?.strip_suffix(notice)?;
+    Some((output.trim_end_matches('\n').to_owned(), notice.to_owned()))
+}
+
+impl Drop for Shell {
+    fn drop(&mut self) {
+        self.0.stop();
+    }
+}
+
+impl Inner {
+    /// The store lists the call's shell as running (`backgroundRunning`).
+    fn background_running(&self) -> bool {
+        self.listed.get()
+    }
+
+    /// Reads [`Self::listed`] again, outside a render (timers and clicks).
+    fn refresh(&self) {
+        let Some(id) = self.call.borrow().as_ref().and_then(|call| call.shell.clone()) else { return };
+        let listed = self.tui.upgrade().is_some_and(|tui| tui.data.read(|state| state.shell(&ShellID(id)).is_some()));
+        self.listed.set(listed);
+    }
+
+    /// The polling effect: read the output every second while the shell runs (a background one only
+    /// while expanded), and drain it once when the shell stops.
+    fn watch(self: &Rc<Self>) {
+        if !self.background_running() {
+            self.stop();
+            if self.was_running.replace(false) {
+                self.load(true);
+            }
+            return;
+        }
+        self.was_running.set(true);
+        let background = self.call.borrow().as_ref().is_some_and(|call| call.background);
+        if background && !self.expanded.get() {
+            self.stop();
+            return;
+        }
+        if self.interval.get().is_some() {
+            return;
+        }
+        self.load(false);
+        let timer = self.app.set_interval(
+            Duration::from_secs(1),
+            bind!(self, |inner, _| {
+                inner.refresh();
+                if inner.background_running() {
+                    inner.load(false);
+                    return;
+                }
+                inner.watch();
+                inner.paint();
+            }),
+        );
+        self.interval.set(Some(timer));
+    }
+
+    fn stop(&self) {
+        if let Some(timer) = self.interval.take() {
+            self.app.cancel_timer(timer);
+        }
+    }
+
+    fn load(self: &Rc<Self>, drain: bool) {
+        let call = self.call.borrow().clone();
+        let Some(call) = call else { return };
+        if call.status == Status::Completed && call.output.is_some() {
+            return;
+        }
+        let Some(id) = call.shell else { return };
+        let Some(tui) = self.tui.upgrade() else { return };
+        let pages = self.output.borrow_mut().start(tui.data.client(), ShellID(id), call.directory, drain);
+        let Some(pages) = pages else { return };
+        tui.app.spawn(
+            pages,
+            bind!(self, |inner, _, pages| {
+                if inner.output.borrow_mut().finish(pages) {
+                    inner.load(true);
+                }
+                inner.paint();
+            }),
+        );
+    }
+
+    fn paint(&self) {
+        let call = self.call.borrow();
+        let Some(call) = call.as_ref() else { return };
+        let theme = &self.theme.get();
+        let expanded = self.expanded.get();
+        let running = call.status == Status::Running || self.background_running();
+        let output = self.output_text(call, expanded);
+        let max_chars = MAX_LINES * (call.width - 8 - if running { 2 } else { 0 }).max(20) as usize;
+        let prefix = if !call.workdir.is_empty() && call.workdir != "." {
+            format!("cd {} && ", call.workdir)
+        } else {
+            String::new()
+        };
+        let input = match &call.command {
+            Some(command) if !command.is_empty() => {
+                format!("{}{prefix}{command}", if running { "" } else { "$ " })
+            }
+            _ => String::new(),
+        };
+        let collapsed = collapse_shell_output(&input, &output, MAX_LINES, max_chars);
+        self.block.set(Block {
+            header: Header::None,
+            spinner: false,
+            permission: call.permission,
+            error: call.error.clone(),
+            clickable: call.shell.is_some() || collapsed.overflow,
+            width: call.width,
+        });
+        let paint = Paint {
+            command: call.command.as_deref().is_some_and(|command| !command.is_empty()),
+            running,
+            streaming: call.status == Status::Streaming,
+            expanded,
+            input: if expanded { input } else { collapsed.input },
+            output: if expanded { output } else { collapsed.output },
+            background: call.background,
+            permission: call.permission,
+        };
+        if self.painted.borrow().as_ref() == Some(&paint) {
+            return;
+        }
+        let app = &self.app;
+        let body = &self.body;
+        body.clear();
+        self.paints.clear();
+        let wrap = if expanded { WrapMode::Word } else { WrapMode::Char };
+        let limit = |text: Text| if expanded { text } else { text.max_height(2) };
+        let permission = paint.permission;
+        let color = move |theme: &Theme| if permission { theme.text.feedback.warning.base } else { theme.text.base };
+        let spinner = |spinner: Spinner| {
+            let painted = spinner.clone();
+            self.paints.add(theme, move |theme| painted.set_color(color(theme)));
+            spinner
+        };
+        let text = |text: Text, fg: fn(&Theme) -> Color| {
+            let painted = text.clone();
+            self.paints.add(theme, move |theme| {
+                painted.fg(fg(theme));
+            });
+            text
+        };
+        if !paint.command {
+            if paint.running || paint.streaming {
+                body.add(&spinner(Spinner::new(app).label("Writing command…")));
+            } else {
+                body.add(&text(Text::new(app, "Writing command…"), |theme| theme.text.muted));
+            }
+        } else {
+            if paint.running {
+                let spinner = spinner(Spinner::new(app));
+                let input = limit(Text::new(app, paint.input.clone()).wrap(wrap).grow(1.0).min_width(0));
+                let painted = input.clone();
+                self.paints.add(theme, move |theme| {
+                    painted.fg(color(theme));
+                });
+                body.add(&View::new(app).row().gap(1).child(&spinner).child(&input));
+            } else {
+                body.add(&text(limit(Text::new(app, paint.input.clone()).wrap(wrap)), |theme| theme.text.base));
+            }
+            if !paint.output.is_empty() {
+                body.add(&text(Text::new(app, paint.output.clone()), |theme| theme.text.muted));
+            }
+        }
+        if paint.background {
+            let badge = status_badge(app, theme, "Background", true);
+            body.add(&badge);
+            self.paints.keep(move |theme| paint_badge(&badge, theme, true));
+        }
+        *self.painted.borrow_mut() = Some(paint);
+    }
+
+    /// The output the block shows (`ShellDisplay`'s `output`).
+    fn output_text(&self, call: &Call, expanded: bool) -> String {
+        if call.status == Status::Streaming {
+            return String::new();
+        }
+        if call.shell.is_none() {
+            return strip_ansi(call.output.as_deref().unwrap_or_default().trim());
+        }
+        if call.background && !expanded {
+            return String::new();
+        }
+        if call.status == Status::Completed
+            && let Some(output) = &call.output
+        {
+            return strip_ansi(output.trim());
+        }
+        let loaded = self.output.borrow();
+        let source =
+            if loaded.text.is_empty() { call.output.as_deref().unwrap_or_default() } else { loaded.text.as_str() };
+        let text = strip_ansi(source.trim());
+        if loaded.truncated {
+            return format!("[earlier output omitted]\n{text}");
+        }
+        text
+    }
+}

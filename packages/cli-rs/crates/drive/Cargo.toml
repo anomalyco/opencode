@@ -1,0 +1,19 @@
+[package]
+name = "opencode-drive"
+description = "The simulation UI endpoint, OPENCODE_DRIVE (H.4)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+opencode-api-types.workspace = true
+opencode-util.workspace = true
+opentui.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# Only for its re-exported synchronous `tungstenite`; the endpoint runs on plain threads.
+tokio-tungstenite.workspace = true
