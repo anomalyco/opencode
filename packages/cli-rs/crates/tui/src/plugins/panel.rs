@@ -137,8 +137,6 @@ pub struct Picker {
     owner: RefCell<Owner>,
     shown: RefCell<abi::Select>,
     handle: RefCell<Option<opencode_ui::select::Select<String>>>,
-    /// It is on screen: closing or replacing it ends that, keyed or not.
-    open: Cell<bool>,
 }
 
 /// TS `dialog.select`: picking an option closes the list, then runs the action with the option's value. A select with
@@ -184,7 +182,6 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
         owner: RefCell::new(owner.clone()),
         shown: RefCell::new(select),
         handle: RefCell::default(),
-        open: Cell::new(true),
     });
     *tui.reads.select.borrow_mut() = keyed.is_some().then(|| picker.clone());
     let dialog = keyed.as_ref().map_or_else(DialogOptions::default, |key| DialogOptions::default().key(key.clone()));
@@ -194,9 +191,6 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
         let closed = Rc::downgrade(&picker);
         let on_close: Box<dyn FnOnce()> = Box::new(bind!(tui, |tui| {
             on_close();
-            if let Some(picker) = closed.upgrade() {
-                picker.open.set(false);
-            }
             let mine =
                 tui.reads.select.borrow().as_ref().is_some_and(|shown| Weak::ptr_eq(&Rc::downgrade(shown), &closed));
             if mine {
@@ -325,8 +319,8 @@ impl Picker {
             let names = picker.shown.borrow().options.iter().any(|option| {
                 option.value == value && !option.disabled && option.toggle.as_deref() == Some(plugin.as_str())
             });
-            // The same select still on screen, keyed or not: closed or replaced, it is not the select any more.
-            if !(names && picker.open.get() && tui.plugins.live(&owner.0, owner.1)) {
+            // No close can come between the key and this: the app runs what is deferred after each event.
+            if !(names && tui.plugins.live(&owner.0, owner.1)) {
                 return;
             }
             let Some(active) = toggled(&tui, &owner.0, &plugin) else { return };
