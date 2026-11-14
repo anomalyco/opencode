@@ -15,6 +15,10 @@ export default defineSim({
     { type: "/goal Ship the sidebar with every built-in section" },
     { until: "built-in section" },
     { enter: true },
+    { until: "◎ goal" },
+    // When its plugins take over 500 ms to load, TS shows a startup notice for 3 s on the footer's row, whose box
+    // spans the row and takes the click. `◎ goal` is a plugin's, so they have loaded and the notice does not return.
+    { gone: "Finishing startup" },
     { checkpoint: "status", until: "◎ goal" },
     ...click(75, 28),
     { checkpoint: "dialog", until: "pause p" },

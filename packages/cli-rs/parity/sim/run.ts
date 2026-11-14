@@ -284,6 +284,12 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
         async () => (await result("ui.matches", { text: needle })) === true,
         WAIT,
       )
+    const gone = (needle: string) =>
+      waitFor(
+        `${label} screen to stop showing ${JSON.stringify(needle)}`,
+        async () => (await result("ui.matches", { text: needle })) === false,
+        WAIT,
+      )
     const capture = async () => toFixture(Schema.decodeUnknownSync(Frontend.CapturedFrame)(await result("ui.capture")))
     const captures: Record<string, Fixture> = {}
     debug.screen = capture
@@ -291,7 +297,7 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
     debug.requests = proxy.log
     for (const step of scenario.steps) {
       console.error(`${label} ${JSON.stringify(step)}`)
-      await runStep(step, { result, until, capture, captures, release: backend.release })
+      await runStep(step, { result, until, gone, capture, captures, release: backend.release })
     }
     if (backend.failures.length) throw new Error(`${label} backend: ${backend.failures.join("; ")}`)
     return { captures, requests: proxy.log as Logged[], model }
@@ -315,6 +321,7 @@ async function runStep(
   io: {
     result: (method: string, params?: unknown) => Promise<unknown>
     until: (needle: string) => Promise<void>
+    gone: (needle: string) => Promise<void>
     capture: () => Promise<Fixture>
     captures: Record<string, Fixture>
     release: (name: string) => void
@@ -330,6 +337,7 @@ async function runStep(
   if ("mouse" in step) return io.result("ui.mouse", step.mouse)
   if ("resize" in step) return io.result("ui.resize", { cols: step.resize[0], rows: step.resize[1] })
   if ("until" in step && !("checkpoint" in step)) return io.until(step.until)
+  if ("gone" in step) return io.gone(step.gone)
   if (!("checkpoint" in step)) return
   if (step.until) await io.until(step.until)
   // Three captures in a row with the same cells, as H.2's runner waits for a stable frame.
