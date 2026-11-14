@@ -563,3 +563,49 @@ fn a_refilled_mailbox_holds_back_no_report_and_no_wake() {
         assert!(refill > 0, "{carrier:?}: the refills ended before the report");
     }
 }
+
+/// Sends `count` messages from a thread, and joins it; how many were accepted.
+fn flood(count: u32) -> usize {
+    let sender = mail(|mail| mail.sender.clone()).unwrap();
+    std::thread::spawn(move || (0..count).filter(|number| sender.send((9, *number)).is_ok()).count()).join().unwrap()
+}
+
+// Expected (the backlog cause of `slow`, synthesis 4.2; reviews bigboi 10, carbon 5.4): a burst the frame drains is not
+// full at its end. A mailbox a thread keeps full is full at the end of every frame: at the end of 12 of the last 120
+// frames its plugin is not slow, at the end of 13 it is, with one toast and the refused sends in its details; 120
+// frames after its mailbox drained, the backlog is gone from them. On both carriers.
+#[test]
+fn a_mailbox_full_at_the_end_of_13_frames_is_a_backlog() {
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        let monitor = harness.tui.plugins.monitor().clone();
+        let paint = || {
+            harness.app.advance(Duration::from_millis(16));
+            harness.app.render()
+        };
+        assert_eq!(flood(abi::BOUND as u32), abi::BOUND, "{carrier:?}: a burst to the bound");
+        frame(&harness);
+        // Each update puts one more in: the mailbox stays at its bound.
+        mail(|mail| mail.refill = u32::MAX);
+        assert_eq!(flood(abi::BOUND as u32 + 1), abi::BOUND, "{carrier:?}: one refused");
+        for _ in 0..12 {
+            paint();
+        }
+        // Its calls fill each frame's budget, which P4c's cause counts too: the backlog's own news tells them apart.
+        let backlog = || monitor.report(ID).unwrap_or_default().contains("backlog");
+        assert!(!backlog(), "{carrier:?}: a backlog after 12 full ends");
+        let screen = paint().text();
+        assert!(monitor.is_slow(ID) && backlog(), "{carrier:?}: no backlog after 13 full ends");
+        assert!(screen.contains("Its mailbox is full"), "{carrier:?}: no toast\n{screen}");
+        let report = monitor.report(ID).unwrap_or_default();
+        assert!(report.contains("backlog") && report.contains("1 sends refused"), "{carrier:?}: {report}");
+        mail(|mail| mail.refill = 0);
+        frame(&harness);
+        for _ in 0..120 {
+            paint();
+        }
+        // Its calls, which filled each frame's budget, may keep it slow by P4c's cause; the backlog has gone.
+        let report = monitor.report(ID).unwrap_or_default();
+        assert!(!report.contains("backlog"), "{carrier:?}: a backlog 120 frames after it ended: {report}");
+    }
+}
