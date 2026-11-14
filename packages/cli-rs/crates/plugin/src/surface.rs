@@ -371,7 +371,7 @@ impl Surface {
             if let (Some(mounted), Some(host)) = (weak.upgrade(), owner.upgrade()) {
                 let seen = host.local_revision().is_some_and(|now| mounted.revision.get() == Some(now));
                 if changed.size || !seen {
-                    mounted.draw(host.as_ref());
+                    mounted.draw(host.as_ref(), changed);
                 }
             }
         }));
@@ -396,7 +396,7 @@ impl Surface {
             let weak = Rc::downgrade(&mounted);
             app.defer(move |_| {
                 if let (Some(mounted), Some(host)) = (weak.upgrade(), mounted_owner(&weak)) {
-                    mounted.draw_sized(host.as_ref());
+                    mounted.draw_sized(host.as_ref(), &abi::Changed { size: true, ..abi::Changed::default() });
                 }
             });
         });
@@ -410,22 +410,23 @@ impl Surface {
                 let weak = Rc::downgrade(&mounted);
                 host.app().defer(move |_| {
                     if let (Some(mounted), Some(host)) = (weak.upgrade(), mounted_owner(&weak)) {
-                        mounted.draw(host.as_ref());
+                        mounted.draw(host.as_ref(), &abi::Changed::everything());
                     }
                 });
             }
-            false => mounted.draw(host),
+            false => mounted.draw(host, &abi::Changed::everything()),
         }
         mounted
     }
 
-    /// Calls the view and adopts its tree, for a cause other than its size.
-    pub fn draw(&self, host: &dyn Host) {
+    /// Calls the view and adopts its tree, for a cause other than its size: `changed` is what the view hears changed
+    /// ([`v2::SurfaceInput::changed`]).
+    pub fn draw(&self, host: &dyn Host, changed: &abi::Changed) {
         if self.pending.get() {
             return;
         }
         self.resized.set(0);
-        self.draw_sized(host);
+        self.draw_sized(host, changed);
     }
 
     /// What the mount holds of the input.
@@ -434,14 +435,14 @@ impl Surface {
     }
 
     /// Calls the view and adopts its tree; on a refusal, once more for a whole tree.
-    fn draw_sized(&self, host: &dyn Host) {
+    fn draw_sized(&self, host: &dyn Host, changed: &abi::Changed) {
         let theme = host.theme();
         for _ in 0..2 {
             let full = {
                 let state = self.state.borrow();
                 state.last.is_none() || state.refused
             };
-            let Some(called) = self.call_view(host, &theme, full) else {
+            let Some(called) = self.call_view(host, &theme, full, changed) else {
                 self.wipe();
                 return;
             };
@@ -450,6 +451,16 @@ impl Surface {
                 return;
             }
             let (mut memo, remote) = (called.memo, called.remote);
+            // A keep of the last tree's root keeps the mount as it is: nothing to adopt and no frame (P6a). The memo
+            // table finishes against the keep, as a library's does.
+            if !full && called.staged.given.is_empty() && self.keeps_root(&called.nodes) {
+                memo.finish(&called.nodes);
+                let mut state = self.state.borrow_mut();
+                let size = remote.unwrap_or(memo.len()) as i64;
+                book(|ledger| ledger.memo_entries += size - state.booked);
+                (state.memo, state.booked) = (memo, size);
+                return;
+            }
             let result = self.adopt(host, &theme, called.nodes, &called.staged, full);
             let mut state = self.state.borrow_mut();
             match result {
@@ -490,6 +501,12 @@ impl Surface {
         }
     }
 
+    /// Whether `nodes` is a keep of the root of the last accepted tree.
+    fn keeps_root(&self, nodes: &[Node]) -> bool {
+        let [Node::Keep { key }] = nodes else { return false };
+        self.state.borrow().last.as_deref().and_then(|last| last.first()?.id()) == Some(key.as_str())
+    }
+
     /// Drops all the mount holds but itself: its plugin failed, so it shows nothing more and the behaviors leave it.
     fn wipe(&self) {
         behave::detach(&self.app, self);
@@ -518,12 +535,12 @@ impl Surface {
                     log::error!("surface {}: its last tree again: {refused}", self.id.surface);
                 }
             }
-            _ => self.draw(host),
+            _ => self.draw(host, &abi::Changed::everything()),
         }
     }
 
     /// What the view returned and asked for; `None` when the call failed.
-    fn call_view(&self, host: &dyn Host, theme: &Theme, full: bool) -> Option<Called> {
+    fn call_view(&self, host: &dyn Host, theme: &Theme, full: bool, changed: &abi::Changed) -> Option<Called> {
         // Only a surface that says it reads the palette gets it, on either carrier.
         let palette = if self.palette { self.palette_of(host, theme) } else { v2::Palette::default() };
         let rect = self.root.rect();
@@ -539,7 +556,8 @@ impl Surface {
             true => host.panel_input(&self.input.plugin, &self.id.surface),
             false => None,
         };
-        let input = v2::SurfaceInput { width, height, palette, full, panel };
+        let changed = if full { abi::Changed::everything() } else { changed.clone() };
+        let input = v2::SurfaceInput { width, height, palette, full, panel, changed };
         let owner = self.holder().unwrap_or_else(|| Owner::activation(&self.input.plugin, self.owner.clone()));
         // The view works on the mount's table; what it stages there the host keeps only with its tree.
         let mut memo = std::mem::take(&mut self.state.borrow_mut().memo);
@@ -632,7 +650,8 @@ impl Surface {
                     *layout = taken;
                 }
             }
-            self.root.visible(!tree.is_empty());
+            // A hidden root box shows nothing in the slot, not even the gap the slot's parent puts before it.
+            self.root.visible(!tree.is_empty() && !nodes.first().is_some_and(Node::is_hidden));
         }
         *last = Some(nodes);
         for (handle, bytes) in &staged.given {
@@ -743,7 +762,7 @@ impl Surface {
     /// Calls the view again, as `layout` asked.
     pub(crate) fn draw_again(&self) {
         if let Some(host) = self.owner.upgrade() {
-            self.draw(host.as_ref());
+            self.draw(host.as_ref(), &abi::Changed { woken: true, ..abi::Changed::default() });
         }
     }
 
@@ -817,7 +836,7 @@ impl Claimed for Rc<Surface> {
     }
 
     fn sync(&self, host: &dyn Host, changed: &abi::Changed) {
-        self.draw(host);
+        self.draw(host, changed);
         self.state.borrow().tree.each_slot(&mut |slots| slots.sync(host, Some(changed)));
     }
 
@@ -832,7 +851,7 @@ impl Claimed for Rc<Surface> {
 
 impl crate::activation::Drawn for Surface {
     fn woken(&self, host: &dyn Host) {
-        self.draw(host);
+        self.draw(host, &abi::Changed { woken: true, ..abi::Changed::default() });
     }
 }
 

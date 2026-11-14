@@ -137,7 +137,12 @@ fn lower(node: &v2::Node, pending: &mut Vec<v2::Node>) -> Option<abi::Node> {
             bg: bg.clone(),
             layout: *layout,
             on_click: on_click.clone(),
-            children: children.iter().map(|child| lower(child, pending)).collect::<Option<_>>()?,
+            // A hidden box takes no room: the twin leaves it out.
+            children: children
+                .iter()
+                .filter(|child| !child.is_hidden())
+                .map(|child| lower(child, pending))
+                .collect::<Option<_>>()?,
         },
         v2::Node::Text { spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click, .. } => abi::Node::Text {
             spans: spans.clone(),
@@ -166,7 +171,7 @@ fn fresh(nodes: &[v2::Node], theme_index: usize, scrolled: &dyn Fn(&str) -> Opti
     let parent = root(&host);
     let mut twin =
         Twin { host: &host, theme: host.theme(), act: recorder(&host), hovers: Vec::new(), scrolls: Vec::new() };
-    for node in nodes {
+    for node in nodes.iter().filter(|node| !node.is_hidden()) {
         if let Some(widget) = twin.built(node) {
             parent.add(&widget);
         }
@@ -205,7 +210,7 @@ impl Twin<'_> {
                 if layout.grow {
                     scroll.basis(0);
                 }
-                for child in children {
+                for child in children.iter().filter(|child| !child.is_hidden()) {
                     if let Some(widget) = self.built(child) {
                         scroll.add(&widget);
                     }
@@ -426,6 +431,8 @@ impl Generator<'_> {
                         pointer: self.chance(15),
                         ..abi::interact::Interact::default()
                     },
+                    // P6a: a hidden box draws as one that is not there.
+                    visible: !self.chance(10),
                 }
             }
             1 | 2 => v2::Node::Text {

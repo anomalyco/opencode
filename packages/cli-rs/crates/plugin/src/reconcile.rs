@@ -1385,11 +1385,15 @@ impl Pass<'_, '_> {
                 split,
                 interact,
                 id,
+                visible,
                 ..
             } => {
                 let view = View::new(app);
                 if *row {
                     view.row();
+                }
+                if !*visible {
+                    view.visible(false);
                 }
                 if *gap > 0 {
                     view.gap(*gap);
@@ -1726,6 +1730,7 @@ fn shell(node: &Node) -> Node {
             anchor,
             split,
             interact,
+            visible,
             ..
         } => Node::Box {
             id: id.clone(),
@@ -1746,6 +1751,7 @@ fn shell(node: &Node) -> Node {
             anchor: anchor.clone(),
             split: *split,
             interact: interact.clone(),
+            visible: *visible,
         },
         Node::Scroll { id, height, follow, layout, notify_top, user_scroll, .. } => Node::Scroll {
             id: id.clone(),
@@ -1814,11 +1820,12 @@ fn box_change(old: &Node, new: &Node) -> Change {
             sticky,
             split,
             interact,
+            visible,
             ..
         } => Some((
             (id.clone(), *row, *gap, *padding, *justify, *align, *layout),
             (border.clone(), *padding_sides, *wrap, *overflow, *sticky, *split),
-            interact.clone(),
+            (interact.clone(), *visible),
         )),
         _ => None,
     };
