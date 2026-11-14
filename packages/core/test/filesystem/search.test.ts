@@ -381,4 +381,57 @@ describe("FileSystemSearch", () => {
       }).pipe(Effect.provide(layer))
     }),
   )
+
+  it.effect("serves repeated finds from a cached index and drops the cache on refresh", () =>
+    Effect.gen(function* () {
+      let scans = 0
+      const layer = AppNodeBuilder.build(FileSystemSearch.node, [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location({ directory: AbsolutePath.make(path.join(os.tmpdir(), "opencode-search-items-cache")) }),
+            ),
+          ),
+        ),
+        Ripgrep.node.replace(
+          Layer.succeed(
+            Ripgrep.Service,
+            Ripgrep.Service.of({
+              find: (input) =>
+                Effect.gen(function* () {
+                  scans++
+                  const entry = FileSystem.Entry.make({
+                    path: RelativePath.make(scans === 1 ? "src/old.ts" : "src/new.ts"),
+                    type: "file",
+                  })
+                  if (input.onEntry) yield* input.onEntry(entry)
+                  return [entry]
+                }),
+              glob: () => Effect.succeed([]),
+              grep: () => Effect.succeed([]),
+            }),
+          ),
+        ),
+      ])
+
+      yield* Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        const first = yield* search.find({ query: "src" })
+        expect(first.map((entry) => entry.path)).toContain(RelativePath.make("src/old.ts"))
+        expect(yield* search.find({ query: "src" })).toEqual(first)
+        expect(scans).toBe(1)
+
+        yield* TestClock.adjust("10 seconds")
+        yield* search.find({ query: "src" })
+        const refreshed = yield* Effect.gen(function* () {
+          yield* Effect.yieldNow
+          return yield* search.find({ query: "new" })
+        }).pipe(Effect.repeat({ until: (entries) => entries.length > 0 }))
+        expect(refreshed[0]?.path).toBe(RelativePath.make("src/new.ts"))
+        expect(scans).toBe(2)
+        expect(yield* search.find({ query: "new" })).toEqual(refreshed)
+      }).pipe(Effect.provide(layer))
+    }),
+  )
 })
