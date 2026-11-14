@@ -27,6 +27,47 @@ use std::time::{Duration, Instant};
 
 pub use record::{Artifact, Crash, Handoff, Record, Snapshot};
 
+thread_local! {
+    /// How many plugin calls on this thread run inside [`catch`]: a panic now is a plugin's, which its catch stops.
+    static CATCHING: Cell<u32> = const { Cell::new(0) };
+}
+
+/// Runs `f`, a plugin's code, and catches its panic, which the host reports through the plugin's failure. While it
+/// runs, the panic hooks let a panic unwind to here instead of ending the app ([`filter_panics`]).
+pub fn catch<R>(f: impl FnOnce() -> R) -> std::thread::Result<R> {
+    struct Leave;
+    impl Drop for Leave {
+        fn drop(&mut self) {
+            CATCHING.with(|catching| catching.set(catching.get() - 1));
+        }
+    }
+    CATCHING.with(|catching| catching.set(catching.get() + 1));
+    let _leave = Leave;
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
+}
+
+/// Whether a panic on this thread now unwinds to a plugin's [`catch`].
+pub fn catching() -> bool {
+    CATCHING.try_with(Cell::get).is_ok_and(|depth| depth > 0)
+}
+
+/// Wraps the panic hooks installed so far, so a plugin's panic that a [`catch`] stops is logged and left to unwind:
+/// no hook installed before this one (the terminal's restore, the CLI's exit) takes it for the end of the app. Call it
+/// after those hooks, once a process; later calls do nothing.
+pub fn filter_panics() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            if catching() {
+                log::error!("a plugin panicked: {info}");
+                return;
+            }
+            previous(info);
+        }));
+    });
+}
+
 /// The limits of the budget. These are starting values (synthesis 7, decision 5); `OPENCODE_PLUGIN_LIMITS` changes
 /// them ([`Limits::parse`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
