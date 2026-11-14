@@ -8,6 +8,7 @@
 //!   dispatch and adoption, and each frame are timed apart, with the reconcile's counts.
 //! - `parts`: where an open, a toggle and a resize of the cards go: making the syntax theme, building the patches,
 //!   the first frame, the view toggle and the resize, each alone.
+//! - `list` (P3): the route's cards as a windowed list, which builds only the cards near the view.
 //!
 //! `GATE_SIZES` (default `40,410,1000`) sets the files, `GATE_PARTS` the parts. Native layout rounds are counted per
 //! frame; OpenTUI does not time a round apart.
@@ -189,6 +190,8 @@ struct Gate {
     generation: u64,
     view_us: f64,
     widths: Vec<u16>,
+    /// P3: the cards are a windowed list, not a scroll's children.
+    list: bool,
 }
 
 thread_local! {
@@ -221,13 +224,13 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
 /// shows. The patches go to the host once a mount.
 fn view(cx: &mut v2::View<'_>) -> v2::Node {
     let started = Instant::now();
-    let (files, reviewed, selected, split) = gate(|gate| {
+    let (files, reviewed, selected, split, list) = gate(|gate| {
         if gate.generation != cx.mount.generation || cx.input.full {
             gate.generation = cx.mount.generation;
             gate.handles = vec![None; gate.patches.len()];
         }
         gate.widths.push(cx.input.width);
-        (gate.patches.len(), gate.reviewed.clone(), gate.selected, gate.split)
+        (gate.patches.len(), gate.reviewed.clone(), gate.selected, gate.split, gate.list)
     });
     let cards = (0..files)
         .map(|file| {
@@ -257,17 +260,23 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
                 v2::Node::column(vec![head, body])
             })
         })
-        .collect();
-    let scroll = v2::Node::scroll(cards).with_id("files").layout(abi::Layout::default().grow());
+        .collect::<Vec<_>>();
+    // A card is its header and 125 patch rows with four hunk headers between.
+    let scroll = match list {
+        true => v2::Node::list(cards.into_iter().map(|card| v2::ListItem::new(card, 130)).collect()),
+        false => v2::Node::scroll(cards),
+    };
+    let scroll = scroll.with_id("files").layout(abi::Layout::default().grow());
     let node = v2::Node::column(vec![v2::Node::text(vec![abi::Span::new("gate diff")]), scroll])
         .layout(abi::Layout::default().grow());
     gate(|gate| gate.view_us += micros(started));
     node
 }
 
-fn route(count: usize) {
+fn route(count: usize, list: bool) {
+    let part = if list { "list" } else { "route" };
     gate(|gate| {
-        *gate = Gate { patches: (0..count).map(patch).collect(), reviewed: vec![false; count], ..Gate::default() }
+        *gate = Gate { patches: (0..count).map(patch).collect(), reviewed: vec![false; count], list, ..Gate::default() }
     });
     let deps = Deps {
         route: Route::Home,
@@ -287,7 +296,7 @@ fn route(count: usize) {
         let (frames, usable_us, text) = frames(&harness, started, usable);
         let done = reconcile::work().since(work);
         let view_us = gate(|gate| gate.view_us);
-        write(json!({ "part": "route", "files": count, "action": name, "step": step, "host_us": host_us,
+        write(json!({ "part": part, "files": count, "action": name, "step": step, "host_us": host_us,
             "view_us": view_us, "usable_us": usable_us, "frames": frames, "created": done.created,
             "removed": done.removed, "set": done.set, "moved": done.moved, "kept": done.kept, "parses": done.parses }));
         text
@@ -382,7 +391,10 @@ fn gate_probe() {
     let parts_wanted = std::env::var("GATE_PARTS").unwrap_or_else(|_| "today,route,parts".into());
     for &size in &sizes {
         if parts_wanted.contains("route") {
-            route(size);
+            route(size, false);
+        }
+        if parts_wanted.contains("list") {
+            route(size, true);
         }
         if parts_wanted.contains("today") {
             today(size);
