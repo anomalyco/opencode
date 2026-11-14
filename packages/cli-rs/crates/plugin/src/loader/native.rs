@@ -207,6 +207,14 @@ fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Resul
                     }
                 }));
             }
+            if manifest.plugins {
+                let heard = Rc::downgrade(&guest);
+                setup.on_plugins(Rc::new(move || {
+                    if let Some(guest) = heard.upgrade() {
+                        guest.handle("on-plugins", &Request::Plugins);
+                    }
+                }));
+            }
             register(setup, &guest, &manifest);
             // What setup asked for (toasts, routes) happens now that the plugin is active.
             guest.apply(guest.taken().0);
@@ -991,6 +999,7 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
         HostRequest::Limits => return read(ctx, |read| serde_json::to_value(read.limits())),
         HostRequest::Providers => return read(ctx, |read| serde_json::to_value(read.providers())),
         HostRequest::Info => return read(ctx, |read| serde_json::to_value(read.info())),
+        HostRequest::Plugins => return read(ctx, |read| serde_json::to_value(read.plugins())),
         HostRequest::McpServers { location } => {
             return read(ctx, |read| serde_json::to_value(read.mcp_servers(location.as_ref())));
         }
@@ -1201,6 +1210,7 @@ fn effect(request: &HostRequest) -> bool {
         | HostRequest::Limits
         | HostRequest::Providers
         | HostRequest::Info
+        | HostRequest::Plugins
         | HostRequest::McpServers { .. }
         | HostRequest::Integrations { .. }
         | HostRequest::Vcs { .. }

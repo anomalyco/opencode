@@ -441,6 +441,10 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             let (wakes, scope) = (api.wakes().to_vec(), scope.clone());
             activation.on_wake(Rc::new(move || scope.run("on-wake", |host| wakes.iter().for_each(|run| run(host)))));
         }
+        if !api.plugins().is_empty() {
+            let (heard, scope) = (api.plugins().to_vec(), scope.clone());
+            setup.on_plugins(Rc::new(move || scope.run("on-plugins", |host| heard.iter().for_each(|run| run(host)))));
+        }
         // A thread's message runs the message handler as `update`; a thread's panic fails the plugin, once. A plugin
         // without a handler refuses messages, also those its setup sent.
         let (handler, delivered, failing) = (api.message().cloned(), Rc::downgrade(&scope), Rc::downgrade(&scope));
@@ -1120,6 +1124,10 @@ impl abi::Read for Scoped<'_> {
         self.read.themes()
     }
 
+    fn plugins(&self) -> Vec<abi::PluginEntry> {
+        self.read.plugins()
+    }
+
     fn scroll_state(&self, target: &abi::v2::Target) -> Option<abi::v2::ScrollState> {
         behave::scroll_state(&self.caller(), target)
     }
@@ -1636,6 +1644,11 @@ impl Setup<'_> {
         self.registration.failure = Some(failure);
     }
 
+    /// What the activation runs as the plugins the host lists change: the plugin's `on_plugins` handlers (P6b).
+    pub(crate) fn on_plugins(&mut self, run: Rc<dyn Fn()>) {
+        self.registration.plugins = Some(run);
+    }
+
     /// What the record names this plugin's calls by.
     pub(crate) fn artifact(&self) -> contain::Artifact {
         match self.artifact {
@@ -1889,6 +1902,8 @@ struct Registration {
     tools: Vec<(String, Rc<claim::Registered>)>,
     disposers: Vec<Disposer>,
     cleanups: Vec<Box<dyn FnOnce()>>,
+    /// Runs the plugin's handlers of a change of the plugins the host lists (P6b).
+    plugins: Option<Rc<dyn Fn()>>,
 }
 
 impl Registration {
@@ -2494,6 +2509,19 @@ impl Registry {
             registration.dispose();
         }
         Some(self.start(host, id))
+    }
+
+    /// Runs the `on_plugins` handlers of every running plugin (P6b): what [`Registry::entries`] lists changed. Called
+    /// outside every plugin callback.
+    pub fn tell_plugins(&self) {
+        let heard: Vec<Rc<dyn Fn()>> = self
+            .plugins
+            .borrow()
+            .iter()
+            .filter(|plugin| plugin.running())
+            .filter_map(|plugin| plugin.active.as_ref().and_then(|(_, registration)| registration.plugins.clone()))
+            .collect();
+        heard.iter().for_each(|run| run());
     }
 
     /// Every plugin and skipped entry, for the plugin manager.
