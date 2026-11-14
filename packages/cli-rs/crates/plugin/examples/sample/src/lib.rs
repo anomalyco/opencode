@@ -51,7 +51,7 @@ use std::time::Duration;
 
 use opencode_plugin_abi::{
     Command, Line, Node, Placement, Read, Render, Setup, SlotKind, Span, ThemeMode, Toast, Variant, Waker,
-    export_plugin,
+    export_plugin, plugin,
 };
 use serde_json::json;
 
@@ -235,11 +235,13 @@ fn count(host: &dyn Read) -> u64 {
     feature = "abi-1-4",
     feature = "abi-1-3",
     feature = "requires-1-5",
+    feature = "abi-1-6",
     feature = "minor-newer",
-    feature = "major-2",
-    feature = "requires-future"
+    feature = "major-3",
+    feature = "requires-future",
+    feature = "requires-feature"
 )))]
-export_plugin!("sample", setup);
+plugin!(id = "sample", setup);
 
 // Built against ABI 1.0: the shorter table, without `describe`.
 #[cfg(feature = "abi-1-0")]
@@ -248,14 +250,21 @@ export_plugin!(@v1_0 "sample", setup);
 // Needs the 1.5 host, as a plugin built around the composer asks.
 #[cfg(feature = "requires-1-5")]
 export_plugin!("sample", setup, requires_minor = 5);
+// This plugin as one of ABI 1.6, through the entry of ABI 1.
+#[cfg(feature = "abi-1-6")]
+export_plugin!(@version 1, opencode_plugin_abi::V1_MINOR, 4, "sample", setup);
 
 // Built against a minor version newer than any host, without requiring it.
 #[cfg(feature = "minor-newer")]
-export_plugin!(@version 1, 99, 0, "sample", setup);
+export_plugin!(@version2 2, 99, 0, "sample", setup);
 
-#[cfg(feature = "major-2")]
-export_plugin!(@version 2, 0, 0, "sample", setup);
+#[cfg(feature = "major-3")]
+export_plugin!(@version2 3, 0, 0, "sample", setup);
 
 // Needs a host minor version no host has yet.
 #[cfg(feature = "requires-future")]
-export_plugin!(@version 1, 99, 99, "sample", setup);
+export_plugin!(@version2 2, 99, 99, "sample", setup);
+
+// Needs an optional host feature no host has.
+#[cfg(feature = "requires-feature")]
+plugin!(id = "sample", requires = ["terminal"], setup);
