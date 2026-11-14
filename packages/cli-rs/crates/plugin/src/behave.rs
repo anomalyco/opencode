@@ -2,10 +2,12 @@
 //! this frame's geometry and no plugin call, and the `layout` call that follows.
 //!
 //! **The hook.** OpenTUI's `App` calls the host between solve and paint only for a resize, so the hook is a node
-//! (spike S0): an absolute box of no height, the app root's last child, whose width [`arm`] flips between 1 and 2.
-//! The next solve resizes it, and its resize handler runs the behaviors of every live 2.0 mount of its app. The
-//! stepper walks the tree in order and a rect reads the new solve once the walk has passed its node, so the hook must
-//! be last: when a widget was added to the root after it, it goes last again and reads in another round. When a
+//! (spike S0): an absolute box of no height whose width [`arm`] flips between 1 and 2. The next solve resizes it, and
+//! its resize handler runs the behaviors of every live 2.0 mount of its app. A layout round walks the tree depth first
+//! in paint order, z-index then child order, and a rect reads the new solve once the walk has passed its node, so the
+//! hook is walked last: it has the highest z-index and is the root's last child, put in once and never moved (a node
+//! added or moved in a frame is resized before its siblings in it), and every root child added after it goes in
+//! before it ([`opencode_ui::root::add`]). Arming only flips its width. When a
 //! behavior changes something it reads (an offset, a mounted chunk or list item), the hook arms again and the stepper
 //! solves another round in the same frame. Then geometry is final: the landings of steps, then each surface's
 //! `layout` call when something it named changed.
@@ -59,6 +61,14 @@ pub(crate) struct Calls {
     pub plugin: String,
     pub layout: Option<LayoutFn>,
     pub scrolled: Option<Scrolls>,
+    /// Whether the plugin failed or its activation ended: its mounts then leave the behaviors.
+    pub ended: Option<Rc<dyn Fn() -> bool>>,
+}
+
+impl Calls {
+    fn ended(&self) -> bool {
+        self.ended.as_ref().is_some_and(|ended| ended())
+    }
 }
 
 /// A surface's handler of its scrolls' events, as one call of the plugin owned by the mount the first argument
@@ -386,6 +396,8 @@ pub struct Counts {
     pub layouts: u64,
     /// Times the hook was armed.
     pub arms: u64,
+    /// Times a hook was put in its root: once a hook.
+    pub placed: u64,
     /// List items the behaviors and reads visited.
     pub visits: u64,
 }
@@ -396,6 +408,7 @@ impl Counts {
             resolves: self.resolves - before.resolves,
             layouts: self.layouts - before.layouts,
             arms: self.arms - before.arms,
+            placed: self.placed - before.placed,
             visits: self.visits - before.visits,
         }
     }
@@ -441,7 +454,7 @@ pub(crate) fn detach(app: &App, surface: *const Surface) {
         if empty { hooks.remove(&root) } else { None }
     });
     if let Some(hook) = gone {
-        hook.node.detach();
+        opencode_ui::root::release(&hook.app);
         if let Some(key) = hook.key.take() {
             hook.app.remove_handler(key);
         }
@@ -458,7 +471,7 @@ pub(crate) fn arm(app: &App) {
 
 impl Hook {
     fn new(app: &App) -> Rc<Self> {
-        let node = View::new(app).absolute().width(1).height(0).shrink(0.0);
+        let node = View::new(app).absolute().width(1).height(0).shrink(0.0).z_index(i32::MAX);
         let hook = Rc::new_cyclic(|this| Hook {
             app: app.clone(),
             node,
@@ -474,6 +487,8 @@ impl Hook {
             stalled: Cell::new(0),
             this: this.clone(),
         });
+        opencode_ui::root::keep_last(app, &hook.node);
+        tally(|counts| counts.placed += 1);
         let weak = Rc::downgrade(&hook);
         hook.node.on_resize(move |_, rect| {
             if let Some(hook) = weak.upgrade() {
@@ -502,22 +517,19 @@ impl Hook {
             // A cause outside a frame starts afresh.
             false => self.stalled.set(0),
         }
-        if !self.last() {
-            self.node.detach();
-            self.app.root().add(&self.node);
-        }
         self.node.width(if self.seen.get() == 2 { 1 } else { 2 });
         self.app.request_redraw();
     }
 
-    /// Whether the hook is the root's last child, so the walk reaches it after every other widget.
-    fn last(&self) -> bool {
-        self.app.root().children().last().is_some_and(|last| last.id() == self.node.id())
-    }
-
-    /// The live mounts, newest last.
+    /// The live mounts, newest last. A mount whose plugin failed leaves first, with what its behaviors held: its
+    /// pending verbs, its steps' memory and its paints (P4c's containment).
     fn live(&self) -> Vec<Rc<Surface>> {
-        self.mounts.borrow().iter().filter_map(Weak::upgrade).collect()
+        let (live, ended): (Vec<Rc<Surface>>, Vec<Rc<Surface>>) =
+            self.mounts.borrow().iter().filter_map(Weak::upgrade).partition(|mount| !mount.calls.ended());
+        for mount in ended {
+            mount.retire();
+        }
+        live
     }
 
     /// One round: every mount's behaviors; another round while one changed what it reads, then the landings and the
@@ -538,11 +550,6 @@ impl Hook {
             });
         }
         self.rounds.set(self.rounds.get() + 1);
-        // A widget added to the root after the hook was armed comes later in the walk: its rects are not this
-        // solve's yet.
-        if !self.last() {
-            return self.again();
-        }
         let mut changed = false;
         for mount in self.live() {
             changed |= mount.resolve();
@@ -721,7 +728,10 @@ pub(crate) fn scroll(caller: &Caller<'_>, target: Target, verb: Scroll) -> Box<d
         Target::Node { surface, id } => {
             let mounted = mount(caller, &surface).map(|mount| mount.weak());
             Box::new(move || {
-                let Some(mounted) = mounted.and_then(|mount| mount.upgrade()) else { return };
+                let Some(mounted) = mounted.and_then(|mount| mount.upgrade()).filter(|mount| !mount.calls.ended())
+                else {
+                    return;
+                };
                 if let Some(anchor) = mounted.verb(&id, &verb) {
                     mounted.landed(&id, anchor);
                 }
@@ -771,6 +781,12 @@ impl Surface {
         };
         self.hook_scrolls(&index);
         f(&index, &mut self.behave.borrow_mut())
+    }
+
+    /// Leaves the behaviors, as its plugin failed: what they held for it goes, and its app's hook with its last mount.
+    pub(crate) fn retire(&self) {
+        detach(self.app(), self);
+        *self.behave.borrow_mut() = State::default();
     }
 
     /// The tree or a window changed: the index is built again when next read.
