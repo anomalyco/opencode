@@ -620,3 +620,62 @@ fn a_wheel_step_builds_the_tree_only_when_it_ends_a_selection() {
     let work = wheel(false);
     assert!(work.kept > 1 && work.touched() > 0, "{work:?}");
 }
+
+// Expected (`onSwitchSource`): the source picked in the viewer is the next viewer's, though the config names another.
+#[test]
+fn the_picked_source_outlives_the_viewer() {
+    let h = route(2, 4, 120, 30);
+    assert!(h.settle().contains("All"));
+    h.keys(&["d"]);
+    h.wait_for("Diff source");
+    h.keys(&["down", "down", "return"]);
+    h.wait_for("Uncommitted");
+    h.keys(&["q"]);
+    h.wait("q did not close the viewer", || h.tui.route() == Route::Home);
+    h.tui.keymap.dispatch("diff.open", None);
+    h.wait_for("≡ f0000.rs");
+    assert!(h.settle().contains("Uncommitted"), "{}", h.app.text());
+}
+
+// Expected (`fileMenu` on new files): files loaded again close the file menu that was open.
+#[test]
+fn new_files_close_the_file_menu() {
+    let h = mount(support::session_route("ses_a"));
+    h.wait_for("Review");
+    h.tui.keymap.dispatch("diff.open", None);
+    h.wait_for("src/main.rs");
+    h.open_menu();
+    let reads = h.diff_reads();
+    h.turn();
+    h.wait("an ended turn did not load the diff again", || h.diff_reads() > reads);
+    h.assert_menu_closed();
+}
+
+// Expected: the tree scrolls to its selected row only as far as it must, so a row already in view moves nothing.
+#[test]
+fn the_tree_scrolls_only_as_far_as_its_selection() {
+    let h = route(40, 4, 120, 30);
+    h.keys(&["n", "n", "n"]);
+    let tree: String = h.settle().lines().map(|line| line.chars().take(30).collect::<String>() + "\n").collect();
+    assert!(tree.contains("f0000.rs") && tree.contains("f0003.rs"), "{tree}");
+}
+
+// Expected (TS `wrapMode="char"`): a patch line wider than the pane wraps by cell, inside its words.
+#[test]
+fn a_patch_line_wraps_inside_its_words() {
+    let line = "abcdefghij ".repeat(12);
+    let file = json!({
+        "file": "src/long.rs", "patch": format!("@@ -1 +1 @@\n-old\n+{line}\n"),
+        "additions": 1, "deletions": 1, "status": "modified",
+    });
+    let h = mount_with(Route::Home, json!([file]), 120, 30);
+    h.wait_for("/project");
+    h.tui.keymap.dispatch("diff.open", None);
+    h.wait_for("≡ long.rs");
+    let screen = h.settle();
+    let words: Vec<&str> = screen
+        .split_whitespace()
+        .filter(|word| word.len() > 1 && word.chars().all(|char| ('a'..='j').contains(&char)))
+        .collect();
+    assert!(words.len() > 12 && words.iter().any(|word| *word != "abcdefghij"), "{screen}");
+}
