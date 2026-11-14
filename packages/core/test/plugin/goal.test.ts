@@ -100,6 +100,139 @@ describe("goal plugin", () => {
     }),
   )
 
+  it.live("runs a goal commanded after an undo staged a revert", () =>
+    Effect.gen(function* () {
+      const session = yield* project()
+      const sessions = yield* Session.Service
+      const verdicts = reviewer('{"verdict":"done","reason":"The report is written."}')
+      yield* serve(verdicts.respond)
+
+      yield* sessions.prompt({ sessionID: session.id, text: "first prompt" })
+      yield* sessions.wait(session.id)
+      yield* sessions.prompt({ sessionID: session.id, text: "second prompt" })
+      yield* sessions.wait(session.id)
+
+      // /undo stages a revert at the first prompt instead of deleting anything yet.
+      const boundary = (yield* sessions.messages({ sessionID: session.id, order: "asc" })).find(
+        (message) => message.type === "user",
+      )
+      if (!boundary) return yield* Effect.die("Expected a user message to stage the revert at")
+      yield* sessions.revert.stage({ sessionID: session.id, messageID: boundary.id, files: false })
+      expect((yield* sessions.get(session.id)).revert?.messageID).toBe(boundary.id)
+
+      yield* sessions.command({ sessionID: session.id, command: "goal", text: "Write the report" })
+      yield* sessions.wait(session.id)
+
+      // The goal command commits the staged revert first, so the kickoff it queues can run.
+      expect((yield* sessions.get(session.id)).revert).toBeUndefined()
+      expect(verdicts.asked()).toBe(1)
+      expect(yield* goal(session.id)).toMatchObject({ status: "complete", reason: "The report is written." })
+    }),
+  )
+
+  it.live("leaves a staged revert alone when a command queues no work", () =>
+    Effect.gen(function* () {
+      const session = yield* project()
+      const sessions = yield* Session.Service
+
+      yield* sessions.prompt({ sessionID: session.id, text: "first prompt" })
+      yield* sessions.wait(session.id)
+      yield* sessions.prompt({ sessionID: session.id, text: "second prompt" })
+      yield* sessions.wait(session.id)
+
+      const boundary = (yield* sessions.messages({ sessionID: session.id, order: "asc" })).find(
+        (message) => message.type === "user",
+      )
+      if (!boundary) return yield* Effect.die("Expected a user message to stage the revert at")
+      yield* sessions.revert.stage({ sessionID: session.id, messageID: boundary.id, files: false })
+
+      // None of these queue work, so the staged revert — and the redo history behind it — must survive each one.
+      const attempts = [
+        sessions.command({ sessionID: session.id, command: "goal", text: "" }),
+        sessions.command({ sessionID: session.id, command: "goal", text: "pause" }),
+        sessions.command({ sessionID: session.id, command: "goal", text: "clear" }),
+        sessions.command({ sessionID: session.id, command: "definitely-not-a-command", text: "x" }),
+      ]
+      yield* Effect.forEach(attempts, (attempt) =>
+        Effect.gen(function* () {
+          const exit = yield* attempt.pipe(Effect.exit)
+          expect(exit._tag).toBe("Failure")
+          expect((yield* sessions.get(session.id)).revert?.messageID).toBe(boundary.id)
+        }),
+      )
+    }),
+  )
+
+  it.live("pauses an active goal without committing its staged revert", () =>
+    Effect.gen(function* () {
+      const session = yield* project()
+      const sessions = yield* Session.Service
+
+      yield* sessions.prompt({ sessionID: session.id, text: "first prompt" })
+      yield* sessions.wait(session.id)
+      yield* sessions.prompt({ sessionID: session.id, text: "second prompt" })
+      yield* sessions.wait(session.id)
+
+      const boundary = (yield* sessions.messages({ sessionID: session.id, order: "asc" })).find(
+        (message) => message.type === "user",
+      )
+      if (!boundary) return yield* Effect.die("Expected a user message to stage the revert at")
+      yield* sessions.revert.stage({ sessionID: session.id, messageID: boundary.id, files: false })
+      yield* setGoal(session.id, {
+        id: "goal-active",
+        objective: "Write the report",
+        status: "active",
+        rounds: 0,
+        maxRounds: 50,
+        boot: "an-earlier-process",
+        updatedAt: 0,
+      })
+
+      yield* sessions.command({ sessionID: session.id, command: "goal", text: "pause" })
+      expect((yield* sessions.get(session.id)).revert?.messageID).toBe(boundary.id)
+      expect(yield* goal(session.id)).toMatchObject({ status: "paused" })
+    }),
+  )
+
+  it.live("resumes a paused goal past a staged revert", () =>
+    Effect.gen(function* () {
+      const session = yield* project()
+      const sessions = yield* Session.Service
+      const verdicts = reviewer('{"verdict":"done","reason":"The report is written."}')
+      yield* serve(verdicts.respond)
+
+      yield* sessions.prompt({ sessionID: session.id, text: "first prompt" })
+      yield* sessions.wait(session.id)
+      yield* sessions.prompt({ sessionID: session.id, text: "second prompt" })
+      yield* sessions.wait(session.id)
+
+      yield* setGoal(session.id, {
+        id: "goal-paused",
+        objective: "Write the report",
+        status: "paused",
+        rounds: 0,
+        maxRounds: 50,
+        boot: "an-earlier-process",
+        updatedAt: 0,
+      })
+
+      const boundary = (yield* sessions.messages({ sessionID: session.id, order: "asc" })).find(
+        (message) => message.type === "user",
+      )
+      if (!boundary) return yield* Effect.die("Expected a user message to stage the revert at")
+      yield* sessions.revert.stage({ sessionID: session.id, messageID: boundary.id, files: false })
+      expect((yield* sessions.get(session.id)).revert?.messageID).toBe(boundary.id)
+
+      yield* sessions.command({ sessionID: session.id, command: "goal", text: "resume" })
+      yield* sessions.wait(session.id)
+
+      // The resume queues a continuation, so it commits the staged revert first.
+      expect((yield* sessions.get(session.id)).revert).toBeUndefined()
+      expect(verdicts.asked()).toBe(1)
+      expect(yield* goal(session.id)).toMatchObject({ status: "complete", reason: "The report is written." })
+    }),
+  )
+
   for (const scenario of [
     {
       // The first round with this reason made progress; the three repeats after it did not.

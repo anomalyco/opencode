@@ -591,6 +591,11 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
       generate: sessions.generate,
       command: (input) => sessions.command({ ...input, command: input.name }),
       compact: sessions.compact,
+      revert: {
+        stage: sessions.revert.stage,
+        clear: (input) => sessions.revert.clear(input.sessionID),
+        commit: (input) => sessions.revert.commit(input.sessionID),
+      },
       update: Effect.fn(function* (input) {
         yield* sessions.get(input.sessionID)
         if (input.title !== undefined) yield* sessions.rename({ sessionID: input.sessionID, title: input.title })
