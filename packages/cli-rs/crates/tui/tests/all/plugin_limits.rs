@@ -1110,3 +1110,56 @@ fn an_image_job_holds_its_bytes_until_it_is_done() {
         assert!(shown, "{carrier:?}: the next image never showed\n{}", harness.app.render().text());
     }
 }
+
+// Expected (fixed row; review bigboi 5): a mount keeps the tree it adopted, not the one it was offered: a text of
+// 1 MiB past a 64-byte limit leaves the host holding what a tree of only its placeholder leaves, within 64 KiB, by
+// the Rust heap the UI thread still holds; on both carriers.
+#[test]
+fn a_mount_keeps_no_text_a_limit_refused() {
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        let _limits = limits::set(Limits { text: 64, ..small() });
+        let kept = |subject: Subject| {
+            harness.tui.navigate(Route::Home);
+            settle(&harness);
+            let heap = support::heap::measure();
+            show(&harness, subject);
+            heap.kept()
+        };
+        let over = kept(subject(|_| framed(text(&"x".repeat(1 << 20)))));
+        let alone = kept(subject(|_| framed(placeholder(None, "too large: 1048576 bytes"))));
+        assert!(over - alone < 64 << 10, "{carrier:?}: kept {over} bytes, {alone} for the placeholder alone");
+    }
+}
+
+// Expected (fixed row; review bigboi 5): a node that was a placeholder past the tree's nodes, kept by a later revision
+// in which it would fit, is asked for again and shows; the twin draws the tree the plugin then gives. On both
+// carriers.
+#[test]
+fn a_kept_placeholder_that_fits_now_is_asked_for_again() {
+    let open_file = || text("Open file").with_id("open");
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        let frame = {
+            let _limits = limits::set(Limits { nodes: 4, ..small() });
+            PHASE.with(|phase| phase.set(0));
+            show(
+                &harness,
+                subject(move |cx| match (PHASE.with(std::cell::Cell::get), cx.input.full) {
+                    (0, _) => v2::Node::column(vec![text("a"), text("b"), text("c"), open_file()]),
+                    (_, true) => v2::Node::column(vec![open_file()]),
+                    (_, false) => v2::Node::column(vec![v2::Node::Keep { key: "open".into() }]),
+                }),
+            );
+            let before = harness.app.render();
+            assert!(before.text().contains("⋯ too many nodes"), "{carrier:?}: no placeholder\n{}", before.text());
+            next_phase(&harness);
+            harness.app.render()
+        };
+        let twin = {
+            let _limits = support::unlimited();
+            show(&harness, subject(move |_| v2::Node::column(vec![open_file()])))
+        };
+        assert!(frame.cells == twin.cells, "{carrier:?}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
+    }
+}
