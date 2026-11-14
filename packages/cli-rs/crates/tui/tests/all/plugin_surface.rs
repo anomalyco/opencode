@@ -11,6 +11,7 @@ use crate::support::model::{self, Failure, Model, Rng};
 use crate::support::{self, Harness};
 
 use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -637,14 +638,11 @@ fn owned(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (`lifecycle`, mounts): what a mount's own command asked for ends with that mount: a reply that arrives
-// after the route closed and opened again under the same key reaches the plugin no more. What the plugin's global
-// command asked for is the plugin's, and arrives.
-#[test]
-fn a_late_reply_does_not_reach_a_mount_opened_again() {
-    use std::sync::{Condvar, Mutex};
-    REPLIES.with(|replies| replies.borrow_mut().clear());
-    let gate = Arc::new((Mutex::new(false), Condvar::new()));
+/// A server whose `/api/hold` answers once the gate opens, counting what it served.
+type Gate = Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>;
+
+fn held() -> (support::Fake, Gate, Arc<std::sync::atomic::AtomicUsize>) {
+    let gate: Gate = Arc::default();
     let served = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let fake = {
         let (gate, served) = (gate.clone(), served.clone());
@@ -659,6 +657,16 @@ fn a_late_reply_does_not_reach_a_mount_opened_again() {
             (200, serde_json::json!({ "held": true }))
         })
     };
+    (fake, gate, served)
+}
+
+// Expected (`lifecycle`, mounts): what a mount's own command asked for ends with that mount: a reply that arrives
+// after the route closed and opened again under the same key reaches the plugin no more. What the plugin's global
+// command asked for is the plugin's, and arrives.
+#[test]
+fn a_late_reply_does_not_reach_a_mount_opened_again() {
+    REPLIES.with(|replies| replies.borrow_mut().clear());
+    let (fake, gate, served) = held();
     let deps = Deps {
         route: Route::Home,
         builtins: vec![abi::Plugin { id: "test.owned", setup: owned }.into()],
@@ -983,4 +991,75 @@ fn a_theme_of_another_name_calls_the_view_once_and_builds_nothing() {
     assert_eq!(after.len(), 1, "{after:?}");
     assert!(after[0].built == 0 && !after[0].full, "{after:?}");
     assert_eq!((done.created, done.removed, done.parses), (0, 0, 0), "{done:?}");
+}
+
+// Expected (`lifecycle`, a reload; bigboi's 9): a plugin disabled and enabled again while its route's command and its
+// global command each wait on a reply hears neither: both belong to the activation that ended. A request of the new
+// activation gets its reply. The oracle is the plugin's own log of replies.
+#[test]
+fn a_reload_drops_the_replies_of_the_activation_before() {
+    REPLIES.with(|replies| replies.borrow_mut().clear());
+    let (fake, gate, served) = held();
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![abi::Plugin { id: "test.owned", setup: owned }.into()],
+        ..support::deps(Arc::new(fake))
+    };
+    let harness = support::mount(80, 24, deps);
+    let route = Route::Plugin { id: "test.owned".into(), name: "owned".into() };
+    harness.tui.navigate(route.clone());
+    harness.wait_for("owned route");
+    let _ = harness.tui.keymap.dispatch("owned.route", None);
+    let _ = harness.tui.keymap.dispatch("owned.global", None);
+    settle(&harness);
+    let host: Rc<dyn opencode_plugin::Host> = harness.tui.clone();
+    assert!(harness.tui.plugins.set_active(&host, "test.owned", false));
+    settle(&harness);
+    assert!(harness.tui.plugins.set_active(&host, "test.owned", true));
+    settle(&harness);
+    harness.tui.navigate(route);
+    harness.wait_for("owned route");
+    *gate.0.lock().unwrap() = true;
+    gate.1.notify_all();
+    let arrived = |count| {
+        harness.app.wait_until(Duration::from_secs(5), || served.load(std::sync::atomic::Ordering::SeqCst) >= count);
+        harness.app.wait_until(Duration::from_millis(300), || false);
+    };
+    arrived(2);
+    assert!(REPLIES.with(|replies| replies.borrow().is_empty()), "a reply reached the activation after a reload");
+    let _ = harness.tui.keymap.dispatch("owned.global", None);
+    arrived(3);
+    assert_eq!(REPLIES.with(|replies| replies.borrow().len()), 1, "the new activation's reply did not arrive");
+}
+
+// Expected (`ledger`, a census by weak handles; bigboi's 9): every widget a mount showed is freed when the route opens
+// again under a new generation, when it closes, and when its plugin fails; a refused tree and its retry free none of
+// the shown ones. The oracle is a marker each widget's handler holds, apart from the host's own counts.
+#[test]
+fn a_mounts_widgets_are_freed_with_it() {
+    board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
+    let harness = open_tui();
+    // The text, its card, the board and the surface's root.
+    let marked = |harness: &Harness| {
+        let marker = Rc::new(());
+        support::mark_at(&harness.app, "card 0: 0", 4, &marker);
+        assert_eq!(Rc::strong_count(&marker), 5);
+        marker
+    };
+    apply(&harness, Command::Open);
+    let marker = marked(&harness);
+    apply(&harness, Command::Bad);
+    apply(&harness, Command::Bump(1));
+    assert_eq!(Rc::strong_count(&marker), 5, "a refused tree and its retry freed shown widgets");
+    apply(&harness, Command::Open);
+    assert_eq!(Rc::strong_count(&marker), 1, "a mount opened again kept the last one's widgets");
+    let marker = marked(&harness);
+    apply(&harness, Command::Home);
+    assert_eq!(Rc::strong_count(&marker), 1, "a closed mount kept its widgets");
+    apply(&harness, Command::Open);
+    let marker = marked(&harness);
+    board(|board| board.bad = 2);
+    apply(&harness, Command::Bump(2));
+    assert!(matches!(status(&harness), opencode_plugin::Status::Failed(_)));
+    assert_eq!(Rc::strong_count(&marker), 1, "a failed plugin's mount kept its widgets");
 }
