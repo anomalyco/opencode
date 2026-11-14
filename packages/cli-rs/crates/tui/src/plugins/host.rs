@@ -408,15 +408,25 @@ impl Host for Tui {
         self.data.read(|_| f(&Reader { tui: self, theme: OnceCell::new() }));
     }
 
+    fn local_revision(&self) -> Option<u64> {
+        Some(self.reads.revision.get())
+    }
+
     fn watch(&self, push: Rc<dyn Fn(&abi::Changed)>) -> Option<Disposer> {
         let local = abi::Changed { local: true, ..abi::Changed::default() };
         let listener = {
-            let (push, local) = (push.clone(), local.clone());
-            self.local.subscribe(move || push(&local))
+            let (push, local, reads) = (push.clone(), local.clone(), self.reads.revision.clone());
+            self.local.subscribe(move || {
+                reads.set(reads.get() + 1);
+                push(&local)
+            })
         };
         let settings = {
-            let push = push.clone();
-            self.settings.subscribe(move |_| push(&local))
+            let (push, reads) = (push.clone(), self.reads.revision.clone());
+            self.settings.subscribe(move |_| {
+                reads.set(reads.get() + 1);
+                push(&local)
+            })
         };
         let resize = {
             let push = push.clone();
@@ -551,6 +561,8 @@ pub struct Reads {
     /// The mounted claims' pushes, which a storage write calls with `local` from the effect queue.
     watchers: RefCell<Vec<Weak<Push>>>,
     telling: Cell<bool>,
+    /// The changes of the host's own state the watchers hear of, counted ([`Host::local_revision`]).
+    revision: Rc<Cell<u64>>,
     /// The server plugins of the default location (TS `plugins.server()`), and that location.
     server: RefCell<(Option<Location>, Vec<PluginInfo>)>,
     /// What the last change batch changed, for the plugins.
@@ -565,6 +577,7 @@ impl Reads {
     /// Tells the mounted claims that the storage changed. The plugins queue it after a write, so it is in order with
     /// their other effects; it tells at the end of the queue, once for every write queued before then.
     fn changed(&self, tui: &Tui) {
+        self.revision.set(self.revision.get() + 1);
         if self.telling.replace(true) {
             return;
         }

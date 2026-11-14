@@ -211,6 +211,11 @@ pub trait Host: 'static {
     fn watch(&self, _push: Rc<dyn Fn(&abi::Changed)>) -> Option<Disposer> {
         None
     }
+    /// How many changes of its own state the host has made that [`Host::watch`] tells of, when it counts them: a claim
+    /// that drew at the count it has now has seen them all.
+    fn local_revision(&self) -> Option<u64> {
+        None
+    }
 }
 
 /// What a host request of a plugin calls with its result on the UI thread: a fetch's or a program's.
