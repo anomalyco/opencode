@@ -7,18 +7,20 @@ use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
+use opencode_plugin_abi::interact::{Event, Handled};
 use opencode_plugin_abi::v2::{self, ContentRef};
-use opencode_plugin_abi::{HostRequest, Manifest, Request, Span};
+use opencode_plugin_abi::{HostRequest, InputTo, Manifest, Request, Span};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opentui::keymap::Disposer;
 
 use super::proto::{Down, Revision};
-use super::{Scripts, Waiting, count};
+use super::{Call, Scripts, Waiting, count};
 use crate::activation::{Activation, Wake};
+use crate::interact::{Deliver, Owner};
 use crate::loader::native::{Answers, Ctx, apply, handle};
 use crate::mailbox::Mailbox;
 use crate::surface::{self, Viewed, Viewing};
-use crate::{Definition, ErrorFn, Host, Setup, behave, route, tui_command};
+use crate::{Definition, ErrorFn, Host, Owners, Setup, behave, route, tui_command};
 
 /// What a load answered: the plugin, what its setup registered, and the effects setup asked for, which the first
 /// activation applies (the setup ran already); a later activation runs setup again.
@@ -49,7 +51,9 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
             let wake = Arc::new(Wake::new(Some(setup.host().app().proxy())));
             let mailbox = Mailbox::new(setup.id(), wake);
             mailbox.refuse_messages();
+            let activation = Activation::new(setup.host(), mailbox);
             let guest = Rc::new(Guest {
+                owners: Owners::new(setup.id(), Rc::downgrade(setup.host()), &activation),
                 scripts: Rc::downgrade(&scripts),
                 host: Rc::downgrade(setup.host()),
                 loaded: loaded.clone(),
@@ -57,7 +61,7 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
                 generation: setup.generation(),
                 failure,
                 revoked: RefCell::default(),
-                activation: Activation::new(setup.host(), mailbox),
+                activation,
                 viewers: RefCell::default(),
                 watches: RefCell::default(),
                 watcher: RefCell::default(),
@@ -90,6 +94,8 @@ pub(crate) struct Guest {
     /// What a failure revokes at once: the commands' layer and the event subscriptions.
     revoked: RefCell<Vec<Disposer>>,
     activation: Rc<Activation>,
+    /// What it holds of the input (P2): its setup's layers, and its mounts' as its surfaces show.
+    owners: Rc<Owners>,
     viewers: RefCell<Vec<Rc<Viewer>>>,
     /// The reads it watches, by its key, with the value last pushed.
     watches: RefCell<BTreeMap<String, (HostRequest, Option<serde_json::Value>)>>,
@@ -119,13 +125,39 @@ impl Guest {
 
     /// Runs a handler of the plugin on the JS host, after the snapshots of what it reads.
     fn call(self: &Rc<Self>, export: &'static str, request: Request, hold: bool) {
+        self.call_for(export, request, hold, None);
+    }
+
+    /// [`Guest::call`] for an input event of `owner`, whose effects are that owner's.
+    fn call_for(self: &Rc<Self>, export: &'static str, request: Request, hold: bool, owner: Option<Weak<Owner>>) {
         if self.ended() {
             return;
         }
         self.refresh();
         if let Some(scripts) = self.scripts.upgrade() {
-            scripts.call(self, export, request, hold);
+            scripts.call(self, export, request, hold, owner);
         }
+    }
+
+    /// The handler of P2's input `to` on the JS host. A key, a paste or a press cannot wait for the handler's answer,
+    /// so the host answers from what the plugin declared: a [`Bind`](opencode_plugin_abi::interact::Bind)'s key, a
+    /// paste of a layer that takes pastes and a pointer event on a node that asks for them are consumed; a key of a
+    /// listener of every key goes on, which the handler only hears; the others' answer does not matter. The handler's
+    /// own answer is advisory (synthesis 3.7). A `hold` bind holds the keys after it until the plugin's `release_keys`
+    /// effect, or [`opencode_plugin_abi::interact::HOLD`].
+    fn deliver(self: &Rc<Self>, to: InputTo) -> Deliver {
+        let guest = Rc::downgrade(self);
+        Rc::new(move |_: &dyn Host, owner: &Rc<Owner>, event: &Event| {
+            let Some(guest) = guest.upgrade().filter(|guest| !guest.ended()) else { return Handled::Pass };
+            let request = Request::Input { to: to.clone(), event: event.clone() };
+            guest.call_for("handle", request, false, Some(Rc::downgrade(owner)));
+            match event {
+                Event::Key(key) if key.bind.is_some() => Handled::Consume,
+                Event::Paste { .. } => Handled::Consume,
+                Event::Pointer(_) => Handled::Consume,
+                _ => Handled::Pass,
+            }
+        })
     }
 
     /// Runs the plugin's setup again on the JS host, for a new activation or after the JS host started again.
@@ -147,6 +179,12 @@ impl Guest {
     pub(crate) fn restart(self: &Rc<Self>) {
         if self.ended() {
             return;
+        }
+        // The JS state that set a mode is gone: each of its owners leaves its mode.
+        if let Some(host) = self.host.upgrade() {
+            for owner in self.activation.owners() {
+                owner.set_mode(&*host, None);
+            }
         }
         self.setup_again();
         for (_, watch) in self.watches.borrow_mut().values_mut() {
@@ -185,14 +223,7 @@ impl Guest {
     }
 
     /// The handler `seq` returned: its effects apply, or it threw, which fails the plugin with none.
-    pub(crate) fn done(
-        self: &Rc<Self>,
-        seq: u64,
-        export: &'static str,
-        user: bool,
-        effects: Vec<HostRequest>,
-        error: Option<String>,
-    ) {
+    pub(crate) fn done(self: &Rc<Self>, seq: u64, call: &Call, effects: Vec<HostRequest>, error: Option<String>) {
         if self.ended() {
             return;
         }
@@ -200,7 +231,12 @@ impl Guest {
             self.fail(error);
             return;
         }
-        self.effects(&format!("c{seq}"), effects, user, export);
+        let owner = call.owner.as_ref().and_then(Weak::upgrade);
+        let key = format!("c{seq}");
+        match owner {
+            Some(owner) => self.owners.as_owner(&owner, || self.effects(&key, effects, call.user, call.export)),
+            None => self.effects(&key, effects, call.user, call.export),
+        }
     }
 
     /// Applies `effects`, as a call of kind `export` (for the user's input when `user`) would have asked for them, and
@@ -210,6 +246,8 @@ impl Guest {
             return;
         }
         let mut ctx = Ctx::new(self.host.clone(), self.id(), self.loaded.manifest.storage.clone());
+        // Setup holds nothing of the input, as in process.
+        ctx.owners = (export != "setup").then(|| self.owners.clone());
         let results: Vec<serde_json::Value> = effects
             .into_iter()
             .map(|request| {
@@ -224,6 +262,14 @@ impl Guest {
         let (effects, _) = ctx.take();
         let weak: Weak<dyn Answers> = Rc::downgrade(self) as Weak<dyn Answers>;
         apply(&self.host, self.id().to_owned(), weak, Some(self.generation), effects);
+        // What they asked for may move the focus or set a mode, which no host change announces: the reads it watches go
+        // again once they applied (P2).
+        let applied = Rc::downgrade(self);
+        crate::defer(&self.host, move |_| {
+            if let Some(guest) = applied.upgrade() {
+                guest.refresh();
+            }
+        });
         self.send(Down::Answered { id: self.id().to_owned(), key: key.to_owned(), results }, None);
     }
 
@@ -303,7 +349,7 @@ impl Guest {
             watches
                 .iter_mut()
                 .filter_map(|(key, (request, last))| {
-                    let value = super::evaluate(&self.host, self.id(), request);
+                    let value = super::evaluate(&self.host, self.id(), Some(self.owners.clone()), request);
                     (last.as_ref() != Some(&value)).then(|| {
                         *last = Some(value.clone());
                         (key.clone(), value)
@@ -377,11 +423,17 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
         );
         guest.revoked.borrow_mut().extend(subscription);
     }
+    // P2: the layers of setup, each with its own handler, the activation's. Searches answer at once, which the JS host
+    // cannot: it registers none.
+    for (index, layer) in manifest.layers.iter().enumerate() {
+        let deliver = guest.deliver(InputTo::Layer { layer: index });
+        guest.owners.input.register(&**setup.host(), std::slice::from_ref(layer), &deliver);
+    }
     for (index, claim) in manifest.surfaces.iter().enumerate() {
         let at: v2::Place = (&claim.place).into();
         let commands = match &at {
             v2::Place::Route(name) => route::commands(&scoped, name),
-            v2::Place::Slot(_) => Vec::new(),
+            v2::Place::Slot(_) | v2::Place::Panel(_) | v2::Place::Overlay(_) => Vec::new(),
         };
         let commands: surface::Commands = Rc::new(move |_| commands.clone());
         let failing = Rc::downgrade(guest);
@@ -392,27 +444,25 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
         });
         let place =
             surface::Place { name: claim.name.clone(), at, palette: claim.palette, notify: claim.notify.clone() };
-        // No `layout` crosses the pipe: no frame waits for the JS host (3.7). A scroll event is a call as a handler is.
+        // No `layout` crosses the pipe: no frame waits for the JS host (3.7). A scroll event reaches the handler as the
+        // others do.
         let calls = behave::Calls {
             plugin: setup.id().to_owned(),
             layout: None,
-            scrolled: claim.on_scroll.then(|| {
-                let guest = Rc::downgrade(guest);
-                Rc::new(move |_: &Weak<()>, event: &v2::ScrollEvent| {
-                    if let Some(guest) = guest.upgrade() {
-                        let request = Request::Scrolled { surface: index, event: event.clone() };
-                        guest.call("on-scroll", request, false);
-                    }
-                }) as behave::Scrolls
-            }),
             ended: Some({
                 let guest = Rc::downgrade(guest);
                 Rc::new(move || guest.upgrade().is_none_or(|guest| guest.ended())) as Rc<dyn Fn() -> bool>
             }),
         };
+        let input = Rc::new(surface::Input {
+            plugin: setup.id().to_owned(),
+            deliver: claim.handler.then(|| guest.deliver(InputTo::Surface { surface: index })),
+            layers: claim.layers.clone(),
+            panel: matches!(place.at, v2::Place::Panel(_)),
+        });
         let viewer = Viewer::new(guest, index);
         guest.viewers.borrow_mut().push(viewer.clone());
-        setup.surface(place, viewer, commands, fail, calls, &guest.activation);
+        setup.surface(place, viewer, commands, fail, calls, &guest.owners, input);
     }
     let watching = Rc::downgrade(guest);
     let watcher = setup.host().watch(Rc::new(move |_: &opencode_plugin_abi::Changed| {
