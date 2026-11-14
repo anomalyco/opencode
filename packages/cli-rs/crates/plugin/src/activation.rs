@@ -48,8 +48,9 @@ pub(crate) struct Activation {
     on_panic: RefCell<Option<Report>>,
     /// What holds input for it: its mounts and itself (P2). They end with it.
     owners: RefCell<Vec<Weak<crate::interact::Owner>>>,
-    /// A wake of the plugin's waker waits for its wake handlers, which run once its messages are handed over.
-    hinted: Cell<bool>,
+    /// A wake of the plugin's waker waits for its wake handlers, which run once the messages put in before it are
+    /// handed over, and before those put in later: the place it took in the mailbox.
+    hinted: Cell<Option<u64>>,
     /// Times its updates against the frame budget ([`crate::schedule`]); the defaults until the host sets it.
     monitor: RefCell<Option<(Rc<crate::contain::Monitor>, crate::contain::Slot)>>,
 }
@@ -91,7 +92,7 @@ impl Activation {
                 on_message: RefCell::default(),
                 on_panic: RefCell::default(),
                 owners: RefCell::default(),
-                hinted: Cell::new(false),
+                hinted: Cell::new(None),
                 monitor: RefCell::default(),
             }
         })
@@ -192,7 +193,10 @@ impl Activation {
         if self.disposed() {
             return;
         }
-        self.hinted.set(self.hinted.get() || hinted);
+        // The first wake not handled yet keeps its place.
+        if hinted && self.hinted.get().is_none() {
+            self.hinted.set(Some(self.mailbox.placed()));
+        }
         let Some(host) = self.host.upgrade() else { return };
         crate::schedule::ready(self);
         crate::schedule::arm(host.app());
@@ -205,7 +209,9 @@ impl Activation {
         if self.disposed() {
             return Step::Idle;
         }
-        let message = self.mailbox.take_one();
+        // A thread's report, or a wake, goes before the messages put in after it, so a thread that sends as fast as
+        // the updates run does not hold either back (review bigboi 8).
+        let message = self.mailbox.take_one(self.hinted.get());
         between(1);
         if let Some(message) = message {
             let deliver = self.on_message.borrow().clone();
@@ -224,7 +230,7 @@ impl Activation {
             fail(panic);
         }
         between(3);
-        if !self.hinted.replace(false) || self.disposed() || self.mailbox.closed() {
+        if self.hinted.take().is_none() || self.disposed() || self.mailbox.closed() {
             return Step::Idle;
         }
         let run = self.on_wake.borrow().clone();
