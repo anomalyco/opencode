@@ -2025,10 +2025,12 @@ impl SlotMount {
     /// Takes the host's theme in place: each claim keeps its widgets, its mount and their state. False when a claim
     /// cannot, so the owner mounts the slot again.
     pub fn restyle(&self, host: &dyn Host) -> bool {
-        let mut done = self.claims.iter().fold(true, |done, claim| claim.restyle(host) && done);
+        // Every claim restyles, also after one that cannot: a count, not `all`, which would stop there.
+        let mut failed = self.claims.iter().filter(|claim| !claim.restyle(host)).count();
         if let Some(nested) = &self.nested {
-            done = nested.appended.borrow().iter().fold(done, |done, (_, claim)| claim.restyle(host) && done);
+            failed += nested.appended.borrow().iter().filter(|(_, claim)| !claim.restyle(host)).count();
         }
+        let done = failed == 0;
         if let Some(live) = self.live() {
             settle(host, live);
         }
