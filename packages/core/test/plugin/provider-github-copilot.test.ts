@@ -139,6 +139,50 @@ describe("GithubCopilotPlugin", () => {
     })
   })
 
+  it.effect("refreshes before discovery and never uses the refresh token as a bearer token", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const providers = yield* Provider.Service
+      yield* providers.transform((draft) => draft.update(Provider.ID.githubCopilot, () => {}))
+      yield* credentials.create({
+        integrationID: Integration.ID.make("github-copilot"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("device"),
+          access: "expired-access",
+          refresh: "refresh-secret",
+          expires: 1,
+          metadata: { refreshable: true },
+        }),
+      })
+      const requests: Array<{ url: string; authorization?: string }> = []
+      const urls: string[] = []
+      const http = HttpClient.make((request) =>
+        Effect.gen(function* () {
+          requests.push({ url: request.url, authorization: request.headers.authorization })
+          if (request.url.endsWith("/login/oauth/access_token"))
+            return HttpClientResponse.fromWeb(
+              request,
+              Response.json({
+                access_token: "renewed-access",
+                refresh_token: "rotated-refresh-secret",
+                expires_in: 28800,
+                refresh_token_expires_in: 15897600,
+              }),
+            )
+          return yield* copilotAPI(urls).execute(request)
+        }),
+      )
+      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, http))
+      yield* advance(() => urls.some((url) => url.endsWith("/models")))
+      expect(requests.map((request) => request.authorization)).toEqual([
+        undefined,
+        "Bearer renewed-access",
+        "Bearer renewed-access",
+      ])
+    }),
+  )
+
   it.effect("reloads providers only when a refreshed model list changes", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
@@ -790,6 +834,81 @@ describe("GithubCopilotPlugin", () => {
 
       state.available = false
       expect(yield* resolve("primary", ids.child)).toBe("fallback")
+    }),
+  )
+
+  it.effect("resolves current access tokens for Auto routing and utility titles", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const hooks = yield* PluginHooks.Service
+      yield* connect({ apiEndpoint: "https://copilot.test" })
+      const requests: Array<{ url: string; authorization?: string }> = []
+      const http = HttpClient.make((request) =>
+        Effect.sync(() => {
+          requests.push({ url: request.url, authorization: request.headers.authorization })
+          if (request.url.endsWith("/copilot_internal/user"))
+            return HttpClientResponse.fromWeb(request, Response.json({ endpoints: { api: "https://copilot.test" } }))
+          if (request.url.endsWith("/auto"))
+            return HttpClientResponse.fromWeb(
+              request,
+              Response.json({ session_token: "route-token", expires_at: 3600, selected_model: { id: "routed" } }),
+            )
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              data: ["routed", "gpt-4o-mini"].map((id) => ({
+                id,
+                name: id,
+                version: id,
+                model_picker_enabled: true,
+                capabilities: {
+                  family: id,
+                  limits: { max_output_tokens: 100, max_prompt_tokens: 100 },
+                  supports: { tool_calls: true },
+                },
+              })),
+            }),
+          )
+        }),
+      )
+      const titles: Headers[] = []
+      const outbound = Object.assign(
+        async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+          titles.push(new Headers(init?.headers))
+          return Response.json({ choices: [{ message: { content: "Updated title" } }] })
+        },
+        { preconnect: fetch.preconnect },
+      )
+      yield* addPlugin().pipe(
+        Effect.provideService(HttpClient.HttpClient, http),
+        Effect.provideService(FetchHttpClient.Fetch, outbound),
+      )
+      yield* advance(() => requests.some((request) => request.url.endsWith("/models")))
+      yield* drain
+      const stored = required((yield* credentials.list(Integration.ID.make("github-copilot")))[0])
+      yield* credentials.update(stored.id, {
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("device"),
+          access: "rotated-access",
+          refresh: "refresh-secret",
+          expires: 3600000,
+          metadata: { refreshable: true, apiEndpoint: "https://copilot.test" },
+        }),
+      })
+      yield* hooks.trigger("session", "experimental.model.resolve", {
+        sessionID: Session.ID.make("ses_rotated"),
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("auto") }),
+        kind: "primary",
+      })
+      const title = yield* hooks.trigger("session", "title", {
+        ...titleRequest,
+        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5") }),
+      })
+      expect(requests.find((request) => request.url.endsWith("/auto"))?.authorization).toBe("Bearer rotated-access")
+      expect(title.result).toBe("Updated title")
+      expect(titles[0]?.get("authorization")).toBe("Bearer rotated-access")
     }),
   )
 
