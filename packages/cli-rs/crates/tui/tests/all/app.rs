@@ -61,7 +61,12 @@ fn scenarios() {
 fn run(recording: &Recording, abi: bool) -> (bool, String) {
     let memory = Memory::new(routes(recording));
     let app = TestApp::new(recording.width, recording.height);
-    let config = cli_config::decode_text(&recording.config.to_string()).unwrap_or_default();
+    let npm = recording.env.get("OPENCODE_PARITY_PLUGIN").is_some_and(|plugin| plugin == "npm");
+    let config_text = match npm {
+        true => npm_config(&recording.config),
+        false => recording.config.to_string(),
+    };
+    let config = cli_config::decode_text(&config_text).unwrap_or_default();
     let args = &recording.args;
     // TS opens `sessionID` unless it forks it (`app.tsx:680-686`).
     let session = args.session_id.clone().map(SessionID);
@@ -106,6 +111,19 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
         Some("fence") => opencode_tui::plugins::host::add(&tui, fence_plugin().into()),
         _ => {}
     }
+    // P8: the published packages the scenario names, unmodified, on the JS host.
+    let _plugins = npm.then(|| {
+        let bun = crate::plugin_pipe::bun().expect("an npm scenario needs bun (OPENCODE_BUN or bun on the path)");
+        let config = opencode_plugin::pipe::Config { version: "test".to_owned(), channel: "test".to_owned(), ..opencode_plugin::pipe::Config::new(bun) };
+        let root = opencode_util::temp::tempdir().expect("plugin root");
+        let external = opencode_tui::plugins::host::External {
+            config_dir: root.path().join("config"),
+            cwd: root.path().to_path_buf(),
+            dev: Vec::new(),
+        };
+        opencode_tui::plugins::host::external_with(&tui, external, Some(config));
+        root
+    });
     // The editor context's sources (E.5): the fake IDE server and the Zed database the TS side had.
     let ide = recording.ide.as_ref().map(|_| ide::Ide::start());
     let zed = recording.zed.as_ref().map(|zed| {
@@ -433,6 +451,42 @@ fn fence_margin_plugin() -> abi::Plugin {
         Ok(())
     }
     abi::Plugin { id: "parity.fence-margin", setup }
+}
+
+/// P8: the recording's config with each `plugins` entry `./out/npm/node_modules/<name>` unpacked there from the
+/// published tarball `parity/plugins/npm/<name>.tgz` (a scope's `/` as `__`), as the TS recorder does, and named by its
+/// absolute path: the TS side resolved it against the parity directory, its working directory.
+fn npm_config(config: &serde_json::Value) -> String {
+    const PREFIX: &str = "./out/npm/node_modules/";
+    let parity = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity");
+    let mut config = config.clone();
+    let entries = config.get_mut("plugins").and_then(serde_json::Value::as_array_mut).into_iter().flatten();
+    for entry in entries {
+        let target = match entry {
+            serde_json::Value::String(target) => target,
+            serde_json::Value::Object(map) => match map.get_mut("package") {
+                Some(serde_json::Value::String(target)) => target,
+                _ => continue,
+            },
+            _ => continue,
+        };
+        let Some(name) = target.strip_prefix(PREFIX).map(str::to_owned) else { continue };
+        let into = parity.join(&target[2..]);
+        let _ = std::fs::remove_dir_all(&into);
+        std::fs::create_dir_all(&into).expect("the npm package's directory");
+        let tarball = parity.join("plugins/npm").join(format!("{}.tgz", name.replace('/', "__")));
+        let status = std::process::Command::new("tar")
+            .arg("-xzf")
+            .arg(&tarball)
+            .arg("-C")
+            .arg(&into)
+            .arg("--strip-components=1")
+            .status()
+            .expect("tar");
+        assert!(status.success(), "cannot unpack {}", tarball.display());
+        *target = into.to_string_lossy().into_owned();
+    }
+    config.to_string()
 }
 
 /// The scenario routes first, then each recorded read by its exact query, then by path alone.
