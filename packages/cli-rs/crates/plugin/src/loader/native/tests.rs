@@ -913,6 +913,28 @@ fn a_fence_reads_and_renders_the_same_in_process_and_through_the_c_abi() {
     assert_eq!(markdown(&host, &loopback, "```ts\nlet a = 1\n```\n"), direct);
 }
 
+/// A `long` fence of 3,001 lines.
+fn long_fence(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.code_block("long", |_, _| {
+        let lines = (0..3_001).map(|index| vec![abi::Span::new(format!("line {index}"))]).collect();
+        abi::Fenced::Lines { lines, fg: None, drag: false }
+    });
+    Ok(())
+}
+
+// Expected (fixed row; review carbon 2.4): a fence's lines are held to a tree's rows: 3,001 lines show the placeholder,
+// in process and through the C ABI.
+#[test]
+fn a_fence_past_the_rows_shows_its_placeholder() {
+    let host = host();
+    let in_process = Registry::define(vec![abi::Plugin { id: "long", setup: long_fence }.into()], []);
+    in_process.activate(&dynamic(&host));
+    let direct = markdown(&host, &in_process, "```long\nx\n```\n");
+    assert!(direct.contains("⋯ too large to build at once") && !direct.contains("line 0"), "{direct}");
+    let loopback = loopback(&host, abi::export_plugin!(@loopback "long", long_fence));
+    assert_eq!(markdown(&host, &loopback, "```long\nx\n```\n"), direct);
+}
+
 /// A claim that shows the ticks of a thread of its own, which wakes the host after each; disposal stops the thread.
 fn ticking(setup: &mut abi::Setup) -> Result<(), String> {
     use std::sync::atomic::{AtomicBool, AtomicU64};
