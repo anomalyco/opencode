@@ -115,9 +115,10 @@ pub fn find_in(name: &str, path: &std::ffi::OsStr, directory: &Path, home: Optio
     let file = format!("{name}{}", std::env::consts::EXE_SUFFIX);
     let real = |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let project = (Some(real(directory)) != home.map(real)).then(|| real(directory));
+    // A relative entry names a directory under the one the client works in, as the shell resolves it there.
     std::env::split_paths(path)
         .filter(|dir| dir.is_absolute())
-        .map(|dir| dir.join(&file))
+        .map(|dir| directory.join(dir).join(&file))
         .filter(|path| path.is_file())
         .find(|path| project.as_ref().is_none_or(|project| !real(path).starts_with(project)))
 }
