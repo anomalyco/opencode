@@ -917,3 +917,48 @@ fn a_theme_change_keeps_every_surface_mounted() {
         }
     }
 }
+
+thread_local! {
+    /// Views of `test.replacing` left before the next refuses, twice.
+    static REPLACING: std::cell::Cell<usize> = const { std::cell::Cell::new(usize::MAX) };
+}
+
+/// A surface that replaces the home footer's status row and, once armed, returns trees the host refuses.
+fn replacing(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.command(abi::Command { name: "replacing.break".into(), ..abi::Command::default() }, |_, _| {
+        REPLACING.set(0);
+    });
+    setup.surface(v2::Surface::new(
+        "replace",
+        v2::Place::Slot(abi::Placement::new(abi::SlotKind::Replace, "home.footer.status")),
+        |_| {
+            if REPLACING.get() == 0 {
+                return v2::Node::column(vec![v2::Node::Keep { key: "gone".into() }]);
+            }
+            v2::Node::text(vec![abi::Span::new("replaced version")])
+        },
+    ));
+    Ok(())
+}
+
+// Expected (`ledger`, carbon's 4): a plugin whose surface replaces a slot and then fails gives the slot back: the host's
+// own content shows again, and the failed plugin holds no mount.
+#[test]
+fn a_failed_surface_gives_its_slot_back() {
+    REPLACING.set(usize::MAX);
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![abi::Plugin { id: "test.replacing", setup: replacing }.into()],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount(100, 30, deps);
+    let replaced = harness.wait_for("replaced version");
+    assert!(!replaced.contains("plugin failed"), "{replaced}");
+    let _ = harness.tui.keymap.dispatch("replacing.break", None);
+    settle(&harness);
+    let entry = harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "test.replacing").unwrap();
+    assert!(matches!(entry.status, opencode_plugin::Status::Failed(_)), "{:?}", entry.status);
+    let screen = harness.app.render().text();
+    assert!(!screen.contains("replaced version") && screen.contains("1 plugin failed"), "{screen}");
+    assert_eq!(surface::ledger(), Ledger::default());
+}
