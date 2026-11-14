@@ -16,7 +16,7 @@ use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Align, Click, Color, Justify, Layout, Read, Rgba, Span, ThemeMode, Wrap};
+use crate::{Align, Border, Click, Color, Edges, Justify, Layout, Overflow, Read, Rgba, Span, ThemeMode, Wrap};
 
 /// What a surface draws: a node of a keyed tree. A node may carry an `id`, unique in its mount; the host keeps the
 /// widget of a node whose id and kind stay, and writes only what changed. Without an id a node is matched by its kind
@@ -48,6 +48,18 @@ pub enum Node {
         on_click: Option<Click>,
         #[serde(default)]
         children: Vec<Node>,
+        /// A border on the box's edge, inside its size and outside its padding.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        border: Option<std::boxed::Box<Border>>,
+        /// Cells inside each edge, instead of `padding`. A negative side counts as 0.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        padding_sides: Option<Edges>,
+        /// Children that do not fit go on to another row or column.
+        #[serde(default, skip_serializing_if = "is_false")]
+        wrap: bool,
+        /// Whether what does not fit in the box draws outside it.
+        #[serde(default, skip_serializing_if = "is_visible")]
+        overflow: Overflow,
     },
     /// Styled text; `fg` draws spans without their own, by default `text.base`.
     Text {
@@ -338,6 +350,10 @@ impl Node {
             layout: Layout::default(),
             on_click: None,
             children,
+            border: None,
+            padding_sides: None,
+            wrap: false,
+            overflow: Overflow::Visible,
         }
     }
 
@@ -449,7 +465,21 @@ impl From<crate::Node> for Node {
     /// A node of ABI 1.x, which has no ids.
     fn from(node: crate::Node) -> Self {
         match node {
-            crate::Node::Box { row, gap, padding, justify, align, bg, layout, on_click, children } => Node::Box {
+            crate::Node::Box {
+                row,
+                gap,
+                padding,
+                justify,
+                align,
+                bg,
+                layout,
+                on_click,
+                children,
+                border,
+                padding_sides,
+                wrap,
+                overflow,
+            } => Node::Box {
                 id: None,
                 row,
                 gap,
@@ -460,6 +490,10 @@ impl From<crate::Node> for Node {
                 layout,
                 on_click,
                 children: children.into_iter().map(Node::from).collect(),
+                border,
+                padding_sides,
+                wrap,
+                overflow,
             },
             crate::Node::Text { spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click } => {
                 Node::Text { id: None, spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click }
@@ -533,6 +567,10 @@ fn is_word(value: &Wrap) -> bool {
 
 fn is_unified(value: &DiffView) -> bool {
     *value == DiffView::Unified
+}
+
+fn is_visible(value: &Overflow) -> bool {
+    *value == Overflow::Visible
 }
 
 fn is_default_layout(value: &Layout) -> bool {
