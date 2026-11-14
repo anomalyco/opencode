@@ -68,8 +68,7 @@ fn log(owner: &str, host: &dyn abi::Host, event: &Event) {
 pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     let command = |name: &str| abi::Command { name: name.to_owned(), ..abi::Command::default() };
     setup.command(command("input.panel"), |host, input| {
-        let abi::Route::Session { id } = host.route() else { return };
-        host.open_panel(OpenPanel { surface: "side".into(), session: id, fullscreen: input == Some("full") });
+        host.open_panel(OpenPanel { surface: "side".into(), session: None, fullscreen: input == Some("full") });
     });
     setup.command(command("input.close"), |host, _| host.close_panel("side"));
     setup.command(command("input.overlay"), |host, _| {
