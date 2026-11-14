@@ -778,6 +778,14 @@ const session = await ctx.session.get({ sessionID })
 const messages = await ctx.session.context({ sessionID })
 ```
 
+Read the projected transcript with `ctx.session.message.list`. Pages default to the newest 50 messages. Set `order` only on the first page and repeat the `type` filter when following `cursor.next` or `cursor.previous`. An empty page ends the traversal.
+
+```ts
+const input = { sessionID, type: "user", limit: 20 } as const
+const page = await ctx.session.message.list({ ...input, order: "asc" })
+const next = page.cursor.next ? await ctx.session.message.list({ ...input, cursor: page.cursor.next }) : undefined
+```
+
 List sessions a page at a time. To get the next page, pass `cursor.next` back as `cursor`. The cursor remembers your
 filters, so you don't need to repeat them.
 

@@ -2,20 +2,12 @@ import { Schema } from "effect"
 import { Skill } from "@opencode/schema/skill"
 import { Location } from "@opencode/schema/location"
 
+export { InvalidCursorError, InvalidRequestError, SessionNotFoundError, UnknownError } from "@opencode/schema/api-error"
+
 export class LocationNotFoundError extends Schema.TaggedError<LocationNotFoundError>()(
   "LocationNotFoundError",
   { location: Location.PublicRef, message: Schema.String },
   { httpApiStatus: 404 },
-) {}
-
-export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>()(
-  "InvalidRequestError",
-  {
-    message: Schema.String,
-    kind: Schema.optional(Schema.String),
-    field: Schema.optional(Schema.String),
-  },
-  { httpApiStatus: 400 },
 ) {}
 
 export class RpcError extends Schema.TaggedError<RpcError>()(
@@ -69,15 +61,6 @@ export class ServiceUnavailableError extends Schema.TaggedError<ServiceUnavailab
     service: Schema.optional(Schema.String),
   },
   { httpApiStatus: 503 },
-) {}
-
-export class UnknownError extends Schema.TaggedError<UnknownError>()(
-  "UnknownError",
-  {
-    message: Schema.String,
-    ref: Schema.optional(Schema.String),
-  },
-  { httpApiStatus: 500 },
 ) {}
 
 export class ProviderNotFoundError extends Schema.TaggedError<ProviderNotFoundError>()(
@@ -153,15 +136,6 @@ export class AgentNotFoundError extends Schema.TaggedError<AgentNotFoundError>()
   { httpApiStatus: 404 },
 ) {}
 
-export class SessionNotFoundError extends Schema.TaggedError<SessionNotFoundError>()(
-  "SessionNotFoundError",
-  {
-    sessionID: Schema.String,
-    message: Schema.String,
-  },
-  { httpApiStatus: 404 },
-) {}
-
 export class MessageNotFoundError extends Schema.TaggedError<MessageNotFoundError>()(
   "MessageNotFoundError",
   {
@@ -206,12 +180,6 @@ export class CommandExecutionError extends Schema.TaggedError<CommandExecutionEr
     message: Schema.String,
   },
   { httpApiStatus: 500 },
-) {}
-
-export class InvalidCursorError extends Schema.TaggedError<InvalidCursorError>()(
-  "InvalidCursorError",
-  { message: Schema.String },
-  { httpApiStatus: 400 },
 ) {}
 
 export class PermissionNotFoundError extends Schema.TaggedError<PermissionNotFoundError>()(
