@@ -1,7 +1,7 @@
 import { Global } from "@opencode/util/global"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
 import { Hash } from "@opencode/util/hash"
-import { Service } from "@opencode/client/effect/service"
+import { Service, netns, scopedRegistrationFilename } from "@opencode/client/effect/service"
 import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import { randomBytes } from "crypto"
 import path from "path"
@@ -10,7 +10,8 @@ import { RemoteTunnel } from "./remote-tunnel"
 
 // The CLI's service configuration file, plus the Service.EnsureOptions binding that
 // points the client package's service operations at this CLI: which
-// registration file (by channel), which version, and how to spawn opencode.
+// registration file (by channel and network namespace), which version, and
+// how to spawn opencode.
 
 export const Info = Schema.Struct({
   disabled: Schema.optional(Schema.Boolean),
@@ -41,6 +42,14 @@ const decodeRegistration = Schema.decodeUnknownEffect(Schema.fromJsonString(Serv
 export function filename(channel = OPENCODE_CHANNEL) {
   if (channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") return "service.json"
   return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
+}
+
+// Re-exported so tests keep reading the namespace identity through ServiceConfig.
+export { netns }
+
+// The scoped name lives in @opencode/client so the CLI, the client, and Desktop agree on it.
+export function registrationFilename(channel = OPENCODE_CHANNEL, namespace = netns()) {
+  return scopedRegistrationFilename(filename(channel), namespace)
 }
 
 export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platform) {
@@ -117,13 +126,16 @@ const paths = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const global = yield* Global.Service
   const name = filename()
+  const registration = registrationFilename()
   const legacy = legacyFilename()
-  const file = path.join(global.state, name)
+  const file = path.join(global.state, registration)
   return {
     fs,
     file,
     legacyConfigFile: legacy ? path.join(global.config, legacy) : undefined,
     legacyRegistrationFiles: [
+      // Registrations written before namespace scoping used the configuration filename.
+      ...(registration !== name ? [path.join(global.state, name)] : []),
       ...(legacy ? [path.join(global.state, legacy)] : []),
       ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" ? [path.join(global.state, "service.json")] : []),
     ],
