@@ -491,7 +491,6 @@ export const dict = {
   "settings.providers.description": "Łącz dostawców modeli i zarządzaj nimi",
   "settings.providers.section.connected": "Połączeni dostawcy",
   "settings.providers.connected.empty": "Brak połączonych dostawców",
-  "settings.providers.connected.environmentDescription": "Połączono ze zmiennych środowiskowych",
   "settings.providers.account.manage": "Zarządzaj kontami {{provider}}",
   "settings.providers.account.group": "Konta",
   "settings.providers.account.add": "Dodaj konto",
