@@ -63,7 +63,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         return Err("setup refused".to_owned());
     }
     let state = Rc::new(State::default());
-    let command = |name: &str| Command { name: name.to_owned(), title: name.to_owned(), ..Command::default() };
+    let command = |name: &str| Command::default().with_name(name.to_owned()).with_title(name.to_owned());
     setup.storage_key("count");
     setup.command(command("conf.toast"), |host, _| host.toast(Toast::new(Variant::Success, "hello")));
     setup.command(command("conf.store"), |host, _| {
@@ -137,12 +137,10 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         });
         host.toast(Toast::new(Variant::Info, said));
     });
-    let layer = interact::Layer {
-        scope: LayerScope::Global,
-        keys: vec![Bind::new("ctrl+g", "conf"), Bind::new("ctrl+o", "pass")],
-        paste: true,
-        ..interact::Layer::default()
-    };
+    let layer = interact::Layer::default()
+        .with_scope(LayerScope::Global)
+        .with_keys(vec![Bind::new("ctrl+g", "conf"), Bind::new("ctrl+o", "pass")])
+        .with_paste(true);
     setup.layer(layer, handle);
     setup.search("conf.find", |_, query, options| {
         options.iter().filter(|option| option.title.contains(query)).map(|option| option.value.clone()).collect()

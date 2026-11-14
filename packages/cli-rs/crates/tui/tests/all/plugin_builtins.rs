@@ -434,7 +434,7 @@ fn heard() -> Vec<String> {
 /// A slot surface in the prompt's status row that hears its mounts and logs them and each view: the plugin's own log.
 fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("state");
-    setup.command(Command { name: "probe.write".into(), ..Command::default() }, |host, _| {
+    setup.command(Command::default().with_name("probe.write".into()), |host, _| {
         host.storage_merge("state", serde_json::Map::from_iter([("n".to_owned(), json!(1))]));
     });
     let surface = Surface::new("probe", Place::Slot(Placement::append(slot::PROMPT_FOOTER_STATUS)), |cx| {
@@ -459,7 +459,7 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
             HEARD.with(|heard| heard.borrow_mut().push(line));
             // What the plugin starts as a mount ends is the plugin's: its reply comes after the mount went.
             if !mounted {
-                let fetch = abi::Fetch { method: "GET".into(), path: "/api/probe".into(), ..abi::Fetch::default() };
+                let fetch = abi::Fetch::default().with_method("GET".into()).with_path("/api/probe".into());
                 host.fetch(fetch);
             }
         }
@@ -659,7 +659,7 @@ thread_local! {
 /// reads the palette and keeps its root unless it is new or its command
 /// woke it, also when told `all` (as one whose memo of its whole input hit). Its cards are memos.
 fn keeper(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.command(Command { name: "keeper.wake".into(), ..Command::default() }, |_, _| {});
+    setup.command(Command::default().with_name("keeper.wake".into()), |_, _| {});
     let surface = Surface::new("keeper", Place::Slot(Placement::prepend(slot::PROMPT_FOOTER_STATUS)), |cx| {
         if let Some(slot) = &cx.input.slot {
             SIZES.with(|sizes| sizes.borrow_mut().push([slot.width, slot.height, cx.input.width, cx.input.height]));

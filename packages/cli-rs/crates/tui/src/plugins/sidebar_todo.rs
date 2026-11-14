@@ -21,7 +21,7 @@ const ROOT: &str = "todo";
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("view");
-    setup.command(Command { name: FOLD.to_owned(), ..Command::default() }, |host, _| {
+    setup.command(Command::default().with_name(FOLD.to_owned()), |host, _| {
         host.storage_merge("view", serde_json::Map::from_iter([("open".to_owned(), json!(!open(host)))]));
     });
     let last: RefCell<Option<Last>> = RefCell::default();

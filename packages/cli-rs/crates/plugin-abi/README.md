@@ -49,13 +49,11 @@ use opencode_plugin_abi::{Click, Command, Node, Placement, Render, Setup, Span, 
 fn setup(setup: &mut Setup) -> Result<(), String> {
     // A command in the palette and as `/hello`.
     setup.command(
-        Command {
-            name: "hello.greet".to_owned(),
-            title: "Say hello".to_owned(),
-            slash: Some("hello".to_owned()),
-            palette: true,
-            ..Command::default()
-        },
+        Command::default()
+            .with_name("hello.greet".to_owned())
+            .with_title("Say hello".to_owned())
+            .with_slash(Some("hello".to_owned()))
+            .with_palette(true),
         |host, _input| host.toast(Toast::new(Variant::Success, "Hello from a plugin")),
     );
     // A line at the end of the home screen's footer; a click runs the command.
@@ -132,8 +130,21 @@ A plugin binary carries its ABI version. The host is ABI 2.0, and loads every 1.
 | The 2.0 SDK, this crate | yes | The requests of 1.6, and the 2.0 ones: surfaces (`View`, `Unmount`) and messages (`Message`) |
 | A 3.x SDK | no: "plugin ABI 3.0 is not supported: … rebuild the plugin against opencode-plugin-abi 2" | — |
 
-A plugin of 1.6 rebuilt on the 2.0 SDK needs no change: 2.0 keeps every entry and request of 1.6, and keeps them until
-3.0. What 2.0 adds is in `docs/P.4.md`: surfaces of contract 2.0 over the C ABI, and threads that send messages.
+A plugin of 1.6 rebuilt on the 2.0 SDK keeps every entry and request of 1.6 until 3.0, and what 2.0 adds is in
+`docs/P.4.md`: surfaces of contract 2.0 over the C ABI, and threads that send messages. Its source needs one change:
+the requests a plugin builds are `#[non_exhaustive]` from 2.0 on, so that a field a later 2.x adds breaks no plugin's
+source. A struct literal of one does not compile, also with `..Default::default()`; build it from its constructor and
+set what it needs with its `with_` setters, one a field:
+
+- `Command`, `Fetch`, `SelectOption`, `Images`, `Image`, `Bind` and `Layer` from `Type::default()` (or
+  `SelectOption::new`, `Bind::new`, `Bind::command`), `Select` from `Select::new` and `Panel` from `Panel::new`:
+  `Command::default().with_name("hello.greet".to_owned()).with_palette(true)`.
+- `Node::Diff` from `Node::diff(content)` and `with_view`, `with_filetype`, `with_hunks`, `with_diff_wrap`,
+  `with_diff_padding` and `with_id`.
+- `interact::PanelInput`, which the host fills, is read as before; a pattern of it needs `..`.
+
+The other types of 1.x stay open to literals until a field they need comes; the next to close are `Toast`, `Alert`,
+`Confirm`, `ErrorDetails`, `Overlay`, `OpenPanel`, `SelectAction`, `PanelAction` and `PanelBind`.
 
 ABI 1.6 adds the small reads and verbs: a claim's own size (`Setup::sized`), the streaming deltas (`Setup::on_deltas`),
 the model's variants, the session tabs, the keymap's state, the mouse selection, a program in the foreground, the

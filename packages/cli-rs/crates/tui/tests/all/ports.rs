@@ -881,31 +881,22 @@ fn the_author_fixture_counts_and_toasts_a_finished_session() {
 // --- Dialog::Select on both paths
 
 fn picking(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = |name: &str| abi::Command { name: name.to_owned(), ..abi::Command::default() };
+    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
     setup.command(command("probe.pick"), |host, _| {
         let option = |title: &str, value: &str| abi::SelectOption::new(title, value);
-        host.dialog(abi::Dialog::Select(abi::Select {
-            title: "Pick one".to_owned(),
-            placeholder: Some("Search picks".to_owned()),
-            options: vec![
-                option("Alpha", "a").description("first"),
-                abi::SelectOption { footer: Some("2nd".to_owned()), ..option("Beta", "b") },
-                option("Gamma", "c"),
-            ],
-            current: Some("b".to_owned()),
-            action: abi::Action::Command { name: "probe.picked".to_owned(), input: None },
-            key: None,
-            actions: Vec::new(),
-            binds: Vec::new(),
-            search: None,
-            size: None,
-            focus: None,
-            query: None,
-            query_delay: 0,
-            filterless: false,
-            empty: None,
-            note: None,
-        }));
+        host.dialog(abi::Dialog::Select(
+            abi::Select::new(
+                "Pick one".to_owned(),
+                vec![
+                    option("Alpha", "a").description("first"),
+                    option("Beta", "b").with_footer(Some("2nd".to_owned())),
+                    option("Gamma", "c"),
+                ],
+                abi::Action::Command { name: "probe.picked".to_owned(), input: None },
+            )
+            .with_placeholder(Some("Search picks".to_owned()))
+            .with_current(Some("b".to_owned())),
+        ));
     });
     setup.command(command("probe.picked"), |host, input| {
         host.toast(abi::Toast::new(abi::Variant::Info, format!("picked {}", input.unwrap_or("nothing"))));

@@ -27,7 +27,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         }
     });
     setup.command(
-        Command { name: "sample.verbs".to_owned(), title: "Sample verbs".to_owned(), ..Command::default() },
+        Command::default().with_name("sample.verbs".to_owned()).with_title("Sample verbs".to_owned()),
         move |host, _| {
             let answers = [
                 host.set_variant(Some("high")),
@@ -48,20 +48,14 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
             })));
             let answers: Vec<String> = answers.iter().map(bool::to_string).collect();
             host.toast(Toast::new(Variant::Info, format!("sample verbs: {}", answers.join(" "))));
-            host.dialog(Dialog::Panel(Panel {
-                key: "wide".to_owned(),
-                size: PanelSize::XLarge,
-                title: vec![Span::new("Wide")],
-                subtitle: None,
-                body: Node::text([Span::new("docs").link("https://opencode.ai/docs")]),
-                actions: Vec::new(),
-                binds: Vec::new(),
-                bleed: false,
-                centered: false,
-                bare: false,
-                close: None,
-                height: None,
-            }));
+            host.dialog(Dialog::Panel(
+                Panel::new(
+                    "wide".to_owned(),
+                    vec![Span::new("Wide")],
+                    Node::text([Span::new("docs").link("https://opencode.ai/docs")]),
+                )
+                .with_size(PanelSize::XLarge),
+            ));
         },
     );
     setup.slot(Placement::append("home.footer"), move |read, input, changed| {

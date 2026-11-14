@@ -241,11 +241,8 @@ fn gate<T>(f: impl FnOnce(&mut Gate) -> T) -> T {
 }
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = |name: &str| abi::Command {
-        name: name.into(),
-        scope: abi::Scope::Route("diff".into()),
-        ..abi::Command::default()
-    };
+    let command =
+        |name: &str| abi::Command::default().with_name(name.into()).with_scope(abi::Scope::Route("diff".into()));
     setup.command(command("gate.mark"), |_, _| {
         gate(|gate| {
             let selected = gate.selected;
@@ -288,15 +285,9 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
                         .fg("text.muted"),
                 ])
                 .bg(if selected { "background.raised.high" } else { "background.raised.base" });
-                let body = v2::Node::Diff {
-                    id: None,
-                    content: v2::Source::Content(handle),
-                    view: if split { v2::DiffView::Split } else { v2::DiffView::Unified },
-                    filetype: Some("rust".into()),
-                    hunks: None,
-                    wrap: Default::default(),
-                    padding: 0,
-                };
+                let body = v2::Node::diff(v2::Source::Content(handle))
+                    .with_view(if split { v2::DiffView::Split } else { v2::DiffView::Unified })
+                    .with_filetype(Some("rust".into()));
                 v2::Node::column(vec![head, body])
             })
         })

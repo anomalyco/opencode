@@ -185,20 +185,16 @@ fn only_the_btw_answer_links_sessions_among_plugin_markdown() {
     let (h, log) = open(100, 30, "Done.", Info::default());
     h.wait_for("Done.");
     let panel = |key: &str| {
-        opencode_plugin::abi::Dialog::Panel(opencode_plugin::abi::Panel {
-            key: key.to_owned(),
-            size: opencode_plugin::abi::PanelSize::Large,
-            title: vec![opencode_plugin::abi::Span::new("Panel")],
-            subtitle: None,
-            body: opencode_plugin::abi::Node::Markdown { text: format!("See {known} here") },
-            actions: Vec::new(),
-            binds: Vec::new(),
-            bleed: true,
-            centered: true,
-            bare: false,
-            close: None,
-            height: None,
-        })
+        opencode_plugin::abi::Dialog::Panel(
+            opencode_plugin::abi::Panel::new(
+                key.to_owned(),
+                vec![opencode_plugin::abi::Span::new("Panel")],
+                opencode_plugin::abi::Node::Markdown { text: format!("See {known} here") },
+            )
+            .with_size(opencode_plugin::abi::PanelSize::Large)
+            .with_bleed(true)
+            .with_centered(true),
+        )
     };
     opencode_tui::plugins::panel::show(&h.tui, "test.other", 0, panel("other"));
     h.wait_for(&format!("See {known} here"));

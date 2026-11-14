@@ -145,7 +145,9 @@ pub enum Node {
         user_scroll: bool,
     },
     /// A patch in the host's diff view: its own highlighting, colors and line numbers. An added file over 3,000
-    /// lines mounts its chunks near the view.
+    /// lines mounts its chunks near the view. 2.0 (P6c): `#[non_exhaustive]`: build it with [`Node::diff`] and the
+    /// `with_` setters, so a field a later 2.x adds is no break of a plugin's source.
+    #[non_exhaustive]
     Diff {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,
@@ -777,6 +779,46 @@ impl Node {
             wrap: Wrap::Word,
             padding: 0,
         }
+    }
+
+    /// Sets a [`Node::Diff`]'s view; anything else is unchanged.
+    pub fn with_view(mut self, value: DiffView) -> Self {
+        if let Node::Diff { view, .. } = &mut self {
+            *view = value;
+        }
+        self
+    }
+
+    /// Sets a [`Node::Diff`]'s filetype; anything else is unchanged.
+    pub fn with_filetype(mut self, value: Option<String>) -> Self {
+        if let Node::Diff { filetype, .. } = &mut self {
+            *filetype = value;
+        }
+        self
+    }
+
+    /// Sets a [`Node::Diff`]'s group of hunk anchors; anything else is unchanged.
+    pub fn with_hunks(mut self, value: Option<String>) -> Self {
+        if let Node::Diff { hunks, .. } = &mut self {
+            *hunks = value;
+        }
+        self
+    }
+
+    /// Sets how a [`Node::Diff`]'s lines wrap; anything else is unchanged.
+    pub fn with_diff_wrap(mut self, value: Wrap) -> Self {
+        if let Node::Diff { wrap, .. } = &mut self {
+            *wrap = value;
+        }
+        self
+    }
+
+    /// Sets a [`Node::Diff`]'s padding; anything else is unchanged.
+    pub fn with_diff_padding(mut self, value: u16) -> Self {
+        if let Node::Diff { padding, .. } = &mut self {
+            *padding = value;
+        }
+        self
     }
 
     /// A one-line text field showing `value`.

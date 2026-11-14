@@ -9,7 +9,7 @@ use serde_json::json;
 
 pub fn setup(setup: &mut Setup) -> Result<(), String> {
     setup.storage_key("clicks");
-    setup.command(Command { name: "sample.clicked".to_owned(), ..Command::default() }, |host, input| {
+    setup.command(Command::default().with_name("sample.clicked".to_owned()), |host, input| {
         let count = clicks(host) + 1;
         host.storage_set("clicks", json!({ "count": count, "input": input }));
     });

@@ -84,17 +84,15 @@ pub struct Diffs {
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     let diffs = Rc::new(Diffs::default());
-    let open = Command {
-        name: "diff.open".to_owned(),
-        title: "Open diff viewer".to_owned(),
-        group: Some("VCS".to_owned()),
-        slash: Some("diff".to_owned()),
-        palette: true,
-        ..Command::default()
-    };
+    let open = Command::default()
+        .with_name("diff.open".to_owned())
+        .with_title("Open diff viewer".to_owned())
+        .with_group(Some("VCS".to_owned()))
+        .with_slash(Some("diff".to_owned()))
+        .with_palette(true);
     let opened = diffs.clone();
     setup.command(open, move |host, _| opened.open(host));
-    let hidden = |name: &str| Command { name: name.to_owned(), ..Command::default() };
+    let hidden = |name: &str| Command::default().with_name(name.to_owned());
     let commands: [(&str, Clicked); 7] = [
         (SOURCE, |diffs, host, viewer, _| sources::open(host, viewer, &diffs.memory.borrow())),
         (HELP, |_, host, viewer, _| help::open(host, viewer)),
@@ -324,6 +322,6 @@ impl Diffs {
 fn preview(host: &dyn Host, viewer: &Viewer, file: Option<&str>) {
     let Some(file) = file else { return };
     let Some(Preview::Ready(bytes, _)) = viewer.previews.get(file) else { return };
-    let image = abi::Image { data: abi::base64::encode(bytes), name: Some(file.to_owned()) };
-    host.dialog(Dialog::Images(abi::Images { images: vec![image], index: 0 }));
+    let image = abi::Image::default().with_data(abi::base64::encode(bytes)).with_name(Some(file.to_owned()));
+    host.dialog(Dialog::Images(abi::Images::default().with_images(vec![image])));
 }
