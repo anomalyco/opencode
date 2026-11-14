@@ -43,6 +43,8 @@ use proto::{Down, Up};
 
 /// The JS host's source, written to a private directory and run by Bun.
 const SOURCE: &str = include_str!("host.ts");
+/// The V2 compatibility layer the JS host imports (P8), generated from `compat/` by `script/gen/js-host.ts`.
+const COMPAT: &str = include_str!("compat.js");
 
 /// How the JS host runs.
 #[derive(Clone, Debug)]
@@ -257,8 +259,8 @@ pub struct Scripts {
     started: RefCell<std::collections::HashSet<u64>>,
     /// Messages the running JS host's queue had no room for yet, in order, and their bytes: they go once it reads.
     overflow: RefCell<(VecDeque<(Down, usize)>, usize)>,
-    /// The theme's mode the JS host was told last.
-    theme: RefCell<String>,
+    /// The theme's mode and the theme the JS host was told last.
+    theme: RefCell<Option<(String, opencode_ui::theme::Theme)>>,
     /// The plugin whose code the JS host said it runs outside any sequenced work.
     entered: RefCell<Option<String>>,
     reconcile: RefCell<Option<Rc<dyn Fn()>>>,
@@ -485,6 +487,7 @@ impl Scripts {
             manifest: opencode_plugin_abi::Manifest { id: id.clone(), ..Default::default() },
             holds: Vec::new(),
             effects: RefCell::new(None),
+            watches: RefCell::default(),
         };
         (load.state, load.registered) = (Loading::Loaded(Rc::new(loaded)), false);
     }
@@ -500,13 +503,17 @@ impl Scripts {
         }
     }
 
-    /// Tells the JS host the theme's mode, when it changed.
+    /// Tells the JS host the theme's mode and colors, when they changed.
     pub(crate) fn theme(&self) {
         let Some(host) = self.host.upgrade() else { return };
-        let mode = theme_mode(&*host);
-        if self.theme.replace(mode.clone()) != mode && self.child.borrow().is_some() {
-            self.write(&Down::Theme { mode });
+        let now = (theme_mode(&*host), host.theme());
+        let same = self.theme.borrow().as_ref().is_some_and(|told| told.0 == now.0 && told.1 == now.1);
+        if same || self.child.borrow().is_none() {
+            return;
         }
+        let palette = palette(&*host);
+        self.write(&Down::Theme { mode: now.0.clone(), palette: Some(palette) });
+        *self.theme.borrow_mut() = Some(now);
     }
 
     /// Sends `message` and records what its sequence awaits. A full queue is back-pressure, not a fault (review
@@ -629,8 +636,9 @@ impl Scripts {
             Ok(child) => {
                 count(|crossed| crossed.started += 1);
                 let theme_mode = theme_mode(&*host);
-                self.theme.replace(theme_mode.clone());
-                let hello = Down::Hello { version: proto::VERSION, after, theme_mode };
+                let palette = palette(&*host);
+                *self.theme.borrow_mut() = Some((theme_mode.clone(), host.theme()));
+                let hello = Down::Hello { version: proto::VERSION, after, theme_mode, palette: Some(palette) };
                 let hello = serde_json::to_vec(&hello).unwrap_or_default();
                 let _ = child.send(wire::CONTROL, &hello, None, child::Wait::Ack);
                 *self.child.borrow_mut() = Some(child);
@@ -653,6 +661,7 @@ impl Scripts {
         if self.script.borrow().is_none() {
             let dir = opencode_util::temp::tempdir()?;
             std::fs::write(dir.path().join("host.ts"), SOURCE)?;
+            std::fs::write(dir.path().join("compat.js"), COMPAT)?;
             *self.script.borrow_mut() = Some(dir);
         }
         let script = self.script.borrow().as_ref().map(|dir| dir.path().join("host.ts")).unwrap_or_default();
@@ -754,6 +763,7 @@ impl Scripts {
                             manifest,
                             holds,
                             effects: RefCell::new(Some(effects)),
+                            watches: RefCell::default(),
                         };
                         (load.state, load.registered) = (Loading::Loaded(Rc::new(loaded)), false);
                         drop(loads);
@@ -1157,6 +1167,17 @@ fn digest(dir: &Path, options: Option<&str>) -> u64 {
     }
     options.unwrap_or_default().hash(&mut hasher);
     hasher.finish()
+}
+
+/// The page theme's colors, which the V2 context's `theme` reads (P8).
+fn palette(host: &dyn Host) -> proto::Palette {
+    let colors = host
+        .theme()
+        .list()
+        .into_iter()
+        .map(|(token, color)| (token, format!("#{:02x}{:02x}{:02x}{:02x}", color.r, color.g, color.b, color.a)))
+        .collect();
+    proto::Palette { mode: theme_mode(host), colors }
 }
 
 /// The theme's mode as the setup context names it.

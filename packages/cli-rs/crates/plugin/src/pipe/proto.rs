@@ -23,6 +23,9 @@ pub enum Down {
         after: u64,
         /// The theme's mode, `dark` or `light`, which the setup context reads.
         theme_mode: String,
+        /// P8: the page theme's colors, which the V2 context's `theme` reads.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        palette: Option<Palette>,
     },
     /// Loads the TUI module of the plugin directory `dir`, the target `target`. With `setup`, runs its setup with
     /// `options`, answered with [`Up::Loaded`]; without, answered with [`Up::Described`], and [`Down::Setup`] runs it
@@ -39,8 +42,12 @@ pub enum Down {
     Setup { seq: u64, load: u64 },
     /// The host forgot `target`: the JS host drops its plugin, whose ID is free for another target.
     Forget { target: String },
-    /// The theme's mode changed.
-    Theme { mode: String },
+    /// The theme's mode or colors changed.
+    Theme {
+        mode: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        palette: Option<Palette>,
+    },
     /// Runs the cleanups of plugin `id`, which the host disabled or failed: nothing of it is called from now on.
     Deactivate {
         seq: u64,
@@ -126,6 +133,13 @@ impl Down {
             | Down::Answered { .. } => None,
         }
     }
+}
+
+/// The page theme as the JS host holds it (P8): its mode, and each token's color as `#rrggbbaa`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Palette {
+    pub mode: String,
+    pub colors: std::collections::BTreeMap<String, String>,
 }
 
 /// From the JS host to the host.
