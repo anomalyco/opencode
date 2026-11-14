@@ -1,12 +1,14 @@
 //! The sidebar's todo section (E.14, row F07, `feature-plugins/sidebar/todo.tsx`): the list of the latest
 //! completed `todowrite` call before the revert boundary. Above two items the header folds the list, and the
-//! folded header counts what remains. It is a plugin of the one API (O-67).
+//! folded header counts what remains. It is a plugin of the one API (O-67), on contract 2.0 (P6a).
 
 use opencode_api::generated::{SessionMessageAssistantContentItem, SessionMessageAssistantToolState};
-use opencode_plugin::abi::{self, Changed, Click, Command, Layout, Node, Placement, Render, Span};
+use opencode_plugin::abi::v2::{Node, Place, Surface};
+use opencode_plugin::abi::{self, Changed, Click, Command, Layout, Placement, Span};
 use opencode_plugin::slot;
 use opencode_ui::tool_info::{Todo, TodoStatus, parse_todos, todo_marker};
 
+use super::{hidden, kept};
 use crate::prelude::*;
 
 pub fn plugin() -> abi::Plugin {
@@ -15,6 +17,7 @@ pub fn plugin() -> abi::Plugin {
 
 /// The hidden command a click on the header runs.
 const FOLD: &str = "sidebar.todo.fold";
+const ROOT: &str = "todo";
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("view");
@@ -22,23 +25,27 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         host.storage_merge("view", serde_json::Map::from_iter([("open".to_owned(), json!(!open(host)))]));
     });
     let last: RefCell<Option<Last>> = RefCell::default();
-    setup.slot(Placement::append(slot::SIDEBAR_CONTENT), move |read, input, changed| {
-        let Some(session) = input.session_id.as_deref() else { return Render::Hide };
+    let surface = Surface::new("todo", Place::Slot(Placement::append(slot::SIDEBAR_CONTENT)), move |cx| {
+        let Some(session) = cx.input.slot.as_ref().and_then(|slot| slot.session_id.as_deref()) else {
+            return hidden(ROOT);
+        };
+        let changed = &cx.input.changed;
         let mut last = last.borrow_mut();
         let fresh = changed.all || changed.local || last.as_ref().is_none_or(|last| last.session != session);
         let last = match &mut *last {
             Some(last) if !fresh => last,
             last => last.insert(Last { session: session.to_owned(), boundary: None, input: None }),
         };
-        if !last.update(read, changed, fresh) && !fresh {
-            return Render::Keep;
+        if !last.update(cx.read, changed, fresh) && !fresh {
+            return kept(ROOT);
         }
         let list = last.input.as_ref().map(parse_todos).unwrap_or_default();
         if list.is_empty() {
-            return Render::Hide;
+            return hidden(ROOT);
         }
-        Render::Show(view(&list, open(read)))
+        view(&list, open(cx.read)).with_id(ROOT)
     });
+    setup.surface(surface);
     Ok(())
 }
 
