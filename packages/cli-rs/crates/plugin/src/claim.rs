@@ -7,9 +7,9 @@
 //! The claim shows a part only while its view accepts it. The host's own row comes back:
 //!
 //! - for a revision the view declines (returns `None`);
-//! - once a view of it took longer than the overrun limit, or returned a tree the host refused twice in a row (once,
-//!   then once more as a whole tree): for the rest of the part's mount, which a remount ends, and for a fence a new
-//!   theme too, as Markdown builds the block again;
+//! - once a view of it took longer than the overrun limit, or returned a tree the host refused (a keep the host does
+//!   not hold is asked for once more as a whole tree, any other refusal is the plugin's error): for the rest of the
+//!   part's mount, which a remount ends, and for a fence a new theme too, as Markdown builds the block again;
 //! - for every part of the plugin, once a view panicked: the plugin fails, and the host mounts the route again
 //!   without its claims, as it does when the user disables or reloads it.
 //!
@@ -465,6 +465,16 @@ impl Core {
                     let mut state = self.state.borrow_mut();
                     (state.memo, state.remote) = (memo, 0);
                     log::warn!("claim {} refused a tree for part {}: {refused}", self.id.surface, self.id.key);
+                    // Only a keep the host does not hold is mended by a whole tree, once; any other refusal is the
+                    // plugin's error, and the part falls back at once.
+                    if full
+                        || !matches!(
+                            refused,
+                            crate::reconcile::Refused::Unknown(_) | crate::reconcile::Refused::Kept(_)
+                        )
+                    {
+                        break;
+                    }
                 }
             }
         }
@@ -610,17 +620,13 @@ impl Core {
         Ok(())
     }
 
-    /// Drops the tree and the content its views gave. The memo values stay with the mount, as a library keeps its
-    /// table until the mount ends: a later view builds whole, and may keep what they hold.
+    /// Drops the tree, so a later view builds whole. The content handles and memo values its views gave stay with
+    /// the mount until it ends or the plugin releases them (4.2), as a library keeps its table: a later view may name
+    /// them again.
     fn wipe(&self) {
         let mut state = self.state.borrow_mut();
         state.tree.clear(&self.root);
         state.last = None;
-        let content = std::mem::take(&mut state.content);
-        book(|ledger| {
-            ledger.content -= content.len() as i64;
-            ledger.content_bytes -= content.values().map(|bytes| bytes.len() as i64).sum::<i64>();
-        });
     }
 }
 
