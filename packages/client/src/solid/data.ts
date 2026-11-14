@@ -1288,6 +1288,9 @@ export function createData(config: CreateDataInput) {
         return
       case "session.compaction.ended":
         message.update(event.data.sessionID, (draft, index) => {
+          // A re-delivered settlement event (same event id) must settle nothing
+          // twice — and must not mark a newer running row with a stale summary.
+          if (index.has(SessionMessage.ID.fromEvent(event.id))) return
           const position = draft.findLastIndex((item) => item.type === "compaction" && item.status === "running")
           const current = draft[position]
           if (current?.type === "compaction") {
@@ -1300,6 +1303,9 @@ export function createData(config: CreateDataInput) {
               cost: event.data.cost,
               tokens: event.data.tokens,
             })
+            // Register the settlement event id so a re-delivered ended event
+            // hits the append guard instead of adding a duplicate row (#61426).
+            index.set(SessionMessage.ID.fromEvent(event.id), position)
             return
           }
           message.append(draft, index, {
@@ -1319,6 +1325,8 @@ export function createData(config: CreateDataInput) {
       case "session.compaction.failed":
         if (event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
         message.update(event.data.sessionID, (draft, index) => {
+          // Same re-delivery guard as session.compaction.ended above (#61426).
+          if (index.has(SessionMessage.ID.fromEvent(event.id))) return
           const position = draft.findLastIndex((item) => item.type === "compaction" && item.status === "running")
           const current = draft[position]
           const failed: Extract<SessionMessageInfo, { type: "compaction"; status: "failed" }> = {
@@ -1334,6 +1342,7 @@ export function createData(config: CreateDataInput) {
           }
           if (current?.type === "compaction") {
             draft[position] = failed
+            index.set(SessionMessage.ID.fromEvent(event.id), position)
             return
           }
           message.append(draft, index, failed)
