@@ -355,8 +355,16 @@ fn a_stop_flag_ends_a_thread_and_a_failure_closes_the_mailbox() {
 #[derive(Debug)]
 struct Slow;
 
+/// The senders of the slow and the wide plugins, and the wide numbers that arrived.
+#[derive(Default)]
+struct Senders {
+    slow: Option<abi::Sender<Slow>>,
+    wide: Option<abi::Sender<u128>>,
+    arrived: Vec<u128>,
+}
+
 thread_local! {
-    static SLOW: RefCell<(Option<abi::Sender<Slow>>, Vec<u128>, Option<abi::Sender<u128>>)> = RefCell::default();
+    static SLOW: RefCell<Senders> = RefCell::default();
 }
 
 static SERIALIZING: std::sync::Mutex<Option<(std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> =
@@ -380,13 +388,13 @@ impl<'de> serde::Deserialize<'de> for Slow {
 
 fn slow_setup(setup: &mut abi::Setup) -> Result<(), String> {
     let sender = setup.messages(|_, _: Slow| {})?;
-    SLOW.with(|slow| slow.borrow_mut().0 = Some(sender));
+    SLOW.with(|slow| slow.borrow_mut().slow = Some(sender));
     Ok(())
 }
 
 fn wide_setup(setup: &mut abi::Setup) -> Result<(), String> {
-    let sender = setup.messages(|_, number: u128| SLOW.with(|slow| slow.borrow_mut().1.push(number)))?;
-    SLOW.with(|slow| slow.borrow_mut().2 = Some(sender));
+    let sender = setup.messages(|_, number: u128| SLOW.with(|slow| slow.borrow_mut().arrived.push(number)))?;
+    SLOW.with(|slow| slow.borrow_mut().wide = Some(sender));
     Ok(())
 }
 
@@ -407,7 +415,7 @@ fn open_with(carrier: Carrier, id: &'static str, setup: fn(&mut abi::Setup) -> R
 fn disabling_does_not_wait_for_a_serializer() {
     for carrier in CARRIERS {
         let harness = open_with(carrier, "test.slow", slow_setup);
-        let sender = SLOW.with(|slow| slow.borrow().0.clone()).unwrap();
+        let sender = SLOW.with(|slow| slow.borrow().slow.clone()).unwrap();
         let (started, serializing) = std::sync::mpsc::channel();
         let (release, released) = std::sync::mpsc::channel();
         *SERIALIZING.lock().unwrap() = Some((started, released));
@@ -427,13 +435,13 @@ fn disabling_does_not_wait_for_a_serializer() {
 #[test]
 fn a_wide_integer_arrives_as_itself_on_both_carriers() {
     for carrier in CARRIERS {
-        SLOW.with(|slow| slow.borrow_mut().1.clear());
+        SLOW.with(|slow| slow.borrow_mut().arrived.clear());
         let harness = open_with(carrier, "test.wide", wide_setup);
-        let sender = SLOW.with(|slow| slow.borrow().2.clone()).unwrap();
+        let sender = SLOW.with(|slow| slow.borrow().wide.clone()).unwrap();
         let wide = u128::from(u64::MAX) + 7;
         std::thread::spawn(move || sender.send(wide).unwrap()).join().unwrap();
         frame(&harness);
-        assert_eq!(SLOW.with(|slow| slow.borrow().1.clone()), [wide], "{carrier:?}");
+        assert_eq!(SLOW.with(|slow| slow.borrow().arrived.clone()), [wide], "{carrier:?}");
     }
 }
 

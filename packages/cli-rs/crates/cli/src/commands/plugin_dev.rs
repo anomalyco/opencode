@@ -538,7 +538,7 @@ mod tests {
     #[test]
     fn racing_publishers_never_mix_their_libraries() {
         let dir = opencode_util::temp::tempdir().unwrap();
-        let builds: Vec<PathBuf> = [b'a', b'b']
+        let builds: Vec<PathBuf> = b"ab"
             .iter()
             .map(|byte| {
                 let path = dir.path().join(format!("build-{}", char::from(*byte)));
