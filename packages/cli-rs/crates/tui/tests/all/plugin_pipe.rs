@@ -194,8 +194,8 @@ fn screen(cells: &[opentui::testing::Cell]) -> String {
     cells.chunks(80).map(|row| row.iter().map(|cell| cell.symbol.as_str()).collect::<String>() + "\n").collect()
 }
 
-/// The twin's script, linked (`None`) or on the pipe: what each checkpoint saw.
-fn twin_script(pipe: Option<Config>) -> Vec<(&'static str, Seen)> {
+/// The twin's script, in process on `carrier` or on the pipe: what each checkpoint saw.
+fn twin_script(pipe: Option<Config>, carrier: Carrier) -> Vec<(&'static str, Seen)> {
     let (harness, _root) = match pipe {
         Some(config) => {
             let pipe = open(&[("twin", None)], config, (80, 30));
@@ -204,7 +204,7 @@ fn twin_script(pipe: Option<Config>) -> Vec<(&'static str, Seen)> {
         }
         None => {
             let mut deps = Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) };
-            deps.builtins.push(builtin(Carrier::Linked, abi::Plugin { id: twin::ID, setup: twin::setup }));
+            deps.builtins.push(builtin(carrier, abi::Plugin { id: twin::ID, setup: twin::setup }));
             (support::mount(80, 30, deps), None)
         }
     };
@@ -264,18 +264,26 @@ fn twin_script(pipe: Option<Config>) -> Vec<(&'static str, Seen)> {
 #[test]
 fn the_twin_is_equal_linked_and_on_the_pipe() {
     let Some(config) = config() else { return };
-    let linked = twin_script(None);
+    let linked = twin_script(None, Carrier::Linked);
     // The guard: the checkpoints see different frames, so equal runs are not equal by being empty.
     assert_ne!(linked[0].1.0, linked[1].1.0, "a bump changed nothing on screen");
     let (_, (_, toasts, status)) = linked.iter().find(|(name, _)| *name == "failed").unwrap();
     assert_eq!(toasts.len(), 1, "{toasts:?}");
     assert!(status.contains("run-command threw: the twin's command threw"), "{status}");
-    let piped = twin_script(Some(config));
-    for ((name, linked), (_, piped)) in linked.iter().zip(&piped) {
-        assert_eq!(linked.1, piped.1, "at {name}: toasts");
-        assert_eq!(linked.2, piped.2, "at {name}: status");
-        if linked.0 != piped.0 {
-            panic!("at {name}: the frames differ\nlinked:\n{}\npipe:\n{}", screen(&linked.0), screen(&piped.0));
+    // The pipe, and the C ABI's byte shims as the third carrier (review bigboi, gate note).
+    for (carrier, other) in
+        [("pipe", twin_script(Some(config), Carrier::Linked)), ("abi", twin_script(None, Carrier::Abi))]
+    {
+        for ((name, linked), (_, piped)) in linked.iter().zip(&other) {
+            assert_eq!(linked.1, piped.1, "{carrier} at {name}: toasts");
+            assert_eq!(linked.2, piped.2, "{carrier} at {name}: status");
+            if linked.0 != piped.0 {
+                panic!(
+                    "{carrier} at {name}: the frames differ\nlinked:\n{}\n{carrier}:\n{}",
+                    screen(&linked.0),
+                    screen(&piped.0)
+                );
+            }
         }
     }
 }
@@ -438,7 +446,7 @@ fn ends_the_js_host(command: &str, input: Option<&str>, cause: &str, config: Con
 fn a_plugin_that_hangs_fails_alone_and_the_js_host_starts_again() {
     let Some(mut config) = config() else { return };
     config.limits.ack = Duration::from_millis(500);
-    ends_the_js_host("probe.hang", None, "run-command ended the JS host: the JS host did not acknowledge", config);
+    ends_the_js_host("probe.hang", None, "run-command ended the JS host: the JS host sent nothing for 500 ms", config);
 }
 
 // Expected (containment, a plugin that exits): the JS host's end is noticed; the plugin whose handler ran fails, named
@@ -719,7 +727,7 @@ impl Model for Delivery {
         let seen = calls(&log);
         let noted = NOTED.with(|noted| noted.borrow().clone());
         let fail = |site, detail: String| Some(Failure { property: "delivery", site, step: acts.len(), detail });
-        if faults == 0 {
+        if faults == 0 && acts.iter().all(|act| !matches!(act, Act::Fault(_))) {
             if seen != expected {
                 return fail("log", format!("expected {expected:?}\nseen {seen:?}"));
             }
@@ -728,14 +736,15 @@ impl Model for Delivery {
             }
             return None;
         }
-        // Each seen once, in the order of the input.
-        let mut rest = expected.iter();
-        if let Some(entry) = seen.iter().find(|entry| !rest.any(|expected| expected == *entry)) {
-            return fail("subsequence", format!("{entry} out of order or twice\nexpected {expected:?}\nseen {seen:?}"));
+        // A drop or a swap ends the JS host before it starts the message after the gap, and a repeat is dropped: no
+        // handler was running, so every call it did not start is sent again to the next one. The logs are exact
+        // (review bigboi-2: an oracle of subsequences passed with every call after a restart discarded).
+        let _ = faults;
+        if seen != expected {
+            return fail("log-after-faults", format!("expected {expected:?}\nseen {seen:?}"));
         }
-        let mut rest = steps.iter();
-        if let Some(note) = noted.iter().find(|note| !rest.any(|step| step == *note)) {
-            return fail("effects-order", format!("{note} out of order or twice\nexpected {steps:?}\nnoted {noted:?}"));
+        if noted != steps {
+            return fail("effects-after-faults", format!("expected {steps:?}\nnoted {noted:?}"));
         }
         None
     }
@@ -898,7 +907,7 @@ fn a_changed_module_reloads_and_the_running_one_stays_meanwhile() {
     harness.tui.keymap.dispatch("probe.hold", Some("600"));
     let file = pipe.root.path().join("config/plugins/twin/tui.ts");
     let source = std::fs::read_to_string(&file).unwrap();
-    std::fs::write(&file, source.replace("`twin ${total}`", "`twin* ${total}`")).unwrap();
+    std::fs::write(&file, source.replace("`twin ${total}", "`twin* ${total}")).unwrap();
     let begun = Instant::now();
     let mut reloaded = false;
     while begun.elapsed() < Duration::from_secs(10) && !reloaded {
@@ -1023,10 +1032,10 @@ impl Project {
         entries.into_iter().find(|entry| entry.target.as_deref() == Some(&target)).map(|entry| entry.status)
     }
 
-    /// The setups and cleanups the probe logged itself.
-    fn log(&self) -> (usize, usize) {
+    /// The setups and cleanups the probe logged itself, and the times its module's own code ran.
+    fn log(&self) -> (usize, usize, usize) {
         let text = std::fs::read_to_string(self.dir.join(".log.jsonl")).unwrap_or_default();
-        (text.matches("\"setup\"").count(), text.matches("\"cleanup\"").count())
+        (text.matches("\"setup\"").count(), text.matches("\"cleanup\"").count(), text.matches("\"module\"").count())
     }
 }
 
@@ -1143,7 +1152,8 @@ impl Model for PendingModel {
                     format!("listed {:?}, expected {:?} ({asked:?})", project.listed(), asked.listed()),
                 );
             }
-            if project.log() != (asked.setups, asked.cleanups) {
+            // Each setup imports the module afresh, and nothing of it runs before (review bigboi-1).
+            if project.log() != (asked.setups, asked.cleanups, asked.setups) {
                 return fail("log", format!("the probe logged {:?}, expected {asked:?}", project.log()));
             }
             if asked.approved() {
@@ -1263,4 +1273,244 @@ fn the_manager_asks_before_a_project_typescript_plugin_runs() {
         app.advance(Duration::from_millis(1));
         tui.plugins.entries().iter().any(|entry| entry.id == PROBE && entry.status == Status::Active)
     });
+}
+
+// Review bigboi: rows that fail without each fix.
+
+/// Waits, advancing frames and sending nothing else to the JS host, until `done` holds.
+fn quietly(pipe: &Pipe, what: &str, done: impl Fn() -> bool) {
+    let begun = Instant::now();
+    while !done() {
+        assert!(begun.elapsed() < Duration::from_secs(20), "{what}:\n{}", pipe.harness.app.text());
+        pipe.harness.app.advance(Duration::from_millis(1));
+        std::thread::sleep(Duration::from_millis(1));
+    }
+}
+
+/// The text of the twin's header on screen.
+fn header(pipe: &Pipe) -> String {
+    pipe.harness.app.text().lines().find(|line| line.starts_with("twin ")).unwrap_or("").trim().to_owned()
+}
+
+// Expected (bigboi-2, bigboi-3, a cut of the JS host): the handler it was running when it ended fails its plugin and is
+// not run again; the calls it received and never started are sent again, in order, after the surviving plugin's setup,
+// and so is input routed while it is set up again: each runs exactly once. The survivor's JS state is new (setup
+// again), so its board counts only those.
+#[test]
+fn a_cut_runs_what_never_started_once_and_what_ran_never_again() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe_and_twin(config, false);
+    twin_open(&pipe);
+    let tui = &pipe.harness.tui;
+    let pid = pipe.scripts().pid().unwrap();
+    tui.keymap.dispatch("probe.hold", Some("800"));
+    for _ in 0..3 {
+        tui.keymap.dispatch("twin.bump", Some("2"));
+    }
+    // The hold runs; the bumps wait behind it.
+    std::thread::sleep(Duration::from_millis(300));
+    pipe.scripts().kill();
+    quietly(&pipe, "the cut was noticed", || pipe.scripts().pid().is_some_and(|now| now != pid));
+    // Input while the survivor is set up again goes behind its setup, to the new activation: not lost, not run twice.
+    tui.keymap.dispatch("twin.bump", Some("2"));
+    pipe.settle();
+    let error = failed(&pipe, PROBE).unwrap_or_default();
+    assert!(error.contains("run-command ended the JS host"), "{error}");
+    assert!(calls(&log).is_empty(), "the cut handler ran again: {:?}", calls(&log));
+    assert_eq!(pipe.status(twin::ID), Some(Status::Active));
+    assert!(header(&pipe).starts_with("twin 4 "), "{}", pipe.harness.app.text());
+    assert!(pipe.harness.app.text().contains("card 2: 4"), "{}", pipe.harness.app.text());
+}
+
+/// `count` copies of the probe, as `example.probe<n>` with commands `probe<n>.…`, on one JS host with `config`.
+fn probes(count: usize, config: Config) -> Pipe {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let config_dir = root.path().join("config");
+    let source = std::fs::read_to_string(Path::new(EXAMPLES).join("probe/tui.ts")).unwrap();
+    for index in 0..count {
+        let dir = config_dir.join(format!("plugins/probe{index}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        let source = source
+            .replace("\"example.probe\"", &format!("\"example.probe{index}\""))
+            .replace("name: \"probe.", &format!("name: \"probe{index}."));
+        std::fs::write(dir.join("tui.ts"), source).unwrap();
+    }
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    external_with(&harness.tui, External { config_dir, cwd: root.path().to_path_buf(), dev: Vec::new() }, Some(config));
+    let pipe = Pipe { harness, root };
+    (0..count).for_each(|index| pipe.active(&format!("example.probe{index}")));
+    pipe
+}
+
+// Expected (bigboi-3, the production limit of 1 s): five handlers of 270 ms each, sent in one burst, wait in the JS
+// host's queue for over a second; a queue that moves is not a hang, so the JS host stays and every plugin stays active.
+#[test]
+fn a_queue_that_moves_is_not_a_hang() {
+    let Some(bun) = bun() else { return };
+    let config = Config::new(bun);
+    assert_eq!(config.limits.ack, Duration::from_secs(1));
+    let pipe = probes(5, config);
+    pipe.settle();
+    let (pid, started) = (pipe.scripts().pid(), pipe::crossed().started);
+    for index in 0..5 {
+        pipe.harness.tui.keymap.dispatch(&format!("probe{index}.hold"), Some("270"));
+    }
+    quietly(&pipe, "the burst was answered", || pipe.scripts().idle());
+    assert_eq!((pipe.scripts().pid(), pipe::crossed().started), (pid, started), "the JS host was ended");
+    for index in 0..5 {
+        assert_eq!(pipe.status(&format!("example.probe{index}")), Some(Status::Active));
+    }
+}
+
+// Expected (bigboi-3): a handler's answer comes once the views it made due were sent, so a view that never returns
+// after its command did is a handler that never answered: the JS host is ended at the limit with nothing else sent
+// (no ping), and that plugin fails.
+#[test]
+fn a_view_that_never_returns_after_its_command_ends_the_js_host() {
+    let Some(mut config) = config() else { return };
+    config.limits.ack = Duration::from_millis(500);
+    let (pipe, _log) = probe_and_twin(config, false);
+    pipe.settle();
+    pipe.harness.tui.keymap.dispatch("probe.stuck", None);
+    quietly(&pipe, "the stuck view failed the probe", || failed(&pipe, PROBE).is_some());
+    let error = failed(&pipe, PROBE).unwrap();
+    assert!(error.contains("run-command ended the JS host: the JS host sent nothing for 500 ms"), "{error}");
+    pipe.settle();
+    assert_eq!(pipe.status(twin::ID), Some(Status::Active));
+}
+
+// Expected (bigboi-4): a full queue is back-pressure, not a fault. A message larger than the whole queue is refused and
+// ends nothing; a busy JS host whose queue fills is not ended: what does not fit waits in the host's overflow and goes,
+// in order, once it reads; past the overflow's bound a message is refused, counted, and nothing ends. A restart's own
+// sends can therefore never end the JS host again (they did, three times, before).
+#[test]
+fn a_full_queue_is_back_pressure_and_ends_nothing() {
+    let Some(mut config) = config() else { return };
+    config.limits.queued = 64 << 10;
+    config.limits.inbox = 256 << 10;
+    let (pipe, log) = probe_and_twin(config, false);
+    twin_open(&pipe);
+    let tui = &pipe.harness.tui;
+    let (pid, started) = (pipe.scripts().pid(), pipe::crossed().started);
+    let large = "x".repeat(2 << 20);
+    for _ in 0..3 {
+        tui.keymap.dispatch("probe.step", Some(&large));
+    }
+    pipe.settle();
+    assert!(calls(&log).is_empty(), "{:?}", calls(&log));
+    // Busy, it reads nothing for a while: the bumps fill its queue, then the overflow, then are refused.
+    let refused = pipe::crossed().refused_sends;
+    tui.keymap.dispatch("probe.hold", Some("700"));
+    let middle = "y".repeat(20 << 10);
+    for _ in 0..30 {
+        tui.keymap.dispatch("twin.bump", Some(&middle));
+    }
+    pipe.settle();
+    let refused = pipe::crossed().refused_sends - refused;
+    assert!(refused > 0 && refused < 30, "{refused} bumps refused: the row did not reach the bound");
+    assert_eq!((pipe.scripts().pid(), pipe::crossed().started), (pid, started), "a full queue ended the JS host");
+    assert_eq!(pipe.status(PROBE), Some(Status::Active));
+    assert_eq!(pipe.status(twin::ID), Some(Status::Active));
+    // Every bump that was not refused ran, once, in order.
+    assert!(header(&pipe).starts_with(&format!("twin {} ", 1 + 30 - refused)), "{}", header(&pipe));
+    assert_eq!(calls(&log), vec![serde_json::json!({ "hold": 700 })]);
+}
+
+// Expected (bigboi-5): the keys a holding command held reach the composer after the effects of its answer: here the
+// composer set to `set:`, then `ab`.
+#[test]
+fn held_keys_come_after_the_holding_commands_effects() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe_and_twin(config, false);
+    pipe.settle();
+    pipe.harness.tui.keymap.dispatch("probe.holdset", None);
+    pipe.harness.app.type_text("ab");
+    pipe.settle();
+    assert_eq!(pipe.harness.text(), "set:ab");
+}
+
+// Expected (bigboi-6): a reload imports the plugin's modules afresh (an edit of a helper alone runs); a replacement whose
+// setup throws leaves the running one answering; and a command sent while a candidate's setup runs is answered by the
+// activation the host routed it to, the running one.
+#[test]
+fn a_reload_is_fresh_and_a_candidate_never_answers_for_the_running_one() {
+    let Some(config) = config() else { return };
+    let pipe = open(&[("reloader", None)], config, (80, 30));
+    pipe.active("example.reloader");
+    let dir = pipe.root.path().join("config/plugins/reloader");
+    let say = || {
+        toasts(&pipe.harness);
+        pipe.harness.tui.keymap.dispatch("reloader.say", None);
+        pipe.settle();
+        toasts(&pipe.harness)
+    };
+    let reload = || {
+        opencode_tui::plugins::host::reconcile(&pipe.harness.tui);
+        pipe.settle();
+    };
+    assert_eq!(say(), vec!["v1".to_owned()]);
+    std::fs::write(dir.join("label.ts"), "export function label() {\n  return \"v2\"\n}\n").unwrap();
+    reload();
+    assert_eq!(say(), vec!["v2".to_owned()], "an edit of the helper alone did not run");
+    let source = std::fs::read_to_string(dir.join("tui.ts")).unwrap();
+    std::fs::write(
+        dir.join("tui.ts"),
+        source.replace("setup(api: any) {", "setup(api: any) {\n    throw new Error(\"no\")"),
+    )
+    .unwrap();
+    reload();
+    assert_eq!(say(), vec!["v2".to_owned()], "a failed replacement took the running one down");
+    let slow = source.replace(
+        "setup(api: any) {",
+        "async setup(api: any) {\n    await new Promise((done) => setTimeout(done, 400))",
+    );
+    std::fs::write(dir.join("label.ts"), "export function label() {\n  return \"v3\"\n}\n").unwrap();
+    std::fs::write(dir.join("tui.ts"), slow).unwrap();
+    opencode_tui::plugins::host::reconcile(&pipe.harness.tui);
+    pipe.harness.tui.keymap.dispatch("reloader.say", None);
+    quietly(&pipe, "the command was answered", || pipe.harness.tui.toasts.current().is_some());
+    assert_eq!(toasts(&pipe.harness), vec!["v2".to_owned()], "the candidate answered for the running activation");
+    pipe.settle();
+    assert_eq!(say(), vec!["v3".to_owned()]);
+}
+
+// Expected (bigboi-7, the layout epoch): a revision the JS host built for an input the host has replaced (here, a width
+// before a resize) is refused, never shown; the one for the current input follows.
+#[test]
+fn a_revision_for_a_replaced_size_is_never_shown() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe_and_twin(config, false);
+    twin_open(&pipe);
+    assert_eq!(header(&pipe), "twin 1 · 80");
+    let refused = pipe::crossed().dropped;
+    // The bump's view runs before the JS host reads the new size.
+    pipe.harness.tui.keymap.dispatch("probe.hold", Some("400"));
+    pipe.harness.tui.keymap.dispatch("twin.bump", Some("0"));
+    pipe.harness.app.resize(70, 30);
+    let begun = Instant::now();
+    while begun.elapsed() < Duration::from_secs(10) && header(&pipe) != "twin 2 · 70" {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        assert_ne!(header(&pipe), "twin 2 · 80", "a revision for the old width was shown");
+        std::thread::sleep(Duration::from_micros(500));
+    }
+    pipe.settle();
+    assert_eq!(header(&pipe), "twin 2 · 70");
+    assert!(pipe::crossed().dropped > refused, "no revision was refused: the row did not reach its case");
+}
+
+// Expected (bigboi-8): the host keeps only what waits for an answer; mounts, inputs and unmounts, acknowledged, leave
+// nothing behind however long the session churns.
+#[test]
+fn what_is_only_acknowledged_leaves_nothing_behind() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe_and_twin(config, false);
+    let tui = &pipe.harness.tui;
+    for round in 0..20 {
+        tui.navigate(Route::Plugin { id: twin::ID.to_owned(), name: "twin".to_owned() });
+        pipe.harness.app.resize(if round % 2 == 0 { 70 } else { 80 }, 30);
+        pipe.settle();
+        tui.navigate(Route::Home);
+        pipe.settle();
+    }
+    assert_eq!(pipe.scripts().waiting(), 0);
 }

@@ -6,6 +6,9 @@
 import { appendFileSync, writeSync } from "node:fs"
 import path from "node:path"
 
+// The module's own code runs as it is imported: it says so, so a test can tell it never ran before approval.
+appendFileSync(path.join(import.meta.dir, ".log.jsonl"), JSON.stringify({ module: true }) + "\n")
+
 export default {
   id: "example.probe",
   setup(api: any) {
@@ -26,6 +29,15 @@ export default {
       const until = Date.now() + (Number(input) || 0)
       while (Date.now() < until) {}
       log({ hold: Number(input) })
+    })
+    // A holding command whose answer sets the composer: the keys it held come after that edit.
+    carrier.command({ name: "probe.holdset", title: "probe.holdset", hold: true }, () => {
+      carrier.effect({ type: "composer-edit", edit: { type: "set", text: "set:" } })
+    })
+    // The command returns at once; the view it makes due never does.
+    let stuck = false
+    carrier.command({ name: "probe.stuck", title: "probe.stuck" }, () => {
+      stuck = true
     })
     carrier.command({ name: "probe.throw", title: "probe.throw" }, () => {
       api.ui.toast.show({ message: "before the throw" })
@@ -59,10 +71,13 @@ export default {
     carrier.command({ name: "probe.rows", title: "probe.rows" }, (input?: string) => {
       rows = Number(input)
     })
-    carrier.surface("lines", { type: "slot", kind: "prepend", path: "home.footer" }, () => ({
+    carrier.surface("lines", { type: "slot", kind: "prepend", path: "home.footer" }, () => {
+      while (stuck) {}
+      return {
       type: "box",
       children: Array.from({ length: rows }, (_, index) => ({ type: "text", spans: [{ text: `probe line ${index}` }] })),
-    }))
+      }
+    })
     // A route with a scroll the host moves: a verb from a command, its state as a watched read, and the user's wheel
     // as a scroll event (contract 2.0's P3 requests, over the pipe).
     const list = { type: "node", surface: "pane", id: "list" }

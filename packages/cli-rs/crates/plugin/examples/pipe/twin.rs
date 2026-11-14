@@ -47,7 +47,8 @@ fn view(values: &[u32], cx: &mut v2::View<'_>) -> v2::Node {
         })
         .collect();
     let total: u32 = values.iter().sum();
-    let header = v2::Node::text(vec![Span::new(format!("twin {total}"))]).with_id("header");
+    // The width it was built for: a revision built for another size shows (review bigboi-7).
+    let header = v2::Node::text(vec![Span::new(format!("twin {total} · {}", cx.input.width))]).with_id("header");
     let cards = v2::Node::scroll(cards).with_id("cards").layout(Layout::default().grow());
     v2::Node::column(vec![header, cards]).with_id("twin").layout(Layout::default().grow())
 }
