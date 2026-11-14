@@ -3,7 +3,7 @@
 //! per-column strength, through the same native color matrix the TypeScript renderables use.
 
 use super::curve::{clamp, coast, intensity_at, smootherstep};
-use super::{Clock, channels, millis, running, tick_frames};
+use super::{Clock, Drawn, channels, millis, running, tick_frames};
 use opentui::App;
 use opentui::prelude::*;
 use opentui::widget::{Component, Constraint, Custom, Element, Painter, Widget};
@@ -81,14 +81,20 @@ struct ShimmerView {
     fg: Color,
     shimmer: Color,
     clock: Clock,
+    drawn: Rc<Drawn>,
 }
 
 impl ShimmerText {
     pub fn new(app: &App, text: impl Into<String>) -> Self {
-        let clock = Clock::default();
-        tick_frames(app, &clock, None);
-        let view =
-            ShimmerView { text: text.into(), fg: Color::DEFAULT_FOREGROUND, shimmer: Color::DEFAULT_FOREGROUND, clock };
+        let (clock, drawn) = (Clock::default(), Rc::default());
+        tick_frames(app, &clock, None, Some(&drawn));
+        let view = ShimmerView {
+            text: text.into(),
+            fg: Color::DEFAULT_FOREGROUND,
+            shimmer: Color::DEFAULT_FOREGROUND,
+            clock,
+            drawn,
+        };
         Self { widget: Custom::measured(app, view) }
     }
 
@@ -110,6 +116,7 @@ impl ShimmerText {
 
 impl Component for ShimmerView {
     fn paint(&self, painter: &mut Painter<'_>) {
+        self.drawn.paint(painter);
         if !running() {
             painter.text(0, 0, &self.text, Style::new().fg(self.fg).bg(Color::TRANSPARENT));
             return;
@@ -153,7 +160,7 @@ struct FadeView {
 impl FadeInText {
     pub fn new(app: &App, text: impl Into<String>) -> Self {
         let clock = Clock::default();
-        tick_frames(app, &clock, Some(FADE_DURATION));
+        tick_frames(app, &clock, Some(FADE_DURATION), None);
         let view = FadeView {
             text: text.into(),
             fg: Color::DEFAULT_FOREGROUND,
