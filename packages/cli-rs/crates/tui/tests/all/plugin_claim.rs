@@ -787,7 +787,8 @@ impl Model for ClaimModel {
 
 #[test]
 fn claimed_parts_stream_into_what_a_fresh_mount_draws() {
-    model::check(&ClaimModel, 12, 40);
+    // A seed costs about 0.6 s debug (two worlds of 40 commands), so 5 keep the model near 3 s; deep runs take more.
+    model::check(&ClaimModel, 5, 40);
 }
 
 /// The commands that stream every call and the fence to their end, with `faults` before them.
