@@ -578,7 +578,8 @@ pub fn diff(expected: &[Entry], got: &[Entry]) -> Option<String> {
 ///   that is no tree, a buffer refused unread), the instance is called no more, not even destroyed.
 /// - A 1.x instance gets no request of 2.0; a message only an instance whose manifest takes messages; a view only of a
 ///   surface the manifest lists, and of no mount that ended.
-/// - A render or a view reads only: every request of it that asks for something is answered `ERROR`.
+/// - A render of 1.4 on, a view or a draw reads only: every request of it that asks for something is answered
+///   `ERROR`. A 1.3 render may ask.
 /// - Every request is one the contract names, and so is every host request ([`EFFECTS`], [`READS`]).
 #[derive(Default)]
 pub struct Protocol {
@@ -620,7 +621,7 @@ enum Call {
     Destroy,
 }
 
-/// The requests of the host table that ask for something, by their `type`.
+/// The requests of the host table that ask for something, by their `type`, as `opencode_plugin.h` lists them.
 pub const EFFECTS: &[&str] = &[
     "toast",
     "storage-set",
@@ -643,7 +644,7 @@ pub const EFFECTS: &[&str] = &[
     "install-theme",
 ];
 
-/// The requests of the host table that read, or only shape the call's own effects.
+/// The requests of the host table that read, or shape only the call's own effects, as `opencode_plugin.h` lists them.
 pub const READS: &[&str] = &[
     "log",
     "storage-get",
