@@ -250,10 +250,14 @@ impl Life {
 }
 
 impl Life {
-    /// Runs an action of the manager machine: `/plugins`, escape, ctrl+a, or enter on the selected row.
+    /// Runs an action of the manager machine as the user types it: `/plugins` and enter, escape, ctrl+a, or enter.
     fn act_manager(&self, action: &str) {
         match action {
-            "open" => drop(self.harness.tui.keymap.dispatch("plugins.list", None)),
+            "open" => {
+                self.harness.app.type_text("/plugins");
+                self.settle();
+                self.harness.app.press("enter");
+            }
             "escape" => self.harness.app.press("escape"),
             "internal" => self.harness.app.press("ctrl+a"),
             "toggle" => self.harness.app.press("enter"),
@@ -362,9 +366,10 @@ fn traces<'a>(corpus: &Value, machine: &'a Value, walks: bool) -> Vec<Vec<&'a st
     out
 }
 
-/// Replays `path` on a fresh TUI. An action a state has no edge for does nothing; the manager machine's reader does
-/// not send it. The first difference that is not a known row, or `None`; a known row ends the path, unless the machine
-/// says this client follows it on (`continue`).
+/// Replays `path` on a fresh TUI. An action a state has no edge for does nothing; the manager machine names an
+/// outcome for each, and its reader sends every action but those it lists as unspecified. The first difference that
+/// is not a known row, or `None`; a known row ends the path, unless the machine says this client follows it on
+/// (`continue`).
 fn replay(machine: &Value, path: &[&str], known: &mut ExpectedFailures) -> Option<String> {
     let life = Life::open(machine == &CORPUS["machines"]["project"]);
     let manager = machine == &CORPUS["machines"]["manager"];
@@ -376,10 +381,12 @@ fn replay(machine: &Value, path: &[&str], known: &mut ExpectedFailures) -> Optio
             0 => state,
             _ => edge.unwrap_or(state),
         };
+        let unspecified =
+            machine["unspecified"][state].as_array().is_some_and(|actions| actions.contains(&action.into()));
         match (index, manager) {
             (0, _) => {}
             (_, true) if edge.is_some() => life.act_manager(action),
-            (_, true) => {}
+            (_, true) => assert!(unspecified, "the manager machine names no outcome of {action} in {state}"),
             (_, false) => life.act(action),
         }
         let actual = if manager { life.observe_manager() } else { life.observe() };
