@@ -536,6 +536,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
             layers: claim.layers.clone(),
             panel: matches!(place.at, v2::Place::Panel(_)),
             mounts: false,
+            activation: guest.owners.input.clone(),
         });
         let viewer = Viewer::new(guest, index);
         guest.viewers.borrow_mut().push(viewer.clone());

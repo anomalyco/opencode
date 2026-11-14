@@ -146,7 +146,11 @@ fn mount(id: &str, config: Value) -> Harness {
 }
 
 fn mount_at(width: u16, id: &str, config: Value) -> Harness {
-    let memory = Memory::new(routes());
+    mount_with(width, id, config, routes())
+}
+
+fn mount_with(width: u16, id: &str, config: Value, routes: Vec<MemoryRoute>) -> Harness {
+    let memory = Memory::new(routes);
     let deps = Deps {
         config: support::config(support::decode(&config.to_string())),
         route: support::session_route(id),
@@ -395,6 +399,35 @@ fn sidebar_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
 #[test]
 fn the_sidebar_sections_draw_the_same_through_the_c_abi_loopback() {
     assert_eq!(sidebar_frames(true), sidebar_frames(false));
+}
+
+// Expected (review carbon-7): the limit section follows the selected model, the host's own state: a model without a
+// budget hides it, and the budget's model shows it again.
+#[test]
+fn the_sidebar_limit_follows_the_selected_model() {
+    use opencode_local::model_pref::Model;
+    let model = |id: &str, name: &str| {
+        json!({
+            "id": id, "modelID": id, "providerID": "opencode", "name": name, "status": "active",
+            "enabled": true, "capabilities": { "tools": true, "input": ["text"], "output": ["text"] },
+            "cost": [{ "input": 10.0, "output": 30.0, "cache": { "read": 0, "write": 0 } }],
+            "limit": { "context": 200000, "output": 32000 }, "time": { "released": 0 }, "variants": [],
+        })
+    };
+    let models = json!({
+        "location": location_at(DIRECTORY),
+        "data": [model("big", "Big Pickle"), model("small", "Small Pickle")],
+    });
+    let mut routes = routes();
+    routes.insert(0, MemoryRoute::json("GET", "/api/model", 200, &models));
+    let h = mount_with(170, "ses_a", json!({ "animations": false }), routes);
+    h.wait_for("Running low on Big Pickle");
+    h.tui.toasts.dismiss();
+    h.wait_for("$5 remaining");
+    h.tui.local.set(&Model::new("opencode", "small"), false);
+    h.wait("the limit to go", || !h.app.text().contains("remaining"));
+    h.tui.local.set(&Model::new("opencode", "big"), false);
+    h.wait_for("$5 remaining");
 }
 
 /// Holds the usage limits answer until the test releases it.
