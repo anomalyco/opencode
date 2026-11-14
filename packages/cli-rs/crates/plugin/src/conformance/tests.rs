@@ -1172,6 +1172,16 @@ fn the_protocol_machine_refuses_what_the_header_forbids() {
     protocol.event(&Event::Call { instance: 2, request: view.as_bytes() });
     assert!(protocol.broken().is_some(), "a 1.x library got a view");
     let mut protocol = Protocol::default();
+    protocol.event(&Event::Create { instance: 2, major: 1, minor: 6, features: b"", options: b"" });
+    protocol.event(&Event::Return { status: abi::OK, reply: Ok(MANIFEST.as_bytes()) });
+    protocol.event(&Event::Call { instance: 2, request: unmount.as_bytes() });
+    assert!(protocol.broken().is_some(), "a 1.x library got an unmount");
+    // `describe` runs before any instance, and asks the host nothing.
+    let mut protocol = Protocol::default();
+    protocol.event(&Event::Describe);
+    protocol.event(&Event::Host { request: br#"{"type":"route"}"#, status: abi::OK, reply: b"null" });
+    assert!(protocol.broken().is_some(), "describe asked the host");
+    let mut protocol = Protocol::default();
     created(&mut protocol, r#"{"id":"p","commands":[],"fences":[],"slots":[],"routes":[],"storage":[]}"#);
     protocol.event(&Event::Call { instance: 1, request: br#"{"type":"message","message":"1"}"# });
     assert!(protocol.broken().is_some(), "a plugin without a handler got a message");

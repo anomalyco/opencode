@@ -717,7 +717,7 @@ impl Protocol {
             return;
         }
         if let Err(error) = self.step(event) {
-            self.broken = Some(format!("{error} (at {event:?})"));
+            self.broken = Some(format!("{error} (at {})", shown(event)));
         }
     }
 
@@ -869,6 +869,19 @@ impl Protocol {
             Event::Send { .. } | Event::Wake | Event::Stopped { .. } | Event::Report { .. } => {}
         }
         Ok(())
+    }
+}
+
+/// `event` as text, its bytes as the JSON they hold.
+fn shown(event: &Event<'_>) -> String {
+    let text = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
+    match event {
+        Event::Call { instance, request } => format!("call of instance {instance}: {}", text(request)),
+        Event::Host { request, status, reply } => {
+            format!("host request {} answered {status}: {}", text(request), text(reply))
+        }
+        Event::Return { status, reply: Ok(reply) } => format!("return {status}: {}", text(reply)),
+        other => format!("{other:?}"),
     }
 }
 
