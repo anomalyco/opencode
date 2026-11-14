@@ -34,8 +34,18 @@ const step = (stepSessionID: Session.ID) =>
   ({ type: "session.step.started", data: { sessionID: stepSessionID } }) as unknown as SessionEvent.Step.Started
 
 /** Runs the goal plugin against stubbed domains: plugin storage in memory, and RPC that records what it publishes. */
-const run = Effect.fnUntraced(function* (seed?: Goal.State) {
-  const stored = new Map<string, Schema.Json>(seed ? [[`session:${sessionID}`, seed]] : [])
+const run = Effect.fnUntraced(function* (
+  seed?: Goal.State,
+  extra?: Record<string, Schema.Json>,
+  shared?: Map<string, Schema.Json>,
+  /** The 1-based `set` call that fails, so a test can make one beat fail and the next succeed. */
+  failSetAt?: number,
+) {
+  let sets = 0
+  const stored = shared ?? new Map<string, Schema.Json>([
+    ...(seed ? ([[`session:${sessionID}`, seed]] as const) : []),
+    ...Object.entries(extra ?? {}),
+  ])
   const changed: unknown[] = []
   const handlers: { get?: (input: { sessionID: string }) => Effect.Effect<Goal.State | null> } = {}
   const events = yield* Queue.unbounded<Watched>()
@@ -60,7 +70,12 @@ const run = Effect.fnUntraced(function* (seed?: Goal.State) {
       session,
       storage: {
         get: (key) => Effect.sync(() => stored.get(key)),
-        set: (key, value) => Effect.sync(() => void stored.set(key, value)),
+        set: (key, value) =>
+          Effect.sync(() => {
+            sets++
+            if (sets === failSetAt) throw new Error("storage hiccup")
+            stored.set(key, value)
+          }),
         remove: (key) => Effect.sync(() => void stored.delete(key)),
         scan: (options) =>
           Effect.sync(() => ({
@@ -98,6 +113,7 @@ const run = Effect.fnUntraced(function* (seed?: Goal.State) {
   return {
     goal: () =>
       Option.getOrUndefined(Schema.decodeUnknownOption(Goal.State)(stored.get(`session:${sessionID}`))),
+    stored,
     changed,
     get: () => handlers.get?.({ sessionID }) ?? Effect.die("the goal RPC was not registered"),
     command: (text: string) =>
@@ -127,6 +143,132 @@ describe("goal plugin waiting", () => {
       expect(plugin.goal()).toMatchObject({
         status: "paused",
         reason: "The server restarted while the goal was active",
+      })
+    }),
+  )
+
+  it.effect("leaves a goal running while the process that armed it still heartbeats", () =>
+    Effect.gen(function* () {
+      // A second server on the same database starts while this goal's owner is alive: the owner's fresh
+      // heartbeat says the goal is still being driven, so the sweep must leave it alone.
+      const plugin = yield* run(
+        {
+          id: "goal-live-owner",
+          objective: "Ship the release",
+          status: "active",
+          rounds: 1,
+          maxRounds: 50,
+          boot: "a-live-process",
+          updatedAt: 0,
+        },
+        { "process:a-live-process": { at: 0 } },
+      )
+      expect(plugin.goal()).toMatchObject({ status: "active" })
+    }),
+  )
+
+  it.effect("pauses a goal whose owning process stopped heartbeating, and drops the stale heartbeat", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run(
+        {
+          id: "goal-dead-owner",
+          objective: "Ship the release",
+          status: "active",
+          rounds: 1,
+          maxRounds: 50,
+          boot: "a-dead-process",
+          updatedAt: 0,
+        },
+        { "process:a-dead-process": { at: -Duration.toMillis(GoalPlugin.HEARTBEAT_TTL) - 1 } },
+      )
+      expect(plugin.goal()).toMatchObject({
+        status: "paused",
+        reason: "The server restarted while the goal was active",
+      })
+      expect(plugin.stored.has("process:a-dead-process")).toBe(false)
+    }),
+  )
+
+  it.effect("pauses a goal once its owner's heartbeat goes stale, not only at startup", () =>
+    Effect.gen(function* () {
+      // A server restart inside the TTL reads the predecessor's fresh heartbeat as alive, so the startup sweep
+      // leaves the goal alone; once that record goes stale, the next beat's sweep must pause it.
+      const plugin = yield* run(
+        {
+          id: "goal-stale-owner",
+          objective: "Ship the release",
+          status: "active",
+          rounds: 1,
+          maxRounds: 50,
+          boot: "a-stopping-process",
+          updatedAt: 0,
+        },
+        { "process:a-stopping-process": { at: 0 } },
+      )
+      expect(plugin.goal()).toMatchObject({ status: "active" })
+
+      yield* TestClock.adjust(Duration.subtract(GoalPlugin.HEARTBEAT_TTL, GoalPlugin.HEARTBEAT_INTERVAL))
+      expect(plugin.goal()).toMatchObject({ status: "active" })
+      yield* TestClock.adjust(GoalPlugin.HEARTBEAT_INTERVAL)
+      expect(plugin.goal()).toMatchObject({
+        status: "paused",
+        reason: "The server restarted while the goal was active",
+      })
+      expect(plugin.stored.has("process:a-stopping-process")).toBe(false)
+    }),
+  )
+
+  it.effect("reads as dead right away after a clean shutdown", () =>
+    Effect.gen(function* () {
+      // A clean shutdown removes this process's heartbeat, so a server that restarts inside the TTL does not
+      // read its predecessor as alive and leave its goals running.
+      const plugin = yield* Effect.scoped(run())
+      expect([...plugin.stored.keys()].some((key) => key.startsWith("process:"))).toBe(false)
+    }),
+  )
+
+  it.effect("keeps the process's heartbeat while another instance is still running", () =>
+    Effect.gen(function* () {
+      // The plugin runs once per Location, but the heartbeat record is process-wide: closing one Location's
+      // instance must not drop it while another Location still drives goals. The two instances share one
+      // storage, the way two Locations of one process share the plugin's database records.
+      const shared = new Map<string, Schema.Json>()
+      yield* run(undefined, undefined, shared)
+      const key = [...shared.keys()].find((key) => key.startsWith("process:"))
+      expect(key).toBeString()
+
+      // Opening and closing a second instance leaves the record with its owner, whose beat keeps refreshing it.
+      yield* Effect.scoped(run(undefined, undefined, shared))
+      expect(shared.get(key!)).toMatchObject({ at: 0 })
+      yield* TestClock.adjust(GoalPlugin.HEARTBEAT_INTERVAL)
+      expect(shared.get(key!)).toMatchObject({ at: Duration.toMillis(GoalPlugin.HEARTBEAT_INTERVAL) })
+    }),
+  )
+
+  it.effect("refreshes its own heartbeat while it runs", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run()
+      const key = [...plugin.stored.keys()].find((key) => key.startsWith("process:"))
+      expect(key).toBeString()
+      expect(plugin.stored.get(key!)).toMatchObject({ at: 0 })
+
+      yield* TestClock.adjust(GoalPlugin.HEARTBEAT_INTERVAL)
+      expect(plugin.stored.get(key!)).toMatchObject({ at: Duration.toMillis(GoalPlugin.HEARTBEAT_INTERVAL) })
+    }),
+  )
+
+  it.effect("keeps beating after one failed beat", () =>
+    Effect.gen(function* () {
+      // A transient storage failure must not end the heartbeat loop: the process still drives its goals, and
+      // another server would pause them once the record went stale.
+      const plugin = yield* run(undefined, undefined, undefined, 2)
+      const key = [...plugin.stored.keys()].find((key) => key.startsWith("process:"))!
+      expect(plugin.stored.get(key)).toMatchObject({ at: 0 })
+
+      // The first periodic beat fails; the next one must still land.
+      yield* TestClock.adjust(Duration.times(GoalPlugin.HEARTBEAT_INTERVAL, 2))
+      expect(plugin.stored.get(key)).toMatchObject({
+        at: Duration.toMillis(Duration.times(GoalPlugin.HEARTBEAT_INTERVAL, 2)),
       })
     }),
   )
