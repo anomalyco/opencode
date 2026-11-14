@@ -31,6 +31,7 @@ mod navigate;
 mod permission;
 mod plugin_approval;
 mod plugin_fetch;
+mod plugin_gate;
 mod plugin_machines;
 mod plugin_model;
 mod plugin_p0a;
