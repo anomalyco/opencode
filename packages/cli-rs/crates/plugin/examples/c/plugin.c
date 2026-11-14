@@ -8,6 +8,9 @@
  * declaring its surface and messages; `-DOPENCODE_BAD_DESCRIBE` answers metadata the host cannot read. Its options
  * (the JSON text of its `plugins` entry) switch faults on: "view-toast" asks for a toast in a view, "command-true"
  * answers `true` to a command, "command-error" answers OPENCODE_ERROR, "no-messages" declares no message handler.
+ * "canvas" adds a canvas `m` below the count, whose version is the count, and a draw that writes its list by hand: a
+ * text of how many draws ran, and for which canvas. With it, "draw-toast" asks for a toast in each draw, and
+ * "draw-keep" answers no list after the first draw, so the canvas keeps that one.
  */
 
 #include <stdio.h>
@@ -27,6 +30,7 @@
 typedef struct instance {
     const opencode_host_api *host;
     int messages;
+    int draws;
     char options[256];
 } instance;
 
@@ -102,11 +106,33 @@ static int32_t create(const opencode_host_api *host, opencode_bytes options, voi
     snprintf(manifest, sizeof manifest,
              "{\"id\":\"example.c\",\"commands\":[{\"name\":\"c.hello\",\"title\":\"Hello from C\",\"group\":null,"
              "\"slash\":null,\"keybind\":null,\"palette\":false}],\"fences\":[],\"slots\":[],\"routes\":[],"
-             "\"storage\":[],\"render\":2,\"surfaces\":[{\"name\":\"c\",\"place\":{\"type\":\"route\",\"name\":\"c\"}}],"
-             "\"messages\":%s}",
-             option(self, "no-messages") ? "false" : "true");
+             "\"storage\":[],\"render\":2,\"surfaces\":[{\"name\":\"c\",\"place\":{\"type\":\"route\",\"name\":\"c\"},"
+             "\"draw\":%s}],\"messages\":%s}",
+             option(self, "canvas") ? "true" : "false", option(self, "no-messages") ? "false" : "true");
     *out = owned(manifest);
     return OPENCODE_OK;
+}
+
+/* A canvas list of one text at the top-left corner, white, as `crates/plugin-abi/src/canvas.rs` lays it out: the
+ * version byte, then a record of the operation (2, text), its payload's length (u32, little-endian) and the payload:
+ * x and y (i16, little-endian), the style (flags 1 for a foreground, attributes, the foreground and the background as
+ * r, g, b, a) and the text. */
+static opencode_owned list(const char *text) {
+    opencode_owned out = {NULL, 0, 0};
+    size_t len = strlen(text), payload = 4 + 10 + len, total = 1 + 1 + 4 + payload;
+    uint8_t *ptr = calloc(1, total);
+    if (ptr == NULL) {
+        return out;
+    }
+    uint8_t head[] = {1, 2, payload & 0xff, (payload >> 8) & 0xff, (payload >> 16) & 0xff, (payload >> 24) & 0xff};
+    memcpy(ptr, head, sizeof head);
+    uint8_t style[] = {0, 0, 0, 0, 1, 0, 255, 255, 255, 255, 0, 0, 0, 0};
+    memcpy(ptr + sizeof head, style, sizeof style);
+    memcpy(ptr + sizeof head + sizeof style, text, len);
+    out.ptr = ptr;
+    out.len = total;
+    out.cap = total;
+    return out;
 }
 
 /* Asks the host for a toast of `message`. */
@@ -151,11 +177,32 @@ static int32_t call(void *raw, opencode_bytes request, opencode_owned *out) {
         if (option(self, "view-toast")) {
             refused = toast(host, "a view asked for this") != OPENCODE_OK;
         }
-        char tree[200];
-        snprintf(tree, sizeof tree,
-                 "{\"node\":{\"type\":\"text\",\"id\":\"c\",\"spans\":[{\"text\":\"drawn in C, %d messages%s\"}]}}",
+        char text[200], tree[400];
+        snprintf(text, sizeof text,
+                 "{\"type\":\"text\",\"id\":\"c\",\"spans\":[{\"text\":\"drawn in C, %d messages%s\"}]}",
                  self->messages, refused ? ", toast refused" : "");
+        if (option(self, "canvas")) {
+            snprintf(tree, sizeof tree,
+                     "{\"node\":{\"type\":\"box\",\"children\":[%s,{\"type\":\"canvas\",\"id\":\"m\",\"version\":%d,"
+                     "\"layout\":{\"width\":{\"cells\":30},\"height\":{\"cells\":1}}}]}}",
+                     text, self->messages);
+        } else {
+            snprintf(tree, sizeof tree, "{\"node\":%s}", text);
+        }
         *out = owned(tree);
+        return OPENCODE_OK;
+    }
+    if (is(request, "draw")) {
+        self->draws += 1;
+        if (option(self, "draw-keep") && self->draws > 1) {
+            *out = owned("");
+            return OPENCODE_OK;
+        }
+        int refused = option(self, "draw-toast") && toast(host, "a draw asked for this") != OPENCODE_OK;
+        char text[64];
+        snprintf(text, sizeof text, "C draw %d%s%s", self->draws, holds(request, "\"canvas\":\"m\"") ? " of m" : "",
+                 refused ? ", toast refused" : "");
+        *out = list(text);
         return OPENCODE_OK;
     }
     *out = owned("null");
