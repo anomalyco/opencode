@@ -4,6 +4,7 @@ import { createStore } from "solid-js/store"
 import { createSimpleContext } from "../context/helper"
 import { useTuiPaths } from "../context/runtime"
 import { appendText, readText, writeText } from "../util/persistence"
+import { isRecord } from "../util/record"
 
 type FrecencyEntry = { path: string; frequency: number; lastOpen: number }
 
@@ -15,7 +16,7 @@ export function parseFrecency(text: string) {
     .filter(Boolean)
     .map((line) => {
       try {
-        return JSON.parse(line) as FrecencyEntry
+        return parseFrecencyEntry(JSON.parse(line))
       } catch {
         return undefined
       }
@@ -33,6 +34,16 @@ export function parseFrecency(text: string) {
 function calculateFrecency(entry?: { frequency: number; lastOpen: number }) {
   if (!entry) return 0
   return entry.frequency / (1 + (Date.now() - entry.lastOpen) / 86400000)
+}
+
+// A parseable line can still carry no usable path or a broken counter, and the store rewrites every
+// retained entry, so a bad one would survive the repair pass. Keep only whole entries.
+function parseFrecencyEntry(value: unknown): FrecencyEntry | undefined {
+  if (!isRecord(value)) return
+  if (typeof value.path !== "string" || !value.path) return
+  if (typeof value.frequency !== "number" || !Number.isFinite(value.frequency)) return
+  if (typeof value.lastOpen !== "number" || !Number.isFinite(value.lastOpen)) return
+  return { path: value.path, frequency: value.frequency, lastOpen: value.lastOpen }
 }
 
 export const { use: useFrecency, provider: FrecencyProvider } = createSimpleContext({
