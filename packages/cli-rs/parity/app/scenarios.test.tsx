@@ -49,6 +49,9 @@ async function record(name: string, file: string) {
   const routes = scenario.routes ?? []
   const defaults = createFetch().fetch
   const log: Logged[] = []
+  // The paths a `release` step let go, and the requests of `hold` routes that wait for one.
+  const released = new Set<string>()
+  const waiting: { path: string; go: () => void }[] = []
   await using ide = scenario.ide ? startIde() : undefined
   await using zed = scenario.zed ? await zedDatabase(scenario.zed.sql) : undefined
   const env = {
@@ -77,6 +80,8 @@ async function record(name: string, file: string) {
       if (url.pathname === "/api/event") return undefined
       const body = request.body ? await request.clone().text() : ""
       const route = routes.find((route) => matches(route, request.method, url.pathname))
+      if (route?.hold && !released.has(route.path))
+        await new Promise<void>((go) => waiting.push({ path: route.path, go }))
       const response = route
         ? respond(route)
         : await defaults(request).catch(
@@ -93,6 +98,8 @@ async function record(name: string, file: string) {
       return response
     },
   })
+  // Disposed before the app: a request still held when a step fails is answered, so the app can close.
+  await using _held = { [Symbol.asyncDispose]: async () => waiting.forEach((held) => held.go()) }
   await setup.ready
   const started = Date.now()
   const steps: (Step & { fixture?: string })[] = []
@@ -106,6 +113,10 @@ async function record(name: string, file: string) {
     if ("rightClick" in step) await setup.mockMouse.click(...step.rightClick, 2)
     if ("event" in step) setup.events.emit(step.event as never)
     if ("drag" in step) await setup.mockMouse.drag(...step.drag[0], ...step.drag[1])
+    if ("release" in step) {
+      released.add(step.release)
+      waiting.filter((held) => held.path === step.release).forEach((held) => held.go())
+    }
     if ("ide" in step) {
       if (!ide) throw new Error(`${name}: an ide step needs \`ide: true\``)
       await ide.notify(step.ide)
