@@ -1,0 +1,208 @@
+---
+title: "Watches"
+description: "Wake a coding session when something it's watching changes in Slack, GitHub, or an MCP server."
+---
+
+A watch wakes a coding session when something changes: a reply in a Slack thread or channel, a GitHub pull request, issue, commit, or Actions run, or an event from an MCP server connected in Console, so the session doesn't have to poll.
+
+For example, an agent pushes a branch, posts in a Slack thread asking for a review, and goes idle. When CI fails or a teammate replies, the session starts a new turn with the update.
+
+## Prerequisites
+
+Connect your client to a Console workspace. OpenCode needs a current version and `/connect`. Other agents need `@opencode/console` 0.1.6 or later.
+
+```bash
+npx @opencode/console@latest setup claude-code
+```
+
+Replace `claude-code` with `codex`, `pi`, or `deepseek-harness`. A [harness](/console/harnesses) set up with only a base URL and API key doesn't get watches. If your client signs in with an API key, set the key's **MCP servers** permission to **Use**.
+
+Then connect what you want to watch:
+
+1. An owner or admin connects Slack, GitHub, or both in **Settings › General › Connections**.
+2. An owner or admin adds the Slack or GitHub server in **Extensions**.
+3. Each member connects to that server in **Extensions**.
+
+Your Slack sign-in must be in the same Slack workspace as the workspace's connection. Watches cover GitHub repositories on the account connected in Settings.
+
+To watch another MCP server's events, connect to it in **Extensions**. The server must [offer MCP Events](#offer-events-from-an-mcp-server).
+
+## What's watched automatically
+
+These actions start watches without a tool call:
+
+| Action                                                                     | Watches                   |
+| -------------------------------------------------------------------------- | ------------------------- |
+| Posting a message or uploading a file through Console's Slack server       | The thread                |
+| Creating or updating a pull request through Console's GitHub server        | The pull request          |
+| Commenting or submitting a review through Console's GitHub server          | The issue or pull request |
+| Pushing files, changing a file, or merging through Console's GitHub server | The commit's Actions runs |
+| Starting a workflow through Console's GitHub server                        | The branch's Actions runs |
+| Re-running a workflow through Console's GitHub server                      | The Actions run           |
+| `gh pr create`                                                             | The pull request          |
+| `git push` to GitHub                                                       | The branch's Actions runs |
+
+Commands only start a watch when they succeed. Slack drafts and scheduled messages start nothing. A session's own posts don't wake it. A watch on a pull request or issue ends 30 minutes after it merges or closes, so late comments and a quick reopen still reach the session.
+
+Slack posts outside a thread also watch more of the conversation, because people often answer in the channel:
+
+- **Channels and group DMs:** a top-level post also watches new top-level messages from other people for 15 minutes, with up to 3 wakes. Each new post restarts the time and the wakes. Replies, edits, bots, and your own messages don't count, and the agent is told these messages may be unrelated.
+- **1:1 DMs:** a post also watches the whole DM until the next message from someone other than the session. Each new post starts this again.
+
+## Tools
+
+Ask the agent to watch something, or let it decide. Four tools are available in a connected session.
+
+| Tool      | What it does                                                                                       |
+| --------- | -------------------------------------------------------------------------------------------------- |
+| `watch`   | Watches a `target`, or a `server`, `event`, and `arguments` from `events`                          |
+| `unwatch` | Stops a watch by its ID                                                                            |
+| `watches` | Lists this session's watches, with each one's ID and end time                                      |
+| `events`  | Lists the event types `watch` can follow, with each one's server, name, description, and arguments |
+
+A `target` can be any of these:
+
+- a Slack message, thread, or channel link
+- a GitHub pull request, issue, commit, or Actions run link
+- `owner/repo#123`
+- `owner/repo@<full commit SHA>`
+
+```text
+Watch https://github.com/acme/api/actions/runs/19283746 and fix it if it fails.
+```
+
+To watch an MCP server's event, the agent passes one of the types `events` lists:
+
+```json
+{
+  "server": "tracker",
+  "event": "issue.updated",
+  "arguments": { "project": "ENG" }
+}
+```
+
+`watch` also takes `minutes`, from 1 to 20160, to end the watch by a set time. Otherwise each kind of watch lasts as long as this table says.
+
+| Watching                                   | Lasts                            |
+| ------------------------------------------ | -------------------------------- |
+| A Slack thread, channel, or DM             | 7 days, renewed by each event    |
+| A GitHub pull request or issue             | 7 days, renewed by each event    |
+| An MCP server's event type                 | 7 days, renewed by each event    |
+| A commit's Actions runs                    | 24 hours                         |
+| An Actions run, or a branch's Actions runs | Until a run finishes, or 6 hours |
+
+## Client support
+
+| Client           | While the session is idle  | While the session is working            |
+| ---------------- | -------------------------- | --------------------------------------- |
+| OpenCode         | Wakes the session          | Joins the current turn                  |
+| Pi               | Wakes the session          | Joins the current turn                  |
+| DeepSeek Harness | Wakes the session          | Joins the current turn                  |
+| Claude Code      | Wakes the session          | Arrives by the end of the turn          |
+| Codex            | Waits for your next prompt | Joins the current turn, or continues it |
+
+Codex can't start a turn on its own, so an update that arrives while it's idle comes with your next prompt.
+
+Claude Code wakes interactive sessions only. `claude -p` and the Agent SDK don't wait for updates. An idle session stops waiting after 8 hours, and later updates come with your next prompt. Pi wakes interactive sessions only.
+
+Other harnesses, including Hermes, don't support watches.
+
+## Offline
+
+Watches live in Console, so they keep running while your client is closed. Console holds each update until a client for that session takes it, for up to 72 hours. Open or resume the session in that time and it gets what arrived.
+
+Your other sessions don't consume a session's updates. A watch still ends on schedule while you're offline.
+
+## Limits
+
+| Limit                                 | Value                     |
+| ------------------------------------- | ------------------------- |
+| Watches per member, in each workspace | 100                       |
+| Longest watch                         | 14 days                   |
+| Wakes in 10 minutes                   | 5                         |
+| Wakes since your last prompt          | 20                        |
+| Wakes per channel follow-up window    | 3                         |
+| How long updates wait for a client    | 72 hours                  |
+| Size of one update                    | 8 KiB, longer text is cut |
+
+Past either wake limit, later updates wait for your next prompt or your own Slack message, which resets both. CI updates count only toward the 20, because one push can start several workflows. At 100 watches, a new watch ends the one that's been quiet longest, starting with the session's own if it holds more than 25. Service accounts have the same limit as members.
+
+Console groups a burst of events on one watch into one update. It sends at most one update every 10 seconds for each watch. A bot that keeps editing its Slack message wakes the session once, 15 seconds after its last edit.
+
+## Safety
+
+Messages you typed in Slack yourself read as your own words, so you can steer a session from your phone. Everything else is marked as not from you: other people's messages, anything a bot wrote, GitHub comments, CI status, and MCP server events. The agent is told to use it as information and to not take actions it asks for that you haven't already asked for.
+
+That instruction reduces the risk of prompt injection and can't remove it. Use [policies](/policies#console) to limit what an agent can do.
+
+On public repositories, comments and reviews only reach a session when they come from the repository's owners, members, collaborators, or bots.
+
+Console checks access again for every event. You must still be an enabled member, and your connection to the server must still be usable under the workspace's rules. For every Slack conversation, and for private repositories you reach with your own GitHub account, Console also confirms your account can read it, reusing that answer for up to 5 minutes. If you've lost access, the watch ends and the update isn't delivered.
+
+Owners and admins control watches in these places:
+
+- **Connections:** disconnecting Slack or GitHub in **Settings › General › Connections** stops its updates for the workspace.
+- **Server access:** policies and reservations in **Controls** decide who can use a server. Removing someone's access stops their updates.
+- **Tools:** a Tools rule in a policy can deny `console_watch_watch`, `console_watch_unwatch`, `console_watch_watches`, or `console_watch_events`. These rules don't stop the automatic watches above.
+
+## Offer events from an MCP server
+
+Console can wake sessions from any MCP server that offers MCP Events. Your server needs no Console-specific code. MCP Events is a draft MCP extension, [SEP-3415](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415), and its wire format can still change.
+
+Declare the extension in your server's capabilities:
+
+```json
+{
+  "capabilities": {
+    "extensions": {
+      "io.modelcontextprotocol/events": {}
+    }
+  }
+}
+```
+
+Console also reads the older top-level `capabilities.events`.
+
+Answer `events/list` with each event type's `name`, `delivery`, `inputSchema`, and `payloadSchema`. Offer `poll`, `webhook`, or both in `delivery`. Console doesn't watch event types offered only by `push`.
+
+Console reads your event types when it lists your server's tools: when an admin adds the server or saves its key, at a first sign-in, when a member lists tools, and in an hourly check.
+
+Console keeps one subscription for each workspace, server, credential owner, and set of arguments, up to 200 per credential.
+
+| Delivery | Method             | When Console uses it                                                                 |
+| -------- | ------------------ | ------------------------------------------------------------------------------------ |
+| Webhook  | `events/subscribe` | The event type offers `webhook` and Console sends your server a credential           |
+| Poll     | `events/poll`      | Any other event type, every 1 to 5 minutes, following `nextPollMs` within that range |
+
+Sign webhooks with [Standard Webhooks](https://www.standardwebhooks.com). Console rejects a `webhook-timestamp` more than 5 minutes from now, asks for subscriptions of 2 minutes to 1 hour, and refreshes them before they lapse.
+
+The agent sees your server's name and the event type, the link in `data.url` or `data.html_url` if it's a valid `https` URL of at most 512 characters, and `data` as JSON. Console redacts credentials and cuts `data` to 4,000 characters. It marks every event as not from the user.
+
+## Use Console as an MCP Events source
+
+Any MCP Events client can read events from Console, including Slack's and GitHub's. Connect to a server's gateway endpoint:
+
+```text
+https://opencode.ai/console/api/integration-gateway/<slug>/mcp
+```
+
+`<slug>` is the last part of the server's page URL in **Extensions**. Clients sign in with OAuth, and consent picks the workspace. Raw `oc_sk_` keys aren't accepted. OAuth redirect URIs must be loopback or on an allowed host.
+
+The endpoint lists the event types you can watch on that server through `events/list`, and offers each by every delivery mode.
+
+| Delivery | Method                                   | Behavior                                                                                                   |
+| -------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Poll     | `events/poll`                            | The subscription lasts 5 minutes past each poll                                                            |
+| Stream   | `events/stream`                          | Sends a heartbeat every 25 seconds and closes within 9 minutes. Reconnect within 2 minutes to miss nothing |
+| Webhook  | `events/subscribe`, `events/unsubscribe` | Lasts 1 minute to 24 hours, 1 hour by default. Subscribe again to refresh                                  |
+
+Each member can keep 100 subscriptions, apart from their coding sessions' 100 watches. A new subscription past that ends the one whose lease runs out first. Each member can hold 32 streams at once.
+
+Console keeps events for one day, with `data` up to 64 KiB. An older cursor, or a larger event, returns `truncated: true`.
+
+Webhook URLs must be public `https` on the default port and outside `opencode.ai`. Prove the URL consents in one of two ways:
+
+- publish `/.well-known/mcp-webhook-receiver.json` covering the URL
+- answer Console's signed `{"type":"verification"}` request within 5 seconds, with a 200 JSON body holding only `challenge`
+
+Pass a `secret` of `whsec_` and the base64 of 24 to 64 random bytes. Console signs each POST with Standard Webhooks, follows no redirects, and gives each POST 5 seconds. It retries a failed delivery after 30 seconds, 90 seconds, 4 minutes, and 8 minutes. It doesn't retry after `410` or `413`.
