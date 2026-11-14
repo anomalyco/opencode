@@ -1706,6 +1706,93 @@ test("review file navigation focuses the arrow for the keyboard direction", asyn
   await expect(home).toBeFocused()
 })
 
+test("branch review uses the local base for its list, full patches, and expanded folders", async ({ page }) => {
+  const bases: string[] = []
+  const vcs = { current: "feature", default: "main" }
+  const hint = { name: "main" }
+  const stacked = [fileDiff("stacked.ts")]
+
+  const workspace = await openSession(page, {
+    name: "ReviewBranchBase",
+    vcs,
+    vcsBase: (directory) => {
+      bases.push(directory)
+
+      return { name: hint.name, ref: `refs/heads/${hint.name}`, source: "reflog" }
+    },
+    vcsDiff: (input) => {
+      if (input.mode !== "branch") return []
+
+      // Comparing with the remote default includes an unpushed commit already present on local main.
+      if (input.base !== (vcs.current === "feature" ? "refs/heads/main" : "refs/heads/parent"))
+        return [fileDiff("inherited.ts")]
+
+      if (vcs.current === "stacked") return stacked
+
+      if (input.directory.endsWith("/untracked")) return [fileDiff("untracked/notes.ts", { status: "added" })]
+
+      return [fileDiff("src/big.ts", { loaded: input.context === "3" }), fileDiff("untracked/", { status: "added" })]
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await openReviewLauncher(panel)
+  await panel.getByRole("button", { name: "Git changes", exact: true }).click()
+  await page.getByRole("option", { name: "Branch changes", exact: true }).click()
+  await expect(panel.getByRole("treeitem", { name: "big.ts", exact: true })).toBeVisible()
+  await expect(panel.getByRole("treeitem", { name: "inherited.ts", exact: true })).toHaveCount(0)
+  await expect(panel.locator("diffs-container")).toContainText("export const value = 'after'")
+  // A changed reflog hint must not give the folder a different base from the list and patch already shown.
+  hint.name = "parent"
+  await panel.getByRole("treeitem", { name: "untracked", exact: true }).click()
+  await expect(panel.getByRole("treeitem", { name: "notes.ts", exact: true })).toBeVisible()
+  expect(bases).toEqual([workspace.directory])
+
+  vcs.current = "stacked"
+  await workspace.push([
+    {
+      id: "evt_review_branch_stacked",
+      created: 1,
+      type: "vcs.branch.updated",
+      location: { directory: workspace.directory },
+      data: { branch: "stacked" },
+    },
+  ])
+  await expect(panel.getByRole("treeitem", { name: "stacked.ts", exact: true })).toBeVisible()
+  await expect(panel.getByRole("treeitem", { name: "big.ts", exact: true })).toHaveCount(0)
+
+  stacked.push(fileDiff("refreshed.ts"))
+  await workspace.push([filesystemEvent(workspace.directory, "refreshed.ts", "add")])
+  await expect(panel.getByRole("treeitem", { name: "refreshed.ts", exact: true })).toBeVisible()
+  expect(bases).toEqual([workspace.directory, workspace.directory])
+})
+
+test("branch review resolves an unavailable base after a refresh", async ({ page }) => {
+  const state = { available: false }
+
+  const workspace = await openSession(page, {
+    name: "ReviewBaseRecovery",
+    vcs: { current: "feature", default: "main" },
+    vcsBase: () => (state.available ? { name: "main", ref: "refs/heads/main", source: "reflog" } : null),
+    vcsDiff: (input) =>
+      input.mode === "branch" ? [fileDiff(input.base === "refs/heads/main" ? "resolved.ts" : "fallback.ts")] : [],
+  })
+
+  const panel = page.locator("#review-panel")
+
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await openReviewLauncher(panel)
+  await panel.getByRole("button", { name: "Git changes", exact: true }).click()
+  await page.getByRole("option", { name: "Branch changes", exact: true }).click()
+  await expect(panel.getByRole("treeitem", { name: "fallback.ts", exact: true })).toBeVisible()
+
+  state.available = true
+  await workspace.push([filesystemEvent(workspace.directory, "resolved.ts", "add")])
+  await expect(panel.getByRole("treeitem", { name: "resolved.ts", exact: true })).toBeVisible()
+})
+
 test("restores review state and the side-panel tab per session", async ({ page }) => {
   const sessions = [
     { id: "ses_review_state_a", title: "Alpha review state" },
