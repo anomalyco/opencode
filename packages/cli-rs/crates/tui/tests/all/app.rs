@@ -35,19 +35,30 @@ fn scenarios() {
     let only = std::env::var("PARITY_SCENARIO").ok();
     let recordings = Recording::all(only.as_deref()).unwrap_or_else(|error| panic!("{error}"));
     assert!(!recordings.is_empty(), "no P-APP recording matches {only:?}");
+    // The built-ins' own screens (E.14) run on both carriers (P6a): with Rust values, and through the C ABI's byte
+    // shims. `PARITY_CARRIER=both` runs every selected scenario on both.
+    let both = std::env::var("PARITY_CARRIER").is_ok_and(|carrier| carrier == "both");
     let mut failed = Vec::new();
     for recording in &recordings {
-        let (passed, report) = run(recording);
-        eprintln!("{} {}\n{report}", if passed { "ok  " } else { "FAIL" }, recording.scenario);
-        if !passed {
-            failed.push(recording.scenario.clone());
+        let carriers: &[bool] = match both || recording.scenario.starts_with("E.14/") {
+            true => &[false, true],
+            false => &[false],
+        };
+        for &abi in carriers {
+            let (passed, report) = run(recording, abi);
+            let name = format!("{}{}", recording.scenario, if abi { " (C ABI)" } else { "" });
+            eprintln!("{} {name}\n{report}", if passed { "ok  " } else { "FAIL" });
+            if !passed {
+                failed.push(name);
+            }
         }
     }
     assert!(failed.is_empty(), "P-APP scenarios failed: {failed:?} (reports above)");
 }
 
-/// Runs one recording; returns whether it passed and its report.
-fn run(recording: &Recording) -> (bool, String) {
+/// Runs one recording, with the built-ins on the C ABI's byte shims when `abi`; returns whether it passed and its
+/// report.
+fn run(recording: &Recording, abi: bool) -> (bool, String) {
     let memory = Memory::new(routes(recording));
     let app = TestApp::new(recording.width, recording.height);
     let config = cli_config::decode_text(&recording.config.to_string()).unwrap_or_default();
@@ -69,6 +80,7 @@ fn run(recording: &Recording) -> (bool, String) {
             },
             continue_: args.continue_,
             events: true,
+            abi_builtins: abi,
             ..support::deps(Arc::new(memory.clone()))
         },
         Args {

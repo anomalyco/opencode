@@ -339,6 +339,7 @@ pub fn test(test: &Test, out: &mut impl Write) -> error::Result<()> {
         continue_: false,
         events: false,
         builtins: vec![opencode_mermaid::plugin().into(), opencode_latex::plugin().into()],
+        abi_builtins: false,
     };
     let tui = opencode_tui::mount_with(&app, deps, Args::default());
     external(

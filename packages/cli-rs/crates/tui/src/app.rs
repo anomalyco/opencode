@@ -38,6 +38,10 @@ pub struct Deps {
     /// The built-ins from other crates, in TS order: Mermaid and LaTeX. `tui` does not depend on them, so an edit
     /// there does not rebuild it.
     pub builtins: Vec<opencode_plugin::Builtin>,
+    /// Runs every built-in plugin through the byte shims of the C ABI, as a loaded library runs, instead of with Rust
+    /// values: the other carrier, for the tests that compare the two (`carrier-equal`, P6a). The diff viewer and the
+    /// plugin manager are host entries and stay as they are.
+    pub abi_builtins: bool,
 }
 
 pub struct Roots {
@@ -493,7 +497,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         storage: files.as_ref().and_then(|files| files.storage.clone()),
     });
 
-    let plugins = crate::plugins::host::registry(&deps.config.info, deps.builtins);
+    let plugins = crate::plugins::host::registry(&deps.config.info, deps.builtins, deps.abi_builtins);
     let settings =
         crate::dialogs::settings::Live::new(deps.config, args.auto, files.as_ref().map(|files| files.config.clone()));
     let tui = Rc::new_cyclic(|this: &Weak<Tui>| Tui {

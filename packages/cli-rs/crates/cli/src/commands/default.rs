@@ -111,6 +111,7 @@ pub fn run(context: &Context, args: &RootArgs) -> error::Result<()> {
             continue_: args.continue_,
             events: true,
             builtins: vec![opencode_mermaid::plugin().into(), opencode_latex::plugin().into()],
+            abi_builtins: false,
         },
         args: tui_args,
         keep: Box::new(connection),

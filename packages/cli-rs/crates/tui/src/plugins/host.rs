@@ -930,7 +930,12 @@ fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
 /// The built-ins in TS order (`plugin/builtins.ts`), with the ones from other crates ([`crate::Deps::builtins`],
 /// Mermaid and LaTeX) in their TS place after `stats`. The storybook (F14) is excepted (Q17). The plugin manager and
 /// the diff viewer are host entries, which reach the TUI through `tui` once it exists.
-fn builtins(tui: &Rc<OnceCell<Weak<Tui>>>, external: Vec<Builtin>) -> Vec<Builtin> {
+fn builtins(tui: &Rc<OnceCell<Weak<Tui>>>, external: Vec<Builtin>, abi: bool) -> Vec<Builtin> {
+    // On the other carrier each plugin's calls cross the C ABI's byte shims ([`Builtin::Abi`]).
+    let carried = |builtin: Builtin| match builtin {
+        Builtin::Plugin(plugin) if abi => Builtin::Abi(plugin),
+        builtin => builtin,
+    };
     let mut builtins = vec![
         super::home_footer::plugin().into(),
         super::prompt_footer::plugin().into(),
@@ -946,7 +951,7 @@ fn builtins(tui: &Rc<OnceCell<Weak<Tui>>>, external: Vec<Builtin>) -> Vec<Builti
     ];
     builtins.extend(external);
     builtins.push(hosted(tui, super::diffs::viewer::ID, super::diffs::viewer::activate));
-    builtins
+    builtins.into_iter().map(carried).collect()
 }
 
 /// A part of the TUI that the plugin manager lists and toggles like a plugin, which is not plugin API: `activate` runs
@@ -965,12 +970,13 @@ fn hosted(tui: &Rc<OnceCell<Weak<Tui>>>, id: &'static str, activate: fn(&Rc<Tui>
     }
 }
 
-/// The registry of the built-ins and the `plugins` config, not yet active.
-pub fn registry(info: &opencode_local::cli_config::Info, external: Vec<Builtin>) -> Plugins {
+/// The registry of the built-ins and the `plugins` config, not yet active; with `abi`, the built-ins run through the
+/// C ABI's byte shims ([`crate::Deps::abi_builtins`]).
+pub fn registry(info: &opencode_local::cli_config::Info, external: Vec<Builtin>, abi: bool) -> Plugins {
     let targets = info.plugins.iter().flatten().map(target);
     let tui = Rc::default();
     Plugins {
-        registry: Registry::new(builtins(&tui, external), targets),
+        registry: Registry::new(builtins(&tui, external, abi), targets),
         tui,
         diffs: RefCell::default(),
         loader: RefCell::default(),
