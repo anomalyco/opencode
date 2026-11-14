@@ -292,12 +292,22 @@ impl World {
         ])
     }
 
-    /// A TUI on the session with `builtins`.
+    /// A TUI on the session with `builtins`. Each call in its own row: grouping folds rows, and is E.8's.
     fn with(builtins: Vec<opencode_plugin::Builtin>) -> Self {
+        Self::configured(builtins, ungrouped(), false)
+    }
+
+    /// A TUI on the session with `builtins`, the transcript settings `session`, and image previews on or off.
+    fn configured(builtins: Vec<opencode_plugin::Builtin>, session: Session, images: bool) -> Self {
         VIEWS.with_borrow_mut(Vec::clear);
         ARMED.set(None);
         DECLINE.with_borrow_mut(HashSet::clear);
         FIRED.with_borrow_mut(Vec::clear);
+        let info = Info {
+            animations: Some(false),
+            session: Some(Session { image_preview: Some(images), ..session }),
+            ..Info::default()
+        };
         let session = support::merge(support::session(SESSION, "Claims"), json!({ "agent": "build" }));
         let fake = support::Fake::new(move |seen| match seen.path.as_str() {
             "/api/session" => (200, json!({ "data": [], "cursor": {} })),
@@ -306,16 +316,6 @@ impl World {
             "/api/session/ses_c/permission" | "/api/session/ses_c/inbox" => (200, json!({ "data": [] })),
             _ => support::not_found(),
         });
-        // Each call in its own row: grouping folds rows, and is E.8's.
-        let info = Info {
-            animations: Some(false),
-            session: Some(Session {
-                grouping: Some(Grouping::None),
-                verbosity: Some(Verbosity::Medium),
-                ..Session::default()
-            }),
-            ..Info::default()
-        };
         let deps = Deps {
             config: support::config(info),
             route: support::session_route(SESSION),
@@ -1319,5 +1319,181 @@ fn each_claim_draws_with_its_own_view_and_releases_hold() {
         let content = ledger().content;
         assert_eq!(content, 2, "{carrier:?}: one handle each part, the released ones gone: {:?}", ledger());
         drop(world);
+    }
+}
+
+// Claims among the transcript's other rules (O-115): groups, a theme change, a permission, images.
+
+thread_local! {
+    /// What the views of the rows below drew, in order.
+    static DREW: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A part's id, its state, whether a permission request waits on it, and the palette's `text.base` when the claim
+/// reads the palette: the one line [`rules_view`] draws.
+fn rule_line(cx: &v2::View<'_>, part: &Part) -> Option<String> {
+    let Part::Tool(tool) = part else { return None };
+    let base =
+        cx.input.palette.get("text.base").map_or("-".to_owned(), |c| format!("{:02x}{:02x}{:02x}", c.r, c.g, c.b));
+    Some(format!("{} {} {:?} permission {} base {base}", tool.tool.name, tool.tool.id, tool.state, tool.permission))
+}
+
+/// Draws [`rule_line`] in `text.base`, and the call's output once it finished. Declines what [`DECLINE`] names, and
+/// returns a refused tree for the part [`ARMED`] names with [`Fault::Bad`].
+fn rules_view(cx: &mut v2::View<'_>, part: &Part) -> Option<v2::Node> {
+    let line = rule_line(cx, part)?;
+    DREW.with_borrow_mut(|drew| drew.push(line.clone()));
+    let key = key(part);
+    if DECLINE.with_borrow(|decline| decline.contains(&key)) {
+        return None;
+    }
+    if ARMED.with_borrow(|armed| armed.as_ref().is_some_and(|armed| *armed == (key.clone(), Fault::Bad))) {
+        let text = |text: &str| v2::Node::text(vec![abi::Span::new(text)]).with_id("twice");
+        return Some(v2::Node::column(vec![text("x"), text("y")]));
+    }
+    if ARMED.with_borrow(|armed| armed.as_ref().is_some_and(|armed| *armed == (key.clone(), Fault::Panic))) {
+        ARMED.set(None);
+        panic!("claim.rules fault on {key}");
+    }
+    let output = match part {
+        Part::Tool(tool) if tool.state == abi::claim::State::Completed => Some(tool.output()),
+        _ => None,
+    };
+    Some(card(&[line], output))
+}
+
+/// Claims `probe` and `shell` calls, and `paint` calls with the palette.
+fn plugin_rules(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::tool("probe", rules_view));
+    setup.claim(Claim::tool("shell", rules_view));
+    setup.claim(Claim::tool("paint", rules_view).palette());
+    Ok(())
+}
+
+impl World {
+    /// `plugin_rules` on `carrier`, with the transcript settings `session` and image previews on or off.
+    fn rules(carrier: Carrier, session: Session, images: bool) -> Self {
+        DREW.with_borrow_mut(Vec::clear);
+        Self::configured(
+            vec![builtin(carrier, abi::Plugin { id: "claim.rules", setup: plugin_rules })],
+            session,
+            images,
+        )
+    }
+
+    /// Clicks the first cell of the first `text` on screen, a second after the last click so none is a double click.
+    fn click(&self, text: &str) {
+        let app = &self.harness.app;
+        app.advance(Duration::from_secs(1));
+        let screen = app.text();
+        let (y, line) = screen.lines().enumerate().find(|(_, line)| line.contains(text)).unwrap_or_else(|| {
+            panic!("no {text:?} on screen:\n{screen}");
+        });
+        let x = line[..line.find(text).unwrap()].chars().count();
+        app.click(x as u16, y as u16);
+        self.settle();
+    }
+
+    /// A call of `name` that streams its input, runs and finishes with the text `done {id}` and `files`.
+    fn finished_call(&self, id: &str, name: &str, files: &[Value]) {
+        self.emit("session.tool.input.started", json!({ "id": id, "name": name }));
+        self.emit("session.tool.input.delta", json!({ "id": id, "delta": "{}" }));
+        self.emit("session.tool.called", json!({ "id": id, "input": {}, "executed": true }));
+        let mut content = vec![json!({ "type": "text", "text": format!("done {id}") })];
+        content.extend(files.iter().cloned());
+        self.emit("session.tool.success", json!({ "id": id, "content": content, "executed": true }));
+        self.settle();
+    }
+
+    /// The mount of call `id`, if the call is claimed and mounted.
+    fn mount_of(&self, id: &str) -> Option<Shown> {
+        mounted().into_iter().find(|shown| shown.id.key == id)
+    }
+
+    /// Asserts the claim's tree shows call `id` and equals `line` (and `output`) mounted fresh.
+    fn draws(&self, id: &str, line: &str, output: Option<&str>) {
+        let frame = self.frame();
+        let shown = self.mount_of(id).filter(|shown| shown.shows);
+        let shown = shown.unwrap_or_else(|| panic!("the claim does not draw {id}:\n{}", frame.text()));
+        let node = card(&[line.to_owned()], output.map(|text| v2::Source::Text(text.into())));
+        if let Some(diff) = region_diff(&frame, &shown, &node, &self.theme()) {
+            panic!("{diff}\nscreen:\n{}", frame.text());
+        }
+    }
+}
+
+/// Each call in its own row: no exploration group, and no activity group, which low verbosity makes.
+fn ungrouped() -> Session {
+    Session { grouping: Some(Grouping::None), verbosity: Some(Verbosity::Medium), ..Session::default() }
+}
+
+/// The default transcript settings: grouping on, low verbosity.
+fn grouped() -> Session {
+    Session { verbosity: Some(Verbosity::Low), ..Session::default() }
+}
+
+// Expected (E.8 with 4.11): with grouping on, a claimed call in a folded group is not mounted and its view is not
+// called; unfolded, the claim draws it as it draws a call outside a group. The fallback rules hold inside the group:
+// a declined revision shows the host's row; a tree refused twice leaves the call to the host for the rest of its
+// mount, which folding the group ends, so unfolded again the claim draws it afresh; a panic fails the plugin and every
+// call in the group shows the host's row.
+#[test]
+fn a_claimed_call_in_a_group_draws_while_the_group_is_open() {
+    for carrier in CARRIERS {
+        let world = World::rules(carrier, grouped(), false);
+        world.finished_call("call_1", "probe", &[]);
+        world.finished_call("call_2", "probe", &[]);
+        let screen = world.frame().text();
+        assert!(!screen.contains("probe call_1"), "{carrier:?}: a folded group shows its calls:\n{screen}");
+        assert!(mounted().is_empty() && DREW.with_borrow(Vec::is_empty), "{carrier:?}: {:?}", mounted());
+        let line = |id: &str, state: &str| format!("probe {id} {state} permission false base -");
+        world.click(" tools");
+        world.draws("call_1", &line("call_1", "Completed"), Some("done call_1"));
+        world.draws("call_2", &line("call_2", "Completed"), Some("done call_2"));
+        assert_eq!(DREW.with_borrow(Vec::len), 2, "{carrier:?}: one view a call");
+
+        // A call that streams into the open group: declined, the host's row; accepted, the claim's.
+        DECLINE.with_borrow_mut(|decline| decline.insert("call_3".to_owned()));
+        world.emit("session.tool.input.started", json!({ "id": "call_3", "name": "probe" }));
+        world.settle();
+        let screen = world.frame().text();
+        assert!(screen.contains("⋯ probe") && !screen.contains("probe call_3"), "{carrier:?}:\n{screen}");
+        DECLINE.with_borrow_mut(HashSet::clear);
+        world.emit("session.tool.called", json!({ "id": "call_3", "input": {}, "executed": true }));
+        world.settle();
+        world.draws("call_3", &line("call_3", "Running"), None);
+
+        // Refused twice: the host's row for the rest of the mount; folding the group ends the mount.
+        ARMED.set(Some(("call_3".to_owned(), Fault::Bad)));
+        world.emit("session.tool.progress", json!({ "id": "call_3", "metadata": { "n": 1 } }));
+        world.settle();
+        let screen = world.frame().text();
+        assert!(!screen.contains("probe call_3"), "{carrier:?}: the refused tree shows:\n{screen}");
+        assert_eq!(world.mount_of("call_3").map(|shown| shown.shows), Some(false), "{carrier:?}");
+        ARMED.set(None);
+        world.emit("session.tool.progress", json!({ "id": "call_3", "metadata": { "n": 2 } }));
+        world.settle();
+        assert!(!world.frame().text().contains("probe call_3"), "{carrier:?}: a fallen call came back in its mount");
+        let generation = world.mount_of("call_3").map(|shown| shown.id.generation);
+        let before = opencode_plugin::loader::native::crossed();
+        world.click(" tools");
+        let screen = world.frame().text();
+        assert!(mounted().is_empty() && !screen.contains("probe call_"), "{carrier:?}: {:?}\n{screen}", mounted());
+        let ledger = ledger();
+        assert_eq!((ledger.mounts, ledger.content, ledger.memo_entries), (0, 0, 0), "{carrier:?}: {ledger:?}");
+        let unmounts = opencode_plugin::loader::native::crossed().since(before).calls;
+        assert_eq!(unmounts, if carrier == Carrier::Abi { 3 } else { 0 }, "{carrier:?}: a library hears each fold");
+        world.click(" tools");
+        world.draws("call_3", &line("call_3", "Running"), None);
+        assert_ne!(world.mount_of("call_3").map(|shown| shown.id.generation), generation, "{carrier:?}");
+
+        // A panic fails the plugin: every call in the open group shows the host's row.
+        ARMED.set(Some(("call_3".to_owned(), Fault::Panic)));
+        world.emit("session.tool.progress", json!({ "id": "call_3", "metadata": { "n": 3 } }));
+        world.settle();
+        let screen = world.frame().text();
+        assert!(mounted().is_empty() && !screen.contains("probe call_"), "{carrier:?}: {:?}\n{screen}", mounted());
+        assert!(screen.contains("− "), "{carrier:?}: the group stays open:\n{screen}");
+        assert_eq!(screen.matches("probe").count(), 3, "{carrier:?}: three host rows:\n{screen}");
     }
 }
