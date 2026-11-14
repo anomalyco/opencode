@@ -121,10 +121,11 @@ impl Viewer for Linked {
     fn draw(&self, host: &dyn Host, mount: &v2::MountId, canvas: &str, frame: v2::Frame) -> Option<Vec<u8>> {
         let draw = self.draw.as_ref()?;
         let mut list = None;
-        let called = (self.call)("draw", host, &mut |read| {
+        // A call that panicked or was refused set no list.
+        (self.call)("draw", host, &mut |read| {
             list = draw(&mut v2::Draw { read, mount, canvas, frame });
         });
-        list.filter(|_| called).map(abi::canvas::List::into_bytes)
+        list.map(abi::canvas::List::into_bytes)
     }
 }
 
