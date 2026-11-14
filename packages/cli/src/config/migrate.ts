@@ -5,8 +5,9 @@ import { TuiKeybind } from "@opencode/tui/config/v1/keybind"
 import { Definitions } from "@opencode/tui/config/keybind"
 import { Effect, FileSystem, Option, Schema } from "effect"
 import { randomUUID } from "crypto"
-import { applyEdits, createScanner, modify, parse, parseTree, type Node, type ParseError } from "jsonc-parser"
+import { applyEdits, modify, parse, parseTree, type ParseError } from "jsonc-parser"
 import path from "path"
+import { removeProperty } from "./jsonc"
 import { Info, SchemaURL } from "./schema"
 
 const decodeV1 = Schema.decodeUnknownOption(TuiConfigV1.Info)
@@ -125,36 +126,6 @@ function findKeybindObjects(text: string) {
   const tree = parseTree(text)
   if (tree === undefined) return []
   return tree.children?.filter((property) => property.children?.[0]?.value === "keybinds") ?? []
-}
-
-function removeProperty(text: string, property: Node) {
-  const properties = property.parent?.children ?? []
-  const index = properties.indexOf(property)
-  const end = property.offset + property.length
-  const next = properties[index + 1]
-  if (next) {
-    const comma = findComma(text, end, next.offset)
-    if (comma !== undefined) return text.slice(0, property.offset) + text.slice(end, comma) + text.slice(comma + 1)
-  }
-  const previous = properties[index - 1]
-  if (previous) {
-    const comma = findComma(text, previous.offset + previous.length, property.offset)
-    if (comma !== undefined) return text.slice(0, comma) + text.slice(comma + 1, property.offset) + text.slice(end)
-  }
-  const comma = findComma(text, end, (property.parent?.offset ?? 0) + (property.parent?.length ?? 0))
-  if (comma !== undefined) return text.slice(0, property.offset) + text.slice(end, comma) + text.slice(comma + 1)
-  return text.slice(0, property.offset) + text.slice(end)
-}
-
-function findComma(text: string, start: number, end: number) {
-  const scanner = createScanner(text, false)
-  scanner.setPosition(start)
-  while (true) {
-    scanner.scan()
-    const offset = scanner.getTokenOffset()
-    if (scanner.getTokenLength() === 0 || offset >= end) return
-    if (text[offset] === ",") return offset
-  }
 }
 
 export function migrateV1(legacy: TuiConfigV1.Info | undefined, kv: Record<string, any>): Info {
