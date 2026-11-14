@@ -247,22 +247,30 @@ A claim's first render gets `Changed::all`. After that, a mounted claim or route
 
 A node that differs from the last one is reconciled into the widgets the claim has: a node of the same kind in the same
 place keeps its widget and gets only what changed, so its state stays (a hovered text, a scroll offset). A theme
-switch renders a route's claims again in place. `Keep` keeps everything, so a render that `Changed` shows is
-unaffected returns at once.
+switch renders a route's and a slot's claims again in place. `Keep` keeps everything, so a render that `Changed`
+shows is unaffected returns at once; it still takes a new theme. A node that nests more than 64 layout levels, or has
+a size in percent that is not a finite number of 0 or more, is not drawn, and the claim keeps what it showed.
 
 ### Contract 2.0 surfaces (P1, in process only)
 
 `Setup::surface(v2::Surface)` registers a surface of the rich-plugin contract (`opencode_plugin_abi::v2`), shown as
-a route or a slot claim. Its view returns a keyed tree: a node may carry an `id`, unique in the tree, and the host
-keeps the widget of a node whose id and kind stay. `View::memo(key, value, build)` returns `Node::Keep` when `value`
-equals the one the subtree was last built from in this mount; the host then adopts that subtree as it is. Each
-showing is a mount with a new generation, which owns the widgets, the memo table and the content handles of
-`View::content`; all of it goes when the surface closes. A tree with an id twice, a keep of an id the host does not
-hold, or a handle the mount lacks is refused whole: nothing of it shows, the host asks at once for a whole tree
-(`SurfaceInput::full`), and a second refusal in a row fails the plugin. A theme switch restyles the widgets with no
-call, unless the surface reads the palette (`Surface::palette`). A `Diff` or `Markdown` may name a tool call's output
-(`Source::PartOutput`) instead of carrying it. The schema is `crates/plugin-abi/schema/v2.json`, generated from the
-types. Surfaces of an external plugin are not mounted until the C ABI of 2.0.
+a route, which fills the page, or a slot claim, which takes its root node's layout. Its view returns a keyed tree: a
+node may carry an `id`, unique in the tree, and a `Scroll` must. The host keeps the widget of a node whose id stays,
+wherever the tree puts it, so a scroll keeps its offset and the focus; a node of another kind under the id is built
+new. `View::memo(key, value, build)` returns `Node::Keep` when `value` equals the one the subtree was last built from
+in this mount; the host then adopts that subtree as it is. The value is remembered only once the host accepts a tree
+that holds what `build` made. Each showing is a mount with a new generation, which owns the widgets, the memo table
+and the content handles of `View::content`; all of it goes when the surface closes, and what a route's commands
+asked for, such as a fetch, ends with the mount. A handle lives until the mount ends or `View::release`. A tree with
+an id twice, a keep of an id the host does not hold, a handle the mount lacks, a scroll without an id, more than 64
+layout levels or a size in percent that is not a finite number of 0 or more is refused whole: nothing of it shows,
+nor the content its view gave, the host asks at once for a whole tree (`SurfaceInput::full`, which may keep
+nothing), and a second refusal in a row fails the plugin. The view runs again when its surface's size changes. A
+theme switch restyles the widgets in place with no call, unless the surface reads the palette (`Surface::palette`).
+A `Diff` or `Markdown` may name a tool call's output (`Source::PartOutput`) instead of carrying it; the host shows
+the call's output as the transcript does, once it arrives. The schema is `crates/plugin-abi/schema/v2.json`,
+generated from the types in the crate (its root is a `Node`). Surfaces of an external plugin are not mounted until
+the C ABI of 2.0.
 
 ### Storage
 
