@@ -598,10 +598,21 @@ impl Manager {
 /// The question about `artifact`, found as plugin directory `target`: the library that would run, where it really is
 /// when that is outside the directory, and its hash (bigboi-1, carbon-1).
 fn question(target: &str, artifact: &Artifact, unsaved: Option<&str>) -> String {
-    let inside = std::fs::canonicalize(target).is_ok_and(|directory| artifact.path.starts_with(directory));
+    // A TypeScript plugin's directory is its artifact, even when it is a link to another.
+    let inside =
+        artifact.script || std::fs::canonicalize(target).is_ok_and(|directory| artifact.path.starts_with(directory));
     let elsewhere = if inside { "" } else { "\nIt is outside this plugin directory." };
     let saved =
         unsaved.map(|reason| format!("\nYour answer lasts until opencode exits: {reason}.")).unwrap_or_default();
+    if artifact.script {
+        return format!(
+            "This project wants to run TypeScript code in opencode's JS host:\n\n{target}\nModule directory: {}\
+             {elsewhere}\nSHA-256 of its files: {}…\n\nIt runs with your permissions. Approve it only if you trust this \
+             project.{saved}",
+            artifact.path.display(),
+            artifact.short(),
+        );
+    }
     format!(
         "This project wants to run native code inside opencode:\n\n{target}\nLibrary: {}{elsewhere}\nSHA-256: {}…\n\n\
          It runs with your permissions. Approve it only if you trust this project.{saved}",
@@ -768,7 +779,12 @@ mod tests {
         let target = root.path().join("plugins/p");
         std::fs::create_dir_all(&target).unwrap();
         let inside = std::fs::canonicalize(&target).unwrap().join("plugin.so");
-        let artifact = |path: std::path::PathBuf| Artifact { target: target.clone(), path, sha256: "ab".repeat(32) };
+        let artifact = |path: std::path::PathBuf| Artifact {
+            target: target.clone(),
+            path,
+            sha256: "ab".repeat(32),
+            script: false,
+        };
         let text = question(&target.to_string_lossy(), &artifact(inside.clone()), None);
         assert!(text.contains(&format!("Library: {}", inside.display())), "{text}");
         assert!(text.contains(&format!("SHA-256: {}…", "ab".repeat(8))), "{text}");
