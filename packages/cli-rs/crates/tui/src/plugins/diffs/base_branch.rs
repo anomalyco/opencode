@@ -7,7 +7,7 @@ use opencode_api::generated::{LocationQueryInput, VcsBranchListInput, VcsBranchL
 use opencode_plugin::abi::{Action, Dialog, Host, Select, SelectOption, Span};
 
 use super::load::Asked;
-use super::viewer::Viewer;
+use super::viewer::{Base, Viewer};
 use super::{Diffs, PICK_BASE, QUERY_BASE};
 use crate::plugins::fetch::fetch_of;
 
@@ -51,6 +51,18 @@ pub fn open(host: &dyn Host, viewer: &Viewer, diffs: &Diffs) {
         Picker { key, location: viewer.location_query(), current, request, ..Picker::default() };
     host.dialog(Dialog::Select(select(&diffs.picker.borrow())));
     query(host, diffs, String::new());
+}
+
+/// The base the server reported for `key` arrived: an open picker for it with no branch chosen marks it its current
+/// one, as TS's `reportedBases()` does (carbon's review of P6c, 6).
+pub fn reported(host: &dyn Host, diffs: &Diffs, key: &str, base: Option<&Base>) {
+    let mut picker = diffs.picker.borrow_mut();
+    let chosen = diffs.memory.borrow().bases.contains_key(key);
+    let Some(base) = base.filter(|_| picker.key == key && picker.current.is_none() && !chosen) else { return };
+    picker.current = Some(short(&base.reference).to_owned());
+    if host.dialog_open(KEY) {
+        host.dialog(Dialog::Select(select(&picker)));
+    }
 }
 
 /// The picker's select, as it stands.

@@ -13,7 +13,7 @@
 
 use std::sync::Arc;
 
-use opencode_api::generated::{McpServerStatus, SessionArchivedData, SessionDeleted, V2Event};
+use opencode_api::generated::{McpServerStatus, SessionArchivedData, SessionDeleted, V2Event, V2EventServerConnected};
 
 use crate::prelude::*;
 
@@ -106,6 +106,11 @@ pub mod testing {
     pub fn signal(tui: &Tui, event: V2Event) {
         let _ = tui.app.proxy().send(Signal(Arc::new(event)));
     }
+
+    /// Posts that the UI skipped signals, as the event pump does when it falls behind the store.
+    pub fn lagged(tui: &Tui) {
+        let _ = tui.app.proxy().send(Lagged);
+    }
 }
 
 /// After skipped signals, as after a reconnect: reads the location again and syncs every view. The store applied
@@ -127,6 +132,16 @@ fn resync(tui: &Tui) {
         handle(tui, &Handled::SessionDeleted(&event));
     }
     tui.resync();
+    // The subscribers missed what changed too, as across a reconnect: they hear it as one (carbon's review of P6c, 6).
+    let event = V2Event::ServerConnected(V2EventServerConnected {
+        r#type: "server.connected".to_owned(),
+        ..V2EventServerConnected::default()
+    });
+    let subscribers: Vec<_> =
+        tui.events.subscribers.borrow().iter().map(|(_, subscriber)| subscriber.clone()).collect();
+    for subscriber in subscribers {
+        subscriber(tui, &event);
+    }
 }
 
 /// Calls `subscriber` with each store signal, after the TUI's own handling, until the disposer drops. The store passes

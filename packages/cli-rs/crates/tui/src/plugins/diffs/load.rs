@@ -139,6 +139,7 @@ impl Viewer {
             }
             Asked::Reported { key, .. } => {
                 if let Ok(base) = base_of(reply) {
+                    super::base_branch::reported(host, diffs, &key, base.as_ref());
                     self.reported.insert(key, base);
                 }
             }
