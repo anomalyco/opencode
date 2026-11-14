@@ -2743,21 +2743,20 @@ test("free usage limit modal manages animation FPS and adapts to 44x24 and 60x12
   expect(art).toBeDefined()
   expect(art!.animationFps).toBe(30)
   expect(art!.isDestroyed).toBe(false)
-  expect(anim.renderer.targetFps).toBe(30)
-  expect(anim.renderer.maxFps).toBe(30)
+  // The art ticks at 30 fps by itself; the rest of the screen keeps the renderer's rate.
+  expect(anim.renderer.targetFps).toBe(initialTargetFps)
+  expect(anim.renderer.maxFps).toBe(initialMaxFps)
   // Toggling animate off stops the art's ticks; toggling back on restarts them.
   art!.animate = false
   expect(art!.animationFps).toBeUndefined()
   art!.animate = true
   expect(art!.animationFps).toBe(30)
-  // Closing the modal destroys the art renderable and restores FPS.
+  // Closing the modal destroys the art renderable.
   anim.mockInput.pressEscape()
   await anim.waitForFrame((frame) => !frame.includes("Free limit reached"))
   expect(art!.isDestroyed).toBe(true)
   expect(findArt(anim.renderer.root)).toBeUndefined()
   expect(anim.renderer.liveRequestCount).toBe(initialLive)
-  expect(anim.renderer.targetFps).toBe(initialTargetFps)
-  expect(anim.renderer.maxFps).toBe(initialMaxFps)
 
   // Compact sizes: 44x24 (narrow, stacked buttons) and 60x12 (short, scrollable body).
   for (const [width, height] of [

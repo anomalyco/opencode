@@ -22,7 +22,7 @@ const BREATH_SPEED = 0.0008
 const PHASE_OFFSET = 0.29
 // The frame shown when animations are off.
 const STILL = PERIOD * 0.5
-// The rate the dialog's live loop ran at (it sets targetFps to 30).
+// The art ticks at 30 fps; every cell changes each tick.
 const FPS = 30
 const LOGO_LEFT_WIDTH = go.left[0]?.length ?? 0
 const LOGO_LINES = go.left.map((line, index) => line + " " + go.right[index])
