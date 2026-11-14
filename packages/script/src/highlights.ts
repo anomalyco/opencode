@@ -6,9 +6,10 @@ const LIMIT = { items: 5, title: 60, body: 300 }
  * Extracts the `### Highlights` bullets from reviewed release notes. Each bullet is expected to look like
  * `- **Title**: One or two sentences. ([#123](https://github.com/...))`; trailing pull request links are dropped and
  * inline Markdown is reduced to plain text, keeping backticks for code spans. Problems are reported instead of thrown
- * so a formatting mistake never fails a release build.
+ * so a formatting mistake never fails a release build. The TUI audience omits highlights whose source PRs appear
+ * exclusively in the detailed Desktop section; the default audience keeps the complete list.
  */
-export function parse(notes: string) {
+export function parse(notes: string, audience: "all" | "tui" = "all") {
   const problems: string[] = []
   const lines = notes.replace(/\r\n/g, "\n").split("\n")
   const start = lines.findIndex((line) => /^###\s+Highlights\s*$/i.test(line.trim()))
@@ -27,7 +28,12 @@ export function parse(notes: string) {
     { fenced: false, items: [] as string[] },
   ).items
 
-  const items = bullets.flatMap((bullet) => {
+  const excluded = audience === "tui" ? desktopOnly(lines.slice(start + 1)) : new Set<string>()
+  const selected = bullets.filter((bullet) => {
+    const refs = references(bullet)
+    return refs.length === 0 || refs.some((ref) => !excluded.has(ref))
+  })
+  const items = selected.flatMap((bullet) => {
     const match = bullet.match(/^\*\*(.+?)\*\*:?\s*(.*)$/)
     const title = match && plain(match[1].replace(/:$/, ""))
     const body = match && plain(match[2].replace(/\s*\((?:\[[^\]]*\]\([^)]*\)(?:,\s*)?)+\)\s*$/, ""))
@@ -39,8 +45,38 @@ export function parse(notes: string) {
   })
 
   if (items.length > LIMIT.items) problems.push(`Kept the first ${LIMIT.items} of ${items.length} highlights`)
-  if (!items.length) problems.push("The Highlights section has no highlights in the expected format")
+  if (!items.length && (selected.length > 0 || bullets.length === 0))
+    problems.push("The Highlights section has no highlights in the expected format")
   return { items: items.slice(0, LIMIT.items), problems }
+}
+
+// Reviewed highlights repeat their source PRs in the detailed release sections. Only exclude
+// entries whose sources are all explicitly Desktop-only; missing or shared sources stay visible.
+function desktopOnly(lines: string[]) {
+  const desktop = new Set<string>()
+  const shared = new Set<string>()
+  const state = { section: "", fenced: false }
+  for (const line of lines) {
+    if (line.trim().startsWith("```")) {
+      state.fenced = !state.fenced
+      continue
+    }
+    if (state.fenced) continue
+    if (/^#{1,2}\s/.test(line)) break
+    const heading = line.match(/^###\s+(.+?)\s*$/)
+    if (heading) state.section = heading[1].toLowerCase()
+    if (!state.section || state.section === "highlights") continue
+    const refs = state.section === "desktop" ? desktop : shared
+    references(line).forEach((ref) => refs.add(ref))
+  }
+  return new Set([...desktop].filter((ref) => !shared.has(ref)))
+}
+
+function references(value: string) {
+  return Array.from(
+    value.matchAll(/https:\/\/github\.com\/anomalyco\/opencode\/(?:pull|issues)\/(\d+)\b/g),
+    (match) => match[1],
+  )
 }
 
 function plain(value: string) {
@@ -58,10 +94,10 @@ function truncate(value: string, limit: number) {
   return `${(space > limit / 2 ? cut.slice(0, space) : cut).trimEnd()}…`
 }
 
-/** Returns the JSON a stable release build embeds as `OPENCODE_RELEASE_HIGHLIGHTS`, warning about malformed notes. */
+/** Returns the TUI JSON a stable release build embeds as `OPENCODE_RELEASE_HIGHLIGHTS`, warning about malformed notes. */
 export function embed(notes: string | undefined) {
   if (!notes?.trim()) return
-  const result = parse(notes)
+  const result = parse(notes, "tui")
   result.problems.forEach((problem) => console.warn(`release highlights: ${problem}`))
   if (!result.items.length) return
   return JSON.stringify(result.items)
