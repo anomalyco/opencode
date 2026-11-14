@@ -2140,6 +2140,17 @@ impl Registry {
         Some(RouteMount(render(host)))
     }
 
+    /// Whether active plugin `id` registered the route `name`.
+    pub fn has_route(&self, id: &str, name: &str) -> bool {
+        self.with_plugin(id, |plugin| {
+            plugin
+                .active
+                .as_ref()
+                .is_some_and(|(_, registration)| registration.routes.iter().any(|(route, _)| route == name))
+        })
+        .unwrap_or(false)
+    }
+
     /// The code-block renderers of the active plugins, drawing in the theme `theme` returns when they render, so a
     /// Markdown restyled for a new theme draws its fences in it. At one language the plugin last in activation order
     /// wins; a plugin keeps its place.

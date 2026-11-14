@@ -77,7 +77,7 @@ fn open(run: Run) -> Board {
         let dir = config.join("plugins").join("board");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join(entry_file()), library()).unwrap();
-        external(&harness.tui, External { config_dir: config, cwd: root.path().to_path_buf() });
+        external(&harness.tui, External { config_dir: config, cwd: root.path().to_path_buf(), dev: Vec::new() });
         root
     });
     settle(&harness);

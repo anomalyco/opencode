@@ -100,7 +100,7 @@ fn open_with(
     std::fs::write(plugin.join(entry_file()), build).unwrap();
     let deps = Deps { route, roots: roots(root.path()), ..support::deps(Arc::new(fake(text.to_owned()))) };
     let harness = support::mount(80, 24, deps);
-    external(&harness.tui, External { config_dir: config, cwd: root.path().to_path_buf() });
+    external(&harness.tui, External { config_dir: config, cwd: root.path().to_path_buf(), dev: Vec::new() });
     Plugins { harness, plugin, _root: root }
 }
 
@@ -789,4 +789,32 @@ fn a_plugins_change_in_cli_json_reconciles_while_running() {
     plugins(json!([]));
     assert_eq!(h.status(), opencode_plugin::Status::Active);
     h.wait_for("sample plugin v1: home.footer");
+}
+
+// Expected (review bigboi-9): `plugin dev`'s library is a target of its own, beside the configured ones: a settings
+// edit that rewrites `plugins` keeps it loaded and out of the config, and a new build after the edit reloads.
+#[test]
+fn a_dev_library_survives_a_settings_edit() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let dev = root.path().join("crate").join("target").join("opencode-dev");
+    std::fs::create_dir_all(&dev).unwrap();
+    let library = dev.join(entry_file());
+    std::fs::write(&library, build("")).unwrap();
+    let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(fake(String::new()))) });
+    let target = library.to_string_lossy().into_owned();
+    let config_dir = root.path().join("config");
+    external(&harness.tui, External { config_dir, cwd: root.path().to_path_buf(), dev: vec![target.clone()] });
+    harness.wait_for("sample plugin v1: home.footer");
+    opencode_tui::dialogs::settings::update(&harness.tui, |value| {
+        opencode_tui::dialogs::settings::set_path(value, &["plugins"], json!(["an-unrelated-entry"]));
+    });
+    harness.app.advance(Duration::from_millis(1));
+    let entries = harness.tui.plugins.entries();
+    let entry =
+        entries.iter().find(|entry| entry.target.as_deref() == Some(&*target)).expect("the dev target is listed");
+    assert_eq!(entry.status, opencode_plugin::Status::Active);
+    let plugins = harness.tui.config().info.plugins.clone().unwrap_or_default();
+    assert!(plugins.iter().all(|plugin| !format!("{plugin:?}").contains("opencode-dev")), "{plugins:?}");
+    write_atomic(&library, &build("v2"));
+    harness.wait_for("sample plugin v2: home.footer");
 }
