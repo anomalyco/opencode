@@ -98,6 +98,8 @@ thread_local! {
     static FRAME: Cell<Option<((usize, u64), u64)>> = const { Cell::new(None) };
     static LIMITS: Cell<Limits> = Cell::new(Limits::default());
     static HELD: RefCell<HashMap<String, Held>> = RefCell::default();
+    /// What all plugins hold, apart from any plugin's ID (review carbon 5.2).
+    static TOTAL: Cell<Held> = Cell::new(Held::default());
 }
 
 /// The limits on this thread.
@@ -145,9 +147,6 @@ impl Held {
     }
 }
 
-/// The empty plugin ID stands for all plugins in [`HELD`].
-const ALL: &str = "";
-
 /// What the host holds for `plugin` now.
 pub fn held(plugin: &str) -> Held {
     HELD.with(|held| held.borrow().get(plugin).copied().unwrap_or_default())
@@ -155,7 +154,7 @@ pub fn held(plugin: &str) -> Held {
 
 /// What the host holds for all plugins now.
 pub fn total() -> Held {
-    held(ALL)
+    TOTAL.with(Cell::get)
 }
 
 fn bounds(kind: Kind) -> (u64, u64) {
@@ -198,13 +197,16 @@ pub fn release(plugin: &str, kind: Kind, amount: u64) {
 fn change(plugin: &str, kind: Kind, f: impl Fn(u64) -> u64) {
     HELD.with(|held| {
         let mut held = held.borrow_mut();
-        for id in [plugin, ALL] {
-            let entry = held.entry(id.to_owned()).or_default();
-            *entry.of(kind) = f(*entry.of(kind));
-            if id != ALL && *entry == Held::default() {
-                held.remove(id);
-            }
+        let entry = held.entry(plugin.to_owned()).or_default();
+        *entry.of(kind) = f(*entry.of(kind));
+        if *entry == Held::default() {
+            held.remove(plugin);
         }
+    });
+    TOTAL.with(|total| {
+        let mut all = total.get();
+        *all.of(kind) = f(*all.of(kind));
+        total.set(all);
     });
 }
 
@@ -247,6 +249,17 @@ impl std::fmt::Display for Over {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Expected (fixed row; review carbon 5.2): what all plugins hold is apart from any plugin's ID, the empty one too:
+    // a charge to it counts once in the total.
+    #[test]
+    fn the_total_counts_each_charge_once() {
+        let before = total().nodes;
+        assert!(charge("", Kind::Nodes, 5));
+        assert_eq!((held("").nodes, total().nodes - before), (5, 5));
+        release("", Kind::Nodes, 5);
+        assert_eq!((held("").nodes, total().nodes), (0, before));
+    }
 
     // Expected (4.2): a plugin cannot spend what another left, nor more than the total; a replacement gives back
     // what it replaces; a release ends the charge.
