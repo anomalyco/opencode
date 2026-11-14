@@ -78,8 +78,11 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
     });
     let closed = side.clone();
     setup.command(hidden("life.closed"), move |_, _| flip(&closed));
-    setup.slot(abi::Placement::append("home.footer"), move |_, _, _| {
-        abi::Render::Show(abi::Node::text([abi::Span::new(format!("life plugin: {}", side.get()))]))
+    setup.slot(abi::Placement::append("home.footer"), move |read, _, _| {
+        // The pending key sequence (1.6), after the line while one is pending.
+        let pending: Vec<String> = read.keymap_pending().into_iter().map(|part| part.key).collect();
+        let keys = if pending.is_empty() { String::new() } else { format!(" keys {}", pending.join(" ")) };
+        abi::Render::Show(abi::Node::text([abi::Span::new(format!("life plugin: {}{keys}", side.get()))]))
     });
     Ok(())
 }
@@ -143,6 +146,8 @@ impl Life {
                 self.palette(&format!("Life {action}"), true);
             }
             "escape" | "enter" => self.harness.app.press(action),
+            // The leader starts a key sequence, which the line shows while it is pending.
+            "leader" => self.harness.app.press("ctrl+x"),
             "reload" => {
                 self.builds.set(self.builds.get() + 1);
                 std::fs::write(&self.build, [self.builds.get()]).unwrap();
@@ -177,7 +182,8 @@ impl Life {
     }
 
     /// `line/palette/row/dialog`, as `parity/machines/plugins.json` writes them. While its dialog shows, the palette
-    /// and the manager would replace it, so the first three are not read.
+    /// and the manager would replace it, so the first three are not read; while a key sequence is pending, a key would
+    /// continue it, so the line is read with its keys alone.
     fn observe(&self) -> String {
         let screen = self.harness.app.text();
         let dialogs = [("Life prompt", "prompt"), ("Life asks", "confirm"), ("Life says", "alert")];
@@ -185,6 +191,14 @@ impl Life {
             return format!("?/?/?/{dialog}");
         }
         let line = ["A", "B"].into_iter().find(|side| screen.contains(&format!("life plugin: {side}"))).unwrap_or("-");
+        let keys = screen
+            .lines()
+            .filter(|row| row.contains("life plugin: "))
+            .find_map(|row| row.split(" keys ").nth(1))
+            .and_then(|keys| keys.split_whitespace().next());
+        if let Some(keys) = keys {
+            return format!("{line}+{keys}/?/?/-");
+        }
         let palette = if self.palette("Life flip", false) { "yes" } else { "no" };
         self.manager();
         let screen = self.harness.app.text();
