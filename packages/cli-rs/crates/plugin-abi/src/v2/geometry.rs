@@ -96,7 +96,9 @@ pub enum ScrollAlign {
     },
 }
 
-/// A scroll verb, an effect of a handler. The host clamps it to the content.
+/// A scroll verb, an effect of a handler. The host clamps it to the content. [`Scroll::Offset`], [`Scroll::By`] and
+/// [`Scroll::Page`] count the host's rows: in a [`super::Node::List`] those of an item without widgets are its
+/// estimate until it is laid out. The others name content, and land on it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum Scroll {
