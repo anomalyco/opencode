@@ -126,14 +126,8 @@ pub(crate) fn unpack(name: &str, into: &Path) {
         .join("../../parity/plugins/npm")
         .join(format!("{}.tgz", name.replace('/', "__")));
     std::fs::create_dir_all(into).unwrap();
-    let status = Command::new("tar")
-        .arg("-xzf")
-        .arg(&tarball)
-        .arg("-C")
-        .arg(into)
-        .arg("--strip-components=1")
-        .status()
-        .unwrap();
+    let status =
+        Command::new("tar").arg("-xzf").arg(&tarball).arg("-C").arg(into).arg("--strip-components=1").status().unwrap();
     assert!(status.success(), "cannot unpack {}", tarball.display());
 }
 
@@ -367,7 +361,8 @@ fn the_published_subagents_sidebar_lists_and_picks_as_its_port_does() {
             h.sidebar(120).iter().any(|row| row.starts_with("• Child 03") && row.ends_with(" running"))
         });
         let theme = h.tui.page();
-        let colors = (h.fg("• Child 03", 0) == theme.text.feedback.success.base, h.fg("• Child 04", 0) == theme.text.muted);
+        let colors =
+            (h.fg("• Child 03", 0) == theme.text.feedback.success.base, h.fg("• Child 04", 0) == theme.text.muted);
         Some((h.sidebar(120), colors, h))
     };
     let Some((js, js_colors, h)) = rows(Carrier::Npm("opencode-subagents-sidebar")) else { return };

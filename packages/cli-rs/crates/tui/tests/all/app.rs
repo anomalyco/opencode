@@ -114,7 +114,11 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
     // P8: the published packages the scenario names, unmodified, on the JS host.
     let _plugins = npm.then(|| {
         let bun = crate::plugin_pipe::bun().expect("an npm scenario needs bun (OPENCODE_BUN or bun on the path)");
-        let config = opencode_plugin::pipe::Config { version: "test".to_owned(), channel: "test".to_owned(), ..opencode_plugin::pipe::Config::new(bun) };
+        let config = opencode_plugin::pipe::Config {
+            version: "test".to_owned(),
+            channel: "test".to_owned(),
+            ..opencode_plugin::pipe::Config::new(bun)
+        };
         let root = opencode_util::temp::tempdir().expect("plugin root");
         let external = opencode_tui::plugins::host::External {
             config_dir: root.path().join("config"),

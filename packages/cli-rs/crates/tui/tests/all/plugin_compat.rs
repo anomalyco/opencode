@@ -33,7 +33,8 @@ fn probe(config: Config) -> (Pipe, PathBuf) {
 
 /// A call log of this test's own, empty.
 fn log_file() -> PathBuf {
-    let log = std::env::temp_dir().join(format!("v2probe-{}-{:?}.log", std::process::id(), std::thread::current().id()));
+    let log =
+        std::env::temp_dir().join(format!("v2probe-{}-{:?}.log", std::process::id(), std::thread::current().id()));
     let _ = std::fs::remove_file(&log);
     log
 }
@@ -41,7 +42,10 @@ fn log_file() -> PathBuf {
 /// What the probe logged, in order, without its setups.
 fn calls(log: &Path) -> Vec<Value> {
     let text = std::fs::read_to_string(log).unwrap_or_default();
-    text.lines().map(|line| serde_json::from_str(line).unwrap()).filter(|call: &Value| call.get("setup").is_none()).collect()
+    text.lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .filter(|call: &Value| call.get("setup").is_none())
+        .collect()
 }
 
 /// The toasts shown since the last call, oldest first, as `title: message`.
