@@ -283,6 +283,8 @@ pub(crate) struct Surface {
     revision: Cell<Option<u64>>,
     /// The input the view last got, refilled for the next.
     viewed: RefCell<v2::SurfaceInput>,
+    /// What the content the mount holds costs, read once a handle.
+    measures: crate::reconcile::Measures,
     /// Each image source's picture, admitted and decoded once however many nodes show it, and the decoded bytes it
     /// charges to the plugin.
     images: RefCell<HashMap<ImageKey, (Picture, u64)>>,
@@ -405,6 +407,7 @@ impl Surface {
             revision: Cell::new(host.local_revision()),
             viewed: RefCell::default(),
             images: RefCell::default(),
+            measures: crate::reconcile::Measures::default(),
             pending: Cell::new(matches!(surface.at, v2::Place::Panel(_) | v2::Place::Overlay(_))),
             input: input.clone(),
             holder: RefCell::new(None),
@@ -827,6 +830,7 @@ impl Surface {
             content.insert(*handle, bytes.clone());
         }
         limits::recharge(&self.plugin, limits::Kind::Content, 0, admitted);
+        self.measures.retain(|handle| content.contains_key(handle));
         let slots_changed = tree.slots_changed();
         drop(state);
         self.repaint(restyled);
@@ -879,6 +883,13 @@ impl Surface {
             Source::Content(handle) => held(handle).map(|bytes| Rc::from(String::from_utf8_lossy(bytes).as_ref())),
             Source::PartOutput(part) => part_output(host, part).map(|text| Rc::from(text.as_str())),
         };
+        let measure = |source: &Source| match source {
+            Source::Content(handle) => held(handle).map(|bytes| self.measures.of(*handle, bytes)).unwrap_or_default(),
+            Source::Text(text) => crate::reconcile::measure(text),
+            Source::PartOutput(part) => {
+                part_output(host, part).map(|text| crate::reconcile::measure(&text)).unwrap_or_default()
+            }
+        };
         // An image is admitted and decoded once a source: nodes that show the same content share it.
         let image = |source: &Source| {
             let Some(key) = ImageKey::of(source) else { return Picture::Pending };
@@ -904,6 +915,7 @@ impl Surface {
             act: &act,
             slot: &slot,
             source: &source,
+            measure: &measure,
             content: &has,
             dropped: &dropped,
             image: &image,

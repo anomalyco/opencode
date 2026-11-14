@@ -978,3 +978,79 @@ fn a_keep_counts_what_it_keeps_and_a_release_gives_content_back() {
         assert_eq!(limits::held(ID).content, 0, "{carrier:?}: content held after its release");
     }
 }
+
+// Expected (fixed row; review bigboi 2): measuring a tree reads no text past one node's limit, and each content
+// handle's bytes once a mount, however many nodes name it and however many revisions show them; on both carriers.
+#[test]
+fn a_measure_reads_each_handle_once_and_nothing_past_the_text_limit() {
+    let many = |source: v2::Source| v2::Node::column((0..64).map(|_| code(source.clone())).collect());
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        let _limits = limits::set(Limits {
+            nodes: 1_000,
+            rows: 10_000,
+            text: 1_000,
+            plugin_content: 1 << 20,
+            all_content: 1 << 20,
+            ..small()
+        });
+        // Over the limit, by a handle and inline: nothing is read.
+        let before = reconcile::work();
+        show(&harness, subject(move |cx| many(v2::Source::Content(given(cx, || vec![b'x'; 1_001])))));
+        show(&harness, subject(move |_| many(source("x".repeat(1_001)))));
+        assert_eq!(reconcile::work().since(before).scanned, 0, "{carrier:?}: read past the limit");
+        // Within it: one handle's 1,000 bytes are read once in the mount, through its views and another revision.
+        let before = reconcile::work();
+        PHASE.with(|phase| phase.set(0));
+        show(&harness, subject(move |cx| many(v2::Source::Content(given(cx, || b"fn f() {}\n".repeat(100))))));
+        next_phase(&harness);
+        assert_eq!(reconcile::work().since(before).scanned, 1_000, "{carrier:?}: read more than once");
+    }
+}
+
+/// A patch that adds a file of `lines` lines; `valid: false` makes its last line context, so it adds no whole file.
+fn added(lines: usize, valid: bool) -> String {
+    let mut patch = format!("--- /dev/null\n+++ b/f.rs\n@@ -0,0 +1,{lines} @@\n");
+    for line in 0..lines {
+        let sign = if valid || line + 1 < lines { '+' } else { ' ' };
+        patch.push_str(&format!("{sign}line {line}\n"));
+    }
+    patch
+}
+
+// Expected (fixed row; review bigboi 6): a patch is charged as the renderer draws it. An added file of more than 3,000
+// lines is drawn in chunks and fits the default 3,000 rows; one of 2,999 or 3,000 lines, and one whose header names
+// more lines than it adds, are drawn whole and are past them. The twin, with the limits lifted, draws each as the
+// contract says: the chunks, or the placeholder. On both carriers.
+#[test]
+fn a_patch_is_charged_as_the_renderer_draws_it() {
+    let patch = |text: String| v2::Node::Diff {
+        id: None,
+        content: source(text),
+        view: v2::DiffView::Unified,
+        filetype: None,
+        hunks: None,
+    };
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        for (lines, valid, fits) in
+            [(2_999, true, false), (3_000, true, false), (3_001, true, true), (3_001, false, false)]
+        {
+            let text = added(lines, valid);
+            let frame = {
+                let _limits = limits::set(Limits { text: 1 << 20, ..Limits::default() });
+                let text = text.clone();
+                show(&harness, subject(move |_| framed(patch(text.clone()))))
+            };
+            let twin = {
+                let _limits = support::unlimited();
+                match fits {
+                    true => show(&harness, subject(move |_| framed(patch(text.clone())))),
+                    false => show(&harness, subject(|_| framed(placeholder(None, "too large to build at once")))),
+                }
+            };
+            let name = format!("{carrier:?}, {lines} lines, valid {valid}");
+            assert!(frame.cells == twin.cells, "{name}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
+        }
+    }
+}

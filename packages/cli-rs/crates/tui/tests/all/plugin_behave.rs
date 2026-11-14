@@ -1310,6 +1310,10 @@ fn adopt(host: &Plain, tree: &mut reconcile::Tree, nodes: &[v2::Node]) -> Result
         act: &act,
         slot: &slot,
         source: &source,
+        measure: &|source| match source {
+            v2::Source::Text(text) => opencode_plugin::reconcile::measure(text),
+            _ => opencode_plugin::reconcile::Measure::default(),
+        },
         content: &|_| false,
         dropped: &|_| false,
         image: &|_| opencode_plugin::image::Picture::Pending,
