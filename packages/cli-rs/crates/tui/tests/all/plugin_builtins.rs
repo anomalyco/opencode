@@ -5,7 +5,7 @@
 
 use crate::support::{self, DIRECTORY, Fake, Harness};
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -159,6 +159,10 @@ fn a_disabled_built_in_holds_nothing_and_draws_as_one_never_enabled() {
 thread_local! {
     /// What the probe heard and viewed, in order.
     static HEARD: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    /// The probe's view keeps its root unless it hears `all`, as a built-in's does.
+    static KEEPING: Cell<bool> = const { Cell::new(false) };
+    /// The probe's next view names a keep the host does not hold, which the host refuses.
+    static BREAK: Cell<bool> = const { Cell::new(false) };
 }
 
 fn heard() -> Vec<String> {
@@ -175,6 +179,12 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
         let shell = cx.input.slot.as_ref().and_then(|slot| slot.prompt).is_some_and(|prompt| prompt.shell);
         let line = format!("view {} shell {shell} {}", cx.mount.generation, said(&cx.input.changed));
         HEARD.with(|heard| heard.borrow_mut().push(line));
+        if BREAK.replace(false) {
+            return Node::Keep { key: "gone".into() };
+        }
+        if KEEPING.get() && !cx.input.changed.all {
+            return Node::Keep { key: "root".into() };
+        }
         Node::text([Span::new("probe")]).with_id("root")
     })
     .mounts()
@@ -285,4 +295,16 @@ fn a_view_hears_what_changed_since_the_last() {
         Some("local,woken".into())
     );
     assert!(after.iter().skip(1).all(|line| !line.contains("local")), "the write was heard twice: {after:?}");
+    // A tree the host refuses is asked for again whole, and that view hears `all`: one that keeps its root unless told
+    // so builds it, and the plugin stays active.
+    KEEPING.set(true);
+    BREAK.set(true);
+    harness.tui.keymap.dispatch("probe.write", None);
+    settle(&harness);
+    let retried: Vec<String> = heard();
+    assert!(retried.len() >= 2 && retried[1].contains(" all"), "{retried:?}");
+    let status = harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "test.probe").unwrap().status;
+    assert_eq!(status, opencode_plugin::Status::Active);
+    assert!(harness.app.render().text().contains("probe"));
+    KEEPING.set(false);
 }
