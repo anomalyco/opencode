@@ -102,9 +102,9 @@ async function mountForm(
           async read() {
             return clipboardText === undefined ? undefined : { data: clipboardText, mime: "text/plain" }
           },
-          write(text) {
+          async write(text) {
             copied.push(text)
-            return Promise.resolve()
+            return "copied" as const
           },
         }}
       >
