@@ -1,4 +1,4 @@
-use opencode_plugin_abi::{Click, Command, Node, Placement, Render, Setup, Span, Toast, Variant, export_plugin};
+use opencode_plugin_abi::{Click, Command, Node, Placement, Render, Setup, Span, Toast, Variant, plugin};
 
 fn setup(setup: &mut Setup) -> Result<(), String> {
     // A command in the palette and as `/hello`.
@@ -20,4 +20,4 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     Ok(())
 }
 
-export_plugin!("example.hello", setup);
+plugin!(id = "example.hello", setup);
