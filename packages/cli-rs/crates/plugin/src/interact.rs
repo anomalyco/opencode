@@ -305,18 +305,9 @@ impl Owner {
                 let listener = Listener { owner: me.clone(), layer: layer.clone(), deliver: deliver.clone() };
                 router.listeners.borrow_mut().push(listener);
             }
-            let commands: Vec<TuiCommand> = layer
-                .keys
-                .iter()
-                .filter(|bind| {
-                    let reserved = reserved(host, &bind.key);
-                    if reserved {
-                        log::warn!("plugin {}: no layer may bind {}", self.plugin, input::RESERVED);
-                    }
-                    !reserved
-                })
-                .map(|bind| self.command(bind, deliver))
-                .collect();
+            // The reserved chord stops every plugin layer before the keymap sees it (`Router::escape`), so a bind of it
+            // never runs.
+            let commands: Vec<TuiCommand> = layer.keys.iter().map(|bind| self.command(bind, deliver)).collect();
             if commands.is_empty() {
                 continue;
             }
@@ -614,10 +605,6 @@ impl Router {
 
     /// What the intercept does with a key: whether it is taken.
     fn intercept(&self, host: &dyn Host, event: &KeyEvent, stroke: &Stroke) -> bool {
-        if event.matches(input::RESERVED) {
-            self.escape(host);
-            return false;
-        }
         if !self.replaying.get() && self.held(Input::Key(*event)) {
             return true;
         }
@@ -648,7 +635,7 @@ impl Router {
 
     /// The reserved chord (synthesis 3.8): every plugin mode ends, what a hold kept is dropped, as a terminal's interrupt
     /// drops typed-ahead input, and the plugins' layers stop holding where the focus is until it moves. The chord goes
-    /// on to the host. The TUI calls it before its selection and the keymap see the key.
+    /// on to the host. The host calls it before anything else sees the key: its selection, the hold and the keymap.
     pub fn escape(&self, host: &dyn Host) {
         for owner in self.owners.borrow().iter().filter_map(Weak::upgrade) {
             if let Some(mode) = &*owner.mode.borrow() {
