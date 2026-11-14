@@ -84,6 +84,7 @@ pub fn run(context: &Context, args: &RootArgs) -> error::Result<()> {
         new_session_id: session.as_ref().and_then(|(id, found)| (!found).then(|| id.clone())),
         local,
         managed: matches!(connection.source, Source::Service { .. }),
+        server_executable: connection.executable(),
         auto: args.permissions.auto(),
         environment: local.then(opencode_store::environment::session_environment),
         contain: opencode_tui::plugins::contain::Contain {
