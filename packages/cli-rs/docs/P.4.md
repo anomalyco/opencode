@@ -289,6 +289,33 @@ the content handle to number from; the plugin answers the tree, the content it g
 memo table, and `Unmount` drops that table when the mount ends. Only a surface that declares it reads the palette gets
 the palette, on either carrier.
 
+### Contract 2.0 input and surfaces (P2, in process only)
+
+Two more places (`opencode_plugin_abi::interact`): `Place::Panel(name)`, which `Host::open_panel` shows beside the
+session on screen (or over the whole screen) and whose view gets `SurfaceInput::panel` (its width, whether it is full
+screen and whether it has the input); and `Place::Overlay(name)`, which `Host::overlay` shows over everything but the
+host's dialogs, at a cell, under a node of the opening mount, or against a screen edge. An overlay takes the focus;
+escape and a press outside it close it, and its opener's handler gets `Event::Closed`.
+
+`Surface::on(handler)` and `Surface::layers(layers)` give a surface its input: each mount registers the layers, and a
+layer's scope is the surface (the panel, the overlay, or a route while it shows), one of its nodes, the composer, or
+everywhere. A bind's key calls the handler with `Event::Key`; `Handled::Pass` lets the key go on down the host's order,
+by priority. A layer with `any` hears every key before any layer, and one with `paste` may take a paste in its scope.
+`Setup::layer` registers a layer of the plugin's own, for the composer or everywhere. `Host::set_mode` puts the caller's
+mount (or the plugin) in a mode, which only its layers of that mode hold in; the mode ends when the focus leaves its
+scope, when its owner ends, and on `ctrl+c`, which no layer can bind. A bind with `hold` buffers the keys after it
+until `Host::release_keys` or 50 ms. What a handler asks for applies before the next event of the same read. A box's
+`Interact` makes it focusable (`Host::focus`, `Host::blur`), gives `Event::Pointer` for press, release, drag after a
+consumed press, wheel and drop, and a hover background with no call, or `Event::Hover`. `Read::rect`, `Read::focused`
+and `Read::mode` read the running call's mount; a command reads the plugin's mount that holds the node or the focus.
+Everything a mount registers ends with it, and everything a plugin registers ends when it leaves `active`.
+
+`Dialog::Select` with a `key` is the rich select: shown again under its key while it is open, it changes in place and
+keeps its filter and selection, and picking a row does not close it. A row may have its own action, a footer color, a
+gutter (the host's spinner, or a span), or `toggle`, a plugin the host enables or disables when the row is picked,
+labelled from that plugin's state; a row cannot toggle its own plugin or the plugin manager. `actions` and `binds` run
+with the selected row's value. `Dialog::ErrorDetails` shows an error in the host's own error view.
+
 ### Storage
 
 `storage_key(key)` declares a key; only declared keys read and write, as `plugin.<id>.<key>` in the TUI's storage.
