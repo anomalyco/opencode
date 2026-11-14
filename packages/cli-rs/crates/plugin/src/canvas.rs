@@ -18,7 +18,7 @@
 //! so the canvas's own size is already the frame's.
 //!
 //! A list is checked whole before it is kept. One the host cannot read fails the plugin and the canvas keeps its last
-//! list; one over a limit is dropped and the canvas shows a placeholder.
+//! list until the mount ends; one over a limit is dropped and the canvas shows a placeholder.
 //!
 //! What canvases hold is counted per thread outside any mount ([`ledger`]), and what they cost ([`work`]).
 
@@ -32,23 +32,15 @@ use opencode_plugin_abi::{self as abi};
 use opentui::native::BoxSpec;
 use opentui::prelude::*;
 
-/// What one draw of a canvas gave.
-pub(crate) enum Drawn {
-    /// No list: the canvas keeps the one it has.
-    Kept,
-    List(Vec<u8>),
-    /// The call failed, or the plugin is called no more.
-    Failed,
-}
-
-/// How a mount's canvases call their plugin: `draw` runs the surface's draw for a canvas id, and `fail` fails the
-/// plugin for a list the host cannot read.
+/// How a mount's canvases call their plugin: `draw` runs the surface's draw for a canvas id, which gives a list or
+/// nothing (the canvas keeps its list; also when the call failed, and the host then ends the mount), and `fail` fails
+/// the plugin for a list the host cannot read.
 pub struct Drawer {
     pub(crate) draw: Draw,
     pub(crate) fail: Box<dyn Fn(String)>,
 }
 
-pub(crate) type Draw = Box<dyn Fn(&str, Frame) -> Drawn>;
+pub(crate) type Draw = Box<dyn Fn(&str, Frame) -> Option<Vec<u8>>>;
 
 /// What the canvases on this thread hold now.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -154,8 +146,6 @@ struct State {
     /// A frame painted the canvas since its driver's last tick.
     painted: Cell<bool>,
     driving: Cell<bool>,
-    /// Its plugin failed: it is asked for nothing more.
-    dead: Cell<bool>,
 }
 
 enum Shown {
@@ -183,7 +173,6 @@ impl Canvas {
             hook: RefCell::new(None),
             painted: Cell::new(false),
             driving: Cell::new(false),
-            dead: Cell::new(false),
         });
         book(|ledger| ledger.canvases += 1);
         Self::around(app, state)
@@ -206,9 +195,9 @@ impl Canvas {
         let hook = View::new(app).absolute().width(1).height(0).on_resize(move |_, _| {
             // A draw from the canvas's own resize in this frame took the pending one.
             if let Some(state) = weak.upgrade()
-                && let Some(pending) = state.pending.take()
+                && let Some(pending) = state.pending.get()
             {
-                state.draw(pending.cause, pending.dt);
+                state.draw(pending.cause);
             }
         });
         widget.add(&hook);
@@ -226,7 +215,7 @@ impl Canvas {
     pub fn set(&self, version: u64, animate: bool) {
         let state = &self.state;
         state.animate.set(animate);
-        if state.version.replace(version) != version && state.asked.get().is_some() {
+        if state.version.replace(version) != version {
             state.arm(Cause::Version, Duration::ZERO);
         }
     }
@@ -241,7 +230,7 @@ impl State {
             Some(_) => Cause::Resized,
             None => Cause::First,
         };
-        self.draw(cause, Duration::ZERO);
+        self.draw(cause);
     }
 
     /// Asks for a draw after the next layout: an animation's frame takes the place of a version, whose list it draws.
@@ -258,19 +247,21 @@ impl State {
         self.app.request_redraw();
     }
 
-    /// Asks the plugin for a list for this frame, and keeps it.
-    fn draw(&self, cause: Cause, dt: Duration) {
+    /// Asks the plugin for a list for this frame, and keeps it. A frame of the animation that waits is this draw:
+    /// its time goes with it, whatever else asked.
+    fn draw(&self, cause: Cause) {
         let (width, height) = self.size.get();
-        let Some(drawer) = self.drawer.clone().filter(|_| width > 0 && height > 0 && !self.dead.get()) else {
+        let Some(drawer) = self.drawer.clone().filter(|_| width > 0 && height > 0) else {
             return;
         };
-        self.pending.set(None);
+        let dt = match self.pending.take() {
+            Some(Pending { cause: Cause::Animate, dt }) => dt,
+            _ => Duration::ZERO,
+        };
         self.asked.set(Some(((width, height), self.version.get())));
         count(|work| work.draws += 1);
-        match (drawer.draw)(&self.id, Frame { width, height, cause, dt }) {
-            Drawn::Kept => {}
-            Drawn::Failed => self.dead.set(true),
-            Drawn::List(bytes) => self.present(&drawer, bytes),
+        if let Some(bytes) = (drawer.draw)(&self.id, Frame { width, height, cause, dt }) {
+            self.present(&drawer, bytes);
         }
     }
 
@@ -291,7 +282,6 @@ impl State {
             }
             Err(error) => {
                 count(|work| work.refused += 1);
-                self.dead.set(true);
                 (drawer.fail)(format!("canvas {}: {error}", self.id));
                 return;
             }
@@ -333,7 +323,7 @@ fn drive(state: &Rc<State>) {
     state.app.animate(move |cx, elapsed| {
         let Some(state) = weak.upgrade() else { return false };
         let app = cx.app();
-        if !state.animate.get() || state.dead.get() || !opencode_ui::motion::running() || state.missed(app, &mut seen) {
+        if !state.animate.get() || !opencode_ui::motion::running() || state.missed(app, &mut seen) {
             state.set_driving(false);
             return false;
         }
@@ -368,7 +358,7 @@ impl Component for Board {
         let (_, _, width, height) = painter.visible_rect();
         if width > 0 && height > 0 {
             state.painted.set(true);
-            if state.animate.get() && !state.driving.get() && !state.dead.get() && opencode_ui::motion::running() {
+            if state.animate.get() && !state.driving.get() && opencode_ui::motion::running() {
                 drive(state);
             }
         }
