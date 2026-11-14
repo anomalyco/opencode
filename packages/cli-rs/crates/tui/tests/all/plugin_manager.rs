@@ -299,3 +299,71 @@ fn the_host_lists_the_plugins_while_the_manager_has_failed() {
     assert_eq!(entry.status, opencode_plugin::Status::Active);
     assert!(!commands(&harness).contains("plugins.list"), "the host's list stayed");
 }
+
+/// A built-in whose command panics.
+fn crash() -> abi::Plugin {
+    fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+        setup.command(Command { name: "crash.boom".to_owned(), ..Command::default() }, |_, _| panic!("crash"));
+        Ok(())
+    }
+    abi::Plugin { id: "test.crash", setup }
+}
+
+/// The builds of a plugin `test.ext`, through the C ABI's byte shims.
+struct Ext;
+
+impl Backend for Ext {
+    fn load(
+        &self,
+        host: &Rc<dyn Host>,
+        _: &[u8],
+        _: &std::path::Path,
+        _: Option<&str>,
+    ) -> Result<(Definition, ErrorFn), String> {
+        fn ext(_: &mut abi::Setup) -> Result<(), String> {
+            Ok(())
+        }
+        loopback_described(host, abi::export_plugin!(@loopback_described "test.ext", ext))
+    }
+}
+
+// Expected (TS `plugins.tsx`): a failed built-in shows while the built-ins are hidden, failed, with `view error` on its
+// own key beside its toggle, which disables it as it is still active, and not on enter; and the filter finds a plugin
+// by its target, not only by its title.
+#[test]
+fn a_failed_built_in_shows_and_a_plugin_is_found_by_its_target() {
+    let mut builtins = support::deps(Arc::new(support::empty())).builtins;
+    builtins.push(crash().into());
+    let deps = Deps { route: Route::Home, builtins, ..support::deps(Arc::new(support::empty())) };
+    let harness = support::mount(100, 30, deps);
+    settle(&harness);
+    harness.dispatch("crash.boom");
+    settle(&harness);
+    while harness.tui.toasts.current().is_some() {
+        harness.tui.toasts.dismiss();
+    }
+    harness.dispatch("plugins.list");
+    let shown = harness.wait_for("show internal");
+    let row = shown.lines().find(|line| line.contains("test.crash")).unwrap_or_else(|| panic!("{shown}"));
+    assert!(row.contains("failed") && !shown.contains("opencode.stats"), "{shown}");
+    harness.app.type_text("test.crash");
+    let shown = harness.wait_for("view error space");
+    assert!(shown.contains("disable enter") && !shown.contains("view error enter"), "{shown}");
+    harness.app.press("escape");
+    settle(&harness);
+    let root = opencode_util::temp::tempdir().unwrap();
+    std::fs::create_dir(root.path().join(".git")).unwrap();
+    let config = root.path().join("config");
+    let dir = config.join("plugins").join("ext-dir");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join(entry_file()), [1]).unwrap();
+    let loader = Rc::new(Loader::new(Rc::new(Ext), config, root.path().to_path_buf(), Vec::new()));
+    harness.tui.plugins.set_loader(loader.clone());
+    loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
+    settle(&harness);
+    harness.dispatch("plugins.list");
+    harness.wait_for("test.ext");
+    harness.app.type_text("ext-dir");
+    let shown = harness.wait_for("test.ext");
+    assert!(!shown.contains("test.crash"), "{shown}");
+}
