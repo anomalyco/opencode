@@ -2,11 +2,8 @@ import type { SessionMessageShell } from "@opencode/client/promise"
 import { Predicate } from "effect"
 import { type UiI18n, useI18n } from "@opencode/ui/context/i18n"
 import { Badge } from "@opencode/ui/badge"
-import { Icon } from "@opencode/ui/icon"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
-import { Tooltip } from "@opencode/ui/tooltip"
 import { createComputed, createEffect, createMemo, createSignal, on, onCleanup, Show, untrack } from "solid-js"
-import { LinkedText } from "../../components/linked-text"
 import { useData } from "../../context"
 import {
   createShellRunState,
@@ -17,15 +14,7 @@ import {
 } from "../../tools/run-machine"
 import { createShellFollower } from "../../tools/shell-output"
 import { BasicTool } from "../../components/basic-tool"
-import {
-  ConsoleCopy,
-  ConsoleOutput,
-  ShellSubmessage,
-  toolInput,
-  toolMetadata,
-  type ToolProps,
-} from "../../tools/tool-renderer"
-import { ClampedContent } from "./clamped-content"
+import { ConsoleOutput, ShellSubmessage, toolInput, toolMetadata, type ToolProps } from "../../tools/tool-renderer"
 
 /**
  * An agent's shell call is a row of activity, as in the current timeline: Shell, then its command, cut to the row while
@@ -83,15 +72,12 @@ export function ShellTool(props: ToolProps) {
 }
 
 /**
- * A command the user ran shows as a card: its command and output, the output cut to its last lines, where a command says
- * how it went, until expanded. How it ended sits on the card when it did not succeed.
+ * A command the user ran shows as an agent's shell call does once opened, its command and output, without the row above
+ * them to open it.
  */
 function ShellCard(props: ToolProps) {
   const i18n = useI18n()
   const run = shellRun(props)
-  const [expanded, setExpanded] = createSignal(false)
-  const open = () => props.open ?? expanded()
-  const outcome = createMemo(() => shellOutcome(props.metadata, i18n))
 
   run.follow()
 
@@ -107,18 +93,7 @@ function ShellCard(props: ToolProps) {
           </Show>
         }
       >
-        <ShellOutput
-          command={run.view().command}
-          output={run.view().output}
-          expanded={open()}
-          outcome={outcome()}
-          onToggle={() => {
-            const next = !open()
-
-            setExpanded(next)
-            props.onOpenChange?.(next)
-          }}
-        />
+        <ConsoleOutput command={run.view().command} output={run.view().output} />
       </Show>
     </div>
   )
@@ -191,11 +166,7 @@ function shellOutcome(metadata: ToolProps["metadata"], i18n: UiI18n) {
 }
 
 /** A command the user ran. */
-export function ShellMessage(props: {
-  message: SessionMessageShell
-  open?: boolean
-  onOpenChange?: (open: boolean) => void
-}) {
+export function ShellMessage(props: { message: SessionMessageShell }) {
   return (
     <div data-component="session-shell-message" data-timeline-part-id={props.message.id}>
       <ShellCard
@@ -209,91 +180,7 @@ export function ShellMessage(props: {
         }}
         output={props.message.output?.output}
         status={props.message.status === "running" ? "running" : "completed"}
-        open={props.open}
-        onOpenChange={props.onOpenChange}
       />
-    </div>
-  )
-}
-
-// Copy sits on the output only. The command's corner holds how the command ended, and the output's toggle once there is
-// more than the cut shows.
-function ShellOutput(props: {
-  command?: string
-  output: string
-  expanded: boolean
-  outcome?: { tone: "neutral" | "danger"; label: string }
-  onToggle: () => void
-}) {
-  const i18n = useI18n()
-  const [overflow, setOverflow] = createSignal(false)
-  const toggleLabel = () => i18n.t(props.expanded ? "ui.common.showLess" : "ui.common.showMore")
-
-  return (
-    <div
-      data-component="bash-output"
-      data-variant="shell"
-      data-clamp=""
-      data-expanded={props.expanded ? "" : undefined}
-      dir="ltr"
-    >
-      <div
-        data-slot="bash-scroll"
-        data-scrollable
-        tabIndex={0}
-        role="region"
-        aria-label={i18n.t("ui.scrollView.ariaLabel")}
-      >
-        <Show when={props.command}>
-          {(command) => (
-            <div data-slot="bash-command">
-              <Show when={props.outcome || overflow() || props.expanded}>
-                <div data-slot="bash-actions">
-                  <Show when={props.outcome}>
-                    {(outcome) => (
-                      <span data-slot="bash-outcome" data-tone={outcome().tone}>
-                        {outcome().label}
-                      </span>
-                    )}
-                  </Show>
-                  <Show when={overflow() || props.expanded}>
-                    <div data-slot="bash-toggle">
-                      <Tooltip value={toggleLabel()} placement="top">
-                        <button
-                          type="button"
-                          data-slot="bash-toggle-button"
-                          aria-label={toggleLabel()}
-                          aria-expanded={props.expanded}
-                          onClick={() => props.onToggle()}
-                        >
-                          <Icon name="chevron-grabber-vertical" size="small" />
-                        </button>
-                      </Tooltip>
-                    </div>
-                  </Show>
-                </div>
-              </Show>
-              <pre data-slot="bash-pre">
-                <code>{command()}</code>
-              </pre>
-            </div>
-          )}
-        </Show>
-        <Show when={props.output}>
-          {(output) => (
-            <div data-slot="bash-result">
-              <ConsoleCopy text={output()} label={i18n.t("ui.message.copyOutput")} />
-              <ClampedContent expanded={props.expanded} onOverflowChange={setOverflow}>
-                <pre data-slot="bash-pre">
-                  <code>
-                    <LinkedText text={output()} />
-                  </code>
-                </pre>
-              </ClampedContent>
-            </div>
-          )}
-        </Show>
-      </div>
     </div>
   )
 }

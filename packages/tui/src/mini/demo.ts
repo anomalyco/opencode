@@ -508,7 +508,7 @@ function subagentLaunch(sessionID: string) {
   return {
     output: [
       `The subagent is working in the background (sessionID: ${sessionID}). You will receive a <subagent> message when it goes idle, and again after each later round of work.`,
-      "DO NOT sleep, poll for progress, ask the subagent for status, or duplicate this subagent's work; avoid working with the same files or topics it is using.",
+      "DO NOT sleep, poll, proactively check on its progress, or duplicate this subagent's work.",
       "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
       "To send it follow-ups or change its instructions while it runs, call subagent again with this sessionID.",
     ].join("\n"),

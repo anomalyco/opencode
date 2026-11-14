@@ -508,7 +508,7 @@ export const content = {
     },
     colors: {
       title: "Kolory",
-      body: "Logo i logotyp używają jednego koloru w trzech stopniach krycia, z jaśniejszym kolorem na ciemne tła. Wartości poniżej to ten kolor na bieli lub #0B0B0B, tak jak pokazują go standardowe pliki. Kliknij wartość, aby ją skopiować.",
+      body: "Logo i logotyp używają jednego koloru w trzech stopniach krycia, z jaśniejszym kolorem na ciemne tła. Wartości poniżej to kolory użyte w standardowych plikach. Używaj ich wyłącznie w logo i logotypie, nie w innych tekstach ani tłach. Kliknij wartość, aby ją skopiować.",
       palettes: {
         light: {
           name: "Jasna",

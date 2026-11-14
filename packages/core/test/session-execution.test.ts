@@ -1495,13 +1495,13 @@ describe("SessionRestart background recovery", () => {
       yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
       yield* Deferred.await(parentWoken)
 
-      // Replay delivers the formatted row verbatim; the completed child never runs again.
+      // Replay delivers the formatted row verbatim, its still-running list labelling the tag; the child never runs again.
       expect(drained).toEqual([parent])
       expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([
         {
           type: "synthetic",
           payload: {
-            text: `<subagent sessionID="${child}" state="completed" description="Outbox inspection">\n${output}\n</subagent>`,
+            text: `<subagent sessionID="${child}" state="running" description="Outbox inspection">\n${output}\n</subagent>`,
             metadata: { source: "subagent", childID: child, agent: "explore", state: "completed" },
           },
         },

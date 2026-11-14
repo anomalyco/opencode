@@ -16,6 +16,8 @@ export type JumpPrompt = { id: string; text: string; created: number }
 export function JumpToMessage(props: {
   prompts: JumpPrompt[]
   initialQuery?: string
+  query?: string
+  onQuery?: (value: string) => void
   status?: string
   opening?: boolean
   onJump: (prompt: JumpPrompt) => void
@@ -24,7 +26,14 @@ export function JumpToMessage(props: {
 }) {
   const language = useLanguage()
 
-  const [query, setQuery] = createSignal(props.initialQuery ?? "")
+  const [localQuery, setLocalQuery] = createSignal(props.initialQuery ?? "")
+
+  const query = () => props.query ?? localQuery()
+
+  const setQuery = (value: string) => {
+    if (props.query === undefined) setLocalQuery(value)
+    props.onQuery?.(value)
+  }
 
   const timestamp = createMemo(
     () =>
