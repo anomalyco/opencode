@@ -448,8 +448,10 @@ impl Model for ContainModel {
     }
 }
 
-fn fail(property: &'static str, step: usize, detail: String) -> Option<Failure> {
-    Some(Failure { property, step, detail })
+/// The failure of `property` at check `site` when the check found `detail`, unless `MODEL_SKIP` turns the property off.
+fn check(property: &'static str, site: &'static str, step: usize, detail: Option<String>) -> Option<Failure> {
+    let detail = detail.filter(|_| !model::skipped(property))?;
+    Some(Failure { property, site, step, detail })
 }
 
 fn take_calls() -> Vec<Call> {
@@ -469,7 +471,7 @@ fn exact(world: &World) -> Option<String> {
         .then(|| format!("the composer holds {composer:?}, the record {snapshot:?}"))
 }
 
-/// Runs `commands` on the host and its twin, and checks the three properties after each.
+/// Runs `commands` on the host and its twin, and checks the four properties after each.
 fn run(commands: &[Command]) -> Option<Failure> {
     LOG.take();
     ARMED.set(None);
@@ -477,8 +479,8 @@ fn run(commands: &[Command]) -> Option<Failure> {
     FIRED.set(false);
     let world = World::open(0);
     let calls = take_calls();
-    if let Some(detail) = balanced(&world, &calls) {
-        return fail("record-balanced", 0, detail);
+    if let Some(failure) = check("record-balanced", "start", 0, balanced(&world, &calls)) {
+        return Some(failure);
     }
     let twin = World::open(1);
     take_calls();
@@ -489,24 +491,26 @@ fn run(commands: &[Command]) -> Option<Failure> {
         world.apply(command);
         let reports = world.settle();
         let calls = take_calls();
-        if let Some(detail) = exact(&world) {
-            return fail("draft-exact", step, detail);
+        if let Some(failure) = check("draft-exact", "composer", step, exact(&world)) {
+            return Some(failure);
         }
         twin.apply(command);
         // The fault log says when `model.a` fails; the user disables it in the twin at that step, and the host's
         // registry must agree.
         let failing = FIRED.take();
-        if failing != (!failed && world.failed()) {
-            let detail = format!("the fault log says failing {failing}; the host lists model.a {:?}", world.status(A));
-            return fail("reported-once", step, detail);
+        let agrees = failing == (!failed && world.failed());
+        let detail = (!agrees)
+            .then(|| format!("the fault log says failing {failing}; the host lists model.a {:?}", world.status(A)));
+        if let Some(failure) = check("reported-once", "fault-log", step, detail) {
+            return Some(failure);
         }
         if failing {
             twin.toggle(A);
         }
         twin.settle();
         let twins = take_calls();
-        if let Some(detail) = balanced(&world, &calls) {
-            return fail("record-balanced", step, detail);
+        if let Some(failure) = check("record-balanced", "calls", step, balanced(&world, &calls)) {
+            return Some(failure);
         }
         let mine: Vec<&Call> = calls
             .iter()
@@ -515,8 +519,8 @@ fn run(commands: &[Command]) -> Option<Failure> {
         slow.add(&mine);
         // The news of a frame that ended after the plugin failed is the failure's to tell.
         let due = slow.close(world.harness.app.app().frame_number()) && !world.failed();
-        if let Some(detail) = reported(&world, &reports, failing, due) {
-            return fail("reported-once", step, detail);
+        if let Some(failure) = check("reported-once", "reports", step, reported(&world, &reports, failing, due)) {
+            return Some(failure);
         }
         faulted |= failing;
         if !faulted {
@@ -534,18 +538,20 @@ fn run(commands: &[Command]) -> Option<Failure> {
             kinds
         };
         let (calls, twins) = (only(&calls, 0), only(&twins, 1));
-        if witness(&calls) != witness(&twins) {
-            return fail(
-                "isolation",
-                step,
-                format!("model.b's calls: host {:?}, twin {:?}", witness(&calls), witness(&twins)),
-            );
+        let detail = (witness(&calls) != witness(&twins))
+            .then(|| format!("model.b's calls: host {:?}, twin {:?}", witness(&calls), witness(&twins)));
+        if let Some(failure) = check("isolation", "witness", step, detail) {
+            return Some(failure);
         }
-        if world.composer() != twin.composer() {
-            return fail("isolation", step, format!("composer {:?} and {:?}", world.composer(), twin.composer()));
+        let detail = (world.composer() != twin.composer())
+            .then(|| format!("composer {:?} and {:?}", world.composer(), twin.composer()));
+        if let Some(failure) = check("isolation", "composer", step, detail) {
+            return Some(failure);
         }
-        if let Some(row) = frame_diff(&world.frame(), &twin.frame(), world.mask()) {
-            return fail("isolation", step, format!("the frames differ at {row}"));
+        let detail =
+            frame_diff(&world.frame(), &twin.frame(), world.mask()).map(|row| format!("the frames differ at {row}"));
+        if let Some(failure) = check("isolation", "frame", step, detail) {
+            return Some(failure);
         }
     }
     OUTCOME.set((faulted, slow.told));
