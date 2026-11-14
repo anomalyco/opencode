@@ -569,6 +569,8 @@ terminal client startup migrates supported global `tui.json` settings and persis
 unchanged. Project-local client configuration is not migrated because V2 client configuration is global. See
 [CLI settings](/cli/config) for the current client settings reference.
 
+**Legacy `tui.json` migration clarification:** Edits to the legacy `tui.json` file after `cli.json` exists are ignored; see the [CLI settings](/cli/config) reference for details.
+
 ## Plugins
 
 Rename `plugin` to `plugins`. Replace a package-and-options tuple with an object:
