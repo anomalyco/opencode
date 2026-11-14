@@ -198,6 +198,11 @@ pub(crate) struct Wake {
     /// own waker is never revoked; this is.
     revoked: AtomicBool,
     proxy: Option<AppProxy>,
+    /// The `Woken`s posted and handled, for the model that holds at most one in flight.
+    #[cfg(test)]
+    pub posted: std::sync::atomic::AtomicUsize,
+    #[cfg(test)]
+    pub handled: std::sync::atomic::AtomicUsize,
 }
 
 /// A [`Woken`] waits for the UI thread.
@@ -249,6 +254,10 @@ impl Wake {
             state: AtomicU8::new(0),
             revoked: AtomicBool::new(false),
             proxy,
+            #[cfg(test)]
+            posted: Default::default(),
+            #[cfg(test)]
+            handled: Default::default(),
         }
     }
 
@@ -270,6 +279,8 @@ impl Wake {
 
     /// The UI thread handles a [`Woken`]: the state goes back to nothing in one step; whether the waker was among it.
     fn consume(&self) -> bool {
+        #[cfg(test)]
+        self.handled.fetch_add(1, Ordering::SeqCst);
         self.state.swap(0, Ordering::AcqRel) & HINTED != 0
     }
 
@@ -283,6 +294,8 @@ impl Wake {
                 self.state.store(0, Ordering::Release);
                 return;
             };
+            #[cfg(test)]
+            self.posted.fetch_add(1, Ordering::SeqCst);
             match proxy.send(Woken(self.id)) {
                 Ok(()) => {}
                 Err(ProxyError::Closed) => self.state.store(0, Ordering::Release),
