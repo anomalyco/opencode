@@ -22,7 +22,8 @@
 //!   `where` on `#203040` while `items` is scrolled down; its handler (P2) toasts "landed ID" where a step landed, and
 //!   passes every event on.
 //! - A key layer of setup (P2): `ctrl+g` as `conf`, everywhere; its handler passes every key on.
-//! - A renderer claim (Pr) of the calls of tool `conf-tool`: "claimed N", the views it ran.
+//! - A renderer claim (Pr) of the calls of tool `conf-tool`: Markdown of the content "claimed N", given anew in each
+//!   view, N the views it ran.
 //! - Options that hold `fail-setup` make setup fail with "setup refused", before it registers anything.
 
 use std::cell::Cell;
@@ -117,9 +118,10 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     };
     setup.layer(layer, |_, _| Handled::Pass);
     let claims = state.clone();
-    setup.claim(claim::Claim::tool("conf-tool", move |_, _| {
+    setup.claim(claim::Claim::tool("conf-tool", move |view, _| {
         claims.claimed.set(claims.claimed.get() + 1);
-        Some(v2::Node::text(vec![Span::new(format!("claimed {}", claims.claimed.get()))]).with_id("claim"))
+        let handle = view.content(format!("claimed {}", claims.claimed.get()));
+        Some(v2::Node::Markdown { id: Some("claim".to_owned()), source: v2::Source::Content(handle) })
     }));
     setup.on_wake(|host| host.toast(Toast::new(Variant::Info, "woken")));
     setup.surface(v2::Surface::new("conf", v2::Place::Route("conf".to_owned()), move |view| {

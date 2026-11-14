@@ -408,8 +408,6 @@ pub enum Kind {
     Layout,
     /// What a renderer claim's view returns (Pr): a tree as a view's, or none.
     Claim,
-    /// What a handler of input returns (P2).
-    Input,
     /// Anything else: a handler's `null`, or a 1.x render's rows, as JSON.
     Raw,
 }
@@ -424,7 +422,6 @@ impl Kind {
             Some("draw") => Kind::Draw,
             Some("layout") => Kind::Layout,
             Some("claim") => Kind::Claim,
-            Some("input") => Kind::Input,
             _ => Kind::Raw,
         }
     }
@@ -461,7 +458,6 @@ pub fn canonical(kind: Kind, status: i32, reply: Result<&[u8], &str>) -> Value {
         Kind::Fence => typed::<abi::Fenced>(value),
         Kind::Layout => typed::<abi::v2::LayoutReply>(value),
         Kind::Claim => typed::<abi::claim::Reply>(value),
-        Kind::Input => typed::<abi::interact::Handled>(value),
         Kind::Draw | Kind::Raw => value,
     }
 }

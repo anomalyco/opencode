@@ -1240,6 +1240,21 @@ fn the_protocol_machine_refuses_what_the_header_forbids() {
     assert_eq!(protocol.broken(), None);
     protocol.event(&toast);
     assert!(protocol.broken().is_some(), "a layout was granted an effect");
+    // P2's handlers answer a `Handled` and Pr's claims a tree or none; a claim's view reads only.
+    let declared = r#"{"id":"p","commands":[],"fences":[],"slots":[],"routes":[],"storage":[],"surfaces":[{"name":"s","place":{"type":"route","name":"s"},"handler":true}],"claims":[{"target":{"type":"tool","name":"t"}}]}"#;
+    let input = r#"{"type":"input","to":{"type":"surface","surface":0},"event":{"type":"paste","text":"x"}}"#;
+    let claim = r#"{"type":"claim","claim":0,"mount":{"surface":"t","key":"c","generation":1},"input":{"width":1,"height":0,"palette":{"mode":"dark","colors":{}}},"part":{"type":"fence","language":"t","info":"t","code":"","streaming":false,"closed":true},"next":0}"#;
+    let after = |events: &[Event<'_>]| {
+        let mut protocol = Protocol::default();
+        created(&mut protocol, declared);
+        events.iter().for_each(|event| protocol.event(event));
+        protocol.broken().map(str::to_owned)
+    };
+    let request = |text: &'static str| Event::Call { instance: 1, request: text.as_bytes() };
+    assert_eq!(after(&[request(input), ok("\"pass\""), request(claim), ok(r#"{"node":null}"#), request(input)]), None);
+    assert!(after(&[request(input), ok("null"), request(input)]).is_some(), "an input answered null was called again");
+    assert!(after(&[request(claim), ok("7"), request(input)]).is_some(), "a claim answered 7 was called again");
+    assert!(after(&[request(claim), toast]).is_some(), "a claim's view was granted an effect");
     // A create that failed is never destroyed; one whose manifest the host refused is.
     let mut protocol = Protocol::default();
     protocol.event(&Event::Create { instance: 3, major: 2, minor: 0, features: b"[]", options: b"" });
