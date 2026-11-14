@@ -32,6 +32,7 @@ import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
 import { SharedCache } from "@opencode/core/shared-cache"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
+import { SessionTitle } from "@opencode/core/session/title"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -47,6 +48,7 @@ import { WebSearch } from "@opencode/core/websearch"
 import { Worktree } from "@opencode/core/worktree"
 import { WorktreeStrategies } from "@opencode/core/worktree/strategies"
 import { Effect, Layer } from "effect"
+import { tempGlobalLayer } from "../fixture/global"
 import { tempLocationLayer } from "../fixture/location"
 import { emptyMcpLayer } from "../fixture/mcp"
 import { offlineModels } from "../fixture/models"
@@ -88,7 +90,11 @@ const permissionLayer = Layer.succeed(
   }),
 )
 
-export const makePluginTestLayer = (permission = permissionLayer, generate = generateLayer) =>
+export const makePluginTestLayer = (
+  permission = permissionLayer,
+  generate = generateLayer,
+  titles?: Layer.Layer<SessionTitle.Service>,
+) =>
   AppNodeBuilder.build(
     LayerNode.group([
       App.node,
@@ -140,12 +146,14 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
     ]),
     [
       Location.node.replace(tempLocationLayer),
+      Global.node.replace(tempGlobalLayer),
       Npm.node.replace(npmLayer),
       Config.node.replace(configLayer),
       Mcp.node.replace(emptyMcpLayer),
       Generate.node.replace(generate),
       Permission.node.replace(permission),
       offlineModels,
+      ...(titles ? [SessionTitle.node.replace(titles)] : []),
     ],
   ).pipe(Layer.provideMerge(configLayer))
 
