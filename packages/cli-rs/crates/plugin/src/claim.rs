@@ -648,7 +648,7 @@ impl Core {
         let applied = tree.apply(&env, &self.root, &nodes);
         ADOPTING.set(ADOPTING.get() - 1);
         applied?;
-        *last = Some(nodes);
+        *last = Some(tree.admitted(nodes));
         for (handle, bytes) in given {
             book(|ledger| {
                 ledger.content += 1;
