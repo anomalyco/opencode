@@ -31,6 +31,8 @@ const deep = process.env.PARITY_DEEP === "1"
 type App = { setup: Fixture; entry: string; builds: number }
 
 const plugin = path.join(import.meta.dir, "../plugins/life/tui.tsx")
+// The views machine's distractor, beside life, whose setup fails with its own cause.
+const distractor = path.join(import.meta.dir, "../plugins/other/tui.tsx")
 // JSON gives each state as a mixed array; the file's shape is checked once here.
 function parse(source: (typeof machines.machines)[keyof typeof machines.machines]): Machine {
   return {
@@ -53,22 +55,34 @@ const managerViews = parse(machines.machines.views)
 let runs = 0
 
 // A fresh app with a copy of the plugin, which resolves packages/tui's dependencies (as `copyPlugin` does). In the
-// config, or with `inProject` in the `.opencode/plugins` of a project the app starts in; with `fail`, its setup throws.
+// config, or with `inProject` in the `.opencode/plugins` of a project the app starts in; with `fail`, its setup throws,
+// and so does the distractor's beside it.
 async function open(inProject = false, fail = false) {
   const root = await tmpdir()
   const repo = path.join(root.path, "repo")
-  const directory = inProject ? path.join(repo, ".opencode", "plugins", "life") : path.join(root.path, "life")
+  const directory = inProject ? path.join(repo, ".opencode", "plugins", "life") : path.join(root.path, "parity.life")
   const entry = path.join(directory, "tui.tsx")
-  await mkdir(directory, { recursive: true })
-  if (inProject) await mkdir(path.join(repo, ".git"))
-  // A junction on Windows, which needs no privilege (as `plugin-source.test.ts` links).
-  await symlink(
-    path.join(import.meta.dir, "../../../tui/node_modules"),
-    path.join(directory, "node_modules"),
-    process.platform === "win32" ? "junction" : "dir",
-  )
-  await Bun.write(entry, Bun.file(plugin))
-  const plugins = inProject ? [] : [{ package: directory, options: { run: ++runs, fail } }]
+  // A copy that resolves packages/tui's dependencies; a junction on Windows, which needs no privilege (as
+  // `plugin-source.test.ts` links).
+  const copy = async (directory: string, source: string) => {
+    await mkdir(directory, { recursive: true })
+    await symlink(
+      path.join(import.meta.dir, "../../../tui/node_modules"),
+      path.join(directory, "node_modules"),
+      process.platform === "win32" ? "junction" : "dir",
+    )
+    await Bun.write(path.join(directory, "tui.tsx"), Bun.file(source))
+  }
+  if (inProject) await mkdir(path.join(repo, ".git"), { recursive: true })
+  await copy(directory, plugin)
+  const other = path.join(root.path, "parity.other")
+  if (fail) await copy(other, distractor)
+  const plugins = inProject
+    ? []
+    : [
+        { package: directory, options: { run: ++runs, fail } },
+        ...(fail ? [{ package: other, options: { fail } }] : []),
+      ]
   // The app reads its plugins directories from the working directory once it runs, after the fixture returns.
   const cwd = process.cwd()
   if (inProject) process.chdir(repo)
@@ -76,7 +90,7 @@ async function open(inProject = false, fail = false) {
     const setup = await createAppFixture({ width: 80, height: 24, config: { animations: false, plugins } })
     await setup.ready
     // A plugin whose setup throws draws no line: its failure shows instead.
-    if (fail) await poll(setup, (frame) => frame.includes("Plugin failed") || frame.includes("parity.life"), 5000)
+    if (fail) await poll(setup, (frame) => frame.includes("plugins failed") || frame.includes("parity.other"), 5000)
     else await setup.waitForFrame((frame) => frame.includes("life plugin:"))
     return setup
   })().finally(() => process.chdir(cwd))
@@ -277,8 +291,13 @@ async function actViews(app: App, action: string) {
     return
   }
   if (action === "filter") {
-    await setup.mockInput.typeText("life")
+    await setup.mockInput.typeText("parity.other")
     await until(setup, (frame) => !frame.includes("Search"), "the filter")
+    return
+  }
+  if (action === "down") {
+    setup.mockInput.pressArrow("down")
+    await setup.renderOnce()
     return
   }
   if (action === "details") {
@@ -298,14 +317,30 @@ async function actViews(app: App, action: string) {
   await until(setup, (frame) => internal(frame) === undefined, "the plugin manager closing")
 }
 
-// dialog/filter/life, as plugins.json writes them for the views machine.
+// dialog/a/b, as plugins.json writes them for the views machine: the query and the rows of the list, or the plugin
+// whose source and the plugin whose cause the details show.
 function observeViews(setup: Fixture) {
   const frame = setup.captureCharFrame()
-  if (frame.includes("TUI plugin error")) return "error/?/?"
+  const lines = frame.split("\n")
+  if (frame.includes("TUI plugin error")) {
+    // The source, on the row under the title: the plugin's directory. A toast may name other plugins.
+    const title = lines.findIndex((line) => line.includes("TUI plugin error"))
+    const plugin = (lines[title + 1] ?? "").match(/parity\.([a-z]+)/)?.[1] ?? "?"
+    const [life, other] = [frame.includes("life setup"), frame.includes("other setup")]
+    return `error/${plugin}/${life && !other ? "life" : other && !life ? "other" : "?"}`
+  }
   if (internal(frame) === undefined) return "-/?/?"
-  const found = row(frame)
-  const life = found === undefined ? "none" : found.includes("failed") ? "failed" : "on"
-  return `list/${frame.includes("Search") ? "-" : "life"}/${life}`
+  // The filter's field is two rows under the title's.
+  const title = lines.findIndex((line) => line.includes("Plugins") && line.includes("esc"))
+  const query = title < 0 ? "?" : (lines[title + 2] ?? "").trim()
+  const rows = lines
+    .filter((line) => line.includes("parity.") && line.includes("local"))
+    .map((line) => {
+      const name = line.match(/parity\.([a-z]+)/)?.[1] ?? "?"
+      const status = line.includes("failed") ? "failed" : line.includes("inactive") ? "off" : "on"
+      return `${name}:${status}`
+    })
+  return `list/${query === "Search" ? "-" : query}/${rows.join("+")}`
 }
 
 // dialog/internal/life, as plugins.json writes them for the manager machine.
