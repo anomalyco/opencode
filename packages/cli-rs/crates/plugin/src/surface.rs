@@ -196,6 +196,13 @@ pub struct Ledger {
 
 thread_local! {
     static LEDGER: RefCell<HashMap<Rc<str>, Ledger>> = RefCell::default();
+    static ADOPTED: Cell<u64> = const { Cell::new(0) };
+}
+
+/// How many trees the mounts on this thread adopted, a keep of a root that is taken as it is not counted: a view's tree
+/// that equals the last costs the host no reconcile work, but is adopted (review carbon-7).
+pub fn adopted() -> u64 {
+    ADOPTED.get()
 }
 
 /// What the mounts of every plugin hold on this thread now.
@@ -287,8 +294,6 @@ pub(crate) struct Surface {
 struct Called {
     /// `None` when the carrier's plugin answers later: nothing new.
     node: Option<Node>,
-    /// The host's [`Host::local_revision`] the view heard; the mount has seen it once the host takes the tree.
-    revision: Option<u64>,
     staged: Staged,
     memo: v2::Memo,
     /// The values a library's own table holds after the call; `None` when the table is `memo`.
@@ -489,10 +494,8 @@ impl Surface {
             let (mut memo, remote) = (called.memo, called.remote);
             // A keep of the last tree's root keeps the mount as it is: nothing to adopt and no frame (P6a), when the
             // pass would change nothing: no node shows what the host reads again (a tool call's output), and the tree
-            // is in the theme of the moment. The memo table finishes against the keep, as a library's does.
+            // is in the theme of the moment. The memo table stays as it is: the next view discards what this one staged.
             if !full && called.staged.given.is_empty() && self.keeps_root(&node) && self.settled(&theme) {
-                memo.finish(std::slice::from_ref(&node));
-                self.revision.set(called.revision);
                 let mut state = self.state.borrow_mut();
                 let size = remote.unwrap_or(memo.len()) as i64;
                 book(&self.plugin, |ledger| ledger.memo_entries += size - state.booked);
@@ -503,7 +506,6 @@ impl Surface {
             let mut state = self.state.borrow_mut();
             match result {
                 Ok(()) => {
-                    self.revision.set(called.revision);
                     if let Some(last) = &state.last {
                         memo.finish(last);
                     }
@@ -621,7 +623,7 @@ impl Surface {
         // The host's own state changed since the last view: this view hears it as `local`, as its notice, which
         // comes later, calls no view once this one ran.
         let revision = host.local_revision();
-        let local = revision != self.revision.get();
+        let local = revision != self.revision.replace(revision);
         self.seen.set((width, height));
         let panel = match self.input.panel {
             true => host.panel_input(&self.input.plugin, &self.id.surface),
@@ -682,7 +684,7 @@ impl Surface {
             return None;
         };
         let staged = Staged { given: given.take() };
-        Some(Called { node: viewed.node, revision, staged, memo, remote: viewed.memo })
+        Some(Called { node: viewed.node, staged, memo, remote: viewed.memo })
     }
 
     /// Adopts `nodes`, with the content `staged` gives, or refuses them and changes nothing.
@@ -694,6 +696,7 @@ impl Surface {
         staged: &Staged,
         full: bool,
     ) -> Result<(), Refused> {
+        ADOPTED.set(ADOPTED.get() + 1);
         // A slot's root takes its node's layout, and the node fills the root (`node::Mount` does the same). The tree
         // is kept as it came, so a later adoption of it takes the same.
         let mut taken = None;

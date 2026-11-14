@@ -727,9 +727,7 @@ impl Owners {
 
     /// Runs `f` as a call of `owner`, a mount: what it reads and asks of the input is that mount's.
     pub(crate) fn as_owner<R>(&self, owner: &Rc<interact::Owner>, f: impl FnOnce() -> R) -> R {
-        // The activation's own owner is no mount: a call as it is a call of the plugin's own, as a command is.
-        let mount = (!Rc::ptr_eq(owner, &self.input)).then(|| owner.clone());
-        let outer = self.current.replace(mount);
+        let outer = self.current.replace(Some(owner.clone()));
         let result = f();
         *self.current.borrow_mut() = outer;
         result
