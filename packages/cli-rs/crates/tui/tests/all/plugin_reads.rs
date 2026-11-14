@@ -522,6 +522,12 @@ fn a_call_reads_one_snapshot() {
     for loopback in [false, true] {
         let (h, _memory, _root) = home(loopback, 160, json!({ "tabs": { "enabled": true } }));
         h.wait_for("p0b w160 ");
+        // The call below waits 200 ms on purpose, over the budget of one call (100 ms), which would fail the plugin.
+        let monitor = h.tui.plugins.monitor();
+        monitor.set_limits(opencode_plugin::contain::Limits {
+            overrun: std::time::Duration::from_secs(10),
+            ..monitor.limits()
+        });
         h.tui.keymap.dispatch("p0b.script", Some("open ses_a;open ses_b"));
         let loaded = |id: &str| h.tui.data.read(|state| state.session(&SessionID(id.to_owned())).is_some());
         assert!(h.app.wait_until(WAIT, || loaded("ses_a") && loaded("ses_b")), "loopback {loopback}");
