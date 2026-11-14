@@ -56,6 +56,7 @@ use serde::de::DeserializeOwned;
 
 use super::Backend;
 use crate::activation::{Activation, Drawn, Wake};
+use crate::behave;
 use crate::mailbox::Mailbox;
 use crate::node::{Fences, MountFn, Scroll, SlotRender, lines_widget, theme_color};
 use crate::slot::placement;
@@ -509,6 +510,8 @@ enum Effect {
     Title(String),
     Theme(String),
     InstallTheme(String, serde_json::Value),
+    // 2.0 (P3): a scroll verb, bound to the mount it names when the plugin asked.
+    Scroll(Box<dyn FnOnce()>),
 }
 
 /// One plugin instance; dropping it destroys the instance in the plugin.
@@ -1008,6 +1011,35 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
                 ctx.effects.push(Effect::InstallTheme(name, theme));
             }
         }
+        // 2.0 (P3): the verbs and reads of the plugin's newest live mount of a surface, as for a built-in's command,
+        // which a library's command is bound to no mount like. A transcript verb answers the user's input only.
+        HostRequest::Scroll { target, verb } => {
+            if target == v2::Target::Transcript && !behave::in_handler() {
+                return Err("a transcript verb outside a handler of the user's input is dropped".to_owned());
+            }
+            let host = ctx.host.upgrade().ok_or("the host is gone")?;
+            let caller = behave::Caller { app: host.app(), plugin: &ctx.id, mount: None };
+            ctx.effects.push(Effect::Scroll(behave::scroll(&caller, target, verb)));
+        }
+        HostRequest::ScrollState { target } => {
+            let host = ctx.host.upgrade().ok_or("the host is gone")?;
+            let caller = behave::Caller { app: host.app(), plugin: &ctx.id, mount: None };
+            return Ok(serde_json::to_value(behave::scroll_state(&caller, &target)).unwrap_or_default());
+        }
+        HostRequest::Anchors { target, group } => {
+            let host = ctx.host.upgrade().ok_or("the host is gone")?;
+            let caller = behave::Caller { app: host.app(), plugin: &ctx.id, mount: None };
+            return Ok(serde_json::to_value(behave::anchors(&caller, &target, &group)).unwrap_or_default());
+        }
+        HostRequest::TopAnchor { target, group, inset } => {
+            let host = ctx.host.upgrade().ok_or("the host is gone")?;
+            let caller = behave::Caller { app: host.app(), plugin: &ctx.id, mount: None };
+            return Ok(serde_json::to_value(behave::top_anchor(&caller, &target, &group, inset)).unwrap_or_default());
+        }
+        HostRequest::Transcript => {
+            let host = ctx.host.upgrade().ok_or("the host is gone")?;
+            return Ok(serde_json::to_value(behave::transcript(host.app())).unwrap_or_default());
+        }
     }
     Ok(serde_json::Value::Null)
 }
@@ -1022,6 +1054,7 @@ fn renders(request: &Request) -> bool {
             | Request::RenderRoute { .. }
             | Request::View { .. }
             | Request::Draw { .. }
+            | Request::Layout { .. }
     )
 }
 
@@ -1046,7 +1079,8 @@ fn effect(request: &HostRequest) -> bool {
         | HostRequest::Foreground(_)
         | HostRequest::Title { .. }
         | HostRequest::SetTheme { .. }
-        | HostRequest::InstallTheme { .. } => true,
+        | HostRequest::InstallTheme { .. }
+        | HostRequest::Scroll { .. } => true,
         HostRequest::Log { .. }
         | HostRequest::StorageGet { .. }
         | HostRequest::StorageKey { .. }
@@ -1078,7 +1112,11 @@ fn effect(request: &HostRequest) -> bool {
         | HostRequest::Shortcuts { .. }
         | HostRequest::Selection
         | HostRequest::Theme
-        | HostRequest::Themes => false,
+        | HostRequest::Themes
+        | HostRequest::ScrollState { .. }
+        | HostRequest::Anchors { .. }
+        | HostRequest::TopAnchor { .. }
+        | HostRequest::Transcript => false,
     }
 }
 
@@ -1181,11 +1219,14 @@ impl Guest {
             instance.shared().ctx.borrow_mut().read_only = renders(request);
             // One store snapshot for the whole call, as in process: each read it asks for nests in this one.
             let timed = self.monitor.call(self.slot, export, || {
-                let mut result = None;
-                if let Some(host) = self.host.upgrade() {
-                    host.read(&mut |_| result = Some(instance.call(request)));
-                }
-                result.unwrap_or_else(|| instance.call(request))
+                // A command or a scroll event that answers the user's input is a handler of it, as in process.
+                behave::calling(export, || {
+                    let mut result = None;
+                    if let Some(host) = self.host.upgrade() {
+                        host.read(&mut |_| result = Some(instance.call(request)));
+                    }
+                    result.unwrap_or_else(|| instance.call(request))
+                })
             });
             instance.shared().ctx.borrow_mut().read_only = false;
             self.busy.set(false);
@@ -1317,6 +1358,7 @@ fn apply(host: &Weak<dyn Host>, id: String, guest: Weak<Guest>, generation: Opti
                 Effect::Title(title) => host.set_title(&title),
                 Effect::Theme(name) => host.set_theme(&name),
                 Effect::InstallTheme(name, theme) => host.install_theme(&name, theme),
+                Effect::Scroll(scroll) => scroll(),
             }
         }
     });
@@ -1471,9 +1513,33 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
                 guest.fail(error);
             }
         });
-        // P3's `layout` and scroll events cross the C ABI in a later phase: a library's surface names nothing yet.
-        let place = surface::Place { name: claim.name.clone(), at, palette: claim.palette, notify: Vec::new() };
-        let calls = crate::behave::Calls { plugin: setup.id().to_owned(), ..crate::behave::Calls::default() };
+        // P3: `layout` and the scroll handler run as calls of the library, as its view does.
+        let place =
+            surface::Place { name: claim.name.clone(), at, palette: claim.palette, notify: claim.notify.clone() };
+        let calls = behave::Calls {
+            plugin: setup.id().to_owned(),
+            layout: claim.layout.then(|| {
+                let guest = Rc::downgrade(guest);
+                Rc::new(move |geometry: &v2::Geometry| {
+                    let request = Request::Layout { surface: index, geometry: geometry.clone() };
+                    guest.upgrade().and_then(|guest| guest.request("layout", &request)).unwrap_or_default()
+                }) as v2::LayoutFn
+            }),
+            scrolled: claim.on_scroll.then(|| {
+                let guest = Rc::downgrade(guest);
+                Rc::new(move |_: &Weak<()>, event: &v2::ScrollEvent| {
+                    if let Some(guest) = guest.upgrade() {
+                        guest.handle("on-scroll", &Request::Scrolled { surface: index, event: event.clone() });
+                    }
+                }) as behave::Scrolls
+            }),
+            ended: Some({
+                let guest = Rc::downgrade(guest);
+                Rc::new(move || {
+                    guest.upgrade().is_none_or(|guest| guest.failure.borrow().is_some() || guest.activation.disposed())
+                }) as Rc<dyn Fn() -> bool>
+            }),
+        };
         let viewer = Rc::new(Remote { guest: guest.clone(), index, draw: claim.draw });
         setup.surface(place, viewer, commands, fail, calls, &guest.activation);
     }

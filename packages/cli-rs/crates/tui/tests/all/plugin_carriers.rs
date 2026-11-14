@@ -310,3 +310,63 @@ fn a_panicking_draw_is_contained_on_every_carrier() {
         }
     }
 }
+
+/// The board's `files` route on `run`: a windowed list whose estimates are not its files' heights, through a `To`, hunk
+/// steps, a `Nearest`, the wheel and a resize. Each checkpoint's frame shows the offset, the header `layout` painted
+/// from the top file, where the last step landed, and how many `layout` calls ran.
+fn files(run: Run) -> Vec<(&'static str, Seen)> {
+    let board = open(run);
+    let (app, tui) = (&board.harness.app, &board.harness.tui);
+    let dispatch = |name: &str, input: Option<&str>| {
+        tui.keymap.dispatch(name, input);
+        settle(&board.harness);
+    };
+    tui.navigate(Route::Plugin { id: ID.to_owned(), name: "files".to_owned() });
+    settle(&board.harness);
+    let mut seen = vec![("open", observe(&board.harness))];
+    dispatch("files.to", Some("40"));
+    seen.push(("to", observe(&board.harness)));
+    for _ in 0..3 {
+        dispatch("files.step", Some("1"));
+    }
+    seen.push(("steps", observe(&board.harness)));
+    dispatch("files.step", Some("-2"));
+    seen.push(("back", observe(&board.harness)));
+    // The reads show in the next view, which the `Nearest` causes.
+    dispatch("files.read", None);
+    dispatch("files.near", Some("12"));
+    seen.push(("near", observe(&board.harness)));
+    for _ in 0..4 {
+        app.scroll(10, 10, true);
+    }
+    settle(&board.harness);
+    seen.push(("wheel", observe(&board.harness)));
+    app.resize(60, 24);
+    settle(&board.harness);
+    seen.push(("resize", observe(&board.harness)));
+    seen
+}
+
+// Expected (`carrier-equal` for P3, synthesis 4.14): the same source's windowed list gives the same frames linked,
+// through the byte shims, and as a real library: a `To` lands its file at the top, steps land on hunks of files that
+// had no widgets and report where, the reads see the steps' last file at the top, `Nearest` and the wheel move the
+// list, and `layout` paints the header from the top file in the frame of each.
+#[test]
+fn a_windowed_list_is_equal_on_every_carrier() {
+    let linked = files(Run::In(Carrier::Linked));
+    let text = |cells: &[opentui::testing::Cell]| cells.iter().map(|cell| cell.symbol.as_str()).collect::<String>();
+    let to = text(&linked[1].1.0);
+    assert!(to.contains("file 40") && !to.contains("file 39 "), "the `To` did not bring file 40 to the top");
+    assert!(text(&linked[2].1.0).contains("landed d4"), "the steps reported no landing");
+    assert_ne!(linked[0].1.0, linked[1].1.0, "the `To` changed nothing on screen");
+    let near = text(&linked[4].1.0);
+    assert!(near.contains(" of 60 top f41"), "the reads read nothing: {near}");
+    for run in [Run::In(CARRIERS[1]), Run::Library] {
+        for ((name, linked), (_, other)) in linked.iter().zip(&files(run)) {
+            assert_eq!((&linked.1, &linked.2), (&other.1, &other.2), "{run:?} at {name}: toasts and status");
+            if linked.0 != other.0 {
+                panic!("{run:?} at {name}: the frames differ:\n{}\n{}", text(&linked.0), text(&other.0));
+            }
+        }
+    }
+}
