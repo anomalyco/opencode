@@ -238,12 +238,20 @@ fn versions_follow_the_abi_rules() {
         "plugin needs host ABI 1.4 or newer, this opencode-native has 1.3; update opencode-native"
     );
 
-    // A 1.x plugin that asks for the 1.5 host with `requires_minor = 5` loads here and is refused by a 1.4 host.
+    // A 1.x plugin that asks for the 1.5 host with `requires_minor = 5` loads here and is refused by a 1.4 host; one
+    // that asks for 1.6, the last minor of ABI 1, loads here and is refused by a 1.5 host.
     let needs = build("requires-1-5");
     assert!(Library::open(&needs, None, V1_MINOR).is_ok());
     assert_eq!(
         Library::open(&needs, None, 4).err().unwrap(),
         "plugin needs host ABI 1.5 or newer, this opencode-native has 1.4; update opencode-native"
+    );
+    let needs = build("requires-1-6");
+    assert_eq!(Native.inspect(&needs).unwrap(), Inspected { major: 1, minor: 6, version: Some("0.1.0".to_owned()) });
+    assert!(Library::open(&needs, None, V1_MINOR).is_ok());
+    assert_eq!(
+        Library::open(&needs, None, 5).err().unwrap(),
+        "plugin needs host ABI 1.6 or newer, this opencode-native has 1.5; update opencode-native"
     );
     // A plugin built against a newer minor version loads and uses what this host offers.
     let newer = build("minor-newer");
@@ -1206,6 +1214,46 @@ fn the_1_6_reads_and_verbs_are_the_same_in_process_and_through_the_library() {
     library.load(&dynamic(&host), definition.external("sample.so", error));
     assert_eq!(status(&library), Status::Active);
     assert_eq!(verbed(&host, &library), direct);
+    library.set_active(&dynamic(&host), "sample", false);
+
+    // A library of ABI 1.6, on this host of ABI 2.0, gets the same (the restack onto P0a and P0b).
+    let (definition, error) = Native
+        .load(&dynamic(&host), &build("still,abi-1-6"), std::path::Path::new("plugin.so"), Some(r#"{"reads":true}"#))
+        .unwrap();
+    let v1_6 = Registry::define(Vec::new(), []);
+    v1_6.load(&dynamic(&host), definition.external("sample.so", error));
+    assert_eq!(status(&v1_6), Status::Active);
+    assert_eq!(verbed(&host, &v1_6), direct);
+}
+
+// Expected (the restack, review bigboi-4): a library is served its own major and no more: a table of ABI 1 may require
+// up to 1.6, one of ABI 2 up to 2.0, and a table of one major behind the other's entry is refused. A 1.x instance's
+// host table ends before the entries of 2.0 (`the_host_table_states_its_version_and_features`).
+#[test]
+fn the_version_gate_is_exact() {
+    let table = |major: u32, minor: u32, requires_minor: u32| PluginApi {
+        size: size_of::<PluginApi>(),
+        major,
+        minor,
+        requires_minor,
+        create: Some(abi::export_plugin!(@loopback "gate", first)),
+        call: Some(abi::runtime::call),
+        destroy: Some(abi::runtime::destroy),
+        free: Some(abi::runtime::free),
+        describe: None,
+    };
+    let open = |api: PluginApi, entry: u32| {
+        Library::from_table(&api, entry, V1_MINOR).map(|library| (library.major, library.minor, library.served))
+    };
+    assert_eq!(open(table(1, 6, 6), 1), Ok((1, 6, 6)));
+    assert_eq!(open(table(1, 4, 4), 1), Ok((1, 4, 6)));
+    let newer = "plugin needs host ABI 1.7 or newer, this opencode-native has 1.6; update opencode-native";
+    assert_eq!(open(table(1, 7, 7), 1), Err(newer.to_owned()));
+    assert_eq!(open(table(2, 0, 0), 2), Ok((2, 0, 0)));
+    let newer = "plugin needs host ABI 2.1 or newer, this opencode-native has 2.0; update opencode-native";
+    assert_eq!(open(table(2, 1, 1), 2), Err(newer.to_owned()));
+    assert!(open(table(2, 0, 0), 1).unwrap_err().starts_with("plugin ABI 2.0 is not supported"));
+    assert!(open(table(1, 6, 4), 2).unwrap_err().starts_with("plugin ABI 1.6 is not supported"));
 }
 
 thread_local! {

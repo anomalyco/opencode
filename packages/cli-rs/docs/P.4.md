@@ -459,10 +459,10 @@ to it): a project cannot write them.
 `crates/plugin/examples/sample` is a small `cdylib` with its own workspace and `Cargo.lock`, so it is not a member of
 the client's workspace and the other crates build as before. Its features select variants: `v2` draws differently
 and `setup-fails` fails (the reload tests); `abi-1-0`, `minor-newer`, `major-3`, `requires-future` and `requires-feature`
-pretend to target other ABI versions or features; `abi-1-6` exports this crate's plugin as one of ABI 1.6; `abi-1-3` is a plugin on the frozen 1.3 SDK (`sample/abi-1-3`), and
-`abi-1-0-wire` is that plugin behind the 1.0 table; `abi-1-4` is a plugin on the frozen 1.4 SDK (`sample/abi-1-4`),
-whose types the loader's tests also use as a 1.4 host's decoder of the 1.5 sample, and `requires-1-5` asks for a 1.5
-host. `p0a` adds the 1.5 probe (`src/p0a.rs`): a confirm, an alert, the
+pretend to target other ABI versions or features; `abi-1-6` exports this crate's plugin as one of ABI 1.6; `abi-1-3`
+is a plugin on the frozen 1.3 SDK (`sample/abi-1-3`), and `abi-1-0-wire` is that plugin behind the 1.0 table;
+`abi-1-4` is a plugin on the frozen 1.4 SDK (`sample/abi-1-4`), whose types the loader's tests also use as a 1.4
+host's decoder of the 1.5 sample; `requires-1-5` and `requires-1-6` ask for a 1.5 and a 1.6 host. `p0a` adds the 1.5 probe (`src/p0a.rs`): a confirm, an alert, the
 composer's read and edits, and a styled box. The tests build each variant once per test run into
 `target/sample-plugin`: the loader's unit tests in `crates/plugin/src/loader/native/tests.rs`, and the TUI tests in
 `crates/tui/tests/all/plugins.rs`. `crates/tui/tests/all/plugin_p0a.rs` runs the same probe linked, through the C
