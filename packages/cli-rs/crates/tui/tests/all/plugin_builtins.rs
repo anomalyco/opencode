@@ -133,12 +133,11 @@ fn a_streamed_delta_crosses_the_same_bytes_at_any_history() {
     };
     let (none, long) = (per_delta(0), per_delta(200));
     assert_eq!(none.calls, long.calls, "{none:?} {long:?}");
-    // The requests name generations and request ids, which may gain a digit or two a call.
-    let slack = 2 * none.calls;
-    assert!(
-        long.sent.abs_diff(none.sent) <= slack && long.received.abs_diff(none.received) <= slack,
-        "{none:?} {long:?}"
-    );
+    // The requests name mount generations and request ids, process-wide counters whose digits grow with whatever ran
+    // before (other tests in parallel): a tenth is slack for those. A read of the session at 200 turns copies all 400
+    // messages on every delta, many times what a delta crosses.
+    let bound = |bytes: u64| bytes + bytes / 10;
+    assert!(long.sent <= bound(none.sent) && long.received <= bound(none.received), "{none:?} {long:?}");
 }
 
 /// What crossed the C ABI while `count` deltas streamed into a reply of `ses_a`.
