@@ -137,6 +137,8 @@ pub struct Picker {
     owner: RefCell<Owner>,
     shown: RefCell<abi::Select>,
     handle: RefCell<Option<opencode_ui::select::Select<String>>>,
+    /// It is on screen: closing or replacing it ends that, keyed or not.
+    open: Cell<bool>,
 }
 
 /// TS `dialog.select`: picking an option closes the list, then runs the action with the option's value. A select with
@@ -159,7 +161,7 @@ fn pick(tui: &Tui, owner: Owner, select: abi::Select) {
                 *picker.owner.borrow_mut() = owner.clone();
                 *tui.reads.owner.borrow_mut() = Some(owner);
                 let theme = opencode_ui::theme::Theme::clone(&tui.page());
-                handle.set_options(options(tui, &theme, &picker.shown.borrow()));
+                handle.set_options(options(tui, &theme, &picker.shown.borrow(), &picker.owner.borrow().0));
                 handle.refresh_footer();
                 tui.app.request_redraw();
                 return;
@@ -182,6 +184,7 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
         owner: RefCell::new(owner.clone()),
         shown: RefCell::new(select),
         handle: RefCell::default(),
+        open: Cell::new(true),
     });
     *tui.reads.select.borrow_mut() = keyed.is_some().then(|| picker.clone());
     let dialog = keyed.as_ref().map_or_else(DialogOptions::default, |key| DialogOptions::default().key(key.clone()));
@@ -191,6 +194,9 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
         let closed = Rc::downgrade(&picker);
         let on_close: Box<dyn FnOnce()> = Box::new(bind!(tui, |tui| {
             on_close();
+            if let Some(picker) = closed.upgrade() {
+                picker.open.set(false);
+            }
             let mine =
                 tui.reads.select.borrow().as_ref().is_some_and(|shown| Weak::ptr_eq(&Rc::downgrade(shown), &closed));
             if mine {
@@ -205,7 +211,9 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
                 let mut props = SelectProps::dynamic(
                     shown.title.clone(),
                     Rc::new(bind!(tui.weak(), |tui, _: &str| {
-                        weak.upgrade().map_or_else(Vec::new, |picker| options(&tui, &theme, &picker.shown.borrow()))
+                        weak.upgrade().map_or_else(Vec::new, |picker| {
+                            options(&tui, &theme, &picker.shown.borrow(), &picker.owner.borrow().0)
+                        })
                     }, else Vec::new())),
                 );
                 props.placeholder = shown.placeholder.clone();
@@ -221,7 +229,8 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
                             shown.options.iter().filter(|option| !option.disabled).cloned().collect();
                         let host = super::host::host(&tui);
                         let values = tui.plugins.search(&*host, &owner.0, &name, query, &enabled);
-                        let rows = options(&tui, &opencode_ui::theme::Theme::clone(&tui.page()), &shown);
+                        let theme = opencode_ui::theme::Theme::clone(&tui.page());
+                        let rows = options(&tui, &theme, &shown, &owner.0);
                         values
                             .unwrap_or_default()
                             .iter()
@@ -243,10 +252,11 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
                     let selected = picker.handle.borrow().as_ref().and_then(|handle| handle.selected());
                     let plugin = selected.and_then(|selected| {
                         let shown = picker.shown.borrow();
-                        shown.options.iter().find(|option| option.value == selected.value).and_then(|option| option.toggle.clone())
+                        shown.options.iter().find(|option| option.value == selected.value && !option.disabled).and_then(|option| option.toggle.clone())
                     });
+                    let caller = picker.owner.borrow().0.clone();
                     let Some((plugin, active)) =
-                        plugin.and_then(|plugin| toggled(&tui, &plugin).map(|active| (plugin, active)))
+                        plugin.and_then(|plugin| toggled(&tui, &caller, &plugin).map(|active| (plugin, active)))
                     else {
                         return Vec::new();
                     };
@@ -280,7 +290,10 @@ impl Picker {
     fn choose(self: &Rc<Self>, tui: &Tui, value: &str) {
         let shown = self.shown.borrow().clone();
         let owner = self.owner.borrow().clone();
-        let Some(option) = shown.options.iter().find(|option| option.value == value) else { return };
+        // The row the user sees: a disabled row of the same value is not on the list.
+        let Some(option) = shown.options.iter().find(|option| option.value == value && !option.disabled) else {
+            return;
+        };
         if let Some(plugin) = &option.toggle {
             // Only the user toggles a plugin: a key or a click, never a run of the command by name (synthesis 3.6).
             let by_input = self.handle.borrow().as_ref().is_some_and(|handle| handle.by_input());
@@ -301,7 +314,7 @@ impl Picker {
     /// or the plugin manager, after the key is handled, and only if the row still names that plugin then.
     fn toggle(self: &Rc<Self>, tui: &Tui, value: &str, plugin: &str) {
         let caller = self.owner.borrow().0.clone();
-        if plugin == caller || plugin == crate::dialogs::plugins::ID {
+        if toggled(tui, &caller, plugin).is_none() {
             log::warn!("plugin {caller}: a row may not toggle {plugin}");
             return;
         }
@@ -309,40 +322,54 @@ impl Picker {
         tui.app.defer(bind!(tui, |tui, _| {
             let Some(picker) = picker.upgrade() else { return };
             let owner = picker.owner.borrow().clone();
-            let names = picker
-                .shown
-                .borrow()
-                .options
-                .iter()
-                .any(|option| option.value == value && option.toggle.as_deref() == Some(plugin.as_str()));
-            // The same select still on screen: closed or replaced, it is not the select any more.
-            let shows = tui.reads.select.borrow().as_ref().is_some_and(|shown| Rc::ptr_eq(shown, &picker));
-            if !(names && shows && tui.plugins.live(&owner.0, owner.1)) {
+            let names = picker.shown.borrow().options.iter().any(|option| {
+                option.value == value && !option.disabled && option.toggle.as_deref() == Some(plugin.as_str())
+            });
+            // The same select still on screen, keyed or not: closed or replaced, it is not the select any more.
+            if !(names && picker.open.get() && tui.plugins.live(&owner.0, owner.1)) {
                 return;
             }
-            let Some(active) = toggled(&tui, &plugin) else { return };
+            let Some(active) = toggled(&tui, &owner.0, &plugin) else { return };
             match tui.plugins.toggle(&super::host::host(&tui), &plugin, !active) {
-                None => tui.toasts.error(format!("Failed to update plugin {plugin}")),
+                None => {
+                    tui.toasts.error(format!("Failed to update plugin {plugin}"));
+                    return;
+                }
+                // As the plugin manager: why the setup failed, and the claims mount again either way.
                 Some(Err(error)) => tui.toasts.error(error),
-                Some(Ok(())) => tui.navigate(tui.route()),
+                Some(Ok(())) => {}
             }
+            tui.navigate(tui.route());
             // The rows say what the registry holds now, as do the hints.
             if let Some(handle) = picker.handle.borrow().clone() {
                 let theme = opencode_ui::theme::Theme::clone(&tui.page());
-                handle.set_options(options(&tui, &theme, &picker.shown.borrow()));
+                handle.set_options(options(&tui, &theme, &picker.shown.borrow(), &owner.0));
                 handle.refresh_footer();
             }
         }));
     }
 }
 
-/// Whether plugin `id` is active, for a toggle: `None` for a plugin the host cannot toggle.
-fn toggled(tui: &Tui, id: &str) -> Option<bool> {
-    tui.plugins.entries().into_iter().find(|entry| entry.id == id).map(|entry| entry.active)
+/// Whether plugin `id` is active, for a toggle of plugin `caller`'s select: `None` for a plugin it cannot toggle, as
+/// the plugin manager decides (a loaded plugin, not one waiting for the user's approval), and never the caller itself
+/// or the manager.
+fn toggled(tui: &Tui, caller: &str, id: &str) -> Option<bool> {
+    if id == caller || id == crate::dialogs::plugins::ID {
+        return None;
+    }
+    let entry = tui.plugins.entries().into_iter().find(|entry| entry.id == id)?;
+    let loaded = entry.source != opencode_plugin::Source::Configured;
+    let asked = matches!(entry.status, opencode_plugin::Status::Pending | opencode_plugin::Status::Declined);
+    (loaded && !asked).then_some(entry.active)
 }
 
-/// The rows of `select`, in `theme`.
-fn options(tui: &Tui, theme: &opencode_ui::theme::Theme, select: &abi::Select) -> Vec<SelectOption<String>> {
+/// The rows of plugin `caller`'s `select`, in `theme`.
+fn options(
+    tui: &Tui,
+    theme: &opencode_ui::theme::Theme,
+    select: &abi::Select,
+    caller: &str,
+) -> Vec<SelectOption<String>> {
     select
         .options
         .iter()
@@ -354,7 +381,7 @@ fn options(tui: &Tui, theme: &opencode_ui::theme::Theme, select: &abi::Select) -
             item.disabled = option.disabled;
             item.footer_color = option.footer_color.as_ref().and_then(|color| node::color_of(theme, color));
             // A toggle's footer is the host's: what the plugin's state is, not what the plugin says.
-            if let Some(active) = option.toggle.as_deref().and_then(|plugin| toggled(tui, plugin)) {
+            if let Some(active) = option.toggle.as_deref().and_then(|plugin| toggled(tui, caller, plugin)) {
                 item.footer = Some(if active { "enabled" } else { "disabled" }.to_owned());
             }
             item.gutter = option.gutter.as_ref().map(|gutter| -> opencode_ui::select::Gutter {
@@ -377,7 +404,7 @@ fn options(tui: &Tui, theme: &opencode_ui::theme::Theme, select: &abi::Select) -
 
 /// The select's footer actions on the selected row.
 fn actions(tui: &Tui, picker: &Rc<Picker>) -> Vec<opencode_ui::select::SelectAction<String>> {
-    use opencode_ui::select::{Group, SelectAction};
+    use opencode_ui::select::{ActionRun, Group, SelectAction};
     let shown = picker.shown.borrow().clone();
     shown
         .actions
@@ -387,24 +414,41 @@ fn actions(tui: &Tui, picker: &Rc<Picker>) -> Vec<opencode_ui::select::SelectAct
         .filter(|(_, action)| !action.key.as_deref().is_some_and(|key| opencode_plugin::interact::reserved(tui, key)))
         .map(|(index, action)| {
             let (weak, hidden, run_action) = (Rc::downgrade(picker), action.hidden.clone(), action.action.clone());
-            SelectAction {
-                command: format!("plugin.select.{index}"),
-                bind: action.key.clone(),
-                group: action.primary.then_some(Group::Primary),
-                hidden_when: Some(Rc::new(move |option: Option<&SelectOption<String>>| {
-                    option.is_none_or(|option| hidden.contains(&option.value))
-                })),
-                ..SelectAction::new(
-                    format!("plugin.select.{index}"),
-                    action.title.clone(),
-                    bind!(tui.weak(), |tui, option: &SelectOption<String>| {
+            // As TS's `group`: the first group for a row's action, the second for a rowless one.
+            let group = match action.primary.unwrap_or(!action.rowless) {
+                true => Group::Primary,
+                false => Group::Secondary,
+            };
+            let mut item = SelectAction::new(
+                format!("plugin.select.{index}"),
+                action.title.clone(),
+                bind!(tui.weak(), |tui, option: &SelectOption<String>| {
+                    if let Some(picker) = weak.upgrade() {
+                        let owner = picker.owner.borrow().clone();
+                        run(&tui, &owner, &run_action, Some(&option.value));
+                    }
+                }),
+            );
+            item.bind = action.key.clone();
+            item.group = Some(group);
+            match action.rowless {
+                // It needs no row: shown and run also while none matches, with no value.
+                true => {
+                    let (weak, run_action) = (Rc::downgrade(picker), action.action.clone());
+                    item.run = ActionRun::Dialog(Rc::new(bind!(tui.weak(), |tui| {
                         if let Some(picker) = weak.upgrade() {
                             let owner = picker.owner.borrow().clone();
-                            run(&tui, &owner, &run_action, Some(&option.value));
+                            run(&tui, &owner, &run_action, None);
                         }
-                    }),
-                )
+                    })));
+                }
+                false => {
+                    item.hidden_when = Some(Rc::new(move |option: Option<&SelectOption<String>>| {
+                        option.is_none_or(|option| hidden.contains(&option.value))
+                    }));
+                }
             }
+            item
         })
         .collect()
 }

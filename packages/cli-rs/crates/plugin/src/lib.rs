@@ -276,7 +276,7 @@ impl Claimed for View {
 type ClaimRender = Rc<dyn Fn(&dyn Host, &SlotInput) -> Box<dyn Claimed>>;
 type Claim = Box<dyn Claimed>;
 type RouteRender = Rc<dyn Fn(&dyn Host) -> Box<dyn Claimed>>;
-type PanelRender = Rc<dyn Fn(&dyn Host, &View) -> Box<dyn Any>>;
+type PanelRender = Rc<dyn Fn(&dyn Host, &View) -> Box<dyn Claimed>>;
 type SearchCall = Rc<dyn Fn(&dyn Host, &str, &[abi::SelectOption]) -> Option<Vec<String>>>;
 type SetupFn = Rc<dyn Fn(&mut Setup<'_>) -> Result<(), String>>;
 /// The current failure of an external plugin, if any.
@@ -653,7 +653,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                         activation.own(&holder);
                     }
                     frame.add(&mounted.root());
-                    Some(Box::new(mounted) as Box<dyn Any>)
+                    Some(Box::new(mounted) as Box<dyn Claimed>)
                 });
                 scope.overlays.borrow_mut().push((name.clone(), open));
                 continue;
@@ -724,7 +724,7 @@ struct Scope {
 }
 
 /// Mounts an overlay surface into its frame.
-type OverlayFn = Rc<dyn Fn(&dyn Host, &View) -> Option<Box<dyn Any>>>;
+type OverlayFn = Rc<dyn Fn(&dyn Host, &View) -> Option<Box<dyn Claimed>>>;
 
 /// What one call of an in-process plugin asked for: the effects that wait for it to return, the storage it wrote, and
 /// what its verbs staged.
@@ -1718,7 +1718,7 @@ impl Setup<'_> {
                         activation.own(&holder);
                     }
                     parent.add(&mounted.root());
-                    Box::new(mounted) as Box<dyn Any>
+                    Box::new(mounted) as Box<dyn Claimed>
                 });
                 self.registration.panels.push((name, panel));
             }
@@ -2490,14 +2490,25 @@ impl Registry {
         .unwrap_or(false)
     }
 
+    /// Whether active plugin `id` registered the panel surface `name`.
+    pub fn has_panel(&self, id: &str, name: &str) -> bool {
+        self.with_plugin(id, |plugin| {
+            plugin
+                .active
+                .as_ref()
+                .is_some_and(|(_, registration)| registration.panels.iter().any(|(panel, _)| panel == name))
+        })
+        .unwrap_or(false)
+    }
+
     /// Mounts the panel surface plugin `id` registers as `name` into `parent`, the panel the host shows: what it returns
     /// is the mount, which ends when it drops.
-    pub fn panel(&self, host: &dyn Host, id: &str, name: &str, parent: &View) -> Option<Box<dyn Any>> {
+    pub fn panel(&self, host: &dyn Host, id: &str, name: &str, parent: &View) -> Option<PanelMount> {
         let render = self.with_plugin(id, |plugin| {
             let (_, registration) = plugin.active.as_ref().filter(|_| plugin.running())?;
             registration.panels.iter().find(|(panel, _)| panel == name).map(|(_, render)| render.clone())
         })??;
-        Some(render(host, parent))
+        Some(PanelMount(render(host, parent)))
     }
 
     /// The values of `options` that plugin `id`'s search `name` lists for `query`, in its order; `None` when it has no
@@ -2611,6 +2622,16 @@ impl Registry {
 }
 
 /// A mounted plugin route. The route that shows it syncs it with each change batch.
+/// A mounted panel surface of a plugin (P2): it ends when it drops.
+pub struct PanelMount(Box<dyn Claimed>);
+
+impl PanelMount {
+    /// Takes the host's theme in place, keeping its widgets and their state; false when it must mount again.
+    pub fn restyle(&self, host: &dyn Host) -> bool {
+        self.0.restyle(host)
+    }
+}
+
 pub struct RouteMount(Box<dyn Claimed>);
 
 impl RouteMount {

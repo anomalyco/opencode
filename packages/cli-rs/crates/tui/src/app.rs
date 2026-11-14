@@ -384,6 +384,8 @@ impl Tui {
         if self.view.borrow().is_none() {
             return;
         }
+        // The plugins' overlays take the theme in place.
+        self.router.restyle(self);
         // In place, the focus, the scroll positions and every widget's state stay where they are.
         if self.view.borrow().as_ref().is_some_and(|view| view.restyle(self)) {
             // The `app` slot's plugin claims take the theme in place, or mount again when one cannot.

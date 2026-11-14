@@ -121,6 +121,8 @@ enum Command {
     Click,
     /// Two presses and releases on node `a`, a double click.
     DoubleClick,
+    /// A double click on the panel's first line, which no pointer node takes.
+    DoubleClickLabel,
     /// A press on node `a`, a drag in it and a release.
     Drag,
     /// The panel's texts may be selected, or not.
@@ -331,8 +333,8 @@ impl Reference {
     }
 
     /// A press over the overlay's backdrop closes it and goes no further; else a press on the focusable pointer node
-    /// `a` gives it the focus before its handler runs. Either ends a selection: a press on selectable text starts a new
-    /// one, and the backdrop prevents nothing.
+    /// `a` gives it the focus before its handler runs, which takes the press: no selection starts under it. Either ends
+    /// a selection.
     fn press(&mut self, kinds: &[&str]) {
         self.selection = false;
         if self.overlay {
@@ -362,7 +364,8 @@ impl Model for Delivery {
                 9 => Command::Pass(rng.below(2) == 0),
                 10 => Command::Paste,
                 11 => Command::Click,
-                12 => Command::DoubleClick,
+                12 if rng.below(2) == 0 => Command::DoubleClick,
+                12 => Command::DoubleClickLabel,
                 13 => Command::Drag,
                 14 => Command::Selectable(rng.below(2) == 0),
                 _ => Command::Dialog,
@@ -503,11 +506,7 @@ fn apply(harness: &Harness, reference: &mut Reference, command: &Command) {
                 }
             };
             plugin::settle(harness);
-            // A drag over selectable text selects it: OpenTUI starts a selection before any handler runs. Over the
-            // overlay's backdrop it starts on the backdrop.
-            let selects = matches!(command, Command::Drag) && !reference.overlay && reference.selectable;
             reference.press(kinds);
-            reference.selection = selects;
         }
         Command::DoubleClick if reference.panel && !reference.overlay => {
             harness.app.advance(Duration::from_secs(1));
@@ -518,6 +517,19 @@ fn apply(harness: &Harness, reference: &mut Reference, command: &Command) {
             }
             plugin::settle(harness);
             reference.press(&["Down a 1,0", "Up a 1,0", "Down a 1,0", "Up a 1,0"]);
+        }
+        Command::DoubleClickLabel if reference.panel && !reference.overlay => {
+            harness.app.advance(Duration::from_secs(1));
+            let (x, y) = target(harness, "PANEL");
+            for _ in 0..2 {
+                harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
+                harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 1, y);
+            }
+            plugin::settle(harness);
+            // The panel takes the focus; its text selects a word when it may.
+            if !reference.in_panel() {
+                reference.focus(Focus::Panel);
+            }
             reference.selection = reference.selectable;
         }
         Command::Selectable(selectable) => {
@@ -841,15 +853,17 @@ fn nothing_an_ended_mount_or_plugin_held_is_left() {
 }
 
 // Expected: the deep run's seed 553 (2,000 seeds), as fixed rows. A double click on the panel's selectable text makes
-// a selection, which takes the next escape before any layer, also in the composer; on text that selects nothing,
-// escape is the plugin's.
+// a selection, which takes the next escape before any layer, also in the composer; on text that selects nothing, or
+// on a node that takes the press (carbon-5), escape is the plugin's.
 #[test]
 fn a_double_click_in_the_panel_selects_only_selectable_text() {
-    for selectable in [false, true] {
+    for (selectable, click) in
+        [(false, Command::DoubleClickLabel), (true, Command::DoubleClickLabel), (true, Command::DoubleClick)]
+    {
         let trace = [
             Command::Selectable(selectable),
             Command::Panel(true),
-            Command::DoubleClick,
+            click,
             Command::Focus(Focus::Composer),
             Command::Keys(vec![Key::Escape]),
         ];

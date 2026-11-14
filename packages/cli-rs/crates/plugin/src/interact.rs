@@ -70,6 +70,8 @@ pub struct Owner {
 
 struct Mode {
     name: String,
+    /// Where the focus was as the mode was set: the composer, the surface, or everywhere for an activation.
+    scope: LayerScope,
     ended: Rc<Cell<bool>>,
     disposer: Disposer,
 }
@@ -118,9 +120,12 @@ struct Shown {
     opener: Weak<Owner>,
     frame: View,
     backdrop: View,
+    /// Where it was asked to show, and its size, which a resize clamps to the screen again.
+    anchor: Anchor,
+    size: (u16, u16),
     /// Escape, which closes it unless a layer of the overlay above priority 1 takes the key.
     _escape: Option<Disposer>,
-    _mount: Box<dyn Any>,
+    mount: Box<dyn crate::Claimed>,
 }
 
 /// The input registrations of one host: the listeners, the hold, the capture and the overlays. The TUI keeps one.
@@ -327,10 +332,12 @@ impl Owner {
     /// The keymap command of `bind`, which calls the handler and holds the keys after it if it asks.
     fn command(self: &Rc<Self>, bind: &Bind, deliver: &Deliver) -> TuiCommand {
         let (owner, deliver, bind) = (Rc::downgrade(self), deliver.clone(), bind.clone());
-        let mut command = TuiCommand::inline(bind.key.clone(), move |_, _| {
+        let mut command = TuiCommand::inline(bind.key.clone(), move |_, pressed: Option<&KeyEvent>| {
             let Some(owner) = owner.upgrade().filter(|owner| owner.alive()) else { return false };
             let Some(host) = owner.host.upgrade() else { return false };
-            let event = Event::Key(input::Key { bind: Some(bind.name.clone()), key: bind.key.clone(), text: None });
+            // The stroke that matched; a run with no key (none today) names the bind's keys.
+            let (key, text) = pressed.map_or_else(|| (bind.key.clone(), None), key_of);
+            let event = Event::Key(input::Key { bind: Some(bind.name.clone()), key, text });
             let handled = deliver(&*host, &owner, &event) == Handled::Consume;
             if handled
                 && bind.hold
@@ -365,7 +372,8 @@ impl Owner {
             return false;
         }
         match scope {
-            LayerScope::Global => true,
+            // Another plugin's overlay with the focus is the input's, as a dialog is.
+            LayerScope::Global => !host.router().is_some_and(|router| router.overlaid_by_other(&*host, &self.plugin)),
             LayerScope::Composer => host.composer_focused(),
             LayerScope::Surface => self.in_surface(&*host),
             LayerScope::Node(id) => {
@@ -375,14 +383,20 @@ impl Owner {
         }
     }
 
-    /// The scope a mode of this owner holds in: the composer for an owner with a layer there, else its surface,
-    /// else everywhere.
-    fn mode_holds(&self) -> bool {
-        match (self.composer.get(), &self.root) {
-            (true, _) => self.holds(&LayerScope::Composer),
-            (false, Some(_)) => self.holds(&LayerScope::Surface),
-            (false, None) => self.alive(),
+    /// The scope a mode set now holds in: the surface while the focus is in it, else the composer for an owner with a
+    /// layer there while it has the focus, else everywhere for an activation with no composer layer.
+    fn mode_scope(&self) -> Option<LayerScope> {
+        match (&self.root, self.composer.get()) {
+            (Some(_), _) if self.holds(&LayerScope::Surface) => Some(LayerScope::Surface),
+            (_, true) if self.holds(&LayerScope::Composer) => Some(LayerScope::Composer),
+            (None, false) if self.holds(&LayerScope::Global) => Some(LayerScope::Global),
+            _ => None,
         }
+    }
+
+    /// Whether the owner's mode holds: the scope it was set in holds.
+    fn mode_holds(&self) -> bool {
+        self.mode.borrow().as_ref().is_some_and(|mode| self.holds(&mode.scope))
     }
 
     /// The owner's mode, unless the host ended it.
@@ -396,7 +410,7 @@ impl Owner {
         if let Some(old) = self.mode.borrow_mut().take() {
             old.disposer.dispose();
         }
-        let Some(name) = mode.filter(|_| self.alive() && self.mode_holds()) else { return };
+        let Some((name, scope)) = mode.filter(|_| self.alive()).zip(self.mode_scope()) else { return };
         let ended = Rc::new(Cell::new(false));
         let (owner, flag) = (Rc::downgrade(self), ended.clone());
         // A move of the focus out of its scope ends it (`Router::refocus`, `blurs`), so a focus that comes back does
@@ -408,7 +422,7 @@ impl Owner {
                 })
         });
         let disposer = host.keymap().push_mode(&self.mode_key(Some(name)), active);
-        *self.mode.borrow_mut() = Some(Mode { name: name.to_owned(), ended, disposer });
+        *self.mode.borrow_mut() = Some(Mode { name: name.to_owned(), scope, ended, disposer });
         if let Some(router) = host.router() {
             let me = Rc::downgrade(self);
             if !router.owners.borrow().iter().any(|owner| owner.ptr_eq(&me)) {
@@ -456,6 +470,26 @@ impl Owner {
             .min_by_key(|(at, _)| *at)
             .map(|(_, id)| id);
         input::Focused { node, surface: self.scope_view().is_some_and(|view| path.contains(&view.id())) }
+    }
+
+    /// Puts back a focus the mount's new tree took away (OpenTUI drops the focus of a widget it detaches): on node
+    /// `node` if the tree still holds it focusable, else on the surface's container, else the composer.
+    pub(crate) fn restore_focus(&self, host: &dyn Host, node: Option<&str>) {
+        if host.app().focused().is_some() {
+            return;
+        }
+        let kept = node.filter(|id| self.focusable.borrow().iter().any(|known| known == id));
+        match kept.and_then(|id| self.lookup.as_ref()?(id)) {
+            Some(widget) => host.app().focus(&widget),
+            None => {
+                if let Some(view) = self.within() {
+                    host.app().focus(&view);
+                }
+            }
+        }
+        if host.app().focused().is_none() {
+            host.focus_composer();
+        }
     }
 
     /// Records the ids of the tree's nodes, and of the focusable ones, which [`Owner::focus`] may focus. A capture of
@@ -576,7 +610,7 @@ impl Router {
         let disposer = host.keymap().keymap().intercept_key(i32::MAX, false, move |context| {
             let Some(host) = keyed.upgrade() else { return };
             let Some(router) = host.router() else { return };
-            if router.intercept(&*host, &context.event, &context.stroke) {
+            if router.intercept(&*host, &context.event) {
                 context.consume();
             }
         });
@@ -589,6 +623,7 @@ impl Router {
                 && let Some(router) = host.router()
             {
                 router.capture.borrow_mut().take();
+                router.reclamp(&*host);
             }
         });
         let weak = weak.clone();
@@ -604,11 +639,10 @@ impl Router {
     }
 
     /// What the intercept does with a key: whether it is taken.
-    fn intercept(&self, host: &dyn Host, event: &KeyEvent, stroke: &Stroke) -> bool {
+    fn intercept(&self, host: &dyn Host, event: &KeyEvent) -> bool {
         if !self.replaying.get() && self.held(Input::Key(*event)) {
             return true;
         }
-        let key = stroke.to_string();
         let current = host.keymap().mode();
         // Listeners by priority, the newest first among equals.
         let mut listeners: Vec<(i32, usize, Rc<Owner>, Deliver)> = self
@@ -625,10 +659,7 @@ impl Router {
             })
             .collect();
         listeners.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
-        let text = match event.code {
-            KeyCode::Char(character) if !event.modifiers.contains(Modifiers::CTRL) => Some(character.to_string()),
-            _ => None,
-        };
+        let (key, text) = key_of(event);
         let event = Event::Key(input::Key { bind: None, key, text });
         listeners.into_iter().any(|(_, _, owner, deliver)| deliver(host, &owner, &event) == Handled::Consume)
     }
@@ -642,6 +673,7 @@ impl Router {
                 mode.ended.set(true);
             }
         }
+        self.prune();
         let timer = self.hold.borrow_mut().take().and_then(|held| held.timer);
         if let Some(timer) = timer {
             host.app().cancel_timer(timer);
@@ -815,6 +847,31 @@ impl Router {
         self.overlays.borrow().iter().any(|shown| focus_within(host.app(), shown.frame.id()))
     }
 
+    /// Whether an overlay of a plugin other than `plugin` has the focus.
+    fn overlaid_by_other(&self, host: &dyn Host, plugin: &str) -> bool {
+        self.overlays.borrow().iter().any(|shown| shown.plugin != plugin && focus_within(host.app(), shown.frame.id()))
+    }
+
+    /// The overlays on screen take the host's theme in place.
+    pub fn restyle(&self, host: &dyn Host) {
+        self.overlays.borrow().iter().for_each(|shown| {
+            shown.mount.restyle(host);
+        });
+    }
+
+    /// Clamps every overlay to the screen again, from where it was asked to show.
+    fn reclamp(&self, host: &dyn Host) {
+        for shown in self.overlays.borrow().iter() {
+            let Some(opener) = shown.opener.upgrade() else { continue };
+            let Some((x, y, w, h)) = self.place(host, &shown.plugin, &shown.anchor, shown.size, &opener) else {
+                continue;
+            };
+            shown.frame.position(opentui::layout::Edge::Left, x).position(opentui::layout::Edge::Top, y);
+            shown.frame.width(w).height(h);
+        }
+        host.app().request_redraw();
+    }
+
     /// The focus left widget `id`: a capture that began with the focus there ends, and so do the modes whose scope
     /// the focus is not in now.
     pub fn blurred(&self, id: u32) {
@@ -883,7 +940,7 @@ impl Router {
         plugin: &str,
         overlay: &input::Overlay,
         opener: &Rc<Owner>,
-        build: impl FnOnce(&View) -> Option<Box<dyn Any>>,
+        build: impl FnOnce(&View) -> Option<Box<dyn crate::Claimed>>,
     ) {
         let Some(layer) = host.overlay_layer() else {
             log::warn!("plugin {plugin}: this host shows no overlay");
@@ -894,10 +951,41 @@ impl Router {
             return;
         }
         self.close_all(host, plugin, true);
+        // The opener heard the overlay it replaces close, and may have failed doing so.
+        if !opener.alive() {
+            return;
+        }
         let app = host.app();
-        let (width, height) = app.size();
-        let (w, h) = (overlay.width.clamp(1, width.max(1)), overlay.height.clamp(1, height.max(1)));
-        let (x, y) = match &overlay.anchor {
+        let size = (overlay.width, overlay.height);
+        let Some((x, y, w, h)) = self.place(host, plugin, &overlay.anchor, size, opener) else { return };
+        let backdrop = View::new(app).absolute().width(Length::percent(100.0)).height(Length::percent(100.0));
+        let frame = View::new(app)
+            .absolute()
+            .position(opentui::layout::Edge::Left, x)
+            .position(opentui::layout::Edge::Top, y)
+            .width(w)
+            .height(h)
+            .focusable(true);
+        let Some(mount) = build(&frame) else { return };
+        // Its first view may have failed the plugin.
+        if !opener.alive() {
+            return;
+        }
+        self.show(host, plugin, overlay, opener, layer, backdrop, frame, mount);
+    }
+
+    /// Where an overlay of `plugin` anchored at `anchor`, of `size`, shows now: its cell and size, on the screen.
+    fn place(
+        &self,
+        host: &dyn Host,
+        plugin: &str,
+        anchor: &Anchor,
+        size: (u16, u16),
+        opener: &Rc<Owner>,
+    ) -> Option<(u16, u16, u16, u16)> {
+        let (width, height) = host.app().size();
+        let (w, h) = (size.0.clamp(1, width.max(1)), size.1.clamp(1, height.max(1)));
+        let (x, y) = match anchor {
             Anchor::Point { x, y } => (*x, *y),
             Anchor::Node { node } => opener
                 .rect(node)
@@ -909,7 +997,7 @@ impl Router {
             Anchor::Surface { surface, edge } => {
                 let Some((left, top, across, down)) = self.area(plugin, surface) else {
                     log::warn!("plugin {plugin}: its overlay is anchored to {surface:?}, which does not show");
-                    return;
+                    return None;
                 };
                 let (middle_x, middle_y) = (left + across.saturating_sub(w) / 2, top + down.saturating_sub(h) / 2);
                 match edge {
@@ -920,20 +1008,27 @@ impl Router {
                 }
             }
         };
-        let (x, y) = (x.min(width.saturating_sub(w)), y.min(height.saturating_sub(h)));
-        let backdrop = View::new(app).absolute().width(Length::percent(100.0)).height(Length::percent(100.0));
-        let frame = View::new(app)
-            .absolute()
-            .position(opentui::layout::Edge::Left, x)
-            .position(opentui::layout::Edge::Top, y)
-            .width(w)
-            .height(h)
-            .focusable(true);
-        let Some(mount) = build(&frame) else { return };
-        // A press outside the overlay closes it and goes no further, as a menu's does.
+        Some((x.min(width.saturating_sub(w)), y.min(height.saturating_sub(h)), w, h))
+    }
+
+    /// Opens the overlay the open arguments describe; split from [`Router::open`] for its frame.
+    #[allow(clippy::too_many_arguments)]
+    fn show(
+        &self,
+        host: &dyn Host,
+        plugin: &str,
+        overlay: &input::Overlay,
+        opener: &Rc<Owner>,
+        layer: View,
+        backdrop: View,
+        frame: View,
+        mount: Box<dyn crate::Claimed>,
+    ) {
+        let app = host.app();
+        // A press or a wheel outside the overlay closes it and goes no further, as a menu's does.
         let (closing, surface, owner) = (opener.host.clone(), overlay.surface.clone(), plugin.to_owned());
         backdrop.on_mouse(move |cx, event| {
-            if !matches!(event.kind, MouseEventKind::Down(_)) {
+            if !matches!(event.kind, MouseEventKind::Down(_) | MouseEventKind::ScrollUp | MouseEventKind::ScrollDown) {
                 return;
             }
             cx.stop_propagation();
@@ -972,8 +1067,10 @@ impl Router {
             opener: Rc::downgrade(opener),
             frame,
             backdrop,
+            anchor: overlay.anchor.clone(),
+            size: (overlay.width, overlay.height),
             _escape: escape.map_err(|error| log::error!("plugin {plugin} overlay keymap layer: {error}")).ok(),
-            _mount: mount,
+            mount,
         });
         app.request_redraw();
     }
@@ -1050,6 +1147,16 @@ pub fn refocus(host: &dyn Host, move_focus: impl FnOnce()) {
     if moved {
         router.capture.borrow_mut().take();
     }
+}
+
+/// The stroke of `event` as the keymap names it, and the text it types: a chord types nothing, only shift may be held.
+fn key_of(event: &KeyEvent) -> (String, Option<String>) {
+    let plain = event.modifiers.without_locks().bits() & !Modifiers::SHIFT.bits() == 0;
+    let text = match event.code {
+        KeyCode::Char(character) if plain => Some(character.to_string()),
+        _ => None,
+    };
+    (Stroke::from_event(event).to_string(), text)
 }
 
 /// The id of the focused widget.
@@ -1159,7 +1266,7 @@ pub(crate) fn wire<W: Widget + Clone + 'static>(
     if interact.pointer {
         view.on_drop(move |cx, source, event| {
             let Some(owner) = owner.upgrade().filter(|owner| owner.alive()) else { return };
-            let Some(host) = owner.host.upgrade() else { return };
+            let Some(host) = owner.host.upgrade().filter(|host| !host.modal_open()) else { return };
             // A drop counts only from a node of the plugin's, in this mount or another of its mounts.
             let Some(from) = host.router().and_then(|router| router.dragged(&owner.plugin, source)) else { return };
             let rect = owner.rect(&node).unwrap_or_default();
@@ -1186,6 +1293,10 @@ pub(crate) fn wire<W: Widget + Clone + 'static>(
 fn pointed(host: &dyn Host, owner: &Rc<Owner>, node: &str, view: &impl Widget, event: &MouseEvent) -> Handled {
     let Some(router) = host.router() else { return Handled::Pass };
     router.prune_capture(host);
+    // A dialog of the host over it: a release or a drag that OpenTUI still sends to the pressed node is not the plugin's.
+    if host.modal_open() {
+        return Handled::Pass;
+    }
     let me = Rc::downgrade(owner);
     let captured =
         || router.capture.borrow().as_ref().is_some_and(|capture| capture.owner.ptr_eq(&me) && capture.node == node);
@@ -1214,14 +1325,21 @@ fn pointed(host: &dyn Host, owner: &Rc<Owner>, node: &str, view: &impl Widget, e
         from: None,
     };
     let handled = owner.send(host, &Event::Pointer(pointer));
+    // What the handler asked for, a focus among it, applies before the capture records the focus.
+    crate::flush();
     match kind {
         PointerKind::Down if handled == Handled::Consume => {
+            // The press is the plugin's: no selection of the text under it starts, and a surface that does not have
+            // the focus takes it, unless the handler gave it to a node.
+            host.app().clear_selection();
+            if let Some(view) = owner.within().filter(|view| !focus_within(host.app(), view.id())) {
+                refocus(host, || host.app().focus(&view));
+            }
             let focus = host.app().focused().map(|widget| widget.id());
             *router.capture.borrow_mut() = Some(Capture { owner: me.clone(), node: node.to_owned(), focus });
         }
         PointerKind::Up if captured() => drop(router.capture.borrow_mut().take()),
         _ => {}
     }
-    crate::flush();
     handled
 }

@@ -116,31 +116,52 @@ impl Panels {
 pub struct Host {
     pub root: View,
     target: Target,
-    _content: Option<Box<dyn Any>>,
+    content: Option<Content>,
+}
+
+/// What a panel shows: a built-in's widgets, or a plugin's panel surface (P2).
+enum Content {
+    Builtin(#[allow(dead_code)] Box<dyn Any>),
+    Plugin(opencode_plugin::PanelMount),
 }
 
 impl Host {
     pub fn new(tui: &Tui, target: Target, input_width: u16, focused: bool) -> Self {
         let presentation = tui.panels.presentation();
-        let theme = tui.page();
-        let root =
-            View::new(&tui.app).column().grow(1.0).min_width(0).min_height(0).focusable(true).bg(match presentation {
-                Presentation::Panel => theme.background.raised.base,
-                Presentation::Fullscreen => theme.background.base,
-            });
+        let root = View::new(&tui.app).column().grow(1.0).min_width(0).min_height(0).focusable(true);
+        paint(tui, &root);
         let content = match tui.panels.builder(&target) {
-            Some(builder) => {
-                Some(builder(tui, &root, &Input { target: &target, width: input_width, presentation, focused }))
-            }
+            Some(builder) => Some(Content::Builtin(builder(
+                tui,
+                &root,
+                &Input { target: &target, width: input_width, presentation, focused },
+            ))),
             // A panel surface of a plugin (P2) mounts into the panel and reads how it shows from the host.
-            None => tui.plugins.panel(tui, &target.plugin, &target.name, &root),
+            None => tui.plugins.panel(tui, &target.plugin, &target.name, &root).map(Content::Plugin),
         };
-        Self { root, target, _content: content }
+        Self { root, target, content }
+    }
+
+    /// Takes the page theme in place: a plugin's panel surface keeps its mount and state. False for a built-in
+    /// panel, which mounts again.
+    pub fn restyle(&self, tui: &Tui) -> bool {
+        let Some(Content::Plugin(mount)) = &self.content else { return false };
+        paint(tui, &self.root);
+        mount.restyle(tui)
     }
 
     pub fn target(&self) -> &Target {
         &self.target
     }
+}
+
+/// The panel's background, by how it shows.
+fn paint(tui: &Tui, root: &View) {
+    let theme = tui.page();
+    root.bg(match tui.panels.presentation() {
+        Presentation::Panel => theme.background.raised.base,
+        Presentation::Fullscreen => theme.background.base,
+    });
 }
 
 #[cfg(test)]
