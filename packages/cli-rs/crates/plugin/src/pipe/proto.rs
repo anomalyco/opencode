@@ -87,7 +87,14 @@ pub enum Down {
     /// The host refused revision `rev` of `mount`; the next one is whole and builds on `adopted`.
     Refused { id: String, mount: v2::MountId, rev: u64, adopted: u64, error: String },
     /// The value of a read plugin `id` watches under `key`, as of now.
-    Snapshot { id: String, key: String, value: serde_json::Value },
+    /// A read over the host's bound is not pushed: `value` is null, and `error` says why.
+    Snapshot {
+        id: String,
+        key: String,
+        value: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
     /// What the effects of a call (`c<seq>`), a setup (`setup`) or a batch of the plugin's (`b<seq>`) answered, one
     /// value each ([`HostRequest`]'s results).
     Answered { id: String, key: String, results: Vec<serde_json::Value> },

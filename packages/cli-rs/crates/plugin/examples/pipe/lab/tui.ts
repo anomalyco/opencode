@@ -21,9 +21,10 @@ export default {
     command("lab.store", async (input?: string) => {
       await carrier.effect({ type: "storage-set", key: "note", value: JSON.stringify({ text: input }) })
       const stored = await carrier.effect({ type: "storage-get", key: "note" })
-      toast(`stored ${JSON.stringify(stored)}`)
+      toast(`stored ${JSON.stringify(stored).slice(0, 100)}`)
     })
     command("lab.unwatch", () => carrier.unwatch("note"))
+    command("lab.readerror", () => toast(`read error ${carrier.readError("note") ?? "none"}`))
     command("lab.watches", () => {
       let answered = 0
       for (let index = 0; index < 70; index++) if (carrier.read(`w${index}`) !== undefined) answered++

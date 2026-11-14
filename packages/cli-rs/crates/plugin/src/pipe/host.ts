@@ -57,10 +57,66 @@ function frame(kind: number, message: unknown) {
 }
 const send = (message: unknown) => frame(CONTROL, message)
 
-// The client that started the JS host is gone: it exits, from a thread of its own, so a plugin that spins on the main
-// thread does not keep it alive (review carbon-6; Linux also has the parent-death signal, macOS has not).
+// The JS host takes everything its plugins started down with it, however the client ends (review: no orphans). The
+// client makes it a child subreaper on Linux, so a descendant whose parent exited becomes its child rather than
+// escaping; this kills every descendant it finds in `/proc` (one that left the process group too), then the group,
+// itself last. Elsewhere there is no `/proc`: the group alone. It runs when the input ends, on the parent-death signal
+// the client asks for on Linux (SIGTERM), and from a thread of its own that watches the parent, so a plugin that
+// spins on the main thread cannot hold it back.
+function killAll(me: number) {
+  const fs = require("node:fs")
+  const descendants = () => {
+    if (!fs.existsSync("/proc/self/stat")) return []
+    const children = new Map<number, number[]>()
+    for (const name of fs.readdirSync("/proc")) {
+      if (!/^[0-9]+$/.test(name)) continue
+      try {
+        const stat = fs.readFileSync(`/proc/${name}/stat`, "utf8")
+        const ppid = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1])
+        children.set(ppid, [...(children.get(ppid) ?? []), Number(name)])
+      } catch {}
+    }
+    const found: number[] = []
+    for (const queue = [me]; queue.length; ) {
+      for (const pid of children.get(queue.shift()!) ?? []) found.push(pid), queue.push(pid)
+    }
+    return found
+  }
+  // A descendant may fork as it is killed: again until none is left.
+  for (let round = 0; round < 8; round++) {
+    const found = descendants()
+    if (!found.length) break
+    for (const pid of found) {
+      try {
+        process.kill(pid, "SIGKILL")
+      } catch {}
+    }
+  }
+  try {
+    process.kill(-me, "SIGKILL")
+  } catch {}
+  process.kill(me, "SIGKILL")
+}
+process.on("SIGTERM", () => killAll(process.pid))
 const parent = process.ppid
-const orphan = `setInterval(() => { try { process.kill(${parent}, 0) } catch { process.kill(${process.pid}, "SIGKILL") } }, 250)`
+const orphan = `${killAll.toString()}
+const parentOf = () => {
+  try {
+    const stat = require("node:fs").readFileSync("/proc/self/stat", "utf8")
+    return Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1])
+  } catch {
+    return ${parent}
+  }
+}
+setInterval(() => {
+  let gone = parentOf() !== ${parent}
+  try {
+    process.kill(${parent}, 0)
+  } catch {
+    gone = true
+  }
+  if (gone) killAll(${process.pid})
+}, 100)`
 new Worker(URL.createObjectURL(new Blob([orphan], { type: "application/javascript" }))).unref()
 
 type Json = any
@@ -141,6 +197,7 @@ interface Plugin {
   cleanups: Array<() => unknown>
   mounts: Map<string, Mount>
   snapshots: Map<string, Json>
+  readErrors: Map<string, string>
   answers: Map<string, Array<(value: Json) => void>>
   replies: Map<number, (result: Json) => void>
   batch: number
@@ -367,6 +424,8 @@ function context(plugin: Plugin) {
       send({ type: "unwatch", id: plugin.id, key })
     },
     read: (key: string) => plugin.snapshots.get(key),
+    // Why the read `key` watches is nothing: over the host's bound.
+    readError: (key: string) => plugin.readErrors.get(key),
     // The plugin's state changed outside a call: its surfaces view again.
     invalidate: () => viewAll(plugin),
     fetch(request: Json): Promise<Json> {
@@ -505,6 +564,7 @@ function candidate(definition: Plugin["definition"], target: string, dir: string
     cleanups: [],
     mounts: new Map(),
     snapshots: new Map(),
+    readErrors: new Map(),
     answers: new Map(),
     replies: new Map(),
     batch: 0,
@@ -702,7 +762,11 @@ async function handle(message: Json) {
     }
     case "snapshot":
       if (!plugin) return
-      plugin.snapshots.set(message.key, message.value)
+      // A read over the host's bound is nothing, and says why.
+      if (message.error) plugin.snapshots.delete(message.key)
+      else plugin.snapshots.set(message.key, message.value)
+      if (message.error) plugin.readErrors.set(message.key, message.error)
+      else plugin.readErrors.delete(message.key)
       if (plugin.active && !plugin.failed && plugin.mounts.size) within(plugin, () => viewAll(plugin))
       return
     case "answered": {
@@ -766,4 +830,5 @@ for await (const chunk of Bun.stdin.stream()) {
   if (acked) send({ type: "ack", seq: acked })
   drain()
 }
-process.exit(0)
+// The input ended: the client is done with it, or gone.
+killAll(process.pid)

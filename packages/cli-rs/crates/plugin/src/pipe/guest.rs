@@ -24,6 +24,35 @@ use crate::{Definition, ErrorFn, Host, Owners, Setup, behave, route, tui_command
 
 /// The reads a plugin watches at most.
 const WATCHES: usize = 64;
+/// The bytes of JSON a watched read pushes at most: what one control frame carries.
+const READ: usize = super::wire::CONTROL_CAP;
+
+/// The bytes of a value's JSON and their hash, written without keeping them.
+#[derive(Default)]
+struct Measure {
+    hasher: std::hash::DefaultHasher,
+    bytes: usize,
+}
+
+impl Measure {
+    fn of(value: &serde_json::Value) -> Self {
+        let mut measure = Self::default();
+        let _ = serde_json::to_writer(&mut measure, value);
+        measure
+    }
+}
+
+impl std::io::Write for Measure {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        std::hash::Hasher::write(&mut self.hasher, bytes);
+        self.bytes += bytes.len();
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
 /// The effects one call, setup or batch asks for at most.
 const EFFECTS: usize = 256;
 
@@ -103,7 +132,7 @@ pub(crate) struct Guest {
     owners: Rc<Owners>,
     viewers: RefCell<Vec<Rc<Viewer>>>,
     /// The reads it watches, by its key, with the value last pushed.
-    watches: RefCell<BTreeMap<String, (HostRequest, Option<serde_json::Value>)>>,
+    watches: RefCell<BTreeMap<String, (HostRequest, Option<u64>)>>,
     watcher: RefCell<Option<Disposer>>,
     disposed: Cell<bool>,
 }
@@ -343,7 +372,6 @@ impl Guest {
         }
     }
 
-    /// Pushes the value of `request` under `key` now, and each time it changes.
     /// Pushes the value of `request` under `key` now, and each time it changes. A plugin watches at most [`WATCHES`]
     /// reads, each evaluated on the UI thread as the host changes (review carbon-8).
     pub(crate) fn watch(self: &Rc<Self>, key: String, request: HostRequest) {
@@ -355,15 +383,32 @@ impl Guest {
             log::warn!("plugin {}: a watch of {key} is over {WATCHES} reads; it is not watched", self.id());
             return;
         }
-        let value = self.evaluate(&request);
-        watches.insert(key.clone(), (request, Some(value.clone())));
+        let (value, hash) = self.evaluate(&request);
+        watches.insert(key.clone(), (request, Some(hash)));
         drop(watches);
-        self.send(Down::Snapshot { id: self.id().to_owned(), key, value }, None);
+        self.push(key, value);
     }
 
-    fn evaluate(&self, request: &HostRequest) -> serde_json::Value {
+    /// Pushes the value of the read `key` watches: as a failed read when it is over [`READ`] bytes of JSON, which the
+    /// plugin reads as nothing, and can ask why; the plugin goes on (review: bound each read).
+    fn push(&self, key: String, value: serde_json::Value) {
+        let bytes = Measure::of(&value).bytes;
+        let (value, error) = match bytes > READ {
+            true => {
+                log::warn!("plugin {}: the read it watches as {key} is {bytes} bytes, over {READ}", self.id());
+                (serde_json::Value::Null, Some(format!("the read is {bytes} bytes, over {READ}")))
+            }
+            false => (value, None),
+        };
+        self.send(Down::Snapshot { id: self.id().to_owned(), key, value, error }, None);
+    }
+
+    /// The read's value now, and a hash of its JSON, which tells a change without keeping the value.
+    fn evaluate(&self, request: &HostRequest) -> (serde_json::Value, u64) {
         let keys = self.loaded.manifest.storage.clone();
-        super::evaluate(&self.host, self.id(), keys, Some(self.owners.clone()), request)
+        let value = super::evaluate(&self.host, self.id(), keys, Some(self.owners.clone()), request);
+        let hash = std::hash::Hasher::finish(&Measure::of(&value).hasher);
+        (value, hash)
     }
 
     pub(crate) fn unwatch(&self, key: &str) {
@@ -380,16 +425,16 @@ impl Guest {
             watches
                 .iter_mut()
                 .filter_map(|(key, (request, last))| {
-                    let value = self.evaluate(request);
-                    (last.as_ref() != Some(&value)).then(|| {
-                        *last = Some(value.clone());
+                    let (value, hash) = self.evaluate(request);
+                    (*last != Some(hash)).then(|| {
+                        *last = Some(hash);
                         (key.clone(), value)
                     })
                 })
                 .collect()
         };
         for (key, value) in changed {
-            self.send(Down::Snapshot { id: self.id().to_owned(), key, value }, None);
+            self.push(key, value);
         }
     }
 }
