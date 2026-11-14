@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import { takeDraft } from "../src/component/prompt/draft-stash"
+import { saveDraft, takeDraft } from "../src/component/prompt/draft-stash"
+import { emptyPrompt, type PromptInfo } from "../src/prompt/history"
 import { createAppFixture } from "./fixture/app"
 import { agent, model, session } from "./fixture/local"
 import { directory, json } from "./fixture/tui-client"
@@ -17,10 +18,11 @@ test("the prompt keeps pasted control characters and drops escape sequences", as
   expect(setup.renderer.currentFocusedEditor?.plainText).toBe("xa\fbc\0d")
 })
 
-test.each(["whole", "fragment"])("undo submits the restored %s paste chip", async (kind) => {
+async function promptApp(seed?: PromptInfo) {
   const sessionID = `ses_paste_${crypto.randomUUID()}`
-  const prompted = Promise.withResolvers<string>()
-  await using setup = await createAppFixture({
+  const prompted = Promise.withResolvers<any>()
+  if (seed) saveDraft(sessionID, { prompt: seed, cursor: Infinity })
+  const setup = await createAppFixture({
     args: { sessionID },
     fetch: async (url, request) => {
       const location = { directory }
@@ -29,15 +31,20 @@ test.each(["whole", "fragment"])("undo submits the restored %s paste chip", asyn
       if (url.pathname === `/api/session/${sessionID}`) return json({ data: session(sessionID) })
       if (url.pathname.endsWith("/message") || url.pathname.endsWith("/inbox")) return json({ data: [], cursor: {} })
       if (url.pathname.endsWith("/prompt")) {
-        prompted.resolve((await request.json()).text)
+        prompted.resolve(await request.json())
         return json({ data: {} })
       }
     },
   })
   await setup.ready
   await setup.waitForFrame((frame) => frame.includes("Paste Model"))
+  return { setup, prompted: prompted.promise, text: () => setup.renderer.currentFocusedEditor?.plainText }
+}
+
+test.each(["whole", "fragment"])("undo submits the restored %s paste chip", async (kind) => {
+  const { setup, prompted, text } = await promptApp()
+  await using _ = setup
   const pasted = "one\ntwo\nthree\nfour"
-  const text = () => setup.renderer.currentFocusedEditor?.plainText
   await setup.mockInput.pasteBracketedText(pasted)
   await setup.waitFor(() => text() === "[Pasted ~4 lines] ")
   if (kind === "fragment") {
@@ -49,5 +56,26 @@ test.each(["whole", "fragment"])("undo submits the restored %s paste chip", asyn
   setup.mockInput.pressKey("z", { super: true })
   await setup.waitFor(() => text() === (kind === "whole" ? "[Pasted ~4 lines] " : "[Pasted ~4 "))
   setup.mockInput.pressEnter()
-  expect(await prompted.promise).toBe(kind === "whole" ? `${pasted} ` : "[Pasted ~4 ")
+  expect((await prompted).text).toBe(kind === "whole" ? `${pasted} ` : "[Pasted ~4 ")
+})
+
+const mention = (text: string) => ({ start: 4, end: 4 + text.length, text })
+test.each([
+  ["files", { uri: "file:///repo/a.ts", name: "a.ts", mention: mention("@a.ts") }],
+  ["agents", { name: "explore", mention: mention("@explore") }],
+  ["skills", { id: "review", mention: mention("@review") }],
+] as const)("undo submits the restored %s chip with its attachment", async (kind, part) => {
+  const { setup, prompted, text } = await promptApp({
+    ...emptyPrompt(),
+    text: `see ${part.mention.text} `,
+    [kind]: [structuredClone(part)],
+  })
+  await using _ = setup
+  await setup.waitFor(() => text() === `see ${part.mention.text} `)
+  setup.mockInput.pressKey("u", { ctrl: true })
+  await setup.waitFor(() => text() === "")
+  setup.mockInput.pressKey("z", { super: true })
+  await setup.waitFor(() => text() === `see ${part.mention.text} `)
+  setup.mockInput.pressEnter()
+  expect((await prompted)[kind]).toEqual([part])
 })

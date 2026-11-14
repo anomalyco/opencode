@@ -32,7 +32,7 @@ import { useTheme } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "../../util/locale"
-import type { PromptInfo, PromptPartRef } from "../../prompt/history"
+import type { ChipData, PromptInfo, PromptPartRef } from "../../prompt/history"
 import { useFrecency } from "../../prompt/frecency"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { mentionTriggerIndex, slashTriggerIndex } from "../../prompt/display"
@@ -204,6 +204,7 @@ export function Autocomplete(props: {
       virtual: true,
       styleId,
       typeId: props.promptPartTypeId(),
+      data: { [part.type]: part.value } satisfies ChipData,
     })
 
     props.setPrompt((draft) => {

@@ -619,11 +619,8 @@ export function createPromptState(input: PromptInput): PromptState {
     let tracked = 0
     for (const item of area.extmarks.getAllForTypeId(type)) {
       const idx = marks.get(item.id)
-      if (idx === undefined) {
-        continue
-      }
-
-      const part = parts[idx]
+      // Undo restores a deleted chip's mark, with its part as data, after the part left `parts`.
+      const part: Mention | undefined = idx === undefined ? item.data : parts[idx]
       if (!part) {
         continue
       }
@@ -653,6 +650,10 @@ export function createPromptState(input: PromptInput): PromptState {
         copy.source.text.value = text
       }
 
+      if (idx === undefined) {
+        next.push(copy)
+        continue
+      }
       tracked += 1
       next[idx] = copy
     }
@@ -697,6 +698,7 @@ export function createPromptState(input: PromptInput): PromptState {
         end,
         virtual: true,
         typeId: type,
+        data: item,
       })
       marks.set(id, idx)
     })
@@ -846,15 +848,16 @@ export function createPromptState(input: PromptInput): PromptState {
     area.insertText(value + " ")
     const end = area.cursorOffset - 1
     const start = end - measure(value)
-    const id = area.extmarks.create({ start, end, virtual: true, typeId: type })
-    marks.set(id, parts.length)
-    parts.push({
+    const part: Mention = {
       type: "file",
       url: file.uri,
       filename: file.filename,
       mime: file.uri.slice(5, file.uri.indexOf(";")),
       source: { type: "file", text: { start, end, value } },
-    })
+    }
+    const id = area.extmarks.create({ start, end, virtual: true, typeId: type, data: part })
+    marks.set(id, parts.length)
+    parts.push(part)
     syncDraft()
   }
 
@@ -1125,6 +1128,7 @@ export function createPromptState(input: PromptInput): PromptState {
       end: endOffset,
       virtual: true,
       typeId: type,
+      data: part,
     })
     marks.set(id, parts.length)
     parts.push(part)
