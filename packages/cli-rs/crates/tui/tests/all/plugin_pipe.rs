@@ -2301,3 +2301,31 @@ fn the_tui_ending_leaves_nothing_its_plugins_started() {
     let _ = std::fs::remove_file(&pids);
     assert!(left.is_empty(), "{left:?} outlived the TUI");
 }
+
+// Expected (Pl on the pipe): a JS plugin's trees, content and watched reads are charged like the others'. The lab's
+// slot holds its nodes and its content; with no room left in its content share, a watched read that grows is not
+// pushed (the plugin reads nothing and can ask why) and goes on, and with none at all its diff's new content shows the
+// placeholder.
+#[test]
+fn a_js_plugins_trees_content_and_reads_are_held_to_the_limits() {
+    use opencode_plugin::limits::{self, Limits};
+    let Some(config) = config() else { return };
+    let pipe = lab(config);
+    let held = limits::held(LAB);
+    assert!(held.nodes > 0 && held.content > 0, "the lab holds {held:?}");
+    let share = |content: u64| limits::set(Limits { plugin_content: content, ..Limits::default() });
+    {
+        let _limits = share(held.content);
+        pipe.harness.tui.keymap.dispatch("lab.store", Some(&"y".repeat(500)));
+        pipe.settle();
+        shows(&pipe, "note=null");
+        pipe.harness.tui.keymap.dispatch("lab.readerror", None);
+        let error = toasted(&pipe, "read error");
+        assert!(error.contains("past what the plugin may hold"), "{error}");
+        assert_eq!(pipe.status(LAB), Some(Status::Active));
+    }
+    let _limits = share(0);
+    pipe.harness.tui.keymap.dispatch("lab.c", None);
+    pipe.settle();
+    shows(&pipe, "⋯ its content is past what the plugin may hold");
+}
