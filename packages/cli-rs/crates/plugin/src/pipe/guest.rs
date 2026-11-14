@@ -499,6 +499,16 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
         );
         guest.revoked.borrow_mut().extend(subscription);
     }
+    // P6b: a plugin that declares it hears that the plugin list changed. TS gives its plugins no list, so the JS host
+    // declares it for none today; the pipe carries it as the other carriers do.
+    if manifest.plugins {
+        let heard = Rc::downgrade(guest);
+        setup.on_plugins(Rc::new(move || {
+            if let Some(guest) = heard.upgrade() {
+                guest.call("on-plugins", Request::Plugins, false);
+            }
+        }));
+    }
     // P2: the layers of setup, each with its own handler, the activation's. Searches answer at once, which the JS host
     // cannot: it registers none.
     for (index, layer) in manifest.layers.iter().enumerate() {
