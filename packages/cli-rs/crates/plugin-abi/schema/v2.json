@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "opencode plugin contract 2.0",
-  "description": "Generated from opencode_plugin_abi::v2 by `examples/schema.rs`; do not edit. The root is a Node, the tree a view returns; SurfaceInput and MountId are what a view gets.",
+  "description": "Generated from opencode_plugin_abi::v2 by `examples/schema.rs`; do not edit. The root is a Node, the tree a view returns; SurfaceInput and MountId are what a view gets, and Frame what a draw gets.",
   "$ref": "#/$defs/Node",
   "$defs": {
     "Node": {
@@ -437,6 +437,50 @@
       },
       "required": ["width", "height", "palette"],
       "description": "What a surface's view gets besides the plugin's own state."
+    },
+    "Frame": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "cause": {
+          "$ref": "#/$defs/Cause"
+        },
+        "dt": {
+          "$ref": "#/$defs/Duration"
+        }
+      },
+      "required": ["width", "height", "cause", "dt"],
+      "description": "The frame a canvas draws for: its size in cells, why, and the animation's time."
+    },
+    "Cause": {
+      "type": "string",
+      "enum": ["first", "resized", "version", "animate"]
+    },
+    "Duration": {
+      "type": "object",
+      "properties": {
+        "secs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "nanos": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999999999
+        }
+      },
+      "required": ["secs", "nanos"],
+      "description": "A span of time in whole seconds and nanoseconds, as serde writes `std::time::Duration`."
     },
     "Palette": {
       "type": "object",

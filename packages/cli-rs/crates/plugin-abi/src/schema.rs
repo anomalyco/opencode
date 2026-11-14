@@ -6,7 +6,7 @@
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::v2::{ContentRef, DiffView, Mode, MountId, Node, Palette, PartRef, Source, SurfaceInput};
+use crate::v2::{Cause, ContentRef, DiffView, Frame, Mode, MountId, Node, Palette, PartRef, Source, SurfaceInput};
 use crate::{
     Action, Align, Border, BorderStyle, Click, Color, Edges, Justify, Layout, Overflow, Press, Sides, Span, TitleAlign,
     Width, Wrap,
@@ -71,7 +71,8 @@ macro_rules! unit {
 }
 
 /// The JSON Schema of contract 2.0. The root is a [`Node`], the tree a view returns; a host validates what a view
-/// gets against `#/$defs/SurfaceInput` and a mount against `#/$defs/MountId`.
+/// gets against `#/$defs/SurfaceInput`, a mount against `#/$defs/MountId`, and what a draw gets against
+/// `#/$defs/Frame`.
 pub fn schema() -> Value {
     let defs: Vec<(&str, Value)> = vec![
         (
@@ -122,6 +123,22 @@ pub fn schema() -> Value {
             object!(SurfaceInput, "What a surface's view gets besides the plugin's own state.", {
             width: uint16(), height: uint16(), palette: reference("Palette"),
         } { full: boolean() }),
+        ),
+        (
+            "Frame",
+            object!(Frame, "The frame a canvas draws for: its size in cells, why, and the animation's time.", {
+            width: uint16(), height: uint16(), cause: reference("Cause"), dt: reference("Duration"),
+        } { }),
+        ),
+        ("Cause", unit!(Cause { First, Resized, Version, Animate })),
+        (
+            "Duration",
+            object(
+                &[("secs", uint64()), ("nanos", json!({ "type": "integer", "minimum": 0, "maximum": 999_999_999 }))],
+                &[],
+                None,
+                "A span of time in whole seconds and nanoseconds, as serde writes `std::time::Duration`.",
+            ),
         ),
         (
             "Palette",
@@ -213,7 +230,8 @@ pub fn schema() -> Value {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": "opencode plugin contract 2.0",
         "description": "Generated from opencode_plugin_abi::v2 by `examples/schema.rs`; do not edit. The root is a Node, \
-                        the tree a view returns; SurfaceInput and MountId are what a view gets.",
+                        the tree a view returns; SurfaceInput and MountId are what a view gets, and Frame what a \
+                        draw gets.",
         "$ref": "#/$defs/Node",
         "$defs": defs,
     })
@@ -460,6 +478,14 @@ mod tests {
         assert!(agree::<SurfaceInput>("SurfaceInput", serde_json::to_value(&input).unwrap()));
         let mount = MountId { surface: "s".into(), key: "k".into(), generation: 3 };
         assert!(agree::<MountId>("MountId", serde_json::to_value(&mount).unwrap()));
+        for cause in [Cause::First, Cause::Resized, Cause::Version, Cause::Animate] {
+            let frame = Frame { width: 3, height: 2, cause, dt: std::time::Duration::new(1, 999_999_999) };
+            assert!(agree::<Frame>("Frame", serde_json::to_value(frame).unwrap()), "{frame:?}");
+        }
+        let frame = |cause: Value, dt: Value| json!({ "width": 1, "height": 1, "cause": cause, "dt": dt });
+        assert!(!agree::<Frame>("Frame", frame(json!("drawn"), json!({ "secs": 0, "nanos": 0 }))));
+        assert!(!agree::<Frame>("Frame", frame(json!("first"), json!({ "secs": 0 }))));
+        assert!(!agree::<Frame>("Frame", frame(json!("first"), json!({ "secs": -1, "nanos": 0 }))));
         let refused = [
             json!({ "type": "text" }),
             json!({ "type": "image", "id": "x" }),
