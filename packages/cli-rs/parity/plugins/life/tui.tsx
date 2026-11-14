@@ -1,5 +1,5 @@
 // The plugin of the life machine (parity/machines/plugins.json), TypeScript side: a line in home.footer that shows A
-// or B, and six palette commands. Life flip flips the line, Life throw throws, Life arm makes the next setup throw,
+// or B, then the pending keys while a sequence is pending, and six palette commands. Life flip flips the line, Life throw throws, Life arm makes the next setup throw,
 // Life dialog opens a prompt, Life confirm asks whether to flip the line, and Life alert flips it once it closes. The TS reader copies this file and rewrites `build` to reload it. Its Rust twin is
 // `life` in crates/tui/tests/all/plugin_machines.rs; each is checked against the file, not against the other.
 import type { Context } from "../../../../plugin/src/tui/plugin"
@@ -18,6 +18,14 @@ export default {
     if (armed.delete(run)) throw new Error("life setup armed to throw")
     const [side, setSide] = createSignal("A")
     const flip = () => setSide(side() === "A" ? "B" : "A")
+    // The pending key sequence (Rust ABI 1.6 `keymap_pending`), after the line while one is pending.
+    const keys = () => {
+      const pending = context.keymap
+        .pending()
+        .map((part) => part.key)
+        .join(" ")
+      return pending ? ` keys ${pending}` : ""
+    }
     context.keymap.layer(() => ({
       mode: "global",
       commands: [
@@ -77,6 +85,7 @@ export default {
         <box paddingLeft={2}>
           <text fg={context.theme.text.muted}>
             life plugin: {side()} build {build}
+            {keys()}
           </text>
         </box>
       ),
