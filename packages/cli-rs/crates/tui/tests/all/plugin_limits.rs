@@ -801,3 +801,53 @@ fn panels_and_overlays_are_held_to_the_limits() {
         assert_eq!(limits::held(ID).nodes, 0, "{carrier:?}: held once they closed");
     }
 }
+
+/// A tree at the client's limits ([`Limits::default`]) with `extra` texts more: a column of a chain of 62 boxes around
+/// a text (64 layout levels, the deepest a tree may nest), a list of 8,500 items of a box and a text, then 2,935 texts
+/// and the extra ones. So it builds 3,000 rows at once and holds 20,000 nodes, and an extra text is the last to cross.
+fn at_the_limits(extra: usize) -> v2::Node {
+    let mut chain = text("deepest");
+    for _ in 0..62 {
+        chain = v2::Node::column(vec![chain]);
+    }
+    let items = (0..8_500)
+        .map(|index| v2::ListItem {
+            node: v2::Node::row(vec![text(&format!("item {index}"))]).with_id(format!("i{index}")),
+            estimate: 1,
+        })
+        .collect();
+    let mut children = vec![chain, v2::Node::list(items).with_id("list")];
+    children.extend((0..2_935 + extra).map(|index| text(&format!("t{index}"))));
+    v2::Node::column(children)
+}
+
+// Expected (`limits`, 4.2): a tree at every limit of the client at once (its rows, its nodes and its depth) is
+// adopted whole and its frame renders: no plugin tree reaches OpenTUI's layout limits. One text more shows that text's
+// placeholder, and nothing else changes; on the linked carrier, on a thread with the UI thread's stack.
+#[test]
+fn a_tree_at_the_clients_limits_renders() {
+    let run = std::thread::Builder::new().stack_size(8 << 20).spawn(|| {
+        let harness = open(Carrier::Linked);
+        let before = reconcile::work();
+        let tree = Rc::new(at_the_limits(0));
+        show(&harness, subject(move |_| (*tree).clone()));
+        assert!(harness.app.try_render().is_ok(), "the frame at the limits failed");
+        assert_eq!(reconcile::work().since(before).placeholders, 0, "a placeholder at the limits");
+        assert_eq!(limits::held(ID).nodes, 20_000);
+        let over = Rc::new(at_the_limits(1));
+        let frame = show(&harness, subject(move |_| (*over).clone()));
+        // The placeholder costs nothing.
+        assert_eq!(limits::held(ID).nodes, 20_000, "held past the limits");
+        let twin = {
+            let _limits = support::unlimited();
+            let mut expected = at_the_limits(0);
+            if let v2::Node::Box { children, .. } = &mut expected {
+                children.push(placeholder(None, "too large to build at once"));
+            }
+            let expected = Rc::new(expected);
+            show(&harness, subject(move |_| (*expected).clone()))
+        };
+        assert!(frame.cells == twin.cells, "not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
+    });
+    run.unwrap().join().unwrap();
+}
