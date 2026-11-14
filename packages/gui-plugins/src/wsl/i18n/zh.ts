@@ -38,6 +38,7 @@ export default {
   "error.installDistro": "无法安装发行版：{{distro}}",
   "error.installOpencode": "OpenCode 安装失败",
   "error.alreadyAdded": "已添加 {{distro}}",
+  "error.busy": "{{distro}} 正在处理其他任务。请等它完成后再试。",
   "error.opencodeMissing": "此发行版中未安装 opencode",
   "error.opencodeCannotRun": "已安装 opencode，但无法运行",
   "error.opencodeNotInstalled": "{{distro}} 中未安装 OpenCode",
