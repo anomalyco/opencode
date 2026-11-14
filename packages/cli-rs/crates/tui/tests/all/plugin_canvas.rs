@@ -1423,3 +1423,102 @@ fn a_version_leaves_the_canvas_its_size() {
     let causes = [v2::Cause::First, v2::Cause::Version, v2::Cause::Version, v2::Cause::Version];
     assert_eq!(draws, causes.map(|cause| (size.0, size.1, cause)));
 }
+
+/// How the contained canvas's next draw fails: a panic, or 150 ms on the monitor's clock.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Fault {
+    Panic,
+    Overrun,
+}
+
+thread_local! {
+    static PAINT_FAULT: std::cell::Cell<Option<Fault>> = const { std::cell::Cell::new(None) };
+    /// What the record named and whether a panic would unwind to the host's catch, in each draw.
+    static PAINT_SEEN: RefCell<Vec<(Option<String>, bool)>> = const { RefCell::new(Vec::new()) };
+    static PAINT_CLOCK: std::cell::Cell<Duration> = const { std::cell::Cell::new(Duration::ZERO) };
+    static PAINT_RECORD: RefCell<Option<Arc<opencode_plugin::contain::Record>>> = const { RefCell::new(None) };
+}
+
+/// A built-in with one animating canvas on route `paint`, whose draw notes what the record names and fails as armed.
+fn paint_setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let view = |_: &mut v2::View<'_>| {
+        v2::Node::column(vec![v2::Node::canvas("c").animate(true).layout(abi::Layout {
+            width: Some(abi::Width::Cells(8)),
+            height: Some(abi::Width::Cells(2)),
+            ..abi::Layout::default()
+        })])
+    };
+    setup.surface(v2::Surface::new("paint", v2::Place::Route("paint".into()), view).draw(|_| {
+        let named = PAINT_RECORD.with_borrow(|record| {
+            let running = record.as_ref()?.running()?;
+            opencode_plugin::contain::record::KINDS.get(usize::from(running.kind)).map(|kind| (*kind).to_owned())
+        });
+        PAINT_SEEN.with_borrow_mut(|seen| seen.push((named, opencode_plugin::contain::catching())));
+        match PAINT_FAULT.take() {
+            Some(Fault::Panic) => panic!("the canvas's draw panics"),
+            Some(Fault::Overrun) => PAINT_CLOCK.set(PAINT_CLOCK.get() + Duration::from_millis(150)),
+            None => {}
+        }
+        let mut list = List::new();
+        list.text(0, 0, "painted", list::Style::new().fg(abi::Rgba::new(255, 255, 255, 255)));
+        Some(list)
+    }));
+    Ok(())
+}
+
+// Expected (P4c on P5, `isolation`, `reported-once`, `record-balanced` for a draw): a canvas's draw is a plugin call
+// like any other. Inside it the record names `draw` and a panic would unwind to the host's catch. The plugin is a
+// built-in, so a draw over the budget is a counted host bug and fails nothing. A draw that panics fails the plugin
+// once, named "draw panicked": its route shows nothing, its canvas, list and animation go (no draw, no frame after),
+// and the record names nobody.
+#[test]
+fn a_canvas_draw_is_contained() {
+    use opencode_plugin::contain::{Crash, Record};
+    let root = opencode_util::temp::tempdir().unwrap();
+    let record = Arc::new(Record::create(root.path()).unwrap());
+    PAINT_RECORD.set(Some(record.clone()));
+    PAINT_SEEN.take();
+    PAINT_FAULT.set(None);
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![abi::Plugin { id: "test.paint", setup: paint_setup }.into()],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let contain = opencode_tui::plugins::contain::Contain { record: Some(record), ..Default::default() };
+    let harness = support::mount_on(TestApp::new(80, 24), deps, opencode_tui::Args { contain, ..Default::default() });
+    let (app, tui) = (&harness.app, &harness.tui);
+    let base = std::time::Instant::now();
+    tui.plugins.monitor().set_clock(move || base + PAINT_CLOCK.get());
+    let status = || tui.plugins.entries().into_iter().find(|entry| entry.id == "test.paint").unwrap().status;
+    let baseline = host::ledger();
+    tui.navigate(Route::Plugin { id: "test.paint".to_owned(), name: "paint".to_owned() });
+    for _ in 0..3 {
+        let _ = frame(&harness, Duration::from_millis(16));
+    }
+    assert!(app.render().text().contains("painted"));
+
+    PAINT_FAULT.set(Some(Fault::Overrun));
+    let _ = frame(&harness, Duration::from_millis(16));
+    assert_eq!((tui.plugins.monitor().host_overruns(), status()), (1, opencode_plugin::Status::Active));
+    let seen = PAINT_SEEN.take();
+    assert!(seen.len() >= 4 && seen.iter().all(|seen| *seen == (Some("draw".to_owned()), true)), "{seen:?}");
+
+    PAINT_FAULT.set(Some(Fault::Panic));
+    let _ = frame(&harness, Duration::from_millis(16));
+    let _ = frame(&harness, Duration::from_millis(16));
+    let status = status();
+    assert!(
+        matches!(status, opencode_plugin::Status::Failed(ref error) if error.contains("draw panicked: the canvas's draw panics")),
+        "{status:?}"
+    );
+    let drawn = PAINT_SEEN.with_borrow(Vec::len);
+    for _ in 0..3 {
+        let _ = frame(&harness, Duration::from_millis(16));
+    }
+    assert_eq!(PAINT_SEEN.with_borrow(Vec::len), drawn, "a failed plugin's canvas was drawn");
+    assert!(!app.render().text().contains("painted"));
+    assert!(!app.needs_frame(), "a failed plugin's canvas animates");
+    assert_eq!(host::ledger(), baseline);
+    assert_eq!(tui.plugins.monitor().record().unwrap().crash(), Crash::default(), "the record names nobody after");
+    PAINT_RECORD.set(None);
+}
