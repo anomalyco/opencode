@@ -191,10 +191,27 @@ fn pick(tui: &Tui, owner: Owner, select: abi::Select) {
                     }
                 })));
                 props.actions = actions(&tui, &picker);
+                // A row that toggles a plugin shows what enter does to it, from the plugin's state, not the row's.
+                let hinted = Rc::downgrade(&picker);
+                props.dynamic_hints = Some(Rc::new(bind!(tui.weak(), |tui| {
+                    let Some(picker) = hinted.upgrade() else { return Vec::new() };
+                    let selected = picker.handle.borrow().as_ref().and_then(|handle| handle.selected());
+                    let plugin = selected.and_then(|selected| {
+                        let shown = picker.shown.borrow();
+                        shown.options.iter().find(|option| option.value == selected.value).and_then(|option| option.toggle.clone())
+                    });
+                    let Some(active) = plugin.and_then(|plugin| toggled(&tui, &plugin)) else { return Vec::new() };
+                    vec![opencode_ui::select::FooterHint {
+                        title: if active { "disable" } else { "enable" }.to_owned(),
+                        label: "enter".to_owned(),
+                        group: Some(opencode_ui::select::Group::Primary),
+                    }]
+                }, else Vec::new())));
                 props.bindings = binds(&tui, &picker);
                 let (view, handle) = opencode_ui::select::select(cx, props);
+                *picker.handle.borrow_mut() = Some(handle.clone());
+                // The first footer was drawn before the hints could see the selection.
                 handle.refresh_footer();
-                *picker.handle.borrow_mut() = Some(handle);
                 view
             }, else View::new(&cx.app)),
             Some(on_close),
@@ -293,11 +310,11 @@ fn options(tui: &Tui, theme: &opencode_ui::theme::Theme, select: &abi::Select) -
         .collect()
 }
 
-/// The select's footer actions on the selected row, and the host's `enable`/`disable` on a row that toggles.
+/// The select's footer actions on the selected row.
 fn actions(tui: &Tui, picker: &Rc<Picker>) -> Vec<opencode_ui::select::SelectAction<String>> {
-    use opencode_ui::select::{ActionRun, Group, SelectAction};
+    use opencode_ui::select::{Group, SelectAction};
     let shown = picker.shown.borrow().clone();
-    let mut actions: Vec<SelectAction<String>> = shown
+    shown
         .actions
         .iter()
         .enumerate()
@@ -322,40 +339,7 @@ fn actions(tui: &Tui, picker: &Rc<Picker>) -> Vec<opencode_ui::select::SelectAct
                 )
             }
         })
-        .collect();
-    if shown.options.iter().any(|option| option.toggle.is_some()) {
-        let (titled, hidden, ran) = (Rc::downgrade(picker), Rc::downgrade(picker), Rc::downgrade(picker));
-        let target = |picker: &Picker, value: &str| {
-            picker
-                .shown
-                .borrow()
-                .options
-                .iter()
-                .find(|option| option.value == value)
-                .and_then(|option| option.toggle.clone())
-        };
-        actions.push(SelectAction {
-            title: Rc::new(bind!(tui.weak(), |tui, option: Option<&SelectOption<String>>| {
-                let plugin = titled.upgrade().zip(option).and_then(|(picker, option)| target(&picker, &option.value));
-                match plugin.and_then(|plugin| toggled(&tui, &plugin)) {
-                    Some(true) => "disable".to_owned(),
-                    Some(false) => "enable".to_owned(),
-                    None => "toggle".to_owned(),
-                }
-            }, else "toggle".to_owned())),
-            group: Some(Group::Primary),
-            hidden_when: Some(Rc::new(move |option: Option<&SelectOption<String>>| {
-                hidden.upgrade().zip(option).and_then(|(picker, option)| target(&picker, &option.value)).is_none()
-            })),
-            run: ActionRun::Selected(Rc::new(bind!(tui.weak(), |tui, option: &SelectOption<String>| {
-                if let Some(picker) = ran.upgrade() {
-                    picker.choose(&tui, &option.value);
-                }
-            }))),
-            ..SelectAction::new("plugin.select.toggle", "toggle", |_| {})
-        });
-    }
-    actions
+        .collect()
 }
 
 /// The select's extra keys: each runs its action with the selected row's value.
