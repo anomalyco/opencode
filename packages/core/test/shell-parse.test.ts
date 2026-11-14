@@ -229,9 +229,9 @@ describe("ShellParse", () => {
 
   test("extracts PowerShell directory parameters", async () => {
     const result = await Effect.runPromise(
-      ShellParse.scan("Set-Location -LiteralPath '..\\outside'; Get-ChildItem", "pwsh", "C:\\workspace"),
+      ShellParse.scan("Set-Location -LiteralPath '..\\outside'; sl '..\\other'; Get-ChildItem", "pwsh", "C:\\workspace"),
     )
-    expect(result.directories).toEqual(["..\\outside"])
+    expect(result.directories).toEqual(["..\\outside", "..\\other"])
   })
 
   test("expands deterministic directory variables", async () => {
