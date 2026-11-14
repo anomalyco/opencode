@@ -94,12 +94,15 @@ pub struct File {
     pub additions: i64,
     pub deletions: i64,
     pub status: tree::Status,
+    /// The patch's lines, counted once a load: a card's estimate, which every view gives.
+    pub lines: u16,
 }
 
 impl From<FileDiffInfo> for File {
     fn from(info: FileDiffInfo) -> Self {
         Self {
             file: info.file,
+            lines: info.patch.lines().count().min(usize::from(u16::MAX)) as u16,
             patch: info.patch,
             additions: info.additions,
             deletions: info.deletions,

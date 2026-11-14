@@ -217,7 +217,7 @@ struct Card {
 
 /// The rows the host assumes a card takes until it is laid out: its header and a row a patch line.
 fn estimate(entry: &File, card: &Card) -> u16 {
-    let body = if is_image(&entry.file) { card.shape.image_height + 4 } else { entry.patch.lines().count() as u16 };
+    let body = if is_image(&entry.file) { card.shape.image_height + 4 } else { entry.lines };
     let body = if card.reviewed { 2 } else { body.saturating_add(super::viewer::FILE_HEADER_HEIGHT) };
     body.saturating_add(u16::from(card.gap)).max(1)
 }
