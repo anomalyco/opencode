@@ -22,6 +22,7 @@ export default Plugin.define({
     const [items, setItems] = createSignal<string[]>([])
     const [mode, setMode] = createSignal("ok")
     const [shown, setShown] = createSignal(0)
+    const Commands = () => <text>{`v2probe commands ${context.keymap.commands().length > 0}`}</text>
     log({ setup: true })
     context.keymap.layer(() => ({
       commands: [
@@ -146,13 +147,16 @@ export default Plugin.define({
             )
           }}
           <text visible={false}>hidden text</text>
-          {/* Read once, as an installed package's JSX reads it: the read comes before the render that shows it. */}
-          <text>{`v2probe dir ${context.data.location.default().directory}`}</text>
+          {/* Read once, in a component's body, as an installed package's JSX reads it: the host's value comes after
+              the render that read it. */}
+          <Commands />
+
         </box>
       ),
     })
-    // A path the host does not publish: the claim goes to its nearest published ancestor, appended, as in TS.
-    context.ui.slot({ append: "home.footer.custom", render: () => <text>v2probe degraded claim</text> })
+    // A path the host does not publish: the claim goes to its nearest published ancestor, appended, as in TS, so it
+    // replaces nothing there.
+    context.ui.slot({ replace: "home.footer.custom", render: () => <text>v2probe degraded claim</text> })
     // Always shown: the route as the host pushes it, which follows navigation.
     context.ui.slot({
       append: "app",
