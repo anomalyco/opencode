@@ -1,7 +1,7 @@
 //! The spinner: `component/spinner.tsx` and `component/spinner-renderable.ts`.
 
 use super::text::{paint_shaded, shimmer_strength_at};
-use super::{Clock, OneCellMotion, channels, millis, one_cell_frame, rgba, running, tick_every, tick_frames};
+use super::{Clock, Drawn, OneCellMotion, channels, millis, one_cell_frame, rgba, running, tick_every, tick_frames};
 use opentui::App;
 use opentui::prelude::*;
 use opentui::widget::{Component, Constraint, Custom, Element, Painter, Widget};
@@ -69,8 +69,7 @@ struct SpinnerView {
     clock: Clock,
     /// A sequenced one-cell motion and the age it starts at: its frame and level follow the time, not the glyphs.
     sequence: Option<(OneCellMotion, Duration)>,
-    /// Painted since the last tick of the stepped driver.
-    painted: Rc<Cell<bool>>,
+    drawn: Rc<Drawn>,
 }
 
 impl Spinner {
@@ -85,7 +84,7 @@ impl Spinner {
             still: "⋯".to_owned(),
             clock: Clock::default(),
             sequence: None,
-            painted: Rc::new(Cell::new(false)),
+            drawn: Rc::default(),
         };
         let spinner = Self { widget: Custom::measured(app, view).shrink(0.0), app: app.clone() };
         spinner.restart();
@@ -198,18 +197,18 @@ impl Spinner {
 
     /// Replaces the clock, which stops the old driver, and starts the one the settings need.
     fn restart(&self) {
-        let (clock, interval, every_frame, painted) = self.widget.update(|view| {
+        let (clock, interval, every_frame, drawn) = self.widget.update(|view| {
             view.clock = Rc::new(Cell::new(view.clock.get()));
             let moving = view.animations && (view.glyphs.len() > 1 || view.shimmer.is_some());
-            (moving.then(|| Rc::clone(&view.clock)), view.interval, view.shimmer.is_some(), Rc::clone(&view.painted))
+            (moving.then(|| Rc::clone(&view.clock)), view.interval, view.shimmer.is_some(), Rc::clone(&view.drawn))
         });
         let Some(clock) = clock else { return };
         if every_frame {
-            tick_frames(&self.app, &clock, None);
+            tick_frames(&self.app, &clock, None, Some(&drawn));
             return;
         }
         if !interval.is_zero() {
-            tick_every(&self.app, interval, &clock, &painted);
+            tick_every(&self.app, interval, &clock, &drawn);
         }
     }
 }
@@ -236,7 +235,7 @@ impl SpinnerView {
 
 impl Component for SpinnerView {
     fn paint(&self, painter: &mut Painter<'_>) {
-        self.painted.set(true);
+        self.drawn.paint(painter);
         let base = self.color.base();
         if !self.moving() {
             painter.text(0, 0, &self.line(), Style::new().fg(base).bg(Color::TRANSPARENT));

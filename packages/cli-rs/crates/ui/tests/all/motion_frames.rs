@@ -197,6 +197,13 @@ fn the_thread_switch_stops_and_resumes_every_driver() {
     app.advance(Duration::from_millis(80));
     assert!(app.needs_frame(), "motion did not resume");
     assert_eq!((spinner.frame(), late.frame()), (2, 1));
+    // The resumed drivers still stop while their widgets are not drawn.
+    row.visible(false);
+    for _ in 0..20 {
+        app.render();
+        app.advance(Duration::from_millis(80));
+    }
+    assert!(!app.needs_frame(), "a resumed driver runs while hidden");
 }
 
 #[test]
@@ -227,22 +234,79 @@ fn a_dropped_spinner_stops_its_timer() {
     assert!(!app.needs_frame());
 }
 
+/// Frames and wakeups in one second of the manual clock, in 1 ms steps under the real loop's 60 fps cap. A wakeup is
+/// a step in which a frame painted or the driver ticked, which moves `ticks`.
+fn idle(app: &TestApp, ticks: &dyn Fn() -> usize) -> (u32, u32) {
+    let (mut frames, mut wakeups, mut last, mut seen) = (0, 0, None, ticks());
+    for ms in 0..1000 {
+        app.advance(Duration::from_millis(1));
+        let frame = app.needs_frame() && last.is_none_or(|last| ms - last >= 17);
+        if frame {
+            app.render();
+            (frames, last) = (frames + 1, Some(ms));
+        }
+        let ticked = ticks() != seen;
+        seen = ticks();
+        wakeups += u32::from(ticked || frame);
+    }
+    (frames, wakeups)
+}
+
 #[test]
-fn a_hidden_spinner_requests_no_frames_until_shown() {
-    let app = test_app(12);
-    let row = View::new(&app).visible(false);
-    let spinner = Spinner::new(&app).label("Working");
-    row.add(&spinner);
-    app.root().add(&row);
-    app.render();
-    app.advance(Duration::from_millis(80));
-    app.render();
-    app.advance(Duration::from_millis(400));
-    assert!(!app.needs_frame(), "a hidden spinner keeps time without drawing");
-    row.visible(true);
-    assert_eq!((spinner.frame(), app.render().text()), (6, "⠦ Working".to_owned()));
-    app.advance(Duration::from_millis(80));
-    assert!(app.needs_frame(), "a shown spinner redraws on its interval again");
+fn an_undrawn_animation_costs_no_frames_and_no_wakeups() {
+    for widget in ["spinner", "shimmer spinner", "shimmer text"] {
+        for hide in ["hidden parent", "detached", "culled", "clipped"] {
+            let app = test_app(24);
+            let (animated, ticks): (AnyWidget, Box<dyn Fn() -> usize>) = match widget {
+                "spinner" => {
+                    let spinner = Spinner::new(&app).label("Working");
+                    (spinner.as_any(), Box::new(move || spinner.frame()))
+                }
+                "shimmer spinner" => {
+                    let spinner = Spinner::new(&app).shimmer(Some(TEXT)).label("Checking");
+                    (spinner.as_any(), Box::new(move || spinner.frame()))
+                }
+                _ => (ShimmerText::new(&app, "Checking").shimmer(TEXT).as_any(), Box::new(|| 0)),
+            };
+            let holder = View::new(&app).child(&animated);
+            // A scroll box culls rows out of view only among enough of them; with fewer it paints them clipped.
+            let (rows, offset) = if hide == "culled" { (20, 10.0) } else { (1, 1.0) };
+            let scroll = ScrollBox::new(&app).height(1);
+            scroll.add(&holder);
+            for row in 0..rows {
+                scroll.add(&Text::new(&app, format!("row {row}")));
+            }
+            app.root().add(&scroll);
+            let show = |shown: bool| match hide {
+                "hidden parent" => drop(holder.visible(shown)),
+                "detached" if shown => drop(holder.add(&animated)),
+                "detached" => animated.detach(),
+                _ => drop(scroll.scroll_to(0.0, if shown { 0.0 } else { offset })),
+            };
+            // TS: a stepped spinner ticks every 80 ms; shimmer moves on every frame.
+            let rate = if widget == "spinner" { 12..=13 } else { 58..=59 };
+            let case = format!("{widget}, {hide}");
+            let (frames, wakeups) = idle(&app, &ticks);
+            assert!(
+                rate.contains(&frames) && rate.contains(&wakeups),
+                "{case}: shown {frames} frames, {wakeups} wakeups"
+            );
+            show(false);
+            // The frame that hides it, a tick and its frame on the paint before it, and the tick that finds it hidden.
+            let (frames, wakeups) = idle(&app, &ticks);
+            assert!(frames <= 2 && wakeups <= 3, "{case}: hiding {frames} frames, {wakeups} wakeups");
+            assert_eq!(idle(&app, &ticks), (0, 0), "{case}: hidden");
+            show(true);
+            app.render();
+            // A timer armed in paint waits for the loop's next wakeup; the paint that resumes asks for one.
+            assert!(app.needs_frame(), "{case}: shown again with no frame to come");
+            let (frames, wakeups) = idle(&app, &ticks);
+            assert!(
+                rate.contains(&frames) && rate.contains(&wakeups),
+                "{case}: shown again {frames} frames, {wakeups} wakeups"
+            );
+        }
+    }
 }
 
 #[test]
