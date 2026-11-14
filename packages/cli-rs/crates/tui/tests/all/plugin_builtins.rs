@@ -85,6 +85,82 @@ fn a_streamed_delta_does_no_work_in_the_built_ins() {
     stream(&session(&[], Vec::new()), 20);
 }
 
+/// `ses_a` with `turns` question and answer pairs before, each answer with its tokens, on the C ABI carrier when `abi`.
+fn history(turns: u64, abi: bool) -> Harness {
+    let messages: Vec<Value> = (1..=turns)
+        .rev()
+        .flat_map(|turn| {
+            let created = turn * 10_000;
+            [
+                json!({
+                    "id": format!("msg_{turn:04}b"), "type": "assistant", "agent": "build",
+                    "model": { "providerID": "p", "id": "m" },
+                    "time": { "created": created + 1000, "completed": created + 2000 }, "finish": "stop",
+                    "tokens": { "input": 100, "output": 10, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+                    "content": [{ "type": "text", "text": format!("Answer {turn} one.\n\nAnswer {turn} two.") }],
+                }),
+                json!({ "id": format!("msg_{turn:04}a"), "type": "user", "text": format!("Question {turn}"),
+                        "time": { "created": created } }),
+            ]
+        })
+        .collect();
+    let fake = Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/session/ses_a/message") => (200, json!({ "data": messages, "cursor": {} })),
+        _ => support::base(seen, DIRECTORY),
+    });
+    let deps = Deps {
+        config: support::config(support::decode(r#"{ "animations": false }"#)),
+        abi_builtins: abi,
+        ..support::deps(Arc::new(fake))
+    };
+    let harness = support::mount(170, 34, deps);
+    harness.wait_for("Getting started");
+    if turns > 0 {
+        harness.wait_for(&format!("Answer {turns} two."));
+    }
+    settle(&harness);
+    harness
+}
+
+// Expected (`work`, per streamed update, on the C ABI carrier): a delta costs the built-ins the same calls and bytes
+// across the carrier with no history as with 200 turns before it. A view reads the message that changed, not the
+// session (P6a review, big-boi high 2). The counters are the loader's.
+#[test]
+fn a_streamed_delta_crosses_the_same_bytes_at_any_history() {
+    let per_delta = |turns| {
+        let harness = history(turns, true);
+        stream_crossed(&harness, 20)
+    };
+    let (none, long) = (per_delta(0), per_delta(200));
+    assert_eq!(none.calls, long.calls, "{none:?} {long:?}");
+    // The requests name generations and request ids, which may gain a digit or two a call.
+    let slack = 2 * none.calls;
+    assert!(
+        long.sent.abs_diff(none.sent) <= slack && long.received.abs_diff(none.received) <= slack,
+        "{none:?} {long:?}"
+    );
+}
+
+/// What crossed the C ABI while `count` deltas streamed into a reply of `ses_a`.
+fn stream_crossed(harness: &Harness, count: u64) -> opencode_plugin::loader::native::Crossed {
+    let id = "msg_live";
+    let started = json!({ "sessionID": "ses_a", "assistantMessageID": id, "agent": "build",
+                          "model": { "providerID": "p", "id": "m" }, "started": 1 });
+    harness.tui.data.apply(&[event("session.step.started", 1, started)]);
+    let text = json!({ "sessionID": "ses_a", "assistantMessageID": id, "ordinal": 0 });
+    harness.tui.data.apply(&[event("session.text.started", 2, text)]);
+    settle(harness);
+    let before = opencode_plugin::loader::native::crossed();
+    for index in 0..count {
+        let delta =
+            json!({ "sessionID": "ses_a", "assistantMessageID": id, "ordinal": 0, "delta": format!("w{index} ") });
+        harness.tui.data.apply(&[event("session.text.delta", 3 + index, delta)]);
+        settle(harness);
+    }
+    assert!(harness.app.text().contains(&format!("w{} ", count - 1)), "{}", harness.app.text());
+    opencode_plugin::loader::native::crossed().since(before)
+}
+
 // Expected (`work`, a theme switch): a switch to a theme of another name builds and drops no widget of a built-in: they
 // read no palette, so the host restyles their trees in place, and a view that reads the theme's name keeps its tree.
 #[test]
@@ -100,6 +176,94 @@ fn a_theme_switch_builds_nothing_in_the_built_ins() {
         let work = reconcile::work().since(before);
         assert_eq!((work.created, work.removed), (0, 0), "{route:?}: {work:?}");
     }
+}
+
+/// This year's stats, as E.14/stats serves them.
+fn stats() -> Value {
+    let day = 86_400_000_i64;
+    let from = 1_767_268_800_000_i64;
+    json!({ "data": {
+        "range": { "from": from, "to": from + 27 * day }, "sessions": 42, "subagents": 3, "prompts": 120, "steps": 300,
+        "tokens": { "input": 1_000_000, "output": 200_000, "reasoning": 34_000, "cache": { "read": 0, "write": 0 } },
+        "cost": 12.5, "tools": { "mode": "none" }, "activeDays": 9, "streak": 4,
+        "activity": [
+            { "date": "2026-01-02", "steps": 3 }, { "date": "2026-01-05", "steps": 12 },
+            { "date": "2026-01-12", "steps": 30 }, { "date": "2026-01-20", "steps": 1 },
+        ],
+        "models": [],
+    } })
+}
+
+/// The `/stats` route at `height` rows, its stats served.
+fn stats_route(height: u16) -> Harness {
+    let fake = Fake::new(|seen| match seen.path.as_str() {
+        "/api/experimental/session/stats" => (200, stats()),
+        _ => support::base(seen, DIRECTORY),
+    });
+    let deps = Deps {
+        config: support::config(support::decode(r#"{ "animations": false }"#)),
+        route: opencode_tui::Route::Home,
+        ..support::deps(Arc::new(fake))
+    };
+    let harness = support::mount(100, height, deps);
+    harness.tui.navigate(opencode_tui::Route::Plugin { id: "opencode.stats".into(), name: "stats".into() });
+    harness.wait_for("TOKENS");
+    harness
+}
+
+// Expected (a theme switch on `/stats`): the poster's calendar and logo compute their colors from the theme, so a
+// switch draws every cell as the poster opened in the new theme, compact and tall with its logo (P6a review, big-boi
+// medium 3).
+#[test]
+fn the_stats_poster_takes_a_new_theme() {
+    for height in [30, 44] {
+        support::assert_restyles_in_place(|| Box::new(stats_route(height)), |_| {}, |screen| screen.contains("TOKENS"));
+    }
+}
+
+// Expected (`lifecycle`, `/stats`): the stats asked for as the route opened, answered after it closed, reach nothing:
+// Home shows, and the route holds no mount; opened again, it asks again and shows the new answer.
+#[test]
+fn a_stats_reply_after_the_route_closed_reaches_nothing() {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    static OPEN: AtomicBool = AtomicBool::new(false);
+    static ASKED: AtomicUsize = AtomicUsize::new(0);
+    OPEN.store(false, Ordering::SeqCst);
+    ASKED.store(0, Ordering::SeqCst);
+    let fake = Fake::new(|seen| match seen.path.as_str() {
+        "/api/experimental/session/stats" => {
+            ASKED.fetch_add(1, Ordering::SeqCst);
+            let start = std::time::Instant::now();
+            while !OPEN.load(Ordering::SeqCst) && start.elapsed() < Duration::from_secs(10) {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            (200, stats())
+        }
+        _ => support::base(seen, DIRECTORY),
+    });
+    let deps = Deps {
+        config: support::config(support::decode(r#"{ "animations": false }"#)),
+        route: opencode_tui::Route::Home,
+        ..support::deps(Arc::new(fake))
+    };
+    let harness = support::mount(100, 30, deps);
+    harness.wait_for("Ask anything");
+    let route = opencode_tui::Route::Plugin { id: "opencode.stats".into(), name: "stats".into() };
+    harness.tui.navigate(route.clone());
+    harness.wait_for("Gathering your stats");
+    harness.wait("the stats to be asked for", || ASKED.load(Ordering::SeqCst) == 1);
+    harness.app.press("escape");
+    harness.wait_gone("Gathering your stats");
+    OPEN.store(true, Ordering::SeqCst);
+    for _ in 0..20 {
+        harness.app.advance(Duration::from_millis(5));
+    }
+    let screen = harness.app.render().text();
+    assert!(screen.contains("Ask anything") && !screen.contains("TOKENS"), "{screen}");
+    assert_eq!(surface::ledger_of("opencode.stats"), surface::Ledger::default());
+    harness.tui.navigate(route);
+    harness.wait_for("TOKENS");
+    assert_eq!(ASKED.load(Ordering::SeqCst), 2);
 }
 
 /// The built-ins with a 2.0 surface on the session route.
@@ -118,13 +282,15 @@ const SESSION: [&str; 7] = [
 // the same for the home footer.
 #[test]
 fn a_disabled_built_in_holds_nothing_and_draws_as_one_never_enabled() {
-    let mut cases: Vec<(&str, bool)> = SESSION.iter().map(|id| (*id, false)).collect();
-    cases.push(("opencode.home.footer", true));
-    for (id, home) in cases {
+    let mut cases: Vec<(&str, Option<opencode_tui::Route>)> = SESSION.iter().map(|id| (*id, None)).collect();
+    cases.push(("opencode.home.footer", Some(opencode_tui::Route::Home)));
+    let stats = opencode_tui::Route::Plugin { id: "opencode.stats".into(), name: "stats".into() };
+    cases.push(("opencode.stats", Some(stats)));
+    for (id, route) in cases {
         let open = |plugins: &[&str]| {
             let harness = session(plugins, Vec::new());
-            if home {
-                harness.tui.navigate(opencode_tui::Route::Home);
+            if let Some(route) = &route {
+                harness.tui.navigate(route.clone());
                 settle(&harness);
             }
             harness
@@ -154,6 +320,21 @@ fn a_disabled_built_in_holds_nothing_and_draws_as_one_never_enabled() {
         toggle(true);
         assert_eq!(surface::ledger_of(id).mounts, held.mounts, "{id} enabled again");
     }
+}
+
+// Expected (`ledger`, its own rows): the ledger keeps a row for a plugin only while it holds something, so mounting
+// and closing surfaces of ever new plugin IDs leaves as many rows as before (P6a review, big-boi low).
+#[test]
+fn the_ledger_keeps_no_row_for_a_plugin_that_holds_nothing() {
+    let before = surface::ledger_rows();
+    for index in 0..6 {
+        let id: &'static str = Box::leak(format!("test.churn.{index}").into_boxed_str());
+        let harness = session(&[], vec![abi::Plugin { id, setup: probe }.into()]);
+        assert_eq!(surface::ledger_of(id).mounts, 1, "{id}");
+        drop(harness);
+        heard();
+    }
+    assert_eq!(surface::ledger_rows(), before);
 }
 
 thread_local! {
@@ -189,10 +370,11 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     })
     .mounts()
     .on(|host, event| {
-        if let Event::Mount { mounted, slot } = event {
+        if let Event::Mount { mount, mounted, slot } = event {
             let shell = slot.as_ref().and_then(|slot| slot.prompt).is_some_and(|prompt| prompt.shell);
             let session = slot.as_ref().and_then(|slot| slot.session_id.clone()).unwrap_or_default();
-            HEARD.with(|heard| heard.borrow_mut().push(format!("mount {mounted} {session} shell {shell}")));
+            let line = format!("mount {mounted} {} {session} shell {shell}", mount.generation);
+            HEARD.with(|heard| heard.borrow_mut().push(line));
             // What the plugin starts as a mount ends is the plugin's: its reply comes after the mount went.
             if !mounted {
                 let fetch = abi::Fetch { method: "GET".into(), path: "/api/probe".into(), ..abi::Fetch::default() };
@@ -219,24 +401,42 @@ fn said(changed: &Changed) -> String {
     said.join(",")
 }
 
-/// The generation in a `view` line.
+/// The generation in a `view` line, the second word.
 fn generation(line: &str) -> u64 {
     line.split(' ').nth(1).and_then(|number| number.parse().ok()).unwrap_or_default()
 }
 
+/// The lines of the log that are mount notices and whole views (`all`), without replies and `local`. The host may send
+/// a batch of `all` again as it starts or mounts a route: a repeated view of the same mount counts once.
+fn mounts_and_first_views() -> Vec<String> {
+    let mut lines: Vec<String> = heard()
+        .into_iter()
+        .filter(|line| line != "reply" && (!line.starts_with("view") || line.contains("all")))
+        .map(|line| line.replace(",local", ""))
+        .collect();
+    lines.dedup();
+    lines
+}
+
 // Expected (`lifecycle`): a surface that asks hears each mount begin before its first view, which hears `all`, and end
-// after the next mount began (the prompt mounts its footer again as shell mode turns on and off); once its plugin is
-// disabled it hears nothing, not even the end of its mount. The reference is the sequence written out; the log is the
-// plugin's own.
+// after the next mount began (the prompt mounts its footer again as shell mode turns on and off, and with equal input
+// as the route mounts again); each notice names its mount, so the end names the mount that went, not the new one. What
+// the plugin starts as a mount ends answers after it. Once its plugin is disabled it hears nothing, not even the end of
+// its mount. On both carriers; the reference is the sequence written out, the log the plugin's own.
 #[test]
 fn a_surface_hears_its_mounts_begin_and_end_in_order() {
-    let probe = abi::Plugin { id: "test.probe", setup: probe }.into();
-    let harness = session(&[], vec![probe]);
-    let first: Vec<String> =
-        heard().into_iter().filter(|line| !line.starts_with("view") || line.contains("all")).collect();
-    assert_eq!(first.first().map(String::as_str), Some("mount true ses_a shell false"), "{first:?}");
-    assert!(first.get(1).is_some_and(|line| line.contains("shell false all")), "{first:?}");
-    let opened = generation(&first[1]);
+    for abi in [false, true] {
+        mounts_in_order(abi);
+    }
+}
+
+fn mounts_in_order(abi: bool) {
+    let plugin = abi::Plugin { id: "test.probe", setup: probe };
+    let builtin = if abi { opencode_plugin::Builtin::Abi(plugin) } else { opencode_plugin::Builtin::Plugin(plugin) };
+    let harness = session(&[], vec![builtin]);
+    let first = mounts_and_first_views();
+    let opened = first.first().map(|line| line.split(' ').nth(2).unwrap().parse::<u64>().unwrap()).unwrap();
+    assert_eq!(first, [format!("mount true {opened} ses_a shell false"), format!("view {opened} shell false all")]);
     harness.app.type_text("!");
     harness.wait_for("esc exit shell mode");
     settle(&harness);
@@ -246,23 +446,34 @@ fn a_surface_hears_its_mounts_begin_and_end_in_order() {
     // The reads started as the two mounts ended are the plugin's: both answer, after their mounts went.
     harness
         .wait("the replies", || HEARD.with(|heard| heard.borrow().iter().filter(|line| *line == "reply").count()) == 2);
-    let log: Vec<String> = heard()
-        .into_iter()
-        .filter(|line| line != "reply" && (!line.starts_with("view") || line.contains("all")))
-        .collect();
+    let log = mounts_and_first_views();
     let views: Vec<u64> = log.iter().filter(|line| line.starts_with("view")).map(|line| generation(line)).collect();
-    assert!(views.len() == 2 && views[0] > opened && views[1] > views[0], "{log:?}");
+    assert!(views.len() == 2 && views[0] > opened && views[1] > views[0], "abi {abi}: {log:?}");
     let expected = [
-        "mount true ses_a shell true".to_owned(),
+        format!("mount true {} ses_a shell true", views[0]),
         format!("view {} shell true all", views[0]),
-        "mount false ses_a shell false".to_owned(),
-        "mount true ses_a shell false".to_owned(),
+        format!("mount false {opened} ses_a shell false"),
+        format!("mount true {} ses_a shell false", views[1]),
         format!("view {} shell false all", views[1]),
-        "mount false ses_a shell true".to_owned(),
+        format!("mount false {} ses_a shell true", views[0]),
     ];
-    // A first view also hears the change of the host's own state since the mount's last view: `local`.
-    let log: Vec<String> = log.into_iter().map(|line| line.replace(",local", "")).collect();
-    assert_eq!(log, expected);
+    assert_eq!(log, expected, "abi {abi}");
+    // The route mounts again: a mount of equal input, which only the notice's mount tells from the one it replaces.
+    harness.tui.navigate(harness.tui.route());
+    settle(&harness);
+    harness.wait("the reply", || HEARD.with(|heard| heard.borrow().iter().any(|line| line == "reply")));
+    let log = mounts_and_first_views();
+    let again = log.iter().find(|line| line.starts_with("view")).map(|line| generation(line)).unwrap_or_default();
+    assert!(again > views[1], "abi {abi}: {log:?}");
+    let mut sorted = log.clone();
+    sorted.sort();
+    let mut expected = [
+        format!("mount false {} ses_a shell false", views[1]),
+        format!("mount true {again} ses_a shell false"),
+        format!("view {again} shell false all"),
+    ];
+    expected.sort();
+    assert_eq!(sorted, expected, "abi {abi}");
     let host = opencode_tui::plugins::host::host(&harness.tui);
     assert_eq!(harness.tui.plugins.toggle(&host, "test.probe", false), Some(Ok(())));
     harness.tui.navigate(harness.tui.route());
