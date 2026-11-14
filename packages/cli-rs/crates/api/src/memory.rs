@@ -4,12 +4,13 @@
 //! [`Memory::emit`], and logs every request. P-APP builds it from a recording; other tests can use it as a
 //! small fixture server.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
 use futures_util::StreamExt;
+use tokio::sync::Notify;
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
 use crate::transport::{BoxFuture, Request, Response, Transport};
@@ -28,6 +29,8 @@ pub struct Route {
     pub status: u16,
     pub content_type: Option<String>,
     pub body: Bytes,
+    /// Answers only once [`Memory::release`] names its path.
+    pub held: bool,
 }
 
 impl Route {
@@ -40,6 +43,7 @@ impl Route {
             status,
             content_type: Some("application/json".to_owned()),
             body: Bytes::from(serde_json::to_vec(body).expect("JSON values serialize")),
+            held: false,
         }
     }
 
@@ -52,7 +56,14 @@ impl Route {
             status,
             content_type: content_type.map(str::to_owned),
             body: body.into(),
+            held: false,
         }
+    }
+
+    /// Answers only once [`Memory::release`] names its path.
+    pub fn held(mut self) -> Self {
+        self.held = true;
+        self
     }
 
     /// Matches only this exact query.
@@ -94,6 +105,9 @@ struct Inner {
     log: Mutex<Vec<Logged>>,
     streams: Mutex<Streams>,
     in_flight: AtomicUsize,
+    /// The paths of held routes that answer now, and the requests that wait for one.
+    released: Mutex<HashSet<String>>,
+    release: Notify,
 }
 
 #[derive(Default)]
@@ -131,7 +145,14 @@ impl Memory {
         self.inner.log.lock().expect("log lock").clone()
     }
 
-    /// Requests answered but whose response the client has not taken yet. Zero means the client is idle.
+    /// Answers the requests that a held route of `path` keeps waiting, and the ones that come after.
+    pub fn release(&self, path: &str) {
+        self.inner.released.lock().expect("released lock").insert(path.to_owned());
+        self.inner.release.notify_waiters();
+    }
+
+    /// Requests answered but whose response the client has not taken yet: a request a held route keeps waiting does
+    /// not count until it is released. Zero means the client is idle.
     pub fn in_flight(&self) -> usize {
         self.inner.in_flight.load(Ordering::SeqCst)
     }
@@ -180,14 +201,25 @@ impl Transport for Memory {
             let message = format!("memory transport: no route for {} {path}", request.method);
             Route::json("", "", 404, &serde_json::json!({ "_tag": "NotFound", "message": message }))
         });
-        self.inner.in_flight.fetch_add(1, Ordering::SeqCst);
-        let guard = InFlight(self.inner.clone());
-        // The body holds the guard, so the request counts until the client has read or dropped it.
-        let body = futures_util::stream::iter([Ok(route.body)]).map(move |chunk| {
-            let _ = &guard;
-            chunk
-        });
+        // A request counts from now; a held one only once it is released.
+        let inner = self.inner.clone();
+        let counted = (!route.held).then(|| InFlight::new(&inner));
         Box::pin(async move {
+            let guard = match counted {
+                Some(guard) => guard,
+                None => loop {
+                    let released = inner.release.notified();
+                    if inner.released.lock().expect("released lock").contains(&route.path) {
+                        break InFlight::new(&inner);
+                    }
+                    released.await;
+                },
+            };
+            // The body holds the guard, so the request counts until the client has read or dropped it.
+            let body = futures_util::stream::iter([Ok(route.body)]).map(move |chunk| {
+                let _ = &guard;
+                chunk
+            });
             Ok(Response {
                 status: route.status,
                 headers: route.content_type.map(|value| vec![("content-type".to_owned(), value)]).unwrap_or_default(),
@@ -199,6 +231,13 @@ impl Transport for Memory {
 
 /// Counts a request until its response body is dropped.
 struct InFlight(Arc<Inner>);
+
+impl InFlight {
+    fn new(inner: &Arc<Inner>) -> Self {
+        inner.in_flight.fetch_add(1, Ordering::SeqCst);
+        Self(inner.clone())
+    }
+}
 
 impl Drop for InFlight {
     fn drop(&mut self) {
@@ -243,6 +282,26 @@ mod tests {
         assert_eq!(log[0].query, exact);
         assert!(log[3].unmatched && !log[2].unmatched);
         assert_eq!(memory.in_flight(), 0);
+    }
+
+    // Expected: a held route answers once its path is released, and counts as in flight only from then; a request
+    // after the release is answered at once.
+    #[tokio::test]
+    async fn a_held_route_answers_once_released() {
+        let memory =
+            Memory::new(vec![Route::json("POST", "/api/session/:id/generate", 200, &serde_json::json!(1)).held()]);
+        let held = memory.send(request("POST", "http://x/api/session/ses_1/generate"));
+        let mut held = Box::pin(held);
+        let waker = futures_util::task::noop_waker();
+        let mut cx = std::task::Context::from_waker(&waker);
+        assert!(held.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(memory.in_flight(), 0);
+        memory.release("/api/session/:id/generate");
+        let response = held.await.unwrap();
+        assert_eq!(memory.in_flight(), 1);
+        drop(response);
+        let after = memory.send(request("POST", "http://x/api/session/ses_2/generate")).await.unwrap();
+        assert_eq!(after.status, 200);
     }
 
     #[tokio::test]
