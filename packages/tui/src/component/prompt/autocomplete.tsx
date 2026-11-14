@@ -534,6 +534,16 @@ export function Autocomplete(props: {
     })
   })
 
+  // Past the start of the prompt a "/" token mentions skills, so each pick becomes an @skill mention.
+  // Match by prefix and skip skills already in the prompt, so prose never opens an unrelated list.
+  const inlineSkillOptions = createMemo(() => {
+    const query = search().toLowerCase()
+    return skillOptions().filter((option) => {
+      const id = option.display.slice(1)
+      return id.toLowerCase().startsWith(query) && !props.hasSkill(id)
+    })
+  })
+
   const options = createMemo(() => {
     const fileSearch = visibleFiles()
     const referenceMatchValue = referenceMatch()
@@ -560,7 +570,7 @@ export function Autocomplete(props: {
         ? [...skillOptions(), ...referenceAliasesValue, ...agentsValue]
         : store.index === 0
           ? [...commandsValue]
-          : []
+          : inlineSkillOptions()
 
     if (!searchValue) {
       return [...nonFileOptions, ...fileOptions]
@@ -596,6 +606,12 @@ export function Autocomplete(props: {
     filter()
     setStore("selected", 0)
     setConfirming(undefined)
+  })
+
+  // An empty list mid-prompt closes the popup so its Enter binding cannot swallow submission
+  // of a sentence that merely contains "/". At the prompt start the empty list stays visible.
+  createEffect(() => {
+    if (store.visible === "command" && store.index !== 0 && options().length === 0) hide()
   })
 
   function move(direction: -1 | 1) {
@@ -827,9 +843,9 @@ export function Autocomplete(props: {
         if (offset === 0) return
 
         const slash = slashTriggerIndex(beforeCursor, renderer.widthMethod)
-        if (slash === 0) {
-          show("command")
-          setStore("index", slash)
+        // A bare "/" past the start of the prompt is usually prose or a path, not a command.
+        if (slash !== undefined && (slash === 0 || offset > slash + 1)) {
+          show("command", slash)
           return
         }
 
