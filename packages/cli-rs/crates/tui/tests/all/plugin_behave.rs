@@ -316,7 +316,8 @@ impl Oracle {
         (self.rows().extent() - self.viewport).max(0)
     }
 
-    /// Where a step of `by` from `top` lands, and the offset it leaves; `None` when no anchor is there.
+    /// Where a step of `by` from `top` lands, and the offset it leaves, clamped at `most`; `None` when no anchor is
+    /// there.
     fn step(&mut self, top: i32, by: i32, most: i32) -> Option<(String, i32)> {
         let hunks = self.rows().hunks();
         let inset = i32::from(INSET);
@@ -406,9 +407,16 @@ impl Model for Behaviors {
                     app.resize(width, *height);
                     let most = oracle.most();
                     oracle.viewport = i32::from(*height) - 1;
-                    // The step resolves against the last settled frame; the solve then clamps to the new size.
+                    // The step resolves against the last settled frame; the solve then clamps it to the new size. A
+                    // target at the old end is the end (OpenTUI's scroll to the end follows the end), wherever the
+                    // new size puts it.
                     let landing = oracle.step(top, *by, most);
-                    expected = Some(landing.as_ref().map_or(top, |(_, target)| *target).min(oracle.most()));
+                    let new_most = oracle.most();
+                    expected = Some(match &landing {
+                        Some((_, target)) if *target >= most && *target > 0 => new_most,
+                        Some((_, target)) => (*target).min(new_most),
+                        None => top.min(new_most),
+                    });
                     lands = landing.map(|(anchor, _)| anchor);
                     board_view.dispatch("board.step", Some(by.to_string()));
                 }
@@ -489,6 +497,28 @@ fn behaviors_settle_in_the_first_frame_and_verbs_land_where_the_rules_say() {
 #[test]
 fn a_windowed_list_keeps_the_same_rules() {
     model::check(&Behaviors { list: true }, 16, 24);
+}
+
+// Expected (the deep runs' rows, on both kinds): a step that reaches the end, in a batch with a resize, ends at the end
+// of the new size (seed 17, 2,000 seeds); a step's memory ends once the offset moves, also when it comes back to the
+// offset the step left (seed 7225, 10,000 seeds).
+#[test]
+fn the_deep_runs_rows_hold() {
+    let rows = [
+        vec![Command::Resize { width: 70, height: 17 }, Command::To(9), Command::Batch { height: 16, by: 1 }],
+        vec![
+            Command::To(8),
+            Command::Resize { width: 52, height: 18 },
+            Command::Batch { height: 12, by: 1 },
+            Command::Resize { width: 78, height: 18 },
+            Command::Step(1),
+        ],
+    ];
+    for list in [false, true] {
+        for row in &rows {
+            assert_eq!(Behaviors { list }.run(row), None, "list {list}: {row:?}");
+        }
+    }
 }
 
 // Fixed rows.
@@ -930,7 +960,8 @@ fn big_setup(setup: &mut abi::Setup) -> Result<(), String> {
     let command =
         |name: &str| abi::Command { name: name.into(), scope: abi::Scope::Route("big".into()), ..Default::default() };
     let target = || v2::Target::node("big", "files");
-    setup.command(command("big.end"), move |host, _| host.scroll(target(), v2::Scroll::Edge { edge: v2::Edge::Bottom }));
+    setup
+        .command(command("big.end"), move |host, _| host.scroll(target(), v2::Scroll::Edge { edge: v2::Edge::Bottom }));
     setup.command(command("big.at"), move |host, input| {
         let offset = input.and_then(|offset| offset.parse().ok()).unwrap_or(0);
         host.scroll(target(), v2::Scroll::Offset { offset });
