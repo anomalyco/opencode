@@ -9,6 +9,7 @@ import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
 import { PermissionTable } from "@opencode/core/permission/sql"
 import { PermissionSaved } from "@opencode/core/permission/saved"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -26,7 +27,15 @@ const current = Layer.succeed(
 )
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionStore.node, PermissionSaved.node, Agent.node, Permission.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionStore.node,
+      PermissionSaved.node,
+      Agent.node,
+      Permission.node,
+      PluginHooks.node,
+    ]),
     [Location.node.replace(current)],
   ),
 )
@@ -98,6 +107,72 @@ function waitForRequest(input: Partial<Permission.AssertInput> = {}) {
 }
 
 describe("Permission", () => {
+  for (const method of ["assert", "assertNotDenied"] as const) {
+    it.effect(`${method} identifies only resources denied by the last matching configured rule`, () =>
+      Effect.gen(function* () {
+        yield* setup([
+          { action: "shell", resource: "*", effect: "allow" },
+          { action: "shell", resource: "printf *", effect: "deny" },
+          { action: "shell", resource: "printf allowed", effect: "allow" },
+          { action: "shell", resource: "printf ask", effect: "ask" },
+          { action: "shell", resource: "echo *", effect: "deny" },
+        ])
+        const service = yield* Permission.Service
+        const input = assertion({
+          action: "shell",
+          resources: ["pwd", "printf blocked", "printf allowed", "printf ask", "printf denied", "echo blocked"],
+        })
+        const error = yield* service[method](input).pipe(Effect.flip)
+        expect(error).toMatchObject({
+          resources: ["printf blocked", "printf denied", "echo blocked"],
+          message: 'Permission denied: shell. Blocked by configured rule patterns: ["printf *","echo *"]',
+        })
+        expect(yield* service.list()).toEqual([])
+        expect(yield* service.allows(input)).toBe(false)
+        yield* setRules([
+          { action: "shell", resource: "*", effect: "deny" },
+          { action: "shell", resource: "pwd", effect: "allow" },
+        ])
+        const fallback = yield* service[method](input).pipe(Effect.flip)
+        expect(fallback).toMatchObject({
+          resources: input.resources.slice(1),
+          message: 'Permission denied: shell. Blocked by configured rule patterns: ["*"]',
+        })
+        expect(yield* service.allows(assertion({ action: "shell", resources: ["pwd"] }))).toBe(true)
+      }),
+    )
+  }
+
+  it.effect("preserves hook denial reasons without labeling allowed resources as configured blocks", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "read", resource: "*", effect: "allow" }])
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("permission", "evaluate", (event) =>
+        Effect.sync(() => {
+          event.effect = "deny"
+          event.message = "Blocked by policy"
+        }),
+      )
+      const service = yield* Permission.Service
+      for (const method of ["assert", "assertNotDenied"] as const) {
+        const error = yield* service[method](assertion()).pipe(Effect.flip)
+        expect(error.message).toBe("Blocked by policy")
+      }
+    }),
+  )
+
+  it.effect("preserves unattended denial reasons", () =>
+    Effect.gen(function* () {
+      yield* setup([])
+      const service = yield* Permission.Service
+      const error = yield* service
+        .assert(assertion())
+        .pipe(Effect.provideService(Permission.Unattended, []), Effect.flip)
+      expect(error.message).toBe("Permission read needs approval, and nobody is present to give it")
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
   it.effect("returns the evaluated effect and only queues prompts", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
