@@ -11,13 +11,14 @@ use opencode_api::generated::{
 use opencode_store::Data;
 use opencode_ui::motion::Spinner;
 use opencode_ui::prompt_input::paste::strip_ansi;
+use opencode_util::text_boundary;
 use unicode_width::UnicodeWidthChar;
 
 use super::list::Context;
 
 use crate::prelude::*;
 
-/// `SHELL_DISPLAY_LIMIT`: the most output kept, in characters from the end, and read per request.
+/// `SHELL_DISPLAY_LIMIT`: the most output kept, in UTF-16 code units from the end, and read per request.
 const LIMIT: usize = 1024 * 1024;
 const MAX_LINES: usize = 10;
 
@@ -64,8 +65,8 @@ struct Read {
 }
 
 /// `loadBackgroundOutput` (`routes/session/index.tsx:3040-3086`): the output read so far from
-/// `GET /api/shell/{id}/output`, stripped and capped at the last [`LIMIT`] characters. Shell messages and the shell
-/// tool both read through it.
+/// `GET /api/shell/{id}/output`, stripped and capped at the last [`LIMIT`] code units, starting on a whole character.
+/// Shell messages and the shell tool both read through it.
 #[derive(Default)]
 pub(crate) struct Output {
     pub(crate) text: String,
@@ -133,10 +134,10 @@ impl Output {
     pub(crate) fn finish(&mut self, (chunks, cursor, skipped): Pages) -> bool {
         for chunk in chunks {
             let next = strip_ansi(&format!("{}{chunk}", self.text));
-            let count = next.chars().count();
-            self.text = if count > LIMIT {
+            let tail = text_boundary::tail(&next, LIMIT);
+            self.text = if tail.len() < next.len() {
                 self.truncated = true;
-                next.chars().skip(count - LIMIT).collect()
+                tail.to_owned()
             } else {
                 next
             };
@@ -528,5 +529,16 @@ mod tests {
         let mut output = Output::default();
         output.finish((vec!["ok\u{1b}(B\u{1b}[mdone".into()], 1, false));
         assert_eq!(output.text, "okdone");
+    }
+
+    // `session-shell-output.test.tsx`: the pages come to `LIMIT + 1` code units, so the tail would start on the
+    // emoji's second half.
+    #[test]
+    fn the_retained_tail_starts_on_a_whole_character() {
+        let rest = format!("{}{}", format!("{}\n", "x".repeat(1023)).repeat(1023), "x".repeat(1023));
+        let mut output = Output::default();
+        output.finish((vec!["😀".into(), rest.clone()], 1, false));
+        assert!(output.truncated);
+        assert_eq!(output.text, rest);
     }
 }
