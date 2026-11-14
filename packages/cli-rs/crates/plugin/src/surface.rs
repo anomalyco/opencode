@@ -819,7 +819,7 @@ fn mounted_owner(weak: &Weak<Surface>) -> Option<Rc<dyn Host>> {
 
 /// The text tool call `part` returned, as the transcript shows it: its content items, a file by its name; nothing
 /// while it streams its input or runs, and `None` while the host has not loaded it.
-fn part_output(host: &dyn Host, part: &v2::PartRef) -> Option<String> {
+pub(crate) fn part_output(host: &dyn Host, part: &v2::PartRef) -> Option<String> {
     use opencode_plugin_abi::types::{SessionMessageAssistantContentItem, SessionMessageInfo, ToolContent};
     let mut found = None;
     host.read(&mut |read| {
