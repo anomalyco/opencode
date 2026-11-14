@@ -971,6 +971,10 @@ impl abi::Read for Reader<'_> {
         let config = self.tui.settings.info().to_value();
         path.iter().try_fold(&config, |value, key| value.get(key)).filter(|value| !value.is_null()).cloned()
     }
+
+    fn image_size(&self, bytes: &[u8]) -> Option<(u32, u32)> {
+        opencode_plugin::surface::decoded_size(&self.tui.app, bytes)
+    }
 }
 
 /// The path in the TUI config of the plugins' setting `name` ([`abi::SETTINGS`]).

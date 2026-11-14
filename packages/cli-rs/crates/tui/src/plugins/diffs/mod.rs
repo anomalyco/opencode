@@ -295,7 +295,7 @@ impl Diffs {
 /// The image preview of `file`'s working-tree bytes, under its name (`DialogImagePreview`).
 fn preview(host: &dyn Host, viewer: &Viewer, file: Option<&str>) {
     let Some(file) = file else { return };
-    let Some(Preview::Ready(bytes)) = viewer.previews.get(file) else { return };
+    let Some(Preview::Ready(bytes, _)) = viewer.previews.get(file) else { return };
     let image = abi::Image { data: abi::base64::encode(bytes), name: Some(file.to_owned()) };
     host.dialog(Dialog::Images(abi::Images { images: vec![image], index: 0 }));
 }

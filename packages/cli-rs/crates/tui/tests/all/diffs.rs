@@ -870,3 +870,70 @@ fn a_hash_in_a_file_name_is_part_of_it() {
         assert_eq!(h.reviewed(), ["f#1.rs"], "a hunk step's file (C ABI: {abi})");
     }
 }
+
+/// The route over one image, `assets/logo.png`, whose working-tree bytes are `bytes`.
+fn image_route(bytes: Vec<u8>, abi: bool) -> Diffs {
+    let file = json!({ "file": "assets/logo.png", "patch": "", "additions": 0, "deletions": 0, "status": "added" });
+    let memory = Memory::new(
+        routes(file)
+            .into_iter()
+            .chain([MemoryRoute::body("GET", "/api/fs/read/assets/logo.png", 200, Some("image/png"), bytes)])
+            .collect(),
+    );
+    let config = json!({ "animations": false, "diffs": { "source": "working" } });
+    let deps = Deps {
+        config: support::config(support::decode(&config.to_string())),
+        route: Route::Home,
+        events: true,
+        abi_builtins: abi,
+        ..support::deps(Arc::new(memory.clone()))
+    };
+    let h = Diffs { harness: support::mount(100, 30, deps), memory, turns: Cell::new(0) };
+    h.wait_for("/project");
+    h.tui.keymap.dispatch("diff.open", None);
+    h.wait_for("Working tree preview");
+    h
+}
+
+// Expected (big-boi's review of P6c; TS shows the error on the image's `onError`): bytes whose header names a size but
+// that the host cannot decode show "Could not decode image", with no size and nothing to click, on both carriers.
+#[test]
+fn an_image_the_host_cannot_decode_says_so() {
+    let mut header = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+    header.extend(3u32.to_be_bytes().into_iter().chain(4u32.to_be_bytes()));
+    for abi in [false, true] {
+        let h = image_route(header.clone(), abi);
+        h.wait_for("Could not decode image");
+        let screen = h.settle();
+        assert!(!screen.contains("Click to enlarge") && !screen.contains("3 x 4"), "C ABI {abi}:\n{screen}");
+    }
+}
+
+// Expected (deviation F16, big-boi's review of P6c): the viewer's image preview is the plugin's dialog, so it closes as
+// the plugin is turned off; a host dialog that replaced it stays. On both carriers.
+#[test]
+fn the_image_preview_ends_with_the_viewer() {
+    let png = opencode_plugin::abi::base64::decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAECAIAAAA8r+mnAAAAFUlEQVR42mO4Y2MDRzZRd+CIgXoSAKBcLGFZ7ECVAAAAAElFTkSuQmCC",
+    )
+    .unwrap();
+    let preview = Some("prompt-image-viewer".to_owned());
+    for abi in [false, true] {
+        for replaced in [false, true] {
+            let h = image_route(png.clone(), abi);
+            let (x, y) = h.find("Click to enlarge");
+            h.app.click(x, y);
+            h.wait("the preview did not open", || h.tui.dialogs.key() == preview);
+            if replaced {
+                h.dispatch("help.show");
+                h.wait("help did not replace the preview", || h.tui.dialogs.key() != preview);
+            }
+            let open = h.tui.dialogs.key();
+            let host = opencode_tui::plugins::host::host(&h.tui);
+            assert!(h.tui.plugins.set_active(&host, "opencode.diffs", false));
+            h.settle();
+            assert_eq!(h.tui.dialogs.is_open(), replaced, "C ABI: {abi}");
+            assert_eq!(h.tui.dialogs.key(), if replaced { open } else { None }, "C ABI: {abi}");
+        }
+    }
+}
