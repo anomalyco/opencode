@@ -342,13 +342,7 @@ export function Prompt(props: PromptProps) {
     if (directory !== (currentLocation.current?.directory ?? data.location.default().directory)) return
     if (!input || input.isDestroyed) return
     input.insertText(evt.data.text)
-    setTimeout(() => {
-      // setTimeout is a workaround and needs to be addressed properly
-      if (!input || input.isDestroyed) return
-      input.invalidateIntrinsicSize()
-      input.gotoBufferEnd()
-      renderer.requestRender()
-    }, 0)
+    input.gotoBufferEnd()
   })
 
   createEffect(() => {
@@ -1487,12 +1481,6 @@ export function Prompt(props: PromptProps) {
     }
 
     input.insertText(normalizedText)
-
-    setTimeout(() => {
-      if (!input || input.isDestroyed) return
-      input.invalidateIntrinsicSize()
-      renderer.requestRender()
-    }, 0)
   }
 
   function pasteAttachment(file: { filename?: string; uri: string; path?: string }) {
@@ -1854,11 +1842,6 @@ export function Prompt(props: PromptProps) {
                   promptPartTypeId = input.extmarks.registerType("prompt-part")
                 }
                 props.ref?.(ref)
-                setTimeout(() => {
-                  // setTimeout is a workaround and needs to be addressed properly
-                  if (!input || input.isDestroyed) return
-                  input.cursorColor = disabled() ? theme.background.raised.base : theme.text.base
-                }, 0)
               }}
               onMouseDown={(r: MouseEvent) => {
                 if (disabled()) {

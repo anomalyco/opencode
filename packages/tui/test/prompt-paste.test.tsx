@@ -84,6 +84,27 @@ test("a pasted image that reuses a wide label gets a chip as wide as the label",
   ])
 })
 
+// A one-row prompt that missed the growth would show only the cursor's line.
+test.each([
+  ["a plugin append", "ALPHA\nBRAVO\nCHARLIE\nDELTA"],
+  ["an inline paste", "ALPHA\nBRAVO"],
+])("%s grows the prompt in the first frame that shows it", async (kind, lines) => {
+  const { setup, text } = await promptApp()
+  await using _ = setup
+  if (kind === "an inline paste") await setup.mockInput.pasteBracketedText(lines)
+  else
+    setup.events.emit({
+      id: "evt_append",
+      created: 1,
+      type: "tui.prompt.append",
+      data: { text: lines },
+      location: { directory },
+    })
+  const frame = await setup.waitForFrame((frame) => lines.split("\n").some((line) => frame.includes(line)))
+  for (const line of lines.split("\n")) expect(frame).toContain(line)
+  expect(setup.renderer.currentFocusedEditor?.cursorOffset).toBe(text()?.length)
+})
+
 const mention = (text: string) => ({ start: 4, end: 4 + text.length, text })
 test.each([
   ["files", { uri: "file:///repo/a.ts", name: "a.ts", mention: mention("@a.ts") }],
