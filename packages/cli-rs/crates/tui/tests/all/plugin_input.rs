@@ -1289,6 +1289,10 @@ fn a_toggle_row_moves_the_registry_only_on_a_key_or_a_click() {
     run(&harness, "input.select", None);
     run(&harness, "input.submit", None);
     assert!(active(&harness, "test.other"), "a submit by name toggled the plugin");
+    // P6b: the host's toggle action, run by name as a plugin's `dispatch` runs it.
+    harness.tui.keymap.dispatch("plugins.toggle", None);
+    settle(&harness);
+    assert!(active(&harness, "test.other"), "the toggle action by name toggled the plugin");
     let tui = harness.tui.clone();
     harness.app.app().defer(move |_| tui.dialogs.clear());
     harness.app.press("enter");
