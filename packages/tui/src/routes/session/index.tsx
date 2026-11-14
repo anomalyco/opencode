@@ -2236,7 +2236,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
             ref={useSessionLinks()}
             syntaxStyle={syntax()}
             renderBlock={plugins.markdown()}
-            streaming={true}
+            streaming={status() === "running"}
             content={content()}
             tableOptions={{ style: "grid", cellPaddingX: 1 }}
             conceal={ctx.markdownMode() === "rendered"}

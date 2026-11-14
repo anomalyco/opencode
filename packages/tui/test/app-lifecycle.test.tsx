@@ -710,6 +710,52 @@ test.each([80, 120])("completes custom Markdown and ordinary fences in a session
   expect(frame).not.toContain("```")
 })
 
+test("a finished compaction summary shows a last line that streaming would hold back", async () => {
+  await using state = await tmpdir()
+  const session = {
+    id: "ses_compaction",
+    title: "Compaction fixture",
+    projectID: "project",
+    location: { directory },
+    agent: "build",
+    model: { providerID: "fixture", id: "model" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 2 },
+  }
+  await using setup = await createAppFixture({
+    state: state.path,
+    config: { animations: false, tabs: { mode: "off" }, session: { sidebar: "hide" } },
+    args: { sessionID: session.id },
+    fetch: (url) => {
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (url.pathname === `/api/session/${session.id}/message`)
+        return json({
+          data: [
+            {
+              id: "msg_compaction",
+              type: "compaction",
+              time: { created: 1 },
+              status: "completed",
+              reason: "manual",
+              // A streaming document holds a last line that may still become a table's header.
+              summary: "SUMMARY_START\n\n| SUMMARY | END |",
+            },
+          ],
+          cursor: {},
+        })
+      if (
+        url.pathname === `/api/session/${session.id}/inbox` ||
+        url.pathname === `/api/session/${session.id}/permission`
+      )
+        return json({ data: [] })
+      return undefined
+    },
+  })
+  await setup.waitForFrame((frame) => frame.includes("SUMMARY_START"))
+  await setup.waitForFrame((frame) => frame.includes("SUMMARY | END"))
+})
+
 test("keeps assistant footer metrics current after prepend, same-length refresh, and revert", async () => {
   await using state = await tmpdir()
   const session = {
