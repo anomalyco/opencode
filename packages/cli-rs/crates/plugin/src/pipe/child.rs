@@ -45,6 +45,7 @@ pub struct Limits {
     /// How long the oldest event may wait for its acknowledgement (4.3: 1 s).
     pub ack: Duration,
     /// The same for a load or a setup, which may import a large module before it reads on: not a frame's event (4.4).
+    /// Also for whatever waits on the JS host's own start, until its hello: Bun loading the host's modules.
     pub setup: Duration,
     /// The JS host's resident set (S2: a minimal Bun is 20 to 26 MiB; 58 MB a loaded one).
     pub memory: u64,
@@ -141,6 +142,8 @@ struct Shared {
     watch: Condvar,
     /// The last acknowledged sequence.
     acked: AtomicU64,
+    /// The JS host said the protocol's hello: it started.
+    hello: AtomicBool,
     /// Bytes read from the child, and of them in trees.
     read: AtomicU64,
     read_trees: AtomicU64,
@@ -200,6 +203,7 @@ impl Child {
             sent: Mutex::new(Owed { events: VecDeque::new(), progress: Instant::now() }),
             watch: Condvar::new(),
             acked: AtomicU64::new(0),
+            hello: AtomicBool::new(false),
             read: AtomicU64::new(0),
             read_trees: AtomicU64::new(0),
             closed: AtomicBool::new(false),
@@ -509,6 +513,7 @@ fn read(shared: &Shared, stdout: ChildStdout) {
                 Event::Up(up) if matches!(&**up, Up::Hello { magic, version, .. } if magic == MAGIC && *version == VERSION) =>
                 {
                     hello = true;
+                    shared.hello.store(true, Ordering::Release);
                 }
                 _ => {
                     let why = format!("the JS host did not start with the protocol's hello (version {VERSION})");
@@ -620,8 +625,9 @@ fn watch(shared: &Shared) {
         let now = Instant::now();
         let mut wait = shared.limits.poll.saturating_sub(now - polled);
         if !owed.events.is_empty() {
-            // A setup that started may take the setup's time; anything else, the limit.
-            let setup = owed.events.iter().any(|(_, wait, started)| *started && *wait == Wait::Setup);
+            // The JS host's start and a setup that started may take the setup's time; anything else, the limit.
+            let setup = !shared.hello.load(Ordering::Acquire)
+                || owed.events.iter().any(|(_, wait, started)| *started && *wait == Wait::Setup);
             let limit = if setup { shared.limits.setup } else { shared.limits.ack };
             let due = owed.progress + limit;
             if now >= due && named != Some(owed.progress) {
@@ -814,6 +820,33 @@ mod tests {
             let events = take_until(&child, |events| events.iter().any(|event| matches!(event, Event::Hung { .. })));
             let hung = events.iter().any(|event| matches!(event, Event::Hung { seq: 1 }));
             assert_eq!(hung, late, "{wait:?}: {events:?}");
+        }
+    }
+
+    // Expected: the JS host's start, until its hello, may take the setup's time, not the limit of an event, though the
+    // host owes events sent before it: a machine under load starts Bun and its modules slowly. A start past the setup's
+    // time is a hang.
+    #[test]
+    fn a_slow_start_is_not_a_hang() {
+        for (setup, hung) in [(Duration::from_secs(5), false), (Duration::from_millis(200), true)] {
+            let limits = Limits { ack: Duration::from_millis(100), setup, ..Limits::default() };
+            let dir = opencode_util::temp::tempdir().unwrap();
+            let (hello_file, ack_file) = (dir.path().join("hello"), dir.path().join("ack"));
+            std::fs::write(&hello_file, hello()).unwrap();
+            std::fs::write(&ack_file, control(&Up::Ack { seq: 1 })).unwrap();
+            let script = format!(
+                "sleep 0.6; cat '{}'; head -c 7 > /dev/null; cat '{}'; cat > /dev/null",
+                hello_file.display(),
+                ack_file.display()
+            );
+            let mut command = Command::new("sh");
+            command.arg("-c").arg(script);
+            let child = Child::spawn(command, limits, || {}).unwrap();
+            child.send(wire::CONTROL, b"{}", Some(1), Wait::Ack).unwrap();
+            let begun = Instant::now();
+            let events = take_until(&child, |_| child.acked() == 1 && begun.elapsed() > Duration::from_millis(800));
+            let late = events.iter().any(|event| matches!(event, Event::Hung { seq: 1 }));
+            assert_eq!(late, hung, "setup {setup:?}: {events:?}");
         }
     }
 
