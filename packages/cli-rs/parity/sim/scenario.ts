@@ -17,6 +17,8 @@ export type Step =
   | { resize: [number, number] }
   // Waits until the screen shows the text.
   | { until: string }
+  // Waits until the screen no longer shows the text.
+  | { gone: string }
   // Lets the model reply waiting at `{ hold: name }` stream on (scenario.ts `Reply`).
   | { release: string }
   // Waits for a time, for state that has no text to wait for. The scenario says why.
