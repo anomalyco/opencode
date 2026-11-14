@@ -87,6 +87,11 @@ struct Pad {
     views: usize,
     /// The view leaves the canvas's id out.
     unkeyed: bool,
+    /// The canvas sits in a box of its own, or takes no minimum width: a move, and a layout of the same size.
+    wrap: bool,
+    loose: bool,
+    /// The generation the last view had.
+    generation: u64,
 }
 
 impl Default for Pad {
@@ -100,6 +105,9 @@ impl Default for Pad {
             draws: Vec::new(),
             views: 0,
             unkeyed: false,
+            wrap: false,
+            loose: false,
+            generation: 0,
         }
     }
 }
@@ -123,6 +131,8 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             }
             "version" => pad.version += 1,
             "animate" => pad.animate = value == "1",
+            "wrap" => pad.wrap = value == "1",
+            "loose" => pad.loose = value == "1",
             _ => {}
         });
     });
@@ -130,21 +140,24 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-fn view(_: &mut v2::View<'_>) -> v2::Node {
-    let (shown, (width, height), version, animate, unkeyed) = pad(|pad| {
+fn view(cx: &mut v2::View<'_>) -> v2::Node {
+    let (shown, (width, height), version, animate, unkeyed, wrap, loose) = pad(|pad| {
         pad.views += 1;
-        (pad.shown, pad.size, pad.version, pad.animate, pad.unkeyed)
+        pad.generation = cx.mount.generation;
+        (pad.shown, pad.size, pad.version, pad.animate, pad.unkeyed, pad.wrap, pad.loose)
     });
     let fixed = abi::Layout {
         width: Some(abi::Width::Cells(width)),
         height: Some(abi::Width::Cells(height)),
         shrink: Some(false),
+        min_width_zero: loose,
         ..abi::Layout::default()
     };
     let mut row = vec![v2::Node::text(vec![abi::Span::new(MARK)]).layout(abi::Layout::default().shrink(false))];
     if shown {
         let canvas = v2::Node::canvas("art").version(version).animate(animate).layout(fixed);
-        row.push(if unkeyed { v2::Node::Canvas { id: None, layout: fixed, version, animate } } else { canvas });
+        let canvas = if unkeyed { v2::Node::Canvas { id: None, layout: fixed, version, animate } } else { canvas };
+        row.push(if wrap { v2::Node::column(vec![canvas]) } else { canvas });
     }
     v2::Node::column(vec![v2::Node::row(row).bg(abi::Color::Rgba(BG))]).with_id("page")
 }
@@ -388,6 +401,8 @@ enum Command {
     Open,
     Home,
     Show(bool),
+    Wrap(bool),
+    Loose(bool),
     Size(u16, u16),
     Version,
     Animate(bool),
@@ -410,6 +425,8 @@ fn apply(harness: &Harness, command: &Command) {
         Command::Open => tui.navigate(Route::Plugin { id: ID.to_owned(), name: "pad".to_owned() }),
         Command::Home => tui.navigate(Route::Home),
         Command::Show(shown) => set(format!("shown={}", u8::from(*shown))),
+        Command::Wrap(on) => set(format!("wrap={}", u8::from(*on))),
+        Command::Loose(on) => set(format!("loose={}", u8::from(*on))),
         Command::Size(width, height) => set(format!("size={width}x{height}")),
         Command::Version => set("version=".into()),
         Command::Animate(on) => set(format!("animate={}", u8::from(*on))),
@@ -479,7 +496,9 @@ impl Model for Canvases {
         commands.extend((1..steps).map(|_| match rng.below(100) {
             0..8 => Command::Open,
             8..14 => Command::Home,
-            14..24 => Command::Show(rng.below(3) > 0),
+            14..20 => Command::Show(rng.below(3) > 0),
+            20..22 => Command::Wrap(rng.below(2) == 0),
+            22..24 => Command::Loose(rng.below(2) == 0),
             24..36 => Command::Size(1 + rng.below(30) as u16, 1 + rng.below(8) as u16),
             36..48 => Command::Version,
             48..60 => Command::Animate(rng.below(2) == 0),
@@ -515,18 +534,21 @@ impl Model for Canvases {
             let fail = |property: &'static str, site: &'static str, detail: String| {
                 (!model::skipped(property)).then_some(Failure { property, site, step, detail })
             };
-            let seen = pad(|pad| pad.draws.len());
+            let (seen, work) = (pad(|pad| pad.draws.len()), host::work());
             // The draw a command asks for in its frame, from the canvas as it showed before it.
-            let before = (reference.showing(), reference.size);
+            let (was_showing, was_size, was_animating) = (reference.showing(), reference.size, reference.animating());
             apply(&harness, command);
             match command {
-                Command::Open if !reference.dead => {
-                    reference.mounted = None;
+                Command::Open | Command::Home => {
                     reference.held = None;
-                }
-                Command::Home => {
-                    reference.mounted = None;
-                    reference.held = None;
+                    let on_route = matches!(harness.tui.route(), Route::Plugin { .. });
+                    reference.mounted = (on_route && !reference.dead).then(|| pad(|pad| pad.generation));
+                    if let Some(generation) = reference.mounted {
+                        if generation <= reference.highest {
+                            return fail("lifecycle", "mount", format!("generation {generation} opened again"));
+                        }
+                        reference.highest = generation;
+                    }
                 }
                 Command::Show(shown) => {
                     if *shown != reference.shown {
@@ -541,49 +563,37 @@ impl Model for Canvases {
             }
             let first = frame(&harness, Duration::from_millis(1));
             let draws: Vec<Drawn> = pad(|pad| pad.draws[seen..].to_vec());
-            if let Command::Open = command
-                && !reference.dead
-            {
-                // A new mount: its first draw is the canvas's first, and the generation is new.
-                let on_route = matches!(harness.tui.route(), Route::Plugin { .. });
-                if on_route {
-                    let generation = draws.first().map(|drawn| drawn.generation);
-                    match draws.first() {
-                        Some(drawn)
-                            if drawn.frame.cause == v2::Cause::First && drawn.generation > reference.highest =>
-                        {
-                            reference.mounted = generation;
-                            reference.highest = drawn.generation;
-                        }
-                        _ if !reference.shown => {
-                            // A mount without a canvas draws nothing; its generation shows in the next draw.
-                            reference.mounted = Some(u64::MAX);
-                        }
-                        other => return fail("lifecycle", "first", format!("a new mount's first draw is {other:?}")),
-                    }
-                }
-            }
-            if reference.mounted == Some(u64::MAX)
-                && let Some(drawn) = draws.first()
-                && drawn.generation > reference.highest
-            {
-                reference.mounted = Some(drawn.generation);
-                reference.highest = drawn.generation;
-            }
-            if draws.len() > 1 {
-                return fail("work", "once", format!("a frame drew the canvas {} times: {draws:?}", draws.len()));
-            }
-            let showing = reference.showing() && !matches!(reference.mounted, Some(u64::MAX));
-            let asked: &[v2::Cause] = match command {
-                Command::Open | Command::Show(true) if showing && (!before.0 || matches!(command, Command::Open)) => {
-                    &[v2::Cause::First]
-                }
-                Command::Size(..) if showing && before.0 && before.1 != reference.size => &[v2::Cause::Resized],
-                Command::Version if showing && before.0 => &[v2::Cause::Version, v2::Cause::Animate],
-                _ => &[],
+            let animating = was_animating && reference.animating();
+            let asked = match command {
+                Command::Open if reference.showing() => Some(v2::Cause::First),
+                Command::Show(true) if reference.showing() && !was_showing => Some(v2::Cause::First),
+                Command::Size(..) if reference.showing() && was_size != reference.size => Some(v2::Cause::Resized),
+                Command::Version if reference.showing() && animating => Some(v2::Cause::Animate),
+                Command::Version if reference.showing() => Some(v2::Cause::Version),
+                _ if animating => Some(v2::Cause::Animate),
+                _ => None,
             };
-            if !asked.is_empty() && !draws.first().is_some_and(|drawn| asked.contains(&drawn.frame.cause)) {
-                return fail("lifecycle", "asked", format!("{command:?} drew {draws:?}, not one of {asked:?}"));
+            // A frame of the animation carries its time, whatever else asks for the draw in it.
+            let dt = match asked {
+                Some(v2::Cause::First) | None => Duration::ZERO,
+                Some(_) if animating => Duration::from_millis(1),
+                Some(_) => Duration::ZERO,
+            };
+            let got: Vec<(v2::Cause, Duration)> =
+                draws.iter().map(|drawn| (drawn.frame.cause, drawn.frame.dt)).collect();
+            let want: Vec<(v2::Cause, Duration)> = asked.map(|cause| (cause, dt)).into_iter().collect();
+            if got != want {
+                return fail("lifecycle", "asked", format!("{command:?} drew {got:?}, not {want:?}"));
+            }
+            let done = host::work().since(work);
+            let made = |kind: fn(&Returned) -> bool| draws.iter().filter(|drawn| kind(&drawn.returned)).count() as u64;
+            let counted = (
+                made(|returned| matches!(returned, Returned::Art(_))),
+                made(|returned| matches!(returned, Returned::Over)),
+                draws.len() as u64,
+            );
+            if (done.lists, done.over, done.draws) != counted {
+                return fail("work", "counted", format!("the host counted {done:?} for {draws:?}"));
             }
             if let Err(detail) = reference.take(&draws) {
                 return fail("lifecycle", "draw", detail);
@@ -1304,4 +1314,41 @@ fn a_draw_that_fails_is_reported_by_its_call() {
         assert_eq!(pad(|pad| pad.draws.len()), 1);
         assert_eq!(host::ledger(), Ledger::default());
     }
+}
+
+thread_local! {
+    static SLOT: RefCell<Vec<v2::Frame>> = const { RefCell::new(Vec::new()) };
+}
+
+fn slot_setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let place = v2::Place::Slot(abi::Placement::append("home.footer"));
+    let view = |_: &mut v2::View<'_>| {
+        v2::Node::canvas("badge").layout(abi::Layout {
+            width: Some(abi::Width::Cells(7)),
+            height: Some(abi::Width::Cells(1)),
+            ..abi::Layout::default()
+        })
+    };
+    setup.surface(v2::Surface::new("badge", place, view).draw(|cx| {
+        SLOT.with(|frames| frames.borrow_mut().push(cx.frame));
+        let mut list = List::new();
+        list.text(0, 0, "§badge§", list::Style::new().fg(abi::Rgba::new(255, 255, 255, 255)));
+        Some(list)
+    }));
+    Ok(())
+}
+
+// Expected: a canvas at the root of a slot surface takes its own layout there, as a box at a slot's root does, and is
+// drawn at that size.
+#[test]
+fn a_canvas_at_a_slots_root_takes_its_layout() {
+    SLOT.with(|frames| frames.borrow_mut().clear());
+    let harness = open_tui(80, 24, vec![abi::Plugin { id: "test.badge", setup: slot_setup }.into()]);
+    let screen = frame(&harness, Duration::from_millis(16)).text();
+    let frames = SLOT.with(|frames| frames.borrow().clone());
+    assert_eq!(
+        frames.iter().map(|frame| (frame.width, frame.height, frame.cause)).collect::<Vec<_>>(),
+        [(7, 1, v2::Cause::First)]
+    );
+    assert!(screen.contains("§badge§"), "{screen}");
 }
