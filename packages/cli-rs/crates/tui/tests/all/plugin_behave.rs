@@ -2645,3 +2645,114 @@ fn a_handler_moves_the_transcript_for_the_users_scroll_only() {
     assert!(board(|board| board.user_scrolls > 0), "the wheel was not the user's scroll");
     assert_eq!(*verbs.borrow(), [v2::Scroll::By { rows: -2 }]);
 }
+
+thread_local! {
+    /// What the `two` route's handler read: each user's scroll's offset, as the mount whose scroll moved reads it.
+    static TWICE: RefCell<Vec<i64>> = RefCell::default();
+}
+
+/// A route of a list and an input; an input's submit brings row `r<text>` of its own mount's list to the top, and the
+/// user's scroll reads its own list's offset.
+fn twice_setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let target = || v2::Target::node("two", "list");
+    let surface = v2::Surface::new("two", v2::Place::Route("two".into()), |_| {
+        let rows = (0..40).map(|row| text(format!("r{row}")).with_id(format!("r{row}"))).collect();
+        let mut list = v2::Node::scroll(rows).with_id("list").layout(abi::Layout::default().grow());
+        if let v2::Node::Scroll { user_scroll, .. } = &mut list {
+            *user_scroll = true;
+        }
+        let input = v2::Node::Input {
+            id: Some("say".into()),
+            value: String::new(),
+            placeholder: "say".into(),
+            lines: None,
+            layout: abi::Layout::default(),
+        };
+        v2::Node::column(vec![input, list]).layout(abi::Layout::default().grow())
+    })
+    .on(move |host, event| {
+        match event {
+            Event::Submit { text, .. } => {
+                host.scroll(target(), v2::Scroll::To { node: format!("r{text}"), align: v2::ScrollAlign::Start })
+            }
+            Event::Scroll { event: v2::ScrollEvent::UserScroll { .. } } => {
+                let offset = host.scroll_state(&target()).map_or(-1, |state| i64::from(state.offset));
+                TWICE.with(|twice| twice.borrow_mut().push(offset));
+            }
+            _ => {}
+        }
+        Handled::Pass
+    });
+    setup.surface(surface);
+    Ok(())
+}
+
+/// The first row of each mount's list on screen: the left mount's, then the right one's.
+fn tops(screen: &str) -> (String, String) {
+    let top = |half: usize| {
+        screen
+            .lines()
+            .filter_map(|line| {
+                line.chars().skip(half * 40).take(40).collect::<String>().split_whitespace().next().map(str::to_owned)
+            })
+            .find(|word| word.starts_with('r') && word[1..].parse::<u32>().is_ok())
+            .unwrap_or_default()
+    };
+    (top(0), top(1))
+}
+
+// Expected (P3's events on P2's handler, O-115): two mounts of one surface, each with an input and a scroll. An
+// input's submit moves its own mount's list, and the user's scroll of one reads that mount's offset: what a handler
+// asks for and reads is the mount the event came from, not the plugin's newest mount, on both carriers.
+#[test]
+fn an_event_acts_on_the_mount_it_came_from() {
+    use opentui::prelude::*;
+    for carrier in crate::plugin_surface::CARRIERS {
+        TWICE.with(|twice| twice.borrow_mut().clear());
+        let deps = Deps {
+            route: Route::Home,
+            builtins: vec![crate::plugin_surface::builtin(
+                carrier,
+                abi::Plugin { id: "test.twice", setup: twice_setup },
+            )],
+            ..support::deps(Arc::new(support::empty()))
+        };
+        let harness = support::mount(80, 16, deps);
+        harness.app.advance(Duration::ZERO);
+        let host = opencode_tui::plugins::host::host(&harness.tui);
+        let app = harness.app.app();
+        let frame = View::new(app).row().absolute().z_index(3000).width(80).height(12);
+        let mounts: Vec<_> = (0..2)
+            .map(|_| {
+                let mount = harness.tui.plugins.route(&*host, "test.twice", "two").expect("the route mounts");
+                let cell = View::new(app).column().width(40).height(12);
+                cell.add(&mount.root());
+                frame.add(&cell);
+                mount
+            })
+            .collect();
+        opencode_ui::root::add(app, &frame);
+        let settle = || {
+            for _ in 0..3 {
+                harness.app.advance(Duration::from_millis(1));
+                harness.app.render();
+            }
+            harness.app.render().text()
+        };
+        assert_eq!(tops(&settle()), ("r0".into(), "r0".into()), "{carrier:?}");
+        // Submit in the left mount, then in the right one.
+        for (x, row, expected) in [(1, "5", ("r5", "r0")), (41, "9", ("r5", "r9"))] {
+            harness.app.click(x, 0);
+            harness.app.type_text(row);
+            harness.app.press("enter");
+            let screen = settle();
+            assert_eq!(tops(&screen), (expected.0.into(), expected.1.into()), "{carrier:?}:\n{screen}");
+        }
+        // The user's scroll of the left list reads the left list's offset.
+        harness.app.scroll(10, 6, true);
+        settle();
+        let read = TWICE.with(|twice| twice.borrow().clone());
+        assert!(!read.is_empty() && read.iter().all(|offset| (5..9).contains(offset)), "{carrier:?}: read {read:?}");
+        drop(mounts);
+    }
+}
