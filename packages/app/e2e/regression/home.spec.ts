@@ -1,5 +1,5 @@
 import type { OpenCodeEvent } from "@opencode/client/promise"
-import { expect, test, type Page } from "@playwright/test"
+import { devices, expect, test, type Page } from "@playwright/test"
 import {
   expectPath,
   holdRoute,
@@ -151,6 +151,45 @@ test("the session context menu renames, exports, and deletes a Home session", as
   await expect(dialog).toBeHidden()
   await expect(renamedRow).toBeHidden()
   expect(removed.requests).toHaveLength(1)
+})
+
+test.describe("mobile Home session menu", () => {
+  const mobile = devices["Pixel 5"]
+  test.use({
+    viewport: mobile.viewport,
+    userAgent: mobile.userAgent,
+    deviceScaleFactor: mobile.deviceScaleFactor,
+    isMobile: mobile.isMobile,
+    hasTouch: mobile.hasTouch,
+  })
+
+  test("tapping Delete opens the confirmation dialog", async ({ page }) => {
+    await openHome(page)
+    const target = row(page, fixture.expected.targetTitle)
+    await expect(target).toBeVisible()
+
+    await target.dispatchEvent("pointerdown", {
+      bubbles: true,
+      pointerType: "touch",
+      pointerId: 1,
+      clientX: 48,
+      clientY: 12,
+      buttons: 1,
+    })
+    const deleteItem = page.getByRole("menuitem", { name: "Delete…" })
+    await expect(deleteItem).toBeVisible()
+    await target.dispatchEvent("pointerup", {
+      bubbles: true,
+      pointerType: "touch",
+      pointerId: 1,
+      clientX: 48,
+      clientY: 12,
+      buttons: 0,
+    })
+    await deleteItem.tap()
+
+    await expect(page.getByRole("dialog")).toContainText(`Delete session "${fixture.expected.targetTitle}"?`)
+  })
 })
 
 test("a failed session list says so and loads again on Try again, instead of showing the empty state", async ({

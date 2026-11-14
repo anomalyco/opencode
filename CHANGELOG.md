@@ -81,6 +81,7 @@ Release notes for OpenCode V2, newest first.
 
 #### Bug fixes
 
+- Fixed the Home session delete confirmation closing immediately after a mobile touch selection.
 - Recent sessions now keep stable recency ordering through list reloads, renames, and completed runs.
 - Fixed browser panes not retrying after server plugins finish loading.
 - Fixed mention suggestions being recreated while typing.
