@@ -2480,3 +2480,45 @@ fn a_fetch_reply_too_large_for_the_js_host_fails() {
     });
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "Err\n");
 }
+
+// Expected (bigboi P8-6): `data.session.pending` lists the session's inbox items the server has not delivered, as the
+// host holds them, where it listed none.
+#[test]
+fn a_v2_plugin_reads_a_sessions_pending_inbox() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let log = root.path().join("pending");
+    let plugin = root.path().join("config/plugins/pending");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let module = format!(
+        "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.pending\", setup(api) {{\n  api.keymap.layer(() => ({{ mode: \"global\", commands: [{{ id: \"pending.log\", run: async () => {{\n    await api.data.session.pending.sync(\"ses_q\")\n    appendFileSync({log:?}, JSON.stringify(api.data.session.pending.list(\"ses_q\").map((item) => item.id)) + \"\\n\")\n  }} }}] }}))\n}} }}\n"
+    );
+    std::fs::write(plugin.join("tui.ts"), module).unwrap();
+    let queued = serde_json::json!({
+        "id": "msg_3", "sessionID": "ses_q", "type": "user", "time": { "created": 3000 }, "delivery": "queue",
+        "payload": { "text": "queued" },
+    });
+    let server = support::Fake::new(move |seen| match seen.path.as_str() {
+        "/api/session" => (200, serde_json::json!({ "data": [support::session("ses_q", "Q")], "cursor": {} })),
+        "/api/session/ses_q" => (200, serde_json::json!({ "data": support::session("ses_q", "Q") })),
+        "/api/session/ses_q/message" => (200, serde_json::json!({ "data": [], "cursor": {} })),
+        "/api/session/ses_q/inbox" => (200, serde_json::json!({ "data": [queued.clone()] })),
+        _ => support::not_found(),
+    });
+    let deps = Deps { route: support::session_route("ses_q"), ..support::deps(Arc::new(server)) };
+    let harness = support::mount(100, 30, deps);
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.pending");
+    pipe.harness.wait("the inbox loaded", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        pipe.harness.app.text().contains("1 queued")
+    });
+    pipe.harness.tui.keymap.dispatch("pending.log", None);
+    pipe.harness.wait("the plugin read its inbox", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        log.exists()
+    });
+    assert_eq!(std::fs::read_to_string(&log).unwrap(), "[\"msg_3\"]\n");
+}
