@@ -1,13 +1,15 @@
 /*
  * A plugin of ABI 2.0 in C, on `crates/plugin-abi/include/opencode_plugin.h` alone. The loader's tests build it with
  * the system's C compiler and load it: a command that toasts and sends itself a message, a route surface that shows
- * how many messages arrived, and the message handler. It matches requests by their "type" with a byte search, which
- * is enough for a test and no way to read JSON.
+ * how many messages arrived, the message handler, and a renderer claim of the `c` tool's calls. It matches requests
+ * by their "type" with a byte search, which is enough for a test and no way to read JSON.
  *
  * The tests build variants of it. `-DOPENCODE_AS_V1` exports it as a 1.4 plugin, through `opencode_plugin_v1`, still
- * declaring its surface and messages; `-DOPENCODE_BAD_DESCRIBE` answers metadata the host cannot read. Its options
- * (the JSON text of its `plugins` entry) switch faults on: "view-toast" asks for a toast in a view, "command-true"
- * answers `true` to a command, "command-error" answers OPENCODE_ERROR, "no-messages" declares no message handler.
+ * declaring its surface, messages and claim; `-DOPENCODE_BAD_DESCRIBE` answers metadata the host cannot read. Its
+ * options (the JSON text of its `plugins` entry) switch faults on: "view-toast" asks for a toast in a view, and
+ * "claim-toast" in a claim's view; "claim-memo" declines a call and says its memo table holds 7 values; "claim-handle"
+ * gives content numbered 0, which the host never numbers so; "command-true" answers `true` to a command,
+ * "command-error" answers OPENCODE_ERROR, "no-messages" declares no message handler.
  * "canvas" adds a canvas `m` below the count, whose version is the count, and a draw that writes its list by hand: a
  * text of how many draws ran, and for which canvas. With it, "draw-toast" asks for a toast in each draw, and
  * "draw-keep" answers no list after the first draw, so the canvas keeps that one.
@@ -102,12 +104,12 @@ static int32_t create(const opencode_host_api *host, opencode_bytes options, voi
         memcpy(self->options, options.ptr, len);
     }
     *out_instance = self;
-    char manifest[512];
+    char manifest[600];
     snprintf(manifest, sizeof manifest,
              "{\"id\":\"example.c\",\"commands\":[{\"name\":\"c.hello\",\"title\":\"Hello from C\",\"group\":null,"
              "\"slash\":null,\"keybind\":null,\"palette\":false}],\"fences\":[],\"slots\":[],\"routes\":[],"
              "\"storage\":[],\"render\":2,\"surfaces\":[{\"name\":\"c\",\"place\":{\"type\":\"route\",\"name\":\"c\"},"
-             "\"draw\":%s}],\"messages\":%s}",
+             "\"draw\":%s}],\"claims\":[{\"target\":{\"type\":\"tool\",\"name\":\"c\"}}],\"messages\":%s}",
              option(self, "canvas") ? "true" : "false", option(self, "no-messages") ? "false" : "true");
     *out = owned(manifest);
     return OPENCODE_OK;
@@ -151,6 +153,27 @@ static int32_t call(void *raw, opencode_bytes request, opencode_owned *out) {
     }
     instance *self = raw;
     const opencode_host_api *host = self->host;
+    /* A claim's request names the part's own types, so it is told first. */
+    if (is(request, "claim")) {
+        if (option(self, "claim-memo")) {
+            *out = owned("{\"node\":null,\"memo\":7}");
+            return OPENCODE_OK;
+        }
+        if (option(self, "claim-handle")) {
+            *out = owned("{\"node\":{\"type\":\"markdown\",\"id\":\"m\",\"source\":{\"content\":0}},"
+                         "\"content\":[[0,\"claimed\"]]}");
+            return OPENCODE_OK;
+        }
+        int refused = 0;
+        if (option(self, "claim-toast")) {
+            refused = toast(host, "a claim asked for this") != OPENCODE_OK;
+        }
+        char tree[200];
+        snprintf(tree, sizeof tree, "{\"node\":{\"type\":\"text\",\"id\":\"c\",\"spans\":[{\"text\":\"claimed in C%s\"}]}}",
+                 refused ? ", toast refused" : "");
+        *out = owned(tree);
+        return OPENCODE_OK;
+    }
     if (is(request, "command")) {
         toast(host, "hello from C");
         /* A 1.x host has no `send`: the command only toasts there. */
