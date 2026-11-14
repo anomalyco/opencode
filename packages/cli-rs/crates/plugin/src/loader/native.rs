@@ -57,6 +57,7 @@ use serde::de::DeserializeOwned;
 use super::Backend;
 use crate::activation::{Activation, Drawn, Wake};
 use crate::behave;
+use crate::conformance::{self, Event};
 use crate::mailbox::Mailbox;
 use crate::node::{Fences, MountFn, Scroll, SlotRender, lines_widget, theme_color};
 use crate::slot::placement;
@@ -233,6 +234,13 @@ impl Library {
     /// `plugin` through the SDK's own shims, as a library of the current ABI exports them.
     fn carried(plugin: abi::Plugin) -> Self {
         let id = plugin.id;
+        conformance::tap(Event::Open {
+            entry: ABI_MAJOR,
+            major: ABI_MAJOR,
+            minor: ABI_MINOR,
+            requires_minor: 0,
+            served: HOST_MINOR,
+        });
         Self {
             major: ABI_MAJOR,
             minor: ABI_MINOR,
@@ -333,6 +341,8 @@ impl Library {
             Rc::new(move |host, options, instance, out| unsafe { create(host, options, instance, out) });
         let describe =
             describe.map(|describe| Rc::new(move |out| unsafe { describe(out) }) as Rc<dyn Fn(*mut Owned) -> i32>);
+        let requires_minor = core.requires_minor;
+        conformance::tap(Event::Open { entry, major, minor, requires_minor, served: host_minor });
         Ok(Self { major, minor, served: host_minor, create, call, destroy: core.destroy, free, describe })
     }
 
@@ -342,9 +352,12 @@ impl Library {
     fn compatible(&self) -> Result<abi::Metadata, String> {
         let Some(describe) = &self.describe else { return Ok(abi::Metadata::default()) };
         let mut out = Owned::EMPTY;
+        conformance::tap(Event::Describe);
         let status = describe(&mut out);
         // SAFETY: `describe` wrote `out`, which goes back to `free`.
-        let metadata = unsafe { received(out, self.free) }.and_then(|bytes| match status {
+        let received = unsafe { received(out, self.free) };
+        conformance::tap(Event::Return { status, reply: received.as_deref().map_err(String::as_str) });
+        let metadata = received.and_then(|bytes| match status {
             abi::OK => serde_json::from_slice::<abi::Metadata>(&bytes).map_err(|error| error.to_string()),
             _ => Err(String::from_utf8_lossy(&bytes).into_owned()),
         });
@@ -529,6 +542,8 @@ enum Effect {
 /// plugin's threads to stop, so they are never freed.
 struct Instance {
     library: Rc<Library>,
+    /// The instance's number in this process, as the conformance tap names it.
+    tap: u64,
     handle: *mut c_void,
     api: NonNull<HostApi>,
     shared: NonNull<Shared>,
@@ -613,9 +628,20 @@ impl Instance {
         let shared = NonNull::from(Box::leak(Box::new(Shared { ctx, mail: Mailbox::new(id, wake), ui })));
         let table = host_table(library.major, library.served, shared.as_ptr().cast());
         let api = NonNull::from(Box::leak(Box::new(table)));
+        // SAFETY: allocated above, and never written.
+        let table = unsafe { api.as_ref() };
         let mut handle = std::ptr::null_mut();
         let mut out = Owned::EMPTY;
         let options = options.unwrap_or_default();
+        let tap = conformance::next_instance();
+        conformance::tap(Event::Create {
+            instance: tap,
+            major: table.major,
+            minor: table.minor,
+            // SAFETY: the host's static list, or nothing.
+            features: unsafe { table.features.as_slice() },
+            options: options.as_bytes(),
+        });
         // SAFETY: the pointers are valid for the call, and the table and its context outlive the instance.
         let (status, bytes) = unsafe {
             let status = crate::contain::catch(|| {
@@ -623,6 +649,7 @@ impl Instance {
             });
             (status.unwrap_or(abi::PANIC), received(out, library.free))
         };
+        conformance::tap(Event::Return { status, reply: bytes.as_deref().map_err(String::as_str) });
         // SAFETY: allocated above; only shared references reach it from here on.
         let context = unsafe { shared.as_ref() };
         let text = |bytes: Result<Vec<u8>, String>| match bytes {
@@ -640,7 +667,7 @@ impl Instance {
             context.drain();
             return Err(text(bytes));
         }
-        let instance = Self { library: library.clone(), handle, api, shared };
+        let instance = Self { library: library.clone(), tap, handle, api, shared };
         match bytes.and_then(|bytes| manifest(&bytes, library.major, expect)) {
             Ok(manifest) => {
                 let mut ctx = context.ctx.borrow_mut();
@@ -676,11 +703,13 @@ impl Instance {
     fn call(&self, request: &Request) -> Result<Vec<u8>, Failed> {
         let json = serde_json::to_vec(request).map_err(|error| Failed::Refused(error.to_string()))?;
         let mut out = Owned::EMPTY;
+        conformance::tap(Event::Call { instance: self.tap, request: &json });
         // SAFETY: `handle` is live until drop; `out` goes back to the library's `free`.
         let (status, bytes) = unsafe {
             let status = crate::contain::catch(|| (self.library.call)(self.handle, Bytes::new(&json), &mut out));
             (status.unwrap_or(abi::PANIC), received(out, self.library.free))
         };
+        conformance::tap(Event::Return { status, reply: bytes.as_deref().map_err(String::as_str) });
         let bytes = bytes.map_err(|error| Failed::Refused(format!("returned a bad result: {error}")))?;
         carry(|crossed| {
             crossed.calls += 1;
@@ -721,8 +750,10 @@ impl Drop for Instance {
             shared.drain();
             return;
         };
+        conformance::tap(Event::Destroy { instance: self.tap });
         // SAFETY: `handle` came from `create` and is destroyed once; the plugin catches its own panics.
         let _ = crate::contain::catch(|| unsafe { destroy(self.handle) });
+        conformance::tap(Event::Destroyed);
         // What its dispose callbacks asked for still happens, as in process; their fetches reach no activation.
         shared.drain();
         // SAFETY: allocated in `create`; `destroy` has returned, so the plugin holds no pointer into them any more.
@@ -790,6 +821,7 @@ unsafe extern "C" fn host_call(ctx: *mut c_void, request: Bytes, out: *mut Owned
         crossed.received += request.len() as u64;
         crossed.sent += bytes.len() as u64;
     });
+    conformance::tap(Event::Host { request, status, reply: &bytes });
     // SAFETY: `out` is valid for writes during the call.
     unsafe { *out = Owned::from_vec(bytes) };
     status
@@ -811,7 +843,10 @@ unsafe extern "C" fn host_send(ctx: *mut c_void, key: Bytes, message: Bytes) -> 
     let sent = catch_unwind(AssertUnwindSafe(|| unsafe {
         mailbox(ctx).map_or(abi::CLOSED, |mail| mail.put_json(key.as_slice(), message.as_slice()))
     }));
-    sent.unwrap_or(abi::ERROR)
+    let status = sent.unwrap_or(abi::ERROR);
+    // SAFETY: as above.
+    conformance::tap(Event::Send { key: unsafe { key.as_slice() }, message: unsafe { message.as_slice() }, status });
+    status
 }
 
 /// The host's side of [`HostApi::report`], on any thread.
@@ -822,13 +857,17 @@ unsafe extern "C" fn host_report(ctx: *mut c_void, message: Bytes) {
             mail.panicked(String::from_utf8_lossy(message.as_slice()).into_owned());
         }
     }));
+    // SAFETY: as above.
+    conformance::tap(Event::Report { message: unsafe { message.as_slice() } });
 }
 
 /// The host's side of [`HostApi::stopped`], on any thread.
 unsafe extern "C" fn host_stopped(ctx: *mut c_void) -> u32 {
     // SAFETY: as for `host_send`.
     let stopped = catch_unwind(AssertUnwindSafe(|| unsafe { mailbox(ctx).is_none_or(Mailbox::closed) }));
-    u32::from(stopped.unwrap_or(true))
+    let answer = u32::from(stopped.unwrap_or(true));
+    conformance::tap(Event::Stopped { answer });
+    answer
 }
 
 /// The host's side of [`HostApi::theme_mode`]. A host that is gone or panics answers dark.
@@ -836,13 +875,16 @@ unsafe extern "C" fn host_theme_mode(ctx: *mut c_void) -> u32 {
     // SAFETY: `ctx` is the `Shared` this instance was created with, or null. Another thread gets dark, as from a host
     // that is gone.
     if !unsafe { on_ui_thread(ctx) } {
+        conformance::tap(Event::ThemeMode { answer: abi::THEME_DARK });
         return abi::THEME_DARK;
     }
     // SAFETY: `ctx` is the `Shared` this instance was created with, or null.
     let ctx = unsafe { ctx.cast::<Shared>().as_ref().map(|shared| &shared.ctx) };
     let host = ctx.and_then(|ctx| ctx.try_borrow().ok()).and_then(|ctx| ctx.host.upgrade());
     let light = catch_unwind(AssertUnwindSafe(|| host.is_some_and(|host| host.theme_mode() == ThemeMode::Light)));
-    if light.unwrap_or(false) { abi::THEME_LIGHT } else { abi::THEME_DARK }
+    let answer = if light.unwrap_or(false) { abi::THEME_LIGHT } else { abi::THEME_DARK };
+    conformance::tap(Event::ThemeMode { answer });
+    answer
 }
 
 /// The host's side of [`HostApi::wake`], on any thread: posts one [`Woken`] until the UI thread handles it.
@@ -851,6 +893,7 @@ unsafe extern "C" fn host_wake(ctx: *mut c_void) {
     if let Some(mail) = unsafe { mailbox(ctx) } {
         mail.wake().post();
     }
+    conformance::tap(Event::Wake);
 }
 
 unsafe extern "C" fn host_free(owned: Owned) {
@@ -1866,6 +1909,29 @@ fn loopback_with(
     // here keeps its own. Taking and setting the hook around each load would race other threads' loads.
     abi::runtime::keep_panic_hook();
     Library::from_table(&api, ABI_MAJOR, V1_MINOR).and_then(|library| define(host, library, None))
+}
+
+/// The definition of the plugin whose table `api` is, found through the entry of major `entry`, as a library's: the
+/// conformance tests' reference and the plugin that answers from a transcript.
+#[cfg(test)]
+pub(crate) fn from_api(
+    host: &Rc<dyn Host>,
+    api: *const PluginApi,
+    entry: u32,
+    options: Option<&str>,
+) -> Result<(Definition, ErrorFn), String> {
+    // As in `loopback`: the process keeps its panic hook.
+    abi::runtime::keep_panic_hook();
+    Library::from_table(api, entry, V1_MINOR).and_then(|library| define(host, library, options))
+}
+
+/// What the host makes of the table `api` found through the entry of major `entry`: the minor it serves it and what
+/// it says about itself, or why it refuses it (the version gate).
+#[cfg(test)]
+pub(crate) fn gate(api: *const PluginApi, entry: u32) -> Result<(u32, abi::Metadata), String> {
+    let library = Library::from_table(api, entry, V1_MINOR)?;
+    let metadata = library.compatible()?;
+    Ok((library.served, metadata))
 }
 
 /// Plugin `plugin` through the byte shims of the C ABI, as a loaded library runs it: the SDK's own `create`, `call`,

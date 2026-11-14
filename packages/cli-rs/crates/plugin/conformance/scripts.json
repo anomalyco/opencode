@@ -1,0 +1,150 @@
+[
+  {
+    "transcript": "activation",
+    "about": "describe, create with the manifest, destroy as the user disables the plugin, a new instance as they enable it",
+    "library": 2,
+    "script": [{ "do": "load" }, { "do": "observe" }, { "do": "disable" }, { "do": "observe" }, { "do": "enable" }, { "do": "observe" }]
+  },
+  {
+    "transcript": "actions",
+    "about": "commands and the host requests they make: a toast, storage written and read back, the theme mode and a read, in both modes",
+    "library": 2,
+    "script": [
+      { "do": "load" },
+      { "do": "command", "name": "conf.toast" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "command", "name": "conf.store" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "command", "name": "conf.read" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "mode", "light": true },
+      { "do": "command", "name": "conf.read" },
+      { "do": "advance" },
+      { "do": "observe" }
+    ]
+  },
+  {
+    "transcript": "surfaces",
+    "about": "a route surface: its first view with content, a view after a handler that keeps the memoized subtree, the unmount, and a new mount that builds again",
+    "library": 2,
+    "script": [
+      { "do": "load" },
+      { "do": "open", "route": "conf" },
+      { "do": "observe" },
+      { "do": "command", "name": "conf.store" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "close" },
+      { "do": "advance" },
+      { "do": "open", "route": "conf" },
+      { "do": "observe" },
+      { "do": "close" },
+      { "do": "advance" },
+      { "do": "observe" }
+    ]
+  },
+  {
+    "transcript": "mailbox",
+    "about": "sends to the mailbox, one replacing another under its key, delivered one message a call, then a wake and its handler",
+    "library": 2,
+    "script": [
+      { "do": "load" },
+      { "do": "open", "route": "conf" },
+      { "do": "command", "name": "conf.send" },
+      { "do": "advance" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "command", "name": "conf.wake" },
+      { "do": "advance" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "close" },
+      { "do": "advance" }
+    ]
+  },
+  {
+    "transcript": "canvas",
+    "about": "a canvas (P5): the first draw as the surface paints, and a draw for a new version",
+    "library": 2,
+    "script": [
+      { "do": "load" },
+      { "do": "open", "route": "pad" },
+      { "do": "observe" },
+      { "do": "command", "name": "conf.pad" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "close" },
+      { "do": "advance" }
+    ]
+  },
+  {
+    "transcript": "panic",
+    "about": "a command that asks for a toast and panics: nothing it asked for happens, the plugin fails once, its commands go, and it is never called again, not even destroyed",
+    "library": 2,
+    "script": [
+      { "do": "load" },
+      { "do": "open", "route": "conf" },
+      { "do": "command", "name": "conf.panic" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "command", "name": "conf.toast" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "disable" },
+      { "do": "observe" }
+    ]
+  },
+  {
+    "transcript": "refused-tree",
+    "about": "a view whose tree holds an id twice: the host refuses it whole, the plugin fails, and its surface shows nothing",
+    "library": 2,
+    "script": [
+      { "do": "load" },
+      { "do": "open", "route": "conf" },
+      { "do": "command", "name": "conf.dup" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "close" },
+      { "do": "advance" }
+    ]
+  },
+  {
+    "transcript": "setup-fails",
+    "about": "a setup that answers an error: the plugin fails with its text, and the instance is never destroyed",
+    "library": 2,
+    "script": [{ "do": "load", "options": "fail-setup" }, { "do": "advance" }, { "do": "observe" }]
+  },
+  {
+    "transcript": "overrun",
+    "about": "containment (P4c): the first call after setup may be slow; a later one over 100 ms keeps its effects, then fails the plugin",
+    "library": 2,
+    "script": [
+      { "do": "load" },
+      { "do": "command", "name": "conf.toast", "took": 150 },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "command", "name": "conf.toast", "took": 150 },
+      { "do": "advance" },
+      { "do": "observe" }
+    ]
+  },
+  {
+    "transcript": "v1",
+    "about": "the same plugin as a 1.x library on this 2.x host: served 1.x, a table that ends before send, no surfaces and no mailbox",
+    "library": 1,
+    "script": [
+      { "do": "load" },
+      { "do": "command", "name": "conf.toast" },
+      { "do": "command", "name": "conf.send" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "open", "route": "conf" },
+      { "do": "observe" },
+      { "do": "disable" },
+      { "do": "observe" }
+    ]
+  }
+]

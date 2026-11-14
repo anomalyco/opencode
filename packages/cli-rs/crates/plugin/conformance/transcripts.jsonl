@@ -1,0 +1,207 @@
+{"transcript":"activation","about":"describe, create with the manifest, destroy as the user disables the plugin, a new instance as they enable it","library":2,"script":[{"do":"load","options":""},{"do":"observe"},{"do":"disable"},{"do":"observe"},{"do":"enable"},{"do":"observe"}]}
+{"open":{"entry":2,"major":2,"minor":0,"requires_minor":0,"served":0}}
+"describe"
+{"return":{"status":0,"reply":{"version":"1.0.0","id":"conformance"}}}
+{"create":{"major":2,"minor":0,"features":[],"options":""}}
+{"host":{"request":{"type":"storage-key","key":"count"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":{"id":"conformance","commands":[{"name":"conf.toast","title":"conf.toast","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.store","title":"conf.store","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.send","title":"conf.send","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.wake","title":"conf.wake","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.panic","title":"conf.panic","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.dup","title":"conf.dup","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.read","title":"conf.read","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.pad","title":"conf.pad","group":null,"slash":null,"keybind":null,"palette":false}],"fences":[],"slots":[],"routes":[],"storage":["count"],"render":2,"wake":true,"surfaces":[{"name":"conf","place":{"type":"route","name":"conf"}},{"name":"pad","place":{"type":"route","name":"pad"},"draw":true}],"messages":true}}}
+{"observe":{"seen":{"toasts":[],"status":"Some(Active)"}}}
+"destroy"
+"destroyed"
+{"observe":{"seen":{"toasts":[],"status":"Some(Inactive)"}}}
+{"create":{"major":2,"minor":0,"features":[],"options":""}}
+{"host":{"request":{"type":"storage-key","key":"count"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":{"id":"conformance","commands":[{"name":"conf.toast","title":"conf.toast","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.store","title":"conf.store","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.send","title":"conf.send","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.wake","title":"conf.wake","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.panic","title":"conf.panic","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.dup","title":"conf.dup","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.read","title":"conf.read","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.pad","title":"conf.pad","group":null,"slash":null,"keybind":null,"palette":false}],"fences":[],"slots":[],"routes":[],"storage":["count"],"render":2,"wake":true,"surfaces":[{"name":"conf","place":{"type":"route","name":"conf"}},{"name":"pad","place":{"type":"route","name":"pad"},"draw":true}],"messages":true}}}
+{"observe":{"seen":{"toasts":[],"status":"Some(Active)"}}}
+"destroy"
+"destroyed"
+{"transcript":"actions","about":"commands and the host requests they make: a toast, storage written and read back, the theme mode and a read, in both modes","library":2,"script":[{"do":"load","options":""},{"do":"command","name":"conf.toast"},{"do":"advance"},{"do":"observe"},{"do":"command","name":"conf.store"},{"do":"advance"},{"do":"observe"},{"do":"command","name":"conf.read"},{"do":"advance"},{"do":"observe"},{"do":"mode","light":true},{"do":"command","name":"conf.read"},{"do":"advance"},{"do":"observe"}]}
+{"open":{"entry":2,"major":2,"minor":0,"requires_minor":0,"served":0}}
+"describe"
+{"return":{"status":0,"reply":{"version":"1.0.0","id":"conformance"}}}
+{"create":{"major":2,"minor":0,"features":[],"options":""}}
+{"host":{"request":{"type":"storage-key","key":"count"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":{"id":"conformance","commands":[{"name":"conf.toast","title":"conf.toast","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.store","title":"conf.store","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.send","title":"conf.send","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.wake","title":"conf.wake","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.panic","title":"conf.panic","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.dup","title":"conf.dup","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.read","title":"conf.read","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.pad","title":"conf.pad","group":null,"slash":null,"keybind":null,"palette":false}],"fences":[],"slots":[],"routes":[],"storage":["count"],"render":2,"wake":true,"surfaces":[{"name":"conf","place":{"type":"route","name":"conf"}},{"name":"pad","place":{"type":"route","name":"pad"},"draw":true}],"messages":true}}}
+{"call":{"request":{"type":"command","name":"conf.toast","input":null}}}
+{"host":{"request":{"type":"toast","variant":"success","message":"hello"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":null}}
+{"observe":{"seen":{"toasts":["Success: hello"],"status":"Some(Active)"}}}
+{"call":{"request":{"type":"command","name":"conf.store","input":null}}}
+{"host":{"request":{"type":"storage-set","key":"count","value":"1"},"status":0,"reply":null}}
+{"host":{"request":{"type":"storage-get","key":"count"},"status":0,"reply":"1"}}
+{"host":{"request":{"type":"toast","variant":"info","message":"stored 1"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":null}}
+{"observe":{"seen":{"toasts":["Info: stored 1"],"status":"Some(Active)"}}}
+{"call":{"request":{"type":"command","name":"conf.read","input":null}}}
+{"theme_mode":{"answer":0}}
+{"host":{"request":{"type":"interactive"},"status":0,"reply":true}}
+{"host":{"request":{"type":"toast","variant":"info","message":"read dark true"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":null}}
+{"observe":{"seen":{"toasts":["Info: read dark true"],"status":"Some(Active)"}}}
+{"call":{"request":{"type":"command","name":"conf.read","input":null}}}
+{"theme_mode":{"answer":1}}
+{"host":{"request":{"type":"interactive"},"status":0,"reply":true}}
+{"host":{"request":{"type":"toast","variant":"info","message":"read light true"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":null}}
+{"observe":{"seen":{"toasts":["Info: read light true"],"status":"Some(Active)"}}}
+"destroy"
+"destroyed"
+{"transcript":"surfaces","about":"a route surface: its first view with content, a view after a handler that keeps the memoized subtree, the unmount, and a new mount that builds again","library":2,"script":[{"do":"load","options":""},{"do":"open","route":"conf"},{"do":"observe"},{"do":"command","name":"conf.store"},{"do":"advance"},{"do":"observe"},{"do":"close"},{"do":"advance"},{"do":"open","route":"conf"},{"do":"observe"},{"do":"close"},{"do":"advance"},{"do":"observe"}]}
+{"open":{"entry":2,"major":2,"minor":0,"requires_minor":0,"served":0}}
+"describe"
+{"return":{"status":0,"reply":{"version":"1.0.0","id":"conformance"}}}
+{"create":{"major":2,"minor":0,"features":[],"options":""}}
+{"host":{"request":{"type":"storage-key","key":"count"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":{"id":"conformance","commands":[{"name":"conf.toast","title":"conf.toast","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.store","title":"conf.store","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.send","title":"conf.send","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.wake","title":"conf.wake","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.panic","title":"conf.panic","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.dup","title":"conf.dup","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.read","title":"conf.read","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.pad","title":"conf.pad","group":null,"slash":null,"keybind":null,"palette":false}],"fences":[],"slots":[],"routes":[],"storage":["count"],"render":2,"wake":true,"surfaces":[{"name":"conf","place":{"type":"route","name":"conf"}},{"name":"pad","place":{"type":"route","name":"pad"},"draw":true}],"messages":true}}}
+{"call":{"request":{"type":"view","surface":0,"mount":{"surface":"conf","key":"conf","generation":1},"input":{"width":60,"height":10,"palette":{"mode":"dark","colors":{}},"full":true},"next":0}}}
+{"return":{"status":0,"reply":{"node":{"type":"box","id":"root","children":[{"type":"text","id":"count","spans":[{"text":"views 1, messages 0"}]},{"type":"markdown","id":"fixed","source":{"content":1}}]},"content":[[1,"# fixed"]],"memo":1}}}
+{"observe":{"seen":{"toasts":[],"status":"Some(Active)","screen":["views 1, messages 0","fixed"]}}}
+{"call":{"request":{"type":"command","name":"conf.store","input":null}}}
+{"host":{"request":{"type":"storage-set","key":"count","value":"1"},"status":0,"reply":null}}
+{"host":{"request":{"type":"storage-get","key":"count"},"status":0,"reply":"1"}}
+{"host":{"request":{"type":"toast","variant":"info","message":"stored 1"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":null}}
+{"call":{"request":{"type":"view","surface":0,"mount":{"surface":"conf","key":"conf","generation":1},"input":{"width":60,"height":10,"palette":{"mode":"dark","colors":{}}},"next":1}}}
+{"return":{"status":0,"reply":{"node":{"type":"box","id":"root","children":[{"type":"text","id":"count","spans":[{"text":"views 2, messages 0"}]},{"type":"keep","key":"fixed"}]},"memo":1}}}
+{"observe":{"seen":{"toasts":["Info: stored 1"],"status":"Some(Active)","screen":["views 2, messages 0","fixed"]}}}
+{"call":{"request":{"type":"unmount","mount":{"surface":"conf","key":"conf","generation":1}}}}
+{"return":{"status":0,"reply":null}}
+{"call":{"request":{"type":"view","surface":0,"mount":{"surface":"conf","key":"conf","generation":2},"input":{"width":60,"height":10,"palette":{"mode":"dark","colors":{}},"full":true},"next":1}}}
+{"return":{"status":0,"reply":{"node":{"type":"box","id":"root","children":[{"type":"text","id":"count","spans":[{"text":"views 3, messages 0"}]},{"type":"markdown","id":"fixed","source":{"content":2}}]},"content":[[2,"# fixed"]],"memo":1}}}
+{"observe":{"seen":{"toasts":[],"status":"Some(Active)","screen":["views 3, messages 0","fixed"]}}}
+{"call":{"request":{"type":"unmount","mount":{"surface":"conf","key":"conf","generation":2}}}}
+{"return":{"status":0,"reply":null}}
+{"observe":{"seen":{"toasts":[],"status":"Some(Active)"}}}
+"destroy"
+"destroyed"
+{"transcript":"mailbox","about":"sends to the mailbox, one replacing another under its key, delivered one message a call, then a wake and its handler","library":2,"script":[{"do":"load","options":""},{"do":"open","route":"conf"},{"do":"command","name":"conf.send"},{"do":"advance"},{"do":"advance"},{"do":"observe"},{"do":"command","name":"conf.wake"},{"do":"advance"},{"do":"advance"},{"do":"observe"},{"do":"close"},{"do":"advance"}]}
+{"open":{"entry":2,"major":2,"minor":0,"requires_minor":0,"served":0}}
+"describe"
+{"return":{"status":0,"reply":{"version":"1.0.0","id":"conformance"}}}
+{"create":{"major":2,"minor":0,"features":[],"options":""}}
+{"host":{"request":{"type":"storage-key","key":"count"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":{"id":"conformance","commands":[{"name":"conf.toast","title":"conf.toast","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.store","title":"conf.store","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.send","title":"conf.send","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.wake","title":"conf.wake","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.panic","title":"conf.panic","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.dup","title":"conf.dup","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.read","title":"conf.read","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.pad","title":"conf.pad","group":null,"slash":null,"keybind":null,"palette":false}],"fences":[],"slots":[],"routes":[],"storage":["count"],"render":2,"wake":true,"surfaces":[{"name":"conf","place":{"type":"route","name":"conf"}},{"name":"pad","place":{"type":"route","name":"pad"},"draw":true}],"messages":true}}}
+{"call":{"request":{"type":"view","surface":0,"mount":{"surface":"conf","key":"conf","generation":1},"input":{"width":60,"height":10,"palette":{"mode":"dark","colors":{}},"full":true},"next":0}}}
+{"return":{"status":0,"reply":{"node":{"type":"box","id":"root","children":[{"type":"text","id":"count","spans":[{"text":"views 1, messages 0"}]},{"type":"markdown","id":"fixed","source":{"content":1}}]},"content":[[1,"# fixed"]],"memo":1}}}
+{"call":{"request":{"type":"command","name":"conf.send","input":null}}}
+{"send":{"key":"","message":"ping","status":0}}
+{"send":{"key":"k","message":"a","status":0}}
+{"send":{"key":"k","message":"b","status":0}}
+{"host":{"request":{"type":"toast","variant":"info","message":"sent"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":null}}
+{"call":{"request":{"type":"view","surface":0,"mount":{"surface":"conf","key":"conf","generation":1},"input":{"width":60,"height":10,"palette":{"mode":"dark","colors":{}}},"next":1}}}
+{"return":{"status":0,"reply":{"node":{"type":"box","id":"root","children":[{"type":"text","id":"count","spans":[{"text":"views 2, messages 0"}]},{"type":"keep","key":"fixed"}]},"memo":1}}}
+{"call":{"request":{"type":"message","message":"\"ping\""}}}
+{"return":{"status":0,"reply":null}}
+{"call":{"request":{"type":"message","message":"\"b\""}}}
+{"return":{"status":0,"reply":null}}
+{"call":{"request":{"type":"view","surface":0,"mount":{"surface":"conf","key":"conf","generation":1},"input":{"width":60,"height":10,"palette":{"mode":"dark","colors":{}}},"next":1}}}
+{"return":{"status":0,"reply":{"node":{"type":"box","id":"root","children":[{"type":"text","id":"count","spans":[{"text":"views 3, messages 2"}]},{"type":"keep","key":"fixed"}]},"memo":1}}}
+{"observe":{"seen":{"toasts":["Info: sent"],"status":"Some(Active)","screen":["views 3, messages 2","fixed"]}}}
+{"call":{"request":{"type":"command","name":"conf.wake","input":null}}}
+"wake"
+{"return":{"status":0,"reply":null}}
+{"call":{"request":{"type":"view","surface":0,"mount":{"surface":"conf","key":"conf","generation":1},"input":{"width":60,"height":10,"palette":{"mode":"dark","colors":{}}},"next":1}}}
+{"return":{"status":0,"reply":{"node":{"type":"box","id":"root","children":[{"type":"text","id":"count","spans":[{"text":"views 4, messages 2"}]},{"type":"keep","key":"fixed"}]},"memo":1}}}
+{"call":{"request":{"type":"wake"}}}
+{"host":{"request":{"type":"toast","variant":"info","message":"woken"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":null}}
+{"call":{"request":{"type":"view","surface":0,"mount":{"surface":"conf","key":"conf","generation":1},"input":{"width":60,"height":10,"palette":{"mode":"dark","colors":{}}},"next":1}}}
+{"return":{"status":0,"reply":{"node":{"type":"box","id":"root","children":[{"type":"text","id":"count","spans":[{"text":"views 5, messages 2"}]},{"type":"keep","key":"fixed"}]},"memo":1}}}
+{"observe":{"seen":{"toasts":["Info: woken"],"status":"Some(Active)","screen":["views 5, messages 2","fixed"]}}}
+{"call":{"request":{"type":"unmount","mount":{"surface":"conf","key":"conf","generation":1}}}}
+{"return":{"status":0,"reply":null}}
+"destroy"
+"destroyed"
+{"transcript":"canvas","about":"a canvas (P5): the first draw as the surface paints, and a draw for a new version","library":2,"script":[{"do":"load","options":""},{"do":"open","route":"pad"},{"do":"observe"},{"do":"command","name":"conf.pad"},{"do":"advance"},{"do":"observe"},{"do":"close"},{"do":"advance"}]}
+{"open":{"entry":2,"major":2,"minor":0,"requires_minor":0,"served":0}}
+"describe"
+{"return":{"status":0,"reply":{"version":"1.0.0","id":"conformance"}}}
+{"create":{"major":2,"minor":0,"features":[],"options":""}}
+{"host":{"request":{"type":"storage-key","key":"count"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":{"id":"conformance","commands":[{"name":"conf.toast","title":"conf.toast","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.store","title":"conf.store","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.send","title":"conf.send","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.wake","title":"conf.wake","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.panic","title":"conf.panic","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.dup","title":"conf.dup","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.read","title":"conf.read","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.pad","title":"conf.pad","group":null,"slash":null,"keybind":null,"palette":false}],"fences":[],"slots":[],"routes":[],"storage":["count"],"render":2,"wake":true,"surfaces":[{"name":"conf","place":{"type":"route","name":"conf"}},{"name":"pad","place":{"type":"route","name":"pad"},"draw":true}],"messages":true}}}
+{"call":{"request":{"type":"view","surface":1,"mount":{"surface":"pad","key":"pad","generation":1},"input":{"width":60,"height":10,"palette":{"mode":"dark","colors":{}},"full":true},"next":0}}}
+{"return":{"status":0,"reply":{"node":{"type":"box","id":"pad-root","children":[{"type":"canvas","id":"pad","layout":{"width":{"cells":20},"height":{"cells":1}}}]}}}}
+{"call":{"request":{"type":"draw","surface":1,"mount":{"surface":"pad","key":"pad","generation":1},"canvas":"pad","frame":{"width":20,"height":1,"cause":"first","dt":{"secs":0,"nanos":0}}}}}
+{"return":{"status":0,"reply":{"list":"01021a0000000000000000000000000000000000647261772031206669727374"}}}
+{"observe":{"seen":{"toasts":[],"status":"Some(Active)","screen":["draw 1 first"]}}}
+{"call":{"request":{"type":"command","name":"conf.pad","input":null}}}
+{"return":{"status":0,"reply":null}}
+{"call":{"request":{"type":"view","surface":1,"mount":{"surface":"pad","key":"pad","generation":1},"input":{"width":60,"height":10,"palette":{"mode":"dark","colors":{}}},"next":0}}}
+{"return":{"status":0,"reply":{"node":{"type":"box","id":"pad-root","children":[{"type":"canvas","id":"pad","layout":{"width":{"cells":20},"height":{"cells":1}},"version":1}]}}}}
+{"call":{"request":{"type":"draw","surface":1,"mount":{"surface":"pad","key":"pad","generation":1},"canvas":"pad","frame":{"width":20,"height":1,"cause":"version","dt":{"secs":0,"nanos":0}}}}}
+{"return":{"status":0,"reply":{"list":"01021c00000000000000000000000000000000006472617720322076657273696f6e"}}}
+{"observe":{"seen":{"toasts":[],"status":"Some(Active)","screen":["draw 2 version"]}}}
+{"call":{"request":{"type":"unmount","mount":{"surface":"pad","key":"pad","generation":1}}}}
+{"return":{"status":0,"reply":null}}
+"destroy"
+"destroyed"
+{"transcript":"panic","about":"a command that asks for a toast and panics: nothing it asked for happens, the plugin fails once, its commands go, and it is never called again, not even destroyed","library":2,"script":[{"do":"load","options":""},{"do":"open","route":"conf"},{"do":"command","name":"conf.panic"},{"do":"advance"},{"do":"observe"},{"do":"command","name":"conf.toast"},{"do":"advance"},{"do":"observe"},{"do":"disable"},{"do":"observe"}]}
+{"open":{"entry":2,"major":2,"minor":0,"requires_minor":0,"served":0}}
+"describe"
+{"return":{"status":0,"reply":{"version":"1.0.0","id":"conformance"}}}
+{"create":{"major":2,"minor":0,"features":[],"options":""}}
+{"host":{"request":{"type":"storage-key","key":"count"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":{"id":"conformance","commands":[{"name":"conf.toast","title":"conf.toast","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.store","title":"conf.store","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.send","title":"conf.send","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.wake","title":"conf.wake","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.panic","title":"conf.panic","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.dup","title":"conf.dup","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.read","title":"conf.read","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.pad","title":"conf.pad","group":null,"slash":null,"keybind":null,"palette":false}],"fences":[],"slots":[],"routes":[],"storage":["count"],"render":2,"wake":true,"surfaces":[{"name":"conf","place":{"type":"route","name":"conf"}},{"name":"pad","place":{"type":"route","name":"pad"},"draw":true}],"messages":true}}}
+{"call":{"request":{"type":"view","surface":0,"mount":{"surface":"conf","key":"conf","generation":1},"input":{"width":60,"height":10,"palette":{"mode":"dark","colors":{}},"full":true},"next":0}}}
+{"return":{"status":0,"reply":{"node":{"type":"box","id":"root","children":[{"type":"text","id":"count","spans":[{"text":"views 1, messages 0"}]},{"type":"markdown","id":"fixed","source":{"content":1}}]},"content":[[1,"# fixed"]],"memo":1}}}
+{"call":{"request":{"type":"command","name":"conf.panic","input":null}}}
+{"host":{"request":{"type":"toast","variant":"info","message":"before panic"},"status":0,"reply":null}}
+{"return":{"status":2,"reply":"boom"}}
+{"observe":{"seen":{"toasts":["Error: Plugin failed: conformance"],"status":"Some(Failed(\"run-command panicked: boom\"))","screen":[]}}}
+{"observe":{"seen":{"toasts":[],"status":"Some(Failed(\"run-command panicked: boom\"))","screen":[]}}}
+{"observe":{"seen":{"toasts":[],"status":"Some(Inactive)","screen":[]}}}
+{"transcript":"refused-tree","about":"a view whose tree holds an id twice: the host refuses it whole, the plugin fails, and its surface shows nothing","library":2,"script":[{"do":"load","options":""},{"do":"open","route":"conf"},{"do":"command","name":"conf.dup"},{"do":"advance"},{"do":"observe"},{"do":"close"},{"do":"advance"}]}
+{"open":{"entry":2,"major":2,"minor":0,"requires_minor":0,"served":0}}
+"describe"
+{"return":{"status":0,"reply":{"version":"1.0.0","id":"conformance"}}}
+{"create":{"major":2,"minor":0,"features":[],"options":""}}
+{"host":{"request":{"type":"storage-key","key":"count"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":{"id":"conformance","commands":[{"name":"conf.toast","title":"conf.toast","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.store","title":"conf.store","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.send","title":"conf.send","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.wake","title":"conf.wake","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.panic","title":"conf.panic","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.dup","title":"conf.dup","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.read","title":"conf.read","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.pad","title":"conf.pad","group":null,"slash":null,"keybind":null,"palette":false}],"fences":[],"slots":[],"routes":[],"storage":["count"],"render":2,"wake":true,"surfaces":[{"name":"conf","place":{"type":"route","name":"conf"}},{"name":"pad","place":{"type":"route","name":"pad"},"draw":true}],"messages":true}}}
+{"call":{"request":{"type":"view","surface":0,"mount":{"surface":"conf","key":"conf","generation":1},"input":{"width":60,"height":10,"palette":{"mode":"dark","colors":{}},"full":true},"next":0}}}
+{"return":{"status":0,"reply":{"node":{"type":"box","id":"root","children":[{"type":"text","id":"count","spans":[{"text":"views 1, messages 0"}]},{"type":"markdown","id":"fixed","source":{"content":1}}]},"content":[[1,"# fixed"]],"memo":1}}}
+{"call":{"request":{"type":"command","name":"conf.dup","input":null}}}
+{"return":{"status":0,"reply":null}}
+{"call":{"request":{"type":"view","surface":0,"mount":{"surface":"conf","key":"conf","generation":1},"input":{"width":60,"height":10,"palette":{"mode":"dark","colors":{}}},"next":1}}}
+{"return":{"status":0,"reply":{"node":{"type":"box","id":"root","children":[{"type":"text","id":"count","spans":[{"text":"views 2, messages 0"}]},{"type":"text","id":"count","spans":[{"text":"views 2, messages 0"}]}]}}}}
+{"observe":{"seen":{"toasts":["Error: Plugin failed: conformance"],"status":"Some(Failed(\"conf broke the contract: the id \\\"count\\\" is in the tree twice\"))","screen":[]}}}
+{"transcript":"setup-fails","about":"a setup that answers an error: the plugin fails with its text, and the instance is never destroyed","library":2,"script":[{"do":"load","options":"fail-setup"},{"do":"advance"},{"do":"observe"}]}
+{"open":{"entry":2,"major":2,"minor":0,"requires_minor":0,"served":0}}
+"describe"
+{"return":{"status":0,"reply":{"version":"1.0.0","id":"conformance"}}}
+{"create":{"major":2,"minor":0,"features":[],"options":"fail-setup"}}
+{"return":{"status":1,"reply":"setup refused"}}
+{"observe":{"seen":{"toasts":[],"status":"Some(Failed(\"setup refused\"))"}}}
+{"transcript":"overrun","about":"containment (P4c): the first call after setup may be slow; a later one over 100 ms keeps its effects, then fails the plugin","library":2,"script":[{"do":"load","options":""},{"do":"command","name":"conf.toast","took":150},{"do":"advance"},{"do":"observe"},{"do":"command","name":"conf.toast","took":150},{"do":"advance"},{"do":"observe"}]}
+{"open":{"entry":2,"major":2,"minor":0,"requires_minor":0,"served":0}}
+"describe"
+{"return":{"status":0,"reply":{"version":"1.0.0","id":"conformance"}}}
+{"create":{"major":2,"minor":0,"features":[],"options":""}}
+{"host":{"request":{"type":"storage-key","key":"count"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":{"id":"conformance","commands":[{"name":"conf.toast","title":"conf.toast","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.store","title":"conf.store","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.send","title":"conf.send","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.wake","title":"conf.wake","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.panic","title":"conf.panic","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.dup","title":"conf.dup","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.read","title":"conf.read","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.pad","title":"conf.pad","group":null,"slash":null,"keybind":null,"palette":false}],"fences":[],"slots":[],"routes":[],"storage":["count"],"render":2,"wake":true,"surfaces":[{"name":"conf","place":{"type":"route","name":"conf"}},{"name":"pad","place":{"type":"route","name":"pad"},"draw":true}],"messages":true}}}
+{"call":{"request":{"type":"command","name":"conf.toast","input":null}}}
+{"host":{"request":{"type":"toast","variant":"success","message":"hello"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":null}}
+{"observe":{"seen":{"toasts":["Success: hello"],"status":"Some(Active)"}}}
+{"call":{"request":{"type":"command","name":"conf.toast","input":null}}}
+{"host":{"request":{"type":"toast","variant":"success","message":"hello"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":null}}
+{"observe":{"seen":{"toasts":["Success: hello","Error: Plugin failed: conformance"],"status":"Some(Failed(\"run-command took 150 ms, over the limit of 100 ms\"))"}}}
+{"transcript":"v1","about":"the same plugin as a 1.x library on this 2.x host: served 1.x, a table that ends before send, no surfaces and no mailbox","library":1,"script":[{"do":"load","options":""},{"do":"command","name":"conf.toast"},{"do":"command","name":"conf.send"},{"do":"advance"},{"do":"observe"},{"do":"open","route":"conf"},{"do":"observe"},{"do":"disable"},{"do":"observe"}]}
+{"open":{"entry":1,"major":1,"minor":6,"requires_minor":4,"served":6}}
+"describe"
+{"return":{"status":0,"reply":{"version":"1.0.0","id":"conformance"}}}
+{"create":{"major":1,"minor":6,"features":null,"options":""}}
+{"host":{"request":{"type":"storage-key","key":"count"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":{"id":"conformance","commands":[{"name":"conf.toast","title":"conf.toast","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.store","title":"conf.store","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.send","title":"conf.send","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.wake","title":"conf.wake","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.panic","title":"conf.panic","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.dup","title":"conf.dup","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.read","title":"conf.read","group":null,"slash":null,"keybind":null,"palette":false},{"name":"conf.pad","title":"conf.pad","group":null,"slash":null,"keybind":null,"palette":false}],"fences":[],"slots":[],"routes":[],"storage":["count"],"render":2,"wake":true,"surfaces":[{"name":"conf","place":{"type":"route","name":"conf"}},{"name":"pad","place":{"type":"route","name":"pad"},"draw":true}],"messages":true}}}
+{"call":{"request":{"type":"command","name":"conf.toast","input":null}}}
+{"host":{"request":{"type":"toast","variant":"success","message":"hello"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":null}}
+{"call":{"request":{"type":"command","name":"conf.send","input":null}}}
+{"host":{"request":{"type":"toast","variant":"info","message":"sent"},"status":0,"reply":null}}
+{"return":{"status":0,"reply":null}}
+{"observe":{"seen":{"toasts":["Success: hello","Info: sent"],"status":"Some(Active)"}}}
+{"observe":{"seen":{"toasts":[],"status":"Some(Active)"}}}
+"destroy"
+"destroyed"
+{"observe":{"seen":{"toasts":[],"status":"Some(Inactive)"}}}

@@ -1,0 +1,24 @@
+# The conformance plugin (Pc): the reference behavior the golden transcripts in `crates/plugin/conformance` were
+# recorded from. The loader's conformance tests link `src/conformance.rs` itself as the reference, and build this crate
+# as a `cdylib` to replay the transcripts against it; `plugin.c` beside it is the same plugin in C. Not a workspace
+# member. Its version is the one the transcripts' `describe` records.
+[package]
+name = "opencode-conformance-plugin"
+version = "1.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+name = "opencode_conformance"
+crate-type = ["cdylib"]
+
+[features]
+# Exports the plugin as ABI 1.x, through `opencode_plugin_v1`, for the transcripts of a 1.x library.
+v1 = []
+
+[dependencies]
+opencode-plugin-abi = { path = "../../../plugin-abi" }
+serde_json = "1"
+
+[workspace]
