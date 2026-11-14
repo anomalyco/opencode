@@ -77,6 +77,7 @@ export const docsSections: DocsSection[] = [
           { title: "Theme", slug: "cli/theme" },
           { title: "Plugins", slug: "cli/plugins" },
           { title: "Keybinds", slug: "cli/keybinds" },
+          { title: "Android (Termux)", slug: "cli/termux" },
         ],
       },
     ],
