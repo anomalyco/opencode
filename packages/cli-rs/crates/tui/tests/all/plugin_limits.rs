@@ -15,7 +15,7 @@ use crate::support::{self, Harness};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use opencode_plugin::abi::{self, v2};
 use opencode_plugin::limits::{self, Limits};
@@ -135,7 +135,7 @@ fn source(text: String) -> v2::Source {
 fn small() -> Limits {
     Limits {
         nodes: 40,
-        rows: 60,
+        rows: 100,
         text: 200,
         hunks: 3,
         image_bytes: 4096,
@@ -219,12 +219,13 @@ fn rows() -> Vec<Row> {
             nodes: 40,
             content: 0,
         },
-        // Rows: the column, the head, the foot and the patch's own row are 4, and its 56 lines (53 and 3 of headers) 60.
+        // Rows: the column, the head, the foot and the patch itself are 4, its 66 lines (63 and 3 of headers) 66, and
+        // its hunk 30: 100.
         Row {
             name: "rows at the limit",
             limits: Limits { text: 1 << 20, ..small() },
-            subject: subject(|_| framed(v2::Node::diff(source(modified(53))))),
-            shows: subject(|_| framed(v2::Node::diff(source(modified(53))))),
+            subject: subject(|_| framed(v2::Node::diff(source(modified(63))))),
+            shows: subject(|_| framed(v2::Node::diff(source(modified(63))))),
             placeholders: 0,
             parses: 1,
             nodes: 4,
@@ -233,7 +234,7 @@ fn rows() -> Vec<Row> {
         Row {
             name: "rows over",
             limits: Limits { text: 1 << 20, ..small() },
-            subject: subject(|_| framed(v2::Node::diff(source(modified(70))))),
+            subject: subject(|_| framed(v2::Node::diff(source(modified(80))))),
             shows: subject(|_| framed(placeholder(None, "too large to build at once"))),
             placeholders: 1,
             parses: 0,
@@ -262,7 +263,7 @@ fn rows() -> Vec<Row> {
         },
         Row {
             name: "hunks at the limit",
-            limits: small(),
+            limits: Limits { rows: 10_000, ..small() },
             subject: subject(|_| framed(v2::Node::diff(source(hunks(3))))),
             shows: subject(|_| framed(v2::Node::diff(source(hunks(3))))),
             placeholders: 0,
@@ -272,7 +273,7 @@ fn rows() -> Vec<Row> {
         },
         Row {
             name: "hunks over",
-            limits: small(),
+            limits: Limits { rows: 10_000, ..small() },
             subject: subject(|_| framed(v2::Node::diff(source(hunks(4))))),
             shows: subject(|_| framed(placeholder(None, "too large: 4 hunks"))),
             placeholders: 1,
@@ -552,5 +553,181 @@ fn images_decode_on_a_worker_within_their_limits() {
         harness.tui.navigate(Route::Home);
         settle(&harness);
         assert_eq!(limits::held(ID).images, 0, "{carrier:?}: decoded bytes held after the route closed");
+    }
+}
+
+/// The median of `samples`, in milliseconds.
+fn median(mut samples: Vec<Duration>) -> f64 {
+    samples.sort_unstable();
+    samples[samples.len() / 2].as_secs_f64() * 1e3
+}
+
+/// Rust-like lines to highlight.
+fn rust_lines(lines: usize) -> String {
+    (0..lines).map(|line| format!("    let value_{line} = compute({line}, \"text\") + {line};\n")).collect()
+}
+
+/// A patch of `lines` lines in hunks of ten: three context lines, two removed, two added, three context.
+fn realistic(lines: usize) -> String {
+    let mut patch = "--- a/f.rs\n+++ b/f.rs\n".to_owned();
+    for hunk in 0..lines.div_ceil(10) {
+        let at = hunk * 20 + 1;
+        patch.push_str(&format!("@@ -{at},8 +{at},8 @@\n"));
+        for line in 0..3 {
+            patch.push_str(&format!("     let a_{hunk}_{line} = {line};\n"));
+        }
+        patch
+            .push_str(&format!("-    old_{hunk}(1);\n-    old_{hunk}(2);\n+    new_{hunk}(1);\n+    new_{hunk}(2);\n"));
+        for line in 0..3 {
+            patch.push_str(&format!("     let b_{hunk}_{line} = {line};\n"));
+        }
+    }
+    patch
+}
+
+// The measurements Pl's limits are set from (`steps/plugins-pl.md`): what the host's UI thread spends on a plugin's
+// tree as it opens (its host time) and on the first frame that shows it, for trees of texts, patches, code and
+// Markdown, a list's item data, and images decoded in the frame against on a worker. Release, TestApp 200x58 with its
+// frame check off, five runs a size, medians:
+// `cargo test --release -p opencode-tui --test all plugin_limits::probe -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn probe() {
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![abi::Plugin { id: ID, setup }.into(), abi::Plugin { id: SIBLING, setup: sibling }.into()],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount(200, 58, deps);
+    harness.app.set_verify(false);
+    settle(&harness);
+    let _limits = limits::set(Limits {
+        nodes: u64::MAX,
+        rows: u64::MAX,
+        text: u64::MAX,
+        hunks: u64::MAX,
+        image_bytes: u64::MAX,
+        image_pixels: u64::MAX,
+        plugin_nodes: u64::MAX,
+        all_nodes: u64::MAX,
+        plugin_content: u64::MAX,
+        all_content: u64::MAX,
+        plugin_images: u64::MAX,
+        all_images: u64::MAX,
+    });
+    let monitor = harness.tui.plugins.monitor().clone();
+    let route = Route::Plugin { id: ID.to_owned(), name: "tree".to_owned() };
+    let measure = |kind: &str, size: usize, subject: Subject| {
+        let (mut hosts, mut frames) = (Vec::new(), Vec::new());
+        for _ in 0..5 {
+            SUBJECT.with(|slot| *slot.borrow_mut() = subject.clone());
+            harness.tui.navigate(Route::Home);
+            settle(&harness);
+            let host = monitor.host_time(ID);
+            harness.tui.navigate(route.clone());
+            // The route's first view runs in the turn's deferred work, and the host adopts its tree.
+            harness.app.advance(Duration::ZERO);
+            hosts.push(monitor.host_time(ID) - host);
+            let begun = Instant::now();
+            harness.app.present().unwrap();
+            frames.push(begun.elapsed());
+        }
+        println!("probe {kind} {size} host {:.2} frame {:.2}", median(hosts), median(frames));
+    };
+    // `PROBE=texts,hunks` runs those parts alone.
+    let parts = std::env::var("PROBE").unwrap_or_default();
+    let want = |part: &str| parts.is_empty() || parts.split(',').any(|known| known == part);
+    if want("long") {
+        for kib in [64, 256, 1_024] {
+            let line = "word ".repeat(kib * 1024 / 5);
+            measure("one text, KiB", kib, subject(move |_| text(&line)));
+        }
+    }
+    if want("hunks") {
+        for count in [100, 200, 400, 800] {
+            let patch = hunks(count);
+            measure("diff hunks", count, subject(move |_| v2::Node::diff(source(patch.clone()))));
+        }
+    }
+    if !want("rest") {
+        return;
+    }
+    for count in [1_000, 2_000, 4_000, 8_000, 16_000] {
+        let rows: Vec<v2::Node> = (0..count).map(|index| text(&format!("row {index}"))).collect();
+        measure("texts", count, subject(move |_| v2::Node::column(rows.clone())));
+    }
+    for count in [1_000, 2_000, 4_000] {
+        let boxes: Vec<v2::Node> =
+            (0..count / 2).map(|index| v2::Node::row(vec![text(&format!("row {index}"))])).collect();
+        measure("boxed texts", count, subject(move |_| v2::Node::column(boxes.clone())));
+    }
+    for lines in [500, 1_000, 2_000, 4_000, 8_000] {
+        let patch = realistic(lines);
+        let diff = move || v2::Node::Diff {
+            id: None,
+            content: source(patch.clone()),
+            view: v2::DiffView::Unified,
+            filetype: Some("rust".into()),
+            hunks: None,
+        };
+        measure("diff", lines, subject(move |_| diff()));
+    }
+    for lines in [1_000, 2_000, 4_000, 8_000] {
+        let code = rust_lines(lines);
+        measure(
+            "code",
+            lines,
+            subject(move |_| v2::Node::Code {
+                id: None,
+                content: source(code.clone()),
+                filetype: Some("rust".into()),
+                numbers: true,
+                layout: abi::Layout::default(),
+            }),
+        );
+    }
+    for lines in [1_000, 2_000, 4_000] {
+        let markdown: String =
+            (0..lines).map(|line| format!("Paragraph {line} with *some* `code` in it.\n\n")).collect();
+        measure("markdown", lines, subject(move |_| v2::Node::Markdown { id: None, source: source(markdown.clone()) }));
+    }
+    for items in [5_000, 10_000, 20_000, 40_000] {
+        let list: Vec<v2::ListItem> = (0..items)
+            .map(|index| v2::ListItem {
+                node: v2::Node::row(vec![text(&format!("item {index}"))]).with_id(format!("i{index}")),
+                estimate: 1,
+            })
+            .collect();
+        measure("list nodes", items * 2, subject(move |_| v2::Node::list(list.clone()).with_id("list")));
+    }
+    for side in [256u32, 512, 1_024, 2_048, 4_096] {
+        let bytes = png(side, side, |x, y| [(x % 256) as u8, (y % 256) as u8, ((x + y) % 256) as u8, 255]);
+        let mut frame = Vec::new();
+        for _ in 0..3 {
+            let begun = Instant::now();
+            let image = opentui::native::Image::decode(harness.app.session().context(), &bytes).unwrap();
+            frame.push(begun.elapsed());
+            drop(image);
+        }
+        let expected = drawn_in_the_frame(&bytes);
+        let (mut hosts, mut walls) = (Vec::new(), Vec::new());
+        for _ in 0..3 {
+            harness.tui.navigate(Route::Home);
+            settle(&harness);
+            let host = monitor.host_time(ID);
+            let begun = Instant::now();
+            show(&harness, picture(bytes.clone()));
+            let ready = harness.app.wait_until(Duration::from_secs(60), || corner(&harness.app.render()) == expected);
+            assert!(ready, "{side}: never decoded");
+            walls.push(begun.elapsed());
+            hosts.push(monitor.host_time(ID) - host);
+        }
+        println!(
+            "probe image {side} decode-in-frame {:.2} worker-to-shown {:.2} host {:.2} bytes {}",
+            median(frame),
+            median(walls),
+            median(hosts),
+            bytes.len()
+        );
     }
 }

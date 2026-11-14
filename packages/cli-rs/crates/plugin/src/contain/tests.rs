@@ -476,3 +476,30 @@ fn every_change_of_slow_is_said_once() {
     assert!(news.is_empty() && bench.monitor.is_slow("p") && bench.monitor.take_flipped());
     assert!(!bench.monitor.take_flipped());
 }
+
+// Expected (4.4, Pl: "host time for plugin X"): the host's own work for a plugin's nodes is timed apart from the
+// plugin's calls. It is the plugin's host time, beside its calls in a slow plugin's details, and it is not in the
+// plugin's frame budget: a frame whose host work is 5 ms and whose calls are 0.5 ms is under the budget.
+#[test]
+fn host_time_is_counted_beside_the_calls_and_not_in_the_budget() {
+    let bench = Bench::new();
+    let slot = bench.monitor.slot(&Artifact::builtin("p"));
+    let work = |took: Duration| {
+        let now = bench.now.clone();
+        bench.monitor.host(slot, &mut || now.set(now.get() + took));
+    };
+    for _ in 0..120 {
+        bench.frame.set(bench.frame.get() + 1);
+        work(Duration::from_millis(5));
+        bench.call(slot, "render-slot", Duration::from_micros(500));
+    }
+    bench.frame(slot, &[US]);
+    assert_eq!(bench.monitor.host_time("p"), Duration::from_millis(600), "every host work counts");
+    assert!(!bench.monitor.is_slow("p"), "host work is not the plugin's frame budget");
+    // A slow plugin's details show its host time beside its calls.
+    bench.frames(slot, 13, 0);
+    bench.frame(slot, &[US]);
+    let report = bench.monitor.report("p").expect("slow");
+    assert!(report.contains("host 5.0/5.0/5.0 ms"), "{report}");
+    assert!(report.contains("render-slot"), "{report}");
+}
