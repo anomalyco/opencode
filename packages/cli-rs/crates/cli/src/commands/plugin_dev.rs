@@ -18,6 +18,11 @@
 //!   clock is the test's own, and advances a few frames after each step; the plugin's threads run in real time, so a
 //!   frame shows what they sent by then. `--wait TEXT` advances the clock until the frame shows `TEXT`, for at most
 //!   ten seconds of real time, and fails after.
+//! - `plugin test <library, crate or plugin dir> --conformance` replays the golden transcripts of the C ABI (Pc,
+//!   `opencode_plugin::conformance`) against the library, each also as a host of a later minor, and prints a line a
+//!   transcript. It is for whoever binds the C ABI in another language: their port of the conformance plugin
+//!   (`crates/plugin/examples/conformance`, in Rust and in C) passes when their binding speaks the C ABI as the host
+//!   does. It takes no other flag.
 
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -41,7 +46,8 @@ use opentui::testing::TestApp;
 
 const DEV_USAGE: &str = "usage: opencode-native plugin dev <dir> [arguments of the TUI]";
 const TEST_USAGE: &str = "usage: opencode-native plugin test <library, crate or plugin dir> [--route NAME] \
-                          [--size WxH] [--command NAME[=INPUT]] [--wait TEXT]...";
+                          [--size WxH] [--command NAME[=INPUT]] [--wait TEXT]...\n       \
+                          opencode-native plugin test <library, crate or plugin dir> --conformance";
 
 /// How long `--wait` waits, in real time.
 const WAIT: Duration = Duration::from_secs(10);
@@ -65,6 +71,8 @@ pub struct Test {
     pub route: Option<String>,
     pub size: (u16, u16),
     pub steps: Vec<Step>,
+    /// `--conformance`: the golden transcripts, not a frame.
+    pub conformance: bool,
 }
 
 /// A step of `plugin test`, after which it prints a frame.
@@ -98,7 +106,7 @@ pub fn take(args: &[String]) -> Option<error::Result<Native>> {
 
 /// The test `args` describe, or `None` for help.
 fn parse_test(args: &[&str]) -> error::Result<Option<Test>> {
-    let mut test = Test { path: PathBuf::new(), route: None, size: (80, 24), steps: Vec::new() };
+    let mut test = Test { path: PathBuf::new(), route: None, size: (80, 24), steps: Vec::new(), conformance: false };
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         let mut value = || args.next().copied().ok_or_else(|| err!("{arg} needs a value\n{TEST_USAGE}"));
@@ -118,12 +126,16 @@ fn parse_test(args: &[&str]) -> error::Result<Option<Test>> {
                 });
             }
             "--wait" => test.steps.push(Step::Wait(value()?.to_owned())),
+            "--conformance" => test.conformance = true,
             path if test.path.as_os_str().is_empty() && !path.starts_with('-') => test.path = PathBuf::from(path),
             other => return Err(err!("unexpected {other}\n{TEST_USAGE}")),
         }
     }
     if test.path.as_os_str().is_empty() {
         return Err(err!("{TEST_USAGE}"));
+    }
+    if test.conformance && (test.route.is_some() || !test.steps.is_empty()) {
+        return Err(err!("--conformance takes no other flag\n{TEST_USAGE}"));
     }
     Ok(Some(test))
 }
@@ -303,7 +315,7 @@ fn entry() -> String {
     format!("plugin.{}", std::env::consts::DLL_EXTENSION)
 }
 
-/// `plugin test`: the plugin in a headless TUI, as text frames on `out`.
+/// `plugin test`: the plugin in a headless TUI, as text frames on `out`, or its conformance.
 pub fn test(test: &Test, out: &mut impl Write) -> error::Result<()> {
     let library = match (test.path.is_dir(), test.path.join("Cargo.toml").is_file()) {
         (true, true) => build(&std::fs::canonicalize(&test.path)?, false)?,
@@ -311,6 +323,9 @@ pub fn test(test: &Test, out: &mut impl Write) -> error::Result<()> {
         (false, _) => test.path.clone(),
     };
     let library = std::fs::canonicalize(&library).map_err(|error| err!("{}: {error}", library.display()))?;
+    if test.conformance {
+        return conformance(&library, out);
+    }
     let root = opencode_util::temp::tempdir()?;
     let info = Info { plugins: Some(vec![Plugin::Name(library.to_string_lossy().into_owned())]), ..Info::default() };
     let sessions = Served::json("GET", "/api/session", 200, &serde_json::json!({ "data": [], "cursor": {} }));
@@ -345,6 +360,30 @@ pub fn test(test: &Test, out: &mut impl Write) -> error::Result<()> {
     });
     tui.plugins.deactivate_all();
     result
+}
+
+/// `plugin test --conformance`: a line a transcript, and an error naming those the library failed.
+fn conformance(library: &Path, out: &mut impl Write) -> error::Result<()> {
+    let outcomes = opencode_plugin::conformance::check_library(library).map_err(|error| err!("{error}"))?;
+    let mut failed = Vec::new();
+    for outcome in &outcomes {
+        let name = match outcome.future {
+            true => format!("{} (a host of a later minor)", outcome.transcript),
+            false => outcome.transcript.clone(),
+        };
+        match &outcome.result {
+            Ok(()) => writeln!(out, "ok   {name}")?,
+            Err(error) => {
+                writeln!(out, "FAIL {name}\n     {}", error.replace('\n', "\n     "))?;
+                failed.push(name);
+            }
+        }
+    }
+    match (outcomes.is_empty(), failed.is_empty()) {
+        (true, _) => Err(err!("no transcript is of this library's ABI")),
+        (false, true) => Ok(()),
+        (false, false) => Err(err!("{} of {} transcripts failed: {}", failed.len(), outcomes.len(), failed.join(", "))),
+    }
 }
 
 /// Runs `test`'s route and steps, printing a frame after each, and checks the plugin with `active` after each.
@@ -447,7 +486,14 @@ mod tests {
             Step::Wait("ready".to_owned()),
             Step::Command("c".to_owned(), None),
         ];
-        assert_eq!(test, Test { path: "lib.so".into(), route: Some("r".into()), size: (100, 30), steps });
+        let expected =
+            Test { path: "lib.so".into(), route: Some("r".into()), size: (100, 30), steps, conformance: false };
+        assert_eq!(test, expected);
+        let Some(Ok(Native::Test(test))) = line(&["plugin", "test", "lib.so", "--conformance"]) else {
+            panic!("not a conformance line")
+        };
+        assert!(test.conformance && test.route.is_none() && test.steps.is_empty());
+        assert!(line(&["plugin", "test", "lib.so", "--conformance", "--route", "r"]).unwrap().is_err());
         assert!(line(&["plugin", "test"]).unwrap().is_err());
         assert!(line(&["plugin", "test", "x", "--size", "0x3"]).unwrap().is_err());
         assert!(line(&["plugin", "test", "x", "--route"]).unwrap().is_err());
@@ -642,7 +688,8 @@ mod tests {
         let installed = install(&board(), dir.path()).unwrap();
         let run = |path: &Path, route: Option<&str>, steps: Vec<Step>| {
             let mut out = Vec::new();
-            let spec = Test { path: path.to_owned(), route: route.map(str::to_owned), size: (80, 30), steps };
+            let route = route.map(str::to_owned);
+            let spec = Test { path: path.to_owned(), route, size: (80, 30), steps, conformance: false };
             let result = test(&spec, &mut out);
             (result, String::from_utf8(out).unwrap())
         };
@@ -673,5 +720,44 @@ mod tests {
         assert!(out.contains("--- board.panic"), "the frame it got to is printed: {out}");
         let (result, _) = run(&dir.path().join("missing.so"), None, Vec::new());
         assert!(result.is_err());
+    }
+
+    // Expected (Pc): `plugin test --conformance` passes the conformance plugin written in C, a line a transcript, also
+    // as a host of a later minor; and fails a library that is another plugin, naming the transcripts it failed, after
+    // their lines.
+    #[cfg(unix)]
+    #[test]
+    fn plugin_test_conformance_replays_the_transcripts() {
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let library = dir.path().join("plugin.so");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin");
+        let built = Command::new(std::env::var("CC").unwrap_or_else(|_| "cc".to_owned()))
+            .args(["-shared", "-fPIC", "-fvisibility=hidden", "-std=c11", "-I"])
+            .arg(root.join("../plugin-abi/include"))
+            .arg("-o")
+            .arg(&library)
+            .arg(root.join("examples/conformance/plugin.c"))
+            .status();
+        let Ok(status) = built else {
+            assert!(std::env::var_os("OPENCODE_RS_REQUIRE_CC").is_none(), "OPENCODE_RS_REQUIRE_CC is set, but no cc");
+            return;
+        };
+        assert!(status.success());
+        let run = |path: &Path| {
+            let mut out = Vec::new();
+            let spec =
+                Test { path: path.to_owned(), route: None, size: (80, 24), steps: Vec::new(), conformance: true };
+            let result = test(&spec, &mut out);
+            (result, String::from_utf8(out).unwrap())
+        };
+        let (result, out) = run(&library);
+        result.unwrap();
+        assert!(out.lines().all(|line| line.starts_with("ok   ")), "{out}");
+        assert!(out.contains("ok   surfaces\n") && out.contains("ok   surfaces (a host of a later minor)\n"), "{out}");
+
+        let (result, out) = run(&board());
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains("transcripts failed: activation,"), "{error}");
+        assert!(out.starts_with("FAIL activation\n"), "{out}");
     }
 }
