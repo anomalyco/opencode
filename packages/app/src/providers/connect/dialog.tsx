@@ -1492,7 +1492,11 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
         data-component="provider-connect-content"
         data-scrollable
         class="flex min-h-0 flex-1 flex-col overflow-y-auto"
-        classList={{ "pb-2": view().frame === "provider" && !kind("methods") }}
+        classList={{
+          "pb-2": view().frame === "provider" && !kind("methods"),
+          "w-full max-w-[480px] self-start":
+            kind("key") || kind("form") || kind("code") || kind("browser") || kind("claude"),
+        }}
       >
         <Switch>
           <Match when={narrow("no-models")}>{(current) => <ConsoleNoModels body={current()} />}</Match>
