@@ -138,6 +138,8 @@ fn the_manager_shows_the_plugins_only_while_its_list_shows_on() {
     harness.dispatch("plugins.list");
     harness.wait_for("skipped, local");
     harness.wait("the manager's read", || reads(&log) == read + 1);
+    // No package: no check (review carbon-5: hidden, so the list's reply changes it in place).
+    assert!(!harness.app.text().contains("check for updates"), "{}", harness.app.text());
     opencode_tui::plugins::host::add(&harness.tui, watcher().into());
     harness.wait_for("test.watch");
     // The skipped row's error, with a change under it.
