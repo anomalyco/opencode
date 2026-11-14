@@ -414,6 +414,12 @@ impl Tree {
         self.slots_changed = changed;
     }
 
+    /// Whether nothing in the tree shows what the host reads again each revision (a tool call's output): a keep of
+    /// its root then changes nothing, and the host may skip the pass (P6a).
+    pub fn is_static(&self) -> bool {
+        !self.nodes.iter().any(|node| node.dynamic)
+    }
+
     /// Whether the tree's widgets are painted in `theme`: true for an empty tree, which paints nothing.
     pub fn styled_in(&self, theme: &Theme) -> bool {
         self.nodes.is_empty() || self.theme.as_ref() == Some(theme)
@@ -847,6 +853,11 @@ impl Pass<'_, '_> {
                         if let (Some(cell), Some(next)) = (click, click_of(new)) {
                             *cell.borrow_mut() = next.clone();
                         }
+                        // Shown or hidden on the widget it has: its children, and the claims a slot of it put in
+                        // it, stay where they are (P6a review, big-boi).
+                        if old.node.is_hidden() != new.is_hidden() {
+                            view.visible(!new.is_hidden());
+                        }
                         old.node = shell(new);
                         if self.restyle {
                             self.restyle(&old);
@@ -864,7 +875,8 @@ impl Pass<'_, '_> {
                         }
                         let Extra::Box { view, split, .. } = &built.extra else { unreachable!() };
                         let (view, split) = (view.clone(), split.clone());
-                        built.children = self.children(&view, std::mem::take(&mut old.children), children);
+                        let olds = self.movable(std::mem::take(&mut old.children));
+                        built.children = self.children(&view, olds, children);
                         built.dynamic = built.children.iter().any(|child| child.dynamic);
                         if let Some(split) = split {
                             split.first(built.children.first().and_then(|child| child.widget.clone()));
@@ -897,7 +909,8 @@ impl Pass<'_, '_> {
                         self.refocus = Some(next.as_any());
                     }
                     let content = next.content_view().clone();
-                    built.children = self.children(&content, std::mem::take(&mut old.children), children);
+                    let olds = self.movable(std::mem::take(&mut old.children));
+                    built.children = self.children(&content, olds, children);
                     built.dynamic = built.children.iter().any(|child| child.dynamic);
                     return Err(Box::new((old, built)));
                 }
@@ -1603,6 +1616,20 @@ impl Pass<'_, '_> {
         node.children.iter_mut().for_each(|child| self.release_slots(child));
     }
 
+    /// The children of a widget built again, to move into the new one: none when one is a slot, whose claims sit in
+    /// the old widget and nothing can move, so all of them are built again there, the slots first going (as
+    /// [`Self::children`] does for a slot that does not stay).
+    fn movable(&mut self, old: Vec<Mounted>) -> Vec<Mounted> {
+        if !old.iter().any(|node| matches!(node.node, Node::Slot { .. })) {
+            return old;
+        }
+        for mut node in old {
+            self.release_slots(&mut node);
+            self.doom(node);
+        }
+        Vec::new()
+    }
+
     /// Drops `node` once every subtree held again has moved out of it. A placeholder of one drops nothing.
     fn doom(&mut self, node: Mounted) {
         if matches!(node.extra, Extra::Taken) {
@@ -1795,15 +1822,17 @@ fn click_of(node: &Node) -> Option<&abi::Click> {
     }
 }
 
-/// A box changes in place when only its background, its click (one to another) and its anchor change; its children
-/// are reconciled apart.
+/// A box changes in place when only its background, its click (one to another), its anchor and whether it shows
+/// change; its children are reconciled apart.
 fn box_change(old: &Node, new: &Node) -> Change {
-    let (Node::Box { bg, on_click, anchor, .. }, Node::Box { bg: bg2, on_click: on_click2, anchor: anchor2, .. }) =
-        (old, new)
+    let (
+        Node::Box { bg, on_click, anchor, visible, .. },
+        Node::Box { bg: bg2, on_click: on_click2, anchor: anchor2, visible: visible2, .. },
+    ) = (old, new)
     else {
         return Change::Replace;
     };
-    // Everything but the background, the click and the anchor, children aside, must stay.
+    // Everything but the background, the click, the anchor and whether it shows, children aside, must stay.
     let rest = |node: &Node| match node {
         Node::Box {
             id,
@@ -1820,19 +1849,21 @@ fn box_change(old: &Node, new: &Node) -> Change {
             sticky,
             split,
             interact,
-            visible,
             ..
         } => Some((
             (id.clone(), *row, *gap, *padding, *justify, *align, *layout),
             (border.clone(), *padding_sides, *wrap, *overflow, *sticky, *split),
-            (interact.clone(), *visible),
+            interact.clone(),
         )),
         _ => None,
     };
     if rest(old) != rest(new) || on_click.is_some() != on_click2.is_some() {
         return Change::Replace;
     }
-    if bg == bg2 && on_click == on_click2 && anchor == anchor2 { Change::Same } else { Change::InPlace }
+    match bg == bg2 && on_click == on_click2 && anchor == anchor2 && visible == visible2 {
+        true => Change::Same,
+        false => Change::InPlace,
+    }
 }
 
 /// Paints an input in `theme`'s form field colors.

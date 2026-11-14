@@ -37,7 +37,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     })
     .mounts()
     .on(move |host, event| {
-        if let Event::Mount { mounted, slot: Some(SlotInput { session_id: Some(session), .. }) } = event {
+        if let Event::Mount { mounted, slot: Some(SlotInput { session_id: Some(session), .. }), .. } = event {
             goals.mounted(host, session, *mounted);
         }
         Handled::Pass

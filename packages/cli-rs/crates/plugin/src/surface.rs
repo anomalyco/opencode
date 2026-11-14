@@ -212,12 +212,21 @@ pub fn ledger_of(plugin: &str) -> Ledger {
     LEDGER.with(|ledgers| ledgers.borrow().get(plugin).copied().unwrap_or_default())
 }
 
+/// How many plugins the ledger holds a row for: one that holds nothing has none.
+pub fn ledger_rows() -> usize {
+    LEDGER.with(|ledgers| ledgers.borrow().len())
+}
+
 fn book(plugin: &Rc<str>, f: impl FnOnce(&mut Ledger)) {
     LEDGER.with(|ledgers| {
         let mut ledgers = ledgers.borrow_mut();
-        match ledgers.get_mut(plugin) {
-            Some(ledger) => f(ledger),
-            None => f(ledgers.entry(plugin.clone()).or_default()),
+        let ledger = match ledgers.get_mut(plugin) {
+            Some(ledger) => ledger,
+            None => ledgers.entry(plugin.clone()).or_default(),
+        };
+        f(ledger);
+        if *ledger == Ledger::default() {
+            ledgers.remove(plugin);
         }
     });
 }
@@ -472,9 +481,10 @@ impl Surface {
                 return;
             }
             let (mut memo, remote) = (called.memo, called.remote);
-            // A keep of the last tree's root keeps the mount as it is: nothing to adopt and no frame (P6a). The memo
-            // table finishes against the keep, as a library's does.
-            if !full && called.staged.given.is_empty() && self.keeps_root(&called.nodes) {
+            // A keep of the last tree's root keeps the mount as it is: nothing to adopt and no frame (P6a), when the
+            // pass would change nothing: no node shows what the host reads again (a tool call's output), and the tree
+            // is in the theme of the moment. The memo table finishes against the keep, as a library's does.
+            if !full && called.staged.given.is_empty() && self.keeps_root(&called.nodes) && self.settled(&theme) {
                 memo.finish(&called.nodes);
                 let mut state = self.state.borrow_mut();
                 let size = remote.unwrap_or(memo.len()) as i64;
@@ -541,7 +551,14 @@ impl Surface {
                 .map(|prompt| abi::PromptInput { shell: prompt.shell, show_details: prompt.show_details }),
             ..abi::SlotInput::default()
         });
-        abi::interact::Event::Mount { mounted, slot }
+        abi::interact::Event::Mount { mount: self.id.clone(), mounted, slot }
+    }
+
+    /// Whether a pass over the tree as it is would change nothing: no node shows a tool call's output, which the host
+    /// reads again each revision, and its widgets are painted in `theme`.
+    fn settled(&self, theme: &Theme) -> bool {
+        let state = self.state.borrow();
+        state.tree.is_static() && state.tree.styled_in(theme)
     }
 
     /// Whether `nodes` is a keep of the root of the last accepted tree.

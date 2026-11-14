@@ -220,7 +220,7 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *    "event": {"type": "key" | "paste" | "pointer" | "hover" | "closed", ...} |
  *     {"type": "scroll", "event": {"type": "landed", "scroll", "anchor"} | {"type": "user-scroll", "scroll"}} |
  *     {"type": "change" | "submit", "node", "text"} |
- *     {"type": "mount", "mounted", "slot"?}}                     -> "consume" | "pass"
+ *     {"type": "mount", "mount": {"surface", "key", "generation"}, "mounted", "slot"?}} -> "consume" | "pass"
  *      A surface's handler hears the events of the mount the host routed them to; what it reads and asks of the input
  *      ("rect", "focused", "input-mode", "focus", "set-mode", "overlay", "scroll", ...) is that mount's. A layer of the
  *      manifest is the plugin's own. A scroll's and an input's events go to the surface's handler; the answer to them
