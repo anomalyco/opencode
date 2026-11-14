@@ -2,6 +2,7 @@ import { EmbeddedTerminalRenderable, type RGBA } from "@opentui/core"
 import { decodePersistentPtyMessage, persistentPtyFrame } from "@opencode/client/solid"
 import { rgbToOklch, type ResolvedThemeTokens } from "@opencode/theme/tui"
 import { extend, useRenderer } from "@opentui/solid"
+import { useKeymapSelector } from "@opentui/keymap/solid"
 import { Option } from "effect"
 import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useClient } from "../context/client"
@@ -34,7 +35,16 @@ export function TerminalPane(props: {
 }) {
   const client = useClient()
   const keymap = Keymap.use()
-  const leader = Keymap.useLeaderActive()
+  const pending = Keymap.usePendingSequence()
+  const inboxKeys = useKeymapSelector((map) =>
+    (
+      map
+        .getCommandBindings({ commands: ["session.inbox.toggle"], visibility: "reachable" })
+        .get("session.inbox.toggle") ?? []
+    ).flatMap(({ sequence }) =>
+      sequence[0] && !sequence[0].tokenName ? [map.createKeyMatcher(sequence[0].stroke)] : [],
+    ),
+  )
   const theme = useTheme()
   const themes = useThemes()
   const renderer = useRenderer()
@@ -147,7 +157,7 @@ export function TerminalPane(props: {
     "key",
     ({ event }) => {
       if (!terminal?.focused) return
-      if (keymap.isLeader(event) || leader()) return
+      if (keymap.isLeader(event) || pending().length || inboxKeys().some((matches) => matches(event))) return
       event.preventDefault()
       event.stopPropagation()
       terminal.handleKeyPress(event)

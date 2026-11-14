@@ -148,6 +148,18 @@ Configure how full-screen TUI sessions are presented and where new sessions star
 
 </div>
 
+## Inbox
+
+Press `<leader>o` (by default, `Ctrl+X` then `o`) anywhere in the full-screen TUI to toggle the Inbox overlay across locations on the connected server. The overlay opens over the current screen without resizing it, uses at least half of the terminal width, and fills narrow terminals. In **Open settings → Inbox**, choose whether it opens on launch.
+
+```json title="cli.json"
+{
+  "session": { "inbox": true }
+}
+```
+
+`[?]` before a session title means a question is waiting for an answer. `[!]` means a permission request needs review. Type to filter by title, status, or directory. Use Up and Down to move between headings and sessions. Press Left to collapse a section, Right to expand it, or click its heading. Press Enter or click a session to open it. Escape or `<leader>o` closes the overlay and returns focus. Press `alt+a` to archive the selected session, or `tab` to show archived sessions. In Archived, `alt+a` restores the selected session.
+
 ## Tabs
 
 Configure the persistent session tab strip:
