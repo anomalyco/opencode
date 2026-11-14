@@ -506,3 +506,17 @@ fn live(harness: &Harness, shown: &mut Shown, command: Life) {
 fn nothing_an_ended_mount_or_plugin_held_is_left() {
     model::check(&Ledgers, 24, 24);
 }
+
+// Expected: the deep run's seed 553 (2,000 seeds), as a fixed row. Two clicks on the panel's text were a double click,
+// whose word selection the host's escape cleared before any layer saw the key; the panel's texts now select nothing.
+#[test]
+fn a_double_click_in_the_panel_keeps_escape_for_the_composer() {
+    let trace = [
+        Command::Panel(true),
+        Command::Click,
+        Command::Click,
+        Command::Focus(Focus::Composer),
+        Command::Keys(vec![Key::Escape]),
+    ];
+    assert_eq!(Delivery.run(&trace), None);
+}
