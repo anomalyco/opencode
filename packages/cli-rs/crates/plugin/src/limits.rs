@@ -29,8 +29,8 @@ pub struct Limits {
     pub hunks: u64,
     /// One image's encoded bytes.
     pub image_bytes: u64,
-    /// One image's pixels, as its header names them.
-    pub image_pixels: u64,
+    /// One image's width and its height, in pixels, as its header names them.
+    pub image_side: u64,
     /// The nodes of one plugin's mounted trees, and of all plugins'.
     pub plugin_nodes: u64,
     pub all_nodes: u64,
@@ -54,7 +54,7 @@ impl Default for Limits {
             text: 1 << 20,
             hunks: 100,
             image_bytes: 8 << 20,
-            image_pixels: 2048 * 2048,
+            image_side: 2048,
             plugin_nodes: 40_000,
             all_nodes: 100_000,
             plugin_content: 32 << 20,

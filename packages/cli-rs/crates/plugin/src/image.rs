@@ -9,8 +9,88 @@
 
 #![allow(unsafe_code)]
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
+use std::sync::{Condvar, Mutex, PoisonError};
+
 use opentui::native::{Context, ContextOptions};
 use opentui::sys;
+
+use crate::limits;
+
+/// The decoded bytes an image's job reserved for its plugin: the job holds them while it runs and its pixels wait for
+/// the UI thread, and gives them back when it is dropped, unless its mount took them over with the pixels (review
+/// bigboi 9). So a mount that closes, or a decode that fails, gives back nothing before the bytes are gone.
+pub(crate) struct Reservation {
+    plugin: Rc<str>,
+    bytes: u64,
+}
+
+impl Reservation {
+    /// Counts a job of `plugin` that reserved `bytes`, which the caller charged.
+    pub(crate) fn new(plugin: Rc<str>, bytes: u64) -> Self {
+        JOBS.with(|jobs| *jobs.borrow_mut().entry(plugin.to_string()).or_default() += 1);
+        Self { plugin, bytes }
+    }
+
+    /// The mount holds the bytes from now on.
+    pub(crate) fn take(&mut self) -> u64 {
+        std::mem::take(&mut self.bytes)
+    }
+}
+
+impl Drop for Reservation {
+    fn drop(&mut self) {
+        limits::release(&self.plugin, limits::Kind::Images, self.bytes);
+        JOBS.with(|jobs| {
+            let mut jobs = jobs.borrow_mut();
+            if let Some(count) = jobs.get_mut(&*self.plugin) {
+                *count -= 1;
+            }
+            jobs.retain(|_, count| *count > 0);
+        });
+    }
+}
+
+thread_local! {
+    /// The image jobs of each plugin not done yet: decoding, or decoded and waiting for the UI thread.
+    static JOBS: RefCell<HashMap<String, usize>> = RefCell::default();
+}
+
+/// The image jobs of plugin `plugin` this thread started and has not seen end.
+pub fn jobs(plugin: &str) -> usize {
+    JOBS.with(|jobs| jobs.borrow().get(plugin).copied().unwrap_or(0))
+}
+
+/// The plugins whose workers wait before they decode, for the tests: while [`Hold`] lives.
+static HELD: (Mutex<Vec<String>>, Condvar) = (Mutex::new(Vec::new()), Condvar::new());
+
+/// Holds the workers of plugin `plugin` before they decode, until it is dropped.
+pub fn hold(plugin: &str) -> Hold {
+    HELD.0.lock().unwrap_or_else(PoisonError::into_inner).push(plugin.to_owned());
+    Hold(plugin.to_owned())
+}
+
+pub struct Hold(String);
+
+impl Drop for Hold {
+    fn drop(&mut self) {
+        let mut held = HELD.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(at) = held.iter().position(|plugin| *plugin == self.0) {
+            held.remove(at);
+        }
+        HELD.1.notify_all();
+    }
+}
+
+/// Waits while the workers of `plugin` are held.
+pub(crate) fn wait_held(plugin: &str) {
+    let mut held = HELD.0.lock().unwrap_or_else(PoisonError::into_inner);
+    while held.iter().any(|known| known == plugin) {
+        held = HELD.1.wait(held).unwrap_or_else(PoisonError::into_inner);
+    }
+}
 
 /// Straight-alpha RGBA8 pixels, rows without padding.
 pub(crate) struct Pixels {
@@ -102,6 +182,6 @@ pub enum Picture {
     Ready(opentui::native::Image),
     /// Admitted, and decoding on a worker; or bytes that did not decode, which show nothing.
     Pending,
-    /// Past a limit, or not an image: the node shows a placeholder.
+    /// Past a limit: the node shows a placeholder.
     Over,
 }
