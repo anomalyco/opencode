@@ -11,6 +11,7 @@ import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
 import { DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { takeSidecarProbe } from "./sidecar-probe"
+import { SpawnFailure } from "./spawn-failure"
 
 export * as BackgroundService from "./background-service"
 
@@ -58,14 +59,14 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
   const runFork = Effect.runForkWith(yield* Effect.context<FileSystem.FileSystem | Path.Path>())
   const setup = yield* prepare(mode)
 
-  const run = (version = setup.version) =>
+  const run = (version = setup.version, executable: readonly string[] = setup.cli.command) =>
     setup.client.Service.ensure({
       file: setup.file,
       version,
       // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
       // services could boot against the same database.
       command: [
-        ...setup.cli.command,
+        ...executable,
         "serve",
         "--service",
         ...(setup.isolated ? ["--hostname", "0.0.0.0", "--port", String(0x0c0c)] : []),
@@ -74,20 +75,34 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
     })
 
-  const service = yield* Effect.tryPromise(() =>
-    run().catch((error) => {
+  const runEnsure = (executable?: readonly string[]) =>
+    run(setup.version, executable).catch((error) => {
       if (!shouldRetryEnsure(setup.version, error instanceof Error ? error.message : String(error))) throw error
 
-      return run(setup.cli.version)
+      return run(setup.cli.version, executable)
+    })
+
+  // Some Windows profiles refuse to run programs from userData, where the staged copy lives. The shipped
+  // executable in the installation then starts the service instead. It stays locked while the service runs, so
+  // an update has to stop the service first; that is why it is not the default.
+  let bundled = false
+  const service = yield* Effect.tryPromise(() =>
+    runEnsure().catch((error) => {
+      if (!setup.cli.bundled || !SpawnFailure.is(error)) throw error
+      bundled = true
+      runFork(Effect.logWarning("staged v2 CLI could not be started, using the bundled executable", { error }))
+
+      return runEnsure([setup.cli.bundled])
     }),
   )
 
   const ready = yield* adopt(setup, service, false)
 
-  // Only packaged and isolated builds run a staged copy; any other binary sits in the source tree.
+  // Only packaged and isolated builds run a staged copy; any other binary sits in the source tree, and so does the
+  // bundled one, whose folder the cleanup must not touch.
   // Keep both the bundled stage and the running server's stage so its executable stays on disk. This runs only
   // once `Service.ensure` settled which server runs, never for a probed one it may still replace.
-  if (mode === "initial" && (app.isPackaged || setup.isolated) && setup.cli.binary && ready.runningVersion)
+  if (mode === "initial" && (app.isPackaged || setup.isolated) && !bundled && setup.cli.binary && ready.runningVersion)
     runFork(
       cleanStages(setup.cli.binary, { keep: keptStages(setup.cli.version, ready.runningVersion) }).pipe(
         Effect.catch((error) => Effect.logError("failed to clean staged v2 CLIs", { error })),
