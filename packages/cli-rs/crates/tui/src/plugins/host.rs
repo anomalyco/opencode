@@ -1091,7 +1091,12 @@ struct PluginsChanged;
 /// Loads the external native plugins (P.4): the discovered `plugins` directories and the `cli.json` entries that name no
 /// built-in. Each change in a watched directory reconciles them again (hot reload), debounced by 100 ms as in TS.
 pub fn external(tui: &Rc<Tui>, external: External) {
-    external_with(tui, external, opencode_plugin::pipe::Config::from_env());
+    let scripts = opencode_plugin::pipe::Config::from_env().map(|config| opencode_plugin::pipe::Config {
+        version: crate::dialogs::debug::VERSION.to_owned(),
+        channel: opencode_local::channel::Channels::from_env().channel,
+        ..config
+    });
+    external_with(tui, external, scripts);
 }
 
 /// [`external`], with the TypeScript plugins on a JS host that runs as `scripts` says (P7); without one they are listed

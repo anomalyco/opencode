@@ -18,16 +18,29 @@ pub const MAGIC: &str = "opencode-js-host";
 pub enum Down {
     /// The first message: the protocol's version, and the sequence the next event follows, as a new JS host takes over
     /// the stream where the last one ended.
-    Hello { version: u32, after: u64 },
-    /// Loads the TUI module of the plugin directory `dir`, the target `target`, and runs its setup with `options`.
-    /// Answered with [`Up::Loaded`], [`Up::Unsupported`] or [`Up::Done`] with an error.
+    Hello {
+        version: u32,
+        after: u64,
+        /// The theme's mode, `dark` or `light`, which the setup context reads.
+        theme_mode: String,
+    },
+    /// Loads the TUI module of the plugin directory `dir`, the target `target`. With `setup`, runs its setup with
+    /// `options`, answered with [`Up::Loaded`]; without, answered with [`Up::Described`], and [`Down::Setup`] runs it
+    /// once the host knows the plugin is enabled. Either may answer [`Up::Unsupported`] or [`Up::Done`] with an error.
     Load {
         seq: u64,
         target: String,
         dir: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         options: Option<serde_json::Value>,
+        setup: bool,
     },
+    /// Runs the setup of the module the load `load` described. Answered as a load with `setup`.
+    Setup { seq: u64, load: u64 },
+    /// The host forgot `target`: the JS host drops its plugin, whose ID is free for another target.
+    Forget { target: String },
+    /// The theme's mode changed.
+    Theme { mode: String },
     /// Runs the cleanups of plugin `id`, which the host disabled or failed: nothing of it is called from now on.
     Deactivate {
         seq: u64,
@@ -89,6 +102,7 @@ impl Down {
     pub fn seq(&self) -> Option<u64> {
         match self {
             Down::Load { seq, .. }
+            | Down::Setup { seq, .. }
             | Down::Deactivate { seq, .. }
             | Down::Call { seq, .. }
             | Down::Mount { seq, .. }
@@ -97,6 +111,8 @@ impl Down {
             | Down::Ping { seq }
             | Down::Skipped { seq } => Some(*seq),
             Down::Hello { .. }
+            | Down::Forget { .. }
+            | Down::Theme { .. }
             | Down::Adopted { .. }
             | Down::Refused { .. }
             | Down::Snapshot { .. }
@@ -134,6 +150,17 @@ pub enum Up {
         holds: Vec<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         effects: Vec<HostRequest>,
+    },
+    /// The JS host runs plugin `id`'s code for a message without a sequence (a view, a resolver, a cleanup); without
+    /// an ID, it returned.
+    Entered {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+    },
+    /// Load `seq`, without setup, imported plugin `id`.
+    Described {
+        seq: u64,
+        id: String,
     },
     /// The target of load `seq` has no TUI module.
     Unsupported {

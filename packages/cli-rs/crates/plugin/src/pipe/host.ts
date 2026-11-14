@@ -14,36 +14,54 @@
 //   again is dropped; one that skips or goes back breaks the stream, and the process exits.
 // - A handler's effects are its call's: a handler that throws has none, and its plugin is called no more.
 // - A mount has at most one tree in flight: the next waits until the host adopted or refused the last.
-// - The process exits when its input ends.
+// - The process exits when its input ends, or when the client that started it is gone, even while a plugin spins.
 
 import path from "node:path"
-import { existsSync, readFileSync, realpathSync } from "node:fs"
+import { Console } from "node:console"
+import { existsSync, readFileSync, realpathSync, writeSync } from "node:fs"
+import { pathToFileURL } from "node:url"
 
 const MAGIC = "opencode-js-host"
 const VERSION = 1
 const CONTROL = 0
 const TREE = 1
 
-// Standard output is the protocol's alone (review F4).
-const sink = Bun.stdout.writer({ highWaterMark: 1 << 20 })
+// Standard output is the protocol's alone (review F4): every method of `console` (`dir` and `table` too, which Bun's
+// own console writes to standard output directly) and the whole `process.stdout` stream, also for a library that
+// holds on to it or waits for its callback, write to standard error.
 const stderr = (text: string) => process.stderr.write(text.endsWith("\n") ? text : text + "\n")
-for (const level of ["log", "info", "warn", "error", "debug", "trace"] as const) {
-  console[level] = (...args: unknown[]) => stderr(args.map((arg) => (typeof arg === "string" ? arg : Bun.inspect(arg))).join(" "))
-}
-// The whole stream, also for a library that holds on to it or waits for its callback.
+globalThis.console = new Console(process.stderr, process.stderr)
 process.stdout.write = ((chunk: unknown, encoding?: unknown, callback?: unknown) =>
   (process.stderr.write as Function)(chunk, encoding, callback)) as typeof process.stdout.write
 
+// Frames go out with blocking writes (review carbon-5): a client that reads nothing stops the JS host in its write,
+// which is the pipe's back-pressure, rather than letting it buffer without bound; and no frame is cut at exit.
+function write(bytes: Buffer) {
+  let at = 0
+  while (at < bytes.length) {
+    try {
+      at += writeSync(1, bytes, at)
+    } catch (error) {
+      if ((error as { code?: string }).code !== "EAGAIN") throw error
+    }
+  }
+}
+
+// Throws when `message` cannot be JSON (a `BigInt`, a cycle): nothing of it is written.
 function frame(kind: number, message: unknown) {
   const body = Buffer.from(JSON.stringify(message))
   const head = Buffer.alloc(5)
   head.writeUInt32LE(body.length, 0)
   head[4] = kind
-  sink.write(head)
-  sink.write(body)
-  sink.flush()
+  write(Buffer.concat([head, body]))
 }
 const send = (message: unknown) => frame(CONTROL, message)
+
+// The client that started the JS host is gone: it exits, from a thread of its own, so a plugin that spins on the main
+// thread does not keep it alive (review carbon-6; Linux also has the parent-death signal, macOS has not).
+const parent = process.ppid
+const orphan = `setInterval(() => { try { process.kill(${parent}, 0) } catch { process.kill(${process.pid}, "SIGKILL") } }, 250)`
+new Worker(URL.createObjectURL(new Blob([orphan], { type: "application/javascript" }))).unref()
 
 type Json = any
 type Request = { type: string; [field: string]: Json }
@@ -90,6 +108,9 @@ interface Mount {
   // The memo values of the adopted tree, and of the one in flight.
   memo: Map<string, string>
   staged?: Map<string, string>
+  // The memos within each memo's subtree, of the adopted tree and of the one in flight.
+  nested: Map<string, string[]>
+  stagedNested?: Map<string, string[]>
   next: number
   given: Array<[number, Json]>
   released: number[]
@@ -112,6 +133,7 @@ interface Plugin {
   // Who waits for the answer of each effect of the call or setup that runs.
   resolvers: Array<(value: Json) => void>
   commands: Command[]
+  storage: string[]
   events: Array<{ types: string[]; handler: (event: Json) => unknown }>
   // P2: the key layers of setup, each with its handler.
   layers: Array<{ layer: Json; handler: (event: Json) => unknown }>
@@ -130,6 +152,7 @@ interface Plugin {
 const plugins = new Map<string, Plugin>()
 const generations = new Map<number, Plugin>()
 let last = 0
+let themeMode = "dark"
 
 function mountKey(id: Json) {
   return `${id.surface}\u0000${id.key}\u0000${id.generation}`
@@ -140,6 +163,19 @@ function fail(plugin: Plugin, error: string) {
   plugin.failed = true
   plugin.active = false
   send({ type: "fail", id: plugin.id, error })
+}
+
+// Sends what `plugin` gave, which may not be JSON: then it fails, and the call `seq`, if any, is answered with that.
+function sendFor(plugin: Plugin, out: Json, seq?: number) {
+  try {
+    send(out)
+  } catch (error) {
+    const why = `it gave what is not JSON: ${message(error)}`
+    if (seq === undefined) return fail(plugin, why)
+    plugin.failed = true
+    plugin.active = false
+    send({ type: "done", seq, error: why })
+  }
 }
 
 function message(error: unknown) {
@@ -162,7 +198,7 @@ function effect(plugin: Plugin, request: Request): Promise<Json> {
     }
     const seq = ++plugin.batch
     plugin.answers.set(`b${seq}`, [resolve])
-    send({ type: "effects", id: plugin.id, seq, effects: [request] })
+    sendFor(plugin, { type: "effects", id: plugin.id, seq, effects: [request] })
   })
 }
 
@@ -176,6 +212,16 @@ function view(plugin: Plugin, mount: Mount) {
   const surface = plugin.surfaces[mount.surface]
   if (!surface) return
   const used = new Map<string, string>()
+  // The memos within each memo's subtree: a kept subtree keeps them too, so they stay known (review carbon-7).
+  const nested = new Map<string, string[]>()
+  const within: string[][] = []
+  const kept = (key: string) => {
+    for (const inner of mount.nested.get(key) ?? []) {
+      used.set(inner, mount.memo.get(inner) ?? "")
+      nested.set(inner, mount.nested.get(inner) ?? [])
+      kept(inner)
+    }
+  }
   const given: Array<[number, Json]> = []
   const released: number[] = []
   const cx: ViewContext = {
@@ -184,9 +230,20 @@ function view(plugin: Plugin, mount: Mount) {
     memo(key, value, build) {
       const text = JSON.stringify(value) ?? "undefined"
       used.set(key, text)
-      if (!mount.whole && mount.memo.get(key) === text) return { type: "keep", key }
+      within.at(-1)?.push(key)
+      if (!mount.whole && mount.memo.get(key) === text) {
+        nested.set(key, mount.nested.get(key) ?? [])
+        kept(key)
+        return { type: "keep", key }
+      }
+      within.push([])
+      let node: Json
+      try {
+        node = build()
+      } finally {
+        nested.set(key, within.pop() ?? [])
+      }
       // The subtree takes the key as its id, as the Rust SDK's memo gives it.
-      const node = build()
       return node && typeof node === "object" && node.type !== "keep" && node.type !== "slot" ? { ...node, id: key } : node
     },
     content(bytes) {
@@ -199,17 +256,19 @@ function view(plugin: Plugin, mount: Mount) {
     },
   }
   let node: Json
+  let text: string
   try {
     node = surface.view(cx)
+    text = JSON.stringify(node)
   } catch (error) {
     fail(plugin, `view threw: ${message(error)}`)
     return
   }
-  const text = JSON.stringify(node)
   if (!mount.whole && text === mount.last && given.length === 0 && released.length === 0) return
   mount.rev += 1
   mount.inflight = true
   mount.staged = used
+  mount.stagedNested = nested
   mount.last = text
   frame(TREE, {
     id: plugin.id,
@@ -229,6 +288,17 @@ function viewAll(plugin: Plugin) {
   for (const mount of plugin.mounts.values()) view(plugin, mount)
 }
 
+// Runs plugin code for a message without a sequence (a view after an adoption or a snapshot, an answer's resolvers, a
+// cleanup): the host is told whose it is, so an end within it names that plugin (review carbon-3).
+function within(plugin: Plugin, run: () => void) {
+  send({ type: "entered", id: plugin.id })
+  try {
+    run()
+  } finally {
+    send({ type: "entered" })
+  }
+}
+
 function context(plugin: Plugin) {
   const commands = (layer: Json) => {
     for (const command of layer?.commands ?? []) {
@@ -246,7 +316,8 @@ function context(plugin: Plugin) {
           keybind: typeof command.bind === "string" ? command.bind : null,
           palette: !!command.palette,
           ...(command.description ? { description: command.description } : {}),
-          ...(command.slash?.arguments ? { arguments: true } : {}),
+          ...(command.slash?.arguments || command.arguments ? { arguments: true } : {}),
+          ...(command.scope ? { scope: command.scope } : {}),
         },
       })
     }
@@ -275,7 +346,12 @@ function context(plugin: Plugin) {
       plugin.layers.push({ layer, handler })
     },
     command(command: Json, run: (input?: string) => unknown) {
-      commands({ commands: [{ ...command, id: command.name, run, bind: command.keybind, slash: command.slash ? { name: command.slash } : undefined }] })
+      const slash = command.slash ? { name: command.slash, arguments: command.arguments } : undefined
+      commands({ commands: [{ ...command, id: command.name, run, bind: command.keybind, slash }] })
+    },
+    // The storage keys the plugin reads and writes, as a manifest declares them.
+    storage(keys: string[]) {
+      plugin.storage.push(...keys)
     },
     on(types: string[], handler: (event: Json) => unknown) {
       plugin.events.push({ types, handler })
@@ -301,8 +377,11 @@ function context(plugin: Plugin) {
   }
   return {
     options: plugin.options ?? {},
+    // What the client said as it started the JS host, and the theme's mode as it changes.
     app: { version: process.env.OPENCODE_VERSION ?? "", channel: process.env.OPENCODE_CHANNEL ?? "" },
-    themeMode: "dark",
+    get themeMode() {
+      return themeMode
+    },
     keymap: {
       layer(factory: () => Json) {
         commands(factory())
@@ -319,14 +398,19 @@ function context(plugin: Plugin) {
             variant: options.variant ?? "info",
             message: options.message,
             ...(options.title ? { title: options.title } : {}),
+            ...(options.sessionID ? { session: options.sessionID } : {}),
           })
         },
       },
     },
     data: {
       on(type: string, handler: (event: Json) => unknown) {
-        carrier.on([type], handler)
-        return () => {}
+        const listener = { types: [type], handler }
+        plugin.events.push(listener)
+        // The host keeps routing the type; the handler hears no more of it.
+        return () => {
+          listener.handler = () => undefined
+        }
       },
     },
     [Symbol.for("opencode.carrier")]: carrier,
@@ -340,7 +424,7 @@ function manifest(plugin: Plugin) {
     fences: [],
     slots: [],
     routes: [],
-    storage: [],
+    storage: plugin.storage,
     events: plugin.events.map((event) => event.types),
     ...(plugin.layers.length ? { layers: plugin.layers.map((layer) => layer.layer) } : {}),
     surfaces: plugin.surfaces.map((surface) => ({
@@ -395,8 +479,8 @@ async function setup(seq: number, plugin: Plugin) {
   if (effects.length) plugin.answers.set("setup", plugin.resolvers)
   plugin.resolvers = []
   const holds = plugin.commands.filter((command) => command.hold).map((command) => command.name)
-  send({ type: "loaded", seq, id: plugin.id, manifest: manifest(plugin), holds, effects })
-  for (const watch of plugin.setupWatches.splice(0)) send(watch)
+  sendFor(plugin, { type: "loaded", seq, id: plugin.id, manifest: manifest(plugin), holds, effects }, seq)
+  for (const watch of plugin.setupWatches.splice(0)) sendFor(plugin, watch)
 }
 
 function candidate(definition: Plugin["definition"], target: string, dir: string, options: Json): Plugin {
@@ -414,6 +498,7 @@ function candidate(definition: Plugin["definition"], target: string, dir: string
     setupWatches: [],
     resolvers: [],
     commands: [],
+    storage: [],
     events: [],
     layers: [],
     surfaces: [],
@@ -426,7 +511,12 @@ function candidate(definition: Plugin["definition"], target: string, dir: string
   }
 }
 
-async function load(seq: number, target: string, dir: string, options: Json) {
+// The modules loads imported without their setup, by load: the client sets one up once it knows its plugin is enabled.
+const described = new Map<number, Plugin>()
+
+// Loads the plugin of `target`. With `setup`, runs its setup; without, says its ID and keeps it for a `setup` message:
+// a disabled plugin's setup never runs (review carbon-8).
+async function load(seq: number, target: string, dir: string, options: Json, withSetup: boolean) {
   const entry = resolveEntry(dir)
   if (!entry) return send({ type: "unsupported", seq })
   // Each load imports the plugin's modules afresh, as a generation of its own: its helpers as much as its entry, so a
@@ -435,7 +525,8 @@ async function load(seq: number, target: string, dir: string, options: Json) {
   for (const key of Object.keys(require.cache)) if (roots.some((root) => key.startsWith(root))) delete require.cache[key]
   let module: Json
   try {
-    module = await import(`${entry}?generation=${seq}`)
+    // A URL, so a drive letter, `#` or `%` in the path is not read as one.
+    module = await import(`${pathToFileURL(entry).href}?generation=${seq}`)
   } catch (error) {
     return send({ type: "done", seq, error: `cannot load ${target}: ${message(error)}` })
   }
@@ -445,7 +536,20 @@ async function load(seq: number, target: string, dir: string, options: Json) {
   const known = plugins.get(definition.id)
   if (known && known.target !== target)
     return send({ type: "done", seq, error: `plugin ID ${definition.id} is already registered` })
-  await setup(seq, candidate(definition, target, dir, options))
+  const plugin = candidate(definition, target, dir, options)
+  if (withSetup) return setup(seq, plugin)
+  described.set(seq, plugin)
+  send({ type: "described", seq, id: definition.id })
+}
+
+// The client forgot `target`: its plugin goes, and its ID is free for another target.
+function forget(target: string) {
+  for (const [seq, plugin] of described) if (plugin.target === target) described.delete(seq)
+  for (const [id, plugin] of plugins) {
+    if (plugin.target !== target) continue
+    if (plugin.active) within(plugin, () => deactivate(plugin))
+    plugins.delete(id)
+  }
 }
 
 function deactivate(plugin: Plugin) {
@@ -499,14 +603,14 @@ function call(seq: number, plugin: Plugin, request: Json) {
   if (effects.length) plugin.answers.set(`c${seq}`, resolvers)
   // The answer comes once the views the call made due were sent: it is the call's completion, which the host times.
   viewAll(plugin)
-  send({ type: "done", seq, effects })
+  sendFor(plugin, { type: "done", seq, effects }, seq)
 }
 
 const work: Json[] = []
 let running = false
 
 // The work whose start the host times: a load's setup, a handler, a mount's or an input's view.
-const STARTED = new Set(["load", "call", "mount", "input"])
+const STARTED = new Set(["load", "setup", "call", "mount", "input"])
 
 async function handle(message: Json) {
   const plugin = typeof message.activation === "number" ? generations.get(message.activation) : message.id ? plugins.get(message.id) : undefined
@@ -516,9 +620,20 @@ async function handle(message: Json) {
     case "hello":
       return
     case "load":
-      return load(message.seq, message.target, message.dir, message.options)
+      return load(message.seq, message.target, message.dir, message.options, message.setup)
+    case "setup": {
+      const plugin = described.get(message.load)
+      described.delete(message.load)
+      if (!plugin) return send({ type: "done", seq: message.seq, error: "its module is gone" })
+      return setup(message.seq, plugin)
+    }
+    case "forget":
+      return forget(message.target)
+    case "theme":
+      themeMode = message.mode
+      return
     case "deactivate":
-      if (plugin) deactivate(plugin)
+      if (plugin) within(plugin, () => deactivate(plugin))
       return
     // A call for an activation that is gone answers with nothing: the host routed it before it ended.
     case "call":
@@ -538,6 +653,7 @@ async function handle(message: Json) {
         dirty: false,
         whole: true,
         memo: new Map(),
+        nested: new Map(),
         next: 1,
         given: [],
         released: [],
@@ -565,8 +681,10 @@ async function handle(message: Json) {
       mount.inflight = false
       mount.whole = false
       mount.memo = mount.staged ?? new Map()
+      mount.nested = mount.stagedNested ?? new Map()
       mount.staged = undefined
-      if (mount.dirty) view(plugin, mount)
+      mount.stagedNested = undefined
+      if (mount.dirty) within(plugin, () => view(plugin, mount))
       return
     }
     case "refused": {
@@ -576,19 +694,21 @@ async function handle(message: Json) {
       mount.inflight = false
       mount.whole = true
       mount.memo = new Map()
+      mount.nested = new Map()
       mount.staged = undefined
+      mount.stagedNested = undefined
       mount.last = undefined
-      return view(plugin, mount)
+      return within(plugin, () => view(plugin, mount))
     }
     case "snapshot":
       if (!plugin) return
       plugin.snapshots.set(message.key, message.value)
-      if (plugin.active && !plugin.failed) viewAll(plugin)
+      if (plugin.active && !plugin.failed && plugin.mounts.size) within(plugin, () => viewAll(plugin))
       return
     case "answered": {
       const waiting = plugin?.answers.get(message.key)
       plugin?.answers.delete(message.key)
-      waiting?.forEach((resolve, index) => resolve(message.results[index]))
+      if (plugin && waiting) within(plugin, () => waiting.forEach((resolve, index) => resolve(message.results[index])))
       return
     }
     case "ping": {
@@ -628,7 +748,10 @@ for await (const chunk of Bun.stdin.stream()) {
     pending = pending.subarray(5 + len)
     if (kind !== CONTROL) continue
     const message = JSON.parse(body.toString())
-    if (message.type === "hello") last = message.after ?? 0
+    if (message.type === "hello") {
+      last = message.after ?? 0
+      themeMode = message.theme_mode ?? themeMode
+    }
     if (typeof message.seq === "number") {
       if (message.seq <= last) continue
       if (message.seq !== last + 1) {

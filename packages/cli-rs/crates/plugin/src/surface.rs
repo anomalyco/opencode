@@ -114,6 +114,9 @@ pub(crate) struct Viewing<'a> {
     /// The values a library's memo table held after the mount's last view: a claim's view that returns no tree drops
     /// only what it staged, so its table holds no more.
     pub held: usize,
+    /// The height a solve laid the mount's root out at, 0 included; `None` before the first, when the input's size is
+    /// the screen's stand-in.
+    pub laid: Option<u16>,
 }
 
 /// What a view returned.
@@ -567,6 +570,7 @@ impl Surface {
             release: &mut release,
             kept: &kept,
             held: 0,
+            laid: self.laid.get().then(|| self.root.rect().height as u16),
         };
         let viewed = self.viewer.view(host, viewing);
         let Some(viewed) = viewed else {

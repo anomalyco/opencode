@@ -151,14 +151,16 @@ struct Shared {
     stderr: Mutex<VecDeque<String>>,
     process: Mutex<Option<std::process::Child>>,
     pid: u32,
+    /// The job that holds the child and what it starts; closing it ends them all. It goes when the child is killed, not
+    /// when the `Child` drops, so a drop's grace period stands (review carbon-6).
+    #[cfg(windows)]
+    job: Mutex<Option<opencode_util::win::KillOnCloseJob>>,
 }
 
 /// A running JS host. Dropping it closes its input, which ends it; one that does not end within 500 ms is killed, off
 /// the UI thread.
 pub struct Child {
     shared: Arc<Shared>,
-    #[cfg(windows)]
-    _job: Option<opencode_util::win::KillOnCloseJob>,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -179,7 +181,7 @@ impl Child {
         // Without its job the child would outlive a client that dies: it is not run then (review bigboi-9).
         #[cfg(windows)]
         let job = match opencode_util::win::KillOnCloseJob::new().and_then(|job| job.assign(&process).map(|()| job)) {
-            Ok(job) => Some(job),
+            Ok(job) => job,
             Err(error) => {
                 let _ = process.kill();
                 let _ = process.wait();
@@ -205,12 +207,10 @@ impl Child {
             stderr: Mutex::default(),
             process: Mutex::new(Some(process)),
             pid,
-        });
-        let child = Self {
-            shared: shared.clone(),
             #[cfg(windows)]
-            _job: job,
-        };
+            job: Mutex::new(Some(job)),
+        });
+        let child = Self { shared: shared.clone() };
         let named = |name: &str| std::thread::Builder::new().name(format!("js-host-{name}"));
         if let Some(stdin) = stdin {
             let shared = shared.clone();
@@ -309,8 +309,7 @@ impl Drop for Child {
         let reaped = std::thread::Builder::new().name("js-host-reap".to_owned()).spawn(move || {
             let deadline = Instant::now() + Duration::from_millis(500);
             while Instant::now() < deadline {
-                let exited =
-                    lock(&shared.process).as_mut().is_none_or(|process| matches!(process.try_wait(), Ok(Some(_))));
+                let exited = lock(&shared.process).as_mut().is_none_or(exited);
                 if exited {
                     // Its group may hold what it started.
                     kill(&shared);
@@ -335,16 +334,37 @@ fn close(shared: &Shared) {
     shared.watch.notify_all();
 }
 
-fn kill(shared: &Shared) {
-    let Some(mut process) = lock(&shared.process).take() else { return };
+/// Ends the child's process group, then reaps the child: how it exited, once.
+fn kill(shared: &Shared) -> Option<std::process::ExitStatus> {
+    let mut process = lock(&shared.process).take()?;
     #[cfg(unix)]
-    // SAFETY: a signal to the child's own process group, which `contain` made; the child is not reaped yet, so its ID
-    // still names it.
+    // SAFETY: a signal to the child's own process group, which `contain` made; nothing reaps the child before this (see
+    // `exited`), so its ID still names it.
     unsafe {
         libc::kill(-(process.id() as libc::pid_t), libc::SIGKILL);
     }
+    #[cfg(windows)]
+    drop(lock(&shared.job).take());
     let _ = process.kill();
-    let _ = process.wait();
+    process.wait().ok()
+}
+
+/// Whether the child exited, without reaping it on Unix: until [`kill`] signalled its group, its ID cannot name another
+/// process (review carbon-6).
+fn exited(process: &mut std::process::Child) -> bool {
+    #[cfg(unix)]
+    {
+        // SAFETY: `info` is plain data, zeroed as POSIX asks before a `WNOHANG` call; it stays zero when nothing exited.
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        let options = libc::WEXITED | libc::WNOHANG | libc::WNOWAIT;
+        // SAFETY: as above; `waitid` writes only `info`.
+        let found = unsafe { libc::waitid(libc::P_PID, process.id() as libc::id_t, &mut info, options) };
+        found == 0 && info.si_signo == libc::SIGCHLD
+    }
+    #[cfg(not(unix))]
+    {
+        matches!(process.try_wait(), Ok(Some(_)))
+    }
 }
 
 /// Gives the child a process group of its own, and on Linux its death with the host's; on Windows a group of its own
@@ -513,8 +533,11 @@ fn read(shared: &Shared, stdout: ChildStdout) {
             owed.events.iter_mut().filter(|(sent, ..)| *sent == seq).for_each(|(_, _, started)| *started = true);
         }
         if let Event::Up(up) = &event
-            && let Up::Done { seq, .. } | Up::Loaded { seq, .. } | Up::Unsupported { seq } | Up::Pong { seq, .. } =
-                &**up
+            && let Up::Done { seq, .. }
+            | Up::Loaded { seq, .. }
+            | Up::Described { seq, .. }
+            | Up::Unsupported { seq }
+            | Up::Pong { seq, .. } = &**up
         {
             lock(&shared.sent).events.retain(|(sent, ..)| sent != seq);
             shared.watch.notify_all();
@@ -536,11 +559,13 @@ fn read(shared: &Shared, stdout: ChildStdout) {
 fn ended(shared: &Shared, why: &str) -> String {
     let deadline = Instant::now() + Duration::from_millis(100);
     let mut status = None;
-    while status.is_none() && Instant::now() < deadline {
-        status = lock(&shared.process).as_mut().and_then(|process| process.try_wait().ok().flatten());
-        if status.is_none() {
-            std::thread::sleep(Duration::from_millis(2));
+    while Instant::now() < deadline {
+        // It exited: its group goes with it, and then it is reaped.
+        if lock(&shared.process).as_mut().is_some_and(exited) {
+            status = kill(shared);
+            break;
         }
+        std::thread::sleep(Duration::from_millis(2));
     }
     let mut why = why.to_owned();
     if let Some(status) = status {
@@ -624,6 +649,8 @@ fn watch(shared: &Shared) {
 
 /// The resident set of the child, in bytes.
 fn resident(shared: &Shared) -> Option<u64> {
+    // Once reaped, its ID may name another process.
+    lock(&shared.process).as_ref()?;
     #[cfg(target_os = "linux")]
     {
         let status = std::fs::read_to_string(format!("/proc/{}/status", shared.pid)).ok()?;
@@ -826,6 +853,45 @@ mod tests {
         // A zombie is gone too: its parent, the init process, reaps it.
         let state = std::fs::read_to_string(format!("/proc/{pid}/stat")).unwrap_or_default();
         assert!(state.is_empty() || state.contains(") Z "), "the child {pid} outlived its client: {state}");
+    }
+
+    // Expected (review carbon-6): telling that a child exited does not reap it: its ID names it, a zombie, until the
+    // group is signalled and it is waited for.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn telling_a_child_exited_does_not_reap_it() {
+        let mut process = Command::new("sh").arg("-c").arg("exit 3").spawn().unwrap();
+        let begun = Instant::now();
+        while !exited(&mut process) {
+            assert!(begun.elapsed() < Duration::from_secs(5), "the child never exited");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let state = std::fs::read_to_string(format!("/proc/{}/stat", process.id())).unwrap_or_default();
+        assert!(state.contains(") Z "), "telling it exited reaped it: {state:?}");
+        assert_eq!(process.wait().unwrap().code(), Some(3));
+    }
+
+    // Expected (review carbon-9, CM11): messages past the bytes the host has not taken end the stream, however few they
+    // are, and name the plugin whose effects they are.
+    #[test]
+    fn messages_past_the_inbox_bytes_end_the_stream() {
+        let limits = Limits { inbox: 64 << 10, ..Limits::default() };
+        let request = opencode_plugin_abi::HostRequest::Log {
+            level: opencode_plugin_abi::Level::Info,
+            message: "x".repeat(20 << 10),
+        };
+        let effects = control(&Up::Effects { id: "loud".to_owned(), seq: 1, effects: vec![request] });
+        for (count, ends) in [(2, false), (4, true)] {
+            let mut frames = hello();
+            (0..count).for_each(|_| frames.extend(&effects));
+            let (child, _dir) = fake(&frames, limits);
+            std::thread::sleep(Duration::from_millis(300));
+            let why = child.take().into_iter().find_map(|event| match event {
+                Event::Gone(_, plugin) => Some(plugin),
+                _ => None,
+            });
+            assert_eq!(why, ends.then(|| Some("loud".to_owned())), "{count}");
+        }
     }
 
     // Expected: a send past the bytes the queue holds is refused at once; the child is not waited for.

@@ -1168,7 +1168,7 @@ pub fn refocus(host: &dyn Host, move_focus: impl FnOnce()) {
 }
 
 /// The stroke of `event` as the keymap names it, and the text it types: a chord types nothing, only shift may be held.
-fn key_of(event: &KeyEvent) -> (String, Option<String>) {
+pub(crate) fn key_of(event: &KeyEvent) -> (String, Option<String>) {
     let plain = event.modifiers.without_locks().bits() & !Modifiers::SHIFT.bits() == 0;
     let text = match event.code {
         KeyCode::Char(character) if plain => Some(character.to_string()),

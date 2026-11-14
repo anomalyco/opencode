@@ -570,6 +570,8 @@ impl Core {
             release: &mut release,
             kept: &kept,
             held: remote,
+            // A claim keeps no placeholder height of its own.
+            laid: None,
         };
         let viewed = self.claim.viewer.view(host, viewing, &part);
         Attempt { viewed, given: staged.take(), memo, held }

@@ -1678,8 +1678,11 @@ fn a_typescript_plugins_artifact_is_its_files() {
     assert!(artifact.script);
     assert_eq!(artifact.path, std::fs::canonicalize(&dir).unwrap());
     std::fs::write(dir.join("tui.ts"), "export default {}\n").unwrap();
-    std::fs::write(dir.join(".log.jsonl"), "{}\n").unwrap();
-    assert_eq!(hash(), first, "a save that changed nothing, or a hidden file, changed the hash");
+    assert_eq!(hash(), first, "a save that changed nothing changed the hash");
+    // A hidden file is a module the plugin may import (review carbon-1).
+    std::fs::write(dir.join(".payload.ts"), "export const a = 1\n").unwrap();
+    assert_ne!(hash(), first, "a hidden file kept the hash");
+    std::fs::remove_file(dir.join(".payload.ts")).unwrap();
     std::fs::write(dir.join("src/a.ts"), "export const a = 2\n").unwrap();
     let changed = hash();
     assert_ne!(changed, first, "a changed file kept the hash");
@@ -1689,4 +1692,37 @@ fn a_typescript_plugins_artifact_is_its_files() {
     std::fs::write(dir.join("node_modules/dep/index.js"), "module.exports = 2\n").unwrap();
     assert_ne!(hash(), moved, "a dependency changed in place, at its size, kept the hash");
     assert!(approval::Artifact::tree(&dir.join("tui.ts")).is_err());
+}
+
+// Expected (carbon-2): a TypeScript plugin's subdirectories are watched, so a save of a module in one reloads it; its
+// dependencies are not, as an install touches the directory itself.
+#[test]
+fn a_typescript_plugins_subdirectories_are_watched() {
+    let project = Project::new();
+    let dir = project.repo().join(".opencode/plugins/js");
+    write(&dir.join("tui.ts"), "export default {}\n");
+    write(&dir.join("src/deep/a.ts"), "export const a = 1\n");
+    write(&dir.join("node_modules/dep/index.js"), "\n");
+    let host = host();
+    let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host));
+    let loader = project.loader(Rc::new(Fake::default()), Vec::new()).with_scripts(scripts);
+    let watched = loader.watch_dirs();
+    assert!(watched.contains(&dir.join("src")) && watched.contains(&dir.join("src/deep")), "{watched:?}");
+    assert!(!watched.iter().any(|watched| watched.starts_with(dir.join("node_modules"))), "{watched:?}");
+}
+
+// Expected (carbon-1): a `cli.json` entry that names a project's TypeScript plugin through a link replaces it, as one
+// that names a library does: it is listed once, and needs no approval.
+#[cfg(unix)]
+#[test]
+fn a_project_typescript_plugin_named_through_a_link_is_listed_once() {
+    let project = Project::new();
+    let dir = project.repo().join(".opencode/plugins/js");
+    write(&dir.join("tui.ts"), "export default {}\n");
+    let link = project.root.path().join("link");
+    std::os::unix::fs::symlink(&dir, &link).unwrap();
+    let configured = vec![Configured { target: link.to_string_lossy().into_owned(), options: None }];
+    let targets = project.loader(Rc::new(Fake::default()), configured).targets();
+    let named: Vec<(&str, bool)> = targets.iter().map(|target| (target.target.as_str(), target.project)).collect();
+    assert_eq!(named, [(link.to_str().unwrap(), false)]);
 }

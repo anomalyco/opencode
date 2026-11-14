@@ -22,6 +22,11 @@ use crate::mailbox::Mailbox;
 use crate::surface::{self, Viewed, Viewing};
 use crate::{Definition, ErrorFn, Host, Owners, Setup, behave, route, tui_command};
 
+/// The reads a plugin watches at most.
+const WATCHES: usize = 64;
+/// The effects one call, setup or batch asks for at most.
+const EFFECTS: usize = 256;
+
 /// What a load answered: the plugin, what its setup registered, and the effects setup asked for, which the first
 /// activation applies (the setup ran already); a later activation runs setup again.
 pub(crate) struct Loaded {
@@ -108,6 +113,10 @@ impl Guest {
         &self.loaded.id
     }
 
+    pub(crate) fn target(&self) -> &str {
+        &self.loaded.target
+    }
+
     /// The JS host's activation of the plugin this one answers to.
     pub(crate) fn activation(&self) -> u64 {
         self.js.get()
@@ -170,6 +179,7 @@ impl Guest {
             target: self.loaded.target.clone(),
             dir: self.loaded.dir.to_string_lossy().into_owned(),
             options: self.loaded.options.as_deref().and_then(|options| serde_json::from_str(options).ok()),
+            setup: true,
         };
         self.send(load, Some(Waiting::Activate(Rc::downgrade(self))));
     }
@@ -186,10 +196,9 @@ impl Guest {
                 owner.set_mode(&*host, None);
             }
         }
+        // The new activation watches what its setup asks for again; a watch of the last one's handlers is gone with it.
+        self.watches.borrow_mut().clear();
         self.setup_again();
-        for (_, watch) in self.watches.borrow_mut().values_mut() {
-            watch.take();
-        }
         let viewers = self.viewers.borrow().clone();
         viewers.iter().for_each(|viewer| viewer.restart(self));
     }
@@ -204,6 +213,9 @@ impl Guest {
             return;
         }
         let Some(scripts) = self.scripts.upgrade() else { return };
+        // The replacement adopts this activation of the JS host: this guest's end must not deactivate it (review
+        // carbon-2).
+        let handed = self.js.replace(0);
         let mut loads = scripts.loads.borrow_mut();
         if let Some(load) = loads.get_mut(&self.loaded.target) {
             let loaded = Loaded {
@@ -211,7 +223,7 @@ impl Guest {
                 target: self.loaded.target.clone(),
                 dir: self.loaded.dir.clone(),
                 options: self.loaded.options.clone(),
-                seq: self.js.get(),
+                seq: handed,
                 manifest,
                 holds,
                 effects: RefCell::new(Some(Vec::new())),
@@ -240,9 +252,14 @@ impl Guest {
     }
 
     /// Applies `effects`, as a call of kind `export` (for the user's input when `user`) would have asked for them, and
-    /// tells the JS host what they answered under `key`.
+    /// tells the JS host what they answered under `key`. More than [`EFFECTS`] at once fail the plugin: each runs on the
+    /// UI thread (review carbon-8).
     pub(crate) fn effects(self: &Rc<Self>, key: &str, effects: Vec<HostRequest>, user: bool, export: &str) {
         if effects.is_empty() || self.ended() {
+            return;
+        }
+        if effects.len() > EFFECTS {
+            self.fail(format!("{export} asked for {} effects at once, over {EFFECTS}", effects.len()));
             return;
         }
         let mut ctx = Ctx::new(self.host.clone(), self.id(), self.loaded.manifest.storage.clone());
@@ -327,12 +344,26 @@ impl Guest {
     }
 
     /// Pushes the value of `request` under `key` now, and each time it changes.
+    /// Pushes the value of `request` under `key` now, and each time it changes. A plugin watches at most [`WATCHES`]
+    /// reads, each evaluated on the UI thread as the host changes (review carbon-8).
     pub(crate) fn watch(self: &Rc<Self>, key: String, request: HostRequest) {
         if self.ended() {
             return;
         }
-        self.watches.borrow_mut().insert(key, (request, None));
-        self.refresh();
+        let mut watches = self.watches.borrow_mut();
+        if !watches.contains_key(&key) && watches.len() >= WATCHES {
+            log::warn!("plugin {}: a watch of {key} is over {WATCHES} reads; it is not watched", self.id());
+            return;
+        }
+        let value = self.evaluate(&request);
+        watches.insert(key.clone(), (request, Some(value.clone())));
+        drop(watches);
+        self.send(Down::Snapshot { id: self.id().to_owned(), key, value }, None);
+    }
+
+    fn evaluate(&self, request: &HostRequest) -> serde_json::Value {
+        let keys = self.loaded.manifest.storage.clone();
+        super::evaluate(&self.host, self.id(), keys, Some(self.owners.clone()), request)
     }
 
     pub(crate) fn unwatch(&self, key: &str) {
@@ -349,7 +380,7 @@ impl Guest {
             watches
                 .iter_mut()
                 .filter_map(|(key, (request, last))| {
-                    let value = super::evaluate(&self.host, self.id(), Some(self.owners.clone()), request);
+                    let value = self.evaluate(request);
                     (last.as_ref() != Some(&value)).then(|| {
                         *last = Some(value.clone());
                         (key.clone(), value)
@@ -468,6 +499,9 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
     let watcher = setup.host().watch(Rc::new(move |_: &opencode_plugin_abi::Changed| {
         if let Some(guest) = watching.upgrade() {
             guest.refresh();
+            if let Some(scripts) = guest.scripts.upgrade() {
+                scripts.theme();
+            }
         }
     }));
     *guest.watcher.borrow_mut() = watcher;
@@ -500,6 +534,9 @@ struct Mount {
     adopted: u64,
     /// The host's handle of each of the plugin's.
     handles: HashMap<u64, ContentRef>,
+    /// The handles of a JS host that ended, which the tree on screen still shows: they go when the next one's first
+    /// tree is offered (review carbon-7).
+    retired: Vec<ContentRef>,
     /// Something shows: a placeholder or a tree.
     shown: bool,
     /// A tree of the plugin's was adopted.
@@ -586,6 +623,8 @@ impl Viewer {
                 let mut mounts = self.mounts.borrow_mut();
                 let Some(mount) = mounts.get_mut(&id) else { continue };
                 (mount.pending, mount.offered, mount.adopted) = (None, None, 0);
+                let handles: Vec<ContentRef> = mount.handles.drain().map(|(_, given)| given).collect();
+                mount.retired.extend(handles);
                 mount.sent.clone()
             };
             let Some(input) = input else { continue };
@@ -636,22 +675,36 @@ impl surface::Viewer for Viewer {
             let mount = mounts.entry(id.clone()).or_default();
             (mount.started, mount.sent.clone(), mount.real)
         };
-        if real && input.height > 0 {
-            self.heights.borrow_mut().insert(id.key.clone(), input.height);
+        // The height it was laid out at, not the input's, which stands in the screen's before a solve (review carbon-7).
+        if let (true, Some(laid)) = (real, viewing.laid) {
+            self.heights.borrow_mut().insert(id.key.clone(), laid);
         }
         if !started || sent.as_ref() != Some(&input) {
             self.tell(&guest, id, input, !started);
         }
         let mut mounts = self.mounts.borrow_mut();
         let mount = mounts.get_mut(id)?;
-        let whole = |tree: &Revision| !viewing.input.full || tree.whole;
-        if let Some(tree) = mount.pending.take_if(|tree| whole(tree)) {
+        // A surface that asks for a whole tree refuses one that is not: the JS host builds whole (review carbon-7).
+        if let Some(tree) = mount.pending.take_if(|tree| viewing.input.full && !tree.whole) {
+            let (rev, adopted) = (tree.rev, mount.adopted);
+            drop(mounts);
+            let error = "the host asked for a whole tree".to_owned();
+            guest.send(Down::Refused { id: guest.id().to_owned(), mount: id.clone(), rev, adopted, error }, None);
+            return Some(Viewed { node: None, memo: None });
+        }
+        if let Some(tree) = mount.pending.take() {
             let tree = *tree;
+            for given in mount.retired.drain(..) {
+                (viewing.release)(given);
+            }
             let mut fresh = Vec::new();
             for (handle, bytes) in tree.content {
                 let given = ContentRef(surface::next_content());
                 surface::took_content(given.0, 1);
-                mount.handles.insert(handle.0, given);
+                // A handle given again replaces the one it named.
+                if let Some(old) = mount.handles.insert(handle.0, given) {
+                    (viewing.release)(old);
+                }
                 fresh.push(handle.0);
                 (viewing.give)(given, bytes.0);
             }
@@ -666,10 +719,19 @@ impl surface::Viewer for Viewer {
                 serde_json::from_value::<v2::Node>(node)
             });
             let node = match node {
+                // A memo table holds a value for each subtree it built or kept by key, and for each memo a keep holds
+                // again, as a library's does.
+                Ok(node) if tree.memo > crate::loader::native::keyed(&node, viewing.kept) => {
+                    Err(format!("a memo table of {} values for a tree of fewer keyed nodes", tree.memo))
+                }
+                Ok(node) => Ok(node),
+                Err(error) => Err(format!("view returned a tree the host cannot read: {error}")),
+            };
+            let node = match node {
                 Ok(node) => node,
                 Err(error) => {
                     drop(mounts);
-                    guest.fail(format!("view returned a tree the host cannot read: {error}"));
+                    guest.fail(error);
                     return None;
                 }
             };
@@ -710,9 +772,13 @@ impl surface::Viewer for Viewer {
 /// What a mount shows before the JS host's first tree: the rows its key had, or one (review F1).
 fn placeholder(height: u16) -> v2::Node {
     let layout = opencode_plugin_abi::Layout {
-        height: Some(opencode_plugin_abi::Width::Cells(height.max(1))),
+        height: Some(opencode_plugin_abi::Width::Cells(height)),
         ..opencode_plugin_abi::Layout::default()
     };
+    // A mount that showed nothing reserves nothing.
+    if height == 0 {
+        return v2::Node::column(Vec::new()).layout(layout);
+    }
     v2::Node::text(vec![Span::new("…")]).fg("text.muted").layout(layout)
 }
 
