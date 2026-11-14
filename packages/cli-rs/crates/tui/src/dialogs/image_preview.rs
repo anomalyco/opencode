@@ -16,15 +16,16 @@ use crate::routes::session::messages::images::media_hash;
 
 /// Opens the dialog on `images` (each a URI and its prompt label), at `initial`.
 pub fn show(tui: &Tui, images: Vec<(String, Option<String>)>, initial: usize) {
-    show_closing(tui, images, initial, None);
+    show_closing(tui, images, initial, None, None);
 }
 
-/// [`show`], running `on_close` as the dialog closes: a plugin's preview, which ends with its activation.
+/// [`show`] under `key`, running `on_close` as the dialog closes: a plugin's preview, which ends with its activation.
 pub fn show_closing(
     tui: &Tui,
     images: Vec<(String, Option<String>)>,
     initial: usize,
     on_close: Option<Box<dyn FnOnce()>>,
+    key: Option<String>,
 ) {
     if images.is_empty() {
         return;
@@ -58,7 +59,7 @@ pub fn show_closing(
             root
         },
         on_close,
-        DialogOptions::new(DialogSize::XLarge).key("prompt-image-viewer"),
+        DialogOptions::new(DialogSize::XLarge).key(key.unwrap_or_else(|| "prompt-image-viewer".to_owned())),
     );
 }
 
