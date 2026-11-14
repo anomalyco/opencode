@@ -321,6 +321,40 @@ and are not loaded. The `plugins` entries after a plugin's own entry (all of the
 whether it starts enabled. A toggle in `/plugins` lasts until the TUI exits, also across hot reloads; it is not
 saved, as in TS.
 
+### Approval of a project's plugins
+
+A native build found in a project's `.opencode/plugins` runs only once the user approved it (rich-plugins 3.9,
+decision O-125; TS loads it at once, deviation `F16-project-plugin-approval`). The global `plugins` directory and the
+`cli.json` entries need none, also an entry that names a project's plugin another way (the library itself, or a link
+to it): a project cannot write them.
+
+- Until it is approved, the loader opens the library once to hash it, and maps nothing, so the plugin claims nothing:
+  no command, slot, route or fence takes effect, and it does not replace a built-in of its ID. It is listed `pending`
+  in `/plugins` under its directory's name, and a toast "Plugin needs approval: <directory>" says so once for each
+  build. A library that cannot be read, or is over 512 MiB, is pending without a toast, and what ran from it stops.
+- Enter on its row asks "Run project plugin?" ("This project wants to run native code inside opencode"), with the
+  library that would run, whether it lies outside the plugin directory, and the start of its SHA-256; Decline is active.
+  Approve loads it at once; Decline lists it `declined` and stops asking about that build; Escape, Ctrl+C, the header
+  and the backdrop close the question without a decision. The list comes back on the row. Enter on a declined row asks
+  again.
+- A decision names the artifact the user was shown: the plugin directory, the real path of the library, and the SHA-256
+  of its bytes; the bytes loaded are the bytes hashed, read through the same handle. If the library changed while the
+  question was open, nothing is saved, and the new build is asked about. Today the manifest comes from the library's
+  own `setup`, so the library's hash covers it. A changed library is pending again, and a running build of it stops
+  (`Loader::reconcile`, `crates/plugin/src/loader/approval.rs`).
+- What a build loads with it must be the system's (`crates/plugin/src/loader/deps.rs`): no build may name a dependency
+  or search path relative to the current directory (the project) or outside its private copy, and a project's build
+  may name no absolute path outside `/usr/lib` (and `/System` on macOS). On Windows the loader searches neither the
+  current directory nor `PATH` for any plugin's DLLs (`win::load_library`).
+- The decisions are kept in `plugin-approvals.json` in the client's state directory, one for each plugin directory and
+  path, written under a lock (`plugin-approvals.json.lock`) as a private file, so concurrent clients keep each other's
+  decisions. A store inside the project, at a relative path, or in a directory other users can write is not used: the
+  decisions then last as long as the TUI, and the question says why. A store that cannot be read approves nothing, and
+  a decision that cannot be saved says so and stays pending. Without real roots (tests) they last as long as the TUI.
+- An approved plugin's row toggles it as any other's, and the toggle is not saved. To forget an approval, remove its
+  entry from `plugin-approvals.json` (or the file); the plugin is pending at the next start. Disabling or forgetting
+  does not undo what approved native code already did: it ran in the client with the user's permissions.
+
 ## Lifecycle
 
 - Loading a build reads its ID from `describe` and runs no setup. Setup (`create`) runs on each activation, and
