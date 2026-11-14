@@ -38,12 +38,7 @@ it.live("returns LocationNotFoundError for a missing folder and recovers once it
     const session = Schema.decodeUnknownSync(Schema.Struct({ data: Session.Info }))(
       yield* Effect.promise(() => created.json()),
     ).data
-    const endpoints = [
-      "/api/model",
-      "/api/integration",
-      `/api/session/${session.id}/permission`,
-      "/api/session/global/form",
-    ]
+    const endpoints = ["/api/model", "/api/integration", "/api/session/global/form"]
     for (const endpoint of endpoints) {
       const response = yield* Effect.promise(() =>
         handler(
@@ -59,6 +54,17 @@ it.live("returns LocationNotFoundError for a missing folder and recovers once it
         message: `Location not found: ${directory}`,
       })
     }
+    // Pending requests live in memory, so listing them never boots the Location and cannot fail on its folder.
+    const pending = yield* Effect.promise(() =>
+      handler(
+        new Request(`http://opencode.local/api/session/${session.id}/permission`, {
+          headers: { "x-opencode-directory": encodeURIComponent(directory) },
+        }),
+      ),
+    )
+    expect(pending.status).toBe(200)
+    expect(yield* Effect.promise(() => pending.json())).toEqual({ data: [] })
+
     yield* Effect.promise(() => fs.mkdir(directory))
     const recovered = yield* Effect.promise(() =>
       handler(
