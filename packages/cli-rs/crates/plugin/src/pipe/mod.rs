@@ -1536,6 +1536,8 @@ mod tests {
         let work = root.join("work");
         script(&server.join("opencode"), &opencode("1.4.4"));
         script(&old.join("opencode"), &opencode("1.3.9"));
+        let failing = root.join("failing");
+        script(&failing.join("opencode"), "#!/bin/sh\necho 1.4.4\nexit 1\n");
         script(&work.join("bin/opencode"), &opencode("1.4.4"));
         script(&work.join("bin/bun"), "#!/bin/sh\necho 1.4.4\n");
         script(&tools.join("bun"), "#!/bin/sh\necho 1.4.2\n");
@@ -1559,7 +1561,7 @@ mod tests {
         let relative = [Path::new("bin"), Path::new("")];
         let chosen =
             |bun: &Path, opencode, version: &str| Some((bun.to_path_buf(), opencode, Some(version.to_owned())));
-        let all = [&relative[..], &[&shims, &old, &server, &tools]].concat();
+        let all = [&relative[..], &[&shims, &old, &failing, &server, &tools]].concat();
         // The server's binary is known.
         let known = Server::Local(Some(server.join("opencode")));
         assert_eq!(from(known, &all, None), chosen(&server.join("opencode"), true, "1.4.4"));
@@ -1567,7 +1569,7 @@ mod tests {
         assert_eq!(from(too_old, &all, None), chosen(&tools.join("bun"), false, "1.4.2"));
         let projects = Server::Local(Some(work.join("bin/opencode")));
         assert_eq!(from(projects, &all, None), chosen(&tools.join("bun"), false, "1.4.2"));
-        // It is not: the path's first `opencode` that answers, past the shim and the old one.
+        // It is not: the path's first `opencode` that answers, past the shim, the old one and one that fails.
         assert_eq!(from(Server::Local(None), &all, None), chosen(&server.join("opencode"), true, "1.4.4"));
         // A remote server's binary is not this machine's.
         assert_eq!(from(Server::Remote, &all, None), chosen(&tools.join("bun"), false, "1.4.2"));
