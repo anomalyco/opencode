@@ -21,3 +21,5 @@ test("preserves permission roots and self-contained metadata", () => {
     },
   )
 })
+
+
