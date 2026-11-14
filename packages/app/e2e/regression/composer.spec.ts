@@ -1681,3 +1681,70 @@ test("pastes into the composer from the session view but not into other inputs",
   await expect(page.locator("#elsewhere")).toBeFocused()
   await expect.poll(() => editor.innerText()).toBe("pasted from the timeline")
 })
+
+test("a command's model replaces the composer pick for later submissions", async ({ page }) => {
+  const commands: string[] = []
+  const switches: unknown[] = []
+  const prompts: unknown[] = []
+  const alpha = { id: "alpha", providerID: "opencode" }
+  const beta = { id: "beta", providerID: "opencode", variant: "low" }
+
+  page.on("request", (request) => {
+    if (request.method() === "POST" && /\/api\/session\/[^/]+\/model$/.test(new URL(request.url()).pathname))
+      switches.push(request.postDataJSON())
+  })
+
+  const view = await openSession(page, {
+    name: "CommandModel",
+    sessions: [
+      { id: "ses_command_model", title: "Command model", agent: "build", model: { ...alpha, variant: "default" } },
+    ],
+    provider: provider({ id: "alpha", name: "Alpha" }, { id: "beta", name: "Beta", variants: { low: {} } }),
+    commands: [{ name: "switch-test", description: "Use Beta" }],
+    onPrompt: (input) => void prompts.push(input.body),
+    onCommand: ({ sessionID }) => {
+      commands.push(sessionID)
+    },
+  })
+
+  const control = page.locator('[data-action="composer-model"]')
+  await expect(control).toHaveText("Alpha")
+  await control.click()
+  await page
+    .getByRole("dialog", { name: "Select model" })
+    .getByRole("button", { name: "Alpha Free", exact: true })
+    .click()
+  await view.editor.fill("/switch-test")
+  await page.getByRole("button", { name: "/switch-test Use Beta" }).click()
+  await page.getByRole("button", { name: "Send", exact: true }).click()
+  await expect.poll(() => commands.length).toBe(1)
+  const sessionID = commands[0]!
+  await view.push([
+    {
+      id: "evt_command_model",
+      created: T0 + 1,
+      type: "session.model.selected",
+      location: { directory: view.directory },
+      durable: { aggregateID: sessionID, seq: 1, version: 1 },
+      data: { sessionID, model: beta, previous: alpha },
+    },
+  ])
+  await expect(control).toHaveText("Beta")
+  await expect(page.getByRole("button", { name: "Choose model variant", exact: true })).toHaveText("low")
+  await view.editor.fill("/switch-test")
+  await page.getByRole("button", { name: "/switch-test Use Beta" }).click()
+  await page.getByRole("button", { name: "Send", exact: true }).click()
+  await expect.poll(() => commands.length).toBe(2)
+  expect(switches).toEqual([])
+
+  // A deliberate choice made after the command still owns the next ordinary prompt.
+  await control.click()
+  await page
+    .getByRole("dialog", { name: "Select model" })
+    .getByRole("button", { name: "Alpha Free", exact: true })
+    .click()
+  await view.editor.fill("Use the model I just selected")
+  await page.getByRole("button", { name: "Send", exact: true }).click()
+  await expect.poll(() => prompts.length).toBe(1)
+  expect(switches).toEqual([{ model: alpha }])
+})

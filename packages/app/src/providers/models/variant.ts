@@ -39,9 +39,16 @@ export function variantSelectionFrom(value: string | null | undefined): VariantS
   return { type: "named", value }
 }
 
-/** A committed variant: the server records the Default as no variant. */
+/** Session reads spell the Default as "default", while selections and events may omit it. */
+export function normalizeVariant(value: string | undefined) {
+  return value === "default" ? undefined : value
+}
+
+/** A committed absence or explicit "default" both select the Default. */
 export function durableVariantSelection(value: string | undefined): VariantSelection {
-  return value === undefined ? DEFAULT_VARIANT : { type: "named", value }
+  const variant = normalizeVariant(value)
+
+  return variant === undefined ? DEFAULT_VARIANT : { type: "named", value: variant }
 }
 
 export function getConfiguredAgentVariant(input: { agent: Agent | undefined; model: Model | undefined }) {

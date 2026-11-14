@@ -17,6 +17,7 @@ import { getDirectory, getFilename } from "@opencode/util/path"
 import { setCursorPosition } from "./editor/dom"
 import { blobDataUrl, resolveBlobUrl } from "@/runtime/persistence/drafts"
 import type { ModelSelection } from "@/providers/models/selection"
+import { normalizeVariant } from "@/providers/models/variant"
 import {
   composerSubmitTarget,
   createComposerSubmitState,
@@ -755,8 +756,11 @@ async function applySelection(
 
     // Skip an unchanged model so a send never waits on that request. An agent switch or a revert can move the
     // model, and cached SSE state may lag this client's earlier switch, which must also match.
-    const model = `${selection.model.providerID}/${selection.model.modelID}/${selection.variant ?? ""}`
-    const saved = current?.model && `${current.model.providerID}/${current.model.id}/${current.model.variant ?? ""}`
+    const model = `${selection.model.providerID}/${selection.model.modelID}/${normalizeVariant(selection.variant) ?? ""}`
+
+    const saved =
+      current?.model &&
+      `${current.model.providerID}/${current.model.id}/${normalizeVariant(current.model.variant) ?? ""}`
 
     if (
       current?.agent === selection.agent &&
