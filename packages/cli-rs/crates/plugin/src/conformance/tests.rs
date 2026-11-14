@@ -23,7 +23,7 @@ use serde_json::{Value, json};
 use super::*;
 use crate::loader::Backend;
 use crate::loader::native::{self, Native};
-use crate::loader::tests::{TestHost, dynamic, host};
+use crate::loader::tests::{TestHost, dynamic, host, route_keys};
 use crate::{Host, Registry, RouteMount};
 
 #[path = "../../examples/conformance/src/conformance.rs"]
@@ -150,6 +150,7 @@ thread_local! {
 /// Runs `header`'s script on a fresh host with the plugin `load` gives, and returns what crossed and what showed.
 fn run(header: &Header, load: &Load<'_>) -> Vec<Entry> {
     let host = host();
+    route_keys(&host);
     let registry = Rc::new(Registry::define(Vec::new(), []));
     *host.registry.borrow_mut() = Rc::downgrade(&registry);
     let base = Instant::now();
@@ -168,6 +169,7 @@ fn run(header: &Header, load: &Load<'_>) -> Vec<Entry> {
         || {
             let mut route: Option<RouteMount> = None;
             let mut claimed: Option<crate::claim::Mount> = None;
+            let mut shown = None;
             for step in &header.script {
                 match step {
                     Step::Load { options } => {
@@ -205,9 +207,40 @@ fn run(header: &Header, load: &Load<'_>) -> Vec<Entry> {
                         });
                         host.app.render();
                     }
-                    Step::Close => {
+                    Step::Markdown { text } => {
                         host.app().root().clear();
                         (route, claimed) = (None, None);
+                        let theme = host.theme();
+                        let renderers = registry.code_blocks({
+                            let theme = theme.clone();
+                            Rc::new(move || theme.clone())
+                        });
+                        let syntax = opencode_ui::code::syntax_theme(&theme);
+                        let view = opencode_ui::markdown::view(host.app(), &theme, &syntax, &renderers, true, false);
+                        view.set_markdown(text);
+                        host.app().root().add(&view);
+                        host.app.render();
+                        shown = Some(view);
+                    }
+                    Step::Close => {
+                        host.app().root().clear();
+                        (route, claimed, shown) = (None, None, None);
+                    }
+                    Step::Press { key } => {
+                        host.app.press(key);
+                        host.app.advance(Duration::from_millis(1));
+                    }
+                    Step::Paste { text } => {
+                        host.app.paste(text);
+                        host.app.advance(Duration::from_millis(1));
+                    }
+                    Step::Click { x, y } => {
+                        host.app.click(*x, *y);
+                        host.app.advance(Duration::from_millis(1));
+                    }
+                    Step::Search { name, query, options } => {
+                        let found = registry.search(&*host, ID, name, query, options);
+                        recorder.borrow_mut().observe(json!({ "search": found }));
                     }
                     Step::Advance => host.app.advance(Duration::from_millis(1)),
                     Step::Disable | Step::Enable => {
@@ -215,12 +248,12 @@ fn run(header: &Header, load: &Load<'_>) -> Vec<Entry> {
                     }
                     Step::Mode { light } => host.mode.set(if *light { ThemeMode::Light } else { ThemeMode::Dark }),
                     Step::Observe => {
-                        let seen = observe(&host, &registry, route.is_some() || claimed.is_some());
+                        let seen = observe(&host, &registry, route.is_some() || claimed.is_some() || shown.is_some());
                         recorder.borrow_mut().observe(seen);
                     }
                 }
             }
-            drop((route, claimed));
+            drop((route, claimed, shown));
             registry.deactivate_all();
         },
     );
@@ -493,6 +526,47 @@ fn a_library_may_ask_stopped_and_report_on_the_ui_thread() {
         1,
         "{seen}"
     );
+}
+
+// Expected (P2's `search`, read only as in process): a library's search that asks the host for an effect is answered
+// ERROR, and nothing of it applies, the plugin staying active with its answer taken; through any library (the player)
+// and through a real one (the C plugin). In process a search gets the host's reads alone, so it cannot ask.
+#[test]
+fn a_search_asks_for_nothing() {
+    let mut transcript =
+        golden().unwrap().into_iter().find(|transcript| transcript.header.transcript == "search").unwrap();
+    let at = transcript.entries.iter().position(|entry| matches!(entry, Entry::Call { .. })).unwrap();
+    let toast = json!({ "type": "toast", "variant": "info", "message": "a search asked for this" });
+    transcript.entries.insert(at + 1, Entry::Host { request: toast, status: abi::OK, reply: Value::Null });
+    let recorded = run(&transcript.header, &Load::Player(&transcript, false));
+    player::finish();
+    let Some(Entry::Host { status, .. }) = recorded.get(at + 1) else { panic!("{:?}", recorded.get(at + 1)) };
+    assert_eq!(*status, abi::ERROR, "a search was granted a toast");
+    let seen: Vec<&Value> = recorded
+        .iter()
+        .filter_map(|entry| match entry {
+            Entry::Observe { seen } => Some(seen),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(seen[0], &json!({ "search": ["a", "b"] }));
+    assert_eq!(seen.last().unwrap(), &&json!({ "toasts": [], "status": "Some(Active)" }));
+
+    #[cfg(unix)]
+    if let Some(library) = c_library(2) {
+        let host = host();
+        let registry = Registry::define(Vec::new(), []);
+        let (definition, error) =
+            Native.load(&dynamic(&host), &library, Path::new("plugin.so"), Some("search-toast")).unwrap();
+        registry.load(&dynamic(&host), definition.external(TARGET, error));
+        let option = |title: &str, value: &str| abi::SelectOption::new(title, value);
+        let found = registry.search(&*host, ID, "conf.find", "a", &[option("alpha", "a"), option("beta", "b")]);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(found, Some(vec!["a".to_owned(), "b".to_owned()]));
+        assert!(host.toasts.borrow().is_empty(), "{:?}", host.toasts.borrow());
+        let status = registry.entries().into_iter().find(|entry| entry.id == ID).map(|entry| entry.status);
+        assert_eq!(status, Some(crate::Status::Active));
+    }
 }
 
 unsafe extern "C" fn answers_ok(_: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {

@@ -116,6 +116,65 @@
     ]
   },
   {
+    "transcript": "input",
+    "about": "the user's input (P2): a key a layer of setup binds and consumes, one it binds and passes, a paste it takes, and a press and release on a node that takes the pointer, which the surface's handler gets",
+    "library": 2,
+    "script": [
+      { "do": "load" },
+      { "do": "open", "route": "rows" },
+      { "do": "press", "key": "ctrl+g" },
+      { "do": "press", "key": "ctrl+o" },
+      { "do": "paste", "text": "hi" },
+      { "do": "click", "x": 0, "y": 1 },
+      { "do": "observe" },
+      { "do": "close" },
+      { "do": "advance" }
+    ]
+  },
+  {
+    "transcript": "search",
+    "about": "a search of a select (P2), which reads only: the values whose title holds the query, twice",
+    "library": 2,
+    "script": [
+      { "do": "load" },
+      {
+        "do": "search",
+        "name": "conf.find",
+        "query": "a",
+        "options": [
+          { "title": "alpha", "value": "a" },
+          { "title": "beta", "value": "b" },
+          { "title": "omicron", "value": "o" }
+        ]
+      },
+      {
+        "do": "search",
+        "name": "conf.find",
+        "query": "be",
+        "options": [
+          { "title": "alpha", "value": "a" },
+          { "title": "beta", "value": "b" }
+        ]
+      },
+      { "do": "advance" },
+      { "do": "observe" }
+    ]
+  },
+  {
+    "transcript": "fence",
+    "about": "a renderer claim of a fence language (Pr): Markdown with a fence the claim draws, then gone",
+    "library": 2,
+    "script": [
+      { "do": "load" },
+      { "do": "markdown", "text": "```conf-fence\nhello\n```\n" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "close" },
+      { "do": "advance" },
+      { "do": "observe" }
+    ]
+  },
+  {
     "transcript": "claim",
     "about": "a renderer claim (Pr): a tool call shown through the plugin's claim of its tool, its view, and the part's unmount",
     "library": 2,

@@ -49,6 +49,8 @@ pub(crate) struct TestHost {
     pub deltas: Rc<RefCell<Vec<crate::Deltas>>>,
     /// The replies of the programs run in the foreground, which [`TestHost::exit`] delivers.
     pub programs: RefCell<Vec<(Alive, Reply)>>,
+    /// The plugins' input (P2): their layers, listeners, pointer capture and pastes.
+    pub router: crate::interact::Router,
 }
 
 /// Whether a program's plugin is still active.
@@ -141,6 +143,10 @@ impl abi::Read for Fixture<'_> {
 impl Host for TestHost {
     fn app(&self) -> &App {
         &self.app
+    }
+
+    fn router(&self) -> Option<&crate::interact::Router> {
+        Some(&self.router)
     }
 
     fn theme(&self) -> Theme {
@@ -330,7 +336,26 @@ pub(crate) fn host() -> Rc<TestHost> {
         verbs: RefCell::default(),
         deltas: Rc::default(),
         programs: RefCell::default(),
+        router: crate::interact::Router::default(),
     })
+}
+
+/// Routes the app's keys to `host`'s keymap before any widget, and applies what a plugin's handler asked for before the
+/// next key, as the TUI does (`route_keys`).
+pub(crate) fn route_keys(host: &Rc<TestHost>) {
+    let weak = Rc::downgrade(host);
+    host.app.on_key_capture(move |cx, key| {
+        let Some(host) = weak.upgrade() else { return };
+        host.router.prune();
+        let result = host.keymap().handle_key(key);
+        if result.prevent_default {
+            cx.prevent_default();
+        }
+        if result.handled || result.stop_propagation {
+            cx.stop_propagation();
+        }
+        crate::flush();
+    });
 }
 
 /// `host` as the registry takes it.
