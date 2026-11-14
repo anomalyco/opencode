@@ -453,9 +453,11 @@ fn quick_folds_each_land_and_keep_a_field_another_client_stored() {
         h.app.click(x, y);
         h.app.click(x, y);
         h.settle();
-        std::thread::sleep(std::time::Duration::from_millis(300));
-        h.settle();
-        assert_eq!(stored(), json!({ "open": true, "sibling": 99 }), "{carrier:?}: a fold was lost");
+        // Both folds reach the disk in their time; a lost one leaves `open` false, which never matches.
+        h.wait(&format!("{carrier:?}: both folds reach the disk"), || {
+            h.app.advance(std::time::Duration::from_millis(1));
+            stored() == json!({ "open": true, "sibling": 99 })
+        });
         h.app.click(x, y);
         h.wait("the third fold reaches the disk", || stored() == json!({ "open": false, "sibling": 99 }));
     }
