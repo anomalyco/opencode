@@ -221,6 +221,9 @@
                 }
               ]
             },
+            "hover_events": {
+              "type": "boolean"
+            },
             "type": {
               "const": "text"
             }

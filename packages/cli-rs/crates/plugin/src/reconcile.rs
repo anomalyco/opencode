@@ -238,6 +238,8 @@ pub(crate) enum Extra {
         text: Rc<Text>,
         click: Option<Rc<RefCell<abi::Click>>>,
         hover: Option<Rc<Hover>>,
+        /// Its hover events, when it has them.
+        _wired: Option<Rc<crate::interact::Wired>>,
     },
     Spinner(opencode_ui::motion::Spinner),
     Scroll(ScrollBox),
@@ -1425,13 +1427,15 @@ impl Pass<'_, '_> {
                 let click = on_click.clone().map(|click| clickable(&view, click, env.act));
                 let wired = (!interact.is_none()).then(|| {
                     let hover = color(theme, interact.hover.as_ref());
-                    crate::interact::wire(&view, id.as_deref(), interact, env.owner, fill(theme, bg.as_ref()), hover)
+                    let (base, paint): (_, fn(&View, Color)) =
+                        (fill(theme, bg.as_ref()), |view, color| drop(view.bg(color)));
+                    crate::interact::wire(&view, paint, id.as_deref(), interact, env.owner, base, hover)
                 });
                 lay_out(&view, layout);
                 let split = split.map(|split| crate::behave::SplitState::attach(app, &view, split, theme));
                 (view.as_any(), Extra::Box { view, click, split, wired })
             }
-            Node::Text { spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click, .. } => {
+            Node::Text { id, spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click, hover_events } => {
                 let base = color(theme, fg.as_ref()).unwrap_or(theme.text.base);
                 let text = Text::new(app, spans.iter().map(|span| styled(theme, span, None)).collect::<Vec<_>>())
                     .fg(base)
@@ -1451,8 +1455,13 @@ impl Pass<'_, '_> {
                     hover
                 });
                 let click = on_click.clone().map(|click| clickable(&text, click, env.act));
+                let events = abi::interact::Interact { hover_events: true, ..Default::default() };
+                let wired = hover_events.then(|| {
+                    let paint: fn(&Text, Color) = |_, _| {};
+                    crate::interact::wire(&text, paint, id.as_deref(), &events, env.owner, base, None)
+                });
                 lay_out(&text, layout);
-                (text.as_any(), Extra::Text { text: held, click, hover })
+                (text.as_any(), Extra::Text { text: held, click, hover, _wired: wired })
             }
             Node::Spinner { label, .. } => {
                 let spinner =
@@ -1831,7 +1840,7 @@ fn image_fit(fit: opencode_plugin_abi::v2::Fit) -> opentui::native::ImageFit {
 /// a text whose pointer color changes or that gains or loses a click is built again.
 fn text_change(old: &Node, new: &Node) -> Change {
     let (
-        Node::Text { id, spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click },
+        Node::Text { id, spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click, hover_events },
         Node::Text {
             id: id2,
             spans: spans2,
@@ -1842,12 +1851,14 @@ fn text_change(old: &Node, new: &Node) -> Change {
             hover_fg: hover2,
             layout: layout2,
             on_click: on_click2,
+            hover_events: events2,
         },
     ) = (old, new)
     else {
         return Change::Replace;
     };
-    if (id, wrap, truncate, selectable, hover_fg, layout) != (id2, wrap2, truncate2, selectable2, hover2, layout2)
+    if (id, wrap, truncate, selectable, hover_fg, layout, hover_events)
+        != (id2, wrap2, truncate2, selectable2, hover2, layout2, events2)
         || on_click.is_some() != on_click2.is_some()
     {
         return Change::Replace;

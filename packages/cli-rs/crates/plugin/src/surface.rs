@@ -331,7 +331,14 @@ impl Surface {
         let found = Rc::downgrade(&mounted);
         let lookup: interact::Lookup =
             Rc::new(move |id: &str| found.upgrade().and_then(|mounted| mounted.state.borrow().tree.widget(id)));
-        let owned = Owner::mount(&input.plugin, owner.clone(), mounted.root.clone(), lookup, input.deliver.clone());
+        let owned = Owner::mount(
+            &input.plugin,
+            &surface.name,
+            owner.clone(),
+            mounted.root.clone(),
+            lookup,
+            input.deliver.clone(),
+        );
         let deliver: interact::Deliver =
             input.deliver.clone().unwrap_or_else(|| Rc::new(|_, _, _| abi::interact::Handled::Pass));
         owned.register(host, &input.layers, &deliver);

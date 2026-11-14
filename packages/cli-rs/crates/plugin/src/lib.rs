@@ -277,6 +277,7 @@ type ClaimRender = Rc<dyn Fn(&dyn Host, &SlotInput) -> Box<dyn Claimed>>;
 type Claim = Box<dyn Claimed>;
 type RouteRender = Rc<dyn Fn(&dyn Host) -> Box<dyn Claimed>>;
 type PanelRender = Rc<dyn Fn(&dyn Host, &View) -> Box<dyn Any>>;
+type SearchCall = Rc<dyn Fn(&dyn Host, &str, &[abi::SelectOption]) -> Option<Vec<String>>>;
 type SetupFn = Rc<dyn Fn(&mut Setup<'_>) -> Result<(), String>>;
 /// The current failure of an external plugin, if any.
 pub type ErrorFn = Rc<dyn Fn() -> Option<String>>;
@@ -548,6 +549,13 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                 scope.call("render-route", host, |read| render(read, changed)).unwrap_or(abi::Render::Hide)
             });
             setup.view_route(name, render, route::commands(&scoped, name), mount, &activation);
+        }
+        for (name, search) in api.searches() {
+            let (search, scope) = (search.clone(), scope.clone());
+            let call: SearchCall = Rc::new(move |host: &dyn Host, query: &str, options: &[abi::SelectOption]| {
+                scope.call("search", host, |read| search(read, query, options))
+            });
+            setup.registration.searches.push((name.clone(), call));
         }
         // The layers of setup are the plugin's, each with its own handler.
         for (layer, handler) in api.layers() {
@@ -1754,6 +1762,8 @@ struct Registration {
     routes: Vec<(String, RouteRender)>,
     /// The panel surfaces (P2), each mounting into the panel the host shows.
     panels: Vec<(String, PanelRender)>,
+    /// The searches a select names (P2).
+    searches: Vec<(String, SearchCall)>,
     code_blocks: Vec<(String, CodeBlockRender)>,
     disposers: Vec<Disposer>,
     cleanups: Vec<Box<dyn FnOnce()>>,
@@ -2484,6 +2494,23 @@ impl Registry {
             registration.panels.iter().find(|(panel, _)| panel == name).map(|(_, render)| render.clone())
         })??;
         Some(render(host, parent))
+    }
+
+    /// The values of `options` that plugin `id`'s search `name` lists for `query`, in its order; `None` when it has no
+    /// such search, or the search failed. A select that names it closes with the activation that showed it.
+    pub fn search(
+        &self,
+        host: &dyn Host,
+        id: &str,
+        name: &str,
+        query: &str,
+        options: &[abi::SelectOption],
+    ) -> Option<Vec<String>> {
+        let search = self.with_plugin(id, |plugin| {
+            let (_, registration) = plugin.active.as_ref().filter(|_| plugin.running())?;
+            registration.searches.iter().find(|(search, _)| search == name).map(|(_, run)| run.clone())
+        })??;
+        search(host, query, options)
     }
 
     /// The code-block renderers of the active plugins, drawing in the theme `theme` returns when they render, so a
