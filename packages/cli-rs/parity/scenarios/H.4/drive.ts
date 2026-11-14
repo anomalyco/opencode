@@ -12,6 +12,7 @@ import path from "node:path"
 import { Schema } from "effect"
 import { Frontend, Handshake } from "@opencode/protocol/simulation"
 import { buildRust, command, parityRoot, sandbox, type Side } from "../../cli/client"
+import { freePort } from "../../lib/port"
 import { connectDrive } from "../../sim/drive"
 
 const viewport = { cols: 100, rows: 30 }
@@ -68,7 +69,7 @@ await writeFile(
   JSON.stringify({ experimental: { "new-designs": true }, animations: false, debug: { devtools: false } }),
 )
 await buildRust(["rs"])
-const ports = await Promise.all([0, 1, 2].map(freePort))
+const ports = Array.from({ length: 3 }, freePort)
 const server = `http://127.0.0.1:${ports[0]}`
 const serve = Bun.spawn(command("ts", ["serve", "--port", String(ports[0])]), {
   cwd: box.cwd,
@@ -209,13 +210,6 @@ function compare(ts: Frontend.CapturedFrame, rs: Frontend.CapturedFrame) {
   const rows = tsRows.flatMap((row, y) => (row === rsRows[y] ? [] : [{ y, ts: row, rs: rsRows[y] }]))
   // The first few style differences, enough to tell a cursor cell from a theme difference.
   return { size: [ts.cols, ts.rows, rs.cols, rs.rows], textCells, styleCells, rows, styles: styles.slice(0, 5) }
-}
-
-async function freePort(_: number) {
-  const listener = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } })
-  const port = listener.port
-  listener.stop(true)
-  return port
 }
 
 async function waitForServer(url: string) {
