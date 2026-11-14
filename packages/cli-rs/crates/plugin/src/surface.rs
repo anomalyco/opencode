@@ -59,8 +59,15 @@ pub(crate) trait Viewer {
     fn draws(&self) -> bool {
         false
     }
-    /// One call of the draw for `canvas` of `mount` at `frame`: the list's bytes, or `None` to keep the list.
-    fn draw(&self, _host: &dyn Host, _mount: &v2::MountId, _canvas: &str, _frame: v2::Frame) -> Option<Vec<u8>> {
+    /// One call of the draw for `canvas` of `mount` at `frame` ([`canvas::Draw`]): `None` when the plugin did not
+    /// run, else the list's bytes, or `None` to keep the list.
+    fn draw(
+        &self,
+        _host: &dyn Host,
+        _mount: &v2::MountId,
+        _canvas: &str,
+        _frame: v2::Frame,
+    ) -> Option<Option<Vec<u8>>> {
         None
     }
     /// The mount ended.
@@ -118,14 +125,15 @@ impl Viewer for Linked {
         self.draw.is_some()
     }
 
-    fn draw(&self, host: &dyn Host, mount: &v2::MountId, canvas: &str, frame: v2::Frame) -> Option<Vec<u8>> {
+    fn draw(&self, host: &dyn Host, mount: &v2::MountId, canvas: &str, frame: v2::Frame) -> Option<Option<Vec<u8>>> {
         let draw = self.draw.as_ref()?;
-        let mut list = None;
-        // A call that panicked or was refused set no list.
+        let (mut ran, mut list) = (false, None);
+        // A call that panicked set no list; one that was refused did not run.
         (self.call)("draw", host, &mut |read| {
+            ran = true;
             list = draw(&mut v2::Draw { read, mount, canvas, frame });
         });
-        list.map(abi::canvas::List::into_bytes)
+        ran.then(|| list.map(abi::canvas::List::into_bytes))
     }
 }
 
@@ -299,6 +307,9 @@ impl Surface {
                     mounted.draw_sized(host.as_ref());
                 }
             });
+            // The resize runs in the frame, and OpenTUI's event loop drains deferred work only at a turn's start: a
+            // proxy post brings that turn (carbon 4).
+            let _ = app.proxy().post(|_| {});
         });
         match fills {
             // A route's first view runs once the page it replaces is gone, whose keymap layers go in this turn's
@@ -531,8 +542,8 @@ impl Surface {
         Ok(())
     }
 
-    /// One call of the surface's draw for canvas `id` at `frame`: the list's bytes, or `None` to keep the list.
-    fn draw_canvas(&self, id: &str, frame: v2::Frame) -> Option<Vec<u8>> {
+    /// One call of the surface's draw for canvas `id` at `frame` ([`canvas::Draw`]).
+    fn draw_canvas(&self, id: &str, frame: v2::Frame) -> Option<Option<Vec<u8>>> {
         self.viewer.draw(&*self.owner.upgrade()?, &self.id, id, frame)
     }
 

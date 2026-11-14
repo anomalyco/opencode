@@ -46,9 +46,10 @@ enum Shape {
     Clip(i16, i16, u16, u16, Vec<Shape>),
 }
 
-/// A foreground, a background or none, and bold.
+/// A foreground or none, a background or none, and the style's bits: bold 1, dim 2, italic 4, underline 8, inverse
+/// 16, strikethrough 32.
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct Pen(abi::Rgba, Option<abi::Rgba>, bool);
+struct Pen(Option<abi::Rgba>, Option<abi::Rgba>, u8);
 
 /// What the plugin's next draw returns.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -243,7 +244,10 @@ fn shapes(rng: &mut Rng, width: u16, height: u16, depth: u8) -> Vec<Shape> {
     let y = |rng: &mut Rng| rng.below(usize::from(height) + 2) as i16 - 1;
     let size = |rng: &mut Rng, of: u16| rng.below(usize::from(of) + 3) as u16;
     let color = |rng: &mut Rng| *rng.pick(&COLORS);
-    let pen = |rng: &mut Rng| Pen(color(rng), (rng.below(2) == 0).then(|| color(rng)), rng.below(3) == 0);
+    let pen = |rng: &mut Rng| {
+        let fg = (rng.below(5) > 0).then(|| color(rng));
+        Pen(fg, (rng.below(2) == 0).then(|| color(rng)), if rng.below(3) == 0 { rng.below(64) as u8 } else { 0 })
+    };
     (0..1 + rng.below(5))
         .map(|_| match rng.below(if depth < 2 { 6 } else { 5 }) {
             0 => Shape::Fill(x(rng), y(rng), size(rng, width), size(rng, height), color(rng)),
@@ -302,7 +306,17 @@ fn encode(shapes: &[Shape]) -> List {
         }
     }
     fn style(pen: &Pen) -> list::Style {
-        list::Style { fg: Some(pen.0), bg: pen.1, bold: pen.2, ..list::Style::new() }
+        let on = |bit: u8| pen.2 & bit != 0;
+        list::Style {
+            fg: pen.0,
+            bg: pen.1,
+            bold: on(1),
+            dim: on(2),
+            italic: on(4),
+            underline: on(8),
+            inverse: on(16),
+            strikethrough: on(32),
+        }
     }
     let mut list = List::new();
     write(&mut list, shapes);
@@ -331,11 +345,28 @@ impl Component for Twin {
 fn paint(shapes: &[Shape], painter: &mut Painter<'_>) {
     let rgba = |color: abi::Rgba| opentui::style::Color::rgba(color.r, color.g, color.b, color.a);
     let style = |pen: &Pen| {
-        let mut style = opentui::style::Style::new().fg(rgba(pen.0));
+        use opentui::style::Attributes;
+        let mut style = opentui::style::Style::new();
+        if let Some(fg) = pen.0 {
+            style = style.fg(rgba(fg));
+        }
         if let Some(bg) = pen.1 {
             style = style.bg(rgba(bg));
         }
-        if pen.2 { style.bold() } else { style }
+        let bits = [
+            Attributes::BOLD,
+            Attributes::DIM,
+            Attributes::ITALIC,
+            Attributes::UNDERLINE,
+            Attributes::INVERSE,
+            Attributes::STRIKETHROUGH,
+        ];
+        for (index, attribute) in bits.into_iter().enumerate() {
+            if pen.2 & (1 << index) != 0 {
+                style = style.add(attribute);
+            }
+        }
+        style
     };
     for shape in shapes {
         match shape {
@@ -397,6 +428,14 @@ fn origin(frame: &Capture) -> Option<(u32, u32)> {
 fn differs(frame: &Capture, held: Option<&Held>, (width, height): (u16, u16)) -> Option<String> {
     let Some((left, top)) = origin(frame) else { return Some("the mark is not on screen".into()) };
     let expected = twin(held, width, height);
+    // Nothing a list draws reaches the row right of the canvas, which is blank on the row's background.
+    let blank = opentui::style::Color::rgba(BG.r, BG.g, BG.b, BG.a);
+    for y in 0..u32::from(height) {
+        let beside = frame.cell(left + u32::from(width), top + y);
+        if beside.is_some_and(|cell| cell.symbol != " " || cell.bg != blank) {
+            return Some(format!("the cell right of the canvas's row {y} is {beside:?}"));
+        }
+    }
     for y in 0..u32::from(height) {
         for x in 0..u32::from(width) {
             let (got, want) = (frame.cell(left + x, top + y), expected.cell(x, y));
@@ -727,21 +766,46 @@ fn canvases_hold_their_properties() {
     model::check(&Canvases, 64, 24);
 }
 
-/// The cells of a canvas by a rasterizer of this test's own, for opaque fills, text and cells under clips: a second
-/// oracle, which shares no code with OpenTUI's painter either.
-fn raster(shapes: &[Shape], width: u16, height: u16) -> Vec<Vec<(char, abi::Rgba)>> {
+/// One cell as the rasterizer computes it: its character, its foreground (`None` for the terminal's), background and
+/// style bits, and whether a glyph was written there (a fill writes a blank, whose foreground does not show).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Raster {
+    char: char,
+    fg: Option<abi::Rgba>,
+    bg: abi::Rgba,
+    bits: u8,
+    glyph: bool,
+}
+
+/// The cells of a canvas by a rasterizer of this test's own, which shares no code with OpenTUI's painter: opaque
+/// fills, text, cells and runs of cells of one column each, rects with a border of each style (two cells or more each
+/// way) and a fill or none, under nested clips. A cell's space drawn without a background over a glyph leaves the
+/// cell as it was, as the renderer blends a cell and keeps a glyph under a transparent space; text's spaces overwrite.
+fn raster(shapes: &[Shape], width: u16, height: u16) -> Vec<Vec<Raster>> {
     /// A clip as left, top, right and bottom.
     type Clip = (i32, i32, i32, i32);
-    struct Grid(Vec<Vec<(char, abi::Rgba)>>);
+    struct Grid(Vec<Vec<Raster>>);
     impl Grid {
-        fn set(&mut self, clip: Clip, x: i32, y: i32, char: char, bg: Option<abi::Rgba>) {
+        fn at(&mut self, clip: Clip, x: i32, y: i32) -> Option<&mut Raster> {
             if x < clip.0 || y < clip.1 || x >= clip.2 || y >= clip.3 {
+                return None;
+            }
+            Some(&mut self.0[y as usize][x as usize])
+        }
+
+        /// A glyph; `cell` for a cell's, whose space without a background over a glyph leaves the cell as it was.
+        fn glyph(&mut self, clip: Clip, x: i32, y: i32, char: char, pen: &Pen, cell: bool) {
+            let keeps = cell;
+            let Some(cell) = self.at(clip, x, y) else { return };
+            if keeps && char == ' ' && pen.1.is_none() && cell.char != ' ' {
                 return;
             }
-            let cell = &mut self.0[y as usize][x as usize];
-            cell.0 = char;
-            if let Some(bg) = bg {
-                cell.1 = bg;
+            *cell = Raster { char, fg: pen.0, bg: pen.1.unwrap_or(cell.bg), bits: pen.2, glyph: true };
+        }
+
+        fn fill(&mut self, clip: Clip, x: i32, y: i32, color: abi::Rgba) {
+            if let Some(cell) = self.at(clip, x, y) {
+                *cell = Raster { char: ' ', fg: None, bg: color, bits: 0, glyph: false };
             }
         }
 
@@ -751,16 +815,57 @@ fn raster(shapes: &[Shape], width: u16, height: u16) -> Vec<Vec<(char, abi::Rgba
                     Shape::Fill(x, y, width, height, color) => {
                         for row in 0..i32::from(*height) {
                             for column in 0..i32::from(*width) {
-                                self.set(clip, i32::from(*x) + column, i32::from(*y) + row, ' ', Some(*color));
+                                self.fill(clip, i32::from(*x) + column, i32::from(*y) + row, *color);
                             }
                         }
                     }
                     Shape::Text(x, y, text, pen) => {
                         for (index, char) in text.chars().enumerate() {
-                            self.set(clip, i32::from(*x) + index as i32, i32::from(*y), char, pen.1);
+                            self.glyph(clip, i32::from(*x) + index as i32, i32::from(*y), char, pen, false);
                         }
                     }
-                    Shape::Cell(x, y, char, pen) => self.set(clip, i32::from(*x), i32::from(*y), *char, pen.1),
+                    Shape::Cell(x, y, char, pen) => self.glyph(clip, i32::from(*x), i32::from(*y), *char, pen, true),
+                    Shape::Cells(x, y, width, cells) => {
+                        let width = usize::from(*width).max(1);
+                        for (index, (char, pen)) in cells.iter().enumerate() {
+                            let (column, row) = ((index % width) as i32, (index / width) as i32);
+                            self.glyph(clip, i32::from(*x) + column, i32::from(*y) + row, *char, pen, true);
+                        }
+                    }
+                    Shape::Rect(x, y, width, height, border, color, background) => {
+                        let glyphs = match border {
+                            abi::BorderStyle::Single => ['┌', '┐', '└', '┘', '─', '│'],
+                            abi::BorderStyle::Double => ['╔', '╗', '╚', '╝', '═', '║'],
+                            abi::BorderStyle::Rounded => ['╭', '╮', '╰', '╯', '─', '│'],
+                            abi::BorderStyle::Heavy => ['┏', '┓', '┗', '┛', '━', '┃'],
+                        };
+                        let (x, y, right, bottom) = (
+                            i32::from(*x),
+                            i32::from(*y),
+                            i32::from(*x) + i32::from(*width) - 1,
+                            i32::from(*y) + i32::from(*height) - 1,
+                        );
+                        for row in y..=bottom {
+                            for column in x..=right {
+                                let edge = match (column == x, column == right, row == y, row == bottom) {
+                                    (true, _, true, _) => Some(glyphs[0]),
+                                    (_, true, true, _) => Some(glyphs[1]),
+                                    (true, _, _, true) => Some(glyphs[2]),
+                                    (_, true, _, true) => Some(glyphs[3]),
+                                    (_, _, true, _) | (_, _, _, true) => Some(glyphs[4]),
+                                    (true, _, _, _) | (_, true, _, _) => Some(glyphs[5]),
+                                    _ => None,
+                                };
+                                match (edge, background) {
+                                    (Some(char), _) => {
+                                        self.glyph(clip, column, row, char, &Pen(Some(*color), *background, 0), false)
+                                    }
+                                    (None, Some(fill)) => self.fill(clip, column, row, *fill),
+                                    (None, None) => {}
+                                }
+                            }
+                        }
+                    }
                     Shape::Clip(x, y, width, height, inner) => {
                         let (x, y) = (i32::from(*x), i32::from(*y));
                         let inner_clip = (
@@ -771,14 +876,50 @@ fn raster(shapes: &[Shape], width: u16, height: u16) -> Vec<Vec<(char, abi::Rgba
                         );
                         self.walk(inner, inner_clip);
                     }
-                    Shape::Cells(..) | Shape::Rect(..) => unreachable!("the raster draws fills, text, cells and clips"),
                 }
             }
         }
     }
-    let mut grid = Grid(vec![vec![(' ', BG); usize::from(width)]; usize::from(height)]);
+    let blank = Raster { char: ' ', fg: None, bg: BG, bits: 0, glyph: false };
+    let mut grid = Grid(vec![vec![blank; usize::from(width)]; usize::from(height)]);
     grid.walk(shapes, (0, 0, i32::from(width), i32::from(height)));
     grid.0
+}
+
+/// The first cell of the canvas in `frame` that differs from what [`raster`] computes for `shapes`, if any.
+fn unlike_raster(frame: &Capture, shapes: &[Shape], (width, height): (u16, u16)) -> Option<String> {
+    use opentui::style::{Attributes, Color};
+    let (left, top) = origin(frame)?;
+    let color = |color: abi::Rgba| Color::rgba(color.r, color.g, color.b, color.a);
+    let bits = [
+        Attributes::BOLD,
+        Attributes::DIM,
+        Attributes::ITALIC,
+        Attributes::UNDERLINE,
+        Attributes::INVERSE,
+        Attributes::STRIKETHROUGH,
+    ];
+    for (y, row) in raster(shapes, width, height).iter().enumerate() {
+        for (x, want) in row.iter().enumerate() {
+            let got = frame.cell(left + x as u32, top + y as u32).unwrap();
+            let mut same = got.symbol.chars().next().unwrap_or(' ') == want.char && got.bg == color(want.bg);
+            if want.glyph {
+                let attributes = bits
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| want.bits & (1 << index) != 0)
+                    .fold(Attributes::NONE, |all, (_, bit)| all.union(*bit));
+                same &= got.fg == want.fg.map_or(Color::DEFAULT_FOREGROUND, color) && got.attributes == attributes;
+            }
+            if !same {
+                return Some(format!(
+                    "cell ({x}, {y}) is {got:?}, the raster's {want:?}; row {:?}",
+                    frame.row(top + y as u32)
+                ));
+            }
+        }
+    }
+    None
 }
 
 // Expected (a replayed frame equals a drawn one, a second oracle): the canvas on screen holds the characters and the
@@ -791,7 +932,7 @@ fn a_list_on_screen_has_the_cells_a_rasterizer_computes() {
     let white = abi::Rgba::new(255, 255, 255, 255);
     let shapes = vec![
         Shape::Fill(1, 0, 6, 3, red),
-        Shape::Text(-1, 1, "score 120", Pen(white, None, false)),
+        Shape::Text(-1, 1, "score 120", Pen(Some(white), None, 0)),
         Shape::Clip(
             2,
             0,
@@ -799,31 +940,19 @@ fn a_list_on_screen_has_the_cells_a_rasterizer_computes() {
             4,
             vec![
                 Shape::Fill(0, 2, 12, 1, green),
-                Shape::Clip(3, 0, 9, 9, vec![Shape::Cell(4, 3, '@', Pen(white, Some(red), true))]),
-                Shape::Cell(1, 3, '#', Pen(white, None, false)),
+                Shape::Clip(3, 0, 9, 9, vec![Shape::Cell(4, 3, '@', Pen(Some(white), Some(red), 1))]),
+                Shape::Cell(1, 3, '#', Pen(Some(white), None, 0)),
             ],
         ),
-        Shape::Cell(11, 3, '█', Pen(green, Some(white), false)),
+        Shape::Cell(11, 3, '█', Pen(Some(green), Some(white), 0)),
     ];
     PAD.with(|cell| *cell.borrow_mut() = Pad::default());
     FIXED.with(|cell| *cell.borrow_mut() = Some(shapes.clone()));
     let harness = open_tui(80, 24, vec![abi::Plugin { id: ID, setup }.into()]);
     apply(&harness, &Command::Open);
-    let expected = raster(&shapes, 12, 4);
     for step in 0..3 {
         let frame = frame(&harness, Duration::from_millis(16));
-        let (left, top) = origin(&frame).unwrap();
-        for (y, row) in expected.iter().enumerate() {
-            for (x, (char, bg)) in row.iter().enumerate() {
-                let cell = frame.cell(left + x as u32, top + y as u32).unwrap();
-                assert_eq!(
-                    (cell.symbol.chars().next().unwrap_or(' '), cell.bg),
-                    (*char, opentui::style::Color::rgba(bg.r, bg.g, bg.b, bg.a)),
-                    "frame {step}, cell ({x}, {y}): row {:?}",
-                    frame.row(top + y as u32)
-                );
-            }
-        }
+        assert_eq!(unlike_raster(&frame, &shapes, (12, 4)), None, "frame {step}");
     }
     assert_eq!(pad(|pad| pad.draws.len()), 1, "the frames after the first replay the list");
     FIXED.with(|cell| *cell.borrow_mut() = None);
@@ -1456,7 +1585,7 @@ fn slot_setup(setup: &mut abi::Setup) -> Result<(), String> {
         v2::Node::canvas("badge").layout(abi::Layout {
             grow: true,
             min_width_zero: true,
-            height: Some(abi::Width::Cells(1)),
+            height: Some(abi::Width::Cells(2)),
             ..abi::Layout::default()
         })
     };
@@ -1477,9 +1606,54 @@ fn a_canvas_at_a_slots_root_takes_its_layout() {
     let harness = open_tui(80, 24, vec![abi::Plugin { id: "test.badge", setup: slot_setup }.into()]);
     let screen = frame(&harness, Duration::from_millis(16)).text();
     let frames = SLOT.with(|frames| frames.borrow().clone());
-    assert_eq!(frames.iter().map(|frame| (frame.height, frame.cause)).collect::<Vec<_>>(), [(1, v2::Cause::First)]);
+    assert_eq!(frames.iter().map(|frame| (frame.height, frame.cause)).collect::<Vec<_>>(), [(2, v2::Cause::First)]);
     assert!(frames[0].width >= 10, "the slot's room, not the canvas's own: {frames:?}");
     assert!(screen.contains("§badge§"), "{screen}");
+}
+
+thread_local! {
+    static FOOTER_VIEWS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// A plugin whose canvas, of 12 by 2 cells, is the root of a claim on `home.footer`.
+fn footer_setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let place = v2::Place::Slot(abi::Placement::append("home.footer"));
+    let view = |_: &mut v2::View<'_>| {
+        FOOTER_VIEWS.set(FOOTER_VIEWS.get() + 1);
+        v2::Node::canvas("badge").layout(abi::Layout {
+            width: Some(abi::Width::Cells(12)),
+            height: Some(abi::Width::Cells(2)),
+            ..abi::Layout::default()
+        })
+    };
+    setup.surface(v2::Surface::new("badge", place, view).draw(|cx| {
+        SLOT.with(|frames| frames.borrow_mut().push(cx.frame));
+        let mut list = List::new();
+        list.text(0, 1, "§footer§", list::Style::new().fg(abi::Rgba::new(255, 255, 255, 255)));
+        Some(list)
+    }));
+    Ok(())
+}
+
+// Expected (carbon 5): a theme switch restyles a slot's claims in place, adopting each one's last tree again with no
+// view call; a canvas at the root keeps the layout its root took, so it is neither resized nor drawn again, and every
+// frame shows it.
+#[test]
+fn a_slot_root_canvas_keeps_its_layout_through_a_theme_switch() {
+    SLOT.with(|frames| frames.borrow_mut().clear());
+    let harness = open_tui(80, 24, vec![abi::Plugin { id: "test.footer", setup: footer_setup }.into()]);
+    let _ = frame(&harness, Duration::from_millis(16));
+    let (page, views) = (harness.tui.page(), FOOTER_VIEWS.get());
+    for mode in MODES {
+        harness.tui.theme.borrow_mut().set_mode(Some(mode), false);
+        harness.tui.theme_changed();
+        let screen = frame(&harness, Duration::from_millis(16)).text();
+        assert!(screen.contains("§footer§"), "{mode:?}:\n{screen}");
+    }
+    assert_ne!(harness.tui.page(), page, "the theme did not change");
+    assert_eq!(FOOTER_VIEWS.get(), views, "a restyle calls no view");
+    let frames = SLOT.with(|frames| frames.borrow().clone());
+    assert_eq!(frames.iter().map(|frame| (frame.width, frame.height)).collect::<Vec<_>>(), [(12, 2)]);
 }
 
 // Expected: a canvas with no width of its own in a row has no room in layout (OpenTUI's `rect()` and resize report
@@ -1754,7 +1928,10 @@ fn a_list_draws_the_cells_its_table_says() {
     let harness = cells_tui(list);
     let bg = Color::rgba(BG.r, BG.g, BG.b, BG.a);
     for step in ["drawn", "replayed"] {
+        let work = host::work();
         let frame = frame_after_one(&harness);
+        // Ten operations and six cells, the clip and the pop aside.
+        assert_eq!(host::work().since(work).ops, 16, "{step}");
         let (left, top) = origin(&frame).unwrap();
         let cell = |x: u32, y: u32| frame.cell(left + x, top + y).unwrap().clone();
         let symbols: Vec<String> = (0..10).map(|x| cell(x, 0).symbol).collect();
@@ -1768,6 +1945,11 @@ fn a_list_draws_the_cells_its_table_says() {
             assert!((f64::from(got) - want).abs() <= 1.0, "{step}: the fill is {fill:?}, not about {want}");
         }
         assert_eq!(cell(5, 1).bg, bg, "{step}: a cell without a background keeps the row's");
+        assert_eq!(
+            cell(5, 1).fg,
+            Color::DEFAULT_FOREGROUND,
+            "{step}: a cell without a foreground takes the terminal's"
+        );
         for (index, (_, attribute)) in bits.iter().enumerate() {
             let got = cell(index as u32, 2).attributes;
             assert_eq!(got, *attribute, "{step}: style bit {index}");
@@ -2083,7 +2265,7 @@ fn a_list_is_charged_by_the_cells_it_touches() {
 // them, and the same list kept at 20 records 20.
 #[test]
 fn a_kept_list_is_charged_at_its_new_size() {
-    let pen = Pen(abi::Rgba::new(255, 255, 255, 255), None, false);
+    let pen = Pen(Some(abi::Rgba::new(255, 255, 255, 255)), None, 0);
     FIXED.with(|cell| *cell.borrow_mut() = Some(vec![Shape::Cells(0, 0, 30, vec![('#', pen); 30])]));
     PAD.with(|cell| *cell.borrow_mut() = Pad::default());
     let harness = open_tui(80, 24, vec![abi::Plugin { id: ID, setup }.into()]);
@@ -2099,5 +2281,260 @@ fn a_kept_list_is_charged_at_its_new_size() {
     apply(&harness, &Command::Next(Next::Keep));
     apply(&harness, &Command::Size(20, 4));
     assert_eq!(recorded(), 20 * record);
+    FIXED.with(|cell| *cell.borrow_mut() = None);
+}
+
+// Expected (carbon 2): a cell takes a character one column wide by OpenTUI's own measure; a wide one, a combining
+// mark, a zero-width space, a bidirectional override, an emoji and a control each draw U+FFFD in their one cell, and
+// the cell right of the canvas keeps what it had. A one-column character is drawn whatever was measured before it.
+#[test]
+fn a_cell_draws_one_column() {
+    let pen = list::Style::new().fg(abi::Rgba::new(255, 255, 255, 255));
+    let odd = ['\u{301}', '\u{200B}', '\u{202E}', '🦀', '\u{7}', 'A'];
+    let mut list = List::new();
+    // 'â' takes the width cache's slot of '漢' (U+00E2 and U+6F22 are both 34 modulo 64), after it.
+    list.cell(11, 0, '漢', pen).cell(0, 2, 'â', pen).cells(6, 1, 6, odd.map(|char| (char, pen)));
+    let harness = cells_tui(list);
+    for step in ["drawn", "replayed"] {
+        let frame = frame_after_one(&harness);
+        let (left, top) = origin(&frame).unwrap();
+        let symbol = |x: u32, y: u32| frame.cell(left + x, top + y).unwrap().symbol.clone();
+        assert_eq!((symbol(11, 0), symbol(12, 0), symbol(0, 2)), ("\u{FFFD}".into(), " ".into(), "â".into()), "{step}");
+        let row: Vec<String> = (6..13).map(|x| symbol(x, 1)).collect();
+        let replaced = "\u{FFFD}".to_owned();
+        assert_eq!(row, [&replaced, &replaced, &replaced, &replaced, &replaced, "A", " "], "{step}");
+    }
+}
+
+// Expected (carbon 3): a canvas under an ancestor that hides it gets no paint, and so no draw; an animation frame
+// that was waiting then is not drawn when it shows again: the frame that shows it draws the version it missed with no
+// animation time, or nothing when there is none, paused or still animating.
+#[test]
+fn a_canvas_hidden_by_an_ancestor_draws_no_stale_frame() {
+    // Hidden for one frame, the frame its driver left waits; for three, the driver has stopped.
+    for (bumped, pause, hidden) in [(true, true, 1), (false, true, 1), (false, true, 3), (false, false, 3)] {
+        PAD.with(|cell| *cell.borrow_mut() = Pad { animate: true, ..Pad::default() });
+        let harness = open_tui(80, 24, vec![abi::Plugin { id: ID, setup }.into()]);
+        apply(&harness, &Command::Open);
+        for _ in 0..3 {
+            let _ = frame(&harness, Duration::from_millis(16));
+        }
+        let (left, top) = origin(&harness.app.render()).unwrap();
+        let canvas = harness.app.widget_at(left as u16, top as u16).expect("the canvas is on screen");
+        let row = canvas.parent().expect("the canvas's row");
+        let _ = row.visible(false);
+        for _ in 0..hidden {
+            let _ = frame(&harness, Duration::from_millis(16));
+        }
+        if pause {
+            apply(&harness, &Command::Animate(false));
+        }
+        if bumped {
+            apply(&harness, &Command::Version);
+        }
+        let seen = pad(|pad| pad.draws.len());
+        let _ = row.visible(true);
+        let _ = frame(&harness, Duration::from_millis(16));
+        let draws: Vec<(v2::Cause, Duration)> =
+            pad(|pad| pad.draws[seen..].iter().map(|drawn| (drawn.frame.cause, drawn.frame.dt)).collect());
+        // Still animating, it starts again once a presented frame shows it; the frame that shows it draws nothing.
+        let expected: &[(v2::Cause, Duration)] = if bumped { &[(v2::Cause::Version, Duration::ZERO)] } else { &[] };
+        assert_eq!(draws, expected, "bumped {bumped}, paused {pause}, hidden {hidden}");
+    }
+}
+
+thread_local! {
+    static PAIR_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// A plugin of two canvases whose first draws a list the host cannot read.
+fn pair_setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let view = |_: &mut v2::View<'_>| {
+        let canvas = |id: &str| {
+            v2::Node::canvas(id).layout(abi::Layout {
+                width: Some(abi::Width::Cells(4)),
+                height: Some(abi::Width::Cells(1)),
+                ..abi::Layout::default()
+            })
+        };
+        v2::Node::column(vec![canvas("c0"), canvas("c1")])
+    };
+    setup.surface(v2::Surface::new("pair", v2::Place::Route("pair".into()), view).draw(|cx| {
+        PAIR_CALLS.set(PAIR_CALLS.get() + 1);
+        match cx.canvas {
+            "c0" => Some(List::from_bytes(vec![list::VERSION, 1, 0, 0, 0, 0])),
+            _ => Some(List::new()),
+        }
+    }));
+    Ok(())
+}
+
+// Expected (carbon 4): a draw the host refuses because the plugin failed earlier in the frame is not counted: of two
+// canvases whose first draws a list the host cannot read, one draw is counted, as the plugin made one call, and one
+// list is refused.
+#[test]
+fn a_draw_the_plugin_did_not_make_is_not_counted() {
+    PAIR_CALLS.set(0);
+    let harness = open_tui(80, 24, vec![abi::Plugin { id: "test.pair", setup: pair_setup }.into()]);
+    let work = host::work();
+    harness.tui.navigate(Route::Plugin { id: "test.pair".to_owned(), name: "pair".to_owned() });
+    let _ = frame(&harness, Duration::from_millis(16));
+    let done = host::work().since(work);
+    assert!(matches!(status(&harness, "test.pair"), opencode_plugin::Status::Failed(_)));
+    assert_eq!((PAIR_CALLS.get(), done.draws, done.refused), (1, 1, 1), "{done:?}");
+}
+
+// Expected (carbon 4): a still canvas's draw leaves the app idle: within two frames of a version's draw nothing asks
+// for a frame. (P4c's budget closes the frame its calls opened with an animation, which costs that one frame.)
+#[test]
+fn a_still_draw_leaves_the_app_idle() {
+    PAD.with(|cell| *cell.borrow_mut() = Pad::default());
+    let harness = open_tui(80, 24, vec![abi::Plugin { id: ID, setup }.into()]);
+    apply(&harness, &Command::Open);
+    for _ in 0..3 {
+        let _ = frame(&harness, Duration::from_millis(16));
+    }
+    assert!(!harness.app.needs_frame());
+    apply(&harness, &Command::Version);
+    let seen = pad(|pad| pad.draws.len());
+    let _ = frame(&harness, Duration::from_millis(16));
+    assert_eq!(pad(|pad| pad.draws.len()), seen + 1);
+    let _ = frame(&harness, Duration::from_millis(16));
+    assert!(!harness.app.needs_frame(), "a still draw keeps the app awake");
+}
+
+/// A plugin whose route shows a canvas `depth` boxes deep, of `width`, memoized under the key `art`.
+fn deep_setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let view = |cx: &mut v2::View<'_>| {
+        let (depth, width, version) = DEEP.get();
+        let canvas = cx.memo("art", (width.to_bits(), version), |_| {
+            v2::Node::canvas("unnamed").version(version).layout(abi::Layout {
+                width: Some(abi::Width::Percent(width)),
+                height: Some(abi::Width::Cells(1)),
+                ..abi::Layout::default()
+            })
+        });
+        (0..depth).fold(canvas, |inner, _| v2::Node::column(vec![inner]))
+    };
+    setup.surface(v2::Surface::new("deep", v2::Place::Route("deep".into()), view).draw(|_| Some(List::new())));
+    setup.command(abi::Command { name: "deep.redraw".into(), ..abi::Command::default() }, |_, _| {});
+    Ok(())
+}
+
+thread_local! {
+    /// The boxes around the deep plugin's canvas, its width in percent, and its version.
+    static DEEP: std::cell::Cell<(usize, f32, u64)> = const { std::cell::Cell::new((0, 50.0, 0)) };
+}
+
+// Expected (carbon 6): a canvas counts in the tree's bounds and the reconcile's counts. One layout level: 63 boxes
+// around it fit the bound of 64 and 64 do not. A width in percent that is not a number is refused. Memoized, the canvas
+// takes its key as its id and is kept while its value stays; a new version changes it in place (one widget set), and
+// a new layout builds it again alone (one built, one removed).
+#[test]
+fn a_canvas_counts_in_the_trees_bounds() {
+    use opencode_plugin::reconcile;
+    let open = |depth: usize, width: f32| {
+        DEEP.set((depth, width, 0));
+        let harness = open_tui(80, 24, vec![abi::Plugin { id: "test.deep", setup: deep_setup }.into()]);
+        harness.tui.navigate(Route::Plugin { id: "test.deep".to_owned(), name: "deep".to_owned() });
+        let _ = frame(&harness, Duration::from_millis(16));
+        harness
+    };
+    let failed = |harness: &Harness| matches!(status(harness, "test.deep"), opencode_plugin::Status::Failed(_));
+    assert!(!failed(&open(reconcile::MAX_DEPTH as usize - 1, 50.0)), "63 boxes and a canvas");
+    assert!(failed(&open(reconcile::MAX_DEPTH as usize, 50.0)), "64 boxes and a canvas");
+    assert!(failed(&open(1, f32::NAN)), "a width that is not a number");
+    assert_eq!(v2::Node::canvas("a").with_id("b").id(), Some("b"));
+
+    let harness = open(1, 50.0);
+    let redraw = |depth: usize, width: f32, version: u64| {
+        DEEP.set((depth, width, version));
+        let work = reconcile::work();
+        let _ = harness.tui.keymap.dispatch("deep.redraw", None);
+        let _ = frame(&harness, Duration::from_millis(16));
+        reconcile::work().since(work)
+    };
+    let kept = redraw(1, 50.0, 0);
+    assert_eq!((kept.kept, kept.touched()), (1, 0), "a memoized canvas is kept: {kept:?}");
+    let set = redraw(1, 50.0, 1);
+    assert_eq!((set.set, set.created, set.removed), (1, 0, 0), "a version in place: {set:?}");
+    let built = redraw(1, 40.0, 1);
+    assert_eq!((built.created, built.removed), (1, 1), "a layout builds it again: {built:?}");
+}
+
+/// Opaque shapes for [`raster`]: one-column characters, spaces among them, every style bit, and rects of two cells
+/// or more each way.
+fn opaque(seed: u64, width: u16, height: u16) -> Vec<Shape> {
+    fn shapes(rng: &mut Rng, width: u16, height: u16, depth: u8) -> Vec<Shape> {
+        const COLORS: [abi::Rgba; 4] = [
+            abi::Rgba::new(200, 40, 40, 255),
+            abi::Rgba::new(40, 200, 90, 255),
+            abi::Rgba::new(230, 230, 230, 255),
+            abi::Rgba::new(250, 200, 0, 255),
+        ];
+        const TEXTS: [&str; 4] = ["ab", "a b", "█▓", "x"];
+        const CHARS: [char; 5] = ['#', '@', '█', ' ', 'o'];
+        let x = |rng: &mut Rng| rng.below(usize::from(width) + 4) as i16 - 2;
+        let y = |rng: &mut Rng| rng.below(usize::from(height) + 2) as i16 - 1;
+        let size = |rng: &mut Rng, of: u16| 2 + rng.below(usize::from(of)) as u16;
+        let color = |rng: &mut Rng| *rng.pick(&COLORS);
+        let pen = |rng: &mut Rng| {
+            Pen((rng.below(4) > 0).then(|| color(rng)), (rng.below(2) == 0).then(|| color(rng)), rng.below(64) as u8)
+        };
+        (0..1 + rng.below(5))
+            .map(|_| match rng.below(if depth < 2 { 6 } else { 5 }) {
+                0 => Shape::Fill(x(rng), y(rng), size(rng, width), size(rng, height), color(rng)),
+                1 => Shape::Text(x(rng), y(rng), rng.pick(&TEXTS), pen(rng)),
+                2 => Shape::Cell(x(rng), y(rng), *rng.pick(&CHARS), pen(rng)),
+                3 => {
+                    let columns = 1 + rng.below(5) as u16;
+                    Shape::Cells(
+                        x(rng),
+                        y(rng),
+                        columns,
+                        (0..rng.below(12)).map(|_| (*rng.pick(&CHARS), pen(rng))).collect(),
+                    )
+                }
+                4 => {
+                    let border = *rng.pick(&[
+                        abi::BorderStyle::Single,
+                        abi::BorderStyle::Double,
+                        abi::BorderStyle::Rounded,
+                        abi::BorderStyle::Heavy,
+                    ]);
+                    let background = (rng.below(2) == 0).then(|| color(rng));
+                    Shape::Rect(x(rng), y(rng), size(rng, width), size(rng, height), border, color(rng), background)
+                }
+                _ => {
+                    let (left, top) = (x(rng), y(rng));
+                    let (clip_width, clip_height) = (size(rng, width), size(rng, height));
+                    Shape::Clip(left, top, clip_width, clip_height, shapes(rng, width, height, depth + 1))
+                }
+            })
+            .collect()
+    }
+    shapes(&mut Rng::new(seed.wrapping_mul(31) + 7), width, height, 0)
+}
+
+// Expected (carbon 5, a replayed frame equals a drawn one, the independent oracle): over seeded opaque lists of every
+// operation, every style bit and no foreground, the canvas's cells on the frame that draws the list and on one that
+// replays it are what this test's rasterizer computes, with no code of OpenTUI's painter: characters and backgrounds
+// everywhere, foregrounds and style bits where a glyph is written.
+#[test]
+fn seeded_lists_have_the_cells_a_rasterizer_computes() {
+    for seed in 0..model::seeds_or(40) {
+        let shapes = opaque(seed, 12, 4);
+        FIXED.with(|cell| *cell.borrow_mut() = Some(shapes.clone()));
+        PAD.with(|cell| *cell.borrow_mut() = Pad::default());
+        let harness = open_tui(80, 24, vec![abi::Plugin { id: ID, setup }.into()]);
+        apply(&harness, &Command::Open);
+        for step in ["drawn", "replayed"] {
+            let frame = frame(&harness, Duration::from_millis(16));
+            if let Some(detail) = unlike_raster(&frame, &shapes, (12, 4)) {
+                FIXED.with(|cell| *cell.borrow_mut() = None);
+                panic!("seed {seed}, {step}: {detail}\n{shapes:?}");
+            }
+        }
+    }
     FIXED.with(|cell| *cell.borrow_mut() = None);
 }
