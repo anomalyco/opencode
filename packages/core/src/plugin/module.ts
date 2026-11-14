@@ -8,6 +8,7 @@ import { Hash } from "@opencode/util/hash"
 import { Npm } from "@opencode/util/npm"
 import { Deferred, Effect, FiberSet, PubSub, Schema, Stream } from "effect"
 import path from "path"
+import { existsSync, readFileSync } from "node:fs"
 import { readFile, stat } from "node:fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
 import type { ConfigPluginSource } from "../config/plugin/source.js"
@@ -60,7 +61,18 @@ export const make = Effect.fn("PluginModule.make")(function* () {
 
 // A local plugin's directory (or legacy standalone file), where clients resolve its other parts.
 export function source(target: string, version?: string): Source {
-  if (path.isAbsolute(target)) return { type: "local", path: target }
+  if (path.isAbsolute(target)) {
+    try {
+      const pkgPath = path.join(target, "package.json")
+      if (existsSync(pkgPath)) {
+        const manifest = JSON.parse(readFileSync(pkgPath, "utf-8"))
+        if (manifest && typeof manifest.version === "string") {
+          return { type: "package", target, version: manifest.version }
+        }
+      }
+    } catch {}
+    return { type: "local", path: target }
+  }
   return { type: "package", target, ...(version ? { version } : {}) }
 }
 
