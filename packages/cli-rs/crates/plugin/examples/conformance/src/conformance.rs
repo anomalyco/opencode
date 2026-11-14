@@ -19,18 +19,23 @@
 //!   instance, and why the host asked.
 //! - A route surface `rows` (P3): a column `rows-root` of a text `where` and a scroll `items`, 3 rows high, of six boxes
 //!   `i0` to `i5`, each an anchor of group `items` holding "item N". Its `layout` is told of `items`, and paints
-//!   `where` on `#203040` while `items` is scrolled down; its handler (P2) toasts "landed ID" where a step landed, and
-//!   passes every event on.
-//! - A key layer of setup (P2): `ctrl+g` as `conf`, everywhere; its handler passes every key on.
+//!   `where` on `#203040` while `items` is scrolled down. Between `where` and `items`, a box `button` that takes the
+//!   pointer (P2) holds "press".
+//! - One handler of input (P2), for `rows` and for a key layer of setup (`ctrl+g` as `conf`, `ctrl+o` as `pass`,
+//!   everywhere, with pastes): it toasts "key conf", "paste TEXT", "pressed NODE" (a press, not a release) and
+//!   "landed ID" (where a step landed), and consumes the first three; everything else passes on.
 //! - A renderer claim (Pr) of the calls of tool `conf-tool`: Markdown of the content "claimed N", given anew in each
-//!   view, N the views it ran.
+//!   view, N the views it ran; and one of the fences of language `conf-fence`: "fenced CODE".
+//! - A search `conf.find` (P2): the values of the options whose title holds the query, in their order.
 //! - Options that hold `fail-setup` make setup fail with "setup refused", before it registers anything.
 
 use std::cell::Cell;
 use std::rc::Rc;
 
 use opencode_plugin_abi::canvas::{List, Style};
-use opencode_plugin_abi::interact::{self, Anchor, Bind, Edge, Handled, LayerScope, OpenPanel, Overlay};
+use opencode_plugin_abi::interact::{
+    self, Anchor, Bind, Edge, Handled, Interact, LayerScope, OpenPanel, Overlay, PointerKind,
+};
 use opencode_plugin_abi::{Command, Host, Layout, Setup, Span, ThemeMode, Toast, Variant, Width, claim, v2};
 
 #[derive(Default)]
@@ -113,10 +118,20 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     });
     let layer = interact::Layer {
         scope: LayerScope::Global,
-        keys: vec![Bind::new("ctrl+g", "conf")],
+        keys: vec![Bind::new("ctrl+g", "conf"), Bind::new("ctrl+o", "pass")],
+        paste: true,
         ..interact::Layer::default()
     };
-    setup.layer(layer, |_, _| Handled::Pass);
+    setup.layer(layer, handle);
+    setup.search("conf.find", |_, query, options| {
+        options.iter().filter(|option| option.title.contains(query)).map(|option| option.value.clone()).collect()
+    });
+    setup.claim(claim::Claim::fence("conf-fence", |_, part| match part {
+        claim::Part::Fence(fence) => {
+            Some(v2::Node::text(vec![Span::new(format!("fenced {}", fence.code))]).with_id("fence"))
+        }
+        claim::Part::Tool(_) => None,
+    }));
     let claims = state.clone();
     setup.claim(claim::Claim::tool("conf-tool", move |view, _| {
         claims.claimed.set(claims.claimed.get() + 1);
@@ -170,7 +185,11 @@ fn rows() -> v2::Surface {
         if let v2::Node::Scroll { height, .. } = &mut items {
             *height = Some(3);
         }
-        v2::Node::column(vec![v2::Node::text(vec![Span::new("where")]).with_id("where"), items]).with_id("rows-root")
+        let button = v2::Node::column(vec![v2::Node::text(vec![Span::new("press")])])
+            .with_id("button")
+            .interact(Interact { pointer: true, ..Interact::default() });
+        let where_ = v2::Node::text(vec![Span::new("where")]).with_id("where");
+        v2::Node::column(vec![where_, button, items]).with_id("rows-root")
     });
     let notify = vec![v2::Notify::Scroll { id: "items".to_owned() }];
     surface
@@ -182,10 +201,22 @@ fn rows() -> v2::Surface {
             };
             v2::LayoutReply { paints, again: false }
         })
-        .on(|host: &dyn Host, event| {
-            if let interact::Event::Scroll { event: v2::ScrollEvent::Landed { anchor, .. } } = event {
-                host.toast(Toast::new(Variant::Info, format!("landed {}", anchor.id)));
-            }
-            Handled::Pass
-        })
+        .on(handle)
+}
+
+/// The handler of `rows` and of the layer of setup.
+fn handle(host: &dyn Host, event: &interact::Event) -> Handled {
+    let (said, handled) = match event {
+        interact::Event::Key(key) if key.bind.as_deref() == Some("conf") => ("key conf".to_owned(), Handled::Consume),
+        interact::Event::Paste { text } => (format!("paste {text}"), Handled::Consume),
+        interact::Event::Pointer(pointer) if pointer.kind == PointerKind::Down => {
+            (format!("pressed {}", pointer.node), Handled::Consume)
+        }
+        interact::Event::Scroll { event: v2::ScrollEvent::Landed { anchor, .. } } => {
+            (format!("landed {}", anchor.id), Handled::Pass)
+        }
+        _ => return Handled::Pass,
+    };
+    host.toast(Toast::new(Variant::Info, said));
+    handled
 }
