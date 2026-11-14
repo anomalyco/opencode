@@ -200,6 +200,25 @@ describe("FileSystemSearch", () => {
     }),
   )
 
+  it.live("ripgrep search finds hidden files", () =>
+    Effect.gen(function* () {
+      const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-search-hidden-")))).path
+      yield* Effect.promise(() => Bun.write(path.join(directory, ".github/workflows/ci.yml"), "ci"))
+      const layer = AppNodeBuilder.build(FileSystemSearch.configured({ fff: false }), [
+        Location.node.replace(
+          Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+        ),
+      ])
+      yield* Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        const found = yield* search
+          .find({ query: "ci.yml", type: "file" })
+          .pipe(Effect.map((entries) => entries.map((entry) => entry.path)))
+        expect(found).toContain(RelativePath.make(".github/workflows/ci.yml"))
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
   it.live("selects the ripgrep layer for workspace-backed locations even when vcs would pick fff", () =>
     Effect.gen(function* () {
       const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-search-workspace-"))))
