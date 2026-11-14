@@ -81,15 +81,15 @@ impl Config {
         }
     }
 
-    /// The JS host, unless `OPENCODE_PLUGIN_JS` is `0`, when Bun is found: `OPENCODE_BUN`, an absolute path, or `bun`
-    /// on the path ([`find`]).
+    /// The JS host, when `OPENCODE_PLUGIN_JS` is `1` and Bun is found: `OPENCODE_BUN`, an absolute path, or `bun` on
+    /// the path ([`find`]). It is off by default: opt in.
     pub fn from_env() -> Option<Self> {
         Self::from_vars(|name| std::env::var_os(name))
     }
 
     /// [`Config::from_env`] over the environment `var` reads.
     pub fn from_vars(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Option<Self> {
-        if var("OPENCODE_PLUGIN_JS").as_deref() == Some(std::ffi::OsStr::new("0")) {
+        if var("OPENCODE_PLUGIN_JS").as_deref() != Some(std::ffi::OsStr::new("1")) {
             return None;
         }
         let directory = std::env::current_dir().unwrap_or_default();
@@ -1323,22 +1323,24 @@ mod tests {
         assert_eq!(find(&[&project.join("bin")], Some(&project)), Some(project.join("bin").join(&file)));
     }
 
-    // Expected (carbon-1, carbon-6): `OPENCODE_PLUGIN_JS=0` turns the JS host off; `OPENCODE_BUN` counts only as an
-    // absolute path; Bun starts in the JS host's own directory, reads no `.env` and no project `bunfig.toml`, and gets
+    // Expected (carbon-1, carbon-6): the JS host is off unless `OPENCODE_PLUGIN_JS` is `1`; `OPENCODE_BUN` counts only as
+    // an absolute path; Bun starts in the JS host's own directory, reads no `.env` and no project `bunfig.toml`, and gets
     // of the client's environment only what locates the user and the client.
     #[test]
     fn the_js_host_starts_apart_from_the_project() {
-        let vars = |off: bool, bun: &'static str| {
+        let vars = |flag: Option<&'static str>, bun: &'static str| {
             move |name: &str| match name {
-                "OPENCODE_PLUGIN_JS" if off => Some("0".into()),
+                "OPENCODE_PLUGIN_JS" => flag.map(Into::into),
                 "OPENCODE_BUN" => Some(bun.into()),
                 _ => None,
             }
         };
-        assert!(Config::from_vars(vars(true, "/opt/bun/bin/bun")).is_none());
-        let found = Config::from_vars(vars(false, "/opt/bun/bin/bun")).map(|config| config.bun);
+        for off in [None, Some("0"), Some("true")] {
+            assert!(Config::from_vars(vars(off, "/opt/bun/bin/bun")).is_none(), "{off:?}");
+        }
+        let found = Config::from_vars(vars(Some("1"), "/opt/bun/bin/bun")).map(|config| config.bun);
         assert_eq!(found, Some(PathBuf::from("/opt/bun/bin/bun")));
-        assert!(Config::from_vars(vars(false, "bin/bun")).is_none());
+        assert!(Config::from_vars(vars(Some("1"), "bin/bun")).is_none());
         let config = Config { directory: PathBuf::from("/work"), ..Config::new(PathBuf::from("/opt/bun/bin/bun")) };
         let dir = Path::new("/private/js-host");
         let command = command(&config, dir);
