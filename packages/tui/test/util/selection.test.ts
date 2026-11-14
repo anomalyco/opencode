@@ -113,3 +113,30 @@ test("copies a non-empty dragged selection without clearing its highlight", asyn
   expect(value.clears()).toBe(0)
   expect(value.writes).toEqual(["selected"])
 })
+
+test.each([
+  { mode: "select", writes: [["clipboard"]], errors: 1 },
+  { mode: "primary", writes: [["primary"]], errors: 0 },
+  { mode: "both", writes: [["clipboard", "primary"]], errors: 1 },
+  { mode: "manual", writes: [], errors: 0 },
+] as const)("copy-on-select release routes and reports a selection: %o", async (input) => {
+  const writes: unknown[] = []
+  let errors = 0
+  const copied = copyOnSelectRelease(
+    { isDragging: true },
+    renderer(),
+    { show: () => {}, error: () => errors++ },
+    {
+      read: async () => undefined,
+      write: async (_text, selections) => {
+        writes.push(selections)
+        throw new Error("write failed")
+      },
+    },
+    input.mode,
+  )
+  await Bun.sleep(0)
+  expect(copied).toBe(input.writes.length > 0)
+  expect(writes).toEqual([...input.writes])
+  expect(errors).toBe(input.errors)
+})
