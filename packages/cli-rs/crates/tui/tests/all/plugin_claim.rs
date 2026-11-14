@@ -1509,7 +1509,7 @@ fn base(world: &World) -> String {
 }
 
 // Expected (4.2 with 4.11): a theme change views a claim that reads the palette again, with the new palette, and
-// restyles one that does not in place, with no view. A view the new theme declines, or a tree refused twice, shows the
+// restyles one that does not in place, with no view, nor a view of a revision it declined. A view the new theme declines, or a tree refused twice, shows the
 // host's row in place of the claim's, as any other revision would.
 #[test]
 fn a_claim_that_reads_the_palette_is_viewed_again_in_a_new_theme() {
@@ -1517,6 +1517,10 @@ fn a_claim_that_reads_the_palette_is_viewed_again_in_a_new_theme() {
         let world = World::rules(carrier, ungrouped(), false);
         world.finished_call("call_1", "paint", &[]);
         world.finished_call("call_2", "probe", &[]);
+        // A claim that does not read the palette is not asked again about a revision it declined.
+        DECLINE.with_borrow_mut(|decline| decline.insert("call_3".to_owned()));
+        world.finished_call("call_3", "probe", &[]);
+        DECLINE.with_borrow_mut(HashSet::clear);
         let paint = |base: &str| format!("paint call_1 Completed permission false base {base}");
         let probe = "probe call_2 Completed permission false base -";
         world.draws("call_1", &paint(&base(&world)), Some("done call_1"));
@@ -1544,19 +1548,22 @@ fn a_claim_that_reads_the_palette_is_viewed_again_in_a_new_theme() {
         let screen = world.frame().text();
         assert!(!screen.contains("paint call_1"), "{carrier:?}: a refused tree shows:\n{screen}");
         assert!(screen.contains("✓ paint"), "{carrier:?}: no host row:\n{screen}");
+        let views = DREW.with_borrow(Vec::len);
         world.switch_theme(false);
         assert!(!world.frame().text().contains("paint call_1"), "{carrier:?}: a fallen call came back in its mount");
+        assert_eq!(DREW.with_borrow(Vec::len), views, "{carrier:?}: a fallen call is asked again");
     }
 }
 
 impl World {
-    /// Applies an event that is not the session's history, as a permission request is.
+    /// Applies an event that is not the session's history, as a permission request is, in this frame.
     fn signal(&self, kind: &str, data: Value) {
         let seq = self.seq.get() + 1;
         self.seq.set(seq);
         let event = json!({ "id": format!("evt_{seq}"), "created": 10_000 + seq, "type": kind, "data": data });
-        self.harness.tui.data.apply(&[serde_json::from_value::<V2Event>(event).unwrap()]);
-        self.settle();
+        let tui = &self.harness.tui;
+        tui.data.apply(&[serde_json::from_value::<V2Event>(event).unwrap()]);
+        assert!(self.harness.app.wait_until(support::WAIT, || tui.synced()), "the views never took the event");
     }
 
     /// A permission request `id` for call `call`.
@@ -1569,11 +1576,13 @@ impl World {
 
     fn reply(&self, id: &str) {
         self.signal("permission.replied", json!({ "sessionID": SESSION, "requestID": id, "reply": "once" }));
+        self.settle();
     }
 }
 
 // Expected (4.11: "waiting for permission"): the claim is told when the session's first permission request waits on its
-// call, at once and with one view, and told again when the request is answered. With grouping on, a call that waits
+// call, at once and with one view, also in a frame that viewed the call already (it is a phase), and told again when
+// the request is answered. With grouping on, a call that waits
 // shows below its folded group, as the host's row does (`PendingEntries`), drawn by the claim; answered, it folds back.
 #[test]
 fn a_claimed_call_waiting_on_a_permission_is_viewed_with_it() {
@@ -1589,8 +1598,14 @@ fn a_claimed_call_waiting_on_a_permission_is_viewed_with_it() {
                 true => assert!(mounted().is_empty(), "{carrier:?}: {:?}", mounted()),
                 false => world.draws("call_1", &line(false), None),
             }
+            if !folded {
+                world.emit("session.tool.progress", json!({ "id": "call_1", "metadata": { "n": 1 } }));
+            }
             let views = DREW.with_borrow(Vec::len);
             world.ask("per_1", "call_1");
+            if !folded {
+                assert_eq!(DREW.with_borrow(|drew| drew[views..].to_vec()), [line(true)], "{carrier:?}: it waited");
+            }
             world.harness.wait_for("Permission required");
             world.draws("call_1", &line(true), None);
             assert_eq!(DREW.with_borrow(|drew| drew[views..].to_vec()), [line(true)], "{carrier:?} {session:?}");
