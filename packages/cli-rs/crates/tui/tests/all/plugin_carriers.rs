@@ -66,8 +66,12 @@ struct Board {
 }
 
 fn open(run: Run) -> Board {
+    open_on(run, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) })
+}
+
+/// [`open`] with `deps`, such as a session on screen.
+fn open_on(run: Run, mut deps: Deps) -> Board {
     let plugin = abi::Plugin { id: ID, setup: board::setup };
-    let mut deps = Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) };
     if let Run::In(carrier) = run {
         deps.builtins.push(builtin(carrier, plugin));
     }
@@ -90,6 +94,8 @@ fn open(run: Run) -> Board {
 fn settle(harness: &Harness) {
     for _ in 0..3 {
         harness.app.advance(Duration::from_millis(1));
+        // A panel or an overlay draws first at its first layout.
+        harness.app.render();
     }
 }
 
@@ -406,6 +412,71 @@ fn input_is_equal_on_every_carrier() {
         for ((key, _, linked), (_, _, seen)) in linked.iter().zip(run(other)) {
             assert_eq!((&linked.1, &linked.2), (&seen.1, &seen.2), "{other:?} after {key}: toasts and status");
             assert!(linked.0 == seen.0, "{other:?} after {key}: the frames differ");
+        }
+    }
+}
+
+// Expected (`carrier-equal` for panels, overlays, focus, a hold and the reads, P2): beside a session, the board's panel
+// opens with the focus, focuses its pad and reads it back with its place, holds a key and releases it at once, so the
+// key after it is heard in the same step; its overlay opens under the pad, closes on its own key and, on escape, tells
+// the panel; the panel closes; a select lists what the plugin's search finds. Frames, toasts and status are the same on
+// every carrier.
+#[test]
+fn panels_overlays_and_reads_are_equal_on_every_carrier() {
+    let run = |run: Run| {
+        let session = support::Fake::new(|seen| support::base(seen, support::DIRECTORY));
+        let board = open_on(run, support::deps(Arc::new(session)));
+        let (app, tui) = (&board.harness.app, &board.harness.tui);
+        let mut seen = Vec::new();
+        let step = |name: &'static str, seen: &mut Vec<_>| {
+            settle(&board.harness);
+            seen.push((name, app.render().text(), observe(&board.harness)));
+        };
+        tui.keymap.dispatch("board.notes", None);
+        step("open", &mut seen);
+        for key in ["f", "w", "r"] {
+            app.press(key);
+        }
+        step("focus", &mut seen);
+        app.press("k");
+        app.press("w");
+        step("hold", &mut seen);
+        app.press("v");
+        step("menu", &mut seen);
+        app.press("x");
+        step("shut", &mut seen);
+        app.press("v");
+        settle(&board.harness);
+        app.press("escape");
+        step("escape", &mut seen);
+        app.press("q");
+        step("close", &mut seen);
+        tui.keymap.dispatch("board.pick", None);
+        settle(&board.harness);
+        app.type_text("3");
+        step("search", &mut seen);
+        seen
+    };
+    let linked = run(Run::In(Carrier::Linked));
+    let at = |name: &str| &linked.iter().find(|seen| seen.0 == name).unwrap().1;
+    let heard = |name: &str| at(name).lines().find_map(|line| Some(line.split_once("heard")?.1.trim().to_owned()));
+    assert!(at("open").contains("notes focused=true"), "the panel did not open with the focus: {}", at("open"));
+    assert_eq!(heard("hold").as_deref(), Some("where:pad rect:Some((80, 1)) hold where:pad"), "focus, reads, a hold");
+    assert!(at("menu").contains("MENU here"), "the overlay did not open: {}", at("menu"));
+    assert!(!at("shut").contains("MENU here"), "the overlay's key did not close it");
+    assert!(
+        heard("escape").is_some_and(|heard| heard.ends_with("hold where:pad closed:menu")),
+        "{:?}",
+        heard("escape")
+    );
+    assert!(!at("escape").contains("MENU here"));
+    assert!(!at("close").contains("notes focused"), "the panel did not close");
+    let search = at("search");
+    assert!(search.contains("card 3") && !search.contains("card 4"), "the search did not list the rows: {search}");
+    for other in [Run::In(CARRIERS[1]), Run::Library] {
+        for ((name, _, linked), (_, _, seen)) in linked.iter().zip(run(other)) {
+            assert_eq!((&linked.1, &linked.2), (&seen.1, &seen.2), "{other:?} at {name}: toasts and status");
+            assert!(linked.0 == seen.0, "{other:?} at {name}: the frames differ");
         }
     }
 }
