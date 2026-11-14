@@ -14,6 +14,7 @@ mod list;
 pub mod loader;
 pub mod mailbox;
 pub mod node;
+pub mod pipe;
 pub mod reconcile;
 mod route;
 pub mod slot;

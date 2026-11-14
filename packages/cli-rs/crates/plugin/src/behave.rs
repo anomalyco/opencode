@@ -609,6 +609,11 @@ pub(crate) fn as_user<R>(user: bool, f: impl FnOnce() -> R) -> R {
     out
 }
 
+/// Whether the code that runs handles the user's input: the pipe carrier carries it to where a call's effects apply.
+pub(crate) fn user() -> bool {
+    USER.with(Cell::get)
+}
+
 /// Runs `f` as a call of kind `export`: a command or a scroll handler that runs for the user's input is a handler of
 /// it, which a verb on the transcript is taken from.
 pub(crate) fn calling<R>(export: &str, f: impl FnOnce() -> R) -> R {

@@ -1,0 +1,689 @@
+//! One TypeScript plugin's activation on the pipe carrier: its registrations, as its setup on the JS host listed them,
+//! its calls, the effects they answered with, the reads it watches, and its surfaces' mounts.
+
+use std::cell::{Cell, RefCell};
+use std::collections::{BTreeMap, HashMap};
+use std::path::PathBuf;
+use std::rc::{Rc, Weak};
+use std::sync::Arc;
+
+use opencode_plugin_abi::v2::{self, ContentRef};
+use opencode_plugin_abi::{HostRequest, Manifest, Request, Span};
+use opencode_ui::keymap::{KeymapLayer, TuiCommand};
+use opentui::keymap::Disposer;
+
+use super::proto::{Down, Revision};
+use super::{Scripts, Waiting, count};
+use crate::activation::{Activation, Wake};
+use crate::loader::native::{Answers, Ctx, apply, handle};
+use crate::mailbox::Mailbox;
+use crate::surface::{self, Viewed, Viewing};
+use crate::{Definition, ErrorFn, Host, Setup, behave, route, tui_command};
+
+/// What a load answered: the plugin, what its setup registered, and the effects setup asked for, which the first
+/// activation applies (the setup ran already); a later activation runs setup again.
+pub(crate) struct Loaded {
+    pub id: String,
+    pub target: String,
+    pub dir: PathBuf,
+    pub options: Option<String>,
+    /// The load whose setup the JS host ran.
+    pub seq: u64,
+    pub manifest: Manifest,
+    pub holds: Vec<String>,
+    pub effects: RefCell<Option<Vec<HostRequest>>>,
+}
+
+/// The definition of the plugin `loaded` names, whose setup registers what it listed.
+pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, ErrorFn) {
+    let current: Rc<RefCell<Rc<RefCell<Option<String>>>>> = Rc::default();
+    let weak = Rc::downgrade(scripts);
+    let definition = Definition::fallible(loaded.id.clone(), {
+        let current = current.clone();
+        move |setup: &mut Setup<'_>| {
+            let scripts = weak.upgrade().ok_or("the JS host is gone")?;
+            let failure: Rc<RefCell<Option<String>>> = Rc::default();
+            *current.borrow_mut() = failure.clone();
+            let failed = failure.clone();
+            setup.failure(Rc::new(move || failed.borrow().clone()));
+            let wake = Arc::new(Wake::new(Some(setup.host().app().proxy())));
+            let mailbox = Mailbox::new(setup.id(), wake);
+            mailbox.refuse_messages();
+            let guest = Rc::new(Guest {
+                scripts: Rc::downgrade(&scripts),
+                host: Rc::downgrade(setup.host()),
+                loaded: loaded.clone(),
+                js: Cell::new(loaded.seq),
+                generation: setup.generation(),
+                failure,
+                revoked: RefCell::default(),
+                activation: Activation::new(setup.host(), mailbox),
+                viewers: RefCell::default(),
+                watches: RefCell::default(),
+                watcher: RefCell::default(),
+                disposed: Cell::new(false),
+            });
+            register(setup, &guest);
+            scripts.guests.borrow_mut().insert(loaded.id.clone(), Rc::downgrade(&guest));
+            scripts.registered(&loaded.id);
+            // The first activation's setup ran on the JS host as it loaded; a later one runs it again.
+            match loaded.effects.borrow_mut().take() {
+                Some(effects) => guest.effects("setup", effects, false, "setup"),
+                None => guest.setup_again(),
+            }
+            Ok(())
+        }
+    });
+    let error: ErrorFn = Rc::new(move || current.borrow().borrow().clone());
+    (definition, error)
+}
+
+pub(crate) struct Guest {
+    scripts: Weak<Scripts>,
+    host: Weak<dyn Host>,
+    loaded: Rc<Loaded>,
+    /// The load whose setup made the JS host's activation of the plugin, which a deactivation names.
+    js: Cell<u64>,
+    /// The registry's activation, which owns the dialogs it asks for.
+    generation: u64,
+    failure: Rc<RefCell<Option<String>>>,
+    /// What a failure revokes at once: the commands' layer and the event subscriptions.
+    revoked: RefCell<Vec<Disposer>>,
+    activation: Rc<Activation>,
+    viewers: RefCell<Vec<Rc<Viewer>>>,
+    /// The reads it watches, by its key, with the value last pushed.
+    watches: RefCell<BTreeMap<String, (HostRequest, Option<serde_json::Value>)>>,
+    watcher: RefCell<Option<Disposer>>,
+    disposed: Cell<bool>,
+}
+
+impl Guest {
+    pub fn id(&self) -> &str {
+        &self.loaded.id
+    }
+
+    fn ended(&self) -> bool {
+        self.disposed.get() || self.failure.borrow().is_some()
+    }
+
+    fn send(&self, message: Down, waiting: Waiting) {
+        if let Some(scripts) = self.scripts.upgrade() {
+            scripts.send(message, waiting);
+        }
+    }
+
+    /// Runs a handler of the plugin on the JS host, after the snapshots of what it reads.
+    fn call(self: &Rc<Self>, export: &'static str, request: Request, hold: bool) {
+        if self.ended() {
+            return;
+        }
+        self.refresh();
+        if let Some(scripts) = self.scripts.upgrade() {
+            scripts.call(self, export, request, hold);
+        }
+    }
+
+    /// Runs the plugin's setup again on the JS host, for a new activation or after the JS host started again.
+    pub(crate) fn setup_again(self: &Rc<Self>) {
+        let Some(scripts) = self.scripts.upgrade() else { return };
+        let seq = scripts.next();
+        self.js.set(seq);
+        let load = Down::Load {
+            seq,
+            target: self.loaded.target.clone(),
+            dir: self.loaded.dir.to_string_lossy().into_owned(),
+            options: self.loaded.options.as_deref().and_then(|options| serde_json::from_str(options).ok()),
+        };
+        self.send(load, Waiting::Activate(Rc::downgrade(self)));
+    }
+
+    /// The JS host ended: the plugin is set up again on the next one, and its mounts are told again. Their surfaces keep
+    /// their last trees until new ones come.
+    pub(crate) fn restart(self: &Rc<Self>) {
+        if self.ended() {
+            return;
+        }
+        self.setup_again();
+        for (_, watch) in self.watches.borrow_mut().values_mut() {
+            watch.take();
+        }
+        let viewers = self.viewers.borrow().clone();
+        viewers.iter().for_each(|viewer| viewer.restart(self));
+    }
+
+    /// The setup again returned. Registrations other than the ones this activation has take a reload.
+    pub(crate) fn activated(self: &Rc<Self>, manifest: Manifest, holds: Vec<String>, effects: Vec<HostRequest>) {
+        if self.ended() {
+            return;
+        }
+        self.effects("setup", effects, false, "setup");
+        if manifest == self.loaded.manifest && holds == self.loaded.holds {
+            return;
+        }
+        let Some(scripts) = self.scripts.upgrade() else { return };
+        let mut loads = scripts.loads.borrow_mut();
+        if let Some(load) = loads.get_mut(&self.loaded.target) {
+            let loaded = Loaded {
+                id: self.loaded.id.clone(),
+                target: self.loaded.target.clone(),
+                dir: self.loaded.dir.clone(),
+                options: self.loaded.options.clone(),
+                seq: self.js.get(),
+                manifest,
+                holds,
+                effects: RefCell::new(Some(Vec::new())),
+            };
+            (load.state, load.registered) = (super::Loading::Loaded(Rc::new(loaded)), false);
+        }
+        drop(loads);
+        scripts.reconcile();
+    }
+
+    /// The handler `seq` returned: its effects apply, or it threw, which fails the plugin with none.
+    pub(crate) fn done(
+        self: &Rc<Self>,
+        seq: u64,
+        export: &'static str,
+        user: bool,
+        effects: Vec<HostRequest>,
+        error: Option<String>,
+    ) {
+        if self.ended() {
+            return;
+        }
+        if let Some(error) = error {
+            self.fail(error);
+            return;
+        }
+        self.effects(&format!("c{seq}"), effects, user, export);
+    }
+
+    /// Applies `effects`, as a call of kind `export` (for the user's input when `user`) would have asked for them, and
+    /// tells the JS host what they answered under `key`.
+    pub(crate) fn effects(self: &Rc<Self>, key: &str, effects: Vec<HostRequest>, user: bool, export: &str) {
+        if effects.is_empty() || self.ended() {
+            return;
+        }
+        let mut ctx = Ctx::new(self.host.clone(), self.id(), self.loaded.manifest.storage.clone());
+        let results: Vec<serde_json::Value> = effects
+            .into_iter()
+            .map(|request| {
+                behave::as_user(user, || behave::calling(export, || handle(&mut ctx, request))).unwrap_or_else(
+                    |error| {
+                        log::warn!("plugin {}: {error}", self.id());
+                        serde_json::Value::Null
+                    },
+                )
+            })
+            .collect();
+        let (effects, _) = ctx.take();
+        let weak: Weak<dyn Answers> = Rc::downgrade(self) as Weak<dyn Answers>;
+        apply(&self.host, self.id().to_owned(), weak, Some(self.generation), effects);
+        self.send(Down::Answered { id: self.id().to_owned(), key: key.to_owned(), results }, Waiting::Told);
+    }
+
+    /// Fails the plugin with `error`: it is not called again, and the host says so once.
+    pub(crate) fn fail(self: &Rc<Self>, error: String) {
+        if self.failure.borrow().is_some() {
+            return;
+        }
+        crate::fail(&self.host, self.id(), &self.failure, self.revoked.take(), &self.activation, error);
+        self.deactivate();
+    }
+
+    fn deactivate(&self) {
+        if let Some(scripts) = self.scripts.upgrade() {
+            let seq = scripts.next();
+            let message = Down::Deactivate { seq, id: self.id().to_owned(), activation: self.js.get() };
+            scripts.send(message, Waiting::Told);
+        }
+    }
+
+    fn dispose(self: &Rc<Self>) {
+        if self.disposed.replace(true) {
+            return;
+        }
+        if let Some(watcher) = self.watcher.take() {
+            watcher.dispose();
+        }
+        if self.failure.borrow().is_none() {
+            self.deactivate();
+        }
+        self.activation.dispose();
+        if let Some(scripts) = self.scripts.upgrade() {
+            let mut guests = scripts.guests.borrow_mut();
+            if guests.get(self.id()).is_some_and(|known| std::ptr::eq(known.as_ptr(), Rc::as_ptr(self))) {
+                guests.remove(self.id());
+            }
+        }
+    }
+
+    /// A revision for one of its mounts.
+    pub(crate) fn tree(self: &Rc<Self>, tree: Box<Revision>) {
+        if self.ended() {
+            count(|crossed| crossed.dropped += 1);
+            return;
+        }
+        let viewers = self.viewers.borrow().clone();
+        match viewers.iter().find(|viewer| viewer.has(&tree.mount)) {
+            Some(viewer) => {
+                if viewer.take(self, tree) {
+                    self.activation.invalidate();
+                }
+            }
+            None => count(|crossed| crossed.dropped += 1),
+        }
+    }
+
+    /// Pushes the value of `request` under `key` now, and each time it changes.
+    pub(crate) fn watch(self: &Rc<Self>, key: String, request: HostRequest) {
+        if self.ended() {
+            return;
+        }
+        self.watches.borrow_mut().insert(key, (request, None));
+        self.refresh();
+    }
+
+    pub(crate) fn unwatch(&self, key: &str) {
+        self.watches.borrow_mut().remove(key);
+    }
+
+    /// Pushes each watched read whose value changed.
+    fn refresh(&self) {
+        if self.ended() {
+            return;
+        }
+        let changed: Vec<(String, serde_json::Value)> = {
+            let mut watches = self.watches.borrow_mut();
+            watches
+                .iter_mut()
+                .filter_map(|(key, (request, last))| {
+                    let value = super::evaluate(&self.host, self.id(), request);
+                    (last.as_ref() != Some(&value)).then(|| {
+                        *last = Some(value.clone());
+                        (key.clone(), value)
+                    })
+                })
+                .collect()
+        };
+        for (key, value) in changed {
+            self.send(Down::Snapshot { id: self.id().to_owned(), key, value }, Waiting::Told);
+        }
+    }
+}
+
+impl Answers for Guest {
+    fn live(&self) -> bool {
+        !self.disposed.get() && !self.activation.disposed()
+    }
+
+    fn running(&self) -> bool {
+        !self.ended()
+    }
+
+    fn owner(&self) -> Weak<dyn Host> {
+        self.host.clone()
+    }
+
+    fn answer(self: Rc<Self>, request: Request) {
+        self.call("on-reply", request, false);
+    }
+}
+
+/// Registers what the plugin's setup listed, each calling it on the JS host.
+fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
+    let manifest = &guest.loaded.manifest;
+    let disposed = guest.clone();
+    setup.on_dispose(move || disposed.dispose());
+    let commands: Vec<(opencode_plugin_abi::Scope, TuiCommand)> = manifest
+        .commands
+        .iter()
+        .map(|command| {
+            let called = guest.clone();
+            let name = command.name.clone();
+            let hold = guest.loaded.holds.contains(&name);
+            let run = tui_command(command, move |input| {
+                let request = Request::Command { name: name.clone(), input: input.map(str::to_owned) };
+                called.call("run-command", request, hold);
+            });
+            (command.scope.clone(), run)
+        })
+        .collect();
+    let (commands, scoped) = route::split(commands);
+    if !commands.is_empty() {
+        match setup.host().keymap().layer(KeymapLayer::global(commands)) {
+            Ok(disposer) => guest.revoked.borrow_mut().push(disposer),
+            Err(error) => log::error!("plugin {} keymap layer: {error}", setup.id()),
+        }
+    }
+    {
+        let guest = guest.clone();
+        setup.on_dispose(move || guest.revoked.take().into_iter().for_each(Disposer::dispose));
+    }
+    for (handler, types) in manifest.events.iter().enumerate() {
+        let (called, kinds) = (Rc::downgrade(guest), types.clone());
+        let subscription = setup.host().on_event(
+            types,
+            Rc::new(move |event| {
+                if let Some(called) = called.upgrade().filter(|_| kinds.iter().any(|kind| kind == event.tag())) {
+                    called.call("on-event", Request::Event { handler, event: Box::new(event.clone()) }, false);
+                }
+            }),
+        );
+        guest.revoked.borrow_mut().extend(subscription);
+    }
+    for (index, claim) in manifest.surfaces.iter().enumerate() {
+        let at: v2::Place = (&claim.place).into();
+        let commands = match &at {
+            v2::Place::Route(name) => route::commands(&scoped, name),
+            v2::Place::Slot(_) => Vec::new(),
+        };
+        let commands: surface::Commands = Rc::new(move |_| commands.clone());
+        let failing = Rc::downgrade(guest);
+        let fail: surface::Fail = Rc::new(move |error| {
+            if let Some(guest) = failing.upgrade() {
+                guest.fail(error);
+            }
+        });
+        let place =
+            surface::Place { name: claim.name.clone(), at, palette: claim.palette, notify: claim.notify.clone() };
+        // No `layout` crosses the pipe: no frame waits for the JS host (3.7). A scroll event is a call as a handler is.
+        let calls = behave::Calls {
+            plugin: setup.id().to_owned(),
+            layout: None,
+            scrolled: claim.on_scroll.then(|| {
+                let guest = Rc::downgrade(guest);
+                Rc::new(move |_: &Weak<()>, event: &v2::ScrollEvent| {
+                    if let Some(guest) = guest.upgrade() {
+                        let request = Request::Scrolled { surface: index, event: event.clone() };
+                        guest.call("on-scroll", request, false);
+                    }
+                }) as behave::Scrolls
+            }),
+            ended: Some({
+                let guest = Rc::downgrade(guest);
+                Rc::new(move || guest.upgrade().is_none_or(|guest| guest.ended())) as Rc<dyn Fn() -> bool>
+            }),
+        };
+        let viewer = Viewer::new(guest, index);
+        guest.viewers.borrow_mut().push(viewer.clone());
+        setup.surface(place, viewer, commands, fail, calls, &guest.activation);
+    }
+    let watching = Rc::downgrade(guest);
+    let watcher = setup.host().watch(Rc::new(move |_: &opencode_plugin_abi::Changed| {
+        if let Some(guest) = watching.upgrade() {
+            guest.refresh();
+        }
+    }));
+    *guest.watcher.borrow_mut() = watcher;
+}
+
+/// A surface of a plugin on the JS host: each mount shows the last revision the host adopted, a placeholder before the
+/// first, or what a new one brings. The view call never waits: it tells the JS host what changed in the mount's input,
+/// and takes a revision that arrived.
+pub(crate) struct Viewer {
+    this: Weak<Viewer>,
+    guest: Weak<Guest>,
+    index: usize,
+    mounts: RefCell<HashMap<v2::MountId, Mount>>,
+    /// The height each key's mount had with a tree, which a placeholder of a mount of that key keeps (review F1).
+    heights: RefCell<HashMap<String, u16>>,
+}
+
+#[derive(Default)]
+struct Mount {
+    /// The JS host was told of the mount.
+    started: bool,
+    /// The input it was told last, without `full`.
+    sent: Option<v2::SurfaceInput>,
+    pending: Option<Box<Revision>>,
+    /// The revision offered to the surface, and the plugin's handles it added, until it is adopted or refused.
+    offered: Option<(u64, Vec<u64>)>,
+    adopted: u64,
+    /// The host's handle of each of the plugin's.
+    handles: HashMap<u64, ContentRef>,
+    /// Something shows: a placeholder or a tree.
+    shown: bool,
+    /// A tree of the plugin's was adopted.
+    real: bool,
+}
+
+impl Viewer {
+    fn new(guest: &Rc<Guest>, index: usize) -> Rc<Self> {
+        Rc::new_cyclic(|this| Self {
+            this: this.clone(),
+            guest: Rc::downgrade(guest),
+            index,
+            mounts: RefCell::default(),
+            heights: RefCell::default(),
+        })
+    }
+
+    fn has(&self, mount: &v2::MountId) -> bool {
+        self.mounts.borrow().contains_key(mount)
+    }
+
+    /// Takes revision `tree` for its mount: whether the mount has something new to show. A revision that does not
+    /// build on what the host adopted, or comes while another waits, is dropped; the first kind is refused, so the
+    /// JS host sends a whole one.
+    fn take(&self, guest: &Guest, tree: Box<Revision>) -> bool {
+        let mut mounts = self.mounts.borrow_mut();
+        let Some(mount) = mounts.get_mut(&tree.mount) else {
+            count(|crossed| crossed.dropped += 1);
+            return false;
+        };
+        if mount.pending.is_some() || mount.offered.is_some() {
+            count(|crossed| crossed.dropped += 1);
+            return false;
+        }
+        if tree.base != mount.adopted {
+            count(|crossed| crossed.dropped += 1);
+            let (rev, adopted) = (tree.rev, mount.adopted);
+            drop(mounts);
+            let error = format!("revision {rev} builds on {}, and the host shows {adopted}", tree.base);
+            guest.send(
+                Down::Refused { id: guest.id().to_owned(), mount: tree.mount, rev, adopted, error },
+                Waiting::Told,
+            );
+            return false;
+        }
+        mount.pending = Some(tree);
+        true
+    }
+
+    /// The offered revision of `mount` was adopted, or refused: the JS host is told, and builds the next on it.
+    fn settle(&self, id: &v2::MountId, adopted: bool) {
+        let Some(guest) = self.guest.upgrade() else { return };
+        let mut mounts = self.mounts.borrow_mut();
+        let Some(mount) = mounts.get_mut(id) else { return };
+        let Some((rev, fresh)) = mount.offered.take() else { return };
+        if guest.ended() {
+            return;
+        }
+        let message = match adopted {
+            true => {
+                (mount.adopted, mount.real) = (rev, true);
+                count(|crossed| crossed.adopted += 1);
+                Down::Adopted { id: guest.id().to_owned(), mount: id.clone(), rev }
+            }
+            false => {
+                for handle in &fresh {
+                    mount.handles.remove(handle);
+                }
+                count(|crossed| crossed.refused += 1);
+                let error = "the host refused it".to_owned();
+                Down::Refused { id: guest.id().to_owned(), mount: id.clone(), rev, adopted: mount.adopted, error }
+            }
+        };
+        drop(mounts);
+        guest.send(message, Waiting::Told);
+    }
+
+    /// The JS host started again: each mount is told again, and builds whole.
+    fn restart(&self, guest: &Guest) {
+        let ids: Vec<v2::MountId> = self.mounts.borrow().keys().cloned().collect();
+        for id in ids {
+            let input = {
+                let mut mounts = self.mounts.borrow_mut();
+                let Some(mount) = mounts.get_mut(&id) else { continue };
+                (mount.pending, mount.offered, mount.adopted) = (None, None, 0);
+                mount.sent.clone()
+            };
+            let Some(input) = input else { continue };
+            self.tell(guest, &id, input, true);
+        }
+    }
+
+    /// Tells the JS host of `mount`'s input: a mount when `mount` is new to it, else an input.
+    fn tell(&self, guest: &Guest, id: &v2::MountId, input: v2::SurfaceInput, new: bool) {
+        let Some(scripts) = guest.scripts.upgrade() else { return };
+        let seq = scripts.next();
+        if let Some(mount) = self.mounts.borrow_mut().get_mut(id) {
+            (mount.started, mount.sent) = (true, Some(input.clone()));
+        }
+        let (plugin, mount) = (guest.id().to_owned(), id.clone());
+        let message = match new {
+            true => Down::Mount { seq, id: plugin, surface: self.index, mount, input },
+            false => Down::Input { seq, id: plugin, mount, input },
+        };
+        scripts.send(message, Waiting::Told);
+    }
+}
+
+impl surface::Viewer for Viewer {
+    fn view(&self, host: &dyn Host, viewing: Viewing<'_>) -> Option<Viewed> {
+        let guest = self.guest.upgrade().filter(|guest| !guest.ended())?;
+        let id = viewing.mount;
+        // A view with `full` after an offer: the surface refused it.
+        let offered = self.mounts.borrow().get(id).and_then(|mount| mount.offered.clone());
+        if offered.is_some() {
+            self.settle(id, !viewing.input.full);
+        }
+        let input = v2::SurfaceInput { full: false, ..viewing.input.clone() };
+        let (started, sent, real) = {
+            let mut mounts = self.mounts.borrow_mut();
+            let mount = mounts.entry(id.clone()).or_default();
+            (mount.started, mount.sent.clone(), mount.real)
+        };
+        if real && input.height > 0 {
+            self.heights.borrow_mut().insert(id.key.clone(), input.height);
+        }
+        if !started || sent.as_ref() != Some(&input) {
+            self.tell(&guest, id, input, !started);
+        }
+        let mut mounts = self.mounts.borrow_mut();
+        let mount = mounts.get_mut(id)?;
+        let whole = |tree: &Revision| !viewing.input.full || tree.whole;
+        if let Some(tree) = mount.pending.take_if(|tree| whole(tree)) {
+            let tree = *tree;
+            let mut fresh = Vec::new();
+            for (handle, bytes) in tree.content {
+                let given = ContentRef(surface::next_content());
+                surface::took_content(given.0, 1);
+                mount.handles.insert(handle.0, given);
+                fresh.push(handle.0);
+                (viewing.give)(given, bytes.0);
+            }
+            for handle in tree.released {
+                if let Some(given) = mount.handles.remove(&handle.0) {
+                    (viewing.release)(given);
+                }
+            }
+            let mut node = tree.node;
+            rehandle(&mut node, &mount.handles);
+            let node = match serde_json::from_value::<v2::Node>(node) {
+                Ok(node) => node,
+                Err(error) => {
+                    drop(mounts);
+                    guest.fail(format!("view returned a tree the host cannot read: {error}"));
+                    return None;
+                }
+            };
+            mount.offered = Some((tree.rev, fresh));
+            mount.shown = true;
+            drop(mounts);
+            // Adopted unless the surface refuses it in this same draw, which asks again with `full` at once.
+            let (viewer, owner, id) = (self.this.clone(), guest.host.clone(), id.clone());
+            crate::defer(&owner, move |_| {
+                if let Some(viewer) = viewer.upgrade() {
+                    viewer.settle(&id, true);
+                }
+            });
+            return Some(Viewed { node: Some(node), memo: Some(tree.memo) });
+        }
+        if !mount.shown {
+            mount.shown = true;
+            let height = self.heights.borrow().get(&id.key).copied().unwrap_or(1);
+            let _ = host;
+            return Some(Viewed { node: Some(placeholder(height)), memo: Some(0) });
+        }
+        Some(Viewed { node: None, memo: None })
+    }
+
+    fn forget(&self, _host: &dyn Host, id: &v2::MountId) {
+        let Some(mount) = self.mounts.borrow_mut().remove(id) else { return };
+        let Some(guest) = self.guest.upgrade().filter(|guest| !guest.ended()) else { return };
+        if !mount.started {
+            return;
+        }
+        let Some(scripts) = guest.scripts.upgrade() else { return };
+        let seq = scripts.next();
+        scripts.send(Down::Unmount { seq, id: guest.id().to_owned(), mount: id.clone() }, Waiting::Told);
+    }
+}
+
+/// What a mount shows before the JS host's first tree: the rows its key had, or one (review F1).
+fn placeholder(height: u16) -> v2::Node {
+    let layout = opencode_plugin_abi::Layout {
+        height: Some(opencode_plugin_abi::Width::Cells(height.max(1))),
+        ..opencode_plugin_abi::Layout::default()
+    };
+    v2::Node::text(vec![Span::new("…")]).fg("text.muted").layout(layout)
+}
+
+/// Gives each content source of `node` (`{"content": n}`) the host's handle of the plugin's `n`. A handle the mount does
+/// not hold names none, so the host refuses the tree as foreign content.
+fn rehandle(node: &mut serde_json::Value, handles: &HashMap<u64, ContentRef>) {
+    match node {
+        serde_json::Value::Object(map) => {
+            if map.len() == 1
+                && let Some(serde_json::Value::Number(number)) = map.get("content")
+                && let Some(handle) = number.as_u64()
+            {
+                let given = handles.get(&handle).map_or(u64::MAX, |given| given.0);
+                map.insert("content".to_owned(), serde_json::Value::from(given));
+                return;
+            }
+            map.values_mut().for_each(|value| rehandle(value, handles));
+        }
+        serde_json::Value::Array(items) => items.iter_mut().for_each(|value| rehandle(value, handles)),
+        _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Expected: a content source takes the host's handle, one the mount does not hold takes none the host gave, and
+    // nothing else that holds a number named `content` changes.
+    #[test]
+    fn content_sources_take_the_hosts_handles() {
+        let handles = HashMap::from([(1, ContentRef(41)), (2, ContentRef(42))]);
+        let mut node = serde_json::json!({
+            "type": "box",
+            "children": [
+                {"type": "diff", "content": {"content": 1}},
+                {"type": "markdown", "source": {"content": 2}},
+                {"type": "diff", "content": {"content": 7}},
+                {"type": "text", "spans": [{"text": "content"}], "content": 3, "other": 1},
+            ],
+        });
+        rehandle(&mut node, &handles);
+        let children = &node["children"];
+        assert_eq!(children[0]["content"], serde_json::json!({"content": 41}));
+        assert_eq!(children[1]["source"], serde_json::json!({"content": 42}));
+        assert_eq!(children[2]["content"], serde_json::json!({"content": u64::MAX}));
+        assert_eq!(children[3]["content"], serde_json::json!(3));
+    }
+}
