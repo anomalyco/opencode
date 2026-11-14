@@ -883,6 +883,15 @@ fn a_split_follows_the_drag_and_keeps_its_width() {
     assert_eq!(support::at(&screen, "RIGHT").map(|(x, _)| x - left), Some(32), "{screen}");
     let selected = || harness.app.app().selected_text().filter(|text| !text.is_empty());
     assert_eq!(selected(), None, "the split's drag selected text");
+    // The handle's bar, the last column of the first child, lights while the pointer is over the handle.
+    let bar = |capture: &opentui::testing::Capture| capture.cell(u32::from(left + 31), u32::from(row)).map(|c| c.bg);
+    harness.app.hover(left + 50, row);
+    let dark = bar(&harness.app.render());
+    harness.app.hover(left + 32, row);
+    let lit = bar(&harness.app.render());
+    assert_ne!(lit, dark, "the handle's bar did not light");
+    harness.app.hover(left + 50, row);
+    assert_eq!(bar(&harness.app.render()), dark, "the handle's bar stayed lit");
     // A selection the user made stays through a drag of the handle, which prevents the press's default.
     harness.app.drag((left, row), (left + 3, row));
     assert_eq!(selected().as_deref(), Some("LEFT"));
