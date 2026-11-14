@@ -153,7 +153,55 @@ impl Inner {
             cx.set_timeout(Duration::ZERO, bind!(weak, |inner, _| inner.update_away()));
         });
         self.transcript.scroll().content_view().on_resize(bind!(self.this, |inner, _, _| inner.update_away()));
+        let weak = self.this.clone();
+        self.transcript.publish(
+            tui,
+            Rc::new(move |verb| {
+                if let Some(inner) = weak.upgrade() {
+                    inner.plugin_scroll(verb);
+                }
+            }),
+        );
         self.register(tui);
+    }
+
+    /// A plugin's verb on the published transcript (`Viewport::Transcript`), along the wheel's path in the direction
+    /// it asks for, also at an edge: `session.first`'s jump ends, the window reveals rows or follows, the hint and the
+    /// tab's anchor follow, and the plugins told about the transcript hear of the move. `Edge::Bottom` is the tail, as
+    /// "Jump to latest" goes.
+    fn plugin_scroll(&self, verb: &opencode_plugin::abi::v2::Scroll) {
+        use opencode_plugin::abi::v2::{Edge, Scroll};
+        let Some(tui) = self.tui.upgrade() else { return };
+        let scroll = self.transcript.scroll();
+        let (_, top) = scroll.scroll_position();
+        let up = match verb {
+            Scroll::By { rows } => {
+                scroll.scroll_by(0.0, f64::from(*rows));
+                *rows < 0
+            }
+            Scroll::Offset { offset } => {
+                scroll.scroll_to(0.0, f64::from(*offset));
+                f64::from(*offset) < top
+            }
+            Scroll::Edge { edge: Edge::Top } => {
+                scroll.scroll_to(0.0, 0.0);
+                true
+            }
+            Scroll::Edge { edge: Edge::Bottom } => {
+                self.to_bottom(&tui);
+                opencode_plugin::behave::transcript_moved(&tui.app);
+                return;
+            }
+            _ => return,
+        };
+        if self.first_jump.get() {
+            self.clear_navigation();
+        }
+        if !(up && self.transcript.reveal_older(&tui) || !up && self.transcript.reveal_newer(&tui)) {
+            self.transcript.follow(&tui, !up);
+        }
+        self.update_away();
+        opencode_plugin::behave::transcript_moved(&tui.app);
     }
 
     /// "Jump to latest" and the scrollbar in the theme.
