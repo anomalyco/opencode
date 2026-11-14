@@ -246,8 +246,8 @@ impl Tree {
         for doomed in pass.doomed.drain(..) {
             drop_mounted(doomed, &mut pass.slots_changed);
         }
-        // A widget moved within its parent is detached and attached again, which takes the focus from it (OpenTUI's
-        // `subtree_removed`): it gets it back, or the widget that took over from it does.
+        // A parent with a slot is cleared and its held subtrees attached again, which takes the focus from them
+        // (OpenTUI's `subtree_removed`): it comes back, or goes to the widget that took over from a focused one.
         if app.focused().is_none()
             && let Some(widget) = pass.refocus.take().or(focused.filter(|widget| attached(app, widget)))
         {
@@ -1013,10 +1013,9 @@ impl Pass<'_, '_> {
     }
 }
 
-/// Puts the widgets of `out` in `parent` in their order. OpenTUI paints siblings of one z-index in the order they
-/// were attached, not by their index (`paintLessThan` in its `scene.zig`), and a move within a parent keeps that
-/// order. So a widget is never inserted before a sibling: from the first child out of place on, every child is
-/// attached again, in order, and the children paint as a fresh mount's do where they overlap.
+/// Puts the widgets of `out` in `parent` in their order, moving only those out of place. OpenTUI paints and hit-tests
+/// siblings of one z-index in child order, so they paint as a fresh mount's do where they overlap. The parent's other
+/// children are the old ones that go after the pass; they are stepped over.
 fn place(parent: &View, out: &[Mounted], reused: &[bool]) {
     let widgets: Vec<(&AnyWidget, bool)> = out
         .iter()
@@ -1024,24 +1023,22 @@ fn place(parent: &View, out: &[Mounted], reused: &[bool]) {
         .filter_map(|(node, reused)| node.widget.as_ref().map(|widget| (widget, *reused)))
         .collect();
     let wanted: HashSet<u32> = widgets.iter().map(|(widget, _)| widget.id()).collect();
-    let present: Vec<u32> = parent.children().iter().map(Widget::id).filter(|id| wanted.contains(id)).collect();
-    let first = widgets
-        .iter()
-        .zip(&present)
-        .position(|((widget, _), id)| widget.id() != *id)
-        .unwrap_or(present.len().min(widgets.len()));
-    let here: HashSet<u32> = present[first.min(present.len())..].iter().copied().collect();
-    // Detached last first, each from the end of the parent's list.
-    for (widget, _) in widgets[first..].iter().rev() {
-        if here.contains(&widget.id()) {
-            widget.detach();
+    let mut children: Vec<u32> = parent.children().iter().map(Widget::id).collect();
+    let mut at = 0;
+    for (widget, reused) in widgets {
+        while children.get(at).is_some_and(|id| !wanted.contains(id)) {
+            at += 1;
         }
-    }
-    for (widget, reused) in &widgets[first..] {
-        parent.add(*widget);
-        if *reused {
-            count(|work| work.moved += 1);
+        if children.get(at) != Some(&widget.id()) {
+            // Not yet placed, so it is after `at` or in another parent; OpenTUI's index counts the other children.
+            children.retain(|id| *id != widget.id());
+            children.insert(at, widget.id());
+            parent.insert(at, widget);
+            if reused {
+                count(|work| work.moved += 1);
+            }
         }
+        at += 1;
     }
 }
 

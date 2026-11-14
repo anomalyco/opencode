@@ -909,9 +909,9 @@ fn a_revision_touches_what_changed_at_any_size() {
 }
 
 // Expected (`work`, a prepend and a reparent; bigboi's 5 and 9): a card put before the others, written out or kept,
-// builds that card and moves each other card once, at 40 cards and at 410; a box whose own layout changes is built
-// again alone and its cards move into it; a card written out under a new box builds that box and moves the card, the
-// same as when it is kept there.
+// builds that card and moves no other, at 40 cards and at 410, and one taken out moves none; a box whose own layout
+// changes is built again alone and its cards move into it; a card written out under a new box builds that box and
+// moves the card, the same as when it is kept there.
 #[test]
 fn a_prepend_or_a_reparent_moves_what_it_must() {
     for (files, keep) in [(40, false), (40, true), (410, false), (410, true)] {
@@ -926,11 +926,18 @@ fn a_prepend_or_a_reparent_moves_what_it_must() {
         let before = reconcile::work();
         apply(&host, &mut tree, &parent, &prepended).unwrap();
         let done = reconcile::work().since(before);
-        assert_eq!(
-            (done.created, done.removed, done.set, done.moved),
-            (1, 0, 0, files as u64),
-            "{files} {keep}: {done:?}"
-        );
+        assert_eq!((done.created, done.removed, done.set, done.moved), (1, 0, 0, 0), "{files} {keep}: {done:?}");
+        let want = fresh(&expand(&prepended, &cards(files, &[], false)).unwrap(), 0, &|_| None).capture;
+        assert_eq!(host.app.render(), want, "{files} {keep}");
+        if let v2::Node::Box { children, .. } = &mut prepended[0] {
+            children.remove(4);
+        }
+        let before = reconcile::work();
+        apply(&host, &mut tree, &parent, &prepended).unwrap();
+        let done = reconcile::work().since(before);
+        assert_eq!((done.created, done.removed, done.set, done.moved), (0, 5, 0, 0), "{files} {keep}: {done:?}");
+        let want = fresh(&expand(&prepended, &cards(files, &[], false)).unwrap(), 0, &|_| None).capture;
+        assert_eq!(host.app.render(), want, "{files} {keep}");
     }
     // The column's own layout changes: it is built again alone, and its 20 cards move into it.
     {
@@ -974,12 +981,11 @@ fn a_prepend_or_a_reparent_moves_what_it_must() {
     }
 }
 
-// Expected (`work`, `Keep`): a subtree under a keep costs nothing inside it. A card added after the kept ones builds
-// that card and moves nothing; one added before them moves each kept card once, since OpenTUI paints siblings in the
-// order they were attached and the kept ones must paint after it.
+// Expected (`work`, `Keep`): a subtree under a keep costs nothing inside it. A card added after the kept ones or before
+// them builds that card and moves nothing.
 #[test]
 fn a_kept_subtree_is_not_touched() {
-    for (at, moved) in [(20, 0), (0, 20)] {
+    for at in [20, 0] {
         let host = host(0);
         let parent = root(&host);
         let mut tree = Tree::default();
@@ -991,7 +997,7 @@ fn a_kept_subtree_is_not_touched() {
         }
         apply(&host, &mut tree, &parent, &shifted).unwrap();
         let done = reconcile::work().since(before);
-        assert_eq!(done, Work { created: 1, kept: 20, moved, ..Work::default() }, "{done:?}");
+        assert_eq!(done, Work { created: 1, kept: 20, ..Work::default() }, "{done:?}");
         assert_eq!(host.app.render(), fresh(&expand(&shifted, &cards(20, &[], false)).unwrap(), 0, &|_| None).capture);
     }
 }
