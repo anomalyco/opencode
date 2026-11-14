@@ -1,6 +1,6 @@
 export * as SessionRunnerLLM from "./llm.js"
 
-import { Message } from "@opencode/ai/effect"
+import { applySecretShield, isSecretShieldMode, Message, type SecretShieldMode } from "@opencode/ai/effect"
 import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
@@ -32,7 +32,7 @@ import { SessionStep } from "./step.js"
 import { PersistentPty } from "../../persistent-pty/index.js"
 import { ToolOutput } from "../../tool-output.js"
 import { Plugin } from "../../plugin.js"
-import { PluginHooks } from "../../plugin/hooks.js"
+import { Config } from "../../config.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
 const CONTINUE_AFTER_OUTPUT_LIMIT =
@@ -54,6 +54,7 @@ const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const jobs = yield* Job.Service
     const title = yield* SessionTitle.Service
+    const config = yield* Config.Service
     const steps = yield* SessionStep.make
     const pty = yield* PersistentPty.Service
     // Title generation starts once input is visible and must not delay model execution.
@@ -292,6 +293,31 @@ const layer = Layer.effect(
               executeTool: prepared.executeTool,
             })),
           )
+        const shield = applySecretShield(prepared.request, yield* resolveShieldMode())
+        if (shield._tag === "blocked") {
+          const msg = shield.report.error ?? `detected ${shield.report.detected} credential(s), delivery blocked`
+          yield* bus.publish(SessionEvent.Step.Started, {
+            sessionID,
+            assistantMessageID,
+            agent: loaded.agent.id,
+            model: loaded.model.ref,
+            started: Date.now(),
+          })
+          yield* bus.publish(SessionEvent.Step.Failed, {
+            sessionID,
+            assistantMessageID,
+            error: {
+              type: "secret-shield.blocked",
+              message: `Secret Shield: ${msg}. Set experimental.secret_shield to "warn" or "off", or unset OPENCODE_SECRET_SHIELD, to continue.`,
+            },
+          })
+          return false
+        }
+        if (shield.report.detected > 0)
+          yield* Effect.logWarning(
+            `Secret Shield [${shield.report.mode}]: ${shield.report.detected} credential(s) detected`,
+          )
+        const shieldedPrepared = shield.request === prepared.request ? prepared : { ...prepared, request: shield.request }
         const outcome = yield* steps.attempt({
           isLocationClosed: lifecycle.isClosed,
           interruption,
@@ -301,9 +327,9 @@ const layer = Layer.effect(
           agent: loaded.agent.id,
           model: loaded.model,
           prepared: {
-            ...prepared,
+            ...shieldedPrepared,
             // A tool call can arrive during a reload; its permission check reads the session's agent.
-            executeTool: (call) => plugins.awaitActivation.pipe(Effect.andThen(prepared.executeTool(call))),
+            executeTool: (call) => plugins.awaitActivation.pipe(Effect.andThen(shieldedPrepared.executeTool(call))),
           },
           retryAttempt,
           retry: (cause, error, proposed) =>
@@ -466,5 +492,6 @@ export const node = makeLocationNode({
     PersistentPty.node,
     ToolOutput.node,
     Database.node,
+    Config.node,
   ],
 })
