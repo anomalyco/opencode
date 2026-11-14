@@ -16625,6 +16625,33 @@
               ]
             }
           },
+          "sandbox": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "mode": {
+                "$ref": "#/components/schemas/Config.Sandbox.Mode"
+              },
+              "network": {
+                "$ref": "#/components/schemas/Config.Sandbox.Network"
+              },
+              "writable_roots": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "readable_roots": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
           "worktree": {
             "$ref": "#/components/schemas/Config.Worktree"
           },
@@ -17257,6 +17284,14 @@
         },
         "required": ["path"],
         "additionalProperties": false
+      },
+      "Config.Sandbox.Mode": {
+        "type": "string",
+        "enum": ["read-only", "workspace-write"]
+      },
+      "Config.Sandbox.Network": {
+        "type": "string",
+        "enum": ["deny", "allow"]
       },
       "Config.WarmingEncoded": {
         "type": "object",

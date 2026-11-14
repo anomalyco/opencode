@@ -86,6 +86,49 @@ describe("ConfigNormalize", () => {
     ])
   })
 
+  test("keeps sandbox config through normalization and reports invalid values", () => {
+    const sandbox = { enabled: true, mode: "workspace-write", network: "deny" }
+    const result = normalized({ sandbox })
+    expect(result.diagnostics).toEqual([])
+    expect(result.encoded.sandbox).toEqual(sandbox)
+    expect(Schema.decodeUnknownSync(Info)(result.encoded).sandbox).toMatchObject(sandbox)
+
+    const roots = { enabled: true, writable_roots: ["/data/a"], readable_roots: ["/opt/r"] }
+    expect(normalized({ sandbox: roots }).encoded.sandbox).toEqual(roots)
+    // Bad roots never turn the sandbox off, and are dropped rather than trusted.
+    const badRoots = normalized({ sandbox: { enabled: true, writable_roots: "/etc" } })
+    expect(badRoots.encoded.sandbox).toEqual({ enabled: true, mode: "read-only", network: "deny" })
+    expect(badRoots.diagnostics.map((diagnostic) => diagnostic.kind)).toContain("invalid")
+
+    // Valid roots survive an unrelated invalid field in the same block.
+    const mixed = normalized({
+      sandbox: { enabled: true, writable_roots: ["/data/a"], readable_roots: ["/opt/r"], network: "sometimes" },
+    })
+    expect(mixed.encoded.sandbox).toEqual({
+      enabled: true,
+      mode: "read-only",
+      network: "deny",
+      writable_roots: ["/data/a"],
+      readable_roots: ["/opt/r"],
+    })
+    expect(mixed.diagnostics.map((diagnostic) => diagnostic.kind)).toContain("invalid")
+
+    // An invalid block fails closed: it is reported, but the sandbox stays enabled with the strictest values.
+    const invalid = normalized({
+      sandbox: { enabled: false, mode: "read-only", network: "sometimes" },
+      shell: "/bin/sh",
+    })
+    expect(invalid.encoded.sandbox).toEqual({ enabled: true, mode: "read-only", network: "deny" })
+    expect(invalid.encoded.shell).toBe("/bin/sh")
+    expect(invalid.diagnostics.map((diagnostic) => diagnostic.kind)).toContain("invalid")
+
+    for (const bad of ["on", true, [], null, { enabled: "yes" }]) {
+      const result = normalized({ sandbox: bad })
+      expect(result.encoded.sandbox).toMatchObject({ enabled: true, network: "deny" })
+      expect(result.diagnostics.map((diagnostic) => diagnostic.kind)).toContain("invalid")
+    }
+  })
+
   test("rejects every non-object root with one root diagnostic", () => {
     for (const input of [null, [], "config", true, 1]) {
       expect(ConfigNormalize.normalize(input)).toEqual({

@@ -478,6 +478,71 @@ context.
 
 See the [references guide](/references) for shorthand, visibility, and path resolution.
 
+### Shell sandbox
+
+Run the agent's shell commands inside an OS-level sandbox. It is off by default.
+
+```jsonc
+{
+  "sandbox": {
+    "enabled": true,
+    "mode": "workspace-write",
+    "network": "deny",
+  },
+}
+```
+
+- `enabled`: turn the sandbox on. Linux uses [bubblewrap](https://github.com/containers/bubblewrap) (`bwrap`) and
+  macOS uses `sandbox-exec`. Windows has no backend.
+- `mode`: `"workspace-write"` (default) mounts the filesystem read-only and lets the command write only to the
+  project directory and temporary files. `"read-only"` allows no writes outside a private scratch `/tmp` on Linux,
+  and none at all on macOS.
+- `network`: `"deny"` (default) cuts off all network access. `"allow"` shares the host network.
+- `writable_roots`: extra directories a `"workspace-write"` sandbox may write to. Relative paths resolve against the
+  project. The config files `opencode.json`, `opencode.jsonc` and `.opencode` stay read-only inside them too.
+- `readable_roots`: extra directories mounted read-only. Relative paths resolve against the project. On macOS the
+  whole filesystem is already readable, so this has no effect there.
+
+Sandbox settings merge field by field across config layers, and the security settings only tighten: once any layer
+enables the sandbox, selects `"read-only"`, or denies the network, a later layer cannot loosen it. A project file
+that sets only `network` therefore cannot drop `enabled` from a lower layer. An invalid `sandbox` block is reported
+and keeps the sandbox enabled with the strictest values.
+
+Existing regular `opencode.json`, `opencode.jsonc` and `.opencode` paths in the workspace are bound read-only, so a
+confined command cannot rewrite, replace or delete them. A symlinked config path is not bound, because bubblewrap
+refuses to mount on a symlink destination; the link stays ordinary workspace content. A config file that does not
+exist is not created by the sandbox itself.
+
+Sandbox settings are read once per workspace, before its first command runs, and stay fixed for the life of the
+process; change them by restarting. That pinning is what stops a confined command from changing its own sandbox: even
+if it writes an `opencode.json` or `.opencode` directory inside the workspace, the running process keeps the policy it
+started with, so it cannot grant itself network access or extra writable roots on the next command. A file written by
+a command is still loaded by the next process, so treat a project's config as trusted input and review it before
+restarting.
+
+`network: "allow"` shares the host network while the whole filesystem stays readable, so anything the command can
+read, including credentials in your home directory, can be sent out. Keep the network denied unless a task needs it.
+The macOS profile is deny-default, but it permits process execution, Mach lookups and shared memory so ordinary
+tools run; only file writes and the network are restricted.
+
+An enabled sandbox fails closed. If `bwrap` or `sandbox-exec` is missing, the platform has no backend, or the
+workspace is remote, the command does not run, and the error says why. Install the backend or set
+`sandbox.enabled` to `false`. Commands never fall back to running unconfined.
+
+The sandbox applies to the `shell` tool, not to other tools, plugins or MCP servers. Because commands cannot reach
+the network or write outside the project by default, tools that need either (package installs, writes to your home
+directory, or `git` operations that touch files outside the project) fail inside it.
+
+When a command cannot work in the sandbox, the model can set `sandbox: false` on the `shell` tool call. That
+needs the separate `shell_unsandboxed` permission, so approving `shell` commands never approves leaving the
+sandbox. It asks by default. A blanket `"*"` allow rule also covers it, so deny it explicitly where that matters:
+
+```jsonc
+{
+  "permissions": [{ "action": "shell_unsandboxed", "resource": "*", "effect": "deny" }],
+}
+```
+
 ### Worktrees
 
 Set the parent directory for new local worktrees. OpenCode appends the requested or generated worktree name.

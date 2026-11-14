@@ -29,6 +29,7 @@ import { Location } from "./location.js"
 import { Global } from "@opencode/util/global"
 import { PersistentPty } from "./persistent-pty.js"
 import { ShellSelect } from "./shell/select.js"
+import { Sandbox } from "./sandbox.js"
 import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import { PluginHooks } from "./plugin/hooks.js"
 import { SessionEnvironment } from "./session/environment.js"
@@ -69,6 +70,8 @@ type CreateInput = Shell.CreateInput & {
   // A call waits on the command. A server that takes the command over moves it to the background, which clears
   // its timeout, so its deadline is not kept for a restart.
   waited?: boolean
+  // Runs outside the OS sandbox. The caller must already hold the `shell_unsandboxed` permission for it.
+  unsandboxed?: boolean
 }
 
 // What a server needs to take a daemon-run command back after a restart, kept in the daemon's metadata.
@@ -246,6 +249,8 @@ interface Runs {
   /** Fails with `UnavailableError` only when the daemon could not be reached or started: spawning instead is safe. */
   readonly create: (input: {
     readonly info: Info
+    // What to execute, which is the sandbox's backend when the shell runs confined.
+    readonly program: string
     readonly args: readonly string[]
     readonly env: Readonly<Record<string, string>>
     readonly timeout: number
@@ -459,7 +464,7 @@ const daemonLayer = Layer.effect(
           done: Deferred.makeUnsafe<Info, NotFoundError>(),
         }
         const created = yield* pty.createPipe({
-          program: input.info.shell,
+          program: input.program,
           args: input.args,
           cwd: input.info.cwd,
           env: input.env,
@@ -903,7 +908,25 @@ const layer = () =>
         if (location.workspaceID === undefined) invocation.cwd = path.resolve(location.directory, invocation.cwd)
 
         const id = Shell.ID.ascending()
-        const args = ShellSelect.args(invocation.shell, invocation.command)
+        const shellArgs = ShellSelect.args(invocation.shell, invocation.command)
+        // Pinned per workspace on first use, so config written by a confined command cannot change this process's
+        // policy. Fails closed: an enabled sandbox that cannot confine the command stops it from running at all.
+        const entries = yield* config.entries()
+        const policy = Sandbox.policy(entries, location.directory)
+        const confined =
+          input.unsandboxed || !policy
+            ? undefined
+            : Sandbox.wrap({
+                policy,
+                command: { program: invocation.shell, args: shellArgs },
+                cwd: invocation.cwd,
+                workspace: location.directory,
+                remote: location.workspaceID !== undefined,
+              })
+        if (confined instanceof Sandbox.UnavailableError)
+          return yield* new AppProcess.AppProcessError({ command: invocation.command, cause: confined })
+        const program = confined?.program ?? invocation.shell
+        const args = confined?.args ?? shellArgs
         const file = path.join(outputDir, `${id}.out`)
 
         const info: Info = {
@@ -922,6 +945,7 @@ const layer = () =>
           const created = yield* runs
             .create({
               info,
+              program,
               args,
               // The daemon replaces the environment, so variables removed by hooks stay removed, like the spawner.
               env: Object.fromEntries(
@@ -955,7 +979,7 @@ const layer = () =>
             Effect.gen(function* () {
               const handle = yield* environment.spawner
                 .spawn(
-                  ChildProcess.make(invocation.shell, args, {
+                  ChildProcess.make(program, args, {
                     cwd: invocation.cwd,
                     env: invocation.env,
                     stdin: "ignore",

@@ -167,6 +167,31 @@ describe("Agent", () => {
     }),
   )
 
+  it.effect("every shipped agent asks or denies shell_unsandboxed, never allows it", () =>
+    Effect.gen(function* () {
+      const agent = yield* Agent.Service
+      yield* AgentPlugin.Plugin.effect(host({ agent: agentHost(agent) }))
+
+      const effects: Record<string, string> = {}
+      for (const item of yield* agent.list())
+        effects[String(item.id)] = Permission.evaluate("shell_unsandboxed", "rm -rf x", item.permissions).effect
+      expect(effects).toEqual({
+        build: "ask",
+        compaction: "ask",
+        explore: "deny",
+        general: "ask",
+        summary: "deny",
+        title: "deny",
+      })
+      // A custom agent starts from the same base policy.
+      const custom = Agent.ID.make("custom")
+      yield* agent.transform((editor) => editor.update(custom, () => {}))
+      expect(Permission.evaluate("shell_unsandboxed", "x", (yield* agent.get(custom))?.permissions ?? []).effect).toBe(
+        "ask",
+      )
+    }),
+  )
+
   it.effect("allows external directories without opting built-in agents into bash", () =>
     Effect.gen(function* () {
       const agent = yield* Agent.Service

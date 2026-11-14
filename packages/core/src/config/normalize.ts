@@ -16,6 +16,7 @@ import { ConfigPlugin } from "@opencode/schema/config/plugin"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { ConfigReference } from "@opencode/schema/config/reference"
+import { ConfigSandbox } from "@opencode/schema/config/sandbox"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { Permission } from "@opencode/schema/permission"
 import { ConfigAgentV1 } from "../v1/config/agent.js"
@@ -197,6 +198,7 @@ export function normalize(input: unknown): Result {
   normalizeWatcher(input, encoded, diagnostics)
   normalizeFormatter(input, encoded, diagnostics)
   normalizeLsp(input, encoded, diagnostics)
+  normalizeSandbox(input, encoded, diagnostics)
 
   const model = own(input, "model")
     ? decodeValue(ConfigModel.Selection, input.model, ["model"], diagnostics)
@@ -229,6 +231,32 @@ export function normalize(input: unknown): Result {
   if (instructions.length || Array.isArray(input.instructions)) encoded.instructions = instructions
 
   return { type: "normalized", encoded, diagnostics }
+}
+
+// A malformed sandbox block must not switch the sandbox off: it is a security control, so unlike other settings it is
+// never dropped. Invalid input resolves to an enabled sandbox, keeping the fields that are valid and taking the
+// strictest value for the rest.
+function normalizeSandbox(input: Record<string, unknown>, encoded: Record<string, unknown>, diagnostics: Diagnostic[]) {
+  if (!own(input, "sandbox")) return
+  const value = decodeEncoded(Info.fields.sandbox, input.sandbox, ["sandbox"], [])
+  if (value !== undefined) {
+    overlay(encoded, "sandbox", value, ["sandbox"], diagnostics)
+    return
+  }
+  invalid(["sandbox"], diagnostics)
+  const raw = isRecord(input.sandbox) ? input.sandbox : {}
+  const mode = decodeEncoded(ConfigSandbox.Mode, raw.mode, ["sandbox", "mode"], [])
+  const network = decodeEncoded(ConfigSandbox.Network, raw.network, ["sandbox", "network"], [])
+  // Roots only widen what the sandbox can reach, so each is kept when it decodes on its own.
+  const writable = decodeEncoded(ConfigSandbox.Roots, raw.writable_roots, ["sandbox", "writable_roots"], [])
+  const readable = decodeEncoded(ConfigSandbox.Roots, raw.readable_roots, ["sandbox", "readable_roots"], [])
+  encoded.sandbox = {
+    enabled: true,
+    mode: mode ?? "read-only",
+    network: network ?? "deny",
+    ...(writable === undefined ? {} : { writable_roots: writable }),
+    ...(readable === undefined ? {} : { readable_roots: readable }),
+  }
 }
 
 function normalizeSkills(input: Record<string, unknown>, encoded: Record<string, unknown>, diagnostics: Diagnostic[]) {

@@ -85,6 +85,22 @@ describe("Config.Entry", () => {
     expect(() => decode({ worktree: { directory: " " } })).toThrow()
     expect(() => decode({ worktree: { directory: false } })).toThrow()
   })
+  test("validates sandbox config and omits it when absent", () => {
+    const decode = Schema.decodeUnknownSync(Config.Info)
+    const input = { sandbox: { enabled: true, mode: "read-only", network: "allow" } } as const
+    expect(Schema.encodeSync(Config.Info)(decode(input))).toEqual(input)
+    expect(Schema.encodeSync(Config.Info)(decode({ sandbox: {} }))).toEqual({ sandbox: {} })
+    expect(Schema.encodeSync(Config.Info)(new Config.Info({ sandbox: undefined }))).not.toHaveProperty("sandbox")
+    expect(() => decode({ sandbox: { enabled: "yes" } })).toThrow()
+    expect(() => decode({ sandbox: { mode: "read-write" } })).toThrow()
+    expect(() => decode({ sandbox: { network: true } })).toThrow()
+    expect(() => decode({ sandbox: true })).toThrow()
+    const roots = { sandbox: { enabled: true, writable_roots: ["/a"], readable_roots: ["/b"] } }
+    expect(Schema.encodeSync(Config.Info)(decode(roots))).toEqual(roots)
+    expect(() => decode({ sandbox: { writable_roots: "/a" } })).toThrow()
+    expect(() => decode({ sandbox: { readable_roots: [1] } })).toThrow()
+  })
+
   test("round-trips canonical provider IDs without changing config keys", () => {
     const input = { providers: { "console-anthropic": { canonical: "anthropic" } } }
     const decoded = Schema.decodeUnknownSync(Config.Info)(input)

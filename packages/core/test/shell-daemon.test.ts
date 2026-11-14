@@ -7,10 +7,13 @@ import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Config } from "@opencode/core/config"
+import { Document, Info } from "@opencode/schema/config"
+import { ConfigSandbox } from "@opencode/schema/config/sandbox"
 import { Environment } from "@opencode/core/environment/index"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Shell } from "@opencode/core/shell"
+import { Sandbox } from "@opencode/core/sandbox"
 import { Bus } from "@opencode/core/bus"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -550,5 +553,147 @@ describe("Shell on a real process daemon", () => {
         )
       }),
     { timeout: 20_000 },
+  )
+})
+
+// Only Linux resolves `bwrap` from PATH; the other backends are covered by sandbox.test.ts.
+const linuxOnly = process.platform === "linux" ? it.live : it.live.skip
+
+const sandboxConfig = (sandbox: ConstructorParameters<typeof ConfigSandbox.Info>[0]) => [
+  new Document({ type: "document", info: new Info({ sandbox: new ConfigSandbox.Info(sandbox) }) }),
+]
+
+// Runs with PATH holding only the given executables, so a test controls whether the backend exists.
+const withPath = (executables: string[]) =>
+  Effect.gen(function* () {
+    const bin = (yield* tmpdirScoped()).path
+    yield* Effect.promise(() =>
+      Promise.all(
+        executables.map(async (name) => {
+          await writeFile(path.join(bin, name), "#!/bin/sh\nexit 0\n", { mode: 0o755 })
+        }),
+      ),
+    )
+    const previous = process.env.PATH
+    process.env.PATH = bin
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        if (previous === undefined) delete process.env.PATH
+        else process.env.PATH = previous
+      }),
+    )
+    return bin
+  })
+
+describe("Shell with the OS sandbox", () => {
+  linuxOnly("wraps the command in bwrap with a read-only root, workspace-only writes and no network", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      const bin = yield* withPath(["bwrap"])
+      yield* env.withShell(
+        env.directory,
+        (shell) =>
+          Effect.gen(function* () {
+            const info = yield* shell.create({ shell: "/bin/sh", command: "echo hi", timeout: 60_000 })
+            const [request] = env.created()
+            const workspace = realpathSync(env.directory)
+            expect(request?.program).toBe(path.join(bin, "bwrap"))
+            expect(request?.args).toEqual([
+              "--die-with-parent",
+              "--new-session",
+              "--unshare-all",
+              "--ro-bind",
+              "/",
+              "/",
+              "--dev",
+              "/dev",
+              "--proc",
+              "/proc",
+              "--tmpfs",
+              "/tmp",
+              "--bind",
+              workspace,
+              workspace,
+              "--chdir",
+              env.directory,
+              "--",
+              "/bin/sh",
+              "-c",
+              "echo hi",
+            ])
+            // The caller still sees the command it asked for, not the wrapper.
+            expect(info.command).toBe("echo hi")
+            expect(info.shell).toBe("/bin/sh")
+          }),
+        sandboxConfig({ enabled: true }),
+      )
+    }),
+  )
+
+  linuxOnly("shares the network only when sandbox.network is allow", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      yield* withPath(["bwrap"])
+      yield* env.withShell(
+        env.directory,
+        (shell) => shell.create({ shell: "/bin/sh", command: "true" }),
+        sandboxConfig({ enabled: true, network: "deny" }),
+      )
+      // The policy is pinned per workspace on first use; this test deliberately reconfigures the same workspace.
+      Sandbox.resetPolicies()
+      yield* env.withShell(
+        env.directory,
+        (shell) => shell.create({ shell: "/bin/sh", command: "true" }),
+        sandboxConfig({ enabled: true, network: "allow" }),
+      )
+      const [denied, allowed] = env.created()
+      expect(denied?.args).not.toContain("--share-net")
+      expect(allowed?.args).toContain("--share-net")
+      expect(allowed?.args).toContain("--unshare-all")
+    }),
+  )
+
+  linuxOnly("fails closed when bwrap is unavailable instead of running the command unconfined", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      yield* withPath([])
+      yield* env.withShell(
+        env.directory,
+        (shell) =>
+          Effect.gen(function* () {
+            const error = yield* Effect.flip(shell.create({ shell: "/bin/sh", command: "touch escaped" }))
+            expect(error).toBeInstanceOf(AppProcess.AppProcessError)
+            expect(error.message).toContain("Sandbox is enabled but unavailable")
+            expect(error.message).toContain("bwrap was not found")
+            expect(env.created()).toEqual([])
+            expect(env.spawned()).toBe(0)
+            expect(yield* shell.list()).toEqual([])
+          }),
+        sandboxConfig({ enabled: true }),
+      )
+    }),
+  )
+
+  linuxOnly("runs an explicit unsandboxed request directly, and leaves a disabled sandbox alone", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      yield* withPath([])
+      yield* env.withShell(
+        env.directory,
+        (shell) => shell.create({ shell: "/bin/sh", command: "echo out", unsandboxed: true }),
+        sandboxConfig({ enabled: true }),
+      )
+      // A pinned policy would otherwise keep this workspace sandboxed for the second call.
+      Sandbox.resetPolicies()
+      yield* env.withShell(
+        env.directory,
+        (shell) => shell.create({ shell: "/bin/sh", command: "echo off" }),
+        sandboxConfig({ enabled: false, mode: "read-only" }),
+      )
+      expect(env.created().map((request) => [request.program, request.args])).toEqual([
+        ["/bin/sh", ["-c", "echo out"]],
+        ["/bin/sh", ["-c", "echo off"]],
+      ])
+    }),
   )
 })
