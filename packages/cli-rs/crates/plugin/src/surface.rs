@@ -286,8 +286,8 @@ pub(crate) struct Surface {
     /// What the content the mount holds costs, read once a handle.
     measures: crate::reconcile::Measures,
     /// Each image source's picture, admitted and decoded once however many nodes show it, and the decoded bytes it
-    /// charges to the plugin.
-    images: RefCell<HashMap<ImageKey, (Picture, u64)>>,
+    /// charges to the plugin, or the job that holds them until it is done.
+    images: RefCell<HashMap<ImageKey, (Picture, Charge)>>,
     /// A panel or an overlay before its first layout: it draws first as that layout gives it its room, so a change
     /// before it draws nothing (it would draw at a size and a showing the panel does not have yet).
     pending: Cell<bool>,
@@ -296,6 +296,18 @@ pub(crate) struct Surface {
     holder: RefCell<Option<Rc<Owner>>>,
     /// Times the host's own work for the mount's nodes, as the plugin's host time.
     host_time: HostTime,
+}
+
+/// The decoded bytes of an image source: held by the mount, or by the job decoding it, by its number.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Charge {
+    Held(u64),
+    Job(u64),
+}
+
+thread_local! {
+    /// The image jobs started on this thread, which number the next.
+    static JOB: Cell<u64> = const { Cell::new(0) };
 }
 
 /// Runs the host's own work for a plugin's nodes, timed as its host time (synthesis 4.4).
@@ -641,16 +653,23 @@ impl Surface {
         });
     }
 
-    /// Drops every picture the mount holds and gives back what they charged.
+    /// Drops every picture the mount holds and gives back what they charged; a job gives back its own.
     fn release_images(&self) {
-        let charged: u64 = self.images.borrow_mut().drain().map(|(_, (_, charged))| charged).sum();
-        limits::release(&self.plugin, limits::Kind::Images, charged);
+        let held = self.images.borrow_mut().drain().map(|(_, (_, charge))| charge).collect::<Vec<_>>();
+        held.into_iter().for_each(|charge| self.release_charge(charge));
     }
 
-    /// Drops the picture of `key`, if the mount holds one, and gives back what it charged.
+    /// Drops the picture of `key`, if the mount holds one, and gives back what it charged; a job gives back its own.
     fn release_image(&self, key: ImageKey) {
-        if let Some((_, charged)) = self.images.borrow_mut().remove(&key) {
-            limits::release(&self.plugin, limits::Kind::Images, charged);
+        let held = self.images.borrow_mut().remove(&key);
+        if let Some((_, charge)) = held {
+            self.release_charge(charge);
+        }
+    }
+
+    fn release_charge(&self, charge: Charge) {
+        if let Charge::Held(bytes) = charge {
+            limits::release(&self.plugin, limits::Kind::Images, bytes);
         }
     }
 
@@ -928,45 +947,58 @@ impl Surface {
         f(&env, tree)
     }
 
-    /// Admits the image of `bytes` under `key` by its header: within the bytes and pixels of one image, and the decoded
-    /// bytes the plugin and all plugins may hold, which it charges. An admitted image decodes on a worker; bytes that
-    /// are no image show nothing, as before.
+    /// Admits the image of `bytes` under `key` by its header: within the bytes and the width and height of one image,
+    /// and the decoded bytes the plugin and all plugins may hold, which its job reserves. An admitted image decodes on
+    /// a worker; bytes that are no image show nothing, as before.
     fn admit_image(&self, app: &App, key: ImageKey, bytes: Arc<[u8]>) -> Picture {
         let Some((width, height)) = crate::image::size(&bytes) else {
             log::warn!("an image node's bytes are not a PNG, GIF, JPEG or WebP image");
-            self.images.borrow_mut().insert(key, (Picture::Pending, 0));
+            self.images.borrow_mut().insert(key, (Picture::Pending, Charge::Held(0)));
             return Picture::Pending;
         };
         let limits = limits::get();
-        let pixels = u64::from(width) * u64::from(height);
-        let decoded = pixels.saturating_mul(4);
+        let decoded = (u64::from(width) * u64::from(height)).saturating_mul(4);
         let admitted = bytes.len() as u64 <= limits.image_bytes
-            && pixels <= limits.image_pixels
+            && u64::from(width.max(height)) <= limits.image_side
             && limits::charge(&self.plugin, limits::Kind::Images, decoded);
         if !admitted {
             log::warn!(
                 "an image node of {width}x{height} pixels in {} bytes is past what the host decodes",
                 bytes.len()
             );
-            self.images.borrow_mut().insert(key, (Picture::Over, 0));
+            self.images.borrow_mut().insert(key, (Picture::Over, Charge::Held(0)));
             return Picture::Over;
         }
-        self.images.borrow_mut().insert(key, (Picture::Pending, decoded));
+        let job = JOB.with(|job| job.replace(job.get() + 1));
+        self.images.borrow_mut().insert(key, (Picture::Pending, Charge::Job(job)));
         crate::reconcile::count_decoded();
-        let decoding = app.runtime().spawn_blocking(move || crate::image::decode(&bytes));
+        let mut reserved = crate::image::Reservation::new(self.plugin.clone(), decoded);
+        let plugin = self.plugin.to_string();
+        let decoding = app.runtime().spawn_blocking(move || {
+            crate::image::wait_held(&plugin);
+            crate::image::decode(&bytes)
+        });
         let weak = self.weak();
         app.spawn(async move { decoding.await.ok().flatten() }, move |cx, pixels| {
             if let Some(mounted) = weak.upgrade() {
-                mounted.decoded(cx.app(), key, pixels);
+                mounted.decoded(cx.app(), key, job, pixels, &mut reserved);
             }
         });
         Picture::Pending
     }
 
-    /// The worker decoded the image of `key`: the host copies its pixels into the app's context, as host time, and
-    /// shows it in every image node of the source. One the mount released meanwhile is dropped.
-    fn decoded(&self, app: &App, key: ImageKey, pixels: Option<crate::image::Pixels>) {
-        if !self.images.borrow().contains_key(&key) {
+    /// Job `job` decoded the image of `key`: the host copies its pixels into the app's context, as host time, shows it
+    /// in every image node of the source, and holds what the job reserved. One the mount released meanwhile, or that
+    /// did not decode, is dropped, and the job gives back what it reserved.
+    fn decoded(
+        &self,
+        app: &App,
+        key: ImageKey,
+        job: u64,
+        pixels: Option<crate::image::Pixels>,
+        reserved: &mut crate::image::Reservation,
+    ) {
+        if self.images.borrow().get(&key).is_none_or(|(_, charge)| *charge != Charge::Job(job)) {
             return;
         }
         let mut image = None;
@@ -980,11 +1012,10 @@ impl Surface {
         });
         let Some(image) = image else {
             log::warn!("an image node's bytes do not decode");
+            self.images.borrow_mut().insert(key, (Picture::Pending, Charge::Held(0)));
             return;
         };
-        if let Some((picture, _)) = self.images.borrow_mut().get_mut(&key) {
-            *picture = Picture::Ready(image.clone());
-        }
+        self.images.borrow_mut().insert(key, (Picture::Ready(image.clone()), Charge::Held(reserved.take())));
         self.state.borrow().tree.each_image(&mut |source, view| {
             if ImageKey::of(source) == Some(key) {
                 view.image(Some(image.clone()));
@@ -1167,7 +1198,7 @@ pub(crate) fn decode(app: &App, bytes: &[u8]) -> Picture {
         return Picture::Pending;
     };
     let limits = limits::get();
-    if bytes.len() as u64 > limits.image_bytes || u64::from(width) * u64::from(height) > limits.image_pixels {
+    if bytes.len() as u64 > limits.image_bytes || u64::from(width.max(height)) > limits.image_side {
         log::warn!("an image node of {width}x{height} pixels in {} bytes is past what the host decodes", bytes.len());
         return Picture::Over;
     }

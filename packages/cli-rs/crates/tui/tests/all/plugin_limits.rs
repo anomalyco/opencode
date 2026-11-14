@@ -160,7 +160,7 @@ fn small() -> Limits {
         text: 200,
         hunks: 3,
         image_bytes: 4096,
-        image_pixels: 16 * 16,
+        image_side: 16,
         plugin_nodes: 1000,
         all_nodes: 2000,
         plugin_content: 300,
@@ -611,9 +611,17 @@ fn images_decode_on_a_worker_within_their_limits() {
             let other = cx.content((*second).clone());
             v2::Node::column(vec![image(v2::Source::Content(one)), image(v2::Source::Content(other)), text("foot")])
         });
-        // One pixel row past the pixels of an image, with room in the plugin's share; two images past its share.
+        // One pixel row past the side of an image, a row of 17 pixels (review bigboi 9), and one byte past an
+        // image's encoded bytes, each with room in the plugin's share; two images past its share.
         let roomy = Limits { plugin_images: 1 << 20, ..base };
-        let cases = [("pixels", picture(png(16, 17, gradient)), 0, roomy), ("share", two, 1, base)];
+        let encoded = png(16, 16, gradient);
+        let one_short = Limits { image_bytes: encoded.len() as u64 - 1, ..roomy };
+        let cases = [
+            ("pixels", picture(png(16, 17, gradient)), 0, roomy),
+            ("a row", picture(png(17, 1, gradient)), 0, roomy),
+            ("bytes", picture(encoded), 0, one_short),
+            ("share", two, 1, base),
+        ];
         for (name, subject, decodes, case) in cases {
             let _limits = limits::set(case);
             let before = reconcile::work();
@@ -681,7 +689,7 @@ fn probe() {
         text: u64::MAX,
         hunks: u64::MAX,
         image_bytes: u64::MAX,
-        image_pixels: u64::MAX,
+        image_side: u64::MAX,
         plugin_nodes: u64::MAX,
         all_nodes: u64::MAX,
         plugin_content: u64::MAX,
@@ -1052,5 +1060,53 @@ fn a_patch_is_charged_as_the_renderer_draws_it() {
             let name = format!("{carrier:?}, {lines} lines, valid {valid}");
             assert!(frame.cells == twin.cells, "{name}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
         }
+    }
+}
+
+// Expected (fixed row; review bigboi 9): an image's job holds the decoded bytes it reserved until it is done: a mount
+// closed while its worker waits gives nothing back, so a mount opened then has no room for another image; once the
+// worker ends, the plugin holds nothing. A decode that fails gives back what it reserved, so the next image, on
+// another handle, decodes and shows as OpenTUI draws it. On both carriers.
+#[test]
+fn an_image_job_holds_its_bytes_until_it_is_done() {
+    let gradient = |x: u32, y: u32| [(x * 15) as u8, (y * 15) as u8, ((x + y) * 7) as u8, 255];
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        let _limits = limits::set(Limits { plugin_content: 1 << 20, all_content: 1 << 20, ..small() });
+        let hold = opencode_plugin::image::hold(ID);
+        show(&harness, picture(png(16, 16, gradient)));
+        assert_eq!((opencode_plugin::image::jobs(ID), limits::held(ID).images), (1, 1024), "{carrier:?}: a job");
+        harness.tui.navigate(Route::Home);
+        settle(&harness);
+        assert_eq!((opencode_plugin::image::jobs(ID), limits::held(ID).images), (1, 1024), "{carrier:?}: closed");
+        let before = reconcile::work();
+        let frame = show(&harness, picture(png(16, 16, |x, y| gradient(y, x))));
+        assert!(frame.text().contains("⋯ image too large"), "{carrier:?}: another image had room\n{}", frame.text());
+        assert_eq!(reconcile::work().since(before).parses, 0, "{carrier:?}: another decode");
+        drop(hold);
+        let done = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
+        assert!(done, "{carrier:?}: the job never ended");
+        harness.tui.navigate(Route::Home);
+        settle(&harness);
+        assert_eq!(limits::held(ID).images, 0, "{carrier:?}: held after the job ended");
+        // A PNG cut short decodes to nothing; the next, on another handle, has the room it gave back.
+        let mut cut = png(16, 16, gradient);
+        cut.truncate(cut.len() - 40);
+        let good = png(16, 16, |x, y| gradient(y, x));
+        let expected = drawn_in_the_frame(&good);
+        let (cut, good) = (Rc::new(cut), Rc::new(good));
+        PHASE.with(|phase| phase.set(0));
+        show(
+            &harness,
+            subject(move |cx| {
+                let bytes = if PHASE.with(std::cell::Cell::get) == 0 { cut.clone() } else { good.clone() };
+                v2::Node::column(vec![image(v2::Source::Content(cx.content((*bytes).clone()))), text("foot")])
+            }),
+        );
+        let failed = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
+        assert!(failed && limits::held(ID).images == 0, "{carrier:?}: a failed decode kept its bytes");
+        next_phase(&harness);
+        let shown = harness.app.wait_until(Duration::from_secs(10), || corner(&harness.app.render()) == expected);
+        assert!(shown, "{carrier:?}: the next image never showed\n{}", harness.app.render().text());
     }
 }
