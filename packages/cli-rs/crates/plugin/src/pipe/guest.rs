@@ -98,6 +98,7 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
                 loaded: loaded.clone(),
                 js: Cell::new(loaded.seq),
                 handed_over: Cell::new(false),
+                keys: RefCell::new(loaded.manifest.storage.clone()),
                 generation: setup.generation(),
                 failure,
                 revoked: RefCell::default(),
@@ -135,6 +136,9 @@ pub(crate) struct Guest {
     /// A reload of its registrations handed its activation of the JS host to the guest that replaces it, whose end
     /// deactivates it; this one's does not (carbon-2: a flag, not a zeroed `js`, as a second reload reads `js`).
     handed_over: Cell<bool>,
+    /// The storage keys it may read and write: its manifest's, and the ones it declared since (carbon-2: a V2 store
+    /// made after setup declares its key at once, where it waited for a reload and its first writes failed).
+    keys: RefCell<Vec<String>>,
     /// The registry's activation, which owns the dialogs it asks for.
     generation: u64,
     failure: Rc<RefCell<Option<String>>>,
@@ -317,7 +321,7 @@ impl Guest {
             self.fail(format!("{export} asked for {} effects at once, over {EFFECTS}", effects.len()));
             return;
         }
-        let mut ctx = Ctx::new(self.host.clone(), self.id(), self.loaded.manifest.storage.clone());
+        let mut ctx = Ctx::new(self.host.clone(), self.id(), self.keys.borrow().clone());
         // Setup holds nothing of the input, as in process.
         ctx.owners = (export != "setup").then(|| self.owners.clone());
         let results: Vec<serde_json::Value> = effects
@@ -331,6 +335,7 @@ impl Guest {
                 )
             })
             .collect();
+        *self.keys.borrow_mut() = ctx.keys.clone();
         let (effects, _) = ctx.take();
         let weak: Weak<dyn Answers> = Rc::downgrade(self) as Weak<dyn Answers>;
         apply(&self.host, self.id().to_owned(), weak, Some(self.generation), effects);
@@ -458,7 +463,7 @@ impl Guest {
 
     /// The read's value now, and a hash of its JSON, which tells a change without keeping the value.
     fn evaluate(&self, request: &HostRequest) -> (serde_json::Value, u64) {
-        let keys = self.loaded.manifest.storage.clone();
+        let keys = self.keys.borrow().clone();
         let value = super::evaluate(&self.host, self.id(), keys, Some(self.owners.clone()), request);
         let hash = std::hash::Hasher::finish(&Measure::of(&value).hasher);
         (value, hash)

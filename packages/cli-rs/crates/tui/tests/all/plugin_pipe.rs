@@ -2444,3 +2444,35 @@ fn a_hostile_project_loads_nothing_into_the_js_host() {
     assert_ne!(Path::new(seen["cwd"].as_str().unwrap()), project.as_path(), "Bun started in the project");
     assert_eq!(Path::new(seen["directory"].as_str().unwrap()), project.as_path());
 }
+
+// Expected (carbon-5): a fetch whose reply is more than the JS host takes ends with an error, where the plugin's await
+// never ended.
+#[test]
+fn a_fetch_reply_too_large_for_the_js_host_fails() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let log = root.path().join("fetched");
+    let plugin = root.path().join("config/plugins/huge");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let module = format!(
+        "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.huge\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"huge.fetch\", title: \"huge.fetch\" }}, async () => {{\n    const result = await carrier.fetch({{ method: \"GET\", path: \"/api/huge\" }})\n    appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \"\\n\")\n  }})\n}} }}\n"
+    );
+    std::fs::write(plugin.join("tui.ts"), module).unwrap();
+    let big = "x".repeat(1_500_000);
+    let server = support::Fake::new(move |seen| match seen.path.as_str() {
+        "/api/huge" => (200, serde_json::json!({ "data": big })),
+        "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
+        _ => support::not_found(),
+    });
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.huge");
+    pipe.harness.tui.keymap.dispatch("huge.fetch", None);
+    pipe.harness.wait("the fetch ended", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        log.exists()
+    });
+    assert_eq!(std::fs::read_to_string(&log).unwrap(), "Err\n");
+}
