@@ -62,6 +62,68 @@ function replay(events: Event[], from: State = createSessionResolutionState()) {
 
 const types = (effects: readonly SessionResolutionEffect<string>[]) => effects.map((effect) => effect.type)
 
+test("explicit retry starts a fresh metadata attempt and ignores duplicate clicks and stale results", () => {
+  const failed = replay([
+    open("ses_a"),
+    { type: "sync.failed", target: target("ses_a"), attempt: 1, error: new Error("temporary failure") },
+  ])
+
+  const retry = transitionSessionResolution(failed.state, { type: "retry.requested", target: target("ses_a") })
+  expect(retry.state).toEqual({ status: "resolving", target: target("ses_a"), attempt: 2 })
+  expect(retry.effects).toEqual([
+    { type: "sync.transcript", target: target("ses_a") },
+    { type: "sync.metadata", target: target("ses_a"), attempt: 2 },
+    timer(2),
+  ])
+  const duplicate = transitionSessionResolution(retry.state, { type: "retry.requested", target: target("ses_a") })
+  expect(duplicate.state).toBe(retry.state)
+  expect(duplicate.effects).toEqual([])
+
+  const stale = transitionSessionResolution(retry.state, {
+    type: "sync.failed",
+    target: target("ses_a"),
+    attempt: 1,
+    error: new Error("old attempt"),
+  })
+
+  expect(stale.state).toBe(retry.state)
+  expect(stale.effects).toEqual([])
+
+  const resolved = transitionSessionResolution(retry.state, {
+    type: "sync.settled",
+    target: target("ses_a"),
+    attempt: 2,
+    session: info("ses_a"),
+  })
+
+  expect(resolved.state).toMatchObject({ status: "ready", session: info("ses_a") })
+  expect(resolved.effects).toEqual([{ type: "timer.clear" }])
+})
+
+test("retry never replaces a not-found outcome or targets a different server", () => {
+  const missing = replay([
+    open("ses_a"),
+    { type: "sync.failed", target: target("ses_a"), attempt: 1, error: notFound("ses_a") },
+  ])
+
+  const noRetry = transitionSessionResolution(missing.state, { type: "retry.requested", target: target("ses_a") })
+  expect(noRetry.state).toBe(missing.state)
+  expect(noRetry.effects).toEqual([])
+
+  const failed = replay([
+    open("ses_a"),
+    { type: "sync.failed", target: target("ses_a"), attempt: 1, error: new Error("temporary failure") },
+  ])
+
+  const otherServer = transitionSessionResolution(failed.state, {
+    type: "retry.requested",
+    target: target("ses_a", "server-b"),
+  })
+
+  expect(otherServer.state).toBe(failed.state)
+  expect(otherServer.effects).toEqual([])
+})
+
 // The SDK rejects with the decoded response body.
 const notFound = (sessionID: string) =>
   JSON.parse(`{"_tag":"SessionNotFoundError","sessionID":"${sessionID}","message":"Session not found"}`)

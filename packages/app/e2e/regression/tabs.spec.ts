@@ -15,7 +15,7 @@ import {
   sessionHref,
 } from "../utils/app"
 import { openFileLauncher, reviewTabs } from "../utils/side-panel"
-import { mockServers } from "../utils/mock-server"
+import { currentSession, mockServers } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { fileNode, mockWorkspace, openSession } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
@@ -28,6 +28,48 @@ const b = { id: "ses_tab_b", title: "Tab B session" }
 const c = { id: "ses_tab_c", title: "Tab C session" }
 
 test.use({ serviceWorkers: "block" })
+
+test("session metadata failure can be retried without reloading or looping", async ({ page }) => {
+  const target = { id: "ses_metadata_retry", title: "Recovered session" }
+
+  const workspace = await mockWorkspace(page, {
+    name: "MetadataRetry",
+    sessions: [],
+    seed: { tabs: [target.id] },
+  })
+
+  const response = { fail: true, requests: 0 }
+  const metadata = new RegExp(`${SERVER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/api/session/${target.id}(?:\\?|$)`)
+  await page.route(metadata, (route) => {
+    response.requests++
+
+    return route.fulfill(
+      response.fail
+        ? { status: 504, json: { message: "Fixture metadata timeout" } }
+        : { json: { data: currentSession(session({ ...target, directory: workspace.directory })) } },
+    )
+  })
+  await page.goto(sessionHref(target.id))
+  const retry = page.getByRole("button", { name: "Try again", exact: true })
+  await expect(retry).toBeVisible()
+  await expect(page.getByRole("button", { name: "Reload", exact: true })).toBeVisible()
+  const document = await page.locator("html").elementHandle()
+  const before = response.requests
+  const failure = page.waitForResponse(metadata)
+  await retry.press("Enter")
+  await failure
+  await expect.poll(() => response.requests).toBe(before + 1)
+  await expect(retry).toBeVisible()
+  expect(response.requests).toBe(before + 1)
+
+  response.fail = false
+  await retry.click()
+  await expectSessionTitle(page, target.title)
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+  await expect(retry).toHaveCount(0)
+  expect(response.requests).toBe(before + 2)
+  expect(await document?.evaluate((element) => element.isConnected)).toBe(true)
+})
 
 test("recently closed shows ten sessions and searches older closures in close order", async ({ page }) => {
   const sessions = Array.from({ length: 100 }, (_, index) => ({
