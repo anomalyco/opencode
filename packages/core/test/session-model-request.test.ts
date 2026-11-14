@@ -219,16 +219,25 @@ describe("SessionModelRequest.boundImages", () => {
     expect(removed(boundImages([...history, ...Array.from({ length: 4 }, (_, i) => image(`${9 + i}.png`))]))).toBe(8)
   })
 
-  test("keeps every image for Claude Agent, whose Claude Code session already holds them", () => {
-    const messages = Array.from({ length: 9 }, (_, i) =>
-      Message.user({
-        type: "media",
-        media: Media.base64("a".repeat(3 * 1024 * 1024), "image/png"),
-        filename: `${i}.png`,
-      }),
-    )
-    expect(boundImages(messages, "claude-agent")).toBe(messages)
-    expect(boundImages(messages, "anthropic")).not.toBe(messages)
+  test("gives Claude Agent, whose Claude Code session already holds the images, a larger budget", () => {
+    const images = (count: number) =>
+      Array.from({ length: count }, (_, i) =>
+        Message.user({
+          type: "media",
+          media: Media.base64("a".repeat(3 * 1024 * 1024), "image/png"),
+          filename: `${i}.png`,
+        }),
+      )
+    const removed = (messages: ReturnType<typeof boundImages>) =>
+      messages.filter((message) => message.content[0]?.type === "text").length
+
+    // 27 MiB passes the default trigger but not Claude Agent's 96 MiB one.
+    const below = images(9)
+    expect(boundImages(below, "claude-agent")).toBe(below)
+    expect(removed(boundImages(below, "anthropic"))).toBe(4)
+    // 96 MiB still fits; 99 MiB passes the trigger and the oldest twelve go, leaving 63 MiB under the 64 MiB target.
+    expect(removed(boundImages(images(32), "claude-agent"))).toBe(0)
+    expect(removed(boundImages(images(33), "claude-agent"))).toBe(12)
   })
 
   test("replaces images nested in tool results", () => {
