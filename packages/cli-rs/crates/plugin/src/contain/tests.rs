@@ -506,3 +506,19 @@ fn host_time_is_counted_beside_the_calls_and_not_in_the_budget() {
     assert!(report.contains("host 5.0/5.0/5.0 ms"), "{report}");
     assert!(report.contains("render-slot"), "{report}");
 }
+
+// Expected (fixed row; review carbon 5.2): host work for plugin p that runs a nested slot of plugin q, whose view and
+// host work run inside it, counts p's own 1 ms; q's view is q's call and its host work q's 2 ms.
+#[test]
+fn nested_host_work_is_its_own_plugins() {
+    let bench = Bench::new();
+    let (outer, inner) = (bench.monitor.slot(&Artifact::builtin("p")), bench.monitor.slot(&Artifact::builtin("q")));
+    let advance = |took: Duration| bench.now.set(bench.now.get() + took);
+    bench.monitor.host(outer, &mut || {
+        advance(Duration::from_millis(1));
+        bench.call(inner, "render-slot", Duration::from_millis(3));
+        bench.monitor.host(inner, &mut || advance(Duration::from_millis(2)));
+    });
+    assert_eq!(bench.monitor.host_time("p"), Duration::from_millis(1), "p's own host time");
+    assert_eq!(bench.monitor.host_time("q"), Duration::from_millis(2), "q's host time");
+}
