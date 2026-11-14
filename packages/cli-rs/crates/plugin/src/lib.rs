@@ -1640,6 +1640,9 @@ impl Registry {
         match hold {
             Some(hold) => {
                 held.push((target.to_owned(), hold));
+                drop(held);
+                // Listed once, as held: not also as waiting for approval or declined.
+                self.set_unloaded(target, None);
                 false
             }
             None => true,
