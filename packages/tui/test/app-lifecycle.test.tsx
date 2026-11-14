@@ -756,6 +756,74 @@ test("a finished compaction summary shows a last line that streaming would hold 
   await setup.waitForFrame((frame) => frame.includes("SUMMARY | END"))
 })
 
+// Thinking "show" draws the thought as its own part; "hide" draws it in a thought group, opened with a click.
+test.each(["show", "hide"] as const)(
+  "a finished thought shows a last line that streaming would hold back (thinking %s)",
+  async (thinking) => {
+    await using state = await tmpdir()
+    const session = {
+      id: "ses_thought",
+      title: "Thought fixture",
+      projectID: "project",
+      location: { directory },
+      agent: "build",
+      model: { providerID: "fixture", id: "model" },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 1, updated: 2 },
+    }
+    await using setup = await createAppFixture({
+      state: state.path,
+      config: {
+        animations: false,
+        tabs: { mode: "off" },
+        session: { sidebar: "hide", verbosity: "medium", thinking },
+      },
+      args: { sessionID: session.id },
+      fetch: (url) => {
+        if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+        if (url.pathname === `/api/session/${session.id}/message`)
+          return json({
+            data: [
+              {
+                id: "msg_thought",
+                type: "assistant",
+                agent: session.agent,
+                model: session.model,
+                finish: "stop",
+                time: { created: 2, completed: 4 },
+                content: [
+                  {
+                    type: "reasoning",
+                    // A streaming document holds a last line that may still become a table's header.
+                    text: "**Planning**\n\nTHOUGHT_START\n\n| THOUGHT | END |",
+                    time: { created: 2, completed: 3 },
+                  },
+                  { type: "text", text: "Answer text" },
+                ],
+              },
+              { id: "msg_ask", type: "user", text: "Ask", time: { created: 1 } },
+            ],
+            cursor: {},
+          })
+        if (
+          url.pathname === `/api/session/${session.id}/inbox` ||
+          url.pathname === `/api/session/${session.id}/permission`
+        )
+          return json({ data: [] })
+        return undefined
+      },
+    })
+    await setup.waitForFrame((frame) => frame.includes("Answer text"))
+    if (thinking === "hide") {
+      const row = setup.captureCharFrame().split("\n").findIndex((line) => line.includes("+ Thought"))
+      await setup.mockMouse.click(6, row)
+    }
+    await setup.waitForFrame((frame) => frame.includes("THOUGHT_START"))
+    await setup.waitForFrame((frame) => frame.includes("THOUGHT | END"))
+  },
+)
+
 test("keeps assistant footer metrics current after prepend, same-length refresh, and revert", async () => {
   await using state = await tmpdir()
   const session = {

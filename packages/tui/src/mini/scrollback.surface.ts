@@ -20,7 +20,7 @@ import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { turnSummaryCommit } from "./turn-summary"
 import { entryWriter, sameEntryGroup, separatorRows, spacerWriter, turnSummaryWriter } from "./scrollback.writer"
 import { type RunTheme } from "./theme"
-import type { RunEntryBody, StreamCommit } from "./types"
+import type { RunEntryBody, ScrollbackOptions, StreamCommit } from "./types"
 
 type ActiveBody = Exclude<RunEntryBody, { type: "none" | "structured" }>
 
@@ -98,6 +98,7 @@ export class RunScrollbackStream {
   private shellOutput: () => boolean
   private mono: boolean
   private imagePreview: boolean
+  private markdown: ScrollbackOptions["markdown"]
   private destroyed = false
   private pendingThemes: RunTheme[] = []
   private pendingStyles: SyntaxStyle[] = []
@@ -112,8 +113,10 @@ export class RunScrollbackStream {
       shellOutput?: () => boolean
       mono?: boolean
       imagePreview?: boolean
+      markdown?: ScrollbackOptions["markdown"]
     } = {},
   ) {
+    this.markdown = options.markdown
     this.treeSitterClient = options.treeSitterClient
     this.wrote = options.wrote ?? false
     this.shellOutput = options.shellOutput ?? (() => true)
@@ -471,7 +474,7 @@ export class RunScrollbackStream {
       return
     }
 
-    const body = entryBody(commit, { shellOutput: this.shellOutput(), mono: this.mono })
+    const body = entryBody(commit, { shellOutput: this.shellOutput(), mono: this.mono, markdown: this.markdown })
     if (body.type === "none") {
       if (entryDone(commit)) {
         this.markRendered(await this.finishActive(false))

@@ -83,6 +83,7 @@ async function setup(
     onThemeRelease?: (theme: RunTheme) => void
     mono?: boolean
     failHighlight?: boolean
+    markdown?: "source" | "rendered"
   } = {},
 ) {
   const out = await createTestRenderer({
@@ -112,6 +113,7 @@ async function setup(
       wrote: input.wrote ?? false,
       onThemeRelease: input.onThemeRelease,
       mono: input.mono,
+      markdown: input.markdown,
     }),
   }
 }
@@ -297,10 +299,17 @@ test.each([false, true])("monochrome switches preserve printed blocks and open f
   }
 })
 
-test.each([false, true])(
-  "monochrome switches finish pending reasoning without repeating it (initial=%s)",
-  async (mono) => {
-    const out = await setup()
+// Source reasoning is a code entry, which a switch finishes; rendered reasoning is Markdown, which a switch rebuilds,
+// as it does answers, and which ends at the next chunk of another kind. Either way each chunk prints once.
+test.each([
+  [false, "source"],
+  [true, "source"],
+  [false, "rendered"],
+  [true, "rendered"],
+] as const)(
+  "monochrome switches finish pending reasoning without repeating it (initial=%s, %s)",
+  async (mono, markdown) => {
+    const out = await setup({ markdown })
     const output: string[] = []
     out.renderer.on(CliRenderEvents.EXTERNAL_OUTPUT, (event) => {
       output.push(decoder.decode(event.snapshot.getRealCharBytes(true)))
@@ -309,7 +318,7 @@ test.each([false, true])(
       await out.scrollback.setMono(mono)
       await out.scrollback.append(reasoning("Before switch"))
       await out.scrollback.setMono(!mono)
-      expect(output.join("")).toContain("Before switch")
+      if (markdown === "source" || mono) expect(output.join("")).toContain("Before switch")
       await out.scrollback.append(reasoning(" after switch"))
       await out.scrollback.complete()
       expect(output.join("").match(/Before switch/g)).toHaveLength(1)
