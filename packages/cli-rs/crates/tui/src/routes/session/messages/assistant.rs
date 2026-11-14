@@ -32,10 +32,28 @@ impl TextPart {
     /// Takes the theme of `cx` in place: the text and its code views stay.
     pub fn restyle(&self, cx: &Context<'_>) {
         let colors = opencode_ui::markdown::view_colors(cx.theme, cx.syntax);
-        opencode_ui::markdown::restyle(&self.markdown, colors, cx.syntax);
+        // Markdown builds a claimed fence again in the new theme, at the width it is laid out at.
+        let width = self.markdown.rect().width as u16;
+        opencode_plugin::claim::with_fence_width(width, || {
+            opencode_ui::markdown::restyle(&self.markdown, colors, cx.syntax)
+        });
     }
 
-    pub fn update(&self, message: &SessionMessageAssistant, part: &SessionMessageAssistantText, conceal: bool) {
+    /// Shows `part` in a row `width` cells wide.
+    pub fn update(
+        &self,
+        message: &SessionMessageAssistant,
+        part: &SessionMessageAssistantText,
+        conceal: bool,
+        width: u16,
+    ) {
+        // A fence a plugin claims gets the Markdown's width before the Markdown is laid out.
+        let laid = self.markdown.rect().width as u16;
+        let width = if laid > 0 { laid } else { width.saturating_sub(3) };
+        opencode_plugin::claim::with_fence_width(width, || self.show(message, part, conceal));
+    }
+
+    fn show(&self, message: &SessionMessageAssistant, part: &SessionMessageAssistantText, conceal: bool) {
         let text = part.text.trim();
         self.root.visible(!text.is_empty());
         // `session.markdown` changes in place, as TS's `conceal` prop follows it; the code views stay.
