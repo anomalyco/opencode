@@ -55,6 +55,7 @@ export const layer = Layer.effect(
               editor.add({
                 name: tool.name,
                 options: { namespace: namespace(tool.server), codemode: tool.codemode !== false },
+                sessionID: tool.sessionID,
                 description: tool.description ?? "",
                 input: tool.inputSchema as JsonSchema.JsonSchema,
                 output: (tool.outputSchema ?? {}) as JsonSchema.JsonSchema,
