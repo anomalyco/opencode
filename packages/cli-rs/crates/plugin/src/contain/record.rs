@@ -82,6 +82,9 @@ pub const KINDS: &[&str] = &[
     // P3: a surface's `layout` and its scroll handler.
     "layout",
     "on-scroll",
+    // P2: a key, paste, pointer, hover or close event to a surface's or a layer's handler, and a select's search.
+    "handle",
+    "search",
 ];
 
 /// The index of `kind` in [`KINDS`], or the last index past it for a kind it does not list.
