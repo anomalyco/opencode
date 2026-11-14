@@ -1,6 +1,7 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
-import { contextUsage, formatContextUsage } from "../../util/session"
+import { contextUsage, costEstimate, formatContextUsage } from "../../util/session"
+import { useCostEstimate } from "../../config"
 import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
 import { useInteractivity } from "../../context/interactivity"
@@ -19,6 +20,7 @@ export function PromptFooter(props: {
   showDetails: boolean
 }) {
   const dimensions = useTerminalDimensions()
+  const enabled = useCostEstimate()
   const [liveHovered, setLiveHovered] = createSignal(false)
   const subagents = createMemo(() => {
     if (!props.sessionID) return 0
@@ -44,9 +46,26 @@ export function PromptFooter(props: {
       session.revert?.messageID,
     )
     const cost = props.context.data.session.cost(props.sessionID)
+    const estimate =
+      cost <= 0 && enabled()
+        ? costEstimate(
+            session.parentID
+              ? [session]
+              : props.context.data.session
+                  .family(props.sessionID)
+                  .map((id) => props.context.data.session.get(id))
+                  .filter((info) => info !== undefined),
+            props.context.data.location.model.list(session.location),
+            (id) => props.context.data.session.message.list(id),
+          )
+        : 0
     return [
       usage ? formatContextUsage(usage.tokens, usage.percent) : undefined,
-      cost > 0 ? money.format(cost) : undefined,
+      cost > 0
+        ? money.format(cost)
+        : estimate !== undefined && estimate > 0
+          ? `≈ ${estimate < 0.01 ? "<$0.01" : money.format(estimate)}`
+          : undefined,
     ].filter((item): item is string => Boolean(item))
   })
   const live = createMemo(() => Boolean(subagents() || shells()))
