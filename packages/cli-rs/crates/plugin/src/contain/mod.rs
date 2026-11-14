@@ -198,6 +198,8 @@ struct Stats {
     frames: VecDeque<Duration>,
     slow: bool,
     told: bool,
+    /// `slow` changed since the monitor last looked.
+    flipped: bool,
     /// The next call is the first after a setup: exempt from overrun.
     cold: bool,
     load: Option<Duration>,
@@ -421,6 +423,16 @@ impl Monitor {
         news
     }
 
+    /// Whether a plugin became slow or stopped being slow since the last call, which the plugin list shows (P6b).
+    pub fn take_flipped(&self) -> bool {
+        // Every plugin's flag is taken, not only up to the first that is set.
+        let mut flipped = false;
+        for stats in self.plugins.borrow_mut().iter_mut() {
+            flipped |= std::mem::take(&mut stats.flipped);
+        }
+        flipped
+    }
+
     /// Whether the host must close the open frames at the next paint; true once until [`Monitor::close`].
     pub fn wants_close(&self) -> bool {
         !self.closing.replace(true)
@@ -517,7 +529,9 @@ impl Stats {
         }
         self.frames.push_back(sum);
         let over: Vec<Duration> = self.frames.iter().copied().filter(|frame| *frame > limits.frame).collect();
-        self.slow = over.len() > limits.slow;
+        let slow = over.len() > limits.slow;
+        self.flipped |= slow != self.slow;
+        self.slow = slow;
         if !self.slow || std::mem::replace(&mut self.told, true) {
             return None;
         }

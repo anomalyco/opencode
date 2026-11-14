@@ -102,6 +102,9 @@ pub trait Host: 'static {
                 .title(format!("Plugin is slow: {id}")),
         );
     }
+    /// A plugin became slow or stopped being slow, which the plugin list shows: told on every change, where
+    /// [`Host::slow`] is told once a session. Called outside every plugin callback.
+    fn slow_changed(&self) {}
     /// Ends what the host shows for an activation of plugin `id` that ended (it was disabled, replaced, unloaded, or
     /// failed): the dialog it opened, if that activation is no longer [`Registry::live`], so nothing of an old build can
     /// run (4.14). Called outside every plugin callback.
@@ -1574,12 +1577,19 @@ pub(crate) fn budget(
         let id = id.to_owned();
         defer(host, move |host| host.slow(&id, &cost));
     }
+    // Every change of slow, not only the first one a session that a toast tells (review carbon-4).
+    if monitor.take_flipped() {
+        defer(host, |host| host.slow_changed());
+    }
     let Some(strong) = host.upgrade().filter(|_| timed.opened && monitor.wants_close()) else { return };
     let (host, monitor) = (host.clone(), monitor.clone());
     // Animations run as a paint starts, before it counts the frame: the frame of these calls ends there.
     strong.app().animate(move |_, _| {
         for (id, cost) in monitor.close() {
             defer(&host, move |host| host.slow(&id, &cost));
+        }
+        if monitor.take_flipped() {
+            defer(&host, |host| host.slow_changed());
         }
         false
     });
@@ -2517,7 +2527,12 @@ impl Registry {
         if self.with_plugin(id, |_| ()).is_none() {
             return if active { self.release(host, id) } else { None };
         }
-        let before = self.with_plugin(id, |plugin| (plugin.enabled, plugin.failed.clone()))?;
+        // A plugin that failed while active is listed failed by its activation's failure, which the restart ends: kept
+        // as its listed failure, so a setup that fails again leaves the row failed (review carbon-3).
+        let before = self.with_plugin(id, |plugin| {
+            let failed = plugin.failed.clone().or_else(|| plugin.active.as_ref().and(plugin.definition.failure()));
+            (plugin.enabled, failed)
+        })?;
         let error = self.switch(host, id, active)?;
         Some(match error {
             None => Ok(()),
