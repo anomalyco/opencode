@@ -17,13 +17,23 @@ use opentui::keymap::Disposer;
 use opentui::prelude::*;
 
 use crate::canvas;
+use crate::interact::{self, Owner};
 use crate::node::{Act, abi_mode};
 use crate::reconcile::{Env, Refused, Tree};
 use crate::{Claimed, Host, SlotInput, behave, slot};
 
-/// Runs a view or a canvas draw as one call of the plugin, named for its report: `false` when it panicked, which
-/// fails the plugin.
-pub(crate) type Call = Rc<dyn Fn(&'static str, &dyn Host, &mut dyn FnMut(&dyn abi::Read)) -> bool>;
+/// Runs a view or a canvas draw as one call of the plugin, named for its report, for the mount `Owner` stands for:
+/// `false` when it panicked, which fails the plugin.
+pub(crate) type Call = Rc<dyn Fn(&'static str, &dyn Host, &Rc<Owner>, &mut dyn FnMut(&dyn abi::Read)) -> bool>;
+
+/// What a mount routes of the input (P2): its plugin, its handler, the layers each mount registers, and whether it is
+/// a panel, whose view gets [`v2::SurfaceInput::panel`].
+pub(crate) struct Input {
+    pub plugin: String,
+    pub deliver: Option<interact::Deliver>,
+    pub layers: Vec<abi::interact::Layer>,
+    pub panel: bool,
+}
 /// Fails the plugin with the error.
 pub(crate) type Fail = Rc<dyn Fn(String)>;
 /// A route's commands, bound to one mount: what they ask for ends with the mount.
@@ -66,6 +76,7 @@ pub(crate) trait Viewer {
     fn draw(
         &self,
         _host: &dyn Host,
+        _owner: &Rc<Owner>,
         _mount: &v2::MountId,
         _canvas: &str,
         _frame: v2::Frame,
@@ -80,6 +91,8 @@ pub(crate) trait Viewer {
 /// and releases goes.
 pub(crate) struct Viewing<'a> {
     pub mount: &'a v2::MountId,
+    /// What the mount holds of the input: a view in process runs as its call, so its reads are the mount's.
+    pub owner: &'a Rc<Owner>,
     pub input: &'a v2::SurfaceInput,
     pub memo: &'a mut v2::Memo,
     pub give: &'a mut dyn FnMut(ContentRef, Vec<u8>),
@@ -109,9 +122,9 @@ impl Linked {
 
 impl Viewer for Linked {
     fn view(&self, host: &dyn Host, viewing: Viewing<'_>) -> Option<Viewed> {
-        let Viewing { mount, input, memo, give, release } = viewing;
+        let Viewing { mount, owner, input, memo, give, release } = viewing;
         let mut node = None;
-        let called = (self.call)("view", host, &mut |read| {
+        let called = (self.call)("view", host, owner, &mut |read| {
             let mut content = |bytes: Vec<u8>| {
                 let handle = ContentRef(CONTENT.fetch_add(1, Ordering::Relaxed));
                 give(handle, bytes);
@@ -127,11 +140,18 @@ impl Viewer for Linked {
         self.draw.is_some()
     }
 
-    fn draw(&self, host: &dyn Host, mount: &v2::MountId, canvas: &str, frame: v2::Frame) -> Option<Option<Vec<u8>>> {
+    fn draw(
+        &self,
+        host: &dyn Host,
+        owner: &Rc<Owner>,
+        mount: &v2::MountId,
+        canvas: &str,
+        frame: v2::Frame,
+    ) -> Option<Option<Vec<u8>>> {
         let draw = self.draw.as_ref()?;
         let (mut ran, mut list) = (false, None);
         // A call that panicked set no list; one that was refused did not run.
-        (self.call)("draw", host, &mut |read| {
+        (self.call)("draw", host, owner, &mut |read| {
             ran = true;
             list = draw(&mut v2::Draw { read, mount, canvas, frame });
         });
@@ -204,6 +224,9 @@ pub(crate) struct Surface {
     revision: Cell<Option<u64>>,
     /// Each content handle's image, decoded once however many nodes show it; `None` when it does not decode.
     images: RefCell<HashMap<ContentRef, Option<opentui::native::Image>>>,
+    input: Rc<Input>,
+    /// What the mount holds of the input; it ends with the mount.
+    holder: RefCell<Option<Rc<Owner>>>,
 }
 
 /// What one call of the view returned and asked for; the host takes it only with its tree.
@@ -249,6 +272,7 @@ impl Surface {
         viewer: Rc<dyn Viewer>,
         fail: Fail,
         calls: behave::Calls,
+        input: Rc<Input>,
     ) -> Rc<Self> {
         static GENERATION: AtomicU64 = AtomicU64::new(1);
         let id = v2::MountId {
@@ -288,6 +312,8 @@ impl Surface {
             watch: RefCell::new(None),
             revision: Cell::new(None),
             images: RefCell::default(),
+            input: input.clone(),
+            holder: RefCell::new(None),
         });
         book(|ledger| ledger.mounts += 1);
         if mounted.viewer.draws() {
@@ -301,6 +327,15 @@ impl Surface {
         }
         *mounted.this.borrow_mut() = Rc::downgrade(&mounted);
         behave::attach(host.app(), &mounted);
+        // Its input: a node's widget is found in the tree of the moment, so one built again is found too.
+        let found = Rc::downgrade(&mounted);
+        let lookup: interact::Lookup =
+            Rc::new(move |id: &str| found.upgrade().and_then(|mounted| mounted.state.borrow().tree.widget(id)));
+        let owned = Owner::mount(&input.plugin, owner.clone(), mounted.root.clone(), lookup, input.deliver.clone());
+        let deliver: interact::Deliver =
+            input.deliver.clone().unwrap_or_else(|| Rc::new(|_, _, _| abi::interact::Handled::Pass));
+        owned.register(host, &input.layers, &deliver);
+        *mounted.holder.borrow_mut() = Some(owned);
         let weak = Rc::downgrade(&mounted);
         // The host's own state and the terminal's size change outside change batches. A view that ran after the last
         // change of the host's state has seen it: a notice of it, which comes later, calls no view (review bigboi-7).
@@ -353,6 +388,11 @@ impl Surface {
     pub fn draw(&self, host: &dyn Host) {
         self.resized.set(0);
         self.draw_sized(host);
+    }
+
+    /// What the mount holds of the input.
+    pub fn holder(&self) -> Option<Rc<Owner>> {
+        self.holder.borrow().clone()
     }
 
     /// Calls the view and adopts its tree; on a refusal, once more for a whole tree.
@@ -453,7 +493,12 @@ impl Surface {
         };
         self.revision.set(host.local_revision());
         self.seen.set((width, height));
-        let input = v2::SurfaceInput { width, height, palette, full };
+        let panel = match self.input.panel {
+            true => host.panel_input(&self.input.plugin, &self.id.surface),
+            false => None,
+        };
+        let input = v2::SurfaceInput { width, height, palette, full, panel };
+        let owner = self.holder().unwrap_or_else(|| Owner::activation(&self.input.plugin, self.owner.clone()));
         // The view works on the mount's table; what it stages there the host keeps only with its tree.
         let mut memo = std::mem::take(&mut self.state.borrow_mut().memo);
         let given = RefCell::new(HashMap::new());
@@ -473,8 +518,14 @@ impl Surface {
                 });
             }
         };
-        let viewing =
-            Viewing { mount: &self.id, input: &input, memo: &mut memo, give: &mut give, release: &mut release };
+        let viewing = Viewing {
+            mount: &self.id,
+            owner: &owner,
+            input: &input,
+            memo: &mut memo,
+            give: &mut give,
+            release: &mut release,
+        };
         let viewed = self.viewer.view(host, viewing);
         let Some(viewed) = viewed else {
             self.state.borrow_mut().memo = memo;
@@ -511,6 +562,9 @@ impl Surface {
         let State { tree, content, last, .. } = &mut *state;
         let restyled = !tree.styled_in(theme);
         self.reconciling(host, theme, tree, content, staged, full, |env, tree| tree.apply(env, &self.root, &nodes))?;
+        if let Some(owner) = self.holder() {
+            owner.set_tree(tree.ids().map(str::to_owned).collect(), tree.focusable());
+        }
         self.reindex();
         behave::arm(host.app());
         if !self.fills {
@@ -552,7 +606,7 @@ impl Surface {
 
     /// One call of the surface's draw for canvas `id` at `frame` ([`canvas::Draw`]).
     fn draw_canvas(&self, id: &str, frame: v2::Frame) -> Option<Option<Vec<u8>>> {
-        self.viewer.draw(&*self.owner.upgrade()?, &self.id, id, frame)
+        self.viewer.draw(&*self.owner.upgrade()?, &self.holder()?, &self.id, id, frame)
     }
 
     /// Calls `f` with what a reconcile of `tree` builds with: the content the mount holds and the view staged.
@@ -600,6 +654,7 @@ impl Surface {
             Source::PartOutput(_) => None,
         };
         let has = |handle: ContentRef| held(&handle).is_some();
+        let owner = self.holder().map(|owner| Rc::downgrade(&owner));
         let env = Env {
             host,
             theme,
@@ -610,6 +665,7 @@ impl Surface {
             image: &image,
             full,
             draw: self.drawer.get(),
+            owner: owner.as_ref(),
         };
         f(&env, tree)
     }
@@ -688,6 +744,9 @@ impl Drop for Surface {
             self.viewer.forget(&*host, &self.id);
         }
         behave::detach(&self.app, self);
+        if let Some(owner) = self.holder.get_mut().take() {
+            owner.end();
+        }
         let state = self.state.get_mut();
         let bytes: usize = state.content.values().map(|bytes| bytes.len()).sum();
         let (content, memo) = (state.content.len() as i64, state.booked);

@@ -122,10 +122,13 @@ impl Host {
                 Presentation::Panel => theme.background.raised.base,
                 Presentation::Fullscreen => theme.background.base,
             });
-        let content = tui
-            .panels
-            .builder(&target)
-            .map(|builder| builder(tui, &root, &Input { target: &target, width: input_width, presentation, focused }));
+        let content = match tui.panels.builder(&target) {
+            Some(builder) => {
+                Some(builder(tui, &root, &Input { target: &target, width: input_width, presentation, focused }))
+            }
+            // A panel surface of a plugin (P2) mounts into the panel and reads how it shows from the host.
+            None => tui.plugins.panel(tui, &target.plugin, &target.name, &root),
+        };
         Self { root, target, _content: content }
     }
 

@@ -17,6 +17,7 @@ use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
 
+use crate::interact::{HandlerFn, Interact, Layer, PanelInput};
 use crate::{Align, Border, Click, Color, Edges, Justify, Layout, Overflow, Read, Rgba, Span, ThemeMode, Wrap};
 
 mod geometry;
@@ -72,6 +73,9 @@ pub enum Node {
         /// P3: a row whose first child the user resizes by dragging; it needs an id, which keeps the width.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         split: Option<Split>,
+        /// Focus, pointer and hover ([`crate::interact`]); its fields sit beside the box's own.
+        #[serde(default, flatten)]
+        interact: Interact,
     },
     /// Styled text; `fg` draws spans without their own, by default `text.base`.
     Text {
@@ -307,6 +311,9 @@ pub struct SurfaceInput {
     /// The host refused the last tree, or holds none: [`Node::Keep`] has nothing to name. [`View::memo`] builds.
     #[serde(default, skip_serializing_if = "is_false")]
     pub full: bool,
+    /// A panel surface's presentation; `None` elsewhere. A change of it calls the view again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub panel: Option<PanelInput>,
 }
 
 /// Every token of the page theme, by its path (`text.muted`, `background.panel`).
@@ -349,11 +356,16 @@ pub struct MountId {
     pub generation: u64,
 }
 
-/// Where a surface shows in P1: a route of the plugin, or a slot claim.
+/// Where a surface shows: a route of the plugin, or a slot claim (P1); a docked panel or an overlay, which the plugin
+/// opens with [`crate::Host::open_panel`] and [`crate::Host::overlay`] (P2).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Place {
     Route(String),
     Slot(crate::Placement),
+    /// The session's side panel, or the whole screen: the name the plugin opens it by.
+    Panel(String),
+    /// Over everything but the host's dialogs, anchored: the name the plugin opens it by.
+    Overlay(String),
 }
 
 /// A surface as [`crate::Setup::surface`] registers it.
@@ -371,6 +383,10 @@ pub struct Surface {
     pub notify: Vec<Notify>,
     /// P3: hears where a step landed and that the user scrolled.
     pub on_scroll: Option<ScrollFn>,
+    /// What its events come to: its layers' keys, its nodes' pointer and hover, an overlay's close.
+    pub handler: Option<HandlerFn>,
+    /// The key layers each mount of it registers, which end with the mount.
+    pub layers: Vec<Layer>,
 }
 
 impl Surface {
@@ -384,6 +400,8 @@ impl Surface {
             layout: None,
             notify: Vec::new(),
             on_scroll: None,
+            handler: None,
+            layers: Vec::new(),
         }
     }
 
@@ -405,6 +423,19 @@ impl Surface {
     /// The surface with a handler of its scrolls' events.
     pub fn on_scroll(self, handler: impl Fn(&dyn crate::Host, &ScrollEvent) + 'static) -> Self {
         Self { on_scroll: Some(Rc::new(handler)), ..self }
+    }
+
+    /// The surface whose events come to `handler`.
+    pub fn on(
+        self,
+        handler: impl Fn(&dyn crate::Host, &crate::interact::Event) -> crate::interact::Handled + 'static,
+    ) -> Self {
+        Self { handler: Some(Rc::new(handler)), ..self }
+    }
+
+    /// The surface whose mounts take the keys of `layers`.
+    pub fn layers(self, layers: Vec<Layer>) -> Self {
+        Self { layers, ..self }
     }
 }
 
@@ -623,7 +654,16 @@ impl Node {
             sticky: None,
             anchor: None,
             split: None,
+            interact: Interact::default(),
         }
+    }
+
+    /// A box with `value`'s focus, pointer and hover; anything else is unchanged.
+    pub fn interact(mut self, value: Interact) -> Self {
+        if let Node::Box { interact, .. } = &mut self {
+            *interact = value;
+        }
+        self
     }
 
     /// A box of `children` in a row.
@@ -884,6 +924,7 @@ impl From<crate::Node> for Node {
                 sticky: None,
                 anchor: None,
                 split: None,
+                interact: Interact::default(),
             },
             crate::Node::Text { spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click } => {
                 Node::Text { id: None, spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click }

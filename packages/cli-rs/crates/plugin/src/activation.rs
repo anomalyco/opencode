@@ -46,6 +46,8 @@ pub(crate) struct Activation {
     on_message: RefCell<Option<Deliver>>,
     /// Fails the plugin after a thread of it panicked.
     on_panic: RefCell<Option<Report>>,
+    /// What holds input for it: its mounts and itself (P2). They end with it.
+    owners: RefCell<Vec<Weak<crate::interact::Owner>>>,
 }
 
 /// Hands one message to the plugin.
@@ -75,6 +77,7 @@ impl Activation {
                 on_wake: RefCell::default(),
                 on_message: RefCell::default(),
                 on_panic: RefCell::default(),
+                owners: RefCell::default(),
             }
         })
     }
@@ -101,6 +104,25 @@ impl Activation {
         self.on_wake.borrow_mut().take();
         self.on_message.borrow_mut().take();
         self.on_panic.borrow_mut().take();
+        // Its input stops at once, and goes once the event that ended it is handled: a key layer may be the one that
+        // runs now.
+        let owners: Vec<_> = self.owners.take().iter().filter_map(Weak::upgrade).collect();
+        owners.iter().for_each(|owner| owner.revoke());
+        if !owners.is_empty() {
+            defer(&self.host, move |_| owners.iter().for_each(|owner| owner.end()));
+        }
+    }
+
+    /// The live owners of input it holds: its mounts', newest last, and its own.
+    pub fn owners(&self) -> Vec<Rc<crate::interact::Owner>> {
+        self.owners.borrow().iter().filter_map(Weak::upgrade).filter(|owner| owner.alive()).collect()
+    }
+
+    /// Records `owner`, which ends with the activation.
+    pub fn own(&self, owner: &Rc<crate::interact::Owner>) {
+        let mut owners = self.owners.borrow_mut();
+        owners.retain(|owner| owner.strong_count() > 0);
+        owners.push(Rc::downgrade(owner));
     }
 
     pub fn disposed(&self) -> bool {
