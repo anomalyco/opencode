@@ -929,11 +929,16 @@ fn run(commands: &[Command]) -> Option<Failure> {
             Command::DialogThenReload(dialog, build) => vec![Command::Dialog(dialog), Command::Reload(build)],
             command => vec![command],
         };
-        let (life, last) = (reference.life, parts.len() - 1);
+        let last = parts.len() - 1;
         let reload = parts.iter().any(
             |part| matches!(part, Command::Reload(build) | Command::EnterThenReload(build) if *build != reference.file),
         );
-        let before = reload.then(|| (world.observe(false), world.frame(), life));
+        let seen = reload.then(|| (world.observe(false), world.frame()));
+        // That observation may render the claims, before the command (see `observed`).
+        if let Some(failure) = observed(&world, &mut reference, step) {
+            return Some(failure);
+        }
+        let before = seen.map(|(observed, frame)| (observed, frame, reference.life));
         let (mut calls, mut reports) = (Vec::new(), Vec::new());
         for (index, &part) in parts.iter().enumerate() {
             let reached = world.apply(part);
@@ -964,6 +969,9 @@ fn run(commands: &[Command]) -> Option<Failure> {
         {
             return Some(failure);
         }
+        if let Some(failure) = observed(&world, &mut reference, step) {
+            return Some(failure);
+        }
     }
     // Dropping the TUI releases the plugin: an active instance is destroyed once, a failed one not at all.
     take_calls();
@@ -974,6 +982,16 @@ fn run(commands: &[Command]) -> Option<Failure> {
     let dropped: Vec<Kind> = take_calls().iter().map(|call| call.kind).collect();
     let detail = (dropped != expected).then(|| format!("dropped while {:?}: {dropped:?}", reference.life));
     check("lifecycle", "drop", commands.len(), detail)
+}
+
+/// Settles what observing the world asked for, as a frame of its own: observing catches the keymap's focus up after a
+/// remount, as the next key would, which tells the claims (1.6 `Keymap::on_state`), and a frame renders them. Its calls
+/// and toasts are not the next command's.
+fn observed(world: &World, reference: &mut Reference, step: usize) -> Option<Failure> {
+    let reports = world.settle();
+    let stepped = reference.step(Some(Command::Frame), None, true, &take_calls()).err();
+    check("lifecycle", "observed", step, stepped)
+        .or_else(|| check("reported-once", "observed", step, reported(reference, reports)))
 }
 
 /// `reported-once`: the toasts of a frame, against the ones the reference expects, in any order.
