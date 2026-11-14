@@ -1,12 +1,12 @@
-//! A board of cards on a route of contract 2.0. Each card shows a value and a patch by content handle, memoized on its
-//! value; the header shows the plugin's own call log: how many views ran, how many cards they built, and how many
+//! A board of cards on a route of contract 2.0, in a scroll that takes the page below the header. Each card shows a
+//! value and a patch by content handle, memoized on its value; the header shows the plugin's own call log: how many views ran, how many cards they built, and how many
 //! messages arrived. Commands bump a card, toast, panic, and start threads: one that floods the mailbox, waiting on
 //! `Full`, and one that panics.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use opencode_plugin_abi::{Command, SendError, Setup, Span, Toast, Variant, v2};
+use opencode_plugin_abi::{Command, Layout, SendError, Setup, Span, Toast, Variant, v2};
 
 pub const CARDS: usize = 6;
 
@@ -95,9 +95,9 @@ fn view(board: &RefCell<Board>, cx: &mut v2::View<'_>) -> v2::Node {
         board.built += built;
         format!("views {} built {} messages {}", board.views, board.built, board.messages)
     };
-    let mut children = vec![v2::Node::text(vec![Span::new(header)]).with_id("header")];
-    children.extend(cards);
-    v2::Node::column(children).with_id("board")
+    let header = v2::Node::text(vec![Span::new(header)]).with_id("header");
+    let cards = v2::Node::scroll(cards).with_id("cards").layout(Layout::default().grow());
+    v2::Node::column(vec![header, cards]).with_id("board").layout(Layout::default().grow())
 }
 
 fn command(name: &str) -> Command {

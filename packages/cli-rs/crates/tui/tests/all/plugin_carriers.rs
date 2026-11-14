@@ -117,6 +117,9 @@ fn script(run: Run) -> Vec<(&'static str, Seen)> {
     let mut seen = Vec::new();
     tui.navigate(route.clone());
     settle(&board.harness);
+    // The cards' scroll takes the page below the header: a growing scroll in a route has rows (P1's full-page route).
+    let cards = board.harness.app.render().text().lines().filter(|line| line.trim_start().starts_with("card ")).count();
+    assert!(cards >= 3, "{run:?}: the cards' scroll shows {cards} cards");
     seen.push(("open", observe(&board.harness)));
     dispatch("board.bump", Some("2"));
     dispatch("board.bump", Some("2"));
