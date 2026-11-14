@@ -389,7 +389,11 @@ fn a_composer_edit_is_not_overtaken_by_the_next_signal() {
         setup.wait("the clear", || setup.textarea().text().is_empty());
         opencode_tui::features::events::testing::signal(&setup.tui, changed("src/set.rs"));
         setup.tui.keymap.dispatch("p0a.wake", None);
-        setup.wait("the wake", || !logged(&setup, "woke").is_empty());
+        // The wake handlers run as a paint starts (Pl).
+        setup.wait("the wake", || {
+            setup.app.render();
+            !logged(&setup, "woke").is_empty()
+        });
         assert_eq!(logged(&setup, "woke"), ["woke from an event"], "{carrier:?}");
 
         let setup = Setup::new(Route::Home);

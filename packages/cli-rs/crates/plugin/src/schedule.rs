@@ -2,11 +2,13 @@
 //! however many messages its mailbox holds. The UI thread then hands the ready plugins their `update` calls in turn,
 //! one a plugin a round, under the frame budget of P4c's monitor: a plugin gets at least one a frame, and more while
 //! its updates in the frame stay under [`contain::Limits::frame`] and all plugins' under [`contain::Limits::all`]. What
-//! is left waits for the next frame, which the scheduler asks for and drains as its paint starts.
+//! is left waits for the next frame.
 //!
-//! Input comes before any `update`: OpenTUI routes a turn's input before the wakes it delivers and before the paint,
-//! so every update runs after the input that came before it. So a plugin that floods its mailbox delays its own
-//! messages, and no key and no other plugin (`backlog`).
+//! Input comes before any `update`: a wake only marks its plugin ready and asks for one drain of its app, which runs
+//! as the next paint starts. OpenTUI's poll hands a wake and the input read with it in one batch, the wake first
+//! (review bigboi 1), and the paint comes after the whole batch, so every update runs after the input that came
+//! before it. An app has at most one drain asked for at a time, however many wakes come (review bigboi 7). So a
+//! plugin that floods its mailbox delays its own messages, and no key and no other plugin (`backlog`).
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -30,14 +32,19 @@ struct Queue {
     /// in the frame finds the budget spent: by its ID, which no other activation gets, the frame, the updates and
     /// their time.
     spent: HashMap<u64, (Weak<Activation>, u64, u32, Duration)>,
+    /// The apps a drain is asked for, by [`key`]: alive while the drain's animation holds its token, which it drops
+    /// as it starts, and which goes with an app dropped before its paint, whose address another app may get.
+    armed: HashMap<usize, Weak<()>>,
 }
 
-/// The updates the scheduler ran and the drains that left work for the next frame, counted since the thread started,
-/// for the tests.
+/// The updates the scheduler ran, the drains that left work for the next frame, and the drains it asked for and ran,
+/// counted since the thread started, for the tests.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Work {
     pub updates: u64,
     pub deferred: u64,
+    pub armed: u64,
+    pub drains: u64,
 }
 
 thread_local! {
@@ -75,9 +82,35 @@ pub(crate) fn ready(activation: &Rc<Activation>) {
     });
 }
 
-/// Runs the ready plugins of `app` in turn under the frame budget, or only `woken`, which a wake of its own made
-/// ready, so one plugin's wake never moves another's updates; what is left runs in turn as the next paint starts.
-pub(crate) fn drain(app: &App, woken: Option<&Rc<Activation>>) {
+/// Asks for one drain of `app` as its next paint starts, unless one is asked for already.
+pub(crate) fn arm(app: &App) {
+    let token = Rc::new(());
+    let fresh = QUEUE.with(|queue| {
+        let mut queue = queue.borrow_mut();
+        queue.armed.retain(|_, armed| armed.strong_count() > 0);
+        let fresh = !queue.armed.contains_key(&key(app));
+        if fresh {
+            queue.armed.insert(key(app), Rc::downgrade(&token));
+        }
+        fresh
+    });
+    if !fresh {
+        return;
+    }
+    WORK.with(|work| work.set(Work { armed: work.get().armed + 1, ..work.get() }));
+    // Animations run as a paint starts, after the turn's input and before the frame is counted.
+    let mut token = Some(token);
+    app.animate(move |cx, _| {
+        // From here on a wake asks for another drain.
+        drop(token.take());
+        drain(cx.app());
+        false
+    });
+}
+
+/// Runs the ready plugins of `app` in turn under the frame budget; what is left asks for the next frame's drain.
+fn drain(app: &App) {
+    WORK.with(|work| work.set(Work { drains: work.get().drains + 1, ..work.get() }));
     let (app_key, frame) = (key(app), app.frame_number());
     QUEUE.with(|queue| {
         let mut queue = queue.borrow_mut();
@@ -88,10 +121,7 @@ pub(crate) fn drain(app: &App, woken: Option<&Rc<Activation>>) {
         });
     });
     loop {
-        let mut round = QUEUE.with(|queue| of(&queue.borrow(), app_key));
-        if let Some(woken) = woken {
-            round.retain(|activation| Rc::ptr_eq(activation, woken));
-        }
+        let round = QUEUE.with(|queue| of(&queue.borrow(), app_key));
         let mut ran = false;
         for activation in &round {
             let (limits, clock) = activation.budget();
@@ -148,12 +178,7 @@ pub(crate) fn drain(app: &App, woken: Option<&Rc<Activation>>) {
     let left = QUEUE.with(|queue| !of(&queue.borrow(), app_key).is_empty());
     if left {
         WORK.with(|work| work.set(Work { deferred: work.get().deferred + 1, ..work.get() }));
-        // Animations run as a paint starts, after the turn's input and before the frame is counted. A drain the
-        // budget stops asks for one; the frame's spend holds for all of them.
-        app.animate(move |cx, _| {
-            drain(cx.app(), None);
-            false
-        });
+        arm(app);
     }
 }
 
