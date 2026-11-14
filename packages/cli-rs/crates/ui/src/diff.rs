@@ -283,8 +283,32 @@ pub fn split_added(patch: &str, size: usize) -> Option<Vec<AddedChunk>> {
 
 /// Whether [`Chunked::new`] takes `patch`: it adds one whole file of more than 3,000 lines.
 pub fn chunks(patch: &str) -> bool {
-    split_added(patch, CHUNK_LINES)
-        .is_some_and(|chunks| chunks.iter().map(|chunk| chunk.rows).sum::<usize>() > CHUNKED_MIN_LINES)
+    added_lines(patch).is_some_and(|lines| lines > CHUNKED_MIN_LINES)
+}
+
+/// The lines of the file `patch` adds, when [`split_added`] takes it, counted without splitting it; `None` for any
+/// other patch.
+pub fn added_lines(patch: &str) -> Option<usize> {
+    let mut offset = 0;
+    let (start, line) = patch.split_inclusive('\n').find_map(|line| {
+        let start = offset;
+        offset += line.len();
+        line.starts_with("@@ -0,0 +1,").then_some((start, line))
+    })?;
+    let count: usize = line["@@ -0,0 +1,".len()..].split_once(" @@")?.0.parse().ok()?;
+    let body = &patch[start + line.len()..];
+    let mut lines = body.strip_suffix('\n').unwrap_or(body).split('\n').peekable();
+    let mut added = 0;
+    while let Some(line) = lines.next() {
+        if lines.peek().is_none() && line.starts_with("\\ No newline at end of file") {
+            break;
+        }
+        if !line.starts_with('+') {
+            return None;
+        }
+        added += 1;
+    }
+    (added == count).then_some(count)
 }
 
 /// `VirtualAddedPatch`: an added file over 3,000 lines in chunks of 128 rows, unwrapped so each chunk is exactly its
@@ -335,11 +359,11 @@ impl Chunked {
     /// Shows `patch` instead, in the same root, when it adds one file of more than 3,000 lines; `false`, changing
     /// nothing, for any other patch.
     pub fn set_patch(&self, patch: &str) -> bool {
-        let Some(chunks) = split_added(patch, CHUNK_LINES) else { return false };
-        let lines: usize = chunks.iter().map(|chunk| chunk.rows).sum();
-        if lines <= CHUNKED_MIN_LINES {
+        if !chunks(patch) {
             return false;
         }
+        let Some(chunks) = split_added(patch, CHUNK_LINES) else { return false };
+        let lines: usize = chunks.iter().map(|chunk| chunk.rows).sum();
         crate::grammars::register();
         self.gutter.set(DiffGutter {
             padding_left: 1 + self.gutter_padding,

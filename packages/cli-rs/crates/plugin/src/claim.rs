@@ -313,6 +313,8 @@ struct Held {
     content: HashMap<ContentRef, Rc<[u8]>>,
     /// The images content decoded to, a handle each, as a surface keeps them (P3).
     images: RefCell<HashMap<ContentRef, Picture>>,
+    /// What the content costs, read once a handle.
+    measures: crate::reconcile::Measures,
     /// The last accepted tree, keeps as they came.
     last: Option<Vec<Node>>,
     /// The values a library's memo table holds for the mount, as its last accepted view said.
@@ -595,12 +597,19 @@ impl Core {
             None
         };
         let mut state = self.state.borrow_mut();
-        let Held { tree, content, last, images, .. } = &mut *state;
+        let Held { tree, content, last, images, measures, .. } = &mut *state;
         let bytes = |handle: &ContentRef| content.get(handle).or_else(|| given.get(handle));
         let source = |source: &Source| match source {
             Source::Text(text) => Some(Rc::from(text.as_str())),
             Source::Content(handle) => bytes(handle).map(|bytes| Rc::from(String::from_utf8_lossy(bytes).as_ref())),
             Source::PartOutput(part) => crate::surface::part_output(host, part).map(|text| Rc::from(text.as_str())),
+        };
+        let measure = |source: &Source| match source {
+            Source::Content(handle) => bytes(handle).map(|bytes| measures.of(*handle, bytes)).unwrap_or_default(),
+            Source::Text(text) => crate::reconcile::measure(text),
+            Source::PartOutput(part) => {
+                crate::surface::part_output(host, part).map(|text| crate::reconcile::measure(&text)).unwrap_or_default()
+            }
         };
         // An image decodes once a handle, as in a surface (P3).
         let image = |source: &Source| match source {
@@ -625,6 +634,7 @@ impl Core {
             act: &act,
             slot: &slot,
             source: &source,
+            measure: &measure,
             content: &has,
             dropped: &|_| false,
             image: &image,

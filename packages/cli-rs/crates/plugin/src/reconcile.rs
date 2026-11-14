@@ -43,6 +43,8 @@ pub struct Work {
     pub parses: u64,
     /// Nodes adopted as a placeholder, over a limit ([`crate::limits`]).
     pub placeholders: u64,
+    /// Bytes of text read to measure what it costs ([`measure`]).
+    pub scanned: u64,
 }
 
 impl Work {
@@ -56,6 +58,7 @@ impl Work {
             kept: self.kept - before.kept,
             parses: self.parses - before.parses,
             placeholders: self.placeholders - before.placeholders,
+            scanned: self.scanned - before.scanned,
         }
     }
 
@@ -185,6 +188,9 @@ pub struct Env<'a> {
     pub slot: &'a dyn Fn(&View, &str) -> Option<SlotMount>,
     /// The text of a source; `None` when the host has none yet, which draws empty.
     pub source: &'a dyn Fn(&Source) -> Option<Rc<str>>,
+    /// What a source's text costs the host: its bytes, and its lines and hunks when it is within one node's text
+    /// ([`Measure`]).
+    pub measure: &'a dyn Fn(&Source) -> Measure,
     /// Whether the mount holds content `ContentRef`.
     pub content: &'a dyn Fn(ContentRef) -> bool,
     /// Whether the view gave content `ContentRef` and its plugin could not hold it ([`crate::limits`]): a node that
@@ -955,33 +961,24 @@ const CHUNKED_ROWS: u64 = 512 + 4 * HUNK_ROWS;
 /// A node's own text and rows, by what each costs the host (the probe of `plugin_limits.rs`): a node is one row, a
 /// text's or Markdown's line one more, a line of code two, a patch's line one and its hunk [`HUNK_ROWS`].
 fn text_cost(env: &Env<'_>, node: &Node) -> Cost {
-    // A last line without its line break is a line too.
-    let lines =
-        |text: &str| text.bytes().filter(|byte| *byte == b'\n').count() as u64 + u64::from(!text.ends_with('\n'));
     let read = |source: &Source| match source {
-        Source::Content(content) if (env.dropped)(*content) => Rc::from(""),
-        source => (env.source)(source).unwrap_or_else(|| Rc::from("")),
+        Source::Content(content) if (env.dropped)(*content) => Measure::default(),
+        source => (env.measure)(source),
     };
     let (text, rows, hunks) = match node {
         Node::Diff { content, .. } => {
             let text = read(content);
-            let hunks = opencode_ui::diff::hunk_count(&text) as u64;
-            let lines = lines(&text);
             // An added file over 3,000 lines builds its chunks near the view; validation reads no chunk.
-            let added = hunks == 1
-                && text.find("@@ -0,0 +1,").is_some_and(|at| {
-                    text[at..].lines().skip(1).all(|line| line.starts_with('+') || line.starts_with('\\'))
-                });
-            let rows = if added && lines > 3_000 { CHUNKED_ROWS } else { lines + HUNK_ROWS * hunks };
-            (text.len() as u64, rows, hunks)
+            let rows = if text.chunked { CHUNKED_ROWS } else { text.lines + HUNK_ROWS * text.hunks };
+            (text.bytes, rows, text.hunks)
         }
         Node::Code { content, .. } => {
             let text = read(content);
-            (text.len() as u64, CODE_ROWS * lines(&text), 0)
+            (text.bytes, CODE_ROWS * text.lines, 0)
         }
         Node::Markdown { source, .. } => {
             let text = read(source);
-            (text.len() as u64, lines(&text), 0)
+            (text.bytes, text.lines, 0)
         }
         Node::Text { spans, .. } => {
             let bytes: u64 = spans.iter().map(|span| span.text.len() as u64).sum();
@@ -993,6 +990,53 @@ fn text_cost(env: &Env<'_>, node: &Node) -> Cost {
         _ => (0, 0, 0),
     };
     Cost { own_rows: 1 + rows, text, hunks, ..Cost::default() }
+}
+
+/// What a source's text costs the host: its bytes; and, within one node's text, its lines, the hunks it has as a
+/// patch, and whether the renderer shows it as an added file in chunks (`opencode_ui::diff::chunks`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Measure {
+    pub bytes: u64,
+    pub lines: u64,
+    pub hunks: u64,
+    pub chunked: bool,
+}
+
+/// What `text` costs: past one node's text it is not read (review bigboi 2), else it is, and counted.
+pub fn measure(text: &str) -> Measure {
+    let bytes = text.len() as u64;
+    if bytes > limits::get().text {
+        return Measure { bytes, ..Measure::default() };
+    }
+    count(|work| work.scanned += bytes);
+    // A last line without its line break is a line too.
+    let lines = text.bytes().filter(|byte| *byte == b'\n').count() as u64 + u64::from(!text.ends_with('\n'));
+    let hunks = opencode_ui::diff::hunk_count(text) as u64;
+    Measure { bytes, lines, hunks, chunked: opencode_ui::diff::chunks(text) }
+}
+
+/// What a mount's content costs, by handle: content never changes, so each handle's bytes are read once a mount, and
+/// those past one node's text never (review bigboi 2).
+#[derive(Default)]
+pub(crate) struct Measures(RefCell<HashMap<ContentRef, Measure>>);
+
+impl Measures {
+    pub(crate) fn of(&self, handle: ContentRef, bytes: &[u8]) -> Measure {
+        if bytes.len() as u64 > limits::get().text {
+            return Measure { bytes: bytes.len() as u64, ..Measure::default() };
+        }
+        if let Some(measure) = self.0.borrow().get(&handle) {
+            return *measure;
+        }
+        let measure = measure(&String::from_utf8_lossy(bytes));
+        self.0.borrow_mut().insert(handle, measure);
+        measure
+    }
+
+    /// Forgets the handles `keep` does not keep.
+    pub(crate) fn retain(&self, keep: impl Fn(&ContentRef) -> bool) {
+        self.0.borrow_mut().retain(|handle, _| keep(handle));
+    }
 }
 
 /// The placeholder that stands for a node over a limit: one muted row that says why, under the node's id.

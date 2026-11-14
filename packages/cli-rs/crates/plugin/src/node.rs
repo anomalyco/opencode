@@ -207,6 +207,10 @@ impl Mount {
                     act: &act,
                     slot: &slot,
                     source: &source,
+                    measure: &|source| match source {
+                        v2::Source::Text(text) => reconcile::measure(text),
+                        _ => reconcile::Measure::default(),
+                    },
                     content: &|_| false,
                     dropped: &|_| false,
                     image: &|_| crate::image::Picture::Pending,
