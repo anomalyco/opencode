@@ -834,3 +834,39 @@ fn a_mark_after_a_wheel_step_keeps_the_other_cards() {
         assert!(kept >= 99 + 98, "the mark kept {kept} subtrees (C ABI: {abi})");
     }
 }
+
+// Expected (big-boi's review of P6c; TS names files by index): a `#` in a file name is part of it. `m` on the card at the
+// top, the file menu of its heading and a hunk step each name `src/f#1.rs`, not `src/f`, on both carriers.
+#[test]
+fn a_hash_in_a_file_name_is_part_of_it() {
+    let file = |name: &str, lines: usize| {
+        let body: String = (0..lines).map(|line| format!(" line {line}\n")).collect();
+        json!({
+            "file": name, "patch": format!("@@ -1,{} +1,{} @@\n-old\n+new\n{body}", lines + 1, lines + 1),
+            "additions": 1, "deletions": 1, "status": "modified",
+        })
+    };
+    let open = |abi: bool| {
+        let h = mount_on(Route::Home, json!([file("src/f", 1), file("src/f#1.rs", 40)]), 120, 30, abi);
+        h.wait_for("/project");
+        h.tui.keymap.dispatch("diff.open", None);
+        h.wait_for("≡ f#1.rs");
+        h
+    };
+    for abi in [false, true] {
+        let h = open(abi);
+        h.keys(&["end", "m"]);
+        assert_eq!(h.reviewed(), ["f#1.rs"], "m on the card at the top (C ABI: {abi})");
+
+        let h = open(abi);
+        let (x, y) = h.find("src/f#1.rs");
+        h.app.mouse(MouseEventKind::Down(MouseButton::Right), x, y);
+        h.wait_for("Mark complete");
+        h.keys(&["return"]);
+        assert_eq!(h.reviewed(), ["f#1.rs"], "the heading's file menu (C ABI: {abi})");
+
+        let h = open(abi);
+        h.keys(&["]", "]", "m"]);
+        assert_eq!(h.reviewed(), ["f#1.rs"], "a hunk step's file (C ABI: {abi})");
+    }
+}

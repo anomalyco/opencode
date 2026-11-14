@@ -311,10 +311,10 @@ impl Viewer {
         }
     }
 
-    /// The file whose card or row a node of `id` (`f:`, `c:`, `h:`, `d:` and a path) belongs to.
+    /// The file whose card or row a node of `id` (`f:`, `c:`, `h:`, `d:` and a path) belongs to. The path is whole: a
+    /// `#` in it is part of the name (a hunk's `#index` is on its anchor's id, never its owner).
     pub fn file_of(&self, id: &str) -> Option<usize> {
         let path = id.split_once(':')?.1;
-        let path = path.split_once('#').map_or(path, |(path, _)| path);
         self.files().iter().position(|file| file.file == path)
     }
 
