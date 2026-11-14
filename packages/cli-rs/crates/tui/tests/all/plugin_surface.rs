@@ -797,3 +797,109 @@ fn a_whole_tree_after_a_refusal_takes_nothing_from_before() {
         assert_eq!(surface::ledger(), Ledger::default(), "mode {mode}");
     }
 }
+
+thread_local! {
+    /// The views of `test.restyle`'s surfaces: the surface and the mount's generation.
+    static RESTYLE: RefCell<Vec<(&'static str, u64)>> = const { RefCell::new(Vec::new()) };
+    /// The renders of its claim of ABI 1.x.
+    static KEPT_RENDERS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Surfaces in the home footer, the `app` slot, the sidebar and the prompt's footer, each a muted text; one in the
+/// footer that reads the palette and changes its click with it, on a raised background; and a claim of ABI 1.x that
+/// keeps what it showed.
+fn restyling(setup: &mut abi::Setup) -> Result<(), String> {
+    let text = |name: &'static str, place: &str| {
+        v2::Surface::new(name, v2::Place::Slot(abi::Placement::append(place)), move |cx| {
+            RESTYLE.with(|log| log.borrow_mut().push((name, cx.mount.generation)));
+            v2::Node::text(vec![abi::Span::new(format!("{name} claim"))]).fg("text.muted")
+        })
+    };
+    setup.surface(text("foot", "home.footer"));
+    setup.surface(text("app", "app"));
+    setup.surface(text("side", "sidebar.content"));
+    setup.surface(text("prompt", "prompt.footer"));
+    setup.surface(
+        v2::Surface::new("pal", v2::Place::Slot(abi::Placement::append("home.footer")), |cx| {
+            RESTYLE.with(|log| log.borrow_mut().push(("pal", cx.mount.generation)));
+            let mode = format!("{:?}", cx.input.palette.mode);
+            v2::Node::row(vec![v2::Node::text(vec![abi::Span::new("pal box")])])
+                .bg("background.raised.base")
+                .on_click(abi::Click::command("restyle.mode", Some(mode)))
+        })
+        .palette(),
+    );
+    setup.slot(abi::Placement::append("home.footer"), |_, _, _| {
+        let renders = KEPT_RENDERS.get();
+        KEPT_RENDERS.set(renders + 1);
+        match renders {
+            0 => abi::Render::Show(abi::Node::text([abi::Span::new("kept claim").fg("text.muted")])),
+            _ => abi::Render::Keep,
+        }
+    });
+    Ok(())
+}
+
+/// The cell where `text` starts on `harness`'s screen.
+fn cell_of(harness: &Harness, text: &str) -> opentui::testing::Cell {
+    let capture = harness.app.render();
+    let (x, y) = harness.find(text);
+    capture.cells[usize::from(y) * capture.width as usize + usize::from(x)].clone()
+}
+
+// Expected (`work`, a theme change; bigboi's 7): a switch to a light theme keeps every surface's mount in the home
+// footer, the `app` slot, the sidebar and the prompt's footer: no view of one that names its colors by token, one
+// view of the one that reads the palette, in its own mount, and no widget built or dropped. Each paints in the new
+// theme, also the palette's view that changed its click with the palette, and a claim of ABI 1.x that keeps what it
+// showed.
+#[test]
+fn a_theme_change_keeps_every_surface_mounted() {
+    let session = support::merge(support::session("ses_t", "Restyle"), serde_json::json!({ "agent": "build" }));
+    let fake = move || {
+        let session = session.clone();
+        support::Fake::new(move |seen| match seen.path.as_str() {
+            "/api/session" => (200, serde_json::json!({ "data": [session], "cursor": {} })),
+            "/api/session/ses_t" => (200, serde_json::json!({ "data": session })),
+            "/api/session/ses_t/message" => (200, serde_json::json!({ "data": [], "cursor": {} })),
+            "/api/session/ses_t/permission" => (200, serde_json::json!({ "data": [] })),
+            _ => support::base(seen, support::DIRECTORY),
+        })
+    };
+    for route in [Route::Home, support::session_route("ses_t")] {
+        RESTYLE.with(|log| log.borrow_mut().clear());
+        KEPT_RENDERS.set(0);
+        let deps = Deps {
+            route: route.clone(),
+            builtins: vec![abi::Plugin { id: "test.restyle", setup: restyling }.into()],
+            ..support::deps(Arc::new(fake()))
+        };
+        let harness = support::mount(160, 40, deps);
+        let names: &[&str] = match route {
+            Route::Home => &["foot claim", "app claim", "prompt claim", "pal box", "kept claim"],
+            _ => &["side claim", "app claim", "prompt claim"],
+        };
+        harness.wait_for_all(names);
+        settle(&harness);
+        let seen = RESTYLE.with(|log| log.borrow().clone());
+        let work = reconcile::work();
+        assert!(harness.tui.theme.borrow_mut().set_mode(Some(opencode_ui::theme::ThemeMode::Light), false));
+        harness.tui.theme_changed();
+        settle(&harness);
+        let done = reconcile::work().since(work);
+        let after = RESTYLE.with(|log| log.borrow()[seen.len()..].to_vec());
+        let palette = seen.iter().rev().find(|(name, _)| *name == "pal").map(|(_, generation)| *generation);
+        assert!(
+            after.iter().all(|(name, generation)| *name == "pal" && Some(*generation) == palette),
+            "{route:?}: views after the switch {after:?}, before {seen:?}"
+        );
+        assert_eq!((done.created, done.removed), (0, 0), "{route:?}: {done:?}");
+        let page = harness.tui.page();
+        for name in names.iter().filter(|name| **name != "pal box") {
+            assert_eq!(cell_of(&harness, name).fg, page.text.muted, "{route:?}: {name}");
+        }
+        if route == Route::Home {
+            assert_eq!(after.len(), 1, "the palette's surface was not called once");
+            assert_eq!(cell_of(&harness, "pal box").bg, page.background.raised.base);
+        }
+    }
+}
