@@ -7,8 +7,9 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::v2::{
-    Anchor, Cause, ContentRef, DiffView, Edge, Fit, Frame, ListItem, Mode, MountId, Node, Palette, PartRef, Source,
-    Split, SurfaceInput,
+    Anchor, AnchorAt, Cause, ContentRef, DiffView, Edge, Fit, Frame, Geometry, LayoutReply, ListItem, Mode, MountId,
+    Node, Notify, Paint, Palette, PartRef, Rect, Scroll, ScrollAlign, ScrollEvent, ScrollState, Source, Split,
+    SurfaceInput, Target, Top, TranscriptRow, TranscriptView,
 };
 use crate::{
     Action, Align, Border, BorderStyle, Click, Color, Edges, Justify, Layout, Overflow, Press, Sides, Span, TitleAlign,
@@ -75,7 +76,9 @@ macro_rules! unit {
 
 /// The JSON Schema of contract 2.0. The root is a [`Node`], the tree a view returns; a host validates what a view
 /// gets against `#/$defs/SurfaceInput`, a mount against `#/$defs/MountId`, and what a draw gets against
-/// `#/$defs/Frame`.
+/// `#/$defs/Frame`. The scroll verbs ([`Scroll`] on a [`Target`]), the reads ([`ScrollState`], [`AnchorAt`],
+/// [`TranscriptView`]), the scroll events ([`ScrollEvent`]) and the `layout` call ([`Geometry`] in, [`LayoutReply`]
+/// out) are under their names too.
 pub fn schema() -> Value {
     let defs: Vec<(&str, Value)> = vec![
         (
@@ -251,6 +254,105 @@ pub fn schema() -> Value {
                 Command { name: string() } { input: nullable(string()) },
             }),
         ),
+        (
+            "ScrollAlign",
+            tagged!(ScrollAlign, "Where a node goes when a `to` verb brings it into view.", {
+                Start { } { },
+                Keep { } { },
+                Nearest { } { inset: uint16() },
+            }),
+        ),
+        (
+            "Scroll",
+            tagged!(Scroll, "A scroll verb, an effect of a handler; the host clamps it to the content.", {
+                To { node: string() } { align: reference("ScrollAlign") },
+                Offset { offset: int32() } { },
+                By { rows: int32() } { },
+                Page { percent: int16() } { },
+                Edge { edge: reference("Edge") } { },
+                Step { group: string(), by: int32() } { inset: uint16() },
+                Forget { } { },
+            }),
+        ),
+        (
+            "Target",
+            tagged!(Target, "What a verb or a read names: a scroll of the plugin's surface, or the transcript.", {
+                Node { surface: string(), id: string() } { },
+                Transcript { } { },
+            }),
+        ),
+        (
+            "ScrollState",
+            object!(ScrollState, "Where a scroll is, in rows.", {
+                offset: int32(), viewport: int32(), extent: int32(),
+            } { }),
+        ),
+        (
+            "AnchorAt",
+            object!(AnchorAt, "An anchor and its row in its scroll's content.", {
+                id: string(), owner: string(), row: int32(),
+            } { index: uint32(), variant: string() }),
+        ),
+        (
+            "ScrollEvent",
+            tagged!(ScrollEvent, "What the host tells a surface about its scrolls.", {
+                Landed { scroll: string(), anchor: reference("AnchorAt") } { },
+                UserScroll { scroll: string() } { },
+            }),
+        ),
+        (
+            "Notify",
+            tagged!(Notify, "What a surface asks its `layout` call to be told about.", {
+                Node { id: string() } { },
+                Scroll { id: string() } { },
+                Group { scroll: string(), group: string() } { },
+                Transcript { } { },
+            }),
+        ),
+        (
+            "Rect",
+            object!(Rect, "A rect in the surface's own cells.", {
+                x: int32(), y: int32(), width: int32(), height: int32(),
+            } { }),
+        ),
+        (
+            "Top",
+            object!(Top, "The top anchor of a group in a scroll.", {
+                scroll: string(), group: string(), anchor: nullable(reference("AnchorAt")),
+            } { }),
+        ),
+        (
+            "Geometry",
+            object!(Geometry, "What a `layout` call gets: this frame's geometry of what the surface named.", {
+                rects: array(pair(string(), reference("Rect"))),
+                scrolls: array(pair(string(), reference("ScrollState"))),
+                groups: array(triple(string(), string(), array(reference("AnchorAt")))),
+                tops: array(reference("Top")),
+                moved_only: boolean(),
+                reached: array(pair(string(), int32())),
+                transcript: nullable(reference("TranscriptView")),
+            } { }),
+        ),
+        ("Paint", object!(Paint, "A box's background `layout` sets.", { node: string(), bg: reference("Color") } { })),
+        (
+            "LayoutReply",
+            object!(LayoutReply, "What a `layout` call returns.", { } {
+                paints: array(reference("Paint")), again: boolean(),
+            }),
+        ),
+        (
+            "TranscriptView",
+            object!(TranscriptView, "The session transcript's scroll, as the host publishes it.", {
+                offset: int32(), viewport: int32(), extent: int32(), revision: uint64(), above: uint32(),
+                rows: array(reference("TranscriptRow")),
+            } { }),
+        ),
+        (
+            "TranscriptRow",
+            object!(TranscriptRow, "A mounted row of the transcript.", {
+                kind: string(), message: string(), row: int32(), height: int32(),
+            } { part: nullable(string()) }),
+        ),
     ];
     let defs: serde_json::Map<String, Value> =
         defs.into_iter().map(|(name, schema)| (name.to_owned(), schema)).collect();
@@ -317,6 +419,10 @@ fn pair(first: Value, second: Value) -> Value {
     json!({ "type": "array", "prefixItems": [first, second], "minItems": 2, "maxItems": 2 })
 }
 
+fn triple(first: Value, second: Value, third: Value) -> Value {
+    json!({ "type": "array", "prefixItems": [first, second, third], "minItems": 3, "maxItems": 3 })
+}
+
 fn string() -> Value {
     json!({ "type": "string" })
 }
@@ -335,6 +441,14 @@ fn uint16() -> Value {
 
 fn int16() -> Value {
     json!({ "type": "integer", "minimum": i16::MIN, "maximum": i16::MAX })
+}
+
+fn int32() -> Value {
+    json!({ "type": "integer", "minimum": i32::MIN, "maximum": i32::MAX })
+}
+
+fn uint32() -> Value {
+    json!({ "type": "integer", "minimum": 0, "maximum": u32::MAX })
 }
 
 fn uint64() -> Value {
@@ -373,13 +487,17 @@ mod tests {
             }),
             Some("boolean") => value.is_boolean(),
             Some("null") => value.is_null(),
-            Some("number") => value.is_number(),
-            Some("integer") => {
+            Some("number") => value.as_f64().is_some_and(|n| {
                 let bound = |key: &str| schema[key].as_f64();
-                (value.is_i64() || value.is_u64())
-                    && value.as_f64().is_some_and(|n| {
-                        bound("minimum").is_none_or(|min| n >= min) && bound("maximum").is_none_or(|max| n <= max)
-                    })
+                bound("minimum").is_none_or(|min| n >= min) && bound("maximum").is_none_or(|max| n <= max)
+            }),
+            // In integers, as `u64::MAX` is no `f64`.
+            Some("integer") => {
+                let exact = |value: &Value| value.as_i64().map(i128::from).or(value.as_u64().map(i128::from));
+                let bound = |key: &str| schema.get(key).and_then(exact);
+                exact(value).is_some_and(|n| {
+                    bound("minimum").is_none_or(|min| n >= min) && bound("maximum").is_none_or(|max| n <= max)
+                })
             }
             Some("array") => {
                 value.as_array().is_some_and(|items| match schema.get("prefixItems").and_then(Value::as_array) {
@@ -541,7 +659,7 @@ mod tests {
             full: true,
         };
         assert!(agree::<SurfaceInput>("SurfaceInput", serde_json::to_value(&input).unwrap()));
-        let mount = MountId { surface: "s".into(), key: "k".into(), generation: 3 };
+        let mount = MountId { surface: "s".into(), key: "k".into(), generation: u64::MAX };
         assert!(agree::<MountId>("MountId", serde_json::to_value(&mount).unwrap()));
         for cause in [Cause::First, Cause::Resized, Cause::Version, Cause::Animate] {
             let frame = Frame { width: 3, height: 2, cause, dt: std::time::Duration::new(1, 999_999_999) };
@@ -551,6 +669,90 @@ mod tests {
         assert!(!agree::<Frame>("Frame", frame(json!("drawn"), json!({ "secs": 0, "nanos": 0 }))));
         assert!(!agree::<Frame>("Frame", frame(json!("first"), json!({ "secs": 0 }))));
         assert!(!agree::<Frame>("Frame", frame(json!("first"), json!({ "secs": -1, "nanos": 0 }))));
+        // The calls of P3, every variant with every field set.
+        let anchor = AnchorAt { id: "d#1".into(), owner: "d".into(), index: 1, variant: "v".into(), row: -3 };
+        let verbs = [
+            Scroll::To { node: "n".into(), align: ScrollAlign::Nearest { inset: 2 } },
+            Scroll::To { node: "n".into(), align: ScrollAlign::Keep },
+            Scroll::To { node: "n".into(), align: ScrollAlign::Start },
+            Scroll::Offset { offset: -1 },
+            Scroll::By { rows: i32::MIN },
+            Scroll::Page { percent: i16::MIN },
+            Scroll::Edge { edge: Edge::Bottom },
+            Scroll::Step { group: "g".into(), by: -2, inset: 1 },
+            Scroll::Forget,
+        ];
+        for verb in verbs {
+            assert!(agree::<Scroll>("Scroll", serde_json::to_value(&verb).unwrap()), "{verb:?}");
+        }
+        for target in [Target::node("s", "i"), Target::Transcript] {
+            assert!(agree::<Target>("Target", serde_json::to_value(&target).unwrap()));
+        }
+        let state = ScrollState { offset: 1, viewport: 2, extent: 3 };
+        assert!(agree::<ScrollState>("ScrollState", serde_json::to_value(state).unwrap()));
+        for event in [
+            ScrollEvent::Landed { scroll: "s".into(), anchor: anchor.clone() },
+            ScrollEvent::UserScroll { scroll: "s".into() },
+        ] {
+            assert!(agree::<ScrollEvent>("ScrollEvent", serde_json::to_value(&event).unwrap()));
+        }
+        let notify = [
+            Notify::Node { id: "n".into() },
+            Notify::Scroll { id: "s".into() },
+            Notify::Group { scroll: "s".into(), group: "g".into() },
+            Notify::Transcript,
+        ];
+        for notify in notify {
+            assert!(agree::<Notify>("Notify", serde_json::to_value(&notify).unwrap()));
+        }
+        let transcript = TranscriptView {
+            offset: 1,
+            viewport: 2,
+            extent: 3,
+            revision: u64::MAX,
+            above: 4,
+            rows: vec![TranscriptRow {
+                kind: "tool".into(),
+                message: "m".into(),
+                part: Some("p".into()),
+                row: 0,
+                height: 2,
+            }],
+        };
+        let geometry = Geometry {
+            rects: vec![("n".into(), Rect { x: -1, y: 2, width: 3, height: 4 })],
+            scrolls: vec![("s".into(), state)],
+            groups: vec![("s".into(), "g".into(), vec![anchor.clone()])],
+            tops: vec![Top { scroll: "s".into(), group: "g".into(), anchor: Some(anchor) }],
+            moved_only: true,
+            reached: vec![("s".into(), 7)],
+            transcript: Some(transcript),
+        };
+        assert!(agree::<Geometry>("Geometry", serde_json::to_value(&geometry).unwrap()));
+        let reply = LayoutReply::default().paint("n", "text.base");
+        assert!(agree::<LayoutReply>(
+            "LayoutReply",
+            serde_json::to_value(LayoutReply { again: true, ..reply }).unwrap()
+        ));
+        // What a plugin may leave out, and what neither takes.
+        for (verb, taken) in [
+            (json!({ "type": "to", "node": "n" }), true),
+            (json!({ "type": "to", "node": "n", "align": { "type": "nearest" } }), true),
+            (json!({ "type": "step", "group": "g", "by": 1 }), true),
+            (json!({ "type": "step", "group": "g" }), false),
+            (json!({ "type": "page", "percent": 40000 }), false),
+            (json!({ "type": "forget", "node": "n" }), true),
+            (json!({ "type": "edge", "edge": "left" }), false),
+        ] {
+            assert_eq!(agree::<Scroll>("Scroll", verb), taken);
+        }
+        assert!(agree::<LayoutReply>("LayoutReply", json!({})));
+        // serde reads a percent past `f32` as infinite, as the schema takes it; the reconcile refuses a size that is not
+        // finite (`Refused::Number`).
+        assert!(agree::<Node>("Node", json!({ "type": "box", "layout": { "width": { "percent": 1e100 } } })));
+        let past: Value =
+            serde_json::from_str(r#"{ "surface": "s", "key": "k", "generation": 18446744073709551616 }"#).unwrap();
+        assert!(!agree::<MountId>("MountId", past));
         let refused = [
             json!({ "type": "text" }),
             json!({ "type": "image", "id": "x" }),

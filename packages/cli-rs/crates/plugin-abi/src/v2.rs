@@ -8,8 +8,8 @@
 //! calls its view with Rust values. The C ABI of 2.0 is P4's; until then a surface of an external plugin is never
 //! mounted. The leaf types (colors, spans, layout, clicks) are those of ABI 1.x.
 //!
-//! The schema of these types is generated from them (`cargo run -p opencode-plugin-abi --features schema --example
-//! schema`) into `crates/plugin-abi/schema/v2.json`.
+//! The schema of these types is generated from them (`bun script/gen/plugin-schema.ts`, which runs the `schema`
+//! example) into `crates/plugin-abi/schema/v2.json`.
 
 use std::any::Any;
 use std::collections::{BTreeMap, HashMap, HashSet};

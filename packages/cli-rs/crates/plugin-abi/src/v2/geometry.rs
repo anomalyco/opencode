@@ -90,7 +90,10 @@ pub enum ScrollAlign {
     /// Where it is on screen now, across the reflow the same call makes (CSS scroll anchoring).
     Keep,
     /// The least move that shows the whole node below `inset` rows (`scrollIntoView` with a `scroll-padding-top`).
-    Nearest { inset: u16 },
+    Nearest {
+        #[serde(default, skip_serializing_if = "is_zero")]
+        inset: u16,
+    },
 }
 
 /// A scroll verb, an effect of a handler. The host clamps it to the content.
@@ -98,7 +101,11 @@ pub enum ScrollAlign {
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum Scroll {
     /// Brings node `node` into view after the solve, again in each round until it moves nothing.
-    To { node: String, align: ScrollAlign },
+    To {
+        node: String,
+        #[serde(default)]
+        align: ScrollAlign,
+    },
     /// To row `offset` of the content.
     Offset { offset: i32 },
     /// By `rows`, down when positive.
@@ -108,8 +115,14 @@ pub enum Scroll {
     /// To an edge of the content.
     Edge { edge: Edge },
     /// To the anchor `by` steps away in `group`, `inset` rows below the top: from the anchor the last step landed on
-    /// while the offset has not moved since, else from the first anchor below (or the last above) `top + inset`.
-    Step { group: String, by: i32, inset: u16 },
+    /// while the offset has not moved since, else from the first anchor below (or the last above) `top + inset`. A
+    /// step that finds no anchor, or of 0, moves nothing and keeps that memory.
+    Step {
+        group: String,
+        by: i32,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        inset: u16,
+    },
     /// Drops the scroll's pending [`Scroll::To`] and the memory of its last step: its content was replaced.
     Forget,
 }

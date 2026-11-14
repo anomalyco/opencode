@@ -1116,6 +1116,558 @@
         }
       ],
       "description": "What a click asks the host to do."
+    },
+    "ScrollAlign": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "start"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "keep"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "inset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "type": {
+              "const": "nearest"
+            }
+          },
+          "required": ["type"]
+        }
+      ],
+      "description": "Where a node goes when a `to` verb brings it into view."
+    },
+    "Scroll": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "node": {
+              "type": "string"
+            },
+            "align": {
+              "$ref": "#/$defs/ScrollAlign"
+            },
+            "type": {
+              "const": "to"
+            }
+          },
+          "required": ["type", "node"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "offset": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            },
+            "type": {
+              "const": "offset"
+            }
+          },
+          "required": ["type", "offset"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "rows": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            },
+            "type": {
+              "const": "by"
+            }
+          },
+          "required": ["type", "rows"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "percent": {
+              "type": "integer",
+              "minimum": -32768,
+              "maximum": 32767
+            },
+            "type": {
+              "const": "page"
+            }
+          },
+          "required": ["type", "percent"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "edge": {
+              "$ref": "#/$defs/Edge"
+            },
+            "type": {
+              "const": "edge"
+            }
+          },
+          "required": ["type", "edge"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string"
+            },
+            "by": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            },
+            "inset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "type": {
+              "const": "step"
+            }
+          },
+          "required": ["type", "group", "by"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "forget"
+            }
+          },
+          "required": ["type"]
+        }
+      ],
+      "description": "A scroll verb, an effect of a handler; the host clamps it to the content."
+    },
+    "Target": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "node"
+            }
+          },
+          "required": ["type", "surface", "id"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "transcript"
+            }
+          },
+          "required": ["type"]
+        }
+      ],
+      "description": "What a verb or a read names: a scroll of the plugin's surface, or the transcript."
+    },
+    "ScrollState": {
+      "type": "object",
+      "properties": {
+        "offset": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "viewport": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "extent": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        }
+      },
+      "required": ["offset", "viewport", "extent"],
+      "description": "Where a scroll is, in rows."
+    },
+    "AnchorAt": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "row": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "variant": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "owner", "row"],
+      "description": "An anchor and its row in its scroll's content."
+    },
+    "ScrollEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "scroll": {
+              "type": "string"
+            },
+            "anchor": {
+              "$ref": "#/$defs/AnchorAt"
+            },
+            "type": {
+              "const": "landed"
+            }
+          },
+          "required": ["type", "scroll", "anchor"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "scroll": {
+              "type": "string"
+            },
+            "type": {
+              "const": "user-scroll"
+            }
+          },
+          "required": ["type", "scroll"]
+        }
+      ],
+      "description": "What the host tells a surface about its scrolls."
+    },
+    "Notify": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "node"
+            }
+          },
+          "required": ["type", "id"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "scroll"
+            }
+          },
+          "required": ["type", "id"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "scroll": {
+              "type": "string"
+            },
+            "group": {
+              "type": "string"
+            },
+            "type": {
+              "const": "group"
+            }
+          },
+          "required": ["type", "scroll", "group"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "transcript"
+            }
+          },
+          "required": ["type"]
+        }
+      ],
+      "description": "What a surface asks its `layout` call to be told about."
+    },
+    "Rect": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "y": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "width": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "height": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        }
+      },
+      "required": ["x", "y", "width", "height"],
+      "description": "A rect in the surface's own cells."
+    },
+    "Top": {
+      "type": "object",
+      "properties": {
+        "scroll": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "anchor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AnchorAt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["scroll", "group", "anchor"],
+      "description": "The top anchor of a group in a scroll."
+    },
+    "Geometry": {
+      "type": "object",
+      "properties": {
+        "rects": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/Rect"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "scrolls": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/ScrollState"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/AnchorAt"
+                }
+              }
+            ],
+            "minItems": 3,
+            "maxItems": 3
+          }
+        },
+        "tops": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Top"
+          }
+        },
+        "moved_only": {
+          "type": "boolean"
+        },
+        "reached": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "transcript": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TranscriptView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["rects", "scrolls", "groups", "tops", "moved_only", "reached", "transcript"],
+      "description": "What a `layout` call gets: this frame's geometry of what the surface named."
+    },
+    "Paint": {
+      "type": "object",
+      "properties": {
+        "node": {
+          "type": "string"
+        },
+        "bg": {
+          "$ref": "#/$defs/Color"
+        }
+      },
+      "required": ["node", "bg"],
+      "description": "A box's background `layout` sets."
+    },
+    "LayoutReply": {
+      "type": "object",
+      "properties": {
+        "paints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Paint"
+          }
+        },
+        "again": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "description": "What a `layout` call returns."
+    },
+    "TranscriptView": {
+      "type": "object",
+      "properties": {
+        "offset": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "viewport": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "extent": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "above": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TranscriptRow"
+          }
+        }
+      },
+      "required": ["offset", "viewport", "extent", "revision", "above", "rows"],
+      "description": "The session transcript's scroll, as the host publishes it."
+    },
+    "TranscriptRow": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "row": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "height": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "part": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["kind", "message", "row", "height"],
+      "description": "A mounted row of the transcript."
     }
   }
 }
