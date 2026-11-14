@@ -14,6 +14,8 @@ export type Reply = { readonly resolve: () => void; readonly reject: (cause: unk
  */
 export type State =
   | { readonly status: "running"; readonly attempt: number }
+  /** The user quit for the first time and is reading that the background service keeps running after the app. */
+  | { readonly status: "notifying"; readonly attempt: number }
   /** Every plugin but `keep` is stopping for a restart handoff; without `handoff` the app relaunches next. */
   | {
       readonly status: "suspending"
@@ -40,7 +42,9 @@ export type Event =
   | { readonly type: "exit.requested"; readonly mode: ExitMode }
   /** Windows logoff or shutdown (`session-end` on each window); Electron emits no `before-quit` for it. */
   | { readonly type: "session.ending" }
-  | { readonly type: "before.quit" }
+  /** `notify` first tells the user, once, that the background service keeps running after quit. */
+  | { readonly type: "before.quit"; readonly notify?: boolean }
+  | { readonly type: "notice.dismissed"; readonly attempt: number }
   | { readonly type: "will.quit" }
 
 export type RejectReason =
@@ -49,6 +53,7 @@ export type RejectReason =
   | { readonly kind: "quitting" }
 
 export type Command =
+  | { readonly type: "show-quit-notice"; readonly attempt: number }
   | { readonly type: "stop-plugins"; readonly attempt: number }
   | { readonly type: "run-handoff"; readonly attempt: number; readonly handoff: Handoff }
   | { readonly type: "resume-plugins"; readonly attempt: number }
@@ -75,8 +80,22 @@ export function transition(state: State, event: Event): Transition {
 
   // A quit that starts while the handoff runs is the handoff's own (quitAndInstall quits before its promise settles),
   // and the plugins it must not wait for are already stopped.
-  if (event.type === "before.quit")
-    return state.status === "handing-off" ? unchanged(state) : exitRequested(state, "quit")
+  if (event.type === "before.quit") {
+    if (state.status === "handing-off" || state.status === "notifying") return unchanged(state)
+
+    if (state.status === "running" && event.notify)
+      return {
+        state: { status: "notifying", attempt: state.attempt + 1 },
+        commands: [{ type: "show-quit-notice", attempt: state.attempt + 1 }],
+      }
+
+    return exitRequested(state, "quit")
+  }
+
+  if (event.type === "notice.dismissed")
+    return state.status === "notifying" && state.attempt === event.attempt
+      ? exitRequested(state, "quit")
+      : unchanged(state)
 
   if (event.type === "will.quit") return willQuit(state)
 
@@ -84,7 +103,8 @@ export function transition(state: State, event: Event): Transition {
 }
 
 /** The app starts no plugin, and the windows that close are restored on the next launch. */
-export const isQuitting = (state: State) => state.status !== "running" && state.status !== "resuming"
+export const isQuitting = (state: State) =>
+  state.status !== "running" && state.status !== "resuming" && state.status !== "notifying"
 
 /** The scope a stop leaves running: the restart caller's, until the handoff settled. */
 export const keptScope = (state: State) =>
@@ -93,7 +113,7 @@ export const keptScope = (state: State) =>
 /** The macOS dock reopens windows until a real quit starts; a restart handoff can still fail and keep the app. */
 export const restoresWindows = (state: State) => state.status !== "stopping" && state.status !== "quitting"
 
-/** Electron's `before-quit` waits for the plugins to stop first. */
+/** Electron's `before-quit` waits for the user to dismiss the notice and for the plugins to stop first. */
 export const preventsQuit = (state: State) => state.status !== "handing-off" && state.status !== "quitting"
 
 /**
@@ -102,6 +122,10 @@ export const preventsQuit = (state: State) => state.status !== "handing-off" && 
  */
 export const quitsWhenAllWindowsClosed = (state: State, platform: NodeJS.Platform) =>
   platform !== "darwin" || state.status === "stopping" || state.status === "quitting"
+
+/** Whether this stop ends in a quit, as opposed to a restart handoff or a relaunch. */
+export const stopsForQuit = (state: State) =>
+  state.status === "quitting" || (state.status === "stopping" && state.exit === "quit")
 
 function restartRequested(state: State, event: Extract<Event, { type: "restart.requested" }>): Transition {
   if (state.status === "running")
@@ -149,7 +173,10 @@ function willQuit(state: State): Transition {
   }
 }
 
-function stepSettled(state: State, event: Extract<Event, { readonly attempt: number }>): Transition {
+function stepSettled(
+  state: State,
+  event: Exclude<Extract<Event, { readonly attempt: number }>, { type: "notice.dismissed" }>,
+): Transition {
   if (state.status === "quitting" || state.attempt !== event.attempt) return unchanged(state)
 
   if (event.type === "plugins.stopped" && state.status === "suspending") {
@@ -213,6 +240,8 @@ export function createDriver(input: {
   readonly stop: () => Promise<void>
   /** Starts the plugins a handoff stopped again; never rejects. */
   readonly resume: () => Promise<void>
+  /** Shows the first-quit notice and remembers it was shown; never rejects. */
+  readonly notice: () => Promise<void>
   readonly exit: (mode: ExitMode) => void
 }) {
   const current = { state: initialState() }
@@ -228,6 +257,12 @@ export function createDriver(input: {
       const done = () => dispatch({ type: "plugins.stopped", attempt: command.attempt })
 
       return void input.stop().then(done, done)
+    }
+
+    if (command.type === "show-quit-notice") {
+      const done = () => dispatch({ type: "notice.dismissed", attempt: command.attempt })
+
+      return void input.notice().then(done, done)
     }
 
     if (command.type === "run-handoff")

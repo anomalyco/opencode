@@ -316,6 +316,11 @@ export const DESKTOP_NATIVE_ENGLISH = {
 
   "desktop.contextMenu.spellcheck": "Spellcheck",
   "desktop.contextMenu.spellcheckLanguages": "Spellcheck Languages",
+
+  "desktop.quit.serviceNotice.message": "OpenCode keeps running in the background",
+  "desktop.quit.serviceNotice.detail":
+    "After you quit, the OpenCode server keeps running so agents, terminals, and MCP servers can finish their work. You can change this in Settings → General.",
+  "desktop.quit.serviceNotice.ok": "OK",
 } as const
 
 export type DesktopNativeKey = keyof typeof DESKTOP_NATIVE_ENGLISH

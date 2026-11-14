@@ -7,6 +7,7 @@ import {
   preventsQuit,
   quitsWhenAllWindowsClosed,
   restoresWindows,
+  stopsForQuit,
   transition,
   type Event,
   type Reply,
@@ -145,6 +146,70 @@ describe("app lifecycle machine", () => {
       { type: "exit", mode: "relaunch" },
     ])
   })
+
+  test("the first quit holds Electron while the notice is open, then stops the plugins exactly once", () => {
+    const asked = transition(initialState(), { type: "before.quit", notify: true })
+
+    expect(asked).toEqual({
+      state: { status: "notifying", attempt: 1 },
+      commands: [{ type: "show-quit-notice", attempt: 1 }],
+    })
+    expect(preventsQuit(asked.state)).toBe(true)
+    expect(isQuitting(asked.state)).toBe(false)
+
+    // Cmd+Q pressed again, or the window closed again, while the dialog is open asks nothing new.
+    expect(transition(asked.state, { type: "before.quit", notify: true })).toEqual({
+      state: asked.state,
+      commands: [],
+    })
+    expect(transition(asked.state, { type: "notice.dismissed", attempt: 0 })).toEqual({
+      state: asked.state,
+      commands: [],
+    })
+
+    const dismissed = transition(asked.state, { type: "notice.dismissed", attempt: 1 })
+    expect(dismissed).toEqual({
+      state: { status: "stopping", attempt: 2, exit: "quit" },
+      commands: [{ type: "stop-plugins", attempt: 2 }],
+    })
+    expect(stopsForQuit(dismissed.state)).toBe(true)
+    expect(transition(dismissed.state, { type: "notice.dismissed", attempt: 1 }).state).toBe(dismissed.state)
+  })
+
+  test.each([
+    { name: "the OS ends the session", event: { type: "session.ending" } },
+    { name: "a signal quits", event: { type: "exit.requested", mode: "quit" } },
+    { name: "Electron quits without before-quit", event: { type: "will.quit" } },
+  ] satisfies { name: string; event: Event }[])("$name while the notice is open: the quit goes on", (row) => {
+    const asked = transition(initialState(), { type: "before.quit", notify: true }).state
+    const next = transition(asked, row.event)
+
+    expect(next.commands).toEqual([{ type: "stop-plugins", attempt: 2 }])
+    expect(stopsForQuit(next.state)).toBe(true)
+    expect(transition(next.state, { type: "notice.dismissed", attempt: 1 }).state).toBe(next.state)
+  })
+
+  test("a restart while the notice is open is rejected as busy", () => {
+    const asked = transition(initialState(), { type: "before.quit", notify: true }).state
+    const caller = reply()
+
+    expect(transition(asked, { type: "restart.requested", keep, handoff, reply: caller })).toEqual({
+      state: asked,
+      commands: [{ type: "reject", reply: caller, reason: { kind: "busy" } }],
+    })
+  })
+
+  test.each([
+    { name: "quit", events: [{ type: "before.quit" }], quit: true },
+    { name: "Electron quit", events: [{ type: "will.quit" }], quit: true },
+    { name: "relaunch", events: [{ type: "exit.requested", mode: "relaunch" }], quit: false },
+    { name: "restart handoff", events: [{ type: "restart.requested", keep, handoff, reply: reply() }], quit: false },
+  ] satisfies { name: string; events: Event[]; quit: boolean }[])(
+    "only a quit stops the background service, not a $name",
+    (row) => {
+      expect(stopsForQuit(replay(row.events).state)).toBe(row.quit)
+    },
+  )
 
   const phases = [
     { phase: "suspending", events: [], reason: { kind: "quitting" }, stale: { type: "plugins.stopped", attempt: 1 } },
