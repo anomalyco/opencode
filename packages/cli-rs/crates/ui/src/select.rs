@@ -368,7 +368,7 @@ struct Inner<T> {
     scroll_after_layout: Cell<bool>,
     /// The options' search strings, prepared once rather than on every keystroke.
     prepared: RefCell<fuzzy::Cache>,
-    /// The last submit came from a key or a click, not from its command run by name.
+    /// The last submit or action came from a key or a click, not from its command run by name.
     by_input: Cell<bool>,
 }
 
@@ -619,7 +619,8 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         self.filter_changed(value.to_owned());
     }
 
-    /// Whether the option picked last was picked with a key or a click, not by running the submit command by name.
+    /// Whether the option picked last, or the action run last, came with a key or a click, not by running its command
+    /// by name.
     pub fn by_input(&self) -> bool {
         self.0.by_input.get()
     }
@@ -1016,11 +1017,17 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         ];
         for action in self.props().actions.iter().filter(|action| !action.hidden) {
             let run = action.clone();
-            let mut item =
-                TuiCommand::new(action.command.clone(), bind!(weak, |inner, _, _| Select(inner).trigger(&run)))
-                    // Resolved without a selection so moving through the list does not rebuild the layer.
-                    .title((action.title)(None))
-                    .group("Dialog");
+            // As the submit: a key brings its event, a run by name does not.
+            let mut item = TuiCommand::new(
+                action.command.clone(),
+                bind!(weak, |inner, _, event| {
+                    inner.by_input.set(event.is_some());
+                    Select(inner).trigger(&run);
+                }),
+            )
+            // Resolved without a selection so moving through the list does not rebuild the layer.
+            .title((action.title)(None))
+            .group("Dialog");
             if let Some(bind) = &action.bind {
                 item = item.bind(Bind::Key(bind.clone()));
             }
@@ -1448,7 +1455,10 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                 FooterAction::new((action.title)(selected.as_ref()))
                     .key(label)
                     .disabled(self.action_disabled(action))
-                    .on_trigger(bind!(self.0, |inner| Select(inner).trigger(&run))),
+                    .on_trigger(bind!(self.0, |inner| {
+                        inner.by_input.set(true);
+                        Select(inner).trigger(&run);
+                    })),
             ));
         }
         let dynamic = props.dynamic_hints.as_ref().map(|hints| hints());

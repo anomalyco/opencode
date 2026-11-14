@@ -147,10 +147,17 @@ fn pick(tui: &Tui, owner: Owner, select: abi::Select) {
         && open(tui, &owner.0, select.key.as_deref().unwrap_or_default())
     {
         let picker = tui.reads.select.borrow().clone().filter(|picker| picker.key == *keyed);
-        // Its footer actions and keys are the dialog's layer, built with it: new ones build it again.
+        // Its footer actions' keys and its extra keys are the dialog's layer, built with it; what else an action holds
+        // it reads as it shows.
+        let keys = |actions: &[abi::SelectAction]| -> Vec<_> {
+            actions
+                .iter()
+                .map(|action| (action.key.clone(), action.command.clone(), action.rowless, action.primary))
+                .collect()
+        };
         let same = |picker: &Picker| {
             let shown = picker.shown.borrow();
-            shown.actions == select.actions && shown.binds == select.binds
+            keys(&shown.actions) == keys(&select.actions) && shown.binds == select.binds
         };
         let handle = picker.as_ref().and_then(|picker| picker.handle.borrow().clone());
         match (picker, handle) {
@@ -159,8 +166,8 @@ fn pick(tui: &Tui, owner: Owner, select: abi::Select) {
                 *picker.owner.borrow_mut() = owner.clone();
                 *tui.reads.owner.borrow_mut() = Some(owner);
                 let theme = opencode_ui::theme::Theme::clone(&tui.page());
-                handle.set_options(options(tui, &theme, &picker.shown.borrow(), &picker.owner.borrow().0));
-                handle.refresh_footer();
+                // The footer draws again only if what it shows changed, so a press on it is not lost to a rebuild.
+                handle.set_options(options(&theme, &picker.shown.borrow()));
                 tui.app.request_redraw();
                 return;
             }
@@ -184,7 +191,8 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
         handle: RefCell::default(),
     });
     *tui.reads.select.borrow_mut() = keyed.is_some().then(|| picker.clone());
-    let dialog = keyed.as_ref().map_or_else(DialogOptions::default, |key| DialogOptions::default().key(key.clone()));
+    let size = picker.shown.borrow().size.map(dialog_size).unwrap_or_default();
+    let dialog = keyed.as_ref().map_or(DialogOptions::new(size), |key| DialogOptions::new(size).key(key.clone()));
     let kept = RefCell::new(kept);
     own(tui, owner, |on_close| {
         // Closed or replaced, it is no longer the select on screen, and drops its handle.
@@ -204,14 +212,13 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
                 let weak = Rc::downgrade(&picker);
                 let mut props = SelectProps::dynamic(
                     shown.title.clone(),
-                    Rc::new(bind!(tui.weak(), |tui, _: &str| {
-                        weak.upgrade().map_or_else(Vec::new, |picker| {
-                            options(&tui, &theme, &picker.shown.borrow(), &picker.owner.borrow().0)
-                        })
-                    }, else Vec::new())),
+                    Rc::new(move |_: &str| {
+                        weak.upgrade().map_or_else(Vec::new, |picker| options(&theme, &picker.shown.borrow()))
+                    }),
                 );
                 props.placeholder = shown.placeholder.clone();
                 props.current = shown.current.clone();
+                props.focus_target = shown.focus.clone();
                 props.preserve_selection = shown.key.is_some();
                 // The plugin's search lists the rows in place of the host's filter (TS `search`).
                 if let Some(name) = shown.search.clone() {
@@ -224,7 +231,7 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
                         let host = super::host::host(&tui);
                         let values = tui.plugins.search(&*host, &owner.0, &name, query, &enabled);
                         let theme = opencode_ui::theme::Theme::clone(&tui.page());
-                        let rows = options(&tui, &theme, &shown, &owner.0);
+                        let rows = options(&theme, &shown);
                         values
                             .unwrap_or_default()
                             .iter()
@@ -239,27 +246,7 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
                     }
                 })));
                 props.actions = actions(&tui, &picker);
-                // A row that toggles a plugin shows what enter does to which plugin, from its state, not the row's.
-                let hinted = Rc::downgrade(&picker);
-                props.dynamic_hints = Some(Rc::new(bind!(tui.weak(), |tui| {
-                    let Some(picker) = hinted.upgrade() else { return Vec::new() };
-                    let selected = picker.handle.borrow().as_ref().and_then(|handle| handle.selected());
-                    let plugin = selected.and_then(|selected| {
-                        let shown = picker.shown.borrow();
-                        shown.options.iter().find(|option| option.value == selected.value && !option.disabled).and_then(|option| option.toggle.clone())
-                    });
-                    let caller = picker.owner.borrow().0.clone();
-                    let Some((plugin, active)) =
-                        plugin.and_then(|plugin| toggled(&tui, &caller, &plugin).map(|active| (plugin, active)))
-                    else {
-                        return Vec::new();
-                    };
-                    vec![opencode_ui::select::FooterHint {
-                        title: format!("{} {plugin}", if active { "disable" } else { "enable" }),
-                        label: "enter".to_owned(),
-                        group: Some(opencode_ui::select::Group::Primary),
-                    }]
-                }, else Vec::new())));
+                props.actions.push(toggle(&tui, &picker));
                 props.bindings = binds(&tui, &picker);
                 let (view, handle) = opencode_ui::select::select(cx, props);
                 *picker.handle.borrow_mut() = Some(handle.clone());
@@ -279,7 +266,65 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
     });
 }
 
+/// The host's action on a row that toggles a plugin (synthesis 3.6): `plugins.toggle`, the user's keybind for it
+/// (`enter` by default), whose title says what it does to which plugin from the plugin's state, not from the row.
+fn toggle(tui: &Tui, picker: &Rc<Picker>) -> opencode_ui::select::SelectAction<String> {
+    use opencode_ui::select::{Group, SelectAction};
+    let target = {
+        let (tui, picker) = (tui.weak(), Rc::downgrade(picker));
+        move |option: Option<&SelectOption<String>>| -> Option<(String, Toggle, String)> {
+            let (tui, picker, option) = (tui.upgrade()?, picker.upgrade()?, option?);
+            let plugin = picker
+                .shown
+                .borrow()
+                .options
+                .iter()
+                .find(|row| row.value == option.value && !row.disabled)
+                .and_then(|row| row.toggle.clone())?;
+            let caller = picker.owner.borrow().0.clone();
+            let toggle = toggled(&tui, &caller, &plugin)?;
+            Some((plugin, toggle, option.title.clone()))
+        }
+    };
+    let (titled, hidden) = (target.clone(), target);
+    let (weak, picked) = (tui.weak(), Rc::downgrade(picker));
+    let mut action = SelectAction::new(
+        "plugins.toggle",
+        "toggle",
+        bind!(weak, |tui, option: &SelectOption<String>| {
+            let Some(picker) = picked.upgrade() else { return };
+            let Some(plugin) = picker.toggled(&option.value) else { return };
+            // Only the user toggles a plugin: a key or a click, never a run of the command by name.
+            if picker.handle.borrow().as_ref().is_some_and(|handle| handle.by_input()) {
+                picker.toggle(&tui, &option.value, &plugin);
+            }
+        }),
+    );
+    action.title = Rc::new(move |option| match titled(option) {
+        // The row names the plugin when its title is the plugin's id; else the title does. The question about a held
+        // build names its library itself.
+        Some((plugin, toggle, title)) => {
+            let named = if title == plugin { String::new() } else { format!(" {plugin}") };
+            match toggle {
+                Toggle::Switch(true) => format!("disable{named}"),
+                Toggle::Switch(false) => format!("enable{named}"),
+                Toggle::Ask(_) => "approve or decline".to_owned(),
+            }
+        }
+        None => "toggle".to_owned(),
+    });
+    action.group = Some(Group::Primary);
+    action.hidden_when = Some(Rc::new(move |option| hidden(option).is_none()));
+    action
+}
+
 impl Picker {
+    /// The plugin the shown row of `value` toggles.
+    fn toggled(&self, value: &str) -> Option<String> {
+        let shown = self.shown.borrow();
+        shown.options.iter().find(|option| option.value == value && !option.disabled)?.toggle.clone()
+    }
+
     /// Picks the row of `value`: a toggle, the row's action, or the select's; a plain select closes first.
     fn choose(self: &Rc<Self>, tui: &Tui, value: &str) {
         let shown = self.shown.borrow().clone();
@@ -324,7 +369,27 @@ impl Picker {
             if !names {
                 return;
             }
-            let Some(active) = toggled(&tui, &owner.0, &plugin) else { return };
+            let active = match toggled(&tui, &owner.0, &plugin) {
+                Some(Toggle::Switch(active)) => active,
+                // The host's question, after which the list comes back on the row, unless a dialog replaced it.
+                Some(Toggle::Ask(target)) => {
+                    // The question replaces the select, which then holds the picker no more.
+                    let (shown, value) = (picker.shown.borrow().clone(), value.clone());
+                    return super::approve::ask(
+                        &tui,
+                        &target,
+                        bind!(tui, |tui| {
+                            if tui.dialogs.is_open() {
+                                return;
+                            }
+                            if tui.plugins.live(&owner.0, owner.1) {
+                                list(&tui, owner.clone(), shown.clone(), Some((String::new(), Some(value.clone()))));
+                            }
+                        }),
+                    );
+                }
+                None => return,
+            };
             match tui.plugins.toggle(&super::host::host(&tui), &plugin, !active) {
                 None => {
                     tui.toasts.error(format!("Failed to update plugin {plugin}"));
@@ -335,36 +400,38 @@ impl Picker {
                 Some(Ok(())) => {}
             }
             tui.navigate(tui.route());
-            // The rows say what the registry holds now, as do the hints.
+            // The hints say what the registry holds now; the rows are the plugin's, which hears of the change.
             if let Some(handle) = picker.handle.borrow().clone() {
-                let theme = opencode_ui::theme::Theme::clone(&tui.page());
-                handle.set_options(options(&tui, &theme, &picker.shown.borrow(), &owner.0));
                 handle.refresh_footer();
             }
+            super::host::tell_plugins(&tui);
         }));
     }
 }
 
-/// Whether plugin `id` is active, for a toggle of plugin `caller`'s select: `None` for a plugin it cannot toggle, as
-/// the plugin manager decides (a loaded plugin, not one waiting for the user's approval), and never the caller itself
-/// or the manager.
-fn toggled(tui: &Tui, caller: &str, id: &str) -> Option<bool> {
-    if id == caller || id == crate::dialogs::plugins::ID {
+/// What the host does for a row that toggles a plugin.
+enum Toggle {
+    /// Disables the plugin when it is active, else enables it.
+    Switch(bool),
+    /// Asks to approve or decline the build of the project plugin of this target (rich-plugins 3.9).
+    Ask(String),
+}
+
+/// What a toggle of plugin `id` does for plugin `caller`'s select: `None` for a plugin it cannot toggle, one that never
+/// loaded, the caller itself and the plugin manager.
+fn toggled(tui: &Tui, caller: &str, id: &str) -> Option<Toggle> {
+    if id == caller || id == super::manager::ID {
         return None;
     }
     let entry = tui.plugins.entries().into_iter().find(|entry| entry.id == id)?;
-    let loaded = entry.source != opencode_plugin::Source::Configured;
-    let asked = matches!(entry.status, opencode_plugin::Status::Pending | opencode_plugin::Status::Declined);
-    (loaded && !asked).then_some(entry.active)
+    if matches!(entry.status, opencode_plugin::Status::Pending | opencode_plugin::Status::Declined) {
+        return Some(Toggle::Ask(entry.target.unwrap_or(entry.id)));
+    }
+    (entry.source != opencode_plugin::Source::Configured).then_some(Toggle::Switch(entry.active))
 }
 
-/// The rows of plugin `caller`'s `select`, in `theme`.
-fn options(
-    tui: &Tui,
-    theme: &opencode_ui::theme::Theme,
-    select: &abi::Select,
-    caller: &str,
-) -> Vec<SelectOption<String>> {
+/// The rows of `select`, in `theme`.
+fn options(theme: &opencode_ui::theme::Theme, select: &abi::Select) -> Vec<SelectOption<String>> {
     select
         .options
         .iter()
@@ -374,11 +441,8 @@ fn options(
             item.footer = option.footer.clone();
             item.category = option.category.clone();
             item.disabled = option.disabled;
+            item.search_text = option.search_text.clone();
             item.footer_color = option.footer_color.as_ref().and_then(|color| node::color_of(theme, color));
-            // A toggle's footer is the host's: what the plugin's state is, not what the plugin says.
-            if let Some(active) = option.toggle.as_deref().and_then(|plugin| toggled(tui, caller, plugin)) {
-                item.footer = Some(if active { "enabled" } else { "disabled" }.to_owned());
-            }
             item.gutter = option.gutter.as_ref().map(|gutter| -> opencode_ui::select::Gutter {
                 match gutter {
                     abi::Gutter::Spinner => {
@@ -397,7 +461,8 @@ fn options(
         .collect()
 }
 
-/// The select's footer actions on the selected row.
+/// The select's footer actions on the selected row. Each reads its title, the rows it hides on, whether it is disabled
+/// and what it runs from the select as last shown, so a select shown again with only those changed stays in place.
 fn actions(tui: &Tui, picker: &Rc<Picker>) -> Vec<opencode_ui::select::SelectAction<String>> {
     use opencode_ui::select::{ActionRun, Group, SelectAction};
     let shown = picker.shown.borrow().clone();
@@ -408,38 +473,53 @@ fn actions(tui: &Tui, picker: &Rc<Picker>) -> Vec<opencode_ui::select::SelectAct
         // No plugin's key may be the reserved chord.
         .filter(|(_, action)| !action.key.as_deref().is_some_and(|key| opencode_plugin::interact::reserved(tui, key)))
         .map(|(index, action)| {
-            let (weak, hidden, run_action) = (Rc::downgrade(picker), action.hidden.clone(), action.action.clone());
+            let weak = Rc::downgrade(picker);
+            let read = move |f: &dyn Fn(&abi::SelectAction) -> bool| {
+                weak.upgrade().is_some_and(|picker| picker.shown.borrow().actions.get(index).is_some_and(f))
+            };
+            let runs = |value: bool| {
+                let weak = Rc::downgrade(picker);
+                bind!(tui.weak(), |tui, option: Option<&str>| {
+                    let Some(picker) = weak.upgrade() else { return };
+                    let action = picker.shown.borrow().actions.get(index).map(|action| action.action.clone());
+                    let owner = picker.owner.borrow().clone();
+                    if let Some(action) = action {
+                        run(&tui, &owner, &action, option.filter(|_| value));
+                    }
+                })
+            };
             // As TS's `group`: the first group for a row's action, the second for a rowless one.
             let group = match action.primary.unwrap_or(!action.rowless) {
                 true => Group::Primary,
                 false => Group::Secondary,
             };
+            let on_row = runs(true);
+            // The user's keybind of the name it gives runs it, else its own key.
             let mut item = SelectAction::new(
-                format!("plugin.select.{index}"),
+                action.command.clone().unwrap_or_else(|| format!("plugin.select.{index}")),
                 action.title.clone(),
-                bind!(tui.weak(), |tui, option: &SelectOption<String>| {
-                    if let Some(picker) = weak.upgrade() {
-                        let owner = picker.owner.borrow().clone();
-                        run(&tui, &owner, &run_action, Some(&option.value));
-                    }
-                }),
+                move |option: &SelectOption<String>| on_row(Some(&option.value)),
             );
+            let titled = Rc::downgrade(picker);
+            item.title = Rc::new(move |_| {
+                titled
+                    .upgrade()
+                    .and_then(|picker| picker.shown.borrow().actions.get(index).map(|action| action.title.clone()))
+                    .unwrap_or_default()
+            });
             item.bind = action.key.clone();
             item.group = Some(group);
+            let disabled = read.clone();
+            item.disabled = Some(Rc::new(move |_: Option<&SelectOption<String>>| disabled(&|action| action.disabled)));
             match action.rowless {
                 // It needs no row: shown and run also while none matches, with no value.
                 true => {
-                    let (weak, run_action) = (Rc::downgrade(picker), action.action.clone());
-                    item.run = ActionRun::Dialog(Rc::new(bind!(tui.weak(), |tui| {
-                        if let Some(picker) = weak.upgrade() {
-                            let owner = picker.owner.borrow().clone();
-                            run(&tui, &owner, &run_action, None);
-                        }
-                    })));
+                    let rowless = runs(false);
+                    item.run = ActionRun::Dialog(Rc::new(move || rowless(None)));
                 }
                 false => {
                     item.hidden_when = Some(Rc::new(move |option: Option<&SelectOption<String>>| {
-                        option.is_none_or(|option| hidden.contains(&option.value))
+                        option.is_none_or(|option| read(&|action| action.hidden.contains(&option.value)))
                     }));
                 }
             }
@@ -475,6 +555,11 @@ fn binds(tui: &Tui, picker: &Rc<Picker>) -> Vec<TuiCommand> {
 
 /// TS `DialogErrorDetails`, drawn by the host's own error view; Back and escape run `back`, or close it.
 fn detail(tui: &Tui, owner: Owner, details: abi::ErrorDetails) {
+    let large = DialogOptions::new(DialogSize::Large);
+    let dialog = match &details.key {
+        Some(key) => large.key(format!("{}/{key}", owner.0)),
+        None => large,
+    };
     let backed = owner.clone();
     own(tui, owner, |on_close| {
         tui.dialogs.replace(
@@ -491,13 +576,13 @@ fn detail(tui: &Tui, owner: Owner, details: abi::ErrorDetails) {
                     source: details.source.clone(),
                     error: details.error.clone(),
                     context: details.context.clone(),
-                    diagnostic_ref: None,
+                    diagnostic_ref: details.reference.clone(),
                     on_back,
                 };
                 crate::dialogs::error_details::view(&tui, cx, props)
             }, else View::new(&cx.app)),
             Some(on_close),
-            DialogOptions::new(DialogSize::Large),
+            dialog,
         )
     });
 }
@@ -551,14 +636,18 @@ fn tell(tui: &Tui, owner: Owner, alert: abi::Alert) {
     });
 }
 
-fn panel(tui: &Tui, owner: Owner, panel: abi::Panel) {
-    let key = format!("{}/{}", owner.0, panel.key);
-    let centered = panel.centered;
-    let size = match panel.size {
+fn dialog_size(size: abi::PanelSize) -> DialogSize {
+    match size {
         abi::PanelSize::Medium => DialogSize::Medium,
         abi::PanelSize::Large => DialogSize::Large,
         abi::PanelSize::XLarge => DialogSize::XLarge,
-    };
+    }
+}
+
+fn panel(tui: &Tui, owner: Owner, panel: abi::Panel) {
+    let key = format!("{}/{}", owner.0, panel.key);
+    let centered = panel.centered;
+    let size = dialog_size(panel.size);
     let mine = tui.reads.owner.borrow().as_ref().is_some_and(|(id, _)| *id == owner.0);
     if mine && tui.dialogs.key().as_deref() == Some(key.as_str()) {
         let live = tui.reads.panel.borrow_mut().take();

@@ -42,6 +42,11 @@ pub struct Plugins {
     pub(crate) published: RefCell<Option<opencode_plugin::contain::Snapshot>>,
     /// The JS host of the TypeScript plugins, when it runs (P7).
     pub scripts: RefCell<Option<Rc<opencode_plugin::pipe::Scripts>>>,
+    /// The plugins as the plugins that read them last heard of them (P6b), and whether a tell is queued.
+    told: RefCell<Vec<opencode_plugin::Entry>>,
+    telling: Cell<bool>,
+    /// The host's own `/plugins` while the plugin manager has failed.
+    fallback: RefCell<Option<Disposer>>,
 }
 
 impl Plugins {
@@ -153,6 +158,7 @@ impl Host for Tui {
         self.app.defer(bind!(self, |tui, _| failed_toast(&tui, title.clone(), String::new())));
         // The home footer counts the failed plugins.
         self.reads.changed(self);
+        tell_plugins(self);
     }
 
     fn slow(&self, id: &str, cost: &str) {
@@ -170,6 +176,7 @@ impl Host for Tui {
                 host(&tui).remount();
             }),
         ));
+        tell_plugins(self);
     }
 
     fn plugins_changed(&self) {
@@ -239,7 +246,7 @@ impl Host for Tui {
 
     fn remount(&self) {
         self.navigate(self.route());
-        crate::dialogs::plugins::refresh(self);
+        tell_plugins(self);
     }
 
     fn dispatch(&self, name: &str, input: Option<&str>) {
@@ -920,6 +927,61 @@ impl abi::Read for Reader<'_> {
     fn themes(&self) -> Vec<String> {
         self.tui.theme.borrow().names()
     }
+
+    fn plugins(&self) -> Vec<abi::PluginEntry> {
+        self.tui.plugins.entries().into_iter().map(entry).collect()
+    }
+}
+
+/// A registry entry as a plugin reads it.
+fn entry(entry: opencode_plugin::Entry) -> abi::PluginEntry {
+    let (status, error) = match entry.status {
+        Status::Active => (abi::PluginStatus::Active, None),
+        Status::Inactive => (abi::PluginStatus::Inactive, None),
+        Status::Skipped(reason) => (abi::PluginStatus::Skipped, Some(reason)),
+        Status::Failed(error) => (abi::PluginStatus::Failed, Some(error)),
+        Status::Pending => (abi::PluginStatus::Pending, None),
+        Status::Declined => (abi::PluginStatus::Declined, None),
+    };
+    abi::PluginEntry {
+        id: entry.id,
+        target: entry.target,
+        origin: match entry.source {
+            opencode_plugin::Source::Builtin => abi::PluginOrigin::Builtin,
+            opencode_plugin::Source::Added => abi::PluginOrigin::Added,
+            opencode_plugin::Source::Configured => abi::PluginOrigin::Configured,
+            opencode_plugin::Source::External => abi::PluginOrigin::External,
+        },
+        status,
+        error,
+        active: entry.active,
+        slow: entry.slow,
+    }
+}
+
+/// Tells the plugins that read the plugins ([`abi::Setup::on_plugins`]) that they changed, once the current event is
+/// handled and only if what [`opencode_plugin::Registry::entries`] lists differs from what they heard last. While the
+/// plugin manager has failed, the host's own `/plugins` stands in for it.
+pub fn tell_plugins(tui: &Tui) {
+    if tui.plugins.telling.replace(true) {
+        return;
+    }
+    tui.app.defer(bind!(tui, |tui, _| {
+        tui.plugins.telling.set(false);
+        let entries = tui.plugins.entries();
+        if *tui.plugins.told.borrow() == entries {
+            return;
+        }
+        let failed = |entries: &[opencode_plugin::Entry]| {
+            entries.iter().any(|entry| entry.id == super::manager::ID && matches!(entry.status, Status::Failed(_)))
+        };
+        if failed(&entries) != tui.plugins.fallback.borrow().is_some() {
+            let fallback = failed(&entries).then(|| super::fallback::activate(&tui));
+            drop(tui.plugins.fallback.replace(fallback));
+        }
+        *tui.plugins.told.borrow_mut() = entries;
+        tui.plugins.tell_plugins();
+    }));
 }
 
 /// Tells the mounted claims that the TUI's own state the plugins read changed ([`abi::Changed::local`]), such as the
@@ -937,7 +999,7 @@ fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
 
 /// The built-ins in TS order (`plugin/builtins.ts`), with the ones from other crates ([`crate::Deps::builtins`],
 /// Mermaid and LaTeX) in their TS place after `stats`. The storybook (F14) is excepted (Q17). The plugin manager and
-/// the diff viewer are host entries, which reach the TUI through `tui` once it exists.
+/// the diff viewer is a host entry, which reaches the TUI through `tui` once it exists.
 fn builtins(tui: &Rc<OnceCell<Weak<Tui>>>, external: Vec<Builtin>, abi: bool) -> Vec<Builtin> {
     // On the other carrier each plugin's calls cross the C ABI's byte shims ([`Builtin::Abi`]).
     let carried = |builtin: Builtin| match builtin {
@@ -954,7 +1016,7 @@ fn builtins(tui: &Rc<OnceCell<Weak<Tui>>>, external: Vec<Builtin>, abi: bool) ->
         super::sidebar_todo::plugin().into(),
         super::sidebar_footer::plugin().into(),
         crate::plugins::notifications::plugin().into(),
-        hosted(tui, crate::dialogs::plugins::ID, crate::dialogs::plugins::activate),
+        super::manager::plugin().into(),
         super::stats::plugin().into(),
     ];
     builtins.extend(external);
@@ -990,6 +1052,9 @@ pub fn registry(info: &opencode_local::cli_config::Info, external: Vec<Builtin>,
         loader: RefCell::default(),
         published: RefCell::default(),
         scripts: RefCell::default(),
+        told: RefCell::default(),
+        telling: Cell::new(false),
+        fallback: RefCell::default(),
     }
 }
 
@@ -1014,6 +1079,7 @@ pub fn install(tui: &Rc<Tui>) {
     tui.plugins.monitor().set_frames(move || weak.upgrade().map_or(0, |tui| tui.app.frame_number()));
     super::contain::install(tui);
     tui.plugins.activate(&host(tui));
+    tell_plugins(tui);
     // The plugins read the keymap (`keymap.pending()`, `keymap.active()`, `keymap.commands()`): the pending keys, and
     // the layers and focus that decide what a key reaches, as TS's keymap selectors follow its state.
     let keymap = tui.keymap.keymap().on_state(bind!(tui, |tui| local_changed(&tui)));
@@ -1196,6 +1262,7 @@ pub fn decide(tui: &Rc<Tui>, target: &str, artifact: &Artifact, decision: Decisi
     let recorded = loader.decide(target, artifact, decision)?;
     if recorded {
         loader.reconcile(&host(tui), &tui.plugins);
+        tell_plugins(tui);
     }
     Ok(recorded)
 }
@@ -1267,6 +1334,7 @@ pub fn add(tui: &Rc<Tui>, plugin: Definition) {
     tui.plugins.add(plugin);
     tui.plugins.activate(&host(tui));
     tui.navigate(tui.route());
+    tell_plugins(tui);
 }
 
 /// Mounts slot `path` with the host's `content` into `parent`. The view that owns the slot syncs the result.
