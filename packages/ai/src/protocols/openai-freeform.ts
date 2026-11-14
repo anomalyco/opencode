@@ -57,7 +57,7 @@ const field = (custom: Custom | undefined) => custom?.field ?? "input"
 export const streamStart = (custom: Custom | undefined, raw = "") =>
   `{${encodeJson(field(custom))}:"${streamDelta(raw)}`
 export const streamDelta = (raw: string) => encodeJson(raw).slice(1, -1)
-const STREAM_END = '"}'
+export const streamEnd = '"}'
 
 const decodeArguments = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))
 
@@ -73,9 +73,9 @@ export const close = <K extends string | number>(
   [...keys].reduce<{ readonly tools: ToolStream.State<K>; readonly events: ReadonlyArray<LLMEvent> }>(
     (result, key) => {
       const pending = result.tools[key]
-      const streamed = pending && Option.getOrUndefined(decodeArguments(`${pending.input}${STREAM_END}`))
+      const streamed = pending && Option.getOrUndefined(decodeArguments(`${pending.input}${streamEnd}`))
       if (!pending || (final !== undefined && streamed?.[field(final.custom)] !== final.raw)) return result
-      const appended = ToolStream.append(result.tools, key, STREAM_END)
+      const appended = ToolStream.append(result.tools, key, streamEnd)
       return appended ? { tools: appended.tools, events: [...result.events, ...appended.events] } : result
     },
     { tools, events: [] },
