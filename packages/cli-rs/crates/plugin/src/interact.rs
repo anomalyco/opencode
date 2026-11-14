@@ -1144,11 +1144,15 @@ fn blurs(view: &impl Widget, host: &Weak<dyn Host>) {
 /// Moves the focus with `move_focus`, and ends at the move the modes whose scope it leaves and a capture it moves away
 /// from: OpenTUI tells a widget of its focus after the event, when a second move may have brought the focus back.
 pub fn refocus(host: &dyn Host, move_focus: impl FnOnce()) {
-    let Some(router) = host.router() else { return move_focus() };
+    let Some(router) = host.router() else {
+        move_focus();
+        return host.focus_moved();
+    };
     let owners: Vec<Rc<Owner>> = router.owners.borrow().iter().filter_map(Weak::upgrade).collect();
     let moded: Vec<Rc<Owner>> =
         owners.into_iter().filter(|owner| owner.mode.borrow().is_some() && owner.mode_holds()).collect();
     move_focus();
+    host.focus_moved();
     for owner in moded.iter().filter(|owner| !owner.mode_holds()) {
         if let Some(mode) = &*owner.mode.borrow() {
             mode.ended.set(true);
@@ -1354,7 +1358,10 @@ fn pointed(host: &dyn Host, owner: &Rc<Owner>, node: &str, view: &impl Widget, e
             // The press is the plugin's: no selection of the text under it starts, and a surface that does not have
             // the focus takes it, unless the handler gave it to a node.
             host.app().clear_selection();
-            if let Some(view) = owner.within().filter(|view| !focus_within(host.app(), view.id())) {
+            // An overlay the handler opened keeps the focus it took (review carbon-1).
+            if let Some(view) = owner.within().filter(|view| !focus_within(host.app(), view.id()))
+                && !router.overlaid(host)
+            {
                 refocus(host, || host.app().focus(&view));
             }
             let focus = host.app().focused().map(|widget| widget.id());
