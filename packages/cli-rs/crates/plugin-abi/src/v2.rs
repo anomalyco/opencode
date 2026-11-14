@@ -158,8 +158,9 @@ pub struct Frame {
     pub width: u16,
     pub height: u16,
     pub cause: Cause,
-    /// For [`Cause::Animate`], the time since the last frame of this animation; the time the canvas was hidden, or
-    /// not animating, is not counted. Zero for the other causes.
+    /// The time since the last frame of the canvas's animation, when this draw is one: a resize or a version in a
+    /// frame of the animation carries it too. The time the canvas was hidden, or did not animate, is not counted.
+    /// Zero for a draw outside the animation.
     pub dt: std::time::Duration,
 }
 
