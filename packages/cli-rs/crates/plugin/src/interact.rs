@@ -199,6 +199,7 @@ impl Owner {
 
     /// The scope of the surface is the focus in `view`, the container the host shows it in: a panel, an overlay.
     pub(crate) fn hold_in(&self, view: View) {
+        blurs(&view, &self.host);
         *self.held.borrow_mut() = Held::Within(view);
     }
 
@@ -357,6 +358,12 @@ impl Owner {
         });
         let disposer = host.keymap().push_mode(&self.mode_key(Some(name)), active);
         *self.mode.borrow_mut() = Some(Mode { name: name.to_owned(), ended, disposer });
+        if let Some(router) = host.router() {
+            let me = Rc::downgrade(self);
+            if !router.owners.borrow().iter().any(|owner| owner.ptr_eq(&me)) {
+                router.owners.borrow_mut().push(me);
+            }
+        }
     }
 
     /// Drops a mode the host ended, so the keymap's stack holds no entry of it.
@@ -771,6 +778,20 @@ impl Router {
     }
 }
 
+/// Ends the modes whose scope `view` was when it loses the focus, before any key comes: a focus that leaves a mode's
+/// scope and comes back between two keys does not bring the mode back.
+fn blurs(view: &View, host: &Weak<dyn Host>) {
+    let host = host.clone();
+    view.on_focus(move |_, focused| {
+        if !focused
+            && let Some(host) = host.upgrade()
+            && let Some(router) = host.router()
+        {
+            router.prune();
+        }
+    });
+}
+
 /// Whether the focus is in the widget with id `id`.
 fn focus_within(app: &App, id: u32) -> bool {
     std::iter::successors(app.focused(), |widget| widget.parent()).any(|widget| widget.id() == id)
@@ -819,6 +840,9 @@ pub(crate) fn wire(
     let node = id.map(str::to_owned);
     if interact.focusable && node.is_some() {
         view.focusable(true);
+        if let Some(owner) = owner.and_then(Weak::upgrade) {
+            blurs(view, &owner.host);
+        }
     }
     if interact.hover.is_some() || interact.hover_events {
         let (state, this, owner, node) =
