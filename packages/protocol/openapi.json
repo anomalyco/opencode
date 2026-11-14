@@ -9343,6 +9343,16 @@
               }
             }
           },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "FileNotFoundError | LocationNotFoundError",
             "content": {

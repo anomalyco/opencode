@@ -152,6 +152,70 @@ describe("FileSystem", () => {
     )
   }
 
+  for (const input of [
+    { method: "stat", reason: "PermissionDenied", code: "EACCES", denied: true },
+    { method: "readDirectory", reason: "PermissionDenied", code: "EACCES", denied: true },
+    { method: "readDirectory", reason: "Unknown", code: "EPERM", denied: true },
+    { method: "readDirectory", reason: "Unknown", code: "EIO", denied: false },
+  ] as const) {
+    it.live(`classifies list ${input.method} failure ${input.code}`, () =>
+      withTmp((directory) =>
+        Effect.gen(function* () {
+          const target = path.join(directory, "secret")
+          yield* Effect.promise(() => fs.mkdir(target))
+          const filesystem = yield* FSUtil.Service
+          const cause = PlatformError.systemError({
+            _tag: input.reason,
+            module: "FileSystem",
+            method: input.method,
+            pathOrDescriptor: target,
+            cause: Object.assign(new Error(input.code), { code: input.code }),
+          })
+          const result = yield* FileSystem.Service.pipe(
+            Effect.flatMap((service) => service.list({ path: "secret" })),
+            Effect.provide(
+              LayerNode.compile(FileSystem.node, {
+                replacements: [
+                  Location.node.replace(
+                    Layer.succeed(Location.Service, location({ directory: AbsolutePath.make(directory) })),
+                  ),
+                  FSUtil.node.replace(
+                    Layer.succeed(FSUtil.Service, {
+                      ...filesystem,
+                      stat: (file) =>
+                        input.method === "stat" && file === target ? Effect.fail(cause) : filesystem.stat(file),
+                      readDirectoryEntries: (file) =>
+                        input.method === "readDirectory" && file === target
+                          ? Effect.fail(cause)
+                          : filesystem.readDirectoryEntries(file),
+                    }),
+                  ),
+                ],
+              }),
+            ),
+            Effect.exit,
+          )
+          expect(Exit.isFailure(result)).toBe(true)
+          if (Exit.isFailure(result)) {
+            if (input.denied) {
+              expect(Cause.findErrorOption(result.cause)).toMatchObject({
+                _tag: "Some",
+                value: {
+                  _tag: "FileSystem.DirectoryAccessDeniedError",
+                  directory: target,
+                  cause,
+                  message: `Access denied to directory: ${target}`,
+                },
+              })
+              return
+            }
+            expect(result.cause.reasons.filter(Cause.isDieReason)).toMatchObject([{ defect: cause }])
+          }
+        }).pipe(Effect.provide(LayerNode.compile(FSUtil.node))),
+      ),
+    )
+  }
+
   it.live("lists parents and siblings with paths relative to the current location", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
