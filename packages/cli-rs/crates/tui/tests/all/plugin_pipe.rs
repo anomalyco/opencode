@@ -992,7 +992,8 @@ fn a_refused_revision_is_mended_by_a_whole_one() {
 }
 
 // Expected (`reload-fresh` over the pipe): a changed module loads again on the JS host; the running build stays active
-// and on screen until the new one answered, which then replaces it as a fresh load would.
+// and on screen until the new one answered, which then replaces it as a fresh load would: its mount shows the
+// placeholder until its first tree.
 #[test]
 fn a_changed_module_reloads_and_the_running_one_stays_meanwhile() {
     let Some(config) = config() else { return };
@@ -1003,7 +1004,13 @@ fn a_changed_module_reloads_and_the_running_one_stays_meanwhile() {
     harness.tui.keymap.dispatch("probe.hold", Some("600"));
     let file = pipe.root.path().join("config/plugins/twin/tui.ts");
     let source = std::fs::read_to_string(&file).unwrap();
-    std::fs::write(&file, source.replace("`twin ${total}", "`twin* ${total}")).unwrap();
+    // The new build's setup leaves a mark before it answers.
+    let mark = pipe.root.path().join("set-up");
+    let source = source.replace("`twin ${total}", "`twin* ${total}").replace(
+        "setup(api: any) {",
+        &format!("setup(api: any) {{\n    require(\"node:fs\").writeFileSync({:?}, \"\")", mark.to_string_lossy()),
+    );
+    std::fs::write(&file, source).unwrap();
     let begun = Instant::now();
     let mut reloaded = false;
     while begun.elapsed() < Duration::from_secs(10) && !reloaded {
@@ -1012,7 +1019,7 @@ fn a_changed_module_reloads_and_the_running_one_stays_meanwhile() {
         assert_eq!(pipe.status(twin::ID), Some(Status::Active), "the running build left while the new one loaded");
         let text = harness.app.text();
         reloaded = text.contains("twin* 0");
-        assert!(reloaded || text.contains("twin 1"), "{text}");
+        assert!(reloaded || text.contains("twin 1") || mark.exists(), "before the new build was set up: {text}");
     }
     assert!(reloaded, "the changed module did not load: {}", harness.app.text());
     pipe.settle();
