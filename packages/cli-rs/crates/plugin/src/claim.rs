@@ -36,6 +36,7 @@ use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 
 use crate::Host;
+use crate::activation::{Activation, Drawn};
 use crate::node::{Act, abi_mode};
 use crate::reconcile::{Env, Tree};
 use crate::surface::{self, Viewing};
@@ -167,6 +168,8 @@ pub(crate) struct Registered {
     /// What a claim's view holds of the input (P2): its plugin's activation's, as a claim has no handler of its own.
     input: Rc<crate::interact::Owner>,
     viewer: Rc<dyn Viewer>,
+    /// Draws the plugin's parts again when it is woken or a handler of it ran.
+    activation: Rc<Activation>,
     /// The palette of the theme the last view saw.
     palette: RefCell<Option<(Theme, v2::Palette)>>,
 }
@@ -177,8 +180,9 @@ impl Registered {
         owner: Weak<dyn Host>,
         viewer: Rc<dyn Viewer>,
         input: Rc<crate::interact::Owner>,
+        activation: Rc<Activation>,
     ) -> Rc<Self> {
-        Rc::new(Self { entry, owner, viewer, input, palette: RefCell::default() })
+        Rc::new(Self { entry, owner, viewer, input, activation, palette: RefCell::default() })
     }
 
     fn palette(&self, host: &dyn Host, theme: &Theme) -> v2::Palette {
@@ -342,6 +346,7 @@ impl Core {
         });
         book(|ledger| ledger.mounts += 1);
         LIVE.with(|live| live.borrow_mut().push(Rc::downgrade(&core)));
+        core.claim.activation.track(Rc::downgrade(&core) as Weak<dyn Drawn>);
         // A view gets the part's own width: one laid out at another width than the last view saw views again.
         let weak = Rc::downgrade(&core);
         core.root.on_resize(move |_, rect| {
@@ -627,6 +632,21 @@ impl Core {
         let mut state = self.state.borrow_mut();
         state.tree.clear(&self.root);
         state.last = None;
+    }
+}
+
+/// A wake of the plugin, or a handler of it that ran, draws the part again: the plugin's own state may have changed
+/// what its view returns. A part the host's row shows for the rest of its mount is not asked.
+impl Drawn for Core {
+    fn woken(&self, host: &dyn Host) {
+        if self.fallen.get() || self.part.borrow().is_none() {
+            return;
+        }
+        let before = self.shows.get();
+        if self.draw(host) != before {
+            let switch = self.switch.borrow().clone();
+            switch.iter().for_each(|switched| switched());
+        }
     }
 }
 

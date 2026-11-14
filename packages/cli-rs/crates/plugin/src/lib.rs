@@ -1820,10 +1820,17 @@ impl Setup<'_> {
     }
 
     /// Registers a renderer claim, on either path: a tool's calls go to the transcript's tool rows, a fence language to
-    /// the Markdown code-block renderers. `viewer` runs its view.
+    /// the Markdown code-block renderers. `viewer` runs its view, as `owners`' activation; each part it draws is drawn
+    /// again when that activation is woken or a handler of the plugin ran.
     pub(crate) fn renderer_claim(&mut self, entry: abi::claim::Entry, viewer: Rc<dyn claim::Viewer>, owners: &Owners) {
         let target = entry.target.clone();
-        let registered = claim::Registered::new(entry, Rc::downgrade(self.host), viewer, owners.input.clone());
+        let registered = claim::Registered::new(
+            entry,
+            Rc::downgrade(self.host),
+            viewer,
+            owners.input.clone(),
+            owners.activation.clone(),
+        );
         match target {
             abi::claim::Target::Tool(name) => self.registration.tools.push((name, registered)),
             abi::claim::Target::Fence(language) => {
