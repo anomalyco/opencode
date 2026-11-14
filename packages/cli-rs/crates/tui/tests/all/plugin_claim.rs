@@ -2281,3 +2281,46 @@ fn a_declined_part_keeps_its_content_and_a_bad_tree_gets_one_view() {
         assert_eq!(DREW.with_borrow(Vec::len) - views, 1, "{carrier:?}: a first, whole view was asked again");
     }
 }
+
+thread_local! {
+    static BUMPS: Cell<u32> = const { Cell::new(0) };
+}
+
+/// Claims `bump` calls with a card that shows how often its command ran, and runs the command on a click.
+fn plugin_bump(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.command(abi::Command { name: "claim.bump".into(), ..abi::Command::default() }, |_, _| {
+        BUMPS.set(BUMPS.get() + 1);
+    });
+    setup.claim(Claim::tool("bump", |_, part| {
+        let text = format!("{} bumped {}", key(part), BUMPS.get());
+        Some(
+            v2::Node::text(vec![abi::Span::new(text)])
+                .with_id("bump")
+                .on_click(abi::Click::command("claim.bump", None)),
+        )
+    }));
+    Ok(())
+}
+
+// Expected (synthesis 4.4: a handler of the plugin ran, so what it changed shows; review finding carbon-4): a claimed
+// part is drawn again after its plugin's command runs, from a click on the part or from the keymap, on both carriers.
+#[test]
+fn a_claimed_part_draws_again_after_its_plugin_runs_a_command() {
+    for carrier in CARRIERS {
+        BUMPS.set(0);
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.bump", setup: plugin_bump })]);
+        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "bump" }));
+        world.settle();
+        let screen = world.harness.wait_for("call_1 bumped 0");
+        let y = screen.lines().position(|line| line.contains("call_1 bumped")).unwrap() as u16;
+        world.harness.app.click(4, y);
+        world.settle();
+        world.settle();
+        assert_eq!(BUMPS.get(), 1, "{carrier:?}: the click ran no command");
+        assert!(world.frame().text().contains("call_1 bumped 1"), "{carrier:?}:\n{}", world.frame().text());
+        world.harness.tui.keymap.dispatch("claim.bump", None);
+        world.settle();
+        world.settle();
+        assert!(world.frame().text().contains("call_1 bumped 2"), "{carrier:?}:\n{}", world.frame().text());
+    }
+}
