@@ -978,3 +978,18 @@ fn the_image_preview_ends_with_the_viewer() {
         }
     }
 }
+
+// Expected (`toggleDirectory`): a click on a folder's row closes it, its files leave the tree, and a second click opens
+// it again, on both carriers.
+#[test]
+fn a_folder_closes_and_opens_on_a_click() {
+    on_both(|| {
+        let h = route(2, 4, 120, 30);
+        let (x, y) = h.find("▾ src");
+        h.app.click(x, y);
+        h.wait("the folder did not close", || h.app.text().contains("▸ src"));
+        assert!(!h.settle().contains("≡ f0000.rs"), "{}", h.app.text());
+        h.app.click(x, y);
+        h.wait_for("≡ f0000.rs");
+    });
+}
