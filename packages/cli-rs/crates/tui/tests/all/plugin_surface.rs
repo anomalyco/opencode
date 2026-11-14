@@ -246,6 +246,10 @@ impl Model for Surfaces {
                     if first.generation <= highest || !first.full || first.built != ITEMS && !first.bad {
                         return fail("lifecycle", format!("a new mount's first view was {first:?} after {highest}"));
                     }
+                    // One view opens a surface, and one more only when the first tree was refused (review bigboi-7).
+                    if calls.len() != 1 + usize::from(first.bad) {
+                        return fail("work", format!("opening a surface ran {} views: {calls:?}", calls.len()));
+                    }
                     mounted = Some(first.generation);
                     highest = first.generation;
                 }
@@ -1314,23 +1318,49 @@ fn a_duplicate_id_fails_the_plugin_without_a_retry() {
     }
 }
 
-// Expected (review bigboi-7): a route opened from a page with no keymap layer of its own shows after one view, on both
-// carriers: the TUI's sync of the route it has just mounted calls none, nor does the keymap layer of the route's own
-// commands, which is there before the first view. (From Home, or from a route with commands, a second view follows a
-// turn later, when the layer of the page left goes: the keymap is host state a plugin reads.)
+/// A route of one text, with a command of its own: leaving it takes that command's keymap layer away.
+fn page(setup: &mut abi::Setup) -> Result<(), String> {
+    let command =
+        abi::Command { name: "page.go".into(), scope: abi::Scope::Route("page".into()), ..abi::Command::default() };
+    setup.command(command, |_, _| {});
+    setup.surface(v2::Surface::new("page", v2::Place::Route("page".into()), |_| {
+        v2::Node::text(vec![abi::Span::new("a page")])
+    }));
+    Ok(())
+}
+
+// Expected (`work`, review bigboi-7): a route opens with one view call, on both carriers, from Home, from a page with
+// no keymap layer of its own, and from another plugin's route with commands. The TUI's sync of the route it has just
+// mounted calls none; the route's first view runs after the keymap layers of the page it replaces are gone, so their
+// going calls none either; and the route's own layer is there before it.
 #[test]
 fn a_route_opens_with_one_view() {
+    let from = [
+        ("home", Route::Home),
+        ("a page without commands", Route::Plugin { id: "test.none".into(), name: "none".into() }),
+        ("a route with commands", Route::Plugin { id: "test.page".into(), name: "page".into() }),
+    ];
     for carrier in CARRIERS {
-        board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
-        let harness = open_tui(carrier);
-        harness.tui.navigate(Route::Plugin { id: "test.none".into(), name: "none".into() });
-        settle(&harness);
-        let before = board(|board| board.calls.len());
-        harness.tui.navigate(route());
-        settle(&harness);
-        let calls = board(|board| board.calls[before..].to_vec());
-        assert_eq!(calls.len(), 1, "{carrier:?}: {calls:?}");
-        assert!(harness.app.render().text().contains("card 0"), "{carrier:?}");
+        for (name, before) in &from {
+            board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
+            let deps = Deps {
+                route: Route::Home,
+                builtins: vec![
+                    builtin(carrier, abi::Plugin { id: ID, setup }),
+                    builtin(carrier, abi::Plugin { id: "test.page", setup: page }),
+                ],
+                ..support::deps(Arc::new(support::empty()))
+            };
+            let harness = support::mount(80, 40, deps);
+            harness.tui.navigate(before.clone());
+            settle(&harness);
+            let views = board(|board| board.calls.len());
+            harness.tui.navigate(route());
+            settle(&harness);
+            let calls = board(|board| board.calls[views..].to_vec());
+            assert_eq!(calls.len(), 1, "{carrier:?} from {name}: {calls:?}");
+            assert!(harness.app.render().text().contains("card 0"), "{carrier:?} from {name}");
+        }
     }
 }
 
@@ -1345,4 +1375,28 @@ fn leaving_a_surface_unmounts_it_in_the_library() {
     harness.tui.navigate(Route::Home);
     settle(&harness);
     assert_eq!(opencode_plugin::loader::native::crossed().since(before).calls, 1);
+}
+
+// Expected (`work`, review bigboi-7): a view that ran after the last change of the host's own state calls no view for
+// the notice of it, but every change after it calls one: a settings write and a local change (the catalog followed)
+// each run the route's view once, on both carriers.
+#[test]
+fn each_change_of_the_hosts_state_after_a_view_calls_one() {
+    for carrier in CARRIERS {
+        board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
+        let harness = open_tui(carrier);
+        harness.tui.navigate(route());
+        settle(&harness);
+        let views = || board(|board| board.calls.len());
+        let before = views();
+        opencode_tui::dialogs::settings::update(&harness.tui, |value| {
+            opencode_tui::dialogs::settings::set_path(value, &["animations"], serde_json::json!(false));
+        });
+        settle(&harness);
+        assert_eq!(views() - before, 1, "{carrier:?}: a settings write");
+        let before = views();
+        harness.tui.local.sync(&opencode_store::Changes::everything());
+        settle(&harness);
+        assert_eq!(views() - before, 1, "{carrier:?}: a local change");
+    }
 }
