@@ -1193,7 +1193,13 @@ fn a_keyed_scroll_keeps_its_offset_and_its_focus() {
         ("reparent", vec![v2::Node::column(vec![v2::Node::row(vec![scroll()]).with_id("inner")]).with_id("outer")]),
         ("reparent kept", vec![v2::Node::column(vec![v2::Node::row(vec![keep()]).with_id("inner")]).with_id("outer")]),
         ("height", vec![v2::Node::column(vec![rows_scroll(20, 6, abi::Layout::default())]).with_id("outer")]),
-        ("layout", vec![v2::Node::column(vec![rows_scroll(20, 5, abi::Layout::default().width(abi::Width::Cells(30)))]).with_id("outer")]),
+        (
+            "layout",
+            vec![
+                v2::Node::column(vec![rows_scroll(20, 5, abi::Layout::default().width(abi::Width::Cells(30)))])
+                    .with_id("outer"),
+            ],
+        ),
         ("parent", vec![v2::Node::column(vec![scroll()]).with_id("outer").layout(abi::Layout::default().grow())]),
     ];
     for (name, next) in variants {

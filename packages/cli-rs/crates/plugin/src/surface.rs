@@ -448,32 +448,36 @@ fn mounted_owner(weak: &Weak<Surface>) -> Option<Rc<dyn Host>> {
     weak.upgrade()?.owner.upgrade()
 }
 
-/// The text tool call `part` returned, or the text of a part with that id; `None` while the host has not loaded it.
+/// The text tool call `part` returned, as the transcript shows it: its content items, a file by its name; `None`
+/// while the host has not loaded the call or it is still streaming its input.
 fn part_output(host: &dyn Host, part: &v2::PartRef) -> Option<String> {
-    fn find(value: &serde_json::Value, id: &str) -> Option<String> {
-        match value {
-            serde_json::Value::Object(object) => {
-                if object.get("id").and_then(|found| found.as_str()) == Some(id) {
-                    if let Some(text) = object.get("text").and_then(|text| text.as_str()) {
-                        return Some(text.to_owned());
-                    }
-                    let content = object.get("state").and_then(|state| state.get("content"))?.as_array()?;
-                    let texts = content.iter().filter_map(|item| item.get("text").and_then(|text| text.as_str()));
-                    return Some(texts.collect::<Vec<_>>().join("\n"));
-                }
-                object.values().find_map(|value| find(value, id))
-            }
-            serde_json::Value::Array(items) => items.iter().find_map(|value| find(value, id)),
-            _ => None,
-        }
-    }
+    use opencode_plugin_abi::types::{
+        SessionMessageAssistantContentItem, SessionMessageAssistantToolState, SessionMessageInfo, ToolContent,
+    };
     let mut found = None;
     host.read(&mut |read| {
         read.messages(&part.session, &mut |messages| {
-            found = messages
-                .iter()
-                .rev()
-                .find_map(|message| serde_json::to_value(message).ok().and_then(|value| find(&value, &part.part)));
+            let tool = messages.iter().rev().find_map(|message| match message {
+                SessionMessageInfo::Assistant(assistant) => assistant.content.iter().find_map(|item| match item {
+                    SessionMessageAssistantContentItem::Tool(tool) if tool.id == part.part => Some(tool),
+                    _ => None,
+                }),
+                _ => None,
+            });
+            found =
+                tool.filter(|tool| !matches!(tool.state, SessionMessageAssistantToolState::Streaming(_))).map(|tool| {
+                    opencode_ui::tool_info::tool_display_content(&tool.state)
+                        .iter()
+                        .filter_map(|content| match content {
+                            ToolContent::Text(text) => Some(text.text.clone()),
+                            ToolContent::File(file) => {
+                                Some(file.name.clone().flatten().unwrap_or_else(|| file.uri.clone()))
+                            }
+                            ToolContent::Unknown(_) => None,
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                });
         });
     });
     found
