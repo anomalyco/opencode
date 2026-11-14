@@ -478,10 +478,12 @@ impl Core {
                     return true;
                 }
                 Err(refused) => {
+                    // The host's table forgets the view; a library's holds what it said, as it takes its tree.
                     memo.clear();
-                    book(|ledger| ledger.memo_entries -= held);
                     let mut state = self.state.borrow_mut();
-                    (state.memo, state.remote) = (memo, 0);
+                    (state.memo, state.remote) = (memo, remote.unwrap_or(0));
+                    let entries = state.memo_entries();
+                    book(|ledger| ledger.memo_entries += entries - held);
                     log::warn!("claim {} refused a tree for part {}: {refused}", self.id.surface, self.id.key);
                     // Only a keep the host does not hold is mended by a whole tree, once; any other refusal is the
                     // plugin's error, and the part falls back at once.
@@ -539,9 +541,9 @@ impl Core {
         };
         // A part is as tall as its tree: a claim gets no height, which a resize could leave stale.
         let input = v2::SurfaceInput { width, height: 0, palette, full, panel: None };
-        let (held, mut memo) = {
+        let (held, remote, mut memo) = {
             let mut state = self.state.borrow_mut();
-            (state.memo_entries(), std::mem::take(&mut state.memo))
+            (state.memo_entries(), state.remote, std::mem::take(&mut state.memo))
         };
         book(|ledger| ledger.views += 1);
         let staged = RefCell::new(HashMap::new());
@@ -566,6 +568,7 @@ impl Core {
             give: &mut give,
             release: &mut release,
             kept: &kept,
+            held: remote,
         };
         let viewed = self.claim.viewer.view(host, viewing, &part);
         Attempt { viewed, given: staged.take(), memo, held }
