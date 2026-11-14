@@ -188,6 +188,8 @@ pub struct Viewer {
     /// they change, as TS's effect does.
     pub tree_mark: (Option<usize>, usize),
     pub contents: Contents,
+    /// The last view shows this state: a wake that changed nothing of it keeps the tree.
+    pub drawn: bool,
 }
 
 impl Viewer {
@@ -231,6 +233,7 @@ impl Viewer {
             turn_status: None,
             tree_mark: (None, 0),
             contents: Contents::default(),
+            drawn: false,
             place,
         }
     }

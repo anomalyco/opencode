@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use opencode_api::generated::SessionID;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
+use opencode_plugin::reconcile;
 use opencode_store::SessionStatus;
 use opencode_tui::{Deps, Route};
 use opentui::prelude::{MouseButton, MouseEventKind};
@@ -566,7 +567,12 @@ fn the_base_picker_searches_the_server_as_the_user_types() {
     let memory = Memory::new(
         routes(Value::Array(files))
             .into_iter()
-            .chain([MemoryRoute::json("GET", "/api/vcs/branch", 200, &json!({ "location": { "directory": DIRECTORY }, "data": [] }))])
+            .chain([MemoryRoute::json(
+                "GET",
+                "/api/vcs/branch",
+                200,
+                &json!({ "location": { "directory": DIRECTORY }, "data": [] }),
+            )])
             .collect(),
     );
     let config = json!({ "animations": false, "diffs": { "source": "branch" } });
@@ -595,4 +601,22 @@ fn the_base_picker_searches_the_server_as_the_user_types() {
     h.app.advance(Duration::from_millis(200));
     h.wait("the picker did not search the server", || searched("rel"));
     h.wait_for("No branches found");
+}
+
+// Expected (P6c's gate, the wheel step): a wheel step that ends no selection keeps the viewer's tree whole, as today's
+// viewer draws no more than the scroll; one that ends a selection builds it again, and the tree's row loses its mark.
+#[test]
+fn a_wheel_step_builds_the_tree_only_when_it_ends_a_selection() {
+    let h = route(40, 4, 120, 30);
+    let wheel = |down: bool| {
+        let before = reconcile::work();
+        h.app.scroll(80, 10, down);
+        h.settle();
+        reconcile::work().since(before)
+    };
+    let work = wheel(true);
+    assert_eq!(work, reconcile::Work::default());
+    h.keys(&["n"]);
+    let work = wheel(false);
+    assert!(work.kept > 1 && work.touched() > 0, "{work:?}");
 }

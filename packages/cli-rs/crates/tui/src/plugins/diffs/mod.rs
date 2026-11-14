@@ -122,10 +122,20 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     ];
     for (name, run) in commands {
         let ran = diffs.clone();
-        setup.command(hidden(name), move |host, input| ran.with_viewer(host, |viewer| run(&ran, host, viewer, input)));
+        setup.command(hidden(name), move |host, input| {
+            ran.with_viewer(host, |viewer| {
+                run(&ran, host, viewer, input);
+                true
+            })
+        });
     }
     let observed = diffs.clone();
-    setup.on_event(&EXECUTION, move |host, _| observed.with_viewer(host, |viewer| viewer.observe(host, &observed)));
+    setup.on_event(&EXECUTION, move |host, _| {
+        observed.with_viewer(host, |viewer| {
+            viewer.observe(host, &observed);
+            true
+        })
+    });
     let replied = diffs.clone();
     setup.on_reply(move |host, id, reply| replied.reply(host, id, reply));
     for (name, place) in [(PANEL, Place::Panel(PANEL.to_owned())), (PAGE, Place::Route(ROUTE.to_owned()))] {
@@ -168,11 +178,14 @@ impl Diffs {
         host.navigate(abi::Route::Plugin { id: ID.to_owned(), name: ROUTE.to_owned() });
     }
 
-    /// Runs `f` on the viewer on screen, then brings its tree's selection into view.
-    fn with_viewer(&self, host: &dyn Host, f: impl FnOnce(&mut Viewer)) {
+    /// Runs `f` on the viewer on screen, which says whether the view may show something new, then brings its tree's
+    /// selection into view.
+    fn with_viewer(&self, host: &dyn Host, f: impl FnOnce(&mut Viewer) -> bool) {
         let mut held = self.viewer.borrow_mut();
         let Some(viewer) = held.as_mut() else { return };
-        f(viewer);
+        if f(viewer) {
+            viewer.drawn = false;
+        }
         viewer.follow_tree(host);
     }
 
@@ -185,8 +198,9 @@ impl Diffs {
         let mut handled = Handled::Pass;
         self.with_viewer(host, |viewer| {
             if viewer.surface() != surface {
-                return;
+                return false;
             }
+            let before = (viewer.selected, viewer.expanded.len());
             handled = match event {
                 Event::Key(key) => match key.bind.as_deref().and_then(keys::action) {
                     Some(action) => viewer.run(host, self, action),
@@ -207,6 +221,9 @@ impl Diffs {
                 }
                 _ => Handled::Pass,
             };
+            // A wheel step or a hunk step that leaves the selection and the open folders as they were shows nothing
+            // new, so it costs no rebuild of the cards.
+            !matches!(event, Event::Scroll { .. }) || before != (viewer.selected, viewer.expanded.len())
         });
         handled
     }
@@ -271,6 +288,7 @@ impl Diffs {
                 if shown.id == viewer {
                     shown.reply(host, self, asked, reply);
                 }
+                true
             }),
         }
     }
