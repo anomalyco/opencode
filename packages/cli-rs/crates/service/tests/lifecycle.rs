@@ -639,7 +639,8 @@ async fn finds_a_started_service_registered_under_another_channel() {
     needs_bun!();
     let mut fixture = Fixture::new();
     let other = fixture.dir.path().join("service-other.json");
-    let options = fixture.options(fixture.command_for(&other, "environment", &[]));
+    let options =
+        Options { timing: one_contender(), ..fixture.options(fixture.command_for(&other, "environment", &[])) };
     let ensured = run(&options).await.unwrap();
     fixture.pids.push(ensured.service.registration.pid);
     assert_eq!(ensured.file, other);
@@ -665,8 +666,19 @@ fn channel_build(fixture: &Fixture, mode: &str) -> (Options, PathBuf, PathBuf) {
     );
     let ts = TsCommand::from_vars(|name| (name == TsCommand::VAR).then(|| program.clone().into()));
     let mut options = Options::new(fixture.registration.clone(), root.to_owned(), &ts);
-    options.timing = fast();
+    options.timing = one_contender();
     (options, other, spawns)
+}
+
+// A round without an answer past a spawn delay starts a second contender by design (a stall probe): a probe that times
+// out, or nothing registered yet. Under load a probe stalls past `fast`'s 100 ms (a stall of a second took every copy
+// at once) and a contender registers after its 200 ms, at times after a second. The cases of another channel count
+// contenders to test the answer they get, and their fixture takes no lock, so a second one breaks the first's
+// registration. A probe waits until the deadline, and a contender gets two seconds to register.
+fn one_contender() -> Timing {
+    let deadline = Duration::from_secs(10);
+    let delays = Delays { spawn: Duration::from_secs(2), max_spawn: Duration::from_secs(2) };
+    Timing { request: deadline, delays, deadline, ..fast() }
 }
 
 fn spawned(spawns: &Path) -> usize {
@@ -678,11 +690,12 @@ async fn waits_for_its_starting_service_registered_under_another_channel() {
     needs_bun!();
     let fixture = Fixture::new();
     let (options, other, spawns) = channel_build(&fixture, "starting");
+    let spawn = options.timing.delays.spawn;
     let pending = tokio::spawn(async move { run(&options).await });
     let status = PathBuf::from(format!("{}.status-request", other.display()));
     fixture.wait_for_file(&status).await;
-    // Past several spawn delays while the service answers 503.
-    tokio::time::sleep(fast().delays.spawn * 4).await;
+    // Past two spawn delays while the service answers 503.
+    tokio::time::sleep(spawn * 2).await;
     std::fs::write(format!("{}.release", other.display()), "").unwrap();
     let ensured = pending.await.unwrap().unwrap();
     assert_eq!(ensured.file, other);
