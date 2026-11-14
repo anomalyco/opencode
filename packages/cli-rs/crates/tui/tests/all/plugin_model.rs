@@ -33,6 +33,7 @@ use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::time::Duration;
 
+use opencode_plugin::loader::approval::{self, Approvals};
 use opencode_plugin::loader::native::loopback_described;
 use opencode_plugin::loader::{Backend, Loader, entry_file};
 use opencode_plugin::{Definition, ErrorFn, Host, Status, abi};
@@ -46,11 +47,11 @@ const ID: &str = "model.probe";
 /// The build whose `setup` shows a toast, asks for a prompt, and returns a failure.
 const BAD: u8 = 9;
 /// The build whose `setup` asks for its own prompt.
-const PROMPTING: u8 = 3;
+pub(crate) const PROMPTING: u8 = 3;
 /// The report of a failure.
 const FAILED: &str = "Plugin failed: model.probe";
 /// The toast build 9 shows before its `setup` fails.
-const BAD_TOAST: &str = "probe b9 setup";
+pub(crate) const BAD_TOAST: &str = "probe b9 setup";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fault {
@@ -133,11 +134,13 @@ pub struct Call {
 }
 
 thread_local! {
-    static LOG: RefCell<Vec<Call>> = const { RefCell::new(Vec::new()) };
+    pub(crate) static LOG: RefCell<Vec<Call>> = const { RefCell::new(Vec::new()) };
     static ACTIVATIONS: Cell<u32> = const { Cell::new(0) };
-    static ARMED: Cell<Option<Fault>> = const { Cell::new(None) };
+    pub(crate) static ARMED: Cell<Option<Fault>> = const { Cell::new(None) };
     /// Each activation's token, which only the closures it registers hold.
-    static TOKENS: RefCell<Vec<(u32, Weak<()>)>> = const { RefCell::new(Vec::new()) };
+    pub(crate) static TOKENS: RefCell<Vec<(u32, Weak<()>)>> = const { RefCell::new(Vec::new()) };
+    /// The builds the backend opened.
+    pub(crate) static LOADS: Cell<usize> = const { Cell::new(0) };
 }
 
 /// The probe: a command that counts, a command for each of its dialogs, a replacement of `home.footer` and a route
@@ -280,6 +283,7 @@ struct Builds;
 
 impl Backend for Builds {
     fn load(&self, host: &Rc<dyn Host>, library: &[u8], _: Option<&str>) -> Result<(Definition, ErrorFn), String> {
+        LOADS.set(LOADS.get() + 1);
         match library {
             [1] => loopback_described(host, abi::export_plugin!(@loopback_described ID, probe::<1>)),
             [2] => loopback_described(host, abi::export_plugin!(@loopback_described ID, probe::<2>)),
@@ -291,27 +295,40 @@ impl Backend for Builds {
 }
 
 /// A TUI on a route, with the probe's `build` in its plugins directory, or without the probe (the twin).
-struct World {
-    harness: Harness,
-    probe: Option<(Rc<Loader>, std::path::PathBuf, opencode_util::temp::TempDir)>,
+pub(crate) struct World {
+    pub harness: Harness,
+    pub probe: Option<(Rc<Loader>, std::path::PathBuf, opencode_util::temp::TempDir)>,
     exited: bool,
 }
 
 impl World {
     /// The TUI, not yet settled: the first [`World::settle`] drains what the load asked for.
     fn open(build: Option<u8>, route: Route) -> Self {
+        let probe = build.map(|build| {
+            let root = opencode_util::temp::tempdir().unwrap();
+            (root.path().join("config/plugins/probe"), build, root)
+        });
+        Self::load(probe, route)
+    }
+
+    /// A TUI on `route` with the probe's `build` in `dir`, under `root`, where the global config directory is
+    /// `config` and the working directory, the project, is `work`. The loader keeps its approvals in `root`'s `state`,
+    /// outside the project. Nothing is settled.
+    pub(crate) fn load(probe: Option<(std::path::PathBuf, u8, opencode_util::temp::TempDir)>, route: Route) -> Self {
         let deps = Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) };
         let harness = support::mount(80, 24, deps);
         harness.tui.navigate(route);
-        let probe = build.map(|build| {
-            let root = opencode_util::temp::tempdir().unwrap();
+        let probe = probe.map(|(dir, build, root)| {
+            let work = root.path().join("work");
             // The project root, so the loader looks for plugins in this directory and none above it.
-            std::fs::create_dir(root.path().join(".git")).unwrap();
-            let config = root.path().join("config");
-            let dir = config.join("plugins").join("probe");
+            std::fs::create_dir_all(work.join(".git")).unwrap();
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(dir.join(entry_file()), [build]).unwrap();
-            let loader = Rc::new(Loader::new(Rc::new(Builds), config, root.path().to_path_buf(), Vec::new()));
+            let approvals = Approvals::open(root.path().join("state").join(approval::FILE), &work);
+            assert_eq!(approvals.unsaved(), None);
+            let loader = Loader::new(Rc::new(Builds), root.path().join("config"), work, Vec::new());
+            let loader = Rc::new(loader.with_approvals(approvals));
+            harness.tui.plugins.set_loader(loader.clone());
             loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
             (loader, dir, root)
         });
@@ -377,7 +394,7 @@ impl World {
     }
 
     /// Runs what the commands queued, and drains the toasts; returns their titles, or their messages.
-    fn settle(&self) -> Vec<String> {
+    pub(crate) fn settle(&self) -> Vec<String> {
         let (app, tui) = (&self.harness.app, &self.harness.tui);
         // A failure a frame reports shows once what the frame queued has run.
         app.advance(Duration::from_millis(1));
@@ -393,7 +410,7 @@ impl World {
 
     /// What the ledger compares, read from the host; the widgets on screen only when `widgets` asks, as counting
     /// them hit-tests every cell.
-    fn observe(&self, widgets: bool) -> Observed {
+    pub(crate) fn observe(&self, widgets: bool) -> Observed {
         let (app, tui) = (&self.harness.app, &self.harness.tui);
         // The keymap takes focus at the next key (`route_keys`); after a remount it is behind until then.
         tui.keymap.keymap().set_focus(opencode_ui::dialog::focus_path(app.app()));
@@ -419,12 +436,12 @@ impl World {
         self.harness.tui.plugins.entries().into_iter().find(|entry| entry.id == ID).map(|entry| entry.status)
     }
 
-    fn frame(&self) -> Capture {
+    pub(crate) fn frame(&self) -> Capture {
         self.harness.app.render()
     }
 
     /// The composer's cells: its placeholder is random, so frames are compared without them.
-    fn mask(&self) -> Option<(u32, u32, u32, u32)> {
+    pub(crate) fn mask(&self) -> Option<(u32, u32, u32, u32)> {
         let textarea = self.harness.tui.textarea.borrow().clone()?;
         let rect = textarea.rect();
         Some((rect.screen_x as u32, rect.screen_y as u32, rect.width as u32, rect.height as u32))
@@ -448,7 +465,7 @@ fn widgets(app: &opentui::testing::TestApp) -> usize {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct Observed {
+pub(crate) struct Observed {
     commands: Vec<String>,
     dialogs: (usize, Option<String>),
     focus: &'static str,
@@ -458,7 +475,7 @@ struct Observed {
 
 impl Observed {
     /// What differs from `other`, field by field; with `widgets`, the widget count too.
-    fn diff(&self, other: &Observed, widgets: bool) -> Option<String> {
+    pub(crate) fn diff(&self, other: &Observed, widgets: bool) -> Option<String> {
         let only = |a: &Observed, b: &Observed| -> Vec<String> {
             a.commands.iter().filter(|command| !b.commands.contains(command)).cloned().collect()
         };
@@ -483,7 +500,7 @@ impl Observed {
 }
 
 /// The first row where `a` and `b` differ outside `mask`, unless `allowed` accepts the row of `b`.
-fn frame_diff(
+pub(crate) fn frame_diff(
     a: &Capture,
     b: &Capture,
     mask: Option<(u32, u32, u32, u32)>,
@@ -843,7 +860,7 @@ impl Reference {
 }
 
 /// The new calls in the probe's log.
-fn take_calls() -> Vec<Call> {
+pub(crate) fn take_calls() -> Vec<Call> {
     LOG.with_borrow_mut(std::mem::take)
 }
 

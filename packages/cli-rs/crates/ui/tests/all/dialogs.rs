@@ -74,6 +74,44 @@ fn alert_confirms_on_enter_and_closes() {
     assert!(kit.app.render().text().trim().is_empty());
 }
 
+// Expected (plugins-pa, carbon-6): with `dismiss`, Escape closes the confirm without either action, as the header and
+// the backdrop do; with `cancel_first`, Enter runs the cancel button.
+#[test]
+fn a_confirm_can_dismiss_on_escape_and_start_on_cancel() {
+    for (dismiss, cancel_first, key, chosen) in [
+        (true, false, "escape", &[][..]),
+        (false, false, "escape", &["cancel"][..]),
+        (false, true, "return", &["cancel"][..]),
+        (true, true, "return", &["cancel"][..]),
+        (false, false, "return", &["confirm"][..]),
+    ] {
+        let kit = kit(70, 16);
+        let log: Rc<RefCell<Vec<&'static str>>> = Rc::default();
+        let (yes, no) = (log.clone(), log.clone());
+        kit.dialogs.replace(
+            move |cx| {
+                let (yes, no) = (yes.clone(), no.clone());
+                confirm::confirm(
+                    cx,
+                    confirm::ConfirmProps {
+                        title: "Run it?".into(),
+                        on_confirm: Some(Rc::new(move || yes.borrow_mut().push("confirm"))),
+                        on_cancel: Some(Rc::new(move || no.borrow_mut().push("cancel"))),
+                        dismiss,
+                        cancel_first,
+                        ..confirm::ConfirmProps::default()
+                    },
+                )
+            },
+            None,
+            Default::default(),
+        );
+        kit.app.press(key);
+        assert_eq!(log.borrow().as_slice(), chosen, "dismiss {dismiss}, cancel first {cancel_first}, {key}");
+        assert!(!kit.dialogs.is_open());
+    }
+}
+
 fn open_confirm(kit: &Kit, log: &Rc<RefCell<Vec<&'static str>>>) {
     let (yes, no) = (log.clone(), log.clone());
     kit.dialogs.replace(
