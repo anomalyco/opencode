@@ -375,15 +375,36 @@ shims and as a library (`plugin_carriers`).
 
 `Dialog::Select` with a `key` is the rich select: shown again under its key while it is open, it changes in place and
 keeps its filter and selection, and picking a row does not close it. A row may have its own action, a footer color, a
-gutter (the host's spinner, or a span), or `toggle`, a plugin the host enables or disables when the user picks the row
-with a key or a click (never a run of the select's command by name), labelled from that plugin's state and named in
-the hint, keyed or not; a row cannot toggle its own plugin, the plugin manager, or a plugin that did not load or
-waits for approval, and shows no toggle then; a disabled row toggles nothing. `actions` and `binds` run with the selected row's
-value; shown again with others, the select is built again with its filter and selection. An action is primary
-when it runs on the row, unless `primary` says otherwise, and `rowless` runs it with no row, also when nothing
-matches (TS `selection: "none"`). Neither may be `ctrl+c`. A select that names a search of `Setup::search` lists, for the query as it is typed
+gutter (the host's spinner, or a span), a `search_text` the filter matches instead of the title, or `toggle`, a plugin
+the host enables or disables when the user picks the row with a key or a click (never a run of a command by name).
+The toggle is the host's own action `plugins.toggle` (the user's keybind, `enter` by default): its title says
+`enable` or `disable` from that plugin's state, naming the plugin unless the row's title is its id, keyed or not. A
+row cannot toggle its own plugin, the plugin manager, or a plugin that did not load, and shows no toggle then; a
+disabled row toggles nothing. For a project's plugin waiting for approval, the toggle is `approve or decline`: the host
+asks its question (below) and shows the select again on the row once it closes. The row's footer is the plugin's.
+`actions` and `binds` run with the selected row's value; shown again with other keys, the select is built again with
+its filter and selection, and with only other titles, hidden rows or `disabled`, it changes in place. An action is
+primary when it runs on the row, unless `primary` says otherwise, and `rowless` runs it with no row, also when nothing
+matches (TS `selection: "none"`); `command` names the user's keybind that runs it instead of `key` (`key` when the
+config has none), and `disabled` dims it. Neither may be `ctrl+c`. `size` and `focus` (a row selected as it opens,
+without `current`'s mark) are P6b's. A select that names a search of `Setup::search` lists, for the query as it is typed
 and the empty one as it opens, the rows the search returns from the enabled ones, in its order and flat (TS
-`search`). `Dialog::ErrorDetails` shows an error in the host's own error view.
+`search`). `Dialog::ErrorDetails` shows an error in the host's own error view, with its `reference`; with a `key`,
+`Read::dialog_open` answers for it while it shows, as for a keyed select or panel.
+
+### The plugin list (P6b)
+
+`Read::plugins` lists the TUI plugins in the host's order: each with its ID, its target, its origin (built in, added,
+configured and not loaded, or external), its status (active, inactive, skipped, failed, pending, declined), the error or
+the reason, whether it has an activation, and what its calls cost while it is slow. `Setup::on_plugins` runs after
+that list changed (a plugin enabled, disabled, loaded, approved, declined, failed or slow), once for changes that come
+together and never when nothing changed; over the C ABI it is `{"type": "plugins"}`, and the read
+`{"type": "plugins"}` of the host. Only the host changes the list: a plugin offers a toggle row and the user picks it.
+
+The plugin manager (`opencode.plugins`, `crates/tui/src/plugins/manager.rs`) is a plugin of this contract on both
+carriers: `/plugins` opens its rich select, its rows follow `on_plugins` while the select shows, and the server rows,
+check and update are fetches. While it has failed, the host keeps a read-only `/plugins` whose row for the manager
+starts it again (`crates/tui/src/plugins/fallback.rs`, deviation `F16-plugin-manager-fallback`).
 
 ### Storage
 

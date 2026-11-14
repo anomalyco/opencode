@@ -30,7 +30,7 @@ use crate::features::attention::focus::When;
 use crate::features::attention::notify::{self, Request, Sound};
 use crate::prelude::*;
 
-/// The plugin registry, and what its host entries ([`Builtin::Host`]) reach the TUI through once `Rc<Tui>` exists.
+/// The plugin registry, and what its host entry ([`Builtin::Host`]) reaches the TUI through once `Rc<Tui>` exists.
 pub struct Plugins {
     registry: Registry,
     tui: Rc<OnceCell<Weak<Tui>>>,
@@ -998,8 +998,8 @@ fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
 }
 
 /// The built-ins in TS order (`plugin/builtins.ts`), with the ones from other crates ([`crate::Deps::builtins`],
-/// Mermaid and LaTeX) in their TS place after `stats`. The storybook (F14) is excepted (Q17). The plugin manager and
-/// the diff viewer is a host entry, which reaches the TUI through `tui` once it exists.
+/// Mermaid and LaTeX) in their TS place after `stats`. The storybook (F14) is excepted (Q17). The diff viewer is a host
+/// entry, which reaches the TUI through `tui` once it exists.
 fn builtins(tui: &Rc<OnceCell<Weak<Tui>>>, external: Vec<Builtin>, abi: bool) -> Vec<Builtin> {
     // On the other carrier each plugin's calls cross the C ABI's byte shims ([`Builtin::Abi`]).
     let carried = |builtin: Builtin| match builtin {

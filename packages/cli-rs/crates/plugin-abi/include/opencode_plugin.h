@@ -168,7 +168,7 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *      | {"type": "panel", "name"} | {"type": "overlay", "name"}, "palette"?, "draw"?: bool, "notify"?: [notify],
  *      "layout"?: bool, "handler"?: bool, "layers"?: [layer], "mounts"?: bool}],
  *    "claims"?: [{"target": {"type": "tool" | "fence", "name"}, "palette"?}],
- *    "messages"?: bool, "layers"?: [layer], "searches"?: [name]}
+ *    "messages"?: bool, "layers"?: [layer], "searches"?: [name], "plugins"?: bool}
  *   A layer is {"scope": "surface" | {"node": id} | "composer" | "global", "priority"?, "mode"?,
  *    "keys"?: [{"key", "name", "title"?, "hold"?}], "any"?, "paste"?}.
  *
@@ -226,6 +226,9 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *      manifest is the plugin's own. A scroll's and an input's events go to the surface's handler; the answer to them
  *      does not matter.
  *   {"type": "search", "name", "query", "options": [option]}   -> [value]
+ *   2.0 (P6b), for a plugin whose manifest has "plugins":
+ *   {"type": "plugins"}                                        -> null
+ *      The plugin list ("plugins" below) changed.
  *
  * 2.0 tree nodes ("type"): "box" {"id"?, "row"?, "gap"?, "padding"?, "justify"?, "align"?, "bg"?, "layout"?,
  *   "on_click"?, "children", "visible"?}, "text" {"id"?, "spans", "fg"?, "wrap"?, "truncate"?, "selectable"?, "hover_fg"?,
@@ -242,7 +245,9 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   "keymap-pending", "keymap-active", "keymap-commands", "shortcuts", "selection", "theme", "themes", 2.0 (P3)
  *   "scroll-state" {"target"}, "anchors" {"target", "group"}, "top-anchor" {"target", "group", "inset"?},
  *   "transcript", 2.0 (P2) "rect", "focused", "input-mode", 2.0 (P6a) "message" {"session", "message"} (one
- *   message, or null). Those that ask for something: "toast", "storage-set",
+ *   message, or null), 2.0 (P6b) "plugins", which answers [{"key", "id", "target"?, "origin": "builtin" | "added" |
+ *   "configured" | "external", "status": "active" | "inactive" | "skipped" | "failed" | "pending" | "declined",
+ *   "active"?, "slow"?}] and no error text. Those that ask for something: "toast", "storage-set",
  *   "storage-merge", "open-route", "dispatch", "attention", "navigate", "fetch", "dialog", "copy", 1.5
  *   "composer-edit", 1.6 "set-variant", "set-model", "tab", "clear-selection", "foreground", "title", "set-theme",
  *   "install-theme", 2.0 (P3) "scroll" {"target", "verb"}, 2.0 (P2) "open-panel", "close-panel", "overlay",
