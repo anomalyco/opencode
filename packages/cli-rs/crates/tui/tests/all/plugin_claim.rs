@@ -70,6 +70,10 @@ thread_local! {
     static CLOCK: RefCell<Option<Rc<Cell<Duration>>>> = const { RefCell::new(None) };
     /// `claim.a`'s next call is its first since setup, which no overrun fails (P4c).
     static COLD: Cell<bool> = const { Cell::new(false) };
+    /// The parts `claim.a` returns a refused tree for unless the host asks for a whole tree, and the `full` of each
+    /// of its views.
+    static ONCE: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+    static FULL: RefCell<Vec<bool>> = const { RefCell::new(Vec::new()) };
 }
 
 /// What the plugins call a part: a tool call by its id, and the one fence.
@@ -129,11 +133,15 @@ fn tree(part: &Part) -> v2::Node {
     card(&lines(part), output)
 }
 
-fn view_a(_: &mut v2::View<'_>, part: &Part) -> Option<v2::Node> {
+fn view_a(cx: &mut v2::View<'_>, part: &Part) -> Option<v2::Node> {
     let key = key(part);
     VIEWS.with_borrow_mut(|views| views.push(('a', key.clone(), lines(part))));
+    FULL.with_borrow_mut(|full| full.push(cx.input.full));
     if DECLINE.with_borrow(|decline| decline.contains(&key)) {
         return None;
+    }
+    if !cx.input.full && ONCE.with_borrow(|once| once.contains(&key)) {
+        return Some(v2::Node::column(vec![v2::Node::Keep { key: "nothing".into() }]));
     }
     let fault = ARMED.with_borrow(|armed| armed.as_ref().filter(|(armed, _)| *armed == key).map(|(_, fault)| *fault));
     let cold = COLD.replace(false);
@@ -276,6 +284,14 @@ fn messages() -> Value {
 
 impl World {
     fn open() -> Self {
+        Self::with(vec![
+            abi::Plugin { id: "claim.a", setup: plugin_a }.into(),
+            abi::Plugin { id: "claim.b", setup: plugin_b }.into(),
+        ])
+    }
+
+    /// A TUI on the session with `builtins`.
+    fn with(builtins: Vec<opencode_plugin::Builtin>) -> Self {
         VIEWS.with_borrow_mut(Vec::clear);
         ARMED.set(None);
         DECLINE.with_borrow_mut(HashSet::clear);
@@ -301,10 +317,7 @@ impl World {
         let deps = Deps {
             config: support::config(info),
             route: support::session_route(SESSION),
-            builtins: vec![
-                abi::Plugin { id: "claim.a", setup: plugin_a }.into(),
-                abi::Plugin { id: "claim.b", setup: plugin_b }.into(),
-            ],
+            builtins,
             ..support::deps(Arc::new(fake))
         };
         let harness = support::mount(WIDTH, HEIGHT, deps);
@@ -1017,4 +1030,77 @@ fn a_long_transcript_of_claimed_calls_against_the_host_rows() {
             ledger().views - before,
         );
     }
+}
+
+// Expected: a tree refused once is asked for again whole, in the same revision, and the part keeps its claim.
+#[test]
+fn a_tree_refused_once_is_asked_again_whole() {
+    let world = World::open();
+    let mut expected = Expected::new();
+    world.send(&Command::Start(0), &mut expected);
+    ONCE.with_borrow_mut(|once| once.insert("call_1".to_owned()));
+    FULL.with_borrow_mut(Vec::clear);
+    world.send(&Command::Delta(0, 0), &mut expected);
+    assert_eq!(FULL.with_borrow(Vec::clone), [false, true], "a refusal asks once more, for a whole tree");
+    assert_eq!(stream_whole(&world, &expected), Ok(1));
+    ONCE.with_borrow_mut(HashSet::clear);
+}
+
+thread_local! {
+    /// What the probes of the rows below saw: the plugin that viewed, and the width it was given.
+    static SEEN: RefCell<Vec<(char, u16)>> = const { RefCell::new(Vec::new()) };
+}
+
+fn probe(plugin: char) -> impl Fn(&mut v2::View<'_>, &Part) -> Option<v2::Node> {
+    move |cx, part| {
+        SEEN.with_borrow_mut(|seen| seen.push((plugin, cx.input.width)));
+        let text = format!("{plugin} drew {}", key(part));
+        // The text goes to the host once, as content, and shows through its handle.
+        let handle = cx.content(text.into_bytes());
+        Some(v2::Node::column(vec![v2::Node::Markdown {
+            id: Some("text".into()),
+            source: v2::Source::Content(handle),
+        }]))
+    }
+}
+
+fn shell_first(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::tool("shell", probe('f')));
+    Ok(())
+}
+
+fn shell_last(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::tool("shell", probe('l')));
+    Ok(())
+}
+
+// Expected: a claim of a tool takes its calls by the name the host gives the tool too (`bash` is the shell), the plugin
+// last in activation order wins, the content a view gives shows through its handle and goes with the part, and a part
+// laid out at another width is viewed again with it.
+#[test]
+fn the_last_claim_of_a_tool_draws_it_with_its_content_at_its_width() {
+    SEEN.with_borrow_mut(Vec::clear);
+    let world = World::with(vec![
+        abi::Plugin { id: "claim.first", setup: shell_first }.into(),
+        abi::Plugin { id: "claim.last", setup: shell_last }.into(),
+    ]);
+    world.emit("session.tool.input.started", json!({ "id": "call_9", "name": "bash" }));
+    world.settle();
+    world.harness.wait_for("l drew call_9");
+    assert!(
+        SEEN.with_borrow(|seen| seen.iter().all(|(plugin, _)| *plugin == 'l')),
+        "{:?}",
+        SEEN.with_borrow(Vec::clone)
+    );
+    let content = ledger().content;
+    assert_eq!(content, 1, "{:?}", ledger());
+    let width = SEEN.with_borrow(|seen| seen.last().map(|(_, width)| *width)).unwrap();
+    world.harness.app.resize(WIDTH - 20, HEIGHT);
+    world.settle();
+    world.settle();
+    let resized = SEEN.with_borrow(|seen| seen.last().map(|(_, width)| *width)).unwrap();
+    assert_eq!(resized, width - 20, "the view saw {width} columns, then {resized}");
+    world.harness.tui.navigate(opencode_tui::Route::Home);
+    world.settle();
+    assert_eq!((ledger().mounts, ledger().content, ledger().content_bytes), (0, 0, 0));
 }
