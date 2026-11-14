@@ -5,6 +5,15 @@ const migration: DatabaseMigration.Migration = {
   id: "20261025123711_blob",
   up(tx) {
     return Effect.gen(function* () {
+      // Databases upgraded through the V1→V2 data migration carry an unused
+      // legacy `blob(id, data)` table from that baseline. Rename it aside so
+      // the content-addressed `blob` below can be created; nothing references
+      // the legacy table and any rows survive the rename. A table that already
+      // has the new shape is left alone and fails loudly instead of being
+      // silently replaced.
+      const blobColumns = yield* tx.all<{ name: string }>(`PRAGMA table_info(\`blob\`)`)
+      if (blobColumns.length > 0 && !blobColumns.some((column) => column.name === "hash"))
+        yield* tx.run(`ALTER TABLE \`blob\` RENAME TO \`blob_v1_legacy\``)
       yield* tx.run(`
         CREATE TABLE \`blob_ref\` (
           \`session_id\` text NOT NULL,

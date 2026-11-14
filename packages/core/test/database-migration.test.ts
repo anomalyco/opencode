@@ -22,6 +22,7 @@ import sessionInboxMigration from "@opencode/core/database/migration/20260812181
 import sessionViewedStateMigration from "@opencode/core/database/migration/20260819222447_session_viewed_state"
 import azureCliCredentialMigration from "@opencode/core/database/migration/20261007190000_azure_cli_external_credential"
 import dropSessionPendingMigration from "@opencode/core/database/migration/20261025154125_drop_session_pending"
+import blobMigration from "@opencode/core/database/migration/20261025123711_blob"
 import scheduleMigration from "@opencode/core/database/migration/20261026223005_schedule"
 import scheduleChecksMigration from "@opencode/core/database/migration/20261029165540_schedule_checks"
 import automationMigration from "@opencode/core/database/migration/20261116043204_automation"
@@ -233,6 +234,27 @@ describe("DatabaseMigration", () => {
         yield* DatabaseMigration.applyOnly(db, [dropSessionPendingMigration])
 
         expect(yield* db.all(sql`SELECT name FROM sqlite_master WHERE name LIKE 'session_pending%'`)).toEqual([])
+      }),
+    )
+  })
+
+  test("renames the legacy V1→V2 blob table instead of failing", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        // The V1→V2 baseline shipped an unused `blob(id, data)` table that the
+        // content-addressed blob migration must not collide with.
+        yield* db.run(sql`CREATE TABLE blob (id text PRIMARY KEY, data blob NOT NULL)`)
+        yield* db.run(sql`INSERT INTO blob VALUES ('legacy', X'00FF')`)
+
+        yield* DatabaseMigration.applyOnly(db, [blobMigration])
+
+        expect(
+          (yield* db.all<{ name: string }>(sql`SELECT name FROM pragma_table_info('blob')`)).some(
+            (column) => column.name === "hash",
+          ),
+        ).toBe(true)
+        expect(yield* db.all(sql`SELECT id FROM blob_v1_legacy`)).toEqual([{ id: "legacy" }])
       }),
     )
   })
