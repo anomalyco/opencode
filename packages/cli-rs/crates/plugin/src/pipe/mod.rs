@@ -103,17 +103,30 @@ pub struct Crossed {
     pub dropped: u64,
     /// JS hosts started.
     pub started: u64,
+    /// Time the UI thread spent in the carrier's own code: encoding and queueing what it sends, taking what came, and
+    /// reading a revision's tree. Not the host's work on the tree, which every carrier has.
+    pub host: Duration,
 }
 
 thread_local! {
     static CROSSED: Cell<Crossed> = const { Cell::new(Crossed {
         sent: 0, sent_bytes: 0, received: 0, trees: 0, received_bytes: 0, adopted: 0, refused: 0, dropped: 0, started: 0,
+        host: Duration::ZERO,
     }) };
 }
 
 /// What crossed the pipe on this thread so far.
 pub fn crossed() -> Crossed {
     CROSSED.with(Cell::get)
+}
+
+/// Runs `f`, counting its time as the carrier's own.
+fn timed<R>(f: impl FnOnce() -> R) -> R {
+    let begun = Instant::now();
+    let out = f();
+    let took = begun.elapsed();
+    count(|crossed| crossed.host += took);
+    out
 }
 
 fn count(f: impl FnOnce(&mut Crossed)) {
@@ -191,6 +204,8 @@ pub struct Scripts {
     /// The directory of the written script, while the JS host may run.
     script: RefCell<Option<opencode_util::temp::TempDir>>,
     seq: Cell<u64>,
+    /// The bytes read from the running JS host, as last counted.
+    read: Cell<u64>,
     loads: RefCell<HashMap<String, Load>>,
     /// Each plugin's running activation, by ID.
     guests: RefCell<HashMap<String, Weak<Guest>>>,
@@ -237,6 +252,7 @@ impl Scripts {
             child: RefCell::default(),
             script: RefCell::default(),
             seq: Cell::new(0),
+            read: Cell::new(0),
             loads: RefCell::default(),
             guests: RefCell::default(),
             early: RefCell::default(),
@@ -399,6 +415,10 @@ impl Scripts {
 
     /// Writes `message` to the JS host.
     fn write(&self, message: &Down) {
+        timed(|| self.encode(message));
+    }
+
+    fn encode(&self, message: &Down) {
         let seq = message.seq();
         let payload = serde_json::to_vec(message).unwrap_or_default();
         log::trace!("js host -> {}", String::from_utf8_lossy(&payload));
@@ -438,6 +458,7 @@ impl Scripts {
                 let hello = serde_json::to_vec(&Down::Hello { version: proto::VERSION, after }).unwrap_or_default();
                 let _ = child.send(wire::CONTROL, &hello, None, child::Wait::Ack);
                 *self.child.borrow_mut() = Some(child);
+                self.read.set(0);
                 true
             }
             Err(error) => {
@@ -466,10 +487,10 @@ impl Scripts {
 
     /// Takes what the JS host sent.
     fn woken(self: &Rc<Self>) {
-        let events = match self.child.borrow().as_ref() {
-            Some(child) => child.take(),
-            None => return,
-        };
+        let taken = timed(|| self.child.borrow().as_ref().map(|child| (child.take(), child.read())));
+        let Some((events, read)) = taken else { return };
+        let new = read.saturating_sub(self.read.replace(read));
+        count(|crossed| crossed.received_bytes += new);
         for event in events {
             log::trace!("js host <- {event:?}");
             match event {
