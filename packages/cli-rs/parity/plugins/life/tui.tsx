@@ -1,6 +1,7 @@
 // The plugin of the life machine (parity/machines/plugins.json), TypeScript side: a line in home.footer that shows A
 // or B, then the pending keys while a sequence is pending, and seven palette commands. Life flip flips the line, Life throw throws, Life stall takes 150 ms, Life arm makes the next setup throw,
-// Life dialog opens a prompt, Life confirm asks whether to flip the line, and Life alert flips it once it closes. The TS reader copies this file and rewrites `build` to reload it. Its Rust twin is
+// Life dialog opens a prompt, Life confirm asks whether to flip the line, and Life alert flips it once it closes. With
+// the option fail its setup throws, for the views machine. The TS reader copies this file and rewrites `build` to reload it. Its Rust twin is
 // `life` in crates/tui/tests/all/plugin_machines.rs; each is checked against the file, not against the other.
 import type { Context } from "../../../../plugin/src/tui/plugin"
 import { createSignal } from "solid-js"
@@ -15,6 +16,8 @@ export default {
   id: "parity.life",
   setup(context: Context) {
     const run = context.options?.run
+    // The views machine: the setup fails as the plugin first loads, so its row is failed with an error.
+    if (context.options?.fail) throw new Error("life setup fails as it loads")
     if (armed.delete(run)) throw new Error("life setup armed to throw")
     const [side, setSide] = createSignal("A")
     const flip = () => setSide(side() === "A" ? "B" : "A")
