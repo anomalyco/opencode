@@ -65,7 +65,9 @@ export default bench({
 
   cases: {
     "scroll history": {
-      primary: "main.busy",
+      // Work to scroll the same distance in both directions; keep busy share for lit-display runs.
+      primary: "main.work",
+      metrics: ["main.busy"],
       async run({ page, phase }) {
         await phase("up", () => page.scroll(timeline, { by: -4000, speed: 3000 }))
         await phase("down", () => page.scroll(timeline, { by: 4000, speed: 3000 }))
