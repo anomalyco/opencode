@@ -289,13 +289,10 @@ impl State {
             work.draws += 1;
             work.draw_ns += took;
         });
+        // What the call left for after the frame (a failure, the budget's reports) waits on the app's deferred queue,
+        // which OpenTUI's event loop drains once the frame is presented.
         if let Some(bytes) = bytes {
             self.present(drawer, bytes, size);
-        }
-        // What the call left for after the frame (a failure, the budget's reports) waits on the app's deferred
-        // queue, which OpenTUI's event loop drains at its next turn; outside an animation nothing brings that turn.
-        if cause != Cause::Animate {
-            wake(&self.app);
         }
     }
 
@@ -437,14 +434,6 @@ fn resume(state: &Rc<State>) {
             cx.request_redraw();
         }
     });
-    wake(&state.app);
-}
-
-/// Brings OpenTUI's event loop around once, so the deferred work queued in a paint runs: the loop takes its deadline
-/// before it paints and drains the deferred queue only at a turn's start, so neither a deferral nor a timer made in a
-/// paint wakes it. A task posted through the app's proxy does, and paints nothing.
-fn wake(app: &App) {
-    let _ = app.proxy().post(|_| {});
 }
 
 impl Drop for State {
@@ -707,5 +696,40 @@ fn border_style(border: abi::BorderStyle) -> BorderStyle {
         abi::BorderStyle::Double => BorderStyle::Double,
         abi::BorderStyle::Rounded => BorderStyle::Rounded,
         abi::BorderStyle::Heavy => BorderStyle::Heavy,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, Instant};
+
+    use opentui::app::HeadlessOptions;
+
+    use super::*;
+
+    // Expected (carbon-4 (1), OpenTUI #2118): work a draw defers while the canvas paints, as a plugin's failure defers
+    // its revocation, runs once the frame is presented, on OpenTUI's own event loop, with no input and no timer to wake
+    // it: here a list the host cannot read fails the canvas, whose failure defers the end of the run. Were the work to
+    // wait for input, the watchdog would end the run after 5 s.
+    #[test]
+    fn work_a_draw_defers_runs_without_input() {
+        let app = App::headless(HeadlessOptions { width: 20, height: 4, ..HeadlessOptions::default() }).unwrap();
+        let quitting = app.clone();
+        let drawer = Rc::new(Drawer {
+            owner: Rc::from("test.headless"),
+            draw: Box::new(|_, _| Some(Some(vec![0xff]))),
+            fail: Box::new(move |_| quitting.defer(|cx| cx.quit())),
+        });
+        let canvas = Canvas::new(&app, "c", Some(drawer), 0, false);
+        app.root().add(&canvas.widget().width(10).height(2));
+        let proxy = app.proxy();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(5));
+            let _ = proxy.post(|cx| cx.quit());
+        });
+        let started = Instant::now();
+        app.run().unwrap();
+        assert!(started.elapsed() < Duration::from_secs(2), "the failure waited {:?}", started.elapsed());
+        assert_eq!(work().refused, 1);
     }
 }
