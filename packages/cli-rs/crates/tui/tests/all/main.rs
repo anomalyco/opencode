@@ -3,6 +3,9 @@
 
 mod support;
 
+#[global_allocator]
+static HEAP: support::heap::Counting = support::heap::Counting;
+
 mod actions;
 mod animations;
 mod app;
