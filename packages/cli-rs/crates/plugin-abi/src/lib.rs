@@ -2235,6 +2235,23 @@ pub struct Select {
     pub binds: Vec<PanelBind>,
 }
 
+impl Select {
+    /// A select of `options` titled `title`, whose pick runs `action` with the option's value; the fields this crate
+    /// adds later default, so a plugin built with this constructor needs no change for them.
+    pub fn new(title: impl Into<String>, options: Vec<SelectOption>, action: Action) -> Self {
+        Self {
+            title: title.into(),
+            placeholder: None,
+            options,
+            current: None,
+            action,
+            key: None,
+            actions: Vec::new(),
+            binds: Vec::new(),
+        }
+    }
+}
+
 /// An option of a [`Select`].
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct SelectOption {
