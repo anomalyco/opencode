@@ -296,12 +296,21 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
                 v2::Node::text(vec![abi::Span::new("MENU two")]),
             ])
         })
-        .layers(vec![Layer {
-            scope: LayerScope::Surface,
-            keys: vec![Bind::new("k", "k"), Bind::new("n", "nav")],
-            ..Layer::default()
-        }])
+        .layers(vec![
+            Layer {
+                scope: LayerScope::Surface,
+                keys: vec![Bind::new("k", "k"), Bind::new("n", "nav")],
+                ..Layer::default()
+            },
+            Layer {
+                scope: LayerScope::Surface,
+                mode: Some("nav".into()),
+                keys: vec![Bind::new("k", "k")],
+                ..Layer::default()
+            },
+        ])
         .on(|host, event| {
+            assert!(!probe(|probe| probe.panic), "the probe asked for a panic");
             log("menu", host, event);
             // `n`: a mode of the overlay, which binds no escape.
             if let Event::Key(key) = event
@@ -1544,4 +1553,67 @@ fn a_closed_panel_gives_its_focus_to_the_composer() {
     harness.app.type_text("q");
     settle(&harness);
     assert_eq!(composer(&harness), "q");
+}
+
+/// The registries of the same TUI with only the other test plugin.
+fn without() -> interact::Ledger {
+    let deps = Deps {
+        builtins: vec![abi::Plugin { id: "test.other", setup: other }.into()],
+        ..support::deps(Arc::new(support::Fake::new(|seen| support::base(seen, support::DIRECTORY))))
+    };
+    interact::ledger(&*support::mount(120, 30, deps).tui)
+}
+
+/// The test plugin's failure, if it failed.
+fn failure(harness: &Harness) -> Option<String> {
+    harness.tui.plugins.entries().into_iter().find(|entry| entry.id == ID).and_then(|entry| match entry.status {
+        opencode_plugin::Status::Failed(error) => Some(error),
+        _ => None,
+    })
+}
+
+// Expected (P4c's containment of a handler): a handler is a plugin call, timed and contained; one that panics fails
+// its plugin, and what the plugin held of the input goes by the owners' end: its layers, listeners and modes, a
+// capture, a hold with a key behind it and its timer, an overlay. The focus goes to the composer, the held key reaches
+// nothing, and the host goes on.
+#[test]
+fn a_panicking_handler_fails_its_plugin_and_leaves_no_input() {
+    let twin = without();
+    // A pointer handler, with a capture and a hold holding a key.
+    let harness = open_with(|probe| probe.hold = true);
+    run(&harness, "input.panel", None);
+    let (x, y) = support::at(&harness.app.text(), "AAAA").unwrap();
+    harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
+    harness.app.press("x");
+    harness.app.press("q");
+    let armed = interact::ledger(&*harness.tui);
+    assert!(armed.capture && armed.holding && armed.held == 1 && armed.timers == 1, "{armed:?}");
+    probe(|probe| probe.panic = true);
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), x + 2, y);
+    probe(|probe| probe.panic = false);
+    settle(&harness);
+    harness.app.advance(input::HOLD * 2);
+    settle(&harness);
+    let error = failure(&harness).expect("the plugin failed");
+    assert!(error.contains("handle panicked"), "{error}");
+    assert_eq!(interact::ledger(&*harness.tui), twin);
+    assert!(opencode_plugin::Host::composer_focused(&*harness.tui));
+    harness.app.type_text("z");
+    settle(&harness);
+    assert_eq!(composer(&harness), "z", "the held key reached the composer, or the host stopped");
+    // An overlay's handler, in the overlay's mode.
+    let harness = open();
+    run(&harness, "input.overlay", None);
+    harness.app.press("n");
+    settle(&harness);
+    let armed = interact::ledger(&*harness.tui);
+    assert!(armed.overlays > 0 && armed.modes > twin.modes, "{armed:?}");
+    probe(|probe| probe.panic = true);
+    harness.app.press("k");
+    probe(|probe| probe.panic = false);
+    settle(&harness);
+    assert!(failure(&harness).is_some_and(|error| error.contains("handle panicked")));
+    assert_eq!(interact::ledger(&*harness.tui), twin);
+    assert!(!harness.app.text().contains("MENU"));
+    assert!(opencode_plugin::Host::composer_focused(&*harness.tui));
 }

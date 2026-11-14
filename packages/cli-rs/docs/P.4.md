@@ -324,7 +324,10 @@ focus, a host dialog or a resize. On a box with a click of its own, a press the 
 widget or another plugin's node drops nothing. `Read::rect`, `Read::focused`
 and `Read::mode` read the running call's mount; a command reads, and `Host::focus` and `Host::blur` act on, the
 plugin's mount that holds the node or the focus.
-Everything a mount registers ends with it, and everything a plugin registers ends when it leaves `active`.
+Everything a mount registers ends with it, and everything a plugin registers ends when it leaves `active`. A handler and
+a select's search are calls of the plugin (`handle`, `search` in the run record), timed and contained as any other: one
+that panics fails the plugin, whose layers, modes, capture, hold and overlays then go, and the focus goes to the
+composer.
 
 `Dialog::Select` with a `key` is the rich select: shown again under its key while it is open, it changes in place and
 keeps its filter and selection, and picking a row does not close it. A row may have its own action, a footer color, a
