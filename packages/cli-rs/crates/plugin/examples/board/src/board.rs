@@ -26,7 +26,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         let mut board = into.borrow_mut();
         board.values[card % CARDS] += 1;
         board.messages += 1;
-    });
+    })?;
     let bumped = board.clone();
     setup.command(command("board.bump"), move |_, input| bumped.borrow_mut().values[number(input) % CARDS] += 1);
     let spawner = setup.spawner();

@@ -37,6 +37,7 @@ use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use std::mem::{offset_of, size_of};
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::ptr::NonNull;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
@@ -127,7 +128,8 @@ impl Native {
     /// Opens `library` and checks its version without setting it up.
     pub fn inspect(&self, library: &[u8]) -> Result<Inspected, String> {
         let library = Library::open(library, V1_MINOR)?;
-        Ok(Inspected { major: library.major, minor: library.minor, version: library.metadata().version })
+        let metadata = library.compatible()?;
+        Ok(Inspected { major: library.major, minor: library.minor, version: metadata.version })
     }
 }
 
@@ -145,15 +147,9 @@ impl Backend for Native {
 /// The definition of the plugin `library` holds; setup runs on each activation.
 fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Result<(Definition, ErrorFn), String> {
     let library = Rc::new(library);
-    let metadata = library.metadata();
+    let metadata = library.compatible()?;
     if let Some(version) = &metadata.version {
         log::info!("plugin library version {version}, ABI {}.{}", library.major, library.minor);
-    }
-    if let Some(feature) = metadata.requires.iter().find(|feature| !abi::FEATURES.contains(&feature.as_str())) {
-        return Err(format!(
-            "plugin requires the feature {feature}, which this opencode-native (ABI {ABI_MAJOR}.{HOST_MINOR}) lacks; \
-             update opencode-native"
-        ));
     }
     let options = options.map(str::to_owned);
     // Setup runs on each activation only, so a disabled plugin starts nothing. A plugin without `describe`
@@ -161,7 +157,7 @@ fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Resul
     let id = match metadata.id {
         Some(id) => id,
         // That instance only tells the ID: nothing it asks for happens.
-        None => Instance::create(&library, Rc::downgrade(host), "", options.as_deref(), true)?.1.id,
+        None => Instance::create(&library, Rc::downgrade(host), "", options.as_deref(), true, None)?.1.id,
     };
     // The failure of the running instance, a panic, in a cell of each activation's own: a new activation leaves an old
     // one's failure as it was.
@@ -172,17 +168,14 @@ fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Resul
             let host = Rc::downgrade(setup.host());
             let (monitor, slot) = (setup.monitor.clone(), setup.monitor.slot(&setup.artifact()));
             let (created, _) = monitor.call(slot, "setup", || {
-                Instance::create(&library, host.clone(), setup.id(), options.as_deref(), false)
+                Instance::create(&library, host.clone(), setup.id(), options.as_deref(), false, Some(setup.id()))
             });
             let (instance, manifest) = created?;
-            if manifest.id != setup.id() {
-                return Err(format!("setup returned plugin ID {}, not {}", manifest.id, setup.id()));
-            }
             let failure: Rc<RefCell<Option<String>>> = Rc::default();
             *current.borrow_mut() = failure.clone();
             let failed = failure.clone();
             setup.failure(Rc::new(move || failed.borrow().clone()));
-            let activation = Activation::new(setup.host(), instance.shared.mail.clone());
+            let activation = Activation::new(setup.host(), instance.shared().mail.clone());
             let guest = Rc::new(Guest {
                 instance: RefCell::new(Some(instance)),
                 busy: Cell::new(false),
@@ -326,18 +319,29 @@ impl Library {
         Ok(Self { major, minor, served: host_minor, create, call, destroy: core.destroy, free, describe })
     }
 
-    /// What the plugin says about itself, when it has `describe` (1.1).
-    fn metadata(&self) -> abi::Metadata {
-        let Some(describe) = &self.describe else { return abi::Metadata::default() };
+    /// What the plugin says about itself, when it has `describe` (1.1), checked against what this host offers: a 2.x
+    /// library whose `describe` fails or answers what the host cannot read, or that requires a feature the host lacks,
+    /// is refused before any setup. A 1.x library's metadata is a hint, as it always was.
+    fn compatible(&self) -> Result<abi::Metadata, String> {
+        let Some(describe) = &self.describe else { return Ok(abi::Metadata::default()) };
         let mut out = Owned::EMPTY;
-        // SAFETY: `describe` writes `out`, which `free` takes back.
-        let (status, bytes) = unsafe {
-            let status = describe(&mut out);
-            let bytes = out.to_vec();
-            (self.free)(out);
-            (status, bytes)
-        };
-        (status == abi::OK).then(|| serde_json::from_slice(&bytes).ok()).flatten().unwrap_or_default()
+        let status = describe(&mut out);
+        // SAFETY: `describe` wrote `out`, which goes back to `free`.
+        let metadata = unsafe { received(out, self.free) }.and_then(|bytes| match status {
+            abi::OK => serde_json::from_slice::<abi::Metadata>(&bytes).map_err(|error| error.to_string()),
+            _ => Err(String::from_utf8_lossy(&bytes).into_owned()),
+        });
+        if self.major < 2 {
+            return Ok(abi::Metadata { requires: Vec::new(), ..metadata.unwrap_or_default() });
+        }
+        let metadata = metadata.map_err(|error| format!("plugin describe failed: {error}"))?;
+        if let Some(feature) = metadata.requires.iter().find(|feature| !abi::FEATURES.contains(&feature.as_str())) {
+            return Err(format!(
+                "plugin requires the feature {feature}, which this opencode-native (ABI {ABI_MAJOR}.{HOST_MINOR}) \
+                 lacks; update opencode-native"
+            ));
+        }
+        Ok(metadata)
     }
 }
 
@@ -389,7 +393,7 @@ struct Ctx {
     staged: crate::Staged,
     /// What it asks for is dropped.
     quiet: bool,
-    /// The running call is a render, which reads and asks for no effect.
+    /// A render of 1.4 on or a view runs: it may read, and ask for nothing.
     read_only: bool,
 }
 
@@ -441,23 +445,80 @@ enum Effect {
 }
 
 /// One plugin instance; dropping it destroys the instance in the plugin.
+///
+/// The plugin keeps pointers to the host table and its context until `destroy` returns. So they are allocated once
+/// and reached only through raw pointers: nothing moves them or borrows them mutably while the plugin may use them,
+/// and they are freed after `destroy`. Without a `destroy`, or after a `create` that failed, nothing tells the
+/// plugin's threads to stop, so they are never freed.
 struct Instance {
     library: Rc<Library>,
     handle: *mut c_void,
-    // The plugin keeps pointers to these until `destroy`, so they are boxed and dropped after it.
-    _api: Box<HostApi>,
-    shared: Box<Shared>,
+    api: NonNull<HostApi>,
+    shared: NonNull<Shared>,
+}
+
+/// The table a library of `major` gets, of `minor`: ABI 1.x's for a 1.x library, which ends before the entries of 2.0,
+/// and the whole 2.0 table for a 2.x one.
+fn host_table(major: u32, minor: u32, ctx: *mut c_void) -> HostApi {
+    let v2 = major >= 2;
+    HostApi {
+        size: if v2 { size_of::<HostApi>() } else { offset_of!(HostApi, send) },
+        major,
+        minor,
+        ctx,
+        call: Some(host_call),
+        free: Some(host_free),
+        theme_mode: Some(host_theme_mode),
+        wake: Some(host_wake),
+        send: v2.then_some(host_send as unsafe extern "C" fn(*mut c_void, Bytes, Bytes) -> i32),
+        report: v2.then_some(host_report as unsafe extern "C" fn(*mut c_void, Bytes)),
+        stopped: v2.then_some(host_stopped as unsafe extern "C" fn(*mut c_void) -> u32),
+        features: if v2 { Bytes::new(&FEATURES_JSON) } else { Bytes::new(&[]) },
+    }
+}
+
+/// The largest buffer the host takes from a plugin.
+const MAX_BUFFER: usize = 256 << 20;
+
+/// The bytes of a buffer a plugin returned, which goes back to its `free` whatever it holds. A descriptor that cannot
+/// describe a buffer the plugin allocated (a null pointer with a length, a length past the capacity) or one over
+/// [`MAX_BUFFER`] is refused before anything is read through it.
+///
+/// # Safety
+/// `out` was written by the plugin whose `free` this is.
+unsafe fn received(out: Owned, free: unsafe extern "C" fn(Owned)) -> Result<Vec<u8>, String> {
+    let bytes = match (out.ptr.is_null(), out.len) {
+        (true, 0) => Ok(Vec::new()),
+        (true, len) => Err(format!("a null buffer of {len} bytes")),
+        (false, len) if len > out.cap => Err(format!("a buffer of {len} bytes in {} of room", out.cap)),
+        (false, len) if len > MAX_BUFFER => Err(format!("a buffer of {len} bytes, over {MAX_BUFFER}")),
+        // SAFETY: the plugin wrote `len` bytes at `ptr`, which it owns until `free`.
+        (false, _) => Ok(unsafe { out.to_vec() }),
+    };
+    // SAFETY: the buffer goes back to the library that wrote it, once.
+    unsafe { free(out) };
+    bytes
+}
+
+/// A call's failure: the plugin panicked or the host refused its answer, which leaves no effect; or the plugin
+/// returned an error, which is an answer.
+enum Failed {
+    Refused(String),
+    Returned(String),
 }
 
 impl Instance {
-    /// Runs setup. `id` is the plugin's ID, or empty while it is not known, so setup may use storage. What a `quiet`
-    /// instance asks for is dropped.
+    /// Runs setup. `id` is the plugin's ID, or empty while it is not known, so setup may use storage; `expect` is the ID
+    /// its manifest must have. What a `quiet` instance asks for is dropped. A manifest the host refuses (bad, empty, or
+    /// another ID) leaves no effect, as a setup that panics does: what setup asked for is dropped, its storage writes
+    /// are put back, and the instance is destroyed quietly.
     fn create(
         library: &Rc<Library>,
         host: Weak<dyn Host>,
         id: &str,
         options: Option<&str>,
         quiet: bool,
+        expect: Option<&str>,
     ) -> Result<(Self, Manifest), String> {
         let wake = Arc::new(Wake::new(host.upgrade().map(|host| host.app().proxy())));
         let ctx = RefCell::new(Ctx {
@@ -470,71 +531,76 @@ impl Instance {
             quiet,
             read_only: false,
         });
-        let shared = Box::new(Shared { ctx, mail: Mailbox::new(id, wake), ui: std::thread::current().id() });
-        // A 1.x library gets the table of its major under its own version; it reads no entry past what it knows.
-        let api = Box::new(HostApi {
-            size: size_of::<HostApi>(),
-            major: library.major,
-            minor: library.served,
-            ctx: std::ptr::from_ref::<Shared>(&shared).cast_mut().cast(),
-            call: Some(host_call),
-            free: Some(host_free),
-            theme_mode: Some(host_theme_mode),
-            wake: Some(host_wake),
-            send: Some(host_send),
-            report: Some(host_report),
-            stopped: Some(host_stopped),
-            features: Bytes::new(&FEATURES_JSON),
-        });
+        let ui = std::thread::current().id();
+        let shared = NonNull::from(Box::leak(Box::new(Shared { ctx, mail: Mailbox::new(id, wake), ui })));
+        let table = host_table(library.major, library.served, shared.as_ptr().cast());
+        let api = NonNull::from(Box::leak(Box::new(table)));
         let mut handle = std::ptr::null_mut();
         let mut out = Owned::EMPTY;
         let options = options.unwrap_or_default();
-        // SAFETY: the pointers are valid for the call, and `api` and `ctx` outlive the instance.
+        // SAFETY: the pointers are valid for the call, and the table and its context outlive the instance.
         let (status, bytes) = unsafe {
-            let status = (library.create)(&*api, Bytes::new(options.as_bytes()), &mut handle, &mut out);
-            let bytes = out.to_vec();
-            (library.free)(out);
-            (status, bytes)
+            let status = (library.create)(api.as_ptr(), Bytes::new(options.as_bytes()), &mut handle, &mut out);
+            (status, received(out, library.free))
         };
-        let text = || String::from_utf8_lossy(&bytes).into_owned();
-        match status {
-            abi::OK => {}
-            // Nothing a setup that panicked asked for happens, nor what its disposal did within the call.
-            abi::PANIC => {
-                shared.undo();
-                return Err(format!("setup panicked: {}", text()));
+        // SAFETY: allocated above; only shared references reach it from here on.
+        let context = unsafe { shared.as_ref() };
+        let text = |bytes: Result<Vec<u8>, String>| match bytes {
+            Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
+            Err(error) => error,
+        };
+        if status != abi::OK {
+            context.mail.close();
+            if status == abi::PANIC {
+                // Nothing a setup that panicked asked for happens, nor what its disposal did within the call.
+                context.undo();
+                return Err(format!("setup panicked: {}", text(bytes)));
             }
             // What the failed setup and its disposal asked for still happens; its fetches reach no activation.
-            _ => {
-                shared.drain();
-                return Err(text());
+            context.drain();
+            return Err(text(bytes));
+        }
+        let instance = Self { library: library.clone(), handle, api, shared };
+        match bytes.and_then(|bytes| manifest(&bytes, library.major, expect)) {
+            Ok(manifest) => {
+                let mut ctx = context.ctx.borrow_mut();
+                ctx.id = manifest.id.clone();
+                ctx.keys = manifest.storage.clone();
+                drop(ctx);
+                Ok((instance, manifest))
+            }
+            Err(error) => {
+                instance.refuse();
+                Err(error)
             }
         }
-        let instance = Self { library: library.clone(), handle, _api: api, shared };
-        let manifest: Manifest =
-            serde_json::from_slice(&bytes).map_err(|error| format!("setup returned a bad manifest: {error}"))?;
-        if manifest.id.is_empty() {
-            return Err("setup returned an empty plugin ID".to_owned());
-        }
-        {
-            let mut ctx = instance.shared.ctx.borrow_mut();
-            ctx.id = manifest.id.clone();
-            ctx.keys = manifest.storage.clone();
-        }
-        Ok((instance, manifest))
     }
 
-    /// Sends `request`; a panic is `Err(Some(message))`, an error the plugin returned `Err(None)` after logging.
-    fn call(&self, request: &Request) -> Result<serde_json::Value, Option<String>> {
-        let json = serde_json::to_vec(request).map_err(|error| Some(error.to_string()))?;
+    fn shared(&self) -> &Shared {
+        // SAFETY: allocated in `create`, freed only in `drop`; reached through shared references only.
+        unsafe { self.shared.as_ref() }
+    }
+
+    /// Destroys an instance whose answer the host refused: what it asked for is dropped, its storage writes are put
+    /// back, and what its disposal asks for is dropped too.
+    fn refuse(self) {
+        let shared = self.shared();
+        shared.undo();
+        shared.ctx.borrow_mut().quiet = true;
+        drop(self);
+    }
+
+    /// Sends `request`. A panic, or an answer the host cannot take, is [`Failed::Refused`]; an error the plugin returned
+    /// is [`Failed::Returned`].
+    fn call(&self, request: &Request) -> Result<serde_json::Value, Failed> {
+        let json = serde_json::to_vec(request).map_err(|error| Failed::Refused(error.to_string()))?;
         let mut out = Owned::EMPTY;
         // SAFETY: `handle` is live until drop; `out` goes back to the library's `free`.
         let (status, bytes) = unsafe {
             let status = (self.library.call)(self.handle, Bytes::new(&json), &mut out);
-            let bytes = out.to_vec();
-            (self.library.free)(out);
-            (status, bytes)
+            (status, received(out, self.library.free))
         };
+        let bytes = bytes.map_err(|error| Failed::Refused(format!("returned a bad result: {error}")))?;
         carry(|crossed| {
             crossed.calls += 1;
             crossed.sent += json.len() as u64;
@@ -542,26 +608,49 @@ impl Instance {
         });
         let text = String::from_utf8_lossy(&bytes);
         match status {
-            abi::OK => serde_json::from_slice(&bytes).map_err(|error| Some(format!("returned a bad result: {error}"))),
-            abi::PANIC => Err(Some(format!("panicked: {text}"))),
-            _ => {
-                log::warn!("plugin {}: {text}", self.shared.ctx.borrow().id);
-                Err(None)
-            }
+            abi::OK => serde_json::from_slice(&bytes)
+                .map_err(|error| Failed::Refused(format!("returned a bad result: {error}"))),
+            abi::PANIC => Err(Failed::Refused(format!("panicked: {text}"))),
+            _ => Err(Failed::Returned(text.into_owned())),
         }
     }
 }
 
+/// The manifest `create` answered, checked: its ID, and, for a 1.x library, nothing of 2.0.
+fn manifest(bytes: &[u8], major: u32, expect: Option<&str>) -> Result<Manifest, String> {
+    let mut manifest: Manifest =
+        serde_json::from_slice(bytes).map_err(|error| format!("setup returned a bad manifest: {error}"))?;
+    if manifest.id.is_empty() {
+        return Err("setup returned an empty plugin ID".to_owned());
+    }
+    if let Some(expect) = expect.filter(|expect| *expect != manifest.id) {
+        return Err(format!("setup returned plugin ID {}, not {expect}", manifest.id));
+    }
+    if major < 2 && (!manifest.surfaces.is_empty() || manifest.messages) {
+        log::warn!("plugin {}: a plugin of ABI {major}.x has no surfaces and no messages; ignored", manifest.id);
+        (manifest.surfaces, manifest.messages) = (Vec::new(), false);
+    }
+    Ok(manifest)
+}
+
 impl Drop for Instance {
     fn drop(&mut self) {
+        let shared = self.shared();
         // Its threads are told to end before `destroy` revokes what they reach the host through.
-        self.shared.mail.close();
-        if let Some(destroy) = self.library.destroy {
-            // SAFETY: `handle` came from `create` and is destroyed once; the plugin catches its own panics.
-            unsafe { destroy(self.handle) };
-        }
+        shared.mail.close();
+        let Some(destroy) = self.library.destroy else {
+            shared.drain();
+            return;
+        };
+        // SAFETY: `handle` came from `create` and is destroyed once; the plugin catches its own panics.
+        unsafe { destroy(self.handle) };
         // What its dispose callbacks asked for still happens, as in process; their fetches reach no activation.
-        self.shared.drain();
+        shared.drain();
+        // SAFETY: allocated in `create`; `destroy` has returned, so the plugin holds no pointer into them any more.
+        unsafe {
+            drop(Box::from_raw(self.api.as_ptr()));
+            drop(Box::from_raw(self.shared.as_ptr()));
+        }
     }
 }
 
@@ -605,9 +694,9 @@ unsafe extern "C" fn host_call(ctx: *mut c_void, request: Bytes, out: *mut Owned
         return abi::ERROR;
     }
     // SAFETY: `ctx` is the `Shared` this instance was created with, or null; `request` is valid for the call.
-    let (ctx, request) = unsafe { (ctx.cast::<Shared>().as_ref().map(|shared| &shared.ctx), request.as_slice()) };
+    let (shared, request) = unsafe { (ctx.cast::<Shared>().as_ref(), request.as_slice()) };
     let result = catch_unwind(AssertUnwindSafe(|| {
-        let ctx = ctx.ok_or("no host context")?;
+        let ctx = &shared.ok_or("no host context")?.ctx;
         let request: HostRequest = serde_json::from_slice(request)
             .map_err(|error| format!("unsupported host request (host ABI {ABI_MAJOR}.{HOST_MINOR}): {error}"))?;
         let mut ctx = ctx.try_borrow_mut().map_err(|_| "the host is busy".to_owned())?;
@@ -702,7 +791,7 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
             .ok_or_else(|| format!("storage key {key} was not declared"))
     };
     if ctx.read_only && effect(&request) {
-        return Err("a render reads the host and asks for no effect".to_owned());
+        return Err("a render or a view reads the host and asks for no effect".to_owned());
     }
     match request {
         HostRequest::Log { level, message } => {
@@ -855,6 +944,15 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
     Ok(serde_json::Value::Null)
 }
 
+/// Whether `request` is a render of 1.4 on or a view, which reads only. A 1.3 render is left as it was: its SDK let it
+/// ask for effects, which apply when the host draws its answer.
+fn renders(request: &Request) -> bool {
+    matches!(
+        request,
+        Request::RenderFence(_) | Request::Render { .. } | Request::RenderRoute { .. } | Request::View { .. }
+    )
+}
+
 /// Whether `request` asks for an effect, which a render may not. Every request is sorted, so a new one has to say.
 fn effect(request: &HostRequest) -> bool {
     match request {
@@ -971,9 +1069,11 @@ impl Guest {
     }
 
     /// [`Guest::request`] whose result `check` must accept. A result the host cannot decode, or that `check` refuses,
-    /// fails the plugin as a panic does: what the call asked for is dropped, and the storage it wrote put back. A call
-    /// that returned late (an overrun, synthesis 4.4) did return: what it asked for happens, then it fails, which
-    /// revokes it.
+    /// fails the plugin as a panic does: what the call asked for is dropped, and the storage it wrote put back. An
+    /// error the plugin returns is an answer: what the call asked for happens, and a 2.x plugin then fails (4.14), where
+    /// a 1.x plugin's error is logged, as it always was. A render or a view may ask for nothing ([`asks`]). A call that
+    /// returned late (an overrun, synthesis 4.4) did return: what it asked for happens, then it fails, which revokes it;
+    /// a cause of the call's own (a refusal, or a 2.x error) names the failure before the overrun.
     fn checked<T: DeserializeOwned>(
         self: &Rc<Self>,
         export: &'static str,
@@ -983,17 +1083,14 @@ impl Guest {
         if self.failure.borrow().is_some() {
             return None;
         }
-        let (result, timed) = {
+        let ((result, timed), major) = {
             let instance = self.instance.borrow();
             let instance = instance.as_ref()?;
             if self.busy.replace(true) {
                 log::warn!("plugin {}: {export} called while the plugin runs", self.id);
                 return None;
             }
-            // The renders of 1.4 on, whose SDK hands them only reads; a 1.3 render is left as it was.
-            let render =
-                matches!(request, Request::RenderFence(_) | Request::Render { .. } | Request::RenderRoute { .. });
-            instance.shared.ctx.borrow_mut().read_only = render;
+            instance.shared().ctx.borrow_mut().read_only = renders(request);
             // One store snapshot for the whole call, as in process: each read it asks for nests in this one.
             let timed = self.monitor.call(self.slot, export, || {
                 let mut result = None;
@@ -1002,36 +1099,44 @@ impl Guest {
                 }
                 result.unwrap_or_else(|| instance.call(request))
             });
-            instance.shared.ctx.borrow_mut().read_only = false;
+            instance.shared().ctx.borrow_mut().read_only = false;
             self.busy.set(false);
-            timed
+            (timed, instance.library.major)
         };
         let (effects, undo) = self.taken();
-        let bad = |error: String| Some(format!("returned a bad result: {error}"));
+        let bad = |error: String| Failed::Refused(format!("returned a bad result: {error}"));
         let result = result.and_then(|value| {
             let value = serde_json::from_value::<T>(value).map_err(|error| bad(error.to_string()))?;
             check(&value).map_err(bad)?;
             Ok(value)
         });
+        let overrun = timed.overrun.then(|| {
+            let limit = self.monitor.limits().overrun.as_millis();
+            format!("{export} took {} ms, over the limit of {limit} ms", timed.took.as_millis())
+        });
         let error = match &result {
-            Err(Some(error)) => Some(format!("{export} {error}")),
-            _ if timed.overrun => {
-                let limit = self.monitor.limits().overrun.as_millis();
-                Some(format!("{export} took {} ms, over the limit of {limit} ms", timed.took.as_millis()))
+            Ok(_) => {
+                self.apply(effects);
+                overrun
             }
-            _ => None,
-        };
-        match &result {
-            // The call returned, with a result or with an error of its own: what it asked for happens (rich plugins
-            // 4.14), also when it returned late.
-            Ok(_) | Err(None) => self.apply(effects),
+            Err(Failed::Returned(error)) => {
+                self.apply(effects);
+                match major {
+                    1 => {
+                        log::warn!("plugin {}: {export}: {error}", self.id);
+                        overrun
+                    }
+                    _ => Some(format!("{export} returned an error: {error}")),
+                }
+            }
             // A result the host refuses, or a panic: nothing of it happens, and its storage writes go back.
-            Err(Some(_)) => {
+            Err(Failed::Refused(error)) => {
                 if let Some(host) = self.host.upgrade() {
                     undo.restore(&*host);
                 }
+                Some(format!("{export} {error}"))
             }
-        }
+        };
         crate::budget(&self.host, &self.monitor, &self.id, &timed, error.is_some());
         if let Some(error) = error {
             self.fail(error);
@@ -1047,7 +1152,8 @@ impl Guest {
 
     /// Sends a request to a handler, then, if it ran, invalidates the claims, whose state it may have changed.
     fn handle(self: &Rc<Self>, export: &'static str, request: &Request) {
-        if self.request::<serde_json::Value>(export, request).is_some() {
+        // A handler answers `null` (O-135): anything else is a contract break.
+        if self.request::<()>(export, request).is_some() {
             self.activation.invalidate();
         }
     }
@@ -1055,7 +1161,7 @@ impl Guest {
     /// What the instance asked for since it was last taken.
     fn taken(&self) -> (Vec<Effect>, Undo) {
         let instance = self.instance.borrow();
-        instance.as_ref().map(|instance| instance.shared.ctx.borrow_mut().take()).unwrap_or_default()
+        instance.as_ref().map(|instance| instance.shared().ctx.borrow_mut().take()).unwrap_or_default()
     }
 
     /// Queues the effects of a call on the effect queue, as the host would for a built-in.
@@ -1172,7 +1278,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
             if let Some(host) = guest.upgrade().map(|guest| guest.host.clone()) {
                 defer(&host, move |_| {
                     if let Some(guest) = guest.upgrade() {
-                        guest.request::<serde_json::Value>("fence-gone", &Request::FenceGone { key });
+                        guest.request::<()>("fence-gone", &Request::FenceGone { key });
                     }
                 });
             }
@@ -1284,7 +1390,11 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
         let place = surface::Place { name: claim.name.clone(), at, palette: claim.palette };
         setup.surface(place, Rc::new(Remote { guest: guest.clone(), index }), commands, fail, &guest.activation);
     }
-    // 2.0: what the plugin's threads send runs `Message`, one call each; a thread's panic fails the plugin, once.
+    // 2.0: what the plugin's threads send runs `Message`, one call each, when its manifest says it takes messages; a
+    // thread's panic fails the plugin, once.
+    if !manifest.messages {
+        guest.activation.mailbox.refuse_messages();
+    }
     let (delivered, failing) = (Rc::downgrade(guest), Rc::downgrade(guest));
     guest.activation.on_mail(
         Rc::new(move |message| {
@@ -1300,6 +1410,11 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
     );
 }
 
+/// The nodes of `node` that carry an id, kept subtrees included.
+fn keyed(node: &v2::Node) -> usize {
+    usize::from(node.id().is_some()) + node.children().iter().map(keyed).sum::<usize>()
+}
+
 /// A surface's view in a library, through [`Request::View`].
 struct Remote {
     guest: Rc<Guest>,
@@ -1313,12 +1428,22 @@ impl Viewer for Remote {
         let (mount, input) = (viewing.mount.clone(), viewing.input.clone());
         let request = Request::View { surface: self.index, mount, input, next };
         let reply: abi::ViewReply = self.guest.checked("view", &request, |reply: &abi::ViewReply| {
-            let numbered = reply.content.iter().zip(next + 1..).all(|((handle, _), expected)| handle.0 == expected);
-            numbered.then_some(()).ok_or_else(|| "content handles that do not follow the host's".to_owned())
+            let numbered = reply.content.iter().enumerate().all(|(index, (handle, _))| {
+                (index as u64).checked_add(1).and_then(|step| next.checked_add(step)) == Some(handle.0)
+            });
+            if !numbered {
+                return Err("content handles that do not follow the host's".to_owned());
+            }
+            // A memo table holds a value for each subtree the view built or kept by key, and no more.
+            let keyed = keyed(&reply.node);
+            match reply.memo <= keyed {
+                true => Ok(()),
+                false => Err(format!("a memo table of {} values for a tree of {keyed} keyed nodes", reply.memo)),
+            }
         })?;
         surface::took_content(next + 1, reply.content.len() as u64);
-        for (handle, text) in reply.content {
-            (viewing.give)(handle, text.into_bytes());
+        for (handle, bytes) in reply.content {
+            (viewing.give)(handle, bytes.0);
         }
         reply.released.into_iter().for_each(|handle| (viewing.release)(handle));
         Some(Viewed { node: reply.node, memo: Some(reply.memo) })
@@ -1329,7 +1454,7 @@ impl Viewer for Remote {
         let (guest, mount) = (Rc::downgrade(&self.guest), mount.clone());
         defer(&self.guest.host, move |_| {
             if let Some(guest) = guest.upgrade() {
-                guest.request::<serde_json::Value>("unmount", &Request::Unmount { mount });
+                guest.request::<()>("unmount", &Request::Unmount { mount });
             }
         });
     }

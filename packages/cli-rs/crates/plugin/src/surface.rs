@@ -304,6 +304,14 @@ impl Surface {
                         (self.fail)(format!("{} refused twice in a row: {refused}", self.id.surface));
                         return;
                     }
+                    // Only a keep the host does not hold is mended by a whole tree; any other refusal is the plugin's
+                    // error, and fails it at once (3.4).
+                    if !matches!(refused, Refused::Unknown(_) | Refused::Kept(_)) {
+                        drop(state);
+                        self.wipe();
+                        (self.fail)(format!("{} broke the contract: {refused}", self.id.surface));
+                        return;
+                    }
                     log::warn!("surface {}: {refused}; asking for a whole tree", self.id.surface);
                     state.refused = true;
                 }

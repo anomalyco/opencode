@@ -397,8 +397,12 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             let (wakes, scope) = (api.wakes().to_vec(), scope.clone());
             activation.on_wake(Rc::new(move || scope.run("on-wake", |host| wakes.iter().for_each(|run| run(host)))));
         }
-        // A thread's message runs the message handler as `update`; a thread's panic fails the plugin, once.
+        // A thread's message runs the message handler as `update`; a thread's panic fails the plugin, once. A plugin
+        // without a handler refuses messages, also those its setup sent.
         let (handler, delivered, failing) = (api.message().cloned(), Rc::downgrade(&scope), Rc::downgrade(&scope));
+        if handler.is_none() {
+            activation.mailbox.refuse_messages();
+        }
         activation.on_mail(
             Rc::new(move |message| {
                 if let (Some(scope), Some(run)) = (delivered.upgrade(), &handler) {
@@ -1163,6 +1167,10 @@ pub(crate) fn fail(
     activation: &Rc<Activation>,
     error: String,
 ) {
+    // A failure is final, and the first cause is the one reported (4.14): a plugin that failed cannot fail again.
+    if failure.borrow().is_some() {
+        return;
+    }
     log::error!("plugin {id} failed: {error}");
     *failure.borrow_mut() = Some(error);
     // Its threads are told to end, and what they sent is dropped (4.14: a wake for a plugin that is not active).

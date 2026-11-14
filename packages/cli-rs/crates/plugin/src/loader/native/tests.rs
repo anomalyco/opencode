@@ -419,9 +419,11 @@ fn a_malformed_table_is_refused_without_reading_it() {
     assert!(library.destroy.is_none() && library.describe.is_none());
     // A table must carry the major of the entry it came through: 2 through `opencode_plugin_v2`, 1 through `_v1`.
     let v1 = PluginApi { major: 1, minor: 4, ..api };
-    assert!(Library::from_table(&v1, ABI_MAJOR).err().unwrap().starts_with("plugin ABI 1.4 is not supported"));
-    assert!(Library::from_table(&api, 1).err().unwrap().starts_with("plugin ABI 2.0 is not supported"));
-    assert_eq!(Library::from_table(&v1, 1).unwrap().major, 1);
+    assert!(
+        Library::from_table(&v1, ABI_MAJOR, V1_MINOR).err().unwrap().starts_with("plugin ABI 1.4 is not supported")
+    );
+    assert!(Library::from_table(&api, 1, V1_MINOR).err().unwrap().starts_with("plugin ABI 2.0 is not supported"));
+    assert_eq!(Library::from_table(&v1, 1, V1_MINOR).unwrap().major, 1);
 }
 
 // Expected: a plugin's own thread wakes the host (ABI 1.3), which asks its mounted claim for its rows again without a
@@ -2886,8 +2888,17 @@ fn a_result_the_host_refuses_has_no_effects() {
         assert_eq!((entry.active, failed, command), (true, 1, false), "{bytes:?}");
     }
 
+    // A memo table cannot hold more values than the tree has keyed nodes; a count past it is refused, not booked.
+    let host = crate::loader::tests::host();
+    let registry = panicking(&host, true);
+    CORRUPT.set(Some(br#"{"node":{"type":"text","id":"t","spans":[]},"memo":9223372036854775808}"#));
+    drop(registry.route(&*host, "panicky", "v"));
+    CORRUPT.set(None);
+    let entry = registry.entries().into_iter().find(|entry| entry.id == "panicky").unwrap();
+    assert!(matches!(&entry.status, Status::Failed(error) if error.contains("memo table")), "{:?}", entry.status);
+
     // A view's content must be numbered after the mount's, as the host numbers it in process.
-    let host = host();
+    let host = crate::loader::tests::host();
     let registry = panicking(&host, true);
     CORRUPT.set(Some(br#"{"node":{"type":"text","spans":[]},"content":[[99,"stray"]]}"#));
     drop(registry.route(&*host, "panicky", "v"));
@@ -2910,17 +2921,17 @@ fn a_result_the_host_refuses_has_no_effects() {
     assert!(!host.app.text().contains("a view"), "{}", host.app.text());
 }
 
-// Expected: a plugin written in C against `include/opencode_plugin.h` alone loads as ABI 2.0: its command toasts and
-// sends a message, which its handler gets on the UI thread, and its route surface draws what it counted. This holds the
-// header to the Rust tables field by field.
+/// `examples/c/plugin.c` built with `defines`, symbols hidden by default as a careful C build hides them, so the entry
+/// must carry the header's `OPENCODE_EXPORT`; `None` without a C compiler.
 #[cfg(unix)]
-#[test]
-fn a_plugin_written_in_c_against_the_header_runs() {
+fn c_plugin(defines: &[&str]) -> Option<Vec<u8>> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let dir = opencode_util::temp::tempdir().unwrap();
     let library = dir.path().join("plugin.so");
     let built = Command::new(std::env::var("CC").unwrap_or_else(|_| "cc".to_owned()))
-        .args(["-shared", "-fPIC", "-std=c11", "-Wall", "-Wextra", "-Werror", "-I"])
+        .args(["-shared", "-fPIC", "-fvisibility=hidden", "-std=c11", "-Wall", "-Wextra", "-Werror"])
+        .args(defines.iter().map(|define| format!("-D{define}")))
+        .arg("-I")
         .arg(root.join("../plugin-abi/include"))
         .arg("-o")
         .arg(&library)
@@ -2929,25 +2940,123 @@ fn a_plugin_written_in_c_against_the_header_runs() {
     let Ok(status) = built else {
         assert!(std::env::var_os("OPENCODE_RS_REQUIRE_CC").is_none(), "OPENCODE_RS_REQUIRE_CC is set, but no cc");
         eprintln!("skipped: no C compiler");
-        return;
+        return None;
     };
-    assert!(status.success(), "the C plugin did not build");
-    let library = fs::read(library).unwrap();
-    assert_eq!(Native.inspect(&library).unwrap(), Inspected { major: 2, minor: 0, version: Some("0.1.0".to_owned()) });
+    assert!(status.success(), "the C plugin did not build with {defines:?}");
+    Some(fs::read(library).unwrap())
+}
+
+/// The C plugin loaded with `options` into a fresh host and registry.
+#[cfg(unix)]
+fn c_active(library: &[u8], options: &str) -> (Rc<TestHost>, Registry) {
     let host = host();
-    let (definition, error) = Native.load(&dynamic(&host), &library, None).unwrap();
+    let (definition, error) = Native.load(&dynamic(&host), library, Some(options)).unwrap();
     let registry = Registry::define(Vec::new(), []);
     registry.load(&dynamic(&host), definition.external("c.so", error));
+    (host, registry)
+}
+
+/// The toasts' messages so far.
+#[cfg(unix)]
+fn toasts(host: &TestHost) -> Vec<String> {
+    host.toasts.borrow().iter().filter(|toast| toast.title.is_none()).map(|toast| toast.message.clone()).collect()
+}
+
+/// The route `c` drawn alone, or `None` when the plugin has none.
+#[cfg(unix)]
+fn c_route(host: &Rc<TestHost>, registry: &Registry) -> Option<String> {
+    let route = registry.route(&**host, "example.c", "c")?;
+    host.app().root().clear();
+    host.app().root().add(&route.root());
+    host.app.render();
+    Some(host.app.text())
+}
+
+// Expected: a plugin written in C against `include/opencode_plugin.h` alone, its entry exported with the header's macro
+// from a build that hides symbols, loads as ABI 2.0 and reads the host's table as 2.0: its command toasts and sends a
+// message, which its handler gets on the UI thread, and its route surface draws what it counted. This holds the header
+// to the Rust tables field by field.
+#[cfg(unix)]
+#[test]
+fn a_plugin_written_in_c_against_the_header_runs() {
+    let Some(library) = c_plugin(&[]) else { return };
+    assert_eq!(Native.inspect(&library).unwrap(), Inspected { major: 2, minor: 0, version: Some("0.1.0".to_owned()) });
+    let (host, registry) = c_active(&library, "");
     assert_eq!(entry(&registry.entries(), "c.so").status, Status::Active);
     assert!(matches!(host.keymap().dispatch("c.hello", None), RunResult::Ok));
     host.app.advance(Duration::from_millis(1));
     host.app.advance(Duration::from_millis(1));
-    assert_eq!(*host.toasts.borrow(), [abi::Toast::new(abi::Variant::Success, "hello from C")]);
-    let route = registry.route(&*host, "example.c", "c").unwrap();
-    host.app().root().clear();
-    host.app().root().add(&route.root());
-    host.app.render();
-    assert!(host.app.text().contains("drawn in C, 1 messages"), "{}", host.app.text());
+    assert_eq!(toasts(&host), ["hello from C", "send answered 0"]);
+    let screen = c_route(&host, &registry).unwrap();
+    assert!(screen.contains("drawn in C, 1 messages"), "{screen}");
+}
+
+// Expected (reviews bigboi-4, carbon-2): the same plugin built as a 1.4 library is served 1.4 exactly: its table ends
+// before `send`, so it sends nothing, and the surface and messages its manifest declares are ignored, so its route does
+// not exist; its command runs.
+#[cfg(unix)]
+#[test]
+fn a_1_4_library_gets_nothing_of_2_0() {
+    let Some(library) = c_plugin(&["OPENCODE_AS_V1"]) else { return };
+    assert_eq!(Native.inspect(&library).unwrap(), Inspected { major: 1, minor: 4, version: Some("0.1.0".to_owned()) });
+    let (host, registry) = c_active(&library, "");
+    assert_eq!(entry(&registry.entries(), "c.so").status, Status::Active);
+    assert!(matches!(host.keymap().dispatch("c.hello", None), RunResult::Ok));
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(toasts(&host), ["hello from C"]);
+    assert!(c_route(&host, &registry).is_none(), "a 1.4 library mounted a 2.0 surface");
+}
+
+// Expected (review bigboi-4): a 2.x library whose `describe` answers what the host cannot read is refused before any
+// setup, at load and at inspection, rather than read as "requires nothing".
+#[cfg(unix)]
+#[test]
+fn a_2_x_library_whose_describe_fails_is_refused() {
+    let Some(library) = c_plugin(&["OPENCODE_BAD_DESCRIBE"]) else { return };
+    let error = Native.load(&dynamic(&host()), &library, None).err().unwrap();
+    assert!(error.starts_with("plugin describe failed: "), "{error}");
+    assert!(Native.inspect(&library).err().unwrap().starts_with("plugin describe failed: "));
+}
+
+// Expected (reviews bigboi-3, carbon-3, carbon-4, bigboi "non-null handler replies"): a view asks the host for nothing,
+// and an effect it asks for is refused and never shows; a command that answers anything but `null` is refused whole,
+// with no effect, and fails the plugin; one that answers OPENCODE_ERROR keeps its effects and fails the 2.x plugin; a
+// plugin without a message handler gets `Closed` for a message and no `message` request.
+#[cfg(unix)]
+#[test]
+fn a_c_plugin_gets_what_its_answers_ask_for() {
+    let Some(library) = c_plugin(&[]) else { return };
+
+    let (host, registry) = c_active(&library, "view-toast");
+    let screen = c_route(&host, &registry).unwrap();
+    host.app.advance(Duration::from_millis(1));
+    assert!(screen.contains("drawn in C, 0 messages, toast refused"), "{screen}");
+    assert!(toasts(&host).is_empty(), "a view's toast showed");
+
+    let (host, registry) = c_active(&library, "command-true");
+    host.keymap().dispatch("c.hello", None);
+    host.app.advance(Duration::from_millis(1));
+    assert!(toasts(&host).is_empty(), "a refused command's toast showed");
+    let status = entry(&registry.entries(), "c.so").status.clone();
+    assert!(
+        matches!(&status, Status::Failed(error) if error.starts_with("run-command returned a bad result")),
+        "{status:?}"
+    );
+
+    let (host, registry) = c_active(&library, "command-error");
+    host.keymap().dispatch("c.hello", None);
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(toasts(&host), ["hello from C", "send answered 0"]);
+    let failed = Status::Failed("run-command returned an error: the command failed".to_owned());
+    assert_eq!(entry(&registry.entries(), "c.so").status, failed);
+
+    let (host, registry) = c_active(&library, "no-messages");
+    host.keymap().dispatch("c.hello", None);
+    host.app.advance(Duration::from_millis(1));
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(toasts(&host), ["hello from C", format!("send answered {}", abi::CLOSED).as_str()]);
+    let screen = c_route(&host, &registry).unwrap();
+    assert!(screen.contains("drawn in C, 0 messages"), "{screen}");
 }
 
 // Expected (4.5, review F12): on macOS a library the system refuses for its code signature, or for the quarantine of a
@@ -2965,4 +3074,41 @@ fn a_library_macos_refuses_says_why() {
     assert!(explain_refusal(quarantine, true).contains("xattr -d com.apple.quarantine"));
     let missing = "dlopen(/tmp/x/plugin.dylib): image not found";
     assert_eq!(explain_refusal(missing, true), format!("cannot load the library: {missing}"));
+}
+
+// Expected (review bigboi-3): a setup whose manifest the host refuses, here for another ID than the library described,
+// leaves no effect, as a setup that panics: its toast never shows, its storage writes are put back, and the plugin is
+// listed as failed with the reason.
+#[test]
+fn a_refused_manifest_leaves_no_effect() {
+    unsafe extern "C" fn describe(out: *mut Owned) -> i32 {
+        // SAFETY: the loader passes what `PluginApi::describe` documents.
+        unsafe { abi::runtime::describe("other", "0.1.0", &[], out) }
+    }
+    let host = host();
+    host.storage.borrow_mut().insert("plugin.other.k".to_owned(), "{\"kept\":true}".to_owned());
+    let before = host.storage.borrow().clone();
+    LEAK_AT.set(("setup", false));
+    let api = PluginApi {
+        size: size_of::<PluginApi>(),
+        major: ABI_MAJOR,
+        minor: ABI_MINOR,
+        requires_minor: 0,
+        create: Some(abi::export_plugin!(@loopback "panicky", panicky)),
+        call: Some(abi::runtime::call),
+        destroy: Some(abi::runtime::destroy),
+        free: Some(abi::runtime::free),
+        describe: Some(describe),
+    };
+    let (definition, error) =
+        define(&dynamic(&host), Library::from_table(&api, ABI_MAJOR, V1_MINOR).unwrap(), None).unwrap();
+    let registry = Registry::define(Vec::new(), []);
+    registry.load(&dynamic(&host), definition.external("other.so", error));
+    host.app.advance(Duration::from_millis(1));
+    LEAK_AT.set(("", false));
+    let status = entry(&registry.entries(), "other.so").status.clone();
+    assert_eq!(status, Status::Failed("setup returned plugin ID panicky, not other".to_owned()));
+    assert!(host.toasts.borrow().iter().all(|toast| toast.title.is_some()), "{:?}", host.toasts.borrow());
+    assert_eq!(*host.storage.borrow(), before);
+    assert!(host.attention.borrow().is_empty() && host.routes.borrow().is_empty() && host.fetches.borrow().is_empty());
 }
