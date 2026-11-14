@@ -11,7 +11,7 @@
 //! schema`) into `crates/plugin-abi/schema/v2.json`.
 
 use std::any::Any;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
@@ -257,6 +257,7 @@ pub struct View<'a> {
     pub mount: &'a MountId,
     memo: &'a mut Memo,
     content: &'a mut dyn FnMut(Vec<u8>) -> ContentRef,
+    release: &'a mut dyn FnMut(ContentRef),
 }
 
 impl<'a> View<'a> {
@@ -267,23 +268,34 @@ impl<'a> View<'a> {
         mount: &'a MountId,
         memo: &'a mut Memo,
         content: &'a mut dyn FnMut(Vec<u8>) -> ContentRef,
+        release: &'a mut dyn FnMut(ContentRef),
     ) -> Self {
         if input.full {
             memo.entries.clear();
         }
-        memo.used.clear();
-        Self { read, input, mount, memo, content }
+        memo.discard();
+        Self { read, input, mount, memo, content, release }
     }
 
-    /// Gives the host `bytes` once; a [`Source::Content`] of the handle shows them. The handle lives while a tree of
-    /// this mount names it.
+    /// Gives the host `bytes` once; a [`Source::Content`] of the handle shows them. The handle lives until the mount
+    /// ends or the plugin releases it, so a plugin may keep it in its model while no tree shows it. Content a view
+    /// gave is dropped with its tree when the host refuses it; the host then asks for a whole tree
+    /// ([`SurfaceInput::full`]), which gives it again.
     pub fn content(&mut self, bytes: impl Into<Vec<u8>>) -> ContentRef {
         (self.content)(bytes.into())
     }
 
+    /// Lets the host drop the content `handle` names, at once: no tree may name it from now on. A handle the mount
+    /// does not hold is ignored.
+    pub fn release(&mut self, handle: ContentRef) {
+        (self.release)(handle)
+    }
+
     /// The subtree `build` makes, with id `key`; or, when `value` equals the one it was last built from in this
     /// mount, [`Node::Keep`] of `key`, and `build` does not run (Elm's `lazy`). The host then neither compares nor
-    /// touches that subtree.
+    /// touches that subtree. The value is remembered only once the host accepts a tree that holds what `build` made
+    /// under `key`: a node `build` makes that cannot carry an id (a slot or a keep), or one the view leaves out or
+    /// swaps for another, is built again next time.
     pub fn memo<V: PartialEq + 'static>(
         &mut self,
         key: impl Into<String>,
@@ -291,40 +303,110 @@ impl<'a> View<'a> {
         build: impl FnOnce(&mut Self) -> Node,
     ) -> Node {
         let key = key.into();
-        let same =
-            self.memo.entries.get(&key).and_then(|last| last.downcast_ref::<V>()).is_some_and(|last| *last == value);
+        if let Some((_, inner)) = self.memo.building.last_mut() {
+            inner.push(key.clone());
+        }
         if !self.memo.used.insert(key.clone()) {
             // A second memo of one key in one view: the first named the subtree, so this one builds.
             return build(self);
         }
+        let same = self
+            .memo
+            .entries
+            .get(&key)
+            .and_then(|last| last.value.downcast_ref::<V>())
+            .is_some_and(|last| *last == value);
         if same {
+            self.memo.hits.push(key.clone());
             return Node::Keep { key };
         }
+        self.memo.building.push((key.clone(), Vec::new()));
         let node = build(self).with_id(key.clone());
-        self.memo.entries.insert(key, Box::new(value));
+        let (_, inner) = self.memo.building.pop().unwrap_or_default();
+        if node.id() == Some(key.as_str()) && !matches!(node, Node::Keep { .. }) {
+            self.memo.staged.insert(key, Entry { value: Box::new(value), print: print(&node), inner });
+        }
         node
     }
 }
 
-/// The SDK's table of [`View::memo`] values, one per mount, empty in a new one. After a view only the keys it used
-/// stay, so a [`Node::Keep`] always names a subtree of the tree the view before returned.
+/// The SDK's table of [`View::memo`] values, one per mount, empty in a new one. A view's values are staged and kept
+/// by [`Memo::finish`] only for what the host accepted, so a [`Node::Keep`] always names the subtree its value built.
 #[derive(Default)]
 pub struct Memo {
-    entries: HashMap<String, Box<dyn Any>>,
-    used: std::collections::HashSet<String>,
+    entries: HashMap<String, Entry>,
+    /// What the running view built, and the keys it kept.
+    staged: HashMap<String, Entry>,
+    hits: Vec<String>,
+    used: HashSet<String>,
+    /// The memos building now, innermost last, each with the keys memoized inside it.
+    building: Vec<(String, Vec<String>)>,
+}
+
+struct Entry {
+    value: Box<dyn Any>,
+    /// A fingerprint of the node built from the value.
+    print: u64,
+    /// The keys memoized inside it: they stay while it is kept.
+    inner: Vec<String>,
 }
 
 impl Memo {
-    /// Drops what the last view did not use. The host calls it once a view returned.
-    pub fn finish(&mut self) {
-        let used = &self.used;
-        self.entries.retain(|key, _| used.contains(key));
+    /// Keeps, of the view that returned `accepted`, each value whose node `accepted` holds as built, and each kept
+    /// value whose [`Node::Keep`] it holds, with the values inside it; the rest goes. The host calls it once it
+    /// accepted the view's tree.
+    pub fn finish(&mut self, accepted: &[Node]) {
+        fn walk<'a>(
+            nodes: &'a [Node],
+            staged: &HashMap<String, Entry>,
+            keeps: &mut HashSet<&'a str>,
+            built: &mut HashMap<&'a str, &'a Node>,
+        ) {
+            for node in nodes {
+                match node {
+                    Node::Keep { key } => {
+                        keeps.insert(key);
+                    }
+                    _ => {
+                        if let Some(id) = node.id().filter(|id| staged.contains_key(*id)) {
+                            built.insert(id, node);
+                        }
+                        walk(node.children(), staged, keeps, built);
+                    }
+                }
+            }
+        }
+        let (mut keeps, mut built) = (HashSet::new(), HashMap::new());
+        walk(accepted, &self.staged, &mut keeps, &mut built);
+        let mut entries = HashMap::new();
+        let mut kept: Vec<String> = self.hits.drain(..).filter(|key| keeps.contains(key.as_str())).collect();
+        while let Some(key) = kept.pop() {
+            if let Some(entry) = self.entries.remove(&key) {
+                kept.extend(entry.inner.iter().cloned());
+                entries.insert(key, entry);
+            }
+        }
+        for (key, entry) in self.staged.drain() {
+            if built.get(key.as_str()).is_some_and(|node| print(node) == entry.print) {
+                entries.insert(key, entry);
+            }
+        }
+        self.entries = entries;
+        self.used.clear();
+    }
+
+    /// Drops what the running view staged: the host refused its tree, or it failed.
+    pub fn discard(&mut self) {
+        self.staged.clear();
+        self.hits.clear();
+        self.used.clear();
+        self.building.clear();
     }
 
     /// Forgets every value: the host refused the tree, so the next view builds whole.
     pub fn clear(&mut self) {
         self.entries.clear();
-        self.used.clear();
+        self.discard();
     }
 
     pub fn len(&self) -> usize {
@@ -334,6 +416,24 @@ impl Memo {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+}
+
+/// A fingerprint of `node` and all it holds.
+fn print(node: &Node) -> u64 {
+    struct Hashing(std::collections::hash_map::DefaultHasher);
+    impl std::io::Write for Hashing {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            std::hash::Hasher::write(&mut self.0, bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut hashing = Hashing(Default::default());
+    // Writing to a hasher does not fail, and a node always serializes.
+    let _ = serde_json::to_writer(&mut hashing, node);
+    std::hash::Hasher::finish(&hashing.0)
 }
 
 impl Node {
@@ -602,9 +702,54 @@ mod tests {
             next += 1;
             ContentRef(next)
         };
-        let node = view(&mut View::new(&NoRead, &input, &mount, memo, &mut content));
-        memo.finish();
+        let node = view(&mut View::new(&NoRead, &input, &mount, memo, &mut content, &mut |_| {}));
+        memo.finish(std::slice::from_ref(&node));
         node
+    }
+
+    // Expected (`keep-full`): memo remembers a value only for the node the accepted tree holds: a candidate the view
+    // built and left out for another node with its id, a slot, which carries no id, and a duplicate key all build
+    // again. A memo inside a kept one stays with it, so after the outer value changes an unchanged inner one keeps.
+    #[test]
+    fn memo_remembers_only_what_the_host_accepted() {
+        let text = |text: &str| Node::text(vec![Span::new(text)]);
+        let mut memo = Memo::default();
+        let swapped = |cx: &mut View<'_>| {
+            let _candidate = cx.memo("pane", 1, |_| text("EXPECTED"));
+            text("OTHER").with_id("pane")
+        };
+        view(&mut memo, false, swapped);
+        let pane = view(&mut memo, false, |cx| cx.memo("pane", 1, |_| text("EXPECTED")));
+        assert!(matches!(pane, Node::Text { .. }), "a swapped candidate was kept: {pane:?}");
+        assert_eq!(
+            view(&mut memo, false, |cx| cx.memo("pane", 1, |_| text("EXPECTED"))),
+            Node::Keep { key: "pane".into() }
+        );
+
+        let mut memo = Memo::default();
+        let slot = |cx: &mut View<'_>| cx.memo("slot", 1, |_| Node::Slot { path: "home.footer".into() });
+        view(&mut memo, false, slot);
+        assert!(matches!(view(&mut memo, false, slot), Node::Slot { .. }), "a slot was kept");
+        assert!(memo.is_empty());
+
+        let mut memo = Memo::default();
+        let twice =
+            |cx: &mut View<'_>| Node::column(vec![cx.memo("a", 1, |_| text("1")), cx.memo("a", 1, |_| text("2"))]);
+        view(&mut memo, false, twice);
+        let Node::Box { children, .. } = view(&mut memo, false, twice) else { panic!() };
+        assert_eq!(children[0], Node::Keep { key: "a".into() });
+        assert!(matches!(&children[1], Node::Text { id: None, .. }), "a second memo of a key kept: {:?}", children[1]);
+
+        let mut memo = Memo::default();
+        let day = |outer: u32| {
+            move |cx: &mut View<'_>| {
+                cx.memo("day", outer, |cx| Node::column(vec![cx.memo("commit", 7, |_| text("commit")), text("day")]))
+            }
+        };
+        view(&mut memo, false, day(1));
+        assert_eq!(view(&mut memo, false, day(1)), Node::Keep { key: "day".into() });
+        let Node::Box { children, .. } = view(&mut memo, false, day(2)) else { panic!() };
+        assert_eq!(children[0], Node::Keep { key: "commit".into() }, "the inner memo was dropped with its kept parent");
     }
 
     // Expected: memo builds on first use and keeps while the value is equal; a changed value, a full input, or a key

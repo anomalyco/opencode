@@ -81,7 +81,7 @@ fn apply_acting(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::No
         v2::Source::Text(text) => Some(Rc::from(text.as_str())),
         _ => None,
     };
-    let env = Env { host, theme: &theme, act: &act, slot: &slot, source: &source, content: &|_| false };
+    let env = Env { host, theme: &theme, act: &act, slot: &slot, source: &source, content: &|_| false, full: false };
     tree.apply(&env, parent, nodes)
 }
 
