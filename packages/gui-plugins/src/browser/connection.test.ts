@@ -1,14 +1,36 @@
 import { expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import type { IpcClient } from "@opencode/plugin/gui"
+import { Schema } from "effect"
 import { openBinding } from "./connection"
-import type { BrowserPane, PaneEvent } from "./ipc"
+import { BrowserPane, type PaneEvent } from "./ipc"
 
 type Client = IpcClient<(typeof BrowserPane)["spec"]>
 
 const tabID = Browser.TabID.make("tab_aaaaaaaa-1111-1111-1111-111111111111")
 
 const element = Browser.Ref.make("e4")
+
+test("viewport IPC accepts Auto or two bounded whole CSS dimensions", () => {
+  const accepts = Schema.is(BrowserPane.spec.methods.setViewport.input)
+
+  const message = { binding: "desktop", tabID }
+  expect(accepts({ ...message, viewport: { mode: "auto" } })).toBe(true)
+  const viewport = { mode: "fixed", width: 1, height: 4096, preset: "laptop", scale: 2 } as const
+
+  const command = Schema.decodeUnknownSync(BrowserPane.spec.methods.setViewport.input)({ ...message, viewport })
+  expect(command.viewport).toEqual(viewport)
+  expect(
+    Schema.decodeUnknownSync(BrowserPane.spec.events.event)({
+      binding: message.binding,
+      event: { type: "page", tabID, zoom: 1, viewport: command.viewport },
+    }).event,
+  ).toMatchObject({ viewport })
+
+  for (const invalid of [{ height: undefined }, { width: 1.5 }, { width: 0 }, { height: 4097 }, { scale: 3 }]) {
+    expect(accepts({ ...message, viewport: { ...viewport, ...invalid } })).toBe(false)
+  }
+})
 
 // The client stands in for the pane's main entry; `reject` is the error its register rejects with.
 function fixture(reject?: Error) {
@@ -32,6 +54,7 @@ function fixture(reject?: Error) {
       highlights.push(input)
     },
     zoom: async () => undefined,
+    setViewport: async () => undefined,
     site: async () => ({ cookies: 0 }),
     clearSite: async () => undefined,
     close: async (input) => {

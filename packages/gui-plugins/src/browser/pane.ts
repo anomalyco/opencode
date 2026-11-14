@@ -12,7 +12,7 @@ import { browserFailure } from "./errors"
 import { createBrowserNetwork, type BrowserNetwork } from "./network"
 import { destinationOrigin, fileURLWithin, refusal } from "./policy"
 import { createRefs } from "./refs"
-import type { PaneEvent } from "./ipc"
+import type { PaneEvent, Viewport } from "./ipc"
 import {
   attachmentFailure,
   createPaneState,
@@ -320,6 +320,13 @@ export function createBrowserPane(input: {
       owned(window, binding)
       page(binding, tabID)?.zoom(direction)
     },
+    async setViewport(window: number, binding: string, tabID: Browser.TabID, viewport: Viewport) {
+      owned(window, binding)
+      const target = load(binding, tabID)
+
+      if (!target) throw new Error("browser.pane.unavailable")
+      await target.setViewport(viewport)
+    },
     async site(window: number, binding: string, tabID: Browser.TabID) {
       owned(window, binding)
 
@@ -520,17 +527,14 @@ export function createBrowserPane(input: {
       inspect: (event) => {
         if (current()) emit(binding, { type: "inspect", tabID: id, ...event })
       },
-      // Icons and zoom are local to this desktop, and follow the states reported before them, so the window files a new
-      // page's icon under that page's URL.
+      // The window files the icon under the URL from the preceding inventory update.
       detail: (value) => {
         if (current()) emit(binding, { type: "page", tabID: id, ...value })
       },
       zoomed: () => handles.get(binding)?.pages.forEach((page) => page.detail()),
       shortcut: (shortcut) => {
         if (!focused() || win.isDestroyed()) return
-
-        // The page held keyboard focus; the command runs in the app, which may move focus there, as ⌘L does.
-        if (win.isFocused()) win.webContents.focus()
+        page.focusHost()
         emit(binding, { type: "shortcut", ...shortcut })
       },
       focused: () => {

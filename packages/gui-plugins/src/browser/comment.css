@@ -12,12 +12,13 @@
   }
 }
 
-[data-component="browser-comment"] {
+[data-component="browser-comment"],
+[data-slot="browser-comment-spotlight"] {
   animation: browser-comment-enter 160ms cubic-bezier(0.215, 0.61, 0.355, 1);
 }
 
 /* Dim the frozen page around the picked element, whose DevTools highlight stays in the still. */
-[data-component="browser-comment"] [data-slot="browser-comment-spotlight"] {
+[data-slot="browser-comment-spotlight"] {
   box-shadow:
     0 0 0 1px var(--v2-border-border-focus),
     0 0 0 100vmax color-mix(in srgb, var(--v2-overlay-simple-overlay-scrim) 50%, transparent);
@@ -30,6 +31,7 @@
 
 :root[data-motion="reduce"] {
   [data-component="browser-comment"],
+  [data-slot="browser-comment-spotlight"],
   [data-component="browser-comment"] [data-slot="browser-comment-editor"] {
     animation: none;
   }

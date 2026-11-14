@@ -73,6 +73,7 @@ type PaneHost = {
 
 type PaneFixtureState = {
   session: string
+  secondTab: boolean
   mounted: boolean
   visible: boolean
   url: string | undefined
@@ -97,8 +98,8 @@ type PaneFixtureState = {
   dropInspect: boolean
   highlights: { sessionKey: string; ref?: Browser.Ref }[]
   comments: ComposerNote[]
-  /** The page's zoom as main last reported it. */
-  zoom: number
+  /** Presentation details last reported by each native tab. */
+  pages: Record<string, PageDetails | undefined>
   /** The browser history store. */
   history: History
   /** URLs the pane opened in the system browser. */
@@ -126,6 +127,8 @@ type StoryHost = Pick<PaneHost, "useLanguage"> & {
     comments: readonly ComposerNote[]
   }>
 }
+
+type PageDetails = Pick<Extract<PaneEvent, { type: "page" }>, "zoom" | "viewport" | "icon">
 
 // A 16px blue square, as main reports a page icon.
 const icon =
@@ -179,6 +182,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
 
     const [store, setStore] = createStore<PaneFixtureState>({
       session: "Alpha",
+      secondTab: false,
       mounted: true,
       visible: true,
       url: scenario === "Empty" || scenario === "Recent" ? "about:blank" : undefined,
@@ -199,7 +203,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       dropInspect: false,
       highlights: [],
       comments: [],
-      zoom: 1,
+      pages: {},
       history: { visits: scenario === "Recent" ? structuredClone(visits) : [] },
       external: [],
       cookies: 3,
@@ -218,8 +222,9 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       if (binding) listeners.forEach((listener) => listener({ binding, event }))
     }
 
-    const tabs = ["Alpha", "Beta"].map((name) => ({
-      id: Browser.TabID.make(`tab_${name === "Alpha" ? "11111111" : "22222222"}-1111-1111-1111-111111111111`),
+    const tabs = ["Alpha", "Beta", "Second"].map((name, index) => ({
+      id: Browser.TabID.make(`tab_${String(index + 1).repeat(8)}-1111-1111-1111-111111111111`),
+      owner: name === "Second" ? "Alpha" : name,
       title: name,
       url: `https://${name.toLowerCase()}.example/`,
       loading: false,
@@ -228,7 +233,24 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       generation: 0,
     }))
 
-    const current = () => tabs.find((tab) => tab.title === store.session) ?? tabs[0]
+    const current = (key = store.session) =>
+      tabs.find((tab) => tab.title === (key === "Alpha" && store.secondTab ? "Second" : key)) ?? tabs[0]
+
+    const target = (value: { binding: string; tabID: Browser.TabID }) => {
+      const tab = tabs.find((item) => item.id === value.tabID && bindings.get(item.owner) === value.binding)
+
+      if (!tab) throw new Error("Unknown browser tab")
+
+      return tab
+    }
+
+    const details = (tabID: Browser.TabID): PageDetails => store.pages[tabID] ?? { zoom: 1, viewport: { mode: "auto" } }
+
+    const page = (tab: (typeof tabs)[number], update: Partial<PageDetails> = {}, notice?: "zoom") => {
+      const next = { ...details(tab.id), ...update }
+      setStore("pages", (pages) => ({ ...pages, [tab.id]: next }))
+      emit(tab.owner, { type: "page", tabID: tab.id, ...next, ...(notice && { viewportNotice: notice }) })
+    }
 
     // Main's window focus reports, which focus moving into an embed does not end.
     const windowFocus = new Set<Parameters<Bridge["on"]>[0]>()
@@ -274,7 +296,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
                 <Show when={props.id && props.visible && !store.loading && !model.suspended({ key: store.session })}>
                   <input.Page
                     url={store.url ?? current().url}
-                    zoom={store.zoom}
+                    zoom={details(current().id).zoom}
                     picking={!!store.picker[store.session]}
                     pick={pick}
                   />
@@ -341,7 +363,13 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       }),
     )
 
-    const session = () => views.get(store.session) ?? views.get("Alpha")
+    const session = () => {
+      const view = views.get(store.session)
+
+      if (!view) throw new Error("Unknown fixture session")
+
+      return view
+    }
 
     // The session screen: one object that follows the route, with the composer the pane attaches comments to.
     // SAFETY: the pane reads only file.search and composer.attach; the model's workspace-link paths are not invoked.
@@ -355,46 +383,52 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
     const forward: string[] = []
 
     const report = (key = store.session) => {
-      const tab = tabs.find((item) => item.title === key)
+      const inventory = tabs.filter((item) => item.owner === key)
 
-      if (!tab) return
+      if (!inventory.length) return
+
+      const tab = current(key)
       emit(key, {
         type: "state",
         state: {
-          tabs: [
-            {
-              ...tab,
-              url: store.url ?? tab.url,
-              canGoBack: back.length > 0,
-              canGoForward: forward.length > 0,
-              loading: store.loading,
-              generation: store.generation,
-              loadError: store.loadErrors[key],
-            },
-          ],
+          tabs: inventory.map((item) =>
+            item === tab
+              ? {
+                  ...item,
+                  url: store.url ?? item.url,
+                  canGoBack: back.length > 0,
+                  canGoForward: forward.length > 0,
+                  loading: store.loading,
+                  generation: store.generation,
+                  loadError: store.loadErrors[key],
+                }
+              : item,
+          ),
           focusedTabID: tab.id,
         },
         error: store.error,
       })
+
+      return tab
     }
+
+    const embed = (tab: (typeof tabs)[number]) =>
+      emit(tab.owner, { type: "embed", tabID: tab.id, embed: `embed-${tab.title}` })
 
     // Address rejection counters and cleanup run through the real model over this main-process Ipc boundary.
     const pane: PaneClient = {
       register: async (value) => {
         bindings.set(value.session, value.binding)
         queueMicrotask(() => {
-          report(value.session)
+          const tab = report(value.session)
 
           // A suspended attachment reports its retained inventory once. The next interaction can reconnect it.
-          if (store.error === "browser.pane.suspended") {
-            setStore("error", undefined)
+          if (store.error === "browser.pane.suspended") return setStore("error", undefined)
 
-            return
+          if (tab) {
+            embed(tab)
+            page(tab)
           }
-
-          const tab = tabs.find((item) => item.title === value.session)
-
-          if (tab) emit(value.session, { type: "embed", tabID: tab.id, embed: `embed-${tab.title}` })
         })
       },
       load: async () => undefined,
@@ -456,12 +490,20 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       },
       // Main steps through Chromium's presets and reports the page's new zoom.
       zoom: async (value) => {
+        const tab = target(value)
+
+        const previous = details(tab.id)
+
         const steps = [0.9, 1, 1.1, 1.25]
-        const index = steps.indexOf(store.zoom)
-        const next = value.zoom === "reset" ? 1 : (steps[index + (value.zoom === "in" ? 1 : -1)] ?? store.zoom)
-        setStore("zoom", next)
-        emit(store.session, { type: "page", tabID: value.tabID, zoom: next })
+
+        const index = steps.indexOf(previous.zoom)
+
+        const zoom = value.zoom === "reset" ? 1 : (steps[index + (value.zoom === "in" ? 1 : -1)] ?? previous.zoom)
+
+        if (zoom === previous.zoom) return
+        page(tab, { zoom, viewport: { mode: "auto" } }, previous.viewport.mode === "fixed" ? "zoom" : undefined)
       },
+      setViewport: async (value) => page(target(value), { viewport: value.viewport }),
       site: async () => {
         if (store.failSite) {
           setStore("failSite", false)
@@ -562,9 +604,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
               comments={store.comments}
               external={store.external.at(-1)}
             >
-              <Show when={session()}>
-                {(view) => <SessionBrowserPane tab={current} session={view()} screen={screen} model={model} />}
-              </Show>
+              <SessionBrowserPane tab={current} session={session()} screen={screen} model={model} />
             </input.Frame>
           </PanelContext.Provider>
         </PluginContext.Provider>
@@ -577,6 +617,17 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
               Menus and suggestions portal into <body>, under this fixture's fixed host unless raised above it. */}
           <style>{`${barStyles}\n[data-popper-positioner] { z-index: 1001 !important; }`}</style>
           <h1 style={{ "font-size": "24px", "margin-bottom": "16px" }}>Browser pane lifecycle</h1>
+          <button
+            style={{ position: "absolute", top: "24px", "inset-inline-end": "24px" }}
+            disabled={store.session !== "Alpha"}
+            onClick={() => {
+              setStore("secondTab", (selected) => !selected)
+              report()
+              embed(current())
+            }}
+          >
+            Switch browser tab
+          </button>
           <nav style={{ display: "flex", "flex-wrap": "wrap", gap: "12px", margin: "16px 0" }}>
             <For each={["Alpha", "Beta", "Empty"]}>
               {(name) => <button onClick={() => setStore({ session: name, mounted: name !== "Empty" })}>{name}</button>}
@@ -663,17 +714,15 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
             </select>
             <button onClick={() => setStore("history", { visits })}>Seed history</button>
             <button onClick={() => setStore("failSite", true)}>Fail next site read</button>
-            <button onClick={() => emit(store.session, { type: "page", tabID: current().id, icon, zoom: store.zoom })}>
-              Page icon
-            </button>
+            <button onClick={() => page(current(), { icon })}>Page icon</button>
           </nav>
           <p>Captures: {store.captures}</p>
-          <p>Zoom: {Math.round(store.zoom * 100)}</p>
+          <p>Zoom: {Math.round(details(current().id).zoom * 100)}</p>
           <p>Visits: {store.history.visits.map((visit) => visit.url).join(" ")}</p>
           <p>External: {store.external.join(" ")}</p>
           <p>Session getter reads: {reads.directory}</p>
           <p>Picker: {store.picker[store.session] ? "on" : "off"}</p>
-          <For each={tabs}>
+          <For each={tabs.filter((tab) => tab.title !== "Second")}>
             {(tab) => (
               <p>
                 Picker {tab.title}: {store.picker[tab.title] ? "on" : "off"}
@@ -683,8 +732,8 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
           <p>Highlights: {store.highlights.map((item) => item.ref ?? "clear").join(",")}</p>
           <p>Highlight owners: {store.highlights.map((item) => item.sessionKey).join(",")}</p>
           <div style={{ position: "relative", width: `${store.width}px`, height: "360px", border: "1px solid #555" }}>
-            <Show when={store.mounted && session()}>
-              {(view) => <SessionBrowserPane tab={() => current()} session={view()} screen={screen} model={model} />}
+            <Show when={store.mounted}>
+              <SessionBrowserPane tab={current} session={session()} screen={screen} model={model} />
             </Show>
             <ResizeHandle
               data-testid="pane-resize-handle"
@@ -725,15 +774,23 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
             </Portal>
           </Show>
           <For each={tabs}>
-            {(tab) => (
-              <div
-                data-testid={`native-${tab.title}`}
-                data-visible={!!store.layouts[`embed-${tab.title}`]?.visible}
-                style={{ padding: "12px", margin: "8px 0", border: "1px solid #555" }}
-              >
-                {tab.title}: {store.layouts[`embed-${tab.title}`]?.visible ? "visible" : "hidden"}
-              </div>
-            )}
+            {(tab) => {
+              const layout = () => store.layouts[`embed-${tab.title}`]
+
+              return (
+                <div
+                  data-testid={`native-${tab.title}`}
+                  data-visible={!!layout()?.visible}
+                  data-x={layout()?.bounds?.x}
+                  data-y={layout()?.bounds?.y}
+                  data-width={layout()?.bounds?.width}
+                  data-height={layout()?.bounds?.height}
+                  style={{ padding: "12px", margin: "8px 0", border: "1px solid #555" }}
+                >
+                  {tab.title}: {layout()?.visible ? "visible" : "hidden"}
+                </div>
+              )
+            }}
           </For>
         </PanelContext.Provider>
       </PluginContext.Provider>
@@ -1086,6 +1143,7 @@ export function mountBrowserRegion(input: RegionHost) {
       },
       highlight: async () => undefined,
       zoom: async () => undefined,
+      setViewport: async () => undefined,
       site: async () => ({ cookies: 0 }),
       clearSite: async () => undefined,
       close: async () => undefined,

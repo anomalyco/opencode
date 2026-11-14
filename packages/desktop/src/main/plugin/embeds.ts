@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
-import { ImageView, screen, type BrowserWindow, type WebContentsView } from "electron"
-import type { BridgeLayout } from "@opencode/plugin/gui/host"
+import { BaseWindow, ImageView, screen, View, type BrowserWindow, type WebContentsView } from "electron"
 import type { Embed } from "@opencode/plugin/gui/main"
+import type { BridgeLayout } from "@opencode/plugin/gui/host"
 import { createCornerImages } from "../native/corners"
 import type { Instance } from "./lifecycle"
 
@@ -14,6 +14,7 @@ type Entry = {
   readonly corners: readonly ImageView[]
   cornerKey: string
   layout?: BridgeLayout
+  clip?: { root: View; window?: BaseWindow }
   shown: boolean
   /** Whether the view was on screen after the last apply. */
   onscreen: boolean
@@ -22,6 +23,12 @@ type Entry = {
 
 // A box edge this many CSS px from the window edge follows it while the renderer's layout catches up.
 const WINDOW_GUTTER = 24
+
+// A still above MAX_STILL_PIXELS is downscaled to it. Electron cannot capture below native density,
+// so anything above MAX_CAPTURE_PIXELS is not captured at all.
+const MAX_STILL_PIXELS = 16_000_000
+
+const MAX_CAPTURE_PIXELS = 64_000_000
 
 /**
  * The web pages main plugins hand to the host. Each stays hidden until its window's renderer lays
@@ -34,16 +41,19 @@ export function createEmbeds() {
   const apply = (entry: Entry) => {
     if (entry.window.isDestroyed()) return
     const layout = entry.layout?.bounds
+    const cutout = entry.layout?.clip
     const viewport = entry.layout?.viewport
     // The renderer measures a frame or more behind a window resize. Edges beside the window
     // edge follow it now, so the view and its corner masks do not trail inside the panel.
     // This assumes the box takes the whole change, as the side panel beside the fixed-width chat does.
     const [width = 0, height = 0] = entry.window.getContentSize()
     const zoom = entry.window.webContents.getZoomFactor()
+    // A child window uses screen coordinates and must stay inside its owner.
+    const clip = cutout && intersectWindow(cutout, width, height)
 
     // The renderer's viewport is whole CSS px, so it can be off by one CSS px plus rounding; that is not a resize.
     const follow = (inset: number, change: number) =>
-      inset <= WINDOW_GUTTER * zoom && Math.abs(change) >= zoom + 1 ? change : 0
+      !clip && inset <= WINDOW_GUTTER * zoom && Math.abs(change) >= zoom + 1 ? change : 0
 
     const dx = layout && viewport ? follow(viewport.width - layout.x - layout.width, width - viewport.width) : 0
     const dy = layout && viewport ? follow(viewport.height - layout.y - layout.height, height - viewport.height) : 0
@@ -56,9 +66,40 @@ export function createEmbeds() {
       height: Math.round(layout.height + dy),
     }
 
-    const placed = !!entry.layout?.visible && !!bounds && bounds.width > 0 && bounds.height > 0
+    // The DOM scrollport can reflow during a window resize. Wait for its new measurements.
+    const measured =
+      !clip ||
+      !viewport ||
+      (Math.abs(viewport.width - width) < zoom + 1 && Math.abs(viewport.height - height) < zoom + 1)
 
-    if (placed && bounds) {
+    const placed =
+      !!entry.layout?.visible &&
+      !!bounds &&
+      bounds.width > 0 &&
+      bounds.height > 0 &&
+      measured &&
+      (!clip || (clip.width > 0 && clip.height > 0))
+
+    if (placed) {
+      if (
+        clip &&
+        (clip.x !== bounds.x || clip.y !== bounds.y || clip.width !== bounds.width || clip.height !== bounds.height)
+      ) {
+        const container = (entry.clip ??= createClip(entry))
+
+        if (container.window) {
+          const origin = entry.window.getContentBounds()
+
+          container.window.setBounds({ ...clip, x: origin.x + clip.x, y: origin.y + clip.y })
+        } else container.root.setBounds(clip)
+
+        bounds.x -= clip.x
+        bounds.y -= clip.y
+      } else if (entry.clip) {
+        attach(entry, entry.window.contentView)
+        disposeClip(entry)
+      }
+
       entry.view.setBounds(bounds)
 
       const size = Math.min(
@@ -96,6 +137,12 @@ export function createEmbeds() {
     const visible = placed && entry.shown
     entry.corners.forEach((corner) => corner.setVisible(placed && !!entry.cornerKey))
     entry.view.setVisible(visible)
+    const child = entry.clip?.window
+
+    if (child && !child.isDestroyed()) {
+      if (!visible || !entry.window.isVisible() || entry.window.isMinimized()) child.hide()
+      else if (!child.isVisible()) child.showInactive()
+    }
 
     if (visible === entry.onscreen) return
     entry.onscreen = visible
@@ -111,8 +158,10 @@ export function createEmbeds() {
 
     if (entry.window.isDestroyed()) return
     entry.view.setVisible(false)
-    entry.corners.forEach((corner) => entry.window.contentView.removeChildView(corner))
-    entry.window.contentView.removeChildView(entry.view)
+    const root = entry.clip?.root ?? entry.window.contentView
+    entry.corners.forEach((corner) => root.removeChildView(corner))
+    root.removeChildView(entry.view)
+    disposeClip(entry)
   }
 
   const owned = (windowID: number, id: string) => {
@@ -130,6 +179,10 @@ export function createEmbeds() {
         const refresh = () => entries.forEach((entry) => entry.window === window && apply(entry))
         window.on("resize", refresh)
         window.on("move", refresh)
+        window.on("show", refresh)
+        window.on("hide", refresh)
+        window.on("restore", refresh)
+        window.on("minimize", refresh)
         screen.on("display-metrics-changed", refresh)
         window.once("closed", () => screen.off("display-metrics-changed", refresh))
       }
@@ -211,10 +264,81 @@ export function createEmbeds() {
   }
 }
 
+function intersectWindow(box: Electron.Rectangle, width: number, height: number) {
+  const x = Math.max(0, Math.ceil(box.x))
+  const y = Math.max(0, Math.ceil(box.y))
+
+  return {
+    x,
+    y,
+    width: Math.max(0, Math.min(width, Math.floor(box.x + box.width)) - x),
+    height: Math.max(0, Math.min(height, Math.floor(box.y + box.height)) - y),
+  }
+}
+
+function attach(entry: Entry, root: View) {
+  root.addChildView(entry.view)
+  entry.corners.forEach((corner) => root.addChildView(corner))
+}
+
+// On Cocoa a parent View clips the page's pixels; hit testing requires an owned window.
+function createClip(entry: Entry) {
+  const window =
+    process.platform === "darwin"
+      ? new BaseWindow({
+          parent: entry.window,
+          frame: false,
+          roundedCorners: false,
+          hasShadow: false,
+          acceptFirstMouse: true,
+          resizable: false,
+          minimizable: false,
+          maximizable: false,
+          fullscreenable: false,
+          skipTaskbar: true,
+          show: false,
+        })
+      : undefined
+
+  const root = window?.contentView ?? new View()
+
+  if (!window) entry.window.contentView.addChildView(root)
+  attach(entry, root)
+
+  return { root, window }
+}
+
+function disposeClip(entry: Entry) {
+  const clip = entry.clip
+
+  if (!clip) return
+  entry.clip = undefined
+
+  if (clip.window) {
+    if (!clip.window.isDestroyed()) clip.window.destroy()
+  } else entry.window.contentView.removeChildView(clip.root)
+}
+
 // Freezes the shown page so the renderer can paint it under DOM overlays while the view hides.
 async function capture(entry: Entry) {
   if (entry.window.isDestroyed() || entry.view.webContents.isDestroyed() || !entry.view.getVisible()) return
-  const image = await entry.view.webContents.capturePage()
+  const { width, height } = entry.view.getBounds()
 
-  return image.isEmpty() ? undefined : image
+  // Even a small cutout needs a still of the full view at native density.
+  const scale = screen.getDisplayMatching((entry.clip?.window ?? entry.window).getBounds()).scaleFactor
+
+  if (width <= 0 || height <= 0 || Math.ceil(width * scale) * Math.ceil(height * scale) > MAX_CAPTURE_PIXELS) return
+  const image = await entry.view.webContents.capturePage({ x: 0, y: 0, width, height })
+
+  if (image.isEmpty()) return
+  const size = image.getSize()
+  const ratio = Math.sqrt(MAX_STILL_PIXELS / (size.width * size.height))
+
+  if (ratio >= 1) return image
+
+  return image.resize({
+    width: Math.max(1, Math.floor(size.width * ratio)),
+    height: Math.max(1, Math.floor(size.height * ratio)),
+    quality: "good",
+  })
 }

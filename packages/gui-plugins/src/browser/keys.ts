@@ -14,10 +14,9 @@ export type PageShortcut = {
 // opening, closing or switching tabs, focusing the address field, opening settings, and toggling the file tree.
 const shellKeys = ["t", "w", "l", "n", "1", "2", "3", "4", "5", "6", "7", "8", "9", ",", "\\"]
 
-// Shifted chords with the platform's modifier that belong to the app shell rather than the page: reopening a tab,
-// switching side-panel tabs, toggling the side panel, opening the command palette, or running session commands. New Window and Close Window
-// (⇧⌘N, ⇧⌘W) stay unclaimed: only their menu accelerators handle them, and claiming a chord also blocks the menu.
-const shellShiftKeys = ["t", "[", "]", "r", "p", "l", "e", "o", "s"]
+// Shifted shortcuts for the shell and browser pane. Leave ⇧⌘N and ⇧⌘W to the window menu accelerators:
+// forwarding either chord would block its menu action.
+const shellShiftKeys = ["t", "[", "]", "r", "p", "l", "e", "o", "s", "m"]
 
 // The side panel's launchers: Review, Browser and Open file, with ⌃⌘ on macOS and Ctrl+Alt elsewhere. Only a typed
 // Latin letter counts, so AltGr (Ctrl+Alt) typing on other layouts stays with the page.

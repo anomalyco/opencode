@@ -279,7 +279,7 @@ story("toggles the element picker from the shortcut only inside the browser pane
   )
 })
 
-story("keeps in-page shortcuts like ⌘K in the page while forwarding ⌘⇧R and ⌘W to the pane", async ({ page }) => {
+story("keeps in-page shortcuts in the editor and forwards toolbar, review and close shortcuts", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
   const mod = mac ? "Meta" : "Control"
@@ -298,6 +298,17 @@ story("keeps in-page shortcuts like ⌘K in the page while forwarding ⌘⇧R an
   await editor.focus()
   await editor.press(`${mod}+k`)
   await expect(editor).toHaveValue("handled:k")
+
+  const toggle = root.getByRole("button", { name: "Toggle browser toolbar", exact: true })
+  await editor.press(`${mod}+Shift+m`)
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(toggle).toBeFocused()
+  await root.getByRole("button", { name: "Device preset", exact: true }).press("ArrowDown")
+  await page.getByRole("menuitem", { name: "More devices", exact: true }).press("ArrowRight")
+  await expect(page.getByRole("menuitemradio", { name: "iPhone SE", exact: true })).toBeFocused()
+  await page.keyboard.press(`${mod}+Shift+m`)
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await expect(toggle).toBeFocused()
 
   // Shell shortcuts like ⌘⇧R and pane-scoped ⌘W are claimed before the page sees them.
   await editor.press(`${mod}+Shift+r`)

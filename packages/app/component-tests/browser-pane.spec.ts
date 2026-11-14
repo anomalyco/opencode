@@ -1,4 +1,5 @@
 import { expect, sourceURL, story } from "../../stories/playwright/story"
+import type { Locator, Page } from "@playwright/test"
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 
@@ -876,13 +877,18 @@ story("lists recent pages on a blank tab and opens one", async ({ page }) => {
   await expect(address).toHaveValue("http://localhost:5173/settings")
 })
 
-story("adds the whole page to the session and keeps the draft when the button is pressed again", async ({ page }) => {
-  const root = page.getByTestId("browser-pane-fixture")
+story("keeps a page note editable beside a tiny viewport and attaches it to the session", async ({ page }) => {
+  const { root, viewport, width, height } = viewportControls(page)
+  await viewport.click()
+  await width.fill("8")
+  await height.fill("8")
+  await expectSize(root.getByTestId("native-Alpha"), 8, 8)
   const field = root.locator('[data-component="browser-address"]')
   const add = root.getByRole("button", { name: "Add page to session", exact: true })
   await field.hover()
   await add.click()
   const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
+  await editor.click()
   await editor.fill("Check the header layout")
   await field.hover()
   await add.click()
@@ -913,12 +919,51 @@ story("says a failed cookie read failed and reads again on retry", async ({ page
   await expect(site.getByRole("button", { name: "Clear", exact: true })).toBeEnabled()
 })
 
-story("zooms the page from the browser options in view and keeps its zoom in the address field", async ({ page }) => {
+function viewportControls(page: Page) {
   const root = page.getByTestId("browser-pane-fixture")
+
+  const controls = root.getByRole("region", { name: "Viewport", exact: true })
+
+  return {
+    root,
+    controls,
+    viewport: root.getByRole("button", { name: "Toggle browser toolbar", exact: true }),
+    preset: controls.getByRole("button", { name: "Device preset", exact: true }),
+    option: (name: string) => page.getByRole("menuitemradio", { name, exact: true }),
+    moreDevices: page.getByRole("menuitem", { name: "More devices", exact: true }),
+    width: controls.getByLabel("Viewport width in CSS pixels", { exact: true }),
+    height: controls.getByLabel("Viewport height in CSS pixels", { exact: true }),
+    scale: controls.getByRole("button", { name: "Preview scale", exact: true }),
+    rotate: controls.getByRole("button", { name: "Rotate viewport", exact: true }),
+  }
+}
+
+function resizePane(root: Locator, width: number) {
+  return root.locator("#browser-panel").evaluate((pane, width) => {
+    if (!pane.parentElement) throw new Error("Missing pane container")
+    pane.parentElement.style.width = `${width}px`
+  }, width)
+}
+
+async function expectSize(native: Locator, width: number, height: number) {
+  await expect(native).toHaveAttribute("data-width", String(width))
+  await expect(native).toHaveAttribute("data-height", String(height))
+}
+
+story("zooms the page from the browser options in view and keeps its zoom in the address field", async ({ page }) => {
+  const { root, controls, viewport, preset, option, scale } = viewportControls(page)
+  await viewport.click()
+  await preset.click()
+  await option("Samsung Galaxy S26").click()
+  await expect(preset).toHaveText("Samsung Galaxy S26")
   const options = root.getByRole("button", { name: "Browser options", exact: true })
   await options.click()
   await page.getByRole("menuitem", { name: /^Zoom in/ }).click()
   await expect(root.getByText("Zoom: 110", { exact: true })).toBeVisible()
+  await expect(controls.getByRole("status")).toContainText("The page is using the pane size because page zoom changed.")
+  await expect(preset).toBeDisabled()
+  await expect(preset).toHaveText("Responsive")
+  await expect(scale).toBeDisabled()
   // The menu covered the page with a still; it closes so the zoomed page shows at once.
   await expect(page.getByRole("menu")).toBeHidden()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
@@ -928,4 +973,216 @@ story("zooms the page from the browser options in view and keeps its zoom in the
   await zoom.click()
   await expect(root.getByText("Zoom: 100", { exact: true })).toBeVisible()
   await expect(zoom).toBeHidden()
+  await expect(preset).toBeEnabled()
+})
+
+story("restores the full pane when the toolbar closes and keeps the selected device on reopen", async ({ page }) => {
+  const { root, controls, viewport, preset, option, moreDevices, width, height } = viewportControls(page)
+
+  const native = root.getByTestId("native-Alpha")
+
+  const fullWidth = await native.getAttribute("data-width")
+
+  const fullHeight = await native.getAttribute("data-height")
+
+  if (!fullWidth || !fullHeight) throw new Error("Missing native page bounds")
+
+  await viewport.click()
+  await preset.press("ArrowDown")
+  const menu = page.getByRole("menu")
+  await expect(option("Responsive")).toBeChecked()
+  await expect(menu.getByRole("menuitemradio")).toHaveText([
+    "Responsive",
+    "Samsung Galaxy S26",
+    "iPhone 18 Pro",
+    "iPad / iPad Air 11″",
+    "Laptop",
+    "Desktop",
+  ])
+  await page.keyboard.press("End")
+  await expect(moreDevices).toBeFocused()
+  await page.keyboard.press("ArrowRight")
+  const mini = option("iPad mini")
+  await mini.click()
+  await expect(preset).toHaveText("iPad mini")
+  await expect(preset).toBeFocused()
+  await expect(native).not.toHaveAttribute("data-width", fullWidth)
+  await viewport.click()
+  await expect(controls).toBeHidden()
+  await expect(native).toHaveAttribute("data-width", fullWidth)
+  await expect(native).toHaveAttribute("data-height", fullHeight)
+  await expect(root.getByRole("separator", { name: "Resize viewport width" })).toBeHidden()
+  await viewport.click()
+  await expect(preset).toHaveText("iPad mini")
+  await expect(width).toHaveValue("756")
+  await expect(height).toHaveValue("1158")
+  // Matching the preset's dimensions by hand still counts as Custom.
+  await width.fill("700")
+  await width.fill("756")
+  await expect(preset).toHaveText("Custom")
+  await preset.click()
+  await expect(option("Custom")).toBeChecked()
+  await moreDevices.hover()
+  await expect(mini).not.toBeChecked()
+})
+
+story("fits an exact viewport while resizing and rejects invalid edits", async ({ page }) => {
+  const { root, viewport, preset, option, scale, width, height } = viewportControls(page)
+
+  const native = root.getByTestId("native-Alpha")
+  await viewport.click()
+  await expect(width).toHaveValue("624")
+  await width.fill("1248")
+  await expect(scale).toHaveText("Fit - 50%")
+  await expect(width).toBeFocused()
+  await height.fill("5")
+  // Chromium needs whole native pixels: round the fitted height up.
+  await expectSize(native, 624, 3)
+  await expect(height).toBeFocused()
+
+  await resizePane(root, 328)
+  await expect(scale).toHaveText("Fit - 25%")
+  await expectSize(native, 312, 2)
+  await expect(width).toHaveValue("1248")
+  await expect(height).toHaveValue("5")
+
+  for (const edit of ["", "4097"]) {
+    await width.fill(edit)
+    await expect(width).toHaveValue(edit)
+    await expect(width).toHaveAttribute("aria-invalid", "true")
+    await expect(width).toHaveAccessibleDescription("Use whole numbers from 1 to 4096 for width and height.")
+    await expectSize(native, 312, 2)
+  }
+
+  await width.blur()
+  await expect(width).toHaveValue("1248")
+  await expect(width).not.toHaveAttribute("aria-invalid", "true")
+  await preset.click()
+  await option("Responsive").click()
+  await expect(preset).toHaveText("Responsive")
+  await expect(width).toHaveValue("312")
+  await expect(scale).toHaveText("Fit - 100%")
+  await resizePane(root, 640)
+  await expect(width).toHaveValue("624")
+  await expect(native).toHaveAttribute("data-width", "624")
+})
+
+story("resizes a device with the RTL side grip by pointer and keyboard", async ({ page }) => {
+  const { root, viewport, preset, option, scale, width, height } = viewportControls(page)
+  await root.evaluate((element) => element.setAttribute("dir", "rtl"))
+  await viewport.click()
+  await preset.click()
+  await option("Samsung Galaxy S26").click()
+  await scale.click()
+  await option("50%").click()
+  await expectSize(root.getByTestId("native-Alpha"), 180, 390)
+  const grip = root.getByRole("separator", { name: "Resize viewport width", exact: true })
+
+  const box = await grip.boundingBox()
+
+  if (!box) throw new Error("Missing viewport resize grip")
+  const x = box.x + box.width / 2
+
+  const y = box.y + box.height / 2
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x - 12, y)
+  await page.mouse.up()
+  // Both edges move 12 screen pixels, or 24 guest CSS pixels each at 50% scale.
+  await expect(width).toHaveValue("408")
+  await expect(height).toHaveValue("780")
+  await expect(preset).toHaveText("Custom")
+  await expectSize(root.getByTestId("native-Alpha"), 204, 390)
+  await grip.press("Shift+ArrowRight")
+  await expect(width).toHaveValue("398")
+})
+
+story("pins the responsive dimensions when a manual preview scale is selected", async ({ page }) => {
+  const { root, viewport, preset, option, scale, width, height } = viewportControls(page)
+
+  const native = root.getByTestId("native-Alpha")
+  await viewport.click()
+  await expect(width).toHaveValue("624")
+  const responsiveHeight = await height.inputValue()
+  await expect(scale).toHaveText("Fit - 100%")
+  await scale.click()
+  const menu = page.getByRole("menu")
+  await expect(menu.getByRole("menuitemradio")).toHaveText([
+    "Fit to pane",
+    "50%",
+    "75%",
+    "100%",
+    "125%",
+    "150%",
+    "200%",
+  ])
+  const fit = option("Fit to pane")
+  await expect(fit).toBeChecked()
+  const double = option("200%")
+  await double.click()
+  await resizePane(root, 400)
+  await expect(scale).toHaveText("200%")
+  await expect(preset).toHaveText("Custom")
+  await expect(width).toHaveValue("624")
+  await expect(height).toHaveValue(responsiveHeight)
+
+  await width.fill("120")
+  await height.fill("80")
+  await expectSize(native, 240, 160)
+  await scale.click()
+  await expect(double).toBeChecked()
+  await fit.click()
+  await expect(scale).toHaveText("Fit - 100%")
+  await expectSize(native, 120, 80)
+})
+
+story("keeps the selected device and its rotated viewport with its browser tab", async ({ page }) => {
+  const { root, viewport, preset, moreDevices, option, width, height, scale, rotate } = viewportControls(page)
+
+  const switchTab = root.getByRole("button", { name: "Switch browser tab", exact: true })
+  await viewport.click()
+  await scale.click()
+  await option("50%").click()
+  await preset.click()
+  await moreDevices.hover()
+  const pixel = option("Pixel 10")
+  await pixel.click()
+  await expect(preset).toHaveText("Pixel 10")
+  await rotate.click()
+  await expectSize(root.getByTestId("native-Alpha"), 462, 206)
+
+  await switchTab.click()
+  await expect(root.getByTestId("native-Second")).toHaveAttribute("data-visible", "true")
+  await expect(preset).toHaveText("Responsive")
+  await width.fill("200")
+  await height.fill("180")
+  const second = root.getByTestId("native-Second")
+  await expectSize(second, 200, 180)
+  await expect(scale).toHaveText("Fit - 100%")
+
+  // Wrapping the toolbar moves the centered native view on both axes without changing its size.
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+
+  const embed = root.locator('[data-component="browser-preview"] > div:first-child')
+
+  const wide = await embed.boundingBox()
+  await resizePane(root, 320)
+  const narrow = await embed.boundingBox()
+
+  if (!wide || !narrow) throw new Error("Missing preview bounds")
+  expect(narrow.x).toBeLessThan(wide.x)
+  expect(narrow.y).toBeGreaterThan(wide.y)
+  await expect(second).toHaveAttribute("data-x", String(Math.round(narrow.x)))
+  await expect(second).toHaveAttribute("data-y", String(Math.round(narrow.y)))
+  await expectSize(second, 200, 180)
+
+  await switchTab.click()
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+  await expect(width).toHaveValue("924")
+  await expect(height).toHaveValue("412")
+  await expect(preset).toHaveText("Pixel 10")
+  await expect(scale).toHaveText("50%")
+  await preset.click()
+  await moreDevices.hover()
+  await expect(pixel).toBeChecked()
 })

@@ -48,7 +48,9 @@ import {
   refusal,
   type Policy,
 } from "./policy"
-import type { PaneElement } from "./ipc"
+import type { PaneElement, PaneEvent, Viewport } from "./ipc"
+import { createViewportWriter } from "./viewport-native"
+import { createDeviceEmulation } from "./mobile-emulation"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 
@@ -117,8 +119,7 @@ const inspectOff = { mode: "none", highlightConfig: inspectHighlight }
 // Chromium's zoom presets, so a step lands where it would in the system browser.
 const zoomSteps = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]
 
-/** A page's icon as a data URL, and its zoom factor, 1 at 100%. */
-export type PageDetail = { icon?: string; zoom: number }
+export type PageDetail = Omit<Extract<PaneEvent, { type: "page" }>, "type" | "tabID">
 
 /** The zoom a key press asks for: the system browser's zoom keys, with the platform's modifier already checked. */
 function zoomKey(input: Electron.Input) {
@@ -185,7 +186,7 @@ export function createBrowserPage(
     publish: (error?: string) => void
     /** Reports the element picker starting, stopping, or picking an element. */
     inspect?: (event: { active: boolean; element?: PaneElement }) => void
-    /** Reports the page's icon or zoom changing. */
+    /** Reports changes to the page's icon, zoom, or layout viewport. */
     detail?: (detail: PageDetail) => void
     /** The page's zoom changed, which Chromium applies to every page of the same origin in the partition. */
     zoomed?: () => void
@@ -229,6 +230,17 @@ export function createBrowserPage(
 
   const contents = view.webContents
   const detachNetwork = options.network?.attach(contents)
+
+  // A cropped page can own focus in its child window. Only that child may raise the host.
+  function focusHost() {
+    if (win.isDestroyed()) return
+    const focused = electron.BaseWindow.getFocusedWindow()
+
+    if (focused?.getParentWindow() === win && focused.contentView.children.includes(view)) win.focus()
+
+    if (win.isFocused()) win.webContents.focus()
+  }
+
   contents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return
 
@@ -280,28 +292,66 @@ export function createBrowserPage(
 
     if (next === current) return
     contents.setZoomFactor(next)
+    detail()
     options.zoomed?.()
   }
 
   let documentState = createDocumentState(options.restore)
   const closed = () => isDocumentClosed(documentState)
-  let reported = ""
+  let reported: PageDetail | undefined
+  const cdp = createCdp(contents)
+
+  const sessions = new Map<string, string>()
+  const device = createDeviceEmulation(cdp, sessions)
+  const metrics = createViewportWriter(device.apply, report, closed)
+
+  function report() {
+    if (closed()) return
+    // Chromium's factor for the outermost presets can land a rounding error outside them.
+    const zoom = Math.min(5, Math.max(0.25, contents.getZoomFactor()))
+    const icon = documentIcon(documentState)
+    const { viewport, viewportNotice } = metrics.applied()
+
+    if (
+      reported?.zoom === zoom &&
+      reported.icon === icon &&
+      reported.viewport === viewport &&
+      reported.viewportNotice === viewportNotice
+    )
+      return
+    reported = { zoom, viewport, ...(icon && { icon }), ...(viewportNotice && { viewportNotice }) }
+    options.detail?.(reported)
+  }
+
+  async function setViewport(viewport: Viewport) {
+    if (closed() || contents.isDestroyed()) throw new Error("browser.pane.unavailable")
+    const zoom = contents.getZoomFactor()
+    await metrics.set(viewport, view.getBounds(), zoom)
+
+    if (closed() || contents.isDestroyed()) throw new Error("browser.pane.unavailable")
+
+    if (viewport.mode === "fixed" && zoom !== 1) throw new Error("viewport.zoomPrompt")
+  }
+
+  const resize = () => {
+    const viewport = metrics.requested()
+
+    if (viewport.mode === "fixed") void setViewport(viewport).catch(() => undefined)
+  }
 
   const detail = () => {
     if (closed()) return
-    // Chromium's factor for the outermost presets can land a rounding error outside them.
-    const next: PageDetail = { zoom: Math.min(5, Math.max(0.25, contents.getZoomFactor())) }
-    const icon = documentIcon(documentState)
+    // Navigation and another tab of the same origin can both change this page's zoom.
+    const viewport = metrics.requested()
 
-    if (icon) next.icon = icon
-    const key = `${next.zoom}:${next.icon ?? ""}`
-
-    if (key === reported) return
-    reported = key
-    options.detail?.(next)
+    if (viewport.mode === "fixed" && contents.getZoomFactor() !== 1) resize()
+    void metrics.settled().then(report)
   }
 
-  const cdp = createCdp(contents)
+  view.on("bounds-changed", resize)
+  cdp.on("Page.frameResized", () => {
+    if (!closed() && contents.getZoomFactor() !== reported?.zoom) detail()
+  })
   const documents = new Map<string, string>()
   const sourceURLs = () => [...new Set([contents.getURL(), ...documents.values()])].sort()
   const files = createBrowserFiles(sourceURLs)
@@ -313,7 +363,6 @@ export function createBrowserPage(
   const picked = new Map<string, Element>()
   let pickerState = initialPickerState
   let pickerTimer: ReturnType<typeof setTimeout> | undefined
-  const sessions = new Map<string, string>()
   const parents = new Map<string, string>()
   const contexts = new Map<string, { id: number; sessionID?: string }>()
   let dialogGate = createDialogGateState()
@@ -393,7 +442,10 @@ export function createBrowserPage(
   }
 
   contents.on("did-start-loading", () => dispatch({ type: "loading.started" }))
-  contents.on("did-stop-loading", () => dispatch({ type: "loading.stopped", title: contents.getTitle() }))
+  contents.on("did-stop-loading", () => {
+    dispatch({ type: "loading.stopped", title: contents.getTitle() })
+    detail()
+  })
   contents.on("did-start-navigation", (event) =>
     dispatch({
       type: "navigation.started",
@@ -511,7 +563,9 @@ export function createBrowserPage(
 
     if (parentID) parents.set(targetInfo.targetId, parentID)
     sessions.set(targetInfo.targetId, sessionId)
+    // An isolated frame has its own renderer and needs its own UA and touch overrides.
     void Promise.all([
+      device.frame(sessionId),
       diagnostics.enable(sessionId),
       cdp.send("Page.enable", {}, sessionId),
       cdp.send(
@@ -603,6 +657,8 @@ export function createBrowserPage(
     contents,
     state,
     ready,
+    focusHost,
+    setViewport,
     /** The host embed the renderer lays this page out with. */
     embed: embed.id,
     async inspect(enabled: boolean) {
@@ -647,7 +703,7 @@ export function createBrowserPage(
         () => undefined,
       )
     },
-    /** Reports the page's icon and zoom when either changed since the last report. */
+    /** Refreshes the page presentation, including Chromium's per-origin zoom. */
     detail,
     async execute(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
       await ready
@@ -665,7 +721,14 @@ export function createBrowserPage(
       signal.addEventListener("abort", cancel, { once: true })
 
       try {
-        return await Promise.race([perform(command, run.controller.signal), run.interrupted.promise])
+        const act = () => perform(command, run.controller.signal)
+
+        // A resize or screenshot between measuring a ref and clicking it would hit a different point.
+        const action = pointerOperations.includes(command.action.type)
+          ? metrics.exclusive(() => device.mouse(act))
+          : act()
+
+        return await Promise.race([action, run.interrupted.promise])
       } finally {
         signal.removeEventListener("abort", cancel)
         runs.delete(runID)
@@ -678,6 +741,7 @@ export function createBrowserPage(
       dispatchDialog({ type: "disposed" })
       void dispatchPicker({ type: "disposed" })
       clearTimeout(pickerTimer)
+      view.off("bounds-changed", resize)
       detachNetwork?.()
       contents.session.off("will-download", download)
       await profiling.dispose()
@@ -692,6 +756,8 @@ export function createBrowserPage(
   }
 
   async function perform(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
+    abortError(signal)
+
     if (isPickerActive(pickerState) && pointerOperations.includes(command.action.type))
       await dispatchPicker({ type: "pointer.command" })
 
@@ -838,7 +904,7 @@ export function createBrowserPage(
         await point(destination)
         const from = await point(source)
         const box = await rect(destination)
-        const to = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+        const to = await elementCenter(box)
         const html5 = await call(source, "function() { return this.draggable; }")
         let data: Protocol.Input.DragData | undefined
 
@@ -908,11 +974,10 @@ export function createBrowserPage(
         await key(action.key)
         break
       case "scroll": {
-        const bounds = view.getBounds()
+        const { cssVisualViewport } = await cdp.send("Page.getLayoutMetrics")
         await cdp.send("Input.dispatchMouseEvent", {
           type: "mouseWheel",
-          x: bounds.width / 2,
-          y: bounds.height / 2,
+          ...inputCenter({ x: 0, y: 0, width: cssVisualViewport.clientWidth, height: cssVisualViewport.clientHeight }),
           deltaX: action.deltaX ?? 0,
           deltaY: action.deltaY,
         })
@@ -970,41 +1035,45 @@ export function createBrowserPage(
             )
           },
         )
-        const element = action.ref ? await rect(target(action.ref), true) : undefined
-        const metrics = await cdp.send("Page.getLayoutMetrics")
-
-        const bounds = element
-          ? {
-              ...element,
-              x: element.x + metrics.cssVisualViewport.pageX,
-              y: element.y + metrics.cssVisualViewport.pageY,
-            }
-          : action.fullPage
-            ? metrics.cssContentSize
-            : {
-                x: metrics.cssVisualViewport.pageX,
-                y: metrics.cssVisualViewport.pageY,
-                width: metrics.cssVisualViewport.clientWidth,
-                height: metrics.cssVisualViewport.clientHeight,
-              }
-
-        const pixelRatio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
-        const scale = Math.min(1, (action.maxWidth ?? 2000) / (bounds.width * pixelRatio))
-
-        if (bounds.width <= 0 || bounds.height <= 0)
-          throw new Error(
-            "Element or page has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport.",
-          )
-
-        if (bounds.width * bounds.height * (scale * pixelRatio) ** 2 > 16_000_000)
-          throw new Error("Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.")
         const format = action.format ?? "jpeg"
 
-        const capture = await cdp.send("Page.captureScreenshot", {
-          format,
-          quality: format === "png" ? undefined : (action.quality ?? 80),
-          captureBeyondViewport: true,
-          clip: { ...bounds, scale },
+        const capture = await metrics.exclusive(async () => {
+          abortError(signal)
+          const element = action.ref ? await rect(target(action.ref), true) : undefined
+          const layout = await cdp.send("Page.getLayoutMetrics")
+          const viewport = layout.cssVisualViewport
+
+          const bounds = element
+            ? {
+                ...element,
+                x: element.x + layout.cssLayoutViewport.pageX,
+                y: element.y + layout.cssLayoutViewport.pageY,
+              }
+            : action.fullPage
+              ? layout.cssContentSize
+              : { x: viewport.pageX, y: viewport.pageY, width: viewport.clientWidth, height: viewport.clientHeight }
+
+          if (bounds.width <= 0 || bounds.height <= 0)
+            throw new Error(
+              "Element or page has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport.",
+            )
+
+          // CDP captures the unscaled layout. Its clip is in page DIPs, even for a scaled native preview.
+          const zoom = viewport.zoom ?? contents.getZoomFactor()
+          const pixelRatio = zoom * electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
+          // A mobile page can initially zoom out to fit a 980 CSS px layout on a phone screen.
+          const scale = Math.min(viewport.scale, (action.maxWidth ?? 2000) / (bounds.width * pixelRatio))
+
+          if (bounds.width * bounds.height * (scale * pixelRatio) ** 2 > 16_000_000)
+            throw new Error("Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.")
+          abortError(signal)
+
+          return device.capture({
+            format,
+            quality: format === "png" ? undefined : (action.quality ?? 80),
+            captureBeyondViewport: true,
+            clip: { ...scaleRect(bounds, zoom), scale },
+          })
         })
 
         const id = await files.save(`screenshot.${format}`, `image/${format}`, Buffer.from(capture.data, "base64"), [
@@ -1277,9 +1346,10 @@ export function createBrowserPage(
   async function rect(element: Element, scroll = false) {
     if (scroll) {
       await cdp.send("DOM.scrollIntoViewIfNeeded", { backendNodeId: element.backendID }, element.sessionID)
-      // Force a compositor update after scrolling. requestAnimationFrame can
-      // stall in a hidden WebContentsView, even with background throttling off.
-      await contents.capturePage(undefined, { stayHidden: false, stayAwake: true })
+      // A one-DIP capture flushes scrolling even in a hidden tab. A resize can briefly replace the surface.
+      await contents
+        .capturePage({ x: 0, y: 0, width: 1, height: 1 }, { stayHidden: false, stayAwake: true })
+        .catch(() => painted(element.sessionID))
     }
 
     const bounds = Schema.Struct({ x: Schema.Finite, y: Schema.Finite, width: Schema.Finite, height: Schema.Finite })
@@ -1330,9 +1400,22 @@ export function createBrowserPage(
   }
 
   async function point(element: Element) {
-    const box = await rect(element, true)
+    return elementCenter(await rect(element, true))
+  }
 
-    return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  async function elementCenter(box: PaneElement["rect"]) {
+    if (!device.mobile()) return inputCenter(box)
+    // Focusing a field can pan the visual viewport inside the layout viewport. CDP adds that offset on dispatch.
+    const { cssVisualViewport } = await cdp.send("Page.getLayoutMetrics")
+
+    return inputCenter({ ...box, x: box.x - cssVisualViewport.offsetX, y: box.y - cssVisualViewport.offsetY })
+  }
+
+  // Input.dispatch* applies page zoom itself. Its coordinates are relative to the full scaled view, even when panned.
+  function inputCenter(box: PaneElement["rect"]) {
+    const scale = metrics.applied().scale
+
+    return { x: (box.x + box.width / 2) * scale, y: (box.y + box.height / 2) * scale }
   }
 
   async function click(element: Element, button = "left", count = 1, modifiers: readonly string[] = []) {
@@ -1582,19 +1665,19 @@ export function createBrowserPage(
       case "describe": {
         const attempt = effect.attempt
 
-        return describePick(effect.backendID, effect.sessionID).then(
-          (pick) => dispatchPicker({ type: "describe.succeeded", attempt, target: pick.target, element: pick.element }),
-          () => dispatchPicker({ type: "describe.failed", attempt }),
-        )
+        return metrics
+          .exclusive(() => describePick(effect.backendID, effect.sessionID))
+          .then(
+            (pick) =>
+              dispatchPicker({ type: "describe.succeeded", attempt, target: pick.target, element: pick.element }),
+            () => dispatchPicker({ type: "describe.failed", attempt }),
+          )
       }
 
       case "pick": {
         const ref = options.shared.ref()
         picked.set(ref, effect.target)
-
-        // The pick focused the page; the comment editor opens in the app window. Focus only moves
-        // within a focused window, so synthetic input never raises a background window.
-        if (!win.isDestroyed() && win.isFocused()) win.webContents.focus()
+        focusHost()
         options.inspect?.({ active: false, element: { ref: Browser.Ref.make(ref), ...effect.element } })
 
         return
@@ -1660,16 +1743,24 @@ export function createBrowserPage(
     // Keep the box model on the picked element, without the tooltip, while the renderer freezes the page.
     await cdp.send("Overlay.highlightNode", { backendNodeId: backendID, highlightConfig: pickedHighlight }, sessionID)
     const target = { backendID, frameID: await frameOf(backendID, sessionID), sessionID }
-    const [details, box, accessible] = await Promise.all([describe(target), rect(target), accessibility(target)])
+
+    const [details, box, accessible, layout] = await Promise.all([
+      describe(target),
+      rect(target),
+      accessibility(target),
+      cdp.send("Page.getLayoutMetrics"),
+    ])
+
     await painted(sessionID)
-    const zoom = contents.getZoomFactor()
+    const visual = layout.cssVisualViewport
+    const scale = contents.getZoomFactor() * metrics.applied().scale * visual.scale
 
     return {
       target,
       element: {
         ...details,
         ...accessible,
-        rect: { x: box.x * zoom, y: box.y * zoom, width: box.width * zoom, height: box.height * zoom },
+        rect: scaleRect({ ...box, x: box.x - visual.offsetX, y: box.y - visual.offsetY }, scale),
       },
     }
   }
@@ -1806,4 +1897,8 @@ export function createBrowserPage(
       new Promise((resolve) => setTimeout(resolve, 150)),
     ])
   }
+}
+
+function scaleRect(box: PaneElement["rect"], scale: number) {
+  return { x: box.x * scale, y: box.y * scale, width: box.width * scale, height: box.height * scale }
 }
