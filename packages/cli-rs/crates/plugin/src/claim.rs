@@ -37,6 +37,7 @@ use opentui::prelude::*;
 
 use crate::Host;
 use crate::activation::{Activation, Drawn};
+use crate::image::Picture;
 use crate::node::{Act, abi_mode};
 use crate::reconcile::{Env, Tree};
 use crate::surface::{self, Viewing};
@@ -311,7 +312,7 @@ struct Held {
     /// The content the accepted views gave and did not release.
     content: HashMap<ContentRef, Rc<[u8]>>,
     /// The images content decoded to, a handle each, as a surface keeps them (P3).
-    images: RefCell<HashMap<ContentRef, Option<opentui::native::Image>>>,
+    images: RefCell<HashMap<ContentRef, Picture>>,
     /// The last accepted tree, keeps as they came.
     last: Option<Vec<Node>>,
     /// The values a library's memo table holds for the mount, as its last accepted view said.
@@ -607,12 +608,13 @@ impl Core {
                 if let Some(image) = images.borrow().get(handle) {
                     return image.clone();
                 }
-                let image = crate::surface::decode(host.app(), bytes(handle)?);
+                let Some(bytes) = bytes(handle) else { return Picture::Pending };
+                let image = crate::surface::decode(host.app(), bytes);
                 images.borrow_mut().insert(*handle, image.clone());
                 image
             }
             Source::Text(text) => crate::surface::decode(host.app(), text.as_bytes()),
-            Source::PartOutput(_) => None,
+            Source::PartOutput(_) => Picture::Pending,
         };
         let has = |handle: ContentRef| bytes(&handle).is_some();
         // A claim has no draw call (P5): a canvas in its tree draws nothing. It has no handler (P2): a box's pointer
@@ -624,10 +626,13 @@ impl Core {
             slot: &slot,
             source: &source,
             content: &has,
+            dropped: &|_| false,
             image: &image,
             full,
             draw: None,
             owner: None,
+            plugin: None,
+            item: false,
         };
         ADOPTING.set(ADOPTING.get() + 1);
         let applied = tree.apply(&env, &self.root, &nodes);

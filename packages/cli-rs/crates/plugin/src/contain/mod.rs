@@ -205,12 +205,25 @@ struct Stats {
     load: Option<Duration>,
     setup: Option<Duration>,
     kinds: Vec<(&'static str, Samples)>,
+    /// The host's own work for its nodes ([`Monitor::host`]), and all of it so far.
+    host: Samples,
+    host_total: Duration,
 }
 
 #[derive(Default)]
 struct Samples {
     recent: VecDeque<Duration>,
     worst: Duration,
+}
+
+impl Samples {
+    fn add(&mut self, took: Duration) {
+        if self.recent.len() == SAMPLES {
+            self.recent.pop_front();
+        }
+        self.recent.push_back(took);
+        self.worst = self.worst.max(took);
+    }
 }
 
 /// The calls a kind keeps for its percentiles.
@@ -274,6 +287,11 @@ impl Monitor {
         *self.clock.borrow_mut() = Rc::new(clock);
         *self.queued.borrow_mut() = Rc::new(|| Duration::ZERO);
         self.injected.set(true);
+    }
+
+    /// The time on the monitor's clock.
+    pub fn now(&self) -> Instant {
+        (self.clock.borrow())()
     }
 
     /// Counts frames with `frame`: the host's painted frames.
@@ -358,6 +376,26 @@ impl Monitor {
         (value, self.account(slot, kind, charged))
     }
 
+    /// Runs `work`, the host's own work for the plugin in `slot`'s nodes (building them, laying out a list's window,
+    /// copying a decoded image in), timed apart from the plugin's calls: it is not in the plugin's frame budget, the
+    /// limits of 4.2 bound it, and a slow plugin's details show it beside its calls (synthesis 4.4, "host time for
+    /// plugin X").
+    pub fn host(&self, slot: Slot, work: &mut dyn FnMut()) {
+        let clock = self.clock.borrow().clone();
+        let start = clock();
+        work();
+        let took = clock().saturating_duration_since(start);
+        let mut plugins = self.plugins.borrow_mut();
+        let stats = &mut plugins[usize::from(slot.0)];
+        stats.host.add(took);
+        stats.host_total += took;
+    }
+
+    /// The host's time for plugin `id`'s newest build so far ([`Monitor::host`]).
+    pub fn host_time(&self, id: &str) -> Duration {
+        self.latest(id, |stats| stats.host_total).unwrap_or_default()
+    }
+
     /// What the budget makes of a call of `kind` that took `took`.
     fn account(&self, slot: Slot, kind: &'static str, took: Duration) -> Timed {
         let limits = self.limits();
@@ -385,11 +423,7 @@ impl Monitor {
                 &mut stats.kinds.last_mut().expect("pushed").1
             }
         };
-        if samples.recent.len() == SAMPLES {
-            samples.recent.pop_front();
-        }
-        samples.recent.push_back(took);
-        samples.worst = samples.worst.max(took);
+        samples.add(took);
         let cold = std::mem::take(&mut stats.cold);
         let overrun = took > limits.overrun && !cold;
         let (slow, opened) = stats.add(frame, took, &limits);
@@ -478,9 +512,12 @@ impl Monitor {
     pub fn report(&self, id: &str) -> Option<String> {
         self.latest(id, |stats| {
             stats.slow.then(|| {
+                // The host's time for its nodes goes beside its own calls (4.4).
                 let kinds: Vec<String> = stats
                     .kinds
                     .iter()
+                    .map(|(kind, samples)| (*kind, samples))
+                    .chain([("host", &stats.host)])
                     .filter(|(_, samples)| !samples.recent.is_empty())
                     .map(|(kind, samples)| {
                         let mut sorted: Vec<Duration> = samples.recent.iter().copied().collect();

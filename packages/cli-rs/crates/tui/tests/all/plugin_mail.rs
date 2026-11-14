@@ -69,9 +69,24 @@ fn open(carrier: Carrier) -> Harness {
     harness
 }
 
+/// Runs the UI thread until everything that waits is handed over: the updates past a frame's budget wait for the
+/// frames after it (Pl), which it paints.
 fn frame(harness: &Harness) {
     harness.app.advance(Duration::from_millis(1));
     harness.app.advance(Duration::from_millis(1));
+    drain(harness);
+}
+
+/// Paints frames until no plugin has updates waiting for one.
+pub(crate) fn drain(harness: &Harness) {
+    for _ in 0..10_000 {
+        if !opencode_plugin::schedule::busy(&harness.app) {
+            return;
+        }
+        harness.app.render();
+        harness.app.advance(Duration::from_millis(1));
+    }
+    panic!("the scheduler never drained");
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

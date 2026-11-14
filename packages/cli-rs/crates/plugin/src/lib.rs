@@ -9,7 +9,9 @@ pub mod canvas;
 pub mod claim;
 pub mod conformance;
 pub mod contain;
+pub mod image;
 pub mod interact;
+pub mod limits;
 mod list;
 pub mod loader;
 pub mod mailbox;
@@ -17,6 +19,7 @@ pub mod node;
 pub mod pipe;
 pub mod reconcile;
 mod route;
+pub mod schedule;
 pub mod slot;
 pub mod surface;
 
@@ -397,6 +400,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
         let proxy = setup.host().app().proxy();
         let mailbox = mailbox::Mailbox::new(setup.id(), Arc::new(activation::Wake::new(Some(proxy))));
         let activation = Activation::new(setup.host(), mailbox.clone());
+        activation.set_monitor(setup.monitor.clone());
         let scope = Rc::new(Scope {
             host: Rc::downgrade(setup.host()),
             id: setup.id().to_owned(),
@@ -1728,6 +1732,9 @@ impl Setup<'_> {
     ) {
         let (owner, activation) = (Rc::downgrade(self.host), owners.activation.clone());
         let plugin: Rc<str> = Rc::from(self.id);
+        // The host's work for the plugin's nodes is timed apart from its calls, as its host time (4.4).
+        let (monitor, slot) = (self.monitor.clone(), self.monitor.slot(&self.artifact()));
+        let host_time: surface::HostTime = Rc::new(move |work| monitor.host(slot, work));
         match surface.at.clone() {
             abi::v2::Place::Route(name) => {
                 let key = name.clone();
@@ -1747,6 +1754,7 @@ impl Setup<'_> {
                         fail.clone(),
                         calls.clone(),
                         input.clone(),
+                        host_time.clone(),
                     );
                     activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
                     if let Some(holder) = mounted.holder() {
@@ -1779,6 +1787,7 @@ impl Setup<'_> {
                             fail.clone(),
                             calls.clone(),
                             input.clone(),
+                            host_time.clone(),
                         );
                         activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
                         if let Some(holder) = mounted.holder() {
@@ -1804,6 +1813,7 @@ impl Setup<'_> {
                         fail.clone(),
                         calls.clone(),
                         input.clone(),
+                        host_time.clone(),
                     );
                     activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
                     if let Some(holder) = mounted.holder() {
@@ -1830,6 +1840,7 @@ impl Setup<'_> {
                         fail.clone(),
                         calls.clone(),
                         input.clone(),
+                        host_time.clone(),
                     );
                     activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
                     if let Some(holder) = mounted.holder() {
