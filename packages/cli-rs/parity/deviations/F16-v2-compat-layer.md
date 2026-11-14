@@ -9,30 +9,43 @@ read once as the component is created; a local module compiles with Solid's comp
 **Rust.** The JS host gives the module the same context and the modules TS gives it (`@opencode/plugin/tui`, Solid,
 `@opentui/solid`, `@opentui/core`), from the compatibility layer (`crates/plugin/src/pipe/compat`). Its JSX renders with
 Solid's universal renderer into plain nodes, which each view reads into a contract 2.0 tree for the host to draw. The
-four published packages P8 runs draw cell for cell as TS draws them (`parity/scenarios/P.8`). What differs:
+four published packages P8 runs draw cell for cell as TS draws them at the checkpoints of `parity/scenarios/P.8`
+(settled pictures, not every state or the first frame after each event). The JS host is off unless
+`OPENCODE_PLUGIN_JS=1`. What differs:
 
 - **Every module compiles as an installed one**, with Bun's JSX transform: a local TSX plugin that relies on Solid's
   compiler for props that follow signals renders them once, as the same plugin installed from npm does in TS. A
   function child, a `ref` and a memo follow their signals as in TS.
 - **Reads are snapshots** the host pushes. A render that read one the host has not pushed yet renders again once it
-  came, at most three times; after that a read that is late shows in a render only if the plugin's JSX follows it.
+  came, at most three times; after that a read that is late shows in a render only if the plugin's JSX follows it. A
+  setup gets the route, `info` and the route's session at once, and a call the route while the plugin does not watch
+  it; other first reads in a handler (tabs, the model, a panel's state) answer before their snapshot came. A plugin
+  watches at most 64 reads; one no live mount holds goes when a new one needs its place, and one the host could not
+  answer rejects its `sync` and is reported once. `data.session.sync` and `message.sync` answer what the host has
+  loaded; they do not load a session the host has not.
 - **An async setup that waits on the host** (a `client` call, a `sync`) hands the plugin to the host at its first such
   wait, with what it registered so far; what it registers after is taken as a reload of its registrations, and a throw
   after fails the plugin, where TS keeps the plugin inactive until setup resolves.
-- **A command a component registers** (`keymap.layer` in a render) goes 250 ms after the component's mount ends, unless
-  a new mount registered it again: the host remounts after a reload in a later message.
-- **Dialogs**: `select`, `confirm`, `prompt` and `alert` are the host's. One the user closes with escape answers
-  `undefined` only when the next dialog opens (the host runs nothing for it); TS answers at once. A select's `search`
-  and `actions` are not mapped. `ui.dialog.show` shows the plugin's JSX in the host's panel dialog, bare (only the
-  dialog's frame, as TS's), in the size and place `ui.dialog.set` gives; a panel's body is a node of ABI 1.x, so a
-  `<scrollbox>` in it is a box that does not scroll, and an `<input>` in it is its text.
+- **A command a component registers** (`keymap.layer` in a render) runs nothing once the component ended, but the
+  host lists it 250 ms longer, unless a new mount registered it again. A registration after setup (such a layer, a
+  store made late) reloads the plugin's registrations: the plugin's open dialogs and session panel close and the route
+  on screen mounts again. A disposed `ui.slot` or `ui.router.register` draws nothing but stays registered until the
+  next reload, so a disposed `replace` still holds its slot. A layer's `enabled`, its `mode` (base unless `global`) and
+  a command's `enabled` are kept; its `priority`, `bindings`, `target` and slash `aliases` are not mapped.
+- **Dialogs**: `select`, `confirm`, `prompt` and `alert` are the host's, each settled once as TS's are (an answer;
+  `undefined` on escape, the backdrop, another plugin's dialog, `clear()` or the plugin's end). A select's `search` and
+  `actions` and a prompt's `value` and `description` are reported, not mapped. `ui.dialog.show` shows the plugin's JSX
+  in the host's panel dialog, bare (only the dialog's frame, as TS's), in the size and place `ui.dialog.set` gives, and
+  a render that throws closes it. A panel's body is a node of ABI 1.x: a `<scrollbox>` in it is a box that does not
+  scroll (the scroll keys say so, once), an `<input>` in it is its text, and its colors take the dialog's surface.
 - **Pointer**: `onMouseDown`, `onMouseUp` and `onClick` on a box or a text run as a click of the node, with an event
-  that has no position. `onMouseOver`, `onMouseOut`, `onMouseScroll` and `onMouseDrag` are not mapped.
+  that has its kind and the left button but no position; a node with both a press and a release handler keeps the
+  press (reported). `onMouseOver`, `onMouseOut`, `onMouseScroll` and `onMouseDrag` are not mapped.
 - **Absolute nodes**: a render of absolute nodes alone takes its mount's box out of the flow to fill the slot's parent,
   as TS's `<Slot>` is a fragment; OpenTUI's Rust layout has no way back, so the box stays absolute if a later render
   of the claim is in the flow.
 - **Not mapped**, each reported once a plugin with a warning toast (`<id>: <feature> is not supported by
-  opencode-native yet`) and doing nothing: `markdown.registerCodeBlockRenderer`, `data.listen`, `data.project`,
+  opencode-native yet`) and doing nothing (a list answers empty): `markdown.registerCodeBlockRenderer`, `data.listen`, `data.project`,
   `data.shell`, `data.session.permission`, `data.session.form`, the
   location's `agent`, `command`, `mcp.resource`, `reference` and `skill` lists, `renderer` members other than
   `requestRender`, `width` and `height`, `useKeyboard`, `usePaste`, `onFocus`, `onBlur`, `useSelectionHandler`,
@@ -41,9 +54,10 @@ four published packages P8 runs draw cell for cell as TS draws them (`parity/sce
   The intrinsics without a contract node (`select`, `tab_select`, `ascii_font`, `diff`, `line_number`, `image`, `video`)
   and `<Portal>` throw as they are created, which the plugin's boundary reports as TS reports a crash in a render
   (`<id> crashed in slot <path>: …`).
-- **`data.session.pending`** lists nothing, quietly, as a session whose inbox is empty: the host's inbox is not a read.
 - **Colors**: the context's `theme` leaves are colors that carry their token, so a node the plugin colors from the
-  theme follows a theme change without a call, where an installed package's node keeps the color it read in TS.
+  theme follows a theme change without a call, where an installed package's node keeps the color it read in TS. The
+  `theme` object has no `hue`, `categorical` or `surface()`, and neither it nor `themeMode` is a signal.
+- **Numbers** a render computes are rounded and clamped to the contract's ranges.
 
 **Reason.** O-123 and O-125 keep plugin UI code native and in-process; O-128 makes TypeScript a compatibility shim on
 the JS host, the second tier: what it cannot read in the frame, or that the contract does not carry, it reports rather
