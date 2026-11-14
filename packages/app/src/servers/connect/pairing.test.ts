@@ -9,6 +9,19 @@ describe("pairing link", () => {
     })
   })
 
+  test("keeps the path prefix of a server mounted under one", () => {
+    expect(pairingLink("https://example.com/opencode/auth/connect/abc")).toEqual({
+      urls: ["https://example.com/opencode"],
+      code: "abc",
+    })
+    expect(pairingLink("https://example.com/team/opencode/auth/connect/abc")).toEqual({
+      urls: ["https://example.com/team/opencode"],
+      code: "abc",
+    })
+    expect(pairingLink("https://example.com/opencode/auth/connect/")).toBeUndefined()
+    expect(pairingLink("https://example.com/opencode/auth/connect/abc/extra")).toBeUndefined()
+  })
+
   test("reads every server address from opencode pair QR codes", () => {
     expect(
       pairingLink(

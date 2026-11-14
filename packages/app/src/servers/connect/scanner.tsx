@@ -64,7 +64,8 @@ export function PairingScanner(props: {
             if (redeemed && "pairing" in redeemed) {
               // A QR code carries {"code","urls"} JSON; the form shows the link for the address that paired instead.
               const code = pairingLink(data)?.code
-              const link = code ? new URL(`/auth/connect/${code}`, redeemed.pairing.url).href : data
+              // Appended rather than resolved, so an address under a path prefix keeps it.
+              const link = code ? `${redeemed.pairing.url.replace(/\/+$/, "")}/auth/connect/${code}` : data
 
               return dispatch({ type: "redeem.succeeded", attempt, link })
             }
