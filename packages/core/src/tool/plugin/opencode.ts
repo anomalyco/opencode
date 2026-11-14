@@ -52,11 +52,12 @@ export const ModelsInput = Schema.Struct({
   provider: Schema.optionalKey(Schema.String).annotate({
     description: "Provider ID or name to filter by. Try your own provider first.",
   }),
-  type: Schema.optionalKey(Schema.Literals(["chat", "image"])).annotate({
+  type: Schema.optionalKey(Schema.Literals(["chat", "image", "video"])).annotate({
     description: [
       'Which kind of model to list. Defaults to "chat".',
       '"chat": a language model (LLM). Powers sessions, agents and subagents, and can call tools.',
       '"image": generates or edits images from a prompt. It can\'t chat or call tools.',
+      '"video": generates videos from a prompt. It can\'t chat or call tools.',
     ].join("\n"),
   }),
   all: Schema.optionalKey(Schema.Boolean).annotate({
@@ -227,9 +228,7 @@ export const Plugin = {
                 output: { directory: target.absolute, removed: true },
                 content: `Removed worktree ${target.absolute}.`,
               }
-            }).pipe(
-              Effect.mapError(toolFailure(`Unable to remove worktree ${input.directory}`)),
-            ),
+            }).pipe(Effect.mapError(toolFailure(`Unable to remove worktree ${input.directory}`))),
         })
         draft.add({
           name: "models",

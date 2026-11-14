@@ -11,6 +11,9 @@ import { Job } from "../../job.js"
 import { Session } from "../../session.js"
 import { Shell } from "../../shell.js"
 import { ShellTool } from "../../tool/plugin/shell.js"
+import { VideoGenerateTool } from "../../tool/plugin/video-generate.js"
+import { Environment } from "../../environment/index.js"
+import { Generate } from "../../generate.js"
 import { SessionEvent } from "../event.js"
 import { SessionExecution } from "../execution.js"
 import { SessionHistory } from "../history.js"
@@ -138,6 +141,21 @@ export const layer = (options?: Options) =>
             }),
           }
         }
+        if (recovery.kind === "video") {
+          const body =
+            background.status === "running"
+              ? `Video request for ${recovery.path} was lost because the server restarted.`
+              : state === "completed"
+                ? (background.output ?? `Video request finished. Saved video: ${recovery.path} (${recovery.model}).`)
+                : state === "error"
+                  ? (background.error ?? `Video request failed for ${recovery.path}.`)
+                  : `Video request for ${recovery.path} was cancelled.`
+          return {
+            description: "Video generation",
+            text: VideoGenerateTool.notice({ id: background.id, state, body }),
+            metadata: { source: VideoGenerateTool.name, jobID: background.id, state, path: recovery.path },
+          }
+        }
         const body =
           background.status === "running"
             ? `Image request for ${recovery.path} was cancelled because the server restarted.`
@@ -197,6 +215,38 @@ export const layer = (options?: Options) =>
           )
         if (!delivered) return
         yield* jobs.completeBackground(background.notificationID)
+      })
+
+      // A video job the previous server was waiting on keeps running at the provider, so it is read again from its
+      // generation ID in the session's Location. Without that Location it is reported as lost.
+      const recoverVideoJob = Effect.fnUntraced(function* (
+        background: Job.Background,
+        recovery: Extract<Job.Recovery, { kind: "video" }>,
+        notices: Notices,
+      ) {
+        if (background.status !== "running") return yield* recoverToolJob(background, recovery)
+        const session = yield* store.get(recovery.sessionID)
+        const services = session
+          ? yield* Effect.all([Effect.serviceOption(Generate.Service), Effect.serviceOption(Environment.Service)]).pipe(
+              instances.provide(session),
+              Effect.catchTag("FileSystem.DirectoryNotFoundError", () => Effect.succeed(undefined)),
+            )
+          : undefined
+        if (!services || Option.isNone(services[0]) || Option.isNone(services[1]))
+          return yield* recoverToolJob(background, recovery)
+        yield* VideoGenerateTool.track({
+          jobs,
+          sessions: notices,
+          generate: services[0].value,
+          environment: services[1].value,
+          scope,
+          id: background.id,
+          notificationID: background.notificationID,
+          sessionID: recovery.sessionID,
+          model: recovery.model,
+          generationID: recovery.generationID,
+          path: recovery.path,
+        })
       })
 
       // The Shell of a session's Location, booted so it takes back the commands the daemon still runs for it.
@@ -424,6 +474,7 @@ export const layer = (options?: Options) =>
               const recovery = background.recovery
               if (recovery.kind === "subagent" || !(yield* recoverable(background))) return
               if (recovery.kind === "shell") return yield* recoverShellJob(background, recovery, notices, reattached)
+              if (recovery.kind === "video") return yield* recoverVideoJob(background, recovery, notices)
               yield* recoverToolJob(background, recovery)
             }),
             { discard: true },

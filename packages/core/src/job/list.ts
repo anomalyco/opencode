@@ -58,7 +58,7 @@ function toItem(input: {
     }
   }
   return {
-    kind: "image",
+    kind: recovery.kind,
     id: input.id,
     sessionID: recovery.sessionID,
     status: input.status,

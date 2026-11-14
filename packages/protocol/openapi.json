@@ -13389,7 +13389,7 @@
                   "$ref": "#/components/schemas/Job.Kind"
                 }
               ],
-              "description": "Filter by background job kind (shell, subagent, or image)."
+              "description": "Filter by background job kind (shell, subagent, image, or video)."
             },
             "required": false
           },
@@ -16669,6 +16669,9 @@
                 "type": "boolean"
               },
               "artifacts": {
+                "type": "boolean"
+              },
+              "video_generate": {
                 "type": "boolean"
               },
               "console_watches": {
@@ -20004,12 +20007,15 @@
           },
           {
             "$ref": "#/components/schemas/Job.Image"
+          },
+          {
+            "$ref": "#/components/schemas/Job.Video"
           }
         ]
       },
       "Job.Kind": {
         "type": "string",
-        "enum": ["shell", "subagent", "image"]
+        "enum": ["shell", "subagent", "image", "video"]
       },
       "Job.Shell": {
         "type": "object",
@@ -20094,6 +20100,38 @@
           }
         },
         "required": ["started"],
+        "additionalProperties": false
+      },
+      "Job.Video": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["video"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Job.Status"
+          },
+          "title": {
+            "type": "string"
+          },
+          "time": {
+            "$ref": "#/components/schemas/Job.Time"
+          },
+          "path": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "id", "sessionID", "status", "time", "path", "model"],
         "additionalProperties": false
       },
       "Location.PublicInfo": {
@@ -20803,7 +20841,7 @@
         "anyOf": [
           {
             "type": "string",
-            "enum": ["chat", "decision", "image"]
+            "enum": ["chat", "decision", "image", "video"]
           },
           {
             "type": "string"

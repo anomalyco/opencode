@@ -78,12 +78,12 @@ export const Plugin = {
         (model) => model.providerID === ref.providerID && model.id === ref.id,
       )
       if (model === undefined) {
-        const other = (yield* models.available(["image", "decision"])).find(
+        const other = (yield* models.available(["image", "video", "decision"])).find(
           (model) => model.providerID === ref.providerID && model.id === ref.id,
         )
         return yield* new ToolFailure({
           message: other
-            ? `Model "${ref.providerID}/${ref.id}" is ${other.type === "image" ? "an image" : "a decision"} model; subagents need a chat model. Use the models tool to find one.`
+            ? `Model "${ref.providerID}/${ref.id}" is ${other.type === "image" ? "an image" : other.type === "video" ? "a video" : "a decision"} model; subagents need a chat model. Use the models tool to find one.`
             : `Model "${ref.providerID}/${ref.id}" is not available. Use the models tool to see what is available.`,
         })
       }

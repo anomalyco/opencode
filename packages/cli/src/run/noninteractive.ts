@@ -277,8 +277,9 @@ export async function runNonInteractivePrompt(input: Input) {
       const ended = state.ended.promise
       await input.client.experimental.session.wait({ sessionID: input.sessionID })
       const pending = await background()
-      // Image jobs can't be cancelled through the API, so waiting on them would only hold the exit.
-      if (!pending || (pending.length > 0 && pending.every((job) => job.kind === "image"))) return
+      // Image and video jobs can't be cancelled through the API, so waiting on them would only hold the exit.
+      if (!pending || (pending.length > 0 && pending.every((job) => job.kind === "image" || job.kind === "video")))
+        return
       await ended
     }
   }
