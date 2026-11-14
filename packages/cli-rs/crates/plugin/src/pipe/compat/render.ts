@@ -300,6 +300,7 @@ function node(at: VNode, reading: Reading): Json {
     case "scrollbox":
       return compact({
         type: "scroll",
+        id: idOf(at),
         follow: props.stickyScroll ? true : undefined,
         layout,
         children: nodes(contentOf(at), reading),
@@ -318,6 +319,7 @@ function node(at: VNode, reading: Reading): Json {
       reading.dropped.add(`<${at.tag}> events`)
       return compact({
         type: "input",
+        id: idOf(at),
         value: String(props.value ?? props.initialValue ?? ""),
         placeholder: props.placeholder,
         lines: at.tag === "textarea" ? Math.max(1, Number(props.height) || 3) : undefined,
@@ -326,6 +328,16 @@ function node(at: VNode, reading: Reading): Json {
     default:
       return boxOf(at, layout, click, reading)
   }
+}
+
+// A node whose state the host keeps (a scroll's offset, a field's text) needs an id, stable while the node lives: the
+// plugin's own, or one of the layer's.
+const ids = new WeakMap<VNode, string>()
+let lastId = 0
+function idOf(at: VNode) {
+  if (typeof at.props.id === "string" && at.props.id) return at.props.id
+  if (!ids.has(at)) ids.set(at, `opentui-${at.tag}-${++lastId}`)
+  return ids.get(at)!
 }
 
 // A scroll box's children sit in its content box, which a plugin may not wrap.

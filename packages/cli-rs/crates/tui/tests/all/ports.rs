@@ -109,7 +109,7 @@ fn open_in(
     handler: impl Fn(&Seen) -> Option<Reply> + Send + Sync + 'static,
     stored: bool,
 ) -> Port {
-    open_as(Carrier::Port(name), width, handler, stored, None).unwrap()
+    open_as(&[Carrier::Port(name)], width, handler, stored, None).unwrap()
 }
 
 /// What a row loads: a port's library, or the published package of the plugin it ports, unmodified, on the JS host
@@ -137,28 +137,30 @@ pub(crate) fn unpack(name: &str, into: &Path) {
     assert!(status.success(), "cannot unpack {}", tarball.display());
 }
 
-/// The TUI on `first`, or on session `ses_p`, with `carrier`'s plugin, over `handler`; `None` without Bun for a
-/// package.
+/// The TUI on `first`, or on session `ses_p`, with each of `carriers`' plugins, over `handler`; `None` without Bun for
+/// a package.
 fn open_as(
-    carrier: Carrier<'_>,
+    carriers: &[Carrier<'_>],
     width: u16,
     handler: impl Fn(&Seen) -> Option<Reply> + Send + Sync + 'static,
     stored: bool,
     first: Option<Route>,
 ) -> Option<Port> {
-    let scripts = match carrier {
-        Carrier::Port(_) => None,
-        Carrier::Npm(_) => Some(crate::plugin_pipe::config()?),
+    let scripts = match carriers.iter().any(|carrier| matches!(carrier, Carrier::Npm(_))) {
+        true => Some(crate::plugin_pipe::config()?),
+        false => None,
     };
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
-    match carrier {
-        Carrier::Port(name) => {
-            let plugin = config.join("plugins").join(name);
-            std::fs::create_dir_all(&plugin).unwrap();
-            std::fs::write(plugin.join(entry_file()), build(name)).unwrap();
+    for carrier in carriers {
+        match *carrier {
+            Carrier::Port(name) => {
+                let plugin = config.join("plugins").join(name);
+                std::fs::create_dir_all(&plugin).unwrap();
+                std::fs::write(plugin.join(entry_file()), build(name)).unwrap();
+            }
+            Carrier::Npm(name) => unpack(name, &config.join("plugins").join(name.replace('/', "__"))),
         }
-        Carrier::Npm(name) => unpack(name, &config.join("plugins").join(name.replace('/', "__"))),
     }
     let server = Server {
         events: Memory::new(Vec::new()),
@@ -359,7 +361,7 @@ fn subagents_lists_ten_children_newest_first_and_opens_them() {
 #[test]
 fn the_published_subagents_sidebar_lists_and_picks_as_its_port_does() {
     let rows = |carrier| {
-        let h = open_as(carrier, 170, subagents, false, None)?;
+        let h = open_as(&[carrier], 170, subagents, false, None)?;
         h.wait_for("+2 more");
         h.wait("Child 03 runs", || {
             h.sidebar(120).iter().any(|row| row.starts_with("• Child 03") && row.ends_with(" running"))
@@ -454,7 +456,7 @@ fn force_input_interrupts_then_submits_and_hints_the_keys() {
 // the order it made them. Its hint is a static render of the package's JSX, as TS draws it from `node_modules`.
 #[test]
 fn the_published_force_input_sends_what_its_port_sends() {
-    let Some(h) = open_as(Carrier::Npm("@mynameistito/opencode-force-input"), 120, running, false, None) else {
+    let Some(h) = open_as(&[Carrier::Npm("@mynameistito/opencode-force-input")], 120, running, false, None) else {
         return;
     };
     h.wait("the hint", || h.app.text().contains("⏎ "));
@@ -680,7 +682,7 @@ fn the_published_session_usage_totals_as_its_port_does() {
 
 fn totals(carrier: Carrier<'_>) {
     let grown = Arc::new(Mutex::new(false));
-    let Some(h) = open_as(carrier, 170, usage(grown.clone(), false), false, None) else { return };
+    let Some(h) = open_as(&[carrier], 170, usage(grown.clone(), false), false, None) else { return };
     h.wait_for("≈ $2.50 session total");
     let pages = h.sent("/api/session/ses_p/message");
     assert!(pages.contains(&"GET /api/session/ses_p/message?limit=100&cursor=page100".to_owned()), "{pages:#?}");
@@ -821,4 +823,78 @@ fn a_select_dialog_picks_the_same_through_the_c_abi_loopback() {
     let direct = picked(false);
     assert!(direct.1.contains("picked c"), "{}", direct.1);
     assert!(picked(true) == direct, "the loopback draws or picks otherwise");
+}
+
+// --- P8's measure
+
+/// Frame cost and the JS host's memory with the three published packages loaded unmodified (P8), against the same
+/// screen without them, over [`usage`]'s session: the median UI-thread time of a frame that draws (each after a 16 ms
+/// tick), the carrier's own time in them, and the cost of a revision a `session.usage.updated` event brings to every
+/// mount. Not a gate: run it with `--ignored --nocapture`, in release.
+#[test]
+#[ignore]
+fn measure_the_three_npm_plugins() {
+    let packages = [
+        Carrier::Npm("opencode-subagents-sidebar"),
+        Carrier::Npm("@mynameistito/opencode-force-input"),
+        Carrier::Npm("opencode-session-usage"),
+    ];
+    let frame = |h: &Port| {
+        let mut times: Vec<Duration> = (0..200)
+            .map(|_| {
+                h.app.advance(Duration::from_millis(16));
+                let begun = std::time::Instant::now();
+                h.app.render();
+                begun.elapsed()
+            })
+            .collect();
+        times.sort();
+        (times[times.len() / 2], times[times.len() * 99 / 100])
+    };
+    let bare = open_as(&[], 170, usage(Arc::new(Mutex::new(false)), false), false, None).unwrap();
+    bare.wait_for("Tree");
+    let without = frame(&bare);
+    let grown = Arc::new(Mutex::new(false));
+    let Some(h) = open_as(&packages, 170, usage(grown.clone(), false), false, None) else { return };
+    h.wait_for("≈ $2.50 session total");
+    h.wait_for("• Child");
+    let scripts = h.tui.plugins.scripts.borrow().clone().unwrap();
+    crate::plugin_pipe::settle(&h, &scripts);
+    let resident = scripts.resident().unwrap_or_default();
+    let before = opencode_plugin::pipe::crossed();
+    let with = frame(&h);
+    let idle = opencode_plugin::pipe::crossed();
+    let updates = 20;
+    let begun = std::time::Instant::now();
+    // Each event changes the child's history, so the total the panel shows changes with it: a revision of its mount.
+    for index in 0..updates {
+        let total = if index % 2 == 0 { "≈ $3.50" } else { "≈ $2.50" };
+        *grown.lock().unwrap() = index % 2 == 0;
+        h.events.emit(&json!({
+            "id": format!("evt_usage_{index}"), "created": 3 + index, "type": "session.usage.updated",
+            "location": { "directory": DIRECTORY },
+            "data": { "sessionID": "ses_c", "cost": 0, "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } } },
+        }));
+        h.wait_for(total);
+        crate::plugin_pipe::settle(&h, &scripts);
+    }
+    let updated = opencode_plugin::pipe::crossed();
+    eprintln!(
+        "P8 measure: JS host resident {} KiB with the three packages\n\
+         frame (median, p99) without them {:?} / {:?}, with them {:?} / {:?}; carrier time in 200 idle frames {:?}, \
+         trees {}\n\
+         {updates} usage events: {:?} wall each to settle, carrier time {:?} each, {} trees, {} bytes down, {} up",
+        resident >> 10,
+        without.0,
+        without.1,
+        with.0,
+        with.1,
+        idle.host - before.host,
+        idle.trees - before.trees,
+        begun.elapsed() / updates,
+        (updated.host - idle.host) / updates,
+        updated.trees - idle.trees,
+        updated.sent_bytes - idle.sent_bytes,
+        updated.received_bytes - idle.received_bytes,
+    );
 }

@@ -56,6 +56,19 @@ export default Plugin.define({
           },
         },
         {
+          id: "v2probe.ask",
+          run: async () => {
+            log({ confirmed: await context.ui.dialog.confirm({ title: "Go on?", message: "It asks." }) })
+            log({ prompted: await context.ui.dialog.prompt({ title: "Name it" }) })
+            await context.ui.dialog.alert({ title: "Done", message: "It told." })
+            log({ alerted: true })
+          },
+        },
+        {
+          id: "v2probe.page",
+          run: () => context.ui.router.navigate({ type: "plugin", name: "page", data: { n: 3 } }),
+        },
+        {
           id: "v2probe.unmapped",
           run: () => {
             context.ui.dialog.show(() => null)
@@ -65,6 +78,20 @@ export default Plugin.define({
       ],
     }))
     context.data.on("session.created", (event) => log({ event: event.data.sessionID }))
+    // A page of its own: a bordered box with a title, and a scroll of twenty lines.
+    context.ui.router.register({
+      name: "page",
+      render: (input) => (
+        <box border borderStyle="rounded" title="Page" padding={1} flexGrow={1}>
+          <text>{`data n=${input.data?.n}`}</text>
+          <scrollbox height={5}>
+            {Array.from({ length: 20 }, (_, index) => (
+              <text>{`line ${index}`}</text>
+            ))}
+          </scrollbox>
+        </box>
+      ),
+    })
     context.ui.slot({
       append: "home.footer",
       render: () => (
