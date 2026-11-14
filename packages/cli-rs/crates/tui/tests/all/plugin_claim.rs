@@ -291,7 +291,7 @@ fn messages() -> Value {
         {
             "id": "msg_2", "type": "assistant", "agent": "build",
             "model": { "providerID": "provider", "id": "model" },
-            "time": { "created": 1500 }, "content": [],
+            "time": { "created": 1500 }, "content": CONTENT.with_borrow(Clone::clone),
         },
         { "id": "msg_1", "type": "user", "text": "Stream it", "time": { "created": 1000 } },
     ])
@@ -383,6 +383,14 @@ impl World {
                     );
                 }
             }
+            Command::Burst(index) => {
+                if let Call::Streaming(text) = &mut expected.calls[index] {
+                    for token in &TOKENS[..2] {
+                        text.push_str(token);
+                        self.emit("session.tool.input.delta", support::merge(tool(index), json!({ "delta": token })));
+                    }
+                }
+            }
             Command::Call(index) => {
                 if let Call::Streaming(text) = expected.calls[index].clone() {
                     self.emit(
@@ -445,6 +453,8 @@ impl World {
             Command::Wheel(up) => {
                 let kind = if up { MouseEventKind::ScrollUp } else { MouseEventKind::ScrollDown };
                 self.harness.app.mouse(kind, WIDTH / 2, 10);
+                // The pointer leaves: a row a remount builds again under it is not hovered until the pointer moves.
+                self.harness.app.hover(WIDTH + 1, HEIGHT + 1);
             }
             Command::Permission(slot) => match expected.asked.take() {
                 Some(id) => self.reply(&id),
@@ -633,6 +643,8 @@ fn stream_whole(world: &World, expected: &Expected) -> Result<usize, (&'static s
 pub enum Command {
     Start(usize),
     Delta(usize, usize),
+    /// Two deltas of a slot's input in one frame: the second is viewed at the paint.
+    Burst(usize),
     Call(usize),
     Progress(usize, u8),
     Succeed(usize),
@@ -798,7 +810,8 @@ impl Model for ClaimModel {
                 let slot = rng.below(SLOTS.len());
                 match rng.below(110) {
                     0..12 => Command::Start(slot),
-                    12..34 => Command::Delta(slot, rng.below(TOKENS.len())),
+                    12..30 => Command::Delta(slot, rng.below(TOKENS.len())),
+                    30..34 => Command::Burst(slot),
                     34..44 => Command::Call(slot),
                     44..54 => Command::Progress(slot, rng.below(5) as u8),
                     54..62 => Command::Succeed(slot),
@@ -1405,6 +1418,8 @@ fn each_claim_draws_with_its_own_view_and_releases_hold() {
 thread_local! {
     /// What the views of the rows below drew, in order.
     static DREW: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    /// What the session's assistant message holds as the TUI opens it.
+    static CONTENT: RefCell<Vec<Value>> = const { RefCell::new(Vec::new()) };
 }
 
 /// A part's id, its state, whether a permission request waits on it, and the palette's `text.base` when the claim
@@ -2043,6 +2058,18 @@ fn a_part_is_viewed_again_at_a_new_width_and_gets_no_height() {
         let screen = world.frame().text();
         assert!(screen.contains("narrow call_1 at"), "{carrier:?}: the call was not asked again:\n{screen}");
         assert!(screen.contains("narrow fence at"), "{carrier:?}: the fence was not asked again:\n{screen}");
+        // Wide again, the claim declines both, which shows the host's rows at that paint.
+        world.harness.app.resize(WIDTH, HEIGHT);
+        for _ in 0..3 {
+            world.settle();
+        }
+        let screen = world.frame().text();
+        assert!(!screen.contains("narrow call_1") && !screen.contains("narrow fence"), "{carrier:?}:\n{screen}");
+        assert!(screen.contains("fits"), "{carrier:?}: no host code:\n{screen}");
+        world.harness.app.resize(WIDTH - 20, HEIGHT);
+        for _ in 0..3 {
+            world.settle();
+        }
         world.harness.app.resize(WIDTH - 20, HEIGHT - 9);
         world.settle();
         assert!(INPUTS.with_borrow(|inputs| inputs.iter().all(|(_, height)| *height == 0)), "{carrier:?}");
@@ -2359,5 +2386,36 @@ fn a_fence_is_viewed_first_at_its_own_width() {
         let width = mounted().first().map(|shown| shown.rect.width as u16);
         let inputs = INPUTS.with_borrow(Vec::clone);
         assert_eq!(inputs.iter().map(|(width, _)| Some(*width)).collect::<Vec<_>>(), [width], "{carrier:?}");
+    }
+}
+
+/// Claims `given` calls: gives the host content and releases it in the same view, then draws a line.
+fn plugin_given(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::tool("given", |cx, part| {
+        let handle = cx.content(b"given and gone".to_vec());
+        cx.release(handle);
+        Some(v2::Node::text(vec![abi::Span::new(format!("given {}", key(part)))]))
+    }));
+    Ok(())
+}
+
+// Expected (4.2; review finding carbon-9: CM7, CM10): content a view gives and releases in the same view is not the
+// part's, and the ledger books none of it; a call in a state this client does not know is the host's to show, and the
+// claim is not asked.
+#[test]
+fn a_claim_keeps_no_content_it_released_and_is_not_asked_of_an_unknown_state() {
+    for carrier in CARRIERS {
+        CONTENT.set(vec![json!({
+            "type": "tool", "id": "call_9", "name": "given", "time": { "created": 1600 },
+            "state": { "status": "paused", "input": {} },
+        })]);
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.given", setup: plugin_given })]);
+        CONTENT.set(Vec::new());
+        assert!(!world.frame().text().contains("given call_9"), "{carrier:?}:\n{}", world.frame().text());
+        assert!(mounted().iter().all(|shown| !shown.shows), "{carrier:?}: {:?}", mounted());
+        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "given" }));
+        world.settle();
+        world.harness.wait_for("given call_1");
+        assert_eq!((ledger().content, ledger().content_bytes), (0, 0), "{carrier:?}: {:?}", ledger());
     }
 }

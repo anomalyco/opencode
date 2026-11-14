@@ -41,6 +41,16 @@ whether the message streams and the fence closed. The host's own row is the fall
   text trimmed, as TS does, so a closing line at the end of the text so far is a pending line that may still change,
   until more text arrives or the message completes.
 
+Where the two differ beyond that:
+
+- TS throws when a plugin registers a renderer for a language that resolves to no filetype, or registers one language
+  twice (`plugin/api.tsx`). Rust takes both: a claim of an empty name matches nothing, and within one plugin, as across
+  plugins, the claim made last wins.
+- TS shows a thought as Markdown source (`<code filetype="markdown">`), so no renderer runs in it. Rust draws thoughts
+  as Markdown with the plugins' fences, so a fence claim draws in an open thought too.
+- A claimed call sits in the transcript's groups as the host's row does (E.8): in a folded group it is not mounted and
+  its view does not run; a call that waits on a permission shows below its folded group, drawn by the claim.
+
 A TS plugin's code-block renderer does not run in the Rust client (`F16-typescript-plugins-skipped`), so no plugin
 draws the same fence in both clients; `parity/scenarios/Pr/fence.app.ts` compares a TS renderer with its Rust twin, a
 claim.

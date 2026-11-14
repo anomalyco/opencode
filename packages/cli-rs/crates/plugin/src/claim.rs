@@ -238,10 +238,6 @@ impl ToolClaims {
         })?;
         Some(ToolClaim(claim.clone()))
     }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
 }
 
 /// A claim of one tool's calls.
@@ -753,9 +749,9 @@ pub(crate) fn fence(claim: Rc<Registered>) -> crate::CodeBlockRender {
                     look: RefCell::new((theme.clone(), block.conceal)),
                     code: RefCell::default(),
                 });
-                let (held, forget) = (fence.clone(), Forget { fences: Rc::downgrade(&fences), id: widget.id() });
+                let held = fence.clone();
                 widget.on_focus(move |_, _| {
-                    let _ = (&held, &forget);
+                    let _ = &held;
                 });
                 // A view gets the block's width; one the claim declined is asked again at another.
                 let weak = Rc::downgrade(&fence);
@@ -773,7 +769,11 @@ pub(crate) fn fence(claim: Rc<Registered>) -> crate::CodeBlockRender {
                         fence.place();
                     }
                 })));
-                fences.borrow_mut().insert(widget.id(), Rc::downgrade(&fence));
+                // The fences whose widgets Markdown freed go as another comes.
+                let mut fences = fences.borrow_mut();
+                fences.retain(|_, fence| fence.strong_count() > 0);
+                fences.insert(widget.id(), Rc::downgrade(&fence));
+                drop(fences);
                 (widget.as_any(), fence)
             }
         };
@@ -840,22 +840,6 @@ impl Fence {
                 self.slot.add(&markdown);
                 *code = Some(Code { markdown, source, look });
             }
-        }
-    }
-}
-
-/// Forgets a fence once the widget that holds it is freed.
-struct Forget {
-    fences: Weak<RefCell<HashMap<u32, Weak<Fence>>>>,
-    id: u32,
-}
-
-impl Drop for Forget {
-    fn drop(&mut self) {
-        if let Some(fences) = self.fences.upgrade()
-            && let Ok(mut fences) = fences.try_borrow_mut()
-        {
-            fences.remove(&self.id);
         }
     }
 }
