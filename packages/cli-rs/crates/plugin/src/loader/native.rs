@@ -866,13 +866,11 @@ impl Guest {
         apply(&self.host, self.id.clone(), Rc::downgrade(self), Some(self.generation), effects);
     }
 
-    /// Calls `send` unless the instance is destroyed, its activation ended or it failed, as a call that panicked or
-    /// overran after the one that asked for it fails it: a fetch or a program in the foreground. Its reply goes to the
-    /// instance as `request` on the effect queue, unless the instance is destroyed by then.
+    /// Calls `send` unless the instance is destroyed or its activation ended, as a call that panicked after the one
+    /// that asked for it ends it: a fetch or a program in the foreground. Its reply goes to the instance as `request` on
+    /// the effect queue, unless the instance is destroyed by then.
     fn send(guest: &Weak<Self>, host: &dyn Host, request: abi::RequestId, send: impl FnOnce(&dyn Host, crate::Reply)) {
-        let live = guest.upgrade().filter(|guest| {
-            guest.instance.borrow().is_some() && !guest.activation.disposed() && guest.failure.borrow().is_none()
-        });
+        let live = guest.upgrade().filter(|guest| guest.instance.borrow().is_some() && !guest.activation.disposed());
         let Some(live) = live else { return };
         let (guest, owner) = (guest.clone(), live.host.clone());
         send(
