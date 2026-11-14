@@ -488,13 +488,16 @@ fn a_claim_hears_of_tabs_keymap_and_theme_changes() {
         let file = || walk(root.path()).into_iter().find(|path| path.ends_with("tabs.json"));
         let written = h.app.wait_until(WAIT, || file().is_some_and(|file| read(&file).to_string().contains("ses_b")));
         assert!(written, "loopback {loopback}");
-        let mut tabs = read(&file().unwrap());
-        reverse_tabs(&mut tabs);
-        std::fs::write(file().unwrap(), tabs.to_string()).unwrap();
+        // Under the storage lock, as another client writes, so a write of the TUI's in flight cannot undo it.
+        h.tui.storage().unwrap().update("tabs", &json!({}), reverse_tabs).unwrap();
         let ids = || h.tui.tabs.tabs(&h.tui).into_iter().map(|tab| tab.session_id).collect::<Vec<_>>();
         assert!(h.app.wait_until(WAIT, || ids() == ["ses_b", "ses_a"]), "{:?}", ids());
         let first = h.app.render().text();
         assert!(first.contains("[ses_b,ses_a]"), "loopback {loopback}:\n{first}");
+        // The TUI's own writes from before, landing after, keep it.
+        h.tui.tabs.flush();
+        let after = h.app.render().text();
+        assert!(after.contains("[ses_b,ses_a]"), "loopback {loopback}: {:?}\n{after}", ids());
 
         let keys = |screen: &str| {
             screen.split(" a:").nth(1).and_then(|rest| rest.split_whitespace().next()).map(str::to_owned)

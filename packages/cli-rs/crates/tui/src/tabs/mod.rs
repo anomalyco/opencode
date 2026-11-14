@@ -90,7 +90,7 @@ type Write = Arc<dyn Fn(&mut Persisted) + Send + Sync>;
 #[derive(Default)]
 pub struct Tabs {
     file: RefCell<Persisted>,
-    /// The latest write; a write's result replaces the memory copy only if no newer write was sent.
+    /// The revision of the latest write.
     writes: Cell<u64>,
     /// Writes not in `tabs.json` yet, in the order they were made, with their revisions.
     pending: Arc<Mutex<Vec<(u64, Write)>>>,
@@ -193,6 +193,13 @@ impl Tabs {
     pub fn persisted(&self) -> Persisted {
         self.file.borrow().clone()
     }
+
+    /// Waits until every write queued so far is in `tabs.json`, and its reload is queued.
+    pub fn flush(&self) {
+        if let Some(writer) = self.writer.get() {
+            writer.flush();
+        }
+    }
 }
 
 /// Loads `tabs.json`, registers the tab commands, and follows the storage directory.
@@ -207,27 +214,17 @@ pub fn install(tui: &Rc<Tui>) {
         });
         tui.app.on_message(bind!(tui, |tui, _, _: &Reload| {
             if let Some(storage) = tui.storage() {
-                let mut file = load(&storage);
-                // Writes still waiting on the lock land over this file, so the memory copy keeps them.
-                if let Ok(pending) = tui.tabs.pending.lock() {
-                    pending.iter().for_each(|(_, write)| write(&mut file));
-                }
-                if *tui.tabs.file.borrow() != file {
-                    *tui.tabs.file.borrow_mut() = file;
-                    changed(&tui);
-                }
+                reload(&tui, &storage);
                 crate::frame::reload(&tui, &storage);
                 crate::plugins::host::reload_storage(&tui);
             }
         }));
+        tui.app.on_message(bind!(tui, |tui, _, _: &Written| {
+            if let Some(storage) = tui.storage() {
+                reload(&tui, &storage);
+            }
+        }));
     }
-    let weak = tui.weak();
-    tui.app.on_message(bind!(weak, |tui, _, Written(revision, file)| {
-        if *revision == tui.tabs.writes.get() && *tui.tabs.file.borrow() != *file {
-            *tui.tabs.file.borrow_mut() = file.clone();
-            changed(&tui);
-        }
-    }));
     // Terminal focus reports set the focus. TS also counts `useKeyboard`: the keymap consumes shortcuts before
     // it (`E.12/tab-strip` posts no `session.view` after them), but typed text reaches it (`H.5/permission-reply`
     // posts `session.view` without a focus report).
@@ -248,7 +245,7 @@ pub fn install(tui: &Rc<Tui>) {
 }
 
 struct Reload;
-struct Written(u64, Persisted);
+struct Written;
 
 fn load(storage: &Storage) -> Persisted {
     storage
@@ -256,6 +253,20 @@ fn load(storage: &Storage) -> Persisted {
         .ok()
         .and_then(|value| serde_json::from_value(value).ok())
         .unwrap_or_default()
+}
+
+/// Takes `tabs.json` as it is now. Not a write's own result: another client's write may land after it, and its
+/// reload may arrive first.
+fn reload(tui: &Tui, storage: &Storage) {
+    let mut file = load(storage);
+    // Writes still waiting on the lock land over this file, so the memory copy keeps them.
+    if let Ok(pending) = tui.tabs.pending.lock() {
+        pending.iter().for_each(|(_, write)| write(&mut file));
+    }
+    if *tui.tabs.file.borrow() != file {
+        *tui.tabs.file.borrow_mut() = file;
+        changed(tui);
+    }
 }
 
 fn install_commands(tui: &Rc<Tui>) {
@@ -677,8 +688,8 @@ fn cycle(tui: &Tui, forward: bool, unread: bool) {
 }
 
 /// Applies `mutation` to the scope in memory now, and to `tabs.json` under the storage lock on one worker
-/// thread, so the writes land in the order they were made. The written file then replaces the memory copy,
-/// unless a newer write was sent meanwhile.
+/// thread, so the writes land in the order they were made. Then the memory copy reloads the file, with the writes
+/// not in it yet replayed.
 ///
 /// Each job writes every pending mutation at once. The queue is held only to copy them: a job waiting on
 /// another client's lock must not block the UI thread that queues the next one. They leave the queue once
@@ -722,10 +733,7 @@ fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
             pending.retain(|(written, _)| *written > revision);
         }
         match result {
-            Ok(value) => {
-                let file = serde_json::from_value(value).unwrap_or_default();
-                let _ = proxy.send(Written(revision, file));
-            }
+            Ok(_) => drop(proxy.send(Written)),
             // A failed write loses only the tab layout, but silence would hide tabs resetting every launch.
             Err(error) => log::error!("Failed to persist session tabs: {error}"),
         }
