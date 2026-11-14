@@ -17,8 +17,9 @@
 //! already: then the newest content waits for the next paint, and the last accepted tree stays until then. So a part
 //! gets at most one view a frame while it streams.
 //!
-//! A theme change restyles a tool call's tree in place with no call, unless the claim reads the palette. Markdown
-//! builds a claimed fence again in the new theme, so a fence is a new mount and gets a view.
+//! A theme change restyles a tool call's tree in place with no call, unless the claim reads the palette: then it is
+//! viewed again, also where it declined the revision. Markdown builds a claimed fence again in the new theme, so a
+//! fence is a new mount and gets a view.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -242,7 +243,8 @@ impl Mount {
         self.0.show(part)
     }
 
-    /// Takes the page theme in place: the last tree again in it, with no call, unless the claim reads the palette.
+    /// Takes the page theme in place: the last tree again in it, with no call, unless the claim reads the palette. The
+    /// owner asks [`Self::show`] next: which row shows may have changed.
     pub fn restyle(&self) {
         self.0.restyle();
     }
@@ -433,15 +435,17 @@ impl Core {
         false
     }
 
-    /// Takes the theme without a call, unless the claim reads the palette.
+    /// Takes the theme without a call, unless the claim reads the palette: then the new palette is a new input, and
+    /// a revision it declined is asked again too.
     fn restyle(&self) {
-        if !self.shows.get() || self.fallen.get() {
+        let palette = self.claim.entry.palette;
+        if self.fallen.get() || !(self.shows.get() || palette) || self.part.borrow().is_none() {
             return;
         }
         let Some(host) = self.claim.owner.upgrade() else { return };
         let last = self.state.borrow().last.clone();
         match last {
-            Some(last) if !self.claim.entry.palette => {
+            Some(last) if !palette => {
                 if let Err(refused) = self.adopt(&*host, &host.theme(), last, &HashMap::new(), false) {
                     log::error!("claim {}: its last tree again: {refused}", self.id.surface);
                 }

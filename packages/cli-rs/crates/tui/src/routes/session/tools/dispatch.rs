@@ -93,9 +93,10 @@ impl Tool {
         &self.root
     }
 
-    /// Takes the theme of `cx` in place: the view keeps its widgets and their state.
+    /// Takes the theme of `cx` in place: the view keeps its widgets and their state. The update that follows swaps
+    /// the rows if the claim's answer changed.
     pub fn restyle(&self, cx: &Context<'_>) {
-        if let Some((mount, true)) = &*self.claim.borrow() {
+        if let Some((mount, _)) = &*self.claim.borrow() {
             mount.restyle();
         }
         if let Some((_, view)) = &*self.view.borrow() {

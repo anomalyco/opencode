@@ -1497,3 +1497,60 @@ fn a_claimed_call_in_a_group_draws_while_the_group_is_open() {
         assert_eq!(screen.matches("probe").count(), 3, "{carrier:?}: three host rows:\n{screen}");
     }
 }
+
+impl World {
+    /// Switches to the dark default theme or another one, as the theme dialog does.
+    fn switch_theme(&self, dark: bool) {
+        let tui = &self.harness.tui;
+        tui.theme.borrow_mut().set(if dark { "opencode" } else { "tokyonight" });
+        tui.theme_changed();
+        self.settle();
+    }
+}
+
+/// The page theme's `text.base` as [`rule_line`] writes it.
+fn base(world: &World) -> String {
+    let color = world.theme().text.base;
+    format!("{:02x}{:02x}{:02x}", color.r, color.g, color.b)
+}
+
+// Expected (4.2 with 4.11): a theme change views a claim that reads the palette again, with the new palette, and
+// restyles one that does not in place, with no view. A view the new theme declines, or a tree refused twice, shows the
+// host's row in place of the claim's, as any other revision would.
+#[test]
+fn a_claim_that_reads_the_palette_is_viewed_again_in_a_new_theme() {
+    for carrier in CARRIERS {
+        let world = World::rules(carrier, ungrouped(), false);
+        world.finished_call("call_1", "paint", &[]);
+        world.finished_call("call_2", "probe", &[]);
+        let paint = |base: &str| format!("paint call_1 Completed permission false base {base}");
+        let probe = "probe call_2 Completed permission false base -";
+        world.draws("call_1", &paint(&base(&world)), Some("done call_1"));
+        let dark = base(&world);
+        let views = DREW.with_borrow(Vec::len);
+        world.switch_theme(false);
+        assert_ne!(base(&world), dark);
+        world.draws("call_1", &paint(&base(&world)), Some("done call_1"));
+        // The probe's tree takes the new theme with no view.
+        world.draws("call_2", probe, Some("done call_2"));
+        assert_eq!(DREW.with_borrow(|drew| drew[views..].to_vec()), [paint(&base(&world))], "{carrier:?}");
+
+        DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()));
+        world.switch_theme(true);
+        let screen = world.frame().text();
+        assert!(!screen.contains("paint call_1"), "{carrier:?}: a declined tree stays:\n{screen}");
+        assert!(screen.contains("✓ paint"), "{carrier:?}: no host row:\n{screen}");
+        DECLINE.with_borrow_mut(HashSet::clear);
+        world.switch_theme(false);
+        world.draws("call_1", &paint(&base(&world)), Some("done call_1"));
+
+        ARMED.set(Some(("call_1".to_owned(), Fault::Bad)));
+        world.switch_theme(true);
+        ARMED.set(None);
+        let screen = world.frame().text();
+        assert!(!screen.contains("paint call_1"), "{carrier:?}: a refused tree shows:\n{screen}");
+        assert!(screen.contains("✓ paint"), "{carrier:?}: no host row:\n{screen}");
+        world.switch_theme(false);
+        assert!(!world.frame().text().contains("paint call_1"), "{carrier:?}: a fallen call came back in its mount");
+    }
+}
