@@ -97,6 +97,26 @@ impl Style {
         Self { bold: true, ..self }
     }
 
+    pub const fn dim(self) -> Self {
+        Self { dim: true, ..self }
+    }
+
+    pub const fn italic(self) -> Self {
+        Self { italic: true, ..self }
+    }
+
+    pub const fn underline(self) -> Self {
+        Self { underline: true, ..self }
+    }
+
+    pub const fn inverse(self) -> Self {
+        Self { inverse: true, ..self }
+    }
+
+    pub const fn strikethrough(self) -> Self {
+        Self { strikethrough: true, ..self }
+    }
+
     fn attributes(&self) -> u8 {
         [self.bold, self.dim, self.italic, self.underline, self.inverse, self.strikethrough]
             .iter()
@@ -203,6 +223,10 @@ pub struct Checked {
 /// Reads `bytes` whole: the operations it holds, or why the host does not draw it. Operations of a kind this version
 /// does not know count and are skipped.
 pub fn check(bytes: &[u8]) -> Result<Checked, Error> {
+    // Bytes that are no list are malformed whatever their length.
+    if bytes.first() != Some(&VERSION) {
+        let _ = records(bytes)?;
+    }
     if bytes.len() > MAX_BYTES {
         return Err(Error::Over(Limit::Bytes(bytes.len())));
     }
@@ -473,7 +497,8 @@ impl List {
         let at = self.bytes.len();
         self.bytes.extend_from_slice(&[0; 4]);
         write(&mut self.bytes);
-        let length = (self.bytes.len() - at - 4) as u32;
+        // A record over 4 GiB could not be framed; no list of one is drawn anyway.
+        let length = u32::try_from(self.bytes.len() - at - 4).expect("a canvas record under 4 GiB");
         self.bytes[at..at + 4].copy_from_slice(&length.to_le_bytes());
         self
     }
@@ -527,7 +552,7 @@ mod tests {
     }
 
     // Expected: every operation reads back as written, cells in their order with their styles, and a rect without a
-    // background reads back without one.
+    // background reads back without one; each style bit alone reads back as that bit; the run counts its cells.
     #[test]
     fn every_operation_reads_back() {
         let lit = Style::new().bg(BLUE).fg(RED);
@@ -542,6 +567,18 @@ mod tests {
         assert_eq!(cells.iter().collect::<Vec<_>>(), [(lit, 'a'), (Style::new(), 'b'), (lit.bold(), 'c')]);
         assert!(matches!(read[2], Op::Rect { border: BorderStyle::Rounded, background: None, .. }));
         assert!(matches!(read[3], Op::Rect { border: BorderStyle::Heavy, background: Some(BLUE), .. }));
+        assert_eq!((cells.len(), cells.is_empty()), (3, false));
+        let plain = Style::new();
+        for style in
+            [plain.bold(), plain.dim(), plain.italic(), plain.underline(), plain.inverse(), plain.strikethrough()]
+        {
+            let mut list = List::new();
+            list.cell(0, 0, 'x', style).cells(0, 0, 1, []);
+            let read: Vec<Op<'_>> = ops(list.as_bytes()).collect();
+            assert_eq!(read[0], Op::Cell { x: 0, y: 0, style, char: 'x' });
+            let Op::Cells { cells, .. } = read[1] else { panic!() };
+            assert_eq!((cells.len(), cells.is_empty()), (0, true));
+        }
         assert_eq!(check(list.as_bytes()), Ok(Checked { ops: 6 }), "a run of three cells counts three");
     }
 
@@ -567,6 +604,8 @@ mod tests {
         let malformed = |bytes: &[u8]| matches!(check(bytes), Err(Error::Malformed(_)));
         assert!(malformed(&[]));
         assert!(malformed(&[2]));
+        // Bytes that are no list are malformed also past the byte limit: the plugin fails, it is not a placeholder.
+        assert!(malformed(&vec![0; MAX_BYTES + 1]));
         assert!(malformed(&good[..good.len() - 1]));
         assert!(malformed(&[&good[..], &[1, 0, 0]].concat()));
         assert!(malformed(&[1, 1, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
@@ -643,6 +682,20 @@ mod tests {
         }
         assert_eq!(over(&deep), None);
         assert_eq!(over(deep.clip(0, 0, 1, 1)), Some(Limit::Clips));
+
+        // Each says what it is over.
+        let said: Vec<String> = [Limit::Bytes(9), Limit::Ops(8), Limit::Text(7), Limit::Clips]
+            .map(|limit| Error::Over(limit).to_string())
+            .into();
+        assert_eq!(
+            said,
+            [
+                format!("a canvas list of 9 bytes, of {MAX_BYTES}"),
+                format!("a canvas list of 8 operations, of {MAX_OPS}"),
+                format!("a canvas text of 7 bytes, of {MAX_TEXT_BYTES}"),
+                format!("a canvas list with more than {MAX_CLIPS} clips open"),
+            ]
+        );
 
         // A list over a limit that is malformed too is refused as malformed.
         let mut both = run(MAX_OPS + 1);

@@ -63,6 +63,11 @@ fn environment(key: &str) -> Option<String> {
     std::env::var(key).ok().filter(|value| !value.is_empty())
 }
 
+/// How many seeds a seeded test that is not a [`Model`] runs: `MODEL_SEEDS`, or `default`.
+pub fn seeds_or(default: u64) -> u64 {
+    environment("MODEL_SEEDS").map_or(default, |text| text.parse().expect("MODEL_SEEDS is a number"))
+}
+
 /// Whether `MODEL_SKIP` turns `property` off.
 pub fn skipped(property: &str) -> bool {
     static SKIP: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();

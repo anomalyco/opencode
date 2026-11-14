@@ -63,7 +63,9 @@ pub const FRAME_RECORDING: usize = 32 << 20;
 /// What the renderer records for one drawn operation, a text's bytes aside: a draw head and the largest draw record.
 pub const RECORD: usize = 128;
 
-pub(crate) type Draw = Box<dyn Fn(&str, Frame) -> Option<Vec<u8>>>;
+/// One draw: `None` when the plugin was not called (it failed, or its activation ended); else the list's bytes, or
+/// `None` to keep the list (also when the call panicked).
+pub(crate) type Draw = Box<dyn Fn(&str, Frame) -> Option<Option<Vec<u8>>>>;
 
 /// What the canvases on this thread hold now.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -281,7 +283,7 @@ impl State {
     fn draw(&self, drawer: &Drawer, size: (u16, u16), cause: Cause, dt: Duration) {
         self.asked.set(Some((size, self.version.get())));
         let started = Instant::now();
-        let bytes = (drawer.draw)(&self.id, Frame { width: size.0, height: size.1, cause, dt });
+        let Some(bytes) = (drawer.draw)(&self.id, Frame { width: size.0, height: size.1, cause, dt }) else { return };
         let took = started.elapsed().as_nanos() as u64;
         count(|work| {
             work.draws += 1;
@@ -289,6 +291,11 @@ impl State {
         });
         if let Some(bytes) = bytes {
             self.present(drawer, bytes, size);
+        }
+        // What the call left for after the frame (a failure, the budget's reports) waits on the app's deferred
+        // queue, which OpenTUI's event loop drains at its next turn; outside an animation nothing brings that turn.
+        if cause != Cause::Animate {
+            wake(&self.app);
         }
     }
 
@@ -388,11 +395,13 @@ fn drive(state: &Rc<State>) {
     state.app.animate(move |cx, _| {
         let Some(state) = weak.upgrade() else { return false };
         let app = cx.app();
+        // A frame left waiting is not drawn: the paint draws one only while the canvas animates.
         if !state.animate.get() || !opencode_ui::motion::running() {
             state.set_driving(false);
             return false;
         }
         if state.covered(state.visible.get()) {
+            state.frame.set(None);
             state.rested.set(true);
             state.set_driving(false);
             return false;
@@ -428,6 +437,14 @@ fn resume(state: &Rc<State>) {
             cx.request_redraw();
         }
     });
+    wake(&state.app);
+}
+
+/// Brings OpenTUI's event loop around once, so the deferred work queued in a paint runs: the loop takes its deadline
+/// before it paints and drains the deferred queue only at a turn's start, so neither a deferral nor a timer made in a
+/// paint wakes it. A task posted through the app's proxy does, and paints nothing.
+fn wake(app: &App) {
+    let _ = app.proxy().post(|_| {});
 }
 
 impl Drop for State {
@@ -452,8 +469,9 @@ impl Drop for State {
 impl Component for Board {
     fn paint(&self, painter: &mut Painter<'_>) {
         let state = &self.0;
-        // A frame that does not show the canvas drops the animation's frame: its time is not counted.
-        let frame = state.frame.take();
+        // A frame that does not show the canvas drops the animation's frame: its time is not counted. So does a canvas
+        // that stopped animating meanwhile.
+        let frame = state.frame.take().filter(|_| state.animate.get() && opencode_ui::motion::running());
         let visible = painter.visible_rect();
         let size = (painter.width().min(u16::MAX.into()) as u16, painter.height().min(u16::MAX.into()) as u16);
         if let Some(drawer) = state.drawer.clone().filter(|_| visible.2 > 0 && visible.3 > 0) {
@@ -482,7 +500,7 @@ impl Component for Board {
                     painter.text(0, 0, PLACEHOLDER, Style::new().dim());
                     return;
                 }
-                let ops = replay(painter, &mut list::ops(bytes), size);
+                let ops = replay(painter, &mut list::ops(bytes), size, &mut Widths::default());
                 let took = started.elapsed().as_nanos() as u64;
                 count(|work| {
                     work.replays += 1;
@@ -567,17 +585,45 @@ fn place(x: i16, y: i16, width: u16, index: usize, size: (u16, u16)) -> Option<(
     shown.then_some((column, row))
 }
 
-/// The character a cell draws: one column wide, or U+FFFD for one of another width.
-fn single(char: char) -> char {
-    match unicode_width::UnicodeWidthChar::width(char) {
-        Some(1) => char,
-        _ => char::REPLACEMENT_CHARACTER,
+/// Which characters are one column wide by OpenTUI's measure, for a cell: the renderer writes a cell's character as
+/// one column, and one of another width (wide, combining, zero-width, a bidirectional control) would move the
+/// terminal's cursor off the row it draws. A direct-mapped cache of the last measures: a full-screen canvas replays
+/// thousands of cells a frame, and a hash a cell cost the replay a sixth.
+struct Widths([Option<(char, bool)>; 64]);
+
+impl Default for Widths {
+    fn default() -> Self {
+        Self([None; 64])
+    }
+}
+
+impl Widths {
+    /// The character a cell draws: `char` when it is one column wide, else U+FFFD.
+    fn single(&mut self, painter: &Painter<'_>, char: char) -> char {
+        if char.is_ascii_graphic() || char == ' ' {
+            return char;
+        }
+        let slot = &mut self.0[char as usize % 64];
+        let one = match *slot {
+            Some((cached, one)) if cached == char => one,
+            _ => {
+                let one = painter.text_width(char.encode_utf8(&mut [0; 4])) == 1;
+                *slot = Some((char, one));
+                one
+            }
+        };
+        if one { char } else { char::REPLACEMENT_CHARACTER }
     }
 }
 
 /// Paints `ops` up to their end or the `pop` that closes the clip they are in, at `size`, culling what does not reach
 /// into the canvas; returns how many it painted. The one place a list becomes paint calls.
-fn replay<'a>(painter: &mut Painter<'_>, ops: &mut impl Iterator<Item = Op<'a>>, size: (u16, u16)) -> u64 {
+fn replay<'a>(
+    painter: &mut Painter<'_>,
+    ops: &mut impl Iterator<Item = Op<'a>>,
+    size: (u16, u16),
+    widths: &mut Widths,
+) -> u64 {
     let mut painted = 0;
     while let Some(op) = ops.next() {
         match op {
@@ -590,13 +636,15 @@ fn replay<'a>(painter: &mut Painter<'_>, ops: &mut impl Iterator<Item = Op<'a>>,
                 painted += 1;
             }
             Op::Cell { x, y, style, char } if inside(x, y, 1, 1, size) => {
-                painter.cell(x.into(), y.into(), single(char), styled(style));
+                let char = widths.single(painter, char);
+                painter.cell(x.into(), y.into(), char, styled(style));
                 painted += 1;
             }
             Op::Cells { x, y, width, cells } => {
                 for (index, (style, char)) in cells.iter().enumerate() {
                     if let Some((column, row)) = place(x, y, width, index, size) {
-                        painter.cell(column, row, single(char), styled(style));
+                        let char = widths.single(painter, char);
+                        painter.cell(column, row, char, styled(style));
                         painted += 1;
                     }
                 }
@@ -616,7 +664,7 @@ fn replay<'a>(painter: &mut Painter<'_>, ops: &mut impl Iterator<Item = Op<'a>>,
             }
             Op::Clip { x, y, width, height } => {
                 painter.clip(x.into(), y.into(), width.into(), height.into(), |painter| {
-                    painted += replay(painter, ops, size)
+                    painted += replay(painter, ops, size, widths)
                 });
             }
             Op::Pop => return painted,
