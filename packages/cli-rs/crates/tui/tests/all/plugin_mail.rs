@@ -267,7 +267,7 @@ fn a_flood_from_many_threads_keeps_its_order_and_bound() {
         assert_eq!((stats.high, stats.refused), (abi::BOUND, 80_000 - abi::BOUND as u64), "{carrier:?}");
 
         let replacer = std::thread::spawn(move || {
-            (0..10_000u32).map(|number| sender.replace("progress", (KEYED, number)).is_ok()).all(|ok| ok)
+            (0..10_000u32).all(|number| sender.replace("progress", (KEYED, number)).is_ok())
         });
         assert!(replacer.join().unwrap(), "{carrier:?}: a replace was refused");
         frame(&harness);

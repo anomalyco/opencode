@@ -43,10 +43,15 @@ pub(crate) struct Activation {
     /// Runs the plugin's wake handlers, which invalidate its claims; without, a wake only redraws them.
     on_wake: RefCell<Option<Rc<dyn Fn()>>>,
     /// Runs the plugin's message handler with one message.
-    on_message: RefCell<Option<Rc<dyn Fn(Message)>>>,
+    on_message: RefCell<Option<Deliver>>,
     /// Fails the plugin after a thread of it panicked.
-    on_panic: RefCell<Option<Rc<dyn Fn(String)>>>,
+    on_panic: RefCell<Option<Report>>,
 }
+
+/// Hands one message to the plugin.
+pub(crate) type Deliver = Rc<dyn Fn(Message)>;
+/// Fails the plugin with a thread's panic report.
+pub(crate) type Report = Rc<dyn Fn(String)>;
 
 impl Activation {
     pub fn new(host: &Rc<dyn Host>, mailbox: Arc<Mailbox>) -> Rc<Self> {
@@ -75,7 +80,7 @@ impl Activation {
     }
 
     /// Sets what a delivered message runs, and what a thread's panic report runs.
-    pub fn on_mail(&self, message: Rc<dyn Fn(Message)>, panic: Rc<dyn Fn(String)>) {
+    pub fn on_mail(&self, message: Deliver, panic: Report) {
         *self.on_message.borrow_mut() = Some(message);
         *self.on_panic.borrow_mut() = Some(panic);
     }
