@@ -3,7 +3,7 @@
 //! per-column strength, through the same native color matrix the TypeScript renderables use.
 
 use super::curve::{clamp, coast, intensity_at, smootherstep};
-use super::{Clock, Drawn, channels, millis, running, tick_frames};
+use super::{Motion, channels, millis, running};
 use opentui::App;
 use opentui::prelude::*;
 use opentui::widget::{Component, Constraint, Custom, Element, Painter, Widget};
@@ -80,20 +80,16 @@ struct ShimmerView {
     text: String,
     fg: Color,
     shimmer: Color,
-    clock: Clock,
-    drawn: Rc<Drawn>,
+    motion: Rc<Motion>,
 }
 
 impl ShimmerText {
     pub fn new(app: &App, text: impl Into<String>) -> Self {
-        let (clock, drawn) = (Clock::default(), Rc::default());
-        tick_frames(app, &clock, None, Some(&drawn));
         let view = ShimmerView {
             text: text.into(),
             fg: Color::DEFAULT_FOREGROUND,
             shimmer: Color::DEFAULT_FOREGROUND,
-            clock,
-            drawn,
+            motion: Motion::new(app, true, None, None, Duration::ZERO),
         };
         Self { widget: Custom::measured(app, view) }
     }
@@ -116,12 +112,12 @@ impl ShimmerText {
 
 impl Component for ShimmerView {
     fn paint(&self, painter: &mut Painter<'_>) {
-        self.drawn.paint(painter);
+        self.motion.paint(painter);
         if !running() {
             painter.text(0, 0, &self.text, Style::new().fg(self.fg).bg(Color::TRANSPARENT));
             return;
         }
-        let elapsed = millis(self.clock.get());
+        let elapsed = millis(self.motion.clock.get());
         paint_shaded(painter, &self.text, self.fg, self.shimmer, |column, end| {
             shimmer_strength_at(elapsed, column, end)
         });
@@ -151,7 +147,7 @@ struct FadeView {
     enabled: bool,
     sweep_offset: f64,
     sweep_width: Option<f64>,
-    clock: Clock,
+    motion: Rc<Motion>,
     /// Whether the frame that reached the end of the fade was painted; the TypeScript renderable paints that one
     /// frame shaded and plain text after it.
     finished: Cell<bool>,
@@ -159,8 +155,6 @@ struct FadeView {
 
 impl FadeInText {
     pub fn new(app: &App, text: impl Into<String>) -> Self {
-        let clock = Clock::default();
-        tick_frames(app, &clock, Some(FADE_DURATION), None);
         let view = FadeView {
             text: text.into(),
             fg: Color::DEFAULT_FOREGROUND,
@@ -168,7 +162,7 @@ impl FadeInText {
             enabled: true,
             sweep_offset: 0.0,
             sweep_width: None,
-            clock,
+            motion: Motion::new(app, true, None, Some(FADE_DURATION), Duration::ZERO),
             finished: Cell::new(false),
         };
         Self { widget: Custom::measured(app, view) }
@@ -190,7 +184,7 @@ impl FadeInText {
         self.widget.update(|view| {
             view.enabled = enabled;
             if !enabled {
-                view.clock = Rc::new(Cell::new(FADE_DURATION));
+                view.motion.clock.set(FADE_DURATION);
             }
         });
         self
@@ -213,7 +207,8 @@ impl FadeInText {
 
 impl Component for FadeView {
     fn paint(&self, painter: &mut Painter<'_>) {
-        let elapsed = self.clock.get();
+        self.motion.paint(painter);
+        let elapsed = self.motion.clock.get();
         if !self.enabled || !running() || self.finished.get() {
             painter.text(0, 0, &self.text, Style::new().fg(self.fg).bg(Color::TRANSPARENT));
             return;
