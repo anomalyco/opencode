@@ -128,7 +128,7 @@ fn open_in(
         ..support::deps(Arc::new(server.clone()))
     };
     let harness = support::mount(width, 40, deps);
-    external(&harness.tui, External { config_dir: config, cwd: root.path().to_path_buf() });
+    external(&harness.tui, External { config_dir: config, cwd: root.path().to_path_buf(), dev: Vec::new() });
     Port { harness, events: server.events, log: server.log, hold: server.hold, _root: root }
 }
 
