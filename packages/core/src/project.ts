@@ -109,13 +109,16 @@ function fromRow(row: typeof ProjectTable.$inferSelect): Info {
           color: row.icon_color ?? undefined,
         }
       : undefined
+  // Rows written by older builds (and the unchecked V1 import) can hold non-object commands
+  // values such as `[]`, which the API response encoder rejects; treat them as absent.
+  const commands = Schema.is(ProjectSchema.Commands)(row.commands) ? row.commands : undefined
   return {
     id: row.id,
     canonical: row.worktree,
     vcs: row.vcs ?? undefined,
     name: row.name ?? undefined,
     icon,
-    commands: row.commands ?? undefined,
+    commands,
     time: {
       created: row.time_created,
       updated: row.time_updated,
