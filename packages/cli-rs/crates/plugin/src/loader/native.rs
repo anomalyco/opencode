@@ -180,6 +180,8 @@ fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Resul
             let failed = failure.clone();
             setup.failure(Rc::new(move || failed.borrow().clone()));
             let activation = Activation::new(setup.host(), instance.shared().mail.clone());
+            let owners = crate::Owners::new(setup.id(), host.clone(), &activation);
+            instance.shared().ctx.borrow_mut().owners = Some(owners.clone());
             let guest = Rc::new(Guest {
                 instance: RefCell::new(Some(instance)),
                 busy: Cell::new(false),
@@ -189,6 +191,7 @@ fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Resul
                 generation: setup.generation(),
                 revoked: RefCell::default(),
                 activation,
+                owners,
                 monitor,
                 slot,
             });
@@ -463,6 +466,8 @@ struct Ctx {
     quiet: bool,
     /// A render of 1.4 on or a view runs: it may read, and ask for nothing.
     read_only: bool,
+    /// What the calls hold of the input (P2), from the end of setup: setup itself has no mount and no owner.
+    owners: Option<Rc<crate::Owners>>,
 }
 
 /// What [`HostApi::ctx`] points to: the context of the UI thread's callbacks, and the mailbox that `wake`, `send`,
@@ -512,6 +517,8 @@ enum Effect {
     InstallTheme(String, serde_json::Value),
     // 2.0 (P3): a scroll verb, bound to the mount it names when the plugin asked.
     Scroll(Box<dyn FnOnce()>),
+    /// An input verb of P2, its owner taken as it was asked for.
+    Input(crate::Effect),
 }
 
 /// One plugin instance; dropping it destroys the instance in the plugin.
@@ -600,6 +607,7 @@ impl Instance {
             staged: crate::Staged::default(),
             quiet,
             read_only: false,
+            owners: None,
         });
         let ui = std::thread::current().id();
         let shared = NonNull::from(Box::leak(Box::new(Shared { ctx, mail: Mailbox::new(id, wake), ui })));
@@ -1040,8 +1048,30 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
             let host = ctx.host.upgrade().ok_or("the host is gone")?;
             return Ok(serde_json::to_value(behave::transcript(host.app())).unwrap_or_default());
         }
+        HostRequest::OpenPanel(open) => ctx.effects.push(Effect::Input(owners(ctx)?.open_panel(open))),
+        HostRequest::ClosePanel { surface } => ctx.effects.push(Effect::Input(owners(ctx)?.close_panel(&surface))),
+        HostRequest::Overlay(overlay) => {
+            if let Some(effect) = owners(ctx)?.overlay(overlay) {
+                ctx.effects.push(Effect::Input(effect));
+            }
+        }
+        HostRequest::CloseOverlay { surface } => {
+            ctx.effects.push(Effect::Input(owners(ctx)?.close_overlay(&surface)));
+        }
+        HostRequest::Focus { node } => ctx.effects.push(Effect::Input(owners(ctx)?.focus(&node))),
+        HostRequest::Blur => ctx.effects.push(Effect::Input(owners(ctx)?.blur())),
+        HostRequest::SetMode { mode } => ctx.effects.push(Effect::Input(owners(ctx)?.set_mode(mode.as_deref()))),
+        HostRequest::ReleaseKeys => ctx.effects.push(Effect::Input(owners(ctx)?.release_keys())),
+        HostRequest::Rect { node } => return Ok(serde_json::to_value(owners(ctx)?.rect(&node)).unwrap_or_default()),
+        HostRequest::Focused => return Ok(serde_json::to_value(owners(ctx)?.focused()).unwrap_or_default()),
+        HostRequest::InputMode => return Ok(serde_json::to_value(owners(ctx)?.mode()).unwrap_or_default()),
     }
     Ok(serde_json::Value::Null)
+}
+
+/// What the calls hold of the input; a setup asks nothing of it, as it has no mount and no owner yet.
+fn owners(ctx: &Ctx) -> Result<Rc<crate::Owners>, String> {
+    ctx.owners.clone().ok_or_else(|| "setup has no input: it may open, focus and read nothing of it".to_owned())
 }
 
 /// Whether `request` is a render of 1.4 on or a view, which reads only. A 1.3 render is left as it was: its SDK let it
@@ -1080,7 +1110,15 @@ fn effect(request: &HostRequest) -> bool {
         | HostRequest::Title { .. }
         | HostRequest::SetTheme { .. }
         | HostRequest::InstallTheme { .. }
-        | HostRequest::Scroll { .. } => true,
+        | HostRequest::Scroll { .. }
+        | HostRequest::OpenPanel(_)
+        | HostRequest::ClosePanel { .. }
+        | HostRequest::Overlay(_)
+        | HostRequest::CloseOverlay { .. }
+        | HostRequest::Focus { .. }
+        | HostRequest::Blur
+        | HostRequest::SetMode { .. }
+        | HostRequest::ReleaseKeys => true,
         HostRequest::Log { .. }
         | HostRequest::StorageGet { .. }
         | HostRequest::StorageKey { .. }
@@ -1116,7 +1154,10 @@ fn effect(request: &HostRequest) -> bool {
         | HostRequest::ScrollState { .. }
         | HostRequest::Anchors { .. }
         | HostRequest::TopAnchor { .. }
-        | HostRequest::Transcript => false,
+        | HostRequest::Transcript
+        | HostRequest::Rect { .. }
+        | HostRequest::Focused
+        | HostRequest::InputMode => false,
     }
 }
 
@@ -1150,6 +1191,8 @@ struct Guest {
     revoked: RefCell<Vec<Disposer>>,
     /// The mounted slot claims and routes, which a wake draws again.
     activation: Rc<Activation>,
+    /// What its calls hold of the input (P2).
+    owners: Rc<crate::Owners>,
     monitor: Rc<crate::contain::Monitor>,
     slot: crate::contain::Slot,
 }
@@ -1270,6 +1313,21 @@ impl Guest {
         Some(result.ok())
     }
 
+    /// What delivers an event to the handler `to` names, as one call of the plugin, for the owner it is routed to; the
+    /// plugin's surfaces draw again after it. A failed or busy plugin passes.
+    fn deliver(self: &Rc<Self>, to: abi::InputTo) -> crate::interact::Deliver {
+        let guest = Rc::downgrade(self);
+        Rc::new(move |_: &dyn Host, owner: &Rc<crate::interact::Owner>, event: &abi::interact::Event| {
+            let Some(guest) = guest.upgrade() else { return abi::interact::Handled::Pass };
+            let request = Request::Input { to: to.clone(), event: event.clone() };
+            let handled = guest.owners.as_owner(owner, || guest.request("handle", &request));
+            if handled.is_some() {
+                guest.activation.invalidate();
+            }
+            handled.unwrap_or(abi::interact::Handled::Pass)
+        })
+    }
+
     /// Fails the plugin with `error`: it is not called again, and the host says so once.
     fn fail(&self, error: String) {
         fail(&self.host, &self.id, &self.failure, self.revoked.take(), &self.activation, error);
@@ -1359,6 +1417,7 @@ fn apply(host: &Weak<dyn Host>, id: String, guest: Weak<Guest>, generation: Opti
                 Effect::Theme(name) => host.set_theme(&name),
                 Effect::InstallTheme(name, theme) => host.install_theme(&name, theme),
                 Effect::Scroll(scroll) => scroll(),
+                Effect::Input(effect) => effect(host),
             }
         }
     });
@@ -1497,6 +1556,20 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
         let request = Request::Route { name: name.clone() };
         setup.route(name.clone(), move |host| Box::new(Claim::mount(host, &guest, "render-route", request.clone())));
     }
+    // P2: the searches, and the layers of setup, each with its own handler, the activation's.
+    for name in &manifest.searches {
+        let (guest, searched) = (guest.clone(), name.clone());
+        let call: crate::SearchCall = Rc::new(move |_: &dyn Host, query: &str, options: &[abi::SelectOption]| {
+            let request =
+                Request::Search { name: searched.clone(), query: query.to_owned(), options: options.to_vec() };
+            guest.request("search", &request)
+        });
+        setup.registration.searches.push((name.clone(), call));
+    }
+    for (index, layer) in manifest.layers.iter().enumerate() {
+        let deliver = guest.deliver(abi::InputTo::Layer { layer: index });
+        guest.owners.input.register(&**setup.host(), std::slice::from_ref(layer), &deliver);
+    }
     // 2.0: the surfaces, whose views run through `View`.
     for (index, claim) in manifest.surfaces.iter().enumerate() {
         let at: v2::Place = (&claim.place).into();
@@ -1540,15 +1613,14 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
                 }) as Rc<dyn Fn() -> bool>
             }),
         };
-        // Input of contract 2.0 (P2) crosses no ABI yet: a library's mount has no handler and no layers.
         let input = Rc::new(surface::Input {
             plugin: manifest.id.clone(),
-            deliver: None,
-            layers: Vec::new(),
+            deliver: claim.handler.then(|| guest.deliver(abi::InputTo::Surface { surface: index })),
+            layers: claim.layers.clone(),
             panel: matches!(place.at, v2::Place::Panel(_)),
         });
-        let viewer = Rc::new(Remote { guest: guest.clone(), index, draw: claim.draw });
-        setup.surface(place, viewer, commands, fail, calls, &guest.activation, input);
+        let remote = Rc::new(Remote { guest: guest.clone(), index, draw: claim.draw });
+        setup.surface(place, remote, commands, fail, calls, &guest.owners, input);
     }
     // 2.0: what the plugin's threads send runs `Message`, one call each, when its manifest says it takes messages; a
     // thread's panic fails the plugin, once.
@@ -1589,19 +1661,22 @@ impl Viewer for Remote {
         let next = surface::next_content() - 1;
         let (mount, input) = (viewing.mount.clone(), viewing.input.clone());
         let request = Request::View { surface: self.index, mount, input, next };
-        let reply: abi::ViewReply = self.guest.checked("view", &request, |reply: &abi::ViewReply| {
-            let numbered = reply.content.iter().enumerate().all(|(index, (handle, _))| {
-                (index as u64).checked_add(1).and_then(|step| next.checked_add(step)) == Some(handle.0)
-            });
-            if !numbered {
-                return Err("content handles that do not follow the host's".to_owned());
-            }
-            // A memo table holds a value for each subtree the view built or kept by key, and no more.
-            let keyed = keyed(&reply.node);
-            match reply.memo <= keyed {
-                true => Ok(()),
-                false => Err(format!("a memo table of {} values for a tree of {keyed} keyed nodes", reply.memo)),
-            }
+        // What the view reads of the input is its mount's.
+        let reply: abi::ViewReply = self.guest.owners.as_owner(viewing.owner, || {
+            self.guest.checked("view", &request, |reply: &abi::ViewReply| {
+                let numbered = reply.content.iter().enumerate().all(|(index, (handle, _))| {
+                    (index as u64).checked_add(1).and_then(|step| next.checked_add(step)) == Some(handle.0)
+                });
+                if !numbered {
+                    return Err("content handles that do not follow the host's".to_owned());
+                }
+                // A memo table holds a value for each subtree the view built or kept by key, and no more.
+                let keyed = keyed(&reply.node);
+                match reply.memo <= keyed {
+                    true => Ok(()),
+                    false => Err(format!("a memo table of {} values for a tree of {keyed} keyed nodes", reply.memo)),
+                }
+            })
         })?;
         surface::took_content(next + 1, reply.content.len() as u64);
         for (handle, bytes) in reply.content {
@@ -1618,14 +1693,15 @@ impl Viewer for Remote {
     fn draw(
         &self,
         _: &dyn Host,
-        _: &Rc<crate::interact::Owner>,
+        owner: &Rc<crate::interact::Owner>,
         mount: &v2::MountId,
         canvas: &str,
         frame: v2::Frame,
     ) -> Option<Option<Vec<u8>>> {
         let request = Request::Draw { surface: self.index, mount: mount.clone(), canvas: canvas.to_owned(), frame };
-        // The result is the list's bytes as they are, which the canvas checks; none keeps the list.
-        let drawn = self.guest.exchange("draw", &request, Ok)?;
+        // The result is the list's bytes as they are, which the canvas checks; none keeps the list. What the draw reads
+        // of the input is its mount's, as a view's is.
+        let drawn = self.guest.owners.as_owner(owner, || self.guest.exchange("draw", &request, Ok))?;
         Some(drawn.filter(|bytes| !bytes.is_empty()))
     }
 

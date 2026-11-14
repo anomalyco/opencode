@@ -361,6 +361,12 @@ pub struct Manifest {
     /// 2.0: the plugin has a [`Setup::messages`] handler, which [`Request::Message`] runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub messages: bool,
+    /// 2.0 (P2): the key layers of [`Setup::layer`], in order; [`Request::Input`] names one by index.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<interact::Layer>,
+    /// 2.0 (P2): the names of the searches of [`Setup::search`], which [`Request::Search`] runs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub searches: Vec<String>,
 }
 
 /// A surface of contract 2.0 as the manifest lists it ([`v2::Surface`] without its view).
@@ -383,6 +389,12 @@ pub struct SurfaceClaim {
     /// 2.0 (P3): the surface has a scroll handler, which [`Request::Scrolled`] runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub on_scroll: bool,
+    /// P2: the surface has a handler ([`v2::Surface::on`]), which [`Request::Input`] calls.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub handler: bool,
+    /// P2: the key layers each mount of it registers ([`v2::Surface::layers`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<interact::Layer>,
 }
 
 /// [`v2::Place`] on the wire.
@@ -396,8 +408,7 @@ pub enum SurfacePlace {
         kind: SlotKind,
         path: String,
     },
-    /// P2: a docked panel, and an overlay. Opening either is a request of contract 2.0 the C ABI does not carry yet,
-    /// so a library's never shows.
+    /// P2: a docked panel, and an overlay, which [`HostRequest::OpenPanel`] and [`HostRequest::Overlay`] open.
     Panel {
         name: String,
     },
@@ -1533,6 +1544,27 @@ pub enum Request {
         surface: usize,
         event: v2::ScrollEvent,
     },
+    /// 2.0 (P2): calls the handler `to` names with `event`. Result: [`interact::Handled`].
+    Input {
+        to: InputTo,
+        event: interact::Event,
+    },
+    /// 2.0 (P2): runs the search `name` of [`Setup::search`] with `query` and the select's enabled `options`. Result:
+    /// the values of the options to list, in order.
+    Search {
+        name: String,
+        query: String,
+        options: Vec<SelectOption>,
+    },
+}
+
+/// Whose handler a [`Request::Input`] calls: a surface's, which [`Manifest::surfaces`] names by index, for the mount
+/// the host routed the event to, or a layer's of [`Setup::layer`], which [`Manifest::layers`] names by index.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum InputTo {
+    Surface { surface: usize },
+    Layer { layer: usize },
 }
 
 /// What [`Request::View`] returns: the tree, the content the view gave the host with its handles, and how many values
@@ -1846,6 +1878,39 @@ pub enum HostRequest {
     },
     /// 2.0 (P3): [`Read::transcript`].
     Transcript,
+    /// 2.0 (P2): [`Host::open_panel`], once the current call returns.
+    OpenPanel(interact::OpenPanel),
+    /// 2.0 (P2): [`Host::close_panel`], once the current call returns.
+    ClosePanel {
+        surface: String,
+    },
+    /// 2.0 (P2): [`Host::overlay`], once the current call returns, for the mount whose handler runs.
+    Overlay(interact::Overlay),
+    /// 2.0 (P2): [`Host::close_overlay`], once the current call returns.
+    CloseOverlay {
+        surface: String,
+    },
+    /// 2.0 (P2): [`Host::focus`], once the current call returns.
+    Focus {
+        node: String,
+    },
+    /// 2.0 (P2): [`Host::blur`], once the current call returns.
+    Blur,
+    /// 2.0 (P2): [`Host::set_mode`], once the current call returns.
+    SetMode {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mode: Option<String>,
+    },
+    /// 2.0 (P2): [`Host::release_keys`], once the current call returns.
+    ReleaseKeys,
+    /// 2.0 (P2): [`Read::rect`].
+    Rect {
+        node: String,
+    },
+    /// 2.0 (P2): [`Read::focused`].
+    Focused,
+    /// 2.0 (P2): [`Read::mode`].
+    InputMode,
 }
 
 /// 1.5: the composer on screen, from [`Read::composer`].
@@ -2996,6 +3061,18 @@ impl Read for HostHandle {
     fn themes(&self) -> Vec<String> {
         self.read(&HostRequest::Themes).unwrap_or_default()
     }
+
+    fn rect(&self, id: &str) -> Option<interact::Rect> {
+        self.read(&HostRequest::Rect { node: id.to_owned() }).flatten()
+    }
+
+    fn focused(&self) -> interact::Focused {
+        self.read(&HostRequest::Focused).unwrap_or_default()
+    }
+
+    fn mode(&self) -> Option<String> {
+        self.read(&HostRequest::InputMode).flatten()
+    }
 }
 
 impl Host for HostHandle {
@@ -3080,6 +3157,38 @@ impl Host for HostHandle {
 
     fn set_model(&self, provider: &str, model: &str) {
         let _ = self.request(&HostRequest::SetModel { provider: provider.to_owned(), model: model.to_owned() });
+    }
+
+    fn open_panel(&self, open: interact::OpenPanel) {
+        let _ = self.request(&HostRequest::OpenPanel(open));
+    }
+
+    fn close_panel(&self, surface: &str) {
+        let _ = self.request(&HostRequest::ClosePanel { surface: surface.to_owned() });
+    }
+
+    fn overlay(&self, overlay: interact::Overlay) {
+        let _ = self.request(&HostRequest::Overlay(overlay));
+    }
+
+    fn close_overlay(&self, surface: &str) {
+        let _ = self.request(&HostRequest::CloseOverlay { surface: surface.to_owned() });
+    }
+
+    fn focus(&self, id: &str) {
+        let _ = self.request(&HostRequest::Focus { node: id.to_owned() });
+    }
+
+    fn blur(&self) {
+        let _ = self.request(&HostRequest::Blur);
+    }
+
+    fn set_mode(&self, mode: Option<&str>) {
+        let _ = self.request(&HostRequest::SetMode { mode: mode.map(str::to_owned) });
+    }
+
+    fn release_keys(&self) {
+        let _ = self.request(&HostRequest::ReleaseKeys);
     }
 
     fn edit_tab(&self, edit: TabEdit) -> bool {
@@ -3426,6 +3535,8 @@ impl Setup<'_> {
             notify: surface.notify.clone(),
             layout: surface.layout.is_some(),
             on_scroll: surface.on_scroll.is_some(),
+            handler: surface.handler.is_some(),
+            layers: surface.layers.clone(),
         };
         self.registered.manifest.surfaces.push(claim);
         self.registered.surfaces.push(surface);
@@ -3459,19 +3570,21 @@ impl Setup<'_> {
 
     /// 2.0: a search a [`Select`] names (`search`): with the host's reads, the query and the select's enabled options,
     /// it returns the values of the options to list, in order (TS `dialog.select`'s `search`). It runs as one call of
-    /// the plugin, with no effects, while the user types. In process only, as surfaces are.
+    /// the plugin, with no effects, while the user types; over the C ABI, as [`Request::Search`].
     pub fn search(&mut self, name: &str, search: impl Fn(&dyn Read, &str, &[SelectOption]) -> Vec<String> + 'static) {
+        self.registered.manifest.searches.push(name.to_owned());
         self.registered.searches.push((name.to_owned(), Rc::new(search)));
     }
 
     /// 2.0: keys the plugin takes while `layer`'s scope holds ([`interact::Layer`]): of the composer, or global. They
     /// are the plugin's until it leaves `active`. A layer of a surface's own scope belongs on [`v2::Surface::layers`].
-    /// In process only, as surfaces are.
+    /// Over the C ABI, its handler runs as [`Request::Input`].
     pub fn layer(
         &mut self,
         layer: interact::Layer,
         handler: impl Fn(&dyn Host, &interact::Event) -> interact::Handled + 'static,
     ) {
+        self.registered.manifest.layers.push(layer.clone());
         self.registered.layers.push((layer, Rc::new(handler)));
     }
 }
@@ -3780,6 +3893,20 @@ impl Registered {
                 let surface = self.surfaces.get(surface).ok_or("no such surface")?;
                 surface.on_scroll.as_ref().ok_or("no scroll handler")?(&self.host, &event);
                 Ok(serde_json::Value::Null)
+            }
+            Request::Input { to, event } => {
+                let handler = match to {
+                    InputTo::Surface { surface } => {
+                        self.surfaces.get(surface).and_then(|surface| surface.handler.clone())
+                    }
+                    InputTo::Layer { layer } => self.layers.get(layer).map(|(_, handler)| handler.clone()),
+                };
+                let handler = handler.ok_or("no such handler")?;
+                json(serde_json::to_value(handler(&self.host, &event)))
+            }
+            Request::Search { name, query, options } => {
+                let (_, search) = self.searches.iter().find(|(known, _)| *known == name).ok_or("no such search")?;
+                json(serde_json::to_value(search(&self.host, &query, &options)))
             }
         }
     }

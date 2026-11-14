@@ -156,9 +156,12 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *    "scope"?}], "fences": [language], "slots": [{"kind", "path", "render"?, "mount"?}], "routes": [name],
  *    "storage": [key], "render": 2, "events"?: [[type]], "render_routes"?: [name], "wake"?: bool,
  *    "route_mounts"?: [name], "fence_gone"?: bool,
- *    "surfaces"?: [{"name", "place": {"type": "route", "name"} | {"type": "slot", "kind", "path"}, "palette"?,
- *    "draw"?: bool, "notify"?: [notify], "layout"?: bool, "on_scroll"?: bool}],
- *    "messages"?: bool}
+ *    "surfaces"?: [{"name", "place": {"type": "route", "name"} | {"type": "slot", "kind", "path"}
+ *      | {"type": "panel", "name"} | {"type": "overlay", "name"}, "palette"?, "draw"?: bool, "notify"?: [notify],
+ *      "layout"?: bool, "on_scroll"?: bool, "handler"?: bool, "layers"?: [layer]}],
+ *    "messages"?: bool, "layers"?: [layer], "searches"?: [name]}
+ *   A layer is {"scope": "surface" | {"node": id} | "composer" | "global", "priority"?, "mode"?,
+ *    "keys"?: [{"key", "name", "title"?, "hold"?}], "any"?, "paste"?}.
  *
  * Requests from the host (`call`), with their results:
  *   {"type": "command", "name", "input"}                      -> null
@@ -195,6 +198,13 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *      After the solve, when something the surface's "notify" names changed. It reads only, as a view does.
  *   {"type": "scrolled", "surface": index, "event": {"type": "landed", "scroll", "anchor"} |
  *    {"type": "user-scroll", "scroll"}}                         -> null
+ *   2.0 (P2):
+ *   {"type": "input", "to": {"type": "surface", "surface": index} | {"type": "layer", "layer": index},
+ *    "event": {"type": "key" | "paste" | "pointer" | "hover" | "closed", ...}}   -> "consume" | "pass"
+ *      A surface's handler hears the events of the mount the host routed them to; what it reads and asks of the input
+ *      ("rect", "focused", "input-mode", "focus", "set-mode", "overlay", ...) is that mount's. A layer of the manifest
+ *      is the plugin's own.
+ *   {"type": "search", "name", "query", "options": [option]}   -> [value]
  *
  * 2.0 tree nodes ("type"): "box" {"id"?, "row"?, "gap"?, "padding"?, "justify"?, "align"?, "bg"?, "layout"?,
  *   "on_click"?, "children"}, "text" {"id"?, "spans", "fg"?, "wrap"?, "truncate"?, "selectable"?, "hover_fg"?,
@@ -210,7 +220,9 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   "navigate", "fetch", "dialog", "copy", "interactive", "shortcut", "dialog-open"; 2.0 (P3): "scroll"
  *   {"target", "verb"}, an effect, and the reads "scroll-state" {"target"}, "anchors" {"target", "group"},
  *   "top-anchor" {"target", "group", "inset"?} and "transcript". `crates/plugin-abi/schema/v2.json` has their
- *   types (Target, Scroll, ScrollState, AnchorAt, Geometry, LayoutReply, ScrollEvent, TranscriptView). Effects wait
+ *   types (Target, Scroll, ScrollState, AnchorAt, Geometry, LayoutReply, ScrollEvent, TranscriptView); 2.0 (P2):
+ *   "open-panel", "close-panel", "overlay", "close-overlay", "focus", "blur", "set-mode", "release-keys", "rect",
+ *   "focused", "input-mode" (none of them during `create`, which has no input yet). Effects wait
  *   until the plugin's call returns. A call that panics, or whose answer the host refuses (it cannot decode it, the
  *   tree breaks the contract, a handler answers anything but null), has none, and fails the plugin. A call that
  *   answers OPENCODE_ERROR keeps them (see above). A render, a view, a draw or a layout ("fence", "slot", "route",

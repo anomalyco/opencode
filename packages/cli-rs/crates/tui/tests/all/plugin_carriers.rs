@@ -371,3 +371,41 @@ fn a_windowed_list_is_equal_on_every_carrier() {
         }
     }
 }
+
+// Expected (`carrier-equal` for input, P2): the route's handler takes a key, passes one on to the plugin's own global
+// layer, sets a mode whose layer takes the same key for another card and reads it back, and ends it; then a handler's
+// panic fails the plugin once, naming the call. The frames, toasts and status are the same linked, through the byte
+// shims, and as a real library.
+#[test]
+fn input_is_equal_on_every_carrier() {
+    let run = |run: Run| {
+        let board = open(run);
+        let (app, tui) = (&board.harness.app, &board.harness.tui);
+        tui.navigate(Route::Plugin { id: ID.to_owned(), name: "board".to_owned() });
+        settle(&board.harness);
+        let mut seen = Vec::new();
+        for key in ["j", "h", "m", "j", "m", "j", "p"] {
+            app.press(key);
+            settle(&board.harness);
+            let keys =
+                app.text().lines().find_map(|line| line.split_once(" keys ").map(|(_, keys)| keys.trim().to_owned()));
+            seen.push((key, keys, observe(&board.harness)));
+        }
+        seen
+    };
+    let linked = run(Run::In(Carrier::Linked));
+    assert_eq!(
+        linked[5].1.as_deref(),
+        Some("bump help global move shift@move done@move bump"),
+        "a key, a pass and a mode"
+    );
+    let (_, _, (_, toasts, status)) = linked.last().unwrap();
+    assert_eq!(toasts.len(), 1, "{toasts:?}");
+    assert!(status.contains("handle panicked: the board's handler panicked"), "{status}");
+    for other in [Run::In(CARRIERS[1]), Run::Library] {
+        for ((key, _, linked), (_, _, seen)) in linked.iter().zip(run(other)) {
+            assert_eq!((&linked.1, &linked.2), (&seen.1, &seen.2), "{other:?} after {key}: toasts and status");
+            assert!(linked.0 == seen.0, "{other:?} after {key}: the frames differ");
+        }
+    }
+}

@@ -289,7 +289,7 @@ the content handle to number from; the plugin answers the tree, the content it g
 memo table, and `Unmount` drops that table when the mount ends. Only a surface that declares it reads the palette gets
 the palette, on either carrier.
 
-### Contract 2.0 input and surfaces (P2, in process only)
+### Contract 2.0 input and surfaces (P2)
 
 Two more places (`opencode_plugin_abi::interact`): `Place::Panel(name)`, which `Host::open_panel` shows beside the
 session on screen (or over the whole screen) and whose view gets `SurfaceInput::panel` (its width, whether it is full
@@ -328,6 +328,15 @@ Everything a mount registers ends with it, and everything a plugin registers end
 a select's search are calls of the plugin (`handle`, `search` in the run record), timed and contained as any other: one
 that panics fails the plugin, whose layers, modes, capture, hold and overlays then go, and the focus goes to the
 composer.
+
+A library has the same input over the C ABI. Its manifest lists each surface's `handler` and `layers`, and its own
+`layers` and `searches`; the host calls a handler as the request `input` (to a surface, for the mount it routes the
+event to, or to a layer of the manifest) and a search as `search`. The verbs and reads are host requests of the plugin's
+(`open-panel`, `close-panel`, `overlay`, `close-overlay`, `focus`, `blur`, `set-mode`, `release-keys`, `rect`,
+`focused`, `input-mode`), which act on and read the mount whose call runs, as in process. Setup has no input yet, so
+during `create` the host answers them with an error. The example board (`crates/plugin/examples/board`) takes a key, passes one on
+to its own global layer, and sets a mode, with the same frames linked, through the byte shims and as a library
+(`plugin_carriers::input_is_equal_on_every_carrier`).
 
 `Dialog::Select` with a `key` is the rich select: shown again under its key while it is open, it changes in place and
 keeps its filter and selection, and picking a row does not close it. A row may have its own action, a footer color, a

@@ -3,7 +3,9 @@
 //! views ran, how many cards they built, and how many messages arrived. A meter, a canvas below the header, draws the
 //! cards' total as a bar, with the frame it drew for: its version follows the total, and it animates on request,
 //! adding up the animation's time. Commands bump a card, toast, panic, animate the meter or make its next draw panic,
-//! and start threads: one that floods the mailbox, waiting on `Full`, and one that panics.
+//! and start threads: one that floods the mailbox, waiting on `Full`, and one that panics. Keys of the route (P2) bump
+//! a card, pass a key on to the plugin's own global layer, set a mode in which the same key bumps another card, and
+//! panic; the header lists the keys the handlers heard, each with the mode the handler read.
 //!
 //! Its `files` route is P3's: a windowed list of files whose estimates are not their heights, each an anchor of group
 //! `file` with its hunks in group `hunk`. Commands bring a file to the top, step between hunks and show a file with
@@ -16,6 +18,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use opencode_plugin_abi::canvas::{List, Style};
+use opencode_plugin_abi::interact::{Bind, Event, Handled, Layer, LayerScope};
 use opencode_plugin_abi::{Command, Layout, Rgba, SendError, Setup, Span, Toast, Variant, Width, v2};
 
 pub const CARDS: usize = 6;
@@ -32,6 +35,7 @@ struct Board {
     elapsed: Duration,
     /// The meter's next draw panics.
     broken: bool,
+    keys: Vec<String>,
 }
 
 /// The files: how many `layout` calls ran, the header's width the last one was told, and where the last step landed.
@@ -101,9 +105,43 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         board.broken = true;
         board.values[0] += 1;
     });
-    let drawn = board.clone();
-    let surface = v2::Surface::new("board", v2::Place::Route("board".into()), move |cx| view(&board, cx));
-    setup.surface(surface.draw(move |cx| Some(meter(&drawn, cx.frame))));
+    // The plugin's own layer hears the key the route's handler passes.
+    let global = board.clone();
+    let layer = Layer { scope: LayerScope::Global, keys: vec![Bind::new("h", "help")], ..Layer::default() };
+    setup.layer(layer, move |_, _| {
+        global.borrow_mut().keys.push("global".to_owned());
+        Handled::Consume
+    });
+    let (keyed, viewed, drawn) = (board.clone(), board.clone(), board);
+    let base = Layer {
+        keys: vec![Bind::new("j", "bump"), Bind::new("h", "help"), Bind::new("m", "move"), Bind::new("p", "panic")],
+        ..Layer::default()
+    };
+    let moving = Layer {
+        mode: Some("move".to_owned()),
+        keys: vec![Bind::new("j", "shift"), Bind::new("m", "done")],
+        ..Layer::default()
+    };
+    let surface = v2::Surface::new("board", v2::Place::Route("board".into()), move |cx| view(&viewed, cx))
+        .draw(move |cx| Some(meter(&drawn, cx.frame)))
+        .layers(vec![base, moving])
+        .on(move |host, event| {
+            let Event::Key(key) = event else { return Handled::Pass };
+            let bind = key.bind.clone().unwrap_or_default();
+            let heard = host.mode().map_or(bind.clone(), |mode| format!("{bind}@{mode}"));
+            let mut board = keyed.borrow_mut();
+            board.keys.push(heard);
+            match bind.as_str() {
+                "bump" => board.values[0] += 1,
+                "shift" => board.values[CARDS - 1] += 1,
+                "move" => host.set_mode(Some("move")),
+                "done" => host.set_mode(None),
+                "panic" => panic!("the board's handler panicked"),
+                _ => return Handled::Pass,
+            }
+            Handled::Consume
+        });
+    setup.surface(surface);
     files(setup);
     Ok(())
 }
@@ -214,7 +252,11 @@ fn view(board: &RefCell<Board>, cx: &mut v2::View<'_>) -> v2::Node {
     let header = {
         let mut board = board.borrow_mut();
         board.built += built;
-        format!("views {} built {} messages {}", board.views, board.built, board.messages)
+        let keys = match board.keys.is_empty() {
+            true => String::new(),
+            false => format!(" keys {}", board.keys.join(" ")),
+        };
+        format!("views {} built {} messages {}{keys}", board.views, board.built, board.messages)
     };
     let header = v2::Node::text(vec![Span::new(header)]).with_id("header");
     let total: u32 = values.iter().sum();
