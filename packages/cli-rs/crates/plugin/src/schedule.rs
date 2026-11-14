@@ -162,6 +162,8 @@ fn drain(app: &App) {
         }
         !of(&queue, app_key).is_empty()
     });
+    // The frame's updates are done: whether each mailbox with mail is full at its end (the backlog cause of slow).
+    QUEUE.with(|queue| of(&queue.borrow(), app_key)).iter().for_each(|activation| activation.sample_backlog());
     if left {
         WORK.with(|work| work.set(Work { deferred: work.get().deferred + 1, ..work.get() }));
         arm(app);

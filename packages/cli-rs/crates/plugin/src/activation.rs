@@ -245,6 +245,15 @@ impl Activation {
         Step::Ran
     }
 
+    /// The end of a frame in which the plugin had mail: the monitor counts whether its mailbox is full, and tells the
+    /// user once it is slow by its backlog.
+    pub(crate) fn sample_backlog(&self) {
+        let Some((monitor, slot)) = self.monitor.borrow().clone() else { return };
+        if let Some((id, news)) = monitor.backlog(slot, self.mailbox.full(), self.mailbox.stats().refused) {
+            crate::defer(&self.host, move |host| host.slow(&id, &news));
+        }
+    }
+
     pub fn track(&self, claim: Weak<dyn Drawn>) {
         let mut claims = self.claims.borrow_mut();
         claims.retain(|claim| claim.strong_count() > 0);

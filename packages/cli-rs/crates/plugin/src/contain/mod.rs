@@ -231,6 +231,11 @@ struct Stats {
     host_total: Duration,
     /// Its calls in a frame of the host's count, whatever closed P4c's window: what the scheduler's budget reads.
     counted: Option<(u64, Duration)>,
+    /// The frames at the end of which its mailbox was full, the last [`Limits::window`] (synthesis 4.2, reviews
+    /// bigboi 10 and carbon 5.4); whether that was told; and the sends its mailbox refused so far.
+    backlog: VecDeque<u64>,
+    told_backlog: bool,
+    refused: u64,
 }
 
 #[derive(Default)]
@@ -554,9 +559,35 @@ impl Monitor {
         self.plugins.borrow().iter().rev().find(|stats| stats.artifact.id == id).map(f)
     }
 
-    /// Whether plugin `id`'s newest build is slow now.
+    /// Whether plugin `id`'s newest build is slow now: by its calls, or by its backlog.
     pub fn is_slow(&self, id: &str) -> bool {
-        self.latest(id, |stats| stats.slow).unwrap_or(false)
+        let (limits, now) = (self.limits(), self.frame());
+        self.latest(id, |stats| stats.slow || stats.backlogged(&limits, now)).unwrap_or(false)
+    }
+
+    /// The end of a frame in which plugin `slot` had mail: whether its mailbox is `full`, and the sends it refused so
+    /// far. A mailbox full at the end of more than [`Limits::slow`] of the last [`Limits::window`] frames makes its
+    /// plugin slow, with the cause "backlog": the first time, the plugin's ID and the news, once a session.
+    pub fn backlog(&self, slot: Slot, full: bool, refused: u64) -> Option<(String, String)> {
+        let (limits, now) = (self.limits(), self.frame());
+        let mut plugins = self.plugins.borrow_mut();
+        let stats = &mut plugins[usize::from(slot.0)];
+        stats.refused = refused;
+        while stats.backlog.front().is_some_and(|frame| frame + limits.window as u64 <= now) {
+            stats.backlog.pop_front();
+        }
+        if full && stats.backlog.back() != Some(&now) {
+            stats.backlog.push_back(now);
+        }
+        if !stats.backlogged(&limits, now) || std::mem::replace(&mut stats.told_backlog, true) {
+            return None;
+        }
+        log::warn!(
+            "plugin {} is slow: its mailbox was full at the end of {} frames",
+            stats.artifact.id,
+            stats.backlog.len()
+        );
+        Some((stats.artifact.id.clone(), format!("Its mailbox is full; {refused} sends refused")))
     }
 
     /// The frames all plugins together went over [`Limits::all`].
@@ -566,7 +597,18 @@ impl Monitor {
 
     /// What `/plugins` shows for a slow plugin: p50, p99 and worst per call kind.
     pub fn report(&self, id: &str) -> Option<String> {
+        let (limits, now) = (self.limits(), self.frame());
         self.latest(id, |stats| {
+            let backlog = stats.backlogged(&limits, now).then(|| {
+                let full = stats.backlog.iter().filter(|frame| *frame + limits.window as u64 > now).count();
+                format!(
+                    "backlog: full at the end of {full} of the last {} frames, {} sends refused",
+                    limits.window, stats.refused
+                )
+            });
+            if !stats.slow {
+                return backlog;
+            }
             stats.slow.then(|| {
                 // The host's time for its nodes goes beside its own calls (4.4).
                 let kinds: Vec<String> = stats
@@ -588,7 +630,8 @@ impl Monitor {
                     .filter_map(|(name, took)| Some(format!("{name} {:.1} ms", ms(took?))))
                     .collect();
                 let start = if start.is_empty() { String::new() } else { format!("; {}", start.join(", ")) };
-                format!("slow (p50/p99/worst): {}{start}", kinds.join(", "))
+                let backlog = backlog.map(|backlog| format!("; {backlog}")).unwrap_or_default();
+                format!("slow (p50/p99/worst): {}{start}{backlog}", kinds.join(", "))
             })
         })
         .flatten()
@@ -601,6 +644,12 @@ impl Monitor {
 }
 
 impl Stats {
+    /// Whether its mailbox was full at the end of more than [`Limits::slow`] of the [`Limits::window`] frames before
+    /// `now`.
+    fn backlogged(&self, limits: &Limits, now: u64) -> bool {
+        self.backlog.iter().filter(|frame| *frame + limits.window as u64 > now).count() > limits.slow
+    }
+
     /// Adds a call of `took` in `frame`; when that ends the frame before, the slow rule runs on it. Returns the news
     /// of a plugin that became slow for the first time, and whether the call opened a frame.
     fn add(&mut self, frame: u64, took: Duration, limits: &Limits) -> (Option<String>, bool) {
