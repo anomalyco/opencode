@@ -920,3 +920,49 @@ fn a_tree_with_unknown_content_is_refused() {
     );
     assert_eq!(host.app.render(), frame);
 }
+
+/// `levels` scrolls, each inside the last.
+fn nested_scrolls(levels: usize) -> v2::Node {
+    (0..levels).fold(v2::Node::text(vec![abi::Span::new("deep")]), |inner, level| v2::Node::Scroll {
+        id: Some(format!("s{level}")),
+        height: Some(3),
+        follow: false,
+        layout: abi::Layout::default(),
+        children: vec![inner],
+    })
+}
+
+// Expected (`no-effects`, a tree the layout cannot take): a tree that nests past the bound, in one revision or by
+// keeps that each wrap the last, or a size in percent that is not finite, is refused; nothing changes and the TUI
+// keeps painting. Without the bound OpenTUI refuses the node and the app ends.
+#[test]
+fn a_tree_the_layout_cannot_take_is_refused() {
+    let host = host(0);
+    let parent = root(&host);
+    let mut tree = Tree::default();
+    apply(&host, &mut tree, &parent, &[nested_scrolls(4)]).unwrap();
+    let frame = host.app.render();
+    assert_eq!(apply(&host, &mut tree, &parent, &[nested_scrolls(64)]), Err(Refused::Deep));
+    assert_eq!(host.app.render(), frame);
+    for percent in [f32::INFINITY, f32::NAN, -5.0] {
+        let wide = v2::Node::text(vec![abi::Span::new("x")])
+            .layout(abi::Layout { width: Some(abi::Width::Percent(percent)), ..abi::Layout::default() });
+        assert_eq!(apply(&host, &mut tree, &parent, &[v2::Node::column(vec![wide])]), Err(Refused::Number));
+        assert_eq!(host.app.render(), frame);
+    }
+    // Two nodes a revision, each a box around a keep of the last: the tree grows one level each time.
+    let mut tree = Tree::default();
+    apply(&host, &mut tree, &parent, &[v2::Node::column(vec![]).with_id("r0")]).unwrap();
+    let mut refused = None;
+    for level in 1..200 {
+        let wrap =
+            v2::Node::column(vec![v2::Node::Keep { key: format!("r{}", level - 1) }]).with_id(format!("r{level}"));
+        if let Err(error) = apply(&host, &mut tree, &parent, &[wrap]) {
+            refused = Some((level, error));
+            break;
+        }
+        host.app.render();
+    }
+    assert_eq!(refused, Some((usize::from(reconcile::MAX_DEPTH), Refused::Deep)));
+    host.app.render();
+}
