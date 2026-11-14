@@ -44,11 +44,14 @@ export const BlockedReason = Schema.Literals([
 ])
 export type BlockedReason = typeof BlockedReason.Type
 
+/** Maximum number of fallback hops followed while a window blocks a model. */
+const FALLBACK_HOP_LIMIT = 3
+
 const blockedMessage = (
   providerID: Provider.ID,
   modelID: Model.ID,
   reason: BlockedReason,
-  detail: { readonly fallback?: string; readonly limit?: number },
+  detail: { readonly fallback?: string },
 ): string => {
   const model = `${providerID}/${modelID}`
   switch (reason) {
@@ -59,7 +62,7 @@ const blockedMessage = (
     case "cycle-detected":
       return `Model ${model} is outside its availability window and its fallback chain contains a cycle at ${detail.fallback}`
     case "depth-exceeded":
-      return `Model ${model} is outside its availability window and its fallback chain exceeds the maximum of ${detail.limit} hops`
+      return `Model ${model} is outside its availability window and its fallback chain exceeds the maximum of ${FALLBACK_HOP_LIMIT} hops`
     case "malformed-fallback":
       return `Model ${model} is outside its availability window and its fallback ${JSON.stringify(detail.fallback ?? "")} is not a valid provider/model reference`
   }
@@ -72,8 +75,7 @@ export class ModelBlockedByAvailabilityError extends Schema.TaggedError<ModelBlo
 ) {
   override get message() {
     return blockedMessage(this.providerID, this.modelID, this.reason, { fallback: this.fallback })
-  }
-}
+  }}
 export type Error =
   | ModelNotSelectedError
   | ModelUnavailableError
@@ -164,7 +166,7 @@ export const layer = Layer.effect(
             if (visited.has(identity)) return yield* blocked(info, "cycle-detected", fallback)
             const next = yield* find(ref)
             if (next === undefined) return yield* blocked(info, "fallback-not-found", fallback)
-            if (depth >= 3) return yield* blocked(info, "depth-exceeded", fallback)
+            if (depth >= FALLBACK_HOP_LIMIT) return yield* blocked(info, "depth-exceeded", fallback)
             yield* Effect.logInfo("model blocked by availability window, using fallback", {
               provider: info.providerID,
               model: info.id,

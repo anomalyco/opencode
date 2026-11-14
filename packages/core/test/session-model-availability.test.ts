@@ -96,12 +96,9 @@ const resolveSelection = (
 
 const blockedReason = (exit: Exit.Exit<ModelResolver.Resolved, unknown>): string | undefined => {
   if (Exit.isSuccess(exit)) return undefined
-  const failure = exit as Exit.Exit<ModelResolver.Resolved, unknown> & { readonly cause: Cause.Cause<unknown> }
-  const error = Cause.findError(failure.cause)
-  // The Result wrapper's `value` is not a plain property in this effect version; the serialized
-  // form reliably carries the error payload.
-  const match = JSON.stringify(error).match(/"reason":"([a-z-]+)"/)
-  return match === null ? undefined : match[1]
+  const error = Cause.findErrorOption(exit.cause)
+  if (error?._tag !== "Some" || !(error.value instanceof SessionRunnerModel.ModelBlockedByAvailabilityError)) return undefined
+  return error.value.reason
 }
 
 describe("SessionRunnerModel availability fallback", () => {
@@ -184,6 +181,10 @@ describe("SessionRunnerModel availability fallback", () => {
       const exit = yield* resolveSelection(chain, { providerID: "p", id: "a" }, UTC(1, 12))
       expect(Exit.isFailure(exit)).toBe(true)
       expect(blockedReason(exit)).toBe("depth-exceeded")
+      const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : undefined
+      expect(error?._tag === "Some" && error.value instanceof SessionRunnerModel.ModelBlockedByAvailabilityError
+      // The error names the model whose chain hit the cap (p/d after a→b→c→d) and the actual limit.
+        ? error.value.message : "").toBe("Model p/d is outside its availability window and its fallback chain exceeds the maximum of 3 hops")
     }),
   )
 
