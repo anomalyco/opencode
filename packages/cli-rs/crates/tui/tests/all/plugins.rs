@@ -328,6 +328,17 @@ fn project_tui_at(root: &Path, home: &Path) -> Harness {
     harness
 }
 
+/// [`project_tui`], and the log of its requests.
+#[cfg(unix)]
+fn project_tui_logged(root: &Path) -> (Harness, support::Log) {
+    let fake = fake(String::new());
+    let log = fake.log();
+    let roots = support::roots(support::home_paths(&root.join("home")), "test");
+    let harness = support::mount(80, 24, Deps { route: Route::Home, roots, ..support::deps(Arc::new(fake)) });
+    external(&harness.tui, External { config_dir: root.join("config"), cwd: root.join("work"), dev: Vec::new() });
+    (harness, log)
+}
+
 /// Writes `library` as the project plugin `name` under `root/work`.
 fn project_plugin(root: &Path, name: &str, library: &[u8]) {
     let dir = root.join("work/.opencode/plugins").join(name);
@@ -413,7 +424,9 @@ fn the_list_comes_back_as_the_plugins_are_after_the_question() {
     for answer in ["escape", "unsaved", "filtered"] {
         let root = opencode_util::temp::tempdir().unwrap();
         project_plugin(root.path(), "first", &build(""));
-        let h = project_tui(root.path());
+        let (h, log) = project_tui_logged(root.path());
+        let reads =
+            || log.lock().unwrap().iter().filter(|seen| seen.method == "GET" && seen.path == "/api/plugin").count();
         opencode_tui::plugins::host::add(&h.tui, boom().into());
         h.tui.keymap.dispatch("plugins.list", None);
         h.wait_for("pending, local");
@@ -426,6 +439,7 @@ fn the_list_comes_back_as_the_plugins_are_after_the_question() {
         h.wait_for("Run project plugin?");
         h.tui.keymap.dispatch("boom.boom", None);
         h.app.render();
+        let before = reads();
         let state = support::home_paths(&root.path().join("home")).state;
         match answer {
             "escape" | "filtered" => h.app.press("escape"),
@@ -440,6 +454,8 @@ fn the_list_comes_back_as_the_plugins_are_after_the_question() {
         std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o700)).ok();
         if answer != "filtered" {
             h.wait_for("x test.boom");
+            // The server list is read again, as `plugin.updated` went unheard under the question.
+            h.wait("the server list read again", || reads() == before + 1);
             continue;
         }
         let screen = h.app.text();
