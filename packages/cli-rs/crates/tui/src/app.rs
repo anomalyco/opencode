@@ -366,8 +366,8 @@ impl Tui {
         }
         // In place, the focus, the scroll positions and every widget's state stay where they are.
         if self.view.borrow().as_ref().is_some_and(|view| view.restyle(self)) {
-            // The `app` slot's plugin claims take the theme when they render, so they render again.
-            crate::frame::mount_app(self, true);
+            // The `app` slot's plugin claims take the theme in place, or mount again when one cannot.
+            crate::frame::restyle_app(self);
             self.app.request_redraw();
             return;
         }

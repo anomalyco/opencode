@@ -433,7 +433,10 @@ impl Claimed for Rc<Surface> {
 
     fn restyle(&self, host: &dyn Host) -> bool {
         Surface::restyle(self, host);
-        true
+        // The slots it shows keep their claims; they take the theme as their own.
+        let mut done = true;
+        self.state.borrow().tree.each_slot(&mut |slots| done &= slots.restyle(host));
+        done
     }
 }
 
