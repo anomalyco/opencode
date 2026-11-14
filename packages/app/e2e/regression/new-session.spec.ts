@@ -9,8 +9,10 @@ import {
   openDraft,
   openSession,
   openWorktreeDraft,
+  fileDiff,
   type WorkspaceInput,
 } from "../utils/workspace"
+import { openReviewLauncher } from "../utils/side-panel"
 
 const directory = "C:/OpenCode/WorkspacePending"
 
@@ -57,6 +59,47 @@ test.use({
 test("the new session screen does not show session details", async ({ page }) => {
   await openDraft(page, { name: "Summary" })
   await expect(page.getByRole("button", { name: "Session details", exact: true })).toHaveCount(0)
+})
+
+test("the review panel is available before the first message", async ({ page }) => {
+  await openDraft(page, { name: "DraftReview", vcsDiff: [fileDiff("src/changed.ts")] })
+
+  const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+  const panel = page.locator("#review-panel")
+
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(panel).toHaveAttribute("aria-hidden", "false")
+
+  await openReviewLauncher(panel)
+  await expect(panel.getByRole("tab", { name: /Changed/ })).toBeVisible()
+  await expect(panel.getByRole("treeitem", { name: "changed.ts" })).toBeVisible()
+})
+
+test("the review panel stays open after the first message", async ({ page }) => {
+  const created: string[] = []
+
+  const view = await openDraft(page, {
+    name: "DraftReviewPromote",
+    vcsDiff: [fileDiff("src/changed.ts")],
+    onSessionCreate: (body) => void created.push(String(body.id)),
+  })
+
+  const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+  const panel = page.locator("#review-panel")
+
+  await toggle.click()
+  await openReviewLauncher(panel)
+  await expect(panel.getByRole("treeitem", { name: "changed.ts" })).toBeVisible()
+
+  await view.editor.fill("Review before the first message")
+  await submit(page).click()
+  await expect.poll(() => created).toHaveLength(1)
+  await expectPath(page, sessionHref(created[0]!))
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(panel).toHaveAttribute("aria-hidden", "false")
+  await expect(panel.getByRole("treeitem", { name: "changed.ts" })).toBeVisible()
 })
 
 test("the location shortcuts choose worktrees from every state and keep cycling", async ({ page }) => {
@@ -858,6 +901,7 @@ test("retains the draft and reuses the created workspace after session creation 
   await expect.poll(() => mock.prompts.length).toBe(1)
   expect(mock.creates).toHaveLength(2)
   expect(mock.creates[1]).toMatchObject({ location: { directory: workspace } })
+  expect(mock.creates[1]!.id).not.toBe(mock.creates[0]!.id)
   expect(mock.prompts[0]).toMatchObject({ sessionID: mock.creates[1]!.id, body: { text } })
   expect(mock.calls).toEqual(["worktree", "session", "session", "prompt"])
   await expectPath(page, sessionHref(String(mock.creates[1]!.id)))

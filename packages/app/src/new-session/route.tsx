@@ -9,7 +9,7 @@ import { ComposerPersistenceProvider } from "@/composer/persistence"
 import { ServerProvider, useServer } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
 import { isServerIncompatible } from "@/runtime/server/health-machine"
-import { useTabs, type DraftTab } from "@/shell/tabs/tabs"
+import { draftDirectory, useTabs, type DraftTab } from "@/shell/tabs/tabs"
 import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
 import NewSession from "@/new-session/screen"
 import { ServerSignedOutPanel, ServerUnavailablePanel } from "@/session/server-unavailable-panel"
@@ -61,6 +61,8 @@ function ResolvedDraftContent(props: { draft: DraftTab }) {
   const server = useServer()
   const tabs = useTabs()
 
+  const directory = () => draftDirectory(props.draft)
+
   return (
     <Show
       when={!isServerIncompatible(server.health)}
@@ -88,9 +90,9 @@ function ResolvedDraftContent(props: { draft: DraftTab }) {
           </SessionRouteFrame>
         )}
       >
-        <ModelsProvider directory={props.draft.directory}>
-          <LocationProvider directory={props.draft.directory}>
-            <SessionUIProvider directory={props.draft.directory} server={props.draft.server}>
+        <ModelsProvider directory={directory()}>
+          <LocationProvider directory={directory()}>
+            <SessionUIProvider directory={directory()} server={props.draft.server}>
               <DraftProviders>
                 <NewSession draftId={props.draft.draftID} />
               </DraftProviders>

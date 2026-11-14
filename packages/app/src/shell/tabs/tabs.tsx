@@ -10,6 +10,7 @@ import type { NewSessionStartView } from "@/new-session/machine"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { usePlatform } from "@/runtime/platform/platform"
 import { uuid } from "@opencode/util/uuid"
+import { Session } from "@opencode/schema/session"
 import { SessionTabsRemovedDetail } from "@/shell/titlebar/session-events"
 import { sessionHref } from "@/shell/routes/session"
 import { createTabMemory } from "./memory"
@@ -76,6 +77,10 @@ export const tabHref = (tab: Tab) =>
 
 export const tabKey = (tab: Tab) =>
   tab.type === "draft" ? `draft:${tab.draftID}` : `${tab.server}\n${sessionHref(tab.server, tab.sessionId)}`
+
+/** The workspace an unsent draft runs in: its selected worktree, or the project directory for Local and New worktree. */
+export const draftDirectory = (draft: Pick<DraftTab, "directory" | "worktree">) =>
+  draft.worktree && draft.worktree !== "main" && draft.worktree !== "create" ? draft.worktree : draft.directory
 
 export function sessionHasOpenTab(tabs: Tab[], server: ServerConnection.Key, session: SessionInfo) {
   return sessionIDHasOpenTab(tabs, server, session.id)
@@ -209,6 +214,16 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       )
     }
 
+    // A draft keeps its side region while it is promoted to, or rolled back from, a session.
+    const moveRegions = (from: string, to: string) => {
+      if (from === to) return
+      const current = regions[from]
+
+      if (!current) return
+      setRegions(to, { ...current })
+      removeRegions(from)
+    }
+
     const dispatchPromotion = (event: Exclude<TabPromotionEvent, TabPromotionCommit>) => {
       const previous = untrack(promotion)
       const result = transitionTabPromotion(previous, event)
@@ -269,6 +284,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         if (index === -1) return
         const route = currentRoute()
+        moveRegions(effect.key, tabKey(effect.draft))
         setStore(
           produce((tabs) => {
             tabs[index] = effect.draft
@@ -506,6 +522,21 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         return tab
       },
+      /** The session id reserved for a draft's first message, created on first use. */
+      reserveDraft(draftID: string) {
+        const draft = actions.draft(draftID)
+
+        if (draft.sessionId) return draft.sessionId
+        const id = Session.ID.create()
+
+        setStore((tab) => tab.type === "draft" && tab.draftID === draftID, "sessionId", id)
+
+        return id
+      },
+      /** Drops a draft's reserved id, so the next attempt creates a Session with a fresh one. */
+      resetDraftSession(draftID: string) {
+        setStore((tab) => tab.type === "draft" && tab.draftID === draftID, "sessionId", undefined)
+      },
       /** Opens a draft tab; pass `draftID` to know it before the draft opens. */
       async newDraft(
         draft: Omit<DraftTab, "type" | "draftID"> & { draftID?: string },
@@ -513,7 +544,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         model?: PromptModel,
       ) {
         const draftID = draft.draftID ?? uuid()
-        const tab = { ...draft, type: "draft" as const, draftID }
+        const tab = { ...draft, type: "draft" as const, draftID, sessionId: Session.ID.create() }
         memory.ensure(tabKey(tab), "prompt", () => createDraftComposerState(draftID, { prompt, model }))
         await startTransition(() => {
           preview.clear()
@@ -571,6 +602,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
           }
 
           const active = location.pathname === "/new-session" && location.query.draftId === draftID
+          moveRegions(tabKey(draft), key)
           setStore(
             produce((tabs) => {
               tabs[index] = next
@@ -591,7 +623,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
             await memory.get<ComposerState>(key, "prompt")?.ready.promise
             await commitPromotion(() => ({ type: "complete.settled", key, attempt }))
           },
-          async rollback(worktree?: string) {
+          async rollback(worktree?: string, options?: { resetSession?: boolean }) {
             await ready
 
             if (!dispatchPromotion({ type: "rollback.start", key, attempt, worktree })) return
@@ -601,6 +633,8 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
               attempt,
               open: store.some((tab) => tabKey(tab) === key),
             }))
+
+            if (options?.resetSession) actions.resetDraftSession(draftID)
           },
         }
       },

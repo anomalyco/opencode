@@ -45,7 +45,7 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { isServerIncompatible } from "@/runtime/server/health-machine"
 import { useDirectoryPicker } from "@/workspaces/selection/picker"
 import { SessionRouteKey, SessionStateKey, type ServerScope } from "@/runtime/server/scope"
-import { findSessionTab, tabKey, useTabs, type Tab } from "@/shell/tabs/tabs"
+import { draftDirectory, findSessionTab, tabKey, useTabs, type Tab } from "@/shell/tabs/tabs"
 import { openNotificationSession } from "@/shell/notifications/notification"
 import { playSoundById } from "@/shell/notifications/sound"
 import { showToast } from "@/shell/notifications/toast"
@@ -389,8 +389,12 @@ export function createHostApis() {
       },
     }),
     sessions: () => ({
-      list: () => current()?.sessions() ?? [],
-      current: () => current()?.current(),
+      list: (options) => (current()?.sessions() ?? []).filter((session) => options?.drafts || !session.draft),
+      current: (options) => {
+        const session = current()?.current()
+
+        return session?.draft && !options?.drafts ? undefined : session
+      },
     }),
     // Before the interface mounts, no tabs are listed and writes wait for it.
     tabs: () => ({
@@ -451,10 +455,11 @@ export function createHostApis() {
     // No command is registered before the interface mounts.
     commands: () => ({ run: (id) => untrack(attached)?.run(id) ?? false }),
     screen: () => ({
-      current: () => {
+      current: (options) => {
         const attached = current()
+        const session = attached?.current()
 
-        return attached?.current() ? attached.screen() : undefined
+        return attached && session && (options?.drafts || !session.draft) ? attached.screen() : undefined
       },
     }),
     // Before the interface mounts, reads return what an empty layout holds and writes wait for it.
@@ -599,28 +604,56 @@ export function createPluginAttachment(apis: HostApis) {
   }
 
   const sessions = createMemo(() => {
-    const owned = new Set(tabs.store.filter((tab) => tab.type === "session").map(tabKey))
+    const owned = new Set(tabs.store.map(tabKey))
     Array.from(refs).forEach(([key, ref]) => {
       if (!owned.has(ref.tab)) refs.delete(key)
     })
     tabs.store.forEach((tab) => {
-      if (tab.type !== "session") return
+      if (tab.type === "draft" && !tab.sessionId) return
       const target = server(tab.server)
 
       if (!target) return
-      Array.from(new Set([tab.sessionId, tab.routeSessionId ?? tab.sessionId])).forEach((id) => {
+
+      const ids =
+        tab.type === "session"
+          ? [tab.sessionId, tab.routeSessionId ?? tab.sessionId]
+          : tab.sessionId
+            ? [tab.sessionId]
+            : []
+
+      Array.from(new Set(ids)).forEach((id) => {
         const key = `${tab.server}\n${id}`
 
         if (refs.has(key)) return
+
+        // The tab that owns the id now: a draft tab is replaced by its session tab on the first message.
+        const ownedTab = () =>
+          tabs.store.find(
+            (item) =>
+              item.server === target.id &&
+              (item.type === "session" ? item.sessionId === id || item.routeSessionId === id : item.sessionId === id),
+          )
+
         refs.set(key, {
           key,
           id,
-          tab: tabKey(tab),
+          get draft() {
+            return ownedTab()?.type === "draft"
+          },
+          get tab() {
+            const current = ownedTab()
+
+            return current ? tabKey(current) : tabKey(tab)
+          },
           server: target,
           get pending() {
             return target.data.session.creating(id)
           },
           get location() {
+            const current = ownedTab()
+
+            if (current?.type === "draft") return { directory: draftDirectory(current) }
+
             return target.data.session.get(id)?.location
           },
         })
@@ -633,7 +666,12 @@ export function createPluginAttachment(apis: HostApis) {
   const routed = createMemo(() => {
     const value = route()
 
-    return value.type === "session" ? `${value.server}\n${value.sessionId}` : undefined
+    if (value.type === "session") return `${value.server}\n${value.sessionId}`
+
+    if (value.type !== "draft") return undefined
+    const tab = tabs.store.find((tab) => tab.type === "draft" && tab.draftID === value.draftID)
+
+    return tab?.sessionId ? `${tab.server}\n${tab.sessionId}` : undefined
   })
 
   const current = createMemo(() => {
@@ -699,6 +737,7 @@ export function createPluginAttachment(apis: HostApis) {
   })
 
   const shellTab = (session: SessionRef) =>
+    tabs.store.find((tab) => tabKey(tab) === session.tab) ??
     findSessionTab(tabs.store, ServerConnection.Key.make(session.server.id), session.id)
 
   const sideOpened = (session: SessionRef) => !!tabs.region(shellTab(session), "side")
@@ -715,11 +754,13 @@ export function createPluginAttachment(apis: HostApis) {
       true,
     )
 
-  // The keys a session tab's sessions go by: the session it shows and the one it routes.
+  // The keys a session tab's sessions go by: the session it shows and the one it routes; a draft's reserved id.
   const tabSessions = (tab: Tab) =>
     tab.type === "session"
       ? [`${tab.server}\n${tab.sessionId}`, `${tab.server}\n${tab.routeSessionId ?? tab.sessionId}`]
-      : []
+      : tab.sessionId
+        ? [`${tab.server}\n${tab.sessionId}`]
+        : []
 
   // Who each open side region belongs to: the panel whose `Layout.toggle` opened it, or the user. Read straight from
   // the shell tabs, so a session missing from `sessions()` (e.g. while its server signs in again) keeps its owner.
@@ -792,7 +833,7 @@ export function createPluginAttachment(apis: HostApis) {
     return untrack(() =>
       host
         .items(BuiltinPanel)
-        .filter((item) => item.value.region === "side")
+        .filter((item) => item.value.region === "side" && (!view.draft || item.value.drafts))
         .flatMap((item) => {
           const prefix = `${item.plugin}:`
           const open = stored.flatMap((key) => (key.startsWith(prefix) ? [key.slice(prefix.length)] : []))
