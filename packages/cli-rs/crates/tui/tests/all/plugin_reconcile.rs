@@ -88,7 +88,26 @@ fn apply_acting(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::No
 /// The node as ABI 1.x has it, when it has only kinds of 1.x; ids are dropped.
 fn lower(node: &v2::Node) -> Option<abi::Node> {
     Some(match node {
-        v2::Node::Box { row, gap, padding, justify, align, bg, layout, on_click, children, .. } => abi::Node::Box {
+        v2::Node::Box {
+            row,
+            gap,
+            padding,
+            justify,
+            align,
+            bg,
+            layout,
+            on_click,
+            children,
+            border,
+            padding_sides,
+            wrap,
+            overflow,
+            ..
+        } => abi::Node::Box {
+            border: border.clone(),
+            padding_sides: *padding_sides,
+            wrap: *wrap,
+            overflow: *overflow,
             row: *row,
             gap: *gap,
             padding: *padding,
@@ -217,6 +236,10 @@ impl Generator<'_> {
                     layout: self.layout(),
                     on_click: self.click(),
                     children,
+                    border: self.chance(25).then(|| std::boxed::Box::new(self.border())),
+                    padding_sides: self.chance(20).then(|| self.edges()),
+                    wrap: self.chance(15),
+                    overflow: if self.chance(15) { abi::Overflow::Hidden } else { abi::Overflow::Visible },
                 }
             }
             1 | 2 => v2::Node::Text {
@@ -245,8 +268,44 @@ impl Generator<'_> {
         }
     }
 
+    fn border(&mut self) -> abi::Border {
+        abi::Border {
+            sides: abi::Sides {
+                top: self.chance(70),
+                right: self.chance(70),
+                bottom: self.chance(70),
+                left: self.chance(70),
+            },
+            style: *self.rng.pick(&[abi::BorderStyle::Single, abi::BorderStyle::Rounded, abi::BorderStyle::Double]),
+            color: self.chance(60).then(|| self.color()),
+            title: self.chance(30).then(|| "title".to_owned()),
+            title_align: *self.rng.pick(&[abi::TitleAlign::Left, abi::TitleAlign::Center, abi::TitleAlign::Right]),
+        }
+    }
+
+    fn edges(&mut self) -> abi::Edges {
+        let mut side = || self.rng.below(4) as i16 - 1;
+        abi::Edges { top: side(), right: side(), bottom: side(), left: side() }
+    }
+
     fn layout(&mut self) -> abi::Layout {
         let mut layout = abi::Layout::default();
+        if self.chance(10) {
+            layout.height = Some(if self.chance(50) {
+                abi::Width::Cells(1 + self.rng.below(4) as u16)
+            } else {
+                abi::Width::Percent(25.0 * (1 + self.rng.below(3)) as f32)
+            });
+        }
+        if self.chance(5) {
+            layout.min_height = Some(abi::Width::Cells(1 + self.rng.below(3) as u16));
+        }
+        if self.chance(5) {
+            layout.max_height = Some(abi::Width::Cells(1 + self.rng.below(5) as u16));
+        }
+        if self.chance(10) {
+            layout.margin = Some(self.edges());
+        }
         if self.chance(15) {
             layout.grow = true;
         }
@@ -493,7 +552,7 @@ impl Model for Reconcile {
         let mut last: Vec<v2::Node> = Vec::new();
         let mut adopted: Vec<v2::Node> = Vec::new();
         for (step, command) in commands.iter().enumerate() {
-            let fail = |property, detail: String| Some(Failure { property, step, detail });
+            let fail = |property, detail: String| Some(Failure { property, site: property, step, detail });
             let before = host.app.render();
             match command {
                 Command::Theme(index) => {

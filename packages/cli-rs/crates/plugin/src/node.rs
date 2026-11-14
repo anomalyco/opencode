@@ -487,12 +487,12 @@ fn length(value: abi::Width) -> Length {
 }
 
 /// The cells of `edges` at each of OpenTUI's edges.
-fn edges_of(edges: &abi::Edges) -> [(Edge, i16); 4] {
+pub(crate) fn edges_of(edges: &abi::Edges) -> [(Edge, i16); 4] {
     [(Edge::Top, edges.top), (Edge::Right, edges.right), (Edge::Bottom, edges.bottom), (Edge::Left, edges.left)]
 }
 
 /// Draws `border` on `view`, as TS's `<box border>` draws it: white without a color, and the title in its color.
-fn bordered(view: &View, theme: &Theme, border: &abi::Border) {
+pub(crate) fn bordered(view: &View, theme: &Theme, border: &abi::Border) {
     let sides = [
         (border.sides.top, Sides::TOP),
         (border.sides.right, Sides::RIGHT),
