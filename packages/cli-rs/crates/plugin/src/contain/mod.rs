@@ -1,6 +1,7 @@
 //! Containment of plugin calls (synthesis 4.4 and 4.5, phase P4c). Every call into a plugin, on either path, runs
 //! through [`Monitor::call`]: it reads the clock before and after, so the plugin cannot opt out and does not report its
-//! own time, and while a run record is attached it names the call in the record for the watchdog and a restart.
+//! own time, and while a run record is attached it names the call in the record for the watchdog and a restart. On
+//! Linux the time the thread waited on a run queue meanwhile is not the plugin's: a loaded machine's, it is not charged.
 //!
 //! The budget acts after a call returns, because a call on the UI thread cannot be stopped:
 //!
@@ -166,6 +167,8 @@ pub struct Timed {
 pub struct Monitor {
     limits: Cell<Limits>,
     clock: RefCell<Rc<dyn Fn() -> Instant>>,
+    /// How long this thread has waited on a run queue so far ([`queued`]).
+    queued: RefCell<Rc<dyn Fn() -> Duration>>,
     /// A test set the clock: the record still takes the monotonic clock, which the watchdog reads.
     injected: Cell<bool>,
     frame: RefCell<Rc<dyn Fn() -> u64>>,
@@ -242,6 +245,7 @@ impl Monitor {
         Self {
             limits: Cell::new(limits),
             clock: RefCell::new(Rc::new(Instant::now)),
+            queued: RefCell::new(Rc::new(queued)),
             injected: Cell::new(false),
             frame: RefCell::new(Rc::new(|| 0)),
             plugins: RefCell::default(),
@@ -263,9 +267,10 @@ impl Monitor {
         self.limits.set(limits);
     }
 
-    /// Reads time from `clock`, which tests inject.
+    /// Reads time from `clock`, which tests inject. The time on a run queue is then none.
     pub fn set_clock(&self, clock: impl Fn() -> Instant + 'static) {
         *self.clock.borrow_mut() = Rc::new(clock);
+        *self.queued.borrow_mut() = Rc::new(|| Duration::ZERO);
         self.injected.set(true);
     }
 
@@ -329,8 +334,8 @@ impl Monitor {
         if self.depth.get() > 0 {
             return (f(), Timed::default());
         }
-        let clock = self.clock.borrow().clone();
-        let start = clock();
+        let (clock, queued) = (self.clock.borrow().clone(), self.queued.borrow().clone());
+        let (start, waited) = (clock(), queued());
         let generation = self.record.get().map(|(record, epoch)| {
             let now = if self.injected.get() { Instant::now() } else { start };
             record.enter(slot.0, record::kind(kind), now.saturating_duration_since(*epoch).as_millis() as u64)
@@ -340,13 +345,15 @@ impl Monitor {
         let value = f();
         drop(leave);
         let took = clock().saturating_duration_since(start);
+        // Runnable but not running is the machine's load, not the plugin's time.
+        let charged = took.saturating_sub(queued().saturating_sub(waited));
         let noticed =
             generation.zip(self.record.get()).is_some_and(|(generation, (record, _))| record.was_noticed(generation));
         if noticed && let Some(notice) = self.on_notice.borrow().clone() {
             let artifact = self.plugins.borrow()[usize::from(slot.0)].artifact.clone();
             notice(&artifact, took);
         }
-        (value, self.account(slot, kind, took))
+        (value, self.account(slot, kind, charged))
     }
 
     /// What the budget makes of a call of `kind` that took `took`.
@@ -530,6 +537,27 @@ impl Stats {
 
 fn ms(duration: Duration) -> f64 {
     duration.as_secs_f64() * 1e3
+}
+
+/// How long this thread has waited on a run queue so far, runnable but not running: the second field of
+/// `/proc/thread-self/schedstat`, in nanoseconds. None where the kernel does not tell.
+#[cfg(target_os = "linux")]
+fn queued() -> Duration {
+    use std::os::unix::fs::FileExt;
+    thread_local! {
+        static SCHEDSTAT: Option<std::fs::File> = std::fs::File::open("/proc/thread-self/schedstat").ok();
+    }
+    SCHEDSTAT.with(|file| {
+        let mut buffer = [0; 96];
+        let read = file.as_ref().and_then(|file| file.read_at(&mut buffer, 0).ok()).unwrap_or(0);
+        let text = std::str::from_utf8(&buffer[..read]).unwrap_or_default();
+        Duration::from_nanos(text.split_whitespace().nth(1).and_then(|ns| ns.parse().ok()).unwrap_or(0))
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn queued() -> Duration {
+    Duration::ZERO
 }
 
 #[cfg(test)]
