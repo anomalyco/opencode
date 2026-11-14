@@ -60,7 +60,14 @@ test("the art ticks at 30 fps only while drawn and animating, and leaves nothing
     expect(setCell).not.toHaveBeenCalled()
     expect(app.captureCharFrame()).toContain("█▀▀▀ █▀▀█")
     await run(1000)
-    expect(await run(3000)).toBe(90)
+    const pictures = new Set<string>()
+    let drawn = 0
+    for (let i = 0; i < 6; i++) {
+      drawn += await run(500)
+      pictures.add(JSON.stringify(app.captureSpans().lines))
+    }
+    // The art moves, not only redraws.
+    expect([drawn, pictures.size]).toEqual([90, 6])
 
     // Hidden, the first tick after a frame that did not draw it stops the clock.
     setVisible(false)

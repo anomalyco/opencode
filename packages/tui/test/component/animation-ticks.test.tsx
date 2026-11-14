@@ -12,7 +12,7 @@ import "../../src/component/title-shimmer"
 import { ConfigProvider } from "../../src/config"
 import { ThemeProvider } from "../../src/context/theme"
 import { createAnimatable, tween } from "../../src/ui/animation"
-import { BLOCK_LOW_COMET } from "../../src/ui/one-cell-motion"
+import { BLOCK_LOW_COMET, SEED_WORK } from "../../src/ui/one-cell-motion"
 import { countTickers } from "../fixture/animation-ticks"
 import { emptyThemeSource, tmpdir } from "../fixture/fixture"
 import { TestTuiContexts } from "../fixture/tui-environment"
@@ -77,7 +77,17 @@ const rows: [string, () => JSX.Element, number, number, number][] = [
     30,
   ],
   ["a 10 s tween at 60 fps", () => <Tween />, 180, 1, 60],
-  ["shimmer text at 60 fps", () => <ShimmerText shimmer={SHIMMER}>work</ShimmerText>, 180, 1, 0],
+  [
+    "shimmer text at 60 fps",
+    () => (
+      <ShimmerText shimmer={SHIMMER} fg="#444444">
+        work
+      </ShimmerText>
+    ),
+    180,
+    1,
+    0,
+  ],
   ["a shimmer spinner: 60 fps text, 12.5 fps glyph", () => <Spinner shimmer={SHIMMER}>work</Spinner>, 180, 2, 12],
   [
     "a pending title shimmer at 60 fps",
@@ -93,7 +103,14 @@ for (const [name, view, frames, open, hidden] of rows) {
     using tickers = countTickers()
     await using app = await mount(view)
     await app.run(1000)
-    expect([await app.run(3000), tickers()]).toEqual([frames, open])
+    // The picture moves: a view whose time stops still gets its frames, but shows one picture.
+    const pictures = new Set<string>()
+    let running = 0
+    for (let i = 0; i < 6; i++) {
+      running += await app.run(500)
+      pictures.add(JSON.stringify(app.captureSpans().lines))
+    }
+    expect([running, tickers(), pictures.size > 1]).toEqual([frames, open, true])
     app.setVisible(false)
     await app.run(100)
     expect(await app.run(1000)).toBe(hidden)
@@ -113,6 +130,74 @@ test("a shimmer spinner steps its glyph by the tick count", async () => {
   app.clock.advance(240)
   await app.renderOnce()
   expect((glyph() - first + SPINNER_FRAMES.length) % SPINNER_FRAMES.length).toBe(3)
+})
+
+// Steps are tick counts: one late frame lands on the same cell as steady frames. SEED_WORK's 32 ms step is exact in
+// floating point, so the two paths cannot differ by rounding.
+test("a one-cell spinner keeps up with the clock across a late frame", async () => {
+  const cells = async (late: boolean) => {
+    await using app = await mount(() => <OneCellSpinner animation={SEED_WORK} color="#ffffff" />)
+    const out: string[] = []
+    for (let i = 0; i < 6; i++) {
+      if (late) (app.clock.advance(400), await app.renderOnce(), await app.renderer.idle())
+      else await app.run(400)
+      await app.renderOnce()
+      out.push(JSON.stringify(app.captureSpans().lines[0]!.spans[0]))
+    }
+    return out
+  }
+  const steady = await cells(false)
+  expect(new Set(steady).size).toBeGreaterThan(1)
+  expect(await cells(true)).toEqual(steady)
+})
+
+test("a title shimmer stops ticking once its rename settles", async () => {
+  using tickers = countTickers()
+  const [title, setTitle] = createSignal("Untitled session")
+  const [pending, setPending] = createSignal(true)
+  await using app = await mount(() => (
+    <title_shimmer content={title()} rename={{ title: title(), pending: pending() }} />
+  ))
+  await app.run(500)
+  expect(tickers()).toBe(1)
+  setTitle("Generated title")
+  setPending(false)
+  await app.run(2000)
+  expect([await app.run(1000), tickers(), app.clock.pendingTimerCount, app.captureCharFrame().trim()]).toEqual([
+    0,
+    0,
+    0,
+    "Generated title",
+  ])
+})
+
+function TwoTweens() {
+  const short = createAnimatable({ x: 0 }, { transition: tween({ duration: 0.2 }) })
+  const long = createAnimatable({ x: 0 }, { transition: tween({ duration: 0.3 }) })
+  short.animate({ x: 1 })
+  long.animate({ x: 1 })
+  return (
+    <text>
+      {short.value().x.toFixed(2)} {long.value().x.toFixed(2)}
+    </text>
+  )
+}
+
+test("tweens share one subscription, both finish, and it ends with the last", async () => {
+  using tickers = countTickers()
+  await using app = await mount(() => <TwoTweens />)
+  const open = tickers()
+  await app.run(250)
+  const between = [tickers(), app.captureCharFrame().trim().split(" ")[0]]
+  await app.run(750)
+  expect([open, between, await app.run(1000), tickers(), app.clock.pendingTimerCount]).toEqual([
+    1,
+    [1, "1.00"],
+    0,
+    0,
+    0,
+  ])
+  expect(app.captureCharFrame().trim()).toBe("1.00 1.00")
 })
 
 // The 200 ms sweep waits while hidden, runs once shown, then stops.

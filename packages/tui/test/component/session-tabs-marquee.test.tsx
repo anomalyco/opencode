@@ -57,6 +57,21 @@ describe("session tab marquee", () => {
     expect(app.clock.pendingTimerCount).toBe(0)
   })
 
+  test("scrolls by the clock's tick count, so a late frame does not fall behind", async () => {
+    const offset = async (late: boolean) => {
+      await using app = await mount(() => createMarquee(() => false))
+      app.marquee.enter("first", "a long session title that scrolls", 6)
+      await app.advance(700)
+      if (late) (app.clock.advance(400), await app.renderOnce(), await app.renderer.idle())
+      else await app.advance(400)
+      await app.renderOnce()
+      return app.marquee.offset()
+    }
+    const steady = await offset(false)
+    expect(steady).toBeGreaterThan(5)
+    expect(await offset(true)).toBe(steady)
+  })
+
   test("resets immediately after leaving", async () => {
     await using app = await mount(() => createMarquee(() => false))
 
