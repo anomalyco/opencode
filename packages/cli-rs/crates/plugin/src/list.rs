@@ -49,6 +49,8 @@ pub(crate) struct List {
     /// Each id in an item's data, with its item.
     owners: HashMap<String, usize>,
     window: Range<usize>,
+    /// The rows the spacers before and after the window were given.
+    spacers: (u32, u32),
     /// The viewport's width the measures were taken at.
     width: f32,
 }
@@ -63,7 +65,17 @@ impl List {
         } else {
             scroll.content_view().add(&before).add(&after);
         }
-        Self { scroll, row, before, after, items: Vec::new(), owners: HashMap::new(), window: 0..0, width: 0.0 }
+        Self {
+            scroll,
+            row,
+            before: before.height(0),
+            after: after.height(0),
+            items: Vec::new(),
+            owners: HashMap::new(),
+            window: 0..0,
+            spacers: (0, 0),
+            width: 0.0,
+        }
     }
 
     /// Adopts `items`, validated by the tree: a keep item keeps the item of its key; every other item's data is its
@@ -220,10 +232,14 @@ impl List {
         }
         if !self.row {
             let rows = |range: Range<usize>| self.items[range].iter().map(|item| item.used).sum::<f32>().round() as u32;
-            let (before, after) = (rows(0..want.start), rows(want.end..self.items.len()));
-            changed |= self.before.rect().height as u32 != before || self.after.rect().height as u32 != after;
-            self.before.height(before);
-            self.after.height(after);
+            // What the spacers were given, not their rects: an empty spacer's rect is not 0 rows.
+            let spacers = (rows(0..want.start), rows(want.end..self.items.len()));
+            if spacers != self.spacers {
+                self.before.height(spacers.0);
+                self.after.height(spacers.1);
+                self.spacers = spacers;
+                changed = true;
+            }
         }
         changed
     }
