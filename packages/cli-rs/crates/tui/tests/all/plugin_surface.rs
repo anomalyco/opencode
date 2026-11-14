@@ -469,6 +469,8 @@ fn a_theme_change_calls_only_a_surface_that_reads_the_palette() {
 thread_local! {
     /// The views `test.parts` returned.
     static PART_VIEWS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// `test.parts` keeps its whole page from its second view on, not only the box and the item.
+    static PART_ROOT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// A plugin whose route shows tool call outputs of `ses_p` by reference: `call_1`, `call_2` alone and inside a box
@@ -481,6 +483,9 @@ fn parts(setup: &mut abi::Setup) -> Result<(), String> {
     setup.surface(v2::Surface::new("parts", v2::Place::Route("parts".into()), move |_| {
         let views = PART_VIEWS.get();
         PART_VIEWS.set(views + 1);
+        if views > 0 && PART_ROOT.get() {
+            return v2::Node::Keep { key: "page".into() };
+        }
         let code = v2::Node::Code {
             id: None,
             content: v2::Source::PartOutput(v2::PartRef { session: "ses_p".into(), part: "call_2".into() }),
@@ -507,6 +512,7 @@ fn parts(setup: &mut abi::Setup) -> Result<(), String> {
             part("msg_1"),
             v2::Node::text(vec![abi::Span::new("end")]),
         ])
+        .with_id("page")
     }));
     Ok(())
 }
@@ -524,10 +530,18 @@ fn tool_event(kind: &str, seq: u64, data: serde_json::Value) -> V2Event {
 // plugin. A call the transcript does not have yet, or that streams its input or runs, shows nothing; once it completes
 // its output shows, also under a kept ancestor, in code, and in a list's kept item, with no view of the plugin's
 // (review big-boi 11, carbon-4). A newer tool whose input holds the
-// call's id and a text, and a message whose id is named, show nothing of theirs.
+// call's id and a text, and a message whose id is named, show nothing of theirs. The same when the view keeps its whole
+// page, on both carriers: a keep of the root still shows the output that arrives (P6a review, big-boi high 1).
 #[test]
 fn a_part_output_shows_the_transcripts_own_text() {
+    for (root, carrier) in [(false, Carrier::Linked), (true, Carrier::Linked), (true, Carrier::Abi)] {
+        part_output(root, carrier);
+    }
+}
+
+fn part_output(root: bool, carrier: Carrier) {
     PART_VIEWS.set(0);
+    PART_ROOT.set(root);
     let session = support::merge(support::session("ses_p", "Parts"), serde_json::json!({ "agent": "build" }));
     let messages = serde_json::json!([
         {
@@ -573,7 +587,7 @@ fn a_part_output_shows_the_transcripts_own_text() {
     });
     let deps = Deps {
         route: support::session_route("ses_p"),
-        builtins: vec![abi::Plugin { id: "test.parts", setup: parts }.into()],
+        builtins: vec![builtin(carrier, abi::Plugin { id: "test.parts", setup: parts })],
         ..support::deps(Arc::new(fake))
     };
     let harness = support::mount(80, 24, deps);
@@ -605,9 +619,11 @@ fn a_part_output_shows_the_transcripts_own_text() {
     settle(&harness);
     assert_eq!(
         shown(&harness),
-        ["tool said fn parse", "lib.rs", "REAL_RESULT", "kept:", "REAL_RESULT", "REAL_RESULT", "REAL_RESULT", "end"]
+        ["tool said fn parse", "lib.rs", "REAL_RESULT", "kept:", "REAL_RESULT", "REAL_RESULT", "REAL_RESULT", "end"],
+        "root kept {root}, {carrier:?}"
     );
     assert!(PART_VIEWS.get() >= 2, "the kept box was never kept");
+    PART_ROOT.set(false);
 }
 
 /// A plugin of ABI 1.x whose route shows one text in the theme's muted color.
