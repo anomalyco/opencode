@@ -941,6 +941,81 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("infers missing types for enum and const schemas and splits mixed-type enums", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          prompt: "Use the tool.",
+          tools: [
+            {
+              name: "browse_settings",
+              description: "Read or update settings",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  set: {
+                    type: "object",
+                    description: "Settings to change; omit to only read them.",
+                    properties: {
+                      window: { enum: ["current", "separate"], description: "Where agents open their tabs" },
+                      idleMinutes: {
+                        enum: [10, 30, 60, "never"],
+                        description: "Close agent tabs untouched for this many minutes",
+                      },
+                      level: { enum: [1, 2, 3] },
+                      scale: { enum: [1, 2.5] },
+                      fixed: { const: "always" },
+                      mixedWithAnyOf: { enum: [1, "auto"], anyOf: [{ not: { type: "null" } }] },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+                required: [],
+              },
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual({
+        type: "object",
+        properties: {
+          set: {
+            type: "object",
+            description: "Settings to change; omit to only read them.",
+            properties: {
+              window: { type: "string", enum: ["current", "separate"], description: "Where agents open their tabs" },
+              idleMinutes: {
+                anyOf: [
+                  { type: "integer", enum: [10, 30, 60] },
+                  { type: "string", enum: ["never"] },
+                ],
+                description: "Close agent tabs untouched for this many minutes",
+              },
+              level: { type: "integer", enum: [1, 2, 3] },
+              scale: { type: "number", enum: [1, 2.5] },
+              fixed: { type: "string", const: "always" },
+              mixedWithAnyOf: {
+                allOf: [
+                  { anyOf: [{ not: { type: "null" } }] },
+                  {
+                    anyOf: [
+                      { type: "integer", enum: [1] },
+                      { type: "string", enum: ["auto"] },
+                    ],
+                  },
+                ],
+              },
+            },
+            additionalProperties: false,
+          },
+        },
+        required: [],
+      })
+    }),
+  )
+
   it.effect("sends standard JSON Schema tool parameters unchanged", () =>
     Effect.gen(function* () {
       const inputSchema = {
@@ -950,14 +1025,14 @@ describe("Gemini route", () => {
           level: { type: "integer", enum: [1, 2, 3] },
           status: { type: ["number", "string"], description: "Status filter" },
           maybe: { anyOf: [{ type: "string" }, { type: "null" }] },
-          kind: { const: "fixed" },
-          mode: { enum: ["fast", "safe"] },
+          kind: { type: "string", const: "fixed" },
+          mode: { type: "string", enum: ["fast", "safe"] },
           tags: { type: "array" },
           env: { type: "object", additionalProperties: { type: "string" } },
           action: {
             oneOf: [
-              { type: "object", properties: { type: { const: "move" }, to: { type: "string" } } },
-              { type: "object", properties: { type: { const: "delete" } } },
+              { type: "object", properties: { type: { type: "string", const: "move" }, to: { type: "string" } } },
+              { type: "object", properties: { type: { type: "string", const: "delete" } } },
             ],
           },
           item: { $ref: "#/$defs/Item" },
