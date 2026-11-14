@@ -120,6 +120,10 @@ struct Inner {
     width: Cell<Option<u16>>,
     /// `Viewport::Transcript` (rich plugins P3), published while the transcript lives.
     published: RefCell<Option<opencode_plugin::behave::Publication>>,
+    /// New each time the specs change.
+    specs_revision: Cell<u64>,
+    /// The messages before the mounted window, for the specs' revision and the window's start it was counted at.
+    above: RefCell<Option<(u64, Start, u32)>>,
 }
 
 impl Drop for Inner {
@@ -223,9 +227,10 @@ impl Transcript {
             settings: RefCell::default(),
             width: Cell::new(None),
             published: RefCell::default(),
+            specs_revision: Cell::new(0),
+            above: RefCell::default(),
         });
         inner.install(tui);
-        inner.publish(tui);
         Self(inner)
     }
 
@@ -263,6 +268,12 @@ impl Transcript {
     /// either. Scrolling up near the top calls it; E.8's navigation can too.
     pub fn reveal_older(&self, tui: &Tui) -> bool {
         self.0.reveal_older(tui)
+    }
+
+    /// Publishes the transcript to plugins as `Viewport::Transcript` (synthesis 4.2, decision 8): its rows and offset
+    /// to read, and `scroll`, which takes a plugin's `By`, `Offset` and `Edge` along the wheel's own path.
+    pub fn publish(&self, tui: &Tui, scroll: Rc<dyn Fn(&opencode_plugin::abi::v2::Scroll)>) {
+        self.0.publish(tui, scroll);
     }
 
     pub fn scroll(&self) -> &ScrollBox {
@@ -537,37 +548,18 @@ impl Inner {
         self.register(tui);
     }
 
-    /// Publishes the transcript to plugins as `Viewport::Transcript` (synthesis 4.2, decision 8): its rows and offset to
-    /// read, and `By`, `Offset` and `Edge` verbs that take the wheel's own path, so following, the "scrolled away"
-    /// state and the backfill of older rows behave as for a wheel. Its moves and resizes run the host's behaviors.
-    fn publish(&self, tui: &Tui) {
-        use opencode_plugin::abi::v2;
+    /// Publishes the transcript with `scroll` as its mover. The wheel and its resizes run the host's behaviors; a
+    /// pointer that only moves over it does not.
+    fn publish(&self, tui: &Tui, scroll: Rc<dyn Fn(&opencode_plugin::abi::v2::Scroll)>) {
         let read = bind!(self.this.clone(), |inner| inner.viewport());
-        let scroll = bind!(self.this.clone(), |inner, verb: &v2::Scroll| {
-            let Some(tui) = inner.tui.upgrade() else { return };
-            let (_, before) = inner.scroll.scroll_position();
-            match verb {
-                v2::Scroll::By { rows } => drop(inner.scroll.scroll_by(0.0, f64::from(*rows))),
-                v2::Scroll::Offset { offset } => drop(inner.scroll.scroll_to(0.0, f64::from(*offset))),
-                v2::Scroll::Edge { edge: v2::Edge::Top } => drop(inner.scroll.scroll_to(0.0, 0.0)),
-                v2::Scroll::Edge { edge: v2::Edge::Bottom } => {
-                    inner.scroll.scroll_to_bottom();
-                }
-                _ => return,
-            }
-            let up = inner.scroll.scroll_position().1 < before;
-            if up && inner.reveal_older(&tui) || !up && inner.reveal_newer(&tui) {
-                return;
-            }
-            inner.follow(&tui, !up);
-        });
-        let publication = opencode_plugin::behave::publish_transcript(
-            &tui.app,
-            opencode_plugin::behave::Published { read: Rc::new(read), scroll: Rc::new(scroll) },
-        );
-        *self.published.borrow_mut() = Some(publication);
+        let published = opencode_plugin::behave::Published { read: Rc::new(read), scroll };
+        *self.published.borrow_mut() = Some(opencode_plugin::behave::publish_transcript(&tui.app, published));
         let app = tui.app.clone();
-        self.scroll.on_mouse(move |_, _| opencode_plugin::behave::transcript_moved(&app));
+        self.scroll.on_mouse(move |_, event| {
+            if matches!(event.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown) {
+                opencode_plugin::behave::transcript_moved(&app);
+            }
+        });
         for resized in [self.scroll.as_any(), self.scroll.content_view().as_any()] {
             let app = tui.app.clone();
             resized.on_resize(move |_, _| opencode_plugin::behave::transcript_moved(&app));
@@ -611,18 +603,28 @@ impl Inner {
                 })
             })
             .collect();
-        let specs = self.specs.borrow();
-        let above: HashSet<String> = specs[..self.window_start(&specs)]
-            .iter()
-            .map(|spec| match spec.key() {
-                RowKey::Message(id)
-                | RowKey::Part(id, _)
-                | RowKey::Footer(id)
-                | RowKey::TurnUsage(id)
-                | RowKey::Group(id)
-                | RowKey::CompactionQueued(id) => id,
-            })
-            .collect();
+        // Counted again only when the specs or the window's start change: a key or a wheel step costs nothing
+        // proportional to the history.
+        let (revision, start) = (self.specs_revision.get(), self.start.borrow().clone());
+        let cached =
+            self.above.borrow().as_ref().filter(|(at, from, _)| *at == revision && *from == start).map(|it| it.2);
+        let above = cached.unwrap_or_else(|| {
+            let specs = self.specs.borrow();
+            let above: HashSet<String> = specs[..self.window_start(&specs)]
+                .iter()
+                .map(|spec| match spec.key() {
+                    RowKey::Message(id)
+                    | RowKey::Part(id, _)
+                    | RowKey::Footer(id)
+                    | RowKey::TurnUsage(id)
+                    | RowKey::Group(id)
+                    | RowKey::CompactionQueued(id) => id,
+                })
+                .collect();
+            let above = above.len() as u32;
+            *self.above.borrow_mut() = Some((revision, start, above));
+            above
+        });
         let mut revision = DefaultHasher::new();
         published.hash(&mut revision);
         opencode_plugin::abi::v2::TranscriptView {
@@ -630,7 +632,7 @@ impl Inner {
             viewport: self.scroll.rect().height as i32,
             extent: self.scroll.content_view().rect().height as i32,
             revision: revision.finish(),
-            above: above.len() as u32,
+            above,
             rows: published,
         }
     }
@@ -691,6 +693,7 @@ impl Inner {
             *self.weights.borrow_mut() = specs.iter().map(|spec| self.groups.weight(spec, cx.hide_thinking)).collect();
             self.mount(&cx, &specs, changed);
             *self.specs.borrow_mut() = specs;
+            self.specs_revision.set(self.specs_revision.get() + 1);
             self.trailing(tui, &visible, &keys);
             self.limits.check(messages, &|id| state.has_input(&session, id))
         });
