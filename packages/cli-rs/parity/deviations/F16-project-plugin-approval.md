@@ -19,7 +19,7 @@ the header and the backdrop close the question and leave it pending. A declined 
 names the build shown: if the library changed while the question was open, nothing is saved and the new build is
 asked about.
 
-A TypeScript plugin found there waits the same way when the JS host runs it (`OPENCODE_PLUGIN_JS=1`, P7): the loader's
+A TypeScript plugin found there waits the same way when the JS host runs it (Bun found, P7 and P8): the loader's
 one decision point holds it back before anything of it reaches the JS host, which does not start for it. Its toast and
 question say "This project wants to run TypeScript code in opencode's JS host" and show the module directory and the
 SHA-256 of its files. Its artifact is the real path of the directory and a hash of what it holds: each file's path and

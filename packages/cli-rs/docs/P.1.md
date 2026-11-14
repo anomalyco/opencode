@@ -62,9 +62,9 @@ The `cli.json` `plugins` entries apply as in TS (`plugin/context.tsx:313-330`, `
 
 - `-<selector>` disables matching built-ins; `<selector>`, `*`, and `<prefix>.*` re-enable them; an entry
   starting `opencode.` never names an external plugin.
-- Every other entry names a TypeScript TUI plugin. It is not loaded; `entries()` lists it with status
-  `Skipped` and the message "TypeScript TUI plugins do not run in opencode-native yet", and the TUI logs it
-  once (deviation of F16 until P.4).
+- Every other entry names a TypeScript TUI plugin. The registry alone does not load it; `entries()` lists it with
+  status `Skipped` and the message "TypeScript TUI plugins do not run in opencode-native yet", and the TUI logs it
+  once. The loader (P.4) runs a local one on the JS host when Bun is found (deviation F16).
 
 `entries()` returns each plugin's ID, source (built-in or configured), and status (active, inactive,
 skipped), for the plugin manager.
