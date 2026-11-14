@@ -71,6 +71,13 @@ pub fn stats(id: &str) -> Option<Stats> {
     })
 }
 
+/// The mailbox of plugin `id`'s current activation, for the model that reaches into it.
+#[cfg(test)]
+pub(crate) fn current(id: &str) -> Option<Arc<Mailbox>> {
+    MAILBOXES
+        .with(|boxes| boxes.borrow().iter().find(|(known, _)| known == id).and_then(|(_, mailbox)| mailbox.upgrade()))
+}
+
 /// The rows the registry holds, for the test that toggles a plugin many times.
 #[cfg(test)]
 pub(crate) fn rows() -> usize {
