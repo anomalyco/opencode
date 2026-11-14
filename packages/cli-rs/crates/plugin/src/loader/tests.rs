@@ -949,6 +949,32 @@ fn an_answer_records_nothing_for_a_directory_retargeted_while_it_was_asked() {
     assert_eq!(entry(&registry.entries(), &target).status, Status::Pending);
 }
 
+// Expected (bigboi-3): a build that names a dependency the project would supply is refused before the backend opens
+// it, also once approved; a build that names only system libraries loads.
+#[test]
+fn a_build_that_names_a_project_dependency_is_refused_before_it_opens() {
+    let project = Project::new();
+    let target = project.plugin("proj", "id=proj");
+    fs::create_dir_all(project.config().join("plugins/global")).unwrap();
+    let elf = deps::elf64(&["libc.so.6"], Some("lib"));
+    fs::write(project.config().join(format!("plugins/global/{}", entry_file())), elf).unwrap();
+    let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
+    let loader = project.loader(fake.clone(), Vec::new());
+    loader.reconcile(&dynamic(&host), &registry);
+    let global = project.config().join("plugins/global").to_string_lossy().into_owned();
+    let Status::Failed(error) = entry(&registry.entries(), &global).status.clone() else { panic!() };
+    assert!(error.contains("current directory"), "{error}");
+    assert_eq!(fake.loads.get(), 0);
+    // The approved project build names an absolute path outside the system's libraries.
+    fs::write(library(&target), deps::elf64(&["/opt/libx.so"], None)).unwrap();
+    loader.reconcile(&dynamic(&host), &registry);
+    assert!(answer(&loader, &target, approval::Decision::Approved));
+    loader.reconcile(&dynamic(&host), &registry);
+    let Status::Failed(error) = entry(&registry.entries(), &target).status.clone() else { panic!() };
+    assert!(error.contains("outside the system"), "{error}");
+    assert_eq!(fake.loads.get(), 0);
+}
+
 // Expected: an approved build that fails is told again when it comes back after a spell as pending, as a new failure.
 #[test]
 fn a_failure_after_a_pending_spell_is_told_again() {
