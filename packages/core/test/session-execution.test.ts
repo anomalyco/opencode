@@ -1510,6 +1510,43 @@ describe("SessionRestart background recovery", () => {
     }),
   )
 
+  it.effect("a user stop retires a report wake received during the parent execution", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const jobs = yield* Job.Service
+      const parent = Session.ID.make("ses_stop_report_parent")
+      const child = Session.ID.make("ses_stop_report_child")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], { parent_id: parent })
+      const started = yield* Deferred.make<void>()
+      const context = yield* buildExecution(yield* Scope.fork(yield* Effect.scope), () =>
+        Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      const restart = Context.get(context, SessionRestart.Service)
+      yield* execution.wake(parent)
+      yield* Deferred.await(started)
+      yield* jobs.recordSubagentReport({
+        notificationID: SessionMessage.ID.create(),
+        status: "completed",
+        output: "done",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: parent,
+          childSessionID: child,
+          agent: "review",
+          description: "review",
+        },
+      })
+      yield* restart.resumeSuspendedSessions
+      expect(yield* execution.interrupt(parent)).toBe(true)
+      yield* execution.awaitIdle(parent)
+      yield* restart.resumeSuspendedSessions
+      expect(yield* execution.isActive(parent)).toBe(false)
+      expect(yield* SessionInbox.list(database.db, parent)).toHaveLength(1)
+    }),
+  )
+
   it.effect("wakes the parent of an admitted report if the restart sweep fails afterward", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
@@ -1736,6 +1773,7 @@ describe("SessionRestart background recovery", () => {
         expect(yield* SessionInbox.list(database.db, parent)).toHaveLength(2)
         expect(yield* restarted.pendingBackground).toEqual([])
         yield* restart.resumeSuspendedSessions
+        yield* execution.awaitIdle(parent)
         expect(drained).toHaveLength(resumeAttempts < 2 ? 1 : 0)
       }),
     )

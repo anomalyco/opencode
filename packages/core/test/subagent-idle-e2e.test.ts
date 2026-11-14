@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
+import { sql } from "drizzle-orm"
 import { LanguageModel } from "@opencode/ai/effect"
 import type { LLMClientService } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
@@ -143,6 +144,27 @@ const crashInbox = (crashed: Deferred.Deferred<void>) =>
 
 type InboxNode = ReturnType<typeof crashInbox>
 
+// Keep the SQLite image at acknowledgement, before the caller can ring the parent's doorbell.
+const snapshotOnAck = (file: string) =>
+  makeGlobalNode({
+    service: Job.Service,
+    deps: [Database.node],
+    layer: Layer.effect(
+      Job.Service,
+      Effect.gen(function* () {
+        const jobs = yield* Job.make
+        const database = yield* Database.Service
+        return Job.Service.of({
+          ...jobs,
+          completeBackground: (...args) =>
+            jobs
+              .completeBackground(...args)
+              .pipe(Effect.andThen(database.db.run(sql`VACUUM INTO ${file}`).pipe(Effect.orDie)), Effect.asVoid),
+        })
+      }),
+    ),
+  })
+
 type Response = ReturnType<typeof TestLLM.text>
 
 const script = (responses: Record<string, ReadonlyArray<Response>>) => {
@@ -161,6 +183,7 @@ const boot = (
     readonly global: Context.Context<Global.Service>
     readonly llm: Context.Context<LLMClientService>
     readonly inbox?: InboxNode
+    readonly snapshotOnAck?: string
   },
 ) =>
   Effect.gen(function* () {
@@ -173,6 +196,7 @@ const boot = (
         LayerNodePlatform.llmClient.replace(Layer.succeedContext(input.llm)),
         SessionRunnerModel.node.replace(modelLayer),
         ...(input.inbox ? [SessionInbox.node.replace(input.inbox)] : []),
+        ...(input.snapshotOnAck ? [Job.node.replace(snapshotOnAck(input.snapshotOnAck))] : []),
       ]),
       scope,
     )
@@ -189,6 +213,7 @@ const boot = (
   })
 
 type HarnessInput = {
+  readonly snapshotOnAck?: string
   readonly config?: Record<string, unknown>
   readonly database?: string
   readonly inbox?: InboxNode
@@ -243,6 +268,7 @@ const harness = Effect.fnUntraced(function* (input?: HarnessInput) {
     global: base.global,
     llm: base.llmContext,
     inbox: input?.inbox,
+    snapshotOnAck: input?.snapshotOnAck,
   })
   yield* prepareLocation(app, base.location)
   const registry = yield* Tool.Service.pipe(Effect.provide(app.locations.get(base.location)))
@@ -506,6 +532,42 @@ describe("subagent idle reports end to end", () => {
       }),
     30_000,
   )
+
+  for (const replay of [false, true]) {
+    e2e.live(`recovers the parent wake after ${replay ? "replayed" : "live"} report acknowledgement`, () =>
+      Effect.gen(function* () {
+        const dir = yield* tmpdirScoped()
+        const database = path.join(dir.path, "ack.sqlite")
+        const crashed = yield* Deferred.make<void>()
+        const h = yield* harness({ snapshotOnAck: database, inbox: replay ? crashInbox(crashed) : undefined })
+        const launched = yield* h.call("launch", { background: true })
+        const child = outputSessionID(launched.metadata)
+        yield* h.execution.awaitIdle(child)
+        yield* h.jobs.wait({ id: child })
+        if (replay) yield* h.restart.resumeSuspendedSessions
+        yield* h.execution.awaitIdle(h.parent.id)
+
+        const next = yield* boot(yield* Effect.scope, { database, global: h.global, llm: h.llmContext })
+        yield* prepareLocation(next, h.location)
+        const pending = yield* next.sessions.inbox(h.parent.id)
+        expect(pending).toMatchObject([{ type: "synthetic", payload: { metadata: { childID: child } } }])
+        expect(yield* next.jobs.pendingBackground).toEqual([])
+        expect(yield* next.store.listSuspended()).toEqual([])
+        const parked = yield* next.sessions.create({ location: h.location })
+        yield* next.sessions.synthetic({
+          sessionID: parked.id,
+          text: "admit only",
+          metadata: { source: "subagent" },
+          resume: false,
+        })
+        yield* next.restart.resumeSuspendedSessions
+        yield* next.execution.awaitIdle(h.parent.id)
+        expect((yield* deliveredReports(next, h.parent.id)).map((notice) => notice.id)).toEqual([pending[0]!.id])
+        expect(yield* next.sessions.inbox(h.parent.id)).toEqual([])
+        expect(yield* next.sessions.inbox(parked.id)).toHaveLength(1)
+      }),
+    )
+  }
 
   e2e.live(
     "replays the report committed before a crash without running the child again",

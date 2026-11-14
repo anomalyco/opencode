@@ -1,6 +1,6 @@
 export * as SessionInbox from "./inbox.js"
 
-import { and, asc, eq, or } from "drizzle-orm"
+import { and, asc, eq, lte, or } from "drizzle-orm"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import {
@@ -31,6 +31,20 @@ import { SessionInboxTable, SessionMessageTable } from "./sql.js"
 import { SessionHistory } from "./history.js"
 
 type DatabaseService = Database.Interface["db"]
+
+export const retireWakes = (db: DatabaseService, sessionID: SessionSchema.ID, throughSeq?: number) =>
+  db
+    .update(SessionInboxTable)
+    .set({ wake_on_restart: false })
+    .where(
+      and(
+        eq(SessionInboxTable.session_id, sessionID),
+        eq(SessionInboxTable.wake_on_restart, true),
+        throughSeq === undefined ? undefined : lte(SessionInboxTable.enqueued_seq, throughSeq),
+      ),
+    )
+    .run()
+    .pipe(Effect.orDie, Effect.asVoid)
 
 export {
   Compaction,
