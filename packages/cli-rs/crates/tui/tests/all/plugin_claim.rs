@@ -1554,3 +1554,95 @@ fn a_claim_that_reads_the_palette_is_viewed_again_in_a_new_theme() {
         assert!(!world.frame().text().contains("paint call_1"), "{carrier:?}: a fallen call came back in its mount");
     }
 }
+
+impl World {
+    /// Applies an event that is not the session's history, as a permission request is.
+    fn signal(&self, kind: &str, data: Value) {
+        let seq = self.seq.get() + 1;
+        self.seq.set(seq);
+        let event = json!({ "id": format!("evt_{seq}"), "created": 10_000 + seq, "type": kind, "data": data });
+        self.harness.tui.data.apply(&[serde_json::from_value::<V2Event>(event).unwrap()]);
+        self.settle();
+    }
+
+    /// A permission request `id` for call `call`.
+    fn ask(&self, id: &str, call: &str) {
+        let source = json!({ "type": "tool", "messageID": "msg_2", "id": call });
+        let request =
+            json!({ "id": id, "sessionID": SESSION, "action": "shell", "resources": ["*"], "source": source });
+        self.signal("permission.asked", request);
+    }
+
+    fn reply(&self, id: &str) {
+        self.signal("permission.replied", json!({ "sessionID": SESSION, "requestID": id, "reply": "once" }));
+    }
+}
+
+// Expected (4.11: "waiting for permission"): the claim is told when the session's first permission request waits on its
+// call, at once and with one view, and told again when the request is answered. With grouping on, a call that waits
+// shows below its folded group, as the host's row does (`PendingEntries`), drawn by the claim; answered, it folds back.
+#[test]
+fn a_claimed_call_waiting_on_a_permission_is_viewed_with_it() {
+    for carrier in CARRIERS {
+        for session in [ungrouped(), grouped()] {
+            let world = World::rules(carrier, session.clone(), false);
+            world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "shell" }));
+            world.emit("session.tool.called", json!({ "id": "call_1", "input": {}, "executed": true }));
+            world.settle();
+            let line = |waits: bool| format!("shell call_1 Running permission {waits} base -");
+            let folded = session.verbosity == Some(Verbosity::Low);
+            match folded {
+                true => assert!(mounted().is_empty(), "{carrier:?}: {:?}", mounted()),
+                false => world.draws("call_1", &line(false), None),
+            }
+            let views = DREW.with_borrow(Vec::len);
+            world.ask("per_1", "call_1");
+            world.harness.wait_for("Permission required");
+            world.draws("call_1", &line(true), None);
+            assert_eq!(DREW.with_borrow(|drew| drew[views..].to_vec()), [line(true)], "{carrier:?} {session:?}");
+            world.reply("per_1");
+            match folded {
+                true => assert!(mounted().is_empty(), "{carrier:?}: it stays outside its group: {:?}", mounted()),
+                false => world.draws("call_1", &line(false), None),
+            }
+        }
+    }
+}
+
+// Expected (E.6b with 4.11): the images a call returned are the host's, below the row that draws the call: the claim's
+// tree while it shows, the host's row when the claim declines, and once either way. Previews off, none show.
+#[test]
+fn a_claimed_call_keeps_its_images_below_the_claim() {
+    // A 1x1 PNG.
+    let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+    let shot = |name: &str| json!({ "type": "file", "uri": format!("data:image/png;base64,{png}"), "mime": "image/png", "name": name });
+    let shots = [shot("a.png"), shot("b.png"), shot("c.png"), shot("d.png")];
+    let line = "probe call_1 Completed permission false base -";
+    for carrier in CARRIERS {
+        let world = World::rules(carrier, ungrouped(), true);
+        // The output by reference names the files after the text (`part_output`).
+        let output = "done call_1\na.png\nb.png\nc.png\nd.png";
+        world.finished_call("call_1", "probe", &shots);
+        world.draws("call_1", line, Some(output));
+        let screen = world.frame().text();
+        let below = |screen: &str, row: &str| {
+            let at = |text: &str| screen.lines().position(|line| line.contains(text));
+            matches!((at(row), at("+1 more")), (Some(row), Some(more)) if more > row)
+        };
+        assert!(below(&screen, line), "{carrier:?}: no images below the claim's tree:\n{screen}");
+        assert_eq!(screen.matches("+1 more").count(), 1, "{carrier:?}:\n{screen}");
+
+        DECLINE.with_borrow_mut(|decline| decline.insert("call_2".to_owned()));
+        world.finished_call("call_2", "probe", &shots);
+        DECLINE.with_borrow_mut(HashSet::clear);
+        let screen = world.frame().text();
+        let host = screen.lines().skip_while(|row| !row.contains("+1 more")).skip(1).collect::<Vec<_>>().join("\n");
+        assert!(below(&host, "✓ probe") && !host.contains("call_2"), "{carrier:?}: declined:\n{screen}");
+        assert_eq!(screen.matches("+1 more").count(), 2, "{carrier:?}: once each call:\n{screen}");
+
+        let world = World::rules(carrier, ungrouped(), false);
+        world.finished_call("call_1", "probe", &shots);
+        world.draws("call_1", line, Some(output));
+        assert!(!world.frame().text().contains("more"), "{carrier:?}:\n{}", world.frame().text());
+    }
+}
