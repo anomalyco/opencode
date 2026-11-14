@@ -75,14 +75,38 @@ test("opens an investigation draft for a failed MCP server at its originating lo
   }
 })
 
+test.each([
+  { status: { status: "failed", error: "MCP error -32000: Connection closed" }, label: "Failed !", call: "disconnect" },
+  { status: { status: "pending" }, label: "Connecting", call: "disconnect" },
+  { status: { status: "connected" }, label: "Connected", call: "disconnect" },
+  { status: { status: "disabled" }, label: "Disabled", call: "connect" },
+] as const)("space on a $status.status MCP server calls $call", async (row) => {
+  const fixture = await renderMcp({ status: row.status })
+
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes(row.label))
+    expect(fixture.app.captureCharFrame()).toContain(row.call === "connect" ? "enable space" : "disable space")
+    fixture.app.mockInput.pressKey(" ")
+    await fixture.calls.wait(row.call)
+
+    expect(fixture.connect).toBe(row.call === "connect" ? 1 : 0)
+    expect(fixture.disconnect).toBe(row.call === "disconnect" ? 1 : 0)
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
 async function renderMcp(options?: {
   failed?: boolean
+  status?: { status: string; error?: string }
   complete?: boolean
   location?: { directory: string; workspaceID?: string }
 }) {
   const events = createEventStream()
   let oauth = 0
   let connect = 0
+  let disconnect = 0
+  const waiters = { connect: Promise.withResolvers<void>(), disconnect: Promise.withResolvers<void>() }
   let polls = 0
   let route!: ReturnType<typeof useRoute>
   const calls = createFetch((url, request) => {
@@ -97,9 +121,11 @@ async function renderMcp(options?: {
         data: [
           {
             name: "linear",
-            status: options?.failed
-              ? { status: "failed", error: "MCP error -32000: Connection closed" }
-              : { status: "needs_auth", error: "Authentication required" },
+            status:
+              options?.status ??
+              (options?.failed
+                ? { status: "failed", error: "MCP error -32000: Connection closed" }
+                : { status: "needs_auth", error: "Authentication required" }),
             integrationID: "mcp_linear",
           },
         ],
@@ -135,6 +161,12 @@ async function renderMcp(options?: {
     }
     if (url.pathname === "/api/experimental/mcp/linear/connect" && request.method === "POST") {
       connect++
+      waiters.connect.resolve()
+      return new Response(null, { status: 204 })
+    }
+    if (url.pathname === "/api/experimental/mcp/linear/disconnect" && request.method === "POST") {
+      disconnect++
+      waiters.disconnect.resolve()
       return new Response(null, { status: 204 })
     }
     return undefined
@@ -193,5 +225,9 @@ async function renderMcp(options?: {
     get connect() {
       return connect
     },
+    get disconnect() {
+      return disconnect
+    },
+    calls: { wait: (call: "connect" | "disconnect") => waiters[call].promise },
   }
 }
