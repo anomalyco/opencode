@@ -91,7 +91,9 @@ impl ShimmerText {
             shimmer: Color::DEFAULT_FOREGROUND,
             motion: Motion::new(app, true, None, None, Duration::ZERO),
         };
-        Self { widget: Custom::measured(app, view) }
+        let widget = Custom::measured(app, view);
+        widget.with(|view| view.motion.clone()).follow(&widget);
+        Self { widget }
     }
 
     pub fn fg(self, fg: Color) -> Self {
@@ -165,7 +167,9 @@ impl FadeInText {
             motion: Motion::new(app, true, None, Some(FADE_DURATION), Duration::ZERO),
             finished: Cell::new(false),
         };
-        Self { widget: Custom::measured(app, view) }
+        let widget = Custom::measured(app, view);
+        widget.with(|view| view.motion.clone()).follow(&widget);
+        Self { widget }
     }
 
     pub fn fg(self, fg: Color) -> Self {

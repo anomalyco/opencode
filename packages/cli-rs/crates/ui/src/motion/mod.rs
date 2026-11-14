@@ -5,8 +5,8 @@
 //! instant: [`spinner_frame`], [`shimmer_strength`], and [`fade_strength`] give the same values the widgets paint.
 //! A widget's [`Motion`] moves that time on the app's shared animation clock, in the frames the clock shares among
 //! every animation: a stepped spinner by one interval per tick, so its glyph is its summed ticks; shimmer and fade by
-//! the time between frames. A widget that is not drawn stops until it paints again, and keeps no time meanwhile, as
-//! Core's `animationFps` does.
+//! the time between frames. A widget that is not drawn waits until a frame draws it again, and keeps no time
+//! meanwhile, as Core's `animationFps` does.
 //!
 //! The `animations` config switch is one per UI thread, as the TypeScript components all read
 //! `config.animations ?? true`: the app sets it with [`set_running`] at start and on every config change, and every
@@ -31,8 +31,8 @@ pub use text::{FadeInText, ShimmerText, fade_strength, shimmer_strength};
 use opentui::App;
 use opentui::app::{AnimationTick, Cx};
 use opentui::style::Color;
-use opentui::widget::Painter;
-use std::cell::{Cell, RefCell};
+use opentui::widget::{Painter, WeakWidget, Widget};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -67,34 +67,35 @@ pub fn set_running(app: &App, running: bool) {
 /// motion runs. With a `step` below the app's frame rate it ticks `1 / step` times a second and moves one step per
 /// tick; otherwise it moves on every frame ([`App::animate`]) by the time between frames. It stops at `limit`.
 ///
-/// A tick after a frame that did not paint the widget in view stops the motion, as OpenTUI parks a widget's ticks;
-/// the widget's next paint starts it again. A widget that is hidden, scrolled out of view, or under a collapsed
-/// parent is not painted, and a scroll box with few rows paints the ones out of view clipped away, which does not
-/// count either. So an undrawn widget costs no frames and no wakeups. A still motion never moves. Dropping the
-/// motion ends it.
-///
-/// Not `Widget::on_animation_tick`: its handle can only be made from the widget, which its own state cannot hold
-/// without a cycle, so a paint could not start it again; and it counts a clipped row as drawn.
+/// The ticks follow the widget, so OpenTUI parks them while no frame draws it: hidden, detached, culled, or scrolled
+/// fully out of view. A parked widget wakes the app at most twice more, and its next draw resumes the ticks. The
+/// per-frame form follows no widget, so a frame that did not paint the widget in view stops it, and the widget's next
+/// paint starts it again. So an undrawn widget costs no frames and no wakeups. A still motion never moves. With the
+/// switch off the motion stops, and the widget's first paint after it turns on starts it again. Dropping the motion
+/// ends it.
 struct Motion {
     app: App,
+    /// The widget that paints the motion, from [`Self::follow`].
+    widget: OnceCell<WeakWidget>,
     moving: bool,
     step: Option<Duration>,
     limit: Option<Duration>,
     clock: Cell<Duration>,
-    /// The last frame that painted the widget in view, or the frame count when the motion started.
+    /// Per frame: the last frame that painted the widget in view, or the frame count when the motion started.
     drawn: Cell<u64>,
     tick: RefCell<Option<AnimationTick>>,
     framing: Cell<bool>,
 }
 
 impl Motion {
-    /// Starts motion from `clock`, unless it is still or the switch is off.
+    /// A motion from `clock`, which starts once [`Self::follow`] names its widget.
     fn new(app: &App, moving: bool, step: Option<Duration>, limit: Option<Duration>, clock: Duration) -> Rc<Self> {
         let frame = Duration::from_secs(1) / app.options().max_fps.max(1);
         // A tick at the frame rate would wake the loop for the tick and again for the frame slot after it.
         let step = step.filter(|step| *step > frame + Duration::from_micros(1));
-        let motion = Rc::new(Self {
+        Rc::new(Self {
             app: app.clone(),
+            widget: OnceCell::new(),
             moving,
             step,
             limit,
@@ -102,9 +103,13 @@ impl Motion {
             drawn: Cell::new(0),
             tick: RefCell::default(),
             framing: Cell::new(false),
-        });
-        motion.start();
-        motion
+        })
+    }
+
+    /// Binds the motion to the widget that paints it, and starts it unless it is still or the switch is off.
+    fn follow(self: &Rc<Self>, widget: &impl Widget) {
+        let _ = self.widget.set(widget.downgrade());
+        self.start();
     }
 
     /// Called from the widget's paint.
@@ -123,9 +128,9 @@ impl Motion {
         if !self.moving || !running() || self.limit.is_some_and(|limit| self.clock.get() >= limit) {
             return;
         }
-        self.drawn.set(self.app.frame_number());
         let weak = Rc::downgrade(self);
         let Some(step) = self.step else {
+            self.drawn.set(self.app.frame_number());
             self.framing.set(true);
             return self.app.animate(move |cx, elapsed| {
                 weak.upgrade().is_some_and(|motion| {
@@ -135,17 +140,19 @@ impl Motion {
                 })
             });
         };
+        let Some(widget) = self.widget.get().and_then(WeakWidget::upgrade) else { return };
         let tick = self.app.on_animation_tick(1.0 / step.as_secs_f64(), move |cx, tick| {
             let Some(motion) = weak.upgrade() else { return };
             if !motion.advance(cx, step * tick.ticks as u32) {
                 drop(motion.tick.take());
             }
         });
+        tick.follow(&widget);
         *self.tick.borrow_mut() = Some(tick);
     }
 
-    /// Moves the clock by `by`, unless the switch is off or the last frame did not paint the widget in view.
-    /// Returns whether to keep moving. It runs in the frame that paints the move, so it asks for none.
+    /// Moves the clock by `by`, unless the switch is off or, per frame, the last frame did not paint the widget in
+    /// view. Returns whether to keep moving. It runs in the frame that paints the move, so it asks for none.
     fn advance(&self, cx: &mut Cx<'_>, by: Duration) -> bool {
         if !running() {
             // A fade jumps to its end, as `createAnimatable` does without animations.
@@ -154,7 +161,7 @@ impl Motion {
             }
             return false;
         }
-        if self.drawn.get() < cx.app().frame_number() {
+        if self.step.is_none() && self.drawn.get() < cx.app().frame_number() {
             return false;
         }
         let next = self.clock.get() + by;
