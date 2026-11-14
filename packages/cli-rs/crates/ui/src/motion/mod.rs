@@ -4,7 +4,8 @@
 //! Each widget keeps the time it has animated for and derives its frame from it, so a frame is a function of an
 //! instant: [`spinner_frame`], [`shimmer_strength`], and [`fade_strength`] give the same values the widgets paint.
 //! Stepped spinners advance on an app interval timer; shimmer and fade advance on [`App::animate`], every frame.
-//! Both follow the app clock, so `TestApp::advance` drives them.
+//! Both follow the app clock, so `TestApp::advance` drives them. A spinner or shimmer that is not drawn stops until
+//! it paints again, and keeps no time meanwhile, as Core's `animationFps` does; a fade runs to its end.
 //!
 //! The `animations` config switch is one per UI thread, as the TypeScript components all read
 //! `config.animations ?? true`: the app sets it with [`set_running`] at start and on every config change, and every
@@ -29,6 +30,7 @@ pub use text::{FadeInText, ShimmerText, fade_strength, shimmer_strength};
 use crate::bind;
 use opentui::App;
 use opentui::style::Color;
+use opentui::widget::Painter;
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 use std::time::Duration;
@@ -88,19 +90,52 @@ fn park(clock: &Weak<Cell<Duration>>, resume: impl FnOnce(&App) + 'static) {
 /// with a new clock, stops the driver at its next tick.
 type Clock = Rc<Cell<Duration>>;
 
-/// Advances `clock` by `interval` on every tick of an app interval timer. A tick asks for a frame only if the widget
-/// painted since the last one: the widget sets `painted` in its paint, and a hidden widget is not painted. Showing
-/// it again asks for a frame, whose paint resumes the ticks' frames. With motion off the driver parks.
-fn tick_every(app: &App, interval: Duration, clock: &Clock, painted: &Rc<Cell<bool>>) {
-    let painted = Rc::clone(painted);
+/// Whether a widget is drawn, for its driver: a widget that is hidden, scrolled out of view, or under a collapsed
+/// parent is not painted, and its driver stops at its first tick after a frame that did not paint it. The widget's
+/// next paint resumes it, so an undrawn widget costs no frames and no wakeups.
+#[derive(Default)]
+struct Drawn {
+    painted: Cell<bool>,
+    parked: Cell<Option<Unpark>>,
+}
+
+type Unpark = Box<dyn FnOnce(&Rc<Drawn>)>;
+
+impl Drawn {
+    /// Called from the widget's paint. A paint clipped away entirely does not count: a scroll box with few rows
+    /// paints the ones out of view too.
+    fn paint(self: &Rc<Self>, painter: &Painter<'_>) {
+        let (_, _, width, height) = painter.visible_rect();
+        if width == 0 || height == 0 {
+            return;
+        }
+        self.painted.set(true);
+        if let Some(resume) = self.parked.take() {
+            resume(self);
+        }
+    }
+
+    /// Whether a frame ran since the tick that saw frame `seen` without painting the widget. Moves `seen` on.
+    fn missed(&self, app: &App, seen: &mut u64) -> bool {
+        let frame = app.frame_number();
+        let ran = std::mem::replace(seen, frame) != frame;
+        ran && !self.painted.replace(false)
+    }
+}
+
+/// Advances `clock` by `interval` on every tick of an app interval timer, asking for a frame each time, until the
+/// widget is not drawn ([`Drawn`]). With motion off the driver parks.
+fn tick_every(app: &App, interval: Duration, clock: &Clock, drawn: &Rc<Drawn>) {
+    let drawn = Rc::clone(drawn);
     let weak = Rc::downgrade(clock);
     if !running() {
         return park(&Rc::downgrade(clock), move |app| {
             if let Some(clock) = weak.upgrade() {
-                tick_every(app, interval, &clock, &painted);
+                tick_every(app, interval, &clock, &drawn);
             }
         });
     }
+    let mut seen = app.frame_number();
     let id = Rc::new(Cell::new(None));
     let own = Rc::clone(&id);
     id.set(Some(app.set_interval(interval, move |cx| {
@@ -110,28 +145,43 @@ fn tick_every(app: &App, interval: Duration, clock: &Clock, painted: &Rc<Cell<bo
                 cx.cancel_timer(id);
             }
             if let Some(clock) = weak.upgrade() {
-                tick_every(cx.app(), interval, &clock, &painted);
+                tick_every(cx.app(), interval, &clock, &drawn);
             }
             return;
         };
         clock.set(clock.get() + interval);
-        if painted.replace(false) {
+        if !drawn.missed(cx.app(), &mut seen) {
             cx.request_redraw();
+            return;
         }
+        if let Some(id) = own.take() {
+            cx.cancel_timer(id);
+        }
+        let (app, weak) = (cx.app().clone(), Weak::clone(&weak));
+        drawn.parked.set(Some(Box::new(move |drawn| {
+            if let Some(clock) = weak.upgrade() {
+                tick_every(&app, interval, &clock, drawn);
+                // The loop takes its deadline before it paints, so a timer armed in paint would wait for an
+                // unrelated wakeup; an animation makes it come around once.
+                app.animate(|_, _| false);
+            }
+        })));
     })));
 }
 
-/// Advances `clock` by the time between frames until `limit` (if any) is reached. With motion off a looping driver
-/// parks, and a limited one jumps to its end.
-fn tick_frames(app: &App, clock: &Clock, limit: Option<Duration>) {
+/// Advances `clock` by the time between frames until `limit` (if any) is reached, or, with `drawn`, until the widget
+/// is not drawn. With motion off a looping driver parks, and a limited one jumps to its end.
+fn tick_frames(app: &App, clock: &Clock, limit: Option<Duration>, drawn: Option<&Rc<Drawn>>) {
     let weak: Weak<Cell<Duration>> = Rc::downgrade(clock);
+    let drawn = drawn.cloned();
+    let gate = drawn.clone();
     let stop = move |clock: &Clock| match limit {
         Some(limit) => clock.set(limit),
         None => {
-            let resume = Weak::clone(&weak);
+            let (resume, gate) = (Weak::clone(&weak), gate.clone());
             park(&weak, move |app| {
                 if let Some(clock) = resume.upgrade() {
-                    tick_frames(app, &clock, None);
+                    tick_frames(app, &clock, None, gate.as_ref());
                 }
             });
         }
@@ -140,6 +190,7 @@ fn tick_frames(app: &App, clock: &Clock, limit: Option<Duration>) {
         return stop(clock);
     }
     let weak = Rc::downgrade(clock);
+    let mut seen = app.frame_number();
     app.animate(bind!(weak, |clock, cx, elapsed| {
         if !running() {
             stop(&clock);
@@ -147,6 +198,15 @@ fn tick_frames(app: &App, clock: &Clock, limit: Option<Duration>) {
         }
         let next = clock.get() + elapsed;
         clock.set(limit.map_or(next, |limit| next.min(limit)));
+        if let Some(drawn) = drawn.as_ref().filter(|drawn| drawn.missed(cx.app(), &mut seen)) {
+            let (app, weak) = (cx.app().clone(), Rc::downgrade(&clock));
+            drawn.parked.set(Some(Box::new(move |drawn| {
+                if let Some(clock) = weak.upgrade() {
+                    tick_frames(&app, &clock, limit, Some(drawn));
+                }
+            })));
+            return false;
+        }
         cx.request_redraw();
         limit.is_none_or(|limit| next < limit)
     }));
