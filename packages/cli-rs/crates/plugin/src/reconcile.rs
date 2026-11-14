@@ -221,6 +221,11 @@ pub struct Tree {
     slots_changed: bool,
     /// The plugin its nodes are charged to, and how many.
     charged: Option<(Rc<str>, u64)>,
+    /// What the last apply put placeholders in place of, for [`Tree::admitted`].
+    over: Placeholders,
+    /// The ids whose nodes were placeholders past the tree's nodes or rows, and what their subtrees cost: a keep of
+    /// one that would fit now asks for a whole tree (review bigboi 5).
+    substituted: HashMap<String, (u64, u64)>,
 }
 
 /// What the tree holds under an id: the nearest ancestor with an id, the layout levels its subtree takes, the nodes
@@ -342,6 +347,8 @@ struct Plan {
     over: Placeholders,
     /// The nodes the tree holds, as charged to its plugin.
     nodes: u64,
+    /// The ids of placeholders past the nodes or rows, and what their subtrees cost.
+    substituted: HashMap<String, (u64, u64)>,
 }
 
 /// The nodes of a tree being adopted that are over a limit, by address, each with the placeholder that stands for
@@ -407,7 +414,19 @@ impl Tree {
         self.slots_changed = pass.slots_changed;
         self.ids.clear();
         collect_ids(&self.nodes, None, &mut self.ids);
+        (self.over, self.substituted) = (plan.over, plan.substituted);
         Ok(())
+    }
+
+    /// `nodes`, which the last apply adopted, as it adopted them: each node over a limit is its placeholder, and the
+    /// nodes a placeholder stands for are gone. An owner keeps this, not the tree it was offered, so what a limit
+    /// refused is not held (review bigboi 5).
+    pub fn admitted(&mut self, mut nodes: Vec<Node>) -> Vec<Node> {
+        let over = std::mem::take(&mut self.over);
+        if !over.is_empty() {
+            project(&mut nodes, &over);
+        }
+        nodes
     }
 
     /// Whether the tree holds a list.
@@ -454,6 +473,7 @@ impl Tree {
             changed |= has_slot(&node);
         }
         self.ids.clear();
+        self.substituted.clear();
         self.slots_changed = changed;
         self.uncharge();
     }
@@ -630,6 +650,7 @@ impl Tree {
             room: (u64, u64),
             used: (u64, u64),
             over: HashMap<*const Node, Option<Node>>,
+            substituted: HashMap<String, (u64, u64)>,
         }
         impl<'a> Walk<'a, '_> {
             /// `item` is the list and the item whose data the nodes are in: a keep there names a node of that item,
@@ -667,6 +688,12 @@ impl Tree {
                             self.keeps.insert(key);
                             continue;
                         }
+                        // A placeholder past the nodes or rows that would fit now is asked for again.
+                        if let Some((nodes, rows)) = self.tree.substituted.get(key.as_str())
+                            && self.fits(&Cost { nodes: *nodes, rows: *rows, ..cost }, built)
+                        {
+                            return Err(Refused::Unknown(key.clone()));
+                        }
                         if mode == Mode::Admitted || self.fits(&cost, built) {
                             self.keeps.insert(key);
                             self.held.insert(key);
@@ -681,6 +708,10 @@ impl Tree {
                         let stands = !std::mem::replace(absorbing, true);
                         if stands && built && held.item.is_none() {
                             self.moves.insert(key);
+                        }
+                        if stands {
+                            let was = self.tree.substituted.get(key.as_str()).copied();
+                            self.substituted.insert(key.clone(), was.unwrap_or((cost.nodes, 0)));
                         }
                         let placeholder = stands.then(|| placeholder(Some(key), &Over::Nodes));
                         self.over.insert(std::ptr::from_ref(node), placeholder);
@@ -744,6 +775,9 @@ impl Tree {
                                 if stands && !counted && mode == Mode::Count {
                                     self.used.0 += 1;
                                     self.used.1 += u64::from(built);
+                                }
+                                if let (true, true, Some(id)) = (stands, counted, node.id()) {
+                                    self.substituted.insert(id.to_owned(), (cost.nodes, cost.rows));
                                 }
                                 self.over
                                     .insert(std::ptr::from_ref(node), stands.then(|| placeholder(node.id(), &over)));
@@ -861,12 +895,14 @@ impl Tree {
             room: (nodes_room, limits.rows),
             used: (0, 0),
             over: HashMap::new(),
+            substituted: HashMap::new(),
         };
         walk.nodes(nodes, 0, None, Mode::Count, &mut false)?;
         let moves = walk.moves.iter().map(|id| (*id).to_owned()).collect();
         let (over, used) = (Rc::new(std::mem::take(&mut walk.over)), walk.used.0);
+        let substituted = std::mem::take(&mut walk.substituted);
         if walk.keeps.is_empty() {
-            return Ok(Plan { keeps: HashSet::new(), moves, over, nodes: used });
+            return Ok(Plan { keeps: HashSet::new(), moves, over, nodes: used, substituted });
         }
         // An id of the tree, or a keep, may not be one inside a subtree it keeps. Each ancestor is checked once.
         let mut clear: HashSet<&str> = HashSet::new();
@@ -885,7 +921,7 @@ impl Tree {
             }
             clear.extend(chain);
         }
-        Ok(Plan { keeps: walk.held.into_iter().map(str::to_owned).collect(), moves, over, nodes: used })
+        Ok(Plan { keeps: walk.held.into_iter().map(str::to_owned).collect(), moves, over, nodes: used, substituted })
     }
 
     /// Pushes the cost of `node` and of each node under it, in the order [`Tree::validate`] walks them, and returns
@@ -1048,6 +1084,32 @@ fn placeholder(id: Option<&str>, over: &Over) -> Node {
         *selectable = false;
     }
     node
+}
+
+/// Puts in `nodes` each placeholder of `over` in place of its node, and drops the nodes a placeholder stands for.
+fn project(nodes: &mut Vec<Node>, over: &Placeholders) {
+    let kept: Vec<bool> = nodes.iter_mut().map(|node| substitute(node, over)).collect();
+    let mut kept = kept.into_iter();
+    nodes.retain(|_| kept.next().unwrap_or(true));
+}
+
+/// Puts the placeholder of `node` in its place, or projects what is under it; `false` for a node a placeholder stands
+/// for. Moving a node leaves the nodes under it where they are, so their addresses still find them.
+fn substitute(node: &mut Node, over: &Placeholders) -> bool {
+    match over.get(&std::ptr::from_ref(node)) {
+        Some(Some(placeholder)) => *node = placeholder.clone(),
+        Some(None) => return false,
+        None => match node {
+            Node::Box { children, .. } | Node::Scroll { children, .. } => project(children, over),
+            Node::List { items, .. } => {
+                let kept: Vec<bool> = items.iter_mut().map(|item| substitute(&mut item.node, over)).collect();
+                let mut kept = kept.into_iter();
+                items.retain(|_| kept.next().unwrap_or(true));
+            }
+            _ => {}
+        },
+    }
+    true
 }
 
 /// Moves each subtree `plan` holds again from `nodes` into `pool`, leaving an [`Extra::Taken`] in its place: a kept

@@ -836,7 +836,7 @@ impl Surface {
             // A hidden root box shows nothing in the slot, not even the gap the slot's parent puts before it.
             self.root.visible(!tree.is_empty() && !tree.nodes.first().is_some_and(|root| root.node.is_hidden()));
         }
-        *last = Some(nodes);
+        *last = Some(tree.admitted(nodes));
         for (handle, bytes) in &staged.given {
             if over.contains(handle) {
                 dropped.insert(*handle);
