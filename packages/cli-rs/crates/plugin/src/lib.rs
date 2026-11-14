@@ -1348,19 +1348,21 @@ impl Setup<'_> {
             abi::v2::Place::Route(name) => {
                 let key = name.clone();
                 self.route(name, move |host| {
+                    // What the commands ask for ends with the mount; their layer is there before its first view.
+                    let alive = Rc::new(());
+                    let layer = route::layer(host, commands(&Rc::downgrade(&alive)));
                     let mounted = surface::Surface::new(
                         host,
                         owner.clone(),
                         &surface,
-                        &key,
-                        "",
+                        (&key, ""),
                         &SlotInput::default(),
+                        alive,
                         viewer.clone(),
                         fail.clone(),
                     );
                     activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
-                    let commands = commands(&mounted.alive());
-                    Box::new(route::View::fill(host, Box::new(mounted), commands))
+                    Box::new(route::View::fill(host, Box::new(mounted), layer))
                 });
             }
             abi::v2::Place::Slot(at) => {
@@ -1378,9 +1380,9 @@ impl Setup<'_> {
                             host,
                             owner.clone(),
                             &surface,
-                            &path,
-                            &path,
+                            (&path, &path),
                             input,
+                            Rc::new(()),
                             viewer.clone(),
                             fail.clone(),
                         );

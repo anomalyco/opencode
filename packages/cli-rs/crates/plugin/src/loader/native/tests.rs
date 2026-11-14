@@ -41,7 +41,7 @@ pub(crate) fn build(features: &str) -> Vec<u8> {
 
 /// The sample, loaded from `library` and active in a fresh registry.
 fn active(host: &Rc<TestHost>, library: &[u8]) -> Registry {
-    let (definition, error) = Native.load(&dynamic(host), library, None).unwrap();
+    let (definition, error) = Native.load(&dynamic(host), library, std::path::Path::new("plugin.so"), None).unwrap();
     assert_eq!(definition.id, "sample");
     let registry = Registry::define(Vec::new(), []);
     registry.load(&dynamic(host), definition.external("sample.so", error));
@@ -162,7 +162,9 @@ fn a_panicking_command_fails_the_plugin() {
 
 #[test]
 fn versions_follow_the_abi_rules() {
-    let load = |library: &[u8], options: Option<&str>| Native.load(&dynamic(&host()), library, options).err();
+    let load = |library: &[u8], options: Option<&str>| {
+        Native.load(&dynamic(&host()), library, std::path::Path::new("plugin.so"), options).err()
+    };
     // The current build is 2.0. The same source built as a 1.6 plugin loads through the entry of ABI 1, and works.
     let current = build("");
     assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 2, minor: 0, version: Some("0.1.0".to_owned()) });
@@ -232,15 +234,15 @@ fn versions_follow_the_abi_rules() {
 
     // A host that serves ABI 1 up to 1.3 refuses this crate's 1.x plugin, which needs the 1.4 render requests.
     assert_eq!(
-        Library::open(&v1_6, 3).err().unwrap(),
+        Library::open(&v1_6, None, 3).err().unwrap(),
         "plugin needs host ABI 1.4 or newer, this opencode-native has 1.3; update opencode-native"
     );
 
     // A 1.x plugin that asks for the 1.5 host with `requires_minor = 5` loads here and is refused by a 1.4 host.
     let needs = build("requires-1-5");
-    assert!(Library::open(&needs, V1_MINOR).is_ok());
+    assert!(Library::open(&needs, None, V1_MINOR).is_ok());
     assert_eq!(
-        Library::open(&needs, 4).err().unwrap(),
+        Library::open(&needs, None, 4).err().unwrap(),
         "plugin needs host ABI 1.5 or newer, this opencode-native has 1.4; update opencode-native"
     );
     // A plugin built against a newer minor version loads and uses what this host offers.
@@ -268,7 +270,8 @@ fn versions_follow_the_abi_rules() {
     );
     assert!(load(b"not a library", None).unwrap().starts_with("cannot load the library"));
     // Setup runs on activation, so a setup that fails fails the plugin there.
-    let (definition, error) = Native.load(&dynamic(&host), &current, Some("{\"fail\":true}")).unwrap();
+    let (definition, error) =
+        Native.load(&dynamic(&host), &current, std::path::Path::new("plugin.so"), Some("{\"fail\":true}")).unwrap();
     let registry = Registry::define(Vec::new(), []);
     registry.load(&dynamic(&host), definition.external("sample.so", error));
     assert_eq!(status(&registry), Status::Failed("sample setup failed".to_owned()));
@@ -280,7 +283,8 @@ fn versions_follow_the_abi_rules() {
 fn setup_runs_on_activation_and_the_instance_is_destroyed_after() {
     let host = host();
     let stored = |key: &str| host.storage.borrow_mut().remove(&format!("plugin.sample.{key}"));
-    let (definition, error) = Native.load(&dynamic(&host), &build(""), Some("{\"probe\":true}")).unwrap();
+    let (definition, error) =
+        Native.load(&dynamic(&host), &build(""), std::path::Path::new("plugin.so"), Some("{\"probe\":true}")).unwrap();
     assert_eq!(definition.id, "sample");
     let registry = Registry::define(Vec::new(), ["-sample"]);
     registry.load(&dynamic(&host), definition.external("sample.so", error));
@@ -299,7 +303,9 @@ fn setup_runs_on_activation_and_the_instance_is_destroyed_after() {
 
     // Expected (bigboi-6): a build without `describe` runs setup once to tell its ID; that instance's disposal
     // stores nothing.
-    let (definition, _) = Native.load(&dynamic(&host), &build("abi-1-0"), Some("{\"probe\":true}")).unwrap();
+    let (definition, _) = Native
+        .load(&dynamic(&host), &build("abi-1-0"), std::path::Path::new("plugin.so"), Some("{\"probe\":true}"))
+        .unwrap();
     assert_eq!(definition.id, "sample");
     host.app.advance(Duration::from_millis(1));
     assert_eq!(stored("destroyed"), None);
@@ -431,7 +437,8 @@ fn a_malformed_table_is_refused_without_reading_it() {
 #[test]
 fn a_wake_from_a_plugin_thread_draws_its_claims_again() {
     let host = host();
-    let (definition, error) = Native.load(&dynamic(&host), &build(""), Some("{\"tick_ms\":5}")).unwrap();
+    let (definition, error) =
+        Native.load(&dynamic(&host), &build(""), std::path::Path::new("plugin.so"), Some("{\"tick_ms\":5}")).unwrap();
     let registry = Registry::define(Vec::new(), []);
     registry.load(&dynamic(&host), definition.external("sample.so", error));
     let parent = View::new(host.app());
@@ -450,7 +457,8 @@ fn a_wake_from_a_plugin_thread_draws_its_claims_again() {
 fn woken_into_a_full_queue(host: &Rc<TestHost>, options: &str) -> (Registry, impl Sized) {
     let proxy = host.app().proxy();
     while proxy.post(|_| {}).is_ok() {}
-    let (definition, error) = Native.load(&dynamic(host), &build(""), Some(options)).unwrap();
+    let (definition, error) =
+        Native.load(&dynamic(host), &build(""), std::path::Path::new("plugin.so"), Some(options)).unwrap();
     let registry = Registry::define(Vec::new(), []);
     registry.load(&dynamic(host), definition.external("sample.so", error));
     let parent = View::new(host.app());
@@ -498,7 +506,8 @@ fn setup_reaches_the_host() {
     let host = host();
     host.mode.set(ThemeMode::Light);
     host.storage.borrow_mut().insert("plugin.sample.count".to_owned(), "{\"count\":5}".to_owned());
-    let (definition, error) = Native.load(&dynamic(&host), &build(""), Some("{\"probe\":true}")).unwrap();
+    let (definition, error) =
+        Native.load(&dynamic(&host), &build(""), std::path::Path::new("plugin.so"), Some("{\"probe\":true}")).unwrap();
     let registry = Registry::define(Vec::new(), []);
     registry.load(&dynamic(&host), definition.external("sample.so", error));
     assert_eq!(status(&registry), Status::Active);
@@ -823,7 +832,8 @@ fn the_instance_is_destroyed_at_once_while_its_route_is_mounted() {
     let host = host();
     let destroyed = || host.storage.borrow_mut().remove("plugin.sample.destroyed");
     let load = |build: &[u8]| {
-        let (definition, error) = Native.load(&dynamic(&host), build, Some("{\"probe\":true}")).unwrap();
+        let (definition, error) =
+            Native.load(&dynamic(&host), build, std::path::Path::new("plugin.so"), Some("{\"probe\":true}")).unwrap();
         definition.external("sample.so", error)
     };
     let registry = Registry::define(Vec::new(), []);
@@ -1189,7 +1199,9 @@ fn the_1_6_reads_and_verbs_are_the_same_in_process_and_through_the_library() {
     assert_eq!(panel.size, abi::PanelSize::XLarge);
     in_process.set_active(&dynamic(&host), "sample", false);
 
-    let (definition, error) = Native.load(&dynamic(&host), &build("still"), Some(r#"{"reads":true}"#)).unwrap();
+    let (definition, error) = Native
+        .load(&dynamic(&host), &build("still"), std::path::Path::new("plugin.so"), Some(r#"{"reads":true}"#))
+        .unwrap();
     let library = Registry::define(Vec::new(), []);
     library.load(&dynamic(&host), definition.external("sample.so", error));
     assert_eq!(status(&library), Status::Active);
@@ -1689,7 +1701,8 @@ fn a_failed_setup_runs_the_dispose_callbacks_it_registered() {
         ("{\"probe\":true,\"panic\":true}", "setup panicked: sample setup panicked", None),
     ] {
         let host = host();
-        let (definition, failure) = Native.load(&dynamic(&host), &build(""), Some(options)).unwrap();
+        let (definition, failure) =
+            Native.load(&dynamic(&host), &build(""), std::path::Path::new("plugin.so"), Some(options)).unwrap();
         let registry = Registry::define(Vec::new(), []);
         let failed = registry.load(&dynamic(&host), definition.external("sample.so", failure));
         assert_eq!(failed, Some(crate::SetupFailed { error: error.to_owned(), kept: false }));
@@ -2528,7 +2541,7 @@ unsafe extern "C" fn old_host_free(owned: Owned) {
 fn a_1_5_library_gets_what_a_1_4_host_offers() {
     use opencode_plugin_abi_1_4 as old;
     // The probe as a library of ABI 1.x, which a 1.4 host can load.
-    let library = Library::open(&build("p0a,abi-1-6"), 4).unwrap();
+    let library = Library::open(&build("p0a,abi-1-6"), None, 4).unwrap();
     let api = HostApi {
         size: size_of::<HostApi>(),
         major: 1,
@@ -2950,7 +2963,8 @@ fn c_plugin(defines: &[&str]) -> Option<Vec<u8>> {
 #[cfg(unix)]
 fn c_active(library: &[u8], options: &str) -> (Rc<TestHost>, Registry) {
     let host = host();
-    let (definition, error) = Native.load(&dynamic(&host), library, Some(options)).unwrap();
+    let (definition, error) =
+        Native.load(&dynamic(&host), library, std::path::Path::new("plugin.so"), Some(options)).unwrap();
     let registry = Registry::define(Vec::new(), []);
     registry.load(&dynamic(&host), definition.external("c.so", error));
     (host, registry)
@@ -3013,7 +3027,7 @@ fn a_1_4_library_gets_nothing_of_2_0() {
 #[test]
 fn a_2_x_library_whose_describe_fails_is_refused() {
     let Some(library) = c_plugin(&["OPENCODE_BAD_DESCRIBE"]) else { return };
-    let error = Native.load(&dynamic(&host()), &library, None).err().unwrap();
+    let error = Native.load(&dynamic(&host()), &library, std::path::Path::new("plugin.so"), None).err().unwrap();
     assert!(error.starts_with("plugin describe failed: "), "{error}");
     assert!(Native.inspect(&library).err().unwrap().starts_with("plugin describe failed: "));
 }
@@ -3059,21 +3073,70 @@ fn a_c_plugin_gets_what_its_answers_ask_for() {
     assert!(screen.contains("drawn in C, 0 messages"), "{screen}");
 }
 
-// Expected (4.5, review F12): on macOS a library the system refuses for its code signature, or for the quarantine of a
-// download, gets a message that says so in plain words and what to do; elsewhere, and for any other error, the
-// system's words alone.
+// Expected (4.5, reviews F12, bigboi-13, carbon-6): on macOS a library the system refuses gets a message that names the
+// cause the host knows and what to do about it: another team's signature (library validation), the quarantine of a
+// download the host put on its copy, else a missing or invalid signature, with the same words from `dyld` for the last
+// two. Elsewhere, and for any other error, the system's words alone. The words are `dyld4`'s.
 #[test]
 fn a_library_macos_refuses_says_why() {
-    let signature = "dlopen(/tmp/x/plugin.dylib, 0x0005): code signature in <ABC> '/tmp/x/plugin.dylib' not valid for \
-                     use in process: mapping process and mapped file (non-platform) have different Team IDs";
-    let explained = explain_refusal(signature, true);
-    assert!(explained.starts_with(&format!("cannot load the library: {signature}. macOS refused")), "{explained}");
-    assert!(explained.contains("codesign --sign"), "{explained}");
-    assert_eq!(explain_refusal(signature, false), format!("cannot load the library: {signature}"));
-    let quarantine = "dlopen(/tmp/x/plugin.dylib): the file is in quarantine and was not verified";
-    assert!(explain_refusal(quarantine, true).contains("xattr -d com.apple.quarantine"));
-    let missing = "dlopen(/tmp/x/plugin.dylib): image not found";
-    assert_eq!(explain_refusal(missing, true), format!("cannot load the library: {missing}"));
+    let source = Path::new("/Users/u/plugins/x/plugin.dylib");
+    let team = "dlopen(/Users/u/plugins/x/plugin.dylib, 0x0005): code signature in <ABC> '/Users/u/plugins/x/plugin.dylib' \
+                not valid for use in process: mapping process and mapped file (non-platform) have different Team IDs";
+    let policy = "dlopen(/Users/u/plugins/x/plugin.dylib, 0x0005): code signature in <ABC> \
+                  '/Users/u/plugins/x/plugin.dylib' not valid for use in process: library load disallowed by system policy";
+    let missing = "dlopen(/Users/u/plugins/x/plugin.dylib, 0x0005): Library not loaded: @rpath/libdep.dylib";
+    let rows: [(&str, bool, &[&str], &[&str]); 5] = [
+        (team, false, &["library validation", "built from source"], &["xattr", "codesign"]),
+        (team, true, &["library validation"], &["xattr", "codesign"]),
+        (
+            policy,
+            true,
+            &["quarantine of a download", "xattr -d com.apple.quarantine '/Users/u/plugins/x/plugin.dylib'"],
+            &["codesign", "library validation"],
+        ),
+        (
+            policy,
+            false,
+            &["missing or invalid", "codesign --force --sign - '/Users/u/plugins/x/plugin.dylib'"],
+            &["xattr", "library validation"],
+        ),
+        (missing, true, &[], &["xattr", "codesign", "library validation"]),
+    ];
+    for (error, quarantined, has, lacks) in rows {
+        let explained = explain_refusal(error, true, quarantined, Some(source));
+        assert!(explained.starts_with(&format!("cannot load the library: {error}")), "{explained}");
+        assert!(has.iter().all(|needle| explained.contains(needle)), "{quarantined} {explained}");
+        assert!(lacks.iter().all(|needle| !explained.contains(needle)), "{quarantined} {explained}");
+        assert_eq!(
+            explain_refusal(error, false, quarantined, Some(source)),
+            format!("cannot load the library: {error}")
+        );
+    }
+    assert_eq!(explain_refusal(missing, true, false, Some(source)), format!("cannot load the library: {missing}"));
+}
+
+// Expected (review carbon-6): a load names the file the user gave, not the copy the host opened, and on Windows the
+// copies are swept: a directory old enough that no process is still opening it goes, a new one stays.
+#[test]
+fn a_refused_library_is_named_by_its_file_and_old_copies_are_swept() {
+    let dir = opencode_util::temp::tempdir().unwrap();
+    let source = dir.path().join("plugin.so");
+    std::fs::write(&source, b"not a library").unwrap();
+    let error = Library::open(b"not a library", Some(&source), V1_MINOR).err().unwrap();
+    assert!(error.contains(&*source.to_string_lossy()), "{error}");
+    // The source's own directory is a temporary one too; the copy's is not named.
+    assert_eq!(error.matches(".tmp-").count(), 1, "{error}");
+
+    let base = dir.path().join("opencode-plugins");
+    let (old, new) = (base.join("old"), base.join("new"));
+    for made in [&old, &new] {
+        std::fs::create_dir_all(made).unwrap();
+        std::fs::write(made.join("plugin.dll"), b"").unwrap();
+    }
+    let past = std::time::SystemTime::now() - Duration::from_secs(3600);
+    std::fs::File::open(&old).unwrap().set_modified(past).unwrap();
+    sweep(&base, Duration::from_secs(600));
+    assert!(!old.exists() && new.exists());
 }
 
 // Expected (review bigboi-3): a setup whose manifest the host refuses, here for another ID than the library described,

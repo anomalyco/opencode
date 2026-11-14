@@ -141,7 +141,7 @@ pub(crate) struct Surface {
     palette: bool,
     id: v2::MountId,
     /// Lives as long as the mount; what its route's commands asked for checks it before it arrives.
-    alive: Rc<()>,
+    _alive: Rc<()>,
     /// A route's surface fills the page; a slot's takes its node's layout, as a 1.x claim's root does.
     fills: bool,
     /// The layout a slot's root took last.
@@ -152,9 +152,6 @@ pub(crate) struct Surface {
     state: RefCell<State>,
     live: RefCell<Option<Rc<slot::Live>>>,
     watch: RefCell<Option<Disposer>>,
-    /// Drawn by its mount and not synced since: the host's first sync of a new mount brings nothing new (review
-    /// bigboi-7: a route's first frame ran two views).
-    mounted: Cell<bool>,
 }
 
 /// What one call of the view returned and asked for; the host takes it only with its tree.
@@ -193,9 +190,9 @@ impl Surface {
         host: &dyn Host,
         owner: Weak<dyn Host>,
         surface: &Place,
-        key: &str,
-        path: &str,
+        (key, path): (&str, &str),
         slot_input: &SlotInput,
+        alive: Rc<()>,
         viewer: Rc<dyn Viewer>,
         fail: Fail,
     ) -> Rc<Self> {
@@ -219,7 +216,7 @@ impl Surface {
             slot_input: slot_input.clone(),
             palette: surface.palette,
             id,
-            alive: Rc::new(()),
+            _alive: alive,
             fills,
             layout: Cell::new(None),
             seen: Cell::new((0, 0)),
@@ -227,7 +224,6 @@ impl Surface {
             state: RefCell::default(),
             live: RefCell::new(None),
             watch: RefCell::new(None),
-            mounted: Cell::new(true),
         });
         book(|ledger| ledger.mounts += 1);
         let weak = Rc::downgrade(&mounted);
@@ -263,11 +259,6 @@ impl Surface {
     pub fn draw(&self, host: &dyn Host) {
         self.resized.set(0);
         self.draw_sized(host);
-    }
-
-    /// What stands for the mount while it lives.
-    pub fn alive(&self) -> Weak<()> {
-        Rc::downgrade(&self.alive)
     }
 
     /// Calls the view and adopts its tree; on a refusal, once more for a whole tree.
@@ -510,9 +501,7 @@ impl Claimed for Rc<Surface> {
     }
 
     fn sync(&self, host: &dyn Host, changed: &abi::Changed) {
-        if !self.mounted.replace(false) {
-            self.draw(host);
-        }
+        self.draw(host);
         self.state.borrow().tree.each_slot(&mut |slots| slots.sync(host, Some(changed)));
     }
 

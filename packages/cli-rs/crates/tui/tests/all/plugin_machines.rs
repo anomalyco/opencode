@@ -99,7 +99,13 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
 struct Builds;
 
 impl Backend for Builds {
-    fn load(&self, host: &Rc<dyn Host>, _: &[u8], _: Option<&str>) -> Result<(Definition, ErrorFn), String> {
+    fn load(
+        &self,
+        host: &Rc<dyn Host>,
+        _: &[u8],
+        _: &std::path::Path,
+        _: Option<&str>,
+    ) -> Result<(Definition, ErrorFn), String> {
         loopback_described(host, abi::export_plugin!(@loopback_described "parity.life", life))
     }
 }

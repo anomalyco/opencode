@@ -246,10 +246,6 @@ impl Model for Surfaces {
                     if first.generation <= highest || !first.full || first.built != ITEMS && !first.bad {
                         return fail("lifecycle", format!("a new mount's first view was {first:?} after {highest}"));
                     }
-                    // One view opens a surface, and one more only when the first tree was refused.
-                    if calls.len() != 1 + usize::from(first.bad) {
-                        return fail("work", format!("opening a surface ran {} views: {calls:?}", calls.len()));
-                    }
                     mounted = Some(first.generation);
                     highest = first.generation;
                 }
@@ -1314,5 +1310,25 @@ fn a_duplicate_id_fails_the_plugin_without_a_retry() {
         let status = harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "test.dup").unwrap().status;
         let broke = matches!(&status, opencode_plugin::Status::Failed(error) if error.contains("broke the contract"));
         assert!(broke, "{carrier:?}: {status:?}");
+    }
+}
+
+// Expected (review bigboi-7): a route opened from a page with no prompt shows after one view, on both carriers: the
+// TUI's sync of the route it has just mounted calls none, nor does the keymap layer of the route's own commands, which
+// is there before the first view. (From Home a second view follows when the prompt's keymap layer goes, a turn later:
+// the keymap is host state a plugin reads.)
+#[test]
+fn a_route_opens_with_one_view() {
+    for carrier in CARRIERS {
+        board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
+        let harness = open_tui(carrier);
+        harness.tui.navigate(Route::Plugin { id: "test.none".into(), name: "none".into() });
+        settle(&harness);
+        let before = board(|board| board.calls.len());
+        harness.tui.navigate(route());
+        settle(&harness);
+        let calls = board(|board| board.calls[before..].to_vec());
+        assert_eq!(calls.len(), 1, "{carrier:?}: {calls:?}");
+        assert!(harness.app.render().text().contains("card 0"), "{carrier:?}");
     }
 }
