@@ -1169,3 +1169,99 @@ fn a_plugin_image_preview_is_bounded_and_keyed() {
 fn abi_dialog_images(images: opencode_plugin::abi::Images) -> opencode_plugin::abi::Dialog {
     opencode_plugin::abi::Dialog::Images(images)
 }
+
+thread_local! {
+    /// What the keymap probe's layer heard.
+    static HEARD: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+// Expected (the contract's `Bind::command`; carbon's review of P6c, 5): a bind of a name the user set to "none" takes
+// no key, not even its own fallback; a bind may not take the plugin manager's command, so `/plugins` still opens; and
+// a bind with no key and no name is left out, not its whole layer.
+#[test]
+fn a_plugins_binds_take_what_they_may() {
+    use opencode_plugin::abi::interact::{Bind, Handled, Layer, LayerScope};
+    let h = mount_config(Route::Home, json!({ "keybinds": { "diff.next_hunk": "none" } }));
+    h.wait_for("/project");
+    let setup = |setup: &mut opencode_plugin::abi::Setup| {
+        let keys = vec![
+            Bind { key: "f8".into(), ..Bind::command("diff.next_hunk", "none") },
+            Bind::command("plugins.list", "steal"),
+            Bind::new("", "empty"),
+            Bind::new("f9", "kept"),
+        ];
+        setup.layer(Layer { scope: LayerScope::Global, priority: 10, keys, ..Layer::default() }, |_, event| {
+            if let opencode_plugin::abi::interact::Event::Key(key) = event {
+                HEARD.with(|heard| heard.borrow_mut().push(key.bind.clone().unwrap_or_default()));
+            }
+            Handled::Consume
+        });
+        Ok(())
+    };
+    opencode_tui::plugins::host::add(&h.tui, opencode_plugin::abi::Plugin { id: "probe", setup }.into());
+    h.settle();
+    h.keys(&["f8", "f9"]);
+    h.tui.keymap.dispatch("plugins.list", None);
+    h.wait("/plugins did not open", || h.tui.dialogs.is_open());
+    assert_eq!(HEARD.with(|heard| heard.borrow().clone()), ["kept"]);
+}
+
+thread_local! {
+    /// Which of its two forms the dialog probe shows.
+    static SECOND: Cell<bool> = const { Cell::new(false) };
+}
+
+// Expected (carbon's review of P6c, 5): a keyed select shown again shows its new empty text and note, which it had none
+// of; a panel shown again shows its new close label.
+#[test]
+fn a_select_and_a_panel_shown_again_show_their_new_fields() {
+    use opencode_plugin::abi::{Action, Dialog, Panel, PanelSize, Select, SelectOption, Span};
+    let h = route(1, 4, 120, 30);
+    let setup = |setup: &mut opencode_plugin::abi::Setup| {
+        let command = |name: &str| opencode_plugin::abi::Command { name: name.into(), ..Default::default() };
+        setup.command(command("probe.select"), |host, _| {
+            let second = SECOND.with(Cell::get);
+            let options = if second { Vec::new() } else { vec![SelectOption::new("row one", "one")] };
+            let action = Action::Command { name: "probe.select".into(), input: None };
+            host.dialog(Dialog::Select(Select {
+                key: Some("pick".into()),
+                empty: second.then(|| Span::new("Nothing here")),
+                note: second.then(|| Span::new("A note under")),
+                ..Select::new("Pick", options, action)
+            }));
+        });
+        setup.command(command("probe.panel"), |host, _| {
+            let second = SECOND.with(Cell::get);
+            host.dialog(Dialog::Panel(Panel {
+                key: "info".into(),
+                size: PanelSize::Medium,
+                title: vec![Span::new("Info")],
+                subtitle: None,
+                body: opencode_plugin::abi::Node::text([Span::new("body")]),
+                actions: Vec::new(),
+                binds: Vec::new(),
+                bleed: false,
+                centered: false,
+                bare: false,
+                close: Some(if second { "shut B" } else { "shut A" }.into()),
+                height: None,
+            }));
+        });
+        Ok(())
+    };
+    opencode_tui::plugins::host::add(&h.tui, opencode_plugin::abi::Plugin { id: "probe", setup }.into());
+    SECOND.with(|second| second.set(false));
+    h.dispatch("probe.select");
+    h.wait_for("row one");
+    SECOND.with(|second| second.set(true));
+    h.dispatch("probe.select");
+    h.wait_for("Nothing here");
+    h.wait_for("A note under");
+    h.keys(&["escape"]);
+    SECOND.with(|second| second.set(false));
+    h.dispatch("probe.panel");
+    h.wait_for("shut A");
+    SECOND.with(|second| second.set(true));
+    h.dispatch("probe.panel");
+    h.wait_for("shut B");
+}

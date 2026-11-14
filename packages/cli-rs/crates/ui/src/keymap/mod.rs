@@ -509,7 +509,10 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
                 bindings.extend(configured.iter().cloned());
                 continue;
             }
-            if let Bind::Key(key) = &command.bind {
+            // A name the config knows and binds to nothing (`"none"`) takes no key of its own (carbon's review of P6c, 5).
+            if let Bind::Key(key) = &command.bind
+                && !generated::DEFINITIONS.iter().any(|definition| definition.name == id)
+            {
                 bindings.push(Binding::new(key.as_str()).cmd(id.as_str()));
             }
         }
