@@ -89,12 +89,60 @@ fn footer(h: &Harness) -> Vec<opentui::testing::Cell> {
     frame.cells[((frame.height - 3) * frame.width) as usize..].to_vec()
 }
 
-/// The footer rows with the status claim, as mounted, after a status change and after a resize. With `loopback`, the
-/// footer is wired through the byte shims of the C ABI (`Loopback`) instead of running in process.
-fn footer_frames(loopback: bool) -> Vec<Vec<opentui::testing::Cell>> {
-    let plugins: &[&str] = if loopback { &["-opencode.home.footer"] } else { &[] };
+/// The home footer's own source built as a `cdylib` (`crates/plugin/examples/home-footer`), once per test run.
+fn library() -> Vec<u8> {
+    static BUILT: std::sync::Mutex<Option<Vec<u8>>> = std::sync::Mutex::new(None);
+    let mut built = BUILT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(library) = &*built {
+        return library.clone();
+    }
+    let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/examples/home-footer");
+    let target = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/home-footer-plugin");
+    let status = std::process::Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned()))
+        .args(["build", "--quiet", "--manifest-path"])
+        .arg(crate_dir.join("Cargo.toml"))
+        .arg("--target-dir")
+        .arg(&target)
+        .status()
+        .unwrap();
+    assert!(status.success(), "the home footer library did not build");
+    let name = format!("{}opencode_home_footer{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX);
+    let library = std::fs::read(target.join("debug").join(name)).unwrap();
+    *built = Some(library.clone());
+    library
+}
+
+/// How [`footer_frames`] runs the footer.
+#[derive(Clone, Copy, Debug)]
+enum Run {
+    Linked,
+    /// Through the byte shims of the C ABI (`Loopback`), in process.
+    Loopback,
+    /// Its own source, built as a library file and opened by the loader, as an external plugin is (P6a review, big-boi
+    /// medium 7).
+    Library,
+}
+
+/// The footer rows with the status claim, as mounted, after a status change and after a resize, the footer run as
+/// `run` says.
+fn footer_frames(run: Run) -> Vec<Vec<opentui::testing::Cell>> {
+    let plugins: &[&str] = if matches!(run, Run::Linked) { &[] } else { &["-opencode.home.footer"] };
     let h = mount(100, plugins, vec![abi::Plugin { id: "test.status", setup: status }.into()]);
-    if loopback {
+    let _root = matches!(run, Run::Library).then(|| {
+        let root = opencode_util::temp::tempdir().unwrap();
+        let config = root.path().join("config");
+        let dir = config.join("plugins").join("home-footer");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(opencode_plugin::loader::entry_file()), library()).unwrap();
+        let external = opencode_tui::plugins::host::External {
+            config_dir: config,
+            cwd: root.path().to_path_buf(),
+            dev: Vec::new(),
+        };
+        opencode_tui::plugins::host::external(&h.tui, external);
+        root
+    });
+    if matches!(run, Run::Loopback) {
         let (definition, _) = opencode_plugin::loader::native::loopback(
             &opencode_tui::plugins::host::host(&h.tui),
             abi::export_plugin!(@loopback "loopback.home.footer", opencode_tui::plugins::home_footer::plugin().setup),
@@ -115,10 +163,76 @@ fn footer_frames(loopback: bool) -> Vec<Vec<opentui::testing::Cell>> {
 }
 
 // Expected: the home footer draws the same cells through the C ABI's byte shims as in process, its nested slot
-// included.
+// included, and so does its own source built as a library file and opened by the loader.
 #[test]
 fn the_home_footer_draws_the_same_through_the_c_abi_loopback() {
-    assert_eq!(footer_frames(true), footer_frames(false));
+    let linked = footer_frames(Run::Linked);
+    assert_eq!(footer_frames(Run::Loopback), linked);
+    assert_eq!(footer_frames(Run::Library), linked);
+}
+
+// Expected: a 1.x status claim nested in the home footer stays across the footer's size thresholds: below 16 rows the
+// footer's row loses its padding, which builds its box again, below 14 the footer hides and the claim goes to
+// `home.footer` itself (TS `survivingAncestor`), and back at 30 the footer shows again with the claim in its row (P6a
+// review, big-boi medium 4: a box built again left the claim in the widget that went).
+#[test]
+fn a_nested_status_claim_stays_across_the_footer_thresholds() {
+    let h = mount(100, &[], vec![abi::Plugin { id: "test.status", setup: status }.into()]);
+    h.wait_for("2 MCP");
+    h.wait_for("status none");
+    for (height, shown) in [(15, true), (13, false), (30, true), (15, true)] {
+        h.app.resize(100, height);
+        let ready = || {
+            let screen = h.app.render().text();
+            let row = screen.lines().any(|line| line.contains("2 MCP") && line.contains("status none"));
+            screen.contains("2 MCP") == shown && screen.contains("status none") && (row || !shown)
+        };
+        h.wait(&format!("the footer at {height} rows"), ready);
+        for _ in 0..5 {
+            h.app.advance(std::time::Duration::from_millis(1));
+            assert!(ready(), "{height} rows, five frames on:\n{}", h.app.render().text());
+        }
+    }
+}
+
+thread_local! {
+    /// The box of `test.toggle` is shown.
+    static SHOWN: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+}
+
+/// A 2.0 surface in `home.footer` whose box holds a label and the `home.footer.status` slot, shown or hidden by its
+/// command `toggle.flip`, which changes nothing else.
+fn toggle(setup: &mut abi::Setup) -> Result<(), String> {
+    use opencode_plugin::abi::v2::{Node, Place, Surface};
+    setup.command(abi::Command { name: "toggle.flip".into(), ..abi::Command::default() }, |_, _| {
+        SHOWN.set(!SHOWN.get());
+    });
+    setup.surface(Surface::new("toggle", Place::Slot(abi::Placement::append("home.footer")), |_| {
+        let label = Node::text([abi::Span::new("label")]);
+        Node::row(vec![label, Node::Slot { path: "home.footer.status".into() }]).gap(1).visible(SHOWN.get())
+    }));
+    Ok(())
+}
+
+// Expected: a 2.0 box that holds a nested slot, hidden and shown again, shows the slot's 1.x claim again with its own
+// label: whether a box shows changes its widget in place.
+#[test]
+fn a_hidden_and_shown_box_keeps_its_nested_claim() {
+    SHOWN.set(true);
+    let plugins = vec![
+        abi::Plugin { id: "test.toggle", setup: toggle }.into(),
+        abi::Plugin { id: "test.status", setup: status }.into(),
+    ];
+    let h = mount(100, &["-opencode.home.footer"], plugins);
+    h.wait_for("label status none");
+    h.dispatch("toggle.flip");
+    h.wait_gone("label");
+    h.dispatch("toggle.flip");
+    h.wait_for("label");
+    for _ in 0..5 {
+        h.app.advance(std::time::Duration::from_millis(1));
+    }
+    assert!(h.app.render().text().contains("label status none"), "{}", h.app.text());
 }
 
 /// A `home.footer.status` claim whose root grows: `L` at its start and `R` at its end.
