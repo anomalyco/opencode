@@ -156,11 +156,4 @@ zmij build
 
 [optional]
 # Third-party crates only non-default features bring in, over normal, build and dev edges of the whole workspace
-# with --all-features. The same rules apply. opencode-plugin-abi's `schema` feature (the JSON Schema of plugin
-# contract 2.0, script/gen/plugin-schema.ts) brings in schemars; plugins-p1 asks for its decision.
-dyn-clone
-ref-cast build
-ref-cast-impl proc-macro
-schemars
-schemars_derive proc-macro
-serde_derive_internals
+# with --all-features. The same rules apply. Empty: every feature's crates ship by default.

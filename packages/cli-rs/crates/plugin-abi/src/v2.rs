@@ -22,7 +22,6 @@ use crate::{Align, Border, Click, Color, Edges, Justify, Layout, Overflow, Read,
 /// widget of a node whose id and kind stay, and writes only what changed. Without an id a node is matched by its kind
 /// and place among the siblings without one.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum Node {
     /// A box that lays out its children in a column, or in a row.
@@ -130,7 +129,6 @@ pub enum Node {
 /// What a text-bearing node shows: text inline, content sent once ([`View::content`]), or a transcript part's own
 /// output, which never crosses to the plugin.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum Source {
     Text(String),
@@ -140,12 +138,10 @@ pub enum Source {
 
 /// A handle to bytes the plugin gave the host once, in this mount.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ContentRef(pub u64);
 
 /// A part of a session's transcript by its id: a tool call, whose output it names.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct PartRef {
     pub session: String,
     /// The call's id, as the transcript has it (`call_…`).
@@ -153,7 +149,6 @@ pub struct PartRef {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum DiffView {
     #[default]
@@ -163,7 +158,6 @@ pub enum DiffView {
 
 /// What a surface's view gets besides the plugin's own state.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct SurfaceInput {
     /// The surface's own size in cells.
     pub width: u16,
@@ -178,7 +172,6 @@ pub struct SurfaceInput {
 
 /// Every token of the page theme, by its path (`text.muted`, `background.panel`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Palette {
     pub mode: Mode,
     pub colors: BTreeMap<String, Rgba>,
@@ -192,7 +185,6 @@ impl Palette {
 
 /// [`ThemeMode`] on the wire.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum Mode {
     #[default]
@@ -212,7 +204,6 @@ impl From<ThemeMode> for Mode {
 /// One showing of one surface: the plugin's surface, the key it chose, and a generation that is new every time. A
 /// surface closed and opened again has the same key and a new generation; what the first showing owned ends with it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct MountId {
     pub surface: String,
     pub key: String,
@@ -605,33 +596,7 @@ impl From<crate::Node> for Node {
     }
 }
 
-/// [`Rgba`] is `#rrggbbaa` on the wire.
-#[cfg(feature = "schema")]
-impl schemars::JsonSchema for Rgba {
-    fn schema_name() -> std::borrow::Cow<'static, str> {
-        "Rgba".into()
-    }
-
-    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        schemars::json_schema!({ "type": "string", "pattern": "^#[0-9a-f]{8}$" })
-    }
-}
-
-/// The JSON Schema of contract 2.0: every type a surface sends or gets, under `$defs`.
-#[cfg(feature = "schema")]
-pub fn schema() -> serde_json::Value {
-    let mut generator = schemars::SchemaGenerator::default();
-    generator.subschema_for::<Node>();
-    generator.subschema_for::<SurfaceInput>();
-    generator.subschema_for::<MountId>();
-    let defs: serde_json::Map<String, serde_json::Value> = generator.take_definitions(true);
-    serde_json::json!({
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "opencode plugin contract 2.0",
-        "description": "Generated from opencode_plugin_abi::v2 by `examples/schema.rs`. Do not edit.",
-        "$defs": defs,
-    })
-}
+pub use crate::schema::schema;
 
 fn is_false(value: &bool) -> bool {
     !value
