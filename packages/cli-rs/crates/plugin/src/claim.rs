@@ -222,7 +222,9 @@ impl ToolClaims {
     /// one tool the plugin last in activation order wins.
     pub fn find(&self, name: &str) -> Option<ToolClaim> {
         let canonical = opencode_ui::tool_info::canonical_tool_name(name);
-        let (_, claim) = self.0.iter().rev().find(|(claimed, _)| claimed == name || claimed == canonical)?;
+        let (_, claim) = self.0.iter().rev().find(|(claimed, _)| {
+            claimed == name || opencode_ui::tool_info::canonical_tool_name(claimed) == canonical
+        })?;
         Some(ToolClaim(claim.clone()))
     }
 

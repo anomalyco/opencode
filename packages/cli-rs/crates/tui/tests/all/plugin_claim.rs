@@ -2324,3 +2324,22 @@ fn a_claimed_part_draws_again_after_its_plugin_runs_a_command() {
         assert!(world.frame().text().contains("call_1 bumped 2"), "{carrier:?}:\n{}", world.frame().text());
     }
 }
+
+fn bash_claim(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::tool("bash", probe('b')));
+    Ok(())
+}
+
+// Expected (`abi::claim::Target`: `bash` and `shell` are one tool; review finding carbon-8): a claim of a tool by the
+// name a provider gives it takes the calls the transcript names as the host does, and the other way round.
+#[test]
+fn a_claim_of_a_tool_takes_its_calls_by_either_name() {
+    for carrier in CARRIERS {
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.bash", setup: bash_claim })]);
+        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "shell" }));
+        world.emit("session.tool.input.started", json!({ "id": "call_2", "name": "bash" }));
+        world.settle();
+        let screen = world.frame().text();
+        assert!(screen.contains("b drew call_1") && screen.contains("b drew call_2"), "{carrier:?}:\n{screen}");
+    }
+}
