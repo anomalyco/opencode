@@ -1,5 +1,6 @@
 // The shared fixture of the plugin work (rich-plugins 4.14, O-124), TypeScript reader: the TS TUI is driven through
-// the life machine of plugins.json, with parity/plugins/life loaded as a local plugin, each path on a fresh app,
+// the life and project machines of plugins.json, with parity/plugins/life loaded as a local plugin or found in a
+// project, each path on a fresh app,
 // observing after every action. The Rust reader is crates/tui/tests/all/plugin_machines.rs; both read the file and
 // neither reads the other. `bun run test` in packages/cli-rs, which CI runs, covers each edge once and the seeded walks;
 // `bun run parity:machines` adds every path to the file's depth and the fault trials, which take a few minutes. Both
@@ -14,7 +15,13 @@ import { tmpdir } from "../../../tui/test/fixture/fixture"
 import machines from "./plugins.json"
 
 type Fixture = Awaited<ReturnType<typeof createAppFixture>>
-type Machine = { initial: string; states: Record<string, [string, Record<string, string>]>; xfail: string[][] }
+type Machine = {
+  initial: string
+  states: Record<string, [string, Record<string, string>]>
+  xfail: string[][]
+  // A known row does not end the path: this client follows the machine on.
+  continue?: boolean
+}
 
 // The full sweep: every path to the file's depth, and the fault trials.
 const deep = process.env.PARITY_DEEP === "1"
@@ -23,23 +30,31 @@ type App = { setup: Fixture; entry: string; builds: number }
 
 const plugin = path.join(import.meta.dir, "../plugins/life/tui.tsx")
 // JSON gives each state as a mixed array; the file's shape is checked once here.
-const machine: Machine = {
-  ...machines.machines.life,
-  states: Object.fromEntries(
-    Object.entries(machines.machines.life.states).map(([state, [observation, edges]]) => {
-      if (typeof observation !== "string" || typeof edges !== "object") throw new Error(`state ${state} is malformed`)
-      return [state, [observation, edges as Record<string, string>]]
-    }),
-  ),
+function parse(source: (typeof machines.machines)[keyof typeof machines.machines]): Machine {
+  return {
+    ...source,
+    states: Object.fromEntries(
+      Object.entries(source.states).map(([state, [observation, edges]]) => {
+        if (typeof observation !== "string" || typeof edges !== "object") throw new Error(`state ${state} is malformed`)
+        return [state, [observation, edges as Record<string, string>]]
+      }),
+    ),
+  }
 }
+const machine = parse(machines.machines.life)
+// The same plugin found in the project's plugins directory, with nothing in the config naming it.
+const project = parse(machines.machines.project)
 let runs = 0
 
-// A fresh app with a copy of the plugin, which resolves packages/tui's dependencies (as `copyPlugin` does).
-async function open() {
+// A fresh app with a copy of the plugin, which resolves packages/tui's dependencies (as `copyPlugin` does). In the
+// config, or with `inProject` in the `.opencode/plugins` of a project the app starts in.
+async function open(inProject = false) {
   const root = await tmpdir()
-  const directory = path.join(root.path, "life")
+  const repo = path.join(root.path, "repo")
+  const directory = inProject ? path.join(repo, ".opencode", "plugins", "life") : path.join(root.path, "life")
   const entry = path.join(directory, "tui.tsx")
-  await mkdir(directory)
+  await mkdir(directory, { recursive: true })
+  if (inProject) await mkdir(path.join(repo, ".git"))
   // A junction on Windows, which needs no privilege (as `plugin-source.test.ts` links).
   await symlink(
     path.join(import.meta.dir, "../../../tui/node_modules"),
@@ -47,13 +62,16 @@ async function open() {
     process.platform === "win32" ? "junction" : "dir",
   )
   await Bun.write(entry, Bun.file(plugin))
-  const setup = await createAppFixture({
-    width: 80,
-    height: 24,
-    config: { animations: false, plugins: [{ package: directory, options: { run: ++runs } }] },
-  })
-  await setup.ready
-  await setup.waitForFrame((frame) => frame.includes("life plugin:"))
+  const plugins = inProject ? [] : [{ package: directory, options: { run: ++runs } }]
+  // The app reads its plugins directories from the working directory once it runs, after the fixture returns.
+  const cwd = process.cwd()
+  if (inProject) process.chdir(repo)
+  const setup = await (async () => {
+    const setup = await createAppFixture({ width: 80, height: 24, config: { animations: false, plugins } })
+    await setup.ready
+    await setup.waitForFrame((frame) => frame.includes("life plugin:"))
+    return setup
+  })().finally(() => process.chdir(cwd))
   return {
     setup,
     entry,
@@ -144,6 +162,8 @@ async function act(app: App, action: string) {
     await setup.renderOnce()
     return
   }
+  // TS has no question about a project's plugin (deviation F16-project-plugin-approval): it runs at once.
+  if (action === "approve" || action === "decline") return
   if (action === "leader") {
     // The leader starts a key sequence, which the line shows while it is pending.
     setup.mockInput.pressKey("x", { ctrl: true })
@@ -188,14 +208,16 @@ async function observe(setup: Fixture) {
   const listed = (await palette(setup, "Life flip", false)) ? "yes" : "no"
   const found = await manager(setup)
   await closeManager(setup)
-  const status = found.includes("failed") ? "failed" : found.includes("inactive") ? "off" : "on"
+  const status =
+    ["failed", "pending", "declined"].find((status) => found.includes(status)) ??
+    (found.includes("inactive") ? "off" : "on")
   return `${line}/${listed}/${status}/-`
 }
 
-// Replays `path` on a fresh app. An action a state has no edge for does nothing. The first difference that is not a
-// known row, or undefined; a known row ends the path.
-async function replay(path: string[], known: Set<string>, seen: Set<string>) {
-  await using app = await open()
+// Replays `path` of `machine` on a fresh app. An action a state has no edge for does nothing. The first difference
+// that is not a known row, or undefined; a known row ends the path, unless the machine says to follow it on.
+async function replay(machine: Machine, path: string[], known: Set<string>, seen: Set<string>) {
+  await using app = await open(machine === project)
   let state = machine.initial
   for (const [index, action] of ["mount", ...path].entries()) {
     const next = index === 0 ? state : (machine.states[state][1][action] ?? state)
@@ -205,7 +227,9 @@ async function replay(path: string[], known: Set<string>, seen: Set<string>) {
       const key = `${state} ${action} ${actual}`
       if (known.has(key)) {
         seen.add(key)
-        return undefined
+        if (!machine.continue) return undefined
+        state = next
+        continue
       }
       return `${[...path.slice(0, index)].join(" ")}: ${state} + ${action}: expected ${expected}, got ${actual}`
     }
@@ -223,8 +247,8 @@ function known(...rows: string[][][]) {
   return new Set(ours.map((row) => row[2]))
 }
 
-// Each edge once: the shortest path to its state, then its action.
-function cover() {
+// Each edge of `machine` once: the shortest path to its state, then its action.
+function cover(machine: Machine) {
   const reach = new Map<string, string[]>([[machine.initial, []]])
   const queue = [machine.initial]
   for (const state of queue)
@@ -236,11 +260,11 @@ function cover() {
   return [...reach].flatMap(([state, path]) => Object.keys(machine.states[state][1]).map((action) => [...path, action]))
 }
 
-// Every path from the initial state to the file's depth.
-function paths(state = machine.initial, path: string[] = []): string[][] {
+// Every path of `machine` from its initial state to the file's depth.
+function paths(machine: Machine, state = machine.initial, path: string[] = []): string[][] {
   const edges = Object.entries(machine.states[state][1])
   if (path.length === machines.depth || edges.length === 0) return [path]
-  return edges.flatMap(([action, next]) => paths(next, [...path, action]))
+  return edges.flatMap(([action, next]) => paths(machine, next, [...path, action]))
 }
 
 // The file's seeded walks, as OpenTUI's reader makes them.
@@ -276,11 +300,11 @@ function faulted() {
   return [...out.values()]
 }
 
-async function check(paths: string[][], rows: Set<string>) {
+async function check(paths: string[][], rows: Set<string>, from = machine) {
   const seen = new Set<string>()
   const failures: string[] = []
   for (const path of paths) {
-    const failure = await replay(path, rows, seen)
+    const failure = await replay(from, path, rows, seen)
     if (failure) failures.push(failure)
   }
   expect(failures).toEqual([])
@@ -291,7 +315,15 @@ async function check(paths: string[][], rows: Set<string>) {
 // the fault trials. Every edge is on some path, so either set meets every known row.
 test("the plugin life follows the shared fixture", async () => {
   const rows = known(machine.xfail)
-  const seen = await check(deep ? paths() : cover(), rows)
+  const seen = await check(deep ? paths(machine) : cover(machine), rows)
+  expect([...rows].filter((row) => !seen.has(row))).toEqual([])
+}, 600_000)
+
+// A plugin in the project's plugins directory: TS loads it at once and has no question about it, as the file says
+// (Rust lists it pending, then declined or approved: deviation F16-project-plugin-approval).
+test("a project plugin follows the shared fixture", async () => {
+  const rows = known(project.xfail)
+  const seen = await check(deep ? paths(project) : cover(project), rows, project)
   expect([...rows].filter((row) => !seen.has(row))).toEqual([])
 }, 600_000)
 
