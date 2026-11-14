@@ -2895,3 +2895,43 @@ fn a_result_the_host_refuses_has_no_effects() {
     host.app.render();
     assert!(!host.app.text().contains("a view"), "{}", host.app.text());
 }
+
+// Expected: a plugin written in C against `include/opencode_plugin.h` alone loads as ABI 2.0: its command toasts and
+// sends a message, which its handler gets on the UI thread, and its route surface draws what it counted. This holds the
+// header to the Rust tables field by field.
+#[cfg(unix)]
+#[test]
+fn a_plugin_written_in_c_against_the_header_runs() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let dir = opencode_util::temp::tempdir().unwrap();
+    let library = dir.path().join("plugin.so");
+    let built = Command::new(std::env::var("CC").unwrap_or_else(|_| "cc".to_owned()))
+        .args(["-shared", "-fPIC", "-std=c11", "-Wall", "-Wextra", "-Werror", "-I"])
+        .arg(root.join("../plugin-abi/include"))
+        .arg("-o")
+        .arg(&library)
+        .arg(root.join("examples/c/plugin.c"))
+        .status();
+    let Ok(status) = built else {
+        assert!(std::env::var_os("OPENCODE_RS_REQUIRE_CC").is_none(), "OPENCODE_RS_REQUIRE_CC is set, but no cc");
+        eprintln!("skipped: no C compiler");
+        return;
+    };
+    assert!(status.success(), "the C plugin did not build");
+    let library = fs::read(library).unwrap();
+    assert_eq!(Native.inspect(&library).unwrap(), Inspected { major: 2, minor: 0, version: Some("0.1.0".to_owned()) });
+    let host = host();
+    let (definition, error) = Native.load(&dynamic(&host), &library, None).unwrap();
+    let registry = Registry::define(Vec::new(), []);
+    registry.load(&dynamic(&host), definition.external("c.so", error));
+    assert_eq!(entry(&registry.entries(), "c.so").status, Status::Active);
+    assert!(matches!(host.keymap().dispatch("c.hello", None), RunResult::Ok));
+    host.app.advance(Duration::from_millis(1));
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(*host.toasts.borrow(), [abi::Toast::new(abi::Variant::Success, "hello from C")]);
+    let route = registry.route(&*host, "example.c", "c").unwrap();
+    host.app().root().clear();
+    host.app().root().add(&route.root());
+    host.app.render();
+    assert!(host.app.text().contains("drawn in C, 1 messages"), "{}", host.app.text());
+}
