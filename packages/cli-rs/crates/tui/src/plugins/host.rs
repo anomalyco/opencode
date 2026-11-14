@@ -40,6 +40,8 @@ pub struct Plugins {
     loader: RefCell<Option<Rc<Loader>>>,
     /// The snapshot last published in the run record.
     pub(crate) published: RefCell<Option<opencode_plugin::contain::Snapshot>>,
+    /// The JS host of the TypeScript plugins, when it runs (P7).
+    pub scripts: RefCell<Option<Rc<opencode_plugin::pipe::Scripts>>>,
 }
 
 impl Plugins {
@@ -969,6 +971,7 @@ pub fn registry(info: &opencode_local::cli_config::Info, external: Vec<Builtin>)
         diffs: RefCell::default(),
         loader: RefCell::default(),
         published: RefCell::default(),
+        scripts: RefCell::default(),
     }
 }
 
@@ -1084,6 +1087,12 @@ struct PluginsChanged;
 /// Loads the external native plugins (P.4): the discovered `plugins` directories and the `cli.json` entries that name no
 /// built-in. Each change in a watched directory reconciles them again (hot reload), debounced by 100 ms as in TS.
 pub fn external(tui: &Rc<Tui>, external: External) {
+    external_with(tui, external, opencode_plugin::pipe::Config::from_env());
+}
+
+/// [`external`], with the TypeScript plugins on a JS host that runs as `scripts` says (P7); without one they are listed
+/// as skipped.
+pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<opencode_plugin::pipe::Config>) {
     let dev = external.dev;
     let targets = move |plugins: &[opencode_local::cli_config::Plugin]| -> Vec<String> {
         plugins.iter().map(target).map(str::to_owned).chain(dev.iter().cloned()).collect()
@@ -1096,10 +1105,23 @@ pub fn external(tui: &Rc<Tui>, external: External) {
     let project = opencode_plugin::loader::project_root(&external.cwd);
     let loader = Loader::new(Rc::new(Native), external.config_dir, external.cwd, entries);
     // Without real roots the decisions last as long as the TUI.
-    let loader = Rc::new(match tui.state_dir() {
+    let loader = match tui.state_dir() {
         Some(state) => loader.with_approvals(Approvals::open(state.join(approval::FILE), &project)),
         None => loader,
+    };
+    let scripts = scripts.map(|config| opencode_plugin::pipe::Scripts::new(config, &host(tui)));
+    let loader = Rc::new(match &scripts {
+        Some(scripts) => loader.with_scripts(scripts.clone()),
+        None => loader,
     });
+    if let Some(scripts) = &scripts {
+        // An answer of the JS host is taken as a change of the plugin directories is.
+        let proxy = tui.app.proxy();
+        scripts.on_reconcile(Rc::new(move || {
+            let _ = proxy.send(PluginsChanged);
+        }));
+        *tui.plugins.scripts.borrow_mut() = Some(scripts.clone());
+    }
     tui.plugins.set_loader(loader.clone());
     loader.reconcile(&host(tui), &tui.plugins);
     let watches: Rc<RefCell<Vec<Watched>>> = Rc::default();

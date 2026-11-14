@@ -1,7 +1,8 @@
 //! External plugins (P.4, `docs/P.4.md`, row F16): discovery in `plugins` directories, the `plugins` entries of
 //! `cli.json`, and loading of native builds (shared libraries on the C ABI of `opencode-plugin-abi`, decision
 //! O-42) through a [`Backend`], which is [`native::Native`] in the TUI. Targets without a native build
-//! (TypeScript plugins) are listed as skipped.
+//! (TypeScript plugins) run on the JS host ([`crate::pipe`]) when the loader has one, and are listed as skipped
+//! otherwise.
 //!
 //! A [`Loader`] reconciles the targets with the [`Registry`]: it loads new and changed builds, keeps a running
 //! plugin when its new build fails, and unloads removed ones. The host calls [`Loader::reconcile`] again when a
@@ -19,6 +20,7 @@ use std::hash::{DefaultHasher, Hasher};
 use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 
+use crate::pipe::{Scripts, Step};
 use crate::{Definition, ErrorFn, Host, Registry, SKIPPED, Status};
 use approval::{Approvals, Artifact, Decision};
 
@@ -101,7 +103,12 @@ pub struct Loader {
     /// The project targets held back for approval, with the artifact the user is asked about, or why it cannot be
     /// read.
     held: RefCell<HashMap<String, Result<Artifact, String>>>,
+    /// The JS host, which runs the targets that have no native build.
+    scripts: Option<Rc<Scripts>>,
 }
+
+/// Why a TypeScript plugin is listed and not active while the JS host loads it.
+pub const STARTING: &str = "starting on the JS host";
 
 impl Loader {
     pub fn new(backend: Rc<dyn Backend>, config_dir: PathBuf, cwd: PathBuf, configured: Vec<Configured>) -> Self {
@@ -116,7 +123,18 @@ impl Loader {
             waiting: RefCell::default(),
             approvals: Approvals::default(),
             held: RefCell::default(),
+            scripts: None,
         }
+    }
+
+    /// Runs the targets without a native build on `scripts`.
+    pub fn with_scripts(self, scripts: Rc<Scripts>) -> Self {
+        Self { scripts: Some(scripts), ..self }
+    }
+
+    /// Whether `target` runs on the JS host: it has no native build, and it is a directory.
+    fn scripted(&self, target: &Target) -> bool {
+        self.scripts.is_some() && target.library().is_none() && target.local.as_ref().is_some_and(|dir| dir.is_dir())
     }
 
     /// Keeps the decisions on project plugins in `approvals` rather than in memory.
@@ -217,7 +235,11 @@ impl Loader {
             .seen
             .borrow()
             .keys()
-            .filter(|target| !targets.iter().any(|known| known.target == **target && known.library().is_some()))
+            .filter(|target| {
+                !targets
+                    .iter()
+                    .any(|known| known.target == **target && (known.library().is_some() || self.scripted(known)))
+            })
             .cloned()
             .collect();
         let removed = self
@@ -228,6 +250,9 @@ impl Loader {
             .cloned()
             .collect::<Vec<_>>();
         for target in stale.into_iter().chain(removed) {
+            if let Some(scripts) = &self.scripts {
+                scripts.forget(&target);
+            }
             self.seen.borrow_mut().remove(&target);
             self.waiting.borrow_mut().remove(&target);
             self.held.borrow_mut().remove(&target);
@@ -282,6 +307,11 @@ impl Loader {
             registry.set_unloaded(name, status);
             changed
         };
+        if self.scripted(target)
+            && let (Some(scripts), Some(dir)) = (&self.scripts, &target.local)
+        {
+            return self.script(host, registry, target, scripts, dir, &listed);
+        }
         let Some(file) = target.library() else {
             self.held.borrow_mut().remove(name);
             // What ran from a project's plugin whose build went stops now, not at the next reconcile (bigboi-8).
@@ -319,6 +349,21 @@ impl Loader {
             Err(error) => return self.fail(&**host, registry, &listed, name, digest, error),
         };
         log::info!("plugin {} loaded from {}", definition.id, file.display());
+        self.register(host, registry, &listed, name, definition, error, digest)
+    }
+
+    /// Registers the `definition` of `target`'s build `digest`, whose failure `error` reports.
+    #[allow(clippy::too_many_arguments)]
+    fn register(
+        &self,
+        host: &Rc<dyn Host>,
+        registry: &Registry,
+        listed: &Option<Status>,
+        name: &str,
+        definition: Definition,
+        error: ErrorFn,
+        digest: u64,
+    ) -> bool {
         let reload: Rc<RefCell<Option<String>>> = Rc::default();
         let failure = {
             let reload = reload.clone();
@@ -337,13 +382,55 @@ impl Loader {
             ..definition
         };
         match registry.load(host, definition.external(name, failure).digest(digest)) {
-            Some(failed) if failed.kept => return self.fail(&**host, registry, &listed, name, digest, failed.error),
+            Some(failed) if failed.kept => return self.fail(&**host, registry, listed, name, digest, failed.error),
             // The plugin is listed as failed, and enabling it runs this build's setup again.
-            Some(failed) => self.tell(&**host, registry, &listed, name, failed.error),
+            Some(failed) => self.tell(&**host, registry, listed, name, failed.error),
             None => {}
         }
         self.seen.borrow_mut().insert(name.to_owned(), Seen { digest, reload });
         true
+    }
+
+    /// Brings the TypeScript plugin of `target`, the directory `dir`, in line with the JS host: its load is sent when it
+    /// is new or changed, and registered once it is answered. A running build keeps running while the next loads.
+    fn script(
+        &self,
+        host: &Rc<dyn Host>,
+        registry: &Registry,
+        target: &Target,
+        scripts: &Rc<Scripts>,
+        dir: &Path,
+        listed: &Option<Status>,
+    ) -> bool {
+        let name = target.target.as_str();
+        match scripts.step(name, dir, target.options.as_deref()) {
+            Step::Same => false,
+            Step::Starting if registry.loaded(name) => false,
+            Step::Starting => {
+                let status = Status::Skipped(STARTING.to_owned());
+                let changed = listed.as_ref() != Some(&status);
+                registry.set_unloaded(name, Some(status));
+                changed
+            }
+            Step::Unsupported => {
+                registry.unload(host, name);
+                self.seen.borrow_mut().remove(name);
+                let status = Status::Skipped(SKIPPED.to_owned());
+                let changed = listed.as_ref() != Some(&status);
+                registry.set_unloaded(name, Some(status));
+                changed
+            }
+            Step::Failed(_, digest) if self.seen.borrow().get(name).is_some_and(|seen| seen.digest == digest) => false,
+            Step::Failed(error, digest) => self.fail(&**host, registry, listed, name, digest, error),
+            Step::Ready(definition, error, digest) => {
+                if registry.id_taken(&definition.id, name) {
+                    let error = format!("plugin ID {} is already registered", definition.id);
+                    return self.fail(&**host, registry, listed, name, digest, error);
+                }
+                log::info!("plugin {} loaded on the JS host from {}", definition.id, dir.display());
+                self.register(host, registry, listed, name, definition, error, digest)
+            }
+        }
     }
 
     /// Records that the build of `target` failed: the running previous version, if any, keeps running and
