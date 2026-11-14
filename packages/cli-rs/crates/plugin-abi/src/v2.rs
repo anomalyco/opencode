@@ -18,7 +18,9 @@ use std::rc::Rc;
 use serde::{Deserialize, Serialize};
 
 use crate::interact::{HandlerFn, Interact, Layer, PanelInput};
-use crate::{Align, Border, Click, Color, Edges, Justify, Layout, Overflow, Read, Rgba, Span, ThemeMode, Wrap};
+use crate::{
+    Align, Border, Changed, Click, Color, Edges, Justify, Layout, Overflow, Read, Rgba, Span, ThemeMode, Wrap,
+};
 
 mod geometry;
 pub use geometry::*;
@@ -76,6 +78,10 @@ pub enum Node {
         /// Focus, pointer and hover ([`crate::interact`]); its fields sit beside the box's own.
         #[serde(default, flatten)]
         interact: Interact,
+        /// P6a: `false` hides the box and all it holds, which then take no room, not even a gap (TS `visible`). A slot
+        /// surface whose root box is hidden shows nothing in its slot, as a 1.x claim's `Render::Hide`.
+        #[serde(default = "yes", skip_serializing_if = "is_true")]
+        visible: bool,
     },
     /// Styled text; `fg` draws spans without their own, by default `text.base`.
     Text {
@@ -315,6 +321,17 @@ pub struct SurfaceInput {
     /// A panel surface's presentation; `None` elsewhere. A change of it calls the view again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub panel: Option<PanelInput>,
+    /// P6a: what changed since the mount's last view, as a 1.x render hears it: `all` on its first view and on a
+    /// whole tree ([`Self::full`]), the change batch that called it, `local` or `size` for a change of the host's own
+    /// state or of the room, and `woken` after the plugin's own handlers, a wake, or a `layout` that asked to draw
+    /// again. A view that reads the host's state may answer [`Node::Keep`] of its last tree's root when nothing it read
+    /// changed: the host then keeps the mount as it is, with no work. A claim's view always hears `all`.
+    #[serde(default, skip_serializing_if = "is_unchanged")]
+    pub changed: Changed,
+}
+
+fn is_unchanged(changed: &Changed) -> bool {
+    *changed == Changed::default()
 }
 
 /// Every token of the page theme, by its path (`text.muted`, `background.panel`).
@@ -648,6 +665,7 @@ impl Node {
             anchor: None,
             split: None,
             interact: Interact::default(),
+            visible: true,
         }
     }
 
@@ -886,6 +904,76 @@ impl Node {
         }
         self
     }
+
+    /// A box with `cells` between its children; anything else is unchanged.
+    pub fn gap(mut self, cells: u16) -> Self {
+        if let Node::Box { gap, .. } = &mut self {
+            *gap = cells;
+        }
+        self
+    }
+
+    /// A box with `x` cells inside its left and right edges and `y` inside its top and bottom; anything else is
+    /// unchanged.
+    pub fn padding(mut self, x: u16, y: u16) -> Self {
+        if let Node::Box { padding, .. } = &mut self {
+            *padding = (x, y);
+        }
+        self
+    }
+
+    /// A box whose children share the room left as `value` says; anything else is unchanged.
+    pub fn justify(mut self, value: Justify) -> Self {
+        if let Node::Box { justify, .. } = &mut self {
+            *justify = value;
+        }
+        self
+    }
+
+    /// A box whose children sit across it as `value` says; anything else is unchanged.
+    pub fn align(mut self, value: Align) -> Self {
+        if let Node::Box { align, .. } = &mut self {
+            *align = value;
+        }
+        self
+    }
+
+    /// A box shown or hidden; anything else is unchanged.
+    pub fn visible(mut self, value: bool) -> Self {
+        if let Node::Box { visible, .. } = &mut self {
+            *visible = value;
+        }
+        self
+    }
+
+    /// Text in `color` while the pointer is over it; anything else is unchanged.
+    pub fn hover_fg(mut self, color: impl Into<Color>) -> Self {
+        if let Node::Text { hover_fg, .. } = &mut self {
+            *hover_fg = Some(color.into());
+        }
+        self
+    }
+
+    /// Text that wraps as `value` says; anything else is unchanged.
+    pub fn wrap(mut self, value: Wrap) -> Self {
+        if let Node::Text { wrap, .. } = &mut self {
+            *wrap = value;
+        }
+        self
+    }
+
+    /// Text that cuts lines that do not fit; anything else is unchanged.
+    pub fn truncate(mut self) -> Self {
+        if let Node::Text { truncate, .. } = &mut self {
+            *truncate = true;
+        }
+        self
+    }
+
+    /// Whether the node is a box hidden with [`Node::visible`].
+    pub fn is_hidden(&self) -> bool {
+        matches!(self, Node::Box { visible: false, .. })
+    }
 }
 
 impl From<crate::Node> for Node {
@@ -925,6 +1013,7 @@ impl From<crate::Node> for Node {
                 anchor: None,
                 split: None,
                 interact: Interact::default(),
+                visible: true,
             },
             crate::Node::Text { spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click } => Node::Text {
                 id: None,

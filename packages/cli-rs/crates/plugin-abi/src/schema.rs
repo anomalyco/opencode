@@ -13,8 +13,8 @@ use crate::v2::{
     SurfaceInput, Target, Top, TranscriptRow, TranscriptView,
 };
 use crate::{
-    Action, Align, Border, BorderStyle, Click, Color, Edges, Justify, Layout, Overflow, Press, Sides, Span, TitleAlign,
-    Width, Wrap,
+    Action, Align, Border, BorderStyle, Changed, Click, Color, Edges, Justify, Layout, LocationRef, Overflow, Press,
+    Sides, Span, TitleAlign, Width, Wrap,
 };
 
 /// What an [`Rgba`] is on the wire: `#rrggbbaa`. The host writes lowercase and reads either case.
@@ -88,7 +88,7 @@ pub fn schema() -> Value {
             children: array(reference("Node")), border: nullable(reference("Border")),
             padding_sides: nullable(reference("Edges")), wrap: boolean(), overflow: reference("Overflow"),
             sticky: nullable(reference("Edge")), anchor: nullable(reference("Anchor")),
-            split: nullable(reference("Split")), interact: Value::Null },
+            split: nullable(reference("Split")), interact: Value::Null, visible: boolean() },
         Text { spans: array(reference("Span")) } { id: nullable(string()), fg: nullable(reference("Color")),
             wrap: reference("Wrap"), truncate: boolean(), selectable: boolean(),
             hover_fg: nullable(reference("Color")), layout: reference("Layout"),
@@ -159,7 +159,21 @@ pub fn schema() -> Value {
             "SurfaceInput",
             object!(SurfaceInput, "What a surface's view gets besides the plugin's own state.", {
             width: uint16(), height: uint16(), palette: reference("Palette"),
-        } { full: boolean(), panel: nullable(reference("PanelInput")) }),
+        } { full: boolean(), panel: nullable(reference("PanelInput")), changed: reference("Changed") }),
+        ),
+        (
+            "Changed",
+            object!(Changed, "What changed since a surface's last view, as a 1.x render hears it.", { } {
+                all: boolean(), sessions: array(string()), lists: array(string()),
+                messages: array(pair(string(), string())), locations: array(reference("LocationRef")),
+                local: boolean(), size: boolean(), woken: boolean(),
+            }),
+        ),
+        (
+            "LocationRef",
+            object!(LocationRef, "A location: a directory, and a workspace in it.", { directory: string() } {
+                workspace: nullable(string()),
+            }),
         ),
         (
             "PanelInput",
@@ -605,6 +619,7 @@ mod tests {
                     hover: Some(Color::from("background.raised")),
                     hover_events: true,
                 },
+                visible: false,
             },
             Node::Text {
                 id: Some("t".into()),
@@ -669,6 +684,16 @@ mod tests {
             palette: Palette { mode: Mode::Light, colors: [("text.base".into(), Rgba::new(1, 2, 3, 4))].into() },
             full: true,
             panel: Some(PanelInput { width: 40, fullscreen: true, focused: true }),
+            changed: Changed {
+                all: true,
+                sessions: vec!["ses_a".into()],
+                lists: vec!["ses_a".into()],
+                messages: vec![("ses_a".into(), "msg_1".into())],
+                locations: vec![LocationRef { directory: "/p".into(), workspace: Some("w".into()) }],
+                local: true,
+                size: true,
+                woken: true,
+            },
         };
         assert!(agree::<SurfaceInput>("SurfaceInput", serde_json::to_value(&input).unwrap()));
         let mount = MountId { surface: "s".into(), key: "k".into(), generation: u64::MAX };

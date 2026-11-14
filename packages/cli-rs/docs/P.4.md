@@ -290,6 +290,14 @@ the content handle to number from; the plugin answers the tree, the content it g
 memo table, and `Unmount` drops that table when the mount ends. Only a surface that declares it reads the palette gets
 the palette, on either carrier.
 
+A view hears what changed since the mount's last view (`SurfaceInput::changed`, P6a), as a 1.x render hears
+`Changed`: `all` on the first view and on a whole tree, the change batch that called it, `local` or `size` for a change
+of the host's own state or of the surface's room, and `woken` after the plugin's own handlers, a wake, or a `layout`
+that asked to draw again. A view that reads the host's state and finds nothing it shows changed returns `Node::Keep` of
+its last tree's root (so its root needs an id); the host then keeps the mount as it is, with no work and no frame. A
+box with `visible: false` takes no room, not even a gap, as TS's `visible`; a slot surface whose root box is hidden
+shows nothing in its slot, as a 1.x render's `Render::Hide`.
+
 ### Contract 2.0 input and surfaces (P2)
 
 Two more places (`opencode_plugin_abi::interact`): `Place::Panel(name)`, which `Host::open_panel` shows beside the
