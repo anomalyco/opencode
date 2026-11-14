@@ -696,6 +696,26 @@ fn the_published_session_usage_totals_as_its_port_does() {
     totals(Carrier::Npm("opencode-session-usage"));
 }
 
+// Expected (bigboi P8-5): the published package's setup reads the route and the session's location at once, as TS's
+// does: its first limits request names the session's directory, which is neither the default location nor the JS
+// host's working directory, and on a session's route it prefetches that session's cost before its panel mounts.
+#[test]
+fn the_published_session_usage_asks_for_the_sessions_location_first() {
+    let base = usage(Arc::new(Mutex::new(false)), false);
+    let elsewhere = |value: Value| support::merge(value, json!({ "location": { "directory": "/elsewhere" } }));
+    let handler = move |seen: &Seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/session/ses_p") => Some((200, json!({ "data": elsewhere(session("ses_p", "Tree", None, 1)) }))),
+        ("GET", "/api/session") if seen.param("parentID").is_empty() => {
+            Some((200, json!({ "data": [elsewhere(session("ses_p", "Tree", None, 1))], "cursor": {} })))
+        }
+        _ => base(seen),
+    };
+    let Some(h) = open_as(&[Carrier::Npm("opencode-session-usage")], 170, handler, false, None) else { return };
+    h.wait_for("≈ $2.50 session total");
+    let limits = h.sent("/api/experimental/usage/limits");
+    assert!(limits.first().is_some_and(|first| first.contains("location%5Bdirectory%5D=%2Felsewhere")), "{limits:#?}");
+}
+
 fn totals(carrier: Carrier<'_>) {
     let grown = Arc::new(Mutex::new(false));
     let Some(h) = open_as(&[carrier], 170, usage(grown.clone(), false), false, None) else { return };

@@ -723,7 +723,7 @@ const described = new Map<number, Plugin>()
 
 // Loads the plugin of `target`. With `setup`, runs its setup; without, says its ID and keeps it for a `setup` message:
 // a disabled plugin's setup never runs (review carbon-8).
-async function load(seq: number, target: string, dir: string, options: Json, withSetup: boolean) {
+async function load(seq: number, target: string, dir: string, options: Json, withSetup: boolean, seed?: Json) {
   const entry = resolveEntry(dir)
   if (!entry) return send({ type: "unsupported", seq })
   // Each load imports the plugin's modules afresh, as a generation of its own: its helpers as much as its entry, so a
@@ -744,9 +744,15 @@ async function load(seq: number, target: string, dir: string, options: Json, wit
   if (known && known.target !== target)
     return send({ type: "done", seq, error: `plugin ID ${definition.id} is already registered` })
   const plugin = candidate(definition, target, dir, options)
-  if (withSetup) return setup(seq, plugin)
+  if (withSetup) return setup(seq, seeded(plugin, seed))
   described.set(seq, plugin)
   send({ type: "described", seq, id: definition.id })
+}
+
+// The reads the client sent with a setup (P8): the route and `info` as they are now, which setup may read at once.
+function seeded(plugin: Plugin, seed?: Json) {
+  for (const [key, value] of Object.entries(seed ?? {})) plugin.snapshots.set(key, value)
+  return plugin
 }
 
 // The client forgot `target`: its plugin goes, and its ID is free for another target.
@@ -835,12 +841,12 @@ async function handle(message: Json) {
       return
     case "load":
       if (message.confined) for (const root of [message.dir, realpathSync(message.dir)]) confined.add(root + path.sep)
-      return load(message.seq, message.target, message.dir, message.options, message.setup)
+      return load(message.seq, message.target, message.dir, message.options, message.setup, message.seed)
     case "setup": {
       const plugin = described.get(message.load)
       described.delete(message.load)
       if (!plugin) return send({ type: "done", seq: message.seq, error: "its module is gone" })
-      return setup(message.seq, plugin)
+      return setup(message.seq, seeded(plugin, message.seed))
     }
     case "forget":
       return forget(message.target)

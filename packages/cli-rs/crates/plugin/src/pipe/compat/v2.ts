@@ -14,10 +14,12 @@ import {
   batch,
   createComponent,
   createContext,
+  createEffect,
   createRoot,
   createSignal,
   getOwner,
   onCleanup,
+  runWithOwner,
   untrack,
 } from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
@@ -39,6 +41,8 @@ export interface Carrier {
   watch(key: string, request: Json): void
   unwatch(key: string): void
   read(key: string): Json
+  // Why the read `key` watches is nothing, when the host could not answer it.
+  readError?(key: string): string | undefined
   listen(listener: (key: string) => void): void
   invalidate(): void
   fetch(request: Json): Promise<Json>
@@ -75,33 +79,49 @@ const SLOTS = new Set([
 
 export function context(base: Base, carrier: Carrier) {
   const id = base.id
-  const unsupported = (feature: string) => {
+  const unsupported = (feature: string, message = `${id}: ${feature} is not supported by opencode-native yet`) => {
     const seen = reported.get(id) ?? new Set()
     reported.set(id, seen)
     if (seen.has(feature)) return
     seen.add(feature)
-    console.warn(`plugin ${id}: ${feature} is not supported by opencode-native's JS host`)
-    void carrier.effect({
-      type: "toast",
-      variant: "warning",
-      title: "Plugin",
-      message: `${id}: ${feature} is not supported by opencode-native yet`,
-    })
+    console.warn(`plugin ${message}`)
+    void carrier.effect({ type: "toast", variant: "warning", title: "Plugin", message })
   }
 
   // Reads: a watch per key, a signal per key that a snapshot bumps, and whether the render that runs read one the host
-  // has not pushed yet.
+  // has not pushed yet. The host watches at most 64 reads a plugin (bigboi P8-2): a read a live mount made is held while
+  // the mount lives; the rest are idle, and the least recently used of them goes when a new read needs its place, or
+  // when more than 16 are idle. A read the host could not answer is an error, not empty data: `sync` rejects with it,
+  // and the plugin's first such error is reported once.
+  const WATCHES = 64
+  const IDLE = 16
   const versions = new Map<string, ReturnType<typeof createSignal<number>>>()
-  const watched = new Set<string>()
+  const watched = new Map<string, Json>()
   const pushed = new Set<string>()
-  const waiters = new Map<string, Array<() => void>>()
-  let rendering: { pending: boolean } | undefined
+  const waiters = new Map<string, Array<{ resolve: () => void; reject: (error: Error) => void }>>()
+  // The reads of the mount that renders now, or whose input changes.
+  let rendering: { pending: boolean; keys: Set<string> } | undefined
+  const failed = (key: string) => carrier.readError?.(key)
   carrier.listen((key) => {
     pushed.add(key)
     const version = versions.get(key)
     version?.[1]((value) => value + 1)
-    waiters.get(key)?.splice(0).forEach((resolve) => resolve())
+    const error = failed(key)
+    if (error) unsupported(`read ${error}`, `${id}: a read failed: ${error}`)
+    for (const waiter of waiters.get(key)?.splice(0) ?? []) {
+      if (error) waiter.reject(new Error(`${key}: ${error}`))
+      else waiter.resolve()
+    }
   })
+  const idle = () => {
+    const live = new Set([...rendered.values(), ...(shown ? [shown.mounted] : [])].flatMap((at) => [...at.keys]))
+    return [...watched.keys()].filter((key) => !live.has(key) && !waiters.get(key)?.length)
+  }
+  const release = (key: string) => {
+    watched.delete(key)
+    pushed.delete(key)
+    carrier.unwatch(key)
+  }
   const read = (key: string, request: Json) => {
     let version = versions.get(key)
     if (!version) {
@@ -109,18 +129,28 @@ export function context(base: Base, carrier: Carrier) {
       versions.set(key, version)
     }
     version[0]()
-    if (!watched.has(key)) {
-      watched.add(key)
+    rendering?.keys.add(key)
+    if (watched.has(key)) {
+      // Most recently used last.
+      watched.delete(key)
+      watched.set(key, request)
+    } else {
+      const free = idle()
+      if (watched.size >= WATCHES && free.length) release(free[0]!)
+      watched.set(key, request)
       carrier.watch(key, request)
+      for (const key of idle().slice(0, Math.max(0, idle().length - IDLE))) release(key)
     }
     if (!pushed.has(key) && rendering) rendering.pending = true
     return carrier.read(key)
   }
   const synced = (key: string, request: Json) =>
-    new Promise<void>((resolve) => {
+    new Promise<void>((resolve, reject) => {
       untrack(() => read(key, request))
+      const error = failed(key)
+      if (pushed.has(key) && error) return reject(new Error(`${key}: ${error}`))
       if (pushed.has(key)) return resolve()
-      waiters.set(key, [...(waiters.get(key) ?? []), resolve])
+      waiters.set(key, [...(waiters.get(key) ?? []), { resolve, reject }])
     })
 
   const sessions = (): Json[] => read("sessions", { type: "sessions" }) ?? []
@@ -240,33 +270,44 @@ export function context(base: Base, carrier: Carrier) {
     return tree
   }
 
-  // Internal commands: a click on a node, and a dialog's answer. The host runs a dialog's action with the answer as its
-  // input, and one dialog shows at a time.
-  const presses = new Map<string, (event: unknown) => unknown>()
+  // Internal commands: a click on a node, a dialog's answer, and its close. The host runs a dialog's action with the
+  // answer as its input, and one dialog shows at a time. A click's handler is its mount's (`presses`, by the mount, then
+  // by the node): a view replaces its mount's, and an unmount or a close drops them (bigboi P8-8).
+  const presses = new Map<string, Map<string, (event: unknown) => unknown>>()
   let answering: ((value: string | undefined) => void) | undefined
+  let asked = 0
   const PRESS = `${id}.compat.press`
   const ANSWER = `${id}.compat.answer`
+  const DISMISS = `${id}.compat.dismiss`
   carrier.command({ name: PRESS, title: PRESS }, (input) => {
-    presses.get(input ?? "")?.({ type: "down", stopPropagation() {}, preventDefault() {} })
+    const [mount, node] = (input ?? "").split("\u0001")
+    presses.get(mount ?? "")?.get(node ?? "")?.({ type: "down", stopPropagation() {}, preventDefault() {} })
   })
   carrier.command({ name: ANSWER, title: ANSWER }, (input) => {
     const resolve = answering
     answering = undefined
     resolve?.(input ?? "")
   })
+  // The host closed dialog `input` without its answer (escape, the backdrop, another plugin's dialog, an unload): it
+  // answers nothing, as TS resolves it with undefined (bigboi P8-7). A close after its answer finds nothing to settle.
+  carrier.command({ name: DISMISS, title: DISMISS }, (input) => {
+    if (input === String(asked)) settle()
+  })
   const settle = () => {
     const resolve = answering
     answering = undefined
     resolve?.(undefined)
   }
-  // The dialog this one replaces answers nothing, as TS resolves it with undefined. One closed with escape answers
-  // only then: the host runs nothing for it.
+  // The dialog this one replaces answers nothing, as TS resolves it with undefined.
   const ask = (dialog: Json) =>
     new Promise<string | undefined>((resolve) => {
       settle()
       unshow()
       answering = resolve
-      void carrier.effect({ type: "dialog", dialog: { ...dialog, action: { type: "command", name: ANSWER } } })
+      asked++
+      const dismissed = { type: "command", name: DISMISS, input: String(asked) }
+      const asking = { ...dialog, action: { type: "command", name: ANSWER } }
+      void carrier.effect({ type: "dialog", dialog: { type: "dismissable", dialog: asking, dismissed } })
     })
 
   // `ui.dialog.show`: the plugin's own JSX in the host's live panel dialog (`Dialog::Panel`), the contract's dialog that
@@ -282,19 +323,13 @@ export function context(base: Base, carrier: Carrier) {
     shown = undefined
     if (!was) return
     was.mounted.dispose()
+    presses.delete(PANEL)
     was.onClose?.()
   }
   const sendShown = () => {
     resend = false
     if (!shown) return
-    const reading = {
-      dropped: new Set<string>(),
-      press(node: VNode, handler: (event: unknown) => unknown) {
-        const name = `${PANEL}/${pressIndex(node)}`
-        presses.set(name, handler)
-        return { type: "command", name: PRESS, input: name }
-      },
-    }
+    const reading = pressing(PANEL)
     let body: Json
     try {
       body = legacy(serialize(shown.mounted.root, reading))
@@ -366,16 +401,23 @@ export function context(base: Base, carrier: Carrier) {
       let entry = rendered.get(key(cx))
       if (entry && !entry.crashed && JSON.stringify(entry.input) !== JSON.stringify(input(cx))) {
         entry.input = input(cx)
-        entry.setInput(entry.input)
+        const before = rendering
+        rendering = { pending: false, keys: entry.keys }
+        try {
+          entry.setInput(entry.input)
+        } finally {
+          rendering = before
+        }
       }
-      // A first render that read what the host has not pushed yet renders again once it came, a few times at most.
+      // A first render that read what the host has not pushed yet renders again once its own reads came, a few times
+      // at most.
       const retry = (at: typeof entry) => !!at && at.pending > 0 && at.pending < 4 && !at.crashed
-      if (!entry || (retry(entry) && [...watched].every((key) => pushed.has(key)))) {
+      if (!entry || (retry(entry) && [...entry.keys].every((key) => pushed.has(key)))) {
         entry?.dispose()
         const tries = entry ? entry.pending : 0
         const value = input(cx)
         const [props, setProps] = createStore(structuredClone(value))
-        const reading = { pending: false }
+        const reading = { pending: false, keys: new Set<string>() }
         const before = rendering
         rendering = reading
         let mounted: Mounted
@@ -391,6 +433,7 @@ export function context(base: Base, carrier: Carrier) {
         } finally {
           rendering = before
         }
+        mounted.keys = reading.keys
         entry = Object.assign(mounted, {
           pending: reading.pending ? tries + 1 : 0,
           input: value,
@@ -399,14 +442,7 @@ export function context(base: Base, carrier: Carrier) {
         rendered.set(key(cx), entry)
       }
       if (retry(entry)) return undefined
-      const reading = {
-        dropped: new Set<string>(),
-        press(node: VNode, handler: (event: unknown) => unknown) {
-          const name = `${key(cx)}/${pressIndex(node)}`
-          presses.set(name, handler)
-          return { type: "command", name: PRESS, input: name }
-        },
-      }
+      const reading = pressing(key(cx))
       try {
         const tree = serialize(entry.root, reading)
         for (const dropped of [...reading.dropped, ...missing]) unsupported(dropped)
@@ -427,6 +463,7 @@ export function context(base: Base, carrier: Carrier) {
         const at = `${mount.surface}\u0000${mount.key}\u0000${mount.generation}`
         rendered.get(at)?.dispose()
         rendered.delete(at)
+        presses.delete(at)
       },
     })
     return () => {
@@ -439,6 +476,19 @@ export function context(base: Base, carrier: Carrier) {
   const pressIndex = (node: VNode) => {
     if (!pressIds.has(node)) pressIds.set(node, ++pressCount)
     return pressIds.get(node)!
+  }
+  // What a view of `mount` reads its tree with: its click handlers replace the ones its last view gave.
+  const pressing = (mount: string) => {
+    const handlers = new Map<string, (event: unknown) => unknown>()
+    presses.set(mount, handlers)
+    return {
+      dropped: new Set<string>(),
+      press(node: VNode, handler: (event: unknown) => unknown) {
+        const at = String(pressIndex(node))
+        handlers.set(at, handler)
+        return { type: "command", name: PRESS, input: `${mount}\u0001${at}` }
+      },
+    }
   }
 
   const slotInput = (path: string) => (cx: Json) => {
@@ -489,11 +539,22 @@ export function context(base: Base, carrier: Carrier) {
     }) as typeof fetch,
   })
 
-  const commands = (layer: Json) => {
+  // Each command name runs the newest live registration of it that is enabled: a layer of a component that ended, or a
+  // command whose `enabled` says no, runs nothing.
+  const registrations = new Map<string, Array<{ retired: boolean; commands: Map<string, Json> }>>()
+  const dispatch = (name: string, input?: string) => {
+    const live = (registrations.get(name) ?? []).filter((at) => !at.retired && at.commands.has(name))
+    const command = live.at(-1)?.commands.get(name)
+    if (!command) return
+    const enabled = typeof command.enabled === "function" ? command.enabled() : command.enabled !== false
+    if (enabled) return command.run(input)
+  }
+  const commands = (registration: { retired: boolean; commands: Map<string, Json> }, scope?: string) => {
     const names: string[] = []
-    for (const command of layer?.commands ?? []) {
-      const name = command.id ?? `${id}.inline-${++inline}`
+    for (const [name, command] of registration.commands) {
       names.push(name)
+      const known = registrations.get(name) ?? []
+      if (!known.includes(registration)) registrations.set(name, [...known.filter((at) => !at.retired), registration])
       carrier.command(
         {
           name,
@@ -505,9 +566,9 @@ export function context(base: Base, carrier: Carrier) {
           description: command.description,
           arguments: !!(command.slash?.arguments || command.arguments),
           ...(command.hold ? { hold: true } : {}),
-          ...(command.scope ? { scope: command.scope } : {}),
+          ...(command.scope ?? scope ? { scope: command.scope ?? scope } : {}),
         },
-        (input) => command.run(input),
+        (input) => dispatch(name, input),
       )
     }
     return names
@@ -587,14 +648,37 @@ export function context(base: Base, carrier: Carrier) {
       },
     },
     keymap: {
+      // As TS's (bigboi P8-4): the factory is followed, so its `enabled` and its commands may change; a disabled
+      // layer registers nothing; a layer keeps to the base mode unless its `mode` is `global`; a command's own
+      // `enabled` is asked as it runs. A layer a component made ends with it: from then on its commands run nothing,
+      // though the host lists them a little longer (`uncommand`). Its `priority` and `bindings` are not mapped.
       layer(factory: () => Json) {
-        const names = commands(untrack(factory))
-        carrier.changed()
-        if (getOwner())
-          onCleanup(() => {
-            names.forEach((name) => carrier.uncommand(name))
-            carrier.changed()
-          })
+        const registration = { retired: false, commands: new Map<string, Json>() }
+        let names: string[] = []
+        const apply = (layer: Json) => {
+          const enabled = typeof layer?.enabled === "function" ? layer.enabled() : layer?.enabled !== false
+          registration.commands = new Map(
+            (enabled ? (layer?.commands ?? []) : []).map((command: Json) => [command.id ?? `${id}.inline-${++inline}`, command]),
+          )
+          const next = commands(registration, layer?.mode === "global" ? undefined : "base")
+          names.forEach((name) => carrier.uncommand(name))
+          names = next
+          carrier.changed()
+        }
+        const owner = getOwner()
+        createRoot((dispose) => {
+          createEffect(() => apply(factory()))
+          if (owner)
+            runWithOwner(owner, () =>
+              onCleanup(() => {
+                registration.retired = true
+                dispose()
+                names.forEach((name) => carrier.uncommand(name))
+                names = []
+                carrier.changed()
+              }),
+            )
+        })
       },
       dispatch(name: string, input?: string) {
         void carrier.effect({ type: "dispatch", name, ...(input === undefined ? {} : { input }) })
@@ -636,11 +720,31 @@ export function context(base: Base, carrier: Carrier) {
           const value = untrack(persisted)
           if (value !== undefined) setStore(reconcile(value))
         })
-        const update = async (mutation: (draft: Json) => void) => {
-          const draft = structuredClone(unwrap(store))
-          mutation(draft)
-          await carrier.effect({ type: "storage-set", key, value: JSON.stringify(draft) })
-          batch(() => setStore(reconcile(draft)))
+        // As TS's, under its lock: one update of the key at a time, each made from what is stored then (bigboi P8-3).
+        // Its write says what it was made from; one another client's write came before is made again from that.
+        let queue: Promise<unknown> = Promise.resolve()
+        const once = async (mutation: (draft: Json) => void) => {
+          for (let attempt = 0; ; attempt++) {
+            if (attempt === 8) throw new Error(`storage ${key}: other writes kept changing it`)
+            const stored = await carrier.effect({ type: "storage-get", key })
+            let draft: Json
+            try {
+              draft = typeof stored === "string" ? JSON.parse(stored) : structuredClone(options.initial)
+            } catch {
+              draft = structuredClone(options.initial)
+            }
+            mutation(draft)
+            const value = JSON.stringify(draft)
+            const expect = typeof stored === "string" ? stored : undefined
+            if ((await carrier.effect({ type: "storage-swap", key, expect, value })) !== true) continue
+            batch(() => setStore(reconcile(draft)))
+            return
+          }
+        }
+        const update = (mutation: (draft: Json) => void) => {
+          const done = queue.then(() => once(mutation))
+          queue = done.catch(() => {})
+          return done
         }
         const entry = [store, update] as const
         stores.set(key, entry)
@@ -658,8 +762,11 @@ export function context(base: Base, carrier: Carrier) {
     ui: {
       dialog: {
         show(render: () => unknown, onClose?: () => void) {
+          const asking = !!answering
           settle()
           unshow()
+          if (asking) void carrier.effect({ type: "dialog", dialog: { type: "close", key: "" } })
+          presentation = { size: "medium", centered: false }
           const crashed = (error: unknown) => {
             const message = error instanceof Error ? error.message : String(error)
             void carrier.effect({ type: "toast", variant: "error", title: "Plugin", message: `${id} crashed in dialog: ${message}` })
@@ -671,7 +778,15 @@ export function context(base: Base, carrier: Carrier) {
                 return render()
               },
             })
-          shown = { mounted: mount(provided, screen, panelChanged, crashed), onClose, opened: false }
+          const before = rendering
+          const reading = { pending: false, keys: new Set<string>() }
+          rendering = reading
+          try {
+            shown = { mounted: mount(provided, screen, panelChanged, crashed), onClose, opened: false }
+          } finally {
+            rendering = before
+          }
+          shown.mounted.keys = reading.keys
           untrack(() => read(`dialog-open:${PANEL}`, { type: "dialog-open", key: PANEL }))
           sendShown()
         },
@@ -680,7 +795,10 @@ export function context(base: Base, carrier: Carrier) {
           if (shown) sendShown()
         },
         clear() {
+          const asking = !!answering
           settle()
+          presentation = { size: "medium", centered: false }
+          if (asking) void carrier.effect({ type: "dialog", dialog: { type: "close", key: "" } })
           if (!shown) return
           void carrier.effect({ type: "dialog", dialog: { type: "close", key: PANEL } })
           unshow()
@@ -694,7 +812,11 @@ export function context(base: Base, carrier: Carrier) {
             message: options.message,
             label: { confirm: options.label?.confirm, cancel: options.label?.cancel },
           }).then((answer) => (answer === undefined ? undefined : answer === "true")),
-        prompt: (options: Json) => ask({ type: "prompt", title: options.title, placeholder: options.placeholder }),
+        prompt: (options: Json) => {
+          if (options.value !== undefined) unsupported("ui.dialog.prompt value")
+          if (options.description !== undefined) unsupported("ui.dialog.prompt description")
+          return ask({ type: "prompt", title: options.title, placeholder: options.placeholder })
+        },
         async select(options: Json) {
           if (options.search) unsupported("ui.dialog.select search")
           if (options.actions?.length) unsupported("ui.dialog.select actions")

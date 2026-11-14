@@ -10,7 +10,7 @@ use std::sync::Arc;
 use opencode_plugin_abi::interact::{Event, Handled};
 use opencode_plugin_abi::v2::{self, ContentRef};
 use opencode_plugin_abi::{HostRequest, InputTo, Manifest, Request, Span};
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
+use opencode_ui::keymap::TuiCommand;
 use opentui::keymap::Disposer;
 
 use super::proto::{Down, Revision};
@@ -221,6 +221,7 @@ impl Guest {
             options: self.loaded.options.as_deref().and_then(|options| serde_json::from_str(options).ok()),
             setup: true,
             confined: self.loaded.confined,
+            seed: super::proto::seed(&self.host, self.id()),
         };
         self.send(load, Some(Waiting::Activate(Rc::downgrade(self))));
     }
@@ -403,6 +404,10 @@ impl Guest {
         let mut watches = self.watches.borrow_mut();
         if !watches.contains_key(&key) && watches.len() >= WATCHES {
             log::warn!("plugin {}: a watch of {key} is over {WATCHES} reads; it is not watched", self.id());
+            drop(watches);
+            // Answered as a failed read, so what waits for it ends (bigboi P8-2).
+            let error = Some(format!("the plugin watches {WATCHES} reads already"));
+            self.send(Down::Snapshot { id: self.id().to_owned(), key, value: serde_json::Value::Null, error }, None);
             return;
         }
         let (value, hash) = self.evaluate(&request);
@@ -526,9 +531,10 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
             (command.scope.clone(), run)
         })
         .collect();
-    let (commands, scoped) = route::split(commands);
-    if !commands.is_empty() {
-        match setup.host().keymap().layer(KeymapLayer::global(commands)) {
+    // A V2 layer's commands keep to the base mode unless it opts out, as TS's (bigboi P8-4).
+    let (layers, scoped) = route::split(commands);
+    for layer in layers.into_iter().filter(|layer| !layer.commands.is_empty()) {
+        match setup.host().keymap().layer(layer) {
             Ok(disposer) => guest.revoked.borrow_mut().push(disposer),
             Err(error) => log::error!("plugin {} keymap layer: {error}", setup.id()),
         }

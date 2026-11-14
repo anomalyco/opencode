@@ -29,7 +29,10 @@ export default Plugin.define({
     const [shown, setShown] = createSignal(0)
     const Commands = () => <text>{`v2probe commands ${context.keymap.commands().length > 0}`}</text>
     log({ setup: true })
+    // A command of the base mode, as a layer without `mode` is: it does not run while a dialog has the keyboard.
+    context.keymap.layer(() => ({ commands: [{ id: "v2probe.base", run: () => log({ base: true }) }] }))
     context.keymap.layer(() => ({
+      mode: "global",
       commands: [
         {
           id: "v2probe.add",

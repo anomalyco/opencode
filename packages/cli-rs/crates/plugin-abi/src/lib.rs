@@ -480,6 +480,9 @@ pub enum Scope {
     #[default]
     Global,
     Route(String),
+    /// P8: everywhere, while the keyboard is in its base mode (TS's keymap layer without `mode: "global"`): not while
+    /// a dialog or a mode a plugin pushed has it. An older host refuses the manifest.
+    Base,
 }
 
 impl Scope {
@@ -1789,6 +1792,15 @@ pub enum HostRequest {
         key: String,
         value: String,
     },
+    /// P8: writes `value` (JSON text) under `key` only if what is stored is still `expect` (JSON text; `None` when
+    /// nothing is), and answers whether it did. An update made from a value another write changed meanwhile is made
+    /// again from the new one, as TS updates a store under a file lock. A host that does not know it answers an error.
+    StorageSwap {
+        key: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expect: Option<String>,
+        value: String,
+    },
     OpenRoute {
         name: String,
     },
@@ -2305,7 +2317,8 @@ pub enum Dialog {
         action: Action,
     },
     Panel(Panel),
-    /// Closes the plugin's [`Panel`] `key` if it is open.
+    /// Closes the plugin's [`Panel`] `key` if it is open; since P8, with an empty `key`, whatever dialog of the plugin
+    /// shows.
     Close {
         key: String,
     },
@@ -2319,6 +2332,13 @@ pub enum Dialog {
     /// 2.0: an error's details, drawn by the host's own error view (TS `DialogErrorDetails`); `back` runs from its
     /// Back button and from escape.
     ErrorDetails(ErrorDetails),
+    /// P8: `dialog`, whose `dismissed` runs once as it closes, after its own action if that ran as it closed: so a
+    /// plugin that waits for an answer hears of each close, also escape, the backdrop, another plugin's dialog that
+    /// replaces it, or its unload (TS settles the dialog's promise in each case). An older host shows nothing.
+    Dismissable {
+        dialog: Box<Dialog>,
+        dismissed: Action,
+    },
 }
 
 /// A [`Dialog::ErrorDetails`].

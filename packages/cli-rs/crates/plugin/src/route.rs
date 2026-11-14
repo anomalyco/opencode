@@ -13,19 +13,20 @@ use opentui::prelude::*;
 use crate::node::{Mount, MountFn, SlotRender};
 use crate::{Claimed, Host, SlotInput, abi};
 
-/// A plugin's commands: the global ones, and the ones of each route.
-type Split = (Vec<TuiCommand>, Vec<(String, TuiCommand)>);
+/// A plugin's commands: the layers of its unscoped ones (global, then base mode), and the ones of each route.
+type Split = ([KeymapLayer<opencode_ui::dialog::FocusId>; 2], Vec<(String, TuiCommand)>);
 
-/// Splits `commands` by their scope.
+/// Splits `commands` by their scope. A layer without commands is left for the caller to skip.
 pub(crate) fn split(commands: Vec<(abi::Scope, TuiCommand)>) -> Split {
-    let mut split: Split = (Vec::new(), Vec::new());
+    let (mut global, mut base, mut scoped) = (Vec::new(), Vec::new(), Vec::new());
     for (scope, command) in commands {
         match scope {
-            abi::Scope::Global => split.0.push(command),
-            abi::Scope::Route(name) => split.1.push((name, command)),
+            abi::Scope::Global => global.push(command),
+            abi::Scope::Base => base.push(command),
+            abi::Scope::Route(name) => scoped.push((name, command)),
         }
     }
-    split
+    ([KeymapLayer::global(global), KeymapLayer::new(base)], scoped)
 }
 
 /// The commands of route `name`.

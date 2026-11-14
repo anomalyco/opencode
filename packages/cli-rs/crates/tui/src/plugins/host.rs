@@ -661,6 +661,8 @@ pub struct Reads {
     pub(super) panel: RefCell<Option<super::panel::Live>>,
     /// The plugin and activation whose dialog is on screen, until it closes.
     pub(super) owner: RefCell<Option<(String, u64)>>,
+    /// The action the next plugin dialog runs as it closes (`abi::Dialog::Dismissable`), until that dialog takes it.
+    pub(super) dismissed: RefCell<Option<((String, u64), abi::Action)>>,
     /// The rich select on screen, which a select of the same key changes in place (P2).
     pub(super) select: RefCell<Option<Rc<super::panel::Picker>>>,
     /// The filter and the row the next select of this key opens with: what the host's question about a held build

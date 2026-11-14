@@ -31,7 +31,7 @@ use std::sync::Arc;
 use activation::{Activation, Drawn};
 pub use opencode_plugin_abi as abi;
 use opencode_ui::dialog::DialogKeymap;
-use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, Slash, TuiCommand};
 use opencode_ui::markdown::CodeBlockRenderers;
 use opencode_ui::theme::Theme;
 use opentui::keymap::Disposer;
@@ -538,10 +538,10 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                 )
             })
             .collect();
-        let (global, scoped) = route::split(commands);
-        if !global.is_empty() {
+        let (layers, scoped) = route::split(commands);
+        for layer in layers.into_iter().filter(|layer| !layer.commands.is_empty()) {
             // Kept apart from the registration, so a panic can remove it.
-            match setup.host().keymap().layer(KeymapLayer::global(global)) {
+            match setup.host().keymap().layer(layer) {
                 Ok(disposer) => scope.revoked.borrow_mut().push(disposer),
                 Err(error) => log::error!("plugin {} keymap layer: {error}", setup.id()),
             }
@@ -1910,7 +1910,7 @@ impl Setup<'_> {
 
     /// Registers a keymap layer: commands, their palette and slash entries, and keybinds (TS `keymap.layer`).
     #[cfg(test)]
-    pub(crate) fn layer(&mut self, layer: KeymapLayer<opencode_ui::dialog::FocusId>) {
+    pub(crate) fn layer(&mut self, layer: opencode_ui::keymap::KeymapLayer<opencode_ui::dialog::FocusId>) {
         match self.host.keymap().layer(layer) {
             Ok(disposer) => self.registration.disposers.push(disposer),
             Err(error) => log::error!("plugin {} keymap layer: {error}", self.id),

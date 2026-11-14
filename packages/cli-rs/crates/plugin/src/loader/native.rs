@@ -51,7 +51,7 @@ use opencode_plugin_abi::{
     self as abi, ABI_MAJOR, ABI_MINOR, Bytes, Fenced, HostApi, HostRequest, Line, Manifest, Owned, PluginApi,
     PluginApiV1_0, Request, V1_MINOR, v2,
 };
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
+use opencode_ui::keymap::TuiCommand;
 use opencode_util::dl;
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
@@ -954,7 +954,8 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
             ctx.effects.push(Effect::Toast(abi::Toast { variant, title, message, session }));
         }
         // An instance that only tells its ID changes nothing, also as it is destroyed.
-        HostRequest::StorageSet { .. } | HostRequest::StorageMerge { .. } if ctx.quiet => {}
+        HostRequest::StorageSet { .. } | HostRequest::StorageMerge { .. } | HostRequest::StorageSwap { .. }
+            if ctx.quiet => {}
         HostRequest::StorageGet { key: name } => {
             let stored = key(ctx, &name)?;
             let value = ctx.host.upgrade().and_then(|host| host.storage_read(&stored));
@@ -966,6 +967,19 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
             ctx.undo.record(&*host, &stored);
             host.storage_write(&stored, &value)?;
             ctx.effects.push(Effect::Stored);
+        }
+        HostRequest::StorageSwap { key: name, expect, value } => {
+            let stored = key(ctx, &name)?;
+            let host = ctx.host.upgrade().ok_or("the host is gone")?;
+            // Compared as JSON, so a value written in another layout is still the one expected.
+            let parse = |text: &str| serde_json::from_str::<serde_json::Value>(text).ok();
+            if host.storage_read(&stored).as_deref().and_then(parse) != expect.as_deref().and_then(parse) {
+                return Ok(serde_json::Value::Bool(false));
+            }
+            ctx.undo.record(&*host, &stored);
+            host.storage_write(&stored, &value)?;
+            ctx.effects.push(Effect::Stored);
+            return Ok(serde_json::Value::Bool(true));
         }
         HostRequest::StorageMerge { key: name, fields } => {
             let stored = key(ctx, &name)?;
@@ -1180,6 +1194,7 @@ fn effect(request: &HostRequest) -> bool {
     match request {
         HostRequest::Toast { .. }
         | HostRequest::StorageSet { .. }
+        | HostRequest::StorageSwap { .. }
         | HostRequest::StorageMerge { .. }
         | HostRequest::OpenRoute { .. }
         | HostRequest::Dispatch { .. }
@@ -1570,9 +1585,9 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
             (command.scope.clone(), run)
         })
         .collect();
-    let (commands, scoped) = route::split(commands);
-    if !commands.is_empty() {
-        match setup.host().keymap().layer(KeymapLayer::global(commands)) {
+    let (layers, scoped) = route::split(commands);
+    for layer in layers.into_iter().filter(|layer| !layer.commands.is_empty()) {
+        match setup.host().keymap().layer(layer) {
             Ok(disposer) => guest.revoked.borrow_mut().push(disposer),
             Err(error) => log::error!("plugin {} keymap layer: {error}", setup.id()),
         }

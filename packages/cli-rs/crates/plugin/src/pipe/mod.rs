@@ -461,7 +461,15 @@ impl Scripts {
         let options = options.and_then(|options| serde_json::from_str(options).ok());
         // Nothing of it is set up before the loader knows it is enabled (review carbon-8).
         let dir = dir.to_string_lossy().into_owned();
-        let load = Down::Load { seq, target: target.to_owned(), dir, options, setup: false, confined };
+        let load = Down::Load {
+            seq,
+            target: target.to_owned(),
+            dir,
+            options,
+            setup: false,
+            confined,
+            seed: Default::default(),
+        };
         self.send(load, Some(Waiting::Load(target.to_owned())));
         Step::Starting
     }
@@ -471,10 +479,11 @@ impl Scripts {
         let seq = self.next();
         let mut loads = self.loads.borrow_mut();
         let Some(load) = loads.get_mut(target) else { return };
-        let Loading::Described(described, _) = load.state else { return };
+        let Loading::Described(described, ref id) = load.state else { return };
+        let seed = proto::seed(&self.host, id);
         load.state = Loading::Waiting(seq);
         drop(loads);
-        self.send(Down::Setup { seq, load: described }, Some(Waiting::Load(target.to_owned())));
+        self.send(Down::Setup { seq, load: described, seed }, Some(Waiting::Load(target.to_owned())));
     }
 
     /// Registers the plugin `target`'s load described, which is disabled, without its setup: its activation runs it.
