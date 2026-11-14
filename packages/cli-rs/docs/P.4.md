@@ -505,9 +505,14 @@ saved, as in TS.
 
 ### TypeScript plugins on the JS host (P7)
 
-With `OPENCODE_PLUGIN_JS=1` (it is off by default) and Bun found (`OPENCODE_BUN`, an absolute path, or `bun` in an
-absolute `PATH` entry outside the project), a directory target without a native build runs on the JS host: one Bun process for every TypeScript TUI plugin, started with the first one
-(`crates/plugin/src/pipe`, rich-plugins 3.7 and 4.3). Bun starts in the JS host's private directory, with
+With `OPENCODE_PLUGIN_JS=1` (it is off by default) and Bun found, a directory target without a native build runs on
+the JS host: one Bun process for every TypeScript TUI plugin, started with the first one (`crates/plugin/src/pipe`,
+rich-plugins 3.7 and 4.3). Bun is `OPENCODE_BUN` (an absolute path); else the opencode binary of a local server (a
+background service or a standalone server, not `--server`) run as the Bun it embeds (`BUN_BE_BUN=1`), when that Bun
+reports a version of 1.4.0 or newer: the executable of the server's process where the client can tell it (Linux and
+Windows), else the first `opencode` in an absolute `PATH` entry outside the project that answers so (its real path,
+so a `mise` shim answers for `mise` and is passed over); else `bun` in an absolute `PATH` entry outside the project.
+Without any, TypeScript plugins are skipped and the log says why. Bun starts in the JS host's private directory, with
 `--no-env-file`, an empty `bunfig.toml` of its own and an allowlisted environment, so nothing of the project the client
 works in loads as it starts; a project's plugin runs from a copy of the files the user approved, and imports nothing
 outside it. It loads the directory's TUI module as TS does (`package.json`
