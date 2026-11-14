@@ -91,6 +91,7 @@ fn run(recording: &Recording) -> (bool, String) {
         Some("p0a") => opencode_tui::plugins::host::add(&tui, p0a_plugin().into()),
         Some("p0b") => opencode_tui::plugins::host::add(&tui, p0b_plugin().into()),
         Some("fence-margin") => opencode_tui::plugins::host::add(&tui, fence_margin_plugin().into()),
+        Some("fence") => opencode_tui::plugins::host::add(&tui, fence_plugin().into()),
         _ => {}
     }
     // The editor context's sources (E.5): the fake IDE server and the Zed database the TS side had.
@@ -329,6 +330,19 @@ fn app_plugin() -> abi::Plugin {
         Ok(())
     }
     abi::Plugin { id: "parity.app", setup }
+}
+
+/// `parity/plugins/fence/tui.tsx`, as a renderer claim of `parity` fences (Pr): each line of the fence after a label.
+fn fence_plugin() -> abi::Plugin {
+    fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+        setup.claim(abi::claim::Claim::fence("parity", |_, part| {
+            let abi::claim::Part::Fence(fence) = part else { return None };
+            let lines = fence.code.lines().filter(|line| !line.is_empty()).map(|line| format!("fence plugin: {line}"));
+            Some(abi::v2::Node::text([Span::new(lines.collect::<Vec<_>>().join("\n"))]).fg("text.muted"))
+        }));
+        Ok(())
+    }
+    abi::Plugin { id: "parity.fence", setup }
 }
 
 /// `parity/plugins/p0a/tui.tsx`: F6 asks a confirm, F7 shows an alert, F8 inserts into the composer, F9 sets it, and
