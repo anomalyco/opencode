@@ -4,8 +4,12 @@
 //! the three give equal frames (cells with their styles), and the same toasts and plugin status. The board's header
 //! is its own call log: views run, cards built, messages arrived.
 //!
-//! The script covers a mount, revisions with memoized cards, a theme change, an effect, a thread that floods the
-//! mailbox past its bound, a remount, and a panic on the plugin's own thread, which is reported once.
+//! The script covers a mount, revisions with memoized cards, a theme change, an effect, bursts of messages from the
+//! plugin's thread, a remount, and a panic on the plugin's own thread, which is reported once. The script is the same
+//! input on every carrier: each burst is all in the mailbox before the UI thread runs again, so the drains, and the
+//! views they cause, do not depend on how the threads are scheduled (review bigboi-6: comparing a flood that raced
+//! the UI failed in 12 of 24 runs). A flood that waits on `Full` races by design; its own test compares only what does
+//! not depend on the schedule.
 
 #[path = "../../../plugin/examples/board/src/board.rs"]
 mod board;
@@ -124,15 +128,18 @@ fn script(run: Run) -> Vec<(&'static str, Seen)> {
     seen.push(("theme", observe(&board.harness)));
     dispatch("board.toast", None);
     seen.push(("toast", observe(&board.harness)));
-    // More than the mailbox holds: the thread waits on `Full`, and every message arrives.
-    dispatch("board.flood", Some("1000"));
-    board.harness.wait("the flood arrived", || {
-        app.advance(Duration::from_millis(1));
-        app.text().contains("messages 1000")
-    });
-    let stats = opencode_plugin::mailbox::stats(ID).unwrap();
-    assert!(stats.high <= abi::BOUND, "{run:?}: the mailbox held {} entries", stats.high);
-    seen.push(("flood", observe(&board.harness)));
+    // Three bursts, each all in the mailbox before the UI thread runs: one drain, one view each.
+    for burst in 1..=3 {
+        tui.keymap.dispatch("board.burst", Some("200"));
+        let queued = || opencode_plugin::mailbox::stats(ID).is_some_and(|stats| stats.waiting == 200);
+        let begun = std::time::Instant::now();
+        while !queued() {
+            assert!(begun.elapsed() < Duration::from_secs(10), "{run:?}: burst {burst} never queued");
+            std::thread::yield_now();
+        }
+        settle(&board.harness);
+    }
+    seen.push(("bursts", observe(&board.harness)));
     tui.navigate(Route::Home);
     settle(&board.harness);
     tui.navigate(route);
@@ -153,6 +160,36 @@ fn script(run: Run) -> Vec<(&'static str, Seen)> {
     }
     seen.push(("after", observe(&board.harness)));
     seen
+}
+
+/// The board's cards on screen after a flood of `count`, with what is left of the frame dropped: the header counts views
+/// and builds, which follow when the UI thread drained.
+fn flood(run: Run, count: usize) -> (Vec<String>, usize) {
+    let board = open(run);
+    let (app, tui) = (&board.harness.app, &board.harness.tui);
+    tui.navigate(Route::Plugin { id: ID.to_owned(), name: "board".to_owned() });
+    settle(&board.harness);
+    tui.keymap.dispatch("board.flood", Some(&count.to_string()));
+    board.harness.wait("the flood arrived", || {
+        app.advance(Duration::from_millis(1));
+        app.text().contains(&format!("messages {count}"))
+    });
+    let cards = app.text().lines().filter(|line| line.contains("card ")).map(|line| line.trim().to_owned()).collect();
+    (cards, opencode_plugin::mailbox::stats(ID).unwrap().high)
+}
+
+// Expected (`backlog` on every carrier): a flood of four times the bound, whose thread waits on `Full`, delivers every
+// message, leaves the same cards on every carrier, and never holds more than the bound, however the UI drains it.
+#[test]
+fn a_flood_ends_the_same_on_every_carrier() {
+    let (linked, high) = flood(Run::In(Carrier::Linked), 4 * abi::BOUND);
+    assert!(high <= abi::BOUND, "the mailbox held {high}");
+    assert!(linked.iter().any(|line| line == &format!("card 0: {}", 4 * abi::BOUND / board::CARDS + 1)), "{linked:?}");
+    for run in [Run::In(CARRIERS[1]), Run::Library] {
+        let (cards, high) = flood(run, 4 * abi::BOUND);
+        assert!(high <= abi::BOUND, "{run:?}: the mailbox held {high}");
+        assert_eq!(cards, linked, "{run:?}");
+    }
 }
 
 // Expected (`carrier-equal`, and a thread's panic in `reported-once`): the board gives the same frames, toasts and
