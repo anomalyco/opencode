@@ -39,6 +39,9 @@ pub fn plugin() -> abi::Plugin {
 struct State {
     /// The opens so far: a reply to an earlier one changes nothing of this one.
     opened: Cell<u64>,
+    /// The server-list reads and checks asked for so far: only the reply to the newest one is shown, whatever order
+    /// they come back in (TS's resource keeps the newest).
+    asked: Cell<u64>,
     /// `context.location ?? data.location.default()` as it opened.
     directory: RefCell<String>,
     server: RefCell<Option<Vec<PluginInfo>>>,
@@ -49,10 +52,10 @@ struct State {
     requests: RefCell<HashMap<RequestId, Asked>>,
 }
 
-/// A server call in flight, with the open it belongs to.
+/// A server call in flight, with the open it belongs to and, for a read or a check, its place among them.
 enum Asked {
-    List(u64),
-    Check(u64),
+    List(u64, u64),
+    Check(u64, u64),
     Update(u64, String),
 }
 
@@ -76,7 +79,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         state.internal.set(false);
         state.updating.borrow_mut().clear();
         host.dialog(Dialog::Select(list(host, state, None)));
-        state.fetch(host, Asked::List(state.opened.get()));
+        state.fetch(host, Asked::List(state.opened.get(), state.next()));
     });
     let internal = state.clone();
     setup.command(hidden("opencode.plugins.internal"), move |host, _| {
@@ -87,7 +90,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(hidden("opencode.plugins.check"), move |host, _| {
         if !check.checking.replace(true) {
             check.show(host);
-            check.fetch(host, Asked::Check(check.opened.get()));
+            check.fetch(host, Asked::Check(check.opened.get(), check.next()));
         }
     });
     let update = state.clone();
@@ -103,7 +106,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     let detail = state.clone();
     setup.command(hidden("opencode.plugins.error"), move |host, key| {
         let row = key.and_then(|key| detail.rows(host).into_iter().find(|row| row.key() == key));
-        if let Some(row) = row.filter(|row| row.error().is_some()) {
+        if let Some(row) = row.filter(Row::has_error) {
             host.dialog(Dialog::ErrorDetails(details(&row)));
         }
     });
@@ -115,7 +118,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     let updated = state.clone();
     setup.on_event(&["plugin.updated"], move |host, _| {
         if host.dialog_open(LIST) || host.dialog_open(ERROR) {
-            updated.fetch(host, Asked::List(updated.opened.get()));
+            updated.fetch(host, Asked::List(updated.opened.get(), updated.next()));
         }
     });
     // The TUI rows follow the registry while the list shows; nothing opens it again.
@@ -124,19 +127,20 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.on_reply(move |host, id, reply| {
         let Some(asked) = state.requests.borrow_mut().remove(&id) else { return };
         let current = |open: u64| open == state.opened.get();
+        let newest = |open: u64, asked: u64| current(open) && asked == state.asked.get();
         match asked {
-            Asked::List(open) => {
-                if let (true, Ok(plugins)) = (current(open), data::<Vec<PluginInfo>>(reply)) {
+            Asked::List(open, asked) => {
+                if let (true, Ok(plugins)) = (newest(open, asked), data::<Vec<PluginInfo>>(reply)) {
                     state.server.replace(Some(plugins));
                 }
             }
-            Asked::Check(open) => {
+            Asked::Check(open, asked) => {
                 let plugins = data::<Vec<PluginInfo>>(reply);
                 if current(open) {
                     state.checking.set(false);
                 }
                 match plugins {
-                    Ok(plugins) if current(open) => drop(state.server.replace(Some(plugins))),
+                    Ok(plugins) if newest(open, asked) => drop(state.server.replace(Some(plugins))),
                     Ok(_) => {}
                     Err(error) => host.toast(Toast::new(Variant::Error, error)),
                 }
@@ -146,7 +150,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
                     state.updating.borrow_mut().retain(|updating| *updating != key);
                 }
                 match reply {
-                    Ok(_) if current(open) => state.fetch(host, Asked::List(open)),
+                    Ok(_) if current(open) => state.fetch(host, Asked::List(open, state.next())),
                     Ok(_) => {}
                     Err(error) => host.toast(Toast::new(Variant::Error, error)),
                 }
@@ -166,6 +170,12 @@ fn command(name: &str, input: Option<String>) -> Action {
 }
 
 impl State {
+    /// The place of a new read or check among this open's.
+    fn next(&self) -> u64 {
+        self.asked.set(self.asked.get() + 1);
+        self.asked.get()
+    }
+
     /// Shows the list again while it is open: in place, with its filter and selection.
     fn show(&self, host: &dyn Host) {
         if host.dialog_open(LIST) {
@@ -176,8 +186,10 @@ impl State {
     fn fetch(&self, host: &dyn Host, asked: Asked) {
         let location = Some(LocationQueryInput { directory: Some(self.directory.borrow().clone()) });
         let call = match &asked {
-            Asked::List(_) => Client::plugin_list_call(&PluginListInput { location }),
-            Asked::Check(_) => Client::plugin_check_call(&PluginCheckInput { location, ..PluginCheckInput::default() }),
+            Asked::List(..) => Client::plugin_list_call(&PluginListInput { location }),
+            Asked::Check(..) => {
+                Client::plugin_check_call(&PluginCheckInput { location, ..PluginCheckInput::default() })
+            }
             Asked::Update(_, key) => {
                 let rows = self.rows(host);
                 let Some(package) = rows.iter().find(|row| row.key() == *key).and_then(Row::package) else { return };
@@ -247,7 +259,7 @@ fn list(read: &dyn Read, state: &State, focus: Option<String>) -> Select {
             title: "view error".to_owned(),
             key: Some("space".to_owned()),
             action: error.clone(),
-            hidden: except(&|row| row.toggle().is_some() && row.error().is_some()),
+            hidden: except(&|row| row.toggle().is_some() && row.has_error()),
             primary: None,
             rowless: false,
             command: Some("dialog.plugins.error".to_owned()),
@@ -258,7 +270,7 @@ fn list(read: &dyn Read, state: &State, focus: Option<String>) -> Select {
             title: "view error".to_owned(),
             key: Some("enter".to_owned()),
             action: error.clone(),
-            hidden: except(&|row| row.toggle().is_none() && row.error().is_some()),
+            hidden: except(&|row| row.toggle().is_none() && row.has_error()),
             primary: None,
             rowless: false,
             command: None,
@@ -317,6 +329,8 @@ fn option(row: &Row, state: &State) -> SelectOption {
             (false, false) => None,
         },
         toggle: row.toggle(),
+        // The host asks about a held build; once its question closes, the list comes back on the row as it is then.
+        action: row.held().then(|| command("opencode.plugins.back", None)),
         ..SelectOption::new(row.label(), row.key())
     }
 }
@@ -327,7 +341,8 @@ fn details(row: &Row) -> ErrorDetails {
     let source = row.source();
     ErrorDetails {
         title: format!("{} plugin error", if runtime == "tui" { "TUI" } else { "Server" }),
-        error: row.error().unwrap_or_else(|| "Unknown plugin error".to_owned()),
+        // A TUI plugin's error is the host's to show: the plugin list does not carry it.
+        error: row.server_error().unwrap_or_else(|| "Unknown plugin error".to_owned()),
         context: Some(format!("Plugin: {}\nStatus: failed\nRuntime: {runtime}\nSource: {source}", row.label())),
         source: Some(source),
         back: Some(command("opencode.plugins.back", Some(row.key()))),
@@ -336,6 +351,10 @@ fn details(row: &Row) -> ErrorDetails {
             _ => None,
         },
         key: Some(ERROR.to_owned()),
+        plugin: match row {
+            Row::Tui(entry) => Some(entry.key.clone()),
+            Row::Server { .. } => None,
+        },
     }
 }
 
@@ -352,7 +371,7 @@ enum Row {
 impl Row {
     fn key(&self) -> String {
         match self {
-            Row::Tui(entry) => format!("tui:{}", entry.target.as_ref().unwrap_or(&entry.id)),
+            Row::Tui(entry) => format!("tui:{}", entry.key),
             Row::Server { plugin, source } => format!("server:{}", plugin.id.as_ref().map_or(source, |id| &id.0)),
         }
     }
@@ -369,10 +388,10 @@ impl Row {
         matches!(self, Row::Tui(entry) if matches!(entry.status, PluginStatus::Pending | PluginStatus::Declined))
     }
 
-    /// The plugin a pick of the row enables, disables or asks about: one with a definition, or a held build.
+    /// The entry a pick of the row enables, disables or asks about: one with a definition, or a held build.
     fn toggle(&self) -> Option<String> {
         match self {
-            Row::Tui(entry) if entry.origin != PluginOrigin::Configured || self.held() => Some(entry.id.clone()),
+            Row::Tui(entry) if entry.origin != PluginOrigin::Configured || self.held() => Some(entry.key.clone()),
             _ => None,
         }
     }
@@ -435,13 +454,21 @@ impl Row {
         self.package().is_some_and(|package| package.outdated == Some(true))
     }
 
-    fn error(&self) -> Option<String> {
+    /// It failed, or a TUI plugin is skipped: it has an error to show.
+    fn has_error(&self) -> bool {
         match self {
-            Row::Server { plugin, .. } => match &plugin.state {
-                PluginState::Failed(failed) => Some(failed.error.clone()),
-                _ => None,
-            },
-            Row::Tui(entry) => entry.error.clone(),
+            Row::Server { .. } => self.server_error().is_some(),
+            Row::Tui(entry) => matches!(entry.status, PluginStatus::Failed | PluginStatus::Skipped),
+        }
+    }
+
+    /// A server plugin's error, which the server lists to any client.
+    fn server_error(&self) -> Option<String> {
+        match self {
+            Row::Server { plugin: PluginInfo { state: PluginState::Failed(failed), .. }, .. } => {
+                Some(failed.error.clone())
+            }
+            _ => None,
         }
     }
 
@@ -504,24 +531,25 @@ mod tests {
     // project's build waiting for approval; a configured target that never loaded is not, and opens its reason.
     #[test]
     fn a_row_toggles_what_has_a_definition_or_waits_for_approval() {
-        let row = |origin: PluginOrigin, status: PluginStatus, error: Option<&str>| {
+        let row = |origin: PluginOrigin, status: PluginStatus| {
             Row::Tui(PluginEntry {
+                key: "k".to_owned(),
                 id: "sample".to_owned(),
                 target: Some("/plugins/sample".to_owned()),
                 origin,
                 status,
-                error: error.map(str::to_owned),
                 active: status == PluginStatus::Active,
                 slow: None,
             })
         };
-        let failed = row(PluginOrigin::External, PluginStatus::Failed, Some("boom (previous version still active)"));
-        assert_eq!(failed.toggle().as_deref(), Some("sample"));
+        let failed = row(PluginOrigin::External, PluginStatus::Failed);
+        assert_eq!((failed.toggle().as_deref(), failed.has_error()), (Some("k"), true));
         assert_eq!(failed.footer().as_deref(), Some("failed, local"));
-        assert_eq!(row(PluginOrigin::Builtin, PluginStatus::Inactive, None).toggle().as_deref(), Some("sample"));
-        let skipped = row(PluginOrigin::Configured, PluginStatus::Skipped, Some("TypeScript"));
-        assert_eq!((skipped.toggle(), skipped.label().as_str()), (None, "/plugins/sample"));
-        let pending = row(PluginOrigin::Configured, PluginStatus::Pending, None);
-        assert_eq!((pending.toggle().as_deref(), pending.label().as_str()), (Some("sample"), "sample"));
+        assert_eq!(row(PluginOrigin::Builtin, PluginStatus::Inactive).toggle().as_deref(), Some("k"));
+        let skipped = row(PluginOrigin::Configured, PluginStatus::Skipped);
+        assert_eq!((skipped.toggle(), skipped.label().as_str(), skipped.has_error()), (None, "/plugins/sample", true));
+        let pending = row(PluginOrigin::Configured, PluginStatus::Pending);
+        assert_eq!((pending.toggle().as_deref(), pending.label().as_str()), (Some("k"), "sample"));
+        assert!(!pending.has_error());
     }
 }

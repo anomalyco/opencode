@@ -1507,7 +1507,10 @@ fn a_crashed_build_is_never_opened_until_enabled_or_rebuilt() {
         let registry = Registry::define(Vec::new(), []);
         let forgotten: Rc<RefCell<Vec<crate::Crashed>>> = Rc::default();
         let seen = forgotten.clone();
-        registry.set_crashed(crashed, move |entry| seen.borrow_mut().push(entry.clone()));
+        registry.set_crashed(crashed, move |entry| {
+            seen.borrow_mut().push(entry.clone());
+            Ok(())
+        });
         let loader =
             Loader::new(fake.clone() as Rc<dyn Backend>, config.clone(), root.path().to_path_buf(), Vec::new());
         (host, fake, registry, loader, forgotten)
@@ -1534,6 +1537,49 @@ fn a_crashed_build_is_never_opened_until_enabled_or_rebuilt() {
     assert_eq!((listed(&registry).status, fake.loads.get()), (Status::Active, 1));
     assert_eq!(*forgotten.borrow(), [crashed]);
     assert!(registry.crashed().is_empty());
+}
+
+// Expected (review bigboi-3, P6b): a held build that shares its ID with a loaded built-in is named by its own key: its
+// release leaves the built-in running and opens the build, where a toggle by the ID reaches the built-in. A release
+// the crash list cannot record does not happen, and says why (the review's inherited finding).
+#[test]
+fn a_held_build_is_released_by_its_key_and_only_once_recorded() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let config = root.path().join("config");
+    let dir = config.join("plugins").join("fake");
+    write(&dir.join(entry_file()), "id=fake");
+    let target = dir.to_string_lossy().into_owned();
+    let crashed = crate::Crashed {
+        id: "builtin".to_owned(),
+        target: target.clone(),
+        digest: build_of("id=fake"),
+        reason: "crashed the client in `run-command` and is disabled".to_owned(),
+    };
+    let (host, fake) = (host(), Rc::new(Fake::default()));
+    let registry = Registry::define(vec![Definition::new("builtin", |_| {})], []);
+    registry.activate(&dynamic(&host));
+    let refuse = Rc::new(Cell::new(true));
+    let refused = refuse.clone();
+    registry
+        .set_crashed(vec![crashed], move |_| if refused.get() { Err("the disk is full".to_owned()) } else { Ok(()) });
+    let loader = Loader::new(fake.clone() as Rc<dyn Backend>, config.clone(), root.path().to_path_buf(), Vec::new());
+    loader.reconcile(&dynamic(&host), &registry);
+    let entries = registry.entries();
+    let keys: Vec<(&str, &str)> = entries.iter().map(|entry| (entry.key.as_str(), entry.id.as_str())).collect();
+    let held = Entry::held_key(&target);
+    assert_eq!(keys, [("plugin:builtin", "builtin"), (held.as_str(), "builtin")]);
+    let error = registry.toggle_entry(&dynamic(&host), &held, true).unwrap().unwrap_err();
+    assert!(error.contains("the disk is full"), "{error}");
+    assert!(registry.held(&target));
+    refuse.set(false);
+    assert_eq!(registry.toggle_entry(&dynamic(&host), &held, true), Some(Ok(())));
+    assert!(!registry.held(&target) && registry.crashed().is_empty());
+    let builtin = registry.entries().into_iter().find(|entry| entry.key == "plugin:builtin").unwrap();
+    assert_eq!((builtin.status, builtin.active), (Status::Active, true));
+    assert_eq!(registry.toggle_entry(&dynamic(&host), "target:nothing", true), None);
+    assert_eq!(registry.toggle_entry(&dynamic(&host), &held, false), None);
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!(fake.loads.get(), 1);
 }
 
 // Expected (synthesis 4.5; bigboi 1, 3): after a second crash that named no plugin, no external library is opened,
@@ -1634,7 +1680,7 @@ fn a_crashed_project_build_is_held_in_one_row() {
         reason: reason.to_owned(),
     };
     let (registry, fake) = (Registry::define(Vec::new(), []), Rc::new(Fake::default()));
-    registry.set_crashed(vec![crashed], |_| {});
+    registry.set_crashed(vec![crashed], |_| Ok(()));
     let loader = project.loader(fake.clone(), Vec::new());
     let rows = |registry: &Registry| -> Vec<Status> {
         let entries = registry.entries();

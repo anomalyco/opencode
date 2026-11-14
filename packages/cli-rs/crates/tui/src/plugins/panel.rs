@@ -272,7 +272,7 @@ fn toggle(tui: &Tui, picker: &Rc<Picker>) -> opencode_ui::select::SelectAction<S
     use opencode_ui::select::{Group, SelectAction};
     let target = {
         let (tui, picker) = (tui.weak(), Rc::downgrade(picker));
-        move |option: Option<&SelectOption<String>>| -> Option<(String, Toggle, String)> {
+        move |option: Option<&SelectOption<String>>| -> Option<(opencode_plugin::Entry, Toggle, String)> {
             let (tui, picker, option) = (tui.upgrade()?, picker.upgrade()?, option?);
             let plugin = picker
                 .shown
@@ -282,8 +282,8 @@ fn toggle(tui: &Tui, picker: &Rc<Picker>) -> opencode_ui::select::SelectAction<S
                 .find(|row| row.value == option.value && !row.disabled)
                 .and_then(|row| row.toggle.clone())?;
             let caller = picker.owner.borrow().0.clone();
-            let toggle = toggled(&tui, &caller, &plugin)?;
-            Some((plugin, toggle, option.title.clone()))
+            let (entry, toggle) = toggled(&tui, &caller, &plugin)?;
+            Some((entry, toggle, option.title.clone()))
         }
     };
     let (titled, hidden) = (target.clone(), target);
@@ -303,8 +303,8 @@ fn toggle(tui: &Tui, picker: &Rc<Picker>) -> opencode_ui::select::SelectAction<S
     action.title = Rc::new(move |option| match titled(option) {
         // The row names the plugin when its title is the plugin's id; else the title does. The question about a held
         // build names its library itself.
-        Some((plugin, toggle, title)) => {
-            let named = if title == plugin { String::new() } else { format!(" {plugin}") };
+        Some((entry, toggle, title)) => {
+            let named = if title == entry.id { String::new() } else { format!(" {}", entry.id) };
             match toggle {
                 Toggle::Switch(true) => format!("disable{named}"),
                 Toggle::Switch(false) => format!("enable{named}"),
@@ -369,30 +369,36 @@ impl Picker {
             if !names {
                 return;
             }
-            let active = match toggled(&tui, &owner.0, &plugin) {
-                Some(Toggle::Switch(active)) => active,
+            let (entry, active) = match toggled(&tui, &owner.0, &plugin) {
+                Some((entry, Toggle::Switch(active))) => (entry, active),
                 // The host's question, after which the list comes back on the row, unless a dialog replaced it.
-                Some(Toggle::Ask(target)) => {
-                    // The question replaces the select, which then holds the picker no more.
+                Some((_, Toggle::Ask(target))) => {
+                    // The question replaces the select, which then holds the picker no more. The row's own action
+                    // asks its plugin for the list as it is now (review bigboi-5); without one, the list as it was.
                     let (shown, value) = (picker.shown.borrow().clone(), value.clone());
+                    let then =
+                        shown.options.iter().find(|option| option.value == value).and_then(|row| row.action.clone());
                     return super::approve::ask(
                         &tui,
                         &target,
                         bind!(tui, |tui| {
-                            if tui.dialogs.is_open() {
+                            if tui.dialogs.is_open() || !tui.plugins.live(&owner.0, owner.1) {
                                 return;
                             }
-                            if tui.plugins.live(&owner.0, owner.1) {
-                                list(&tui, owner.clone(), shown.clone(), Some((String::new(), Some(value.clone()))));
+                            match &then {
+                                Some(action) => run(&tui, &owner, action, Some(&value)),
+                                None => {
+                                    list(&tui, owner.clone(), shown.clone(), Some((String::new(), Some(value.clone()))))
+                                }
                             }
                         }),
                     );
                 }
                 None => return,
             };
-            match tui.plugins.toggle(&super::host::host(&tui), &plugin, !active) {
+            match tui.plugins.toggle_entry(&super::host::host(&tui), &entry.key, !active) {
                 None => {
-                    tui.toasts.error(format!("Failed to update plugin {plugin}"));
+                    tui.toasts.error(format!("Failed to update plugin {}", entry.id));
                     return;
                 }
                 // As the plugin manager: why the setup failed, and the claims mount again either way.
@@ -417,17 +423,21 @@ enum Toggle {
     Ask(String),
 }
 
-/// What a toggle of plugin `id` does for plugin `caller`'s select: `None` for a plugin it cannot toggle, one that never
-/// loaded, the caller itself and the plugin manager.
-fn toggled(tui: &Tui, caller: &str, id: &str) -> Option<Toggle> {
-    if id == caller || id == super::manager::ID {
+/// What a toggle of the entry `name` does for plugin `caller`'s select: `name` is an entry's key, or the ID of a plugin
+/// of the registry. `None` for an entry it cannot toggle, one that never loaded, and any entry of the caller's ID or
+/// the plugin manager's.
+fn toggled(tui: &Tui, caller: &str, name: &str) -> Option<(opencode_plugin::Entry, Toggle)> {
+    let entries = tui.plugins.entries();
+    let plugin = opencode_plugin::Entry::plugin_key(name);
+    let entry = entries.iter().find(|entry| entry.key == name).or_else(|| entries.iter().find(|e| e.key == plugin))?;
+    if entry.id == caller || entry.id == super::manager::ID {
         return None;
     }
-    let entry = tui.plugins.entries().into_iter().find(|entry| entry.id == id)?;
     if matches!(entry.status, opencode_plugin::Status::Pending | opencode_plugin::Status::Declined) {
-        return Some(Toggle::Ask(entry.target.unwrap_or(entry.id)));
+        let target = entry.target.clone().unwrap_or_else(|| entry.id.clone());
+        return Some((entry.clone(), Toggle::Ask(target)));
     }
-    (entry.source != opencode_plugin::Source::Configured).then_some(Toggle::Switch(entry.active))
+    (entry.source != opencode_plugin::Source::Configured).then(|| (entry.clone(), Toggle::Switch(entry.active)))
 }
 
 /// The rows of `select`, in `theme`.
@@ -507,7 +517,13 @@ fn actions(tui: &Tui, picker: &Rc<Picker>) -> Vec<opencode_ui::select::SelectAct
                     .and_then(|picker| picker.shown.borrow().actions.get(index).map(|action| action.title.clone()))
                     .unwrap_or_default()
             });
-            item.bind = action.key.clone();
+            // A keybind name the config knows takes only the config's keys, so the user's `none` turns it off; `key`
+            // is for a name of the plugin's own.
+            let known = action
+                .command
+                .as_deref()
+                .is_some_and(|name| opencode_ui::keymap::DEFINITIONS.iter().any(|definition| definition.name == name));
+            item.bind = if known { None } else { action.key.clone() };
             item.group = Some(group);
             let disabled = read.clone();
             item.disabled = Some(Rc::new(move |_: Option<&SelectOption<String>>| disabled(&|action| action.disabled)));
@@ -571,10 +587,12 @@ fn detail(tui: &Tui, owner: Owner, details: abi::ErrorDetails) {
                         run(&tui, &owner, back, None);
                     }
                 }));
+                // A TUI plugin's own error, which only the host reads (review bigboi-2).
+                let error = details.plugin.as_deref().and_then(|key| plugin_error(&tui, key));
                 let props = crate::dialogs::error_details::Props {
                     title: details.title.clone(),
                     source: details.source.clone(),
-                    error: details.error.clone(),
+                    error: error.unwrap_or_else(|| details.error.clone()),
                     context: details.context.clone(),
                     diagnostic_ref: details.reference.clone(),
                     on_back,
@@ -585,6 +603,15 @@ fn detail(tui: &Tui, owner: Owner, details: abi::ErrorDetails) {
             dialog,
         )
     });
+}
+
+/// The error of the entry `key` names, or why it is skipped.
+fn plugin_error(tui: &Tui, key: &str) -> Option<String> {
+    let entry = tui.plugins.entries().into_iter().find(|entry| entry.key == key)?;
+    match entry.status {
+        opencode_plugin::Status::Failed(error) | opencode_plugin::Status::Skipped(error) => Some(error),
+        _ => None,
+    }
 }
 
 /// TS `dialog.confirm`: `Confirm` runs the action with `true`, `Cancel` and escape with `false`; a dialog that replaces
