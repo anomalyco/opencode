@@ -77,6 +77,9 @@ pub struct RouteSpec {
     pub base64: Option<String>,
     #[serde(default)]
     pub headers: BTreeMap<String, String>,
+    /// Answers only once a [`Step::Release`] names its path.
+    #[serde(default)]
+    pub hold: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -117,6 +120,10 @@ pub enum Step {
     /// Output from, or the close of, the fake PTY socket (E.13a). The recorded socket replays what it sent.
     Pty {
         pty: Value,
+    },
+    /// Answers the requests a `hold` route of this path keeps waiting, and the ones that come after.
+    Release {
+        release: String,
     },
 }
 

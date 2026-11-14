@@ -37,6 +37,8 @@ export type Step =
   | { ide: { method: string; params?: unknown } }
   // Output from, or the close of, the fake persistent PTY socket (parity/lib/pty-socket.ts).
   | { pty: PtyStep }
+  // Answers the requests a `hold` route of this path keeps waiting, and the ones that come after.
+  | { release: string }
   | {
       checkpoint: string
       // Text the TS frame contains once it is ready.

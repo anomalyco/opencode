@@ -1,5 +1,6 @@
 // `/btw` (F03): the side question goes to `session.generate` with the instructions, and the answer opens in a
-// large dialog as Markdown.
+// large dialog as Markdown. The answer is held until the pending checkpoint has seen the `/btw` spinner under the
+// prompt; once the dialog closes, the spinner is gone.
 import { assistant, defineApp, session, user } from "../../lib/app"
 
 export default defineApp({
@@ -15,6 +16,7 @@ export default defineApp({
     {
       method: "POST",
       path: "/api/session/:sessionID/generate",
+      hold: true,
       json: {
         data: {
           text: "It was an **off-by-one** in the tokenizer.\n\n- one\n- two\n",
@@ -28,6 +30,10 @@ export default defineApp({
     { checkpoint: "open", until: "The parser is fixed." },
     { type: "/btw what was the bug?" },
     { keys: ["enter"] },
+    { checkpoint: "pending", until: "⋯ /btw" },
+    { release: "/api/session/:sessionID/generate" },
     { checkpoint: "answer", until: "off-by-one" },
+    { keys: ["escape"] },
+    { checkpoint: "closed", until: "The parser is fixed." },
   ],
 })

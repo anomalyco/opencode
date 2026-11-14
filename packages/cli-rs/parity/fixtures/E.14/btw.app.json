@@ -14,13 +14,17 @@
   {"path":"/api/session/ses_b","json":{"data":{"id":"ses_b","title":"Side questions","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":2,"updated":2},"location":{"directory":"/tmp/opencode/packages/tui"}}}},
   {"path":"/api/session/ses_b/message","json":{"data":[{"id":"msg_2","type":"assistant","agent":"build","model":{"providerID":"provider","id":"model"},"content":[{"type":"text","text":"The parser is fixed."}],"finish":"stop","time":{"created":2,"completed":3}},{"id":"msg_1","type":"user","text":"Fix the parser","time":{"created":1}}],"cursor":{}}},
   {"path":"/api/session/ses_b/inbox","json":{"data":[]}},
-  {"method":"POST","path":"/api/session/:sessionID/generate","json":{"data":{"text":"It was an **off-by-one** in the tokenizer.\n\n- one\n- two\n","tokens":{"input":120,"output":14,"reasoning":0,"cache":{"read":0,"write":0}},"cost":0.0004}}}
+  {"method":"POST","path":"/api/session/:sessionID/generate","hold":true,"json":{"data":{"text":"It was an **off-by-one** in the tokenizer.\n\n- one\n- two\n","tokens":{"input":120,"output":14,"reasoning":0,"cache":{"read":0,"write":0}},"cost":0.0004}}}
  ],
  "steps": [
   {"checkpoint":"open","until":"The parser is fixed.","fixture":"E.14/btw/open"},
   {"type":"/btw what was the bug?"},
   {"keys":["enter"]},
-  {"checkpoint":"answer","until":"off-by-one","fixture":"E.14/btw/answer"}
+  {"checkpoint":"pending","until":"⋯ /btw","fixture":"E.14/btw/pending"},
+  {"release":"/api/session/:sessionID/generate"},
+  {"checkpoint":"answer","until":"off-by-one","fixture":"E.14/btw/answer"},
+  {"keys":["escape"]},
+  {"checkpoint":"closed","until":"The parser is fixed.","fixture":"E.14/btw/closed"}
  ],
  "requests": {
   "writes": [

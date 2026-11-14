@@ -142,6 +142,7 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
                 app.mouse(MouseEventKind::Up(MouseButton::Right), *x, *y);
             }
             Step::Event { event } => memory.emit(event),
+            Step::Release { release } => memory.release(release),
             Step::Drag { drag: [from, to] } => app.drag((from[0], from[1]), (to[0], to[1])),
             Step::Ide { ide: message } => {
                 let ide = ide.as_ref().expect("an ide step needs `ide` in the scenario");
@@ -441,7 +442,7 @@ fn routes(recording: &Recording) -> Vec<MemoryRoute> {
         let status = route
             .status
             .unwrap_or(if route.json.is_some() || route.body.is_some() || route.base64.is_some() { 200 } else { 204 });
-        match (&route.json, &route.body) {
+        let served = match (&route.json, &route.body) {
             (Some(json), _) => MemoryRoute::json(method, &route.path, status, json),
             (None, None) if let Some(bytes) = &route.base64 => MemoryRoute::body(
                 method,
@@ -458,7 +459,8 @@ fn routes(recording: &Recording) -> Vec<MemoryRoute> {
                 body.clone(),
             ),
             (None, None) => MemoryRoute::body(method, &route.path, status, None, ""),
-        }
+        };
+        if route.hold { served.held() } else { served }
     });
     let recorded = |entry: &app::Exchange| match (&entry.json, &entry.text) {
         (Some(json), _) => MemoryRoute::json(&entry.method, &entry.path, entry.status, json),

@@ -24,6 +24,9 @@ export type Route = {
   delay?: number | ((entry: Logged, requests: Logged[]) => number)
   // Waits this long (ms) after answering before pushing `then`'s events.
   thenDelay?: number
+  // P-APP: answers only once a `{ release: path }` step names this route's path, so a checkpoint can see the client
+  // while it waits.
+  hold?: boolean
 }
 
 // A `then` event that closes the open `events` streams instead, so the clients reconnect.
