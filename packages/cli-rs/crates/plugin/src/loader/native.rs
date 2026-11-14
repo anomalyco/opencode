@@ -528,7 +528,7 @@ pub(crate) enum Effect {
     Stored,
     Navigate(abi::Route),
     Fetch(abi::RequestId, abi::Fetch),
-    Dialog(abi::Dialog),
+    Dialog(Box<abi::Dialog>),
     Copy(String, Option<abi::Action>),
     Composer(abi::ComposerEdit),
     // 1.6
@@ -540,6 +540,8 @@ pub(crate) enum Effect {
     Title(String),
     Theme(String),
     InstallTheme(String, serde_json::Value),
+    // 2.0 (P6c)
+    Setting(String, serde_json::Value),
     // 2.0 (P3): a scroll verb, bound to the mount it names when the plugin asked.
     Scroll(Box<dyn FnOnce()>),
     /// An input verb of P2, its owner taken as it was asked for.
@@ -1010,6 +1012,8 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
         HostRequest::Providers => return read(ctx, |read| serde_json::to_value(read.providers())),
         HostRequest::Info => return read(ctx, |read| serde_json::to_value(read.info())),
         HostRequest::Plugins => return read(ctx, |read| serde_json::to_value(read.plugins())),
+        HostRequest::Setting { name } => return read(ctx, |read| serde_json::to_value(read.setting(&name))),
+        HostRequest::SetSetting { name, value } => ctx.effects.push(Effect::Setting(name, value)),
         HostRequest::McpServers { location } => {
             return read(ctx, |read| serde_json::to_value(read.mcp_servers(location.as_ref())));
         }
@@ -1198,6 +1202,7 @@ fn effect(request: &HostRequest) -> bool {
         | HostRequest::Title { .. }
         | HostRequest::SetTheme { .. }
         | HostRequest::InstallTheme { .. }
+        | HostRequest::SetSetting { .. }
         | HostRequest::Scroll { .. }
         | HostRequest::OpenPanel(_)
         | HostRequest::ClosePanel { .. }
@@ -1221,6 +1226,7 @@ fn effect(request: &HostRequest) -> bool {
         | HostRequest::Providers
         | HostRequest::Info
         | HostRequest::Plugins
+        | HostRequest::Setting { .. }
         | HostRequest::McpServers { .. }
         | HostRequest::Integrations { .. }
         | HostRequest::Vcs { .. }
@@ -1526,7 +1532,7 @@ pub(crate) fn apply(
                 // instance asked for has none, and shows nowhere.
                 Effect::Dialog(dialog) => {
                     if let Some(generation) = generation {
-                        host.dialog(&id, generation, dialog);
+                        host.dialog(&id, generation, *dialog);
                     }
                 }
                 Effect::Copy(text, then) => crate::copy(host, &text, then),
@@ -1544,6 +1550,7 @@ pub(crate) fn apply(
                 Effect::Title(title) => host.set_title(&title),
                 Effect::Theme(name) => host.set_theme(&name),
                 Effect::InstallTheme(name, theme) => host.install_theme(&name, theme),
+                Effect::Setting(name, value) => host.set_setting(&name, value),
                 Effect::Scroll(scroll) => scroll(),
                 Effect::Input(effect) => effect(host),
             }
@@ -1771,10 +1778,13 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
 /// The nodes of `node` that carry an id, with what each keep holds again in the host's tree (`kept`): a library's memo
 /// table keeps a value for each memo inside a kept one.
 pub(crate) fn keyed(node: &v2::Node, kept: &dyn Fn(&str) -> usize) -> usize {
-    match node {
-        v2::Node::Keep { key } => kept(key).max(1),
-        _ => usize::from(node.id().is_some()) + node.children().iter().map(|child| keyed(child, kept)).sum::<usize>(),
-    }
+    let inside: usize = match node {
+        v2::Node::Keep { key } => return kept(key).max(1),
+        // A list's items are nodes of the tree too (P6c: a memo a list item).
+        v2::Node::List { items, .. } => items.iter().map(|item| keyed(&item.node, kept)).sum(),
+        _ => node.children().iter().map(|child| keyed(child, kept)).sum(),
+    };
+    usize::from(node.id().is_some()) + inside
 }
 
 /// A surface's view in a library, through [`Request::View`].

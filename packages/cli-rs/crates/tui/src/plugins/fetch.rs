@@ -18,6 +18,7 @@ pub fn fetch_of(call: Call) -> abi::Fetch {
             Some(Body::Json(value)) => Some(value),
             _ => None,
         },
+        bytes: false,
     }
 }
 

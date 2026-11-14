@@ -100,7 +100,7 @@ pub fn schema() -> Value {
             layout: reference("Layout"), children: array(reference("Node")),
             notify_top: nullable(string()), user_scroll: boolean() },
         Diff { content: reference("Source") } { id: nullable(string()), view: reference("DiffView"),
-            filetype: nullable(string()), hunks: nullable(string()) },
+            filetype: nullable(string()), hunks: nullable(string()), wrap: reference("Wrap"), padding: uint16() },
         Input { } { id: nullable(string()), value: string(), placeholder: string(),
             lines: nullable(uint16()), layout: reference("Layout") },
         List { } { id: nullable(string()), row: boolean(), items: array(reference("ListItem")),
@@ -195,7 +195,7 @@ pub fn schema() -> Value {
             "PanelInput",
             object!(PanelInput, "How a panel surface shows.", {
             width: uint16(), fullscreen: boolean(), focused: boolean(),
-        } { }),
+        } { forced: boolean() }),
         ),
         (
             "Frame",
@@ -678,6 +678,8 @@ mod tests {
                 view: DiffView::Split,
                 filetype: Some("rust".into()),
                 hunks: Some("hunk".into()),
+                wrap: Default::default(),
+                padding: 0,
             },
             Node::Input { id: Some("i".into()), value: "v".into(), placeholder: "p".into(), lines: Some(3), layout },
             Node::List {
@@ -707,7 +709,7 @@ mod tests {
             height: 2,
             palette: Palette { mode: Mode::Light, colors: [("text.base".into(), Rgba::new(1, 2, 3, 4))].into() },
             full: true,
-            panel: Some(PanelInput { width: 40, fullscreen: true, focused: true }),
+            panel: Some(PanelInput { width: 40, fullscreen: true, focused: true, forced: true }),
             changed: Changed {
                 all: true,
                 sessions: vec!["ses_a".into()],

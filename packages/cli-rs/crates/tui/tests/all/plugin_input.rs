@@ -535,6 +535,11 @@ fn select(read: &dyn abi::Read) -> abi::Select {
         search: probe(|probe| probe.search).then(|| "probe".into()),
         size: None,
         focus: None,
+        query: None,
+        query_delay: 0,
+        filterless: false,
+        empty: None,
+        note: None,
     }
 }
 

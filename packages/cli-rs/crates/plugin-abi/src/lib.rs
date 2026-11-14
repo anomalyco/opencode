@@ -1713,8 +1713,9 @@ impl<'de> Deserialize<'de> for Blob {
     }
 }
 
-/// Base64 of RFC 4648, with padding: what [`Blob`] needs, and no dependency.
-mod base64 {
+/// Base64 of RFC 4648, with padding: what [`Blob`] needs, and no dependency. A plugin reads [`Fetch::bytes`] replies and
+/// writes [`Image::data`] with it.
+pub mod base64 {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
     pub fn encode(bytes: &[u8]) -> String {
@@ -1750,6 +1751,47 @@ mod base64 {
             out.extend_from_slice(&word.to_be_bytes()[1..4 - padding]);
         }
         Some(out)
+    }
+}
+
+/// 2.0 (P6c): the width and height in pixels the header of a PNG, GIF, JPEG or WebP image names, as the host reads it
+/// before it decodes a [`v2::Node::Image`]; `None` for other bytes.
+pub fn image_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    let at = |from: usize, len: usize| bytes.get(from..from + len);
+    let be = |from: usize, len: usize| Some(at(from, len)?.iter().fold(0u32, |n, byte| n << 8 | u32::from(*byte)));
+    let le =
+        |from: usize, len: usize| Some(at(from, len)?.iter().rev().fold(0u32, |n, byte| n << 8 | u32::from(*byte)));
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Some((be(16, 4)?, be(20, 4)?));
+    }
+    if bytes.starts_with(b"GIF8") {
+        return Some((le(6, 2)?, le(8, 2)?));
+    }
+    if bytes.starts_with(b"RIFF") && at(8, 4) == Some(b"WEBP") {
+        return match at(12, 4)? {
+            b"VP8 " => Some((le(26, 2)? & 0x3fff, le(28, 2)? & 0x3fff)),
+            b"VP8L" => {
+                let bits = le(21, 4)?;
+                Some(((bits & 0x3fff) + 1, ((bits >> 14) & 0x3fff) + 1))
+            }
+            b"VP8X" => Some((le(24, 3)? + 1, le(27, 3)? + 1)),
+            _ => None,
+        };
+    }
+    if !bytes.starts_with(&[0xff, 0xd8]) {
+        return None;
+    }
+    // JPEG: the segments up to the first start of frame, which holds the size.
+    let mut from = 2;
+    loop {
+        if *bytes.get(from)? != 0xff {
+            return None;
+        }
+        let marker = *bytes.get(from + 1)?;
+        if (0xc0..=0xcf).contains(&marker) && ![0xc4, 0xc8, 0xcc].contains(&marker) {
+            return Some((be(from + 7, 2)?, be(from + 5, 2)?));
+        }
+        from += 2 + be(from + 2, 2)? as usize;
     }
 }
 
@@ -1863,7 +1905,8 @@ pub enum HostRequest {
     Fetch(Fetch),
     /// 1.4: [`Host::dialog`], once the current call returns.
     Dialog {
-        dialog: Dialog,
+        /// Boxed: a select is the largest request.
+        dialog: Box<Dialog>,
     },
     /// 1.4: [`Host::copy`], once the current call returns.
     Copy {
@@ -1949,6 +1992,15 @@ pub enum HostRequest {
     Themes,
     /// 2.0 (P6b): [`Read::plugins`].
     Plugins,
+    /// 2.0 (P6c): [`Read::setting`].
+    Setting {
+        name: String,
+    },
+    /// 2.0 (P6c): [`Host::set_setting`], once the current call returns.
+    SetSetting {
+        name: String,
+        value: serde_json::Value,
+    },
     /// 1.6: [`Host::set_theme`]; answers whether it will.
     SetTheme {
         name: String,
@@ -2293,6 +2345,10 @@ pub struct Fetch {
     /// A JSON body.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body: Option<serde_json::Value>,
+    /// 2.0 (P6c): the reply is the body's bytes, whatever they are (a file the server reads), as a JSON string in
+    /// base64 ([`base64::decode`]).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub bytes: bool,
 }
 
 /// What [`Host::fetch`] returns, and [`Setup::on_reply`] gets back with the reply.
@@ -2334,6 +2390,24 @@ pub enum Dialog {
         dialog: Box<Dialog>,
         dismissed: Action,
     },
+    /// 2.0 (P6c): images in the host's image preview (TS `DialogImagePreview`), starting at `index`.
+    Images(Images),
+}
+
+/// A [`Dialog::Images`].
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Images {
+    pub images: Vec<Image>,
+    #[serde(default, skip_serializing_if = "is_zero_usize")]
+    pub index: usize,
+}
+
+/// An image of [`Images`]: its bytes in base64 ([`base64::encode`]), and the name the preview shows.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Image {
+    pub data: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 /// A [`Dialog::ErrorDetails`].
@@ -2436,6 +2510,22 @@ pub struct Select {
     /// 2.0 (P6b): the value of the option selected as the list opens, without `current`'s mark.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub focus: Option<String>,
+    /// 2.0 (P6c): the host lists the rows as they are and filters none; it runs this with the filter's text as the
+    /// input once the text has stayed `query_delay` milliseconds, so the plugin lists the rows for it, such as from the
+    /// server (TS `skipFilter` with `onFilter`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<Action>,
+    #[serde(default, skip_serializing_if = "is_zero_u16")]
+    pub query_delay: u16,
+    /// 2.0 (P6c): no filter field, and no filtering (TS `skipFilter` with `renderFilter={false}`).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub filterless: bool,
+    /// 2.0 (P6c): what shows while no row does, as the text of the plugin (TS `emptyView` and `noMatchView`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub empty: Option<Span>,
+    /// 2.0 (P6c): a line under the rows (TS `footer`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<Span>,
 }
 
 impl Select {
@@ -2454,6 +2544,11 @@ impl Select {
             search: None,
             size: None,
             focus: None,
+            query: None,
+            query_delay: 0,
+            filterless: false,
+            empty: None,
+            note: None,
         }
     }
 }
@@ -2577,6 +2672,13 @@ pub struct Panel {
     /// shows the panel whole.
     #[serde(default, skip_serializing_if = "is_false")]
     pub bare: bool,
+    /// 2.0 (P6c): the header's close label; `esc` when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub close: Option<String>,
+    /// 2.0 (P6c): the body's rows, whatever it holds; it scrolls inside them. A panel of a set height without actions
+    /// has no footer row (TS `DialogLayout` without a footer).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<u16>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -2811,7 +2913,17 @@ pub trait Read {
     fn plugins(&self) -> Vec<PluginEntry> {
         Vec::new()
     }
+    /// 2.0 (P6c): the user's setting `name`, one of the host's named settings ([`SETTINGS`]), as the TUI config
+    /// (`tui.json`) holds it; `None` when it holds none, and for a name the host does not name. A change of it is a
+    /// change of the host's own state ([`Changed::local`]).
+    fn setting(&self, _name: &str) -> Option<serde_json::Value> {
+        None
+    }
 }
+
+/// 2.0 (P6c): the user's settings a plugin reads ([`Read::setting`]) and writes ([`Host::set_setting`]), by name: the
+/// diff viewer's (TS `config.diffs`).
+pub const SETTINGS: [&str; 5] = ["diffs.source", "diffs.view", "diffs.fullscreen", "diffs.tree", "diffs.single"];
 
 /// What a command or an event handler reads and asks of the host. An effect waits until the outermost plugin
 /// callback has returned, and effects run in the order they were asked for.
@@ -2902,6 +3014,10 @@ pub trait Host: Read {
     /// `api.theme.install`), at once for [`Host::set_theme`] in the same call. It does not select it. A name that is
     /// not a plain file name, or a value without `theme` or `base`, installs nothing.
     fn install_theme(&self, _name: &str, _theme: serde_json::Value) {}
+    /// 2.0 (P6c): saves `value` as the user's setting `name` ([`SETTINGS`]) in the TUI config, once the call returns,
+    /// as the host's settings dialog does. A name the host does not name, or a value the setting does not take, is not
+    /// saved.
+    fn set_setting(&self, _name: &str, _value: serde_json::Value) {}
     /// 2.0 (P3): scrolls `target` by `verb` once the call returns. The transcript takes a verb from a handler of the
     /// user's input only (a key, a click, the palette, the user's scroll), never from a view, `layout`, a wake, a
     /// reply, a command the plugin dispatched or the report of its own step.
@@ -3268,9 +3384,19 @@ impl Read for HostHandle {
     fn plugins(&self) -> Vec<PluginEntry> {
         self.read(&HostRequest::Plugins).unwrap_or_default()
     }
+
+    fn setting(&self, name: &str) -> Option<serde_json::Value> {
+        self.read(&HostRequest::Setting { name: name.to_owned() }).flatten()
+    }
 }
 
 impl Host for HostHandle {
+    fn set_setting(&self, name: &str, value: serde_json::Value) {
+        if let Err(error) = self.request(&HostRequest::SetSetting { name: name.to_owned(), value }) {
+            self.log(Level::Warn, &format!("setting {name}: {error}"));
+        }
+    }
+
     fn scroll(&self, target: v2::Target, verb: v2::Scroll) {
         if let Err(error) = self.request(&HostRequest::Scroll { target, verb }) {
             self.log(Level::Warn, &format!("scroll: {error}"));
@@ -3327,7 +3453,7 @@ impl Host for HostHandle {
             }
             dialog => dialog,
         };
-        let _ = self.request(&HostRequest::Dialog { dialog });
+        let _ = self.request(&HostRequest::Dialog { dialog: Box::new(dialog) });
     }
 
     fn copy(&self, text: &str, then: Option<Action>) {
@@ -4818,6 +4944,7 @@ mod tests {
             path: "/api/x".into(),
             query: vec![("a".into(), "b".into())],
             body: Some(serde_json::json!({ "c": 1 })),
+            bytes: false,
         };
         let action = Action::Command { name: "x.ask".into(), input: None };
         let panel = Panel {
@@ -4837,19 +4964,21 @@ mod tests {
             bleed: true,
             centered: true,
             bare: false,
+            close: None,
+            height: None,
         };
         let requests = [
             HostRequest::Fetch(fetch),
             HostRequest::Navigate { route: Route::Session { id: "ses_1".into() } },
-            HostRequest::Dialog { dialog: Dialog::Panel(panel) },
-            HostRequest::Dialog { dialog: Dialog::Prompt { title: "p".into(), placeholder: None, action } },
+            HostRequest::Dialog { dialog: Box::new(Dialog::Panel(panel)) },
+            HostRequest::Dialog { dialog: Box::new(Dialog::Prompt { title: "p".into(), placeholder: None, action }) },
             HostRequest::Copy { text: "x".into(), then: None },
-            HostRequest::Dialog { dialog: Dialog::Close { key: "k".into() } },
+            HostRequest::Dialog { dialog: Box::new(Dialog::Close { key: "k".into() }) },
             HostRequest::Interactive,
             HostRequest::Shortcut { name: "agent.cycle".into() },
             HostRequest::DialogOpen { key: "k".into() },
             HostRequest::Dialog {
-                dialog: Dialog::Select(Select {
+                dialog: Box::new(Dialog::Select(Select {
                     title: "s".into(),
                     placeholder: None,
                     options: vec![SelectOption::new("A", "a").description("d"), SelectOption::new("B", "b")],
@@ -4861,7 +4990,12 @@ mod tests {
                     search: None,
                     size: Some(PanelSize::Large),
                     focus: Some("a".into()),
-                }),
+                    query: None,
+                    query_delay: 0,
+                    filterless: false,
+                    empty: None,
+                    note: None,
+                })),
             },
         ];
         for request in requests {
@@ -5150,6 +5284,11 @@ mod tests {
             search: None,
             size: None,
             focus: None,
+            query: None,
+            query_delay: 0,
+            filterless: false,
+            empty: None,
+            note: None,
         });
         let json = r#"{"type":"select","title":"Subagents","options":[{"title":"Child","value":"ses_1","description":"running"}],"action":{"type":"command","name":"x.open"}}"#;
         assert_eq!(serde_json::to_string(&select).unwrap(), json);
@@ -5499,6 +5638,8 @@ mod tests {
             bleed: false,
             centered: false,
             bare: false,
+            close: None,
+            height: None,
         };
         host.dialog(Dialog::Panel(panel(PanelSize::XLarge)));
         // A panel whose text says `xlarge` is not one (review bigboi-12).
@@ -5634,6 +5775,8 @@ mod tests {
                 view: v2::DiffView::Unified,
                 filetype: None,
                 hunks: None,
+                wrap: Default::default(),
+                padding: 0,
             }
         }));
         let mount = v2::MountId { surface: "s".into(), key: "s".into(), generation: 1 };

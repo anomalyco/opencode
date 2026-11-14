@@ -82,6 +82,16 @@ pub fn show(tui: &Tui, id: &str, generation: u64, dialog: abi::Dialog) {
         abi::Dialog::Confirm(confirm) => ask_yes(tui, owner, confirm),
         abi::Dialog::Alert(alert) => tell(tui, owner, alert),
         abi::Dialog::ErrorDetails(details) => detail(tui, owner, details),
+        abi::Dialog::Images(images) => {
+            let shown: Vec<(String, Option<String>)> = images
+                .images
+                .into_iter()
+                .map(|image| (format!("data:application/octet-stream;base64,{}", image.data), image.name))
+                .collect();
+            if !shown.is_empty() {
+                crate::dialogs::image_preview::show(tui, shown, images.index);
+            }
+        }
     }
 }
 
@@ -243,6 +253,25 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
                 );
                 props.placeholder = shown.placeholder.clone();
                 props.current = shown.current.clone();
+                // The plugin's own rows for a query (P6c): the host filters none and tells it the query.
+                props.skip_filter = shown.query.is_some() || shown.filterless;
+                props.render_filter = !shown.filterless;
+                if shown.query.is_some() {
+                    props.on_filter = Some(query(&tui, &picker));
+                }
+                if shown.empty.is_some() {
+                    let (empty, app, theme) = (Rc::downgrade(&picker), cx.app.clone(), cx.theme.page());
+                    let view: Rc<dyn Fn() -> AnyWidget> = Rc::new(move || {
+                        let span = empty.upgrade().and_then(|picker| picker.shown.borrow().empty.clone());
+                        let text = span.map(|span| styled(&app, &theme, &span)).unwrap_or_else(|| Text::new(&app, ""));
+                        View::new(&app).padding_x(opencode_ui::dialog::DIALOG_LIST_INSET).child(&text).as_any()
+                    });
+                    props.empty_view = Some(view.clone());
+                    props.no_match_view = Some(view);
+                }
+                if let Some(note) = &shown.note {
+                    props.footer = Some(styled(&cx.app, &cx.theme.page(), note).as_any());
+                }
                 props.focus_target = shown.focus.clone();
                 props.preserve_selection = shown.key.is_some();
                 // The plugin's search lists the rows in place of the host's filter (TS `search`).
@@ -289,6 +318,38 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
             dialog,
         )
     });
+}
+
+/// A text of `span` in `theme`, its color `text.base` unless it names one.
+fn styled(app: &App, theme: &opencode_ui::theme::Theme, span: &abi::Span) -> Text {
+    let fg = span.fg.as_ref().and_then(|fg| node::color_of(theme, fg)).unwrap_or(theme.text.base);
+    Text::new(app, span.text.clone()).fg(fg)
+}
+
+/// What a select with a query does as its filter changes (P6c): once the text has stayed the select's delay, its action
+/// runs with the text, as TS's debounced `onFilter` (`createDebouncedSignal`).
+fn query(tui: &Tui, picker: &Rc<Picker>) -> Rc<dyn Fn(&str)> {
+    let (weak, timer) = (Rc::downgrade(picker), Rc::new(Cell::new(None::<TimerId>)));
+    Rc::new(bind!(tui.weak(), |tui, text: &str| {
+        let Some(picker) = weak.upgrade() else { return };
+        if let Some(previous) = timer.take() {
+            tui.app.cancel_timer(previous);
+        }
+        let delay = Duration::from_millis(u64::from(picker.shown.borrow().query_delay));
+        let (picker, text, fired) = (Rc::downgrade(&picker), text.to_owned(), timer.clone());
+        timer.set(Some(tui.app.set_timeout(
+            delay,
+            bind!(tui.weak(), |tui, _| {
+                fired.set(None);
+                let Some(picker) = picker.upgrade() else { return };
+                let (owner, action) = (picker.owner.borrow().clone(), picker.shown.borrow().query.clone());
+                // A select closed meanwhile asks for nothing.
+                if let (Some(action), true) = (action, picker.handle.borrow().is_some()) {
+                    run(&tui, &owner, &action, Some(&text));
+                }
+            }),
+        )));
+    }))
 }
 
 /// The host's action on a row that toggles a plugin (synthesis 3.6): `plugins.toggle`, the user's keybind for it
@@ -772,9 +833,16 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Pa
     let app = &cx.app;
     let page = cx.theme.page();
     let title = View::new(app).row().gap(2).grow(1.0).min_width(0);
-    let header =
-        dialog::header(cx, HeaderProps { gap: Some(2), title_view: Some(title.as_any()), ..HeaderProps::default() });
-    let scroll = ScrollBox::new(app).scrollbars(false).height(1);
+    let header = dialog::header(
+        cx,
+        HeaderProps {
+            gap: Some(2),
+            title_view: Some(title.as_any()),
+            close_label: panel.close.clone(),
+            ..HeaderProps::default()
+        },
+    );
+    let scroll = ScrollBox::new(app).scrollbars(false).height(panel.height.map_or(1, u32::from));
     let content = View::new(app).shrink(0.0);
     // A bare panel is the dialog's frame and its body, which no box sizes or scrolls (TS `Dialog` around a plugin's
     // own view); its header and footer are built and never shown.
@@ -791,8 +859,10 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Pa
         false => View::new(app).child(&scroll),
     };
     let footer = View::new(app);
+    // A panel of a set height without actions has no footer row (TS `DialogLayout` without a footer).
+    let footed = panel.height.is_none() || !panel.actions.is_empty();
     let layout = match fitted {
-        true => dialog::layout_view(cx, &header, &body, Some(&footer), DIALOG_INSET, 1),
+        true => dialog::layout_view(cx, &header, &body, footed.then_some(&footer), DIALOG_INSET, 1),
         false => content.clone(),
     };
     // A page is the body's most rows, as the screen is now.
@@ -820,7 +890,8 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Pa
             .group("Dialog"),
         ]));
     }
-    let fit = Rc::new(RefCell::new(fitted.then(|| Fit {
+    // A panel of a set height keeps it.
+    let fit = Rc::new(RefCell::new((fitted && panel.height.is_none()).then(|| Fit {
         scroll: scroll.clone(),
         content: content.clone(),
         padding: if panel.bleed { 2 } else { 0 },

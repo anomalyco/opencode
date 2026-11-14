@@ -187,6 +187,8 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
             bleed: false,
             centered: false,
             bare: false,
+            close: None,
+            height: None,
         }));
     });
     let held = token.clone();
@@ -211,6 +213,11 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
             search: None,
             size: None,
             focus: None,
+            query: None,
+            query_delay: 0,
+            filterless: false,
+            empty: None,
+            note: None,
         }));
     });
     let held = token.clone();

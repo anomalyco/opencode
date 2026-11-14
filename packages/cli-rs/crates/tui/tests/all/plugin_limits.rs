@@ -115,6 +115,8 @@ fn old(setup: &mut abi::Setup) -> Result<(), String> {
             bleed: false,
             bare: false,
             centered: false,
+            close: None,
+            height: None,
         }));
     });
     Ok(())
@@ -893,6 +895,8 @@ fn probe() {
             view: v2::DiffView::Unified,
             filetype: Some("rust".into()),
             hunks: None,
+            wrap: Default::default(),
+            padding: 0,
         };
         measure("diff", lines, subject(move |_| diff()));
     }
@@ -1193,6 +1197,8 @@ fn a_patch_is_charged_as_the_renderer_draws_it() {
         view: v2::DiffView::Unified,
         filetype: None,
         hunks: None,
+        wrap: Default::default(),
+        padding: 0,
     };
     for carrier in CARRIERS {
         let harness = open(carrier);
@@ -1629,6 +1635,8 @@ fn a_lists_anchors_respect_the_limits_of_a_patch() {
                     view: v2::DiffView::Unified,
                     filetype: None,
                     hunks: Some("h".into()),
+                    wrap: Default::default(),
+                    padding: 0,
                 };
                 v2::ListItem::new(diff, 1)
             })

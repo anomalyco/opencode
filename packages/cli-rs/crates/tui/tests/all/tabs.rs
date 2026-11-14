@@ -10,14 +10,13 @@ use crate::support::{self, Harness, WAIT, deref_harness};
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use opencode_api::generated::SessionID;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
+use opencode_plugin::abi::{self, v2};
 use opencode_tui::panel::{Presentation, Target};
-use opencode_tui::{Deps, Route, Tui};
-use opentui::prelude::*;
+use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
 const CHANNEL: &str = "test";
@@ -457,14 +456,15 @@ fn frames(h: &Tabs) -> Vec<u128> {
 #[test]
 fn a_split_panel_shows_beside_the_session_and_resizes() {
     let h = mount(140, json!({ "animations": false, "session": { "sidebar": "hide" } }));
-    h.tui.panels.register(
-        "test",
-        "diff",
-        Rc::new(|tui: &Tui, root: &View, input: &opencode_tui::panel::Input<'_>| {
-            root.add(&Text::new(&tui.app, format!("panel for {}", input.target.session)));
-            Box::new(()) as Box<dyn std::any::Any>
-        }),
-    );
+    // A plugin's panel surface that names the session it shows beside.
+    let setup = |setup: &mut abi::Setup| {
+        setup.surface(v2::Surface::new("diff", v2::Place::Panel("diff".into()), |cx| {
+            let abi::Route::Session { id } = cx.read.route() else { return v2::Node::column(Vec::new()) };
+            v2::Node::text(vec![abi::Span::new(format!("panel for {id}"))])
+        }));
+        Ok(())
+    };
+    opencode_tui::plugins::host::add(&h.tui, abi::Plugin { id: "test", setup }.into());
     let target = Target { plugin: "test".into(), name: "diff".into(), session: "ses_a".into() };
     h.tui.panels.open(&h.tui, target, Presentation::Panel);
     let screen = h.wait_for("panel for ses_a");

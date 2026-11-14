@@ -254,6 +254,12 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
             }
         }
     }
+    // A plugin that failed says why, which the frames only show as its toast.
+    for entry in tui.plugins.entries() {
+        if let opencode_plugin::Status::Failed(error) = &entry.status {
+            let _ = writeln!(report, "  plugin {} failed: {error}", entry.id);
+        }
+    }
     drop(tui);
     (passed, report)
 }

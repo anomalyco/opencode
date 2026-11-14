@@ -127,6 +127,8 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
             bleed: false,
             centered: false,
             bare: false,
+            close: None,
+            height: None,
         }));
     });
     let program = Rc::new(Cell::new(None));

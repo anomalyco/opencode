@@ -41,6 +41,8 @@ fn view(values: &[u32], cx: &mut v2::View<'_>) -> v2::Node {
                         view: v2::DiffView::Unified,
                         filetype: None,
                         hunks: None,
+                        wrap: Default::default(),
+                        padding: 0,
                     },
                 ])
             })

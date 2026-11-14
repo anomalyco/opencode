@@ -197,6 +197,8 @@ pub trait Host: 'static {
     fn set_theme(&self, _name: &str) {}
     /// Installs theme `name` ([`abi::Host::install_theme`]). Called outside every plugin callback.
     fn install_theme(&self, _name: &str, _theme: serde_json::Value) {}
+    /// Saves `value` as the user's setting `name` ([`abi::Host::set_setting`]). Called outside every plugin callback.
+    fn set_setting(&self, _name: &str, _value: serde_json::Value) {}
     /// Calls `run` with the streaming deltas the host applied since the last call, or since this, at most once a frame,
     /// until the disposer is dropped ([`abi::Setup::on_deltas`]).
     fn on_deltas(&self, _run: Deltas) -> Option<Disposer> {
@@ -300,9 +302,6 @@ pub enum Builtin {
     /// The same plugin through the byte shims of the C ABI, as a loaded library runs: its other carrier, for the tests
     /// that compare the two (`carrier-equal`).
     Abi(abi::Plugin),
-    /// A part of the host that the plugin manager lists and toggles like a plugin. It is not plugin API: `activate`
-    /// and `dispose` reach the host on their own.
-    Host { id: &'static str, activate: Rc<dyn Fn()>, dispose: Rc<dyn Fn()> },
 }
 
 impl From<abi::Plugin> for Builtin {
@@ -326,6 +325,7 @@ pub struct Definition {
 }
 
 impl Definition {
+    #[cfg(test)]
     pub(crate) fn new(id: impl Into<String>, setup: impl Fn(&mut Setup<'_>) + 'static) -> Self {
         Self::fallible(id, move |registering| {
             setup(registering);
@@ -370,11 +370,6 @@ impl From<Builtin> for Definition {
         match builtin {
             Builtin::Plugin(plugin) => in_process(plugin),
             Builtin::Abi(plugin) => loader::native::carried(plugin),
-            Builtin::Host { id, activate, dispose } => Definition::new(id, move |setup: &mut Setup<'_>| {
-                activate();
-                let dispose = dispose.clone();
-                setup.on_dispose(move || dispose());
-            }),
         }
     }
 }
@@ -1139,6 +1134,10 @@ impl abi::Read for Scoped<'_> {
         self.read.plugins()
     }
 
+    fn setting(&self, name: &str) -> Option<serde_json::Value> {
+        self.read.setting(name)
+    }
+
     fn scroll_state(&self, target: &abi::v2::Target) -> Option<abi::v2::ScrollState> {
         behave::scroll_state(&self.caller(), target)
     }
@@ -1343,6 +1342,11 @@ impl abi::Host for Scoped<'_> {
             let name = name.to_owned();
             self.defer(move |host| host.install_theme(&name, theme));
         }
+    }
+
+    fn set_setting(&self, name: &str, value: serde_json::Value) {
+        let name = name.to_owned();
+        self.defer(move |host| host.set_setting(&name, value));
     }
 
     fn declare_storage_key(&self, key: &str) {

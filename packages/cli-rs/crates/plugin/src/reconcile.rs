@@ -1516,14 +1516,16 @@ impl Pass<'_, '_> {
             }
             // A patch that is or becomes chunked takes new text in place while it stays a large added file, and is
             // built again otherwise; a theme restyles it in place.
-            (Node::Diff { content: was, filetype: had, .. }, Node::Diff { content, filetype, .. })
-                if matches!(old.extra, Extra::Chunked(..))
-                    || ((was != content || had != filetype || matches!(content, Source::PartOutput(_)))
-                        && opencode_ui::diff::chunks(&self.text(content))) =>
+            (
+                Node::Diff { content: was, filetype: had, padding: padded, .. },
+                Node::Diff { content, filetype, padding, .. },
+            ) if matches!(old.extra, Extra::Chunked(..))
+                || ((was != content || had != filetype || matches!(content, Source::PartOutput(_)))
+                    && opencode_ui::diff::chunks(&self.text(content))) =>
             {
                 let text = (was != content || matches!(content, Source::PartOutput(_))).then(|| self.text(content));
                 let syntax = self.syntax();
-                if let (Extra::Chunked(chunked, shown), true) = (&mut old.extra, had == filetype) {
+                if let (Extra::Chunked(chunked, shown), true) = (&mut old.extra, (had, padded) == (filetype, padding)) {
                     match text.filter(|text| text != shown) {
                         None => {}
                         Some(text) if chunked.set_patch(&text) => {
@@ -1669,8 +1671,12 @@ impl Pass<'_, '_> {
             (Node::Diff { .. }, Node::Diff { .. }) | (Node::Markdown { .. }, Node::Markdown { .. }) => {
                 // Both change in place: a patch or Markdown shows its new text, a patch its new view.
                 let text = match (&old.node, new) {
-                    (Node::Diff { content: was, filetype: had, .. }, Node::Diff { content: source, filetype, .. })
-                        if was == source && had == filetype && !matches!(source, Source::PartOutput(_)) =>
+                    (
+                        Node::Diff { content: was, filetype: had, wrap: wrapped, padding: padded, .. },
+                        Node::Diff { content: source, filetype, wrap, padding, .. },
+                    ) if was == source
+                        && (had, wrapped, padded) == (filetype, wrap, padding)
+                        && !matches!(source, Source::PartOutput(_)) =>
                     {
                         None
                     }
@@ -1682,8 +1688,11 @@ impl Pass<'_, '_> {
                     (_, Node::Diff { content: source, .. } | Node::Markdown { source, .. }) => Some(self.text(source)),
                     _ => unreachable!(),
                 };
+                // A patch whose language, wrap or padding changes shows its lines again.
                 let filetype_changed = matches!((&old.node, new),
-                    (Node::Diff { filetype: had, .. }, Node::Diff { filetype, .. }) if had != filetype);
+                    (Node::Diff { filetype: had, wrap: wrapped, padding: padded, .. },
+                        Node::Diff { filetype, wrap, padding, .. })
+                        if (had, wrapped, padded) != (filetype, wrap, padding));
                 let view_changed = matches!((&old.node, new),
                     (Node::Diff { view: had, .. }, Node::Diff { view, .. }) if had != view);
                 old.node = new.clone();
@@ -1731,7 +1740,7 @@ impl Pass<'_, '_> {
         let env = self.env;
         let syntax = self.syntax();
         match (&mounted.node, &mut mounted.extra) {
-            (Node::Diff { view, filetype, .. }, Extra::Diff(patch, shown)) => {
+            (Node::Diff { view, filetype, wrap, padding, .. }, Extra::Diff(patch, shown)) => {
                 let text = text.filter(|text| rebuild || text != shown);
                 match text {
                     Some(text) => {
@@ -1742,8 +1751,8 @@ impl Pass<'_, '_> {
                             &text,
                             diff_view(*view),
                             filetype.as_deref(),
-                            WrapMode::Word,
-                            0,
+                            wrap_mode(*wrap),
+                            u32::from(*padding),
                         );
                         *shown = text;
                         count(|work| {
@@ -1952,11 +1961,16 @@ impl Pass<'_, '_> {
                 interact,
                 id,
                 visible,
+                sticky,
                 ..
             } => {
                 let view = View::new(app);
                 if *row {
                     view.row();
+                }
+                // P6c: a sticky box paints over the siblings it is pinned above, as CSS's sticky stacks.
+                if sticky.is_some() {
+                    view.z_index(1);
                 }
                 if !*visible {
                     view.visible(false);
@@ -2020,11 +2034,7 @@ impl Pass<'_, '_> {
                 let base = color(theme, fg.as_ref()).unwrap_or(theme.text.base);
                 let text = Text::new(app, spans.iter().map(|span| styled(theme, span, None)).collect::<Vec<_>>())
                     .fg(base)
-                    .wrap(match wrap {
-                        abi::Wrap::Word => WrapMode::Word,
-                        abi::Wrap::Char => WrapMode::Char,
-                        abi::Wrap::None => WrapMode::None,
-                    })
+                    .wrap(wrap_mode(*wrap))
                     .truncate(*truncate)
                     .selectable(*selectable);
                 let held = Rc::new(text.clone());
@@ -2131,16 +2141,17 @@ impl Pass<'_, '_> {
                 lay_out(&image, layout);
                 (image.as_any(), Extra::Image(image))
             }
-            Node::Diff { content, view, filetype, .. } => {
+            Node::Diff { content, view, filetype, wrap, padding, .. } => {
                 let text = self.text(content);
                 count(|work| work.parses += 1);
                 let syntax = self.syntax();
-                match opencode_ui::diff::Chunked::new(app, theme, &syntax, &text, filetype.as_deref(), 0) {
+                let padding = u32::from(*padding);
+                match opencode_ui::diff::Chunked::new(app, theme, &syntax, &text, filetype.as_deref(), padding) {
                     Some(chunked) => (chunked.root().as_any(), Extra::Chunked(Rc::new(chunked), text)),
                     None => {
                         let view = diff_view(*view);
-                        let patch =
-                            Patch::new(app, theme, &syntax, &text, view, filetype.as_deref(), WrapMode::Word, 0);
+                        let wrap = wrap_mode(*wrap);
+                        let patch = Patch::new(app, theme, &syntax, &text, view, filetype.as_deref(), wrap, padding);
                         (patch.view().as_any(), Extra::Diff(patch, text))
                     }
                 }
@@ -2382,6 +2393,15 @@ fn shell(node: &Node) -> Node {
             user_scroll: *user_scroll,
         },
         _ => node.clone(),
+    }
+}
+
+/// OpenTUI's wrap of `wrap`.
+fn wrap_mode(wrap: abi::Wrap) -> WrapMode {
+    match wrap {
+        abi::Wrap::Word => WrapMode::Word,
+        abi::Wrap::Char => WrapMode::Char,
+        abi::Wrap::None => WrapMode::None,
     }
 }
 
