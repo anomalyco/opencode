@@ -21,6 +21,8 @@ type Machine = {
   xfail: string[][]
   // A known row does not end the path: this client follows the machine on.
   continue?: boolean
+  // The actions of a state that a reader does not send: the machine leaves their outcome open.
+  unspecified?: Record<string, string[]>
 }
 
 // The full sweep: every path to the file's depth, and the fault trials.
@@ -44,7 +46,7 @@ function parse(source: (typeof machines.machines)[keyof typeof machines.machines
 const machine = parse(machines.machines.life)
 // The same plugin found in the project's plugins directory, with nothing in the config naming it.
 const project = parse(machines.machines.project)
-// The plugin manager's keys (phase P2); its reader sends no action that the state has no edge for.
+// The plugin manager's keys (phase P2); every action of a state has an edge, or is one it leaves unspecified.
 const managerKeys = parse(machines.machines.manager)
 let runs = 0
 
@@ -232,6 +234,15 @@ async function actManager(app: App, action: string) {
     await until(setup, (frame) => internal(frame) !== undefined && row(frame) !== undefined, "the plugin manager")
     return
   }
+  // With the manager closed the key goes to the empty home composer, where nothing shows a change: it is sent, and the
+  // frame is read once it has settled.
+  if (internal(frame) === undefined) {
+    if (action === "escape") setup.mockInput.pressEscape()
+    if (action === "internal") setup.mockInput.pressKey("a", { ctrl: true })
+    if (action === "toggle") setup.mockInput.pressEnter()
+    await poll(setup, () => false, 100)
+    return
+  }
   if (action === "escape") {
     setup.mockInput.pressEscape()
     await until(setup, (frame) => internal(frame) === undefined, "the plugin manager closing")
@@ -259,9 +270,9 @@ function observeManager(setup: Fixture) {
   return `list/${shown}/${found === undefined ? "none" : found.includes("inactive") ? "off" : "on"}`
 }
 
-// Replays `path` of `machine` on a fresh app. An action a state has no edge for does nothing; the manager machine's
-// reader does not send it. The first difference that is not a known row, or undefined; a known row ends the path,
-// unless the machine says to follow it on.
+// Replays `path` of `machine` on a fresh app. An action a state has no edge for does nothing; the manager machine names
+// an outcome for each, and its reader sends every action but those it lists as unspecified. The first difference that
+// is not a known row, or undefined; a known row ends the path, unless the machine says to follow it on.
 async function replay(machine: Machine, path: string[], known: Set<string>, seen: Set<string>) {
   await using app = await open(machine === project)
   const keyed = machine === managerKeys
@@ -271,6 +282,8 @@ async function replay(machine: Machine, path: string[], known: Set<string>, seen
     const next = index === 0 ? state : (edge ?? state)
     if (index > 0 && !keyed) await act(app, action)
     if (index > 0 && keyed && edge !== undefined) await actManager(app, action)
+    if (index > 0 && keyed && edge === undefined && !machine.unspecified?.[state]?.includes(action))
+      throw new Error(`the manager machine names no outcome of ${action} in ${state}`)
     const observed = keyed ? observeManager(app.setup) : await observe(app.setup)
     const [expected, actual] = [machine.states[next][0], observed]
     if (actual !== expected) {
