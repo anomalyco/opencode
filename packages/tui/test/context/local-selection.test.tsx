@@ -162,6 +162,16 @@ test("same-model agent switches clear drafts without a model acknowledgment", as
   expect(setup.local.model.current()?.modelID).toBe("second")
 })
 
+test("session with hidden agent resolves the hidden agent in current()", async () => {
+  await using setup = await renderLocal({
+    agents: [agent("build"), { ...agent("secret"), hidden: true }],
+    sessions: [session("ses_hidden", undefined, "secret")],
+  })
+  await setup.data.session.sync("ses_hidden")
+  setup.route.navigate({ type: "session", sessionID: "ses_hidden" })
+  expect(setup.local.agent.current()?.id).toBe("secret")
+})
+
 async function publishSelection(
   setup: Awaited<ReturnType<typeof renderLocal>>,
   agent: string,
