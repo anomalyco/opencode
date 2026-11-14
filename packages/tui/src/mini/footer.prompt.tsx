@@ -17,7 +17,7 @@ import {
   type TextareaRenderable,
 } from "@opentui/core"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { normalizePromptContent } from "../prompt/content"
+import { deleteCells, normalizePromptContent } from "../prompt/content"
 import { deduplicatePromptImages, promptAttachmentLabel } from "../prompt/attachment"
 import { resolvePastedAttachments } from "../component/prompt/local-attachment"
 import { createTuiClipboard, type OwnedClipboardService } from "../clipboard"
@@ -993,14 +993,7 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    const cursor = area.cursorOffset
-    const startOffset = at()
-    area.cursorOffset = startOffset
-    const start = area.logicalCursor
-    area.cursorOffset = cursor
-    const end = area.logicalCursor
-    area.deleteRange(start.row, start.col, end.row, end.col)
-    area.cursorOffset = startOffset
+    deleteCells(area, at(), area.cursorOffset)
     hide()
     syncDraft()
     scheduleRows()
@@ -1060,13 +1053,11 @@ export function createPromptState(input: PromptInput): PromptState {
       const separator = !shell() && !local && head && /\s/.test(area.plainText[head.end] ?? "") ? "" : " "
       const text = `/${next.name}${separator}`
 
-      area.cursorOffset = 0
-      const start = area.logicalCursor
-      area.cursorOffset =
-        shell() || !head ? cursor : measure(local ? area.plainText : area.plainText.slice(0, head.end))
-      const end = area.logicalCursor
-
-      area.deleteRange(start.row, start.col, end.row, end.col)
+      deleteCells(
+        area,
+        0,
+        shell() || !head ? cursor : measure(local ? area.plainText : area.plainText.slice(0, head.end)),
+      )
       area.insertText(text)
       area.cursorOffset = measure(text)
       hide()
@@ -1083,11 +1074,7 @@ export function createPromptState(input: PromptInput): PromptState {
 
     const cursor = area.cursorOffset
     const append = "@" + next.value + (area.getTextRange(cursor, cursor + 1) === " " ? "" : " ")
-    area.cursorOffset = at()
-    const start = area.logicalCursor
-    area.cursorOffset = cursor
-    const end = area.logicalCursor
-    area.deleteRange(start.row, start.col, end.row, end.col)
+    deleteCells(area, at(), cursor)
     area.insertText(append)
 
     const text = "@" + next.value
@@ -1144,12 +1131,7 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    const cursor = area.cursorOffset
-    area.cursorOffset = at()
-    const start = area.logicalCursor
-    area.cursorOffset = cursor
-    const end = area.logicalCursor
-    area.deleteRange(start.row, start.col, end.row, end.col)
+    deleteCells(area, at(), area.cursorOffset)
     area.insertText("@" + next.value)
     syncDraft()
     refresh()
