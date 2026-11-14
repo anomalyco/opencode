@@ -129,7 +129,7 @@ impl Sidebar {
     pub fn restyle(&self, tui: &Tui) {
         let inner = &self.inner;
         inner.paint(&tui.page());
-        let restyled = inner.slots.borrow().iter().fold(true, |done, slot| slot.restyle(tui) && done);
+        let restyled = inner.slots.borrow().iter().filter(|slot| !slot.restyle(tui)).count() == 0;
         if !restyled && inner.placed.get() != Place::Hidden {
             inner.slots.borrow_mut().clear();
             inner.content.clear();

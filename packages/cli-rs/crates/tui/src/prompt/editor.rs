@@ -239,7 +239,7 @@ impl Prompt {
         let old = inner.theme.replace(theme.clone());
         parts::restyle(inner, &old, &theme);
         inner.previews.restyle(&theme);
-        let restyled = inner.footer_slots.borrow().1.iter().fold(true, |done, slot| slot.restyle(tui) && done);
+        let restyled = inner.footer_slots.borrow().1.iter().filter(|slot| !slot.restyle(tui)).count() == 0;
         if !restyled {
             inner.footer_slots.borrow_mut().0 = None;
         }

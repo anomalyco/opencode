@@ -318,7 +318,7 @@ mod tests {
         if let Some(values) = schema.get("enum").and_then(Value::as_array) {
             return values.contains(value);
         }
-        let typed = match schema.get("type").and_then(Value::as_str) {
+        match schema.get("type").and_then(Value::as_str) {
             Some("string") => value.as_str().is_some_and(|text| match schema.get("pattern") {
                 Some(_) => text.len() == 9 && text.starts_with('#') && text[1..].chars().all(|c| c.is_ascii_hexdigit()),
                 None => true,
@@ -356,8 +356,7 @@ mod tests {
                     })
             }),
             _ => true,
-        };
-        typed
+        }
     }
 
     /// Whether serde reads `value` as a `T`, and the schema's definition `name` takes it; both must agree.
