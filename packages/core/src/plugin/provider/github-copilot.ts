@@ -172,7 +172,10 @@ export const GithubCopilotPlugin = define({
     const outbound = yield* FetchHttpClient.Fetch
     // Each Session keeps the model Copilot's Auto router picked until its token nears expiry, the Session is compacted,
     // or the account changes. The token unlocks the pick and its Auto discount; Copilot rejects it for any other model.
-    const routes = new Map<Session.ID, { model: string; account: string; token?: string; until: number }>()
+    const routes = new Map<
+      Session.ID,
+      { model: string; account: string; tier?: string; token?: string; until: number }
+    >()
     // The endpoint saved at login serves requests until the first refresh reads the account's current one, so an
     // Enterprise login doesn't send its token to the public host while that refresh is still running.
     const login = yield* credentialSettings(ctx, "github-copilot", (value) =>
@@ -184,6 +187,7 @@ export const GithubCopilotPlugin = define({
         readonly baseURL?: string
         readonly token?: string
         readonly models?: CopilotModels.Snapshot
+        readonly tiers?: readonly string[]
         readonly connection?: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
       },
       active: ctx.integration.connection.active("github-copilot"),
@@ -247,7 +251,19 @@ export const GithubCopilotPlugin = define({
             ),
           })
           .pipe(Effect.orElseSucceed(() => undefined))
-        return { connection, value: { baseURL: url, token: credential.refresh, models, connection } }
+        const tiers = yield* cache
+          .get({
+            key: `${modelsKey(connection, url, headers)}:tiers`,
+            ...options,
+            load: CopilotModels.loadTiers(http, url, {
+              ...headers,
+              Authorization: `Bearer ${credential.refresh}`,
+              "User-Agent": App.useragent(ctx.app),
+              "X-GitHub-Api-Version": apiVersion,
+            }).pipe(Effect.timeout("5 seconds")),
+          })
+          .pipe(Effect.orElseSucceed(() => undefined))
+        return { connection, value: { baseURL: url, token: credential.refresh, models, tiers, connection } }
       }),
     })
 
@@ -261,7 +277,7 @@ export const GithubCopilotPlugin = define({
       const loaded = discovered.current
       const url = loaded.baseURL ?? (typeof login.settings.baseURL === "string" ? login.settings.baseURL : baseURL())
       if (loaded.models) {
-        const router = CopilotModels.autoModel(url, loaded.models)
+        const router = CopilotModels.autoModel(url, loaded.models, loaded.tiers)
         evt.add({
           info: item.provider,
           models: [
@@ -316,7 +332,7 @@ export const GithubCopilotPlugin = define({
         }),
       { providerID: Provider.ID.githubCopilot },
     )
-    const route = Effect.fn("GithubCopilotPlugin.route")(function* (sessionID: Session.ID) {
+    const route = Effect.fn("GithubCopilotPlugin.route")(function* (sessionID: Session.ID, tier?: string) {
       const loaded = discovered.current
       if (!loaded.baseURL || !loaded.token || !loaded.models) return
       const user = yield* ctx.session.context({ sessionID }).pipe(
@@ -336,6 +352,9 @@ export const GithubCopilotPlugin = define({
             HttpClientRequest.bodyJsonUnsafe({
               prompt: user?.text ?? "",
               ...(user?.files?.some((file) => file.mime.startsWith("image/")) ? { has_image: true } : {}),
+              ...(tier
+                ? { tier, multi_turn: { routing_intent: "anchor", turns_since_anchor: 0 }, hydra_rl_multi_turn: {} }
+                : {}),
             }),
           ),
         )
@@ -343,17 +362,23 @@ export const GithubCopilotPlugin = define({
           Effect.flatMap(HttpClientResponse.schemaBodyJson(AutoRoute)),
           Effect.timeout("5 seconds"),
           Effect.tapError((cause) => Effect.logWarning("Copilot Auto routing failed", { cause })),
-          Effect.option,
+          Effect.catch((cause) =>
+            tier
+              ? Effect.die(new Error(`Copilot Auto could not select tier '${tier}'`, { cause }))
+              : Effect.succeed(undefined),
+          ),
         )
       const now = yield* Clock.currentTimeMillis
-      if (Option.isSome(picked) && loaded.models.has(picked.value.selected_model.id))
+      if (picked && loaded.models.has(picked.selected_model.id))
         return {
-          model: picked.value.selected_model.id,
+          model: picked.selected_model.id,
           account: loaded.token,
-          token: picked.value.session_token,
+          tier,
+          token: picked.session_token,
           // Route again before the token can expire mid-request.
-          until: picked.value.expires_at * 1000 - 5 * 60_000,
+          until: picked.expires_at * 1000 - 5 * 60_000,
         }
+      if (tier) return yield* Effect.die(new Error(`Copilot Auto tier '${tier}' selected an unavailable model`))
       const models = Array.from(loaded.models.values())
       const fallback =
         models.find((model) => model.is_chat_fallback) ?? models.find((model) => model.billing?.auto_discount)
@@ -366,12 +391,21 @@ export const GithubCopilotPlugin = define({
         Effect.gen(function* () {
           // Titles use Copilot's utility model, so they never route.
           if (evt.model.id !== CopilotModels.auto || evt.kind === "title") return
+          const tier = evt.model.variant === "default" ? undefined : evt.model.variant
+          if (tier && !discovered.current.tiers?.includes(tier))
+            return yield* Effect.die(
+              new Error(
+                discovered.current.tiers
+                  ? `Copilot Auto tier '${tier}' is not enabled for this account`
+                  : "Could not verify Copilot Auto tier availability",
+              ),
+            )
           const now = yield* Clock.currentTimeMillis
           const cached = routes.get(evt.sessionID)
           const current =
-            cached && cached.until > now && cached.account === discovered.current.token
+            cached && cached.until > now && cached.account === discovered.current.token && cached.tier === tier
               ? cached
-              : yield* route(evt.sessionID)
+              : yield* route(evt.sessionID, tier)
           if (!current) return
           for (const [id, route] of routes) if (route.until <= now) routes.delete(id)
           routes.set(evt.sessionID, current)
