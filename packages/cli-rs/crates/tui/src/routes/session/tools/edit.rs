@@ -6,7 +6,7 @@ use opencode_local::cli_config::{DiffView as ConfigDiffView, DiffWrap};
 use opentui::widget::DiffView;
 
 use super::diagnostics;
-use super::dispatch::{Block, BlockTool, Header, Props, Status, content_width, format_path};
+use super::dispatch::{Block, BlockTool, Header, Props, Status, content_width, fingerprint, format_path};
 use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 
@@ -20,7 +20,8 @@ pub struct Edit {
 
 #[derive(PartialEq)]
 struct Shown {
-    patch: String,
+    /// The patch's fingerprint.
+    patch: u64,
     path: String,
     view: DiffView,
     wrap: WrapMode,
@@ -79,7 +80,7 @@ impl Edit {
             _ => WrapMode::Word,
         };
         let shown = Shown {
-            patch: file.patch,
+            patch: fingerprint(&file.patch),
             path: file.path,
             view,
             wrap,
@@ -96,7 +97,7 @@ impl Edit {
             cx.app,
             cx.theme,
             cx.syntax,
-            &shown.patch,
+            &file.patch,
             shown.view,
             opentui::syntax::filetype_for_path(&shown.path),
             shown.wrap,

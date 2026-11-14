@@ -231,6 +231,15 @@ pub fn content_width(cx: &Context<'_>) -> i64 {
     cx.content_width() as i64
 }
 
+/// A fingerprint of what a block shows. A block keeps it to skip an update that changes nothing, instead of a second
+/// copy of text the store already holds.
+pub fn fingerprint(shown: &impl std::hash::Hash) -> u64 {
+    use std::hash::{DefaultHasher, Hasher};
+    let mut hasher = DefaultHasher::new();
+    shown.hash(&mut hasher);
+    hasher.finish()
+}
+
 /// A number as JavaScript prints it.
 pub fn number(value: f64) -> String {
     opencode_api::query::js_string(&Value::from(value))
