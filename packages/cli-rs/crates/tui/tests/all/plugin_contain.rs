@@ -1009,7 +1009,7 @@ fn a_2_0_surface_is_contained() {
     assert!(!screen().contains("page body"), "{}", screen());
     tui.navigate(Route::Home);
     settle();
-    assert_eq!(opencode_plugin::surface::ledger(), opencode_plugin::surface::Ledger::default());
+    assert_eq!(opencode_plugin::surface::ledger_of("test.surfaces"), opencode_plugin::surface::Ledger::default());
 
     // Enabled again: a new activation, whose route mounts under a new generation; then a panic in its slot view.
     assert_eq!(tui.plugins.toggle(&host(tui), "test.surfaces", true), Some(Ok(())));
@@ -1022,7 +1022,7 @@ fn a_2_0_surface_is_contained() {
     settle();
     assert!(matches!(status(), opencode_plugin::Status::Failed(error) if error.contains("view panicked")));
     assert!(!screen().contains("slot body"));
-    assert_eq!(opencode_plugin::surface::ledger().content, 0);
+    assert_eq!(opencode_plugin::surface::ledger_of("test.surfaces").content, 0);
     assert_eq!(tui.plugins.monitor().record().unwrap().crash(), Crash::default(), "the record names nobody after");
     SURFACE_RECORD.set(None);
 }
