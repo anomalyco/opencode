@@ -189,6 +189,8 @@ struct Call {
     /// It answers the user's input.
     user: bool,
     request: opencode_plugin_abi::Request,
+    /// The input owner of a handler's event (P2): its effects are that mount's, as in process.
+    owner: Option<Weak<crate::interact::Owner>>,
 }
 
 /// Whom an end of the JS host names.
@@ -715,7 +717,7 @@ impl Scripts {
                     }
                     Some(Waiting::Call(call)) => {
                         if let Some(guest) = call.guest.upgrade() {
-                            guest.done(seq, call.export, call.user, effects, error);
+                            guest.done(seq, &call, effects, error);
                         }
                         // The keys it held go on once its effects applied: they are deferred, and so is this, after
                         // them (review bigboi-5).
@@ -911,7 +913,7 @@ impl Scripts {
         }
         for call in calls {
             if let Some(guest) = call.guest.upgrade().filter(|guest| !guest.ended()) {
-                self.call_as(&guest, call.export, call.request, false, call.user);
+                self.call_as(&guest, call.export, call.request, false, call.user, call.owner);
             }
         }
         self.reconcile();
@@ -927,15 +929,17 @@ impl Scripts {
         }
     }
 
-    /// Runs a call of `guest`: a command, an event, a scroll event. A command in `holds` holds the keys after it.
+    /// Runs a call of `guest`: a command, an event, an input event of `owner`. A command in `holds` holds the keys
+    /// after it.
     fn call(
         self: &Rc<Self>,
         guest: &Rc<Guest>,
         export: &'static str,
         request: opencode_plugin_abi::Request,
         hold: bool,
+        owner: Option<Weak<crate::interact::Owner>>,
     ) {
-        self.call_as(guest, export, request, hold, crate::behave::user());
+        self.call_as(guest, export, request, hold, crate::behave::user(), owner);
     }
 
     /// [`Scripts::call`] for the user's input when `user`.
@@ -946,11 +950,12 @@ impl Scripts {
         request: opencode_plugin_abi::Request,
         hold: bool,
         user: bool,
+        owner: Option<Weak<crate::interact::Owner>>,
     ) {
         let seq = self.next();
         let message =
             Down::Call { seq, id: guest.id().to_owned(), activation: guest.activation(), call: request.clone() };
-        let call = Call { guest: Rc::downgrade(guest), export, user, request };
+        let call = Call { guest: Rc::downgrade(guest), export, user, request, owner };
         self.send(message, Some(Waiting::Call(call)));
         if hold {
             self.start_hold(seq);
@@ -1054,10 +1059,15 @@ fn digest(dir: &Path, options: Option<&str>) -> u64 {
     hasher.finish()
 }
 
-/// What a read the plugin watches is now, as [`HostRequest`]'s result.
-pub(crate) fn evaluate(host: &Weak<dyn Host>, id: &str, request: &HostRequest) -> serde_json::Value {
+/// What a read the plugin watches is now, as [`HostRequest`]'s result: P2's reads are of its newest mount.
+pub(crate) fn evaluate(
+    host: &Weak<dyn Host>,
+    id: &str,
+    owners: Option<Rc<crate::Owners>>,
+    request: &HostRequest,
+) -> serde_json::Value {
     let mut ctx = crate::loader::native::Ctx::new(host.clone(), id, Vec::new());
-    ctx.read_only = true;
+    (ctx.read_only, ctx.owners) = (true, owners);
     match crate::loader::native::handle(&mut ctx, request.clone()) {
         Ok(value) => value,
         Err(error) => {

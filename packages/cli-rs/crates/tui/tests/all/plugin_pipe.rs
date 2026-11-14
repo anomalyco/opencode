@@ -292,6 +292,7 @@ fn the_twin_is_equal_linked_and_on_the_pipe() {
 
 use opencode_plugin::Status;
 use opencode_plugin::pipe::Fault;
+use opentui::input::{Event, KeyCode, KeyEvent, Modifiers, MouseButton, MouseEventKind};
 
 use crate::support::model::{self, Failure, Model, Rng};
 
@@ -1523,4 +1524,135 @@ fn what_is_only_acknowledged_leaves_nothing_behind() {
         pipe.settle();
     }
     assert_eq!(pipe.scripts().waiting(), 0);
+}
+
+// P2's input over the pipe.
+
+const KEYS: &str = "example.keys";
+
+/// The keys example on the JS host, on a session (a panel docks beside one), and the file it logs to.
+fn keys(config: Config) -> (Pipe, PathBuf) {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let config_dir = root.path().join("config");
+    copy(&Path::new(EXAMPLES).join("keys"), &config_dir.join("plugins/keys"));
+    let server = support::Fake::new(|seen| support::base(seen, support::DIRECTORY));
+    let harness = support::mount(120, 30, support::deps(Arc::new(server)));
+    external_with(&harness.tui, External { config_dir, cwd: root.path().to_path_buf(), dev: Vec::new() }, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active(KEYS);
+    let log = pipe.root.path().join("config/plugins/keys/.log.jsonl");
+    (pipe, log)
+}
+
+/// What the keys example's handlers got since the last call, one `owner: what` line each.
+fn heard(log: &Path) -> Vec<String> {
+    let text = std::fs::read_to_string(log).unwrap_or_default();
+    let _ = std::fs::remove_file(log);
+    let entries = text.lines().map(|line| serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(line));
+    entries.flat_map(Result::unwrap).map(|(owner, what)| format!("{owner}: {}", what.as_str().unwrap_or(""))).collect()
+}
+
+/// Dispatches `keys` as one polled batch, then waits for the JS host's answers without moving the clock, so no hold
+/// times out on a busy machine, and settles.
+fn burst(pipe: &Pipe, keys: &[(char, Modifiers)]) {
+    for (key, modifiers) in keys {
+        pipe.harness.app.app().dispatch(Event::Key(KeyEvent::new(KeyCode::Char(*key), *modifiers)));
+    }
+    let begun = Instant::now();
+    while !pipe.scripts().idle() {
+        assert!(begun.elapsed() < Duration::from_secs(20), "the JS host never answered");
+        pipe.harness.app.advance(Duration::ZERO);
+        std::thread::sleep(Duration::from_micros(200));
+    }
+    pipe.settle();
+}
+
+/// Waits until the screen shows `text`: a surface that mounts asks for its first tree in a later frame.
+fn shows(pipe: &Pipe, text: &str) {
+    quietly(pipe, &format!("the screen shows {text:?}"), || pipe.harness.app.text().contains(text));
+}
+
+fn plain(text: &str) -> Vec<(char, Modifiers)> {
+    text.chars().map(|key| (key, Modifiers::NONE)).collect()
+}
+
+// Expected (P2 on the pipe, review F3): a key's answer comes a round trip late, so a key that changes how the next
+// ones route holds them until its answer applied. `x` sets the composer before the `ab` typed with it; `ctrl+n` enters
+// the mode `normal` before `d` and `w` of the same batch, which its layer takes, and `i` leaves it before `cd`: no key is
+// lost or misrouted. A listener of every key in the base mode hears each key outside the mode, and passes it on.
+#[test]
+fn a_modal_composer_on_the_pipe_loses_no_key_at_a_mode_switch() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = keys(config);
+    burst(&pipe, &plain("xab"));
+    assert_eq!(pipe.harness.text(), "X:ab");
+    assert_eq!(heard(&log), ["any: any x", "setup: hold", "any: any a", "any: any b"]);
+    let mut batch = vec![('n', Modifiers::CTRL)];
+    batch.extend(plain("dwicd"));
+    burst(&pipe, &batch);
+    assert_eq!(pipe.harness.text(), "X:abcd");
+    assert_eq!(
+        heard(&log),
+        ["any: any ctrl+n", "setup: normal", "normal: d", "normal: w", "normal: insert", "any: any c", "any: any d"]
+    );
+}
+
+// Expected (P2 on the pipe): a panel opens, takes the focus and the keys of its layer; a focus effect moves the focus to
+// its node, which the read it watches shows; a press on its pointer node is consumed and captures the release; its
+// handler's overlay opens over it, with the opener's mount, which hears it closed; closing the panel leaves nothing of
+// its input behind.
+#[test]
+fn a_panel_and_its_overlay_take_keys_and_focus_over_the_pipe() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = keys(config);
+    let tui = &pipe.harness.tui;
+    let before = opencode_plugin::interact::ledger(&**tui);
+    tui.keymap.dispatch("keys.panel", None);
+    pipe.settle();
+    shows(&pipe, "SIDE mode=- node=-");
+    burst(&pipe, &plain("k"));
+    tui.keymap.dispatch("keys.focus", None);
+    pipe.settle();
+    shows(&pipe, "SIDE mode=- node=a");
+    // A press on its node is consumed (no click of the host's runs), and the release reaches the node it captured.
+    // One cell in: the panel's first column is its splitter's.
+    let (x, y) = support::at(&pipe.harness.app.text(), "node a").map(|(x, y)| (x + 1, y)).unwrap();
+    pipe.harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x, y);
+    pipe.settle();
+    assert!(opencode_plugin::interact::ledger(&**tui).capture, "a consumed press captured nothing");
+    pipe.harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x, y);
+    pipe.settle();
+    burst(&pipe, &plain("o"));
+    shows(&pipe, "MENU one");
+    burst(&pipe, &plain("m"));
+    pipe.harness.app.press("escape");
+    pipe.settle();
+    assert!(!pipe.harness.app.text().contains("MENU one"), "{}", pipe.harness.app.text());
+    let heard = heard(&log).into_iter().filter(|line| !line.starts_with("any: ")).collect::<Vec<_>>();
+    assert_eq!(heard, ["side: k", "side: pointer down", "side: pointer up", "side: open", "menu: m", "side: closed"]);
+    tui.keymap.dispatch("keys.close", None);
+    pipe.settle();
+    assert!(!pipe.harness.app.text().contains("SIDE"), "{}", pipe.harness.app.text());
+    assert_eq!(opencode_plugin::interact::ledger(&**tui), before);
+}
+
+// Expected (P2 on the pipe, synthesis 3.8): a JS host that ends takes the modes its plugins set with it: their JS state
+// is gone. The plugin is set up again, its layers stay, and the keys route as if no mode were set.
+#[test]
+fn a_mode_ends_with_the_js_host_that_set_it() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = keys(config);
+    let base = opencode_plugin::interact::ledger(&*pipe.harness.tui);
+    burst(&pipe, &[('n', Modifiers::CTRL)]);
+    assert_eq!(opencode_plugin::interact::ledger(&*pipe.harness.tui).modes, base.modes + 1);
+    let pid = pipe.scripts().pid().unwrap();
+    pipe.scripts().kill();
+    quietly(&pipe, "the end was noticed", || pipe.scripts().pid().is_some_and(|now| now != pid));
+    pipe.settle();
+    assert_eq!(pipe.status(KEYS), Some(Status::Active));
+    assert_eq!(opencode_plugin::interact::ledger(&*pipe.harness.tui), base);
+    heard(&log);
+    burst(&pipe, &plain("dx"));
+    assert_eq!(pipe.harness.text(), "X:");
+    assert_eq!(heard(&log), ["any: any d", "any: any x", "setup: hold"]);
 }

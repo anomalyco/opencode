@@ -102,7 +102,7 @@ export default {
           },
         ],
       }),
-      { onScroll: (event: any) => log({ scrolled: event.type }) },
+      { on: (event: any) => void (event.type === "scroll" && log({ scrolled: event.event.type })) },
     )
     return () => {
       hoard = []

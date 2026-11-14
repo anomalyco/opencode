@@ -61,7 +61,9 @@ interface Surface {
   place: Json
   palette: boolean
   notify: Json[]
-  onScroll?: (event: Json) => unknown
+  // P2: the mount's handler (its keys, pointer, scroll and input events) and the key layers each mount registers.
+  on?: (event: Json) => unknown
+  layers: Json[]
   view: (cx: ViewContext) => Json
 }
 
@@ -111,6 +113,8 @@ interface Plugin {
   resolvers: Array<(value: Json) => void>
   commands: Command[]
   events: Array<{ types: string[]; handler: (event: Json) => unknown }>
+  // P2: the key layers of setup, each with its handler.
+  layers: Array<{ layer: Json; handler: (event: Json) => unknown }>
   surfaces: Surface[]
   cleanups: Array<() => unknown>
   mounts: Map<string, Mount>
@@ -253,7 +257,7 @@ function context(plugin: Plugin) {
       name: string,
       place: Json,
       view: Surface["view"],
-      options?: { palette?: boolean; notify?: Json[]; onScroll?: (event: Json) => unknown },
+      options?: { palette?: boolean; notify?: Json[]; on?: (event: Json) => unknown; layers?: Json[] },
     ) {
       plugin.surfaces.push({
         name,
@@ -261,8 +265,14 @@ function context(plugin: Plugin) {
         view,
         palette: !!options?.palette,
         notify: options?.notify ?? [],
-        onScroll: options?.onScroll,
+        on: options?.on,
+        layers: options?.layers ?? [],
       })
+    },
+    // A key layer of the activation, as contract 2.0's `Setup::layer`. What the handler returns is advisory: the host
+    // answers a key from the layer's declaration, as it cannot wait.
+    layer(layer: Json, handler: (event: Json) => unknown) {
+      plugin.layers.push({ layer, handler })
     },
     command(command: Json, run: (input?: string) => unknown) {
       commands({ commands: [{ ...command, id: command.name, run, bind: command.keybind, slash: command.slash ? { name: command.slash } : undefined }] })
@@ -332,12 +342,14 @@ function manifest(plugin: Plugin) {
     routes: [],
     storage: [],
     events: plugin.events.map((event) => event.types),
+    ...(plugin.layers.length ? { layers: plugin.layers.map((layer) => layer.layer) } : {}),
     surfaces: plugin.surfaces.map((surface) => ({
       name: surface.name,
       place: surface.place,
       ...(surface.palette ? { palette: true } : {}),
       ...(surface.notify.length ? { notify: surface.notify } : {}),
-      ...(surface.onScroll ? { on_scroll: true } : {}),
+      ...(surface.on ? { handler: true } : {}),
+      ...(surface.layers.length ? { layers: surface.layers } : {}),
     })),
   }
 }
@@ -403,6 +415,7 @@ function candidate(definition: Plugin["definition"], target: string, dir: string
     resolvers: [],
     commands: [],
     events: [],
+    layers: [],
     surfaces: [],
     cleanups: [],
     mounts: new Map(),
@@ -460,8 +473,10 @@ function call(seq: number, plugin: Plugin, request: Json) {
       result = command?.run(request.input ?? undefined)
     } else if (request.type === "event") {
       result = plugin.events[request.handler]?.handler(request.event)
-    } else if (request.type === "scrolled") {
-      result = plugin.surfaces[request.surface]?.onScroll?.(request.event)
+    } else if (request.type === "input") {
+      const to = request.to
+      const handler = to.type === "layer" ? plugin.layers[to.layer]?.handler : plugin.surfaces[to.surface]?.on
+      result = handler?.(request.event)
     } else if (request.type === "reply") {
       const reply = plugin.replies.get(request.id)
       plugin.replies.delete(request.id)
@@ -469,7 +484,7 @@ function call(seq: number, plugin: Plugin, request: Json) {
     }
     if (result instanceof Promise) result.catch((error) => fail(plugin, `${request.type} rejected: ${message(error)}`))
   } catch (thrown) {
-    const call = { command: "run-command", scrolled: "on-scroll" }[request.type as string] ?? `on-${request.type}`
+    const call = { command: "run-command", input: "handle" }[request.type as string] ?? `on-${request.type}`
     error = `${call} threw: ${message(thrown)}`
   }
   const effects = plugin.callEffects
