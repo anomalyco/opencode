@@ -3201,3 +3201,75 @@ fn a_refused_manifest_leaves_no_effect() {
     assert_eq!(*host.storage.borrow(), before);
     assert!(host.attention.borrow().is_empty() && host.routes.borrow().is_empty() && host.fetches.borrow().is_empty());
 }
+
+// Expected (reviews bigboi-12, carbon-2): a buffer descriptor that cannot describe what the plugin allocated (a null
+// pointer with a length, a length past the capacity), or one past the bound, is refused before anything is read
+// through it; every descriptor goes back to the plugin's `free` once.
+#[test]
+fn a_buffer_the_plugin_cannot_have_written_is_refused_unread() {
+    static FREED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    unsafe extern "C" fn counted(_: Owned) {
+        FREED.fetch_add(1, Ordering::SeqCst);
+    }
+    let mut bytes = *b"abc";
+    let ptr = bytes.as_mut_ptr();
+    let rows: [(Owned, Result<&[u8], &str>); 5] = [
+        (Owned { ptr: std::ptr::null_mut(), len: 0, cap: 0 }, Ok(b"")),
+        (Owned { ptr: std::ptr::null_mut(), len: 5, cap: 5 }, Err("a null buffer of 5 bytes")),
+        (Owned { ptr, len: 4, cap: 3 }, Err("a buffer of 4 bytes in 3 of room")),
+        (Owned { ptr, len: MAX_BUFFER + 1, cap: usize::MAX }, Err("over")),
+        (Owned { ptr, len: 3, cap: 3 }, Ok(b"abc")),
+    ];
+    for (index, (out, expected)) in rows.into_iter().enumerate() {
+        // SAFETY: the valid rows describe `bytes`; the others are refused before they are read, as the test checks.
+        let got = unsafe { received(out, counted) };
+        match expected {
+            Ok(expected) => assert_eq!(got.unwrap(), expected),
+            Err(needle) => assert!(got.as_ref().unwrap_err().contains(needle), "{got:?}"),
+        }
+        assert_eq!(FREED.load(Ordering::SeqCst), index + 1, "row {index} was not freed once");
+    }
+}
+
+// Expected (reviews bigboi-12, carbon-2): the host answers `call` on its UI thread only: one from another thread is
+// refused before the instance's context is read. The same call on the UI thread gets past that check.
+#[test]
+fn the_host_answers_calls_on_its_ui_thread_only() {
+    let host = host();
+    let dynamic = dynamic(&host);
+    let api = PluginApi {
+        size: size_of::<PluginApi>(),
+        major: ABI_MAJOR,
+        minor: ABI_MINOR,
+        requires_minor: 0,
+        create: Some(abi::export_plugin!(@loopback "first", first)),
+        call: Some(abi::runtime::call),
+        destroy: Some(abi::runtime::destroy),
+        free: Some(abi::runtime::free),
+        describe: None,
+    };
+    let library = Rc::new(Library::from_table(&api, ABI_MAJOR, V1_MINOR).unwrap());
+    let (instance, _) = Instance::create(&library, Rc::downgrade(&dynamic), "first", None, false, None).unwrap();
+    let ctx = instance.shared.as_ptr() as usize;
+    let call = move || {
+        let mut out = Owned::EMPTY;
+        // SAFETY: the instance's context, alive until the instance drops below; `out` goes back to the host's `free`.
+        unsafe {
+            let status = host_call(ctx as *mut c_void, Bytes::new(br#"{"type":"theme"}"#), &mut out);
+            let text = String::from_utf8_lossy(&out.to_vec()).into_owned();
+            host_free(out);
+            (status, text)
+        }
+    };
+    let (status, text) = std::thread::spawn(call).join().unwrap();
+    assert_eq!(status, abi::ERROR);
+    assert!(text.contains("UI thread"), "{text}");
+    let (_, text) = call();
+    assert!(!text.contains("UI thread"), "{text}");
+    // A light host answers light on its UI thread, and dark off it, where it reads nothing.
+    host.mode.set(ThemeMode::Light);
+    // SAFETY: as above.
+    let mode = move || unsafe { host_theme_mode(ctx as *mut c_void) };
+    assert_eq!((mode(), std::thread::spawn(mode).join().unwrap()), (abi::THEME_LIGHT, abi::THEME_DARK));
+    drop(instance);
+}
