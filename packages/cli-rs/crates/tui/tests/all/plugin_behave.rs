@@ -53,6 +53,8 @@ struct Board {
     churn: bool,
     /// The edge's rect each `layout` call was told.
     edges: Vec<Option<v2::Rect>>,
+    /// A list's items estimate rows that have nothing to do with their heights.
+    vary: bool,
 }
 
 thread_local! {
@@ -98,6 +100,11 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         let edge = if input == Some("bottom") { v2::Edge::Bottom } else { v2::Edge::Top };
         host.scroll(files(), v2::Scroll::Edge { edge });
     });
+    // Marks a card reviewed or not, and nothing else: a list keeps the reading position by itself.
+    setup.command(command("board.fold"), |_, input| {
+        let card: usize = input.and_then(|card| card.parse().ok()).unwrap_or(0);
+        board(|board| board.reviewed[card] = !board.reviewed[card]);
+    });
     setup.command(command("board.anchors"), |host, _| {
         let anchors = host.anchors(&files(), "file");
         board(|board| board.anchors = anchors.iter().map(|anchor| (anchor.id.clone(), anchor.row)).collect());
@@ -112,22 +119,40 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         }
     });
     let surface = v2::Surface::new("board", v2::Place::Route("board".into()), view)
-        .layout(vec![v2::Notify::Node { id: "edge".into() }], |geometry| {
-            let top = geometry.top("files", "file");
-            board(|board| {
-                board.layouts += 1;
-                board.edges.push(geometry.rect("edge"));
-                board.tops.push((top.map(|top| top.id.clone()), geometry.moved_only));
-            });
-            let reviewed = top.is_some_and(|top| top.variant == "reviewed");
-            let reply =
-                v2::LayoutReply::default().paint("edge", if reviewed { "background.raised.high" } else { "text.base" });
-            v2::LayoutReply { again: board(|board| board.again), ..reply }
-        })
+        .layout(vec![v2::Notify::Node { id: "edge".into() }], board_layout)
         .on_scroll(|_, event| match event {
             v2::ScrollEvent::Landed { anchor, .. } => board(|board| board.landed.push(anchor.id.clone())),
             v2::ScrollEvent::UserScroll { .. } => board(|board| board.user_scrolls += 1),
         });
+    setup.surface(surface);
+    Ok(())
+}
+
+/// The board's `layout`: it paints the edge from the top card.
+fn board_layout(geometry: &v2::Geometry) -> v2::LayoutReply {
+    let top = geometry.top("files", "file");
+    board(|board| {
+        board.layouts += 1;
+        board.edges.push(geometry.rect("edge"));
+        board.tops.push((top.map(|top| top.id.clone()), geometry.moved_only));
+    });
+    let reviewed = top.is_some_and(|top| top.variant == "reviewed");
+    let reply = v2::LayoutReply::default().paint("edge", if reviewed { "background.raised.high" } else { "text.base" });
+    v2::LayoutReply { again: board(|board| board.again), ..reply }
+}
+
+/// The board as a scroll of every card, whatever the board's `list`: the eager reference a windowed list must show
+/// the same as. Its commands show the board's state and move it to an offset.
+fn eager_setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let command =
+        |name: &str| abi::Command { name: name.into(), scope: abi::Scope::Route("eager".into()), ..Default::default() };
+    setup.command(command("eager.view"), |_, _| {});
+    setup.command(command("eager.at"), |host, input| {
+        let offset = input.and_then(|offset| offset.parse().ok()).unwrap_or(0);
+        host.scroll(v2::Target::node("eager", "files"), v2::Scroll::Offset { offset });
+    });
+    let surface = v2::Surface::new("eager", v2::Place::Route("eager".into()), |cx| view_as(cx, false))
+        .layout(vec![v2::Notify::Node { id: "edge".into() }], board_layout);
     setup.surface(surface);
     Ok(())
 }
@@ -157,16 +182,31 @@ fn card(cx: &mut v2::View<'_>, card: usize, reviewed: bool) -> v2::Node {
 }
 
 fn view(cx: &mut v2::View<'_>) -> v2::Node {
-    let (reviewed, list, quiet) = board(|board| {
+    let list = board(|board| board.list);
+    view_as(cx, list)
+}
+
+/// The rows a card's item estimates: its height, or, when the board varies them, rows that have nothing to do with
+/// it.
+fn estimate(index: usize, reviewed: bool, vary: bool) -> u16 {
+    match (vary, reviewed) {
+        (true, _) => 1 + (index * 7 % 13) as u16,
+        (false, true) => 1,
+        (false, false) => CARD as u16,
+    }
+}
+
+fn view_as(cx: &mut v2::View<'_>, list: bool) -> v2::Node {
+    let (reviewed, quiet, vary) = board(|board| {
         board.views += 1;
-        (board.reviewed.clone(), board.list, board.quiet)
+        (board.reviewed.clone(), board.quiet, board.vary)
     });
     let grow = abi::Layout::default().grow();
     let files = if list {
         let items = reviewed
             .iter()
             .enumerate()
-            .map(|(index, reviewed)| v2::ListItem::new(card(cx, index, *reviewed), if *reviewed { 1 } else { 8 }))
+            .map(|(index, reviewed)| v2::ListItem::new(card(cx, index, *reviewed), estimate(index, *reviewed, vary)))
             .collect();
         v2::Node::list(items)
     } else {
@@ -193,8 +233,14 @@ struct Mounted {
 
 fn mount(cards: usize, width: u16, height: u16, list: bool) -> Mounted {
     board(|board| {
-        *board =
-            Board { reviewed: vec![false; cards], list, quiet: board.quiet, again: board.again, ..Board::default() }
+        *board = Board {
+            reviewed: vec![false; cards],
+            list,
+            quiet: board.quiet,
+            again: board.again,
+            vary: board.vary,
+            ..Board::default()
+        }
     });
     let deps = Deps {
         route: Route::Home,
@@ -314,6 +360,8 @@ enum Command {
     Step(i32),
     To(usize),
     Review(usize),
+    /// A card marked reviewed or not with no verb: a list keeps the reading position by itself.
+    Fold(usize),
     Forget,
     /// `To` a node that is not in the tree.
     Gone,
@@ -332,6 +380,36 @@ enum Command {
 
 struct Behaviors {
     list: bool,
+}
+
+/// The eager reference of a run on a list: the same board as a scroll of every card, at the same size and offset.
+struct Eager {
+    harness: support::Harness,
+}
+
+impl Eager {
+    fn new(width: u16, height: u16) -> Self {
+        let deps = Deps {
+            route: Route::Home,
+            builtins: vec![abi::Plugin { id: "test.eager", setup: eager_setup }.into()],
+            ..support::deps(Arc::new(support::empty()))
+        };
+        let harness = support::mount(width, height, deps);
+        harness.tui.navigate(Route::Plugin { id: "test.eager".into(), name: "eager".into() });
+        harness.app.advance(Duration::ZERO);
+        Self { harness }
+    }
+
+    /// The reference's frame at `size` and offset `top`, with the board as it is now.
+    fn at(&self, size: (u16, u16), top: i32) -> opentui::testing::Capture {
+        self.harness.app.resize(size.0, size.1);
+        for (name, input) in [("eager.view", None), ("eager.at", Some(top.to_string()))] {
+            let _ = self.harness.tui.keymap.dispatch(name, input.as_deref());
+            self.harness.app.advance(Duration::ZERO);
+            settled(&self.harness);
+        }
+        settled(&self.harness)
+    }
 }
 
 /// What the oracle knows: the board's marks, the viewport, and the memory of the last step.
@@ -353,14 +431,18 @@ impl Oracle {
 
     /// Where a step of `by` from `top` lands, and the offset it leaves, clamped at `most`; `None` when no anchor is
     /// there.
+    /// A step of 0, or one that finds no anchor, moves nothing and keeps the memory of the last that landed.
     fn step(&mut self, top: i32, by: i32, most: i32) -> Option<(String, i32)> {
+        if by == 0 {
+            return None;
+        }
         let hunks = self.rows().hunks();
         let inset = i32::from(INSET);
         let from = self
             .memory
-            .take()
+            .as_ref()
             .filter(|(_, left)| *left == top)
-            .and_then(|(anchor, _)| hunks.iter().position(|(_, id)| *id == anchor));
+            .and_then(|(anchor, _)| hunks.iter().position(|(_, id)| id == anchor));
         let next = match from {
             Some(at) => usize::try_from(at as i32 + by).ok().and_then(|at| hunks.get(at)),
             None if by > 0 => hunks.iter().find(|(row, _)| *row > top + inset),
@@ -382,8 +464,9 @@ impl Model for Behaviors {
             .map(|_| match rng.below(15) {
                 0 | 1 => Command::Wheel { down: rng.below(3) > 0, steps: 1 + rng.below(3) as u8 },
                 2 => Command::Resize { width: 40 + rng.below(40) as u16, height: 8 + rng.below(14) as u16 },
-                3..=5 => Command::Step(*rng.pick(&[1, 1, -1, 2, -2])),
+                3..=5 => Command::Step(*rng.pick(&[1, 1, -1, 2, -2, 0])),
                 6 => Command::To(rng.below(CARDS)),
+                7 if self.list => Command::Fold(rng.below(CARDS)),
                 7 | 8 => Command::Review(rng.below(CARDS)),
                 9 => Command::Forget,
                 10 => Command::Gone,
@@ -406,7 +489,10 @@ impl Model for Behaviors {
 
     fn run(&self, commands: &[Command]) -> Option<Failure> {
         let (width, height) = (60, 16);
+        board(|board| board.vary = self.list);
         let board_view = mount(CARDS, width, height, self.list);
+        let eager = self.list.then(|| Eager::new(width, height));
+        let mut size = (width, height);
         let app = &board_view.harness.app;
         let mut oracle = Oracle { reviewed: vec![false; CARDS], viewport: i32::from(height) - 1, memory: None };
         let mut top = 0;
@@ -425,13 +511,14 @@ impl Model for Behaviors {
             let mut lands: Option<String> = None;
             match command {
                 Command::Wheel { down, steps } => {
+                    // A wheel at a clamp moves nothing and keeps a step's memory; one that moves ends it below.
                     for _ in 0..*steps {
                         app.scroll(10, 5, *down);
                     }
-                    oracle.memory = None;
                 }
                 Command::Resize { width, height } => {
                     app.resize(*width, *height);
+                    size = (*width, *height);
                     oracle.viewport = i32::from(*height) - 1;
                 }
                 Command::Step(by) => {
@@ -442,7 +529,8 @@ impl Model for Behaviors {
                     board_view.dispatch("board.step", Some(by.to_string()));
                 }
                 Command::Batch { height, by } => {
-                    app.resize(width, *height);
+                    app.resize(size.0, *height);
+                    size.1 = *height;
                     let most = oracle.most();
                     oracle.viewport = i32::from(*height) - 1;
                     // The step resolves against the last settled frame; the solve then clamps it to the new size. A
@@ -471,6 +559,17 @@ impl Model for Behaviors {
                     oracle.reviewed[*card] = !oracle.reviewed[*card];
                     expected = Some((oracle.rows().start(current) - at).clamp(0, oracle.most()));
                     board_view.dispatch("board.review", Some(card.to_string()));
+                }
+                Command::Fold(card) => {
+                    // The item at the top stays, as many rows into it as it has, where the clamp allows.
+                    let rows = oracle.rows();
+                    let current = rows.card_at(top);
+                    let within = top - rows.start(current);
+                    oracle.reviewed[*card] = !oracle.reviewed[*card];
+                    let rows = oracle.rows();
+                    let kept = rows.start(current) + within.min(rows.heights[current] - 1);
+                    expected = Some(kept.clamp(0, oracle.most()));
+                    board_view.dispatch("board.fold", Some(card.to_string()));
                 }
                 Command::Forget => {
                     oracle.memory = None;
@@ -505,7 +604,9 @@ impl Model for Behaviors {
                     oracle.memory = None;
                     let rows = oracle.viewport * i32::from(*percent) / 100;
                     let rows = if rows == 0 { i32::from(percent.signum()) } else { rows };
-                    expected = Some((top + rows).clamp(0, oracle.most()));
+                    // A list's page counts the host's rows, which are estimates for items without widgets: the eager
+                    // reference checks what it shows.
+                    expected = (!self.list).then(|| (top + rows).clamp(0, oracle.most()));
                     board_view.dispatch("board.page", Some(percent.to_string()));
                 }
                 Command::Edge { bottom } => {
@@ -516,6 +617,14 @@ impl Model for Behaviors {
             }
             let first = app.render();
             let settled = board_view.settle();
+            if app.needs_frame() && !model::skipped("settled-first") {
+                return fail(
+                    "settled-first",
+                    "settles",
+                    step,
+                    format!("work is left after 12 frames:\n{}", settled.text()),
+                );
+            }
             if !model::skipped("settled-first") && first != settled {
                 return fail(
                     "settled-first",
@@ -529,7 +638,8 @@ impl Model for Behaviors {
                 return fail("scroll-keep", "no offset", step, screen);
             };
             top = shown;
-            let property = if matches!(command, Command::Review(_)) { "scroll-keep" } else { "scroll-step" };
+            let property =
+                if matches!(command, Command::Review(_) | Command::Fold(_)) { "scroll-keep" } else { "scroll-step" };
             if let Some(expected) = expected
                 && expected != top
                 && !model::skipped(property)
@@ -539,6 +649,17 @@ impl Model for Behaviors {
             let landed = board(|board| board.landed.get(landed_before).cloned());
             if landed != lands && !model::skipped("scroll-step") {
                 return fail("scroll-step", "landed", step, format!("expected {lands:?}, landed {landed:?}"));
+            }
+            // A windowed list shows every cell as the board of every card does at its offset: rows, sticky header
+            // and the edge `layout` painted.
+            if let Some(eager) = &eager
+                && !model::skipped("eager")
+            {
+                let reference = eager.at(size, top);
+                if reference != settled {
+                    let detail = format!("list:\n{}\neager:\n{}", settled.text(), reference.text());
+                    return fail("eager", "cells", step, detail);
+                }
             }
             if let Some((_, left)) = &oracle.memory
                 && *left != top
@@ -568,7 +689,7 @@ fn a_windowed_list_keeps_the_same_rules() {
     model::check(&Behaviors { list: true }, 16, 24);
 }
 
-// Expected (the deep runs' rows, on both kinds): a step that reaches the end, in a batch with a resize, ends at the end
+// Expected (the deep runs' rows, on both kinds, and on a list alone): a step that reaches the end, in a batch with a resize, ends at the end
 // of the new size (seed 17, 2,000 seeds); a step's memory ends once the offset moves, also when it comes back to the
 // offset the step left (seed 7225, 10,000 seeds).
 #[test]
@@ -584,11 +705,72 @@ fn the_deep_runs_rows_hold() {
         ],
         // Seed 35 (2,000 seeds, O-115): `Nearest` for a card taller than the view below the header shows its top.
         vec![Command::Batch { height: 8, by: 1 }, Command::Near(3)],
+        // Seeds 19 and 100 (2,000 seeds, reviews): a step's memory holds across a resize that re-estimates the
+        // items above, and a wheel at the end keeps it.
+        vec![
+            Command::Resize { width: 53, height: 14 },
+            Command::Edge { bottom: true },
+            Command::Step(1),
+            Command::Resize { width: 78, height: 12 },
+            Command::Step(-1),
+        ],
+        vec![
+            Command::Edge { bottom: true },
+            Command::Step(1),
+            Command::Wheel { down: true, steps: 1 },
+            Command::Step(1),
+        ],
     ];
     for list in [false, true] {
         for row in &rows {
             assert_eq!(Behaviors { list }.run(row), None, "list {list}: {row:?}");
         }
+    }
+    // A list's own rows (a scroll keeps no reading position by itself). Seed 32 (2,000 seeds, reviews): a fold keeps
+    // the card at the top while items mount above it. Seed 4: a fold near the end, whose reading lies past it, settles.
+    // Seed 40: a fold above ends a step's memory. Seed 61: a step that the view after it would clamp, as an item it
+    // mounts is shorter than its estimate, lands where it was meant to. Seed 64: a page into an item shorter than
+    // its estimate goes its rows on. Seed 127: a jump through items far off their estimates settles in its frame. Seed
+    // 551: the reading a resize and a step hold reaches the end the new heights give. Seed 707: a step's memory
+    // follows the list's correction from where the step meant to go.
+    let rows = [
+        vec![Command::Resize { width: 75, height: 12 }, Command::Near(8), Command::Review(5), Command::Fold(6)],
+        vec![
+            Command::Review(8),
+            Command::To(6),
+            Command::Resize { width: 40, height: 17 },
+            Command::Wheel { down: true, steps: 3 },
+            Command::Fold(9),
+        ],
+        // A fold above the top moves the offset with the view: a step's memory ends, as on a scroll.
+        vec![Command::To(5), Command::Step(1), Command::Fold(3), Command::Step(-2)],
+        vec![Command::To(8), Command::Review(4), Command::Resize { width: 40, height: 21 }, Command::Step(-1)],
+        vec![Command::Review(5), Command::Step(1), Command::Wheel { down: true, steps: 1 }, Command::Page(250)],
+        vec![
+            Command::Review(1),
+            Command::Edge { bottom: true },
+            Command::Resize { width: 67, height: 18 },
+            Command::Review(3),
+            Command::To(4),
+        ],
+        vec![
+            Command::Resize { width: 77, height: 18 },
+            Command::Review(4),
+            Command::Resize { width: 59, height: 13 },
+            Command::Edge { bottom: true },
+            Command::Batch { height: 18, by: -1 },
+            Command::Step(1),
+        ],
+        vec![
+            Command::Edge { bottom: true },
+            Command::Review(5),
+            Command::Step(-1),
+            Command::Step(-1),
+            Command::Step(-2),
+        ],
+    ];
+    for row in &rows {
+        assert_eq!(Behaviors { list: true }.run(row), None, "{row:?}");
     }
 }
 
@@ -1211,6 +1393,8 @@ struct Shape {
     card_hidden: bool,
     /// Each card is a split row of `L{i}` and `RIGHT{i}`, the first 10 wide.
     split: bool,
+    /// Scroll `s` tells `layout` its top anchor of group `g`.
+    top: bool,
 }
 
 #[derive(Default)]
@@ -1390,7 +1574,7 @@ fn probe_view(cx: &mut v2::View<'_>) -> v2::Node {
             &mut node
         {
             *user_scroll = shape.user_scroll;
-            *notify_top = shape.twin.then(|| "g".to_owned());
+            *notify_top = (shape.twin || shape.top).then(|| "g".to_owned());
         }
         node
     };
@@ -2190,4 +2374,25 @@ fn layout_hears_the_messages_above_the_transcript() {
     let told =
         seen(|seen| seen.geometries.last().and_then(|geometry| geometry.transcript.as_ref().map(|view| view.above)));
     assert_eq!(told, Some(9));
+}
+
+// Expected (review big-boi, work): a key no scroll takes costs a list told about its top anchor the same items visited
+// at 410 cards as at 4,000: the top anchor is found from the item at the top, not from the whole group.
+#[test]
+fn a_quiet_key_visits_the_same_items_at_any_size() {
+    let visits = |count: usize| {
+        let harness = probe(Shape { cards: cards(count, 2), list: true, top: true, ..Shape::default() }, 40, 12);
+        harness.app.render();
+        dispatch(&harness, "p.at", &(count as i32).to_string());
+        settled(&harness);
+        let before = behave::counts();
+        for _ in 0..10 {
+            harness.app.press("f11");
+            harness.app.render();
+        }
+        behave::counts().since(before)
+    };
+    let (small, large) = (visits(410), visits(4000));
+    assert!(small.resolves > 0, "the keys ran no behaviors: {small:?}");
+    assert_eq!(small.visits, large.visits, "{small:?} {large:?}");
 }

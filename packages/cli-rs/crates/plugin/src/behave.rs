@@ -150,7 +150,9 @@ enum Resolve {
 enum Aim {
     /// The node's top this many rows below the viewport's top.
     Row(i32),
-    Nearest(i32),
+    /// The least move from the offset the verb was asked at, below this many rows: the rounds that mount the node
+    /// move the offset on the way, and the move is the user's view of then.
+    Nearest { inset: i32, from: i32 },
 }
 
 /// The behaviors of a mounted tree, found by walking it: its scrolls and lists, and its nodes by id.
@@ -174,6 +176,8 @@ struct Scrolled {
     user_scroll: bool,
     /// A list of items in a row: its offset is horizontal.
     row: bool,
+    /// Where a verb's last move meant to go: a row, or the end (`None`).
+    went: Cell<Option<Option<f64>>>,
 }
 
 impl Scrolled {
@@ -192,8 +196,10 @@ impl Scrolled {
         (if self.row { x } else { y }).round() as i32
     }
 
-    /// Scrolls to `offset` along its axis; the other stays.
+    /// Scrolls to `offset` along its axis; the other stays. An offset at or past the end is the end.
     fn go(&self, offset: i64) {
+        let most = i64::from((self.state().extent - self.state().viewport).max(0));
+        self.went.set(Some((offset < most || most == 0).then(|| offset.clamp(0, most) as f64)));
         let offset = offset.clamp(0, i64::from(i32::MAX)) as f64;
         let (x, y) = self.widget.scroll_position();
         match self.row {
@@ -320,6 +326,7 @@ fn scrolled(widget: &ScrollBox, notify_top: Option<String>, user_scroll: bool, r
         notify_top,
         user_scroll,
         row,
+        went: Cell::new(None),
     }
 }
 
@@ -847,6 +854,7 @@ impl Surface {
         }
         let landed = self.with_index(|index, behave| {
             let scrolled = index.scrolls.get(id)?;
+            scrolled.went.take();
             let state = scrolled.state();
             let (top, viewport, most) =
                 (i64::from(state.offset), i64::from(state.viewport), i64::from(state.extent - state.viewport).max(0));
@@ -859,7 +867,9 @@ impl Surface {
                 Scroll::To { node, align } => {
                     let aim = match align {
                         v2::ScrollAlign::Start => Aim::Row(0),
-                        v2::ScrollAlign::Nearest { inset } => Aim::Nearest(i32::from(*inset)),
+                        v2::ScrollAlign::Nearest { inset } => {
+                            Aim::Nearest { inset: i32::from(*inset), from: state.offset }
+                        }
                         v2::ScrollAlign::Keep => {
                             let (widget, _) = index.nodes.get(node)?;
                             Aim::Row(scrolled.y(widget, &behave.translated)?.saturating_sub(state.offset))
@@ -893,6 +903,7 @@ impl Surface {
                 }
                 Scroll::Edge { edge: Edge::Bottom } => {
                     scrolled.widget.scroll_to_bottom();
+                    scrolled.went.set(Some(None));
                     None
                 }
                 Scroll::Forget => None,
@@ -931,6 +942,10 @@ impl Surface {
                 }
             }
         });
+        // A list holds the reading position from where the move meant to go, not where a solve clamps it.
+        if let Some(went) = self.with_index(|index, _| index.scrolls.get(id)?.went.take()) {
+            self.each_list(id, |list| list.intend(went));
+        }
         arm(self.app());
         landed
     }
@@ -994,16 +1009,17 @@ impl Surface {
         }
     }
 
-    /// The behaviors after a solve: list windows, pending `To`s, chunks near the view, then sticky nodes. Whether it
-    /// changed something it reads, so the solve runs again.
+    /// The behaviors after a solve: list windows, then, once they hold, pending `To`s, chunks near the view and sticky
+    /// nodes. Whether it changed something it reads, so the solve runs again.
     pub(crate) fn resolve(&self) -> bool {
-        let mut changed = self.windows();
-        if changed {
+        // Items mounted or unmounted move what the solve laid out: the rest waits for the next round's solve.
+        if self.windows() {
             self.reindex();
+            return true;
         }
-        changed |= self
+        let (changed, jumped) = self
             .with_index(|index, behave| {
-                let mut changed = false;
+                let (mut changed, mut jumped) = (false, false);
                 let mut scrolls: Vec<(&String, &Scrolled)> = index.scrolls.iter().collect();
                 scrolls.sort_by_key(|(id, _)| *id);
                 for (id, scrolled) in scrolls {
@@ -1035,7 +1051,7 @@ impl Surface {
                         };
                         Resolve::To(match pending.aim {
                             Aim::Row(row) => y.saturating_sub(row),
-                            Aim::Nearest(inset) => nearest(y, height, before, viewport, inset),
+                            Aim::Nearest { inset, from } => nearest(y, height, from, viewport, inset),
                         })
                     });
                     match aim {
@@ -1044,8 +1060,17 @@ impl Surface {
                         Some(Resolve::Unsolved) | None => {}
                     }
                     let top = scrolled.offset();
-                    // A step's memory holds while the offset has not moved: once a solve shows another, it is gone,
-                    // also if the offset comes back later.
+                    // A list that held its reading position moved the offset, not the view; unless the end clamped it.
+                    let (mut shift, mut clamped) = (0.0, false);
+                    self.each_list(id, |list| (shift, clamped) = list.take_shift());
+                    if let Some((_, _, left)) = behave.steps.get_mut(id) {
+                        *left = left.saturating_add(shift.round() as i32);
+                    }
+                    if clamped {
+                        behave.steps.remove(id);
+                    }
+                    // A step's memory holds while the view has not moved: once a solve shows another offset, it is
+                    // gone, also if the offset comes back later.
                     if behave.steps.get(id).is_some_and(|(_, _, left)| *left != top) {
                         behave.steps.remove(id);
                     }
@@ -1059,6 +1084,7 @@ impl Surface {
                         }
                     }
                     changed |= top != before;
+                    jumped |= matches!(aim, Some(Resolve::To(_))) && top != before;
                     let content = scrolled.widget.content_view().rect();
                     for chunked in &scrolled.chunked {
                         let y = (chunked.root().rect().screen_y - content.screen_y).round() as i64;
@@ -1074,9 +1100,13 @@ impl Surface {
                         }
                     }
                 }
-                Some(changed)
+                Some((changed, jumped))
             })
-            .unwrap_or(false);
+            .unwrap_or((false, false));
+        // A jump mounts the items around where it went in its own round, not the next.
+        if jumped && self.windows() {
+            self.reindex();
+        }
         changed
     }
 
