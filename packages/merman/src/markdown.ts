@@ -11,7 +11,7 @@ import {
   type RGBA,
   type StyledText,
 } from "@opentui/core"
-import { MermaidSyntaxError } from "./diagnostics.js"
+import { MermaidSubgraphCycleError, MermaidSyntaxError } from "./diagnostics.js"
 import type { OpenCodeDiagramPalette } from "./palette.js"
 import { DiagramCanvasSizeError } from "./core/canvas.js"
 import { detectMermaidDiagram } from "./detect.js"
@@ -286,6 +286,7 @@ export function createMermaidCodeBlockRenderer(
       if (key) claimLastGood(key, prepared, diagram, lastGood)
       return diagram
     } catch (error) {
+      if (error instanceof MermaidSubgraphCycleError) return undefined
       if (error instanceof MermaidSyntaxError) {
         const previous = key ? lastGood.get(key) : undefined
         if (previous?.kind === kind) {
@@ -309,7 +310,12 @@ export function createMermaidCodeBlockRenderer(
           if (key) claimLastGood(key, prepared, diagram, lastGood)
           return diagram
         } catch (error) {
-          if (error instanceof MermaidSyntaxError || error instanceof DiagramCanvasSizeError) return undefined
+          if (
+            error instanceof MermaidSyntaxError ||
+            error instanceof MermaidSubgraphCycleError ||
+            error instanceof DiagramCanvasSizeError
+          )
+            return undefined
           throw error
         }
       }
