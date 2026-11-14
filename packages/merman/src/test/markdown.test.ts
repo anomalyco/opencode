@@ -473,3 +473,28 @@ gitGraph
   expect(frame).toContain("ship")
   expect(frame).not.toContain("gitGraph")
 })
+
+test("renders a Mermaid class diagram fence inside MarkdownRenderable", async () => {
+  const testRenderer = await setup({ width: 80, height: 20 })
+  const markdown = new MarkdownRenderable(renderer, {
+    id: "markdown-class-mermaid",
+    content: `\`\`\`mermaid
+classDiagram
+  class Animal {
+    +String name
+  }
+  Animal <|-- Duck
+\`\`\``,
+    syntaxStyle,
+    treeSitterClient,
+    renderNode: createMermaidMarkdownRenderer(renderer),
+  })
+
+  renderer.root.add(markdown)
+  await renderMarkdown(markdown, testRenderer.renderOnce)
+
+  const frame = testRenderer.captureCharFrame()
+  expect(frame).toContain("+String name")
+  expect(frame).toContain("△")
+  expect(frame).not.toContain("classDiagram")
+})
