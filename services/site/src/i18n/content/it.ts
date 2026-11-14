@@ -466,7 +466,7 @@ export const content = {
     },
     colors: {
       title: "Colori",
-      body: "Il logo e il logotipo usano un solo inchiostro a tre opacità, con un inchiostro più chiaro per gli sfondi scuri. I valori sotto sono quell'inchiostro su bianco o su #0B0B0B, come nei file standard. Fai clic su un valore per copiarlo.",
+      body: "Il logo e il logotipo usano un solo inchiostro a tre opacità, con un inchiostro più chiaro per gli sfondi scuri. I valori sotto sono i colori nei file standard. Usali solo per il logo e il logotipo, non per altri testi o sfondi. Fai clic su un valore per copiarlo.",
       palettes: {
         light: {
           name: "Chiaro",

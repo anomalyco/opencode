@@ -149,7 +149,7 @@ export const dict = {
   "provider.connect.title": "Lidhni {{provider}}",
   "provider.connect.method.apiKey": "Tasti API",
   "provider.connect.status.inProgress": "Autorizimi në proces…",
-  "provider.connect.status.waiting": "Në pritje të autorizimit…",
+  "provider.connect.status.waiting": "Në pritje të autorizimit",
   "provider.connect.status.failed": "Autorizimi dështoi: {{error}}",
   "provider.connect.apiKey.description":
     "Futni çelësin API të {{provider}} për të lidhur llogarinë dhe për të përdorur modelet {{provider}} në OpenCode.",
@@ -822,7 +822,6 @@ export const dict = {
   "toast.migration.progress.working.progress": "Migrimi i të dhënave {{current}}/{{total}}",
   "command.session.location.cycle": "Ndrysho vendndodhjen e sesionit",
   "dialog.provider.anthropic.note": "Qasje e drejtpërdrejtë te modelet Claude përmes çelësit API",
-  "provider.connect.title.anthropicProMax": "Hyr me Anthropic",
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "Anulo ngarkimin e {{filename}}",
   "prompt.toast.uploadFailed.title": "Ngarkimi dështoi",

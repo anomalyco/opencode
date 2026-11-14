@@ -161,7 +161,7 @@ export const dict = {
   "provider.connect.title": "Tengdu {{provider}}",
   "provider.connect.method.apiKey": "API lykill",
   "provider.connect.status.inProgress": "Heimild í gangi…",
-  "provider.connect.status.waiting": "Bíður eftir heimild…",
+  "provider.connect.status.waiting": "Bíður eftir heimild",
   "provider.connect.status.failed": "Heimild mistókst: {{error}}",
   "provider.connect.apiKey.description":
     "Sláðu inn API-lykilinn þinn fyrir {{provider}} til að tengja reikninginn og nota líkön frá {{provider}} í OpenCode.",
@@ -821,7 +821,6 @@ export const dict = {
   "toast.migration.progress.working.progress": "Flytja gögn {{current}}/{{total}}",
   "command.session.location.cycle": "Skipta um staðsetningu setu",
   "dialog.provider.anthropic.note": "Beinn aðgangur að Claude-líkönum með API-lykli",
-  "provider.connect.title.anthropicProMax": "Skrá inn með Anthropic",
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "Hætta við upphleðslu á {{filename}}",
   "prompt.toast.uploadFailed.title": "Upphleðsla mistókst",

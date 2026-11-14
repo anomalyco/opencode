@@ -324,7 +324,7 @@ export const content = {
     },
     colors: {
       title: "Farger",
-      body: "Logoen og ordmerket bruker én farge i tre opasiteter, med en lysere farge for mørke bakgrunner. Verdiene under er fargen over hvitt eller #0B0B0B, slik standardfilene viser den. Klikk på en verdi for å kopiere den.",
+      body: "Logoen og ordmerket bruker én farge i tre opasiteter, med en lysere farge for mørke bakgrunner. Verdiene under er fargene i standardfilene. Bruk dem bare til logoen og ordmerket, ikke til annen tekst eller bakgrunner. Klikk på en verdi for å kopiere den.",
       palettes: {
         light: {
           name: "Lys",

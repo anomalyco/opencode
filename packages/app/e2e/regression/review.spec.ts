@@ -459,7 +459,7 @@ test("context closes the side region only when its button opened it", async ({ p
   await expect(panel.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
 })
 
-test("context hides free-model cost but keeps paid-model zero cost", async ({ page }) => {
+test("context hides zero cost for Go and free models but keeps paid-model cost", async ({ page }) => {
   const cases = [
     { id: "ses_context_free", title: "Free model", model: "free", cost: 0, usage: false, text: "0" },
     { id: "ses_context_paid", title: "Paid model", model: "paid", cost: 0, usage: false, text: "0·$0.00" },
@@ -468,24 +468,48 @@ test("context hides free-model cost but keeps paid-model zero cost", async ({ pa
     { id: "ses_context_mixed", title: "Previously paid", model: "free", cost: 1.25, usage: true, text: "2k·$1.25" },
     { id: "ses_context_unknown", title: "Unknown pricing", model: "missing", cost: 0, usage: false, text: "0·$0.00" },
     { id: "ses_context_output", title: "Output pricing", model: "output", cost: 0, usage: false, text: "0·$0.00" },
+    {
+      id: "ses_context_go",
+      title: "Covered by Go",
+      providerID: "opencode-go",
+      model: "paid",
+      cost: 0,
+      usage: true,
+      text: "2k",
+    },
+    {
+      id: "ses_context_go_spend",
+      title: "Go with charges",
+      providerID: "opencode-go",
+      model: "paid",
+      cost: 0.38,
+      usage: true,
+      text: "2k·$0.38",
+    },
     // The root's model is free, but its subagent spent on a paid model: the family total shows.
     { id: "ses_context_family", title: "Paid subagent", model: "free", cost: 0, usage: true, text: "2k·$1.25" },
     // A completed compaction resets the context until the next reply reports usage, as in the TUI.
     { id: "ses_context_compacted", title: "Compacted", model: "paid", cost: 1.25, usage: true, text: "0·$1.25" },
   ]
 
+  const catalog = provider(
+    { id: "free", name: "Free", cost: { input: 0, output: 0 } },
+    { id: "paid", name: "Paid", cost: { input: 1, output: 3 } },
+    { id: "output", name: "Output", cost: { input: 0, output: 1 } },
+  )
+
   await openSession(page, {
     name: "ContextPricing",
-    provider: provider(
-      { id: "free", name: "Free", cost: { input: 0, output: 0 } },
-      { id: "paid", name: "Paid", cost: { input: 1, output: 3 } },
-      { id: "output", name: "Output", cost: { input: 0, output: 1 } },
-    ),
+    provider: {
+      ...catalog,
+      all: [...catalog.all, { ...catalog.all[0], id: "opencode-go", name: "OpenCode Go" }],
+      connected: [...catalog.connected, "opencode-go"],
+    },
     sessions: [
       ...cases.map((item) => ({
         id: item.id,
         title: item.title,
-        model: { id: item.model, providerID: "opencode" },
+        model: { id: item.model, providerID: item.providerID ?? "opencode" },
         cost: item.cost,
       })),
       {
@@ -504,7 +528,7 @@ test("context hides free-model cost but keeps paid-model zero cost", async ({ pa
                 id: `msg_${item.id}`,
                 type: "assistant",
                 agent: "build",
-                model: { id: item.model, providerID: "opencode" },
+                model: { id: item.model, providerID: item.providerID ?? "opencode" },
                 tokens: { input: 1500, output: 500, reasoning: 0, cache: { read: 0, write: 0 } },
                 content: [{ type: "text", text: "Done." }],
                 time: { created: 1, completed: 2 },
@@ -533,6 +557,15 @@ test("context hides free-model cost but keeps paid-model zero cost", async ({ pa
     await page.locator("[data-titlebar-tab-slot]", { hasText: item.title }).click()
     await expectSessionTitle(page, item.title)
     await expect(button).toHaveText(item.text)
+
+    if (item.providerID === "opencode-go") {
+      await button.click()
+      const panel = page.locator('[data-slot="session-usage-content"]')
+
+      await expect(panel.getByText("OpenCode Go", { exact: true })).toBeVisible()
+      await expect(panel.getByText("Total Cost", { exact: true })).toBeVisible({ visible: item.cost > 0 })
+      await button.click()
+    }
   }
 })
 

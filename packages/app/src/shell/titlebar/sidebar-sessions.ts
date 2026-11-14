@@ -25,5 +25,5 @@ export function isSidebarSessionActivity(
 
 // Loading a tab refreshes its metadata, not its place in the project list. A newer idle marker means a run ended
 // after the index was fetched, which is the one server change that may move the session. Recency overrides are
-// applied afterward by the shared desktop data layer, which also owns send promotion and the rename guard.
+// applied afterward by the shared desktop data layer, which owns send promotion.
 export const mergeSidebarSessions = mergeHomeSessionIndex

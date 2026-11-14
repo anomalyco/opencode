@@ -373,7 +373,9 @@ function DialogPairing(props: {
 
     if (!value) return
 
-    return renderSVG(value, { border: 4, blackColor: "currentColor", whiteColor: "transparent" })
+    // Scanners expect dark modules on a light quiet zone, so the code keeps black on white in every theme. Following
+    // the theme drew light modules on a dark background, which the Android app's scanner can't read.
+    return renderSVG(value, { border: 4 })
   })
 
   // The QR code's frame, which also holds the setup progress and its failure, so the dialog keeps its size.
@@ -391,7 +393,7 @@ function DialogPairing(props: {
             {(current) => (
               <>
                 <div
-                  class={`${frame} bg-v2-background-bg-base p-6 text-v2-text-text-base [&>svg]:size-full`}
+                  class={`${frame} bg-v2-background-bg-base p-6 [&>svg]:size-full`}
                   role="img"
                   aria-label={ctx.t("qr")}
                   innerHTML={qr()}

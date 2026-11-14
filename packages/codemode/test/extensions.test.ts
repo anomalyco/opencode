@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Context, Effect, Schema } from "effect"
-import { CodeMode, Extension, Tool } from "./lib/index.js"
+import { CodeMode, Extension, Tool } from "../src/index.js"
 
 const held: Array<unknown> = []
 const config = { retries: 3, nested: { deep: true } }

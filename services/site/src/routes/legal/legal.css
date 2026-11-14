@@ -672,7 +672,7 @@
 
 /* Print and Save as PDF: only the document. The site's sidebars, menus, corner controls and the
    page's own buttons go; the text prints black on white at a book size, and each link prints its
-   address after it. */
+   address after it. grey-ok: print, black on white whatever the theme */
 @media print {
   @page {
     margin: 18mm 16mm;
@@ -773,6 +773,7 @@
       }
     }
   }
+  /* grey-ok-end */
 }
 
 /* A document's title is a page title, the size docs and product pages use. The repeated attribute

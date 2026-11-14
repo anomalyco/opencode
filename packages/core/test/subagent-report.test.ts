@@ -153,7 +153,7 @@ describe("SubagentReport settlement", () => {
         {
           payload: {
             text: [
-              `<subagent sessionID="${child}" state="completed" description="Background audit">`,
+              `<subagent sessionID="${child}" state="running" description="Background audit">`,
               "Started tests",
               "",
               "Background work still running:",
@@ -162,6 +162,7 @@ describe("SubagentReport settlement", () => {
               `- subagent (subagent, sessionID: ${active}): ${active}`,
               "</subagent>",
             ].join("\n"),
+            metadata: { state: "completed" },
           },
         },
       ])

@@ -5,8 +5,8 @@
 
 import { Effect } from "effect"
 import { CodeMode } from "../src/index.js"
-import { Interpreter } from "../src/vm/runtime/interpreter.js"
-import { createBuiltins } from "../src/vm/runtime/intrinsics.js"
+import { Interpreter } from "../src/runtime/interpreter.js"
+import { createBuiltins } from "../src/runtime/intrinsics.js"
 import { ToolRuntime } from "../src/tool-runtime.js"
 
 const index = process.argv.indexOf("--iterations")

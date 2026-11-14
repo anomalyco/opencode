@@ -68,7 +68,7 @@ const preloadRules: [string, string, (s: SiteSettings, el: HTMLElement, d: SiteS
   ],
   ["", "data-status-bars", (s) => s.statusBars],
   ["", "data-logo-menu-hover", (s) => s.logoMenuHover],
-  ["", "data-light-bg", (s) => (s.lightBackground === "#ffffff" ? undefined : s.lightBackground.slice(1))],
+  ["", "data-light-bg", (s) => (s.lightBackground === "#fbfbfb" ? undefined : s.lightBackground.slice(1))],
   ["", "data-sidebar", (s) => (s.sidebar === "fifth column" ? "column" : undefined)],
   ['[data-slot="logo"]', "data-variant", (s) => s.logo],
   // The architect print's label case; ?labels= on a legal page overrides it (legal.tsx).

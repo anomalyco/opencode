@@ -596,14 +596,16 @@ with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
       frozen. Functions, symbols, promises, iterators, URL, Headers, and tool references cannot be cloned; without a
       `DOMException`, the failure is a `TypeError` whose message starts with `DataCloneError:`.
 - [x] `TextEncoder` and `TextDecoder` for UTF-8 only: any other label is a `RangeError`. `TextDecoder` accepts the
-      `fatal` and `ignoreBOM` options; `decode` takes a Uint8Array or nothing.
+      `fatal` and `ignoreBOM` options. `decode(chunk, { stream: true })` accepts incremental Uint8Array input;
+      `decode()` flushes the stream.
 - [x] `new Headers()` from records, synchronous iterables of pairs, and Headers, wrapping the host's `Headers`: names
       fold to lowercase, values are normalized and combined, and invalid names or values throw a `TypeError`.
 - [x] Headers `append`, `delete`, `get`, `getSetCookie`, `has`, `set`, `forEach`, `keys`, `values`, `entries`, and
       `[Symbol.iterator]`; iteration is live and sorted by name, with `set-cookie` values kept apart.
 - [x] Headers serialize to a `{ name: value }` object in JSON, in results, and in tool arguments.
 - [ ] `Request`, `Response`, and `Blob`.
-- [ ] `crypto.subtle` and `TextDecoder` streaming or non-UTF-8 encodings.
+- [x] A host-provided streaming fetch response exposes `bodyUsed`, whole-body readers, a default stream reader and `for await` iteration. `arrayBuffer()` crosses as a `Uint8Array`.
+- [ ] `crypto.subtle` and non-UTF-8 `TextDecoder` encodings.
 
 ## Extensions
 
