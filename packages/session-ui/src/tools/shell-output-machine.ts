@@ -146,8 +146,7 @@ export function transitionShellFollower(state: ShellFollowerState, event: ShellF
   const page = event.page
   const advanced = page.cursor > state.cursor
   const cursor = Math.max(state.cursor, page.cursor)
-  const joined = state.output + page.output
-  const output = joined.slice(TextBoundary.tail(joined, joined.length - SHELL_OUTPUT_TAIL_BYTES))
+  const output = TextBoundary.tail(state.output + page.output, SHELL_OUTPUT_TAIL_BYTES)
   const emit = { type: "emit", output } as const
   const attempt = state.attempt + 1
 

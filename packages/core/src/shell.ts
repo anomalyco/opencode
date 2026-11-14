@@ -826,7 +826,7 @@ const layer = () =>
           // Read the byte before the window too, to tell whether the window starts on a line boundary.
           const before = Math.max(0, start - 1)
           const window = yield* readRange(info.file, before, size - before)
-          const page = window.subarray(TextBoundary.utf8Tail(window, start - before)).toString("utf8")
+          const page = TextBoundary.utf8Tail(window, size - start)
           const partial = start > 0 && window[0] !== 10
           const endsWithNewline = page.endsWith("\n")
           const lines = page.split("\n")

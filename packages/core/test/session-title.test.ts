@@ -634,28 +634,26 @@ it.effect("bounds regeneration context while preserving the original request and
   }),
 )
 
-for (const pad of ["", "x"])
-  it.effect(`keeps the clipped regeneration context well formed with ${pad.length} units of padding`, () =>
-    Effect.gen(function* () {
-      yield* enableTitleAgent
-      const sessionID = Session.ID.make(`ses_title_regenerate_emoji_${pad.length}`)
-      yield* insertSession(sessionID, "Original title")
-      // One of the two paddings puts each cut, the original request's head and the recent conversation's tail,
-      // between the halves of an emoji.
-      yield* prompt(sessionID, `${pad}${"😀".repeat(1_500)}`)
-      yield* prompt(sessionID, `${pad}${"😀".repeat(5_000)}`)
+it.effect("keeps the clipped regeneration context well formed", () =>
+  Effect.gen(function* () {
+    yield* enableTitleAgent
+    const sessionID = Session.ID.make("ses_title_regenerate_emoji")
+    yield* insertSession(sessionID, "Original title")
+    // The leading x puts both cuts, the original request's head and the recent conversation's tail, inside an emoji.
+    yield* prompt(sessionID, `x${"😀".repeat(1_500)}`)
+    yield* prompt(sessionID, `x${"😀".repeat(5_000)}`)
 
-      const title = yield* SessionTitle.Service
-      yield* title.generate(sessionID)
+    const title = yield* SessionTitle.Service
+    yield* title.generate(sessionID)
 
-      const content = requests[0]?.messages[0]?.content[0]
-      expect(content?.type).toBe("text")
-      if (content?.type !== "text") return
-      expect(content.text.length).toBeLessThanOrEqual(8_000)
-      expect(content.text.length).toBeGreaterThan(7_900)
-      expect(content.text.isWellFormed()).toBe(true)
-    }),
-  )
+    const content = requests[0]?.messages[0]?.content[0]
+    expect(content?.type).toBe("text")
+    if (content?.type !== "text") return
+    expect(content.text.length).toBeLessThanOrEqual(8_000)
+    expect(content.text.length).toBeGreaterThan(7_900)
+    expect(content.text.isWellFormed()).toBe(true)
+  }),
+)
 
 for (const [prefix, stored] of [
   [95, `${"a".repeat(95)}😀...`],

@@ -376,7 +376,7 @@ const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput, sep =
 }
 
 const clampLine = (line: string) =>
-  line.length <= MAX_LINE_LENGTH ? line : line.slice(0, TextBoundary.head(line, MAX_LINE_LENGTH)) + MAX_LINE_SUFFIX
+  line.length <= MAX_LINE_LENGTH ? line : TextBoundary.head(line, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX
 
 const layer = Layer.effect(
   Service,

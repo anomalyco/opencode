@@ -125,11 +125,7 @@ const layer = Layer.effect(
             ChildProcess.make(yield* binary.filepath, input.args, { cwd: input.cwd, extendEnv: true, stdin: "ignore" }),
           )
           const stderrFiber = yield* collectStream(handle.stderr, ERROR_BYTES).pipe(
-            Effect.map((output) =>
-              output.buffer
-                .subarray(0, output.truncated ? TextBoundary.utf8Head(output.buffer, ERROR_BYTES) : undefined)
-                .toString("utf8"),
-            ),
+            Effect.map((output) => output.buffer.toString("utf8")),
             Effect.forkScoped,
           )
           let observed = 0
@@ -257,8 +253,7 @@ const layer = Layer.effect(
                     lines: {
                       text:
                         match.data.lines.text.length > MAX_LINE_CHARS
-                          ? match.data.lines.text.slice(0, TextBoundary.head(match.data.lines.text, MAX_LINE_CHARS)) +
-                            "..."
+                          ? TextBoundary.head(match.data.lines.text, MAX_LINE_CHARS) + "..."
                           : match.data.lines.text,
                     },
                     path: { text: normalizePath(match.data.path.text) },
