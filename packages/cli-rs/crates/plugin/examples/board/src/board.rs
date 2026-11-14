@@ -6,8 +6,8 @@
 //! and start threads: one that floods the mailbox, waiting on `Full`, and one that panics. Keys of the route (P2) bump
 //! a card, pass a key on to the plugin's own global layer, set a mode in which the same key bumps another card, and
 //! panic; the header lists the keys the handlers heard, each with the mode the handler read. A panel beside a session,
-//! `notes`, focuses its pad, reads where the focus is and the pad's place, holds a key and releases it, and opens an
-//! overlay under its pad; a select lists the cards a search finds.
+//! `notes`, focuses its pad, reads where the focus is and the pad's place, holds a key and releases it, opens an
+//! overlay under its pad, and gives the focus back; a select lists the cards a search finds.
 //!
 //! Its `files` route is P3's: a windowed list of files whose estimates are not their heights, each an anchor of group
 //! `file` with its hunks in group `hunk`. Commands bring a file to the top, step between hunks and show a file with
@@ -233,6 +233,7 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
     setup.command(command("board.notes"), |host, _| {
         host.open_panel(OpenPanel { surface: "notes".into(), session: None, fullscreen: false });
     });
+    setup.command(command("board.unnotes"), |host, _| host.close_panel("notes"));
     setup.search("cards", |_, query, options| {
         options.iter().filter(|option| option.title.contains(query)).map(|option| option.value.clone()).collect()
     });
@@ -247,7 +248,7 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
         Bind::new("r", "rect"),
         Bind { hold: true, ..Bind::new("k", "hold") },
         Bind::new("v", "menu"),
-        Bind::new("q", "close"),
+        Bind::new("b", "blur"),
     ];
     let (heard, viewed) = (board.clone(), board.clone());
     let surface = v2::Surface::new("notes", v2::Place::Panel("notes".into()), move |cx| {
@@ -257,7 +258,11 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
             .with_id("pad")
             .interact(Interact { focusable: true, ..Interact::default() });
         v2::Node::column(vec![
-            v2::Node::text(vec![Span::new(format!("notes focused={}", panel.focused))]),
+            v2::Node::text(vec![Span::new(format!(
+                "notes focused={} at {}",
+                panel.focused,
+                cx.read.focused().node.unwrap_or_default()
+            ))]),
             v2::Node::text(vec![Span::new(format!("heard {keys}"))]),
             pad,
         ])
@@ -269,7 +274,9 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
             Event::Key(key) => match key.bind.as_deref().unwrap_or_default() {
                 "focus" => host.focus("pad"),
                 "where" => heard(format!("where:{}", host.focused().node.unwrap_or_default())),
-                "rect" => heard(format!("rect:{:?}", host.rect("pad").map(|rect| (rect.width, rect.height)))),
+                "rect" => heard(
+                    host.rect("pad").map_or("rect:-".to_owned(), |rect| format!("rect:{}x{}", rect.width, rect.height)),
+                ),
                 "hold" => {
                     heard("hold".to_owned());
                     host.release_keys();
@@ -280,7 +287,7 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
                     width: 12,
                     height: 2,
                 }),
-                "close" => host.close_panel("notes"),
+                "blur" => host.blur(),
                 _ => return Handled::Pass,
             },
             Event::Closed { surface } => heard(format!("closed:{surface}")),
