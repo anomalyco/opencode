@@ -83,6 +83,12 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(command("input.focus"), |host, input| host.focus(input.unwrap_or("a")));
     // Changes nothing: the plugin's surfaces draw again after it, with what the probe says now.
     setup.command(command("input.redraw"), |_, _| {});
+    // The geometry and focus reads, as a command makes them: of the plugin's mount that holds the node.
+    setup.command(command("input.where"), |host, _| {
+        let rect = host.rect("a");
+        let focused = host.focused();
+        probe(|probe| probe.log.push(format!("where {rect:?} {focused:?}")));
+    });
     // The rich select: its rows follow the probe's `rows`, and it is shown again under its key as they change.
     setup.command(command("input.select"), |host, _| host.dialog(abi::Dialog::Select(select())));
     setup.command(command("input.reselect"), |host, _| {
@@ -755,4 +761,22 @@ fn a_box_that_gains_pointer_events_gets_them() {
     settle(&harness);
     let log: Vec<String> = taken().into_iter().filter(|line| !line.contains("hover")).collect();
     assert_eq!(log, ["side: Down b 1,0 [-]", "side: Up b 1,0 [-]"]);
+}
+
+// Expected (synchronous geometry reads): a call reads where a node of the plugin's mount is, as the last settled frame
+// laid it out, and which of its nodes has the focus.
+#[test]
+fn a_call_reads_the_geometry_and_the_focus_of_its_mount() {
+    let harness = open();
+    run(&harness, "input.where", None);
+    assert_eq!(taken(), ["where None Focused { node: None, surface: false }"]);
+    run(&harness, "input.panel", None);
+    let (x, y) = support::at(&harness.app.text(), "AAAA").unwrap();
+    run(&harness, "input.focus", Some("a"));
+    run(&harness, "input.where", None);
+    let rect = input::Rect { x: i32::from(x), y: i32::from(y), width: 0, height: 1 };
+    let [line] = taken().try_into().unwrap();
+    let expected = format!("Rect {{ x: {}, y: {}, width: ", rect.x, rect.y);
+    assert!(line.starts_with(&format!("where Some({expected}")), "{line}");
+    assert!(line.ends_with("height: 1 }) Focused { node: Some(\"a\"), surface: true }"), "{line}");
 }
