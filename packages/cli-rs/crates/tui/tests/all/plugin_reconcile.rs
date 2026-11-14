@@ -1227,23 +1227,23 @@ fn a_keyed_scroll_keeps_its_offset_and_its_focus() {
 }
 
 // Expected: a scroll that follows its end shows the rows appended to it, as its own scroll box does; one that does not
-// stays at the top.
+// stays at the top. Each starts out the other way, so the change is made in place.
 #[test]
 fn a_following_scroll_shows_appended_rows() {
     for follow in [true, false] {
         let host = host(0);
         let parent = root(&host);
         let mut tree = Tree::default();
-        let tree_of = |rows: usize| {
+        let tree_of = |rows: usize, follow: bool| {
             let mut scroll = rows_scroll(rows, 3, abi::Layout::default());
             if let v2::Node::Scroll { follow: following, .. } = &mut scroll {
                 *following = follow;
             }
             vec![scroll]
         };
-        apply(&host, &mut tree, &parent, &tree_of(2)).unwrap();
+        apply(&host, &mut tree, &parent, &tree_of(2, !follow)).unwrap();
         host.app.render();
-        apply(&host, &mut tree, &parent, &tree_of(10)).unwrap();
+        apply(&host, &mut tree, &parent, &tree_of(10, follow)).unwrap();
         host.app.render();
         let top = top_row(&host);
         assert_eq!(top, if follow { "row 7" } else { "row 0" }, "follow={follow}");

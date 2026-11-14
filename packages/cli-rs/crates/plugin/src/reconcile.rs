@@ -160,13 +160,11 @@ pub struct Tree {
     slots_changed: bool,
 }
 
-/// What the tree holds under an id: the nearest ancestor with an id, the layout levels its subtree takes, and its
-/// kind.
+/// What the tree holds under an id: the nearest ancestor with an id, and the layout levels its subtree takes.
 #[derive(Clone, Debug)]
 struct Held {
     above: Option<String>,
     depth: u16,
-    kind: std::mem::Discriminant<Node>,
 }
 
 struct Mounted {
@@ -203,7 +201,7 @@ enum Extra {
 }
 
 /// The ids of the tree before that a tree being adopted holds again: the ones it keeps, and the ones it has a node
-/// of the same kind for.
+/// for.
 struct Plan {
     keeps: HashSet<String>,
     moves: HashSet<String>,
@@ -367,7 +365,8 @@ impl Tree {
                         if !self.ids.insert(id) || self.keeps.contains(id) {
                             return Err(Refused::Duplicate(id.to_owned()));
                         }
-                        if self.tree.ids.get(id).is_some_and(|held| held.kind == std::mem::discriminant(node)) {
+                        // A node of another kind under the id is built new where the subtree is reconciled.
+                        if self.tree.ids.contains_key(id) {
                             self.moves.insert(id);
                         }
                     }
@@ -453,8 +452,7 @@ fn collect_ids(nodes: &[Mounted], above: Option<&str>, ids: &mut HashMap<String,
         let id = node.node.id();
         let depth = weight(&node.node) + collect_ids(&node.children, id.or(above), ids);
         if let Some(id) = id {
-            let kind = std::mem::discriminant(&node.node);
-            ids.insert(id.to_owned(), Held { above: above.map(str::to_owned), depth, kind });
+            ids.insert(id.to_owned(), Held { above: above.map(str::to_owned), depth });
         }
         deepest = deepest.max(depth);
     }
