@@ -4,7 +4,7 @@ use std::process::Command;
 use std::rc::Rc;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use opentui::keymap::RunResult;
 use opentui::testing::Capture;
@@ -2664,4 +2664,62 @@ fn a_failed_plugin_gives_way_to_the_host() {
         assert!(!fence.contains("PLUGIN FENCE") && fence.contains("body"), "{case}: {fence}");
         assert!(registry.route(&*host, "replacer", "page").is_none(), "{case}");
     }
+}
+
+thread_local! {
+    /// The clock the monitor of [`a_builtin_is_timed_and_its_overrun_fails_nothing`] reads.
+    static TIMED_NOW: std::cell::Cell<Duration> = const { std::cell::Cell::new(Duration::ZERO) };
+    /// The record of that test, and the calls its plugin found named in it.
+    static TIMED_RECORD: RefCell<Option<Arc<crate::contain::Record>>> = const { RefCell::new(None) };
+    static TIMED_SEEN: RefCell<Vec<&'static str>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Logs the call the record names.
+fn timed_seen() {
+    let kind = TIMED_RECORD.with_borrow(|record| {
+        let running = record.as_ref()?.running()?;
+        crate::contain::record::KINDS.get(usize::from(running.kind)).copied()
+    });
+    TIMED_SEEN.with_borrow_mut(|seen| seen.push(kind.unwrap_or("nothing")));
+}
+
+/// A built-in whose command takes 150 ms on the injected clock.
+fn timed(setup: &mut abi::Setup) -> Result<(), String> {
+    timed_seen();
+    let command = abi::Command { name: "timed.slow".into(), title: "slow".into(), ..abi::Command::default() };
+    setup.command(command, |_, _| {
+        timed_seen();
+        TIMED_NOW.set(TIMED_NOW.get() + Duration::from_millis(150));
+    });
+    setup.on_dispose(|_| timed_seen());
+    Ok(())
+}
+
+// Expected (synthesis 4.4; bigboi, carbon 8): a built-in's setup, calls and dispose are timed and named in the
+// record; its overrun is a host bug, counted for the performance gate, and fails nothing.
+#[test]
+fn a_builtin_is_timed_and_its_overrun_fails_nothing() {
+    let host = host();
+    let dir = opencode_util::temp::tempdir().unwrap();
+    let record = Arc::new(crate::contain::Record::create(dir.path()).unwrap());
+    TIMED_RECORD.set(Some(record.clone()));
+    TIMED_SEEN.take();
+    let registry = Registry::define(Vec::new(), []);
+    registry.monitor().attach(record).unwrap();
+    let base = Instant::now();
+    registry.monitor().set_clock(move || base + TIMED_NOW.get());
+    registry.add(abi::Plugin { id: "timed", setup: timed });
+    registry.activate(&dynamic(&host));
+    // The first call after setup is exempt; the second overruns.
+    for _ in 0..2 {
+        host.keymap().dispatch("timed.slow", None);
+    }
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(registry.monitor().host_overruns(), 1);
+    assert!(registry.monitor().load("timed").1.is_some(), "setup is timed");
+    let status = |registry: &Registry| registry.entries().into_iter().find(|entry| entry.id == "timed").unwrap().status;
+    assert_eq!(status(&registry), Status::Active);
+    registry.toggle(&dynamic(&host), "timed", false);
+    assert_eq!(TIMED_SEEN.take(), ["setup", "run-command", "run-command", "dispose"]);
+    TIMED_RECORD.set(None);
 }

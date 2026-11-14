@@ -27,13 +27,14 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use opencode_plugin::abi;
-use opencode_plugin::contain::{Crash, Handoff, Record, Snapshot, record};
+use opencode_plugin::contain::{Artifact, Crash, Handoff, Record, Snapshot, record};
 use opencode_plugin::loader::native::loopback_described;
 use opencode_plugin::loader::{Backend, Loader, entry_file};
 use opencode_plugin::{Definition, ErrorFn, Host, Status};
 use opencode_tui::plugins::contain::Contain;
 use opencode_tui::plugins::host::host;
 use opencode_tui::{Args, Deps, Route};
+use opencode_ui::toast::ToastOptions;
 use opentui::keymap::RunResult;
 use opentui::prelude::*;
 use opentui::testing::{Capture, TestApp};
@@ -200,7 +201,10 @@ fn builds() -> opencode_util::temp::TempDir {
 struct World {
     harness: Harness,
     current: Current,
-    _loader: Loader,
+    /// The toasts shown as it started.
+    opened: Vec<ToastOptions>,
+    /// Stands in for the TUI's own loader, which `PluginsChanged` reconciles.
+    loader: Loader,
     _root: opencode_util::temp::TempDir,
 }
 
@@ -208,13 +212,15 @@ impl World {
     fn open(world: usize) -> Self {
         let root = builds();
         let record = Arc::new(Record::create(root.path()).unwrap());
-        Self::mount(world, root, record)
+        Self::mount(world, root, record, false)
     }
 
-    /// A TUI on home with the plugins of `root` and `record`, which a parent made for it.
-    fn mount(world: usize, root: opencode_util::temp::TempDir, record: Arc<Record>) -> Self {
+    /// A TUI on home with the plugins of `root` and `record`, which a parent made for it; with `state`, it keeps its
+    /// state in `root`, as a real run does.
+    fn mount(world: usize, root: opencode_util::temp::TempDir, record: Arc<Record>, state: bool) -> Self {
         let config = root.path().join("config");
-        let deps = Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) };
+        let roots = state.then(|| support::roots(support::home_paths(&root.path().join("home")), "test")).flatten();
+        let deps = Deps { route: Route::Home, roots, ..support::deps(Arc::new(support::empty())) };
         let contain = Contain { record: Some(record), ..Contain::default() };
         let harness = support::mount_on(TestApp::new(100, 24), deps, Args { contain, ..Args::default() });
         let monitor = harness.tui.plugins.monitor().clone();
@@ -231,8 +237,8 @@ impl World {
         CURRENT.set(Some(current.clone()));
         let loader = Loader::new(Rc::new(Builds), config, root.path().to_path_buf(), Vec::new());
         loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
-        let world = Self { harness, current, _loader: loader, _root: root };
-        world.settle();
+        let mut world = Self { harness, current, opened: Vec::new(), loader, _root: root };
+        world.opened = world.drain();
         world
     }
 
@@ -285,12 +291,17 @@ impl World {
 
     /// Runs what the command queued and drains the toasts; returns their titles.
     fn settle(&self) -> Vec<String> {
+        self.drain().into_iter().map(|toast| toast.title.unwrap_or(toast.message)).collect()
+    }
+
+    /// Runs what the command queued and drains the toasts.
+    fn drain(&self) -> Vec<ToastOptions> {
         self.enter();
         let (app, tui) = (&self.harness.app, &self.harness.tui);
         app.advance(Duration::from_millis(1));
         let mut toasts = Vec::new();
         while let Some(toast) = tui.toasts.current() {
-            toasts.push(toast.title.unwrap_or(toast.message));
+            toasts.push(toast);
             tui.toasts.dismiss();
         }
         app.advance(Duration::from_millis(1));
@@ -628,6 +639,7 @@ fn the_oracles_can_fail() {
     LOG.take();
     LAG.set(false);
     let world = World::open(0);
+    assert!(world.opened.is_empty());
     ARMED.set(Some((Fault::Panic, Kind::Command)));
     world.apply(Command::Run(A));
     assert_eq!(world.settle(), ["Plugin failed: model.a"]);
@@ -662,7 +674,73 @@ fn restarted(snapshot: Option<Snapshot>) -> World {
     if let Some(snapshot) = &snapshot {
         record.publish(snapshot);
     }
-    World::mount(0, root, record)
+    World::mount(0, root, record, false)
+}
+
+/// A client a parent started after `crash`, with its state in `root`.
+fn after(root: opencode_util::temp::TempDir, crash: Crash) -> World {
+    let record = Arc::new(Record::create(root.path()).unwrap());
+    record.set_handoff(&Handoff { crash: Some(crash), safe: false });
+    World::mount(0, root, record, true)
+}
+
+/// The crash list in the state directory of `world`.
+fn crash_list(world: &World) -> serde_json::Value {
+    let file = world.harness.tui.state_dir().expect("a state directory").join("plugin-crashes.json");
+    serde_json::from_slice(&std::fs::read(file).unwrap_or_else(|_| b"[]".to_vec())).unwrap()
+}
+
+// Expected (synthesis 4.5; bigboi 1, carbon 8): a client started after `model.a`'s build crashed in a render never
+// opens it: it is listed failed with the call, the crash list on disk holds the build, and one toast says so. Its
+// Enable again loads it, ends the entry on disk, and the next client loads it too.
+#[test]
+fn a_crash_holds_the_build_until_its_toast_enables_it() {
+    LOG.take();
+    let root = builds();
+    let target = root.path().join("config").join("plugins").join("a").to_string_lossy().into_owned();
+    // The digest the loader gives build `[A]`, read off a client that loaded it.
+    let probe = World::open(0);
+    let digest = (0..record::NAMES as u16)
+        .find_map(|slot| probe.current.record.named(slot).filter(|artifact| artifact.id == "model.a"))
+        .and_then(|artifact| artifact.digest)
+        .expect("model.a is named");
+    drop(probe);
+    take_calls();
+    let crash = Crash {
+        artifact: Some(Artifact::external("model.a", &target, &digest)),
+        call: Some("render-slot".to_owned()),
+        hang: false,
+    };
+    let world = after(root, crash);
+    assert!(take_calls().iter().all(|call| call.plugin != A), "the build that crashed ran");
+    let reason = "crashed the client in `render-slot` and is disabled";
+    assert_eq!(world.status(A), Some(Status::Failed(reason.to_owned())));
+    assert_eq!(crash_list(&world).as_array().map(Vec::len), Some(1));
+    let toast = world.opened.iter().find(|toast| toast.title.as_deref() == Some("Plugin failed: model.a")).unwrap();
+    assert_eq!(world.opened.len(), 1);
+    let action = toast.action.clone().expect("Enable again");
+    assert_eq!(action.label, "Enable again");
+    (action.run)();
+    world.settle();
+    world.loader.reconcile(&host(&world.harness.tui), &world.harness.tui.plugins);
+    world.settle();
+    assert_eq!(world.status(A), Some(Status::Active));
+    assert!(take_calls().iter().any(|call| call.plugin == A && call.kind == Kind::Setup));
+    assert_eq!(crash_list(&world), serde_json::json!([]));
+}
+
+// Expected (carbon 8): a crash the record pins on a built-in is told as a bug of opencode-native, and nothing is held.
+#[test]
+fn a_crash_in_a_builtin_is_told_as_a_host_bug() {
+    LOG.take();
+    let crash =
+        Crash { artifact: Some(Artifact::builtin("opencode.home")), call: Some("render-slot".to_owned()), hang: false };
+    let world = after(builds(), crash);
+    let titles: Vec<_> = world.opened.iter().filter_map(|toast| toast.title.clone()).collect();
+    assert_eq!(titles, ["Built-in plugin failed: opencode.home"]);
+    assert_eq!(crash_list(&world), serde_json::json!([]));
+    assert_eq!((world.status(A), world.status(B)), (Some(Status::Active), Some(Status::Active)));
+    take_calls();
 }
 
 // Expected (bigboi 8, carbon 2): a client started after a crash shows the draft it was handed and holds it in its own

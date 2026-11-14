@@ -19,8 +19,9 @@ export default definePty({
     { until: { screen: /crashed the client in `render-slot`[\s\S]*fault plugin c/ }, settle: 500, timeout: 20_000 },
     { keys: "\x1b", settle: 300 },
     ...palette("Fault B in render: segv"),
+    // The third client holds both: `example.fault` by the crash list, `example.fault.b` by the handoff.
     {
-      until: { screen: /^(?![\s\S]*fault plugin b)(?=[\s\S]*example\.fault\.b)[\s\S]*fault plugin c/ },
+      until: { screen: /^(?![\s\S]*fault plugin(?! c))(?=[\s\S]*example\.fault\.b)[\s\S]*fault plugin c/ },
       settle: 500,
       timeout: 20_000,
     },
