@@ -10,7 +10,7 @@ use opencode_local::cli_config::{CliConfig, Info, Resolved, ThemeMode as ConfigM
 use opencode_local::paths::Paths;
 use opencode_local::storage::Storage;
 use opencode_store::{Data, Options};
-use opencode_ui::dialog::{DialogKeymap, Dialogs, route_keys};
+use opencode_ui::dialog::{DialogKeymap, Dialogs, focus_path};
 use opencode_ui::keymap::{COMMAND_PALETTE_COMMAND, Keybinds, Slash};
 use opencode_ui::theme::{Effect, ModeSetting, TerminalColors, ThemeMode, ThemeState, ThemeStateOptions};
 use opencode_ui::toast::Toasts;
@@ -59,6 +59,10 @@ pub struct Launch {
 /// The shared context. Held as `Rc<Tui>`; widget callbacks keep a [`Weak`].
 pub struct Tui {
     pub app: App,
+    /// The plugins' key layers, listeners, modes, captures and overlays (P2).
+    pub router: opencode_plugin::interact::Router,
+    /// Where the plugins' overlays show: over the routes, under the dialogs.
+    pub plugin_overlays: View,
     pub data: Data,
     pub keymap: Rc<DialogKeymap>,
     pub dialogs: Dialogs,
@@ -468,6 +472,13 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     app.root().add(&shell);
     let toasts = Toasts::new(app, page.clone(), &shell);
     let dialogs = Dialogs::new(app, keymap.clone(), page.clone());
+    let plugin_overlays = View::new(app)
+        .absolute()
+        .z_index(2500)
+        .width(Length::percent(100.0))
+        .height(Length::percent(100.0))
+        .visible(false);
+    app.root().add(&plugin_overlays);
     let local_files = deps.roots.as_ref().map(|roots| crate::local::Files {
         state: roots.paths.state.clone(),
         storage: files.as_ref().and_then(|files| files.storage.clone()),
@@ -479,6 +490,8 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     let tui = Rc::new_cyclic(|this: &Weak<Tui>| Tui {
         local: crate::local::Local::new(app, data.clone(), dialogs.clone(), toasts.clone(), local_files, this.clone()),
         app: app.clone(),
+        router: Default::default(),
+        plugin_overlays,
         data,
         keymap,
         dialogs,
@@ -620,13 +633,33 @@ pub fn run_on(app: App, launch: Launch, started: impl FnOnce(&Rc<Tui>) -> opentu
     Ok(())
 }
 
+/// Sends keys to the keymap before any widget, as `opencode_ui::dialog::route_keys` does, with the plugins' rules
+/// (synthesis 3.8): a mode the host ended goes before the key is routed, and what a plugin's handler asked for (an
+/// edit of the composer, a mode, a focus) applies before the next key of the same batch.
+fn route_keys(tui: &Rc<Tui>) {
+    let weak = tui.weak();
+    tui.app.on_key_capture(move |cx, key| {
+        let Some(tui) = weak.upgrade() else { return };
+        tui.router.prune();
+        tui.keymap.keymap().set_focus(focus_path(cx.app()));
+        let result = tui.keymap.handle_key(key);
+        if result.prevent_default {
+            cx.prevent_default();
+        }
+        if result.handled || result.stop_propagation {
+            cx.stop_propagation();
+        }
+        opencode_plugin::flush();
+    });
+}
+
 fn install_keys(tui: &Rc<Tui>) {
     // Console copy, then the selection keys, go before the keymap (E.20).
     crate::features::console_copy::install(tui);
     crate::features::selection::install(tui);
     // A focused terminal takes keys before the keymap (E.13a).
     crate::terminal::install_keys(tui);
-    route_keys(&tui.app, tui.keymap.clone());
+    route_keys(tui);
     // The leader sequence expires on a timer (`leader.timeout`).
     let weak = tui.weak();
     let timer = Rc::new(Cell::new(None::<TimerId>));

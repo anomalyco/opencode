@@ -7,6 +7,7 @@ mod activation;
 pub mod behave;
 pub mod canvas;
 pub mod contain;
+pub mod interact;
 mod list;
 pub mod loader;
 pub mod mailbox;
@@ -219,6 +220,35 @@ pub trait Host: 'static {
     fn local_revision(&self) -> Option<u64> {
         None
     }
+
+    // Contract 2.0's input and surfaces (P2, [`interact`]).
+
+    /// The input registrations of the plugins; without one, a host routes no plugin input.
+    fn router(&self) -> Option<&interact::Router> {
+        None
+    }
+    /// Whether the composer has the focus.
+    fn composer_focused(&self) -> bool {
+        false
+    }
+    /// Gives the composer the focus, as when a plugin's surface that had it goes.
+    fn focus_composer(&self) {}
+    /// Whether a dialog of the host is on screen, which ends a plugin's pointer capture.
+    fn modal_open(&self) -> bool {
+        false
+    }
+    /// The layer the plugins' overlays show in: over the routes, under the host's dialogs.
+    fn overlay_layer(&self) -> Option<View> {
+        None
+    }
+    /// Opens plugin `id`'s panel surface. Called outside every plugin callback.
+    fn open_panel(&self, _id: &str, _open: &abi::interact::OpenPanel) {}
+    /// Closes plugin `id`'s panel `surface`, if it shows. Called outside every plugin callback.
+    fn close_panel(&self, _id: &str, _surface: &str) {}
+    /// How plugin `id`'s panel `surface` shows now, if it does.
+    fn panel_input(&self, _id: &str, _surface: &str) -> Option<abi::interact::PanelInput> {
+        None
+    }
 }
 
 /// What a host request of a plugin calls with its result on the UI thread: a fetch's or a program's.
@@ -246,6 +276,7 @@ impl Claimed for View {
 type ClaimRender = Rc<dyn Fn(&dyn Host, &SlotInput) -> Box<dyn Claimed>>;
 type Claim = Box<dyn Claimed>;
 type RouteRender = Rc<dyn Fn(&dyn Host) -> Box<dyn Claimed>>;
+type PanelRender = Rc<dyn Fn(&dyn Host, &View) -> Box<dyn Any>>;
 type SetupFn = Rc<dyn Fn(&mut Setup<'_>) -> Result<(), String>>;
 /// The current failure of an external plugin, if any.
 pub type ErrorFn = Rc<dyn Fn() -> Option<String>>;
@@ -372,7 +403,11 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             mount: RefCell::default(),
             monitor: setup.monitor.clone(),
             slot: setup.monitor.slot(&setup.artifact()),
+            current: RefCell::default(),
+            input: interact::Owner::activation(setup.id(), Rc::downgrade(setup.host())),
+            overlays: RefCell::default(),
         });
+        activation.own(&scope.input);
         let mut api = abi::Registered::new(setup.id(), None);
         api.set_waker(activation.waker());
         api.set_link(mailbox);
@@ -514,10 +549,22 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             });
             setup.view_route(name, render, route::commands(&scoped, name), mount, &activation);
         }
+        // The layers of setup are the plugin's, each with its own handler.
+        for (layer, handler) in api.layers() {
+            let deliver = scope.deliver(handler.clone());
+            scope.input.register(&**setup.host(), std::slice::from_ref(layer), &deliver);
+        }
         for surface in api.surfaces() {
             let called = scope.clone();
-            let call: surface::Call =
-                Rc::new(move |export, host, view| called.call(export, host, |read| view(read)).is_some());
+            let call: surface::Call = Rc::new(move |export, host, owner, view| {
+                called.call_as(owner, export, host, |read| view(read)).is_some()
+            });
+            let input = Rc::new(surface::Input {
+                plugin: setup.id().to_owned(),
+                deliver: surface.handler.clone().map(|handler| scope.deliver(handler)),
+                layers: surface.layers.clone(),
+                panel: matches!(surface.place, abi::v2::Place::Panel(_)),
+            });
             let failing = scope.clone();
             let fail: surface::Fail = Rc::new(move |error| {
                 let revoked = failing.revoked.take();
@@ -530,7 +577,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                     .filter(|(command, _)| matches!(&command.scope, abi::Scope::Route(route) if route == name))
                     .map(|(command, run)| (command.clone(), run.clone()))
                     .collect(),
-                abi::v2::Place::Slot(_) => Vec::new(),
+                abi::v2::Place::Slot(_) | abi::v2::Place::Panel(_) | abi::v2::Place::Overlay(_) => Vec::new(),
             };
             // P3: `layout` and the scroll handler run as calls of the plugin, as its view does.
             let laying = scope.clone();
@@ -567,14 +614,43 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                     })
                     .collect()
             });
-            let viewer = Rc::new(surface::Linked::new(surface.view.clone(), surface.draw.clone(), call));
+            let viewer: Rc<dyn surface::Viewer> =
+                Rc::new(surface::Linked::new(surface.view.clone(), surface.draw.clone(), call));
             let place = surface::Place {
                 name: surface.name.clone(),
                 at: surface.place.clone(),
                 palette: surface.palette,
                 notify: surface.notify.clone(),
             };
-            setup.surface(place, viewer, commands, fail, calls, &activation);
+            if let abi::v2::Place::Overlay(name) = &surface.place {
+                let (place, owner, activation) = (place.clone(), Rc::downgrade(setup.host()), activation.clone());
+                let (viewer, plugin): (_, Rc<str>) = (viewer.clone(), Rc::from(setup.id()));
+                let open: OverlayFn = Rc::new(move |host: &dyn Host, frame: &View| {
+                    let mounted = surface::Surface::new(
+                        host,
+                        owner.clone(),
+                        plugin.clone(),
+                        &place,
+                        (&place.name, ""),
+                        &SlotInput::default(),
+                        Rc::new(()),
+                        viewer.clone(),
+                        fail.clone(),
+                        calls.clone(),
+                        input.clone(),
+                    );
+                    activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
+                    if let Some(holder) = mounted.holder() {
+                        holder.hold_in(frame.clone());
+                        activation.own(&holder);
+                    }
+                    frame.add(&mounted.root());
+                    Some(Box::new(mounted) as Box<dyn Any>)
+                });
+                scope.overlays.borrow_mut().push((name.clone(), open));
+                continue;
+            }
+            setup.surface(place, viewer, commands, fail, calls, &activation, input);
         }
         // Disposal removes the plugin's commands, runs its dispose callbacks, then drops its replies and wakes.
         setup.on_dispose(move || scope.dispose(&mut api));
@@ -631,7 +707,16 @@ struct Scope {
     mount: RefCell<Option<Weak<()>>>,
     monitor: Rc<contain::Monitor>,
     slot: contain::Slot,
+    /// The input owner of the running call: a mount's while its view or handler runs (P2); else [`Scope::input`].
+    current: RefCell<Option<Rc<interact::Owner>>>,
+    /// The activation's own input owner: the layers of its setup, and what a command asks for.
+    input: Rc<interact::Owner>,
+    /// The plugin's overlay surfaces, by name, each mounting into the frame the host gives it.
+    overlays: RefCell<Vec<(String, OverlayFn)>>,
 }
+
+/// Mounts an overlay surface into its frame.
+type OverlayFn = Rc<dyn Fn(&dyn Host, &View) -> Option<Box<dyn Any>>>;
 
 /// What one call of an in-process plugin asked for: the effects that wait for it to return, the storage it wrote, and
 /// what its verbs staged.
@@ -712,6 +797,49 @@ impl Scope {
         if self.call(export, &*host, handler).is_some() {
             self.activation.invalidate();
         }
+    }
+
+    /// [`Scope::call`] for a call of `owner`, a mount: what it reads and asks of the input is that mount's.
+    fn call_as<R>(
+        self: &Rc<Self>,
+        owner: &Rc<interact::Owner>,
+        export: &'static str,
+        host: &dyn Host,
+        f: impl FnOnce(&Scoped<'_>) -> R,
+    ) -> Option<R> {
+        let outer = self.current.replace(Some(owner.clone()));
+        let result = self.call(export, host, f);
+        *self.current.borrow_mut() = outer;
+        result
+    }
+
+    /// The input owner of the running call.
+    fn owner(&self) -> Rc<interact::Owner> {
+        self.current.borrow().clone().unwrap_or_else(|| self.input.clone())
+    }
+
+    /// The owner a call's node `id` belongs to: the running call's mount, or, for a call of the plugin's own (a
+    /// command), its newest mount whose tree holds the id.
+    fn owner_of(&self, id: &str) -> Rc<interact::Owner> {
+        if let Some(current) = self.current.borrow().clone() {
+            return current;
+        }
+        let mounts = self.activation.owners();
+        mounts.into_iter().rev().find(|owner| owner.has(id)).unwrap_or_else(|| self.input.clone())
+    }
+
+    /// What delivers an event to `handler` as one call of the plugin, for the owner it is routed to; the plugin's
+    /// surfaces draw again after it.
+    fn deliver(self: &Rc<Self>, handler: abi::interact::HandlerFn) -> interact::Deliver {
+        let scope = Rc::downgrade(self);
+        Rc::new(move |host: &dyn Host, owner: &Rc<interact::Owner>, event: &abi::interact::Event| {
+            let Some(scope) = scope.upgrade() else { return abi::interact::Handled::Pass };
+            let handled = scope.call_as(owner, "handle", host, |host| handler(host, event));
+            if handled.is_some() {
+                scope.activation.invalidate();
+            }
+            handled.unwrap_or(abi::interact::Handled::Pass)
+        })
     }
 
     /// [`Scope::run`] for a command that belongs to the mount `alive` stands for.
@@ -894,6 +1022,18 @@ impl abi::Read for Scoped<'_> {
     fn transcript(&self) -> Option<abi::v2::TranscriptView> {
         behave::transcript(self.host.app())
     }
+
+    fn rect(&self, id: &str) -> Option<abi::interact::Rect> {
+        self.scope.owner_of(id).rect(id)
+    }
+
+    fn focused(&self) -> abi::interact::Focused {
+        self.scope.owner().focused()
+    }
+
+    fn mode(&self) -> Option<String> {
+        self.scope.owner().mode()
+    }
 }
 
 impl abi::Host for Scoped<'_> {
@@ -968,6 +1108,64 @@ impl abi::Host for Scoped<'_> {
 
     fn edit_composer(&self, edit: abi::ComposerEdit) {
         self.defer(move |host| host.edit_composer(edit));
+    }
+
+    fn open_panel(&self, open: abi::interact::OpenPanel) {
+        let id = self.scope.id.clone();
+        self.defer(move |host| host.open_panel(&id, &open));
+    }
+
+    fn close_panel(&self, surface: &str) {
+        let (id, surface) = (self.scope.id.clone(), surface.to_owned());
+        self.defer(move |host| host.close_panel(&id, &surface));
+    }
+
+    fn overlay(&self, overlay: abi::interact::Overlay) {
+        let open =
+            self.scope.overlays.borrow().iter().find(|(name, _)| *name == overlay.surface).map(|(_, f)| f.clone());
+        let Some(open) = open else {
+            log::warn!("plugin {}: no overlay surface {:?}", self.scope.id, overlay.surface);
+            return;
+        };
+        let (id, opener) = (self.scope.id.clone(), self.scope.owner());
+        self.defer(move |host| {
+            if let Some(router) = host.router().filter(|_| opener.alive()) {
+                router.open(host, &id, &overlay, &opener, |frame| open(host, frame));
+            }
+        });
+    }
+
+    fn close_overlay(&self, surface: &str) {
+        let (id, surface) = (self.scope.id.clone(), surface.to_owned());
+        self.defer(move |host| {
+            if let Some(router) = host.router() {
+                router.close(host, &id, &surface, false);
+            }
+        });
+    }
+
+    fn focus(&self, node: &str) {
+        let (owner, node) = (self.scope.owner_of(node), node.to_owned());
+        self.defer(move |host| owner.focus(host, &node));
+    }
+
+    fn blur(&self) {
+        let owner = self.scope.owner();
+        self.defer(move |host| owner.blur(host));
+    }
+
+    fn set_mode(&self, mode: Option<&str>) {
+        let (owner, mode) = (self.scope.owner(), mode.map(str::to_owned));
+        self.defer(move |host| owner.set_mode(host, mode.as_deref()));
+    }
+
+    fn release_keys(&self) {
+        let weak = self.scope.host.clone();
+        self.defer(move |host| {
+            if let Some(router) = host.router() {
+                router.release(&weak);
+            }
+        });
     }
 
     fn checkpoint(&self) -> Option<u64> {
@@ -1415,6 +1613,7 @@ impl Setup<'_> {
         fail: surface::Fail,
         calls: behave::Calls,
         activation: &Rc<Activation>,
+        input: Rc<surface::Input>,
     ) {
         let (owner, activation) = (Rc::downgrade(self.host), activation.clone());
         let plugin: Rc<str> = Rc::from(self.id);
@@ -1436,8 +1635,13 @@ impl Setup<'_> {
                         viewer.clone(),
                         fail.clone(),
                         calls.clone(),
+                        input.clone(),
                     );
                     activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
+                    if let Some(holder) = mounted.holder() {
+                        holder.hold_route();
+                        activation.own(&holder);
+                    }
                     Box::new(route::View::fill(host, Box::new(mounted), layer))
                 });
             }
@@ -1451,24 +1655,56 @@ impl Setup<'_> {
                         mount: false,
                         size: false,
                     }),
-                    move |host, input| {
+                    move |host, slot_input| {
                         let mounted = surface::Surface::new(
                             host,
                             owner.clone(),
                             plugin.clone(),
                             &surface,
                             (&path, &path),
-                            input,
+                            slot_input,
                             Rc::new(()),
                             viewer.clone(),
                             fail.clone(),
                             calls.clone(),
+                            input.clone(),
                         );
                         activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
+                        if let Some(holder) = mounted.holder() {
+                            activation.own(&holder);
+                        }
                         Box::new(mounted)
                     },
                 );
             }
+            abi::v2::Place::Panel(name) => {
+                let key = name.clone();
+                let panel: PanelRender = Rc::new(move |host: &dyn Host, parent: &View| {
+                    let mounted = surface::Surface::new(
+                        host,
+                        owner.clone(),
+                        plugin.clone(),
+                        &surface,
+                        (&key, ""),
+                        &SlotInput::default(),
+                        Rc::new(()),
+                        viewer.clone(),
+                        fail.clone(),
+                        calls.clone(),
+                        input.clone(),
+                    );
+                    activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
+                    if let Some(holder) = mounted.holder() {
+                        holder.hold_in(parent.clone());
+                        activation.own(&holder);
+                    }
+                    parent.add(&mounted.root());
+                    Box::new(mounted) as Box<dyn Any>
+                });
+                self.registration.panels.push((name, panel));
+            }
+            // An overlay mounts when the plugin opens it ([`abi::Host::overlay`]).
+            abi::v2::Place::Overlay(_) => {}
         }
     }
 
@@ -1509,6 +1745,8 @@ struct Registration {
     failure: Option<ErrorFn>,
     claims: Vec<(Placement, ClaimRender)>,
     routes: Vec<(String, RouteRender)>,
+    /// The panel surfaces (P2), each mounting into the panel the host shows.
+    panels: Vec<(String, PanelRender)>,
     code_blocks: Vec<(String, CodeBlockRender)>,
     disposers: Vec<Disposer>,
     cleanups: Vec<Box<dyn FnOnce()>>,
@@ -2229,6 +2467,16 @@ impl Registry {
                 .is_some_and(|(_, registration)| registration.routes.iter().any(|(route, _)| route == name))
         })
         .unwrap_or(false)
+    }
+
+    /// Mounts the panel surface plugin `id` registers as `name` into `parent`, the panel the host shows: what it returns
+    /// is the mount, which ends when it drops.
+    pub fn panel(&self, host: &dyn Host, id: &str, name: &str, parent: &View) -> Option<Box<dyn Any>> {
+        let render = self.with_plugin(id, |plugin| {
+            let (_, registration) = plugin.active.as_ref().filter(|_| plugin.running())?;
+            registration.panels.iter().find(|(panel, _)| panel == name).map(|(_, render)| render.clone())
+        })??;
+        Some(render(host, parent))
     }
 
     /// The code-block renderers of the active plugins, drawing in the theme `theme` returns when they render, so a

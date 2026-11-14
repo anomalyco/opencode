@@ -204,6 +204,9 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
             options: vec![abi::SelectOption::new("Probe option", "option")],
             current: None,
             action: confirmed(),
+            key: None,
+            actions: Vec::new(),
+            binds: Vec::new(),
         }));
     });
     let held = token.clone();

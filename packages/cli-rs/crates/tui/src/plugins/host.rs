@@ -176,6 +176,7 @@ impl Host for Tui {
 
     fn revoked(&self, id: &str) {
         super::panel::close(self, id);
+        self.panels.release(self, id);
     }
 
     fn pending(&self, target: &str) {
@@ -412,6 +413,58 @@ impl Host for Tui {
         Some(self.reads.revision.get())
     }
 
+    fn router(&self) -> Option<&opencode_plugin::interact::Router> {
+        Some(&self.router)
+    }
+
+    fn composer_focused(&self) -> bool {
+        self.prompt.current.borrow().upgrade().is_some_and(|prompt| prompt.shown() && prompt.focused())
+    }
+
+    fn focus_composer(&self) {
+        let prompt = self.prompt.current.borrow().upgrade();
+        if let Some(prompt) = prompt.filter(|prompt| prompt.shown()) {
+            self.app.focus(&prompt.textarea);
+        }
+    }
+
+    fn modal_open(&self) -> bool {
+        self.dialogs.is_open()
+    }
+
+    fn overlay_layer(&self) -> Option<View> {
+        Some(self.plugin_overlays.clone())
+    }
+
+    fn open_panel(&self, id: &str, open: &abi::interact::OpenPanel) {
+        // Beside the session it names, while that session shows.
+        if !matches!(self.route(), Route::Session { id: shown } if shown.0 == open.session) {
+            log::warn!("plugin {id}: its panel {} names a session that is not on screen", open.surface);
+            return;
+        }
+        let target =
+            crate::panel::Target { plugin: id.to_owned(), name: open.surface.clone(), session: open.session.clone() };
+        let presentation =
+            if open.fullscreen { crate::panel::Presentation::Fullscreen } else { crate::panel::Presentation::Panel };
+        self.panels.open(self, target, presentation);
+    }
+
+    fn close_panel(&self, id: &str, surface: &str) {
+        if self.panels.current().is_some_and(|target| target.plugin == id && target.name == surface) {
+            self.panels.close(self);
+        }
+    }
+
+    fn panel_input(&self, id: &str, surface: &str) -> Option<abi::interact::PanelInput> {
+        let target = self.panels.current().filter(|target| target.plugin == id && target.name == surface)?;
+        let session = crate::frame::panel_state(self, &target)?;
+        Some(abi::interact::PanelInput {
+            width: session.0,
+            fullscreen: self.panels.presentation() == crate::panel::Presentation::Fullscreen,
+            focused: session.1,
+        })
+    }
+
     fn watch(&self, push: Rc<dyn Fn(&abi::Changed)>) -> Option<Disposer> {
         let local = abi::Changed { local: true, ..abi::Changed::default() };
         let listener = {
@@ -571,6 +624,8 @@ pub struct Reads {
     pub(super) panel: RefCell<Option<super::panel::Live>>,
     /// The plugin and activation whose dialog is on screen, until it closes.
     pub(super) owner: RefCell<Option<(String, u64)>>,
+    /// The rich select on screen, which a select of the same key changes in place (P2).
+    pub(super) select: RefCell<Option<Rc<super::panel::Picker>>>,
 }
 
 impl Reads {

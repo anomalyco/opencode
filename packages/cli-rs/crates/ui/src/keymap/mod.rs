@@ -551,6 +551,16 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
         binding.run(move |_| check(&command.enabled) && (command.run)(None, None) == Outcome::Handled)
     }
 
+    /// How many layers are registered, for a ledger of who holds what.
+    pub fn layer_count(&self) -> usize {
+        self.layers.borrow().len()
+    }
+
+    /// How many modes are pushed, active or not.
+    pub fn mode_count(&self) -> usize {
+        self.modes.borrow().len()
+    }
+
     /// The current input mode: the newest pushed mode that is active, else [`BASE_MODE`].
     pub fn mode(&self) -> String {
         current_mode(&self.modes.borrow())

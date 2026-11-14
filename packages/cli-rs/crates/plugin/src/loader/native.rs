@@ -1504,7 +1504,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
         // bound to no mount.
         let commands = match &at {
             v2::Place::Route(name) => route::commands(&scoped, name),
-            v2::Place::Slot(_) => Vec::new(),
+            v2::Place::Slot(_) | v2::Place::Panel(_) | v2::Place::Overlay(_) => Vec::new(),
         };
         let commands: surface::Commands = Rc::new(move |_| commands.clone());
         let failing = Rc::downgrade(guest);
@@ -1540,8 +1540,15 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
                 }) as Rc<dyn Fn() -> bool>
             }),
         };
+        // Input of contract 2.0 (P2) crosses no ABI yet: a library's mount has no handler and no layers.
+        let input = Rc::new(surface::Input {
+            plugin: manifest.id.clone(),
+            deliver: None,
+            layers: Vec::new(),
+            panel: matches!(place.at, v2::Place::Panel(_)),
+        });
         let viewer = Rc::new(Remote { guest: guest.clone(), index, draw: claim.draw });
-        setup.surface(place, viewer, commands, fail, calls, &guest.activation);
+        setup.surface(place, viewer, commands, fail, calls, &guest.activation, input);
     }
     // 2.0: what the plugin's threads send runs `Message`, one call each, when its manifest says it takes messages; a
     // thread's panic fails the plugin, once.
@@ -1608,7 +1615,14 @@ impl Viewer for Remote {
         self.draw
     }
 
-    fn draw(&self, _: &dyn Host, mount: &v2::MountId, canvas: &str, frame: v2::Frame) -> Option<Option<Vec<u8>>> {
+    fn draw(
+        &self,
+        _: &dyn Host,
+        _: &Rc<crate::interact::Owner>,
+        mount: &v2::MountId,
+        canvas: &str,
+        frame: v2::Frame,
+    ) -> Option<Option<Vec<u8>>> {
         let request = Request::Draw { surface: self.index, mount: mount.clone(), canvas: canvas.to_owned(), frame };
         // The result is the list's bytes as they are, which the canvas checks; none keeps the list.
         let drawn = self.guest.exchange("draw", &request, Ok)?;

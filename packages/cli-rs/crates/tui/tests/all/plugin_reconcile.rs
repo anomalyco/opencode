@@ -100,6 +100,7 @@ fn apply_acting(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::No
         image: &|_| None,
         full: false,
         draw: None,
+        owner: None,
     };
     tree.apply(&env, parent, nodes)
 }
@@ -419,6 +420,12 @@ impl Generator<'_> {
                     sticky: None,
                     anchor: None,
                     split: None,
+                    // P2: a box that takes the focus or the pointer draws as one that does not.
+                    interact: abi::interact::Interact {
+                        focusable: self.chance(15),
+                        pointer: self.chance(15),
+                        ..abi::interact::Interact::default()
+                    },
                 }
             }
             1 | 2 => v2::Node::Text {

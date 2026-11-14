@@ -65,6 +65,12 @@ pub fn connect(inner: &Rc<Inner>) {
         // Inserted here, after the file check, not by the textarea.
         cx.prevent_default();
         cx.stop_propagation();
+        // A plugin's composer layer that declares pastes may take it (synthesis 3.8); else the host's route has it.
+        if let Some(tui) = prompt.tui.upgrade()
+            && tui.router.paste(&*tui, text, true)
+        {
+            return;
+        }
         if text.is_empty() {
             from_clipboard(&prompt);
             return;
