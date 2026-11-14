@@ -2343,3 +2343,21 @@ fn a_claim_of_a_tool_takes_its_calls_by_either_name() {
         assert!(screen.contains("b drew call_1") && screen.contains("b drew call_2"), "{carrier:?}:\n{screen}");
     }
 }
+
+// Expected (review finding carbon-7): a fence's first view gets the width the fence is laid out at, so a fence that
+// streams in whole is viewed once, and draws its first frame at its own width.
+#[test]
+fn a_fence_is_viewed_first_at_its_own_width() {
+    for carrier in CARRIERS {
+        INPUTS.with_borrow_mut(Vec::clear);
+        NARROW.set(u16::MAX);
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.narrow", setup: plugin_narrow })]);
+        world.emit("session.text.started", json!({ "ordinal": 0 }));
+        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```narrow\nfits\n```\n\nAfter.\n" }));
+        world.settle();
+        world.settle();
+        let width = mounted().first().map(|shown| shown.rect.width as u16);
+        let inputs = INPUTS.with_borrow(Vec::clone);
+        assert_eq!(inputs.iter().map(|(width, _)| Some(*width)).collect::<Vec<_>>(), [width], "{carrier:?}");
+    }
+}
