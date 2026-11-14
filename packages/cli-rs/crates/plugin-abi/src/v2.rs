@@ -152,8 +152,9 @@ pub enum Node {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         hunks: Option<String>,
     },
-    /// P3: a text field whose text and cursor are the host's. It runs command `on_change` with the text as its input
-    /// after each edit, and `on_submit` on enter (one line) or the submit key. A changed `value` replaces the text.
+    /// P3: a text field whose text and cursor are the host's. With an id, the surface's handler hears
+    /// [`crate::interact::Event::Change`] with the text after each edit, and [`crate::interact::Event::Submit`] on
+    /// enter (one line) or the submit key. A changed `value` replaces the text.
     Input {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,
@@ -164,10 +165,6 @@ pub enum Node {
         /// Rows of a field of many lines; one line when `None`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         lines: Option<u16>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        on_change: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        on_submit: Option<String>,
         #[serde(default, skip_serializing_if = "is_default_layout")]
         layout: Layout,
     },
@@ -385,8 +382,6 @@ pub struct Surface {
     /// P3: called after geometry is final, in a frame where something in `notify` changed.
     pub layout: Option<LayoutFn>,
     pub notify: Vec<Notify>,
-    /// P3: hears where a step landed and that the user scrolled.
-    pub on_scroll: Option<ScrollFn>,
     /// What its events come to: its layers' keys, its nodes' pointer and hover, an overlay's close.
     pub handler: Option<HandlerFn>,
     /// The key layers each mount of it registers, which end with the mount.
@@ -403,7 +398,6 @@ impl Surface {
             draw: None,
             layout: None,
             notify: Vec::new(),
-            on_scroll: None,
             handler: None,
             layers: Vec::new(),
         }
@@ -422,11 +416,6 @@ impl Surface {
     /// The surface with a `layout` call, told about `notify` and each scroll's `notify_top`.
     pub fn layout(self, notify: Vec<Notify>, layout: impl Fn(&Geometry) -> LayoutReply + 'static) -> Self {
         Self { layout: Some(Rc::new(layout)), notify, ..self }
-    }
-
-    /// The surface with a handler of its scrolls' events.
-    pub fn on_scroll(self, handler: impl Fn(&dyn crate::Host, &ScrollEvent) + 'static) -> Self {
-        Self { on_scroll: Some(Rc::new(handler)), ..self }
     }
 
     /// The surface whose events come to `handler`.
@@ -743,8 +732,6 @@ impl Node {
             value: value.into(),
             placeholder: String::new(),
             lines: None,
-            on_change: None,
-            on_submit: None,
             layout: Layout::default(),
         }
     }

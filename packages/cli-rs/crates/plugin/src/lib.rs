@@ -594,13 +594,6 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                         laying.call("layout", &*host, |_| layout(geometry)).unwrap_or_default()
                     }) as abi::v2::LayoutFn
                 }),
-                // Owned by the mount whose scroll it hears: what it asks for ends with that mount.
-                scrolled: surface.on_scroll.clone().map(|handler| {
-                    let scope = scope.clone();
-                    Rc::new(move |alive: &Weak<()>, event: &abi::v2::ScrollEvent| {
-                        scope.run_owned(alive, "on-scroll", |host| handler(host, event));
-                    }) as behave::Scrolls
-                }),
                 ended: Some({
                     let scope = scope.clone();
                     Rc::new(move || scope.failure.borrow().is_some() || scope.activation.disposed())
@@ -919,7 +912,15 @@ impl Scope {
         let scope = Rc::downgrade(self);
         Rc::new(move |host: &dyn Host, owner: &Rc<interact::Owner>, event: &abi::interact::Event| {
             let Some(scope) = scope.upgrade() else { return abi::interact::Handled::Pass };
-            let handled = scope.call_as(owner, "handle", host, |host| handler(host, event));
+            // Owned by the mount it reaches: what it asks for (a fetch, a scroll verb) ends with that mount; and the
+            // user's when the user's input caused it, which a verb on the transcript needs.
+            let outer = scope.mount.replace(owner.mounted());
+            let call = || scope.call_as(owner, "handle", host, |host| handler(host, event));
+            let handled = match event.by_user() {
+                Some(user) => behave::as_user(user, call),
+                None => call(),
+            };
+            *scope.mount.borrow_mut() = outer;
             if handled.is_some() {
                 scope.activation.invalidate();
             }

@@ -454,6 +454,14 @@ fn panels_overlays_and_reads_are_equal_on_every_carrier() {
         app.press("b");
         app.press("w");
         step("blur", &mut seen);
+        // P3's input in the panel: its edits and its enter come to the panel's handler.
+        let (x, y) = support::at(&app.render().text(), "say").expect("the input shows");
+        // One cell in: the panel's left edge is the splitter's.
+        app.click(x + 1, y);
+        // Keys no layer of the board binds: a layer whose scope holds takes its key before the field.
+        app.type_text("yo");
+        app.press("enter");
+        step("say", &mut seen);
         tui.keymap.dispatch("board.unnotes", None);
         step("close", &mut seen);
         tui.keymap.dispatch("board.pick", None);
@@ -478,6 +486,7 @@ fn panels_overlays_and_reads_are_equal_on_every_carrier() {
     assert!(at("hold").contains("notes focused=true at pad"), "the view did not read its focus: {}", at("hold"));
     assert_eq!(heard("blur"), heard("escape"), "blur kept the focus: {}", at("blur"));
     assert!(at("blur").contains("notes focused=false at"), "the panel did not hear it lost the focus: {}", at("blur"));
+    assert!(at("say").contains("said c:y c:yo s:yo"), "the input's events: {}", at("say"));
     assert!(!at("close").contains("notes focused"), "the panel did not close");
     let search = at("search");
     assert!(search.contains("card 3") && !search.contains("card 4"), "the search did not list the rows: {search}");

@@ -158,7 +158,7 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *    "route_mounts"?: [name], "fence_gone"?: bool,
  *    "surfaces"?: [{"name", "place": {"type": "route", "name"} | {"type": "slot", "kind", "path"}
  *      | {"type": "panel", "name"} | {"type": "overlay", "name"}, "palette"?, "draw"?: bool, "notify"?: [notify],
- *      "layout"?: bool, "on_scroll"?: bool, "handler"?: bool, "layers"?: [layer]}],
+ *      "layout"?: bool, "handler"?: bool, "layers"?: [layer]}],
  *    "messages"?: bool, "layers"?: [layer], "searches"?: [name]}
  *   A layer is {"scope": "surface" | {"node": id} | "composer" | "global", "priority"?, "mode"?,
  *    "keys"?: [{"key", "name", "title"?, "hold"?}], "any"?, "paste"?}.
@@ -196,14 +196,15 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   {"type": "layout", "surface": index, "geometry": {"rects", "scrolls", "groups", "tops", "moved_only",
  *    "reached", "transcript"?}}                                -> {"paints"?: [{"node", "bg"}], "again"?: bool}
  *      After the solve, when something the surface's "notify" names changed. It reads only, as a view does.
- *   {"type": "scrolled", "surface": index, "event": {"type": "landed", "scroll", "anchor"} |
- *    {"type": "user-scroll", "scroll"}}                         -> null
- *   2.0 (P2):
+ *   2.0 (P2), with P3's scroll and input events:
  *   {"type": "input", "to": {"type": "surface", "surface": index} | {"type": "layer", "layer": index},
- *    "event": {"type": "key" | "paste" | "pointer" | "hover" | "closed", ...}}   -> "consume" | "pass"
+ *    "event": {"type": "key" | "paste" | "pointer" | "hover" | "closed", ...} |
+ *     {"type": "scroll", "event": {"type": "landed", "scroll", "anchor"} | {"type": "user-scroll", "scroll"}} |
+ *     {"type": "change" | "submit", "node", "text"}}               -> "consume" | "pass"
  *      A surface's handler hears the events of the mount the host routed them to; what it reads and asks of the input
- *      ("rect", "focused", "input-mode", "focus", "set-mode", "overlay", ...) is that mount's. A layer of the manifest
- *      is the plugin's own.
+ *      ("rect", "focused", "input-mode", "focus", "set-mode", "overlay", "scroll", ...) is that mount's. A layer of the
+ *      manifest is the plugin's own. A scroll's and an input's events go to the surface's handler; the answer to them
+ *      does not matter.
  *   {"type": "search", "name", "query", "options": [option]}   -> [value]
  *
  * 2.0 tree nodes ("type"): "box" {"id"?, "row"?, "gap"?, "padding"?, "justify"?, "align"?, "bg"?, "layout"?,
@@ -228,8 +229,8 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   answers OPENCODE_ERROR keeps them (see above). A render, a view, a draw or a layout ("fence", "slot", "route",
  *   "render-fence", "render", "render-route", "view", "draw", "layout") reads only: the host answers OPENCODE_ERROR
  *   to any request of it that asks for something. A "scroll" of the transcript is taken only from a call that
- *   answers the user's input (a key, a click, the palette, the user's scroll): the host answers OPENCODE_ERROR to
- *   any other.
+ *   answers the user's input (a key, a click, an edit, the palette, the user's scroll): the host answers
+ *   OPENCODE_ERROR to any other.
  *
  * Content in a view reply is a JSON string when its bytes are UTF-8, else {"base64": "..."} (RFC 4648, padded).
  * A message the host delivers ("message") is the JSON text the sender wrote, as a JSON string.
