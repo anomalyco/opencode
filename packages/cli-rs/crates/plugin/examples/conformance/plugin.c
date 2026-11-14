@@ -33,6 +33,7 @@ typedef struct instance {
     unsigned long long fixed;
     unsigned long long pads;
     unsigned draws;
+    unsigned claimed;
 } instance;
 
 /* Whether the host table has `entry`: its size covers it, and it is set. */
@@ -130,7 +131,7 @@ static void send(const opencode_host_api *host, const char *key, const char *mes
 
 static const char *const COMMANDS[] = {
     "conf.toast", "conf.store", "conf.send", "conf.wake", "conf.panic", "conf.dup",
-    "conf.read",  "conf.pad",   "conf.down", "conf.step", "conf.where",
+    "conf.read",  "conf.pad",   "conf.down", "conf.step", "conf.where", "conf.ui",
 };
 
 /* The scroll `items` of the surface `rows`, as a verb or a read names it. */
@@ -171,10 +172,40 @@ static int32_t create(const opencode_host_api *host, opencode_bytes options, voi
             "\"surfaces\":[{\"name\":\"conf\",\"place\":{\"type\":\"route\",\"name\":\"conf\"}},"
             "{\"name\":\"pad\",\"place\":{\"type\":\"route\",\"name\":\"pad\"},\"draw\":true},"
             "{\"name\":\"rows\",\"place\":{\"type\":\"route\",\"name\":\"rows\"},"
-            "\"notify\":[{\"type\":\"scroll\",\"id\":\"items\"}],\"layout\":true,\"on_scroll\":true}],\"messages\":true}",
+            "\"notify\":[{\"type\":\"scroll\",\"id\":\"items\"}],\"layout\":true,\"handler\":true}],\"messages\":true,"
+            "\"claims\":[{\"target\":{\"type\":\"tool\",\"name\":\"conf-tool\"}}],"
+            "\"layers\":[{\"scope\":\"global\",\"keys\":[{\"key\":\"ctrl+g\",\"name\":\"conf\"}]}]}",
             sizeof manifest - strlen(manifest) - 1);
     *out = owned(manifest);
     return OPENCODE_OK;
+}
+
+/* `conf.ui`: each verb and read of P2 once, then what the reads answered. */
+static void ui(const opencode_host_api *host) {
+    char answer[256];
+    ask(host, "{\"type\":\"focus\",\"node\":\"i2\"}", NULL, 0);
+    int32_t status = ask(host, "{\"type\":\"focused\"}", answer, sizeof answer);
+    int focused = status == OPENCODE_OK && find(bytes(answer), "\"surface\":true") != NULL;
+    status = ask(host, "{\"type\":\"rect\",\"node\":\"where\"}", answer, sizeof answer);
+    int rect = status == OPENCODE_OK && answer[0] != '\0' && strcmp(answer, "null") != 0;
+    ask(host, "{\"type\":\"set-mode\",\"mode\":\"nav\"}", NULL, 0);
+    status = ask(host, "{\"type\":\"input-mode\"}", answer, sizeof answer);
+    char mode[64] = "none";
+    size_t len = strlen(answer);
+    if (status == OPENCODE_OK && len >= 2 && answer[0] == '"' && answer[len - 1] == '"') {
+        answer[len - 1] = '\0';
+        snprintf(mode, sizeof mode, "%s", answer + 1);
+    }
+    ask(host, "{\"type\":\"release-keys\"}", NULL, 0);
+    ask(host, "{\"type\":\"blur\"}", NULL, 0);
+    ask(host, "{\"type\":\"open-panel\",\"surface\":\"rows\"}", NULL, 0);
+    ask(host, "{\"type\":\"close-panel\",\"surface\":\"rows\"}", NULL, 0);
+    ask(host, "{\"type\":\"overlay\",\"surface\":\"rows\",\"anchor\":{\"edge\":\"top\"},\"width\":10,\"height\":3}", NULL,
+        0);
+    ask(host, "{\"type\":\"close-overlay\",\"surface\":\"rows\"}", NULL, 0);
+    char message[96];
+    snprintf(message, sizeof message, "ui %s %s %s", focused ? "true" : "false", rect ? "true" : "false", mode);
+    toast(host, "info", message);
 }
 
 static int32_t command(instance *self, opencode_bytes request, opencode_owned *out) {
@@ -224,6 +255,8 @@ static int32_t command(instance *self, opencode_bytes request, opencode_owned *o
             snprintf(message, sizeof message, "offset %llu of %llu", number(state, "offset"), number(state, "extent"));
         }
         toast(host, "info", message);
+    } else if (names(request, "conf.ui")) {
+        ui(host);
     } else if (names(request, "conf.read")) {
         int light = OFFERS(host, theme_mode) && host->theme_mode(host->ctx) == OPENCODE_THEME_LIGHT;
         char answer[16];
@@ -306,8 +339,8 @@ static int32_t layout(opencode_bytes request, opencode_owned *out) {
     return OPENCODE_OK;
 }
 
-/* The scroll handler of `rows`: where a step landed. */
-static void scrolled(instance *self, opencode_bytes request) {
+/* The handler of `rows`, and of the layer of setup: where a step landed; every event passes on. */
+static void input(instance *self, opencode_bytes request) {
     const char *needle = "\"anchor\":{\"id\":\"";
     const uint8_t *at = find(request, needle);
     if (!is(request, "landed") || at == NULL) {
@@ -368,6 +401,20 @@ static int32_t call(void *raw, opencode_bytes request, opencode_owned *out) {
     if (is(request, "command")) {
         return command(self, request, out);
     }
+    if (is(request, "claim")) {
+        /* The claim of `conf-tool`'s calls. */
+        self->claimed += 1;
+        char reply[160];
+        snprintf(reply, sizeof reply,
+                 "{\"node\":{\"type\":\"text\",\"id\":\"claim\",\"spans\":[{\"text\":\"claimed %u\"}]}}", self->claimed);
+        *out = owned(reply);
+        return OPENCODE_OK;
+    }
+    if (is(request, "input")) {
+        input(self, request);
+        *out = owned("\"pass\"");
+        return OPENCODE_OK;
+    }
     if (is(request, "view")) {
         /* The mount names its surface. */
         if (find(request, "\"surface\":\"rows\"") != NULL) {
@@ -387,8 +434,6 @@ static int32_t call(void *raw, opencode_bytes request, opencode_owned *out) {
         }
     } else if (is(request, "message")) {
         self->messages += 1;
-    } else if (is(request, "scrolled")) {
-        scrolled(self, request);
     } else if (is(request, "wake")) {
         toast(self->host, "info", "woken");
     } else {
