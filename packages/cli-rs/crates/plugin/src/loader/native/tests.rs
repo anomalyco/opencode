@@ -3113,6 +3113,32 @@ fn a_library_macos_refuses_says_why() {
         );
     }
     assert_eq!(explain_refusal(missing, true, false, Some(source)), format!("cannot load the library: {missing}"));
+    // Each of the words alone is enough (review carbon-7).
+    let alone = [
+        ("mapping process and mapped file have different Team IDs", "library validation"),
+        ("'x' is a platform binary", "library validation"),
+        ("library load disallowed by system policy", "ad hoc"),
+        ("code signature in <ABC> 'x' is invalid", "ad hoc"),
+        ("not valid for use in process", "ad hoc"),
+    ];
+    for (error, advice) in alone {
+        assert!(explain_refusal(error, true, false, None).contains(advice), "{error}");
+    }
+}
+
+// Expected (reviews carbon-2, carbon-7): the host's table states the version it serves the library's major, and offers
+// the 2.0 entries and its features to a 2.x library only.
+#[test]
+fn the_host_table_states_its_version_and_features() {
+    let table = host_table(2, HOST_MINOR, std::ptr::null_mut());
+    assert_eq!((table.major, table.minor, table.size), (2, HOST_MINOR, size_of::<HostApi>()));
+    assert!(table.send.is_some() && table.report.is_some() && table.stopped.is_some());
+    // SAFETY: the table's features are the host's static list.
+    let features: Vec<String> = serde_json::from_slice(unsafe { table.features.as_slice() }).unwrap();
+    assert_eq!(features, abi::FEATURES);
+    let table = host_table(1, V1_MINOR, std::ptr::null_mut());
+    assert_eq!((table.major, table.minor, table.size), (1, V1_MINOR, offset_of!(HostApi, send)));
+    assert!(table.send.is_none() && table.report.is_none() && table.stopped.is_none() && table.features.len == 0);
 }
 
 // Expected (review carbon-6): a load names the file the user gave, not the copy the host opened, and on Windows the

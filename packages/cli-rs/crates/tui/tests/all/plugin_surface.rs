@@ -72,6 +72,11 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
+/// The content of card `index` at `value`.
+fn patch(index: usize, value: u32) -> String {
+    format!("@@ -1 +1 @@\n-item {index}\n+item {index} is {value}\n")
+}
+
 fn view(cx: &mut v2::View<'_>) -> v2::Node {
     let (values, bad, palette) = board(|board| {
         let bad = board.bad > 0;
