@@ -172,8 +172,10 @@ fn script(run: Run) -> Vec<(&'static str, Seen)> {
     settle(&board.harness);
     seen.push(("remount", observe(&board.harness)));
     dispatch("board.thread-panic", None);
+    // The report is handled as a paint starts.
     board.harness.wait("the thread's panic failed the plugin", || {
         app.advance(Duration::from_millis(1));
+        app.render();
         tui.plugins
             .entries()
             .iter()

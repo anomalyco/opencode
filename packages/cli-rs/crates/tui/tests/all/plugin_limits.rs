@@ -62,7 +62,16 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         host.close_panel("side");
         host.close_overlay("pop");
     });
+    setup.command(command("limits.anchors"), |host, _| {
+        let anchors = host.anchors(&v2::Target::node("tree", "l"), "h");
+        ANCHORS.with(|seen| *seen.borrow_mut() = anchors.into_iter().map(|anchor| anchor.id).collect());
+    });
     Ok(())
+}
+
+thread_local! {
+    /// The anchors of group `h` in the route's list `l`, as `limits.anchors` last asked for them.
+    static ANCHORS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
 thread_local! {
@@ -167,6 +176,7 @@ fn small() -> Limits {
         all_content: 1000,
         plugin_images: 16 * 16 * 4,
         all_images: 1 << 20,
+        frame_rows: u64::MAX,
     }
 }
 
@@ -194,6 +204,7 @@ fn rows() -> Vec<Row> {
     let mut texts_over = (0..37).map(|index| text(&format!("t{index}"))).collect::<Vec<_>>();
     texts_over.push(placeholder(None, "too many nodes"));
     let line = |bytes: usize| text(&"x".repeat(bytes));
+    let code_at_limit = 4 + 2 * 47 + rust_lines(47).len() as u64 / 1024;
     vec![
         // Nodes: a column, a head, a box of 36 texts and a foot are 40.
         Row {
@@ -329,12 +340,13 @@ fn rows() -> Vec<Row> {
             nodes: 4,
             content: 0,
         },
-        // Code: a line is two rows. The column, the head, the foot and the code itself are 4, and 48 lines 96.
+        // Code: a line is two rows, and a KiB of its text one. The column, the head, the foot and the code itself are
+        // 4, and 47 lines 94 and a row a KiB: the limit; 48 lines are past it.
         Row {
             name: "code at the limit",
-            limits: Limits { text: 1 << 20, ..small() },
-            subject: subject(|_| framed(code(source(rust_lines(48))))),
-            shows: subject(|_| framed(code(source(rust_lines(48))))),
+            limits: Limits { text: 1 << 20, rows: code_at_limit, ..small() },
+            subject: subject(|_| framed(code(source(rust_lines(47))))),
+            shows: subject(|_| framed(code(source(rust_lines(47))))),
             placeholders: 0,
             parses: 1,
             nodes: 4,
@@ -342,7 +354,7 @@ fn rows() -> Vec<Row> {
         },
         Row {
             name: "code over",
-            limits: Limits { text: 1 << 20, ..small() },
+            limits: Limits { text: 1 << 20, rows: code_at_limit, ..small() },
             subject: subject(|_| framed(code(source(rust_lines(49))))),
             shows: subject(|_| framed(placeholder(None, "too large to build at once"))),
             placeholders: 1,
@@ -472,11 +484,14 @@ fn a_plugin_spends_its_own_share_of_what_all_plugins_may_hold() {
     let texts = |count: usize| v2::Node::column((0..count).map(|index| text(&format!("t{index}"))).collect());
     for carrier in CARRIERS {
         let harness = open(carrier);
-        let _limits = limits::set(Limits { nodes: 100, plugin_nodes: 10, all_nodes: 14, ..small() });
+        // The host's own plugins hold nodes too: all plugins may hold 14 beside what they hold on the page.
+        let others = || limits::total().nodes - limits::held(ID).nodes - limits::held(SIBLING).nodes;
+        let shares = |others: u64| Limits { nodes: 100, plugin_nodes: 10, all_nodes: others + 14, ..small() };
         for (beside, admitted) in [(1, 9), (6, 6)] {
             // The sibling's next view is a column of `beside` texts; its waker draws it, with the route closed.
             harness.tui.navigate(Route::Home);
             settle(&harness);
+            let _limits = limits::set(shares(others()));
             BESIDE.with(|slot| *slot.borrow_mut() = subject(move |_| texts(beside)));
             WAKER.with(|waker| waker.borrow().as_ref().expect("the sibling's waker").wake());
             settle(&harness);
@@ -486,8 +501,12 @@ fn a_plugin_spends_its_own_share_of_what_all_plugins_may_hold() {
                 beside as u64 + 1,
                 "{carrier:?}: the sibling holds its column\n{screen}"
             );
+            // On the route, beside what the host's own plugins hold there.
+            show(&harness, subject(|_| text("route")));
+            let on_route = others();
+            let _limits = limits::set(shares(on_route));
             let frame = show(&harness, subject(move |_| texts(12)));
-            let held = (limits::held(ID).nodes, limits::total().nodes);
+            let held = (limits::held(ID).nodes, limits::total().nodes - on_route);
             let twin = {
                 let _unlimited = support::unlimited();
                 show(
@@ -685,20 +704,7 @@ fn probe() {
     let harness = support::mount(200, 58, deps);
     harness.app.set_verify(false);
     settle(&harness);
-    let _limits = limits::set(Limits {
-        nodes: u64::MAX,
-        rows: u64::MAX,
-        text: u64::MAX,
-        hunks: u64::MAX,
-        image_bytes: u64::MAX,
-        image_side: u64::MAX,
-        plugin_nodes: u64::MAX,
-        all_nodes: u64::MAX,
-        plugin_content: u64::MAX,
-        all_content: u64::MAX,
-        plugin_images: u64::MAX,
-        all_images: u64::MAX,
-    });
+    let _limits = support::unlimited();
     let monitor = harness.tui.plugins.monitor().clone();
     let route = Route::Plugin { id: ID.to_owned(), name: "tree".to_owned() };
     let measure = |kind: &str, size: usize, subject: Subject| {
@@ -900,7 +906,8 @@ fn a_tree_at_the_clients_limits_renders() {
         assert_eq!(reconcile::work().since(before).placeholders, 0, "a placeholder at the limits");
         assert_eq!(limits::held(ID).nodes, 20_000);
         let over = Rc::new(at_the_limits(1));
-        let frame = show(&harness, subject(move |_| (*over).clone()));
+        show(&harness, subject(move |_| (*over).clone()));
+        let frame = caught_up(&harness);
         // The placeholder costs nothing.
         assert_eq!(limits::held(ID).nodes, 20_000, "held past the limits");
         let twin = {
@@ -915,6 +922,18 @@ fn a_tree_at_the_clients_limits_renders() {
         assert!(frame.cells == twin.cells, "not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
     });
     run.unwrap().join().unwrap();
+}
+
+/// Paints frames until no revision or list item waits for a frame's rows, and returns the last.
+fn caught_up(harness: &Harness) -> opentui::native::Capture {
+    for _ in 0..100 {
+        let before = reconcile::work().deferred;
+        let frame = harness.app.render();
+        if reconcile::work().deferred == before && !harness.app.needs_frame() {
+            return frame;
+        }
+    }
+    panic!("the host never caught up with the frames' rows");
 }
 
 thread_local! {
@@ -1267,5 +1286,244 @@ fn a_keep_is_admitted_as_the_subtree_it_stands_for() {
             harness.app.render()
         };
         same("opened box", &frame, twin(subject(move |_| v2::Node::column(vec![outer()]))));
+    }
+}
+
+// Expected (fixed row; review bigboi 3): the rows trees build in a frame are shared by every plugin. A route and a
+// sibling's surface whose revisions build 23 rows each, both woken before one paint, in a frame of 30 rows: the paint
+// adopts one, and the next paint the other; the screen then equals the twin's, which builds both at once. On both
+// carriers.
+#[test]
+fn two_plugins_share_the_rows_of_a_frame() {
+    let both = |phase: u8| [code_lines("r", 10), text(&format!("route {phase}"))];
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        let limits = Limits { text: 1 << 20, frame_rows: 30, ..small() };
+        PHASE.with(|phase| phase.set(0));
+        BESIDE.with(|beside| {
+            *beside.borrow_mut() = subject(move |_| {
+                let phase = PHASE.with(std::cell::Cell::get);
+                v2::Node::column(vec![code_lines("s", 10), text(&format!("beside {phase}"))])
+            })
+        });
+        let (first, second) = {
+            let _limits = limits::set(limits);
+            show(&harness, subject(move |_| v2::Node::column(both(phase()).to_vec())));
+            caught_up(&harness);
+            PHASE.with(|phase| phase.set(1));
+            WAKE_ROUTE.with(|waker| waker.borrow().as_ref().unwrap().wake());
+            WAKER.with(|waker| waker.borrow().as_ref().unwrap().wake());
+            let before = reconcile::work();
+            let first = harness.app.render().text();
+            let deferred = reconcile::work().since(before).deferred;
+            assert_eq!(deferred, 1, "{carrier:?}: revisions left for the next frame");
+            (first, caught_up(&harness))
+        };
+        assert!(first.contains("route 1") != first.contains("beside 1"), "{carrier:?}: one revision a frame\n{first}");
+        let twin = {
+            let _limits = support::unlimited();
+            show(&harness, subject(move |_| v2::Node::column(both(1).to_vec())))
+        };
+        let name = format!("{carrier:?}");
+        assert!(second.cells == twin.cells, "{name}: not the twin's frame\n{}\n---\n{}", second.text(), twin.text());
+        BESIDE.with(|beside| *beside.borrow_mut() = subject(|_| text("sibling")));
+    }
+}
+
+// Expected (fixed row; review carbon 2.1): a list's items share the rows of the frame: ten items of 61 rows each in a
+// list that lays them out in a row, in a frame of 100 rows, mount two at most in the paint that shows the list; once
+// they are all mounted the screen equals the twin's, which mounts them at once. On both carriers.
+#[test]
+fn a_lists_items_share_the_rows_of_a_frame() {
+    let tabs = || {
+        let items = (0..10).map(|index| v2::ListItem::new(code_lines(&format!("i{index}"), 30), 1)).collect();
+        let mut list = v2::Node::list(items).with_id("tabs");
+        if let v2::Node::List { row, .. } = &mut list {
+            *row = true;
+        }
+        v2::Node::column(vec![list])
+    };
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        let (first, frame) = {
+            let _limits = limits::set(Limits { text: 1 << 20, frame_rows: 100, ..small() });
+            PHASE.with(|phase| phase.set(0));
+            show(&harness, subject(move |_| if phase() == 0 { text("none") } else { tabs() }));
+            let before = reconcile::work();
+            PHASE.with(|phase| phase.set(1));
+            WAKE_ROUTE.with(|waker| waker.borrow().as_ref().unwrap().wake());
+            harness.app.render();
+            let first = reconcile::work().since(before).parses;
+            (first, caught_up(&harness))
+        };
+        assert!(first <= 2, "{carrier:?}: {first} items parsed in the paint that showed the list");
+        let twin = {
+            let _limits = support::unlimited();
+            show(&harness, subject(move |_| tabs()))
+        };
+        assert!(frame.cells == twin.cells, "{carrier:?}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
+    }
+}
+
+/// Paints and presents frames until no revision or list item waits for a frame's rows; the time of each, from the
+/// wakes and input it handles through the present.
+fn paints(harness: &Harness) -> Vec<Duration> {
+    let mut times = Vec::new();
+    for _ in 0..100 {
+        let before = reconcile::work().deferred;
+        let begun = Instant::now();
+        harness.app.present().unwrap();
+        times.push(begun.elapsed());
+        if reconcile::work().deferred == before && !harness.app.needs_frame() {
+            break;
+        }
+    }
+    times
+}
+
+fn worst(times: &[Duration]) -> f64 {
+    times.iter().max().map_or(0.0, |time| time.as_secs_f64() * 1000.0)
+}
+
+// The probe of the frame's rows (review bigboi 3), in release with `--ignored --nocapture`; `steps/plugins-pl.md`
+// records its output. TestApp at 200x60, its frame check off, the client's limits: a route and a sibling's surface
+// each revise 1,400 lines of Rust (2,801 rows) with a comment that changes, both woken before one paint; the route's
+// first mount of that tree; and wheel steps through a list of 200 items of 30 lines each. Each paint is timed from the
+// wakes and input it handles through the present.
+#[test]
+#[ignore = "a probe: run it alone, in release"]
+fn frame_probe() {
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![abi::Plugin { id: ID, setup }.into(), abi::Plugin { id: SIBLING, setup: sibling }.into()],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount(200, 60, deps);
+    harness.app.set_verify(false);
+    settle(&harness);
+    let tree = |name: &str| {
+        let comment = format!("// {name} revision {}\n", PHASE.with(std::cell::Cell::get));
+        let content = source(comment + &rust_lines(1_400));
+        v2::Node::Code {
+            id: None,
+            content,
+            filetype: Some("rust".into()),
+            numbers: false,
+            layout: abi::Layout::default(),
+        }
+    };
+    // A revision of both, at each frame's rows.
+    for frame_rows in [3_000, u64::MAX] {
+        let _limits = limits::set(Limits { frame_rows, ..Limits::default() });
+        PHASE.with(|phase| phase.set(0));
+        BESIDE.with(|beside| *beside.borrow_mut() = subject(move |_| tree("beside")));
+        show(&harness, subject(move |_| tree("route")));
+        caught_up(&harness);
+        let mut all = Vec::new();
+        for revision in 1..=8 {
+            PHASE.with(|phase| phase.set(revision));
+            WAKE_ROUTE.with(|waker| waker.borrow().as_ref().unwrap().wake());
+            WAKER.with(|waker| waker.borrow().as_ref().unwrap().wake());
+            let times = paints(&harness);
+            println!("probe revision frame_rows {frame_rows} paints {} worst {:.2}", times.len(), worst(&times));
+            all.extend(times);
+        }
+        let mut sorted = all.clone();
+        sorted.sort();
+        println!("probe revisions frame_rows {frame_rows} median {:.2} worst {:.2}", median(all), worst(&sorted));
+        BESIDE.with(|beside| *beside.borrow_mut() = subject(|_| text("sibling")));
+    }
+    // A first mount at the rows of a tree.
+    for _ in 0..3 {
+        harness.tui.navigate(Route::Home);
+        caught_up(&harness);
+        SUBJECT.with(|slot| *slot.borrow_mut() = subject(move |_| tree("route")));
+        harness.tui.navigate(Route::Plugin { id: ID.to_owned(), name: "tree".to_owned() });
+        let times = paints(&harness);
+        println!("probe first mount paints {} worst {:.2}", times.len(), worst(&times));
+    }
+    // Wheel steps through a list of heavy items.
+    let items = || {
+        let items = (0..200).map(|index| v2::ListItem::new(code_lines(&format!("i{index}"), 30), 31)).collect();
+        v2::Node::list(items).with_id("list").layout(abi::Layout::default().height(abi::Width::Cells(58)))
+    };
+    show(&harness, subject(move |_| v2::Node::column(vec![items()])));
+    caught_up(&harness);
+    let mut steps = Vec::new();
+    for _ in 0..40 {
+        let wheel = opentui::prelude::MouseEvent {
+            kind: opentui::prelude::MouseEventKind::ScrollDown,
+            x: 10,
+            y: 10,
+            modifiers: opentui::prelude::Modifiers::NONE,
+        };
+        harness.app.app().dispatch(opentui::prelude::Event::Mouse(wheel));
+        steps.extend(paints(&harness));
+    }
+    let mut sorted = steps.clone();
+    sorted.sort();
+    println!("probe wheel paints {} median {:.2} worst {:.2}", steps.len(), median(steps), worst(&sorted));
+}
+
+// Expected (fixed row; review carbon 2.2): a list's items that are not mounted give the hunks of their patches as
+// anchors only within one node's limits: twenty patches of 3 hunks give 60, and of 5 hunks, past the 3 of a patch,
+// none, as they are placeholders once mounted. On both carriers.
+#[test]
+fn a_lists_anchors_respect_the_limits_of_a_patch() {
+    let list = |count: usize| {
+        let items = (0..20)
+            .map(|index| {
+                let diff = v2::Node::Diff {
+                    id: Some(format!("d{index}")),
+                    content: source(hunks(count)),
+                    view: v2::DiffView::Unified,
+                    filetype: None,
+                    hunks: Some("h".into()),
+                };
+                v2::ListItem::new(diff, 1)
+            })
+            .collect();
+        v2::Node::column(vec![
+            v2::Node::list(items).with_id("l").layout(abi::Layout::default().height(abi::Width::Cells(3))),
+        ])
+    };
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        let _limits = limits::set(Limits { nodes: 1_000, rows: 1_000, text: 1 << 20, ..small() });
+        for (count, anchors) in [(3, 60), (5, 0)] {
+            show(&harness, subject(move |_| list(count)));
+            caught_up(&harness);
+            let _ = harness.tui.keymap.dispatch("limits.anchors", None);
+            let seen = ANCHORS.with(|seen| seen.borrow().len());
+            assert_eq!(seen, anchors, "{carrier:?}: anchors of patches of {count} hunks");
+        }
+    }
+}
+
+// Expected (fixed row; review carbon 2.3): a node's text costs a row a KiB, however its lines break: one line of
+// 100 KiB is past the 100 rows of a tree and shows its placeholder, and one of 90 KiB shows; against the twin. On both
+// carriers.
+#[test]
+fn a_long_line_costs_its_rows() {
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        for (bytes, fits) in [(90 << 10, true), (100 << 10, false)] {
+            let frame = {
+                let _limits = limits::set(Limits { text: 1 << 20, ..small() });
+                show(&harness, subject(move |_| v2::Node::column(vec![text(&"x".repeat(bytes))])))
+            };
+            let twin = {
+                let _limits = support::unlimited();
+                match fits {
+                    true => show(&harness, subject(move |_| v2::Node::column(vec![text(&"x".repeat(bytes))]))),
+                    false => show(
+                        &harness,
+                        subject(|_| v2::Node::column(vec![placeholder(None, "too large to build at once")])),
+                    ),
+                }
+            };
+            let name = format!("{carrier:?}, {bytes} bytes");
+            assert!(frame.cells == twin.cells, "{name}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
+        }
     }
 }

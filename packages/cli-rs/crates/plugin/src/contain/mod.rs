@@ -168,6 +168,11 @@ thread_local! {
     static IN_FRAME: Cell<bool> = const { Cell::new(false) };
 }
 
+/// Whether [`in_frame`] runs.
+pub(crate) fn painting() -> bool {
+    IN_FRAME.with(Cell::get)
+}
+
 /// Runs `work`, which runs inside a frame of OpenTUI's, after the paint counted its frame up: the plugin calls in it
 /// count in the frame the paint started in ([`Monitor::frame`]).
 pub(crate) fn in_frame<R>(work: impl FnOnce() -> R) -> R {

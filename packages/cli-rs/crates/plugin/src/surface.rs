@@ -42,6 +42,18 @@ pub(crate) struct Input {
     /// with the activation (review carbon-3).
     pub activation: Rc<Owner>,
 }
+/// Adds what `from` says changed to `into`.
+fn merge(into: &mut abi::Changed, from: &abi::Changed) {
+    into.all |= from.all;
+    into.local |= from.local;
+    into.size |= from.size;
+    into.woken |= from.woken;
+    into.sessions.extend(from.sessions.iter().cloned());
+    into.lists.extend(from.lists.iter().cloned());
+    into.messages.extend(from.messages.iter().cloned());
+    into.locations.extend(from.locations.iter().cloned());
+}
+
 /// Fails the plugin with the error.
 pub(crate) type Fail = Rc<dyn Fn(String)>;
 /// A route's commands, bound to one mount: what they ask for ends with the mount.
@@ -285,6 +297,8 @@ pub(crate) struct Surface {
     viewed: RefCell<v2::SurfaceInput>,
     /// What the content the mount holds costs, read once a handle.
     measures: crate::reconcile::Measures,
+    /// A view waits for the next frame's rows, with what changed for it ([`Surface::draw_next_frame`]).
+    deferred: RefCell<Option<abi::Changed>>,
     /// Each image source's picture, admitted and decoded once however many nodes show it, and the decoded bytes it
     /// charges to the plugin, or the job that holds them until it is done.
     images: RefCell<HashMap<ImageKey, (Picture, Charge)>>,
@@ -420,6 +434,7 @@ impl Surface {
             viewed: RefCell::default(),
             images: RefCell::default(),
             measures: crate::reconcile::Measures::default(),
+            deferred: RefCell::new(None),
             pending: Cell::new(matches!(surface.at, v2::Place::Panel(_) | v2::Place::Overlay(_))),
             input: input.clone(),
             holder: RefCell::new(None),
@@ -526,8 +541,18 @@ impl Surface {
         self.holder.borrow().clone()
     }
 
-    /// Calls the view and adopts its tree; on a refusal, once more for a whole tree.
+    /// Calls the view and adopts its tree; on a refusal, once more for a whole tree. A revision the frame has no rows
+    /// left for, by what the last one built, waits for the next frame; a first view does not (review bigboi 3).
     fn draw_sized(&self, host: &dyn Host, changed: &abi::Changed) {
+        let estimate = {
+            let state = self.state.borrow();
+            state.last.is_some().then(|| state.tree.rows())
+        };
+        if let Some(estimate) = estimate
+            && !limits::frame_room(host.app(), estimate)
+        {
+            return self.draw_next_frame(host.app(), changed);
+        }
         let theme = host.theme();
         for _ in 0..2 {
             let full = {
@@ -626,6 +651,23 @@ impl Surface {
     fn keeps_root(&self, node: &Node) -> bool {
         let Node::Keep { key } = node else { return false };
         self.state.borrow().tree.nodes.first().and_then(|root| root.node.id()) == Some(key.as_str())
+    }
+
+    /// Calls the view as the next paint starts, once however many causes ask for it, with what each said changed.
+    fn draw_next_frame(&self, app: &App, changed: &abi::Changed) {
+        if let Some(waiting) = self.deferred.borrow_mut().as_mut() {
+            return merge(waiting, changed);
+        }
+        *self.deferred.borrow_mut() = Some(changed.clone());
+        crate::reconcile::Tree::defer();
+        let weak = self.weak();
+        app.animate(move |_, _| {
+            if let (Some(mounted), Some(host)) = (weak.upgrade(), mounted_owner(&weak)) {
+                let changed = mounted.deferred.borrow_mut().take().unwrap_or_default();
+                mounted.draw_sized(host.as_ref(), &changed);
+            }
+            false
+        });
     }
 
     /// Drops all the mount holds but itself: its plugin failed, so it shows nothing more and the behaviors leave it.
