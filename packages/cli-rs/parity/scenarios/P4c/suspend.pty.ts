@@ -4,6 +4,11 @@
 import { definePty } from "../../pty/run"
 import { install, palette, server, shellLine } from "./fault"
 
+// The shell's prompt on a line of its own, and the job's stop with the prompt after it (the stop's line wraps): `fg`
+// is typed only then.
+const PROMPT = /^\$ *$/m
+const STOPPED = /Stopped[\s\S]*\n\$ *$/m
+
 export default definePty({
   args: [],
   command: (_side, url) => [
@@ -20,8 +25,10 @@ export default definePty({
   server,
   setup: install,
   steps: [
+    // The shell reads a line only once it printed its prompt: what is typed before is echoed before the prompt.
+    { until: { screen: PROMPT }, timeout: 10_000 },
     { keys: 'ulimit -c 0; eval "$OC_LINE"\r', until: { screen: "fault plugin" }, settle: 500, timeout: 30_000 },
-    { keys: "\x1a", until: { screen: /Stopped/ }, settle: 500, checkpoint: "stopped" },
+    { keys: "\x1a", until: { screen: STOPPED }, settle: 500, checkpoint: "stopped" },
     { keys: "fg\r", until: { screen: /^(?![\s\S]*Stopped)[\s\S]*fault plugin/ }, settle: 1_000 },
     { keys: "keep this draft", until: { screen: "keep this draft" }, settle: 300 },
     ...palette("Fault in render: segv"),
@@ -30,7 +37,7 @@ export default definePty({
       settle: 500,
       timeout: 20_000,
     },
-    { keys: "\x1a", until: { screen: /Stopped/ }, settle: 500 },
+    { keys: "\x1a", until: { screen: STOPPED }, settle: 500 },
     { keys: "fg\r", until: { screen: /^(?![\s\S]*Stopped)[\s\S]*keep this draft/ }, settle: 1_000, checkpoint: "continued" },
   ],
   osc: [],
