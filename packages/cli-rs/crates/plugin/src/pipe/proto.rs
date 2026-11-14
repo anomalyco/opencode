@@ -18,10 +18,7 @@ pub const MAGIC: &str = "opencode-js-host";
 pub enum Down {
     /// The first message: the protocol's version, and the sequence the next event follows, as a new JS host takes over
     /// the stream where the last one ended.
-    Hello {
-        version: u32,
-        after: u64,
-    },
+    Hello { version: u32, after: u64 },
     /// Loads the TUI module of the plugin directory `dir`, the target `target`, and runs its setup with `options`.
     /// Answered with [`Up::Loaded`], [`Up::Unsupported`] or [`Up::Done`] with an error.
     Load {
@@ -30,11 +27,6 @@ pub enum Down {
         dir: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         options: Option<serde_json::Value>,
-    },
-    /// Runs the setup of plugin `id` again, after it was disabled. Answered as a load is.
-    Activate {
-        seq: u64,
-        id: String,
     },
     /// Runs the cleanups of plugin `id`, which the host disabled or failed: nothing of it is called from now on.
     Deactivate {
@@ -47,12 +39,16 @@ pub enum Down {
     Call {
         seq: u64,
         id: String,
+        /// The activation it is for: the load whose setup made it. Another one's never answers it.
+        activation: u64,
         call: Request,
     },
-    /// A surface of plugin `id` mounted, with its first input.
+    /// A surface of plugin `id` mounted, with its first input. Answered with [`Up::Done`] once its view was sent.
     Mount {
         seq: u64,
         id: String,
+        /// The activation it is for: the load whose setup made it. Another one's never answers it.
+        activation: u64,
         surface: usize,
         mount: v2::MountId,
         input: v2::SurfaceInput,
@@ -61,45 +57,31 @@ pub enum Down {
     Input {
         seq: u64,
         id: String,
+        /// The activation it is for: the load whose setup made it. Another one's never answers it.
+        activation: u64,
         mount: v2::MountId,
         input: v2::SurfaceInput,
     },
     Unmount {
         seq: u64,
         id: String,
+        /// The activation it is for: the load whose setup made it. Another one's never answers it.
+        activation: u64,
         mount: v2::MountId,
     },
     /// The host adopted revision `rev` of `mount`: the next one builds on it.
-    Adopted {
-        id: String,
-        mount: v2::MountId,
-        rev: u64,
-    },
+    Adopted { id: String, mount: v2::MountId, rev: u64 },
     /// The host refused revision `rev` of `mount`; the next one is whole and builds on `adopted`.
-    Refused {
-        id: String,
-        mount: v2::MountId,
-        rev: u64,
-        adopted: u64,
-        error: String,
-    },
+    Refused { id: String, mount: v2::MountId, rev: u64, adopted: u64, error: String },
     /// The value of a read plugin `id` watches under `key`, as of now.
-    Snapshot {
-        id: String,
-        key: String,
-        value: serde_json::Value,
-    },
+    Snapshot { id: String, key: String, value: serde_json::Value },
     /// What the effects of a call (`c<seq>`), a setup (`setup`) or a batch of the plugin's (`b<seq>`) answered, one
     /// value each ([`HostRequest`]'s results).
-    Answered {
-        id: String,
-        key: String,
-        results: Vec<serde_json::Value>,
-    },
+    Answered { id: String, key: String, results: Vec<serde_json::Value> },
     /// Answered with [`Up::Pong`] once everything before it was handled.
-    Ping {
-        seq: u64,
-    },
+    Ping { seq: u64 },
+    /// The message of `seq` was over the queue and is not sent; its sequence goes, so the stream has no gap.
+    Skipped { seq: u64 },
 }
 
 impl Down {
@@ -107,13 +89,13 @@ impl Down {
     pub fn seq(&self) -> Option<u64> {
         match self {
             Down::Load { seq, .. }
-            | Down::Activate { seq, .. }
             | Down::Deactivate { seq, .. }
             | Down::Call { seq, .. }
             | Down::Mount { seq, .. }
             | Down::Input { seq, .. }
             | Down::Unmount { seq, .. }
-            | Down::Ping { seq } => Some(*seq),
+            | Down::Ping { seq }
+            | Down::Skipped { seq } => Some(*seq),
             Down::Hello { .. }
             | Down::Adopted { .. }
             | Down::Refused { .. }
@@ -137,6 +119,11 @@ pub enum Up {
     Ack {
         seq: u64,
     },
+    /// The JS host starts the work of `seq`: a load's setup, a handler, a view. Work it did not start when it ended
+    /// never ran.
+    Started {
+        seq: u64,
+    },
     /// The setup of load or activation `seq` returned: the plugin's ID, what it registered, the command names whose
     /// keys hold (`hold`), and the effects setup asked for.
     Loaded {
@@ -152,7 +139,8 @@ pub enum Up {
     Unsupported {
         seq: u64,
     },
-    /// The handler of `seq` returned, with the effects it asked for; or it threw, with nothing.
+    /// The handler of `seq` returned and the views it made due were sent, with the effects it asked for; or it threw,
+    /// with nothing. For a mount or an input: its view was sent.
     Done {
         seq: u64,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]

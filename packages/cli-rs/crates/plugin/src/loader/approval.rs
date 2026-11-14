@@ -79,9 +79,9 @@ impl Artifact {
     }
 
     /// The TypeScript plugin directory `target`, which the JS host would run: its real path, and the SHA-256 of what it
-    /// holds. Each file's path and bytes count, in name order; `node_modules` counts by each entry's path, size and time
-    /// (and a link's target), which a reinstall changes, without reading every dependency; hidden entries do not count.
-    /// The JS host reads the files itself, so a change after the hash is what the next reconcile sees: the watcher's.
+    /// holds. Each file's path and bytes count, in name order, its dependencies in `node_modules` too (what the JS host
+    /// would import); hidden entries do not count. The JS host reads the files itself, so a change after the hash is what
+    /// the next reconcile sees: the watcher's, which holds the new files back.
     pub fn tree(target: &Path) -> Result<Self, String> {
         let error = |error: std::io::Error| format!("{}: {error}", target.display());
         let path = std::fs::canonicalize(target).map_err(error)?;
@@ -116,7 +116,7 @@ impl Artifact {
 }
 
 /// Hashes the entries of `dir` (at `relative` in the plugin) into `context`; `total` counts the bytes read, refused past
-/// [`LIMIT`]. A link is followed (Bun follows it) to a depth of 16, past which the tree is refused.
+/// [`LIMIT`]. A link is followed (Bun follows it) to a depth of 32, past which the tree is refused.
 fn walk(
     dir: &Path,
     relative: &Path,
@@ -124,7 +124,7 @@ fn walk(
     total: &mut u64,
     depth: usize,
 ) -> Result<(), String> {
-    if depth > 16 {
+    if depth > 32 {
         return Err(format!("{}: nested too deep", dir.display()));
     }
     let error = |error: std::io::Error| format!("{}: {error}", dir.display());
@@ -139,9 +139,7 @@ fn walk(
         let metadata = std::fs::metadata(&path).map_err(error)?;
         context.update(encode(&inner).as_bytes());
         context.update(b"\0");
-        if name == "node_modules" {
-            dependencies(&path, context, 0)?;
-        } else if metadata.is_dir() {
+        if metadata.is_dir() {
             walk(&path, &inner, context, total, depth + 1)?;
         } else if metadata.is_file() {
             *total += metadata.len();
@@ -151,30 +149,6 @@ fn walk(
             let mut file = File::open(&path).map_err(error)?;
             context.update(sha256(&mut file)?.as_bytes());
         }
-    }
-    Ok(())
-}
-
-/// Hashes the entries of a `node_modules` directory by their names, sizes, times and link targets, to a depth of 32.
-fn dependencies(dir: &Path, context: &mut ring::digest::Context, depth: usize) -> Result<(), String> {
-    if depth > 32 {
-        return Ok(());
-    }
-    let Ok(entries) = std::fs::read_dir(dir) else { return Ok(()) };
-    let mut entries: Vec<_> = entries.flatten().collect();
-    entries.sort_by_key(|entry| entry.file_name());
-    for entry in entries {
-        let Ok(metadata) = std::fs::symlink_metadata(entry.path()) else { continue };
-        context.update(encode(Path::new(&entry.file_name())).as_bytes());
-        let time = metadata.modified().ok().and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok());
-        context.update(format!("\0{}\0{:?}\0", metadata.len(), time).as_bytes());
-        if metadata.file_type().is_symlink() {
-            let link = std::fs::read_link(entry.path()).unwrap_or_default();
-            context.update(encode(&link).as_bytes());
-        } else if metadata.is_dir() {
-            dependencies(&entry.path(), context, depth + 1)?;
-        }
-        context.update(b"\0");
     }
     Ok(())
 }

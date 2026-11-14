@@ -1686,7 +1686,7 @@ fn a_typescript_plugins_artifact_is_its_files() {
     std::fs::rename(dir.join("src/a.ts"), dir.join("src/b.ts")).unwrap();
     assert_ne!(hash(), changed, "a moved file kept the hash");
     let moved = hash();
-    std::fs::write(dir.join("node_modules/dep/index.js"), "module.exports = 22\n").unwrap();
-    assert_ne!(hash(), moved, "a changed dependency kept the hash");
+    std::fs::write(dir.join("node_modules/dep/index.js"), "module.exports = 2\n").unwrap();
+    assert_ne!(hash(), moved, "a dependency changed in place, at its size, kept the hash");
     assert!(approval::Artifact::tree(&dir.join("tui.ts")).is_err());
 }

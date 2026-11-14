@@ -104,6 +104,8 @@ pub struct Crossed {
     pub dropped: u64,
     /// JS hosts started.
     pub started: u64,
+    /// Messages the host had no room for, not sent.
+    pub refused_sends: u64,
     /// Time the UI thread spent in the carrier's own code: encoding and queueing what it sends, taking what came, and
     /// reading a revision's tree. Not the host's work on the tree, which every carrier has.
     pub host: Duration,
@@ -112,7 +114,7 @@ pub struct Crossed {
 thread_local! {
     static CROSSED: Cell<Crossed> = const { Cell::new(Crossed {
         sent: 0, sent_bytes: 0, received: 0, trees: 0, received_bytes: 0, tree_bytes: 0, adopted: 0, refused: 0,
-        dropped: 0, started: 0, host: Duration::ZERO,
+        dropped: 0, started: 0, refused_sends: 0, host: Duration::ZERO,
     }) };
 }
 
@@ -167,19 +169,36 @@ enum Loading {
     Failed(String),
 }
 
-/// What a sequence awaits.
+/// What a sequence awaits; a message that is only acknowledged (an unmount, a deactivation) awaits nothing here.
 enum Waiting {
     /// A load of the target.
     Load(String),
     /// A setup again, for an activation.
     Activate(Weak<Guest>),
-    Call {
-        guest: Weak<Guest>,
-        export: &'static str,
-        user: bool,
-    },
-    /// A mount, an input, an unmount, a deactivation: nothing is answered but the acknowledgement.
-    Told,
+    /// A handler, kept whole: one the JS host did not start when it ended is sent again to the next one.
+    Call(Call),
+    /// A mount's or an input's view.
+    View(Weak<Guest>),
+    Ping,
+}
+
+/// A handler's call as the host sent it.
+struct Call {
+    guest: Weak<Guest>,
+    export: &'static str,
+    /// It answers the user's input.
+    user: bool,
+    request: opencode_plugin_abi::Request,
+}
+
+/// Whom an end of the JS host names.
+enum Blame {
+    /// The work the JS host said it started and did not finish.
+    Running,
+    /// Nobody: the JS host as a whole (its memory).
+    Nobody,
+    /// A plugin that flooded it.
+    Plugin(String),
 }
 
 /// A fault the next handler's message suffers on its way to the JS host (4.14's pipe operators), for the tests.
@@ -223,6 +242,10 @@ pub struct Scripts {
     /// What a plugin sent after its setup was answered and before the loader registered it: its watches, its effects.
     early: RefCell<HashMap<String, Vec<Up>>>,
     waiting: RefCell<HashMap<u64, Waiting>>,
+    /// The sequences the running JS host said it started.
+    started: RefCell<std::collections::HashSet<u64>>,
+    /// Messages the running JS host's queue had no room for yet, in order, and their bytes: they go once it reads.
+    overflow: RefCell<(VecDeque<(Down, usize)>, usize)>,
     reconcile: RefCell<Option<Rc<dyn Fn()>>>,
     ends: RefCell<VecDeque<Instant>>,
     /// Why the JS host is not started again.
@@ -270,6 +293,8 @@ impl Scripts {
             guests: RefCell::default(),
             early: RefCell::default(),
             waiting: RefCell::default(),
+            started: RefCell::default(),
+            overflow: RefCell::default(),
             reconcile: RefCell::default(),
             ends: RefCell::default(),
             stopped: RefCell::default(),
@@ -320,7 +345,7 @@ impl Scripts {
     /// Asks the JS host to answer once it handled everything sent so far; [`Scripts::ponged`] tells when it did.
     pub fn ping(&self) -> u64 {
         let seq = self.next();
-        self.send(Down::Ping { seq }, Waiting::Told);
+        self.send(Down::Ping { seq }, Some(Waiting::Ping));
         seq
     }
 
@@ -329,9 +354,15 @@ impl Scripts {
         self.pong.get().filter(|(answered, _)| *answered >= seq).map(|(_, waiting)| waiting)
     }
 
-    /// Whether nothing waits for the JS host: no load, setup or handler is unanswered.
+    /// Whether nothing waits for the JS host: no load, setup, handler or view is unanswered (a ping is left out).
     pub fn idle(&self) -> bool {
-        self.waiting.borrow().values().all(|waiting| matches!(waiting, Waiting::Told))
+        self.waiting.borrow().values().all(|waiting| matches!(waiting, Waiting::Ping))
+    }
+
+    /// How many answers the host waits for, pings included.
+    #[doc(hidden)]
+    pub fn waiting(&self) -> usize {
+        self.waiting.borrow().len()
     }
 
     /// Arms `fault` for the next handler's message.
@@ -405,7 +436,7 @@ impl Scripts {
         drop(loads);
         let options = options.and_then(|options| serde_json::from_str(options).ok());
         let load = Down::Load { seq, target: target.to_owned(), dir: dir.to_string_lossy().into_owned(), options };
-        self.send(load, Waiting::Load(target.to_owned()));
+        self.send(load, Some(Waiting::Load(target.to_owned())));
         Step::Starting
     }
 
@@ -417,10 +448,12 @@ impl Scripts {
         }
     }
 
-    /// Sends `message` and records what its sequence awaits. A JS host that cannot take it is ended.
-    fn send(&self, message: Down, waiting: Waiting) {
+    /// Sends `message` and records what its sequence awaits. A full queue is back-pressure, not a fault (review
+    /// bigboi-4): the message waits in the host's overflow, in order, until the JS host reads; past the overflow's bound
+    /// it is refused. A JS host that reads nothing is ended by the progress rule ([`child`]), once.
+    fn send(&self, message: Down, waiting: Option<Waiting>) {
         let seq = message.seq();
-        if let Some(seq) = seq {
+        if let (Some(seq), Some(waiting)) = (seq, waiting) {
             self.waiting.borrow_mut().insert(seq, waiting);
         }
         if self.stopped.borrow().is_some() || !self.started(seq.map_or(self.seq.get(), |seq| seq - 1)) {
@@ -446,37 +479,83 @@ impl Scripts {
         }
     }
 
-    /// Writes `message` to the JS host.
+    /// Writes `message` to the JS host, after what waits in the overflow.
     fn write(&self, message: &Down) {
-        timed(|| self.encode(message));
+        if !self.overflow.borrow().0.is_empty() {
+            self.overflowed(message.clone(), serde_json::to_vec(message).map_or(0, |bytes| bytes.len()));
+            return;
+        }
+        if !timed(|| self.encode(message)) {
+            self.overflowed(message.clone(), serde_json::to_vec(message).map_or(0, |bytes| bytes.len()));
+        }
     }
 
-    fn encode(&self, message: &Down) {
+    /// Keeps `message`, of `size` bytes, for when the queue has room; past the bound, refuses it.
+    fn overflowed(&self, message: Down, size: usize) {
+        let mut overflow = self.overflow.borrow_mut();
+        if overflow.1 + size > self.config.limits.inbox {
+            drop(overflow);
+            self.refuse(&message, size);
+            return;
+        }
+        overflow.1 += size;
+        overflow.0.push_back((message, size));
+    }
+
+    /// Writes what waits in the overflow while the queue takes it.
+    fn drain(&self) {
+        loop {
+            let Some((message, size)) = self.overflow.borrow_mut().0.pop_front() else { return };
+            self.overflow.borrow_mut().1 -= size;
+            if !timed(|| self.encode(&message)) {
+                let mut overflow = self.overflow.borrow_mut();
+                overflow.1 += size;
+                overflow.0.push_front((message, size));
+                return;
+            }
+        }
+    }
+
+    /// Refuses `message`, of `size` bytes, which no queue holds: it is not sent, its sequence goes so the stream has no
+    /// gap, and a handler's call is answered with nothing, as one that asked for nothing.
+    fn refuse(&self, message: &Down, size: usize) {
+        log::warn!("a message of {size} bytes for the JS host has no room; it is not sent");
+        count(|crossed| crossed.refused_sends += 1);
+        let seq = message.seq();
+        if let Some(seq) = seq {
+            // In the message's place: after what waits before it.
+            let skipped = Down::Skipped { seq };
+            if !self.overflow.borrow().0.is_empty() || !self.encode(&skipped) {
+                self.overflow.borrow_mut().0.push_back((skipped, 0));
+            }
+        }
+        let call = seq.and_then(|seq| self.waiting.borrow_mut().remove(&seq));
+        if let (Some(seq), Some(Waiting::Call(_))) = (seq, call) {
+            self.release_hold(seq);
+        }
+    }
+
+    /// Queues `message`; false when the queue has no room for it now.
+    fn encode(&self, message: &Down) -> bool {
         let seq = message.seq();
         let payload = serde_json::to_vec(message).unwrap_or_default();
         log::trace!("js host -> {}", String::from_utf8_lossy(&payload));
         let wait = match message {
-            Down::Load { .. } | Down::Activate { .. } => child::Wait::Setup,
-            Down::Call { .. } | Down::Ping { .. } => child::Wait::Answer,
+            Down::Load { .. } => child::Wait::Setup,
+            Down::Call { .. } | Down::Ping { .. } | Down::Mount { .. } | Down::Input { .. } => child::Wait::Answer,
             _ => child::Wait::Ack,
         };
         let sent = self.child.borrow().as_ref().map(|child| child.send(wire::CONTROL, &payload, seq, wait));
-        match sent {
+        match &sent {
             Some(Ok(())) => count(|crossed| {
                 crossed.sent += 1;
                 crossed.sent_bytes += payload.len() as u64 + 5;
             }),
-            Some(Err(child::Full)) => {
-                let this = self.this.clone();
-                // Not inside the call that sent it: the end revokes what the caller may still hold.
-                crate::defer(&self.host, move |_| {
-                    if let Some(scripts) = this.upgrade() {
-                        scripts.ended("the JS host does not read its input: its queue is full".to_owned());
-                    }
-                });
-            }
+            Some(Err(child::Refused::Full)) => return false,
+            Some(Err(child::Refused::TooLarge(size))) => self.refuse(message, *size),
             None => {}
         }
+        true
     }
 
     /// Starts the JS host when none runs, its stream after sequence `after`; whether one runs.
@@ -492,6 +571,8 @@ impl Scripts {
                 let _ = child.send(wire::CONTROL, &hello, None, child::Wait::Ack);
                 *self.child.borrow_mut() = Some(child);
                 self.read.set((0, 0));
+                *self.overflow.borrow_mut() = Default::default();
+                self.started.borrow_mut().clear();
                 true
             }
             Err(error) => {
@@ -520,6 +601,8 @@ impl Scripts {
 
     /// Takes what the JS host sent.
     fn woken(self: &Rc<Self>) {
+        // It read something, which made room.
+        self.drain();
         let taken = timed(|| self.child.borrow().as_ref().map(|child| (child.take(), child.read())));
         let Some((events, read)) = taken else { return };
         let (seen, seen_trees) = self.read.replace(read);
@@ -551,17 +634,17 @@ impl Scripts {
                         None => count(|crossed| crossed.dropped += 1),
                     }
                 }
+                // A plugin that flooded the host fails, and nothing else is blamed.
                 child::Event::Gone(why, flooded) => {
-                    // A plugin that flooded the host fails, whatever ran.
-                    if let Some(guest) = flooded.and_then(|id| self.guest(&id)) {
-                        guest.fail(format!("flooded the host with effects: {why}"));
-                    }
-                    self.ended(why);
+                    self.ended(why, flooded.map_or(Blame::Running, Blame::Plugin));
                     return;
                 }
                 child::Event::Hung { seq } => {
                     let limit = self.config.limits.ack.as_millis();
-                    self.ended(format!("the JS host did not acknowledge event {seq} within {limit} ms"));
+                    self.ended(
+                        format!("the JS host sent nothing for {limit} ms while event {seq} waited"),
+                        Blame::Running,
+                    );
                     return;
                 }
                 child::Event::Memory(bytes) => {
@@ -570,7 +653,7 @@ impl Scripts {
                         bytes >> 20,
                         self.config.limits.memory >> 20
                     );
-                    self.ended(why);
+                    self.ended(why, Blame::Nobody);
                     return;
                 }
             }
@@ -584,7 +667,12 @@ impl Scripts {
     fn up(self: &Rc<Self>, up: Up) {
         match up {
             Up::Hello { .. } | Up::Ack { .. } => {}
-            Up::Loaded { seq, id, manifest, holds, effects } => match self.waiting.borrow_mut().remove(&seq) {
+            Up::Started { seq } => {
+                if self.waiting.borrow().contains_key(&seq) {
+                    self.started.borrow_mut().insert(seq);
+                }
+            }
+            Up::Loaded { seq, id, manifest, holds, effects } => match self.take_waiting(seq) {
                 Some(Waiting::Load(target)) => {
                     let mut loads = self.loads.borrow_mut();
                     if let Some(load) =
@@ -614,6 +702,7 @@ impl Scripts {
             },
             Up::Unsupported { seq } => self.answered_load(seq, Loading::Unsupported),
             Up::Done { seq, effects, error } => {
+                self.started.borrow_mut().remove(&seq);
                 let waiting = self.waiting.borrow_mut().remove(&seq);
                 match waiting {
                     Some(Waiting::Load(_)) => {
@@ -624,13 +713,22 @@ impl Scripts {
                             guest.fail(error.unwrap_or_else(|| "setup failed".to_owned()));
                         }
                     }
-                    Some(Waiting::Call { guest, export, user }) => {
-                        if let Some(guest) = guest.upgrade() {
-                            guest.done(seq, export, user, effects, error);
+                    Some(Waiting::Call(call)) => {
+                        if let Some(guest) = call.guest.upgrade() {
+                            guest.done(seq, call.export, call.user, effects, error);
                         }
-                        self.release_hold(seq);
+                        // The keys it held go on once its effects applied: they are deferred, and so is this, after
+                        // them (review bigboi-5).
+                        let this = self.this.clone();
+                        if let Some(host) = self.host.upgrade() {
+                            host.app().defer(move |_| {
+                                if let Some(scripts) = this.upgrade() {
+                                    scripts.release_hold(seq);
+                                }
+                            });
+                        }
                     }
-                    Some(Waiting::Told) | None => {}
+                    Some(Waiting::View(_) | Waiting::Ping) | None => {}
                 }
             }
             Up::Effects { ref id, .. } | Up::Watch { ref id, .. } if self.guest(id).is_none() => self.keep(up),
@@ -660,7 +758,7 @@ impl Scripts {
                 }
             }
             Up::Pong { seq, waiting } => {
-                self.waiting.borrow_mut().remove(&seq);
+                self.take_waiting(seq);
                 self.pong.set(Some((seq, waiting)));
             }
             Up::Log { id, level, message } => {
@@ -697,9 +795,15 @@ impl Scripts {
         early.into_iter().for_each(|up| self.up(up));
     }
 
+    /// What `seq` waited for, now answered.
+    fn take_waiting(&self, seq: u64) -> Option<Waiting> {
+        self.started.borrow_mut().remove(&seq);
+        self.waiting.borrow_mut().remove(&seq)
+    }
+
     /// The load `seq` was answered with `state`.
     fn answered_load(&self, seq: u64, state: Loading) {
-        self.waiting.borrow_mut().remove(&seq);
+        self.take_waiting(seq);
         let mut loads = self.loads.borrow_mut();
         let Some(load) = loads.values_mut().find(|load| matches!(load.state, Loading::Waiting(at) if at == seq)) else {
             return;
@@ -717,48 +821,65 @@ impl Scripts {
         }
     }
 
-    /// The JS host ended, hung (`hung`, the event it did not acknowledge) or went over its budget: it is ended and its
-    /// process group with it. The plugin whose handler ran fails; every other one is set up again on a new JS host,
-    /// and its surfaces keep their last trees meanwhile. Past the limit of ends, every plugin on it fails.
-    fn ended(self: &Rc<Self>, why: String) {
-        let child = self.child.borrow_mut().take();
-        let acked = child.as_ref().map_or(0, Child::acked);
-        drop(child);
+    /// The JS host ended, hung, broke the protocol, was flooded, or went over its budget: it is ended with its process
+    /// group. `blame` names whom: the work it said it started and did not finish (its plugin fails), a plugin that
+    /// flooded it, or nobody (memory). Every other plugin is set up again on a new JS host, and its surfaces keep their
+    /// last trees until new ones come; a restart resets every plugin's JS state, as the process is one (3.7). The calls
+    /// the JS host received and did not start are sent again, in order, after the setups: they never ran. One it started
+    /// and did not finish is not: it may have done what it does, so it is never run twice (at most once). Past the limit
+    /// of ends, every plugin on it fails.
+    fn ended(self: &Rc<Self>, why: String, blame: Blame) {
+        drop(self.child.borrow_mut().take());
+        *self.overflow.borrow_mut() = Default::default();
         log::error!("{why}");
         // A ping on its way is lost with it: answered, as one a tree waits behind, so its sender asks again.
         self.pong.set(Some((self.seq.get(), true)));
-        let waiting: Vec<(u64, Waiting)> = self.waiting.borrow_mut().drain().collect();
-        // What ran when it ended: the oldest load, setup or handler the JS host received and did not answer. Its plugin
-        // fails; a load that did not run is sent again.
-        let ran = waiting
-            .iter()
-            .filter(|(seq, waiting)| *seq <= acked && !matches!(waiting, Waiting::Told))
-            .min_by_key(|(seq, _)| *seq);
-        match ran.map(|(_, waiting)| waiting) {
-            Some(Waiting::Call { guest, export, .. }) => {
-                if let Some(guest) = guest.upgrade() {
-                    guest.fail(format!("{export} ended the JS host: {why}"));
+        let started = std::mem::take(&mut *self.started.borrow_mut());
+        let mut waiting: Vec<(u64, Waiting)> = self.waiting.borrow_mut().drain().collect();
+        waiting.sort_by_key(|(seq, _)| *seq);
+        let ran = waiting.iter().find(|(seq, _)| started.contains(seq)).map(|(seq, _)| *seq);
+        match blame {
+            Blame::Plugin(id) => {
+                if let Some(guest) = self.guest(&id) {
+                    guest.fail(format!("flooded the host with effects: {why}"));
                 }
             }
-            Some(Waiting::Activate(guest)) => {
-                if let Some(guest) = guest.upgrade() {
-                    guest.fail(format!("setup ended the JS host: {why}"));
+            Blame::Running => match waiting.iter().find(|(seq, _)| Some(*seq) == ran).map(|(_, waiting)| waiting) {
+                Some(Waiting::Call(call)) => {
+                    if let Some(guest) = call.guest.upgrade() {
+                        guest.fail(format!("{} ended the JS host: {why}", call.export));
+                    }
                 }
-            }
-            Some(Waiting::Load(target)) => {
-                if let Some(load) = self.loads.borrow_mut().get_mut(target) {
-                    (load.state, load.registered) = (Loading::Failed(format!("setup ended the JS host: {why}")), false);
+                Some(Waiting::Activate(guest) | Waiting::View(guest)) => {
+                    if let Some(guest) = guest.upgrade() {
+                        guest.fail(format!("setup or a view ended the JS host: {why}"));
+                    }
                 }
-            }
-            Some(Waiting::Told) | None => {}
+                Some(Waiting::Load(target)) => {
+                    if let Some(load) = self.loads.borrow_mut().get_mut(target) {
+                        (load.state, load.registered) =
+                            (Loading::Failed(format!("setup ended the JS host: {why}")), false);
+                    }
+                }
+                Some(Waiting::Ping) | None => {}
+            },
+            Blame::Nobody => {}
         }
-        let again: Vec<String> = waiting
-            .iter()
-            .filter_map(|(seq, waiting)| match waiting {
-                Waiting::Load(target) if Some(*seq) != ran.map(|(seq, _)| *seq) => Some(target.clone()),
-                _ => None,
-            })
-            .collect();
+        if let Some(seq) = ran
+            && let Some((_, Waiting::Call(call))) = waiting.iter().find(|(known, _)| *known == seq)
+        {
+            let plugin = call.guest.upgrade().map(|guest| guest.id().to_owned()).unwrap_or_default();
+            log::warn!("{} of plugin {plugin} ran when the JS host ended; it is not run again", call.export);
+        }
+        let mut again = Vec::new();
+        let mut calls = Vec::new();
+        for (seq, waiting) in waiting {
+            match waiting {
+                Waiting::Load(target) if Some(seq) != ran => again.push(target),
+                Waiting::Call(call) if Some(seq) != ran => calls.push(call),
+                _ => {}
+            }
+        }
         let now = Instant::now();
         let mut ends = self.ends.borrow_mut();
         ends.push_back(now);
@@ -783,10 +904,15 @@ impl Scripts {
                 load.digest = 0;
             }
         }
-        // Every running plugin is set up again on a new JS host.
+        // Every running plugin is set up again on a new JS host, then gets the calls that never ran, in order.
         let guests: Vec<Rc<Guest>> = self.guests.borrow().values().filter_map(Weak::upgrade).collect();
         for guest in guests {
             guest.restart();
+        }
+        for call in calls {
+            if let Some(guest) = call.guest.upgrade().filter(|guest| !guest.ended()) {
+                self.call_as(&guest, call.export, call.request, false, call.user);
+            }
         }
         self.reconcile();
     }
@@ -809,10 +935,23 @@ impl Scripts {
         request: opencode_plugin_abi::Request,
         hold: bool,
     ) {
+        self.call_as(guest, export, request, hold, crate::behave::user());
+    }
+
+    /// [`Scripts::call`] for the user's input when `user`.
+    fn call_as(
+        self: &Rc<Self>,
+        guest: &Rc<Guest>,
+        export: &'static str,
+        request: opencode_plugin_abi::Request,
+        hold: bool,
+        user: bool,
+    ) {
         let seq = self.next();
-        let user = crate::behave::user();
-        let message = Down::Call { seq, id: guest.id().to_owned(), call: request };
-        self.send(message, Waiting::Call { guest: Rc::downgrade(guest), export, user });
+        let message =
+            Down::Call { seq, id: guest.id().to_owned(), activation: guest.activation(), call: request.clone() };
+        let call = Call { guest: Rc::downgrade(guest), export, user, request };
+        self.send(message, Some(Waiting::Call(call)));
         if hold {
             self.start_hold(seq);
         }
