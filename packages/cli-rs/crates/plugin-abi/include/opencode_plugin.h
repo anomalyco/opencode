@@ -235,11 +235,11 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   "focused", "input-mode" (none of them during `create`, which has no input yet). Effects wait
  *   until the plugin's call returns. A call that panics, or whose answer the host refuses (it cannot decode it, the
  *   tree breaks the contract, a handler answers anything but null), has none, and fails the plugin. A call that
- *   answers OPENCODE_ERROR keeps them (see above). A render, a view, a claim's view, a draw or a layout ("fence", "slot",
- *   "route", "render-fence", "render", "render-route", "view", "claim", "draw", "layout") reads only: the host answers OPENCODE_ERROR
- *   to any request of it that asks for something. A "scroll" of the transcript is taken only from a call that
- *   answers the user's input (a key, a click, an edit, the palette, the user's scroll): the host answers
- *   OPENCODE_ERROR to any other.
+ *   answers OPENCODE_ERROR keeps them (see above). A render, a view, a claim's view, a draw or a layout ("fence",
+ *   "slot", "route", "render-fence", "render", "render-route", "view", "claim", "draw", "layout") reads only: the
+ *   host answers OPENCODE_ERROR to any request of it that asks for something. A "scroll" of the transcript is taken
+ *   only from a call that answers the user's input (a key, a click, an edit, the palette, the user's scroll): the
+ *   host answers OPENCODE_ERROR to any other.
  *
  * Content in a view reply is a JSON string when its bytes are UTF-8, else {"base64": "..."} (RFC 4648, padded).
  * A message the host delivers ("message") is the JSON text the sender wrote, as a JSON string.
