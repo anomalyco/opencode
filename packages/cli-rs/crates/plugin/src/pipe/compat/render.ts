@@ -204,6 +204,8 @@ export interface Mounted {
   root: VNode
   dispose(): void
   crashed?: string
+  // The reads its renders made, which the plugin keeps watching while it lives.
+  keys: Set<string>
 }
 
 // Renders `render` under a root node whose changes call `invalidate`; a throw, as it renders or later, ends what it
@@ -217,7 +219,7 @@ export function mount(
   const root = new VNode("box")
   root.owner = { invalidate }
   let dispose = () => {}
-  const mounted: Mounted = { root, dispose: () => dispose() }
+  const mounted: Mounted = { root, dispose: () => dispose(), keys: new Set() }
   const fail = (error: unknown) => {
     if (mounted.crashed !== undefined) return
     mounted.crashed = error instanceof Error ? error.message : String(error)

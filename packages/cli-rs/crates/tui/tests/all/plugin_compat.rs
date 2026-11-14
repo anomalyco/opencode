@@ -320,6 +320,9 @@ fn a_dialog_of_its_own_shows_its_jsx_and_closes() {
     pipe.settle();
     let screen = pipe.harness.app.text();
     assert!(screen.contains("Own dialog") && screen.contains("shown 0"), "{screen}");
+    // A command of the base mode runs nothing while the dialog has the keyboard (bigboi P8-4).
+    tui.keymap.dispatch("v2probe.base", None);
+    pipe.settle();
     let (x, y) = pipe.harness.find("bump it");
     pipe.harness.app.click(x, y);
     // The layer sends the changed dialog in a microtask after the click's handler.
@@ -331,12 +334,14 @@ fn a_dialog_of_its_own_shows_its_jsx_and_closes() {
     pipe.settle();
     assert!(!pipe.harness.app.text().contains("Own dialog"), "{}", pipe.harness.app.text());
     assert_eq!(logged(&pipe, &log, 1), [json!({ "closed": true })]);
+    tui.keymap.dispatch("v2probe.base", None);
+    assert_eq!(logged(&pipe, &log, 2), [json!({ "closed": true }), json!({ "base": true })]);
     tui.keymap.dispatch("v2probe.show", None);
     pipe.settle();
     tui.keymap.dispatch("v2probe.unshow", None);
     pipe.settle();
     assert!(!pipe.harness.app.text().contains("Own dialog"), "{}", pipe.harness.app.text());
-    assert_eq!(logged(&pipe, &log, 2), [json!({ "closed": true }), json!({ "closed": true })]);
+    assert_eq!(logged(&pipe, &log, 3), [json!({ "closed": true }), json!({ "base": true }), json!({ "closed": true })]);
 }
 
 // Expected: a command a component registers (the page's, after setup) runs while the component is mounted, though
@@ -372,7 +377,10 @@ fn a_components_command_lives_with_its_mount_across_a_reload() {
     assert!(screen.contains("v2probe route plugin"), "the route read did not follow after the reload:\n{screen}");
     tui.keymap.dispatch("v2probe.home", None);
     pipe.settle();
-    // The command outlives its mount by 250 ms of the JS host's time.
+    // Right after the page left, its command runs nothing (bigboi P8-4), though the host lists it 250 ms longer.
+    tui.keymap.dispatch("v2probe.onpage", None);
+    pipe.settle();
+    assert_eq!(calls(&log), [json!({ "onpage": true })], "the page's command ran after the page left");
     std::thread::sleep(Duration::from_millis(400));
     pipe.settle();
     assert!(!matches!(tui.keymap.dispatch("v2probe.onpage", None), opentui::keymap::RunResult::Ok), "it stayed");

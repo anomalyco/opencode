@@ -3,18 +3,22 @@
 // the step, an effect), hold the keys after them, throw, hang, exit, flood the host with effects, write raw bytes to
 // standard output, print, and grow its memory. Its slot surface on the home footer shows `rows` lines.
 
-import { appendFileSync, writeSync } from "node:fs"
+import { appendFileSync, existsSync, readFileSync, writeSync } from "node:fs"
 import path from "node:path"
 
+// Beside its directory, or where `log.txt` in it says: a project's plugin runs from a copy of its files (P8).
+const named = path.join(import.meta.dir, "log.txt")
+const beside = existsSync(named) ? readFileSync(named, "utf8").trim() : path.join(import.meta.dir, "..", ".probe.log.jsonl")
+
 // The module's own code runs as it is imported: it says so, so a test can tell it never ran before approval.
-appendFileSync(path.join(import.meta.dir, "..", ".probe.log.jsonl"), JSON.stringify({ module: true }) + "\n")
+appendFileSync(beside, JSON.stringify({ module: true }) + "\n")
 
 export default {
   id: "example.probe",
   setup(api: any) {
     const carrier = api[Symbol.for("opencode.carrier")]
     // Without the option (a project's plugin has none), beside its directory: a file in it is part of its hash.
-    const file = api.options.log ?? path.join(import.meta.dir, "..", ".probe.log.jsonl")
+    const file = api.options.log ?? beside
     const log = (entry: unknown) => appendFileSync(file, JSON.stringify(entry) + "\n")
     let rows = 3
     let hoard: unknown[] = []

@@ -40,9 +40,18 @@ pub enum Down {
         /// `dir` is the approved copy of a project's plugin (P8): what its files import must be in it.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         confined: bool,
+        /// With `setup`: the reads its setup may make at once, as they are now ([`seed`]).
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        seed: std::collections::BTreeMap<String, serde_json::Value>,
     },
     /// Runs the setup of the module the load `load` described. Answered as a load with `setup`.
-    Setup { seq: u64, load: u64 },
+    Setup {
+        seq: u64,
+        load: u64,
+        /// The reads its setup may make at once, as they are now ([`seed`]).
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        seed: std::collections::BTreeMap<String, serde_json::Value>,
+    },
     /// The host forgot `target`: the JS host drops its plugin, whose ID is free for another target.
     Forget { target: String },
     /// The theme's mode or colors changed.
@@ -140,6 +149,27 @@ impl Down {
             | Down::Answered { .. } => None,
         }
     }
+}
+
+/// The reads a V2 plugin's setup makes before the host could push them (bigboi P8-5): the route and what `info` says
+/// (the location, the terminal's size), as they are as the setup starts, under the keys the compatibility layer reads
+/// them by. TS's setup reads them from its store at once; a watch made in setup answers only after it returned.
+pub(crate) fn seed(
+    host: &std::rc::Weak<dyn crate::Host>,
+    id: &str,
+) -> std::collections::BTreeMap<String, serde_json::Value> {
+    let evaluate = |request: &HostRequest| super::evaluate(host, id, Vec::new(), None, request);
+    let route = evaluate(&HostRequest::Route);
+    // A session's route: the session too, whose location a setup prefers to the default one.
+    let session = (route["type"] == "session").then(|| route["id"].as_str().map(str::to_owned)).flatten();
+    let mut seed = std::collections::BTreeMap::from([
+        ("info".to_owned(), evaluate(&HostRequest::Info)),
+        ("route".to_owned(), route),
+    ]);
+    if let Some(session) = session {
+        seed.insert(format!("session:{session}"), evaluate(&HostRequest::Session { id: session }));
+    }
+    seed
 }
 
 /// The page theme as the JS host holds it (P8): its mode, and each token's color as `#rrggbbaa`.

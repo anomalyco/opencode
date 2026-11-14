@@ -67,9 +67,16 @@ pub fn show(tui: &Tui, id: &str, generation: u64, dialog: abi::Dialog) {
         abi::Dialog::Prompt { title, placeholder, action } => ask(tui, owner, title, placeholder, action),
         abi::Dialog::Panel(panel) => self::panel(tui, owner, panel),
         abi::Dialog::Close { key } => {
-            if open(tui, id, &key) {
+            let mine = || tui.reads.owner.borrow().as_ref().is_some_and(|(owner, _)| owner == id);
+            if open(tui, id, &key) || (key.is_empty() && mine()) {
                 tui.dialogs.clear();
             }
+        }
+        abi::Dialog::Dismissable { dialog, dismissed } => {
+            *tui.reads.dismissed.borrow_mut() = Some((owner, dismissed));
+            show(tui, id, generation, *dialog);
+            // A dialog that did not open (a close) leaves it.
+            tui.reads.dismissed.borrow_mut().take();
         }
         abi::Dialog::Select(select) => pick(tui, owner, select),
         abi::Dialog::Confirm(confirm) => ask_yes(tui, owner, confirm),
@@ -97,10 +104,17 @@ pub fn close(tui: &Tui, id: &str) {
 /// once the dialog it replaced has closed.
 fn own(tui: &Tui, owner: Owner, replace: impl FnOnce(Box<dyn FnOnce()>)) {
     let forgotten = owner.clone();
+    let dismissed = tui.reads.dismissed.borrow_mut().take().filter(|(of, _)| *of == owner);
     replace(Box::new(bind!(tui, |tui| {
-        let mut current = tui.reads.owner.borrow_mut();
-        if current.as_ref() == Some(&forgotten) {
-            current.take();
+        {
+            let mut current = tui.reads.owner.borrow_mut();
+            if current.as_ref() == Some(&forgotten) {
+                current.take();
+            }
+        }
+        // After the dialog's own action, which an answer runs once the event that closed it is handled.
+        if let Some((owner, action)) = dismissed {
+            tui.app.defer(bind!(tui, |tui, _| run(&tui, &owner, &action, None)));
         }
     })));
     *tui.reads.owner.borrow_mut() = Some(owner);
