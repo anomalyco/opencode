@@ -113,6 +113,7 @@ fn log(owner: &str, host: &dyn abi::Host, event: &Event) {
         Event::Scroll { event } => format!("scroll {event:?}"),
         Event::Change { node, text } => format!("change {node} {text}"),
         Event::Submit { node, text } => format!("submit {node} {text}"),
+        Event::Mount { mounted, .. } => format!("mount {mounted}"),
     };
     probe(|probe| probe.log.push(format!("{owner}: {event} [{mode}]")));
 }

@@ -298,7 +298,10 @@ its last tree's root (so its root needs an id); the host then keeps the mount as
 box with `visible: false` takes no room, not even a gap, as TS's `visible`; a slot surface whose root box is hidden
 shows nothing in its slot, as a 1.x render's `Render::Hide`. A slot surface's view gets its slot's input as a 1.x claim
 does (`SurfaceInput::slot`: the session, the prompt's state). A change of the host's own state since the last view is
-`local`, also when the view runs for another cause first.
+`local`, also when the view runs for another cause first. A surface that asks (`Surface::mounts`) hears each mount
+begin, before its first view, and end, as `Event::Mount` with the slot's input, as a 1.x `on_mount` or
+`on_route_mount`; the plugin hears it, not the mount, so what its handler starts (a fetch) is the plugin's and outlives
+that mount.
 
 ### Contract 2.0 input and surfaces (P2)
 

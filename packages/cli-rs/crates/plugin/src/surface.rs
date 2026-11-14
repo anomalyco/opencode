@@ -33,6 +33,8 @@ pub(crate) struct Input {
     pub deliver: Option<interact::Deliver>,
     pub layers: Vec<abi::interact::Layer>,
     pub panel: bool,
+    /// Its handler hears each mount begin and end ([`abi::interact::Event::Mount`], P6a).
+    pub mounts: bool,
 }
 /// Fails the plugin with the error.
 pub(crate) type Fail = Rc<dyn Fn(String)>;
@@ -380,6 +382,8 @@ impl Surface {
         let deliver: interact::Deliver =
             input.deliver.clone().unwrap_or_else(|| Rc::new(|_, _, _| abi::interact::Handled::Pass));
         owned.register(host, &input.layers, &deliver);
+        // A surface that asks hears its mount begin before its first view, as a 1.x claim's `on_mount` (P6a).
+        mounted.tell_mount(host, true);
         *mounted.holder.borrow_mut() = Some(owned);
         let weak = Rc::downgrade(&mounted);
         // The host's own state and the terminal's size change outside change batches. A view that ran after the last
@@ -516,6 +520,28 @@ impl Surface {
                 }
             }
         }
+    }
+
+    /// Tells the plugin of a surface that asks that this mount began or is ending. The plugin hears it, not the mount:
+    /// what it starts is the plugin's and outlives the mount, as a 1.x `on_mount`'s does (a read the next mount shows).
+    fn tell_mount(&self, host: &dyn Host, mounted: bool) {
+        let Some(deliver) = self.input.deliver.as_ref().filter(|_| self.input.mounts) else { return };
+        let owner = Owner::activation(&self.input.plugin, self.owner.clone());
+        deliver(host, &owner, &self.mount_event(mounted));
+    }
+
+    /// [`abi::interact::Event::Mount`] for this mount, with a slot surface's input.
+    fn mount_event(&self, mounted: bool) -> abi::interact::Event {
+        let slot = (!self.path.is_empty()).then(|| abi::SlotInput {
+            session_id: self.slot_input.session_id.clone(),
+            prompt: self
+                .slot_input
+                .prompt
+                .as_ref()
+                .map(|prompt| abi::PromptInput { shell: prompt.shell, show_details: prompt.show_details }),
+            ..abi::SlotInput::default()
+        });
+        abi::interact::Event::Mount { mounted, slot }
     }
 
     /// Whether `nodes` is a keep of the root of the last accepted tree.
@@ -846,6 +872,12 @@ impl Surface {
 
 impl Drop for Surface {
     fn drop(&mut self) {
+        // The plugin hears the mount end while the mount's owner lives: a failed plugin's was revoked.
+        if let Some(host) = self.owner.upgrade()
+            && self.holder.get_mut().as_ref().is_some_and(|owner| owner.alive())
+        {
+            self.tell_mount(&*host, false);
+        }
         if let Some(host) = self.owner.upgrade() {
             self.viewer.forget(&*host, &self.id);
         }
