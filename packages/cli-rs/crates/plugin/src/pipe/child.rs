@@ -124,7 +124,9 @@ struct Inbox {
     ordered: usize,
     bytes: usize,
     trees: usize,
-    /// The unread messages of each plugin's own effects.
+    /// The unread messages of each plugin's own: its effects, and the start of its code that ran for an answer of them
+    /// (`Up::Entered` with its ID), which a flood of effects also brings. The end of that code names no plugin; with
+    /// the start counted, the plugin's own are still most of a flood of its effects and their answers.
     effects: std::collections::HashMap<String, usize>,
     /// A `Gone` was queued: nothing more is.
     ended: bool,
@@ -457,7 +459,7 @@ fn deliver(shared: &Shared, event: Event, bytes: usize) -> bool {
         Event::Up(up) => {
             inbox.ordered += 1;
             inbox.bytes += bytes;
-            if let Up::Effects { id, .. } = &**up {
+            if let Up::Effects { id, .. } | Up::Entered { id: Some(id) } = &**up {
                 *inbox.effects.entry(id.clone()).or_default() += 1;
             }
             event
@@ -779,6 +781,23 @@ mod tests {
                 true => assert_eq!(why.map(|(_, plugin)| plugin), Some(Some("loud".to_owned())), "{count}"),
             }
         }
+        // The start of the code a plugin runs for the answers of its effects is its own too: a flood of effects with
+        // each answered is still the plugin's (P8). Of the 16 held, 5 are its effects and 5 the starts of its code.
+        let entered = |id: Option<&str>| control(&Up::Entered { id: id.map(str::to_owned) });
+        let mut frames = hello();
+        frames.extend(effects("quiet"));
+        for _ in 0..5 {
+            frames.extend(effects("loud"));
+            frames.extend(entered(Some("loud")));
+            frames.extend(entered(None));
+        }
+        let (child, _dir) = fake(&frames, Limits { ordered: 16, ..Limits::default() });
+        std::thread::sleep(Duration::from_millis(300));
+        let blamed = child.take().into_iter().find_map(|event| match event {
+            Event::Gone(_, plugin) => Some(plugin),
+            _ => None,
+        });
+        assert_eq!(blamed, Some(Some("loud".to_owned())));
     }
 
     // Expected (the flood of trees, S2): past the bound of trees the host has not taken, the reader stops reading, so
