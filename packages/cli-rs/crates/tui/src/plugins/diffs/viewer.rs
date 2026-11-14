@@ -142,7 +142,10 @@ pub enum Showing {
 pub enum Preview {
     Loading,
     Failed,
-    Ready(std::rc::Rc<[u8]>),
+    /// Bytes that the host's image decoder refuses (TS `onError`): no size and no preview to click.
+    Undecodable,
+    /// The bytes, and the width and height the host decodes them to.
+    Ready(std::rc::Rc<[u8]>, (u32, u32)),
 }
 
 /// The content handles a viewer gave its mount: a patch by its file, an image by its path. They name nothing in

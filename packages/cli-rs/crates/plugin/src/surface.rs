@@ -1266,6 +1266,15 @@ pub(crate) fn part_output(host: &dyn Host, part: &v2::PartRef) -> Option<String>
     found
 }
 
+/// The size of the image `bytes` decode to, or `None` where an image node of them shows nothing ([`abi::Read::image_size`]):
+/// it decodes them, within one image's limits (4.2).
+pub fn decoded_size(app: &App, bytes: &[u8]) -> Option<(u32, u32)> {
+    match decode(app, bytes) {
+        Picture::Ready(image) => image.info().ok().map(|info| (info.width, info.height)),
+        Picture::Pending | Picture::Over => None,
+    }
+}
+
 /// The image `bytes` decode to in the frame, for a 1.x claim's part, which has no plugin in the host to charge: within
 /// one image's limits (4.2), else the placeholder; bytes that are no image, or do not decode, show nothing.
 pub(crate) fn decode(app: &App, bytes: &[u8]) -> Picture {

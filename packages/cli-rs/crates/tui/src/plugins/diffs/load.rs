@@ -146,7 +146,10 @@ impl Viewer {
                 let preview = match reply.and_then(|value| {
                     value.as_str().and_then(abi::base64::decode).ok_or_else(|| "not base64".to_owned())
                 }) {
-                    Ok(bytes) => Preview::Ready(bytes.into()),
+                    Ok(bytes) => match host.image_size(&bytes) {
+                        Some(size) => Preview::Ready(bytes.into(), size),
+                        None => Preview::Undecodable,
+                    },
                     Err(error) => {
                         log::warn!("{}: {file}: {error}", super::ID);
                         Preview::Failed

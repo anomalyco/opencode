@@ -1138,6 +1138,10 @@ impl abi::Read for Scoped<'_> {
         self.read.setting(name)
     }
 
+    fn image_size(&self, bytes: &[u8]) -> Option<(u32, u32)> {
+        self.read.image_size(bytes)
+    }
+
     fn scroll_state(&self, target: &abi::v2::Target) -> Option<abi::v2::ScrollState> {
         behave::scroll_state(&self.caller(), target)
     }

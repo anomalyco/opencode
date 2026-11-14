@@ -1996,6 +1996,10 @@ pub enum HostRequest {
     Setting {
         name: String,
     },
+    /// 2.0 (P6c): [`Read::image_size`] of the bytes, in base64 ([`base64::encode`]).
+    ImageSize {
+        bytes: String,
+    },
     /// 2.0 (P6c): [`Host::set_setting`], once the current call returns.
     SetSetting {
         name: String,
@@ -2919,6 +2923,12 @@ pub trait Read {
     fn setting(&self, _name: &str) -> Option<serde_json::Value> {
         None
     }
+    /// 2.0 (P6c): the width and height of the image `bytes` decode to in the host, or `None` where an image node of
+    /// them would show nothing: not a PNG, GIF, JPEG or WebP image, past the host's bounds, or bytes that do not
+    /// decode. [`image_size`] reads only the header.
+    fn image_size(&self, _bytes: &[u8]) -> Option<(u32, u32)> {
+        None
+    }
 }
 
 /// 2.0 (P6c): the user's settings a plugin reads ([`Read::setting`]) and writes ([`Host::set_setting`]), by name: the
@@ -3387,6 +3397,10 @@ impl Read for HostHandle {
 
     fn setting(&self, name: &str) -> Option<serde_json::Value> {
         self.read(&HostRequest::Setting { name: name.to_owned() }).flatten()
+    }
+
+    fn image_size(&self, bytes: &[u8]) -> Option<(u32, u32)> {
+        self.read(&HostRequest::ImageSize { bytes: base64::encode(bytes) }).flatten()
     }
 }
 

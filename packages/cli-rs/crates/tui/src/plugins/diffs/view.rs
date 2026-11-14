@@ -335,30 +335,28 @@ fn image_body(cx: &mut v2::View<'_>, contents: &mut super::viewer::Contents, ent
     let slot = match &card.preview {
         None | Some(Preview::Loading) => vec![line("Loading image…", "text.muted")],
         Some(Preview::Failed) => vec![line("Could not load image", "text.feedback.error.base")],
-        Some(Preview::Ready(bytes)) => match opencode_plugin::abi::image_size(bytes) {
-            None => vec![line("Could not decode image", "text.feedback.error.base")],
-            Some((width, tall)) => {
-                let handle: ContentRef =
-                    *contents.images.entry(entry.file.clone()).or_insert_with(|| cx.content(bytes.to_vec()));
-                let open = Click::command(PREVIEW, Some(entry.file.clone()));
-                let picture = Node::Image {
-                    id: Some(format!("i:{}", entry.file)),
-                    content: Source::Content(handle),
-                    fit: Fit::Contain,
-                    layout: Layout::default().width(Width::Percent(100.0)).height(Width::Percent(100.0)),
-                };
-                vec![
-                    Node::column(vec![picture])
-                        .on_click(open.clone())
-                        .layout(Layout::default().width(Width::Percent(100.0)).height(Width::Cells(height))),
-                    Node::row(vec![
-                        line(&format!("{width} x {tall}"), "text.muted"),
-                        line("Click to enlarge", "text.action.secondary.base").on_click(open),
-                    ])
-                    .justify(Justify::SpaceBetween),
-                ]
-            }
-        },
+        Some(Preview::Undecodable) => vec![line("Could not decode image", "text.feedback.error.base")],
+        Some(Preview::Ready(bytes, (width, tall))) => {
+            let handle: ContentRef =
+                *contents.images.entry(entry.file.clone()).or_insert_with(|| cx.content(bytes.to_vec()));
+            let open = Click::command(PREVIEW, Some(entry.file.clone()));
+            let picture = Node::Image {
+                id: Some(format!("i:{}", entry.file)),
+                content: Source::Content(handle),
+                fit: Fit::Contain,
+                layout: Layout::default().width(Width::Percent(100.0)).height(Width::Percent(100.0)),
+            };
+            vec![
+                Node::column(vec![picture])
+                    .on_click(open.clone())
+                    .layout(Layout::default().width(Width::Percent(100.0)).height(Width::Cells(height))),
+                Node::row(vec![
+                    line(&format!("{width} x {tall}"), "text.muted"),
+                    line("Click to enlarge", "text.action.secondary.base").on_click(open),
+                ])
+                .justify(Justify::SpaceBetween),
+            ]
+        }
     };
     Node::column(vec![
         line("Working tree preview", "text.muted"),
