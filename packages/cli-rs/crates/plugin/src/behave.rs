@@ -240,6 +240,9 @@ struct Hook {
     frame: Cell<u64>,
     mounts: RefCell<Vec<Weak<Surface>>>,
     key: Cell<Option<opentui::app::HandlerId>>,
+    /// A `layout` delivery past this frame's cap waits for the next frame.
+    owed: Cell<bool>,
+    this: Weak<Hook>,
 }
 
 thread_local! {
@@ -329,7 +332,7 @@ pub(crate) fn arm(app: &App) {
 impl Hook {
     fn new(app: &App) -> Rc<Self> {
         let node = View::new(app).absolute().width(1).height(0).shrink(0.0);
-        let hook = Rc::new(Hook {
+        let hook = Rc::new_cyclic(|this| Hook {
             app: app.clone(),
             node,
             seen: Cell::new(1),
@@ -338,6 +341,8 @@ impl Hook {
             frame: Cell::new(u64::MAX),
             mounts: RefCell::default(),
             key: Cell::new(None),
+            owed: Cell::new(false),
+            this: this.clone(),
         });
         let weak = Rc::downgrade(&hook);
         hook.node.on_resize(move |_, rect| {
@@ -388,6 +393,19 @@ impl Hook {
         // Geometry is final.
         self.runs.set(0);
         if self.deliveries.get() >= DELIVERIES {
+            // A third delivery waits for the next frame, which the hook runs in with that frame's geometry: an arm
+            // now would only start another round of this one.
+            if !self.owed.get() && mounts.iter().any(|mount| mount.owes()) {
+                self.owed.set(true);
+                let hook = self.this.clone();
+                self.app.defer(move |_| {
+                    if let Some(hook) = hook.upgrade() {
+                        hook.owed.set(false);
+                        hook.arm();
+                    }
+                });
+                self.app.request_redraw();
+            }
             return;
         }
         let again: Vec<&Rc<Surface>> = mounts.iter().filter(|mount| mount.deliver()).collect();
@@ -756,6 +774,15 @@ impl Surface {
             row = found.owner(node).map(|item| found.row_of(item).round() as i32);
         });
         row
+    }
+
+    /// Whether `layout` has something to be told that it was not.
+    pub(crate) fn owes(&self) -> bool {
+        if self.calls.layout.is_none() {
+            return false;
+        }
+        let Some((_, signature)) = self.geometry() else { return false };
+        !self.behave.borrow().seen.is_some_and(|seen| seen.calls(&signature))
     }
 
     /// Calls `layout` when something it was told about changed; whether it asked for a view again.
