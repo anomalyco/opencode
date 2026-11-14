@@ -15,6 +15,7 @@ use opencode_ui::dialog::{DIALOG_INSET, DialogCx, FooterAction, FooterProps, foo
 use opentui::widget::ScrollEdge;
 
 use opencode_ui::prompt_input::paste::strip_ansi;
+use opencode_util::text_boundary;
 
 use crate::prelude::*;
 
@@ -229,10 +230,11 @@ impl Poll {
         let mut output = self.output.borrow_mut();
         let mut next = output.take().unwrap_or_default();
         next.push_str(&loaded.page.output);
-        let length = next.chars().count();
-        if length > PAGE_BYTES as usize {
+        // Like `next.slice(-PAGE_BYTES)` in UTF-16 code units, without starting on half a character.
+        let tail = text_boundary::tail(&next, PAGE_BYTES as usize);
+        if tail.len() < next.len() {
             self.omitted.set(true);
-            next = next.chars().skip(length - PAGE_BYTES as usize).collect();
+            next = tail.to_owned();
         }
         *output = Some(next);
         self.error.borrow_mut().clear();
