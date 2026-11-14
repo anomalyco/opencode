@@ -1499,7 +1499,7 @@ export function Prompt(props: PromptProps) {
     const currentOffset = input.cursorOffset
     const extmarkStart = currentOffset
     const virtualText = promptAttachmentLabel(store.prompt.files, { uri: file.uri, name: file.filename })
-    const extmarkEnd = extmarkStart + virtualText.length
+    const extmarkEnd = extmarkStart + measure(virtualText)
     const textToInsert = virtualText + " "
 
     input.insertText(textToInsert)

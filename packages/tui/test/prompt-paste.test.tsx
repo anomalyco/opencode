@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test"
 import { saveDraft, takeDraft } from "../src/component/prompt/draft-stash"
-import { emptyPrompt, type PromptInfo } from "../src/prompt/history"
+import { emptyPrompt, type PromptFile, type PromptInfo } from "../src/prompt/history"
+import { tmpdir } from "./fixture/fixture"
+import path from "node:path"
 import { createAppFixture } from "./fixture/app"
 import { agent, model, session } from "./fixture/local"
 import { directory, json } from "./fixture/tui-client"
@@ -57,6 +59,29 @@ test.each(["whole", "fragment"])("undo submits the restored %s paste chip", asyn
   await setup.waitFor(() => text() === (kind === "whole" ? "[Pasted ~4 lines] " : "[Pasted ~4 "))
   setup.mockInput.pressEnter()
   expect((await prompted).text).toBe(kind === "whole" ? `${pasted} ` : "[Pasted ~4 ")
+})
+
+test("a pasted image that reuses a wide label gets a chip as wide as the label", async () => {
+  await using tmp = await tmpdir()
+  const file = path.join(tmp.path, "a.png")
+  await Bun.write(file, new Uint8Array([0x89, 0x50, 0x4e, 0x47]))
+  const uri = `data:image/png;base64,${Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64")}`
+  // "[图片 1]" is 6 string units and 8 cells.
+  const label = "[图片 1]"
+  const { setup, prompted, text } = await promptApp({
+    ...emptyPrompt(),
+    text: `${label} `,
+    files: [{ uri, name: "a.png", mention: { start: 0, end: 8, text: label } }],
+  })
+  await using _ = setup
+  await setup.waitFor(() => text() === `${label} `)
+  await setup.mockInput.pasteBracketedText(file)
+  await setup.waitFor(() => text() === `${label} ${label} `)
+  setup.mockInput.pressEnter()
+  expect((await prompted).files.map((file: PromptFile) => file.mention)).toEqual([
+    { start: 0, end: 8, text: label },
+    { start: 9, end: 17, text: label },
+  ])
 })
 
 const mention = (text: string) => ({ start: 4, end: 4 + text.length, text })
