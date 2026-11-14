@@ -902,33 +902,15 @@ fn post(proxy: &AppProxy, id: u64) {
     }
 }
 
-/// The build of a plugin directory: the size and time of each file in it and in its directories but `node_modules`
-/// and hidden ones, and the options. Bun loads a changed module afresh, as a new generation.
+/// The build of a plugin directory: what its files hold ([`crate::loader::approval::Artifact::tree`], the hash an
+/// approval names), and the options. A save that changes nothing loads nothing, as TS compares a local module's content;
+/// Bun loads a changed module afresh, as a generation of its own.
 fn digest(dir: &Path, options: Option<&str>) -> u64 {
-    fn walk(dir: &Path, hasher: &mut DefaultHasher, depth: usize) {
-        let Ok(entries) = std::fs::read_dir(dir) else { return };
-        let mut entries: Vec<_> = entries.flatten().collect();
-        entries.sort_by_key(|entry| entry.file_name());
-        for entry in entries {
-            let name = entry.file_name();
-            let text = name.to_string_lossy();
-            if text.starts_with('.') || text == "node_modules" {
-                continue;
-            }
-            let Ok(metadata) = entry.metadata() else { continue };
-            text.hash(hasher);
-            if metadata.is_dir() {
-                if depth < 4 {
-                    walk(&entry.path(), hasher, depth + 1);
-                }
-                continue;
-            }
-            metadata.len().hash(hasher);
-            metadata.modified().ok().hash(hasher);
-        }
-    }
     let mut hasher = DefaultHasher::new();
-    walk(dir, &mut hasher, 0);
+    match crate::loader::approval::Artifact::tree(dir) {
+        Ok(artifact) => artifact.sha256.hash(&mut hasher),
+        Err(error) => error.hash(&mut hasher),
+    }
     options.unwrap_or_default().hash(&mut hasher);
     hasher.finish()
 }

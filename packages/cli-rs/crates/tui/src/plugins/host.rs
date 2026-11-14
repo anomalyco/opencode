@@ -182,10 +182,14 @@ impl Host for Tui {
     }
 
     fn pending(&self, target: &str) {
-        let mut options = ToastOptions::new(
-            Variant::Warning,
-            "This project wants to run native code inside opencode. Run /plugins to approve or decline it.",
-        );
+        let script = held(self, target).is_some_and(|(artifact, _)| artifact.is_ok_and(|artifact| artifact.script));
+        let message = match script {
+            true => {
+                "This project wants to run TypeScript code in opencode's JS host. Run /plugins to approve or decline it."
+            }
+            false => "This project wants to run native code inside opencode. Run /plugins to approve or decline it.",
+        };
+        let mut options = ToastOptions::new(Variant::Warning, message);
         options.title = Some(format!("Plugin needs approval: {target}"));
         let open = bind!(self, |tui| {
             tui.keymap.dispatch("plugins.list", None);
@@ -1155,6 +1159,14 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<opencode
 pub fn held(tui: &Tui, target: &str) -> Option<(Result<Artifact, String>, Option<String>)> {
     let loader = tui.plugins.loader.borrow().clone()?;
     Some((loader.held(target)?, loader.unsaved()))
+}
+
+/// Reconciles the external plugins with their directories now, as the watcher does after a change.
+pub fn reconcile(tui: &Rc<Tui>) {
+    let loader = tui.plugins.loader.borrow().clone();
+    if let Some(loader) = loader {
+        loader.reconcile(&host(tui), &tui.plugins);
+    }
 }
 
 /// Records the user's `decision` on `artifact`, the build of `target` they were shown, and applies it: an approved

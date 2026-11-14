@@ -403,6 +403,14 @@ impl Loader {
         listed: &Option<Status>,
     ) -> bool {
         let name = target.target.as_str();
+        // A project's TypeScript plugin runs only once the user approved its files, as a native build does: until then
+        // nothing of it reaches the JS host, which does not start for it.
+        if target.project
+            && let Err(changed) = self.approved(host, registry, name, Artifact::tree(dir))
+        {
+            scripts.forget(name);
+            return changed;
+        }
         match scripts.step(name, dir, target.options.as_deref()) {
             Step::Same => false,
             Step::Starting if registry.loaded(name) => false,
@@ -502,13 +510,9 @@ impl Loader {
             // cannot be identified, what ran from it stops (bigboi-8) and nothing is reported (carbon-5).
             true => {
                 let (artifact, mut handle) = match Artifact::open(target.local.as_deref().unwrap_or(file), file) {
-                    Ok(opened) => opened,
+                    Ok((artifact, handle)) => (self.approved(host, registry, name, Ok(artifact))?, handle),
                     Err(error) => return Err(self.hold(host, registry, name, Err(error), None)),
                 };
-                match self.approvals.decision(&artifact) {
-                    Some(Decision::Approved) => drop(self.held.borrow_mut().remove(name)),
-                    decision => return Err(self.hold(host, registry, name, Ok(artifact), decision)),
-                }
                 let digest = digest(artifact.sha256.as_bytes());
                 if unchanged(digest) {
                     return Err(false);
@@ -554,6 +558,29 @@ impl Loader {
             return Err(!was_held);
         }
         Ok((digest, bytes))
+    }
+
+    /// The one place that decides whether a project's plugin `target` may run: `artifact` (or why it cannot be read),
+    /// when the user approved exactly it; otherwise it is held back, and the error says whether the manager's list
+    /// changed. A native build and a TypeScript plugin go through it alike (3.9, P7).
+    fn approved(
+        &self,
+        host: &Rc<dyn Host>,
+        registry: &Registry,
+        target: &str,
+        artifact: Result<Artifact, String>,
+    ) -> Result<Artifact, bool> {
+        let artifact = match artifact {
+            Ok(artifact) => artifact,
+            Err(error) => return Err(self.hold(host, registry, target, Err(error), None)),
+        };
+        match self.approvals.decision(&artifact) {
+            Some(Decision::Approved) => {
+                self.held.borrow_mut().remove(target);
+                Ok(artifact)
+            }
+            decision => Err(self.hold(host, registry, target, Ok(artifact), decision)),
+        }
     }
 
     /// Holds back the project build of `target` that the user has not approved, or that cannot be identified:

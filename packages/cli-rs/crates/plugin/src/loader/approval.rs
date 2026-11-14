@@ -1,6 +1,8 @@
 //! Approval of project plugins (rich-plugins 3.9, decision O-125): a native build found in a project's
-//! `.opencode/plugins` runs only once the user approved it. A decision names an [`Artifact`]: the directory it was
-//! found as, the real path of its library, and the SHA-256 of the bytes that are loaded. A changed library, another
+//! `.opencode/plugins` runs only once the user approved it, and so does a TypeScript plugin there that the JS host
+//! would run (P7). A decision names an [`Artifact`]: the directory it was found as, the real path of its library, and
+//! the SHA-256 of the bytes that are loaded; for a TypeScript plugin, the real path of the directory and the SHA-256 of
+//! its files ([`Artifact::tree`]). A changed library, another
 //! path to it, or the same library found as another plugin directory (another project's) is pending again. The global
 //! `plugins` directory and `cli.json` entries need none: a project cannot write them.
 //!
@@ -25,12 +27,14 @@ pub const FILE: &str = "plugin-approvals.json";
 pub const LIMIT: u64 = 512 * 1024 * 1024;
 
 /// What an approval names: the plugin directory it was found as, the real path of its library, and the SHA-256 of the
-/// library's bytes in hex.
+/// library's bytes in hex; or, for a TypeScript plugin (`script`), the real path of the directory and the SHA-256 of
+/// its files.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Artifact {
     pub target: PathBuf,
     pub path: PathBuf,
     pub sha256: String,
+    pub script: bool,
 }
 
 impl Artifact {
@@ -71,7 +75,25 @@ impl Artifact {
         if !same {
             return Err(format!("{}: changed while it was read", file.display()));
         }
-        Ok((Self { target: target.to_path_buf(), path, sha256 }, handle))
+        Ok((Self { target: target.to_path_buf(), path, sha256, script: false }, handle))
+    }
+
+    /// The TypeScript plugin directory `target`, which the JS host would run: its real path, and the SHA-256 of what it
+    /// holds. Each file's path and bytes count, in name order; `node_modules` counts by each entry's path, size and time
+    /// (and a link's target), which a reinstall changes, without reading every dependency; hidden entries do not count.
+    /// The JS host reads the files itself, so a change after the hash is what the next reconcile sees: the watcher's.
+    pub fn tree(target: &Path) -> Result<Self, String> {
+        let error = |error: std::io::Error| format!("{}: {error}", target.display());
+        let path = std::fs::canonicalize(target).map_err(error)?;
+        if !path.is_dir() {
+            return Err(format!("{}: not a directory", path.display()));
+        }
+        let mut context = ring::digest::Context::new(&ring::digest::SHA256);
+        context.update(b"opencode-ts-plugin\0");
+        let mut total = 0;
+        walk(&path, Path::new(""), &mut context, &mut total, 0)?;
+        let sha256 = context.finish().as_ref().iter().map(|byte| format!("{byte:02x}")).collect();
+        Ok(Self { target: target.to_path_buf(), path, sha256, script: true })
     }
 
     /// The bytes of `handle`, the file [`Artifact::open`] hashed, once they are checked to be the ones it hashed: what
@@ -91,6 +113,70 @@ impl Artifact {
     pub fn short(&self) -> &str {
         &self.sha256[..self.sha256.len().min(16)]
     }
+}
+
+/// Hashes the entries of `dir` (at `relative` in the plugin) into `context`; `total` counts the bytes read, refused past
+/// [`LIMIT`]. A link is followed (Bun follows it) to a depth of 16, past which the tree is refused.
+fn walk(
+    dir: &Path,
+    relative: &Path,
+    context: &mut ring::digest::Context,
+    total: &mut u64,
+    depth: usize,
+) -> Result<(), String> {
+    if depth > 16 {
+        return Err(format!("{}: nested too deep", dir.display()));
+    }
+    let error = |error: std::io::Error| format!("{}: {error}", dir.display());
+    let mut entries: Vec<_> = std::fs::read_dir(dir).map_err(error)?.collect::<Result<_, _>>().map_err(error)?;
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let name = entry.file_name();
+        if name.to_string_lossy().starts_with('.') {
+            continue;
+        }
+        let (path, inner) = (entry.path(), relative.join(&name));
+        let metadata = std::fs::metadata(&path).map_err(error)?;
+        context.update(encode(&inner).as_bytes());
+        context.update(b"\0");
+        if name == "node_modules" {
+            dependencies(&path, context, 0)?;
+        } else if metadata.is_dir() {
+            walk(&path, &inner, context, total, depth + 1)?;
+        } else if metadata.is_file() {
+            *total += metadata.len();
+            if *total > LIMIT {
+                return Err(format!("{}: larger than {} MiB", dir.display(), LIMIT / 1024 / 1024));
+            }
+            let mut file = File::open(&path).map_err(error)?;
+            context.update(sha256(&mut file)?.as_bytes());
+        }
+    }
+    Ok(())
+}
+
+/// Hashes the entries of a `node_modules` directory by their names, sizes, times and link targets, to a depth of 32.
+fn dependencies(dir: &Path, context: &mut ring::digest::Context, depth: usize) -> Result<(), String> {
+    if depth > 32 {
+        return Ok(());
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else { return Ok(()) };
+    let mut entries: Vec<_> = entries.flatten().collect();
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let Ok(metadata) = std::fs::symlink_metadata(entry.path()) else { continue };
+        context.update(encode(Path::new(&entry.file_name())).as_bytes());
+        let time = metadata.modified().ok().and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok());
+        context.update(format!("\0{}\0{:?}\0", metadata.len(), time).as_bytes());
+        if metadata.file_type().is_symlink() {
+            let link = std::fs::read_link(entry.path()).unwrap_or_default();
+            context.update(encode(&link).as_bytes());
+        } else if metadata.is_dir() {
+            dependencies(&entry.path(), context, depth + 1)?;
+        }
+        context.update(b"\0");
+    }
+    Ok(())
 }
 
 #[cfg(test)]
