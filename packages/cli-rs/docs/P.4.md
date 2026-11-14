@@ -335,6 +335,10 @@ On a box with a click of its own, a press the handler consumes runs no click. A 
 widget or another plugin's node drops nothing. `Read::rect`, `Read::focused`
 and `Read::mode` read the running call's mount; a command reads, and `Host::focus` and `Host::blur` act on, the
 plugin's mount that holds the node or the focus.
+The same handler hears P3's scroll events (`Event::Scroll`: a step of the plugin's landed, or the user moved a scroll
+that asks with `user_scroll`) and an `Input`'s with an id (`Event::Change` after each edit, `Event::Submit` on enter);
+their answer does not matter. A handler of the user's own input (a key, a paste, a press, an edit, the user's scroll)
+may move the transcript, as a command the user runs may; it runs owned by its mount, so what it asks for ends with it.
 Everything a mount registers ends with it, and everything a plugin registers ends when it leaves `active`. A handler and
 a select's search are calls of the plugin (`handle`, `search` in the run record), timed and contained as any other: one
 that panics fails the plugin, whose layers, modes, capture, hold and overlays then go, and the focus goes to the

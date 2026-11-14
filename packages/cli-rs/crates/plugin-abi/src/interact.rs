@@ -49,6 +49,29 @@ pub enum Event {
     Hover { node: String, inside: bool },
     /// The host closed the plugin's overlay `surface`: escape, a click outside it, or another overlay of the plugin.
     Closed { surface: String },
+    /// P3: a scroll of the mount: the user moved one that asks with `user_scroll`, or a step of the plugin's own
+    /// landed. The answer does not matter.
+    Scroll { event: crate::v2::ScrollEvent },
+    /// P3: the text of the mount's [`crate::v2::Node::Input`] `node` changed, after each edit. The answer does not
+    /// matter.
+    Change { node: String, text: String },
+    /// P3: the mount's [`crate::v2::Node::Input`] `node` was submitted: enter on one line, the submit key on many. The
+    /// answer does not matter.
+    Submit { node: String, text: String },
+}
+
+impl Event {
+    /// Whether the user's own input caused it: a key, a paste, a press, an edit. A scroll says so itself
+    /// ([`crate::v2::ScrollEvent::UserScroll`]); hovering and an overlay's close do not count.
+    pub fn by_user(&self) -> Option<bool> {
+        match self {
+            Event::Key(_) | Event::Paste { .. } | Event::Pointer(_) | Event::Change { .. } | Event::Submit { .. } => {
+                Some(true)
+            }
+            Event::Scroll { event } => Some(matches!(event, crate::v2::ScrollEvent::UserScroll { .. })),
+            Event::Hover { .. } | Event::Closed { .. } => None,
+        }
+    }
 }
 
 /// A key as the host names it: a shortcut such as `ctrl+a` or `escape`, and the text it types, if any.

@@ -418,26 +418,6 @@
                 }
               ]
             },
-            "on_change": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "on_submit": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
             "layout": {
               "$ref": "#/$defs/Layout"
             },

@@ -292,8 +292,6 @@ pub struct TranscriptRow {
 
 /// A surface's `layout` call.
 pub type LayoutFn = std::rc::Rc<dyn Fn(&Geometry) -> LayoutReply>;
-/// A surface's handler of [`ScrollEvent`]s.
-pub type ScrollFn = std::rc::Rc<dyn Fn(&dyn crate::Host, &ScrollEvent)>;
 
 fn is_zero(value: &u16) -> bool {
     *value == 0

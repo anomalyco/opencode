@@ -61,7 +61,6 @@ pub const STALLED: u32 = 8;
 pub(crate) struct Calls {
     pub plugin: String,
     pub layout: Option<LayoutFn>,
-    pub scrolled: Option<Scrolls>,
     /// Whether the plugin failed or its activation ended: its mounts then leave the behaviors.
     pub ended: Option<Rc<dyn Fn() -> bool>>,
 }
@@ -71,10 +70,6 @@ impl Calls {
         self.ended.as_ref().is_some_and(|ended| ended())
     }
 }
-
-/// A surface's handler of its scrolls' events, as one call of the plugin owned by the mount the first argument
-/// stands for.
-pub(crate) type Scrolls = Rc<dyn Fn(&Weak<()>, &ScrollEvent)>;
 
 /// What the behaviors of one mount hold.
 #[derive(Default)]
@@ -617,7 +612,7 @@ pub(crate) fn as_user<R>(user: bool, f: impl FnOnce() -> R) -> R {
 /// Runs `f` as a call of kind `export`: a command or a scroll handler that runs for the user's input is a handler of
 /// it, which a verb on the transcript is taken from.
 pub(crate) fn calling<R>(export: &str, f: impl FnOnce() -> R) -> R {
-    let handler = USER.with(Cell::get) && matches!(export, "run-command" | "on-scroll");
+    let handler = USER.with(Cell::get) && matches!(export, "run-command" | "handle");
     let outer = HANDLER.with(|cell| cell.replace(handler));
     let out = f();
     HANDLER.with(|cell| cell.set(outer));
@@ -818,15 +813,17 @@ impl Surface {
             behave.steps.remove(scroll);
             Some(index.scrolls.get(scroll)?.user_scroll)
         });
-        if let (Some(true), Some(scrolled)) = (user, self.calls.scrolled.clone()) {
-            as_user(true, || scrolled(&self.alive(), &ScrollEvent::UserScroll { scroll: scroll.to_owned() }));
+        if let (Some(true), Some(owner)) = (user, self.holder()) {
+            owner.hear(&abi::interact::Event::Scroll { event: ScrollEvent::UserScroll { scroll: scroll.to_owned() } });
         }
     }
 
     /// Reports where a step of scroll `scroll` landed: a result of the plugin's own verb, not the user's input.
     fn landed(&self, scroll: &str, anchor: AnchorAt) {
-        if let Some(scrolled) = self.calls.scrolled.clone() {
-            as_user(false, || scrolled(&self.alive(), &ScrollEvent::Landed { scroll: scroll.to_owned(), anchor }));
+        if let Some(owner) = self.holder() {
+            owner.hear(&abi::interact::Event::Scroll {
+                event: ScrollEvent::Landed { scroll: scroll.to_owned(), anchor },
+            });
         }
     }
 

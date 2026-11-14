@@ -251,8 +251,8 @@ pub(crate) enum Extra {
     Markdown(opentui::widget::Markdown, Rc<str>),
     Slot(Option<SlotMount>),
     Canvas(Canvas),
-    /// The field, the value the tree gave it last, and the commands its events run.
-    Input(Field, RefCell<String>, Rc<RefCell<Events>>),
+    /// The field, and the value the tree gave it last.
+    Input(Field, RefCell<String>),
     List(Box<List>),
     /// The code and the text it shows.
     Code(opentui::widget::Code, Rc<str>),
@@ -262,9 +262,6 @@ pub(crate) enum Extra {
     /// has its id now.
     Taken,
 }
-
-/// The commands an input's change and submit run.
-pub(crate) type Events = (Option<String>, Option<String>);
 
 /// An input of one line or many.
 #[derive(Clone)]
@@ -452,7 +449,7 @@ impl Tree {
     /// Moves what the user typed into the tree's inputs, where it is not the value the tree gave, into `drafts`.
     pub(crate) fn take_drafts(&self, drafts: &mut HashMap<String, (String, (u32, u32))>) {
         each(&self.nodes, &mut |node| {
-            if let (Some(id), Extra::Input(field, given, _)) = (node.node.id(), &node.extra) {
+            if let (Some(id), Extra::Input(field, given)) = (node.node.id(), &node.extra) {
                 let draft = field.draft();
                 if draft.0 != *given.borrow() {
                     drafts.insert(id.to_owned(), draft);
@@ -971,14 +968,11 @@ impl Pass<'_, '_> {
                 let built = self.build(new);
                 Err(Box::new((old, built)))
             }
-            (
-                Node::Input { lines: had, layout: laid, .. },
-                Node::Input { value, placeholder, lines, on_change, on_submit, layout, .. },
-            ) => {
+            (Node::Input { lines: had, layout: laid, .. }, Node::Input { value, placeholder, lines, layout, .. }) => {
                 if had != lines || laid != layout {
                     // Built again, it keeps what the user typed, where the value stays, and the focus.
                     let built = self.build(new);
-                    let (Extra::Input(was, given, _), Extra::Input(field, ..)) = (&old.extra, &built.extra) else {
+                    let (Extra::Input(was, given), Extra::Input(field, ..)) = (&old.extra, &built.extra) else {
                         unreachable!()
                     };
                     let draft = was.draft();
@@ -992,8 +986,7 @@ impl Pass<'_, '_> {
                 }
                 let Node::Input { placeholder: shown, .. } = &old.node else { unreachable!() };
                 let placeholder_changed = shown != placeholder;
-                let Extra::Input(field, given, commands) = &old.extra else { unreachable!() };
-                *commands.borrow_mut() = (on_change.clone(), on_submit.clone());
+                let Extra::Input(field, given) = &old.extra else { unreachable!() };
                 // The text is the host's: a value the tree did not change leaves what the user typed.
                 if *given.borrow() != *value {
                     field.set(value);
@@ -1492,7 +1485,7 @@ impl Pass<'_, '_> {
                 }
                 (scroll.as_any(), Extra::Scroll(scroll))
             }
-            Node::Input { value, placeholder, lines, on_change, on_submit, layout, .. } => {
+            Node::Input { id, value, placeholder, lines, layout } => {
                 let field = match lines {
                     None => Field::Line(opentui::widget::Input::new(app).placeholder(placeholder).set_value(value)),
                     Some(rows) => Field::Lines(
@@ -1504,23 +1497,30 @@ impl Pass<'_, '_> {
                     ),
                 };
                 paint_field(&field, theme);
-                let commands = Rc::new(RefCell::new((on_change.clone(), on_submit.clone())));
-                let run = |which: fn(&Events) -> Option<String>| {
-                    let (commands, act) = (commands.clone(), env.act.clone());
-                    move |_: &mut Cx<'_>, text: &str| {
-                        if let Some(name) = which(&commands.borrow()) {
-                            act(&abi::Action::Command { name, input: Some(text.to_owned()) });
+                // With an id, its edits reach the mount's handler. The id stays while the field does: another builds it
+                // again.
+                if let (Some(id), Some(owner)) = (id.clone(), env.owner.cloned()) {
+                    let hear = |submit: bool| {
+                        let (node, owner) = (id.clone(), owner.clone());
+                        move |_: &mut Cx<'_>, text: &str| {
+                            let (node, text) = (node.clone(), text.to_owned());
+                            let event = match submit {
+                                true => abi::interact::Event::Submit { node, text },
+                                false => abi::interact::Event::Change { node, text },
+                            };
+                            if let Some(owner) = owner.upgrade() {
+                                owner.hear(&event);
+                            }
                         }
+                    };
+                    match &field {
+                        Field::Line(input) => drop(input.on_change(hear(false)).on_submit(hear(true))),
+                        Field::Lines(area) => drop(area.on_change(hear(false)).on_submit(hear(true))),
                     }
-                };
-                let (change, submit) = (run(|commands| commands.0.clone()), run(|commands| commands.1.clone()));
-                match &field {
-                    Field::Line(input) => drop(input.on_change(change).on_submit(submit)),
-                    Field::Lines(area) => drop(area.on_change(change).on_submit(submit)),
                 }
                 let widget = field.widget();
                 lay_out(&widget, layout);
-                (widget, Extra::Input(field, RefCell::new(value.clone()), commands))
+                (widget, Extra::Input(field, RefCell::new(value.clone())))
             }
             Node::List { row, layout, .. } => {
                 let list = List::new(app, *row);
