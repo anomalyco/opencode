@@ -7,7 +7,8 @@
 //!   in a full mailbox is `Full`; an empty key is no key;
 //! - once the plugin leaves `active` every send is `Closed`, and what waited is dropped; a plugin without a message
 //!   handler refuses messages the same way, and its threads still run;
-//! - a thread's panic report is one flag a plugin: the first is kept, the plugin fails once.
+//! - a thread's panic report is one flag a plugin: the first is kept, the plugin fails once, after the messages that
+//!   were in before it and before any that came later (review bigboi 8).
 //!
 //! No message is dropped while the mailbox's lock is held: a message in process is the author's value, whose `Drop`
 //! may come back to the mailbox (a `Stop` check, a send) or wait for a thread that does. Replaced and closed entries
@@ -47,11 +48,15 @@ pub(crate) struct Mailbox {
 
 #[derive(Default)]
 struct State {
-    entries: VecDeque<(Option<String>, Message)>,
+    /// The messages that wait, each with its key and its place: how many were put in before it.
+    entries: VecDeque<(Option<String>, Message, u64)>,
+    /// The messages put in so far; a replaced one keeps its place.
+    put: u64,
     closed: bool,
     /// The plugin registered no message handler: a message is `Closed`, though the plugin is active.
     refusing: bool,
-    panic: Option<String>,
+    /// The first panic report, and the place it took: the messages put in before it go first.
+    panic: Option<(String, u64)>,
     high: usize,
     refused: u64,
 }
@@ -112,7 +117,8 @@ impl Mailbox {
             if state.closed || state.refusing {
                 return Err((Refused::Closed, message));
             }
-            let waiting = key.and_then(|key| state.entries.iter().position(|(known, _)| known.as_deref() == Some(key)));
+            let waiting =
+                key.and_then(|key| state.entries.iter().position(|(known, ..)| known.as_deref() == Some(key)));
             match waiting {
                 Some(index) => Some(std::mem::replace(&mut state.entries[index].1, message)),
                 None if state.entries.len() >= abi::BOUND => {
@@ -120,7 +126,9 @@ impl Mailbox {
                     return Err((Refused::Full, message));
                 }
                 None => {
-                    state.entries.push_back((key.map(str::to_owned), message));
+                    let place = state.put;
+                    state.entries.push_back((key.map(str::to_owned), message, place));
+                    state.put += 1;
                     state.high = state.high.max(state.entries.len());
                     None
                 }
@@ -138,7 +146,7 @@ impl Mailbox {
         {
             let state = self.state();
             // No entry waits under the empty key: `put` takes it as no key.
-            let waiting = state.entries.iter().any(|(known, _)| known.as_deref() == Some(key));
+            let waiting = state.entries.iter().any(|(known, ..)| known.as_deref() == Some(key));
             if state.closed || state.refusing {
                 return abi::CLOSED;
             }
@@ -175,7 +183,7 @@ impl Mailbox {
                 let end = (0..=REPORT).rev().find(|end| message.is_char_boundary(*end)).unwrap_or(0);
                 message.truncate(end);
             }
-            state.panic = Some(message);
+            state.panic = Some((message, state.put));
         }
         self.wake.ring();
     }
@@ -218,18 +226,30 @@ impl Mailbox {
     #[cfg(test)]
     pub fn take(&self) -> (Vec<Message>, Option<String>) {
         let mut state = self.state();
-        let messages = state.entries.drain(..).map(|(_, message)| message).collect();
-        (messages, state.panic.take())
+        let messages = state.entries.drain(..).map(|(_, message, _)| message).collect();
+        (messages, state.panic.take().map(|(report, _)| report))
     }
 
-    /// The first message that waits: its place is free at once.
-    pub fn take_one(&self) -> Option<Message> {
-        self.state().entries.pop_front().map(|(_, message)| message)
+    /// How many messages were put in so far: a wake that comes now goes after them.
+    pub fn placed(&self) -> u64 {
+        self.state().put
+    }
+
+    /// The first message that waits, if it was put in before the panic report and before place `before`: its place
+    /// in the mailbox is free at once.
+    pub fn take_one(&self, before: Option<u64>) -> Option<Message> {
+        let mut state = self.state();
+        let bound = state.panic.as_ref().map(|(_, at)| *at).into_iter().chain(before).min();
+        let (_, _, place) = state.entries.front()?;
+        if bound.is_some_and(|bound| *place >= bound) {
+            return None;
+        }
+        state.entries.pop_front().map(|(_, message, _)| message)
     }
 
     /// A thread's panic report.
     pub fn take_panic(&self) -> Option<String> {
-        self.state().panic.take()
+        self.state().panic.take().map(|(report, _)| report)
     }
 
     pub fn stats(&self) -> Stats {
