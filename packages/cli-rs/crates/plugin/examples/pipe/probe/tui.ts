@@ -4,14 +4,15 @@
 // standard output, print, and grow its memory. Its slot surface on the home footer shows `rows` lines.
 
 import { appendFileSync, writeSync } from "node:fs"
+import path from "node:path"
 
 export default {
   id: "example.probe",
   setup(api: any) {
     const carrier = api[Symbol.for("opencode.carrier")]
-    const log = (entry: unknown) => {
-      if (api.options.log) appendFileSync(api.options.log, JSON.stringify(entry) + "\n")
-    }
+    // Without the option (a project's plugin has none), beside the module, in a hidden file its hash leaves out.
+    const file = api.options.log ?? path.join(import.meta.dir, ".log.jsonl")
+    const log = (entry: unknown) => appendFileSync(file, JSON.stringify(entry) + "\n")
     let rows = 3
     let hoard: unknown[] = []
     log({ setup: true })
