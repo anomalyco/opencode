@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en" style="background-color: var(--v2-background-bg-deep, #fafafa)">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- data-sm lets the MetaProvider replace this pre-load title with the app's <Title> tags. -->
+    <title data-sm>OpenCode</title>
+    <script id="oc-theme-preload-script" src="./oc-theme-preload.js"></script>
+  </head>
+  <body
+    class="antialiased overscroll-none font-(family-name:--font-family-text) text-[13px] font-[440] overflow-hidden bg-v2-background-bg-deep"
+  >
+    <div id="root" class="flex flex-col h-dvh bg-v2-background-bg-deep p-px"></div>
+    <script src="./src/entry.tsx" type="module"></script>
+  </body>
+</html>

@@ -102,13 +102,14 @@ export type LocationDialogTransition = {
   readonly stop: boolean
 }
 
+/** A `fixed` project, which the host chose, has no projects step to step back to. */
 export function createLocationDialogState(
   drilled?: PromptProject,
-  options?: { readonly step?: "branches"; readonly base?: string },
+  options?: { readonly step?: "branches"; readonly base?: string; readonly fixed?: boolean },
 ): LocationDialogState {
   if (!drilled) return { type: "projects", query: "", history: [] }
 
-  const history = [{ type: "projects", query: "", active: projectEntryID(drilled) }] as const
+  const history = options?.fixed ? [] : ([{ type: "projects", query: "", active: projectEntryID(drilled) }] as const)
 
   if (options?.step === "branches") return { type: "branches", project: drilled, direct: true, query: "", history }
 

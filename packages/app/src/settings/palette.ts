@@ -1,5 +1,6 @@
 import { createMemo } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import type { CommandPaletteEntry } from "@/shell/commands/palette"
 import { createSettingsSearchCatalog } from "./search"
 import { rankSettings } from "./search-results"
@@ -11,12 +12,15 @@ const LIMIT = 5
 export function createSettingsPaletteEntries() {
   const language = useLanguage()
   const surface = useSettingsSurface()
+  const platform = usePlatform()
   const catalog = createSettingsSearchCatalog()
   // Servers and projects already have their own palette rows.
   const settings = createMemo(() => catalog().filter((item) => !item.entity))
 
   return {
     items(query: string): CommandPaletteEntry[] {
+      // The host's settings hold these, and the Settings screen they reveal never opens.
+      if (platform.openSettings) return []
       const value = query.trim().toLocaleLowerCase()
       const category = language.t("palette.group.settings")
 

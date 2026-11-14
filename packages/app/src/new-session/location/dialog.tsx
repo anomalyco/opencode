@@ -30,6 +30,7 @@ import {
 import type { PromptProject, PromptProjectController, PromptServer } from "@/new-session/project/selector"
 import type { NewSessionWorkspaceController } from "@/new-session/workspace/controller"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
@@ -67,20 +68,29 @@ export function useNewSessionLocationDialog(input: {
   onDone: () => void
 }) {
   const dialog = useDialog()
+  const platform = usePlatform()
 
-  /** Pass `project` to open straight on that project's worktree step; stepping back still reaches the projects. */
+  /**
+   * Pass `project` to open straight on that project's worktree step; stepping back still reaches the projects. A host
+   * that fixes the project offers only its worktrees, with no projects to step back to.
+   */
   return (options?: {
     project?: PromptProject
     step?: "worktrees" | "branches"
     base?: string
     onWorkspace?: (value: string) => void
   }) => {
+    const fixed = !!platform.project
+    const drilled = options?.project ?? (fixed ? input.project.selected() : undefined)
+
+    if (fixed && !drilled) return
     void dialog.show(
       () => (
         <NewSessionLocationDialog
           project={input.project}
           workspace={input.workspace}
-          drilled={options?.project}
+          drilled={drilled}
+          fixed={fixed}
           step={options?.step}
           base={options?.base}
           onWorkspace={options?.onWorkspace}
@@ -95,6 +105,7 @@ function NewSessionLocationDialog(props: {
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
   drilled?: PromptProject
+  fixed: boolean
   step?: "worktrees" | "branches"
   base?: string
   onWorkspace?: (value: string) => void
@@ -111,6 +122,7 @@ function NewSessionLocationDialog(props: {
     createLocationDialogState(props.drilled, {
       step: props.step === "branches" ? "branches" : undefined,
       base: props.base,
+      fixed: props.fixed,
     }),
   )
 
@@ -515,14 +527,20 @@ function NewSessionLocationDialog(props: {
             <div class="command-palette-group">
               <Show when={title()}>
                 {(value) => (
-                  <button
-                    type="button"
-                    class="command-palette-group-title new-session-location-back"
-                    aria-label={language.t("session.new.location.back")}
-                    onClick={back}
+                  // A step with nowhere to go back to, such as a fixed project's worktrees, only names itself.
+                  <Show
+                    when={step().history.length > 0}
+                    fallback={<div class="command-palette-group-title">{value()}</div>}
                   >
-                    {value()}
-                  </button>
+                    <button
+                      type="button"
+                      class="command-palette-group-title new-session-location-back"
+                      aria-label={language.t("session.new.location.back")}
+                      onClick={back}
+                    >
+                      {value()}
+                    </button>
+                  </Show>
                 )}
               </Show>
               <Show

@@ -3,6 +3,7 @@ import { useLayout } from "@/shell/state/layout"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { isServerFailed } from "@/runtime/server/health-machine"
 import { usePluginServers } from "@/runtime/plugin/servers"
+import { usePlatform } from "@/runtime/platform/platform"
 import { createProjectSessionActions } from "@/shell/tabs/project-sessions"
 import { batch, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { pathKey } from "@/workspaces/path-key"
@@ -23,6 +24,7 @@ export function createHomeController() {
   const servers = useServers()
   const pluginServers = usePluginServers()
   const sessions = createProjectSessionActions()
+  const platform = usePlatform()
 
   const env = createMemo(
     (): HomeEnvSnapshot => ({
@@ -122,6 +124,16 @@ export function createHomeController() {
   })
 
   const newSessionProject = createMemo(() => selectedProject() ?? focusedServerCtx()?.projects.last() ?? projects()[0])
+
+  // A host that fixes the project shows it, adding it to this client's projects the first time. Adding resolves a folder
+  // inside a project to the project's root. The server may only be focused once it has connected.
+  createEffect(() => {
+    const conn = focusedServer()
+    const fixed = platform.project
+
+    if (!fixed || !conn) return
+    untrack(() => send({ type: "project.add", server: ServerConnection.key(conn), directories: [fixed] }))
+  })
 
   return {
     selection: {

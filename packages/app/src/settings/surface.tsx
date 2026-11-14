@@ -4,6 +4,7 @@ import { createSimpleContext } from "@opencode/ui/context"
 import { useLayout, type LayoutRoute } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useServers } from "@/runtime/server/registry"
+import { usePlatform } from "@/runtime/platform/platform"
 import { useCommand } from "@/shell/commands/command"
 import { createSettingsPages } from "@/runtime/plugin/settings-pages"
 import { useSettingsServers } from "./servers/inventory"
@@ -52,6 +53,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
     const servers = useSettingsServers()
     const registry = useServers()
     const tabs = useTabs()
+    const platform = usePlatform()
 
     const location = useLocation<{
       settings?: { route: Exclude<LayoutRoute, { type: "settings" }>; view?: SettingsTransientView }
@@ -101,6 +103,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
     let revealTimer: ReturnType<typeof setTimeout> | undefined
 
     const show = (view: SettingsView) => {
+      if (platform.openSettings) return platform.openSettings()
       const route = layout.route()
 
       if (route.type !== "settings" && document.activeElement instanceof HTMLElement) focus = document.activeElement

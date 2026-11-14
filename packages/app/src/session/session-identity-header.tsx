@@ -426,11 +426,14 @@ export function SessionLocation(props: {
                 </Menu.Sub>
               )}
             </Show>
-            <Menu.Separator />
-            <Menu.Item disabled={!props.project} onSelect={openProjectSettings}>
-              <Icon name="settings-gear" class="text-v2-icon-icon-muted" />
-              {language.t("project.settings.title")}
-            </Menu.Item>
+            {/* Project settings live on the Settings screen, which a host with its own settings never opens. */}
+            <Show when={!platform.openSettings}>
+              <Menu.Separator />
+              <Menu.Item disabled={!props.project} onSelect={openProjectSettings}>
+                <Icon name="settings-gear" class="text-v2-icon-icon-muted" />
+                {language.t("project.settings.title")}
+              </Menu.Item>
+            </Show>
           </Menu.Content>
         </Menu.Portal>
       </Menu>

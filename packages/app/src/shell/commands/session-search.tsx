@@ -42,6 +42,7 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
         : createKnownServerSessions(() => ctx),
       apply: ctx.data.session.apply,
       projects: ctx.projects.list,
+      fixed: ctx.projects.fixed,
       load: (search, signal) =>
         ctx.sdk.api.session.list({ parentID: null, search, archived: !!props.archived, limit: 50 }, { signal }),
       get: (sessionID, signal) => ctx.sdk.api.session.get({ sessionID }, { signal }),
