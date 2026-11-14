@@ -50,6 +50,22 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
       ),
   )
   .add(
+    HttpApiEndpoint.get("fs.preview", "/api/experimental/fs/preview/*", {
+      query: LocationQuery,
+      success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
+      error: FileNotFoundError,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.fs.preview",
+          summary: "Preview HTML file",
+          description:
+            "Serve one HTML file relative to the requested location as a page for a sandboxed frame: its scripts run in an opaque origin under `Content-Security-Policy: sandbox`, with no access to the server's origin. Other files get the same download headers as read. Experimental: may change without compatibility guarantees.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.get("fs.list", "/api/fs/list", {
       query: ListQuery,
       success: Location.response(Schema.Array(FileSystem.Entry)),

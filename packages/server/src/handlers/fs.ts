@@ -17,16 +17,16 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
     return handlers
       .handleRaw("fs.read", (ctx) =>
         Effect.gen(function* () {
-          const path = yield* decodeRequestPath(ctx.request.url)
-          const fs = yield* FileSystem.Service
-          const file = yield* fs
-            .read({ path })
-            .pipe(
-              Effect.mapError(
-                (error) => new FileNotFoundError({ path: error.path, message: `File not found: ${error.path}` }),
-              ),
-            )
+          const path = yield* decodeRequestPath(ctx.request.url, "/api/fs/read/")
+          const file = yield* readFile(path)
           return serveFile(ctx.request, file, ContentHeaders.download({ path, mime: file.mime }))
+        }),
+      )
+      .handleRaw("fs.preview", (ctx) =>
+        Effect.gen(function* () {
+          const path = yield* decodeRequestPath(ctx.request.url, "/api/experimental/fs/preview/")
+          const file = yield* readFile(path)
+          return serveFile(ctx.request, file, ContentHeaders.preview({ path, mime: file.mime }))
         }),
       )
       .handle("fs.list", (ctx) =>
@@ -95,8 +95,21 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
   }),
 )
 
-function decodeRequestPath(url: string) {
-  const raw = new URL(url, "http://localhost").pathname.slice(13)
+function readFile(path: RelativePath) {
+  return Effect.gen(function* () {
+    const fs = yield* FileSystem.Service
+    return yield* fs
+      .read({ path })
+      .pipe(
+        Effect.mapError(
+          (error) => new FileNotFoundError({ path: error.path, message: `File not found: ${error.path}` }),
+        ),
+      )
+  })
+}
+
+function decodeRequestPath(url: string, prefix: string) {
+  const raw = new URL(url, "http://localhost").pathname.slice(prefix.length)
   return Effect.try({
     try: () => RelativePath.make(decodeURIComponent(raw)),
     catch: () => new FileNotFoundError({ path: raw, message: `File not found: ${raw}` }),
@@ -106,7 +119,7 @@ function decodeRequestPath(url: string) {
 function serveFile(
   request: HttpServerRequest.HttpServerRequest,
   file: FileSystem.File,
-  content: ReturnType<typeof ContentHeaders.download>,
+  content: Record<string, string>,
 ) {
   const etag = `W/"${file.size.toString(16)}-${Option.match(file.mtime, {
     onNone: () => "0",

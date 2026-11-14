@@ -106,7 +106,10 @@ export type FileContent = {
   mimeType?: string
   /** On-disk size when the bytes themselves are not retained. */
   size?: number
-  /** A URL the server streams the file from with range requests, set instead of `bytes` for images, audio and video. */
+  /**
+   * A URL the server streams the file from with range requests, set instead of `bytes` for images, audio and video.
+   * For HTML, set beside `content`: a page the server serves sandboxed, for a sandboxed frame to load.
+   */
   url?: string
 }
 
