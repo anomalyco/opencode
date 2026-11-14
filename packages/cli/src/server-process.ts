@@ -175,10 +175,13 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
               const server = yield* launch.pipe(Effect.catchIf(addressInUse, () => Effect.void))
               if (server !== undefined) return server
             }
-            const owner = port === undefined ? undefined : yield* PortOwner.describe(port, hostname)
+            const owner = port === undefined ? { kind: "unknown" as const } : yield* PortOwner.inspect(port, hostname)
+            // Only the SSH bootstrap asks for this marker, so normal CLI output stays readable.
+            if (process.env[PortOwner.markerEnv] === "1")
+              yield* Effect.sync(() => process.stderr.write(PortOwner.marker(owner) + "\n"))
             return yield* Effect.fail(
               new Error(
-                `Managed service port ${port} on ${hostname} is already in use by ${owner ?? "another process"}. ` +
+                `Managed service port ${port} on ${hostname} is already in use by ${PortOwner.format(owner)}. ` +
                   "Configure another port with `opencode service set port <port>` and start the service again.",
                 { cause: error },
               ),

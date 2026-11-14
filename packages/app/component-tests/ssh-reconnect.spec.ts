@@ -87,6 +87,22 @@ story("updating an incompatible connection continues authentication in the same 
   await expect(component.getByText("Session connected")).toBeVisible()
 })
 
+story("a failed connection shows the remote command's own output", async ({ mount, page }) => {
+  await mount("app-dialog-ssh--failure")
+  const dialog = page.getByRole("dialog")
+  await expect(dialog.getByRole("alert")).toContainText("Could not establish the SSH connection")
+  await expect(dialog.getByText("Connection refused")).toBeVisible()
+})
+
+story("a failed remote start shows the cause without the CLI stack", async ({ mount, page }) => {
+  await mount("app-dialog-ssh--failure-service")
+  const dialog = page.getByRole("dialog")
+  await expect(dialog.getByRole("alert")).toContainText("SSH connected, but the OpenCode server did not become ready")
+  await expect(dialog.getByText(/Managed service port 49374 .* already in use/)).toBeVisible()
+  await expect(dialog.getByText("at <anonymous>")).toHaveCount(0)
+  await expect(dialog.getByText(/\[cause\]/)).toHaveCount(0)
+})
+
 story("key-based reconnect completes without opening an authentication dialog", async ({ mount, page }) => {
   const component = await mount("app-dialog-ssh--key-reconnect")
   await component.getByRole("button", { name: "Reconnect", exact: true }).click()

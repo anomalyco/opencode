@@ -1,6 +1,25 @@
 import { expect, test } from "bun:test"
-import { binaryPath, parseRegistration } from "./bootstrap"
+import { NodeServices } from "@effect/platform-node"
+import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/http"
+import fs from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { testEffect } from "../../../core/test/lib/effect"
+import { binaryPath, bootstrap, parseRegistration } from "./bootstrap"
+import { parseTarget, sshFailureCode, SshFailure } from "./command"
 import { RemoteCli } from "./remote-cli"
+
+const it = testEffect(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer))
+
+// The stand-in remote runs the bootstrap scripts with `sh`, so these cases need a POSIX shell.
+const bootTest = process.platform === "win32" ? it.live.skip : it.live
+
+const VERSION = "2.0.26"
+
+const URL = "http://127.0.0.1:54321"
+
+const FIXED_URL = "http://127.0.0.1:49374"
 
 test("ignores stopped services and registrations that do not match the healthy endpoint", () => {
   const registration = { url: "http://127.0.0.1:1234", password: "secret", version: "2.0.0", pid: 42 }
@@ -22,3 +41,162 @@ test("rejects unsafe versions and platforms in remote installation paths", () =>
   expect(() => RemoteCli.installScript({ version: '2.0.0"; whoami', source: { type: "installer" } })).toThrow()
   expect(() => RemoteCli.archiveUrl("linux-x64;whoami", "2.0.0")).toThrow()
 })
+
+test("keeps a remote command failure on its own step and OpenSSH failures as connections", () => {
+  expect(sshFailureCode(255, "service")).toBe("connection")
+  expect(sshFailureCode(1, "service")).toBe("service")
+  expect(sshFailureCode(1)).toBe("connection")
+})
+
+// A stand-in remote: `ssh` runs the script it receives, and the private CLI answers
+// `--version`, `service status`, and `service start` the way the shipping CLI does.
+async function remote(cli: string) {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "oc-ssh-bootstrap-"))
+  const bin = path.join(home, "bin")
+
+  await fs.mkdir(bin, { recursive: true })
+  await fs.mkdir(path.dirname(path.join(home, ".opencode/desktop-ssh", VERSION, "opencode")), { recursive: true })
+  await fs.mkdir(path.join(home, ".local/state/opencode"), { recursive: true })
+  await fs.writeFile(path.join(bin, "ssh"), "#!/bin/sh\nexec sh -s\n", { mode: 0o755 })
+  await fs.writeFile(path.join(home, ".opencode/desktop-ssh", VERSION, "opencode"), `#!/bin/sh\n${cli}\n`, {
+    mode: 0o755,
+  })
+
+  return {
+    home,
+    env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` },
+  }
+}
+
+const service = `case "$2" in
+  status)
+    if [ -f "$HOME/.local/state/opencode/service.json" ]; then printf '%s\\n' "${URL}"; else printf '%s\\n' stopped; fi
+    ;;
+  start|restart)
+    if [ "$3" = "--port" ] && [ "$4" = "0" ]; then
+      printf '%s' '{"url":"${URL}","password":"secret","version":"${VERSION}","pid":7}' > "$HOME/.local/state/opencode/service.json"
+      printf '%s\\n' "${URL}"
+    else
+      printf '%s\\n' "OPENCODE_SERVICE_PORT_OWNER=foreign" "Managed service port 49374 on 0.0.0.0 is already in use by another process." >&2
+      exit 1
+    fi
+    ;;
+  *)
+    if [ "$1" = "--version" ]; then printf '%s\\n' "${VERSION}"; fi
+    ;;
+esac`
+
+const unavailable = `if [ "$2" = "start" ] || [ "$2" = "restart" ]; then
+  printf '%s\\n' "OPENCODE_SERVICE_PORT_OWNER=opencode" "OPENCODE_SERVICE_PORT_OWNER_PID=999999" "Managed service port 49374 on 0.0.0.0 is already in use by another process." >&2
+  exit 1
+fi
+if [ "$1" = "--version" ]; then printf '%s\\n' "${VERSION}"; else printf '%s\\n' stopped; fi`
+
+const reclaim = `case "$2" in
+  status)
+    if [ -f "$HOME/.local/state/opencode/restarted" ]; then printf '%s\\n' "${FIXED_URL}"; else printf '%s\\n' stopped; fi
+    ;;
+  start|restart)
+    if [ "$3" = "--port" ] && [ "$4" = "0" ]; then
+      printf '%s\\n' "Free-port fallback started a second service." >&2
+      exit 1
+    fi
+    if [ -f "$HOME/.local/state/opencode/restarted" ]; then
+      printf '%s' '{"url":"${FIXED_URL}","password":"secret","version":"${VERSION}","pid":7}' > "$HOME/.local/state/opencode/service.json"
+      printf '%s\\n' "${FIXED_URL}"
+    else
+      touch "$HOME/.local/state/opencode/restarted"
+      printf '%s\\n' "OPENCODE_SERVICE_PORT_OWNER=opencode" "OPENCODE_SERVICE_PORT_OWNER_PID=999999" "Managed service port 49374 on 0.0.0.0 is already in use by another process." >&2
+      exit 1
+    fi
+    ;;
+  *)
+    if [ "$1" = "--version" ]; then printf '%s\\n' "${VERSION}"; fi
+    ;;
+esac`
+
+bootTest(
+  "starts on a free port when the managed port is already taken",
+  Effect.gen(function* () {
+    const machine = yield* Effect.promise(() => remote(service))
+
+    try {
+      const endpoint = yield* bootstrap({ target: parseTarget("devbox"), version: VERSION, env: machine.env })
+      expect(endpoint).toEqual({ host: "127.0.0.1", port: 54321, password: "secret" })
+    } finally {
+      yield* Effect.promise(() => fs.rm(machine.home, { recursive: true, force: true }))
+    }
+  }),
+)
+
+const foreignProfile = `case "$2" in
+  status) printf '%s\\n' stopped ;;
+  start|restart)
+    if [ "$3" = "--port" ]; then touch "$HOME/.local/state/opencode/free-port"; fi
+    printf '%s\\n' "OPENCODE_SERVICE_PORT_OWNER=opencode" "OPENCODE_SERVICE_PORT_OWNER_PID=999999" "Managed service port 49374 on 0.0.0.0 is already in use by another process." >&2
+    exit 1
+    ;;
+  *)
+    if [ "$1" = "--version" ]; then printf '%s\\n' "${VERSION}"; fi
+    ;;
+esac`
+
+bootTest(
+  "restarts an OpenCode service that holds the managed port",
+  Effect.gen(function* () {
+    const machine = yield* Effect.promise(() => remote(reclaim))
+
+    try {
+      // An unhealthy service still leaves its registration, so the holder is this home's own.
+      yield* Effect.promise(() =>
+        fs.writeFile(
+          path.join(machine.home, ".local/state/opencode/service.json"),
+          JSON.stringify({ url: FIXED_URL, password: "secret", version: VERSION, pid: 999999 }),
+        ),
+      )
+      const endpoint = yield* bootstrap({ target: parseTarget("devbox"), version: VERSION, env: machine.env })
+      expect(endpoint).toEqual({ host: "127.0.0.1", port: 49374, password: "secret" })
+    } finally {
+      yield* Effect.promise(() => fs.rm(machine.home, { recursive: true, force: true }))
+    }
+  }),
+)
+
+bootTest(
+  "reports an OpenCode service from another profile without touching it",
+  Effect.gen(function* () {
+    const machine = yield* Effect.promise(() => remote(foreignProfile))
+
+    try {
+      const error = yield* bootstrap({ target: parseTarget("devbox"), version: VERSION, env: machine.env }).pipe(
+        Effect.flip,
+      )
+
+      expect(error.code).toBe("service")
+      expect(
+        yield* Effect.promise(() => Bun.file(path.join(machine.home, ".local/state/opencode/free-port")).exists()),
+      ).toBe(false)
+    } finally {
+      yield* Effect.promise(() => fs.rm(machine.home, { recursive: true, force: true }))
+    }
+  }),
+)
+
+bootTest(
+  "reports a remote start failure as a service error with its captured output",
+  Effect.gen(function* () {
+    const machine = yield* Effect.promise(() => remote(unavailable))
+
+    try {
+      const error = yield* bootstrap({ target: parseTarget("devbox"), version: VERSION, env: machine.env }).pipe(
+        Effect.flip,
+      )
+
+      expect(error).toBeInstanceOf(SshFailure)
+      expect(error.code).toBe("service")
+      expect(error.detail).toContain("already in use")
+    } finally {
+      yield* Effect.promise(() => fs.rm(machine.home, { recursive: true, force: true }))
+    }
+  }),
+)

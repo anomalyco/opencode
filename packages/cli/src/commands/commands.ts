@@ -27,6 +27,13 @@ export const Server = GlobalFlag.Setting("server")({
 
 const ServerFlags = [Standalone, Server] as const
 
+/** A one-off service port for this start; 0 lets the OS choose a free one. */
+const ServicePort = Flag.Int("port").pipe(
+  Flag.withDescription("Bind the background server to this port; 0 chooses a free port"),
+  Flag.withSchema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65_535 }))),
+  Flag.optional,
+)
+
 declare const OPENCODE_CLI_NAME: string | undefined
 
 const ServerParams = {
@@ -502,8 +509,8 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
     Spec.make("service", {
       description: "Manage the background server",
       commands: [
-        Spec.make("start", { description: "Start the background server" }),
-        Spec.make("restart", { description: "Restart the background server" }),
+        Spec.make("start", { description: "Start the background server", params: { port: ServicePort } }),
+        Spec.make("restart", { description: "Restart the background server", params: { port: ServicePort } }),
         Spec.make("status", { description: "Show background server status" }),
         Spec.make("stop", { description: "Stop the background server" }),
         Spec.make("get", {

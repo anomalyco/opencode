@@ -20,6 +20,22 @@ import type { SshController } from "./state"
 
 export { default as css } from "./ssh.css?inline"
 
+/** The message lines of a failure; stack frames, cause braces, and machine markers hide the cause. */
+function failureSummary(detail: string) {
+  const lines = detail.split(/\r?\n/).filter((line) => line.trim())
+
+  const messages = lines.filter(
+    (line) =>
+      line === line.trimStart() &&
+      !/^OPENCODE_[A-Z_]+=/.test(line) &&
+      !/^\[cause\]/.test(line) &&
+      !/^Error: Server process exited with code \d+$/.test(line) &&
+      !/^[}\])]+$/.test(line),
+  )
+
+  return (messages.length > 0 ? messages : lines).slice(0, 6).join("\n")
+}
+
 export function DialogSsh(props: {
   ssh: SshController
   config?: SshConfig
@@ -53,6 +69,8 @@ export function DialogSsh(props: {
   )
 
   const view = createMemo(() => viewSshDialog(dialogState(), snapshot()))
+  // The remote command's message, so an actionable cause is not hidden behind the error code.
+  const detail = createMemo(() => failureSummary(snapshot().item?.detail ?? ""))
   // One key per prompt, so typing a response never remounts and refocuses its field.
   const prompt = createMemo(() => view().prompt, undefined, { equals: (previous, next) => previous?.id === next?.id })
 
@@ -102,9 +120,18 @@ export function DialogSsh(props: {
   const ConnectionError = () => (
     <Show when={view().error}>
       {(error) => (
-        <span id="ssh-error" class="settings-server-dialog-error !leading-[var(--line-height-compact)]" role="alert">
-          {plugin.t(error())}
-        </span>
+        <div class="flex w-full min-w-0 flex-col gap-2">
+          <span id="ssh-error" class="settings-server-dialog-error !leading-[var(--line-height-compact)]" role="alert">
+            {plugin.t(error())}
+          </span>
+          <Show when={detail()}>
+            {(text) => (
+              <pre class="ssh-error-detail" dir="auto">
+                {text()}
+              </pre>
+            )}
+          </Show>
+        </div>
       )}
     </Show>
   )

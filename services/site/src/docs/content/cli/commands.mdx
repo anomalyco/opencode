@@ -440,7 +440,13 @@ Manages the background server. See [Web](/cli/web).
 $ opencode service start
 ```
 
-Restart it.
+Use a different port for this run only. `0` asks the operating system for a free port; the saved setting stays the same.
+
+```bash
+$ opencode service start --port 0
+```
+
+Restart it. It accepts the same `--port` flag.
 
 ```bash
 $ opencode service restart
