@@ -2,6 +2,7 @@ import { isUnauthorizedError, OpenCode } from "@opencode/client/promise"
 import { Option, Schema } from "effect"
 import { checkServerHealth } from "@/runtime/server/health"
 import { normalizeServerUrl } from "@/runtime/server/registry"
+import { errorStatus } from "@/shell/errors/description"
 
 export function serverAddress(value: string) {
   if (value.includes("://") && !/^https?:\/\//.test(value.trim())) return
@@ -84,9 +85,7 @@ export type Redeemed =
 // Every address may reach the same server, but the code is single-use, so at most one attempt succeeds.
 export function redeemPairingLink(link: { urls: ReadonlyArray<string>; code: string }) {
   const attempts = link.urls.map((url) =>
-    OpenCode.make({ baseUrl: url })
-      .server.connect({ code: link.code }, { signal: AbortSignal.timeout(5_000) })
-      .then((session): Pairing => ({ url, password: session.token })),
+    redeem(url, link.code).then((session): Pairing => ({ url, password: session.token })),
   )
 
   // Whether the first address answered at all: a 401 there means another address spent the code first.
@@ -105,6 +104,25 @@ export function redeemPairingLink(link: { urls: ReadonlyArray<string>; code: str
           ? { type: "expired" }
           : { type: "unreachable" },
     )
+}
+
+// Servers before POST redemption answer it with 404 and redeem the code on GET instead.
+function redeem(url: string, code: string) {
+  const signal = AbortSignal.timeout(5_000)
+
+  return OpenCode.make({ baseUrl: url })
+    .server.connect({ code }, { signal })
+    .catch((error) => {
+      if (errorStatus(error) !== 404) throw error
+
+      const fetch = Object.assign(
+        (input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, { ...init, method: "GET" }),
+        // Bun's fetch type carries preconnect; the browser never calls it.
+        { preconnect: () => {} },
+      )
+
+      return OpenCode.make({ baseUrl: url, fetch }).server.connect({ code }, { signal })
+    })
 }
 
 // The token works on every address of the server, so keep the first one (the address the user chose in Pairing) when it

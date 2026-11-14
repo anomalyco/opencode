@@ -58,7 +58,7 @@ it.live("rejects API navigations and calls from other sites while other clients 
     ).toBe(200)
 
     // Pairing links and artifact pages are opened from elsewhere on purpose.
-    expect(yield* status("/auth/connect/expired", { ...navigate("cross-site"), accept: "text/html" })).toBe(401)
+    expect(yield* status("/auth/connect/expired", { ...navigate("cross-site"), accept: "text/html" })).toBe(200)
     const artifact = new URL("/api/experimental/artifacts/art_missing/view/", server.base)
     artifact.searchParams.set("location[directory]", tmp.path)
     const opened = yield* Effect.promise(() =>
