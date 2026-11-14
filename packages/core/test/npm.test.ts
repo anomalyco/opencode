@@ -125,6 +125,15 @@ describe("Npm.sanitize", () => {
   })
 })
 
+describe("Npm.resolveNpmBin", () => {
+  test("never hands pacote a script from inside a compiled binary", () => {
+    // pacote spawns process.execPath when the name ends in .js, and in both compiled
+    // distributions - the Bun binary and the Node single-executable build - that is
+    // opencode itself, which runs its own entry point and ignores the argument.
+    expect(Npm.resolveNpmBin()).toBe("npm")
+  })
+})
+
 describe("Npm.isRegistryPackage", () => {
   test("accepts registry packages and rejects unsupported install targets", async () => {
     expect(await Npm.isRegistryPackage("plugin")).toBe(true)

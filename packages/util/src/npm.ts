@@ -2,6 +2,7 @@ export * as Npm from "./npm.js"
 
 import path from "path"
 import { createHash, randomUUID } from "node:crypto"
+import { spawnSync } from "node:child_process"
 import { Clock, Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { FSUtil } from "./fs-util.js"
 import { Global } from "./global.js"
@@ -47,6 +48,29 @@ const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|",
 export function sanitize(pkg: string) {
   if (!illegal) return pkg
   return Array.from(pkg, (char) => (illegal.has(char) || char.charCodeAt(0) < 32 ? "_" : char)).join("")
+}
+
+export function npmOnPath() {
+  // Windows cannot spawn a bare `npm` without a shell; the preparation would fail for a
+  // different reason than a missing tool, so ask the shell there.
+  const result = spawnSync("npm", ["--version"], {
+    stdio: "ignore",
+    shell: process.platform === "win32",
+  })
+  return result.status === 0
+}
+
+/**
+ * pacote builds a Git dependency by running `npm install` inside it and takes the binary
+ * from `npmBin`. When that name ends in `.js`, it spawns `process.execPath` with the script
+ * as the argument — and in every compiled distribution `process.execPath` is opencode
+ * itself: the Bun binary and the Node single-executable build both run their own entry
+ * point and ignore the argument. That is what made `git dep preparation failed` fire for
+ * every Git plugin with a build step. Handing pacote the bare name lets the system npm do
+ * the work, and `npmOnPath()` turns a missing npm into a readable error.
+ */
+export function resolveNpmBin() {
+  return "npm"
 }
 
 export async function isRegistryPackage(pkg: string) {
@@ -217,8 +241,15 @@ const layer = Layer.effect(
       Effect.gen(function* () {
         const { Arborist } = yield* Effect.promise(() => import("@npmcli/arborist"))
         const add = input.add ?? []
+        // Building a Git dependency means running its install scripts. Say so: it is a
+        // policy decision, not something to discover from the process list.
+        const git = (yield* Effect.promise(() => Promise.all(add.map((pkg) => parse(pkg))))).some(
+          (target) => target?.type === "git",
+        )
+        if (git) yield* Effect.logWarning("preparing a git plugin runs its install scripts", { add })
         const options = {
           ...(yield* NpmConfig.load(input.config ?? input.dir)),
+          npmBin: resolveNpmBin(),
           ...(input.update ? { preferOnline: true, noGitRevCache: true } : {}),
           // Audit reports are unused here, but Arborist waits for them before completing an install.
           audit: false,
@@ -241,12 +272,22 @@ const layer = Layer.effect(
               save: true,
               saveType: "prod",
             }),
-          catch: (cause) =>
-            new InstallFailedError({
-              cause,
-              add,
-              dir: input.dir,
-            }),
+          catch: (cause) => {
+            // A Git dependency is built by running `npm install` inside the clone; without
+            // npm the preparation fails with a bare "git dep preparation failed" that says
+            // nothing about the missing tool. Only pay for the check once it failed.
+            const message = cause instanceof Error ? cause.message : String(cause)
+            if (message.includes("git dep preparation failed") && !npmOnPath())
+              return new InstallFailedError({
+                add,
+                dir: input.dir,
+                cause: new Error(
+                  `${message}
+Git plugins are built with npm during install, and no npm was found on PATH. Install Node.js and npm, or use a release that ships the plugin already built.`,
+                ),
+              })
+            return new InstallFailedError({ cause, add, dir: input.dir })
+          },
         }) as Effect.Effect<ArboristTree, InstallFailedError>
       }).pipe(
         Effect.withSpan("Npm.reify", {
