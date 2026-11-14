@@ -1,6 +1,6 @@
 //! The shared fixture of the plugin work (O-124, phase Pt), Rust reader: `parity/machines/plugins.json` holds the
 //! life of a plugin as the user sees it, of the same plugin found in a project (phase Pa), and the plugin manager's keys
-//! (P2) and views (P6b), as states with an expected observation and named actions. The TS reader is
+//! (P2) and views (P6b), and the diff viewer's route (P6c), as states with an expected observation and named actions. The TS reader is
 //! `parity/machines/plugins.test.tsx`. This drives the real TUI through every legal path to the file's depth and its
 //! seeded walks, each on a fresh mount, observing after every action, in OpenTUI's shape
 //! (`packages/rust/crates/opentui/tests/interaction_machines.rs`). Then it drops, repeats or swaps one action inside
@@ -15,13 +15,14 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
+use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_plugin::abi;
 use opencode_plugin::loader::native::loopback_described;
 use opencode_plugin::loader::{Backend, Loader, entry_file};
 use opencode_plugin::{Definition, ErrorFn, Host};
 use opencode_tui::plugins::host::host;
 use opencode_tui::{Deps, Route};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 const MACHINES: &str = include_str!("../../../../parity/machines/plugins.json");
 
@@ -370,6 +371,119 @@ impl Life {
     }
 }
 
+/// The TUI on home over two files, a.ts and b.ts, whose diff `/diff` shows in the viewer's route (P6c).
+struct Viewer {
+    harness: Harness,
+}
+
+impl Viewer {
+    fn open() -> Self {
+        let location = json!({ "directory": "/project", "project": { "id": "proj", "directory": "/project" } });
+        let list = |data: Value| json!({ "location": location, "data": data });
+        let file = |name: &str| {
+            json!({ "file": format!("{name}.ts"), "patch": format!("@@ -1 +1 @@\n-old {name}\n+new {name}\n"),
+                "additions": 1, "deletions": 1, "status": "modified" })
+        };
+        let memory = Memory::new(vec![
+            MemoryRoute::json("GET", "/api/location", 200, &location),
+            MemoryRoute::json("GET", "/api/agent", 200, &list(json!([]))),
+            MemoryRoute::json("GET", "/api/model", 200, &list(json!([]))),
+            MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
+            MemoryRoute::json("GET", "/api/vcs/diff", 200, &list(json!([file("a"), file("b")]))),
+        ]);
+        let config = json!({ "animations": false, "diffs": { "source": "working" } });
+        let deps = Deps {
+            config: support::config(support::decode(&config.to_string())),
+            route: Route::Home,
+            ..support::deps(Arc::new(memory))
+        };
+        let viewer = Self { harness: support::mount(120, 30, deps) };
+        viewer.settle();
+        viewer
+    }
+
+    /// Lets every reply, view and frame land.
+    fn settle(&self) {
+        let app = &self.harness.app;
+        app.advance(Duration::from_millis(1));
+        for _ in 0..20 {
+            app.render();
+            if !app.needs_frame() {
+                break;
+            }
+        }
+    }
+
+    /// Runs an action of the viewer machine as the user types it.
+    fn act(&self, action: &str) {
+        let app = &self.harness.app;
+        match action {
+            "open" => {
+                app.type_text("/diff");
+                self.settle();
+                app.press("enter");
+                assert!(app.wait_until(support::WAIT, || app.text().contains("≡ a.ts")), "{}", app.text());
+            }
+            "close" => app.press("q"),
+            "review" => app.press("m"),
+            "single" => app.press("s"),
+            _ => panic!("unknown action {action}"),
+        }
+        self.settle();
+    }
+
+    /// `screen/reviewed/shown`, as `parity/machines/plugins.json` writes them for the viewer machine: the tree is the
+    /// screen's first 30 columns, the cards the rest.
+    fn observe(&self) -> String {
+        let screen = self.harness.app.text();
+        let (mut reviewed, mut shown) = (String::new(), String::new());
+        for line in screen.lines() {
+            let tree: String = line.chars().take(30).collect();
+            let pane: String = line.chars().skip(30).collect();
+            for name in ["a", "b"] {
+                if tree.contains(&format!("≡ {name}.ts")) && tree.trim_end().ends_with('✓') {
+                    reviewed.push_str(name);
+                }
+                if pane.contains(&format!("{name}.ts")) {
+                    shown.push_str(name);
+                }
+            }
+        }
+        if !screen.contains("≡ a.ts") {
+            return "-/?/?".to_owned();
+        }
+        let reviewed = if reviewed.is_empty() { "-" } else { &reviewed };
+        format!("diff/{reviewed}/{shown}")
+    }
+}
+
+/// [`replay`] of the viewer machine, whose reader sends every action but those a state leaves unspecified.
+fn replay_viewer(machine: &Value, path: &[&str], known: &mut ExpectedFailures) -> Option<String> {
+    let viewer = Viewer::open();
+    let mut state = machine["initial"].as_str().unwrap();
+    for (index, action) in ["mount"].into_iter().chain(path.iter().copied()).enumerate() {
+        let edge = machine["states"][state][1][action].as_str();
+        let next = if index == 0 { state } else { edge.unwrap_or(state) };
+        if index > 0 {
+            let unspecified =
+                machine["unspecified"][state].as_array().is_some_and(|actions| actions.contains(&action.into()));
+            match edge {
+                Some(_) => viewer.act(action),
+                None => assert!(unspecified, "the viewer machine names no outcome of {action} in {state}"),
+            }
+        }
+        let (actual, expected) = (viewer.observe(), machine["states"][next][0].as_str().unwrap());
+        if actual != expected {
+            if known.has(&format!("{state} {action} {actual}")) {
+                return None;
+            }
+            return Some(format!("{state} + {action}: expected {expected:?}, got {actual:?}"));
+        }
+        state = next;
+    }
+    None
+}
+
 /// The known differences of this client: `state action observation`.
 struct ExpectedFailures {
     known: BTreeSet<String>,
@@ -453,6 +567,9 @@ fn traces<'a>(corpus: &Value, machine: &'a Value, walks: bool) -> Vec<Vec<&'a st
 /// is not a known row, or `None`; a known row ends the path, unless the machine says this client follows it on
 /// (`continue`).
 fn replay(machine: &Value, path: &[&str], known: &mut ExpectedFailures) -> Option<String> {
+    if machine == &CORPUS["machines"]["viewer"] {
+        return replay_viewer(machine, path, known);
+    }
     let views = machine == &CORPUS["machines"]["views"];
     let life = Life::open(machine == &CORPUS["machines"]["project"], views);
     let manager = machine == &CORPUS["machines"]["manager"] || views;
@@ -635,4 +752,21 @@ fn the_plugin_manager_views_follow_the_shared_fixture_on_walks_and_faults() {
         check("views", traces(&CORPUS, views, true), &[&views["xfail"]]);
         check("views", faulted(&cycles("views")), &[&views["xfail"], &CORPUS["faults"]["views"]["xfail"]]);
     }
+}
+
+// Expected (P6c, the shared fixture's rows for the viewer): after every legal path to depth 4 the diff viewer's route
+// shows what the file says: what is reviewed, which cards show, and that the single view outlives the viewer.
+#[test]
+fn the_diff_viewer_follows_the_shared_fixture() {
+    let viewer = &CORPUS["machines"]["viewer"];
+    check("viewer", traces(&CORPUS, viewer, false), &[&viewer["xfail"]]).check();
+}
+
+// Expected: the same along the file's seeded walks, and after one action of two normal cycles is dropped, repeated or
+// swapped.
+#[test]
+fn the_diff_viewer_follows_the_shared_fixture_on_walks_and_faults() {
+    let viewer = &CORPUS["machines"]["viewer"];
+    check("viewer", traces(&CORPUS, viewer, true), &[&viewer["xfail"]]);
+    check("viewer", faulted(&cycles("viewer")), &[&viewer["xfail"], &CORPUS["faults"]["viewer"]["xfail"]]);
 }

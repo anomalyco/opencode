@@ -1,5 +1,5 @@
 // The shared fixture of the plugin work (rich-plugins 4.14, O-124), TypeScript reader: the TS TUI is driven through
-// the life, project and manager machines of plugins.json, with parity/plugins/life loaded as a local plugin or found in a
+// the life, project, manager and viewer machines of plugins.json, with parity/plugins/life loaded as a local plugin or found in a
 // project, each path on a fresh app,
 // observing after every action. The Rust reader is crates/tui/tests/all/plugin_machines.rs; both read the file and
 // neither reads the other. `bun run test` in packages/cli-rs, which CI runs, covers each edge once and the seeded walks;
@@ -12,6 +12,7 @@ import { mkdir, symlink } from "node:fs/promises"
 import path from "node:path"
 import { createAppFixture } from "../../../tui/test/fixture/app"
 import { tmpdir } from "../../../tui/test/fixture/fixture"
+import { directory, json, worktree } from "../../../tui/test/fixture/tui-client"
 import machines from "./plugins.json"
 
 type Fixture = Awaited<ReturnType<typeof createAppFixture>>
@@ -52,6 +53,8 @@ const project = parse(machines.machines.project)
 const managerKeys = parse(machines.machines.manager)
 // The plugin manager's views (phase P6b), with the plugin failing as it loads; as the keys, every action has an outcome.
 const managerViews = parse(machines.machines.views)
+// The diff viewer's route (phase P6c); as the manager's keys, every action has an outcome.
+const viewer = parse(machines.machines.viewer)
 let runs = 0
 
 // A fresh app with a copy of the plugin, which resolves packages/tui's dependencies (as `copyPlugin` does). In the
@@ -354,10 +357,97 @@ function observeManager(setup: Fixture) {
   return `list/${shown}/${found === undefined ? "none" : found.includes("inactive") ? "off" : "on"}`
 }
 
+// The diff viewer's files: a.ts and b.ts, one changed line each, which fit on one screen.
+function diffFile(name: string) {
+  return {
+    file: `${name}.ts`,
+    patch: `@@ -1 +1 @@\n-old ${name}\n+new ${name}\n`,
+    additions: 1,
+    deletions: 1,
+    status: "modified",
+  }
+}
+
+// A fresh app on home at 120 by 30 cells whose server lists the two files' diff.
+async function openViewer() {
+  const location = { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } }
+  const setup = await createAppFixture({
+    width: 120,
+    height: 30,
+    config: { animations: false, diffs: { source: "working" } },
+    fetch: (url) =>
+      url.pathname === "/api/vcs/diff" ? json({ location, data: [diffFile("a"), diffFile("b")] }) : undefined,
+  })
+  await setup.ready
+  await until(setup, (frame) => frame.includes("Ask anything"), "home")
+  return { setup, [Symbol.asyncDispose]: () => setup[Symbol.asyncDispose]() }
+}
+
+// Draws until three frames in a row are the same.
+async function settled(setup: Fixture) {
+  let [last, same] = ["", 0]
+  for (let tries = 0; tries < 200 && same < 3; tries++) {
+    await setup.renderOnce()
+    const frame = setup.captureCharFrame()
+    same = frame === last ? same + 1 : 0
+    last = frame
+    await Bun.sleep(10)
+  }
+}
+
+// An action of the viewer machine: /diff and enter, q, m or s.
+async function actViewer(setup: Fixture, action: string) {
+  if (action === "open") {
+    await setup.mockInput.typeText("/diff")
+    await until(setup, (frame) => frame.includes("/diff"), "/diff in the prompt")
+    setup.mockInput.pressEnter()
+    await until(setup, (frame) => frame.includes("≡ a.ts"), "the diff viewer")
+  } else setup.mockInput.pressKey({ close: "q", review: "m", single: "s" }[action]!)
+  await settled(setup)
+}
+
+// screen/reviewed/shown, as plugins.json writes them for the viewer machine: the tree is the first 30 columns.
+function observeViewer(setup: Fixture) {
+  const frame = setup.captureCharFrame()
+  if (!frame.includes("≡ a.ts")) return "-/?/?"
+  let [reviewed, shown] = ["", ""]
+  for (const line of frame.split("\n")) {
+    const cells = Array.from(line)
+    const [tree, pane] = [cells.slice(0, 30).join(""), cells.slice(30).join("")]
+    for (const name of ["a", "b"]) {
+      if (tree.includes(`≡ ${name}.ts`) && tree.trimEnd().endsWith("✓")) reviewed += name
+      if (pane.includes(`${name}.ts`)) shown += name
+    }
+  }
+  return `diff/${reviewed || "-"}/${shown}`
+}
+
+// Replays `path` of the viewer machine on a fresh app, sending every action but those a state leaves unspecified.
+async function replayViewer(path: string[], known: Set<string>, seen: Set<string>) {
+  await using app = await openViewer()
+  let state = viewer.initial
+  for (const [index, action] of ["mount", ...path].entries()) {
+    const edge = viewer.states[state][1][action]
+    const next = index === 0 ? state : (edge ?? state)
+    if (index > 0 && edge !== undefined) await actViewer(app.setup, action)
+    if (index > 0 && edge === undefined && !viewer.unspecified?.[state]?.includes(action))
+      throw new Error(`the viewer machine names no outcome of ${action} in ${state}`)
+    const [expected, actual] = [viewer.states[next][0], observeViewer(app.setup)]
+    if (actual !== expected) {
+      const key = `${state} ${action} ${actual}`
+      if (known.has(key)) return void seen.add(key)
+      return `${path.slice(0, index).join(" ")}: ${state} + ${action}: expected ${expected}, got ${actual}`
+    }
+    state = next
+  }
+  return undefined
+}
+
 // Replays `path` of `machine` on a fresh app. An action a state has no edge for does nothing; the manager machine names
 // an outcome for each, and its reader sends every action but those it lists as unspecified. The first difference that
 // is not a known row, or undefined; a known row ends the path, unless the machine says to follow it on.
 async function replay(machine: Machine, path: string[], known: Set<string>, seen: Set<string>) {
+  if (machine === viewer) return replayViewer(path, known, seen)
   await using app = await open(machine === project, machine === managerViews)
   const views = machine === managerViews
   const keyed = machine === managerKeys || views
@@ -434,7 +524,7 @@ function walks(machine: Machine) {
 }
 
 // Two normal cycles, each with one action dropped, repeated, or swapped with the next.
-function faulted(name: "life" | "manager" | "views") {
+function faulted(name: "life" | "manager" | "views" | "viewer") {
   const cycles = machines.faults[name].cycles.map((cycle) => cycle.split(" "))
   const out = new Map<string, string[]>()
   for (const a of cycles)
@@ -520,6 +610,24 @@ test.if(deep)(
   "the plugin manager's views recover from a dropped, repeated or swapped action",
   async () => {
     await check(faulted("views"), known(managerViews.xfail, machines.faults.views.xfail), managerViews)
+  },
+  600_000,
+)
+
+test("the diff viewer follows the shared fixture", async () => {
+  const rows = known(viewer.xfail)
+  const seen = await check(deep ? paths(viewer) : cover(viewer), rows, viewer)
+  expect([...rows].filter((row) => !seen.has(row))).toEqual([])
+}, 600_000)
+
+test("the diff viewer follows the shared fixture on walks", async () => {
+  await check(walks(viewer), known(viewer.xfail), viewer)
+}, 600_000)
+
+test.if(deep)(
+  "the diff viewer recovers from a dropped, repeated or swapped action",
+  async () => {
+    await check(faulted("viewer"), known(viewer.xfail, machines.faults.viewer.xfail), viewer)
   },
   600_000,
 )
