@@ -5,7 +5,9 @@ import { Bus } from "@opencode/core/bus"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
+import { Plugin } from "@opencode/core/plugin"
 import { CommandPlugin } from "@opencode/core/plugin/command"
+import { PluginHost } from "@opencode/core/plugin/host"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/schema/session"
 import { SessionInbox } from "@opencode/schema/session-inbox"
@@ -15,6 +17,7 @@ import { DateTime } from "effect"
 import { emptyMcpLayer } from "../fixture/mcp"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
+import { PluginTestLayer } from "./fixture"
 import { host } from "./host"
 import PROMPT_INITIALIZE from "../../src/plugin/command/initialize.txt"
 import PROMPT_REVIEW from "../../src/plugin/command/review.txt"
@@ -43,11 +46,6 @@ describe("CommandPlugin.Plugin", () => {
       }[] = []
       yield* CommandPlugin.Plugin.effect(
         host({
-          command: {
-            list: () => Effect.die("unused command.list"),
-            transform: command.transform,
-            reload: command.reload,
-          },
           session: {
             prompt: (input) =>
               Effect.sync(() => {
@@ -73,10 +71,12 @@ describe("CommandPlugin.Plugin", () => {
       expect(yield* command.get("init")).toMatchObject({
         name: "init",
         description: "guided AGENTS.md setup",
+        source: "builtin",
       })
       expect(yield* command.get("review")).toMatchObject({
         name: "review",
         description: "review changes [commit|branch|pr], defaults to uncommitted",
+        source: "builtin",
       })
       yield* command.execute({
         name: "init",
@@ -135,3 +135,20 @@ describe("CommandPlugin.Plugin", () => {
     }),
   )
 })
+
+testEffect(PluginTestLayer).effect("ignores built-in metadata supplied by a plugin command", () =>
+  Effect.gen(function* () {
+    const commands = yield* Command.Service
+    const context = yield* PluginHost.make(yield* Plugin.Service, "test.custom-command")
+    const definition = {
+      name: "init",
+      description: "Custom setup",
+      source: "builtin" as const,
+      execute: () => Effect.void,
+    }
+
+    yield* context.command.transform((editor) => editor.add(definition))
+
+    expect(yield* commands.get("init")).toEqual(Command.Info.make({ name: "init", description: "Custom setup" }))
+  }),
+)

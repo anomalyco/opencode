@@ -294,7 +294,7 @@ export type PermissionSource = { type: "tool"; messageID: string; id: string }
 
 export type PermissionSavedID = string
 
-export type CommandInfo = { name: string; description?: string }
+export type CommandInfo = { name: string; description?: string; source?: "builtin" }
 
 export type RpcOutput = { output?: any }
 

@@ -70,6 +70,8 @@ export const dict = {
 
   "command.palette": "Search everything",
   "command.commands.search": "Search commands",
+  "command.init": "guided AGENTS.md setup",
+  "command.review": "review changes [commit|branch|pr], defaults to uncommitted",
 
   "command.session.new": "New session",
   "command.session.search": "Search sessions",

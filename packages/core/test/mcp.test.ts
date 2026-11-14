@@ -3650,15 +3650,8 @@ describe("MCP pool", () => {
           })
           const b = yield* open(config, pool, directories[1], { bus })
           const command = Context.get(yield* Layer.build(Command.layer.pipe(Layer.provide(bus))), Command.Service)
-          yield* CommandPlugin.Plugin.effect(
-            host({
-              command: {
-                list: () => Effect.die("unused command.list"),
-                transform: command.transform,
-                reload: command.reload,
-              },
-            }),
-          ).pipe(
+          yield* CommandPlugin.Plugin.effect(host()).pipe(
+            Effect.provideService(Command.Service, command),
             Effect.provideService(Mcp.Service, b.mcp),
             Effect.provide(bus),
             Effect.provideService(
