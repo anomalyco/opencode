@@ -22,6 +22,7 @@ pub mod permission;
 pub mod prompt;
 pub mod prompt_input;
 pub mod qr;
+pub mod root;
 pub mod select;
 pub mod theme;
 pub mod toast;

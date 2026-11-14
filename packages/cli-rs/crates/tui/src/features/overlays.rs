@@ -69,7 +69,7 @@ pub fn connection_changed(tui: &Tui, state: &State) {
                 return;
             }
             let view = reconnecting(&tui);
-            tui.app.root().add(&view);
+            opencode_ui::root::add(&tui.app, &view);
             *tui.overlays.reconnecting.borrow_mut() = Some(view);
             tui.app.request_redraw();
         }),
@@ -192,7 +192,7 @@ fn set_migration(tui: &Tui, progress: Option<String>) {
         .padding_x(2)
         .padding_y(1)
         .child(&spinner);
-    tui.app.root().add(&view);
+    opencode_ui::root::add(&tui.app, &view);
     *tui.overlays.migration.borrow_mut() = Some(view);
     tui.app.request_redraw();
 }

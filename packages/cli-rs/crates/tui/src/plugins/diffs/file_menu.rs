@@ -96,7 +96,7 @@ pub fn open(viewer: &Viewer, file: usize, x: u16, y: u16) {
             cx.stop_propagation();
         }
     });
-    app.root().add(&overlay);
+    opencode_ui::root::add(app, &overlay);
 
     let mode = tui.keymap.push_mode(MODE, Condition::Always);
     let (on_close, on_run) = (weak.clone(), weak);

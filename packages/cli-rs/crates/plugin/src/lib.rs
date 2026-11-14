@@ -549,6 +549,11 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                         scope.run_owned(alive, "on-scroll", |host| handler(host, event));
                     }) as behave::Scrolls
                 }),
+                ended: Some({
+                    let scope = scope.clone();
+                    Rc::new(move || scope.failure.borrow().is_some() || scope.activation.disposed())
+                        as Rc<dyn Fn() -> bool>
+                }),
             };
             let owning = scope.clone();
             let commands: surface::Commands = Rc::new(move |alive: &Weak<()>| {

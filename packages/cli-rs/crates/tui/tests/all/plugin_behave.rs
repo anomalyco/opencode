@@ -1395,6 +1395,8 @@ struct Shape {
     split: bool,
     /// Scroll `s` tells `layout` its top anchor of group `g`.
     top: bool,
+    /// `layout` panics.
+    panic_layout: bool,
 }
 
 #[derive(Default)]
@@ -1452,6 +1454,7 @@ fn probe_setup(setup: &mut abi::Setup) -> Result<(), String> {
     let notify = shape(|shape| shape.notify.clone());
     let surface = v2::Surface::new("probe", v2::Place::Route("probe".into()), probe_view)
         .layout(notify, |geometry| {
+            assert!(!shape(|shape| shape.panic_layout), "layout fault");
             let again = shape(|shape| shape.again_until).is_some_and(|until| seen(|seen| seen.stage) < until);
             seen(|seen| {
                 seen.geometries.push(geometry.clone());
@@ -2395,4 +2398,54 @@ fn a_quiet_key_visits_the_same_items_at_any_size() {
     let (small, large) = (visits(410), visits(4000));
     assert!(small.resolves > 0, "the keys ran no behaviors: {small:?}");
     assert_eq!(small.visits, large.visits, "{small:?} {large:?}");
+}
+
+// Expected (P4c containment): a `layout` that panics is a contained plugin call. The plugin fails and the frame paints;
+// its mount leaves the behaviors with what they held, so later input runs no behaviors and no `layout` for it.
+#[test]
+fn a_panicking_layout_fails_its_plugin_and_leaves_the_behaviors() {
+    let notify = vec![v2::Notify::Scroll { id: "s".into() }];
+    let harness = probe(Shape { cards: cards(30, 1), notify, ..Shape::default() }, 40, 10);
+    settled(&harness);
+    shape(|shape| shape.panic_layout = true);
+    harness.app.scroll(4, 4, true);
+    harness.app.advance(Duration::ZERO);
+    settled(&harness);
+    let status =
+        harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "test.probe").map(|entry| entry.status);
+    assert!(matches!(status, Some(opencode_plugin::Status::Failed(_))), "{status:?}");
+    let (before, layouts) = (behave::counts(), seen(|seen| seen.geometries.len()));
+    for _ in 0..5 {
+        harness.app.press("f11");
+        harness.app.scroll(4, 4, true);
+        harness.app.advance(Duration::ZERO);
+        settled(&harness);
+    }
+    let after = behave::counts().since(before);
+    assert_eq!((after.resolves, seen(|seen| seen.geometries.len())), (0, layouts), "{after:?}");
+}
+
+// Expected (OpenTUI's walk order, opentui #2129; review big-boi 1): the hook is put in its root once and never moved,
+// as a node added or moved in a frame is resized before its siblings; arming flips its width only, and a root child
+// added later goes in before it.
+#[test]
+fn the_hook_stays_the_roots_last_child() {
+    use opentui::prelude::*;
+    let before = behave::counts();
+    let harness = probe(Shape { cards: cards(30, 1), list: true, ..Shape::default() }, 40, 10);
+    settled(&harness);
+    let app = harness.app.app();
+    let hook = app.root().children().last().map(|last| last.id());
+    let late = View::new(app).absolute().width(1).height(1);
+    opencode_ui::root::add(app, &late);
+    for _ in 0..3 {
+        harness.app.press("f11");
+        harness.app.scroll(4, 4, true);
+        dispatch(&harness, "p.at", "5");
+        settled(&harness);
+    }
+    assert_eq!(app.root().children().last().map(|last| last.id()), hook, "a root child went in after the hook");
+    let counts = behave::counts().since(before);
+    assert!(counts.arms > 3, "{counts:?}");
+    assert_eq!(counts.placed, 1, "the hook was put in its root again");
 }

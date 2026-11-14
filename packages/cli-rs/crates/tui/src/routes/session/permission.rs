@@ -98,7 +98,7 @@ impl Permission {
             .position(Edge::Bottom, 0)
             .z_index(2000)
             .visible(false);
-        tui.app.root().add(&overlay);
+        opencode_ui::root::add(&tui.app, &overlay);
         let inner = Rc::new(Inner {
             tui: tui.weak(),
             session: session.clone(),
