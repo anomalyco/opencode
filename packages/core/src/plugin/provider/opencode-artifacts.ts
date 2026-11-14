@@ -33,22 +33,25 @@ const Problem = Schema.Struct({ message: Schema.optional(Schema.String), owner: 
 
 /**
  * `artifacts.share` for one Location, while `sync` is given the Console connection that may share. It joins the tools
- * of the Console's built-in `artifacts` MCP server, which read and answer the comments.
+ * of the Console's built-in `artifacts` MCP server, which read and answer the comments. While event watches run
+ * (`wakes`), a share makes the session watch its comments.
  */
 export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.HttpClient) {
   const environment = yield* Environment.Service
   const access = yield* FileAccess.Service
   const permission = yield* Permission.Service
-  let current: Connection | undefined
+  let current: { readonly connection: Connection; readonly wakes: boolean } | undefined
 
   yield* ctx.tool
     .transform((editor) => {
-      const connection = current
-      if (!connection) return
+      if (!current) return
+      const connection = current.connection
+      const wakes = current.wakes
       editor.add({
         name: "share",
         description:
-          "Publish a local folder of static files with an index.html as an OpenCode Console artifact the workspace's members can open and comment on, and return its URL. Sharing the same name again updates it at the same URL, uploading only changed files. This session wakes when someone comments.",
+          "Publish a local folder of static files with an index.html as an OpenCode Console artifact the workspace's members can open and comment on, and return its URL. Sharing the same name again updates it at the same URL, uploading only changed files." +
+          (wakes ? " This session wakes when someone comments." : ""),
         input: Schema.Struct({
           folder: Schema.String.annotate({ description: "The folder to share" }),
           name: Schema.optional(
@@ -96,6 +99,13 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
               return yield* new ToolFailure({
                 message: `${input.folder} is ${(total / 1024 / 1024).toFixed(1)} MB; keep a share under 100 MB`,
               })
+            // Each file's own read rules apply too, such as asking before an `.env` file leaves the machine.
+            yield* permission.assert({
+              action: "read",
+              resources: listed.map((file) => path.join(folder.resource, file.path).replaceAll("\\", "/")),
+              save: ["*"],
+              ...Permission.invocation(context),
+            })
             const files = yield* Effect.forEach(
               listed,
               (file) =>
@@ -159,7 +169,7 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
                         (input.ttl.endsWith("h") ? 3600 : input.ttl.endsWith("d") ? 86_400 : 604_800),
                     }),
                 ...replace,
-                sessionID: context.sessionID,
+                ...(wakes ? { sessionID: context.sessionID } : {}),
               }),
             ).pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(Shared)))
             return {
@@ -186,9 +196,14 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
     })
     .pipe(Effect.orDie)
 
-  /** Offers `share` through `next`, or nothing when it is undefined. */
-  const sync = Effect.fnUntraced(function* (next: Connection | undefined) {
-    if (IntegrationConnection.key(next) === IntegrationConnection.key(current)) return
+  /** Offers `share` through `connection`, or nothing when it is undefined. */
+  const sync = Effect.fnUntraced(function* (connection: Connection | undefined, wakes: boolean) {
+    const next = connection && { connection, wakes }
+    if (
+      IntegrationConnection.key(next?.connection) === IntegrationConnection.key(current?.connection) &&
+      next?.wakes === current?.wakes
+    )
+      return
     current = next
     yield* ctx.tool.reload()
   })

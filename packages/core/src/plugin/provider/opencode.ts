@@ -346,7 +346,7 @@ export const OpencodePlugin = define<
       yield* syncInstructionsAndSkills(next, allowed)
       const watching = allowed && next.remote?.watches === true && (yield* flags.enabled("console_watches"))
       yield* syncWatches(watching ? next.connection : undefined)
-      yield* artifacts.sync(allowed && next.remote?.artifacts === true ? next.connection : undefined)
+      yield* artifacts.sync(allowed && next.remote?.artifacts === true ? next.connection : undefined, watching)
     })
     // Watching starts when the console_watches flag is on and the Console's config says the workspace has event watches,
     // and stops when either no longer holds.

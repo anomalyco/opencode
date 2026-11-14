@@ -1,25 +1,47 @@
 import { describe, expect } from "bun:test"
 import path from "node:path"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { Credential } from "@opencode/core/credential"
+import { Flag } from "@opencode/core/flag"
 import { Integration } from "@opencode/core/integration"
 import { Location } from "@opencode/core/location"
+import { Permission } from "@opencode/core/permission"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
+import { OpencodeWatches } from "@opencode/core/plugin/provider/opencode-watches"
 import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/core/tool"
 import { testEffect } from "../lib/effect"
-import { PluginTestLayer } from "./fixture"
+import { makePluginTestLayer } from "./fixture"
 
-const it = testEffect(PluginTestLayer)
+/** Every permission check the tool makes, allowed. */
+const checks = new Array<{ action: string; resources: readonly string[] }>()
+const permission = Layer.succeed(
+  Permission.Service,
+  Permission.Service.of({
+    close: Effect.void,
+    ask: (input) => Effect.succeed({ id: input.id ?? Permission.ID.create(), effect: "ask" }),
+    assert: (input) => Effect.sync(() => void checks.push({ action: input.action, resources: input.resources })),
+    assertNotDenied: () => Effect.void,
+    allows: () => Effect.succeed(false),
+    reply: () => Effect.void,
+    get: () => Effect.succeed(undefined),
+    forSession: () => Effect.succeed([]),
+    list: () => Effect.succeed([]),
+  }),
+)
+const it = testEffect(
+  makePluginTestLayer(permission).pipe(Layer.provide(Layer.succeed(Flag.Overrides, "console_watches"))),
+)
 
 /** Console's artifact routes, in-process: it stores blobs by digest and answers `prepare` with the ones it lacks. */
 function fakeConsole() {
   const state = {
     artifacts: true,
+    watches: true,
     owner: undefined as string | undefined,
     blobs: new Set<string>(),
     uploads: new Array<string>(),
@@ -30,7 +52,15 @@ function fakeConsole() {
     fetch: async (request) => {
       const url = new URL(request.url)
       if (url.pathname === "/api/v2/config")
-        return Response.json({}, { headers: state.artifacts ? { "x-opencode-artifacts": "1" } : {} })
+        return Response.json(
+          {},
+          {
+            headers: {
+              ...(state.artifacts ? { "x-opencode-artifacts": "1" } : {}),
+              ...(state.watches ? { [OpencodeWatches.header]: "1" } : {}),
+            },
+          },
+        )
       if (url.pathname === "/api/artifacts/prepare") {
         const body = (await request.json()) as { files: { sha256: string }[]; replace?: boolean }
         if (state.owner && !body.replace)
@@ -78,10 +108,12 @@ const start = Effect.fnUntraced(function* (console: ReturnType<typeof fakeConsol
     Promise.all([
       Bun.write(path.join(folder, "index.html"), "<title>Demo</title><h1>Hi</h1>"),
       Bun.write(path.join(folder, "assets/app.js"), "console.log(1)"),
+      Bun.write(path.join(folder, "prod.env"), "TOKEN=1"),
       Bun.write(path.join(folder, ".env"), "SECRET=1"),
     ]),
   )
   yield* OpencodePlugin.effect(yield* PluginHost.make(yield* Plugin.Service, "test"))
+  checks.length = 0
   return folder
 })
 
@@ -124,6 +156,7 @@ describe("OpencodePlugin artifacts", () => {
       Effect.gen(function* () {
         const folder = yield* start(console)
         const tool = yield* Effect.fromNullishOr(yield* share)
+        expect(tool.description).toContain("This session wakes when someone comments.")
         const first = yield* tool.execute({ folder: "demo" }, context)
         expect(first.output).toEqual({
           url: "https://opencode.ai/console/org_1/artifacts/demo",
@@ -133,18 +166,40 @@ describe("OpencodePlugin artifacts", () => {
           expiresAt: null,
           watching: true,
         })
-        expect(console.state.uploads).toHaveLength(2)
+        expect(console.state.uploads).toHaveLength(3)
         expect(console.state.published[0]).toMatchObject({ title: "Demo", sessionID })
         expect((console.state.published[0]?.files as { path: string }[]).map((file) => file.path).toSorted()).toEqual([
           "assets/app.js",
           "index.html",
+          "prod.env",
         ])
+        // Each file's own read rules are checked, not only the folder's.
+        expect(
+          checks
+            .filter((check) => check.action === "read")
+            .flatMap((check) => check.resources)
+            .toSorted(),
+        ).toEqual(["demo", "demo/assets/app.js", "demo/index.html", "demo/prod.env"])
 
         yield* Effect.promise(() => Bun.write(path.join(folder, "index.html"), "<title>Demo</title><h1>Bye</h1>"))
         const second = yield* tool.execute({ folder: "demo", ttl: "7d" }, context)
         expect(second.output).toMatchObject({ updated: true, revision: 2 })
-        expect(console.state.uploads).toHaveLength(3)
+        expect(console.state.uploads).toHaveLength(4)
         expect(console.state.published[1]).toMatchObject({ ttlSeconds: 7 * 86_400, sessionID })
+      }),
+    ),
+  )
+
+  it.effect("without event watches, publishes without the session and promises no wake", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        console.state.watches = false
+        yield* start(console)
+        const tool = yield* Effect.fromNullishOr(yield* share)
+        expect(tool.description).not.toContain("wakes")
+        const shared = yield* tool.execute({ folder: "demo" }, context)
+        expect(shared.output).toMatchObject({ watching: false })
+        expect(console.state.published[0]).not.toHaveProperty("sessionID")
       }),
     ),
   )
