@@ -116,6 +116,8 @@ pub struct Tui {
     /// A theme change arrived while a key sequence was pending; remount once it ends.
     restyle: Cell<bool>,
     seen: Cell<u64>,
+    /// [`Tui::hold_sync`].
+    held: Cell<bool>,
     /// The open dialogs and viewers that follow the store: [`Tui::follow`].
     followers: RefCell<Vec<Follower>>,
     connection: RefCell<Option<Connection>>,
@@ -247,8 +249,20 @@ impl Tui {
         self.app.request_redraw();
     }
 
+    /// Holds the store's changes back from the views, or releases them, for a test that measures what one change does
+    /// on its own while reads land: they show once released.
+    #[doc(hidden)]
+    pub fn hold_sync(&self, held: bool) {
+        if self.held.replace(held) && !held {
+            self.sync();
+        }
+    }
+
     /// Passes what changed since the last sync to the route view.
     fn sync(&self) {
+        if self.held.get() {
+            return;
+        }
         let (revision, changes) = self.data.changes_since(self.seen.get());
         self.seen.set(revision);
         // Also with no change: a delta of a session whose messages are not loaded changes nothing.
@@ -500,6 +514,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         painted: Live::new(page),
         restyle: Cell::new(false),
         seen: Cell::new(0),
+        held: Cell::new(false),
         followers: RefCell::default(),
         connection: RefCell::new(None),
         layers: RefCell::new(Vec::new()),
