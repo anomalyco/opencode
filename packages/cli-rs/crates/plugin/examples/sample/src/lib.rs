@@ -13,6 +13,22 @@
 
 #![cfg_attr(any(feature = "abi-1-3", feature = "abi-1-4"), allow(dead_code, unused_imports))]
 
+/// The `witness` feature's static constructor: the platform loader runs it as it maps the library.
+#[cfg(feature = "witness")]
+mod witness {
+    #[used]
+    #[cfg_attr(any(target_os = "linux", target_os = "android", target_os = "freebsd"), unsafe(link_section = ".init_array"))]
+    #[cfg_attr(target_vendor = "apple", unsafe(link_section = "__DATA,__mod_init_func"))]
+    #[cfg_attr(windows, unsafe(link_section = ".CRT$XCU"))]
+    static INIT: extern "C" fn() = init;
+
+    extern "C" fn init() {
+        let path = std::env::temp_dir().join(format!("opencode-sample-witness-{}", std::process::id()));
+        let file = std::fs::OpenOptions::new().create(true).append(true).open(path);
+        let _ = file.and_then(|mut file| std::io::Write::write_all(&mut file, b"mapped\n"));
+    }
+}
+
 mod fence;
 mod fetch;
 mod home;

@@ -88,6 +88,17 @@ pub trait Host: 'static {
     /// failed): the dialog it opened, if that activation is no longer [`Registry::live`], so nothing of an old build can
     /// run (4.14). Called outside every plugin callback.
     fn revoked(&self, _id: &str) {}
+    /// Says that the project plugin of `target` waits for the user's approval (rich-plugins 3.9): once a build, as the
+    /// loader finds it. Called outside every plugin callback.
+    fn pending(&self, target: &str) {
+        self.toast(
+            &abi::Toast::new(
+                abi::Variant::Warning,
+                "This project wants to run native code inside opencode. Run /plugins to approve or decline it.",
+            )
+            .title(format!("Plugin needs approval: {target}")),
+        );
+    }
     /// Asks for the user's attention. Called outside every plugin callback.
     fn attention(&self, _attention: &abi::Attention) {}
     /// Calls `run` with each server event, after the host has applied it, until the disposer is dropped. `run` gets at
@@ -1233,6 +1244,10 @@ pub enum Status {
     Skipped(String),
     /// An external plugin that failed to load or crashed, with the error.
     Failed(String),
+    /// Found in a project's `plugins` directory and not approved (rich-plugins 3.9): not loaded, and it claims nothing.
+    Pending,
+    /// Found in a project's `plugins` directory, and the user declined this build: not loaded, and not asked again.
+    Declined,
 }
 
 /// One plugin as the plugin manager lists it.
@@ -1292,7 +1307,8 @@ pub struct SetupFailed {
 /// The host's plugins in enable order, and the configured entries it did not load.
 pub struct Registry {
     plugins: RefCell<Vec<Plugin>>,
-    /// Targets that are not loaded, with their status ([`Status::Skipped`] or [`Status::Failed`]).
+    /// Targets that are not loaded, with their status ([`Status::Skipped`], [`Status::Failed`], [`Status::Pending`] or
+    /// [`Status::Declined`]).
     unloaded: RefCell<Vec<(String, Status)>>,
     /// The `plugins` targets, in order, which also enable and disable external plugins as they load.
     directives: RefCell<Vec<String>>,

@@ -24,6 +24,9 @@ p0a = []
 # Adds `/p0btitle`, which sets the terminal title, and `/p0brun <shell command>`, which runs it in the foreground and
 # toasts how it ended, for the P-PTY scenarios `P.0b/*`.
 pty = []
+# A static constructor that appends a line to `opencode-sample-witness-<pid>` in the temp directory as the library
+# loads, before any of its code is called: the TUI's approval test sees whether the library was mapped at all.
+witness = []
 # Builds that pretend to target another ABI version, for the version tests.
 abi-1-0 = []
 minor-newer = []
