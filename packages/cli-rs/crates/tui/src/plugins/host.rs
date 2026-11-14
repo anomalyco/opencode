@@ -996,6 +996,9 @@ fn server_name(plugin: &PluginInfo) -> String {
 pub struct External {
     pub config_dir: PathBuf,
     pub cwd: PathBuf,
+    /// Targets loaded beside the configured ones, which a config change keeps and settings never save: `plugin dev`'s
+    /// library (review bigboi-9).
+    pub dev: Vec<String>,
 }
 
 /// Posted when a watched plugin directory changed.
@@ -1004,6 +1007,14 @@ struct PluginsChanged;
 /// Loads the external native plugins (P.4): the discovered `plugins` directories and the `cli.json` entries that name no
 /// built-in. Each change in a watched directory reconciles them again (hot reload), debounced by 100 ms as in TS.
 pub fn external(tui: &Rc<Tui>, external: External) {
+    let dev = external.dev;
+    let targets = move |plugins: &[opencode_local::cli_config::Plugin]| -> Vec<String> {
+        plugins.iter().map(target).map(str::to_owned).chain(dev.iter().cloned()).collect()
+    };
+    if !targets(&[]).is_empty() {
+        let plugins = tui.config().info.plugins.clone().unwrap_or_default();
+        tui.plugins.set_targets(&host(tui), targets(&plugins).iter().map(String::as_str));
+    }
     let entries = configured(tui, tui.plugins.skipped());
     let project = opencode_plugin::loader::project_root(&external.cwd);
     let loader = Loader::new(Rc::new(Native), external.config_dir, external.cwd, entries);
@@ -1031,7 +1042,8 @@ pub fn external(tui: &Rc<Tui>, external: External) {
             return;
         }
         let host = host(&tui);
-        let targets = tui.plugins.set_targets(&host, current.iter().flatten().map(target));
+        let targets =
+            tui.plugins.set_targets(&host, targets(current.as_deref().unwrap_or_default()).iter().map(String::as_str));
         plugins.replace(current);
         loader.set_configured(configured(&tui, targets));
         loader.reconcile(&host, &tui.plugins);
