@@ -47,6 +47,8 @@ struct Board {
     quiet: bool,
     /// The `file` anchors a read gave, with their rows.
     anchors: Vec<(String, i32)>,
+    /// `layout` asks for a view again on every call; the view then shows how many it ran.
+    again: bool,
 }
 
 thread_local! {
@@ -101,7 +103,9 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
                 board.tops.push((top.map(|top| top.id.clone()), geometry.moved_only));
             });
             let reviewed = top.is_some_and(|top| top.variant == "reviewed");
-            v2::LayoutReply::default().paint("edge", if reviewed { "background.raised.high" } else { "text.base" })
+            let reply =
+                v2::LayoutReply::default().paint("edge", if reviewed { "background.raised.high" } else { "text.base" });
+            v2::LayoutReply { again: board(|board| board.again), ..reply }
         })
         .on_scroll(|_, event| match event {
             v2::ScrollEvent::Landed { anchor, .. } => board(|board| board.landed.push(anchor.id.clone())),
@@ -155,7 +159,10 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
     if let v2::Node::Scroll { user_scroll, .. } | v2::Node::List { user_scroll, .. } = &mut files {
         *user_scroll = !quiet;
     }
-    let edge = v2::Node::row(vec![text("edge".into())]).with_id("edge");
+    let views = board(|board| board.views);
+    let edge =
+        v2::Node::row(vec![text(if board(|board| board.again) { format!("edge {views}") } else { "edge".into() })])
+            .with_id("edge");
     v2::Node::column(vec![edge, files]).layout(grow)
 }
 
@@ -166,7 +173,10 @@ struct Mounted {
 }
 
 fn mount(cards: usize, width: u16, height: u16, list: bool) -> Mounted {
-    board(|board| *board = Board { reviewed: vec![false; cards], list, quiet: board.quiet, ..Board::default() });
+    board(|board| {
+        *board =
+            Board { reviewed: vec![false; cards], list, quiet: board.quiet, again: board.again, ..Board::default() }
+    });
     let deps = Deps {
         route: Route::Home,
         builtins: vec![abi::Plugin { id: "test.board", setup }.into()],
@@ -1002,4 +1012,21 @@ fn a_large_added_file_mounts_its_chunks_near_the_view() {
         assert!(first.text().contains(line), "{command} does not show {line}:\n{}", first.text());
         assert!(!harness.app.needs_frame() || harness.app.render() == first, "{command}'s first frame was not settled");
     }
+}
+
+// Expected (synthesis 4.4 step 5): `layout` may ask for a view again; the view runs in the same frame and the frame
+// shows it. Then `layout` is called again only when something it was told about changed.
+#[test]
+fn layout_may_ask_for_a_view_again() {
+    board(|board| board.again = true);
+    let board_view = mount(3, 60, 12, false);
+    let app = &board_view.harness.app;
+    let (views, layouts) = board(|board| (board.views, board.layouts));
+    // A fold changes the top card's variant: the handler's view, one delivery, and the view it asks for.
+    board_view.dispatch("board.review", Some("0".into()));
+    let first = app.render();
+    let (ran, laid) = board(|board| (board.views - views, board.layouts - layouts));
+    assert_eq!((ran, laid), (2, 1));
+    assert!(first.text().contains(&format!("edge {}", views + 2)), "{}", first.text());
+    assert_eq!(first, board_view.settle());
 }
