@@ -78,6 +78,8 @@ pub struct Probe {
     pub panic: bool,
     /// The rich select has no footer action.
     pub no_update: bool,
+    /// The select's `update` action is disabled (P6b).
+    pub update_disabled: bool,
     /// The rich select's first footer action, `launch`, runs on the row and does not say its group.
     pub launch: bool,
     /// Node `a` has a click of its own, on the press, which runs `input.row a`.
@@ -496,7 +498,7 @@ fn select(read: &dyn abi::Read) -> abi::Select {
                         primary: Some(false),
                         rowless: false,
                         command: None,
-                        disabled: false,
+                        disabled: probe(|probe| probe.update_disabled),
                     },
                     abi::SelectAction {
                         title: "cut".into(),
@@ -1334,6 +1336,17 @@ fn a_keyed_select_takes_new_actions_and_its_rows_follow_a_toggle() {
     harness.app.press("ctrl+u");
     settle(&harness);
     assert_eq!(taken(), Vec::<String>::new());
+    // P6b: shown again with the action disabled, its key runs nothing; enabled again, in place, it runs.
+    probe(|probe| (probe.no_update, probe.update_disabled) = (false, true));
+    run(&harness, "input.reselect", None);
+    harness.app.press("ctrl+u");
+    settle(&harness);
+    assert_eq!(taken(), Vec::<String>::new());
+    probe(|probe| probe.update_disabled = false);
+    run(&harness, "input.reselect", None);
+    harness.app.press("ctrl+u");
+    settle(&harness);
+    assert_eq!(taken(), ["update gamma"]);
     harness.app.press("escape");
     settle(&harness);
     probe(|probe| probe.no_update = false);
