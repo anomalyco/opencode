@@ -263,6 +263,10 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/In
 const attemptLifetime = Duration.toMillis(Duration.minutes(10))
 const terminalRetention = Duration.toMillis(Duration.minutes(1))
 const scrubInterval = Duration.seconds(30)
+// A credential stores only its absolute expiry, so a fixed margin as long as a token's lifetime would refresh it on
+// every use.
+const refreshMargin = Duration.seconds(30)
+const expiring = (value: Credential.OAuth, now: number) => Credential.expiring(value, now, refreshMargin)
 
 type AttemptTime = { created: number; expires: number }
 type PendingAttempt = {
@@ -708,9 +712,8 @@ const layer = Layer.effect(
             .get()
             .integrations.get(credential.integrationID)
             ?.implementations.get(credential.value.methodID)?.refresh
-          if (!refresh || !Credential.expiring(credential.value, yield* Clock.currentTimeMillis))
-            return credential.value
-          return yield* authorize(credentials.refresh(credential.id, { stale: Credential.expiring, refresh }))
+          if (!refresh || !expiring(credential.value, yield* Clock.currentTimeMillis)) return credential.value
+          return yield* authorize(credentials.refresh(credential.id, { stale: expiring, refresh }))
         }),
         key: Effect.fn("Integration.connection.key")(function* (input) {
           const method = state
