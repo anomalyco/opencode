@@ -38,7 +38,8 @@ Versions only grow by appending:
   absent, so a plugin built against ABI 1.0 loads on a 1.5 host.
 - JSON payloads only gain optional fields; readers ignore fields they do not know.
 - A plugin built against a newer minor version loads on an older host and uses what the host offers: the host
-  answers a request it does not know with an error. A plugin that cannot work without a newer host sets
+  answers a request it does not know with an error, and so does a library (the conformance suite holds both sides to
+  it, below). The host sends a library no request newer than the minor its table states. A plugin that cannot work without a newer host sets
   `requires_minor`, and the host refuses it: "plugin needs host ABI 1.4 or newer, this opencode-native has 1.3; update
   opencode-native". `export_plugin!` sets `requires_minor` to 4, because only a 1.4 host sends the render requests the
   SDK answers; `export_plugin!(id, setup, requires_minor = 5)` asks for a newer host, and `Read::abi_minor()` reads the
@@ -569,6 +570,53 @@ C ABI in process (`Builtin::Abi`), and loads its `cdylib`, and compares frames, 
 (`carrier-equal`). `plugin_surface.rs` runs P1's surface model on both in-process carriers, and `plugin_mail.rs`
 holds the mailbox to its rule (`backlog`). `crates/plugin/examples/c` is a plugin in C on the header alone.
 
+## Conformance
+
+The conformance suite (phase Pc) holds the C ABI still for every binding. `crates/plugin/conformance/scripts.json`
+lists scripted sessions: activation and its end, commands and the host requests they make, a route surface with
+content and a memoized subtree, the mailbox and a wake, a canvas and its draws, a panic, a refused tree, a setup that
+fails, an overrun, and the same plugin as a 1.x library. Each is recorded from `crates/plugin/examples/conformance`
+(the reference, linked into the loader's tests and called through the SDK's byte shims) into
+`crates/plugin/conformance/transcripts.jsonl`: every request and reply that cross the C ABI on the UI thread, with
+what the user sees at each `observe` step. `CONFORMANCE_WRITE=1` on the loader's `conformance::` tests writes it, and
+`versions.jsonl`, again; nothing else does.
+
+A transcript keeps what the host sends as JSON, which compares exactly, but for two process-wide counters: mount
+generations are numbered by first appearance and content handles by the order the transcript's views gave them. It
+keeps what the library sends as the host reads it: decoded with the host's types and written again, so field order,
+defaults and unknown fields do not count. A canvas's list is kept as its bytes, in hex. Statuses, error texts and panic
+texts compare exactly.
+
+Each transcript is checked on both sides (`crates/plugin/src/conformance/tests.rs`):
+
+- the reference records it again (a host or SDK change that changes what crosses fails until the file is written
+  again);
+- the host runs the script against a plugin that answers from the transcript, and records it, also when that plugin
+  is of a later minor (a longer table that says minor 1, a field the host does not know in every object, and a request
+  no host knows inside each call, which the host answers with an error);
+- a fake host drives the reference built as a `cdylib`, and `examples/conformance/plugin.c`, built with symbols hidden
+  and every warning an error, through every transcript of their major, also as a host of a later minor (a longer
+  table, minor 1, an unknown feature, an unknown field in every request, and after `create` a request no library
+  knows, which it answers with an error); the host loading each library records every transcript too;
+- every part of every entry changed, or the entry dropped, fails the side that writes it.
+
+`the_version_gate_is_exact` runs a grid of tables (each entry, majors 0 to 3, minors at, below and above the host's,
+`requires_minor` at and past it, tables cut short, `describe` answers that fail, cannot be read, require an unknown
+feature or carry an unknown field) through the host's gate, checks each verdict against the header's rule, and pins the
+words in `versions.jsonl`.
+
+The tap that records transcripts also feeds a protocol machine written from `opencode_plugin.h`
+(`conformance::Protocol`): one call at a time, host requests only inside a call, no call into an instance that failed
+or is destroyed, nothing of 2.0 to a 1.x library, renders read only, and only requests the contract names. Every seeded
+model of the TUI's tests runs under it, so a model run that breaks a rule fails as `abi-protocol`.
+
+`opencode-native plugin test <library, crate or plugin dir> --conformance` replays the transcripts against a library
+and prints a line a transcript. A library passes when it is the conformance plugin; whoever binds the C ABI in another
+language ports that plugin to prove the binding.
+
+A later phase adds a transcript, not harness code: a new request or surface kind goes into the conformance plugin in
+Rust and in C and into a script, and the writer records it.
+
 ## Authoring
 
 `opencode-native plugin dev <dir>` builds the plugin crate in `<dir>`, runs the TUI with its library beside the
@@ -579,4 +627,5 @@ leaves the running one, with its output in `<dir>/target/opencode-dev/build.log`
 [--wait TEXT]...` loads the plugin into the TUI on the headless renderer, with no server, and prints text frames. It
 exits with an error when the plugin does not load or fails, the route is not the plugin's, or a command does not run.
 Its clock is its own, but the plugin's threads run in real time: `--wait TEXT` advances the clock until the frame shows
-`TEXT`, for ten seconds at most. Neither command is in the TypeScript CLI (deviation `D01-plugin-dev-test`).
+`TEXT`, for ten seconds at most. `plugin test <library> --conformance` replays the conformance suite instead (above).
+Neither command is in the TypeScript CLI (deviation `D01-plugin-dev-test`).

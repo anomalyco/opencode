@@ -3,6 +3,12 @@
  * `crates/plugin-abi/src/lib.rs` is the reference; this header follows it field by field, and
  * `crates/plugin/examples/c` is a plugin built against it, which the loader's tests build and load.
  *
+ * Conformance. `crates/plugin/conformance` holds golden transcripts: every request and reply the host and a library
+ * exchange in scripted sessions. `crates/plugin/examples/conformance` is the plugin they were recorded from, in Rust
+ * and in C (`plugin.c`, on this header alone). A binding of this ABI in another language proves itself with its port of
+ * that plugin: `opencode-native plugin test <library> --conformance` replays every transcript against it, also as a
+ * host of a later minor.
+ *
  * A plugin is a shared library that exports `opencode_plugin_v2`, which returns its `opencode_plugin_api`.
  * Everything after that crosses as JSON in byte buffers. A buffer one side returns is freed by that side's `free`,
  * so each side keeps its own allocator. Every call runs on the host's UI thread, except the entries of the host
@@ -12,7 +18,9 @@
  * `size` is absent; read an entry only when `size >= offsetof(table, entry) + sizeof(entry)`, so a plugin built against
  * a later header still loads on an earlier host. Nothing is removed inside a major. A plugin that needs a newer host
  * minor sets `requires_minor`; a host older than that refuses it, as it refuses a major it does not serve. A 2.x host
- * gives a 1.x library (`opencode_plugin_v1`) the table of ABI 1.4, which ends before `send`.
+ * gives a 1.x library (`opencode_plugin_v1`) the table of ABI 1.6, which ends before `send`. Either side answers a
+ * request whose "type" it does not know with OPENCODE_ERROR, and changes nothing; the host sends a library no request
+ * newer than the minor its table states, and a library should send the host none newer than the host's.
  *
  * What the host takes from the plugin, and what the plugin must keep to:
  *
@@ -224,22 +232,26 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   {"content": handle} or {"part-output": {"session", "part"}}. A tree the host cannot decode, such as one with a
  *   kind it does not know, fails the plugin and leaves no effect.
  *
- * Requests to the host (the host table's `call`), tagged by "type": "log", "toast", "storage-get", "storage-set",
- *   "storage-merge", "storage-key", "open-route", "color", "session", "family", "messages", "models", "model",
- *   "limits", "providers", "info", "mcp-servers", "integrations", "vcs", "route", "dispatch", "attention",
- *   "navigate", "fetch", "dialog", "copy", "interactive", "shortcut", "dialog-open"; 2.0 (P3): "scroll"
- *   {"target", "verb"}, an effect, and the reads "scroll-state" {"target"}, "anchors" {"target", "group"},
- *   "top-anchor" {"target", "group", "inset"?} and "transcript". `crates/plugin-abi/schema/v2.json` has their
- *   types (Target, Scroll, ScrollState, AnchorAt, Geometry, LayoutReply, ScrollEvent, TranscriptView); 2.0 (P2):
- *   "open-panel", "close-panel", "overlay", "close-overlay", "focus", "blur", "set-mode", "release-keys", "rect",
- *   "focused", "input-mode" (none of them during `create`, which has no input yet). Effects wait
- *   until the plugin's call returns. A call that panics, or whose answer the host refuses (it cannot decode it, the
- *   tree breaks the contract, a handler answers anything but null), has none, and fails the plugin. A call that
- *   answers OPENCODE_ERROR keeps them (see above). A render, a view, a claim's view, a draw or a layout ("fence",
- *   "slot", "route", "render-fence", "render", "render-route", "view", "claim", "draw", "layout") reads only: the
- *   host answers OPENCODE_ERROR to any request of it that asks for something. A "scroll" of the transcript is taken
- *   only from a call that answers the user's input (a key, a click, an edit, the palette, the user's scroll): the
- *   host answers OPENCODE_ERROR to any other.
+ * Requests to the host (the host table's `call`), tagged by "type". Those that read, or shape only the call's own
+ *   effects: "log", "storage-get", "storage-key", "color", "session", "family", "messages", "models", "model",
+ *   "limits", "providers", "info", "mcp-servers", "integrations", "vcs", "route", "interactive", "shortcut",
+ *   "dialog-open", 1.5 "composer", "checkpoint", "rollback", 1.6 "variants", "tabs-enabled", "tabs",
+ *   "keymap-pending", "keymap-active", "keymap-commands", "shortcuts", "selection", "theme", "themes", 2.0 (P3)
+ *   "scroll-state" {"target"}, "anchors" {"target", "group"}, "top-anchor" {"target", "group", "inset"?},
+ *   "transcript", 2.0 (P2) "rect", "focused", "input-mode". Those that ask for something: "toast", "storage-set",
+ *   "storage-merge", "open-route", "dispatch", "attention", "navigate", "fetch", "dialog", "copy", 1.5
+ *   "composer-edit", 1.6 "set-variant", "set-model", "tab", "clear-selection", "foreground", "title", "set-theme",
+ *   "install-theme", 2.0 (P3) "scroll" {"target", "verb"}, 2.0 (P2) "open-panel", "close-panel", "overlay",
+ *   "close-overlay", "focus", "blur", "set-mode", "release-keys" (none of P2's during `create`, which has no input
+ *   yet). `crates/plugin-abi/schema/v2.json` has the types of P3's (Target, Scroll, ScrollState, AnchorAt, Geometry,
+ *   LayoutReply, ScrollEvent, TranscriptView). Effects wait until the plugin's call returns. A call that panics, or
+ *   whose answer the host refuses (it cannot decode it, the tree breaks the contract, a handler answers anything but
+ *   null), has none, and fails the plugin. A call that answers OPENCODE_ERROR keeps them (see above). A render of 1.4
+ *   on, a view, a claim's view, a draw or a layout ("render-fence", "render", "render-route", "view", "claim",
+ *   "draw", "layout") reads only: the host answers OPENCODE_ERROR to any request of it that asks for something. A
+ *   render of 1.3 ("fence", "slot", "route") may ask, and what it asks for happens when the host draws its answer. A
+ *   "scroll" of the transcript is taken only from a call that answers the user's input (a key, a click, an edit, the
+ *   palette, the user's scroll): the host answers OPENCODE_ERROR to any other.
  *
  * Content in a view reply is a JSON string when its bytes are UTF-8, else {"base64": "..."} (RFC 4648, padded).
  * A message the host delivers ("message") is the JSON text the sender wrote, as a JSON string.
