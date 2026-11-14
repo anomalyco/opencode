@@ -45,6 +45,8 @@ export class Error extends Schema.TaggedError<Error>()("Ripgrep.Error", {
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
+export class InvalidGlobError extends Error {}
+
 export class InvalidPatternError extends Schema.TaggedError<InvalidPatternError>()("Ripgrep.InvalidPatternError", {
   pattern: Schema.String,
   message: Schema.String,
@@ -143,6 +145,10 @@ const layer = Layer.effect(
 
           const code = yield* handle.exitCode
           const stderr = yield* Fiber.join(stderrFiber)
+          const prefix = "rg: error parsing glob "
+          if (code === 2 && stderr.startsWith(prefix)) {
+            return yield* new InvalidGlobError({ message: stderr.slice(prefix.length).trimEnd() })
+          }
           if (input.pattern && code === 2 && isInvalidPattern(stderr)) {
             return yield* new InvalidPatternError({ pattern: input.pattern, message: stderr.trim() })
           }

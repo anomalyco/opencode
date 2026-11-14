@@ -67,6 +67,31 @@ const call = (name: "glob" | "grep", input: unknown) => ({
 })
 
 describe("search tools", () => {
+  for (const name of ["glob", "grep"] as const) {
+    it.live(`${name} distinguishes a malformed filename glob from an empty search`, () =>
+      withTempDir((tmp) =>
+        withTools(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            yield* Effect.promise(() => Bun.write(path.join(tmp.path, "visible.ts"), "needle\n"))
+            const search = (glob: string) =>
+              executeTool(
+                registry,
+                call(name, name === "glob" ? { pattern: glob } : { pattern: "needle", include: glob }),
+              )
+            expect(yield* search("*.txt")).toMatchObject({ status: "completed", output: [] })
+            expect(yield* search("[")).toMatchObject({
+              status: "error",
+              error: {
+                type: "tool.execution",
+                message: `Invalid glob in ${name === "glob" ? "pattern" : "include"} '[': unclosed character class; missing ']'`,
+              },
+            })
+          }),
+        ),
+      ),
+    )
+  }
+
   for (const hidden of [undefined, false, true]) {
     for (const limit of hidden ? [10] : [1, 10]) {
       it.live(`glob honors hidden=${hidden} before limit=${limit}`, () =>
