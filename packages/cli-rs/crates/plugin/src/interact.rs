@@ -343,7 +343,7 @@ impl Owner {
             // The stroke that matched; a run with no key (none today) names the bind's keys.
             let (key, text) = pressed.map_or_else(|| (bind.key.clone(), None), key_of);
             let event = Event::Key(input::Key { bind: Some(bind.name.clone()), key, text });
-            let handled = deliver(&*host, &owner, &event) == Handled::Consume;
+            let handled = delivered(&deliver, &*host, &owner, &event) == Handled::Consume;
             if handled
                 && bind.hold
                 && let Some(router) = host.router()
@@ -556,7 +556,7 @@ impl Owner {
     /// Calls the mount's handler with `event`.
     fn send(self: &Rc<Self>, host: &dyn Host, event: &Event) -> Handled {
         match (&self.deliver, self.alive()) {
-            (Some(deliver), true) => deliver(host, self, event),
+            (Some(deliver), true) => delivered(deliver, host, self, event),
             _ => Handled::Pass,
         }
     }
@@ -678,7 +678,9 @@ impl Router {
         listeners.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
         let (key, text) = key_of(event);
         let event = Event::Key(input::Key { bind: None, key, text });
-        listeners.into_iter().any(|(_, _, owner, deliver)| deliver(host, &owner, &event) == Handled::Consume)
+        listeners
+            .into_iter()
+            .any(|(_, _, owner, deliver)| delivered(&deliver, host, &owner, &event) == Handled::Consume)
     }
 
     /// The reserved chord (synthesis 3.8): every plugin mode ends, what a hold kept is dropped, as a terminal's interrupt
@@ -842,8 +844,9 @@ impl Router {
             .collect();
         listeners.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
         let event = Event::Paste { text: text.to_owned() };
-        let taken =
-            listeners.into_iter().any(|(_, _, owner, deliver)| deliver(host, &owner, &event) == Handled::Consume);
+        let taken = listeners
+            .into_iter()
+            .any(|(_, _, owner, deliver)| delivered(&deliver, host, &owner, &event) == Handled::Consume);
         crate::flush();
         taken
     }
@@ -1177,6 +1180,15 @@ fn key_of(event: &KeyEvent) -> (String, Option<String>) {
 /// The id of the focused widget.
 fn focused(app: &App) -> Option<u32> {
     app.focused().map(|widget| widget.id())
+}
+
+/// Calls `deliver` with `event`, as the user's input when the user caused it ([`Event::by_user`]), which a verb on the
+/// transcript needs (P3's rule), on either carrier; a hover or a close keeps what the code that sent it is.
+fn delivered(deliver: &Deliver, host: &dyn Host, owner: &Rc<Owner>, event: &Event) -> Handled {
+    match event.by_user() {
+        Some(user) => crate::behave::as_user(user, || deliver(host, owner, event)),
+        None => deliver(host, owner, event),
+    }
 }
 
 /// Whether key `key` is or holds the reserved chord, however it is spelled (`ctrl+c`, `Control + C`).

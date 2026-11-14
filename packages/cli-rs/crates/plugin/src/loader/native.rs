@@ -1320,12 +1320,7 @@ impl Guest {
         Rc::new(move |_: &dyn Host, owner: &Rc<crate::interact::Owner>, event: &abi::interact::Event| {
             let Some(guest) = guest.upgrade() else { return abi::interact::Handled::Pass };
             let request = Request::Input { to: to.clone(), event: event.clone() };
-            // The user's when the user's input caused it, which a verb on the transcript needs.
-            let call = || guest.owners.as_owner(owner, || guest.request("handle", &request));
-            let handled = match event.by_user() {
-                Some(user) => behave::as_user(user, call),
-                None => call(),
-            };
+            let handled = guest.owners.as_owner(owner, || guest.request("handle", &request));
             if handled.is_some() {
                 guest.activation.invalidate();
             }

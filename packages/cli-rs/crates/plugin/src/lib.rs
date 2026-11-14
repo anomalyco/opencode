@@ -912,14 +912,9 @@ impl Scope {
         let scope = Rc::downgrade(self);
         Rc::new(move |host: &dyn Host, owner: &Rc<interact::Owner>, event: &abi::interact::Event| {
             let Some(scope) = scope.upgrade() else { return abi::interact::Handled::Pass };
-            // Owned by the mount it reaches: what it asks for (a fetch, a scroll verb) ends with that mount; and the
-            // user's when the user's input caused it, which a verb on the transcript needs.
+            // Owned by the mount it reaches: what it asks for (a fetch, a scroll verb) ends with that mount.
             let outer = scope.mount.replace(owner.mounted());
-            let call = || scope.call_as(owner, "handle", host, |host| handler(host, event));
-            let handled = match event.by_user() {
-                Some(user) => behave::as_user(user, call),
-                None => call(),
-            };
+            let handled = scope.call_as(owner, "handle", host, |host| handler(host, event));
             *scope.mount.borrow_mut() = outer;
             if handled.is_some() {
                 scope.activation.invalidate();
