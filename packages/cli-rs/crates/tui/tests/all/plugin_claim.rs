@@ -209,11 +209,13 @@ struct Expected {
     a: bool,
     /// The parts that show the host's row in place of `claim.a`'s: fallen, or declined in the twin.
     off: HashSet<String>,
+    /// The theme is the dark default.
+    dark: bool,
 }
 
 impl Expected {
     fn new() -> Self {
-        Self { a: true, ..Self::default() }
+        Self { a: true, dark: true, ..Self::default() }
     }
 
     /// The lines of call `index` and its output, while a claim draws it.
@@ -421,21 +423,24 @@ impl World {
                 let tui = &self.harness.tui;
                 tui.theme.borrow_mut().set(if dark { "opencode" } else { "tokyonight" });
                 tui.theme_changed();
+                // Markdown builds a claimed fence again in a new theme: a new mount, claimed afresh.
+                if dark != expected.dark {
+                    expected.off.remove("fence");
+                }
+                expected.dark = dark;
             }
             _ => {}
         }
         self.settle();
     }
 
-    /// What the plugin manager does to `claim.a`; it mounts the route again, so every call is claimed afresh. An enable
-    /// of a running plugin sets nothing up again, so the fence revision that fell back stays with the host.
+    /// What the plugin manager does to `claim.a`; it mounts the route again, so every part is claimed afresh.
     fn enable(&self, on: bool, expected: &mut Expected) {
         let tui = &self.harness.tui;
         let _ = tui.plugins.toggle(&host(tui), "claim.a", on);
         tui.navigate(tui.route());
-        let kept = on && expected.a;
         expected.a = on;
-        expected.off.retain(|key| kept && key == "fence");
+        expected.off.clear();
     }
 
     fn settle(&self) {
@@ -666,17 +671,14 @@ impl ClaimModel {
         VIEWS.with_borrow_mut(Vec::clear);
         for (step, command) in commands.iter().enumerate() {
             let twin = fired.map(|fired| fired[step].as_slice()).unwrap_or_default();
-            if let (true, Command::Enable(on)) = (fired.is_some(), command) {
-                let kept = *on && expected.a;
-                DECLINE.with_borrow_mut(|decline| decline.retain(|key| kept && key == "fence"));
+            // A remount claims every part afresh, and a new theme the fence, which Markdown builds again.
+            if let (true, Command::Enable(_)) = (fired.is_some(), command) {
+                DECLINE.with_borrow_mut(HashSet::clear);
             }
-            // A fence that fell back is claimed afresh at its next revision: Markdown keeps no handle to it.
-            if *command == Command::Text && expected.chunks < CHUNKS.len() {
-                let next = Expected { chunks: expected.chunks + 1, ..expected.clone() };
-                if next.fence().is_some() && next.fence() != expected.fence() {
-                    expected.off.remove("fence");
-                    DECLINE.with_borrow_mut(|decline| decline.remove("fence"));
-                }
+            if let (true, Command::Theme(dark)) = (fired.is_some(), command)
+                && *dark != expected.dark
+            {
+                DECLINE.with_borrow_mut(|decline| decline.remove("fence"));
             }
             // The twin declines a part from the step its fault fell back on, before that step's view.
             for (key, fault) in twin {
@@ -1690,5 +1692,162 @@ fn a_kept_memo_that_holds_a_memo_is_valid_on_every_carrier() {
         assert!(screen.contains("s drew call_1"), "{carrier:?}: the plugin failed:\n{screen}");
         assert!(mounted().iter().all(|shown| shown.shows), "{carrier:?}: {:?}", mounted());
         assert_eq!(ledger().memo_entries, 2, "{carrier:?}: {:?}", ledger());
+    }
+}
+
+// Expected (4.11, review finding H2): a view held back for the paint that declines, or whose tree is refused twice, or
+// that overruns, hands the part to the host's row at that paint, with no event after it: the claim's tree does not
+// stay up. On the C ABI an overrun fails the plugin, so every part shows the host's row.
+#[test]
+fn a_view_at_the_paint_that_does_not_draw_hands_the_row_back() {
+    for carrier in CARRIERS {
+        for fault in [None, Some(Fault::Bad), Some(Fault::Overrun)] {
+            let world = World::open(carrier);
+            let mut expected = Expected::new();
+            world.send(&Command::Start(0), &mut expected);
+            world.send(&Command::Delta(0, 0), &mut expected);
+            COLD.set(false);
+            // Two revisions in one frame: the first is viewed at once, the second at the paint.
+            world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": "x" }));
+            match fault {
+                None => drop(DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()))),
+                Some(fault) => ARMED.set(Some(("call_1".to_owned(), fault))),
+            }
+            world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": "y" }));
+            assert!(world.frame().text().contains("probe call_1"), "{carrier:?} {fault:?}: no tree before the paint");
+            for _ in 0..3 {
+                world.settle();
+            }
+            let screen = world.frame().text();
+            assert!(!screen.contains("probe call_1"), "{carrier:?} {fault:?}: the tree stayed:\n{screen}");
+            assert!(screen.contains("⋯ probe"), "{carrier:?} {fault:?}: no host row:\n{screen}");
+            assert!(mounted().iter().all(|shown| !shown.shows), "{carrier:?} {fault:?}: {:?}", mounted());
+        }
+    }
+}
+
+// Expected (4.11, review finding H2 for fences): a fence whose view at the paint declines shows the host's code view
+// of its newest code at that paint, in the block the claim had.
+#[test]
+fn a_fence_view_at_the_paint_that_declines_shows_the_host_code() {
+    for carrier in CARRIERS {
+        let world = World::open(carrier);
+        let mut expected = Expected::new();
+        for _ in 0..3 {
+            world.send(&Command::Text, &mut expected);
+        }
+        world.harness.wait_for("| alpha");
+        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "beta " }));
+        DECLINE.with_borrow_mut(|decline| decline.insert("fence".to_owned()));
+        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "gamma\n" }));
+        for _ in 0..3 {
+            world.settle();
+        }
+        let screen = world.frame().text();
+        assert!(!screen.contains("| "), "{carrier:?}: the claim's tree stayed:\n{screen}");
+        assert!(screen.contains("beta gamma"), "{carrier:?}: no host code of the newest revision:\n{screen}");
+    }
+}
+
+// Expected (4.11, review finding M7): a part gets at most one view a frame while it streams, also while its claim
+// declines it and the host's row shows it; the view at the paint that accepts takes the row back in that paint.
+#[test]
+fn a_declined_part_gets_one_view_a_frame_and_the_paint_takes_it_back() {
+    for carrier in CARRIERS {
+        let world = World::open(carrier);
+        let mut expected = Expected::new();
+        DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()));
+        world.send(&Command::Start(0), &mut expected);
+        VIEWS.with_borrow_mut(Vec::clear);
+        let views = || VIEWS.with_borrow(|views| views.iter().filter(|(plugin, _, _)| *plugin == 'a').count());
+        for delta in TOKENS {
+            world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": delta }));
+        }
+        assert_eq!(views(), 1, "{carrier:?}: the first revision of the frame is viewed, the rest wait");
+        assert!(world.frame().text().contains("⋯ probe"), "{carrier:?}");
+        DECLINE.with_borrow_mut(HashSet::clear);
+        world.harness.app.render();
+        world.harness.app.render();
+        assert_eq!(views(), 2, "{carrier:?}: the paint views the newest revision once");
+        let screen = world.frame().text();
+        assert!(screen.contains("probe call_1 Pending") && !screen.contains("⋯ probe"), "{carrier:?}:\n{screen}");
+    }
+}
+
+thread_local! {
+    /// The fence views `claim.twice` refuses still, from its first.
+    static REFUSE: Cell<usize> = const { Cell::new(0) };
+}
+
+/// Claims `probe` fences; refuses the tree of its first [`REFUSE`] views, and draws the code in a card after.
+fn plugin_twice(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::fence("probe", |_, part| {
+        let refused = REFUSE.with(|refuse| refuse.replace(refuse.get().saturating_sub(1)) > 0);
+        let text = |text: &str| v2::Node::text(vec![abi::Span::new(text)]).with_id("twice");
+        match refused {
+            true => Some(v2::Node::column(vec![text("x"), text("y")])),
+            false => Some(card(&lines(part), None)),
+        }
+    }));
+    Ok(())
+}
+
+// Expected (4.11, review finding H3): a fence that falls back leaves another fence of the same text claimed: the
+// fallback is the block's, not the text's.
+#[test]
+fn a_fence_that_falls_back_leaves_one_of_the_same_text_claimed() {
+    for carrier in CARRIERS {
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.twice", setup: plugin_twice })]);
+        REFUSE.set(2);
+        world.emit("session.text.started", json!({ "ordinal": 0 }));
+        let text = "```probe\nsame\n```\n\nBetween.\n\n```probe\nsame\n```\n\nAfter.\n";
+        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": text }));
+        world.settle();
+        let screen = world.frame().text();
+        assert_eq!(screen.matches("| same").count(), 1, "{carrier:?}: one fence claimed:\n{screen}");
+        assert_eq!(screen.matches("same").count(), 2, "{carrier:?}: the other the host's:\n{screen}");
+        let (shows, fallen) = mounted().iter().fold((0, 0), |(shows, fallen), shown| match shown.shows {
+            true => (shows + 1, fallen),
+            false => (shows, fallen + 1),
+        });
+        assert_eq!((shows, fallen), (1, 1), "{carrier:?}: {:?}", mounted());
+    }
+}
+
+/// Claims `memo` calls with one memoized line, and declines what [`DECLINE`] names.
+fn plugin_memo(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::tool("memo", |cx, part| {
+        let key = key(part);
+        if DECLINE.with_borrow(|decline| decline.contains(&key)) {
+            return None;
+        }
+        Some(cx.memo("line", key.clone(), |_| v2::Node::text(vec![abi::Span::new(format!("memo {key}"))])))
+    }));
+    Ok(())
+}
+
+// Expected (`ledger`, review finding M9): a declined part keeps its memo values, in the host's table and in a
+// library's alike, and the ledger counts them until the mount ends; the registry of live parts holds none that went,
+// without a reader pruning it.
+#[test]
+fn the_ledger_counts_what_a_declined_part_keeps_and_what_went() {
+    for carrier in CARRIERS {
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.memo", setup: plugin_memo })]);
+        for index in 0..30 {
+            world.emit("session.tool.input.started", json!({ "id": format!("call_{index}"), "name": "memo" }));
+        }
+        world.settle();
+        world.harness.wait_for("memo call_29");
+        assert_eq!(ledger().memo_entries, 30, "{carrier:?}: {:?}", ledger());
+        DECLINE.with_borrow_mut(|decline| decline.insert("call_0".to_owned()));
+        world.emit("session.tool.input.delta", json!({ "id": "call_0", "delta": "x" }));
+        world.settle();
+        assert!(!world.frame().text().contains("memo call_0"), "{carrier:?}");
+        assert_eq!(ledger().memo_entries, 30, "{carrier:?}: the declined part's value went: {:?}", ledger());
+        world.harness.tui.navigate(opencode_tui::Route::Home);
+        world.settle();
+        assert_eq!((ledger().mounts, ledger().memo_entries), (0, 0), "{carrier:?}");
+        assert_eq!(opencode_plugin::claim::registered(), 0, "{carrier:?}: the registry keeps parts that went");
+        DECLINE.with_borrow_mut(HashSet::clear);
     }
 }
