@@ -185,7 +185,7 @@ enum Waiting {
     /// A setup again, for an activation.
     Activate(Weak<Guest>),
     /// A handler, kept whole: one the JS host did not start when it ended is sent again to the next one.
-    Call(Call),
+    Call(Box<Call>),
     /// A mount's or an input's view.
     View(Weak<Guest>),
     Ping,
@@ -1044,7 +1044,7 @@ impl Scripts {
         let message =
             Down::Call { seq, id: guest.id().to_owned(), activation: guest.activation(), call: request.clone() };
         let call = Call { guest: Rc::downgrade(guest), export, user, request, owner };
-        self.send(message, Some(Waiting::Call(call)));
+        self.send(message, Some(Waiting::Call(Box::new(call))));
         if hold {
             self.start_hold(seq);
         }
