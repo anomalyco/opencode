@@ -140,6 +140,78 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     })),
   }))
 
+  // Requests can outlive a run, and the event stream does not replay ones asked before this client connected. Read
+  // them once per indexed location and connection, then load the owner's ancestors so the request reaches its root.
+  const locationReads = new Map<string, Promise<void>>()
+  const requestLocationKey = (server: ServerConnection.Key, directory: string) => `location\0${server}\0${pathKey(directory)}`
+  const locationTargets = () =>
+    connections().flatMap((item, index) => {
+      const server = ServerConnection.key(item.conn)
+      const directories = new Map(
+        (queries[index]?.data?.() ?? []).map((session) => [
+          requestLocationKey(server, session.location.directory),
+          session.location.directory,
+        ]),
+      )
+
+      return [...directories].map(([key, directory]) => ({ key, item, directory }))
+    })
+
+  const readLocation = (target: ReturnType<typeof locationTargets>[number]) => {
+    const existing = locationReads.get(target.key)
+    if (existing) return existing
+
+    const data = target.item.ctx.data
+    const load = async (sessionID: string) => {
+      const loaded = new Set<string>()
+      for (let id: string | undefined = sessionID; id && !loaded.has(id); id = data.session.get(id)?.parentID) {
+        loaded.add(id)
+        if (!data.session.get(id)) await data.session.sync(id)
+      }
+    }
+    const own = (requests: readonly { sessionID: string }[], sync: (sessionID: string) => Promise<void>) =>
+      Promise.allSettled(
+        [...new Set(requests.map((request) => request.sessionID))]
+          .filter((sessionID) => sessionID !== "global")
+          .map((sessionID) => Promise.all([load(sessionID), sync(sessionID)])),
+      )
+    const location = { directory: target.directory }
+    const read = Promise.allSettled([
+      target.item.ctx.sdk.api.permission.request
+        .list({ location })
+        .then((response) => own(response.data, (sessionID) => data.session.permission.sync(sessionID))),
+      target.item.ctx.sdk.api.form
+        .list({ location })
+        .then((response) => own(response.data, (sessionID) => data.session.form.sync(sessionID))),
+    ]).then(() => undefined)
+    locationReads.set(target.key, read)
+
+    return read
+  }
+
+  createEffect(() => locationTargets().forEach((target) => void readLocation(target)))
+
+  // A reconnect can miss request events, so start a new snapshot for every location the index shows.
+  createEffect(() =>
+    connections().forEach((item) => {
+      const server = ServerConnection.key(item.conn)
+      let connected = false
+
+      createEffect(() => {
+        const next = item.ctx.sdk.connection.status() === "connected"
+        if (next && !connected) {
+          ;[...locationReads.keys()]
+            .filter((key) => key.startsWith(`location\0${server}\0`))
+            .forEach((key) => locationReads.delete(key))
+          untrack(locationTargets)
+            .filter((target) => target.item === item)
+            .forEach((target) => void readLocation(target))
+        }
+        connected = next
+      })
+    }),
+  )
+
   const archivedQueries = useQueries(() => ({
     queries: connections().map((item) => ({
       queryKey: ["inbox-archived-sessions", item.conn] as const,
@@ -195,30 +267,25 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
 
         // Locally known sessions come last so live archive and unarchive events win over cached indexes.
         const sessions = mergeRootSessionIndex(
-          [
-            ...(queries[index]?.data?.() ?? []),
-            ...(options.archived ? (archivedQueries[index]?.data?.() ?? []) : []),
-          ],
+          [...(queries[index]?.data?.() ?? []), ...(options.archived ? (archivedQueries[index]?.data?.() ?? []) : [])],
           data.session.known(),
         )
 
-        return data.session
-          .apply(sessions)
-          .map((session): InboxEntry => {
-            const project = projectSettingsKey(item.ctx.sdk.scope, session.projectID)
-            const requests = sessionRequests(item.ctx, session.id, true, settings.permissions.autoApproves(project))
-            const value = status(session, requests)
+        return data.session.apply(sessions).map((session): InboxEntry => {
+          const project = projectSettingsKey(item.ctx.sdk.scope, session.projectID)
+          const requests = sessionRequests(item.ctx, session.id, true, settings.permissions.autoApproves(project))
+          const value = status(session, requests)
 
-            return {
-              key: `${server}\0${session.id}`,
-              conn: item.conn,
-              server,
-              ctx: item.ctx,
-              session,
-              status: value,
-              since: since(value, session, requests),
-            }
-          })
+          return {
+            key: `${server}\0${session.id}`,
+            conn: item.conn,
+            server,
+            ctx: item.ctx,
+            session,
+            status: value,
+            since: since(value, session, requests),
+          }
+        })
       })
       .toSorted((a, b) => b.session.time.updated - a.session.time.updated),
   )
@@ -268,6 +335,12 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
       return
     }
 
+    const location = untrack(locationTargets).find((target) => target.key === effect.key)
+    if (location) {
+      void readLocation(location).then(() => dispatchSettle({ type: "requests.settled", key: effect.key }))
+      return
+    }
+
     const entry = byKey().get(effect.key)
 
     void Promise.allSettled(
@@ -291,9 +364,12 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
 
         return !!queries[index]?.isSuccess || !!queries[index]?.isError
       }),
-      workingKeys: entries().flatMap((entry) =>
-        entry.status === "working" || workingSince(entry.session) !== undefined ? [entry.key] : [],
-      ),
+      workingKeys: [
+        ...entries().flatMap((entry) =>
+          entry.status === "working" || workingSince(entry.session) !== undefined ? [entry.key] : [],
+        ),
+        ...locationTargets().map((target) => target.key),
+      ],
     }),
   )
 
