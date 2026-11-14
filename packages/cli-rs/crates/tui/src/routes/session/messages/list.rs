@@ -561,10 +561,10 @@ impl Inner {
             }
             inner.follow(&tui, !up);
         });
-        let publication = opencode_plugin::behave::publish_transcript(opencode_plugin::behave::Published {
-            read: Rc::new(read),
-            scroll: Rc::new(scroll),
-        });
+        let publication = opencode_plugin::behave::publish_transcript(
+            &tui.app,
+            opencode_plugin::behave::Published { read: Rc::new(read), scroll: Rc::new(scroll) },
+        );
         *self.published.borrow_mut() = Some(publication);
         let app = tui.app.clone();
         self.scroll.on_mouse(move |_, _| opencode_plugin::behave::transcript_moved(&app));

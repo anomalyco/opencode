@@ -187,19 +187,23 @@ pub(crate) struct Surface {
     pub(crate) behave: RefCell<behave::State>,
     this: RefCell<Weak<Surface>>,
     /// Lives as long as the mount; what its route's commands asked for checks it before it arrives.
-    _alive: Rc<()>,
+    alive: Rc<()>,
     /// A route's surface fills the page; a slot's takes its node's layout, as a 1.x claim's root does.
     fills: bool,
     /// The layout a slot's root took last.
     layout: Cell<Option<abi::Layout>>,
     /// The size the last view was given, and how many views in a row a change of it called.
     seen: Cell<(u16, u16)>,
+    /// A solve has laid its root out.
+    laid: Cell<bool>,
     resized: Cell<u8>,
     pub(crate) state: RefCell<State>,
     live: RefCell<Option<Rc<slot::Live>>>,
     watch: RefCell<Option<Disposer>>,
     /// The host's [`Host::local_revision`] when the view last ran.
     revision: Cell<Option<u64>>,
+    /// Each content handle's image, decoded once however many nodes show it; `None` when it does not decode.
+    images: RefCell<HashMap<ContentRef, Option<opentui::native::Image>>>,
 }
 
 /// What one call of the view returned and asked for; the host takes it only with its tree.
@@ -273,15 +277,17 @@ impl Surface {
             slot_input: slot_input.clone(),
             palette: surface.palette,
             id,
-            _alive: alive,
+            alive,
             fills,
             layout: Cell::new(None),
             seen: Cell::new((0, 0)),
+            laid: Cell::new(false),
             resized: Cell::new(0),
             state: RefCell::default(),
             live: RefCell::new(None),
             watch: RefCell::new(None),
             revision: Cell::new(None),
+            images: RefCell::default(),
         });
         book(|ledger| ledger.mounts += 1);
         if mounted.viewer.draws() {
@@ -294,7 +300,7 @@ impl Surface {
             let _ = mounted.drawer.set(Rc::new(drawer));
         }
         *mounted.this.borrow_mut() = Rc::downgrade(&mounted);
-        behave::attach(host.app(), &mounted.calls.plugin, &mounted);
+        behave::attach(host.app(), &mounted);
         let weak = Rc::downgrade(&mounted);
         // The host's own state and the terminal's size change outside change batches. A view that ran after the last
         // change of the host's state has seen it: a notice of it, which comes later, calls no view (review bigboi-7).
@@ -313,6 +319,9 @@ impl Surface {
         let (weak, app) = (Rc::downgrade(&mounted), host.app().clone());
         mounted.root.on_resize(move |_, rect| {
             let Some(mounted) = weak.upgrade() else { return };
+            // What `layout` named may have moved with it, also when it is first laid out.
+            mounted.laid.set(true);
+            behave::arm(&app);
             if (rect.width as u16, rect.height as u16) == mounted.seen.get() || mounted.resized.get() >= 2 {
                 return;
             }
@@ -399,9 +408,11 @@ impl Surface {
         }
     }
 
-    /// Drops all the mount holds but itself: its plugin failed, so it shows nothing more.
+    /// Drops all the mount holds but itself: its plugin failed, so it shows nothing more and the behaviors leave it.
     fn wipe(&self) {
+        behave::detach(&self.app, self);
         *self.behave.borrow_mut() = behave::State::default();
+        self.images.borrow_mut().clear();
         let mut state = self.state.borrow_mut();
         state.tree.clear(&self.root);
         state.last = None;
@@ -452,6 +463,7 @@ impl Surface {
         // A release is the plugin's word that it names the handle no more, so it holds also when the tree is
         // refused: the plugin forgot the handle either way.
         let mut release = |handle| {
+            self.images.borrow_mut().remove(&handle);
             if given.borrow_mut().remove(&handle).is_none()
                 && let Some(bytes) = self.state.borrow_mut().content.remove(&handle)
             {
@@ -497,6 +509,7 @@ impl Surface {
         }
         let mut state = self.state.borrow_mut();
         let State { tree, content, last, .. } = &mut *state;
+        let restyled = !tree.styled_in(theme);
         self.reconciling(host, theme, tree, content, staged, full, |env, tree| tree.apply(env, &self.root, &nodes))?;
         self.reindex();
         behave::arm(host.app());
@@ -528,6 +541,7 @@ impl Surface {
         }
         let slots_changed = tree.slots_changed();
         drop(state);
+        self.repaint(restyled);
         let live = self.live.borrow().clone();
         if let (true, Some(live)) = (slots_changed, live) {
             crate::settle(host, &live);
@@ -572,9 +586,17 @@ impl Surface {
             Source::Content(handle) => held(handle).map(|bytes| Rc::from(String::from_utf8_lossy(bytes).as_ref())),
             Source::PartOutput(part) => part_output(host, part).map(|text| Rc::from(text.as_str())),
         };
-        let bytes = |source: &Source| match source {
-            Source::Content(handle) => held(handle).cloned(),
-            Source::Text(text) => Some(Rc::from(text.as_bytes())),
+        // An image decodes once a handle: nodes that show the same content share it.
+        let image = |source: &Source| match source {
+            Source::Content(handle) => {
+                if let Some(image) = self.images.borrow().get(handle) {
+                    return image.clone();
+                }
+                let image = decode(host.app(), held(handle)?);
+                self.images.borrow_mut().insert(*handle, image.clone());
+                image
+            }
+            Source::Text(text) => decode(host.app(), text.as_bytes()),
             Source::PartOutput(_) => None,
         };
         let has = |handle: ContentRef| held(&handle).is_some();
@@ -585,7 +607,7 @@ impl Surface {
             slot: &slot,
             source: &source,
             content: &has,
-            bytes: &bytes,
+            image: &image,
             full,
             draw: self.drawer.get(),
         };
@@ -615,6 +637,16 @@ impl Surface {
         if let Some(host) = self.owner.upgrade() {
             self.draw(host.as_ref());
         }
+    }
+
+    /// What stands for the mount while it lives: what its route's commands and its scroll handler ask for ends with it.
+    pub(crate) fn alive(&self) -> Weak<()> {
+        Rc::downgrade(&self.alive)
+    }
+
+    /// Whether a solve has laid its root out.
+    pub(crate) fn laid(&self) -> bool {
+        self.laid.get()
     }
 
     /// The mount, weakly.
@@ -655,7 +687,7 @@ impl Drop for Surface {
         if let Some(host) = self.owner.upgrade() {
             self.viewer.forget(&*host, &self.id);
         }
-        behave::detach(&self.app);
+        behave::detach(&self.app, self);
         let state = self.state.get_mut();
         let bytes: usize = state.content.values().map(|bytes| bytes.len()).sum();
         let (content, memo) = (state.content.len() as i64, state.booked);
@@ -728,4 +760,65 @@ fn part_output(host: &dyn Host, part: &v2::PartRef) -> Option<String> {
         });
     });
     found
+}
+
+/// The bytes of an image the host decodes, at most: a header that names more pixels, or more bytes, show nothing
+/// (decoding runs on the UI thread until a worker does it, phase Pl).
+const IMAGE_BYTES: usize = 16 << 20;
+const IMAGE_PIXELS: u64 = 4096 * 4096;
+
+/// The image `bytes` decode to, when their header names a PNG, GIF, JPEG or WebP image within the host's bounds.
+fn decode(app: &App, bytes: &[u8]) -> Option<opentui::native::Image> {
+    let Some((width, height)) = image_size(bytes) else {
+        log::warn!("an image node's bytes are not a PNG, GIF, JPEG or WebP image");
+        return None;
+    };
+    if bytes.len() > IMAGE_BYTES || u64::from(width) * u64::from(height) > IMAGE_PIXELS {
+        log::warn!("an image node of {width}x{height} pixels in {} bytes is past what the host decodes", bytes.len());
+        return None;
+    }
+    crate::reconcile::count_decoded();
+    opentui::native::Image::decode(app.session().context(), bytes)
+        .map_err(|error| log::warn!("an image node does not decode: {error}"))
+        .ok()
+}
+
+/// The width and height the header of a PNG, GIF, JPEG or WebP image names.
+fn image_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    let at = |from: usize, len: usize| bytes.get(from..from + len);
+    let be = |from: usize, len: usize| Some(at(from, len)?.iter().fold(0u32, |n, byte| n << 8 | u32::from(*byte)));
+    let le =
+        |from: usize, len: usize| Some(at(from, len)?.iter().rev().fold(0u32, |n, byte| n << 8 | u32::from(*byte)));
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Some((be(16, 4)?, be(20, 4)?));
+    }
+    if bytes.starts_with(b"GIF8") {
+        return Some((le(6, 2)?, le(8, 2)?));
+    }
+    if bytes.starts_with(b"RIFF") && at(8, 4) == Some(b"WEBP") {
+        return match at(12, 4)? {
+            b"VP8 " => Some((le(26, 2)? & 0x3fff, le(28, 2)? & 0x3fff)),
+            b"VP8L" => {
+                let bits = le(21, 4)?;
+                Some(((bits & 0x3fff) + 1, ((bits >> 14) & 0x3fff) + 1))
+            }
+            b"VP8X" => Some((le(24, 3)? + 1, le(27, 3)? + 1)),
+            _ => None,
+        };
+    }
+    if !bytes.starts_with(&[0xff, 0xd8]) {
+        return None;
+    }
+    // JPEG: the segments up to the first start of frame, which holds the size.
+    let mut from = 2;
+    loop {
+        if *bytes.get(from)? != 0xff {
+            return None;
+        }
+        let marker = *bytes.get(from + 1)?;
+        if (0xc0..=0xcf).contains(&marker) && ![0xc4, 0xc8, 0xcc].contains(&marker) {
+            return Some((be(from + 7, 2)?, be(from + 5, 2)?));
+        }
+        from += 2 + be(from + 2, 2)? as usize;
+    }
 }
