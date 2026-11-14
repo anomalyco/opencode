@@ -6,8 +6,9 @@ row. When the formula is the first block of the text, it also leaves a blank row
 message's top edge.
 
 **Rust.** opentui-rust's `Markdown` puts one blank row between blocks and none before the first. The formula widget
-has no margin of its own. Between blocks the rows are the same: `parity/fixtures/P.2/*.json` match cell for cell.
-A formula that opens the text starts on the first row.
+has no margin of its own. Between blocks the rows are the same: `parity/fixtures/P.2/*.json` match cell for cell,
+and so does the transcript in `parity/scenarios/P.2/fence-margin.app.ts`. A formula that opens the text starts on the
+first row: `P.2/latex-opens` is one row shorter, and otherwise equal.
 
 **Reason.** A renderer does not know if its block is first, so it cannot add the margin only there. Adding it
 always would put two blank rows between blocks everywhere else.
