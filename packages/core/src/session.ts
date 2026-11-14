@@ -219,12 +219,16 @@ export interface Interface {
   }) => Effect.Effect<SessionGenerate.Result, NotFoundError | SessionGenerate.Error>
   readonly command: (input: {
     sessionID: SessionSchema.ID
+    id?: SessionMessage.ID
     command: string
     text: string
     files?: PromptInput.Prompt["files"]
     agents?: PromptInput.Prompt["agents"]
     skills?: PromptInput.Prompt["skills"]
     delivery?: SessionInbox.Delivery
+    unattended?: boolean
+    inline?: boolean
+    note?: string
   }) => Effect.Effect<
     void,
     NotFoundError | Command.NotFoundError | Command.ExecutionError | FileSystem.DirectoryNotFoundError

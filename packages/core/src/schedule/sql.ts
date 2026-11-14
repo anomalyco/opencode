@@ -29,6 +29,7 @@ export const ScheduleTable = sqliteTable(
     failures: integer().notNull().default(0),
     last_fired_at: integer(),
     last_message_id: text().$type<SessionMessage.ID>(),
+    active_job_id: text(),
     last_outcome: text().$type<Schedule.Outcome>(),
     /** The loop leaves a due row alone until then, e.g. while its location has schedules turned off. */
     retry_at: integer(),
