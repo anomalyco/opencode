@@ -56,6 +56,8 @@ struct Board {
     edges: Vec<Option<v2::Rect>>,
     /// A list's items estimate rows that have nothing to do with their heights.
     vary: bool,
+    /// The handler moves the transcript on each scroll event: a step that landed, the user's scroll.
+    transcript: bool,
 }
 
 thread_local! {
@@ -121,13 +123,20 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     });
     let surface = v2::Surface::new("board", v2::Place::Route("board".into()), view)
         .layout(vec![v2::Notify::Node { id: "edge".into() }], board_layout)
-        .on(|_, event| {
-            match event {
+        .on(|host, event| {
+            let rows = match event {
                 Event::Scroll { event: v2::ScrollEvent::Landed { anchor, .. } } => {
-                    board(|board| board.landed.push(anchor.id.clone()))
+                    board(|board| board.landed.push(anchor.id.clone()));
+                    -1
                 }
-                Event::Scroll { event: v2::ScrollEvent::UserScroll { .. } } => board(|board| board.user_scrolls += 1),
-                _ => {}
+                Event::Scroll { event: v2::ScrollEvent::UserScroll { .. } } => {
+                    board(|board| board.user_scrolls += 1);
+                    -2
+                }
+                _ => return Handled::Pass,
+            };
+            if board(|board| board.transcript) {
+                host.scroll(v2::Target::Transcript, v2::Scroll::By { rows });
             }
             Handled::Pass
         });
@@ -246,6 +255,7 @@ fn mount(cards: usize, width: u16, height: u16, list: bool) -> Mounted {
             quiet: board.quiet,
             again: board.again,
             vary: board.vary,
+            transcript: board.transcript,
             ..Board::default()
         }
     });
@@ -2608,4 +2618,30 @@ fn the_hook_stays_the_roots_last_child() {
     let counts = behave::counts().since(before);
     assert!(counts.arms > 3, "{counts:?}");
     assert_eq!(counts.placed, 1, "the hook was put in its root again");
+}
+
+// Expected (P3's decision 4 on P2's events): the user's scroll is the user's input, so the handler that hears it may
+// move the transcript; where a step of the plugin's own landed is not, and that verb is dropped.
+#[test]
+fn a_handler_moves_the_transcript_for_the_users_scroll_only() {
+    board(|board| board.transcript = true);
+    let board_view = mount(6, 60, 16, false);
+    let verbs: std::rc::Rc<RefCell<Vec<v2::Scroll>>> = std::rc::Rc::default();
+    let recorded = verbs.clone();
+    let _published = behave::publish_transcript(
+        board_view.harness.app.app(),
+        behave::Published {
+            read: std::rc::Rc::new(|| v2::TranscriptView { offset: 7, viewport: 10, extent: 40, ..Default::default() }),
+            scroll: std::rc::Rc::new(move |verb| recorded.borrow_mut().push(verb.clone())),
+        },
+    );
+    board_view.dispatch("board.step", Some("1".into()));
+    board_view.settle();
+    assert!(board(|board| !board.landed.is_empty()), "the step landed nowhere");
+    assert_eq!(*verbs.borrow(), [], "a landed step's handler moved the transcript");
+    board_view.harness.app.scroll(10, 5, true);
+    board_view.harness.app.advance(Duration::ZERO);
+    board_view.settle();
+    assert!(board(|board| board.user_scrolls > 0), "the wheel was not the user's scroll");
+    assert_eq!(*verbs.borrow(), [v2::Scroll::By { rows: -2 }]);
 }
