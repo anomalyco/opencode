@@ -58,6 +58,14 @@ pub enum Event {
     /// P3: the mount's [`crate::v2::Node::Input`] `node` was submitted: enter on one line, the submit key on many. The
     /// answer does not matter.
     Submit { node: String, text: String },
+    /// P6a: the mount began (`mounted`), before its first view, or it is ending, for a surface that asks
+    /// ([`crate::v2::Surface::mounts`]), as a 1.x claim's `on_mount`. `slot` is a slot surface's input. The answer does
+    /// not matter.
+    Mount {
+        mounted: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        slot: Option<crate::SlotInput>,
+    },
 }
 
 impl Event {
@@ -69,7 +77,7 @@ impl Event {
                 Some(true)
             }
             Event::Scroll { event } => Some(matches!(event, crate::v2::ScrollEvent::UserScroll { .. })),
-            Event::Hover { .. } | Event::Closed { .. } => None,
+            Event::Hover { .. } | Event::Closed { .. } | Event::Mount { .. } => None,
         }
     }
 }

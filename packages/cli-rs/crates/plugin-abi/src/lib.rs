@@ -396,6 +396,9 @@ pub struct SurfaceClaim {
     /// P2: the key layers each mount of it registers ([`v2::Surface::layers`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub layers: Vec<interact::Layer>,
+    /// P6a: its handler hears [`interact::Event::Mount`] ([`v2::Surface::mounts`]).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub mounts: bool,
 }
 
 /// [`v2::Place`] on the wire.
@@ -3542,6 +3545,7 @@ impl Setup<'_> {
             layout: surface.layout.is_some(),
             handler: surface.handler.is_some(),
             layers: surface.layers.clone(),
+            mounts: surface.mounts,
         };
         self.registered.manifest.surfaces.push(claim);
         self.registered.surfaces.push(surface);
