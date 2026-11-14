@@ -294,3 +294,15 @@ fn a_flood_drains_in_turn_under_the_frame_budget() {
         model::check(&Flood { carrier, all: Duration::from_micros(1500) }, 24, 32);
     }
 }
+
+// Expected (fixed row; the mutant `idle-forgets-spend`): a plugin that went idle keeps what it spent in the frame. In
+// one frame plugin a's key (0.4 ms) and one update (0.3 ms) run and it goes idle; a second key takes it to 1.1 ms; the
+// message that comes after waits for the next frame, though it is the first since a went idle.
+#[test]
+fn a_plugin_that_went_idle_keeps_its_spend_for_the_frame() {
+    let commands = [Command::Send(0, 1), Command::Key, Command::Key, Command::Send(0, 1), Command::Frame];
+    for carrier in CARRIERS {
+        let failure = Flood { carrier, all: Duration::from_millis(4) }.run(&commands);
+        assert_eq!(failure, None, "{carrier:?}");
+    }
+}

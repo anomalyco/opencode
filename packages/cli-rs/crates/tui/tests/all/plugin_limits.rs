@@ -41,6 +41,8 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         let subject = SUBJECT.with(|subject| subject.borrow().clone());
         subject(cx)
     }));
+    // Its waker draws its mounts again, for the rows that change the tree in one mount.
+    WAKE_ROUTE.with(|waker| *waker.borrow_mut() = setup.waker());
     // P2's surfaces show the same tree: a panel and an overlay, which its commands open and close.
     let view = |cx: &mut v2::View<'_>| {
         let subject = SUBJECT.with(|subject| subject.borrow().clone());
@@ -327,6 +329,54 @@ fn rows() -> Vec<Row> {
             nodes: 4,
             content: 0,
         },
+        // Code: a line is two rows. The column, the head, the foot and the code itself are 4, and 48 lines 96.
+        Row {
+            name: "code at the limit",
+            limits: Limits { text: 1 << 20, ..small() },
+            subject: subject(|_| framed(code(source(rust_lines(48))))),
+            shows: subject(|_| framed(code(source(rust_lines(48))))),
+            placeholders: 0,
+            parses: 1,
+            nodes: 4,
+            content: 0,
+        },
+        Row {
+            name: "code over",
+            limits: Limits { text: 1 << 20, ..small() },
+            subject: subject(|_| framed(code(source(rust_lines(49))))),
+            shows: subject(|_| framed(placeholder(None, "too large to build at once"))),
+            placeholders: 1,
+            parses: 0,
+            nodes: 3,
+            content: 0,
+        },
+        // A list's item data builds no rows: 50 items and 50 texts after them are 54 rows, 104 nodes.
+        Row {
+            name: "list data builds no rows",
+            limits: Limits { nodes: 1_000, ..small() },
+            subject: subject(move |_| {
+                let items = (0..50)
+                    .map(|index| v2::ListItem {
+                        node: text(&format!("i{index}")).with_id(format!("i{index}")),
+                        estimate: 1,
+                    })
+                    .collect();
+                v2::Node::column(vec![text("head"), v2::Node::list(items).with_id("list"), texts(50)])
+            }),
+            shows: subject(move |_| {
+                let items = (0..50)
+                    .map(|index| v2::ListItem {
+                        node: text(&format!("i{index}")).with_id(format!("i{index}")),
+                        estimate: 1,
+                    })
+                    .collect();
+                v2::Node::column(vec![text("head"), v2::Node::list(items).with_id("list"), texts(50)])
+            }),
+            placeholders: 0,
+            parses: 0,
+            nodes: 104,
+            content: 0,
+        },
     ]
 }
 
@@ -543,7 +593,8 @@ fn images_decode_on_a_worker_within_their_limits() {
     let gradient = |x: u32, y: u32| [(x * 15) as u8, (y * 15) as u8, ((x + y) * 7) as u8, 255];
     for carrier in CARRIERS {
         let harness = open(carrier);
-        let _limits = limits::set(Limits { plugin_content: 1 << 20, all_content: 1 << 20, ..small() });
+        let base = Limits { plugin_content: 1 << 20, all_content: 1 << 20, ..small() };
+        let _limits = limits::set(base);
         let bytes = png(16, 16, gradient);
         let expected = drawn_in_the_frame(&bytes);
         let before = reconcile::work();
@@ -560,7 +611,11 @@ fn images_decode_on_a_worker_within_their_limits() {
             let other = cx.content((*second).clone());
             v2::Node::column(vec![image(v2::Source::Content(one)), image(v2::Source::Content(other)), text("foot")])
         });
-        for (name, subject, decodes) in [("pixels", picture(png(17, 16, gradient)), 0), ("share", two, 1)] {
+        // One pixel row past the pixels of an image, with room in the plugin's share; two images past its share.
+        let roomy = Limits { plugin_images: 1 << 20, ..base };
+        let cases = [("pixels", picture(png(16, 17, gradient)), 0, roomy), ("share", two, 1, base)];
+        for (name, subject, decodes, case) in cases {
+            let _limits = limits::set(case);
             let before = reconcile::work();
             let frame = show(&harness, subject);
             let text = frame.text();
@@ -850,4 +905,76 @@ fn a_tree_at_the_clients_limits_renders() {
         assert!(frame.cells == twin.cells, "not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
     });
     run.unwrap().join().unwrap();
+}
+
+thread_local! {
+    /// The test plugin's waker: a wake draws its mounts again.
+    static WAKE_ROUTE: RefCell<Option<abi::Waker>> = const { RefCell::new(None) };
+    /// Which tree the rows that draw a mount again show: the first, then the second.
+    static PHASE: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
+}
+
+/// Draws the route's mount again in its next phase.
+fn next_phase(harness: &Harness) {
+    PHASE.with(|phase| phase.set(1));
+    WAKE_ROUTE.with(|waker| waker.borrow().as_ref().expect("the plugin's waker").wake());
+    settle(harness);
+}
+
+// Expected (`limits`, 4.2): a kept subtree counts the nodes it keeps, so a revision that keeps 31 nodes and adds 16
+// crosses the tree's 40 inside what it adds; and content the plugin releases is given back to its share at once,
+// while the mount lives. On both carriers.
+#[test]
+fn a_keep_counts_what_it_keeps_and_a_release_gives_content_back() {
+    let texts = |count: usize| v2::Node::column((0..count).map(|index| text(&format!("t{index}"))).collect());
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        let (frame, held) = {
+            let _limits = limits::set(Limits { text: 1 << 20, ..small() });
+            PHASE.with(|phase| phase.set(0));
+            show(
+                &harness,
+                subject(move |_| match PHASE.with(std::cell::Cell::get) {
+                    0 => v2::Node::column(vec![texts(30).with_id("k")]),
+                    _ => v2::Node::column(vec![v2::Node::Keep { key: "k".into() }, texts(15)]),
+                }),
+            );
+            next_phase(&harness);
+            (harness.app.render(), limits::held(ID).nodes)
+        };
+        let twin = {
+            let _limits = support::unlimited();
+            show(
+                &harness,
+                subject(move |_| {
+                    let mut added: Vec<v2::Node> = (0..7).map(|index| text(&format!("t{index}"))).collect();
+                    added.push(placeholder(None, "too many nodes"));
+                    v2::Node::column(vec![texts(30).with_id("k"), v2::Node::column(added)])
+                }),
+            )
+        };
+        let (shown, wanted) = (frame.text(), twin.text());
+        assert!(frame.cells == twin.cells, "{carrier:?}: not the twin's frame\n{shown}\n---\n{wanted}");
+        assert_eq!(held, 40, "{carrier:?}: held with the keep");
+        // A release.
+        let _limits = limits::set(Limits { text: 1 << 20, ..small() });
+        PHASE.with(|phase| phase.set(0));
+        show(
+            &harness,
+            subject(|cx| {
+                let handle = given(cx, || vec![b'x'; 100]);
+                match PHASE.with(std::cell::Cell::get) {
+                    0 => framed(code(v2::Source::Content(handle))),
+                    _ => {
+                        cx.release(handle);
+                        framed(text("released"))
+                    }
+                }
+            }),
+        );
+        assert_eq!(limits::held(ID).content, 100, "{carrier:?}: content held");
+        next_phase(&harness);
+        assert!(harness.app.render().text().contains("released"), "{carrier:?}: the second phase did not draw");
+        assert_eq!(limits::held(ID).content, 0, "{carrier:?}: content held after its release");
+    }
 }

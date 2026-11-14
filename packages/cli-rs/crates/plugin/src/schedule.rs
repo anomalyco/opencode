@@ -144,17 +144,8 @@ pub(crate) fn drain(app: &App, woken: Option<&Rc<Activation>>) {
             break;
         }
     }
-    let left = QUEUE.with(|queue| {
-        let mut queue = queue.borrow_mut();
-        // After a round, the plugin served first goes last, so each one's turn comes round when all plugins' budget
-        // binds.
-        let first = queue.ready.iter().position(|known| known.upgrade().and_then(|known| known.app()) == Some(app_key));
-        if let (Some(first), None) = (first, woken) {
-            let served = queue.ready.remove(first);
-            queue.ready.push(served);
-        }
-        !of(&queue, app_key).is_empty()
-    });
+    // The round runs in the order the plugins became ready.
+    let left = QUEUE.with(|queue| !of(&queue.borrow(), app_key).is_empty());
     if left {
         WORK.with(|work| work.set(Work { deferred: work.get().deferred + 1, ..work.get() }));
         // Animations run as a paint starts, after the turn's input and before the frame is counted. A drain the
