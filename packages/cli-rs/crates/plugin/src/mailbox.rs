@@ -179,3 +179,30 @@ impl Link for Mailbox {
         self.closed()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Expected (4.2): closing frees what waited, at once, and refuses every send after; the first panic report of an
+    // open mailbox is kept, and one after the close is not.
+    #[test]
+    fn closing_frees_what_waited() {
+        let mailbox = Mailbox::new("test.close", Arc::new(Wake::new(None)));
+        for number in 0..3 {
+            assert!(mailbox.put(None, Message::Json(number.into())).is_ok());
+        }
+        mailbox.panicked("first".to_owned());
+        mailbox.panicked("second".to_owned());
+        assert_eq!(mailbox.stats(), Stats { waiting: 3, high: 3, refused: 0, closed: false });
+        let (_, panic) = mailbox.take();
+        assert_eq!(panic.as_deref(), Some("first"));
+        assert!(mailbox.put(Some("k"), Message::Json(1.into())).is_ok());
+        mailbox.close();
+        mailbox.panicked("late".to_owned());
+        assert_eq!(mailbox.stats(), Stats { waiting: 0, high: 3, refused: 0, closed: true });
+        assert!(matches!(mailbox.put(None, Message::Json(9.into())), Err((Refused::Closed, _))));
+        let (messages, panic) = mailbox.take();
+        assert!(messages.is_empty() && panic.is_none());
+    }
+}
