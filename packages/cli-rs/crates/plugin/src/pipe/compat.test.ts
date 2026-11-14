@@ -48,14 +48,9 @@ function host(answer: (key: string) => Json = () => [], limit = 64) {
       await turn()
       if (request.type === "storage-get") return fake.stored.get(request.key) ?? null
       if (request.type === "storage-set") fake.stored.set(request.key, request.value)
-      if (request.type === "storage-swap") {
-        const now = fake.stored.get(request.key)
-        if ((now === undefined ? undefined : JSON.parse(now)) === undefined && request.expect !== undefined) return false
-        if (now !== undefined && JSON.stringify(JSON.parse(now)) !== JSON.stringify(JSON.parse(request.expect ?? "null")))
-          return false
-        fake.stored.set(request.key, request.value)
-        return true
-      }
+      // As the host's: merged into what is stored as it is written.
+      if (request.type === "storage-merge")
+        fake.stored.set(request.key, JSON.stringify({ ...JSON.parse(fake.stored.get(request.key) ?? "{}"), ...request.fields }))
       return null
     },
     watch(key: string) {

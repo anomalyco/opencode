@@ -114,7 +114,7 @@ fn open_in(
 
 /// What a row loads: a port's library, or the published package of the plugin it ports, unmodified, on the JS host
 /// through the V2 compatibility layer (P8: `parity/plugins/npm/<name>.tgz`, a scope's `/` as `__`).
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum Carrier<'a> {
     Port(&'a str),
     Npm(&'a str),
@@ -179,6 +179,15 @@ fn open_as(
 }
 
 impl Port {
+    /// Lets what the input started finish: the JS host's answers when it runs, then a few frames.
+    fn settle(&self) {
+        let scripts = self.tui.plugins.scripts.borrow().clone();
+        match scripts {
+            Some(scripts) => crate::plugin_pipe::settle(&self.harness, &scripts),
+            None => (0..5).for_each(|_| self.app.advance(std::time::Duration::from_millis(16))),
+        }
+    }
+
     /// The interrupts and prompts the server saw, in order.
     fn wire(&self) -> Vec<String> {
         self.log
@@ -414,6 +423,29 @@ fn the_published_subagents_sidebar_opens_a_clicked_row_and_stores_the_fold() {
     let (x, y) = h.find("▼ Subagents");
     h.app.click(x + 2, y);
     h.wait("the fold reaches the disk", || stored() == json!({ "open": false }));
+}
+
+// Expected (bigboi P8-3, both carriers): two clicks on the header before the first fold is written store both folds,
+// each made from what the other stored (TS updates under a file lock), and a field another client wrote stays.
+#[test]
+fn quick_folds_each_land_and_keep_a_field_another_client_stored() {
+    for carrier in [Carrier::Port("subagents-sidebar"), Carrier::Npm("opencode-subagents-sidebar")] {
+        let Some(h) = open_as(&[carrier], 170, subagents, true, None) else { continue };
+        h.wait_for("+2 more");
+        let storage = h.tui.storage().unwrap();
+        let file = storage.file("plugin.subagents-sidebar.view").unwrap();
+        opencode_local::storage::write_json_atomic(&file, &json!({ "open": true, "sibling": 99 })).unwrap();
+        let stored = || storage.load("plugin.subagents-sidebar.view", &Value::Null).unwrap();
+        let (x, y) = h.find("Subagents");
+        h.app.click(x, y);
+        h.app.click(x, y);
+        h.settle();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        h.settle();
+        assert_eq!(stored(), json!({ "open": true, "sibling": 99 }), "{carrier:?}: a fold was lost");
+        h.app.click(x, y);
+        h.wait("the third fold reaches the disk", || stored() == json!({ "open": false, "sibling": 99 }));
+    }
 }
 
 // --- @mynameistito/opencode-force-input
