@@ -62,10 +62,14 @@ pub fn run(context: &Context, args: &RootArgs) -> error::Result<()> {
         }
         None => None,
     };
-    let info = CliConfig::new(&paths).get().unwrap_or_else(|error| {
+    let mut info = CliConfig::new(&paths).get().unwrap_or_else(|error| {
         log::warn!("failed to read cli.json: {error}");
         Default::default()
     });
+    if let Some(library) = &context.dev {
+        let entry = opencode_local::cli_config::Plugin::Name(library.to_string_lossy().into_owned());
+        info.plugins.get_or_insert_with(Vec::new).push(entry);
+    }
     let config = Resolved::new(info, |name| std::env::var(name).ok());
     // As TS `run` does, after the session lookup and the config read.
     let location = runtime.block_on(server_directory(&client, &directory.to_string_lossy()))?;
