@@ -284,9 +284,13 @@ fn mcp_error_view_goes_back_copies_and_investigates() {
     kit.app.press("c");
     kit.wait_for("Failed to copy to clipboard");
     kit.app.press("i");
-    kit.wait_for("Investigate why");
+    // `composer.set` leaves the cursor at the end, so the composer shows the text's last lines. The offset past the
+    // end went to the start before OpenTUI #2131, which showed its first.
+    kit.wait_for("Do not expose credentials.");
     assert!(!kit.tui.dialogs.is_open());
-    let text = kit.tui.textarea.borrow().as_ref().unwrap().text();
+    let textarea = kit.tui.textarea.borrow().clone().unwrap();
+    assert_eq!(textarea.cursor_offset(), opencode_ui::prompt_input::end(&textarea));
+    let text = textarea.text();
     for part in [
         "Investigate why this OpenCode component failed in the current project.",
         "MCP server: linear\nStatus: failed\nConfiguration: mcp.servers.linear\nError: MCP error -32000: Connection closed",
