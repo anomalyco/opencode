@@ -11,7 +11,7 @@ import { SessionHistory } from "./history.js"
 import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
 import { Session } from "@opencode/schema/session"
-import { SessionMessageTable, SessionTable } from "./sql.js"
+import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { fromRow } from "./info.js"
 
 const ListInputBase = {
@@ -78,6 +78,11 @@ export interface Interface {
    * Sessions holding an execution claim, including directly driven children.
    */
   readonly listSuspended: () => Effect.Effect<ReadonlyArray<Session.ID>>
+  /**
+   * Top-level Sessions holding an eligible pending inbox row: admission asked to execute it and
+   * recovery has not retired it. These are receipts a crash before the claim would otherwise strand.
+   */
+  readonly listResumableInbox: () => Effect.Effect<ReadonlyArray<Session.ID>>
   /**
    * Records the execution claim: the durable write-ahead intent that a turn is
    * (or was) in flight. Set when execution starts; a claim that survives to the
@@ -242,6 +247,29 @@ const layer = Layer.effect(
           .select({ sessionID: SessionTable.id })
           .from(SessionTable)
           .where(isNotNull(SessionTable.time_suspended))
+          .all()
+          .pipe(
+            Effect.orDie,
+            Effect.map((rows) => rows.map((row) => row.sessionID)),
+          )
+      }),
+      /**
+       * Top-level Sessions holding at least one pending row that admission asked to execute and
+       * recovery has not retired. These are the Sessions a crash before the write-ahead claim would
+       * otherwise strand: the receipt exists but no claim ever marked it for `listSuspended`.
+       */
+      listResumableInbox: Effect.fn("SessionStore.listResumableInbox")(function* () {
+        return yield* db
+          .selectDistinct({ sessionID: SessionTable.id })
+          .from(SessionTable)
+          .innerJoin(SessionInboxTable, eq(SessionInboxTable.session_id, SessionTable.id))
+          .where(
+            and(
+              isNull(SessionTable.parent_id),
+              eq(SessionInboxTable.resume, true),
+              eq(SessionInboxTable.resume_retired, false),
+            ),
+          )
           .all()
           .pipe(
             Effect.orDie,
