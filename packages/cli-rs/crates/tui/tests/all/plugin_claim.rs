@@ -580,6 +580,21 @@ fn stream_whole(world: &World, expected: &Expected) -> Result<usize, (&'static s
     if let Some((key, _)) = wanted.iter().find(|(key, _)| !shown.iter().any(|shown| part(shown) == *key)) {
         return Err(("missing", format!("the model says a claim draws {key}; nothing shows it:\n{}", frame.text())));
     }
+    // Where the host's row shows a part, no claim's tree of it does, also one no mount says shows.
+    let screen = frame.text();
+    let host = SLOTS
+        .iter()
+        .enumerate()
+        .filter(|(index, (id, name))| {
+            *name == "probe" && expected.calls[*index] != Call::None && !wanted.iter().any(|(key, _)| key == id)
+        })
+        .map(|(_, (id, name))| format!("{name} {id} "))
+        .chain(
+            expected.fence().filter(|_| !wanted.iter().any(|(key, _)| key == "fence")).map(|lines| lines[0].clone()),
+        );
+    if let Some(drawn) = host.into_iter().find(|drawn| screen.contains(drawn.as_str())) {
+        return Err(("host", format!("the host's row shows that part, and {drawn:?} is on screen:\n{screen}")));
+    }
     Ok(shown.len())
 }
 
@@ -865,6 +880,12 @@ fn a_streaming_part_gets_one_view_a_frame() {
     world.harness.app.render();
     assert_eq!(views(), 2, "the next paint views the newest content once");
     assert_eq!(stream_whole(&world, &expected), Ok(1));
+    // A revision that changes the phase is viewed at once, also in a frame that viewed the part already.
+    world.send(&Command::Delta(0, 0), &mut expected);
+    world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": TOKENS[1] }));
+    let before = views();
+    world.emit("session.tool.called", json!({ "id": "call_1", "input": { "q": "aa aa bb" }, "executed": true }));
+    assert_eq!(views(), before + 1, "a phase change waited for the paint");
 }
 
 // Expected: a part the claim declines shows the host's own row, and a later revision the claim takes shows its tree.
@@ -878,9 +899,36 @@ fn a_declined_part_shows_the_host_row() {
     let screen = world.frame().text();
     assert!(!screen.contains("probe call_1"), "{screen}");
     assert!(mounted().iter().all(|shown| !shown.shows));
+    assert!(screen.contains("⋯ probe"), "the host's row does not show:\n{screen}");
     DECLINE.with_borrow_mut(HashSet::clear);
     world.send(&Command::Call(0), &mut expected);
     assert_eq!(stream_whole(&world, &expected), Ok(1));
+    let screen = world.frame().text();
+    assert!(!screen.contains("⋯ probe"), "the host's row stayed beside the claim's tree:\n{screen}");
+    // Declined again: the host's row comes back, built again, and the claim's tree goes.
+    DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()));
+    expected.off.insert("call_1".to_owned());
+    world.send(&Command::Progress(0, 1), &mut expected);
+    let screen = world.frame().text();
+    assert!(screen.contains("⋯ probe"), "the host's row is not back:\n{screen}");
+    assert_eq!(stream_whole(&world, &expected), Ok(0));
+    DECLINE.with_borrow_mut(HashSet::clear);
+}
+
+// Expected: a fence keeps its mount while it streams: Markdown hands its widget back, and the claim finds its mount
+// through it.
+#[test]
+fn a_streaming_fence_keeps_its_mount() {
+    let world = World::open();
+    let mut expected = Expected::new();
+    let mut generations = Vec::new();
+    for _ in 0..5 {
+        world.send(&Command::Text, &mut expected);
+        generations
+            .extend(mounted().into_iter().filter(|shown| shown.id.key.starts_with("fence-")).map(|shown| shown.id));
+    }
+    assert_eq!(generations.len(), 3, "{generations:?}");
+    assert!(generations.windows(2).all(|pair| pair[0] == pair[1]), "{generations:?}");
 }
 
 // Expected (`ledger`): a part that leaves the transcript forgets its tree: leaving the session frees every claimed
