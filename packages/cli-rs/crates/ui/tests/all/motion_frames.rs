@@ -240,7 +240,9 @@ fn a_dropped_spinner_stops_its_timer() {
 }
 
 // An undrawn widget costs no frames and no wakeups. `TestApp::idle` sleeps as `App::run` does: until the next timer
-// or, while a frame is wanted, the next frame slot at 60 fps.
+// or, while a frame is wanted, the next frame slot at 60 fps. A stepped spinner's ticks follow it, so OpenTUI parks
+// them, also while a scroll box clips it fully out of view, and resumes them when a frame draws it again; TS keeps
+// ticking there, which differs in wakeups only.
 #[test]
 fn an_undrawn_animation_costs_no_frames_and_no_wakeups() {
     for widget in ["spinner", "shimmer spinner", "shimmer text"] {
@@ -280,7 +282,7 @@ fn an_undrawn_animation_costs_no_frames_and_no_wakeups() {
             assert!(hiding.frames <= 2 && hiding.wakeups <= 2, "{case}: hiding {hiding:?}");
             assert_eq!(second(), Idle::default(), "{case}: hidden");
             show(true);
-            // The paint that shows it starts it again, with no other event.
+            // The frame that draws it resumes or starts it again, with no other event.
             second();
             let again = second();
             assert!(rate.contains(&again.frames) && rate.contains(&again.wakeups), "{case}: shown again {again:?}");
