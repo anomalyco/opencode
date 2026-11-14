@@ -190,7 +190,32 @@ pub struct Viewer {
     pub drawn: bool,
 }
 
+/// What of a viewer's own state its view shows, beside its input: an event that leaves it as it was keeps the view.
+#[derive(PartialEq)]
+pub struct Shown {
+    selected: Option<usize>,
+    expanded: usize,
+    reviewed: usize,
+    tree: bool,
+    single: bool,
+    view: Option<DiffView>,
+    loads: u64,
+}
+
 impl Viewer {
+    /// What its view shows of it now (each event changes a set by one, so the sizes tell).
+    pub fn shown(&self) -> Shown {
+        Shown {
+            selected: self.selected,
+            expanded: self.expanded.len(),
+            reviewed: self.reviewed.len(),
+            tree: self.tree_enabled,
+            single: self.single,
+            view: self.view_override,
+            loads: self.loads,
+        }
+    }
+
     pub fn new(read: &dyn Read, memory: &Memory, id: u64, place: Showing) -> Self {
         let session = match &place {
             Showing::Panel { session } => Some(session.clone()),

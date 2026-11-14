@@ -221,10 +221,25 @@ pub fn row_id(row: &Row) -> String {
     format!("t:{}", row.id)
 }
 
+/// What a row of the tree shows: a row that shows the same is kept ([`v2::View::memo`]), so a view at 1,000 files
+/// sends the host one keep a row, not the row.
+#[derive(Clone, PartialEq)]
+struct Line {
+    indent: String,
+    marker: &'static str,
+    name: String,
+    selected: bool,
+    foreground: &'static str,
+    status: &'static str,
+    status_color: &'static str,
+    faint: Rgba,
+    rail: Rgba,
+}
+
 /// The pane (`DiffViewerFileTree`, tree layout): the source header, the rows in their scroll `tree`, and the help
 /// footer. A click on the header switches the source (`diff.source`), one on the help opens it (`diff.help`); a row's
 /// presses reach the surface's handler.
-pub fn pane(input: &Pane<'_>, tree: &Tree) -> v2::Node {
+pub fn pane(input: &Pane<'_>, tree: &Tree, cx: &mut v2::View<'_>) -> v2::Node {
     let surface = "background.raised.base";
     let content_width = (i64::from(input.width) - 6).max(0);
     let reviewed_count = (0..input.files.len()).filter(|&file| (input.reviewed)(file)).count();
@@ -287,30 +302,19 @@ pub fn pane(input: &Pane<'_>, tree: &Tree) -> v2::Node {
                 Some(Status::Deleted) => ("D", "diff.text.removed"),
                 Some(Status::Unknown) => ("?", "text.muted"),
             };
-            let name = Span { bold: selected, ..Span::new(name) };
-            let line = v2::Node::row(vec![
-                v2::Node::text([Span::new(indent).fg(input.rail), Span::new(marker).fg(input.faint)])
-                    .wrap(Wrap::None)
-                    .layout(Layout::default().shrink(false)),
-                v2::Node::column(vec![v2::Node::text([name]).fg(foreground).wrap(Wrap::None).truncate()])
-                    .layout(Layout::default().grow().min_width_zero().margin(Edges { right: 1, ..Edges::default() })),
-                v2::Node::text([Span::new(status)])
-                    .fg(status_color)
-                    .wrap(Wrap::None)
-                    .layout(Layout::default().width(Width::Cells(1)).shrink(false)),
-            ])
-            .layout(Layout::default().height(Width::Cells(1)));
-            // The row fills the line; a press on it is the handler's: the left button picks it, the right opens the
-            // file menu.
-            v2::Node::column(vec![line])
-                .with_id(row_id(&row))
-                .bg(surface)
-                .interact(Interact {
-                    pointer: true,
-                    hover: Some("background.raised.high".into()),
-                    ..Interact::default()
-                })
-                .layout(Layout::default().width(Width::Percent(100.0)).height(Width::Cells(1)).shrink(false))
+            let line = Line {
+                indent,
+                marker,
+                name,
+                selected,
+                foreground,
+                status,
+                status_color,
+                faint: input.faint,
+                rail: input.rail,
+            };
+            let id = row_id(&row);
+            cx.memo(id.clone(), line.clone(), |_| row_node(id, &line, surface))
         })
         .collect();
     let scroll = v2::Node::scroll(vec![v2::Node::column(rows).layout(Layout::default().shrink(false))])
@@ -346,6 +350,29 @@ pub fn pane(input: &Pane<'_>, tree: &Tree) -> v2::Node {
             .min_height(Width::Cells(0))
             .shrink(false),
     )
+}
+
+/// A row: it fills the line, and a press on it is the handler's: the left button picks it, the right opens the file
+/// menu.
+fn row_node(id: String, line: &Line, surface: &'static str) -> v2::Node {
+    let name = Span { bold: line.selected, ..Span::new(line.name.clone()) };
+    let content = v2::Node::row(vec![
+        v2::Node::text([Span::new(line.indent.clone()).fg(line.rail), Span::new(line.marker).fg(line.faint)])
+            .wrap(Wrap::None)
+            .layout(Layout::default().shrink(false)),
+        v2::Node::column(vec![v2::Node::text([name]).fg(line.foreground).wrap(Wrap::None).truncate()])
+            .layout(Layout::default().grow().min_width_zero().margin(Edges { right: 1, ..Edges::default() })),
+        v2::Node::text([Span::new(line.status)])
+            .fg(line.status_color)
+            .wrap(Wrap::None)
+            .layout(Layout::default().width(Width::Cells(1)).shrink(false)),
+    ])
+    .layout(Layout::default().height(Width::Cells(1)));
+    v2::Node::column(vec![content])
+        .with_id(id)
+        .bg(surface)
+        .interact(Interact { pointer: true, hover: Some("background.raised.high".into()), ..Interact::default() })
+        .layout(Layout::default().width(Width::Percent(100.0)).height(Width::Cells(1)).shrink(false))
 }
 
 #[cfg(test)]

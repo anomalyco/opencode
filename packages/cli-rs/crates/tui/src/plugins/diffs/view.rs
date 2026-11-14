@@ -435,7 +435,7 @@ fn footer(viewer: &Viewer, cx: &v2::View<'_>, docked: bool, help: Option<String>
 }
 
 /// The tree pane, in the surface's palette.
-fn tree_pane(viewer: &Viewer, cx: &v2::View<'_>) -> Node {
+fn tree_pane(viewer: &Viewer, cx: &mut v2::View<'_>) -> Node {
     let palette = &cx.input.palette;
     let color = |token: &str| {
         palette.get(token).map_or(Color::rgb(0, 0, 0), |rgba| Color::rgba(rgba.r, rgba.g, rgba.b, rgba.a))
@@ -460,6 +460,7 @@ fn tree_pane(viewer: &Viewer, cx: &v2::View<'_>) -> Node {
             rail: rgba(tint(muted, surface, 0.7)),
         },
         &viewer.tree,
+        cx,
     )
 }
 

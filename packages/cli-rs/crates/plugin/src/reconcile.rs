@@ -47,6 +47,8 @@ pub struct Work {
     pub deferred: u64,
     /// Bytes of text read to measure what it costs ([`measure`]).
     pub scanned: u64,
+    /// Ids visited to count what a library's keeps hold again ([`Tree::held_counts`]).
+    pub held: u64,
 }
 
 impl Work {
@@ -62,6 +64,7 @@ impl Work {
             placeholders: self.placeholders - before.placeholders,
             deferred: self.deferred - before.deferred,
             scanned: self.scanned - before.scanned,
+            held: self.held - before.held,
         }
     }
 
@@ -652,21 +655,26 @@ impl Tree {
         out
     }
 
-    /// The ids the tree holds at `id` and under it: what a node that keeps `id` holds again.
-    pub fn held_under(&self, id: &str) -> usize {
-        let under = |key: &String| {
-            let mut at = key.as_str();
-            loop {
-                if at == id {
-                    return true;
-                }
-                match self.ids.get(at).and_then(|held| held.above.as_deref()) {
-                    Some(above) => at = above,
-                    None => return false,
-                }
+    /// The ids the tree holds, when `key` is its only root: what a keep of the whole tree holds again, with no count.
+    pub fn held_whole(&self, key: &str) -> Option<usize> {
+        matches!(&self.nodes[..], [root] if root.node.id() == Some(key)).then_some(self.ids.len())
+    }
+
+    /// For each id, the ids the tree holds at it and under it: what a node that keeps it holds again. One walk up
+    /// from each id, so a view that keeps every card costs one pass, not one a keep.
+    pub fn held_counts(&self) -> HashMap<String, usize> {
+        let mut counts: HashMap<&str, usize> = HashMap::with_capacity(self.ids.len());
+        let mut visits = 0;
+        for key in self.ids.keys() {
+            let mut at = Some(key.as_str());
+            while let Some(id) = at {
+                *counts.entry(id).or_default() += 1;
+                visits += 1;
+                at = self.ids.get(id).and_then(|held| held.above.as_deref());
             }
-        };
-        self.ids.keys().filter(|key| under(key)).count()
+        }
+        count(|work| work.held += visits);
+        counts.into_iter().map(|(id, count)| (id.to_owned(), count)).collect()
     }
 
     /// The ids the tree holds.

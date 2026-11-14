@@ -564,7 +564,16 @@ impl Core {
                 });
             }
         };
-        let kept = |key: &str| self.state.borrow().tree.held_under(key);
+        // Counted once, at the view's first keep.
+        let counts = std::cell::OnceCell::new();
+        let kept = |key: &str| {
+            let state = self.state.borrow();
+            if let Some(whole) = state.tree.held_whole(key) {
+                return whole;
+            }
+            let counts = counts.get_or_init(|| state.tree.held_counts());
+            counts.get(key).copied().unwrap_or(0)
+        };
         let viewing = Viewing {
             mount: &self.id,
             owner: &self.claim.input,
