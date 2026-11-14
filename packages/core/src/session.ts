@@ -216,6 +216,11 @@ export interface Interface {
   readonly generate: (input: {
     sessionID: SessionSchema.ID
     prompt: string
+    /** Overrides the Session's model, as compaction does with its agent's model. */
+    model?: Model.Ref
+    toolChoice?: "none"
+    /** `false` sends only the prompt: no system prompt, history, tools or session hooks. */
+    transcript?: boolean
   }) => Effect.Effect<SessionGenerate.Result, NotFoundError | SessionGenerate.Error>
   readonly command: (input: {
     sessionID: SessionSchema.ID
@@ -495,7 +500,13 @@ const layer = Layer.effect(
       prompt: (input) => sessions.forSession(input.sessionID).prompt(input),
       generate: Effect.fn("Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        return yield* SessionGenerate.generate({ session, prompt: input.prompt }).pipe(
+        return yield* SessionGenerate.generate({
+          session,
+          prompt: input.prompt,
+          model: input.model,
+          toolChoice: input.toolChoice,
+          transcript: input.transcript,
+        }).pipe(
           Effect.provideService(Instance.Service, instances),
           Effect.provideService(Database.Service, database),
           Effect.provideService(LLMClient.Service, llm),

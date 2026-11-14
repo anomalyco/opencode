@@ -2626,6 +2626,9 @@ function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }
       <Match when={display() === "subagent"}>
         <Subagent {...toolprops} />
       </Match>
+      <Match when={display() === "advisor"}>
+        <AdvisorTool {...toolprops} />
+      </Match>
       <Match when={display() === "execute"}>
         <Execute {...toolprops} />
       </Match>
@@ -3353,6 +3356,106 @@ export function subagentModelLabel(
   const modelID = separator === -1 ? reference : reference.slice(separator + 1)
   const name = models?.find((item) => item.providerID === providerID && item.id === modelID)?.name
   return `${name ?? reference}${variant ? ` (${variant})` : ""}`
+}
+
+function AdvisorTool(props: ToolProps) {
+  const ctx = use()
+  const theme = useTheme()
+  const { currentSyntax: syntax } = useThemes()
+  const plugins = usePlugin()
+  const [expanded, setExpanded] = createSignal(false)
+  const running = createMemo(() => props.part.state.status === "streaming" || props.part.state.status === "running")
+  const question = createMemo(() => stringValue(props.input.question))
+  const context = createMemo(() => stringValue(props.input.context))
+  const secure = createMemo(() => props.metadata.mode === "secure" || Boolean(context()))
+  const advice = createMemo(() =>
+    props.metadata.status === "reviewed"
+      ? collapseToolOutput(stripAnsi(props.output?.trim() ?? ""), 30, 4000).output
+      : "",
+  )
+  const error = createMemo(() => (props.part.state.status === "error" ? stripAnsi(props.part.state.error.message) : ""))
+  const label = createMemo(() => {
+    if (running()) return "Asking the advisor…"
+    if (props.part.state.status === "error") return "Advisor unavailable"
+    if (props.metadata.status === "declined") return "Advisor declined"
+    return "Advisor reviewed"
+  })
+  return (
+    <>
+      <InlineTool
+        icon={props.part.state.status === "error" ? "✗" : "✓"}
+        complete={props.part.state.status === "completed"}
+        pending={label()}
+        spinner={running()}
+        part={props.part}
+        onClick={() => setExpanded((value) => !value)}
+        onErrorClick={() => setExpanded((value) => !value)}
+      >
+        {label()}
+      </InlineTool>
+      <Show when={expanded()}>
+        <box paddingLeft={3 + INLINE_TOOL_ICON_WIDTH}>
+          <text fg={theme.text.muted}>
+            {secure() ? "Shared only this brief, not the conversation:" : "Shared the whole conversation."}
+          </text>
+          <Show when={question()}>
+            {(value) => (
+              <box flexDirection="row">
+                <text flexShrink={0} fg={theme.text.muted}>
+                  question:{" "}
+                </text>
+                <text flexGrow={1} wrapMode="word" fg={theme.text.base}>
+                  {value()}
+                </text>
+              </box>
+            )}
+          </Show>
+          <Show when={context()}>
+            {(value) => (
+              <box flexDirection="row">
+                <text flexShrink={0} fg={theme.text.muted}>
+                  context:{" "}
+                </text>
+                <text flexGrow={1} wrapMode="word" fg={theme.text.base}>
+                  {value()}
+                </text>
+              </box>
+            )}
+          </Show>
+          <Show when={running()}>
+            <text fg={theme.text.muted}>Waiting for the advisor…</text>
+          </Show>
+          <Show when={error()}>
+            <text wrapMode="word" fg={theme.text.feedback.error.base}>
+              {error()}
+            </text>
+          </Show>
+          <Show when={props.metadata.status === "declined"}>
+            <text fg={theme.text.muted}>The advisor had nothing to add.</text>
+          </Show>
+          <Show when={advice()}>
+            {(value) => (
+              <>
+                <text fg={theme.text.muted}>advice:</text>
+                <markdown
+                  ref={useSessionLinks()}
+                  syntaxStyle={syntax()}
+                  renderNode={plugins.markdown()}
+                  content={value()}
+                  streaming={false}
+                  internalBlockMode="top-level"
+                  tableOptions={{ style: "grid", cellPaddingX: 1 }}
+                  conceal={ctx.markdownMode() === "rendered"}
+                  fg={theme.markdown.text}
+                  bg={theme.background.base}
+                />
+              </>
+            )}
+          </Show>
+        </box>
+      </Show>
+    </>
+  )
 }
 
 export { executeCallSummary }

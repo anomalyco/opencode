@@ -28,7 +28,7 @@ import { Instructions } from "@opencode/core/instructions/index"
 import { InstructionBuiltIns } from "@opencode/core/instructions/builtins"
 import { Location } from "@opencode/core/location"
 import { McpInstructions } from "@opencode/core/mcp/instructions"
-import { ID } from "@opencode/core/model"
+import { ID, Ref } from "@opencode/core/model"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
 import { ReferenceInstructions } from "@opencode/core/reference/instructions"
@@ -94,9 +94,11 @@ const client = Layer.mock(LLMClient.Service)({
       return response
     }),
 })
+const resolvedSessions: SessionSchema.Info[] = []
 const models = Layer.mock(SessionRunnerModel.Service)({
-  resolve: () =>
-    Effect.succeed(
+  resolve: (session) => {
+    resolvedSessions.push(session)
+    return Effect.succeed(
       SessionRunnerModel.resolved(model, {
         capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
         cost: [
@@ -108,7 +110,8 @@ const models = Layer.mock(SessionRunnerModel.Service)({
         ],
         limit: { context: 200_000, output: 32_000 },
       }),
-    ),
+    )
+  },
 })
 const builtins = Layer.mock(InstructionBuiltIns.Service, {
   load: () =>
@@ -399,6 +402,48 @@ it.effect(
         tokens_cache_read: (usageBefore.session?.tokens_cache_read ?? 0) + 30,
         tokens_cache_write: (usageBefore.session?.tokens_cache_write ?? 0) + 10,
       })
+    }),
+  { timeout: 15_000 },
+)
+
+it.effect(
+  "honours the model, toolChoice and transcript inputs",
+  () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      options.length = 0
+      resolvedSessions.length = 0
+      const { db, session, instances } = yield* setup
+      const override = Ref.make({ providerID: Provider.ID.make("other"), id: ID.make("other-model") })
+      // A prompt-only request carries nothing a plugin could add.
+      const hooks = yield* PluginHooks.Service
+      let generateHooks = 0
+      yield* hooks.register("session", "generate", () => Effect.sync(() => generateHooks++))
+      const usageBefore = yield* usageState(db, sessionID)
+
+      const result = yield* SessionGenerate.generate({
+        session,
+        prompt: "Advise",
+        model: override,
+        toolChoice: "none",
+        transcript: false,
+      }).pipe(Effect.provideService(Instance.Service, instances))
+
+      expect(result.text).toBe("Transient answer")
+      expect(resolvedSessions[0]?.model).toEqual(override)
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.toolChoice).toMatchObject({ type: "none" })
+      expect(requests[0]?.system).toEqual([])
+      expect(requests[0]?.messages).toHaveLength(1)
+      expect(userTexts(requests[0])).toEqual(["Advise"])
+      expect(generateHooks).toBe(0)
+      const usageAfter = yield* usageState(db, sessionID)
+      expect(recordedUsage(usageBefore, usageAfter)).toEqual([
+        {
+          type: Event.versionedType(SessionEvent.UsageRecorded.type, SessionEvent.UsageRecorded.durable.version),
+          data: { sessionID, source: "generate", cost: result.cost, tokens: result.tokens },
+        },
+      ])
     }),
   { timeout: 15_000 },
 )

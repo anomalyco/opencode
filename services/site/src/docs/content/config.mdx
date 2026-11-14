@@ -628,6 +628,7 @@ All experimental settings live under the `experimental` key:
   "$schema": "https://opencode.ai/config.json",
   "experimental": {
     "todo": true,
+    "advisor": true,
     "subagent_depth": 2,
     "background_compaction": true,
     "image_generate": { "model": "openai/gpt-image-2" },
@@ -639,6 +640,19 @@ All experimental settings live under the `experimental` key:
 ### Todos
 
 Set `todo` to `true` to give agents a `todowrite` tool for tracking multi-step work. Defaults to `false`.
+
+### Advisor
+
+Set `advisor` to `true` to let agents consult a second model you choose. Pick the model and what it may see with
+`/advisor` in the TUI; see [Advisor](/cli/tui#advisor). Defaults to `false`.
+
+```jsonc
+{
+  "experimental": {
+    "advisor": true,
+  },
+}
+```
 
 ### Subagent depth
 
