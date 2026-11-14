@@ -53,12 +53,18 @@ impl Mounted {
 }
 
 fn mount_with(app: &TestApp, info: Info, answer: Answer) -> Mounted {
+    mount_on(app, info, answer, false)
+}
+
+/// [`mount_with`], with the built-ins' calls across the C ABI's byte shims when `abi` says so.
+fn mount_on(app: &TestApp, info: Info, answer: Answer, abi: bool) -> Mounted {
     let fake = fake(answer);
     let log = fake.log();
     let deps = Deps {
         directory: DIRECTORY.into(),
         config: support::config(info),
         route: Route::Home,
+        abi_builtins: abi,
         ..support::deps(Arc::new(fake))
     };
     Mounted { tui: opencode_tui::mount(app, deps), log }
@@ -292,7 +298,12 @@ fn team_plugin() -> abi::Plugin {
 
 /// The TUI with the plugin server and [`team_plugin`], and how often that plugin was activated.
 fn plugin_manager(app: &TestApp, extra: Value) -> (Mounted, fn() -> u32) {
-    let mounted = mount_with(app, support::component_info(extra), plugin_server());
+    plugin_manager_on(app, extra, false)
+}
+
+/// [`plugin_manager`] on the linked carrier, or with `abi` across the C ABI's byte shims (P6b: the manager is a plugin).
+fn plugin_manager_on(app: &TestApp, extra: Value, abi: bool) -> (Mounted, fn() -> u32) {
+    let mounted = mount_on(app, support::component_info(extra), plugin_server(), abi);
     ACTIVATIONS.set(0);
     opencode_tui::plugins::host::add(&mounted.tui, team_plugin().into());
     (mounted, || ACTIVATIONS.get())
@@ -304,8 +315,14 @@ fn active(tui: &Tui, id: &str) -> bool {
 
 #[test]
 fn plugin_manager_matches_typescript() {
+    for abi in [false, true] {
+        plugin_manager_matches_typescript_on(abi);
+    }
+}
+
+fn plugin_manager_matches_typescript_on(abi: bool) {
     let app = TestApp::new(100, 30);
-    let (mounted, _) = plugin_manager(&app, json!({}));
+    let (mounted, _) = plugin_manager_on(&app, json!({}), abi);
     mounted.tui.keymap.dispatch("plugins.list", None);
     wait_for(&app, "team.plugins");
     assert_dialog(&app, "E.18b/plugins", "Plugins");
@@ -334,7 +351,7 @@ fn plugin_manager_matches_typescript() {
     assert_dialog(&app, "E.18b/plugins-failed", "Plugins");
 
     let app = TestApp::new(100, 40);
-    let (mounted, _) = plugin_manager(&app, json!({}));
+    let (mounted, _) = plugin_manager_on(&app, json!({}), abi);
     mounted.tui.keymap.dispatch("plugins.list", None);
     wait_for(&app, "team.plugins");
     app.press("ctrl+a");
@@ -430,8 +447,14 @@ fn the_host_entries_list_and_toggle_like_plugins() {
 
 #[test]
 fn plugin_manager_toggles_checks_and_updates() {
+    for abi in [false, true] {
+        plugin_manager_toggles_checks_and_updates_on(abi);
+    }
+}
+
+fn plugin_manager_toggles_checks_and_updates_on(abi: bool) {
     let app = TestApp::new(100, 30);
-    let (mounted, activations) = plugin_manager(&app, json!({}));
+    let (mounted, activations) = plugin_manager_on(&app, json!({}), abi);
     let tui = &mounted.tui;
     tui.keymap.dispatch("plugins.list", None);
     wait_for(&app, "disable enter");
