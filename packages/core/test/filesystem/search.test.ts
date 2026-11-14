@@ -381,4 +381,45 @@ describe("FileSystemSearch", () => {
       }).pipe(Effect.provide(layer))
     }),
   )
+
+  it.effect("indexes every ancestor directory of nested scan entries", () =>
+    Effect.gen(function* () {
+      const layer = AppNodeBuilder.build(FileSystemSearch.node, [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location({ directory: AbsolutePath.make(path.join(os.tmpdir(), "opencode-search-nested")) }),
+            ),
+          ),
+        ),
+        Ripgrep.node.replace(
+          Layer.succeed(
+            Ripgrep.Service,
+            Ripgrep.Service.of({
+              find: (input) =>
+                Effect.gen(function* () {
+                  const entries = ["a/b/c.ts", "a/d.ts"].map((file) =>
+                    FileSystem.Entry.make({ path: RelativePath.make(file), type: "file" }),
+                  )
+                  if (input.onEntry) for (const entry of entries) yield* input.onEntry(entry)
+                  return entries
+                }),
+              glob: () => Effect.succeed([]),
+              grep: () => Effect.succeed([]),
+            }),
+          ),
+        ),
+      ])
+
+      yield* Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        const directories = yield* search
+          .find({ query: "a", type: "directory" })
+          .pipe(Effect.map((entries) => entries.map((entry) => entry.path)))
+        expect(directories).toContain(RelativePath.make(`a${path.sep}`))
+        expect(directories).toContain(RelativePath.make(`a${path.sep}b${path.sep}`))
+      }).pipe(Effect.provide(layer))
+    }),
+  )
 })
