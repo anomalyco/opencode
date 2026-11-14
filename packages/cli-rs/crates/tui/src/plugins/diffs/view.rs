@@ -242,16 +242,16 @@ fn build(
             + if card.reviewed { 2 } else { 0 };
     let shown = crate::dialogs::open::truncate_file_path(path, (shape.pane - counts - 2).max(1));
     let split = shown.rfind('/').map_or(0, |at| at + 1);
+    // As few nodes as the heading needs: a list of 1,000 cards holds each card's nodes in one tree, within what the
+    // host takes of one tree (`limits::Limits::nodes`).
     let mut line = vec![
-        Node::column(vec![
-            Node::text([
-                Span::new(&shown[..split]).fg("text.muted"),
-                Span::new(&shown[split..]).fg(if card.reviewed { "text.muted" } else { "text.base" }),
-            ])
-            .fg("text.muted")
-            .wrap(Wrap::None)
-            .truncate(),
+        Node::text([
+            Span::new(&shown[..split]).fg("text.muted"),
+            Span::new(&shown[split..]).fg(if card.reviewed { "text.muted" } else { "text.base" }),
         ])
+        .fg("text.muted")
+        .wrap(Wrap::None)
+        .truncate()
         .layout(Layout::default().grow().min_width_zero()),
     ];
     if card.reviewed {
