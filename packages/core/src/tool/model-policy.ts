@@ -1,4 +1,6 @@
 import type { Model } from "@opencode/schema/model"
+import type { ConfigExperimental } from "@opencode/schema/config/experimental"
+import { EDITING_TOOLS, editingTools } from "./editing.js"
 
 const fullCodeModeHidden = ["glob", "grep", "webfetch"] as const
 
@@ -11,6 +13,7 @@ export function modelTools(input: {
   readonly model?: Model.Info
   readonly websearch: boolean
   readonly fullCodeMode: boolean
+  readonly editing?: ConfigExperimental.Editing
 }): ModelTools {
   const hidden = new Set<string>()
   if (!input.websearch) hidden.add("websearch")
@@ -19,20 +22,11 @@ export function modelTools(input: {
 
   // GPT-5+ edits with patch; every other model edits with edit and write.
   if (input.model) {
-    for (const name of usesPatch(input.model) ? ["edit", "write"] : ["patch"]) hidden.add(name)
+    const tools = editingTools(input.model, input.editing)
+    for (const name of EDITING_TOOLS) {
+      if (!tools.has(name)) hidden.add(name)
+    }
   }
 
   return { hidden, direct: new Set<string>() }
-}
-
-function usesPatch(model: Model.Info) {
-  const id = model.id.toLowerCase()
-  const modelID = model.modelID.toLowerCase()
-  return (
-    (id.includes("gpt-") || modelID.includes("gpt-")) &&
-    !id.includes("oss") &&
-    !modelID.includes("oss") &&
-    !id.includes("gpt-4") &&
-    !modelID.includes("gpt-4")
-  )
 }

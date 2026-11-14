@@ -12,10 +12,14 @@ import { FileMutation } from "@opencode/core/file-mutation"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
 import { Permission } from "@opencode/core/permission"
+import { Model } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { PatchTool } from "@opencode/core/tool/plugin/patch"
+import { Document, type Entry, Info } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { transformEnvironmentFiles } from "./fixture/environment"
 import { location } from "./fixture/location"
 import { tmpdir, withTempDir } from "./fixture/tmpdir"
@@ -37,6 +41,7 @@ const patchToolNode = makeLocationNode({
     Permission.node,
     Config.node,
     Flag.node,
+    Session.node,
   ],
 })
 
@@ -50,6 +55,8 @@ let readsBeforeEditApproval = 0
 let editApproved = false
 let afterEditApproval = (): Effect.Effect<void> => Effect.void
 let formatFile = (_target: string): Effect.Effect<boolean> => Effect.succeed(false)
+let configEntries: Entry[] = []
+let sessionModelID = "claude-sonnet-4"
 
 const permission = permissionLayer({
   assert: (input) =>
@@ -86,6 +93,8 @@ const reset = () => {
   editApproved = false
   afterEditApproval = () => Effect.void
   formatFile = () => Effect.succeed(false)
+  configEntries = []
+  sessionModelID = "claude-sonnet-4"
 }
 
 const withTool = <A, E, R>(
@@ -127,7 +136,16 @@ const withTool = <A, E, R>(
         Location.node.replace(activeLocation),
         Formatter.node.replace(formatter),
         Permission.node.replace(permission),
-        Config.node.replace(Config.testLayer()),
+        Config.node.replace(Config.testLayer(configEntries)),
+        Session.node.replace(
+          Layer.succeed(Session.Service, {
+            get: (sessionID: Session.ID) =>
+              Effect.succeed({
+                id: sessionID,
+                model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make(sessionModelID) }),
+              } as Session.Info),
+          } as unknown as Session.Interface),
+        ),
       ]),
     ),
   )
@@ -147,13 +165,90 @@ const exists = (target: string) =>
     ),
   )
 const it = testEffect(Layer.succeed(Flag.Overrides, undefined))
-const withTempTool = <A, E, R>(body: (directory: string, registry: Tool.Interface) => Effect.Effect<A, E, R>) =>
+const withTempTool = <A, E, R>(
+  body: (directory: string, registry: Tool.Interface) => Effect.Effect<A, E, R>,
+  entries: Entry[] = [],
+) =>
   withTempDir((tmp) => {
     reset()
+    configEntries = entries
     return withTool(tmp.path, (registry) => body(tmp.path, registry))
   })
 
+const editingConfig = (editing: ConfigExperimental.Editing) => [
+  new Document({
+    type: "document",
+    info: new Info({ experimental: new ConfigExperimental.Info({ editing }) }),
+  }),
+]
+
 describe("PatchTool", () => {
+  it.live("keeps the base patch result when no editing config is set", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const settled = yield* executeTool(
+          registry,
+          call("*** Begin Patch\n*** Add File: default-style.txt\n+created\n*** End Patch"),
+        )
+        expect(settled.status).toBe("completed")
+        if (settled.status !== "completed") return
+        expect(settled.content).toEqual([
+          { type: "text", text: "Success. Updated the following files:\nA default-style.txt" },
+        ])
+        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "default-style.txt"), "utf8"))).toBe(
+          "created\n",
+        )
+      }),
+    ),
+  )
+
+  it.live("includes only the hunk when result_style is diff", () =>
+    withTempTool(
+      (directory, registry) =>
+        Effect.gen(function* () {
+          sessionModelID = "claude-sonnet-4"
+          const settled = yield* executeTool(
+            registry,
+            call("*** Begin Patch\n*** Add File: style-diff.txt\n+created\n*** End Patch"),
+          )
+          expect(settled.status).toBe("completed")
+          if (settled.status !== "completed") return
+          const text = settled.content?.[0]?.type === "text" ? settled.content[0].text : ""
+          expect(text).toContain("A style-diff.txt (+1 -0)")
+          expect(text).toContain("@@")
+          expect(text).toContain("+created")
+          expect(text).not.toContain("Index:")
+          expect(text).not.toContain(directory)
+          expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "style-diff.txt"), "utf8"))).toBe(
+            "created\n",
+          )
+        }),
+      editingConfig({ rules: [{ match: "^test/claude", result_style: "diff" }] }),
+    ),
+  )
+
+  it.live("truncates a large diff before returning it to the model", () =>
+    withTempTool(
+      (directory, registry) =>
+        Effect.gen(function* () {
+          const lines = Array.from({ length: 250 }, (_, index) => `+line ${index}`).join("\n")
+          const settled = yield* executeTool(
+            registry,
+            call(`*** Begin Patch\n*** Add File: large-diff.txt\n${lines}\n*** End Patch`),
+          )
+          expect(settled.status).toBe("completed")
+          if (settled.status !== "completed") return
+          const text = settled.content?.[0]?.type === "text" ? settled.content[0].text : ""
+          expect(text).toContain("... diff truncated ...")
+          expect(text).not.toContain("line 249")
+          expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "large-diff.txt"), "utf8"))).toContain(
+            "line 249",
+          )
+        }),
+      editingConfig({ result_style: "diff" }),
+    ),
+  )
+
   it.live("registers and sequentially applies add, update, and delete hunks", () =>
     withTempDir((tmp) => {
       reset()

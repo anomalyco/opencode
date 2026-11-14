@@ -3,13 +3,14 @@ import { CodeModeCatalog } from "@opencode/core/codemode/catalog"
 import { Config } from "@opencode/core/config"
 import { Image } from "@opencode/core/image"
 import { Permission } from "@opencode/core/permission"
+import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { toSessionError } from "@opencode/core/session/to-session-error"
 import type { SessionError } from "@opencode/schema/session-error"
 import { Tool } from "@opencode/core/tool"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { LayerNode } from "@opencode/util/effect/layer-node"
-import { Effect, type Layer, type Scope } from "effect"
+import { Effect, Layer, type Scope } from "effect"
 import { host } from "../plugin/host"
 import { imagePassthrough } from "./image"
 import { permissionLayer } from "./permission"
@@ -18,6 +19,10 @@ export const toolIdentity = {
   agent: Agent.ID.make("build"),
   messageID: SessionMessage.ID.make("msg_tool_test"),
 }
+
+export const sessionStub = Layer.succeed(Session.Service, {
+  get: (sessionID: Session.ID) => Effect.succeed({ id: sessionID } as Session.Info),
+} as unknown as Session.Interface)
 
 /** Replacements for tests that build `Tool.node` without a Location. */
 export const toolNodeReplacements = (

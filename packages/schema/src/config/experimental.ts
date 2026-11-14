@@ -6,6 +6,66 @@ import { ConfigFlag } from "./flag.js"
 import { ConfigModel } from "./model.js"
 import { ConfigPolicy } from "./policy.js"
 
+const EditingTool = Schema.Literals(["patch", "edit", "write"])
+export type EditingTool = typeof EditingTool.Type
+
+const EditingResult = Schema.Literals(["summary", "counts", "diff"])
+export type EditingResult = typeof EditingResult.Type
+
+const EditingTools = EditingTool.pipe(Schema.Array)
+
+const EditingDeltaFields = {
+  add: EditingTools.pipe(optional).annotate({
+    description: "Editing tools to add to the model's built-in editing set",
+  }),
+  remove: EditingTools.pipe(optional).annotate({
+    description: "Editing tools to remove from the model's built-in editing set",
+  }),
+  result_style: EditingResult.pipe(optional).annotate({
+    description: "How patch results are reported to the model: file list, line counts, or the applied diff",
+  }),
+}
+
+const overlap = (value: { readonly add?: readonly EditingTool[]; readonly remove?: readonly EditingTool[] }) =>
+  (value.add ?? []).some((tool) => (value.remove ?? []).includes(tool))
+
+const Match = Schema.String.pipe(
+  // JavaScript has no separate regex validation, so compile once at decode time.
+  Schema.refine(
+    (value): value is typeof value => {
+      try {
+        new RegExp(value)
+        return true
+      } catch {
+        return false
+      }
+    },
+    { message: "match must be a valid regular expression" },
+  ),
+).annotate({ description: "Regular expression matched against providerID/modelID" })
+
+export const EditingRule = Schema.Struct({
+  match: Match,
+  ...EditingDeltaFields,
+}).pipe(
+  Schema.refine((value): value is typeof value => !overlap(value), {
+    message: "editing rule add and remove must not contain the same tool",
+  }),
+)
+export interface EditingRule extends Schema.Schema.Type<typeof EditingRule> {}
+
+export const Editing = Schema.Struct({
+  ...EditingDeltaFields,
+  rules: EditingRule.pipe(Schema.Array, optional).annotate({
+    description: "Ordered overrides. The last matching rule wins and replaces the top-level add/remove.",
+  }),
+}).pipe(
+  Schema.refine((value): value is typeof value => !overlap(value), {
+    message: "editing add and remove must not contain the same tool",
+  }),
+)
+export interface Editing extends Schema.Schema.Type<typeof Editing> {}
+
 export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   portable_shell_scanner: Schema.Boolean.pipe(optional).annotate({
     description: "Deprecated: the built-in shell permission scanner is now always enabled.",
@@ -56,6 +116,10 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
       description:
         "Settings for the experimental_image_generate tool, which is offered while a connected provider has an image model.",
     }),
+  editing: Editing.pipe(optional).annotate({
+    description:
+      "Adjust which editing tools (patch, edit, write) are offered per model. This does not remove any other tool.",
+  }),
   subagent_depth: NonNegativeInt.pipe(optional).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1.",
   }),

@@ -7,6 +7,7 @@ import { Agent } from "../agent.js"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { CodeModeInstructions } from "../codemode/instructions.js"
 import { CodeModeTool } from "../codemode/tool.js"
+import { Config } from "../config.js"
 import { Database } from "../database/database.js"
 import { FileAccess } from "../file-access.js"
 import { FileMutation } from "../file-mutation.js"
@@ -23,6 +24,7 @@ import { McpTool } from "../tool/mcp.js"
 import { ReferenceInstructions } from "../reference/instructions.js"
 import { SkillInstructions } from "../skill/instructions.js"
 import { Tool } from "../tool.js"
+import { configuredEditing } from "../tool/editing.js"
 import { modelTools } from "../tool/model-policy.js"
 import { WebSearch } from "../websearch.js"
 import { AgentNotFoundError } from "./error.js"
@@ -90,6 +92,7 @@ const layer = Layer.effect(
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
     const flags = yield* Flag.Service
+    const config = yield* Config.Service
     const location = yield* Location.Service
     const machineInstructions = yield* MachineInstructions.Service
     const mcpInstructions = yield* McpInstructions.Service
@@ -156,11 +159,12 @@ const layer = Layer.effect(
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
       // Session permissions narrow discovery the same way they narrow the tool snapshot.
       const permissions = Permission.merge(agent.info.permissions, session.permissions ?? [])
-      const [selected, hasWebSearch, fullCodeMode] = yield* Effect.all(
+      const [selected, hasWebSearch, fullCodeMode, editing] = yield* Effect.all(
         [
           models.select(session, model.available).pipe(Effect.orElseSucceed(() => undefined)),
           websearch.available(),
           flags.enabled("full_codemode"),
+          config.entries().pipe(Effect.map(configuredEditing)),
         ],
         { concurrency: "unbounded" },
       )
@@ -173,6 +177,7 @@ const layer = Layer.effect(
           model: policyModel,
           websearch: hasWebSearch,
           fullCodeMode: fullCodeMode && Tool.codeModeAvailable(permissions),
+          editing,
         }),
       })
       const loaded = yield* Effect.all(
@@ -250,6 +255,7 @@ export const node = makeLocationNode({
   deps: [
     Agent.node,
     Model.node,
+    Config.node,
     Database.node,
     FileAccess.node,
     FileMutation.node,

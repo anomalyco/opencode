@@ -20,7 +20,7 @@ import { PatchTool } from "@opencode/core/tool/plugin/patch"
 import { elsewhere } from "./fixture/target-environment"
 import { withTempDir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
+import { executeTool, registerToolPlugin, sessionStub, toolIdentity } from "./lib/tool"
 
 const patchToolNode = makeLocationNode({
   name: "test/patch-target-environment-plugin",
@@ -35,6 +35,7 @@ const patchToolNode = makeLocationNode({
     Permission.node,
     Config.node,
     Flag.node,
+    Session.node,
   ],
 })
 
@@ -70,6 +71,7 @@ const twoEnvironments = (directory: string) => {
         FileAccess.node.replace(access),
         Formatter.node.replace(Layer.mock(Formatter.Service, { file: () => Effect.succeed(false) })),
         Config.node.replace(Config.testLayer()),
+        Session.node.replace(sessionStub),
       ]),
     ),
   }

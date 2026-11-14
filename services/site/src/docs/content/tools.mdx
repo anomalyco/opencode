@@ -99,8 +99,10 @@ sections.
 Use patch to rename src/old.ts to src/new.ts and update its exported name.
 ```
 
-OpenCode exposes `patch` for supported GPT models; other models receive `edit`
-and `write` instead. Permission: `edit` with every affected path as a resource.
+By default OpenCode exposes `patch` for supported GPT models; other models
+receive `edit` and `write` instead. Configure
+[`experimental.editing`](/config#editing-tools) to add or remove the editing
+tools per model. Permission: `edit` with every affected path as a resource.
 
 Paths outside the active Location or its project worktree are also checked
 against `external_directory`, which is allowed by default. See
