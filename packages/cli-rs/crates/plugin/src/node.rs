@@ -203,6 +203,7 @@ impl Mount {
                     slot: &slot,
                     source: &source,
                     content: &|_| false,
+                    full: false,
                 };
                 // A tree of ABI 1.x has no ids and no keeps, so nothing in it can be refused.
                 if let Err(refused) = tree.apply(&env, &self.root, &[v2::Node::from(inner)]) {

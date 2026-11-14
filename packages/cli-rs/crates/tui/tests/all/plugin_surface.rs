@@ -43,6 +43,8 @@ struct Board {
     /// The surface reads the palette.
     palette: bool,
     palettes: Vec<String>,
+    /// The content handle each card shows, which the plugin releases when it builds the card again.
+    handles: Vec<Option<v2::ContentRef>>,
 }
 
 thread_local! {
@@ -81,11 +83,18 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
             cx.memo(format!("card-{index}"), *value, |cx| {
                 built += 1;
                 let patch = format!("@@ -1 +1 @@\n-item {index}\n+item {index} is {value}\n");
+                let handle = cx.content(patch);
+                if let Some(old) = board(|board| {
+                    board.handles.resize(ITEMS, None);
+                    board.handles[index].replace(handle)
+                }) {
+                    cx.release(old);
+                }
                 v2::Node::column(vec![
                     v2::Node::text(vec![abi::Span::new(format!("card {index}: {value}"))]).fg("text.muted"),
                     v2::Node::Diff {
                         id: None,
-                        content: v2::Source::Content(cx.content(patch)),
+                        content: v2::Source::Content(handle),
                         view: v2::DiffView::Unified,
                         filetype: None,
                     },
@@ -328,7 +337,9 @@ fn a_second_refusal_in_a_row_fails_the_plugin() {
     apply(&harness, Command::Bump(1));
     apply(&harness, Command::Wake);
     assert_eq!(board(|board| board.calls.len()), calls, "a failed plugin got a view");
-    assert_eq!(surface::ledger().content, 0);
+    // Nothing of the failed plugin's mount stays, and its route shows the host's screen for a missing route.
+    assert_eq!(surface::ledger(), Ledger::default());
+    assert!(!harness.app.render().text().contains("card 0"));
 }
 
 // Expected (`work`, a theme change): a surface that names its colors by token gets no call on a theme switch and its
@@ -650,4 +661,65 @@ fn a_surface_gets_the_room_it_is_given() {
     settle(&harness);
     let last = ROOM.with(|room| room.borrow().iter().rev().find(|(name, ..)| *name == "route").copied()).unwrap();
     assert!(last.1 == 70 && last.2 > 0 && last.2 <= 18, "after a resize the route's view was given {last:?}");
+}
+
+thread_local! {
+    /// What `test.retry`'s next view returns, and the handle of content a refused view gave.
+    static RETRY: std::cell::Cell<(u8, Option<v2::ContentRef>)> = const { std::cell::Cell::new((0, None)) };
+}
+
+/// A route that shows a kept body; command `retry.go` arms its next view with mode 1 or 2. Both give content and
+/// return a tree the host refuses; the whole tree asked for after that shows the refused view's content (1) or keeps
+/// the body the last accepted tree holds (2). Mode 3 memoizes, gives content and panics.
+fn retry(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.command(abi::Command { name: "retry.go".into(), ..abi::Command::default() }, |_, input| {
+        RETRY.set((input.and_then(|input| input.parse().ok()).unwrap_or(0), None));
+    });
+    setup.surface(v2::Surface::new("retry", v2::Place::Route("retry".into()), |cx| {
+        let body = v2::Node::text(vec![abi::Span::new("kept body")]).with_id("body");
+        match RETRY.get() {
+            (mode @ (1 | 2), None) => {
+                RETRY.set((mode, Some(cx.content("REFUSED BYTES"))));
+                v2::Node::column(vec![v2::Node::Keep { key: "missing".into() }])
+            }
+            (1, Some(refused)) => v2::Node::Markdown { id: None, source: v2::Source::Content(refused) },
+            (2, Some(_)) => v2::Node::column(vec![v2::Node::Keep { key: "body".into() }]),
+            (3, _) => {
+                cx.memo("memo", 1, |_| v2::Node::column(Vec::new()));
+                cx.content("PANIC BYTES");
+                panic!("the view panics");
+            }
+            _ => v2::Node::column(vec![body]),
+        }
+    }));
+    Ok(())
+}
+
+// Expected (`keep-full`, `no-effects`): the whole tree asked for after a refusal can neither show content the refused
+// view gave nor keep a subtree of the last accepted tree: either is a second refusal, which fails the plugin, and the
+// refused content is never shown. A view that panics fails the plugin, and of what it memoized and gave nothing stays.
+#[test]
+fn a_whole_tree_after_a_refusal_takes_nothing_from_before() {
+    for mode in [1, 2, 3] {
+        RETRY.set((0, None));
+        let deps = Deps {
+            route: Route::Home,
+            builtins: vec![abi::Plugin { id: "test.retry", setup: retry }.into()],
+            ..support::deps(Arc::new(support::empty()))
+        };
+        let harness = support::mount(80, 24, deps);
+        harness.tui.navigate(Route::Plugin { id: "test.retry".into(), name: "retry".into() });
+        harness.wait_for("kept body");
+        let _ = harness.tui.keymap.dispatch("retry.go", Some(&mode.to_string()));
+        settle(&harness);
+        let entry = harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "test.retry").unwrap();
+        assert!(
+            matches!(&entry.status, opencode_plugin::Status::Failed(error)
+                if error.contains(if mode == 3 { "panics" } else { "refused twice" })),
+            "mode {mode}: {:?}",
+            entry.status
+        );
+        assert!(!harness.app.render().text().contains("REFUSED BYTES"), "mode {mode}");
+        assert_eq!(surface::ledger(), Ledger::default(), "mode {mode}");
+    }
 }

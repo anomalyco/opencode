@@ -6,7 +6,7 @@
 //! A theme change restyles the widgets in place with no call, unless the surface reads the palette.
 
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -83,15 +83,29 @@ pub(crate) struct Surface {
     watch: RefCell<Option<Disposer>>,
 }
 
+/// What one call of the view returned and asked for; the host takes it only with its tree.
+struct Called {
+    nodes: Vec<Node>,
+    staged: Staged,
+    memo: v2::Memo,
+    /// The memo values the mount held before the call.
+    held: i64,
+}
+
+/// The content a view gave, which goes with its tree when the host refuses it.
+#[derive(Default)]
+struct Staged {
+    given: HashMap<ContentRef, Rc<[u8]>>,
+}
+
 #[derive(Default)]
 struct State {
     tree: Tree,
     memo: v2::Memo,
-    /// The content handles, each with the revision it was given in.
-    content: HashMap<ContentRef, (Rc<str>, u64)>,
+    /// The content the accepted views gave and did not release.
+    content: HashMap<ContentRef, Rc<[u8]>>,
     /// The last accepted tree, keeps as they came.
     last: Option<Vec<Node>>,
-    revision: u64,
     /// The last tree was refused, so the next view builds whole.
     refused: bool,
     palette: Option<(Theme, v2::Palette)>,
@@ -188,21 +202,32 @@ impl Surface {
                 let state = self.state.borrow();
                 state.last.is_none() || state.refused
             };
-            let Some(nodes) = self.call_view(host, &theme, full) else { return };
-            match self.adopt(host, &theme, nodes) {
+            let Some(called) = self.call_view(host, &theme, full) else {
+                self.wipe();
+                return;
+            };
+            let (mut memo, held) = (called.memo, called.held);
+            let result = self.adopt(host, &theme, called.nodes, &called.staged, full);
+            let mut state = self.state.borrow_mut();
+            match result {
                 Ok(()) => {
-                    self.state.borrow_mut().refused = false;
+                    if let Some(last) = &state.last {
+                        memo.finish(last);
+                    }
+                    book(|ledger| ledger.memo_entries += memo.len() as i64 - held);
+                    state.memo = memo;
+                    state.refused = false;
                     return;
                 }
                 Err(refused) => {
-                    // Nothing of the refused call stays: no tree names the content it gave, so the next adoption
-                    // releases it, and its memo values go.
-                    let mut state = self.state.borrow_mut();
-                    let cleared = state.memo.len() as i64;
-                    state.memo.clear();
-                    book(|ledger| ledger.memo_entries -= cleared);
+                    // Nothing of the refused call stays: the content it gave is dropped, its releases with it, and
+                    // the memo values go, as the next view builds whole.
+                    memo.clear();
+                    book(|ledger| ledger.memo_entries -= held);
+                    state.memo = memo;
                     if state.refused {
                         drop(state);
+                        self.wipe();
                         (self.fail)(format!("{} refused twice in a row: {refused}", self.id.surface));
                         return;
                     }
@@ -213,6 +238,20 @@ impl Surface {
         }
     }
 
+    /// Drops all the mount holds but itself: its plugin failed, so it shows nothing more.
+    fn wipe(&self) {
+        let mut state = self.state.borrow_mut();
+        state.tree.clear(&self.root);
+        state.last = None;
+        let (content, memo) = (std::mem::take(&mut state.content), state.memo.len() as i64);
+        state.memo.clear();
+        book(|ledger| {
+            ledger.content -= content.len() as i64;
+            ledger.content_bytes -= content.values().map(|bytes| bytes.len() as i64).sum::<i64>();
+            ledger.memo_entries -= memo;
+        });
+    }
+
     /// Takes the theme without a call: the last tree is adopted again in it. A surface that reads the palette
     /// gets a view instead.
     pub fn restyle(&self, host: &dyn Host) {
@@ -220,7 +259,7 @@ impl Surface {
         match last {
             Some(last) if !self.palette => {
                 let theme = host.theme();
-                if let Err(refused) = self.adopt(host, &theme, last) {
+                if let Err(refused) = self.adopt(host, &theme, last, &Staged::default(), false) {
                     log::error!("surface {}: its last tree again: {refused}", self.id.surface);
                 }
             }
@@ -228,8 +267,8 @@ impl Surface {
         }
     }
 
-    /// The view's tree; `None` when the call failed.
-    fn call_view(&self, host: &dyn Host, theme: &Theme, full: bool) -> Option<Vec<Node>> {
+    /// What the view returned and asked for; `None` when the call failed.
+    fn call_view(&self, host: &dyn Host, theme: &Theme, full: bool) -> Option<Called> {
         let palette = self.palette_of(host, theme);
         let rect = self.root.rect();
         // Before its first frame a surface has no size of its own; the terminal's stands in.
@@ -239,40 +278,52 @@ impl Surface {
         };
         self.seen.set((width, height));
         let input = v2::SurfaceInput { width, height, palette, full };
+        // The view works on the mount's table; what it stages there the host keeps only with its tree.
         let mut memo = std::mem::take(&mut self.state.borrow_mut().memo);
         let held = memo.len() as i64;
-        let revision = self.state.borrow().revision;
-        let mut given: Vec<(ContentRef, Rc<str>)> = Vec::new();
+        let mut staged = Staged::default();
         let mut node = None;
         let view = self.view.clone();
         let called = (self.call)(host, &mut |read| {
+            let given = RefCell::new(HashMap::new());
             let mut content = |bytes: Vec<u8>| {
                 let handle = ContentRef(CONTENT.fetch_add(1, Ordering::Relaxed));
-                given.push((handle, Rc::from(String::from_utf8_lossy(&bytes).as_ref())));
+                given.borrow_mut().insert(handle, Rc::from(bytes));
                 handle
             };
-            node = Some(view(&mut v2::View::new(read, &input, &self.id, &mut memo, &mut content)));
+            // A release is the plugin's word that it names the handle no more, so it holds also when the tree is
+            // refused: the plugin forgot the handle either way.
+            let mut release = |handle| {
+                if given.borrow_mut().remove(&handle).is_none()
+                    && let Some(bytes) = self.state.borrow_mut().content.remove(&handle)
+                {
+                    book(|ledger| {
+                        ledger.content -= 1;
+                        ledger.content_bytes -= bytes.len() as i64;
+                    });
+                }
+            };
+            node = Some(view(&mut v2::View::new(read, &input, &self.id, &mut memo, &mut content, &mut release)));
+            staged = Staged { given: given.take() };
         });
-        memo.finish();
-        let mut state = self.state.borrow_mut();
-        book(|ledger| ledger.memo_entries += memo.len() as i64 - held);
-        state.memo = memo;
         if !called {
+            self.state.borrow_mut().memo = memo;
             return None;
         }
-        for (handle, text) in given {
-            book(|ledger| {
-                ledger.content += 1;
-                ledger.content_bytes += text.len() as i64;
-            });
-            state.content.insert(handle, (text, revision + 1));
-        }
-        Some(vec![node?])
+        Some(Called { nodes: vec![node?], staged, memo, held })
     }
 
-    /// Adopts `nodes`, or refuses them and changes nothing.
-    fn adopt(&self, host: &dyn Host, theme: &Theme, mut nodes: Vec<Node>) -> Result<(), Refused> {
-        // A slot's root takes its node's layout, and the node fills the root (`node::Mount` does the same).
+    /// Adopts `nodes`, with the content `staged` gives, or refuses them and changes nothing.
+    fn adopt(
+        &self,
+        host: &dyn Host,
+        theme: &Theme,
+        mut nodes: Vec<Node>,
+        staged: &Staged,
+        full: bool,
+    ) -> Result<(), Refused> {
+        // A slot's root takes its node's layout, and the node fills the root (`node::Mount` does the same). The tree
+        // is kept as it came, so a later adoption of it takes the same.
         let mut taken = None;
         if !self.fills
             && let Some(Node::Box { layout, .. } | Node::Text { layout, .. } | Node::Scroll { layout, .. }) =
@@ -295,42 +346,38 @@ impl Surface {
             Some(mounted)
         };
         let mut state = self.state.borrow_mut();
-        let State { tree, content, last, revision, .. } = &mut *state;
+        let State { tree, content, last, .. } = &mut *state;
+        let bytes = |handle: &ContentRef| content.get(handle).or_else(|| staged.given.get(handle));
         let source = |source: &Source| match source {
             Source::Text(text) => Some(Rc::from(text.as_str())),
-            Source::Content(handle) => content.get(handle).map(|(text, _)| text.clone()),
+            Source::Content(handle) => bytes(handle).map(|bytes| Rc::from(String::from_utf8_lossy(bytes).as_ref())),
             Source::PartOutput(part) => part_output(host, part).map(|text| Rc::from(text.as_str())),
         };
-        let has = |handle: ContentRef| content.contains_key(&handle);
-        let env = Env { host, theme, act: &act, slot: &slot, source: &source, content: &has };
+        let has = |handle: ContentRef| bytes(&handle).is_some();
+        let env = Env { host, theme, act: &act, slot: &slot, source: &source, content: &has, full };
         tree.apply(&env, &self.root, &nodes)?;
         if !self.fills {
-            if let Some(taken) = taken.filter(|taken| self.layout.get() != Some(*taken)) {
-                crate::node::root_layout(&self.root, &taken);
-                self.layout.set(Some(taken));
+            if let Some(taken) = taken {
+                if self.layout.get() != Some(taken) {
+                    crate::node::root_layout(&self.root, &taken);
+                    self.layout.set(Some(taken));
+                }
+                if let Some(Node::Box { layout, .. } | Node::Text { layout, .. } | Node::Scroll { layout, .. }) =
+                    nodes.first_mut()
+                {
+                    *layout = taken;
+                }
             }
             self.root.visible(!tree.is_empty());
         }
-        *revision += 1;
         *last = Some(nodes);
-        // Content no tree of this mount names any more goes, once the revision it was given for is adopted.
-        let mut named = HashSet::new();
-        tree.each_source(&mut |source| {
-            if let Source::Content(handle) = source {
-                named.insert(*handle);
-            }
-        });
-        let revision = *revision;
-        content.retain(|handle, (text, given)| {
-            let keep = named.contains(handle) || *given > revision;
-            if !keep {
-                book(|ledger| {
-                    ledger.content -= 1;
-                    ledger.content_bytes -= text.len() as i64;
-                });
-            }
-            keep
-        });
+        for (handle, bytes) in &staged.given {
+            book(|ledger| {
+                ledger.content += 1;
+                ledger.content_bytes += bytes.len() as i64;
+            });
+            content.insert(*handle, bytes.clone());
+        }
         let slots_changed = tree.slots_changed();
         drop(state);
         let live = self.live.borrow().clone();
@@ -363,7 +410,7 @@ impl Surface {
 impl Drop for Surface {
     fn drop(&mut self) {
         let state = self.state.get_mut();
-        let bytes: usize = state.content.values().map(|(text, _)| text.len()).sum();
+        let bytes: usize = state.content.values().map(|bytes| bytes.len()).sum();
         let (content, memo) = (state.content.len() as i64, state.memo.len() as i64);
         book(|ledger| {
             ledger.mounts -= 1;
