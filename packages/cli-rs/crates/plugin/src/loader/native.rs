@@ -107,7 +107,7 @@ fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Resul
         let current = current.clone();
         move |setup: &mut Setup<'_>| {
             let host = Rc::downgrade(setup.host());
-            let (monitor, slot) = (setup.monitor.clone(), setup.monitor.slot(setup.id()));
+            let (monitor, slot) = (setup.monitor.clone(), setup.monitor.slot(&setup.artifact()));
             let (created, _) = monitor.call(slot, "setup", || {
                 Instance::create(&library, host.clone(), setup.id(), options.as_deref(), false)
             });
@@ -811,42 +811,41 @@ impl Guest {
             self.busy.set(false);
             timed
         };
-        crate::budget(&self.host, &self.id, &timed);
         let (effects, undo) = self.taken();
-        let error = match result {
-            Err(Some(error)) => format!("{export} {error}"),
-            Ok(_) | Err(None) if timed.overrun => {
-                self.apply(effects);
-                let limit = self.monitor.limits().overrun.as_millis();
-                let error = format!("{export} took {} ms, over the limit of {limit} ms", timed.took.as_millis());
-                fail(&self.host, &self.id, &self.failure, self.revoked.take(), &self.activation, error);
-                return None;
-            }
+        // Ok: the call returned, with a result or with an error it logged. A result the host refuses, or a panic,
+        // leaves no effect, and its storage writes go back; a refusal fails nothing, a panic fails the plugin.
+        let decoded: Result<Option<T>, Option<String>> = match result {
+            Ok(value) => serde_json::from_value(value).map(Some).map_err(|error| {
+                log::warn!("plugin {}: {export}: {error}", self.id);
+                None
+            }),
             // A call that returned a failure did return: its effects apply (rich plugins 4.14).
-            Err(None) => {
-                self.apply(effects);
-                return None;
-            }
-            Ok(value) => match serde_json::from_value(value) {
-                Ok(typed) => {
-                    self.apply(effects);
-                    return Some(typed);
-                }
-                // A result the host refuses leaves no effect, and its storage writes go back.
-                Err(error) => {
-                    log::warn!("plugin {}: {export}: {error}", self.id);
-                    if let Some(host) = self.host.upgrade() {
-                        undo.restore(&*host);
-                    }
-                    return None;
-                }
-            },
+            Err(None) => Ok(None),
+            Err(Some(error)) => Err(Some(format!("{export} {error}"))),
         };
-        if let Some(host) = self.host.upgrade() {
-            undo.restore(&*host);
+        let error = match &decoded {
+            Err(Some(error)) => Some(error.clone()),
+            _ if timed.overrun => {
+                let limit = self.monitor.limits().overrun.as_millis();
+                Some(format!("{export} took {} ms, over the limit of {limit} ms", timed.took.as_millis()))
+            }
+            _ => None,
+        };
+        // A late call did return: what it asked for happens, then the plugin fails, which revokes what it made.
+        match decoded {
+            Ok(_) => self.apply(effects),
+            Err(_) => {
+                if let Some(host) = self.host.upgrade() {
+                    undo.restore(&*host);
+                }
+            }
         }
-        fail(&self.host, &self.id, &self.failure, self.revoked.take(), &self.activation, error);
-        None
+        crate::budget(&self.host, &self.monitor, &self.id, &timed, error.is_some());
+        if let Some(error) = error {
+            fail(&self.host, &self.id, &self.failure, self.revoked.take(), &self.activation, error);
+            return None;
+        }
+        decoded.ok().flatten()
     }
 
     /// Sends a request to a handler, then, if it ran, invalidates the claims, whose state it may have changed.
@@ -867,11 +866,13 @@ impl Guest {
         apply(&self.host, self.id.clone(), Rc::downgrade(self), Some(self.generation), effects);
     }
 
-    /// Calls `send` unless the instance is destroyed or its activation ended, as a call that panicked after the one
-    /// that asked for it ends it: a fetch or a program in the foreground. Its reply goes to the instance as `request` on
-    /// the effect queue, unless the instance is destroyed by then.
+    /// Calls `send` unless the instance is destroyed, its activation ended or it failed, as a call that panicked or
+    /// overran after the one that asked for it fails it: a fetch or a program in the foreground. Its reply goes to the
+    /// instance as `request` on the effect queue, unless the instance is destroyed by then.
     fn send(guest: &Weak<Self>, host: &dyn Host, request: abi::RequestId, send: impl FnOnce(&dyn Host, crate::Reply)) {
-        let live = guest.upgrade().filter(|guest| guest.instance.borrow().is_some() && !guest.activation.disposed());
+        let live = guest.upgrade().filter(|guest| {
+            guest.instance.borrow().is_some() && !guest.activation.disposed() && guest.failure.borrow().is_none()
+        });
         let Some(live) = live else { return };
         let (guest, owner) = (guest.clone(), live.host.clone());
         send(

@@ -2232,6 +2232,9 @@ thread_local! {
     static RAW_MODE: Cell<u8> = const { Cell::new(0) };
     /// The statuses the host answered the raw render's requests with.
     static RAW_STATUSES: RefCell<Vec<i32>> = const { RefCell::new(Vec::new()) };
+    /// Each fence render takes 150 ms on [`RAW_NOW`], the clock a test gives the monitor.
+    static RAW_LATE: Cell<bool> = const { Cell::new(false) };
+    static RAW_NOW: Cell<Duration> = const { Cell::new(Duration::ZERO) };
 }
 
 /// A plugin written against the C ABI without the SDK: one 1.4 slot claim and one storage key.
@@ -2254,6 +2257,9 @@ unsafe extern "C" fn raw_call(_: *mut c_void, request: Bytes, out: *mut Owned) -
     let mode = RAW_MODE.get();
     // A 1.3 fence render, which may ask for effects: they apply with a result the host draws, not with one it refuses.
     if request.contains(r#""type":"fence""#) {
+        if RAW_LATE.get() {
+            RAW_NOW.set(RAW_NOW.get() + Duration::from_millis(150));
+        }
         let table = Table(RAW_HOST.get());
         table.call(r#"{"type":"toast","variant":"info","message":"from a fence"}"#);
         table.call(r#"{"type":"storage-set","key":"k","value":"{\"a\":1}"}"#);
@@ -2389,6 +2395,55 @@ fn a_refused_render_result_leaves_no_effects() {
     assert_eq!(outcome(1), (Vec::new(), None));
 }
 
+// Expected (bigboi): a late call's result is checked before its effects apply. A 1.3 fence render that overran and
+// returned a result the host refuses asks for nothing that happens, its storage write goes back, and the plugin fails
+// by the overrun; with a result the host draws, its effects apply, then it fails. The first render after setup is
+// exempt, so the fence renders twice.
+#[test]
+fn a_late_refused_result_leaves_no_effects() {
+    let outcome = |mode: u8| {
+        RAW_MODE.set(mode);
+        RAW_LATE.set(true);
+        let host = host();
+        let api = PluginApi {
+            size: size_of::<PluginApi>(),
+            major: ABI_MAJOR,
+            minor: 3,
+            requires_minor: 0,
+            create: Some(raw_create_1_3),
+            call: Some(raw_call),
+            destroy: None,
+            free: Some(abi::runtime::free),
+            describe: None,
+        };
+        let (definition, error) =
+            define(&dynamic(&host), Library::from_table(&api, HOST_MINOR).unwrap(), None).unwrap();
+        let registry = Registry::define(Vec::new(), []);
+        let base = std::time::Instant::now();
+        registry.monitor().set_clock(move || base + RAW_NOW.get());
+        registry.load(&dynamic(&host), definition.external("raw.so", error));
+        for _ in 0..2 {
+            host.toasts.borrow_mut().clear();
+            markdown(&host, &registry, "```raw\nx\n```\n");
+            host.app.advance(Duration::from_millis(1));
+        }
+        RAW_LATE.set(false);
+        // The fence's own toasts; the failure has its own.
+        let toasts: Vec<_> = host
+            .toasts
+            .borrow()
+            .iter()
+            .map(|toast| toast.message.clone())
+            .filter(|message| message.starts_with("from"))
+            .collect();
+        let status = registry.entries().into_iter().find(|entry| entry.id == "raw").unwrap().status;
+        let late = matches!(&status, Status::Failed(error) if error.starts_with("render-fence took 150 ms"));
+        (toasts, host.storage.borrow().get("plugin.raw.k").cloned(), late)
+    };
+    assert_eq!(outcome(0), (vec!["from a fence".to_owned()], Some("{\"a\":1}".to_owned()), true));
+    assert_eq!(outcome(1), (Vec::new(), None, true));
+}
+
 /// What the frozen 1.4 host saw: the type of each request it decoded, and `refused` for each it could not.
 static OLD_SEEN: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
@@ -2493,8 +2548,8 @@ fn late(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(command("late.run"), |host, _| {
         let seen = LATE_RECORD.with_borrow(|record| {
             let record = record.as_ref()?;
-            let (slot, kind, _) = record.running()?;
-            Some((record.named(slot)?, *crate::contain::record::KINDS.get(usize::from(kind))?))
+            let running = record.running()?;
+            Some((record.named(running.slot)?.id, *crate::contain::record::KINDS.get(usize::from(running.kind))?))
         });
         LATE_SEEN.set(seen);
         host.toast(abi::Toast::new(abi::Variant::Info, "late"));
@@ -2514,7 +2569,9 @@ fn an_overrun_applies_its_effects_then_fails_an_external_plugin_only() {
         let base = std::time::Instant::now();
         registry.monitor().set_clock(move || base + LATE_CLOCK.get());
         let dir = opencode_util::temp::tempdir().unwrap();
-        LATE_RECORD.set(Some(registry.monitor().attach_record(&dir.path().join("run")).unwrap()));
+        let record = Arc::new(crate::contain::Record::create(dir.path()).unwrap());
+        registry.monitor().attach(record.clone()).unwrap();
+        LATE_RECORD.set(Some(record));
         LATE_SEEN.set(None);
         match through {
             true => {
@@ -2544,5 +2601,67 @@ fn an_overrun_applies_its_effects_then_fails_an_external_plugin_only() {
         assert_eq!((toasts, status), expected, "through the C ABI: {through}");
         assert_eq!(LATE_SEEN.take(), Some(("late".to_owned(), "run-command")), "through the C ABI: {through}");
         LATE_RECORD.set(None);
+    }
+}
+
+/// A plugin that replaces `home.footer`, draws `rep` fences and has a route; `replacer.panic` panics.
+fn replacer(setup: &mut abi::Setup) -> Result<(), String> {
+    let command = abi::Command { name: "replacer.panic".into(), title: "panic".into(), ..abi::Command::default() };
+    setup.command(command, |_, _| panic!("replacer fault"));
+    setup.slot(abi::Placement::new(abi::SlotKind::Replace, "home.footer"), |_, _, _| {
+        abi::Render::Show(abi::Node::text([abi::Span::new("REPLACED")]))
+    });
+    setup.code_block("rep", |_, _| abi::Fenced::Lines {
+        lines: vec![vec![abi::Span::new("PLUGIN FENCE")]],
+        fg: None,
+        drag: false,
+    });
+    setup.route("page", |_, _| abi::Render::Show(abi::Node::text([abi::Span::new("PAGE")])));
+    Ok(())
+}
+
+// Expected (bigboi 10, carbon 5): a plugin that failed while it ran gives way as if the user had disabled it, on both
+// paths: its `Replace` claim no longer hides the host's content, its fences fall back to the code view, and its route
+// no longer mounts. Before the failure each of them wins.
+#[test]
+fn a_failed_plugin_gives_way_to_the_host() {
+    for through in [false, true] {
+        let host = host();
+        let registry = Rc::new(Registry::define(Vec::new(), []));
+        *host.registry.borrow_mut() = Rc::downgrade(&registry);
+        match through {
+            true => {
+                let loaded =
+                    loopback_described(&dynamic(&host), abi::export_plugin!(@loopback_described "replacer", replacer));
+                let (definition, error) = loaded.unwrap();
+                registry.load(&dynamic(&host), definition.external("replacer.so", error));
+            }
+            false => {
+                registry.add(abi::Plugin { id: "replacer", setup: replacer });
+                registry.activate(&dynamic(&host));
+            }
+        }
+        let footer = || {
+            let parent = View::new(host.app());
+            let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |parent| {
+                parent.add(&opentui::widget::Text::new(host.app(), "HOST"));
+            });
+            host.app().root().clear();
+            host.app().root().add(&parent);
+            host.app.render();
+            host.app.text()
+        };
+        let case = format!("through the C ABI: {through}");
+        let screen = footer();
+        assert!(screen.contains("REPLACED") && !screen.contains("HOST"), "{case}: {screen}");
+        assert!(markdown(&host, &registry, "```rep\nbody\n```\n").contains("PLUGIN FENCE"), "{case}");
+        assert!(registry.route(&*host, "replacer", "page").is_some(), "{case}");
+        host.keymap().dispatch("replacer.panic", None);
+        host.app.advance(Duration::from_millis(1));
+        let screen = footer();
+        assert!(screen.contains("HOST") && !screen.contains("REPLACED"), "{case}: {screen}");
+        let fence = markdown(&host, &registry, "```rep\nbody\n```\n");
+        assert!(!fence.contains("PLUGIN FENCE") && fence.contains("body"), "{case}: {fence}");
+        assert!(registry.route(&*host, "replacer", "page").is_none(), "{case}");
     }
 }

@@ -338,17 +338,31 @@ impl Loader {
                 (digest, bytes)
             }
         };
+        let build = format!("{digest:016x}");
+        // A held build is not opened at all: no initializer, no `describe`, nothing of it runs (synthesis 4.5).
+        let was_held = registry.held(name);
+        if !registry.admit(name, &build) {
+            if self.seen.borrow_mut().remove(name).is_some() {
+                registry.unload(host, name);
+                return true;
+            }
+            return !was_held;
+        }
         self.waiting.borrow_mut().remove(name);
         // Nothing the build names may come from the project, or leave its private copy (bigboi-3).
-        let loaded = deps::check(&bytes, target.project);
-        let loaded =
-            loaded.and_then(|()| self.backend.load(host, &bytes, target.options.as_deref())).and_then(|loaded| {
-                if !registry.id_taken(&loaded.0.id, name) {
-                    return Ok(loaded);
-                }
-                self.waiting.borrow_mut().insert(name.to_owned(), loaded.0.id.clone());
-                Err(format!("plugin ID {} is already registered", loaded.0.id))
-            });
+        let checked = deps::check(&bytes, target.project);
+        // Opening the library runs its code: the record names the build while it does, before its ID is known.
+        let slot = registry.monitor().slot(&crate::contain::Artifact::external("", name, &build));
+        let (loaded, _) = registry
+            .monitor()
+            .call(slot, "load", || checked.and_then(|()| self.backend.load(host, &bytes, target.options.as_deref())));
+        let loaded = loaded.and_then(|loaded| {
+            if !registry.id_taken(&loaded.0.id, name) {
+                return Ok(loaded);
+            }
+            self.waiting.borrow_mut().insert(name.to_owned(), loaded.0.id.clone());
+            Err(format!("plugin ID {} is already registered", loaded.0.id))
+        });
         let (definition, error) = match loaded {
             Ok(loaded) => loaded,
             Err(error) => return self.fail(&**host, registry, &listed, name, digest, error),
