@@ -64,7 +64,7 @@ export async function llmsText(locale: Locale) {
       `- ${link("Discord", config.social.discord)}: the community`,
       `- ${link("humans.txt", context.route("/humans.txt"))}: the team and contributors behind OpenCode, as plain text`,
       `- ${link("X", config.social.twitter)}: announcements`,
-      `- ${link("Status", "https://status.opencode.ai")}: service status`,
+      `- ${link("Status", "https://opencode.ai/status")}: service status`,
     ].join("\n"),
   )
 }
