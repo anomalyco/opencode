@@ -9,6 +9,7 @@
 //! the dialogs are surfaces, a layer, an overlay and host dialogs. One viewer shows at a time: its state lives from
 //! its mount's begin to its end.
 
+use opencode_api::generated::V2Event;
 use opencode_plugin::abi::interact::{Button, Event, Handled, OpenPanel, PointerKind};
 use opencode_plugin::abi::v2::{Place, ScrollEvent, Surface};
 use opencode_plugin::abi::{self, Command, Dialog, Host, RequestId};
@@ -47,13 +48,8 @@ const PREVIEW: &str = "opencode.diffs.preview";
 const PICK_SOURCE: &str = "opencode.diffs.pick_source";
 const PICK_BASE: &str = "opencode.diffs.pick_base";
 const QUERY_BASE: &str = "opencode.diffs.query_base";
-/// The events that end a turn or start one, after which the session's status is read again.
-const EXECUTION: [&str; 4] = [
-    "session.execution.started",
-    "session.execution.succeeded",
-    "session.execution.failed",
-    "session.execution.interrupted",
-];
+/// The events that end a turn, after which the last turn's diff loads again.
+const ENDED: [&str; 3] = ["session.execution.succeeded", "session.execution.failed", "session.execution.interrupted"];
 
 /// What a command of a click or a dialog does to the viewer on screen, with its input.
 type Clicked = fn(&Diffs, &dyn Host, &mut Viewer, Option<&str>);
@@ -130,11 +126,14 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         });
     }
     let observed = diffs.clone();
-    setup.on_event(&EXECUTION, move |host, _| {
-        observed.with_viewer(host, |viewer| {
-            viewer.observe(host, &observed);
-            true
-        })
+    setup.on_event(&ENDED, move |host, event| {
+        let session = match event {
+            V2Event::SessionExecutionSucceeded(event) => &event.data.session_id.0,
+            V2Event::SessionExecutionFailed(event) => &event.data.session_id.0,
+            V2Event::SessionExecutionInterrupted(event) => &event.data.session_id.0,
+            _ => return,
+        };
+        observed.with_viewer(host, |viewer| viewer.turn_ended(host, &observed, session));
     });
     let replied = diffs.clone();
     setup.on_reply(move |host, id, reply| replied.reply(host, id, reply));
@@ -272,7 +271,6 @@ impl Diffs {
         self.viewers.set(self.viewers.get() + 1);
         let mut viewer = Viewer::new(host, &self.memory.borrow(), self.viewers.get(), place);
         viewer.load(host, self);
-        viewer.observe(host, self);
         *self.viewer.borrow_mut() = Some(viewer);
     }
 

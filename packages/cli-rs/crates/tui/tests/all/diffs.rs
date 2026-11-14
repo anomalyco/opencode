@@ -107,6 +107,29 @@ impl Diffs {
             .count()
     }
 
+    /// A turn of `session` starts and ends within one turn of the UI: the store applies both before the UI hears of
+    /// the first, as on a loaded machine (`steps/flakes-8.md`).
+    fn short_turn(&self, session: &str) {
+        for (kind, status) in [
+            ("session.execution.started", SessionStatus::Running),
+            ("session.execution.succeeded", SessionStatus::Idle),
+        ] {
+            let turn = self.turns.get() + 1;
+            self.turns.set(turn);
+            self.memory.emit(&json!({
+                "id": format!("evt_{turn}"), "created": turn, "type": kind,
+                "durable": { "aggregateID": session, "seq": turn, "version": 1 },
+                "data": { "sessionID": session },
+            }));
+            let id = SessionID(session.into());
+            let started = std::time::Instant::now();
+            while self.tui.data.read(|state| state.status(&id)) != status {
+                assert!(started.elapsed() < support::WAIT, "{kind} did not set the status");
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        }
+    }
+
     /// A turn of `ses_a` starts and ends.
     fn turn(&self) {
         for (kind, status) in [
@@ -678,4 +701,28 @@ fn a_patch_line_wraps_inside_its_words() {
         .filter(|word| word.len() > 1 && word.chars().all(|char| ('a'..='j').contains(&char)))
         .collect();
     assert!(words.len() > 12 && words.iter().any(|word| *word != "abcdefghij"), "{screen}");
+}
+
+// Expected (TS's turn watch, `steps/flakes-8.md`): a turn that starts and ends before the UI hears of its start still
+// loads the last turn's diff again, on both carriers; another session's turn loads nothing.
+#[test]
+fn a_turn_too_short_to_see_running_loads_the_diff_again() {
+    for abi in [false, true] {
+        let diff = json!({
+            "file": "src/main.rs", "patch": "@@ -1 +1 @@\n-old\n+new\n", "additions": 1, "deletions": 1,
+            "status": "modified",
+        });
+        let h = mount_on(support::session_route("ses_a"), diff, 140, 30, abi);
+        h.wait_for("Review");
+        h.tui.keymap.dispatch("diff.open", None);
+        h.wait_for("src/main.rs");
+        let reads = h.diff_reads();
+        h.short_turn("ses_b");
+        h.settle();
+        h.app.advance(Duration::from_millis(50));
+        assert_eq!(h.diff_reads(), reads, "another session's turn loaded the diff (C ABI: {abi})");
+        h.short_turn("ses_a");
+        let loaded = h.app.wait_until(support::WAIT, || h.diff_reads() > reads);
+        assert!(loaded, "a short turn did not load the diff again (C ABI: {abi})");
+    }
 }
