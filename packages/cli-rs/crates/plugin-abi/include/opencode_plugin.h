@@ -250,15 +250,16 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   message, or null), 2.0 (P6b) "plugins", which answers [{"key", "id", "target"?, "origin": "builtin" | "added" |
  *   "configured" | "external", "status": "active" | "inactive" | "skipped" | "failed" | "pending" | "declined",
  *   "active"?, "slow"?}] and no error text, 2.0 (P6c) "setting" {"name"}, which answers the user's setting of that name
- *   (one of "diffs.source", "diffs.view", "diffs.fullscreen", "diffs.tree", "diffs.single") or null. Those that ask
- *   for something: "toast", "storage-set",
- *   "storage-merge", "open-route", "dispatch", "attention", "navigate", "fetch", "dialog", "copy", 1.5
+ *   (one of "diffs.source", "diffs.view", "diffs.fullscreen", "diffs.tree", "diffs.single") or null, and "image-size"
+ *   {"bytes": base64}, which answers [width, height] of the image the host decodes from them, or null. Those that ask
+ *   for something: "toast", "storage-set", "storage-merge", "open-route", "dispatch", "attention", "navigate", "fetch", "dialog", "copy", 1.5
  *   "composer-edit", 1.6 "set-variant", "set-model", "tab", "clear-selection", "foreground", "title", "set-theme",
  *   "install-theme", 2.0 (P3) "scroll" {"target", "verb"}, 2.0 (P2) "open-panel", "close-panel", "overlay",
  *   "close-overlay", "focus", "blur", "set-mode", "release-keys" (none of P2's during `create`, which has no input
  *   yet), 2.0 (P6c) "set-setting" {"name", "value"}. A "fetch" with "bytes" answers the body's bytes in base64 as a
  *   JSON string; a "dialog" may be {"type": "images", "images": [{"data": base64, "name"?}], "index"?}, a select may
- *   have "query", "query_delay", "filterless", "empty" and "note", and a panel "close" and "height". `crates/plugin-abi/schema/v2.json` has the types of P3's (Target, Scroll, ScrollState, AnchorAt, Geometry,
+ *   have "query", "query_delay", "filterless", "empty" and "note", and a panel "close" and "height".
+ *   `crates/plugin-abi/schema/v2.json` has the types of P3's (Target, Scroll, ScrollState, AnchorAt, Geometry,
  *   LayoutReply, ScrollEvent, TranscriptView). Effects wait until the plugin's call returns. A call that panics, or
  *   whose answer the host refuses (it cannot decode it, the tree breaks the contract, a handler answers anything but
  *   null), has none, and fails the plugin. A call that answers OPENCODE_ERROR keeps them (see above). A render of 1.4
