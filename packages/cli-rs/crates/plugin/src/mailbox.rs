@@ -135,10 +135,10 @@ impl Mailbox {
     /// that is not JSON, or a key that is not UTF-8, is [`abi::ERROR`].
     pub fn put_json(&self, key: &[u8], message: &[u8]) -> i32 {
         let Ok(key) = std::str::from_utf8(key) else { return abi::ERROR };
-        let key = (!key.is_empty()).then_some(key);
         {
             let state = self.state();
-            let waiting = key.is_some_and(|key| state.entries.iter().any(|(known, _)| known.as_deref() == Some(key)));
+            // No entry waits under the empty key: `put` takes it as no key.
+            let waiting = state.entries.iter().any(|(known, _)| known.as_deref() == Some(key));
             if state.closed || state.refusing {
                 return abi::CLOSED;
             }
@@ -151,7 +151,7 @@ impl Mailbox {
         if serde_json::from_str::<serde::de::IgnoredAny>(text).is_err() {
             return abi::ERROR;
         }
-        match self.put(key, Message::Json(text.to_owned())) {
+        match self.put(Some(key), Message::Json(text.to_owned())) {
             Ok(()) => abi::OK,
             Err((Refused::Full, _)) => abi::FULL,
             Err((Refused::Closed, _)) => abi::CLOSED,

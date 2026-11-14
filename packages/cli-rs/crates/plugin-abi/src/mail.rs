@@ -142,7 +142,7 @@ impl<M: Serialize + DeserializeOwned + Send + 'static> Sender<M> {
     /// the last one sent under a key, and nothing older after it. A new key in a full mailbox is `Full`. An empty `key`
     /// is no key: this is [`Sender::send`].
     pub fn replace(&self, key: &str, message: M) -> Result<(), SendError<M>> {
-        self.post(Some(key).filter(|key| !key.is_empty()), message)
+        self.post(Some(key), message)
     }
 
     fn post(&self, key: Option<&str>, message: M) -> Result<(), SendError<M>> {
