@@ -1928,23 +1928,13 @@ describe("ShellTool", () => {
     }),
   )
 
-  it.live("persists a silent command that finishes before backgrounding", () =>
+  it.live("reports a silent command that finishes before backgrounding as finished", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
         Effect.gen(function* () {
-          const bus = yield* Bus.Service
           const jobs = yield* Job.Service
           const shell = yield* Shell.Service
-          const persisted = yield* Deferred.make<readonly Job.Background[]>()
-          yield* bus.project(SessionEvent.InboxEnqueued, (event) =>
-            event.data.sessionID === sessionID && event.data.item.type === "synthetic"
-              ? jobs.pendingBackground.pipe(
-                  Effect.flatMap((background) => Deferred.succeed(persisted, background)),
-                  Effect.asVoid,
-                )
-              : Effect.void,
-          )
           const settled = yield* executeTool(registry, {
             ...call({ command: "exit 7", background: true }, "call-background-silent-nonzero"),
             // The command can finish while its initial progress update is being published.
@@ -1954,13 +1944,13 @@ describe("ShellTool", () => {
                 : Effect.void,
           })
 
-          expect(yield* Deferred.await(persisted)).toMatchObject([
-            {
-              id: settled.metadata?.shellID,
-              status: "completed",
-              output: "(no output)\n\nExit code: 7",
-            },
+          // The command settled before the move, so the call reports its own result and leaves nothing pending.
+          expect(settled.metadata).toMatchObject({ status: "completed", exit: 7 })
+          expect(settled.content).toEqual([
+            { type: "text", text: "(no output)" },
+            { type: "text", text: "Exit code: 7" },
           ])
+          expect(yield* jobs.pendingBackground).toEqual([])
         }),
       )
     }),

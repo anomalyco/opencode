@@ -1042,13 +1042,18 @@ describe("SessionRestart background recovery", () => {
       const sessionID = Session.ID.make("ses_background_image")
       yield* seedSessions(database, [sessionID])
       const recovery = (path: string) => ({ kind: "image" as const, sessionID, path, model: "test/painter" })
+      const released = yield* Deferred.make<void>()
       yield* jobs.start({
         id: "image_done",
         type: "experimental_image_generate",
         recovery: recovery("/tmp/done.png"),
-        run: Effect.succeed("Image request finished. Saved image: /tmp/done.png (test/painter)."),
+        run: Deferred.await(released).pipe(
+          Effect.as("Image request finished. Saved image: /tmp/done.png (test/painter)."),
+        ),
       })
+      // Backgrounded while running, then finished: the completion notice is what a restart recovers.
       yield* jobs.background("image_done")
+      yield* Deferred.succeed(released, undefined)
       yield* jobs.wait({ id: "image_done" })
       yield* jobs.start({
         id: "image_running",
@@ -1611,6 +1616,7 @@ describe("SessionRestart background recovery", () => {
       yield* seedSessions(database, [parent])
       yield* seedSessions(database, [child], { parent_id: parent })
       yield* seedSessions(database, [healthy], { time_suspended: Date.now() })
+      const released = yield* Deferred.make<void>()
       yield* jobs.start({
         id: child,
         type: "subagent",
@@ -1621,10 +1627,12 @@ describe("SessionRestart background recovery", () => {
           agent: "explore",
           description: "Completed inspection",
         },
-        run: Effect.succeed("Recovered result"),
+        run: Deferred.await(released).pipe(Effect.as("Recovered result")),
       })
-      yield* jobs.wait({ id: child })
+      // Backgrounded while running, then finished: that completion marker is what a restart recovers.
       yield* jobs.background(child)
+      yield* Deferred.succeed(released, undefined)
+      yield* jobs.wait({ id: child })
       const marker = (yield* jobs.pendingBackground)[0]
       if (!marker) return yield* Effect.die("background record missing")
       yield* admission.admit({
