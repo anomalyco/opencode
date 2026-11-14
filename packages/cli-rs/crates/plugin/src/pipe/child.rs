@@ -126,8 +126,9 @@ struct Shared {
     watch: Condvar,
     /// The last acknowledged sequence.
     acked: AtomicU64,
-    /// Bytes read from the child.
+    /// Bytes read from the child, and of them in trees.
     read: AtomicU64,
+    read_trees: AtomicU64,
     closed: AtomicBool,
     /// A wake waits for the UI thread.
     pending: AtomicBool,
@@ -175,6 +176,7 @@ impl Child {
             watch: Condvar::new(),
             acked: AtomicU64::new(0),
             read: AtomicU64::new(0),
+            read_trees: AtomicU64::new(0),
             closed: AtomicBool::new(false),
             pending: AtomicBool::new(false),
             wake: Box::new(wake),
@@ -242,9 +244,9 @@ impl Child {
         events
     }
 
-    /// The bytes read from the child so far.
-    pub fn read(&self) -> u64 {
-        self.shared.read.load(Ordering::Relaxed)
+    /// The bytes read from the child so far, and of them in trees.
+    pub fn read(&self) -> (u64, u64) {
+        (self.shared.read.load(Ordering::Relaxed), self.shared.read_trees.load(Ordering::Relaxed))
     }
 
     /// The last acknowledged sequence.
@@ -433,6 +435,9 @@ fn read(shared: &Shared, stdout: ChildStdout) {
         };
         let len = payload.len();
         shared.read.fetch_add(len as u64 + 5, Ordering::Relaxed);
+        if kind == wire::TREE {
+            shared.read_trees.fetch_add(len as u64 + 5, Ordering::Relaxed);
+        }
         let event = match kind {
             wire::TREE => serde_json::from_slice::<Revision>(&payload).map(|tree| Event::Tree(Box::new(tree))),
             _ => serde_json::from_slice::<Up>(&payload).map(|up| Event::Up(Box::new(up))),
@@ -602,5 +607,137 @@ fn resident(shared: &Shared) -> Option<u64> {
     {
         let _ = shared;
         None
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use crate::pipe::proto::Up;
+
+    /// A child that writes `frames` to its output and then waits for its input to end, as the JS host does.
+    fn fake(frames: &[u8], limits: Limits) -> (Child, opencode_util::temp::TempDir) {
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let file = dir.path().join("frames");
+        std::fs::write(&file, frames).unwrap();
+        let mut command = Command::new("sh");
+        command.arg("-c").arg(format!("cat '{}'; cat > /dev/null", file.display()));
+        (Child::spawn(command, limits, || {}).unwrap(), dir)
+    }
+
+    fn control(up: &Up) -> Vec<u8> {
+        wire::encode(wire::CONTROL, &serde_json::to_vec(up).unwrap())
+    }
+
+    fn hello() -> Vec<u8> {
+        control(&Up::Hello { magic: MAGIC.to_owned(), version: VERSION, pid: 0 })
+    }
+
+    fn tree(rev: u64) -> Vec<u8> {
+        let tree = serde_json::json!({
+            "id": "p", "mount": { "surface": "s", "key": "k", "generation": 1 }, "rev": rev, "base": 0, "epoch": 0,
+            "node": { "type": "text", "spans": [] },
+        });
+        wire::encode(wire::TREE, &serde_json::to_vec(&tree).unwrap())
+    }
+
+    /// Takes events until `done` says so, or two seconds pass; all it took.
+    fn take_until(child: &Child, done: impl Fn(&[Event]) -> bool) -> Vec<Event> {
+        let (mut events, begun) = (Vec::new(), Instant::now());
+        while !done(&events) && begun.elapsed() < Duration::from_secs(2) {
+            events.extend(child.take());
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        events
+    }
+
+    fn gone(events: &[Event]) -> Option<&str> {
+        events.iter().find_map(|event| match event {
+            Event::Gone(why, _) => Some(why.as_str()),
+            _ => None,
+        })
+    }
+
+    // Expected (review F4): a child whose first message is not the protocol's hello is refused, before anything of it
+    // reaches the host.
+    #[test]
+    fn a_child_that_does_not_say_hello_is_refused() {
+        let mut frames = control(&Up::Pong { seq: 1, waiting: false });
+        frames.extend(hello());
+        let (child, _dir) = fake(&frames, Limits::default());
+        let events = take_until(&child, |events| gone(events).is_some());
+        assert!(gone(&events).is_some_and(|why| why.contains("hello")), "{events:?}");
+        assert_eq!(events.len(), 1, "{events:?}");
+    }
+
+    // Expected (the bound on ordered messages): the bound's worth of messages the host has not taken is held; one more
+    // ends the stream, naming the plugin whose effects were most of them.
+    #[test]
+    fn ordered_messages_past_the_bound_end_the_stream() {
+        let limits = Limits { ordered: 8, ..Limits::default() };
+        let effects = |id: &str| control(&Up::Effects { id: id.to_owned(), seq: 1, effects: Vec::new() });
+        // With the hello and the quiet one: 8 messages, then 9.
+        for (count, ends) in [(6, false), (7, true)] {
+            let mut frames = hello();
+            frames.extend(effects("quiet"));
+            (0..count).for_each(|_| frames.extend(effects("loud")));
+            let (child, _dir) = fake(&frames, limits);
+            std::thread::sleep(Duration::from_millis(300));
+            let events = child.take();
+            let why = events.iter().find_map(|event| match event {
+                Event::Gone(why, plugin) => Some((why.clone(), plugin.clone())),
+                _ => None,
+            });
+            match ends {
+                false => assert!(why.is_none(), "{count}: {events:?}"),
+                true => assert_eq!(why.map(|(_, plugin)| plugin), Some(Some("loud".to_owned())), "{count}"),
+            }
+        }
+    }
+
+    // Expected (the flood of trees, S2): past the bound of trees the host has not taken, the reader stops reading, so
+    // no more are held; once the host takes them, the rest come, every one.
+    #[test]
+    fn unread_trees_hold_the_reader_back() {
+        let limits = Limits { trees: 4, ..Limits::default() };
+        let mut frames = hello();
+        (1..=20).for_each(|rev| frames.extend(tree(rev)));
+        let (child, _dir) = fake(&frames, limits);
+        std::thread::sleep(Duration::from_millis(300));
+        let first = child.take();
+        let trees = |events: &[Event]| events.iter().filter(|event| matches!(event, Event::Tree(_))).count();
+        assert_eq!(trees(&first), 4, "{first:?}");
+        let rest = take_until(&child, |events| trees(events) >= 16);
+        assert_eq!(trees(&rest), 16);
+    }
+
+    // Expected (4.3, review F9): an acknowledgement is not progress: an event that waits for its answer is late at the
+    // limit though it was acknowledged; one that waits only for its acknowledgement is not.
+    #[test]
+    fn an_acknowledged_handler_that_never_answers_is_late() {
+        let limits = Limits { ack: Duration::from_millis(100), ..Limits::default() };
+        for (wait, late) in [(Wait::Ack, false), (Wait::Answer, true)] {
+            let mut frames = hello();
+            frames.extend(control(&Up::Ack { seq: 1 }));
+            let (child, _dir) = fake(&frames, limits);
+            child.send(wire::CONTROL, b"{}", Some(1), wait).unwrap();
+            let events = take_until(&child, |events| events.iter().any(|event| matches!(event, Event::Hung { .. })));
+            let hung = events.iter().any(|event| matches!(event, Event::Hung { seq: 1 }));
+            assert_eq!(hung, late, "{wait:?}: {events:?}");
+        }
+    }
+
+    // Expected: a send past the bytes the queue holds is refused at once; the child is not waited for.
+    #[test]
+    fn a_full_queue_refuses() {
+        let limits = Limits { queued: 64, ..Limits::default() };
+        let mut command = Command::new("sh");
+        // A child that never reads its input.
+        command.arg("-c").arg("sleep 5");
+        let child = Child::spawn(command, limits, || {}).unwrap();
+        let payload = vec![b' '; 40];
+        let sends: Vec<bool> = (0..200).map(|_| child.send(wire::CONTROL, &payload, None, Wait::Ack).is_ok()).collect();
+        assert!(sends.iter().any(|sent| !sent), "the queue never filled");
+        child.kill();
     }
 }

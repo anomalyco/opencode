@@ -763,3 +763,41 @@ fn scroll_verbs_reads_and_events_cross_the_pipe() {
     let after: i32 = text.lines().find_map(|line| line.trim().strip_prefix("offset ")).unwrap().trim().parse().unwrap();
     assert!(after < offset, "the wheel's offset did not reach the plugin:\n{text}");
 }
+
+// Expected (`work` in bytes over the pipe): a revision that changes one card crosses that card and keeps the others, so
+// its bytes are a fraction of the whole tree's; one that changes nothing crosses no tree; a theme change crosses
+// nothing to the plugin.
+#[test]
+fn a_revision_crosses_bytes_that_follow_the_change() {
+    let Some(config) = config() else { return };
+    let pipe = open(&[("twin", None)], config, (80, 30));
+    pipe.active(twin::ID);
+    let tui = &pipe.harness.tui;
+    let before = pipe::crossed();
+    tui.navigate(Route::Plugin { id: twin::ID.to_owned(), name: "twin".to_owned() });
+    pipe.settle();
+    let opened = pipe::crossed();
+    let whole = opened.tree_bytes - before.tree_bytes;
+    assert_eq!(opened.trees - before.trees, 1, "one tree opens the route");
+    tui.keymap.dispatch("twin.bump", Some("1"));
+    pipe.settle();
+    let bumped = pipe::crossed();
+    let one = bumped.tree_bytes - opened.tree_bytes;
+    assert_eq!(bumped.trees - opened.trees, 1);
+    assert!(one * 2 < whole, "a one-card revision crossed {one} bytes of a {whole}-byte tree");
+    // The next view keeps the card the bump built, as memo does on every carrier; the one after crosses nothing.
+    tui.keymap.dispatch("twin.toast", None);
+    pipe.settle();
+    let kept = pipe::crossed();
+    assert_eq!(kept.trees - bumped.trees, 1);
+    tui.keymap.dispatch("twin.toast", None);
+    pipe.settle();
+    assert_eq!(pipe::crossed().trees, kept.trees, "a call that changed nothing crossed a tree");
+    let quiet = pipe::crossed();
+    tui.theme.borrow_mut().set("tokyonight");
+    tui.theme_changed();
+    pipe.settle();
+    let themed = pipe::crossed();
+    // The settle's own ping and pong cross; nothing else does.
+    assert_eq!((themed.sent - quiet.sent, themed.trees - quiet.trees), (1, 0), "a theme change crossed to the plugin");
+}
