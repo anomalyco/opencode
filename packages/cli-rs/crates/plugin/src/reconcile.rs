@@ -610,35 +610,32 @@ impl Tree {
 
     /// The widget of the node with id `id`, kept subtrees included.
     pub fn widget(&self, id: &str) -> Option<AnyWidget> {
-        fn find(nodes: &[Mounted], id: &str) -> Option<AnyWidget> {
-            nodes.iter().find_map(|node| match node.node.id() == Some(id) {
-                true => node.widget.clone(),
-                false => find(&node.children, id),
-            })
-        }
-        find(&self.nodes, id)
-    }
-
-    /// Of the nodes whose widgets are on `path`, widget ids from the nearest, the id of the nearest, kept subtrees
-    /// included: one walk, where [`Self::widget`] for each id would be one walk an id.
-    pub fn nearest(&self, path: &[u32]) -> Option<String> {
-        fn walk<'a>(nodes: &'a [Mounted], path: &[u32], best: &mut Option<(usize, &'a str)>) {
-            for node in nodes {
-                if let (Some(id), Some(widget)) = (node.node.id(), &node.widget)
-                    && let Some(at) = path.iter().position(|step| *step == widget.id())
-                    && best.is_none_or(|(nearest, _)| at < nearest)
-                {
-                    *best = Some((at, id));
-                }
-                walk(&node.children, path, best);
+        let mut found = None;
+        each(&self.nodes, &mut |node| {
+            if found.is_none() && node.node.id() == Some(id) {
+                found = Some(node.widget.clone());
             }
-        }
-        let mut best = None;
-        walk(&self.nodes, path, &mut best);
-        best.map(|(_, id)| id.to_owned())
+        });
+        found.flatten()
     }
 
-    /// The ids of the boxes that can take the focus: none in a hidden box, which OpenTUI focuses not (review carbon-5).
+    /// Of the nodes whose widgets are on `path`, widget ids from the nearest, the id of the nearest, kept subtrees and
+    /// the mounted items of lists included: one walk, where [`Self::widget`] for each id would be one walk an id.
+    pub fn nearest(&self, path: &[u32]) -> Option<String> {
+        let mut best: Option<(usize, String)> = None;
+        each(&self.nodes, &mut |node| {
+            if let (Some(id), Some(widget)) = (node.node.id(), &node.widget)
+                && let Some(at) = path.iter().position(|step| *step == widget.id())
+                && best.as_ref().is_none_or(|(nearest, _)| at < *nearest)
+            {
+                best = Some((at, id.to_owned()));
+            }
+        });
+        best.map(|(_, id)| id)
+    }
+
+    /// The ids of the boxes that can take the focus, in the mounted items of lists too: none in a hidden box, which
+    /// OpenTUI focuses not (review carbon-5).
     pub fn focusable(&self) -> Vec<String> {
         fn walk(nodes: &[Mounted], out: &mut Vec<String>) {
             for node in nodes.iter().filter(|node| !node.node.is_hidden()) {
@@ -646,6 +643,11 @@ impl Tree {
                     && interact.focusable
                 {
                     out.push(id.clone());
+                }
+                if let Extra::List(list) = &node.extra {
+                    list.items.iter().filter_map(|item| item.mounted.as_ref()).for_each(|mounted| {
+                        walk(&mounted.tree.nodes, out);
+                    });
                 }
                 walk(&node.children, out);
             }

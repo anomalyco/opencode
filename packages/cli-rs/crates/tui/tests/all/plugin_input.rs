@@ -72,6 +72,8 @@ pub struct Probe {
     pub a_bg: Option<&'static str>,
     /// Node `a` is in a hidden box.
     pub a_in_hidden: bool,
+    /// Node `a` is the item of a list.
+    pub a_in_list: bool,
     /// Each view of the panel: how it showed, and its mount's generation.
     pub panels: Vec<(Option<input::PanelInput>, u64)>,
     /// The panel's handler panics, which fails the plugin.
@@ -624,6 +626,10 @@ fn side(cx: &mut v2::View<'_>) -> v2::Node {
     };
     let a = match probe(|probe| probe.a_in_hidden) {
         true => v2::Node::column(vec![a]).with_id("ah").visible(false),
+        false => a,
+    };
+    let a = match probe(|probe| probe.a_in_list) {
+        true => v2::Node::list(vec![v2::ListItem::new(a, 1)]).with_id("al"),
         false => a,
     };
     let a = match probe(|probe| probe.click_a) {
@@ -2111,4 +2117,31 @@ fn a_hold_goes_with_its_owner() {
     harness.app.type_text("q");
     settle(&harness);
     assert_eq!(composer(&harness), "q");
+}
+
+// Expected (carbon's review of P6c, 3): a node in a list's item is the plugin's as any other: it takes the focus, the
+// focus names it, its rect reads, and a drag from it is captured and dropped as itself.
+#[test]
+fn a_node_in_a_list_item_is_found() {
+    let harness = open_with(|probe| {
+        probe.a_in_list = true;
+        probe.strip = true;
+    });
+    run(&harness, "input.panel", None);
+    run(&harness, "input.focus", Some("a"));
+    taken();
+    run(&harness, "input.where", Some("a"));
+    let log = taken();
+    assert!(log.iter().any(|line| line.starts_with("where Some(") && line.contains("node: Some(\"a\")")), "{log:?}");
+    let screen = harness.app.text();
+    let (x, y) = support::at(&screen, "AAAA").unwrap();
+    let (sx, sy) = support::at(&screen, "STRIP").unwrap();
+    harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), x + 1, y + 3);
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), sx + 1, sy);
+    harness.app.mouse(MouseEventKind::Up(MouseButton::Left), sx + 1, sy);
+    settle(&harness);
+    let log = taken();
+    assert!(log.iter().any(|line| line.starts_with("side: Drag a")), "{log:?}");
+    assert!(log.contains(&"strip: Drop s 1,0 from side/a [-]".to_owned()), "{log:?}");
 }
