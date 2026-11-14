@@ -260,7 +260,8 @@ impl Guest {
         let mut loads = scripts.loads.borrow_mut();
         if let Some(load) = loads.get_mut(&self.loaded.target) {
             // What the activation watches it keeps watching.
-            let watches = self.watches.borrow().iter().map(|(key, (request, _))| (key.clone(), request.clone())).collect();
+            let watches =
+                self.watches.borrow().iter().map(|(key, (request, _))| (key.clone(), request.clone())).collect();
             let loaded = Loaded {
                 id: self.loaded.id.clone(),
                 target: self.loaded.target.clone(),
