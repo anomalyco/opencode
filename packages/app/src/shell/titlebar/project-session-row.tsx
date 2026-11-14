@@ -38,6 +38,8 @@ export function ProjectSessionRow(props: {
   active: boolean
   /** A faint trailing label, such as the server a session belongs to. */
   label?: string
+  /** A small colored worktree badge, when the project has worktrees. */
+  worktree?: { label: string; color: string }
   /** Extra nesting steps of 14px, for subagent sessions and nested groups. */
   depth?: number
   /** Shows the project avatar in the leading slot, where no project header names it. */
@@ -156,6 +158,18 @@ export function ProjectSessionRow(props: {
         <span class="min-w-0 flex-1 truncate" dir="auto">
           {sessionLabel(props.session)}
         </span>
+        <Show when={props.worktree}>
+          {(worktree) => (
+            <span
+              title={worktree().label}
+              class="inline-flex max-w-[40%] shrink-0 items-center gap-1 rounded-full px-1.5 text-[10px] leading-[15px] font-medium text-v2-text-text-muted"
+              style={{ "background-color": `color-mix(in srgb, ${worktree().color} 16%, transparent)` }}
+            >
+              <span class="size-1.5 shrink-0 rounded-full" style={{ "background-color": worktree().color }} />
+              <span class="truncate">{worktree().label}</span>
+            </span>
+          )}
+        </Show>
         <Show when={props.label}>
           {(label) => (
             <span class="max-w-[40%] shrink-0 truncate text-[11px] leading-[var(--line-height-compact)] text-v2-text-text-faint [font-weight:400]">
