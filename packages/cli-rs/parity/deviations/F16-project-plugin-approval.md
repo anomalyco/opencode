@@ -23,10 +23,12 @@ A TypeScript plugin found there waits the same way when the JS host runs it (`OP
 one decision point holds it back before anything of it reaches the JS host, which does not start for it. Its toast and
 question say "This project wants to run TypeScript code in opencode's JS host" and show the module directory and the
 SHA-256 of its files. Its artifact is the real path of the directory and a hash of what it holds: each file's path and
-bytes, and `node_modules` by each entry's path, size, time and link target; hidden entries do not count. A save that
-changes nothing keeps the approval; a changed file, a moved one or a reinstalled dependency asks again and stops the
-running plugin (its cleanup runs). The JS host reads the files itself, so a change between the hash and the import is
-caught by the next reconcile, the watcher's, which holds the new files back.
+bytes, hidden ones and those in `node_modules` included, links followed as Bun follows them. A save that changes
+nothing keeps the approval; a changed file, a moved one or a reinstalled dependency asks again and stops the running
+plugin (its cleanup runs). The JS host reads the files itself, so a change between the hash and the import is caught by
+the next reconcile, the watcher's (it watches the plugin's subdirectories too), which holds the new files back. A file
+outside the directory that the plugin imports (`../shared.ts`) is not part of the approval: the approved code chose to
+import it. Safe mode holds a TypeScript plugin as it holds a library.
 
 A decision names the artifact: the plugin directory, the real path of the library, and the SHA-256 of the bytes that
 are loaded. It is kept in `plugin-approvals.json` in the client's state directory, so it lasts across clients, and a
