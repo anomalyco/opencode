@@ -120,12 +120,9 @@ impl Activation {
         self.host.upgrade().map(|host| crate::schedule::key(host.app()))
     }
 
-    /// The frame budget and the clock its updates are scheduled by.
-    pub(crate) fn budget(&self) -> (crate::contain::Limits, Rc<dyn Fn() -> std::time::Instant>) {
-        match self.monitor.borrow().clone() {
-            Some((monitor, _)) => (monitor.limits(), Rc::new(move || monitor.now())),
-            None => crate::schedule::default_budget(),
-        }
+    /// The frame budget its updates are scheduled by.
+    pub(crate) fn limits(&self) -> crate::contain::Limits {
+        self.monitor.borrow().as_ref().map_or_else(crate::contain::Limits::default, |(monitor, _)| monitor.limits())
     }
 
     /// Sets what a delivered message runs, and what a thread's panic report runs.
@@ -145,6 +142,8 @@ impl Activation {
     pub fn dispose(&self) {
         self.disposed.set(true);
         self.wake.revoked.store(true, Ordering::Release);
+        // An ended activation keeps no wake posted.
+        self.wake.consume();
         self.mailbox.retire();
         // The wake and mail handlers hold what holds the activation.
         self.on_wake.borrow_mut().take();
@@ -185,21 +184,26 @@ impl Activation {
     /// a thread's panic report; then, for an [`abi::Waker`]'s wake, runs the plugin's wake handlers, or renders the
     /// claims again ([`Activation::step`], [`crate::schedule`]).
     ///
-    /// The wake is consumed first, in one step: a send or a wake from now on posts another, so none is lost between
-    /// what this one sees and what it handles.
     fn woken(self: &Rc<Self>) {
-        let hinted = self.wake.consume();
-        between(0);
         if self.disposed() {
             return;
-        }
-        // The first wake not handled yet keeps its place.
-        if hinted && self.hinted.get().is_none() {
-            self.hinted.set(Some(self.mailbox.placed()));
         }
         let Some(host) = self.host.upgrade() else { return };
         crate::schedule::ready(self);
         crate::schedule::arm(host.app());
+    }
+
+    /// The scheduler's drain takes the wake, as the plugin's first turn in it starts: until then the wake stays
+    /// posted, so a thread's sends and replaces post no other and wake the UI thread once a drain at most (review
+    /// carbon 4.2). A send or a wake from now on posts another, so none is lost between what this one sees and what it
+    /// handles.
+    pub(crate) fn take_wake(&self) {
+        let hinted = self.wake.consume();
+        between(0);
+        // The first wake not handled yet keeps its place.
+        if hinted && self.hinted.get().is_none() {
+            self.hinted.set(Some(self.mailbox.placed()));
+        }
     }
 
     /// One update of the scheduler's turn: the next message to the message handler; once none waits, a thread's panic
@@ -374,9 +378,12 @@ impl Wake {
 
     /// The UI thread handles a [`Woken`]: the state goes back to nothing in one step; whether the waker was among it.
     fn consume(&self) -> bool {
+        let state = self.state.swap(0, Ordering::AcqRel);
         #[cfg(test)]
-        self.handled.fetch_add(1, Ordering::SeqCst);
-        self.state.swap(0, Ordering::AcqRel) & HINTED != 0
+        if state & PENDING != 0 {
+            self.handled.fetch_add(1, Ordering::SeqCst);
+        }
+        state & HINTED != 0
     }
 
     /// Sets `bits`, and posts a [`Woken`] when none waits. Catches its own panics.

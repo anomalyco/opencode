@@ -13,12 +13,10 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::{Rc, Weak};
-use std::time::Duration;
 
 use opentui::prelude::*;
 
 use crate::activation::{Activation, Step};
-use crate::contain;
 
 thread_local! {
     static QUEUE: RefCell<Queue> = RefCell::default();
@@ -28,10 +26,6 @@ thread_local! {
 struct Queue {
     /// The activations with work, in turn order.
     ready: Vec<Weak<Activation>>,
-    /// What each activation's updates took in a frame of its app, also once it went idle, so mail that comes later
-    /// in the frame finds the budget spent: by its ID, which no other activation gets, the frame, the updates and
-    /// their time.
-    spent: HashMap<u64, (Weak<Activation>, u64, u32, Duration)>,
     /// The apps a drain is asked for, by [`key`]: alive while the drain's animation holds its token, which it drops
     /// as it starts, and which goes with an app dropped before its paint, whose address another app may get.
     armed: HashMap<usize, Weak<()>>,
@@ -45,6 +39,8 @@ pub struct Work {
     pub deferred: u64,
     pub armed: u64,
     pub drains: u64,
+    /// Wakes that reached the UI thread.
+    pub wakes: u64,
 }
 
 thread_local! {
@@ -73,6 +69,7 @@ pub fn busy(app: &App) -> bool {
 
 /// `activation` has work: its mailbox has messages, a thread's report or a wake of its waker waits.
 pub(crate) fn ready(activation: &Rc<Activation>) {
+    WORK.with(|work| work.set(Work { wakes: work.get().wakes + 1, ..work.get() }));
     let this = Rc::downgrade(activation);
     QUEUE.with(|queue| {
         let mut queue = queue.borrow_mut();
@@ -111,78 +108,62 @@ pub(crate) fn arm(app: &App) {
 /// Runs the ready plugins of `app` in turn under the frame budget; what is left asks for the next frame's drain.
 fn drain(app: &App) {
     WORK.with(|work| work.set(Work { drains: work.get().drains + 1, ..work.get() }));
-    let (app_key, frame) = (key(app), app.frame_number());
-    QUEUE.with(|queue| {
-        let mut queue = queue.borrow_mut();
-        queue.ready.retain(|activation| activation.strong_count() > 0);
-        // What the app's earlier frames spent is past, and an activation that ended spends nothing.
-        queue.spent.retain(|_, (activation, open, ..)| {
-            activation.upgrade().is_some_and(|activation| activation.app() != Some(app_key) || *open == frame)
-        });
-    });
+    let app_key = key(app);
+    QUEUE.with(|queue| queue.borrow_mut().ready.retain(|activation| activation.strong_count() > 0));
+    // An app drains once a paint ([`arm`]): the updates each plugin had in this one, by its activation's ID.
+    let mut updates: HashMap<u64, u32> = HashMap::new();
     loop {
         let round = QUEUE.with(|queue| of(&queue.borrow(), app_key));
         let mut ran = false;
         for activation in &round {
-            let (limits, clock) = activation.budget();
-            let (updates, spent, all) = QUEUE.with(|queue| {
-                let queue = queue.borrow();
-                let (updates, spent) = match queue.spent.get(&activation.id()) {
-                    Some((_, open, updates, spent)) if *open == frame => (*updates, *spent),
-                    _ => (0, Duration::ZERO),
-                };
-                let all = queue
-                    .spent
-                    .values()
-                    .filter(|(known, open, ..)| {
-                        *open == frame && known.upgrade().and_then(|known| known.app()) == Some(app_key)
-                    })
-                    .map(|(.., spent)| *spent)
-                    .sum::<Duration>();
-                (updates, spent, all)
-            });
-            // What the monitor counted of the plugin's calls in the frame, its handlers and views too, when the host
-            // times them; else its updates as the scheduler timed them.
-            let (counted, counted_all) = activation.spent().unwrap_or((spent, all));
+            let limits = activation.limits();
+            let had = match updates.get(&activation.id()) {
+                Some(had) => *had,
+                None => {
+                    activation.take_wake();
+                    updates.insert(activation.id(), 0);
+                    0
+                }
+            };
+            // What the monitor counted of the plugin's calls in the frame: its handlers, views, `layout`, draws and
+            // updates; and all plugins' calls.
+            let (counted, counted_all) = activation.spent().unwrap_or_default();
             // At least one a frame; then while its own and all plugins' calls stay under the budget.
-            if updates > 0 && (counted >= limits.frame || counted_all >= limits.all) {
+            if had > 0 && (counted >= limits.frame || counted_all >= limits.all) {
                 continue;
             }
-            let start = clock();
             let step = activation.step();
-            let took = clock().saturating_duration_since(start);
-            QUEUE.with(|queue| {
-                let mut queue = queue.borrow_mut();
-                // A step that found nothing to do made no update and spent nothing of the budget.
-                match step {
-                    Step::Ran => {
-                        let entry = (Rc::downgrade(activation), frame, updates + 1, spent + took);
-                        queue.spent.insert(activation.id(), entry);
-                    }
-                    Step::Idle => {
-                        let this = Rc::downgrade(activation);
-                        queue.ready.retain(|known| !known.ptr_eq(&this));
-                    }
+            // A step that found nothing to do made no update and spent nothing of the budget.
+            match step {
+                Step::Ran => {
+                    updates.insert(activation.id(), had + 1);
+                    WORK.with(|work| work.set(Work { updates: work.get().updates + 1, ..work.get() }));
+                    ran = true;
                 }
-            });
-            if step == Step::Ran {
-                WORK.with(|work| work.set(Work { updates: work.get().updates + 1, ..work.get() }));
-                ran = true;
+                Step::Idle => {
+                    let this = Rc::downgrade(activation);
+                    QUEUE.with(|queue| queue.borrow_mut().ready.retain(|known| !known.ptr_eq(&this)));
+                }
             }
         }
         if !ran {
             break;
         }
     }
-    // The round runs in the order the plugins became ready.
-    let left = QUEUE.with(|queue| !of(&queue.borrow(), app_key).is_empty());
+    let left = QUEUE.with(|queue| {
+        let mut queue = queue.borrow_mut();
+        // The plugin served first goes last, so when the total budget binds each one's turn to go first comes round
+        // (review carbon 4.3).
+        if let Some(first) =
+            queue.ready.iter().position(|known| known.upgrade().and_then(|known| known.app()) == Some(app_key))
+        {
+            let served = queue.ready.remove(first);
+            queue.ready.push(served);
+        }
+        !of(&queue, app_key).is_empty()
+    });
     if left {
         WORK.with(|work| work.set(Work { deferred: work.get().deferred + 1, ..work.get() }));
         arm(app);
     }
-}
-
-/// The frame budget and the clock of P4c's monitor, or the defaults while the host has set none.
-pub(crate) fn default_budget() -> (contain::Limits, Rc<dyn Fn() -> std::time::Instant>) {
-    (contain::Limits::default(), Rc::new(std::time::Instant::now))
 }

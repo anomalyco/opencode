@@ -163,6 +163,20 @@ pub struct Timed {
     pub opened: bool,
 }
 
+thread_local! {
+    /// A frame's layout or draws run on this thread ([`in_frame`]).
+    static IN_FRAME: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Runs `work`, which runs inside a frame of OpenTUI's, after the paint counted its frame up: the plugin calls in it
+/// count in the frame the paint started in ([`Monitor::frame`]).
+pub(crate) fn in_frame<R>(work: impl FnOnce() -> R) -> R {
+    let outer = IN_FRAME.with(|flag| flag.replace(true));
+    let result = work();
+    IN_FRAME.with(|flag| flag.set(outer));
+    result
+}
+
 /// Times every plugin call and keeps the budget's state; the host owns one.
 pub struct Monitor {
     limits: Cell<Limits>,
@@ -304,6 +318,22 @@ impl Monitor {
         *self.frame.borrow_mut() = Rc::new(frame);
     }
 
+    /// The frame calls count in now. OpenTUI counts a paint's frame up after its animations and deferred work and
+    /// before its layout and draws; a call inside the frame ([`in_frame`]: `layout`, a canvas's draw) counts in the
+    /// frame the paint started in. So a frame is a paint's calls and the calls since the paint before it (review
+    /// carbon 4.1).
+    pub fn frame(&self) -> u64 {
+        (self.frame.borrow())().saturating_sub(u64::from(IN_FRAME.with(Cell::get)))
+    }
+
+    /// Whether a frame open now is over a budget: a close must end it at a later paint, for the slow rule to see
+    /// it; a frame under the budget ends with the next call that opens another.
+    pub fn open_over(&self) -> bool {
+        let limits = self.limits();
+        self.all.get().is_some_and(|(_, sum)| sum > limits.all)
+            || self.plugins.borrow().iter().any(|stats| stats.window.is_some_and(|(_, sum)| sum > limits.frame))
+    }
+
     /// Calls `notice` when a call returns whose hang notice the watchdog painted.
     pub fn set_on_notice(&self, notice: impl Fn(&Artifact, Duration) + 'static) {
         *self.on_notice.borrow_mut() = Some(Rc::new(notice));
@@ -399,7 +429,7 @@ impl Monitor {
     /// What the plugin in `slot`'s calls took in the host's frame now, its handlers, views, `layout` and updates, and
     /// what all plugins' calls took: what the scheduler of updates budgets them by ([`crate::schedule`]).
     pub fn spent(&self, slot: Slot) -> (Duration, Duration) {
-        let frame = (self.frame.borrow())();
+        let frame = self.frame();
         let now = |counted: Option<(u64, Duration)>| {
             counted.filter(|(open, _)| *open == frame).map_or(Duration::ZERO, |(_, took)| took)
         };
@@ -415,7 +445,7 @@ impl Monitor {
     /// What the budget makes of a call of `kind` that took `took`.
     fn account(&self, slot: Slot, kind: &'static str, took: Duration) -> Timed {
         let limits = self.limits();
-        let frame = (self.frame.borrow())();
+        let frame = self.frame();
         let mut plugins = self.plugins.borrow_mut();
         let stats = &mut plugins[usize::from(slot.0)];
         match kind {
@@ -457,19 +487,22 @@ impl Monitor {
         Timed { took, overrun, slow, opened }
     }
 
-    /// A paint starts: every open frame ends. Returns the plugins that became slow, with what a slow frame costs.
+    /// A paint starts: every frame before the one now open ends; the open one goes on through the paint, so a paint
+    /// does not cut one frame's calls in two, and ends at a later paint (review carbon 4.1). Returns the plugins that
+    /// became slow, with what a slow frame costs.
     pub fn close(&self) -> Vec<(String, String)> {
         self.closing.set(false);
-        let limits = self.limits();
+        let (limits, frame) = (self.limits(), self.frame());
         let mut news = Vec::new();
         for stats in self.plugins.borrow_mut().iter_mut() {
-            if let Some((_, sum)) = stats.window.take()
+            if let Some((_, sum)) = stats.window.take_if(|(open, _)| *open < frame)
                 && let Some(cost) = stats.close(sum, &limits)
             {
                 news.push((stats.artifact.id.clone(), cost));
             }
         }
-        if let Some((_, sum)) = self.all.take() {
+        if let Some((_, sum)) = self.all.get().filter(|(open, _)| *open < frame) {
+            self.all.set(None);
             self.close_all(sum, &limits);
         }
         news

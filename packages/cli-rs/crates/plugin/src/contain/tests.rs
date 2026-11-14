@@ -318,6 +318,9 @@ fn the_last_expensive_frame_closes_at_the_paint() {
         }
     }
     assert!(!bench.monitor.is_slow("p"));
+    // A paint starting in the frame open does not end it; the next paint, a frame on, does (review carbon 4.1).
+    assert!(bench.monitor.close().is_empty());
+    bench.frame.set(bench.frame.get() + 1);
     assert_eq!(bench.monitor.close(), [("p".to_owned(), "99.0 ms a frame".to_owned())]);
     assert!(bench.monitor.is_slow("p"));
     assert!(bench.monitor.close().is_empty());

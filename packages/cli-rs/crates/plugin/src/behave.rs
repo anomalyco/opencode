@@ -488,7 +488,7 @@ impl Hook {
         hook.node.on_resize(move |_, rect| {
             if let Some(hook) = weak.upgrade() {
                 hook.seen.set(rect.width as u32);
-                hook.run();
+                crate::contain::in_frame(|| hook.run());
             }
         });
         hook

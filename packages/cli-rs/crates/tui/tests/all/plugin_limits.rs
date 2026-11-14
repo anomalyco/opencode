@@ -634,6 +634,8 @@ fn images_decode_on_a_worker_within_their_limits() {
         }
         harness.tui.navigate(Route::Home);
         settle(&harness);
+        // A job holds what it reserved until it ends.
+        assert!(harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0));
         assert_eq!(limits::held(ID).images, 0, "{carrier:?}: decoded bytes held after the route closed");
     }
 }
