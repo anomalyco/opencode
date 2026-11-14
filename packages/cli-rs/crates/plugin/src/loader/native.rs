@@ -705,9 +705,9 @@ fn manifest(bytes: &[u8], major: u32, expect: Option<&str>) -> Result<Manifest, 
     if let Some(expect) = expect.filter(|expect| *expect != manifest.id) {
         return Err(format!("setup returned plugin ID {}, not {expect}", manifest.id));
     }
-    if major < 2 && (!manifest.surfaces.is_empty() || manifest.messages) {
-        log::warn!("plugin {}: a plugin of ABI {major}.x has no surfaces and no messages; ignored", manifest.id);
-        (manifest.surfaces, manifest.messages) = (Vec::new(), false);
+    if major < 2 && (!manifest.surfaces.is_empty() || !manifest.claims.is_empty() || manifest.messages) {
+        log::warn!("plugin {}: a plugin of ABI {major}.x has no surfaces, claims or messages; ignored", manifest.id);
+        (manifest.surfaces, manifest.claims, manifest.messages) = (Vec::new(), Vec::new(), false);
     }
     Ok(manifest)
 }
@@ -1092,6 +1092,7 @@ fn renders(request: &Request) -> bool {
             | Request::View { .. }
             | Request::Draw { .. }
             | Request::Layout { .. }
+            | Request::Claim { .. }
     )
 }
 
@@ -1621,6 +1622,10 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
         let remote = Rc::new(Remote { guest: guest.clone(), index, draw: claim.draw });
         setup.surface(place, remote, commands, fail, calls, &guest.owners, input);
     }
+    // 2.0: the renderer claims, whose views run through `Claim`.
+    for (index, entry) in manifest.claims.iter().enumerate() {
+        setup.renderer_claim(entry.clone(), Rc::new(RemoteClaim { guest: guest.clone(), index }));
+    }
     // 2.0: what the plugin's threads send runs `Message`, one call each, when its manifest says it takes messages; a
     // thread's panic fails the plugin, once.
     if !manifest.messages {
@@ -1706,6 +1711,55 @@ impl Viewer for Remote {
 
     fn forget(&self, _: &dyn Host, mount: &v2::MountId) {
         // Once the event that ended the mount is done, so the plugin is never entered from within a call of its own.
+        let (guest, mount) = (Rc::downgrade(&self.guest), mount.clone());
+        defer(&self.guest.host, move |_| {
+            if let Some(guest) = guest.upgrade() {
+                guest.request::<()>("unmount", &Request::Unmount { mount });
+            }
+        });
+    }
+}
+
+/// A renderer claim's view in a library, through [`Request::Claim`]. An overrun fails the plugin in its guest, so
+/// every call that does not return is a failure here.
+struct RemoteClaim {
+    guest: Rc<Guest>,
+    index: usize,
+}
+
+impl crate::claim::Viewer for RemoteClaim {
+    fn view(&self, _: &dyn Host, viewing: Viewing<'_>, part: &abi::claim::Part) -> crate::claim::Viewed {
+        let next = surface::next_content() - 1;
+        let request = Request::Claim {
+            claim: self.index,
+            mount: viewing.mount.clone(),
+            input: viewing.input.clone(),
+            part: part.clone(),
+            next,
+        };
+        let checked = self.guest.checked("view", &request, |reply: &abi::claim::Reply| {
+            let numbered = reply.content.iter().enumerate().all(|(index, (handle, _))| {
+                (index as u64).checked_add(1).and_then(|step| next.checked_add(step)) == Some(handle.0)
+            });
+            if !numbered {
+                return Err("content handles that do not follow the host's".to_owned());
+            }
+            let keyed = reply.node.as_ref().map_or(0, keyed);
+            match reply.memo <= keyed || reply.node.is_none() {
+                true => Ok(()),
+                false => Err(format!("a memo table of {} values for a tree of {keyed} keyed nodes", reply.memo)),
+            }
+        });
+        let Some(reply) = checked else { return crate::claim::Viewed::Failed };
+        surface::took_content(next + 1, reply.content.len() as u64);
+        for (handle, bytes) in reply.content {
+            (viewing.give)(handle, bytes.0);
+        }
+        reply.released.into_iter().for_each(|handle| (viewing.release)(handle));
+        crate::claim::Viewed::Returned(reply.node.map(Box::new), Some(reply.memo))
+    }
+
+    fn forget(&self, _: &dyn Host, mount: &v2::MountId) {
         let (guest, mount) = (Rc::downgrade(&self.guest), mount.clone());
         defer(&self.guest.host, move |_| {
             if let Some(guest) = guest.upgrade() {
