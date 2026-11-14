@@ -12,6 +12,7 @@ import { Schema } from "effect"
 import { Frontend, Handshake } from "@opencode/protocol/simulation"
 import { applyMasks } from "../lib/app"
 import { writeFixture, type Fixture } from "../lib/cells"
+import { freePort } from "../lib/port"
 import { buildRust, command, parseSides, parityRoot, sandbox, type Sandbox, type Side } from "../cli/client"
 import { startBackend, type Invocation, type Reply } from "./backend"
 import { allows, compareFixtures, compareRequests, text, toFixture } from "./compare"
@@ -188,7 +189,7 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
     const cmd = command(side, args)
     return side === "ts" && scenario.now !== undefined ? [cmd[0]!, `--preload=${CLOCK}`, ...cmd.slice(1)] : cmd
   }
-  const [serverPort, backendPort, serverUiPort, uiPort] = await Promise.all([0, 1, 2, 3].map(freePort))
+  const [serverPort, backendPort, serverUiPort, uiPort] = Array.from({ length: 4 }, freePort)
   const backendUrl = `ws://127.0.0.1:${backendPort}`
   const viewport = { cols: scenario.width ?? 100, rows: scenario.height ?? 30 }
   await Bun.write(
@@ -457,13 +458,6 @@ function readText(file: string) {
   return Bun.file(file)
     .text()
     .catch(() => "")
-}
-
-async function freePort(_: number) {
-  const listener = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } })
-  const port = listener.port
-  listener.stop(true)
-  return port
 }
 
 function deviationExists(file: string) {
