@@ -32,43 +32,46 @@ const BLOCKED_MONDAY: ModelSchema.Availability = {
 const languageModel = (provider: string, id: string) =>
   LanguageModel.make({ id, provider, route: OpenAIChat.route })
 
-const stubResolver = Layer.succeed(
-  ModelResolver.Service,
-  ModelResolver.Service.of({
-    resolve: () => Effect.succeed(undefined),
-    fallback: () => Effect.succeed(resolverFallback),
-    resolveModel: (info: Model.Info, variant?: Model.VariantID) =>
-      Effect.succeed(
-        SessionRunnerModel.resolved(languageModel(info.providerID, info.id), {
-          capabilities: info.capabilities,
-          cost: info.cost,
-          limit: info.limit,
-          ...(variant === undefined ? {} : { variant }),
+/** Builds a self-contained layer for one test: no state is shared between tests. */
+const testLayer = (options: {
+  readonly agentModel?: { readonly providerID: string; readonly id: string }
+  readonly resolverFallback?: Model.Info
+}) => {
+  const stubResolver = Layer.succeed(
+    ModelResolver.Service,
+    ModelResolver.Service.of({
+      resolve: () => Effect.succeed(undefined),
+      fallback: () => Effect.succeed(options.resolverFallback),
+      resolveModel: (info: Model.Info, variant?: Model.VariantID) =>
+        Effect.succeed(
+          SessionRunnerModel.resolved(languageModel(info.providerID, info.id), {
+            capabilities: info.capabilities,
+            cost: info.cost,
+            limit: info.limit,
+            ...(variant === undefined ? {} : { variant }),
+          }),
+        ),
+      resolveImage: () => Effect.succeed(undefined),
+      resolveDecision: () => Effect.succeed(undefined),
+    } as never),
+  )
+  const stubAgents = Layer.succeed(
+    Agent.Service,
+    Agent.Service.of({
+      select: () =>
+        Effect.succeed({
+          info: options.agentModel === undefined ? undefined : { model: options.agentModel },
         }),
-      ),
-    resolveImage: () => Effect.succeed(undefined),
-    resolveDecision: () => Effect.succeed(undefined),
-  } as never),
-)
-
-let agentModel: { readonly providerID: string; readonly id: string } | undefined
-let resolverFallback: Model.Info | undefined
-
-const stubAgents = Layer.succeed(
-  Agent.Service,
-  Agent.Service.of({
-    select: () => Effect.succeed({ info: agentModel === undefined ? undefined : { model: agentModel } }),
-  } as never),
-)
-
-const stubHooks = Layer.succeed(
-  PluginHooks.Service,
-  PluginHooks.Service.of({
-    trigger: (_domain: never, _name: never, event: never) => Effect.succeed(event),
-  } as never),
-)
-
-const layer = Layer.provide(SessionRunnerModel.layer, Layer.mergeAll(stubResolver, stubAgents, stubHooks))
+    } as never),
+  )
+  const stubHooks = Layer.succeed(
+    PluginHooks.Service,
+    PluginHooks.Service.of({
+      trigger: (_domain: never, _name: never, event: never) => Effect.succeed(event),
+    } as never),
+  )
+  return Layer.provide(SessionRunnerModel.layer, Layer.mergeAll(stubResolver, stubAgents, stubHooks))
+}
 
 const session = (model?: { readonly providerID: string; readonly id: string; readonly variant?: string }) =>
   ({
@@ -81,6 +84,7 @@ const resolveSelection = (
   catalog: readonly Model.Info[],
   sessionModel: { readonly providerID: string; readonly id: string; readonly variant?: string } | undefined,
   at: Date,
+  layer: Layer.Layer<SessionRunnerModel.Service> = testLayer({}),
 ): Effect.Effect<Exit.Exit<ModelResolver.Resolved, unknown>, never, never> =>
   Effect.gen(function* () {
     const service = yield* SessionRunnerModel.Service
@@ -89,6 +93,16 @@ const resolveSelection = (
       agent: "build" as never,
     })
   }).pipe(Effect.provide(layer), Effect.provide(ModelAvailability.Now.at(at)), Effect.exit)
+
+const blockedReason = (exit: Exit.Exit<ModelResolver.Resolved, unknown>): string | undefined => {
+  if (Exit.isSuccess(exit)) return undefined
+  const failure = exit as Exit.Exit<ModelResolver.Resolved, unknown> & { readonly cause: Cause.Cause<unknown> }
+  const error = Cause.findError(failure.cause)
+  // The Result wrapper's `value` is not a plain property in this effect version; the serialized
+  // form reliably carries the error payload.
+  const match = JSON.stringify(error).match(/"reason":"([a-z-]+)"/)
+  return match === null ? undefined : match[1]
+}
 
 describe("SessionRunnerModel availability fallback", () => {
   it.effect("returns the selected model when available", () =>
@@ -123,7 +137,7 @@ describe("SessionRunnerModel availability fallback", () => {
     }),
   )
 
-  it.effect("fails when no fallback is configured", () =>
+  it.effect("fails with reason no-fallback when no fallback is configured", () =>
     Effect.gen(function* () {
       const exit = yield* resolveSelection(
         [modelInfo("deepseek", "chat", ALWAYS_BLOCKED)],
@@ -131,66 +145,79 @@ describe("SessionRunnerModel availability fallback", () => {
         UTC(1, 12),
       )
       expect(Exit.isFailure(exit)).toBe(true)
-      const failure = exit as Exit.Exit<ModelResolver.Resolved, unknown> & { readonly cause: Cause.Cause<unknown> }
-      expect(Cause.pretty(failure.cause)).toContain("ModelBlockedByAvailabilityError")
+      expect(blockedReason(exit)).toBe("no-fallback")
     }),
   )
 
-  it.effect("fails when the fallback model is not in the catalog", () =>
+  it.effect("fails with reason fallback-not-found when the fallback model is not in the catalog", () =>
     Effect.gen(function* () {
       const primary = modelInfo("deepseek", "chat", { ...ALWAYS_BLOCKED, fallback: "anthropic/claude" })
       const exit = yield* resolveSelection([primary], { providerID: "deepseek", id: "chat" }, UTC(1, 12))
       expect(Exit.isFailure(exit)).toBe(true)
-      const failure = exit as Exit.Exit<ModelResolver.Resolved, unknown> & { readonly cause: Cause.Cause<unknown> }
-      expect(Cause.pretty(failure.cause)).toContain("ModelBlockedByAvailabilityError")
+      expect(blockedReason(exit)).toBe("fallback-not-found")
     }),
   )
 
-  it.effect("stops at the fallback depth limit instead of looping forever", () =>
+  it.effect("fails with reason cycle-detected on a fallback cycle", () =>
     Effect.gen(function* () {
-      // a -> b -> c -> d -> a: a cycle longer than the depth limit.
+      // a → b → a: a short cycle.
       const cycle = [
         modelInfo("p", "a", { ...ALWAYS_BLOCKED, fallback: "p/b" }),
-        modelInfo("p", "b", { ...ALWAYS_BLOCKED, fallback: "p/c" }),
-        modelInfo("p", "c", { ...ALWAYS_BLOCKED, fallback: "p/d" }),
-        modelInfo("p", "d", { ...ALWAYS_BLOCKED, fallback: "p/a" }),
+        modelInfo("p", "b", { ...ALWAYS_BLOCKED, fallback: "p/a" }),
       ]
       const exit = yield* resolveSelection(cycle, { providerID: "p", id: "a" }, UTC(1, 12))
       expect(Exit.isFailure(exit)).toBe(true)
-      const failure = exit as Exit.Exit<ModelResolver.Resolved, unknown> & { readonly cause: Cause.Cause<unknown> }
-      expect(Cause.pretty(failure.cause)).toContain("ModelBlockedByAvailabilityError")
+      expect(blockedReason(exit)).toBe("cycle-detected")
+    }),
+  )
+
+  it.effect("fails with reason depth-exceeded on an acyclic chain longer than the hop limit", () =>
+    Effect.gen(function* () {
+      // a → b → c → d → e: five blocked models, more than the three-hop limit, no cycle.
+      const chain = [
+        modelInfo("p", "a", { ...ALWAYS_BLOCKED, fallback: "p/b" }),
+        modelInfo("p", "b", { ...ALWAYS_BLOCKED, fallback: "p/c" }),
+        modelInfo("p", "c", { ...ALWAYS_BLOCKED, fallback: "p/d" }),
+        modelInfo("p", "d", { ...ALWAYS_BLOCKED, fallback: "p/e" }),
+        modelInfo("p", "e"),
+      ]
+      const exit = yield* resolveSelection(chain, { providerID: "p", id: "a" }, UTC(1, 12))
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(blockedReason(exit)).toBe("depth-exceeded")
     }),
   )
 
   it.effect("applies availability to the agent default model, not just session-pinned models", () =>
     Effect.gen(function* () {
-      agentModel = { providerID: "deepseek", id: "chat" }
       const primary = modelInfo("deepseek", "chat", { ...ALWAYS_BLOCKED, fallback: "anthropic/claude" })
       const fallback = modelInfo("anthropic", "claude")
-      const result = yield* resolveSelection([primary, fallback], undefined, UTC(1, 12))
+      const layer = testLayer({ agentModel: { providerID: "deepseek", id: "chat" } })
+      const result = yield* resolveSelection([primary, fallback], undefined, UTC(1, 12), layer)
       const ref = Exit.isSuccess(result) ? result.value.ref : undefined
       expect(ref && `${ref.providerID}/${ref.id}`).toBe("anthropic/claude")
     }),
   )
 
-  it.effect("fails with the blocked-model error on a malformed fallback ref", () =>
+  it.effect("applies availability to the resolver fallback model", () =>
+    Effect.gen(function* () {
+      const primary = modelInfo("deepseek", "chat", { ...ALWAYS_BLOCKED, fallback: "anthropic/claude" })
+      const fallback = modelInfo("anthropic", "claude")
+      const layer = testLayer({ resolverFallback: primary })
+      const result = yield* resolveSelection([primary, fallback], undefined, UTC(1, 12), layer)
+      const ref = Exit.isSuccess(result) ? result.value.ref : undefined
+      expect(ref && `${ref.providerID}/${ref.id}`).toBe("anthropic/claude")
+    }),
+  )
+
+  it.effect("fails with reason malformed-fallback on a malformed fallback ref", () =>
     Effect.gen(function* () {
       const primary = modelInfo("deepseek", "chat", { ...ALWAYS_BLOCKED, fallback: "not-a-ref" })
-      const result = yield* resolveSelection([primary], { providerID: "deepseek", id: "chat" }, UTC(1, 12))
+      const result = yield* resolveSelection([primary], {
+        providerID: "deepseek",
+        id: "chat",
+      }, UTC(1, 12))
       expect(Exit.isFailure(result)).toBe(true)
-      const failure = result as { readonly cause: Cause.Cause<unknown> }
-      expect(Cause.pretty(failure.cause)).toContain("ModelBlockedByAvailabilityError")
-    }),
-  )
-
-  it.effect("applies availability to the global resolver fallback model", () =>
-    Effect.gen(function* () {
-      agentModel = undefined
-      resolverFallback = modelInfo("deepseek", "chat", { ...ALWAYS_BLOCKED, fallback: "anthropic/claude" })
-      const fallback = modelInfo("anthropic", "claude")
-      const result = yield* resolveSelection([resolverFallback, fallback], undefined, UTC(1, 12))
-      const ref = Exit.isSuccess(result) ? result.value.ref : undefined
-      expect(ref && `${ref.providerID}/${ref.id}`).toBe("anthropic/claude")
+      expect(blockedReason(result)).toBe("malformed-fallback")
     }),
   )
 })

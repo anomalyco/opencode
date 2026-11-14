@@ -16803,6 +16803,30 @@
         "required": ["command"],
         "additionalProperties": false
       },
+      "Config.Model.Availability.WindowEncoded": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+            }
+          },
+          "start": {
+            "type": "string",
+            "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+            "description": "Local time of day as HH:mm, 00:00 to 23:59"
+          },
+          "end": {
+            "type": "string",
+            "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+            "description": "Local time of day as HH:mm, 00:00 to 23:59"
+          }
+        },
+        "required": ["start", "end"],
+        "additionalProperties": false
+      },
       "Config.Model.Capabilities": {
         "type": "object",
         "properties": {
@@ -17060,6 +17084,32 @@
           },
           "disabled": {
             "type": "boolean"
+          },
+          "availability": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["block", "allow"]
+              },
+              "windows": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Config.Model.Availability.WindowEncoded"
+                },
+                "minItems": 1
+              },
+              "timezone": {
+                "type": "string"
+              },
+              "fallback": {
+                "type": "string",
+                "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$",
+                "description": "Fallback model reference like `anthropic/claude-sonnet-4-6`"
+              }
+            },
+            "required": ["windows"],
+            "additionalProperties": false
           },
           "limit": {
             "type": "object",
@@ -20516,6 +20566,46 @@
         "required": ["_tag", "sessionID", "messageID", "message"],
         "additionalProperties": false
       },
+      "Model.Availability": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["block", "allow"]
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "days": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+                  }
+                },
+                "start": {
+                  "type": "string"
+                },
+                "end": {
+                  "type": "string"
+                }
+              },
+              "required": ["start", "end"],
+              "additionalProperties": false
+            }
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "fallback": {
+            "type": "string"
+          }
+        },
+        "required": ["windows"],
+        "additionalProperties": false
+      },
       "Model.CacheFormat": {
         "type": "string",
         "enum": ["anthropic", "alibaba"]
@@ -20705,6 +20795,9 @@
           },
           "enabled": {
             "type": "boolean"
+          },
+          "availability": {
+            "$ref": "#/components/schemas/Model.Availability"
           },
           "limit": {
             "type": "object",

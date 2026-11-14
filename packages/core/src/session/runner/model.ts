@@ -34,13 +34,44 @@ export class ModelUnavailableError extends Schema.TaggedError<ModelUnavailableEr
   }
 }
 
+/** Why a blocked model could not be substituted. */
+export const BlockedReason = Schema.Literals([
+  "no-fallback",
+  "fallback-not-found",
+  "cycle-detected",
+  "depth-exceeded",
+  "malformed-fallback",
+])
+export type BlockedReason = typeof BlockedReason.Type
+
+const blockedMessage = (
+  providerID: Provider.ID,
+  modelID: Model.ID,
+  reason: BlockedReason,
+  detail: { readonly fallback?: string; readonly limit?: number },
+): string => {
+  const model = `${providerID}/${modelID}`
+  switch (reason) {
+    case "no-fallback":
+      return `Model ${model} is outside its availability window and no fallback model is configured`
+    case "fallback-not-found":
+      return `Model ${model} is outside its availability window and its fallback ${detail.fallback} is not a known model`
+    case "cycle-detected":
+      return `Model ${model} is outside its availability window and its fallback chain contains a cycle at ${detail.fallback}`
+    case "depth-exceeded":
+      return `Model ${model} is outside its availability window and its fallback chain exceeds the maximum of ${detail.limit} hops`
+    case "malformed-fallback":
+      return `Model ${model} is outside its availability window and its fallback ${JSON.stringify(detail.fallback ?? "")} is not a valid provider/model reference`
+  }
+}
+
 /** A time window in the model's `availability` config currently blocks it and no usable fallback is configured. */
 export class ModelBlockedByAvailabilityError extends Schema.TaggedError<ModelBlockedByAvailabilityError>()(
   "SessionRunnerModel.ModelBlockedByAvailabilityError",
-  { providerID: Provider.ID, modelID: Model.ID },
+  { providerID: Provider.ID, modelID: Model.ID, reason: BlockedReason, fallback: Schema.String.pipe(Schema.optional) },
 ) {
   override get message() {
-    return `Model ${this.providerID}/${this.modelID} is outside its availability window and no usable fallback model is configured`
+    return blockedMessage(this.providerID, this.modelID, this.reason, { fallback: this.fallback })
   }
 }
 export type Error =
@@ -97,35 +128,52 @@ export const layer = Layer.effect(
     type Selection = { readonly info: Model.Info; readonly variant: Model.VariantID | undefined }
     type SelectionError = ModelBlockedByAvailabilityError | ModelAvailability.TimezoneError
     // Resolves a model, substituting its configured fallback while an availability window blocks it.
-    // Fallback chains are followed transitively (a fallback may itself be blocked) up to a fixed depth.
+    // Fallback chains are followed transitively (a fallback may itself be blocked) up to a fixed depth,
+    // with cycles reported explicitly via a visited set of provider/model identities.
     const pick =
-      (find: (ref: Model.Ref) => Effect.Effect<Model.Info | undefined>) =>
-      (
-        info: Model.Info,
-        variant: Model.VariantID | undefined,
-        depth = 0,
-      ): Effect.Effect<Selection, SelectionError> =>
-        Effect.gen(function* () {
-          if (yield* ModelAvailability.check(info)) return { info, variant }
-          const fallback = info.availability?.fallback
-          if (fallback === undefined || depth >= 3)
-            return yield* new ModelBlockedByAvailabilityError({ providerID: info.providerID, modelID: info.id })
-          yield* Effect.logInfo("model blocked by availability window, using fallback", {
-            provider: info.providerID,
-            model: info.id,
-            fallback,
+      (find: (ref: Model.Ref) => Effect.Effect<Model.Info | undefined>) => {
+        const blocked = (
+          info: Model.Info,
+          reason: BlockedReason,
+          fallback?: string,
+        ): ModelBlockedByAvailabilityError =>
+          new ModelBlockedByAvailabilityError({
+            providerID: info.providerID,
+            modelID: info.id,
+            reason,
+            ...(fallback === undefined ? {} : { fallback }),
           })
-          // Catalog-injected models bypass config decoding, so a malformed fallback ref is a
-          // config error, not a defect: surface the blocked-model error instead of throwing.
-          const ref = yield* Effect.try({
-            try: () => Model.Ref.parse(fallback),
-            catch: () => new ModelBlockedByAvailabilityError({ providerID: info.providerID, modelID: info.id }),
+        return function choose(
+          info: Model.Info,
+          variant: Model.VariantID | undefined,
+          depth = 0,
+          visited = new Set<string>([`${info.providerID}/${info.id}`]),
+        ): Effect.Effect<Selection, SelectionError> {
+          return Effect.gen(function* () {
+            if (yield* ModelAvailability.check(info)) return { info, variant }
+            const fallback = info.availability?.fallback
+            if (fallback === undefined) return yield* blocked(info, "no-fallback")
+            // Catalog-injected models bypass config decoding, so a malformed fallback ref is a
+            // config error, not a defect: surface a blocked-model error naming the bad ref.
+            const ref = yield* Effect.try({
+              try: () => Model.Ref.parse(fallback),
+              catch: () => blocked(info, "malformed-fallback", fallback),
+            })
+            if (ref === undefined) return yield* blocked(info, "malformed-fallback", fallback)
+            const identity = `${ref.providerID}/${ref.id}`
+            if (visited.has(identity)) return yield* blocked(info, "cycle-detected", fallback)
+            const next = yield* find(ref)
+            if (next === undefined) return yield* blocked(info, "fallback-not-found", fallback)
+            if (depth >= 3) return yield* blocked(info, "depth-exceeded", fallback)
+            yield* Effect.logInfo("model blocked by availability window, using fallback", {
+              provider: info.providerID,
+              model: info.id,
+              fallback,
+            })
+            return yield* choose(next, ref.variant, depth + 1, new Set(visited).add(identity))
           })
-          const next = ref === undefined ? undefined : yield* find(ref)
-          if (next === undefined)
-            return yield* new ModelBlockedByAvailabilityError({ providerID: info.providerID, modelID: info.id })
-          return yield* pick(find)(next, ref.variant, depth + 1)
-        })
+        }
+      }
     const select = Effect.fn("SessionRunnerModel.select")(function* (
       session: SessionSchema.Info,
       available: () => Effect.Effect<ReadonlyArray<Model.Info>>,

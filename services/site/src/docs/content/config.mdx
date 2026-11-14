@@ -598,6 +598,15 @@ with a no-route error.
 - `fallback`: a `provider/model` or `provider/model#variant` reference used
   while a window blocks the model.
 
+While a window blocks the model, requests silently use the fallback: the UI
+and clients keep showing the configured model, and the only trace is a log
+line on the server. Making the substitution visible in the UI may be added
+later.
+
+Fallback chains are followed transitively up to three hops, cycles are
+detected and reported, and a blocked model with no usable fallback fails
+with a no-route error that says which case applied.
+
 See the [providers guide](/providers) for credentials, custom endpoints, provider packages, the WebSocket transport, and model configuration.
 
 ## Variables
