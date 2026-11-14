@@ -1165,3 +1165,87 @@ fn a_tree_the_layout_cannot_take_is_refused() {
     assert_eq!(refused, Some((usize::from(reconcile::MAX_DEPTH), Refused::Deep)));
     host.app.render();
 }
+
+/// A scroll of `rows` rows, `height` rows tall, with id `sc`.
+fn rows_scroll(rows: usize, height: u16, layout: abi::Layout) -> v2::Node {
+    let rows = (0..rows).map(|row| v2::Node::text(vec![abi::Span::new(format!("row {row}"))])).collect();
+    v2::Node::Scroll { id: Some("sc".into()), height: Some(height), follow: false, layout, children: rows }
+}
+
+/// The first row of the scroll the frame shows.
+fn top_row(host: &TestHost) -> String {
+    let text = host.app.render().text();
+    text.lines().find(|line| line.trim_start().starts_with("row ")).unwrap_or_default().trim().to_owned()
+}
+
+// Expected (synthesis 3.4, 4.2): a keyed scroll that was scrolled and has the focus keeps where it is scrolled and the
+// focus whatever the tree does around it, written out or kept: a node before it, a move under another parent, a new
+// height or layout, a parent built again. The next wheel step goes on from there. A node of another kind under its id
+// is a new one.
+#[test]
+fn a_keyed_scroll_keeps_its_offset_and_its_focus() {
+    let scroll = || rows_scroll(20, 5, abi::Layout::default());
+    let before = |child: v2::Node| v2::Node::column(vec![v2::Node::text(vec![abi::Span::new("header")]), child]);
+    let keep = || v2::Node::Keep { key: "sc".into() };
+    let variants: Vec<(&str, Vec<v2::Node>)> = vec![
+        ("prepend", vec![before(scroll()).with_id("outer")]),
+        ("prepend kept", vec![before(keep()).with_id("outer")]),
+        ("reparent", vec![v2::Node::column(vec![v2::Node::row(vec![scroll()]).with_id("inner")]).with_id("outer")]),
+        ("reparent kept", vec![v2::Node::column(vec![v2::Node::row(vec![keep()]).with_id("inner")]).with_id("outer")]),
+        ("height", vec![v2::Node::column(vec![rows_scroll(20, 6, abi::Layout::default())]).with_id("outer")]),
+        ("layout", vec![v2::Node::column(vec![rows_scroll(20, 5, abi::Layout::default().width(abi::Width::Cells(30)))]).with_id("outer")]),
+        ("parent", vec![v2::Node::column(vec![scroll()]).with_id("outer").layout(abi::Layout::default().grow())]),
+    ];
+    for (name, next) in variants {
+        let host = host(0);
+        let parent = root(&host);
+        let mut tree = Tree::default();
+        apply(&host, &mut tree, &parent, &[v2::Node::column(vec![scroll()]).with_id("outer")]).unwrap();
+        host.app.render();
+        host.app.click(1, 1);
+        for _ in 0..3 {
+            host.app.scroll(1, 1, true);
+        }
+        let top = top_row(&host);
+        assert!(host.app.focused().is_some() && top != "row 0", "{name}: the scroll did not take the wheel or focus");
+        apply(&host, &mut tree, &parent, &next).unwrap();
+        assert_eq!(top_row(&host), top, "{name}: the scroll moved");
+        assert!(host.app.focused().is_some(), "{name}: the scroll lost the focus");
+        let row = |top: &str| top.trim_start_matches("row ").parse::<usize>().unwrap();
+        host.app.press("down");
+        host.app.scroll(1, 2, true);
+        assert!(row(&top_row(&host)) > row(&top), "{name}: the next step did not go on from the offset");
+    }
+    let host = host(0);
+    let parent = root(&host);
+    let mut tree = Tree::default();
+    apply(&host, &mut tree, &parent, &[scroll()]).unwrap();
+    host.app.render();
+    host.app.scroll(1, 1, true);
+    apply(&host, &mut tree, &parent, &[v2::Node::text(vec![abi::Span::new("row text")]).with_id("sc")]).unwrap();
+    assert_eq!(top_row(&host), "row text");
+}
+
+// Expected: a scroll that follows its end shows the rows appended to it, as its own scroll box does; one that does not
+// stays at the top.
+#[test]
+fn a_following_scroll_shows_appended_rows() {
+    for follow in [true, false] {
+        let host = host(0);
+        let parent = root(&host);
+        let mut tree = Tree::default();
+        let tree_of = |rows: usize| {
+            let mut scroll = rows_scroll(rows, 3, abi::Layout::default());
+            if let v2::Node::Scroll { follow: following, .. } = &mut scroll {
+                *following = follow;
+            }
+            vec![scroll]
+        };
+        apply(&host, &mut tree, &parent, &tree_of(2)).unwrap();
+        host.app.render();
+        apply(&host, &mut tree, &parent, &tree_of(10)).unwrap();
+        host.app.render();
+        let top = top_row(&host);
+        assert_eq!(top, if follow { "row 7" } else { "row 0" }, "follow={follow}");
+    }
+}
