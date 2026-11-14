@@ -2191,3 +2191,30 @@ fn a_claimed_fence_learns_it_closed_once_markdown_decides_it() {
         assert_eq!(last(), Some((false, true)), "{carrier:?}: the message completed");
     }
 }
+
+/// Claims `probe` fences with Markdown that holds the fence's code in another `probe` fence: unbounded, were a fence
+/// in a claimed part's Markdown claimed again.
+fn plugin_nested(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::fence("probe", |_, part| {
+        let Part::Fence(fence) = part else { return None };
+        let source = v2::Source::Text(format!("nested\n\n```probe\n{}\n```\n", fence.code));
+        Some(v2::Node::column(vec![v2::Node::Markdown { id: Some("text".into()), source }]))
+    }));
+    Ok(())
+}
+
+// Expected (review finding carbon-2): a fence in the Markdown of a claimed part is not claimed again: Markdown draws it
+// as code, so a claim whose tree holds its own fence draws once and the TUI lives.
+#[test]
+fn a_fence_in_a_claimed_part_is_not_claimed_again() {
+    for carrier in CARRIERS {
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.nested", setup: plugin_nested })]);
+        world.emit("session.text.started", json!({ "ordinal": 0 }));
+        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```probe\ncode\n```\n\nAfter.\n" }));
+        world.settle();
+        let screen = world.frame().text();
+        assert_eq!(screen.matches("nested").count(), 1, "{carrier:?}:\n{screen}");
+        assert_eq!(screen.matches("code").count(), 1, "{carrier:?}:\n{screen}");
+        assert_eq!(mounted().len(), 1, "{carrier:?}: {:?}", mounted());
+    }
+}
