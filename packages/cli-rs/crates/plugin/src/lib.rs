@@ -7,6 +7,7 @@ mod activation;
 pub mod behave;
 pub mod canvas;
 pub mod claim;
+pub mod conformance;
 pub mod contain;
 pub mod interact;
 mod list;
