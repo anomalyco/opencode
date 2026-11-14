@@ -26,6 +26,14 @@ export const Info = Schema.Struct({
   model: Model.Ref.pipe(optional),
   request: Provider.Request,
   system: Schema.String.pipe(optional),
+  /**
+   * Added to the default prompt while the agent is selected, without replacing it like `system`. `inactive` is
+   * sent once when the session switches away; a plain string gets a generic note instead.
+   */
+  instructions: Schema.Union([
+    Schema.String,
+    Schema.Struct({ active: Schema.String, inactive: Schema.String.pipe(optional) }),
+  ]).pipe(optional),
   description: Schema.String.pipe(optional),
   mode: Schema.Literals(["subagent", "primary", "all"]),
   hidden: Schema.Boolean,

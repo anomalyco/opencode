@@ -2087,6 +2087,187 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
+  describe("agent instructions", () => {
+    const plan = Agent.ID.make("plan")
+    const build = Agent.ID.make("build")
+    const orchestrator = Agent.ID.make("orchestrator")
+    const leftPlan = "The Plan agent is no longer selected."
+
+    const defineAgents = Effect.fnUntraced(function* (rules = "Plan rules") {
+      const agent = yield* Agent.Service
+      yield* agent.transform((editor) => {
+        editor.update(plan, (item) => {
+          item.name = Agent.Name.make("Plan")
+          item.mode = "primary"
+          item.instructions = rules
+        })
+        editor.update(orchestrator, (item) => {
+          item.name = Agent.Name.make("Orchestrator")
+          item.mode = "primary"
+          item.instructions = "Orchestrator rules"
+        })
+      })
+    })
+    const select = (s: Scenario, agent: Agent.ID) => s.session.switchAgent({ sessionID, agent })
+    const texts = (request: LLMRequest) =>
+      request.messages.flatMap((message) => message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])))
+    const prompt = (request: LLMRequest | undefined) => request?.system.map((part) => part.text).join("\n") ?? ""
+
+    scenario("puts a starting agent's instructions in the system prompt", function* (s) {
+      yield* defineAgents()
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+
+      expect(prompt(s.requests.at(-1))).toContain("Plan rules")
+      expect(systemTexts(s.requests.at(-1)!)).toEqual([])
+    })
+
+    scenario("adds instructions before the next prompt when switching in, keeping the system prompt", function* (s) {
+      yield* defineAgents()
+      yield* s.runPrompt("First")
+      yield* select(s, plan)
+      yield* s.runPrompt("Second")
+
+      expect(s.requests[1]?.system).toEqual(s.requests[0]?.system)
+      expect(prompt(s.requests[1])).not.toContain("Plan rules")
+      expect(texts(s.requests[1]!)).toEqual(["First", "Plan rules", "Second"])
+    })
+
+    scenario("withdraws instructions when switching to an agent without any", function* (s) {
+      yield* defineAgents()
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* select(s, build)
+      yield* s.runPrompt("Second")
+
+      expect(s.requests[1]?.system).toEqual(s.requests[0]?.system)
+      expect(systemTexts(s.requests[1]!)).toEqual([expect.stringContaining(leftPlan)])
+      expect(messageRoles(s.requests[1])).toEqual(["user", "system", "user"])
+    })
+
+    scenario("sends nothing when switching away and back before the next step", function* (s) {
+      yield* defineAgents()
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* select(s, build)
+      yield* select(s, plan)
+      yield* s.runPrompt("Second")
+
+      expect(systemTexts(s.requests[1]!)).toEqual([])
+    })
+
+    scenario("replaces one agent's instructions with another's in one update", function* (s) {
+      yield* defineAgents()
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* select(s, orchestrator)
+      yield* s.runPrompt("Second")
+
+      const updates = systemTexts(s.requests[1]!)
+      expect(updates).toHaveLength(1)
+      expect(updates[0]).toContain(leftPlan)
+      expect(updates[0]).toContain("Orchestrator rules")
+    })
+
+    scenario("sends changed instructions when a plugin edits the selected agent", function* (s) {
+      yield* defineAgents()
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* defineAgents("New plan rules")
+      yield* s.runPrompt("Second")
+
+      expect(systemTexts(s.requests[1]!)).toEqual([
+        "The Plan agent's instructions changed. These replace the previous ones:\n\nNew plan rules",
+      ])
+    })
+
+    scenario("sends an agent's own inactive text when switching away, and only then", function* (s) {
+      const agent = yield* Agent.Service
+      yield* agent.transform((editor) =>
+        editor.update(plan, (item) => {
+          item.name = Agent.Name.make("Plan")
+          item.mode = "primary"
+          item.instructions = { active: "Plan rules", inactive: "Left Plan mode" }
+        }),
+      )
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* select(s, build)
+      yield* s.runPrompt("Second")
+      expect(systemTexts(s.requests[1]!)).toEqual(["Left Plan mode"])
+
+      // After compaction on build, neither text is shown: inactive is only for the switch itself.
+      yield* s.llm.push(TestLLM.text("## Objective\n- summary", "inactive-summary"))
+      yield* s.session.compact({ sessionID })
+      yield* s.resume
+      yield* s.runPrompt("Third")
+      expect(prompt(s.requests.at(-1))).not.toContain("Plan rules")
+      expect(prompt(s.requests.at(-1))).not.toContain("Left Plan mode")
+      expect(systemTexts(s.requests.at(-1)!)).toEqual([])
+    })
+
+    scenario("sends nothing when only an agent's inactive text changes", function* (s) {
+      const agent = yield* Agent.Service
+      const define = (inactive: string) =>
+        agent.transform((editor) =>
+          editor.update(plan, (item) => {
+            item.name = Agent.Name.make("Plan")
+            item.mode = "primary"
+            item.instructions = { active: "Plan rules", inactive }
+          }),
+        )
+      yield* define("Left Plan mode")
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* define("You have left Plan mode")
+      yield* s.runPrompt("Second")
+      expect(systemTexts(s.requests[1]!)).toEqual([])
+      yield* select(s, build)
+      yield* s.runPrompt("Third")
+      expect(systemTexts(s.requests[2]!)).toEqual(["You have left Plan mode"])
+    })
+
+    scenario("moves instructions into the system prompt at compaction", function* (s) {
+      yield* defineAgents()
+      yield* s.runPrompt("First")
+      yield* select(s, plan)
+      yield* s.runPrompt("Second")
+      yield* s.llm.push(TestLLM.text("## Objective\n- summary", "agent-summary"))
+      yield* s.session.compact({ sessionID })
+      yield* s.resume
+      yield* s.runPrompt("Third")
+
+      expect(prompt(s.requests.at(-1))).toContain("Plan rules")
+      expect(systemTexts(s.requests.at(-1)!)).toEqual([])
+    })
+
+    scenario("keeps instructions after reverting past the switch into the agent", function* (s) {
+      yield* defineAgents()
+      const first = yield* s.runPrompt("First")
+      yield* select(s, plan)
+      yield* s.runPrompt("Second")
+      yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: first.id })
+      yield* s.runPrompt("Third")
+
+      expect(prompt(s.requests.at(-1))).toContain("Plan rules")
+      expect(texts(s.requests.at(-1)!)).toEqual(["Third"])
+    })
+
+    scenario("drops instructions after reverting between entering and leaving the agent", function* (s) {
+      yield* defineAgents()
+      yield* s.runPrompt("First")
+      yield* select(s, plan)
+      const second = yield* s.runPrompt("Second")
+      yield* select(s, build)
+      yield* s.runPrompt("Third")
+      yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: second.id })
+      yield* s.runPrompt("Fourth")
+
+      expect(prompt(s.requests.at(-1))).not.toContain("Plan rules")
+      expect(texts(s.requests.at(-1)!)).toEqual(["First", "Fourth"])
+    })
+  })
+
   scenario("uses the selected model family prompt when the agent does not override it", function* (s) {
     s.currentModel = LanguageModel.make({ id: "gpt-5", provider: "openai", route: OpenAIChat.route })
     yield* s.admit("First")
