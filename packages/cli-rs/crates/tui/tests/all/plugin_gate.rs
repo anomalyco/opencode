@@ -13,8 +13,9 @@
 //!   12 hunks of 25 lines in turn, each estimated at 40 rows: modified cards far taller than their estimates, in a
 //!   pane where their lines wrap.
 //!
-//! `GATE_SIZES` (default `40,410,1000`) sets the files, `GATE_PARTS` the parts. Native layout rounds are counted per
-//! frame; OpenTUI does not time a round apart.
+//! `GATE_SIZES` (default `40,410,1000`) sets the files, `GATE_PARTS` the parts. `GATE_VERIFY=off` turns off
+//! `TestApp`'s check of each frame, which a terminal app does not run. Native layout rounds are counted per frame;
+//! OpenTUI does not time a round apart.
 
 use crate::support;
 
@@ -131,7 +132,7 @@ fn today(count: usize) {
         events: true,
         ..support::deps(Arc::new(memory.clone()))
     };
-    let harness = support::mount(WIDTH, HEIGHT, deps);
+    let harness = mount(WIDTH, HEIGHT, deps);
     harness.wait_for("/project");
     frames(&harness, Instant::now(), &|_| false);
     // The open: the dispatch, the load and the first frame that shows the first file, all timed.
@@ -304,7 +305,7 @@ fn route(count: usize, list: bool, narrow: bool) {
         true => (48, 28, 24, (20, 14)),
         false => (WIDTH, HEIGHT, 140, (120, 30)),
     };
-    let harness = support::mount(width, height, deps);
+    let harness = mount(width, height, deps);
     frames(&harness, Instant::now(), &|_| false);
     let action = |name: &str, step: usize, usable: &dyn Fn(&str) -> bool, run: &dyn Fn()| -> String {
         gate(|gate| gate.view_us = 0.0);
@@ -399,6 +400,13 @@ fn parts(count: usize) {
     write(json!({ "part": "parts", "files": count, "syntax_each_us": syntax_each_us, "build_us": build_us,
         "first_frame_us": first.0, "first_rounds": first.1, "toggle_us": toggle_us, "toggle_frame_us": toggle_frame.0,
         "resize_frame_us": resize_frame.0, "resize_rounds": resize_frame.1 }));
+}
+
+/// [`support::mount`], with `TestApp`'s check of each frame as `GATE_VERIFY` says.
+fn mount(width: u16, height: u16, deps: Deps) -> support::Harness {
+    let harness = support::mount(width, height, deps);
+    harness.app.set_verify(std::env::var("GATE_VERIFY").as_deref() != Ok("off"));
+    harness
 }
 
 #[test]
