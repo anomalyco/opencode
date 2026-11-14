@@ -37,7 +37,10 @@ fn session(plugins: &[&str], extra: Vec<opencode_plugin::Builtin>) -> Harness {
     harness
 }
 
+/// Waits until the views took every flush of the store, which reaches the UI thread through a task on the runtime, then
+/// three frames.
 fn settle(harness: &Harness) {
+    harness.wait("the views took the store's changes", || harness.tui.synced());
     for _ in 0..3 {
         harness.app.advance(Duration::from_millis(1));
         harness.app.render();
