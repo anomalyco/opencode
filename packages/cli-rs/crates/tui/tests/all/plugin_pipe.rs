@@ -1813,8 +1813,9 @@ fn released_content_and_a_restarted_hosts_content_go() {
     assert_eq!(opencode_plugin::surface::ledger().content, held, "an ended JS host's content was kept");
 }
 
-// Expected (carbon-7): a slot that showed no rows reserves none when it mounts again: the prompt does not move while its
-// first tree is on its way.
+// Expected (carbon-7): a slot that shows no rows takes the height it was laid out at when it mounts again: the prompt
+// does not move while its first tree is on its way. (At this tip a slot's root lays out one row at least, so the
+// screen's stand-in size, which carbon saw recorded, never reaches a mount that showed a tree.)
 #[test]
 fn a_slot_of_no_rows_reserves_none_again() {
     let Some(config) = config() else { return };
@@ -2026,10 +2027,45 @@ fn a_directory_without_a_tui_module_is_skipped() {
     opencode_tui::plugins::host::reconcile(&pipe.harness.tui);
     let target = dir.to_string_lossy().into_owned();
     let skipped = || {
+        // Skipped for good, not while it starts.
+        let status = Status::Skipped(opencode_plugin::SKIPPED.to_owned());
         let entries = pipe.harness.tui.plugins.entries();
-        entries
-            .into_iter()
-            .any(|entry| entry.target.as_deref() == Some(target.as_str()) && matches!(entry.status, Status::Skipped(_)))
+        entries.into_iter().any(|entry| entry.target.as_deref() == Some(target.as_str()) && entry.status == status)
     };
     quietly(&pipe, "the directory was skipped", skipped);
+}
+
+// Expected (carbon-8): a watch a handler made is gone with the JS host that ended: the setup again makes its own, and the
+// host pushes nothing for the old one, though its read changed.
+#[test]
+fn a_handlers_watch_ends_with_its_js_host() {
+    let Some(mut config) = config() else { return };
+    config.ends = 10;
+    let pipe = lab(config);
+    let tui = &pipe.harness.tui;
+    tui.keymap.dispatch("lab.late", None);
+    pipe.settle();
+    tui.keymap.dispatch("lab.lateread", None);
+    assert_eq!(toasted(&pipe, "late"), "late true");
+    toasts(&pipe.harness);
+    let pid = pipe.scripts().pid().unwrap();
+    pipe.scripts().kill();
+    quietly(&pipe, "the end was noticed", || pipe.scripts().pid().is_some_and(|now| now != pid));
+    pipe.settle();
+    // The read it watched changes.
+    pipe.harness.app.resize(90, 30);
+    pipe.settle();
+    tui.keymap.dispatch("lab.lateread", None);
+    assert_eq!(toasted(&pipe, "late"), "late false");
+}
+
+// Expected (carbon-8): a call that asks for more effects than the host runs at once fails its plugin, with none of them.
+#[test]
+fn a_call_over_the_effect_bound_fails_its_plugin() {
+    let Some(config) = config() else { return };
+    let pipe = lab(config);
+    pipe.harness.tui.keymap.dispatch("lab.effects", Some("300"));
+    quietly(&pipe, "the lab failed", || failed(&pipe, LAB).is_some());
+    assert!(failed(&pipe, LAB).unwrap().contains("300 effects"));
+    assert_eq!(pipe.status(twin::ID), Some(Status::Active));
 }

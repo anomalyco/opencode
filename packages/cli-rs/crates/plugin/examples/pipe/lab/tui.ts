@@ -29,6 +29,16 @@ export default {
       for (let index = 0; index < 70; index++) if (carrier.read(`w${index}`) !== undefined) answered++
       toast(`watches ${answered}`)
     })
+    // A watch of a handler's, which a setup again does not make.
+    command("lab.late", () => {
+      // Its watches are at the bound: one goes first.
+      carrier.unwatch("w0")
+      carrier.watch("late", { type: "info" })
+    })
+    command("lab.lateread", () => toast(`late ${carrier.read("late") !== undefined}`))
+    command("lab.effects", (input?: string) => {
+      for (let index = 0; index < Number(input); index++) carrier.effect({ type: "log", level: "debug", message: `${index}` })
+    })
     command("lab.bigint", () => carrier.effect({ type: "log", level: "info", message: 1n }))
     command("lab.bigview", () => {
       state.big = true
@@ -49,7 +59,7 @@ export default {
     carrier.surface("lab", { type: "slot", kind: "append", path: "home.footer" }, (cx: any) => {
       if (state.exit) process.exit(9)
       if (state.big) return { type: "text", spans: [{ text: `big ${1n}` }], size: 1n }
-      if (state.zero) return { type: "box", children: [] }
+      if (state.zero) return { type: "box", layout: { height: { cells: 0 } }, children: [] }
       const mount = JSON.stringify(cx.mount)
       const last = handles.get(mount)
       if (last) cx.release(last)
