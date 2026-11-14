@@ -925,8 +925,8 @@ fn scroll_verbs_reads_and_events_cross_the_pipe() {
 }
 
 // Expected (`work` in bytes over the pipe): a revision that changes one card crosses that card and keeps the others, so
-// its bytes are a fraction of the whole tree's; one that changes nothing crosses no tree; a theme change crosses
-// nothing to the plugin.
+// its bytes are a fraction of the whole tree's; one that changes nothing crosses no tree; a theme change crosses the
+// theme alone, which the V2 context's `theme` reads (P8), and no tree: the twin's nodes name tokens.
 #[test]
 fn a_revision_crosses_bytes_that_follow_the_change() {
     let Some(config) = config() else { return };
@@ -958,8 +958,8 @@ fn a_revision_crosses_bytes_that_follow_the_change() {
     tui.theme_changed();
     pipe.settle();
     let themed = pipe::crossed();
-    // The settle's own ping and pong cross; nothing else does.
-    assert_eq!((themed.sent - quiet.sent, themed.trees - quiet.trees), (1, 0), "a theme change crossed to the plugin");
+    // The settle's own ping and pong cross, and the theme; nothing else does.
+    assert_eq!((themed.sent - quiet.sent, themed.trees - quiet.trees), (2, 0), "a theme change crossed a tree");
 }
 
 /// The twin alone on the JS host, its route open and settled.
