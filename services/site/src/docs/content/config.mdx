@@ -504,7 +504,11 @@ For example, this global configuration places new worktrees under each project's
 }
 ```
 
-Without this setting, creation uses the server's data directory under `worktree/<first-six-project-ID-characters>`.
+When this is set and Git is the selected strategy, OpenCode tells the model to create worktrees there with
+`git worktree add`, unless the user asks for another location.
+
+Without this setting, creation uses the server's data directory under `worktree/<first-six-project-ID-characters>`, and
+the model gets no worktree location.
 Worktree creation and refresh load configuration from the project's saved canonical checkout, including when other
 clones share its project ID. Changing it does not move existing worktrees.
 

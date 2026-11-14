@@ -1194,6 +1194,9 @@ Load the plugin through `plugins` and configure the common destination separatel
 - `reload()` replays transforms after captured inputs change; it does not rerun plugin setup.
 - Creation failures do not retry through Git. Existing worktrees retain their recorded owner even when the default changes.
 - Strategies manage local directories. Remote workspace provisioning is not part of this interface.
+- OpenCode tells the model how to make worktrees only for the Git strategy. A strategy plugin should add its own
+  instructions with a `context` session hook, for example: "Unless the user asks otherwise, manage worktrees with
+  Rift. Create one with `rift create --name <name>` …".
 
 #### Operations
 

@@ -8,11 +8,9 @@ import { AbsolutePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Effect, Schema } from "effect"
-import { toolFailure } from "../runtime.js"
+import path from "path"
 import { FileAccess } from "../../file-access.js"
-import { Git } from "../../git.js"
-import { Permission } from "../../permission.js"
-import { Worktree } from "../../worktree.js"
+import { WorktreeStrategies } from "../../worktree/strategies.js"
 
 export const RenameInput = Schema.Struct({
   sessionID: Schema.optionalKey(Session.ID).annotate({ description: "Omit to rename the current session." }),
@@ -29,21 +27,6 @@ export const MoveInput = Schema.Struct({
 })
 
 const MoveOutput = Schema.Struct({ sessionID: Session.ID, directory: AbsolutePath })
-
-export const WorktreeCreateInput = Schema.Struct({
-  name: Schema.Trim.check(Schema.isNonEmpty()).annotate({ description: "Worktree name." }),
-})
-
-export const WorktreeRemoveInput = Schema.Struct({
-  directory: AbsolutePath.check(Schema.isMinLength(1)).annotate({
-    description: "Absolute path of the worktree to remove.",
-  }),
-  force: Schema.optionalKey(Schema.Boolean).annotate({
-    description: "Discard modified and untracked files. Only set this when the user has confirmed forced removal.",
-  }),
-})
-
-const WorktreeRemoveOutput = Schema.Struct({ directory: AbsolutePath, removed: Schema.Boolean })
 
 export const ModelsInput = Schema.Struct({
   query: Schema.optionalKey(Schema.String).annotate({
@@ -97,9 +80,13 @@ export const Plugin = {
   id: "opencode.tools",
   effect: Effect.fn("OpenCodeTools.Plugin")(function* (ctx: Context) {
     const access = yield* FileAccess.Service
-    const permission = yield* Permission.Service
+    const worktrees = yield* WorktreeStrategies.Service
     const hook = (event: SessionHooks["context"]) =>
       Effect.sync(() => {
+        const worktree = worktrees.get()
+        // Only for a configured directory and the built-in git strategy; a strategy plugin adds its own instructions.
+        if (worktree.configured && worktree.selected === "git")
+          event.system.push(SystemPart.make(guidance(worktree.directory)))
         event.system.push(
           SystemPart.make(
             "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory.",
@@ -114,7 +101,7 @@ export const Plugin = {
         draft.namespace({
           name: "opencode",
           description:
-            "Tools for managing OpenCode itself, such as working with sessions and worktrees, searching the available models, and reading MCP resources.",
+            "Tools for managing OpenCode itself, such as working with sessions, searching the available models, and reading MCP resources.",
         })
         draft.add({
           name: "session_rename",
@@ -153,11 +140,20 @@ export const Plugin = {
               // The destination becomes the session's internal directory, so leaving the project
               // needs the same approval as reaching outside it. The project's own worktrees don't.
               const target = yield* access.resolve({ path: directory, kind: "directory" })
-              const worktrees = target.externalDirectory
-                ? yield* ctx.worktree.list({ projectID: ctx.location.project.id })
-                : []
-              if (!worktrees.some((worktree) => FSUtil.contains(worktree.directory, directory)))
-                yield* access.authorizeExternal([target], context)
+              const projectID = ctx.location.project.id
+              const known = ctx.worktree
+                .list({ projectID })
+                .pipe(
+                  Effect.map((worktrees) =>
+                    worktrees.some((worktree) => FSUtil.contains(worktree.directory, directory)),
+                  ),
+                )
+              // Models create worktrees with `git worktree add`, so a new one is found by refreshing the inventory.
+              const worktree =
+                target.externalDirectory &&
+                ((yield* known) ||
+                  (yield* ctx.worktree.refresh({ projectID }).pipe(Effect.ignore, Effect.andThen(known))))
+              if (!worktree) yield* access.authorizeExternal([target], context)
               yield* ctx.session.move({
                 sessionID,
                 directory,
@@ -171,64 +167,6 @@ export const Plugin = {
               Effect.mapError(
                 (error) => new ToolFailure({ message: `Unable to move session to ${input.directory}`, error }),
               ),
-            ),
-        })
-        draft.add({
-          name: "worktree_create",
-          description: "Create a named worktree. Returns its directory.",
-          input: WorktreeCreateInput,
-          output: Worktree.Info,
-          options: { namespace: "opencode", codemode: true, pinned: true },
-          execute: (input) =>
-            ctx.worktree.create({ projectID: ctx.location.project.id, name: input.name }).pipe(
-              Effect.map((output) => ({ output, content: `Created worktree in ${output.directory}.` })),
-              Effect.mapError(
-                (error) => new ToolFailure({ message: `Unable to create worktree ${input.name}`, error }),
-              ),
-            ),
-        })
-        draft.add({
-          name: "worktree_list",
-          description: "List a repository's worktrees.",
-          input: Schema.Struct({}),
-          output: Schema.Struct({ worktrees: Worktree.List }),
-          options: { namespace: "opencode", codemode: true, pinned: true },
-          execute: () =>
-            ctx.worktree.list({ projectID: ctx.location.project.id }).pipe(
-              Effect.map((worktrees) => ({ output: { worktrees } })),
-              Effect.mapError((error) => new ToolFailure({ message: "Unable to list worktrees", error })),
-            ),
-        })
-        draft.add({
-          name: "worktree_remove",
-          description:
-            "Remove a worktree. The repository location selects configuration; directory identifies the worktree to remove.",
-          input: WorktreeRemoveInput,
-          output: WorktreeRemoveOutput,
-          options: { namespace: "opencode", codemode: true, pinned: true, permission: "edit" },
-          execute: (input, context) =>
-            Effect.gen(function* () {
-              // Removing a worktree deletes files, so it requires the same approval as editing them.
-              const target = yield* access.resolve({ path: input.directory, kind: "directory" })
-              yield* permission.assert({
-                action: "edit",
-                resources: [target.resource],
-                save: ["*"],
-                ...Permission.invocation(context),
-              })
-              yield* ctx.worktree
-                .remove({
-                  projectID: ctx.location.project.id,
-                  directory: target.absolute,
-                  force: input.force ?? false,
-                })
-                .pipe(Effect.mapError((error) => new ToolFailure({ message: removeFailure(target.absolute, error) })))
-              return {
-                output: { directory: target.absolute, removed: true },
-                content: `Removed worktree ${target.absolute}.`,
-              }
-            }).pipe(
-              Effect.mapError(toolFailure(`Unable to remove worktree ${input.directory}`)),
             ),
         })
         draft.add({
@@ -300,15 +238,6 @@ export const Plugin = {
   }),
 }
 
-// Worktree errors carry no model-facing message, and Git's own text suggests forcing removal.
-function removeFailure(directory: string, error: unknown) {
-  if (error instanceof Worktree.DirectoryUnavailableError)
-    return `Unable to remove worktree ${directory}: the directory does not exist or is not a directory.`
-  if (error instanceof Worktree.InvalidDirectoryError)
-    return `Unable to remove ${directory}: it is not a worktree of this project. Use worktree_list to see the project's worktrees.`
-  if (error instanceof Worktree.StrategyUnavailableError)
-    return `Unable to remove worktree ${directory}: its worktree strategy ${error.strategy} is not available.`
-  if ((error instanceof Git.WorktreeError || error instanceof Worktree.OperationError) && error.forceRequired)
-    return `Unable to remove worktree ${directory}: it has modified or untracked files.`
-  return `Unable to remove worktree ${directory}.`
-}
+/** Where and how to make worktrees, from `worktree.directory`. Measured to steer models better than worktree tools. */
+const guidance = (directory: string) =>
+  `Unless the user asks otherwise, create worktrees in \`${directory}\` with \`git worktree add ${path.join(directory, "<name>")}\` (add \`-b <branch>\` for a new branch). List them with \`git worktree list\` and remove one with \`git worktree remove <path>\`.`
