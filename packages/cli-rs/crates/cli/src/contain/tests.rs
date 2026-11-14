@@ -315,8 +315,9 @@ fn a_fault_is_a_crash_and_a_request_is_an_end() {
 const PROBE: &str = "OPENCODE_CONTAIN_PROBE";
 
 // Expected (bigboi 9, carbon 3, 8): a real parent passes a SIGTERM sent to it alone on to its client, which ends with
-// it, and the parent then ends with the client's code. The parent runs in a process of its own (this test binary
-// again), as its signal dispositions are the process's.
+// it, and the parent then ends with the client's code. Its caller ignored SIGCHLD, as an embedding program may: the
+// parent still waits for its client. The parent runs in a process of its own (this test binary again), as its signal
+// dispositions are the process's.
 #[cfg(unix)]
 #[test]
 #[allow(unsafe_code)]
@@ -324,6 +325,8 @@ fn a_real_parent_passes_a_term_on() {
     use std::io::BufRead;
     if std::env::var_os(PROBE).is_some() {
         let raw = os(&["opencode-native"]);
+        // SAFETY: a disposition, in the probe's own process.
+        unsafe { libc::signal(libc::SIGCHLD, libc::SIG_IGN) };
         match supervise_with(&raw, &restart_of(&raw), &mut sys::Unix::new()) {
             Ok(_) => {
                 println!("client {}", std::process::id());
@@ -367,4 +370,24 @@ fn a_real_parent_passes_a_term_on() {
     assert_eq!(status.code(), Some(143));
     // SAFETY: a probe of a PID; the parent reaped its client, so nothing answers.
     assert_eq!(unsafe { libc::kill(client, 0) }, -1, "the client outlived its parent");
+}
+
+// Expected (bigboi, carbon 4): on Windows an exception status, abort's 3, the watchdog's 75 and a panic's 101 are
+// crashes; the end of a console event (Ctrl+C or Ctrl+Break before the client's handler, the console closing) is the
+// user's; every code reaches the parent's exit whole.
+#[cfg(windows)]
+#[test]
+fn a_console_end_is_the_users_and_codes_stay_whole() {
+    for (code, expected) in [
+        (0xC000_0005u32, End::Crash(0xC000_0005u32 as i32)),
+        (0xC000_00FD, End::Crash(0xC000_00FDu32 as i32)),
+        (3, End::Crash(3)),
+        (75, End::Crash(75)),
+        (101, End::Crash(101)),
+        (0xC000_013A, End::Exit(0xC000_013Au32 as i32)),
+        (0, End::Exit(0)),
+        (300, End::Exit(300)),
+    ] {
+        assert_eq!(sys::end(code), expected, "{code:#x}");
+    }
 }
