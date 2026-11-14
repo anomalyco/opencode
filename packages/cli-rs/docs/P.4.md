@@ -447,10 +447,39 @@ The same targets as TS (`plugin/discovery.ts`, `plugin/context.tsx` reconcile):
 
 Targets merge by local path; a later entry replaces an earlier one in its place. A target has a native build when it
 is a shared library, or a directory with `plugin.so` (`plugin.dylib`, `plugin.dll`). Every other target is a TypeScript plugin and
-is listed as skipped (F16). Server-side TUI plugins (`GET /api/plugin` with `features.tui`) are TypeScript packages
+is listed as skipped (F16), unless the JS host runs (below). Server-side TUI plugins (`GET /api/plugin` with `features.tui`) are TypeScript packages
 and are not loaded. The `plugins` entries after a plugin's own entry (all of them, for a discovered plugin) decide
 whether it starts enabled. A toggle in `/plugins` lasts until the TUI exits, also across hot reloads; it is not
 saved, as in TS.
+
+### TypeScript plugins on the JS host (P7)
+
+With `OPENCODE_PLUGIN_JS=1` and Bun found (`OPENCODE_BUN`, or `bun` on the path), a directory target without a native
+build runs on the JS host: one Bun process for every TypeScript TUI plugin, started with the first one
+(`crates/plugin/src/pipe`, rich-plugins 3.7 and 4.3). It loads the directory's TUI module as TS does (`package.json`
+`name` and `exports`, else `tui.ts` and its kin) and runs its V2 `{ id, setup }` default export. The setup context has
+what maps onto contract 2.0 without Solid: `options`, `app`, `themeMode`, `keymap.layer` commands, `ui.toast`,
+`data.on`; and, under `Symbol.for("opencode.carrier")`, the carrier the V2 compatibility layer (P8) builds the rest on:
+`surface(name, place, view, { palette, notify, onScroll })` with views that return contract 2.0 trees (`memo`,
+`content`), `command`, `on`, `effect` (any host request), `watch`/`read` (snapshots), `invalidate`, `fetch`.
+
+It is the second timing tier. No frame waits for the JS host:
+
+- **Events** (commands, events, scroll events, replies) cross with a sequence. The JS host acknowledges each on
+  receipt and answers when the handler returned, with its effects, which apply then, in order. A handler that throws
+  has none and fails its plugin, as a panic does in process.
+- **Trees** are revisions of a mount, one in flight: the host adopts it in its next frame, or refuses it and gets a
+  whole one. Until a mount's first tree it shows a placeholder that keeps the rows its key had (or one); while a new
+  one is on its way, the last.
+- **Reads** are snapshots the host pushes for what the plugin watches, before each event and each change. There is no
+  `layout` call and no canvas draw.
+- **Hold**: a command that declares `hold` holds the keys typed after it until its handler returned, or 50 ms.
+- **Supervision**: the queues are bounded (1 MiB queued to the JS host; 256 unread messages and 8 MiB from it; 8
+  unread trees, after which it waits), an event or a handler unanswered after 1 s (a load or setup: 10 s) ends it, as
+  does a resident set over 512 MiB. Its process group is killed with it, it dies with the client (Linux
+  `PR_SET_PDEATHSIG`; a job object on Windows; the end of its input everywhere). The plugin whose handler ran when it
+  ended fails, as does one that flooded the host with effects; the others are set up again on a new JS host, their
+  surfaces keeping their last trees meanwhile. Three ends in a minute fail every plugin on it.
 
 ### Approval of a project's plugins
 
