@@ -1,7 +1,8 @@
 //! The test binary's allocator: the system allocator, which can count the Rust heap one thread allocates and still
-//! holds, so a test can tell what a mount keeps. Each allocation carries the allocating thread in a header, so frees
-//! of other threads' allocations, such as messages decoded on the runtime's threads, do not count. OpenTUI's native
-//! memory is not counted.
+//! holds, so a test can tell what a mount keeps. Each allocation carries in a header the measure it counts in, so
+//! frees of other threads' allocations, such as messages decoded on the runtime's threads, do not count, nor frees of
+//! what this thread allocated before the measure, such as the tasks of an earlier mount that its runtime drops in the
+//! background. OpenTUI's native memory is not counted.
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
@@ -12,6 +13,9 @@ pub struct Counting;
 
 /// The thread whose allocations count, 0 for none.
 static MEASURED: AtomicUsize = AtomicUsize::new(0);
+/// The running measure's number, 0 for none.
+static MEASURE: AtomicUsize = AtomicUsize::new(0);
+static NEXT_MEASURE: AtomicUsize = AtomicUsize::new(1);
 static LIVE: AtomicIsize = AtomicIsize::new(0);
 static NEXT_THREAD: AtomicUsize = AtomicUsize::new(1);
 static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
@@ -24,6 +28,7 @@ thread_local! {
 pub fn measure() -> Measure {
     let lock = ONE_AT_A_TIME.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     LIVE.store(0, Ordering::SeqCst);
+    MEASURE.store(NEXT_MEASURE.fetch_add(1, Ordering::SeqCst), Ordering::SeqCst);
     MEASURED.store(thread(), Ordering::SeqCst);
     Measure { _lock: lock }
 }
@@ -42,6 +47,7 @@ impl Measure {
 impl Drop for Measure {
     fn drop(&mut self) {
         MEASURED.store(0, Ordering::SeqCst);
+        MEASURE.store(0, Ordering::SeqCst);
     }
 }
 
@@ -63,14 +69,23 @@ fn header(layout: Layout) -> usize {
     layout.align().max(size_of::<usize>())
 }
 
-fn count(owner: usize, bytes: isize) {
-    if owner != 0 && owner == MEASURED.load(Ordering::Relaxed) {
+/// The measure an allocation this thread makes now counts in, 0 for none.
+fn counted_in() -> usize {
+    let measured = MEASURED.load(Ordering::Relaxed);
+    if measured == 0 || measured != thread() {
+        return 0;
+    }
+    MEASURE.load(Ordering::Relaxed)
+}
+
+fn count(measure: usize, bytes: isize) {
+    if measure != 0 && measure == MEASURE.load(Ordering::Relaxed) {
         LIVE.fetch_add(bytes, Ordering::Relaxed);
     }
 }
 
 // SAFETY: each allocation is the system's, `header(layout)` bytes larger and aligned as asked; the caller gets the
-// pointer past the header, whose last word holds the allocating thread.
+// pointer past the header, whose last word holds the measure the allocation counts in.
 #[allow(unsafe_code)]
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
@@ -83,19 +98,19 @@ unsafe impl GlobalAlloc for Counting {
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         unsafe {
-            count(owner(ptr), -(layout.size() as isize));
+            count(counts_in(ptr), -(layout.size() as isize));
             System.dealloc(ptr.sub(header(layout)), with_header(layout));
         }
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         unsafe {
-            let owner = owner(ptr);
+            let measure = counts_in(ptr);
             let base = System.realloc(ptr.sub(header(layout)), with_header(layout), new_size + header(layout));
             if base.is_null() {
                 return base;
             }
-            count(owner, new_size as isize - layout.size() as isize);
+            count(measure, new_size as isize - layout.size() as isize);
             base.add(header(layout))
         }
     }
@@ -110,16 +125,36 @@ unsafe fn tag(base: *mut u8, layout: Layout) -> *mut u8 {
     if base.is_null() {
         return base;
     }
-    let owner = thread();
-    count(owner, layout.size() as isize);
+    let measure = counted_in();
+    count(measure, layout.size() as isize);
     unsafe {
         let ptr = base.add(header(layout));
-        ptr.cast::<usize>().sub(1).write_unaligned(owner);
+        ptr.cast::<usize>().sub(1).write_unaligned(measure);
         ptr
     }
 }
 
 #[allow(unsafe_code)]
-unsafe fn owner(ptr: *mut u8) -> usize {
+unsafe fn counts_in(ptr: *mut u8) -> usize {
     unsafe { ptr.cast::<usize>().sub(1).read_unaligned() }
+}
+
+/// Memory this thread allocated before a measure and another thread frees during it is not part of the measure, as
+/// the tasks of a mount that ended, which its runtime frees in the background while the next mount is measured.
+#[test]
+fn a_measure_counts_no_free_of_what_came_before_it() {
+    let before = vec![0u8; 65_536];
+    let barrier = std::sync::Barrier::new(2);
+    std::thread::scope(|scope| {
+        let barrier = &barrier;
+        scope.spawn(move || {
+            barrier.wait();
+            drop(before);
+            barrier.wait();
+        });
+        let measure = measure();
+        barrier.wait();
+        barrier.wait();
+        assert_eq!(measure.kept(), 0);
+    });
 }
