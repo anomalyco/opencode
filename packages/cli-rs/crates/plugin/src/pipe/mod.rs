@@ -16,8 +16,8 @@
 //!   handler ran fails, and the others are set up again, their surfaces keeping their last trees meanwhile. Three ends
 //!   in a minute fail every plugin on it.
 //!
-//! The JS host runs only when [`Config::from_env`] finds it asked for (`OPENCODE_PLUGIN_JS=1`): until the V2
-//! compatibility layer (P8) maps their UI, most TypeScript plugins would fail on it.
+//! The JS host runs when [`Config::from_env`] finds Bun, unless `OPENCODE_PLUGIN_JS=0`: the V2 compatibility layer (P8,
+//! `compat/`) runs today's V2 plugins on it unmodified where their features map.
 
 pub mod child;
 mod guest;
@@ -78,9 +78,9 @@ impl Config {
         }
     }
 
-    /// The JS host, when `OPENCODE_PLUGIN_JS` is `1` and Bun is found: `OPENCODE_BUN`, or `bun` on the path.
+    /// The JS host, unless `OPENCODE_PLUGIN_JS` is `0`, when Bun is found: `OPENCODE_BUN`, or `bun` on the path.
     pub fn from_env() -> Option<Self> {
-        if std::env::var("OPENCODE_PLUGIN_JS").ok().as_deref() != Some("1") {
+        if std::env::var("OPENCODE_PLUGIN_JS").ok().as_deref() == Some("0") {
             return None;
         }
         let bun = std::env::var_os("OPENCODE_BUN").map(PathBuf::from).or_else(|| find("bun"))?;
