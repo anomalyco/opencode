@@ -1,6 +1,7 @@
 //! Shared setup for the TUI integration tests: a fake server with a baseline route table, a mount with default
 //! [`Deps`], and the wait and screen helpers.
 
+pub mod heap;
 pub mod ide;
 pub mod model;
 

@@ -384,6 +384,45 @@ fn the_edit_diff_splits_in_a_session_pane_above_120_columns() {
     assert!(split, "{}", h.app.text());
 }
 
+/// A write or edit block keeps no copy of its file or patch: the store holds the text, and OpenTUI's views their own.
+/// The Rust heap this thread keeps after a mount grows with the text by the copies; the fixed cost cancels out
+/// between two sizes. The store's copy is decoded on the runtime's threads and does not count.
+#[test]
+fn write_and_edit_blocks_keep_no_second_copy_of_the_text() {
+    // Rust heap this thread keeps after mounting a completed call whose text has `size` bytes and ends in `end`.
+    let kept = |name: &str, size: usize| {
+        let mut text: String =
+            (0..size / 32).map(|line| format!("let value_{line:05} = compute({line:05});\n")).collect();
+        text.push_str("end");
+        let (input, metadata) = match name {
+            "write" => (json!({ "path": "/project/w.rs", "content": text }), json!({})),
+            _ => (
+                json!({ "path": "/project/e.rs" }),
+                json!({ "files": [{
+                    "file": "e.rs", "filePath": "/project/e.rs", "type": "update",
+                    "patch": format!("--- e.rs\n+++ e.rs\n@@ -1 +1,{} @@\n-x\n+{}\n", size / 32 + 1, text.replace('\n', "\n+")),
+                    "additions": size / 32 + 1, "deletions": 1,
+                }] }),
+            ),
+        };
+        let messages = turn(vec![tool("call_1", name, completed(input, "Done", metadata))]);
+        let measure = support::heap::measure();
+        let h = open(100, 40, messages, Vec::new());
+        h.wait_for("end\n");
+        measure.kept()
+    };
+    // Measured: write 2.13 and edit 9.55 copies, and 3.19 and 10.64 with a copy in the block. Write's are OpenTUI's
+    // `Code`: its source, and the copy its kept highlighter diffs the next edit against. Edit's are OpenTUI's `Diff`:
+    // the patch, the text of each side, and per-line gutter maps.
+    for (name, bound) in [("write", 2.6), ("edit", 10.1)] {
+        // The first mount on a thread also fills caches that live for the process.
+        kept(name, 4096);
+        let (small, large) = (kept(name, 4096), kept(name, 69_632));
+        let copies = (large - small) as f64 / 65_536.0;
+        assert!(copies < bound, "{name} keeps {copies:.2} copies of its text, at most {bound}");
+    }
+}
+
 #[test]
 fn the_generic_tool_lists_its_inputs_and_output_on_click() {
     let input = json!({ "url": "https://example.com", "depth": 2, "options": { "deep": true } });
