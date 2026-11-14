@@ -379,6 +379,14 @@ impl Tui {
     }
 }
 
+impl Drop for Tui {
+    /// An open dialog holds the dialog stack, which holds the keymap and with it every plugin's commands, so the TUI
+    /// frees them as it ends.
+    fn drop(&mut self) {
+        self.dialogs.release();
+    }
+}
+
 impl opencode_ui::bind::WeakRef for Tui {
     type Target = Tui;
     fn weak_ref(&self) -> Weak<Tui> {
