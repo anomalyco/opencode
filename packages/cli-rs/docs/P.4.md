@@ -63,8 +63,9 @@ Versions only grow by appending:
   without it refuses the plugin at load and names it. A 2.0 host has no optional features yet.
 - What the host takes from a plugin is decoded before anything of the call applies. An answer it cannot decode (cut
   short, not JSON, a node kind it does not know) fails the plugin and leaves no effect, as a panic does.
-- On macOS, when the system refuses a library for its code signature or for quarantine, the plugin manager says so
-  and what to do.
+- The host opens a copy of each build. On macOS the copy keeps the file's quarantine, so the system checks it as it
+  would the file; when the system refuses a library, the plugin manager names the file, the cause (another team's
+  signature, the quarantine of a download, a missing or invalid signature) and what to do.
 - 1.5 is P0a's (dialogs, box styling, the composer). 1.6 adds the small reads and verbs (below), as new
   `HostRequest`s, one `Request` (`Deltas`) and optional fields, and no table entry. A 1.x plugin
   (`export_plugin!(.., requires_minor = N)`) requires 1.4: on an older host a 1.6 read returns its default (`None`,
@@ -493,9 +494,12 @@ holds the mailbox to its rule (`backlog`). `crates/plugin/examples/c` is a plugi
 
 ## Authoring
 
-`opencode-native plugin dev <dir>` builds the plugin crate in `<dir>`, runs the TUI with its library as one more
-`plugins` entry, and builds it again when `<dir>` or `<dir>/src` changes; the hot reload above takes the new
-library, and a failed build leaves the running one, with its output in `<dir>/target/opencode-dev/build.log`.
-`opencode-native plugin test <library or crate dir> [--route NAME] [--size WxH] [--command NAME[=INPUT]]...` loads the
-plugin into the TUI on the headless renderer, with no server, and prints text frames. Neither command is in the
-TypeScript CLI (deviation `D01-plugin-dev-test`).
+`opencode-native plugin dev <dir>` builds the plugin crate in `<dir>`, runs the TUI with its library beside the
+configured plugins (a settings change keeps it, and it is never saved), and builds it again after a change in any
+directory of the crate but `target` and hidden ones; the hot reload above takes the new library, and a failed build
+leaves the running one, with its output in `<dir>/target/opencode-dev/build.log`.
+`opencode-native plugin test <library, crate or plugin dir> [--route NAME] [--size WxH] [--command NAME[=INPUT]]
+[--wait TEXT]...` loads the plugin into the TUI on the headless renderer, with no server, and prints text frames. It
+exits with an error when the plugin does not load or fails, the route is not the plugin's, or a command does not run.
+Its clock is its own, but the plugin's threads run in real time: `--wait TEXT` advances the clock until the frame shows
+`TEXT`, for ten seconds at most. Neither command is in the TypeScript CLI (deviation `D01-plugin-dev-test`).
