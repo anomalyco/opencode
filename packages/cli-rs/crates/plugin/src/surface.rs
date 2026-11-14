@@ -307,9 +307,6 @@ impl Surface {
                     mounted.draw_sized(host.as_ref());
                 }
             });
-            // The resize runs in the frame, and OpenTUI's event loop drains deferred work only at a turn's start: a
-            // proxy post brings that turn (carbon 4).
-            let _ = app.proxy().post(|_| {});
         });
         match fills {
             // A route's first view runs once the page it replaces is gone, whose keymap layers go in this turn's
