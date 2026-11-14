@@ -357,6 +357,9 @@ function resolveEntry(dir: string): string | undefined {
 }
 
 async function setup(seq: number, plugin: Plugin) {
+  // A setup again (an activation, a changed module, a new JS host) starts from nothing: the last one's cleanups run.
+  if (plugin.active) deactivate(plugin)
+  plugin.mounts.clear()
   plugin.commands = []
   plugin.events = []
   plugin.surfaces = []
