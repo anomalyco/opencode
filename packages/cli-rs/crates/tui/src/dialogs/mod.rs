@@ -19,7 +19,6 @@ pub mod model;
 pub mod open;
 pub mod pair;
 pub mod pending_steer;
-pub mod plugins;
 pub mod queued;
 pub mod rename;
 pub mod session_list;

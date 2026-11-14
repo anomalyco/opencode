@@ -1,0 +1,527 @@
+//! The plugin manager (E.18b, `feature-plugins/system/plugins.tsx`): the built-in `opencode.plugins` with `plugins.list`
+//! (`/plugins`), a plugin of the one API (P6b, synthesis 4.10) on both carriers. It reads the TUI plugins
+//! ([`abi::Read::plugins`]) and hears when they change ([`abi::Setup::on_plugins`]); it never changes them. A row that
+//! enables or disables a plugin, or asks to approve a project's plugin, is a toggle row, which only the host runs, on the
+//! user's key or click (synthesis 3.6). The server rows come from `GET /api/plugin` of the location the manager opened
+//! at; check and update are server calls too.
+//!
+//! Built-ins are internal and hidden until `ctrl+a`; a configured TypeScript plugin is listed as `skipped` with the
+//! reason as its error (F16), and an external plugin that failed as `failed` with its error. Enter on a row that is not a
+//! toggle opens its error, if any. A project plugin held back for approval (rich-plugins 3.9, not in TS) is listed
+//! `pending` or `declined`.
+
+use opencode_api::client::Client;
+use opencode_api::generated::{
+    LocationQueryInput, PluginCheckInput, PluginInfo, PluginListInput, PluginSource, PluginSourcePackage, PluginState,
+    PluginUpdateInput,
+};
+use opencode_api::js::locale_compare;
+use opencode_plugin::abi::{
+    self, Action, Command, Dialog, ErrorDetails, Gutter, Host, PanelSize, PluginEntry, PluginOrigin, PluginStatus,
+    Read, RequestId, Select, SelectAction, SelectOption, Span, Toast, Variant,
+};
+
+use super::fetch::{data, fetch_of};
+
+use crate::prelude::*;
+
+pub const ID: &str = "opencode.plugins";
+/// The list's key, and the error view's.
+const LIST: &str = "plugins";
+const ERROR: &str = "plugins.error";
+
+pub fn plugin() -> abi::Plugin {
+    abi::Plugin { id: ID, setup }
+}
+
+/// The open manager's state; a new open starts it again, as TS mounts a new `PluginsDialog`.
+#[derive(Default)]
+struct State {
+    /// The opens so far: a reply to an earlier one changes nothing of this one.
+    opened: Cell<u64>,
+    /// `context.location ?? data.location.default()` as it opened.
+    directory: RefCell<String>,
+    server: RefCell<Option<Vec<PluginInfo>>>,
+    checking: Cell<bool>,
+    internal: Cell<bool>,
+    /// Keys of the server plugins with an update in flight.
+    updating: RefCell<Vec<String>>,
+    requests: RefCell<HashMap<RequestId, Asked>>,
+}
+
+/// A server call in flight, with the open it belongs to.
+enum Asked {
+    List(u64),
+    Check(u64),
+    Update(u64, String),
+}
+
+fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let state = Rc::new(State::default());
+    let command = Command {
+        name: "plugins.list".to_owned(),
+        title: "Plugins".to_owned(),
+        group: Some("System".to_owned()),
+        slash: Some("plugins".to_owned()),
+        palette: true,
+        ..Command::default()
+    };
+    let opened = state.clone();
+    setup.command(command, move |host, _| {
+        let state = &opened;
+        state.opened.set(state.opened.get() + 1);
+        *state.directory.borrow_mut() = host.info().location.directory;
+        state.server.replace(None);
+        state.checking.set(false);
+        state.internal.set(false);
+        state.updating.borrow_mut().clear();
+        host.dialog(Dialog::Select(list(host, state, None)));
+        state.fetch(host, Asked::List(state.opened.get()));
+    });
+    let internal = state.clone();
+    setup.command(hidden("opencode.plugins.internal"), move |host, _| {
+        internal.internal.set(!internal.internal.get());
+        internal.show(host);
+    });
+    let check = state.clone();
+    setup.command(hidden("opencode.plugins.check"), move |host, _| {
+        if !check.checking.replace(true) {
+            check.show(host);
+            check.fetch(host, Asked::Check(check.opened.get()));
+        }
+    });
+    let update = state.clone();
+    setup.command(hidden("opencode.plugins.update"), move |host, key| {
+        let row = key.and_then(|key| update.rows(host).into_iter().find(|row| row.key() == key));
+        if let Some(row) = row.filter(|row| update.updatable(row)) {
+            update.updating.borrow_mut().push(row.key());
+            update.show(host);
+            update.fetch(host, Asked::Update(update.opened.get(), row.key()));
+        }
+    });
+    // Enter on a row that toggles nothing, and the `view error` actions: the row's error, if it has one.
+    let detail = state.clone();
+    setup.command(hidden("opencode.plugins.error"), move |host, key| {
+        let row = key.and_then(|key| detail.rows(host).into_iter().find(|row| row.key() == key));
+        if let Some(row) = row.filter(|row| row.error().is_some()) {
+            host.dialog(Dialog::ErrorDetails(details(&row)));
+        }
+    });
+    let back = state.clone();
+    setup.command(hidden("opencode.plugins.back"), move |host, key| {
+        host.dialog(Dialog::Select(list(host, &back, key.map(str::to_owned))));
+    });
+    // TS's subscription lives as long as the dialog, its error view included (`plugins.tsx:39`).
+    let updated = state.clone();
+    setup.on_event(&["plugin.updated"], move |host, _| {
+        if host.dialog_open(LIST) || host.dialog_open(ERROR) {
+            updated.fetch(host, Asked::List(updated.opened.get()));
+        }
+    });
+    // The TUI rows follow the registry while the list shows; nothing opens it again.
+    let heard = state.clone();
+    setup.on_plugins(move |host| heard.show(host));
+    setup.on_reply(move |host, id, reply| {
+        let Some(asked) = state.requests.borrow_mut().remove(&id) else { return };
+        let current = |open: u64| open == state.opened.get();
+        match asked {
+            Asked::List(open) => {
+                if let (true, Ok(plugins)) = (current(open), data::<Vec<PluginInfo>>(reply)) {
+                    state.server.replace(Some(plugins));
+                }
+            }
+            Asked::Check(open) => {
+                let plugins = data::<Vec<PluginInfo>>(reply);
+                if current(open) {
+                    state.checking.set(false);
+                }
+                match plugins {
+                    Ok(plugins) if current(open) => drop(state.server.replace(Some(plugins))),
+                    Ok(_) => {}
+                    Err(error) => host.toast(Toast::new(Variant::Error, error)),
+                }
+            }
+            Asked::Update(open, key) => {
+                if current(open) {
+                    state.updating.borrow_mut().retain(|updating| *updating != key);
+                }
+                match reply {
+                    Ok(_) if current(open) => state.fetch(host, Asked::List(open)),
+                    Ok(_) => {}
+                    Err(error) => host.toast(Toast::new(Variant::Error, error)),
+                }
+            }
+        }
+        state.show(host);
+    });
+    Ok(())
+}
+
+fn hidden(name: &str) -> Command {
+    Command { name: name.to_owned(), ..Command::default() }
+}
+
+fn command(name: &str, input: Option<String>) -> Action {
+    Action::Command { name: name.to_owned(), input }
+}
+
+impl State {
+    /// Shows the list again while it is open: in place, with its filter and selection.
+    fn show(&self, host: &dyn Host) {
+        if host.dialog_open(LIST) {
+            host.dialog(Dialog::Select(list(host, self, None)));
+        }
+    }
+
+    fn fetch(&self, host: &dyn Host, asked: Asked) {
+        let location = Some(LocationQueryInput { directory: Some(self.directory.borrow().clone()) });
+        let call = match &asked {
+            Asked::List(_) => Client::plugin_list_call(&PluginListInput { location }),
+            Asked::Check(_) => Client::plugin_check_call(&PluginCheckInput { location, ..PluginCheckInput::default() }),
+            Asked::Update(_, key) => {
+                let rows = self.rows(host);
+                let Some(package) = rows.iter().find(|row| row.key() == *key).and_then(Row::package) else { return };
+                Client::plugin_update_call(&PluginUpdateInput { location, targets: vec![package.target.clone()] })
+            }
+        };
+        let call = call.expect("the plugin inputs encode");
+        self.requests.borrow_mut().insert(host.fetch(fetch_of(call)), asked);
+    }
+
+    /// Every row: the TUI plugins, then the server plugins, each sorted by label.
+    fn rows(&self, read: &dyn Read) -> Vec<Row> {
+        let mut local: Vec<Row> = read.plugins().into_iter().filter(|entry| entry.id != ID).map(Row::Tui).collect();
+        // A package without a server part runs nothing there; its TUI part has its own row.
+        let directory = self.directory.borrow();
+        let mut server: Vec<Row> = self
+            .server
+            .borrow()
+            .iter()
+            .flatten()
+            .filter(|plugin| plugin.features.server == Some(true) || matches!(plugin.state, PluginState::Failed(_)))
+            .map(|plugin| Row::Server { source: source(plugin, &directory), plugin: plugin.clone() })
+            .collect();
+        local.sort_by(|a, b| locale_compare(&a.label(), &b.label()));
+        server.sort_by(|a, b| locale_compare(&a.label(), &b.label()));
+        local.extend(server);
+        local
+    }
+
+    fn updating(&self, row: &Row) -> bool {
+        self.updating.borrow().contains(&row.key())
+            || row.package().is_some_and(|package| package.updating == Some(true))
+    }
+
+    fn updatable(&self, row: &Row) -> bool {
+        row.outdated() && !self.updating(row)
+    }
+}
+
+/// `PluginsDialog`'s list, selecting `focus` as it opens (back from an error).
+fn list(read: &dyn Read, state: &State, focus: Option<String>) -> Select {
+    let rows = state.rows(read);
+    let visible: Vec<&Row> =
+        rows.iter().filter(|row| state.internal.get() || !row.internal() || row.status() == "failed").collect();
+    // The values of the visible rows an action does not apply to, on which it hides.
+    let except = |applies: &dyn Fn(&Row) -> bool| -> Vec<String> {
+        visible.iter().filter(|row| !applies(row)).map(|row| row.key()).collect()
+    };
+    let mut actions = Vec::new();
+    if rows.iter().any(|row| row.package().is_some()) {
+        let checking = state.checking.get();
+        actions.push(SelectAction {
+            title: if checking { "checking for updates" } else { "check for updates" }.to_owned(),
+            key: Some("ctrl+r".to_owned()),
+            action: command("opencode.plugins.check", None),
+            hidden: Vec::new(),
+            primary: None,
+            rowless: true,
+            command: Some("dialog.plugins.check".to_owned()),
+            disabled: checking,
+        });
+    }
+    let error = command("opencode.plugins.error", None);
+    actions.extend([
+        // A toggle row's error: enter toggles it.
+        SelectAction {
+            title: "view error".to_owned(),
+            key: Some("space".to_owned()),
+            action: error.clone(),
+            hidden: except(&|row| row.toggle().is_some() && row.error().is_some()),
+            primary: None,
+            rowless: false,
+            command: Some("dialog.plugins.error".to_owned()),
+            disabled: false,
+        },
+        // Any other row's error, which enter opens (TS's footer hint).
+        SelectAction {
+            title: "view error".to_owned(),
+            key: Some("enter".to_owned()),
+            action: error.clone(),
+            hidden: except(&|row| row.toggle().is_none() && row.error().is_some()),
+            primary: None,
+            rowless: false,
+            command: None,
+            disabled: false,
+        },
+        SelectAction {
+            title: "update".to_owned(),
+            key: Some("ctrl+u".to_owned()),
+            action: command("opencode.plugins.update", None),
+            hidden: except(&|row| state.updatable(row)),
+            primary: None,
+            rowless: false,
+            command: Some("dialog.plugins.update".to_owned()),
+            disabled: false,
+        },
+        SelectAction {
+            title: format!("{} internal", if state.internal.get() { "hide" } else { "show" }),
+            key: Some("ctrl+a".to_owned()),
+            action: command("opencode.plugins.internal", None),
+            hidden: Vec::new(),
+            primary: Some(false),
+            rowless: true,
+            command: None,
+            disabled: false,
+        },
+    ]);
+    Select {
+        key: Some(LIST.to_owned()),
+        size: Some(PanelSize::Large),
+        focus,
+        actions,
+        ..Select::new("Plugins", visible.iter().map(|row| option(row, state)).collect(), error)
+    }
+}
+
+fn option(row: &Row, state: &State) -> SelectOption {
+    let updating = state.updating(row);
+    let failed = row.status() == "failed";
+    let color = if failed {
+        "text.feedback.error.base"
+    } else if row.status() == "pending" {
+        "text.feedback.warning.base"
+    } else if row.outdated() {
+        "text.feedback.info.base"
+    } else {
+        "text.muted"
+    };
+    SelectOption {
+        category: Some(if matches!(row, Row::Tui(_)) { "TUI" } else { "Server" }.to_owned()),
+        search_text: Some(row.source()),
+        footer: if updating { Some("updating".to_owned()) } else { row.footer() },
+        footer_color: Some(color.into()),
+        gutter: match (updating, failed) {
+            (true, _) => Some(Gutter::Spinner),
+            (false, true) => Some(Gutter::Span(Span::new("x").fg("text.feedback.error.base"))),
+            (false, false) => None,
+        },
+        toggle: row.toggle(),
+        ..SelectOption::new(row.label(), row.key())
+    }
+}
+
+/// `DialogErrorDetails` for `row`; Back and escape return to the list on it.
+fn details(row: &Row) -> ErrorDetails {
+    let runtime = if matches!(row, Row::Tui(_)) { "tui" } else { "server" };
+    let source = row.source();
+    ErrorDetails {
+        title: format!("{} plugin error", if runtime == "tui" { "TUI" } else { "Server" }),
+        error: row.error().unwrap_or_else(|| "Unknown plugin error".to_owned()),
+        context: Some(format!("Plugin: {}\nStatus: failed\nRuntime: {runtime}\nSource: {source}", row.label())),
+        source: Some(source),
+        back: Some(command("opencode.plugins.back", Some(row.key()))),
+        reference: match row {
+            Row::Server { plugin: PluginInfo { state: PluginState::Failed(failed), .. }, .. } => failed.r#ref.clone(),
+            _ => None,
+        },
+        key: Some(ERROR.to_owned()),
+    }
+}
+
+/// A row of the list.
+enum Row {
+    Tui(PluginEntry),
+    Server {
+        /// `source(plugin)`, formatted against the location.
+        source: String,
+        plugin: PluginInfo,
+    },
+}
+
+impl Row {
+    fn key(&self) -> String {
+        match self {
+            Row::Tui(entry) => format!("tui:{}", entry.target.as_ref().unwrap_or(&entry.id)),
+            Row::Server { plugin, source } => format!("server:{}", plugin.id.as_ref().map_or(source, |id| &id.0)),
+        }
+    }
+
+    fn internal(&self) -> bool {
+        match self {
+            Row::Tui(entry) => entry.origin == PluginOrigin::Builtin,
+            Row::Server { plugin, .. } => matches!(plugin.source, PluginSource::Builtin(_)),
+        }
+    }
+
+    /// The project plugin's build waits for the user's approval, or was declined.
+    fn held(&self) -> bool {
+        matches!(self, Row::Tui(entry) if matches!(entry.status, PluginStatus::Pending | PluginStatus::Declined))
+    }
+
+    /// The plugin a pick of the row enables, disables or asks about: one with a definition, or a held build.
+    fn toggle(&self) -> Option<String> {
+        match self {
+            Row::Tui(entry) if entry.origin != PluginOrigin::Configured || self.held() => Some(entry.id.clone()),
+            _ => None,
+        }
+    }
+
+    fn label(&self) -> String {
+        match self {
+            // Nothing of a held plugin is opened, so it has no ID: its directory names it.
+            Row::Tui(entry) if self.held() => entry
+                .target
+                .as_deref()
+                .and_then(|target| std::path::Path::new(target).file_name())
+                .map_or_else(|| entry.id.clone(), |name| name.to_string_lossy().into_owned()),
+            Row::Tui(entry) if entry.origin != PluginOrigin::Configured => entry.id.clone(),
+            Row::Tui(entry) => entry.target.clone().unwrap_or_else(|| entry.id.clone()),
+            Row::Server { plugin, source } => plugin.id.as_ref().map_or_else(|| source.clone(), |id| id.0.clone()),
+        }
+    }
+
+    fn source(&self) -> String {
+        match self {
+            Row::Tui(entry) => entry.target.clone().unwrap_or_else(|| entry.id.clone()),
+            Row::Server { source, .. } => source.clone(),
+        }
+    }
+
+    fn status(&self) -> &str {
+        match self {
+            Row::Server { plugin, .. } => plugin.state.tag(),
+            Row::Tui(entry) => match entry.status {
+                PluginStatus::Active => "active",
+                PluginStatus::Inactive => "inactive",
+                PluginStatus::Skipped => "skipped",
+                PluginStatus::Failed => "failed",
+                PluginStatus::Pending => "pending",
+                PluginStatus::Declined => "declined",
+            },
+        }
+    }
+
+    fn local(&self) -> bool {
+        match self {
+            Row::Server { plugin, .. } => matches!(plugin.source, PluginSource::Local(_)),
+            Row::Tui(entry) => entry.target.as_deref().is_some_and(|target| {
+                target.starts_with("file://")
+                    || target.starts_with("./")
+                    || target.starts_with("../")
+                    || std::path::Path::new(target).is_absolute()
+            }),
+        }
+    }
+
+    fn package(&self) -> Option<&PluginSourcePackage> {
+        match self {
+            Row::Server { plugin: PluginInfo { source: PluginSource::Package(package), .. }, .. } => Some(package),
+            _ => None,
+        }
+    }
+
+    fn outdated(&self) -> bool {
+        self.package().is_some_and(|package| package.outdated == Some(true))
+    }
+
+    fn error(&self) -> Option<String> {
+        match self {
+            Row::Server { plugin, .. } => match &plugin.state {
+                PluginState::Failed(failed) => Some(failed.error.clone()),
+                _ => None,
+            },
+            Row::Tui(entry) => entry.error.clone(),
+        }
+    }
+
+    fn footer(&self) -> Option<String> {
+        let mut details = Vec::new();
+        if self.status() != "active" {
+            details.push(self.status().to_owned());
+        }
+        if self.local() {
+            details.push("local".to_owned());
+        }
+        if let Some(version) = self.package().and_then(|package| package.version.as_deref()) {
+            details.push(display_version(version));
+        }
+        if self.outdated() {
+            details.push("update available".to_owned());
+        }
+        if let Row::Tui(PluginEntry { slow: Some(slow), .. }) = self {
+            details.push(slow.clone());
+        }
+        (!details.is_empty()).then(|| details.join(", "))
+    }
+}
+
+/// The package target, the local path relative to the location's directory, else the source type.
+fn source(plugin: &PluginInfo, directory: &str) -> String {
+    match &plugin.source {
+        PluginSource::Package(package) => package.target.clone(),
+        PluginSource::Local(local) => opencode_ui::path::format(
+            &local.path,
+            Some(directory),
+            &std::env::current_dir().unwrap_or_default(),
+            std::env::home_dir().as_deref(),
+        ),
+        other => other.tag().to_owned(),
+    }
+}
+
+/// A commit hash shows as its first 7 characters.
+fn display_version(version: &str) -> String {
+    let hash = matches!(version.len(), 40 | 64) && version.chars().all(|c| c.is_ascii_hexdigit());
+    if hash { version[..7].to_owned() } else { version.to_owned() }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Expected: a commit hash shortens to 7 characters, and labels sort as TS's `localeCompare` does.
+    #[test]
+    fn versions_and_labels_order_as_in_typescript() {
+        assert_eq!(display_version(&"a".repeat(40)), "aaaaaaa");
+        assert_eq!(display_version("1.2.3"), "1.2.3");
+        let mut labels = vec!["beta", "Alpha", "alpha"];
+        labels.sort_by(|a, b| locale_compare(a, b));
+        assert_eq!(labels, ["alpha", "Alpha", "beta"]);
+    }
+
+    // Expected (TS `focusedTui`): a plugin with a definition is a toggle row, a failed active one included, and so is a
+    // project's build waiting for approval; a configured target that never loaded is not, and opens its reason.
+    #[test]
+    fn a_row_toggles_what_has_a_definition_or_waits_for_approval() {
+        let row = |origin: PluginOrigin, status: PluginStatus, error: Option<&str>| {
+            Row::Tui(PluginEntry {
+                id: "sample".to_owned(),
+                target: Some("/plugins/sample".to_owned()),
+                origin,
+                status,
+                error: error.map(str::to_owned),
+                active: status == PluginStatus::Active,
+                slow: None,
+            })
+        };
+        let failed = row(PluginOrigin::External, PluginStatus::Failed, Some("boom (previous version still active)"));
+        assert_eq!(failed.toggle().as_deref(), Some("sample"));
+        assert_eq!(failed.footer().as_deref(), Some("failed, local"));
+        assert_eq!(row(PluginOrigin::Builtin, PluginStatus::Inactive, None).toggle().as_deref(), Some("sample"));
+        let skipped = row(PluginOrigin::Configured, PluginStatus::Skipped, Some("TypeScript"));
+        assert_eq!((skipped.toggle(), skipped.label().as_str()), (None, "/plugins/sample"));
+        let pending = row(PluginOrigin::Configured, PluginStatus::Pending, None);
+        assert_eq!((pending.toggle().as_deref(), pending.label().as_str()), (Some("sample"), "sample"));
+    }
+}
