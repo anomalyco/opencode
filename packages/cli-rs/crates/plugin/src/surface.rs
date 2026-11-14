@@ -118,7 +118,8 @@ pub(crate) struct Viewing<'a> {
 
 /// What a view returned.
 pub(crate) struct Viewed {
-    pub node: Node,
+    /// `None` from a carrier whose plugin answers later (the pipe's): nothing new, and the mount keeps its tree.
+    pub node: Option<Node>,
     /// The values the memo table of a library holds after the view; `None` for a table in the host.
     pub memo: Option<usize>,
 }
@@ -150,7 +151,7 @@ impl Viewer for Linked {
             node = Some((self.view)(&mut v2::View::new(read, input, mount, memo, &mut content, release)));
         });
         called.then_some(())?;
-        Some(Viewed { node: node?, memo: None })
+        Some(Viewed { node: Some(node?), memo: None })
     }
 
     fn draws(&self) -> bool {
@@ -441,6 +442,10 @@ impl Surface {
                 self.wipe();
                 return;
             };
+            if called.nodes.is_empty() {
+                self.state.borrow_mut().memo = called.memo;
+                return;
+            }
             let (mut memo, remote) = (called.memo, called.remote);
             let result = self.adopt(host, &theme, called.nodes, &called.staged, full);
             let mut state = self.state.borrow_mut();
@@ -569,7 +574,7 @@ impl Surface {
             return None;
         };
         let staged = Staged { given: given.take() };
-        Some(Called { nodes: vec![viewed.node], staged, memo, remote: viewed.memo })
+        Some(Called { nodes: viewed.node.into_iter().collect(), staged, memo, remote: viewed.memo })
     }
 
     /// Adopts `nodes`, with the content `staged` gives, or refuses them and changes nothing.

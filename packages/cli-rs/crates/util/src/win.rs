@@ -128,6 +128,15 @@ pub fn resident_memory() -> Option<usize> {
     (ok != 0).then_some(counters.WorkingSetSize)
 }
 
+/// The working set of `child`, in bytes, while it runs.
+pub fn process_resident(child: &std::process::Child) -> Option<usize> {
+    let mut counters =
+        PROCESS_MEMORY_COUNTERS { cb: size_of::<PROCESS_MEMORY_COUNTERS>() as u32, ..Default::default() };
+    // SAFETY: the child's handle is open while `child` lives; `counters` is as large as `cb` says.
+    let ok = unsafe { K32GetProcessMemoryInfo(child.as_raw_handle(), &mut counters, counters.cb) };
+    (ok != 0).then_some(counters.WorkingSetSize)
+}
+
 /// `os.release()`: `major.minor.build` from `RtlGetVersion`, as libuv's `uv_os_uname` reads it. Unlike
 /// `GetVersionExW`, it is not capped at 6.2 for an executable without a compatibility manifest.
 pub fn os_release() -> Option<String> {

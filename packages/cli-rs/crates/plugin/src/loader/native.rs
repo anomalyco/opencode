@@ -470,20 +470,20 @@ fn has<T>(size: usize, offset: usize) -> bool {
 
 /// What the host's callbacks see: the plugin's identity, its storage keys, and what the running call asked for:
 /// effects that wait for it to return, and the storage it wrote, which a panic puts back.
-struct Ctx {
-    host: Weak<dyn Host>,
-    id: String,
-    keys: Vec<String>,
-    effects: Vec<Effect>,
-    undo: Undo,
+pub(crate) struct Ctx {
+    pub(crate) host: Weak<dyn Host>,
+    pub(crate) id: String,
+    pub(crate) keys: Vec<String>,
+    pub(crate) effects: Vec<Effect>,
+    pub(crate) undo: Undo,
     /// What the call's verbs staged for its later ones.
     staged: crate::Staged,
     /// What it asks for is dropped.
     quiet: bool,
     /// A render of 1.4 on or a view runs: it may read, and ask for nothing.
-    read_only: bool,
+    pub(crate) read_only: bool,
     /// What the calls hold of the input (P2), from the end of setup: setup itself has no mount and no owner.
-    owners: Option<Rc<crate::Owners>>,
+    pub(crate) owners: Option<Rc<crate::Owners>>,
 }
 
 /// What [`HostApi::ctx`] points to: the context of the UI thread's callbacks, and the mailbox that `wake`, `send`,
@@ -510,7 +510,7 @@ unsafe fn on_ui_thread(ctx: *mut c_void) -> bool {
 static FEATURES_JSON: std::sync::LazyLock<Vec<u8>> =
     std::sync::LazyLock::new(|| serde_json::to_vec(abi::FEATURES).unwrap_or_else(|_| b"[]".to_vec()));
 
-enum Effect {
+pub(crate) enum Effect {
     Toast(abi::Toast),
     Route(String),
     Dispatch(String, Option<String>),
@@ -773,7 +773,7 @@ impl Shared {
         let mut ctx = self.ctx.borrow_mut();
         let (effects, _) = ctx.take();
         if !ctx.quiet {
-            apply(&ctx.host, ctx.id.clone(), Weak::new(), None, effects);
+            apply(&ctx.host, ctx.id.clone(), Weak::<Guest>::new(), None, effects);
         }
     }
 
@@ -787,8 +787,14 @@ impl Shared {
 }
 
 impl Ctx {
+    /// The context of calls of plugin `id`, whose storage keys are `keys`, outside any instance: the pipe carrier's.
+    pub(crate) fn new(host: Weak<dyn Host>, id: &str, keys: Vec<String>) -> Self {
+        let (effects, undo, staged) = (Vec::new(), Undo::default(), crate::Staged::default());
+        Self { host, id: id.to_owned(), keys, effects, undo, staged, quiet: false, read_only: false, owners: None }
+    }
+
     /// What the calls asked for since it was last taken; what they staged goes with it.
-    fn take(&mut self) -> (Vec<Effect>, Undo) {
+    pub(crate) fn take(&mut self) -> (Vec<Effect>, Undo) {
         self.staged = crate::Staged::default();
         (std::mem::take(&mut self.effects), std::mem::take(&mut self.undo))
     }
@@ -904,7 +910,7 @@ unsafe extern "C" fn host_free(owned: Owned) {
     drop(unsafe { owned.into_vec() });
 }
 
-fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, String> {
+pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, String> {
     let key = |ctx: &Ctx, key: &str| {
         if ctx.id.is_empty() {
             return Err("the plugin ID is not known during setup".to_owned());
@@ -1405,32 +1411,72 @@ impl Guest {
 
     /// Queues the effects of a call on the effect queue, as the host would for a built-in.
     fn apply(self: &Rc<Self>, effects: Vec<Effect>) {
-        apply(&self.host, self.id.clone(), Rc::downgrade(self), Some(self.generation), effects);
+        let guest: Weak<dyn Answers> = Rc::downgrade(self) as Weak<Guest>;
+        apply(&self.host, self.id.clone(), guest, Some(self.generation), effects);
+    }
+}
+
+/// The instance a fetch or a program in the foreground answers, on the library carrier or the pipe.
+pub(crate) trait Answers {
+    /// Whether a reply may still reach it: it lives and its activation did not end.
+    fn live(&self) -> bool;
+    /// Whether a program it asked for may still start: it lives and did not fail.
+    fn running(&self) -> bool;
+    fn owner(&self) -> Weak<dyn Host>;
+    /// Hands it the reply, as its `on-reply` call.
+    fn answer(self: Rc<Self>, request: Request);
+}
+
+impl Answers for Guest {
+    fn live(&self) -> bool {
+        self.instance.borrow().is_some() && !self.activation.disposed()
     }
 
-    /// Calls `send` unless the instance is destroyed or its activation ended, as a call that panicked after the one
-    /// that asked for it ends it: a fetch or a program in the foreground. Its reply goes to the instance as `request` on
-    /// the effect queue, unless the instance is destroyed by then.
-    fn send(guest: &Weak<Self>, host: &dyn Host, request: abi::RequestId, send: impl FnOnce(&dyn Host, crate::Reply)) {
-        let live = guest.upgrade().filter(|guest| guest.instance.borrow().is_some() && !guest.activation.disposed());
-        let Some(live) = live else { return };
-        let (guest, owner) = (guest.clone(), live.host.clone());
-        send(
-            host,
-            Box::new(move |result| {
-                defer(&owner, move |_| {
-                    if let Some(guest) = guest.upgrade() {
-                        guest.handle("on-reply", &Request::Reply { id: request, result });
-                    }
-                });
-            }),
-        );
+    fn running(&self) -> bool {
+        self.instance.borrow().is_some() && self.failure.borrow().is_none()
     }
+
+    fn owner(&self) -> Weak<dyn Host> {
+        self.host.clone()
+    }
+
+    fn answer(self: Rc<Self>, request: Request) {
+        self.handle("on-reply", &request);
+    }
+}
+
+/// Calls `send` unless the instance `guest` names is destroyed or its activation ended, as a call that panicked after
+/// the one that asked for it ends it: a fetch or a program in the foreground. Its reply goes to the instance as
+/// `request` on the effect queue, unless the instance is destroyed by then.
+fn reply_to(
+    guest: &Weak<dyn Answers>,
+    host: &dyn Host,
+    request: abi::RequestId,
+    send: impl FnOnce(&dyn Host, crate::Reply),
+) {
+    let Some(live) = guest.upgrade().filter(|guest| guest.live()) else { return };
+    let (guest, owner) = (guest.clone(), live.owner());
+    send(
+        host,
+        Box::new(move |result| {
+            defer(&owner, move |_| {
+                if let Some(guest) = guest.upgrade() {
+                    guest.answer(Request::Reply { id: request, result });
+                }
+            });
+        }),
+    );
 }
 
 /// Queues `effects` of plugin `id` on the effect queue, as the host would for a built-in; a fetch replies to `guest`, and
 /// a dialog belongs to activation `generation`.
-fn apply(host: &Weak<dyn Host>, id: String, guest: Weak<Guest>, generation: Option<u64>, effects: Vec<Effect>) {
+pub(crate) fn apply(
+    host: &Weak<dyn Host>,
+    id: String,
+    guest: Weak<dyn Answers>,
+    generation: Option<u64>,
+    effects: Vec<Effect>,
+) {
     if effects.is_empty() {
         return;
     }
@@ -1444,7 +1490,7 @@ fn apply(host: &Weak<dyn Host>, id: String, guest: Weak<Guest>, generation: Opti
                 Effect::Stored => host.storage_changed(),
                 Effect::Navigate(route) => host.navigate(&id, &route),
                 Effect::Fetch(request, fetch) => {
-                    Guest::send(&guest, host, request, |host, reply| host.fetch(fetch, reply));
+                    reply_to(&guest, host, request, |host, reply| host.fetch(fetch, reply));
                 }
                 // The host shows it only while its activation is live. What a setup that failed or a destroyed
                 // instance asked for has none, and shows nowhere.
@@ -1462,12 +1508,8 @@ fn apply(host: &Weak<dyn Host>, id: String, guest: Weak<Guest>, generation: Opti
                 Effect::Foreground(request, program) => {
                     // The program starts later, once the turn is done: only if the instance is still live then.
                     let owner = guest.clone();
-                    let alive = Box::new(move || {
-                        owner
-                            .upgrade()
-                            .is_some_and(|guest| guest.instance.borrow().is_some() && guest.failure.borrow().is_none())
-                    });
-                    Guest::send(&guest, host, request, |host, reply| host.foreground(program, alive, reply));
+                    let alive = Box::new(move || owner.upgrade().is_some_and(|guest| guest.running()));
+                    reply_to(&guest, host, request, |host, reply| host.foreground(program, alive, reply));
                 }
                 Effect::Title(title) => host.set_title(&title),
                 Effect::Theme(name) => host.set_theme(&name),
@@ -1739,7 +1781,7 @@ impl Viewer for Remote {
             (viewing.give)(handle, bytes.0);
         }
         reply.released.into_iter().for_each(|handle| (viewing.release)(handle));
-        Some(Viewed { node: reply.node, memo: Some(reply.memo) })
+        Some(Viewed { node: Some(reply.node), memo: Some(reply.memo) })
     }
 
     fn draws(&self) -> bool {
