@@ -157,7 +157,7 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *    "storage": [key], "render": 2, "events"?: [[type]], "render_routes"?: [name], "wake"?: bool,
  *    "route_mounts"?: [name], "fence_gone"?: bool,
  *    "surfaces"?: [{"name", "place": {"type": "route", "name"} | {"type": "slot", "kind", "path"}, "palette"?,
- *    "draw"?: bool}],
+ *    "draw"?: bool, "notify"?: [notify], "layout"?: bool, "on_scroll"?: bool}],
  *    "messages"?: bool}
  *
  * Requests from the host (`call`), with their results:
@@ -189,6 +189,12 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *      shows a placeholder.
  *   {"type": "unmount", "mount"}                               -> null
  *   {"type": "message", "message": "<json text>"}              -> null
+ *   2.0 (P3), for a surface the manifest says has them:
+ *   {"type": "layout", "surface": index, "geometry": {"rects", "scrolls", "groups", "tops", "moved_only",
+ *    "reached", "transcript"?}}                                -> {"paints"?: [{"node", "bg"}], "again"?: bool}
+ *      After the solve, when something the surface's "notify" names changed. It reads only, as a view does.
+ *   {"type": "scrolled", "surface": index, "event": {"type": "landed", "scroll", "anchor"} |
+ *    {"type": "user-scroll", "scroll"}}                         -> null
  *
  * 2.0 tree nodes ("type"): "box" {"id"?, "row"?, "gap"?, "padding"?, "justify"?, "align"?, "bg"?, "layout"?,
  *   "on_click"?, "children"}, "text" {"id"?, "spans", "fg"?, "wrap"?, "truncate"?, "selectable"?, "hover_fg"?,
@@ -201,12 +207,17 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  * Requests to the host (the host table's `call`), tagged by "type": "log", "toast", "storage-get", "storage-set",
  *   "storage-merge", "storage-key", "open-route", "color", "session", "family", "messages", "models", "model",
  *   "limits", "providers", "info", "mcp-servers", "integrations", "vcs", "route", "dispatch", "attention",
- *   "navigate", "fetch", "dialog", "copy", "interactive", "shortcut", "dialog-open". Effects wait until the
- *   plugin's call returns. A call that panics, or whose answer the host refuses (it cannot decode it, the tree breaks
- *   the contract, a handler answers anything but null), has none, and fails the plugin. A call that answers
- *   OPENCODE_ERROR keeps them (see above). A render, a view or a draw ("fence", "slot", "route", "render-fence",
- *   "render", "render-route", "view", "draw") reads only: the host answers OPENCODE_ERROR to any request of it that
- *   asks for something.
+ *   "navigate", "fetch", "dialog", "copy", "interactive", "shortcut", "dialog-open"; 2.0 (P3): "scroll"
+ *   {"target", "verb"}, an effect, and the reads "scroll-state" {"target"}, "anchors" {"target", "group"},
+ *   "top-anchor" {"target", "group", "inset"?} and "transcript". `crates/plugin-abi/schema/v2.json` has their
+ *   types (Target, Scroll, ScrollState, AnchorAt, Geometry, LayoutReply, ScrollEvent, TranscriptView). Effects wait
+ *   until the plugin's call returns. A call that panics, or whose answer the host refuses (it cannot decode it, the
+ *   tree breaks the contract, a handler answers anything but null), has none, and fails the plugin. A call that
+ *   answers OPENCODE_ERROR keeps them (see above). A render, a view, a draw or a layout ("fence", "slot", "route",
+ *   "render-fence", "render", "render-route", "view", "draw", "layout") reads only: the host answers OPENCODE_ERROR
+ *   to any request of it that asks for something. A "scroll" of the transcript is taken only from a call that
+ *   answers the user's input (a key, a click, the palette, the user's scroll): the host answers OPENCODE_ERROR to
+ *   any other.
  *
  * Content in a view reply is a JSON string when its bytes are UTF-8, else {"base64": "..."} (RFC 4648, padded).
  * A message the host delivers ("message") is the JSON text the sender wrote, as a JSON string.
