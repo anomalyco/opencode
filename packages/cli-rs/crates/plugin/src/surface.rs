@@ -1266,6 +1266,15 @@ pub(crate) fn part_output(host: &dyn Host, part: &v2::PartRef) -> Option<String>
     found
 }
 
+/// Whether `bytes` have the header of a PNG, GIF, JPEG or WebP image within one image's limits (4.2): what the host
+/// decodes at all.
+pub fn within_bounds(bytes: &[u8]) -> bool {
+    let limits = limits::get();
+    crate::image::size(bytes).is_some_and(|(width, height)| {
+        bytes.len() as u64 <= limits.image_bytes && u64::from(width.max(height)) <= limits.image_side
+    })
+}
+
 /// The size of the image `bytes` decode to, or `None` where an image node of them shows nothing ([`abi::Read::image_size`]):
 /// it decodes them, within one image's limits (4.2).
 pub fn decoded_size(app: &App, bytes: &[u8]) -> Option<(u32, u32)> {

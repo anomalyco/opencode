@@ -36,6 +36,8 @@ pub const ROUTE: &str = "diff";
 pub const PANEL: &str = "panel";
 pub const PAGE: &str = "diff";
 pub const MENU: &str = "menu";
+/// The key a plugin's image preview has (`Dialog::Images`).
+const IMAGES: &str = "images";
 /// The nodes the verbs name: the cards, the file tree's scroll, and the fixed edge above the cards.
 const FILES: &str = "files";
 const TREE: &str = "tree";
@@ -107,7 +109,6 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         }),
         (PICK_BASE, |diffs, host, viewer, value| {
             let Some(reference) = value else { return };
-            host.dialog(Dialog::Close { key: base_branch::KEY.to_owned() });
             let key = base_branch::key(diffs);
             let previous = diffs.memory.borrow_mut().bases.insert(key.clone(), reference.to_owned());
             if previous.as_deref() != Some(reference) && viewer.mode.needs_base() && viewer.base_key == key {
@@ -118,7 +119,16 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     ];
     for (name, run) in commands {
         let ran = diffs.clone();
+        // A pick closes its keyed dialog, also once no viewer is left to take it (review carbon-4).
+        let closes = match name {
+            PICK_SOURCE => Some(sources::KEY),
+            PICK_BASE => Some(base_branch::KEY),
+            _ => None,
+        };
         setup.command(hidden(name), move |host, input| {
+            if let Some(key) = closes.filter(|_| input.is_some()) {
+                host.dialog(Dialog::Close { key: key.to_owned() });
+            }
             ran.with_viewer(host, |viewer| {
                 run(&ran, host, viewer, input);
                 true
@@ -254,8 +264,11 @@ impl Diffs {
         if !mounted {
             let left = self.mounts.get().saturating_sub(1);
             self.mounts.set(left);
-            if left == 0 {
-                self.viewer.borrow_mut().take();
+            // The viewer's dialogs end with it, as TS's close clears them (review carbon-4).
+            if left == 0 && self.viewer.borrow_mut().take().is_some() {
+                for key in [sources::KEY, base_branch::KEY, help::KEY, IMAGES] {
+                    host.dialog(Dialog::Close { key: key.to_owned() });
+                }
             }
             return;
         }

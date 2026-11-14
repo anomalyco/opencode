@@ -11,6 +11,8 @@ use super::viewer::{Memory, Viewer};
 const LABEL_WIDTH: usize = 11;
 /// The value of the "Base" row.
 pub const BASE: &str = "base";
+/// The source dialog's key, which a pick or the viewer's end closes.
+pub const KEY: &str = "source";
 
 /// `diff.switch_source` and a click on the source header (`openSwitchDiffDialog`).
 pub fn open(host: &dyn Host, viewer: &Viewer, memory: &Memory) {
@@ -25,6 +27,7 @@ pub fn open(host: &dyn Host, viewer: &Viewer, memory: &Memory) {
         .collect();
     let action = Action::Command { name: PICK_SOURCE.to_owned(), input: None };
     host.dialog(Dialog::Select(Select {
+        key: Some(KEY.to_owned()),
         current: Some(viewer.mode.key().to_owned()),
         filterless: true,
         ..Select::new("Diff source", options, action)
