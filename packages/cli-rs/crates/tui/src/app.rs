@@ -654,6 +654,15 @@ fn route_keys(tui: &Rc<Tui>) {
 }
 
 fn install_keys(tui: &Rc<Tui>) {
+    // The reserved chord resets the plugins' input before anything may stop it, and goes on (synthesis 3.8).
+    let weak = tui.weak();
+    tui.app.on_key_capture(move |_, key| {
+        if key.matches(opencode_plugin::abi::interact::RESERVED)
+            && let Some(tui) = weak.upgrade()
+        {
+            tui.router.escape(&*tui);
+        }
+    });
     // Console copy, then the selection keys, go before the keymap (E.20).
     crate::features::console_copy::install(tui);
     crate::features::selection::install(tui);

@@ -77,9 +77,15 @@ impl Panels {
         crate::frame::refresh(tui);
     }
 
+    /// Closes the panel; a focus it had goes to the composer.
     pub fn close(&self, tui: &Tui) {
         if self.current.borrow_mut().take().is_some() {
             crate::frame::refresh(tui);
+            tui.app.defer(bind!(tui, |tui, _| {
+                if tui.app.focused().is_none() {
+                    opencode_plugin::Host::focus_composer(&*tui);
+                }
+            }));
         }
     }
 

@@ -368,6 +368,8 @@ struct Inner<T> {
     scroll_after_layout: Cell<bool>,
     /// The options' search strings, prepared once rather than on every keystroke.
     prepared: RefCell<fuzzy::Cache>,
+    /// The last submit came from a key or a click, not from its command run by name.
+    by_input: Cell<bool>,
 }
 
 struct Row<T> {
@@ -477,6 +479,7 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
         listed: Cell::new(false),
         tail: RefCell::new(Vec::new()),
         footer_key: RefCell::new(None),
+        by_input: Cell::new(false),
         scroll_after_layout: Cell::new(false),
         prepared: RefCell::default(),
     });
@@ -614,6 +617,11 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             return;
         }
         self.filter_changed(value.to_owned());
+    }
+
+    /// Whether the option picked last was picked with a key or a click, not by running the submit command by name.
+    pub fn by_input(&self) -> bool {
+        self.0.by_input.get()
     }
 
     /// Draws the footer again, after the `footer` content was shown or hidden.
@@ -938,10 +946,11 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         self.render();
     }
 
-    fn submit(&self) {
+    fn submit(&self, by_input: bool) {
         if self.props().locked {
             return;
         }
+        self.0.by_input.set(by_input);
         let Some(option) = self.selected() else { return };
         if let Some(run) = &option.on_select {
             run(&self.0.cx.dialogs);
@@ -997,7 +1006,13 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                     s.move_index(s.count() - 1, false, true);
                 }
             }),
-            command("dialog.select.submit", "Select item", Select::submit),
+            // A key that runs it brings its event; a run by name, as a plugin's, does not.
+            TuiCommand::new(
+                "dialog.select.submit",
+                bind!(weak, |inner, _, event| Select(inner).submit(event.is_some())),
+            )
+            .title("Select item")
+            .group("Dialog"),
         ];
         for action in self.props().actions.iter().filter(|action| !action.hidden) {
             let run = action.clone();
@@ -1399,6 +1414,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                     let app = select.0.cx.app.clone();
                     app.defer(move |_cx| {
                         select.move_index(index, false, true);
+                        select.0.by_input.set(true);
                         if let Some(run) = &option.on_select {
                             run(&select.0.cx.dialogs);
                         }

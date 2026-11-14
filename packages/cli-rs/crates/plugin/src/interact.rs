@@ -11,25 +11,27 @@
 //!
 //! | State | Event | Next | The host |
 //! | --- | --- | --- | --- |
-//! | any | a key, not held | the same | the intercept: the reserved chord ends every plugin mode and goes on; else the listeners in order (priority, then newest) until one consumes; else the keymap's layers |
+//! | any | the reserved chord | the same | before the hold, the selection and every layer: every plugin mode ends, a hold's input is dropped, the plugins' layers stop holding where the focus is until it moves; the chord goes on to the host |
+//! | any | a key, not held | the same | the intercept: the listeners in order (priority, then newest) until one consumes; else the keymap's layers |
 //! | any | a handler returns | the same | its effects apply before the next event of the batch (the TUI flushes after each key) |
-//! | free | a consumed [`Bind::hold`] key | held | the keys after it are buffered until `release_keys` or [`input::HOLD`] |
-//! | held | release or [`input::HOLD`] | free | the buffered keys are routed in order, after the batch |
-//! | no mode | `set_mode(m)` | mode m | the keymap's mode is the plugin's `m`: its layers of `m` hold, base layers do not |
-//! | mode m | the owner's scope loses the focus, the reserved chord, `set_mode(None)`, the owner ends | no mode | the mode is gone for good |
+//! | free | a consumed [`Bind::hold`] key | held | the keys and pastes after it wait behind it, at most [`HOLD_LIMIT`] |
+//! | held | its owner's `release_keys`, its own [`input::HOLD`] timer, [`HOLD_LIMIT`], the owner ends | free | what waited is routed in order after the event; what was meant for a focus that something else moved (a press, a command) is dropped |
+//! | no mode | `set_mode(m)` | mode m | the keymap's mode is the plugin's `m` while no host dialog is open: its layers of `m` hold, base layers do not |
+//! | mode m | a move of the focus out of the owner's scope, the reserved chord, `set_mode(None)`, the owner ends | no mode | the mode is gone for good |
 //! | no capture | a press on a pointer node, consumed | captured | its drags reach it |
-//! | captured | release, the owner ends, the node leaves its tree, the focus moves, a host dialog opens | no capture | |
+//! | captured | release, the owner ends, the node leaves its tree, a move of the focus, a host dialog opens, a resize | no capture | |
 //! | any | the owner ends | gone | its layers, listeners, mode, capture, hold and overlays go |
 
 use std::any::Any;
 use std::cell::{Cell, RefCell};
+use std::collections::VecDeque;
 use std::rc::{Rc, Weak};
 
 use opencode_plugin_abi::interact::{
     self as input, Anchor, Bind, Button, Event, Handled, Interact, Layer, LayerScope, Pointer, PointerKind,
 };
 use opencode_ui::keymap::{BASE_MODE, KeymapLayer, TuiCommand};
-use opentui::input::{KeyCode, KeyEvent, Modifiers, MouseButton, MouseEvent, MouseEventKind};
+use opentui::input::{Event as Input, KeyCode, KeyEvent, Modifiers, MouseButton, MouseEvent, MouseEventKind};
 use opentui::keymap::{Condition, Disposer, Stroke};
 use opentui::prelude::*;
 
@@ -86,10 +88,18 @@ struct Listener {
     deliver: Deliver,
 }
 
+/// How many events a hold keeps; at the limit it is released, and what it kept goes on in order.
+pub const HOLD_LIMIT: usize = 256;
+
 struct Hold {
     owner: Weak<Owner>,
-    keys: Vec<KeyEvent>,
-    /// Released: the keys are being routed again, after the batch.
+    /// New with every hold: a release or a timer of an earlier one does nothing to it.
+    generation: u64,
+    /// The input after the hold key, in arrival order, each with the focus it came to: keys and pastes. OpenTUI gives
+    /// a press to its widget before any host code sees it, so a press cannot wait.
+    events: VecDeque<(Input, Option<u32>)>,
+    timer: Option<TimerId>,
+    /// Released: what it kept is being routed again.
     draining: bool,
 }
 
@@ -123,7 +133,11 @@ pub struct Router {
     overlays: RefCell<Vec<Shown>>,
     /// The intercept of the keymap, once a plugin registers input.
     intercept: RefCell<Option<Disposer>>,
+    host: RefCell<Option<Weak<dyn Host>>>,
     replaying: Cell<bool>,
+    holds: Cell<u64>,
+    /// After the reserved chord, the focus where the plugins' layers stop holding until it moves.
+    suspended: Cell<Option<Option<u32>>>,
 }
 
 /// What the input registrations hold now, read from the registries the host routes by (`ledger`, 4.14).
@@ -137,19 +151,25 @@ pub struct Ledger {
     /// The widgets in the host's overlay layer.
     pub overlays: usize,
     pub capture: bool,
+    /// A hold is active, and the events it keeps.
+    pub holding: bool,
     pub held: usize,
+    /// Pending hold timers.
+    pub timers: usize,
 }
 
-/// The input registrations of `host` now.
+/// The input registrations of `host` now; reading them changes nothing.
 pub fn ledger(host: &dyn Host) -> Ledger {
     let keymap = host.keymap();
     let mut ledger = Ledger { layers: keymap.layer_count(), modes: keymap.mode_count(), ..Ledger::default() };
     ledger.overlays = host.overlay_layer().map_or(0, |layer| layer.children().len());
     if let Some(router) = host.router() {
-        router.prune_capture(host);
         ledger.listeners = router.listeners.borrow().len();
         ledger.capture = router.capture.borrow().is_some();
-        ledger.held = router.hold.borrow().as_ref().map_or(0, |hold| hold.keys.len());
+        let hold = router.hold.borrow();
+        ledger.holding = hold.is_some();
+        ledger.held = hold.as_ref().map_or(0, |hold| hold.events.len());
+        ledger.timers = hold.as_ref().map_or(0, |hold| usize::from(hold.timer.is_some()));
     }
     ledger
 }
@@ -205,7 +225,27 @@ impl Owner {
     /// The scope of the surface is the focus in `view`, the container the host shows it in: a panel, an overlay.
     pub(crate) fn hold_in(&self, view: View) {
         blurs(&view, &self.host);
-        // A paste in it goes to the layers that declare pastes, before the host's paste route.
+        self.pastes_in(&view);
+        *self.held.borrow_mut() = Held::Within(view);
+    }
+
+    /// The scope of the surface is the focus in its root: a slot claim.
+    pub(crate) fn hold_root(&self) {
+        if let Some(root) = self.root.clone() {
+            self.hold_in(root);
+        }
+    }
+
+    /// The scope of the surface is its route's showing; a paste in it is its.
+    pub(crate) fn hold_route(&self) {
+        if let Some(root) = &self.root {
+            self.pastes_in(root);
+        }
+        *self.held.borrow_mut() = Held::Route;
+    }
+
+    /// A paste in `view` goes to the layers that declare pastes, before the host's paste route.
+    fn pastes_in(&self, view: &View) {
         let host = self.host.clone();
         view.on_paste(move |cx, text| {
             if let Some(host) = host.upgrade()
@@ -216,12 +256,6 @@ impl Owner {
                 cx.stop_propagation();
             }
         });
-        *self.held.borrow_mut() = Held::Within(view);
-    }
-
-    /// The scope of the surface is its route's showing.
-    pub(crate) fn hold_route(&self) {
-        *self.held.borrow_mut() = Held::Route;
     }
 
     /// The view whose focus is the surface's, if its scope is one.
@@ -232,13 +266,18 @@ impl Owner {
         }
     }
 
-    /// Whether the focus is in the surface's scope, or its route shows with no dialog over it.
+    /// Whether the focus is in the surface's scope, or its route shows with no dialog or overlay over it.
     fn in_surface(&self, host: &dyn Host) -> bool {
         match (&*self.held.borrow(), &self.root) {
             (_, None) => false,
             (Held::Within(view), Some(_)) => focus_within(host.app(), view.id()),
-            (Held::Route, Some(_)) => !host.modal_open(),
+            (Held::Route, Some(_)) => !host.modal_open() && !host.router().is_some_and(|router| router.overlaid(host)),
         }
+    }
+
+    /// The view the focus is in while it is in the surface: its container, or its root.
+    fn scope_view(&self) -> Option<View> {
+        self.within().or_else(|| self.root.clone())
     }
 
     /// Registers `layers`, whose keys reach `deliver`.
@@ -270,7 +309,7 @@ impl Owner {
                 .keys
                 .iter()
                 .filter(|bind| {
-                    let reserved = same_key(&bind.key, input::RESERVED);
+                    let reserved = reserved(host, &bind.key);
                     if reserved {
                         log::warn!("plugin {}: no layer may bind {}", self.plugin, input::RESERVED);
                     }
@@ -325,12 +364,15 @@ impl Owner {
         }
     }
 
-    /// Whether `scope` holds for this owner now.
+    /// Whether `scope` holds for this owner now: never where the reserved chord left the focus, until it moves.
     fn holds(&self, scope: &LayerScope) -> bool {
         if !self.alive() {
             return false;
         }
         let Some(host) = self.host.upgrade() else { return false };
+        if host.router().is_some_and(|router| router.suspended(&*host)) {
+            return false;
+        }
         match scope {
             LayerScope::Global => true,
             LayerScope::Composer => host.composer_focused(),
@@ -366,8 +408,14 @@ impl Owner {
         let Some(name) = mode.filter(|_| self.alive() && self.mode_holds()) else { return };
         let ended = Rc::new(Cell::new(false));
         let (owner, flag) = (Rc::downgrade(self), ended.clone());
-        // A blur of its scope prunes it (`blurs`), so a focus that comes back does not bring it back.
-        let active = Condition::when(move || !flag.get() && owner.upgrade().is_some_and(|owner| owner.mode_holds()));
+        // A move of the focus out of its scope ends it (`Router::refocus`, `blurs`), so a focus that comes back does
+        // not bring it back. A host dialog's mode stays above it, whenever the dialog opened.
+        let active = Condition::when(move || {
+            !flag.get()
+                && owner.upgrade().is_some_and(|owner| {
+                    owner.mode_holds() && !owner.host.upgrade().is_some_and(|host| host.modal_open())
+                })
+        });
         let disposer = host.keymap().push_mode(&self.mode_key(Some(name)), active);
         *self.mode.borrow_mut() = Some(Mode { name: name.to_owned(), ended, disposer });
         if let Some(router) = host.router() {
@@ -416,27 +464,44 @@ impl Owner {
             })
             .min_by_key(|(at, _)| *at)
             .map(|(_, id)| id);
-        input::Focused { node, surface: self.within().is_some_and(|view| path.contains(&view.id())) }
+        input::Focused { node, surface: self.scope_view().is_some_and(|view| path.contains(&view.id())) }
     }
 
-    /// Records the ids of the tree's nodes, and of the focusable ones, which [`Owner::focus`] may focus.
+    /// Records the ids of the tree's nodes, and of the focusable ones, which [`Owner::focus`] may focus. A capture of
+    /// a node the tree no longer holds ends with it.
     pub(crate) fn set_tree(&self, ids: Vec<String>, focusable: Vec<String>) {
+        if let Some(host) = self.host.upgrade()
+            && let Some(router) = host.router()
+        {
+            let gone = router
+                .capture
+                .borrow()
+                .as_ref()
+                .is_some_and(|capture| std::ptr::eq(capture.owner.as_ptr(), self) && !ids.contains(&capture.node));
+            if gone {
+                router.capture.borrow_mut().take();
+            }
+        }
         *self.ids.borrow_mut() = ids;
         *self.focusable.borrow_mut() = focusable;
     }
 
-    /// Gives the focus to the owner's node `id`, if it is focusable.
+    /// Gives the focus to the owner's node `id`, if it is focusable and no host dialog is open.
     pub(crate) fn focus(&self, host: &dyn Host, id: &str) {
+        if host.modal_open() {
+            log::warn!("plugin {}: a dialog of the host has the focus", self.plugin);
+            return;
+        }
         let focusable = self.focusable.borrow().iter().any(|known| known == id);
         match self.lookup.as_ref().and_then(|lookup| lookup(id)).filter(|_| focusable && self.alive()) {
-            Some(widget) => host.app().focus(&widget),
+            Some(widget) => refocus(host, || host.app().focus(&widget)),
             None => log::warn!("plugin {}: {id:?} is not a focusable node of its mount", self.plugin),
         }
     }
 
     /// Gives the composer the focus, if the owner's surface has it.
     pub(crate) fn blur(&self, host: &dyn Host) {
-        if self.within().is_some_and(|view| focus_within(host.app(), view.id())) {
+        if self.scope_view().is_some_and(|view| focus_within(host.app(), view.id())) {
             host.focus_composer();
         }
     }
@@ -481,10 +546,10 @@ impl Owner {
             if capture {
                 router.capture.borrow_mut().take();
             }
-            let held = router.hold.borrow().as_ref().is_some_and(|hold| hold.owner.ptr_eq(&me));
-            if held {
-                // The keys it held go on as if it had not been there.
-                router.release(&self.host);
+            let held = router.hold.borrow().as_ref().filter(|hold| hold.owner.ptr_eq(&me)).map(|hold| hold.generation);
+            if let Some(generation) = held {
+                // What it held goes on as if it had not been there.
+                router.release(generation);
             }
             let owned: Vec<(String, String)> = router
                 .overlays
@@ -515,6 +580,7 @@ impl Router {
         if self.intercept.borrow().is_some() {
             return;
         }
+        *self.host.borrow_mut() = Some(weak.clone());
         let keyed = weak.clone();
         let disposer = host.keymap().keymap().intercept_key(i32::MAX, false, move |context| {
             let Some(host) = keyed.upgrade() else { return };
@@ -548,22 +614,14 @@ impl Router {
 
     /// What the intercept does with a key: whether it is taken.
     fn intercept(&self, host: &dyn Host, event: &KeyEvent, stroke: &Stroke) -> bool {
-        if !self.replaying.get()
-            && let Some(held) = self.hold.borrow_mut().as_mut()
-        {
-            held.keys.push(*event);
+        if event.matches(input::RESERVED) {
+            self.escape(host);
+            return false;
+        }
+        if !self.replaying.get() && self.held(Input::Key(*event)) {
             return true;
         }
         let key = stroke.to_string();
-        if same_key(&key, input::RESERVED) {
-            // Every plugin mode ends; the chord goes on to the app.
-            for owner in self.owners.borrow().iter().filter_map(Weak::upgrade) {
-                if let Some(mode) = &*owner.mode.borrow() {
-                    mode.ended.set(true);
-                }
-            }
-            return false;
-        }
         let current = host.keymap().mode();
         // Listeners by priority, the newest first among equals.
         let mut listeners: Vec<(i32, usize, Rc<Owner>, Deliver)> = self
@@ -588,51 +646,123 @@ impl Router {
         listeners.into_iter().any(|(_, _, owner, deliver)| deliver(host, &owner, &event) == Handled::Consume)
     }
 
-    /// Holds the keys after a consumed hold key of `owner`, until it releases them or [`input::HOLD`] passes.
-    fn hold(&self, host: &dyn Host, owner: &Rc<Owner>) {
-        if self.hold.borrow().is_some() {
-            return;
+    /// The reserved chord (synthesis 3.8): every plugin mode ends, what a hold kept is dropped, as a terminal's interrupt
+    /// drops typed-ahead input, and the plugins' layers stop holding where the focus is until it moves. The chord goes
+    /// on to the host. The TUI calls it before its selection and the keymap see the key.
+    pub fn escape(&self, host: &dyn Host) {
+        for owner in self.owners.borrow().iter().filter_map(Weak::upgrade) {
+            if let Some(mode) = &*owner.mode.borrow() {
+                mode.ended.set(true);
+            }
         }
-        *self.hold.borrow_mut() = Some(Hold { owner: Rc::downgrade(owner), keys: Vec::new(), draining: false });
+        let timer = self.hold.borrow_mut().take().and_then(|held| held.timer);
+        if let Some(timer) = timer {
+            host.app().cancel_timer(timer);
+        }
+        self.suspended.set(Some(focused(host.app())));
+    }
+
+    /// Whether the reserved chord left the focus where it is now; the first look after it moved ends that.
+    fn suspended(&self, host: &dyn Host) -> bool {
+        let Some(at) = self.suspended.get() else { return false };
+        if at == focused(host.app()) {
+            return true;
+        }
+        self.suspended.set(None);
+        false
+    }
+
+    /// Keeps `event` behind a hold that is not being released; whether it did. At [`HOLD_LIMIT`] the hold is released.
+    fn held(&self, event: Input) -> bool {
+        let Some(host) = self.host.borrow().as_ref().and_then(Weak::upgrade) else { return false };
+        let full = {
+            let mut hold = self.hold.borrow_mut();
+            let Some(held) = hold.as_mut().filter(|held| !held.draining) else { return false };
+            held.events.push_back((event, focused(host.app())));
+            (held.events.len() >= HOLD_LIMIT).then_some(held.generation)
+        };
+        if let Some(generation) = full {
+            self.release(generation);
+        }
+        true
+    }
+
+    /// Holds the input after a consumed hold key of `owner`, until it releases it or [`input::HOLD`] passes. A hold key
+    /// routed again from a hold being released starts its own hold, with the input after it.
+    fn hold(&self, host: &dyn Host, owner: &Rc<Owner>) {
+        let rest = match self.hold.borrow_mut().as_mut() {
+            Some(held) if !held.draining => return,
+            Some(held) => std::mem::take(&mut held.events),
+            None => VecDeque::new(),
+        };
+        let generation = self.holds.get() + 1;
+        self.holds.set(generation);
         let weak = owner.host.clone();
-        host.app().set_timeout(input::HOLD, move |_| {
+        let timer = host.app().set_timeout(input::HOLD, move |_| {
             if let Some(host) = weak.upgrade()
                 && let Some(router) = host.router()
             {
-                router.release(&weak);
+                router.release(generation);
             }
         });
+        *self.hold.borrow_mut() =
+            Some(Hold { owner: Rc::downgrade(owner), generation, events: rest, timer: Some(timer), draining: false });
     }
 
-    /// Routes the held keys in order, after the batch that runs now.
-    pub(crate) fn release(&self, weak: &Weak<dyn Host>) {
-        let Some(host) = weak.upgrade() else { return };
-        {
-            let mut hold = self.hold.borrow_mut();
-            match hold.as_mut() {
-                Some(held) if !held.draining => held.draining = true,
-                _ => return,
-            }
+    /// The owner of the hold of `plugin` lets it go: what it kept is routed again. A hold of another plugin stays.
+    pub(crate) fn release_for(&self, plugin: &str) {
+        let generation = self.hold.borrow().as_ref().and_then(|held| {
+            let owner = held.owner.upgrade().filter(|owner| owner.alive() && owner.plugin == plugin)?;
+            drop(owner);
+            Some(held.generation)
+        });
+        if let Some(generation) = generation {
+            self.release(generation);
         }
-        let weak = weak.clone();
+    }
+
+    /// Releases hold `generation`: what it kept is routed in order after the event that runs now. A release of another
+    /// hold, or a timer of an earlier one, does nothing.
+    pub(crate) fn release(&self, generation: u64) {
+        let Some(host) = self.host.borrow().as_ref().and_then(Weak::upgrade) else { return };
+        let timer = {
+            let mut hold = self.hold.borrow_mut();
+            let Some(held) = hold.as_mut().filter(|held| held.generation == generation && !held.draining) else {
+                return;
+            };
+            held.draining = true;
+            held.timer.take()
+        };
+        if let Some(timer) = timer {
+            host.app().cancel_timer(timer);
+        }
+        let weak = Rc::downgrade(&host);
         host.app().defer(move |_| {
             let Some(host) = weak.upgrade() else { return };
             let Some(router) = host.router() else { return };
-            // Keys that arrive while these are routed again join the end, so the order holds.
             loop {
                 let next = {
                     let mut hold = router.hold.borrow_mut();
-                    match hold.as_mut() {
-                        Some(held) if !held.keys.is_empty() => Some(held.keys.remove(0)),
-                        _ => {
-                            hold.take();
-                            None
-                        }
+                    match hold.as_mut().filter(|held| held.generation == generation) {
+                        Some(held) => match held.events.pop_front() {
+                            Some(next) => Some(next),
+                            None => {
+                                hold.take();
+                                None
+                            }
+                        },
+                        // Another hold took the rest, or the reserved chord dropped it.
+                        None => None,
                     }
                 };
-                let Some(key) = next else { break };
+                let Some((event, meant)) = next else { break };
+                // Input never reaches a focus other than the one it came to: a press or a command moved it since.
+                if focused(host.app()) != meant {
+                    log::warn!("a held {event:?} is dropped: the focus it was meant for moved");
+                    continue;
+                }
                 router.replaying.set(true);
-                host.app().dispatch(opentui::input::Event::Key(key));
+                host.app().dispatch(event);
                 router.replaying.set(false);
             }
         });
@@ -643,16 +773,21 @@ impl Router {
     /// and in the plugins' surfaces before the host, as in TS, and elsewhere only once no host widget took it
     /// (`Pasted::Elsewhere`), since OpenTUI routes a paste to the focused widget before anything else.
     pub fn paste(&self, host: &dyn Host, text: &str, at: Pasted) -> bool {
+        // Behind a hold, it waits for the keys before it.
+        if !self.replaying.get() && self.held(Input::Paste(text.to_owned())) {
+            return true;
+        }
         if at == Pasted::Elsewhere && self.offered(host) {
             return false;
         }
         let current = host.keymap().mode();
-        let listeners: Vec<(Rc<Owner>, Deliver)> = self
+        // By priority, the newest first among equals, as the listeners of keys.
+        let mut listeners: Vec<(i32, usize, Rc<Owner>, Deliver)> = self
             .listeners
             .borrow()
             .iter()
-            .rev()
-            .filter(|listener| {
+            .enumerate()
+            .filter(|(_, listener)| {
                 listener.layer.paste
                     && match (at, &listener.layer.scope) {
                         (_, LayerScope::Global) => true,
@@ -661,28 +796,46 @@ impl Router {
                         (Pasted::Elsewhere, _) => false,
                     }
             })
-            .filter_map(|listener| {
+            .filter_map(|(index, listener)| {
                 let owner = listener.owner.upgrade()?;
                 let mode = owner.mode_key(listener.layer.mode.as_deref());
-                (owner.holds(&listener.layer.scope) && mode == current).then(|| (owner, listener.deliver.clone()))
+                (owner.holds(&listener.layer.scope) && mode == current)
+                    .then(|| (listener.layer.priority, index, owner, listener.deliver.clone()))
             })
             .collect();
+        listeners.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
         let event = Event::Paste { text: text.to_owned() };
-        let taken = listeners.into_iter().any(|(owner, deliver)| deliver(host, &owner, &event) == Handled::Consume);
+        let taken =
+            listeners.into_iter().any(|(_, _, owner, deliver)| deliver(host, &owner, &event) == Handled::Consume);
         crate::flush();
         taken
     }
 
-    /// Whether a paste with the focus where it is now was offered already, in a plugin's panel or overlay. One in the
-    /// composer never gets this far: the composer takes every paste.
+    /// Whether a paste with the focus where it is now was offered already, in a plugin's surface. One in the composer
+    /// never gets this far: the composer takes every paste.
     fn offered(&self, host: &dyn Host) -> bool {
         self.owners
             .borrow()
             .iter()
             .filter_map(Weak::upgrade)
             .filter(|owner| owner.alive())
-            .filter_map(|owner| owner.within())
+            .filter_map(|owner| owner.scope_view())
             .any(|view| focus_within(host.app(), view.id()))
+    }
+
+    /// Whether an overlay has the focus.
+    fn overlaid(&self, host: &dyn Host) -> bool {
+        self.overlays.borrow().iter().any(|shown| focus_within(host.app(), shown.frame.id()))
+    }
+
+    /// The focus left widget `id`: a capture that began with the focus there ends, and so do the modes whose scope
+    /// the focus is not in now.
+    pub fn blurred(&self, id: u32) {
+        let lost = self.capture.borrow().as_ref().is_some_and(|capture| capture.focus == Some(id));
+        if lost {
+            self.capture.borrow_mut().take();
+        }
+        self.prune();
     }
 
     /// The plugin's node a drag from `source` started on, if it is one of `plugin`'s mounts'.
@@ -749,6 +902,10 @@ impl Router {
             log::warn!("plugin {plugin}: this host shows no overlay");
             return;
         };
+        if host.modal_open() {
+            log::warn!("plugin {plugin}: a dialog of the host has the focus, so its overlay does not open");
+            return;
+        }
         self.close_all(host, plugin, true);
         let app = host.app();
         let (width, height) = app.size();
@@ -816,11 +973,12 @@ impl Router {
                 });
             }
         });
-        let escape = host.keymap().layer(KeymapLayer::new(vec![escape]).priority(1).target(frame.id()));
+        // In every mode: a mode of the overlay without its own escape keeps this one.
+        let escape = host.keymap().layer(KeymapLayer::global(vec![escape]).priority(1).target(frame.id()));
         layer.add(&backdrop);
         layer.add(&frame);
         layer.visible(true);
-        app.focus(&frame);
+        refocus(host, || app.focus(&frame));
         self.overlays.borrow_mut().push(Shown {
             plugin: plugin.to_owned(),
             surface: overlay.surface.clone(),
@@ -849,20 +1007,16 @@ impl Router {
         }
         let opener = shown.opener.upgrade().filter(|opener| opener.alive());
         drop(shown);
-        match opener {
-            Some(opener) => {
-                // The focus goes back to where the overlay was opened from.
-                if had_focus && let Some(view) = opener.within() {
-                    host.app().focus(&view);
-                } else if had_focus {
-                    host.focus_composer();
-                }
-                if tell {
-                    opener.send(host, &Event::Closed { surface: surface.to_owned() });
-                }
-            }
+        // The focus goes to the overlay on top, else back to where this one was opened from.
+        let top = self.overlays.borrow().last().map(|shown| shown.frame.clone());
+        let back = top.or_else(|| opener.as_ref().and_then(|opener| opener.within()));
+        match back {
+            Some(view) if had_focus => refocus(host, || host.app().focus(&view)),
             None if had_focus => host.focus_composer(),
-            None => {}
+            _ => {}
+        }
+        if let (Some(opener), true) = (opener, tell) {
+            opener.send(host, &Event::Closed { surface: surface.to_owned() });
         }
         host.app().request_redraw();
     }
@@ -877,18 +1031,50 @@ impl Router {
     }
 }
 
-/// Ends the modes whose scope `view` was when it loses the focus, before any key comes: a focus that leaves a mode's
-/// scope and comes back between two keys does not bring the mode back.
+/// Ends, as `view` loses the focus, a capture that began with the focus there and the modes whose scope the focus
+/// is not in now, before any key comes.
 fn blurs(view: &impl Widget, host: &Weak<dyn Host>) {
-    let host = host.clone();
+    let (host, id) = (host.clone(), view.id());
     view.on_focus(move |_, focused| {
         if !focused
             && let Some(host) = host.upgrade()
             && let Some(router) = host.router()
         {
-            router.prune();
+            router.blurred(id);
         }
     });
+}
+
+/// Moves the focus with `move_focus`, and ends at the move the modes whose scope it leaves and a capture it moves away
+/// from: OpenTUI tells a widget of its focus after the event, when a second move may have brought the focus back.
+pub fn refocus(host: &dyn Host, move_focus: impl FnOnce()) {
+    let Some(router) = host.router() else { return move_focus() };
+    let owners: Vec<Rc<Owner>> = router.owners.borrow().iter().filter_map(Weak::upgrade).collect();
+    let moded: Vec<Rc<Owner>> =
+        owners.into_iter().filter(|owner| owner.mode.borrow().is_some() && owner.mode_holds()).collect();
+    move_focus();
+    for owner in moded.iter().filter(|owner| !owner.mode_holds()) {
+        if let Some(mode) = &*owner.mode.borrow() {
+            mode.ended.set(true);
+        }
+    }
+    let now = focused(host.app());
+    let moved = router.capture.borrow().as_ref().is_some_and(|capture| capture.focus != now);
+    if moved {
+        router.capture.borrow_mut().take();
+    }
+}
+
+/// The id of the focused widget.
+fn focused(app: &App) -> Option<u32> {
+    app.focused().map(|widget| widget.id())
+}
+
+/// Whether key `key` is or holds the reserved chord, however it is spelled (`ctrl+c`, `Control + C`).
+pub fn reserved(host: &dyn Host, key: &str) -> bool {
+    let keymap = host.keymap();
+    let Ok(chord) = keymap.keymap().parse_key(input::RESERVED) else { return false };
+    keymap.keymap().parse_key_sequence(key).is_ok_and(|parts| parts.iter().any(|part| part.stroke == chord.stroke))
 }
 
 /// Where a paste landed, which decides the paste listeners it is offered to.
@@ -905,11 +1091,6 @@ pub enum Pasted {
 /// Whether the focus is in the widget with id `id`.
 fn focus_within(app: &App, id: u32) -> bool {
     std::iter::successors(app.focused(), |widget| widget.parent()).any(|widget| widget.id() == id)
-}
-
-/// Whether two shortcuts name the same key, such as `Ctrl+C` and `ctrl+c`.
-fn same_key(a: &str, b: &str) -> bool {
-    a.trim().eq_ignore_ascii_case(b.trim())
 }
 
 /// A wired box's colors off and under the pointer, and whether the pointer is over it.

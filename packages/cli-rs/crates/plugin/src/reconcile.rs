@@ -1424,13 +1424,14 @@ impl Pass<'_, '_> {
                 if let Some(bg) = color(theme, bg.as_ref()) {
                     view.bg(bg);
                 }
-                let click = on_click.clone().map(|click| clickable(&view, click, env.act));
                 let wired = (!interact.is_none()).then(|| {
                     let hover = color(theme, interact.hover.as_ref());
                     let (base, paint): (_, fn(&View, Color)) =
                         (fill(theme, bg.as_ref()), |view, color| drop(view.bg(color)));
                     crate::interact::wire(&view, paint, id.as_deref(), interact, env.owner, base, hover)
                 });
+                // After the pointer handler: a press it consumes runs no click, one it passes does.
+                let click = on_click.clone().map(|click| clickable(&view, click, env.act));
                 lay_out(&view, layout);
                 let split = split.map(|split| crate::behave::SplitState::attach(app, &view, split, theme));
                 (view.as_any(), Extra::Box { view, click, split, wired })
