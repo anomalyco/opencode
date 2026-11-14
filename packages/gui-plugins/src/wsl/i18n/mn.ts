@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} суулгаагүй байна.",
   "onboarding.openDistroOnce": "Тохиргоог дуусгахын тулд {{distro}}-г нэг удаа нээнэ үү.",
   "onboarding.updatingOpencode": "Шинэчилж байна OpenCode…",
-  "onboarding.updateOpencode": "Шинэчлэх OpenCode",
   "onboarding.installOpencode": "OpenCode суулгах",
   "onboarding.installedDistros": "Суулгасан түгээлтүүд",
   "onboarding.checkAgain": "Дахин шалгана уу",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencode энэ түгээлтэд суулгаагүй байна",
   "error.opencodeCannotRun": "opencode суулгасан боловч ажиллуулж чадсангүй",
   "error.opencodeNotInstalled": "OpenCode-г {{distro}}-д суулгаагүй байна",
-  "error.updateVersion":
-    "OpenCode шинэчлэлт дууссан боловч {{distro}} мэдээлсэн хэвээр {{installed}}; хүлээгдэж буй {{expected}}",
-  "error.noVersion": "хувилбар байхгүй",
   "error.serverExited": "WSL сервер эхлүүлсний дараа гарсан (код={{code}} дохио ={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL сервер эрүүл болохоосоо өмнө гарсан (код={{code}} дохио={{signal}}){{output}}",

@@ -118,9 +118,9 @@ for (const mode of ["failed", "stopped", "ready"] as const) {
     await expect(switcher).toHaveText("ServerUbuntu")
     await expect(unavailable).toHaveCount(0)
     await settings.getByRole("tab", { name: "Servers", exact: true }).click()
-    await connection.getByRole("button", { name: "Update OpenCode", exact: true }).click()
+    await connection.getByRole("button", { name: "Install OpenCode", exact: true }).click()
     await expect(page.getByLabel("WSL actions")).toContainText("update:Ubuntu")
-    await expect(connection.getByRole("button", { name: "Update OpenCode", exact: true })).toHaveCount(0)
+    await expect(connection.getByRole("button", { name: "Install OpenCode", exact: true })).toHaveCount(0)
 
     await connection.getByRole("button", { name: "More options", exact: true }).click()
     await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
@@ -392,13 +392,13 @@ test("an open session moves to the controller a new SSH sign-in creates", async 
   await expect.poll(() => prompts).toEqual(["after sign-in"])
 })
 
-test("a session being created on an SSH host that turns out incompatible says so", async ({ page }) => {
+test("a session being created on an SSH host whose connection fails says so", async ({ page }) => {
   const directory = "/home/box/project"
-  const box = session({ id: "ses_ssh_incompatible", directory, title: "SSH incompatible session" })
+  const box = session({ id: "ses_ssh_failed", directory, title: "SSH failed session" })
 
   const config = {
     directory,
-    project: project({ id: "proj_ssh_incompatible", directory }),
+    project: project({ id: "proj_ssh_failed", directory }),
     provider: provider(),
     sessions: [box],
     pageMessages: () => ({ items: [] }),
@@ -426,8 +426,12 @@ test("a session being created on an SSH host that turns out incompatible says so
   await expect(preparing).toBeVisible()
 
   // The SSH plugin covers a host that is not ready; the route stays mounted beneath its cover.
-  await page.getByRole("button", { name: "Report incompatible SSH server" }).click()
+  await page.getByRole("button", { name: "Fail SSH connection" }).click()
   await expect(page.getByRole("heading", { name: "SSH connection inactive", exact: true })).toBeVisible()
-  await expect(page.getByText("This server version isn't supported", { exact: true })).toBeAttached()
+  await expect(
+    page.getByText("Could not establish the SSH connection. Check your network and SSH configuration.", {
+      exact: true,
+    }),
+  ).toBeAttached()
   await expect(preparing).toHaveCount(0)
 })

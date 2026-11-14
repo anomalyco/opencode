@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} nuk është instaluar ende.",
   "onboarding.openDistroOnce": "Hap {{distro}} një herë për të përfunduar konfigurimin.",
   "onboarding.updatingOpencode": "OpenCode po përditësohet…",
-  "onboarding.updateOpencode": "Përditëso OpenCode",
   "onboarding.installOpencode": "Instaloni OpenCode",
   "onboarding.installedDistros": "Distro të instaluara",
   "onboarding.checkAgain": "Kontrollo sërish",
@@ -42,9 +41,6 @@ export default {
   "error.opencodeMissing": "Opencode nuk është i instaluar në këtë shpërndarje",
   "error.opencodeCannotRun": "Opencode është instaluar por nuk mund të ekzekutohet",
   "error.opencodeNotInstalled": "OpenCode nuk është i instaluar në {{distro}}",
-  "error.updateVersion":
-    "Përditësimi i OpenCode përfundoi, por {{distro}} ende raporton {{installed}}; pritet {{expected}}",
-  "error.noVersion": "asnjë version",
   "error.serverExited": "Serveri WSL doli pas nisjes (kodi={{code}} sinjal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "Serveri WSL doli përpara se të bëhej i shëndetshëm (kodi={{code}} sinjal={{signal}}){{output}}",

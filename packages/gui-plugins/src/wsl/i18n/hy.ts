@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} դեռ տեղադրված չէ։",
   "onboarding.openDistroOnce": "Բացեք {{distro}}-ը մեկ անգամ՝ կարգավորումն ավարտելու համար:",
   "onboarding.updatingOpencode": "Թարմացվում է OpenCode…",
-  "onboarding.updateOpencode": "Թարմացնել OpenCode",
   "onboarding.installOpencode": "Տեղադրեք OpenCode",
   "onboarding.installedDistros": "Տեղադրված բաշխումներ",
   "onboarding.checkAgain": "Ստուգել նորից",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencode-ը տեղադրված չէ այս բաշխում",
   "error.opencodeCannotRun": "opencode-ը տեղադրված է, բայց չի կարող գործարկվել",
   "error.opencodeNotInstalled": "OpenCode տեղադրված չէ {{distro}}",
-  "error.updateVersion":
-    "OpenCode թարմացումն ավարտված է, բայց {{distro}}-ը դեռ հայտնում է {{installed}}; սպասվում է {{expected}}",
-  "error.noVersion": "առանց տարբերակ",
   "error.serverExited": "WSL սերվերը դուրս է եկել գործարկումից հետո (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL սերվերը դուրս է եկել առողջանալուց առաջ (code={{code}} signal={{signal}}){{output}}",

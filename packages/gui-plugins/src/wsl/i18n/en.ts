@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} is not installed yet.",
   "onboarding.openDistroOnce": "Open {{distro}} once to finish setup.",
   "onboarding.updatingOpencode": "Updating OpenCode…",
-  "onboarding.updateOpencode": "Update OpenCode",
   "onboarding.installOpencode": "Install OpenCode",
   "onboarding.installedDistros": "Installed distros",
   "onboarding.checkAgain": "Check again",
@@ -43,8 +42,6 @@ export default {
   "error.opencodeMissing": "opencode is not installed in this distro",
   "error.opencodeCannotRun": "opencode is installed but could not run",
   "error.opencodeNotInstalled": "OpenCode is not installed in {{distro}}",
-  "error.updateVersion": "OpenCode update finished but {{distro}} still reports {{installed}}; expected {{expected}}",
-  "error.noVersion": "no version",
   "error.serverExited": "WSL server exited after startup (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL server exited before becoming healthy (code={{code}} signal={{signal}}){{output}}",

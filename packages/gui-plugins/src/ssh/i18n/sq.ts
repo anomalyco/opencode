@@ -14,15 +14,12 @@ export default {
   "session.reconnect": "Rilidheni",
   trust: "Besoni dhe lidheni",
   continue: "Vazhdo",
-  update: "Përditëso dhe rilidhe",
   project: "Hap projektin në {{host}}",
-  "stage.incompatible": "Kërkohet përditësimi i serverit",
   "error.input":
     "Fut një komandë lidhjeje host ose SSH. Komandat në distancë dhe opsionet e pambështetura SSH nuk lejohen.",
   "error.connection": "Lidhja SSH nuk mund të vendosej. Kontrolloni rrjetin tuaj dhe konfigurimin SSH.",
   "error.platform":
     "Kjo platformë në distancë nuk mbështetet. Konfigurimi automatik aktualisht kërkon Linux ose macOS në x64 ose arm64.",
-  "error.version": "Shërbimi në distancë duhet të përputhet me këtë version të desktopit përpara se të lidhet.",
   "error.install":
     "Serveri në distancë nuk mund të instalohej. Kontrolloni lidhjen, hapësirën në disk dhe nëse tar është instaluar.",
   "error.unpublished":

@@ -14,15 +14,12 @@ export default {
   "session.reconnect": "Riconnettiti",
   trust: "Fidati e connettiti",
   continue: "Continua",
-  update: "Aggiorna e riconnettiti",
   project: "Apri progetto su {{host}}",
-  "stage.incompatible": "È richiesto l'aggiornamento del server",
   "error.input":
     "Immettere un comando di connessione host o SSH. Non sono consentiti comandi remoti e opzioni SSH non supportate.",
   "error.connection": "Impossibile stabilire la connessione SSH. Controlla la tua rete e la configurazione SSH.",
   "error.platform":
     "Questa piattaforma remota non è supportata. La configurazione automatica attualmente richiede Linux o macOS su x64 o arm64.",
-  "error.version": "Il servizio remoto deve corrispondere a questa versione desktop prima della connessione.",
   "error.install":
     "Impossibile installare il server remoto. Controlla la connettività, lo spazio su disco e che tar sia installato.",
   "error.unpublished":

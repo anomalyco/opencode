@@ -22,7 +22,7 @@ export function sshServerState(item: SshItem): ServerState {
 
   if (item.stage === "authentication") return "auth"
 
-  if (item.stage === "ready" || item.stage === "failed" || item.stage === "incompatible") return item.stage
+  if (item.stage === "ready" || item.stage === "failed") return item.stage
 
   return "stopped"
 }

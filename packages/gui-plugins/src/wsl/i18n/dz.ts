@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} ད་ལྟོ་གཞི་བཙུགས་མ་འབད་བས།",
   "onboarding.openDistroOnce": "གཞི་སྒྲིག་མཇུག་བསྡུ་ནིའི་དོན་ལུ་ {{distro}} ཚར་གཅིག་ཁ་ཕྱེ།",
   "onboarding.updatingOpencode": "OpenCodeདུས་མཐུན་བཟོ་དོ།…",
-  "onboarding.updateOpencode": "OpenCodeདུས་མཐུན་བཟོ།",
   "onboarding.installOpencode": "OpenCodeགཞི་བཙུགས་འབད།",
   "onboarding.installedDistros": "ཌིསི་ཊོ་ཚུ་གཞི་བཙུགས་འབད་ཡོདཔ།",
   "onboarding.checkAgain": "ལོག་སྟེ་ཞིབ་དཔྱད་འབད།",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "ཌིསི་ཊོ་འདི་ནང་ opencode གཞི་བཙུགས་མ་འབད་བས།",
   "error.opencodeCannotRun": "opencode འདི་གཞི་བཙུགས་འབད་ཡོད་རུང་ གཡོག་བཀོལ་མ་ཚུགས།",
   "error.opencodeNotInstalled": "OpenCode འདི་ {{distro}} ནང་གཞི་བཙུགས་མ་འབད་བས།",
-  "error.updateVersion":
-    "OpenCode དུས་མཐུན་བཟོ་ཚར་ཡི་ དེ་འབདཝ་ད་ {{distro}}གིས་ ད་ལྟོ་ཡང་ {{installed}} སྙན་ཞུ་འབདཝ་ཨིན། རེ་བ་བསྐྱེད་པའི་ {{expected}}",
-  "error.noVersion": "ཐོན་རིམ་མེད།",
   "error.serverExited":
     "WSL སར་བར་འདི་ འགོ་བཙུགས་པའི་ཤུལ་ལས་ ཕྱིར་འཐོན་འབད་ཡོདཔ་ཨིན་ (ཨང་རྟགས་={{code}} བརྡ་རྟགས་={{signal}})",
   "error.serverExitedBeforeHealthy":

@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} δεν έχει εγκατασταθεί ακόμα.",
   "onboarding.openDistroOnce": "Ανοίξτε το {{distro}} μία φορά για να ολοκληρώσετε τη ρύθμιση.",
   "onboarding.updatingOpencode": "Ενημέρωση OpenCode…",
-  "onboarding.updateOpencode": "Ενημέρωση OpenCode",
   "onboarding.installOpencode": "Εγκατάσταση OpenCode",
   "onboarding.installedDistros": "Εγκατεστημένες διανομές",
   "onboarding.checkAgain": "Έλεγχος ξανά",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "ο ανοιχτός κώδικας δεν είναι εγκατεστημένος σε αυτήν τη διανομή",
   "error.opencodeCannotRun": "ο ανοιχτός κώδικας είναι εγκατεστημένος αλλά δεν ήταν δυνατή η εκτέλεση",
   "error.opencodeNotInstalled": "OpenCode δεν είναι εγκατεστημένο στο {{distro}}",
-  "error.updateVersion":
-    "OpenCode η ενημέρωση ολοκληρώθηκε αλλά το {{distro}} εξακολουθεί να αναφέρει {{installed}}; αναμενόμενο {{expected}}",
-  "error.noVersion": "χωρίς έκδοση",
   "error.serverExited": "WSL έξοδος διακομιστή μετά την εκκίνηση (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL ο διακομιστής εξήλθε πριν γίνει υγιής (code={{code}} signal={{signal}}){{output}}",

@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} hali o'rnatilmagan.",
   "onboarding.openDistroOnce": "Oʻrnatishni tugatish uchun {{distro}} ni bir marta oching.",
   "onboarding.updatingOpencode": "OpenCode yangilanmoqda…",
-  "onboarding.updateOpencode": "OpenCode-ni yangilang",
   "onboarding.installOpencode": "OpenCode-ni o'rnating",
   "onboarding.installedDistros": "O'rnatilgan distroslar",
   "onboarding.checkAgain": "Yana tekshiring",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "Opencode ushbu tarqatishda o'rnatilmagan",
   "error.opencodeCannotRun": "opencode o'rnatilgan, lekin ishga tushirilmadi",
   "error.opencodeNotInstalled": "OpenCode {{distro}} da o'rnatilmagan",
-  "error.updateVersion":
-    "OpenCode yangilanishi tugallandi, lekin {{distro}} hali ham {{installed}} haqida xabar beradi; kutilgan {{expected}}",
-  "error.noVersion": "versiya yo'q",
   "error.serverExited": "WSL server ishga tushirilgandan so'ng chiqdi (kod = {{code}} signal = {{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL serveri sog'lom bo'lgunga qadar chiqdi (kod={{code}} signali={{signal}}){{output}}",

@@ -14,15 +14,12 @@ export default {
   "session.reconnect": "Prisijunkite iš naujo",
   trust: "autentifikavimas Pasitikėk ir prisijunk",
   continue: "Tęsti",
-  update: "Atnaujinkite ir vėl prijunkite",
   project: "Atidaryti projektą {{host}}",
-  "stage.incompatible": "Reikalingas serverio atnaujinimas",
   "error.input":
     "Įveskite pagrindinio kompiuterio arba SSH ryšio komandą. Nuotolinės komandos ir nepalaikomos SSH parinktys neleidžiamos.",
   "error.connection": "Nepavyko užmegzti SSH ryšio. Patikrinkite tinklą ir SSH konfigūraciją.",
   "error.platform":
     "Ši nuotolinė platforma nepalaikoma. Šiuo metu automatinei sąrankai reikia Linux arba macOS x64 arba arm64.",
-  "error.version": "Prieš prisijungiant, nuotolinė paslauga turi atitikti šią darbalaukio versiją.",
   "error.install": "Nepavyko įdiegti nuotolinio serverio. Patikrinkite ryšį, vietos diske ir ar įdiegta tar.",
   "error.unpublished":
     "Šioje darbalaukio versijoje nėra paskelbto nuotolinio serverio. Norėdami sukurti kūrimo versiją, įdiekite ir paleiskite V2 pagrindiniame kompiuteryje, tada bandykite dar kartą.",

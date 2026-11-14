@@ -9,14 +9,7 @@ export const SshHttp = Schema.Struct({ url: Schema.String, password: Schema.Stri
 
 export type SshHttp = typeof SshHttp.Type
 
-export const SshStage = Schema.Literals([
-  "disconnected",
-  "connecting",
-  "ready",
-  "authentication",
-  "incompatible",
-  "failed",
-])
+export const SshStage = Schema.Literals(["disconnected", "connecting", "ready", "authentication", "failed"])
 
 export const SshPrompt = Schema.Struct({
   id: Schema.String,
@@ -30,7 +23,6 @@ export const SshError = Schema.Literals([
   "connection",
   "input",
   "platform",
-  "version",
   "install",
   "service",
   "host-key",
@@ -66,7 +58,6 @@ export const SshStart = Schema.Struct({
   id: Schema.String,
   target: Schema.String,
   name: Schema.String,
-  replace: Schema.optional(Schema.Boolean),
   background: Schema.optional(Schema.Boolean),
 })
 

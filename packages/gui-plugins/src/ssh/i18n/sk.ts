@@ -14,15 +14,12 @@ export default {
   "session.reconnect": "Znova sa pripojiť",
   trust: "Dôverovať a pripojiť sa",
   continue: "Pokračovať",
-  update: "Aktualizovať a znovu sa pripojiť",
   project: "Otvoriť projekt na {{host}}",
-  "stage.incompatible": "Vyžaduje sa aktualizácia servera",
   "error.input":
     "Zadajte hosta alebo SSH príkaz na pripojenie. Vzdialené príkazy a nepodporované SSH voľby nie sú povolené.",
   "error.connection": "Nepodarilo sa nadviazať SSH spojenie. Skontrolujte sieť a SSH nastavenia.",
   "error.platform":
     "Táto vzdialená platforma nie je podporovaná. Automatické nastavenie momentálne vyžaduje Linux alebo macOS na x64 alebo arm64.",
-  "error.version": "Vzdialená služba musí pred pripojením zodpovedať tejto verzii Desktopu.",
   "error.install":
     "Nepodarilo sa nainštalovať vzdialený server. Skontrolujte pripojenie, voľné miesto na disku a či je nainštalovaný tar.",
   "error.unpublished":

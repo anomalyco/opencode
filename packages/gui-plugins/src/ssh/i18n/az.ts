@@ -14,15 +14,12 @@ export default {
   "session.reconnect": "Yenidən qoşul",
   trust: "Etibar et və qoşul",
   continue: "Davam et",
-  update: "Yenilə və yenidən qoşul",
   project: "Layihəni {{host}} üzərində aç",
-  "stage.incompatible": "Server yeniləməsi tələb olunur",
   "error.input":
     "Bir host və ya SSH bağlantı əmri daxil edin. Uzaq əmrlər və dəstəklənməyən SSH seçimlərinə icazə verilmir.",
   "error.connection": "SSH bağlantısı qurula bilmədi. Şəbəkə və SSH tənzimləmələrinizi yoxlayın.",
   "error.platform":
     "Bu uzaq platforma dəstəklənmir. Avtomatik quraşdırma hazırda x64 və ya arm64 üzərində Linux və ya macOS tələb edir.",
-  "error.version": "Bağlantıdan əvvəl uzaq xidmət bu Desktop versiyası ilə uyğun olmalıdır.",
   "error.install":
     "Uzaq server quraşdırıla bilmədi. Bağlantını, disk boşluğunu və tar proqramının quraşdırıldığını yoxlayın.",
   "error.unpublished":

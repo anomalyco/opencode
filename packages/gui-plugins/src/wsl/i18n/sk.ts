@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} ešte nie je nainštalovaná.",
   "onboarding.openDistroOnce": "Otvorte {{distro}} raz na dokončenie nastavenia.",
   "onboarding.updatingOpencode": "Aktualizuje sa OpenCode…",
-  "onboarding.updateOpencode": "Aktualizovať OpenCode",
   "onboarding.installOpencode": "Nainštalovať OpenCode",
   "onboarding.installedDistros": "Nainštalované distribúcie",
   "onboarding.checkAgain": "Skontrolovať znova",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencode nie je v tejto distribúcii nainštalovaný",
   "error.opencodeCannotRun": "opencode je nainštalovaný, ale nedá sa spustiť",
   "error.opencodeNotInstalled": "OpenCode nie je nainštalovaný v {{distro}}",
-  "error.updateVersion":
-    "Aktualizácia OpenCode bola dokončená, ale {{distro}} stále hlási {{installed}}; očakávané {{expected}}",
-  "error.noVersion": "žiadna verzia",
   "error.serverExited": "WSL server sa ukončil po spustení (kód={{code}} signál={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL server sa ukončil pred inicializáciou (kód={{code}} signál={{signal}}){{output}}",

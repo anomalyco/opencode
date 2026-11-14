@@ -19,8 +19,6 @@ function check(distro: string, version: string): WslOpencodeCheck {
     distro,
     resolvedPath: "/usr/bin/opencode",
     version,
-    expectedVersion: "2",
-    matchesDesktop: version === "2",
     error: null,
   }
 }
@@ -37,7 +35,7 @@ function play(state: WslMachineState, ...events: WslMachineEvent[]) {
   )
 }
 
-// Ubuntu is added with its server up as start `s0`, reporting an older OpenCode than the desktop.
+// Ubuntu is added with its server up as start `s0`, reporting a different OpenCode version than the desktop.
 function readyUbuntu() {
   return play(
     createWslMachineState([ubuntu]),
@@ -65,7 +63,7 @@ describe("one job per distro", () => {
     expect(toServersState(updating.state).distroJobs).toEqual({ Ubuntu: "updating" })
     expect(wslRowView(toServersState(updating.state), "Ubuntu")).toEqual({
       version: "1",
-      button: { label: "server.updating", disabled: true },
+      button: null,
       retry: false,
       removable: false,
     })
@@ -230,17 +228,23 @@ describe("updates", () => {
       readyUbuntu(),
       { type: "update", distro: "Ubuntu", attempt: "u1" },
       { type: "server.stopped", distro: "Ubuntu", attempt: "u1" },
-      { type: "job.failed", distro: "Ubuntu", attempt: "u1", message: "still 1", check: check("Ubuntu", "1") },
+      {
+        type: "job.failed",
+        distro: "Ubuntu",
+        attempt: "u1",
+        message: "cannot run",
+        check: { ...check("Ubuntu", "1"), version: null, error: "cannot run" },
+      },
     )
 
     expect(failed.effects).toContainEqual({
       type: "reject",
       attempt: "u1",
-      failure: { kind: "error", message: "still 1" },
+      failure: { kind: "error", message: "cannot run" },
     })
     expect(toServersState(failed.state).servers[0]?.runtime).toEqual({ kind: "stopped" })
     expect(wslRowView(toServersState(failed.state), "Ubuntu")).toMatchObject({
-      button: { label: "onboarding.updateOpencode", disabled: false },
+      button: null,
       retry: true,
     })
   })

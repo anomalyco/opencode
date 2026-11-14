@@ -39,7 +39,7 @@ type FixtureState = {
 function Fixture(props: {
   session?: boolean
   settings?: boolean
-  incompatible?: true | "failed-update" | "version-mismatch"
+  installFailure?: boolean
   prompts?: (keyof typeof challenges)[]
   rejectPassword?: boolean
   connectionDelay?: number
@@ -103,12 +103,8 @@ function Fixture(props: {
 
       if (props.initial === "connecting") return
 
-      if (props.incompatible && !input.replace) return update({ stage: "incompatible", error: "version" })
-
       const connected = () => {
-        if (props.incompatible === "failed-update") return update({ stage: "failed", error: "install" })
-
-        if (props.incompatible === "version-mismatch") return update({ stage: "incompatible", error: "version" })
+        if (props.installFailure) return update({ stage: "failed", error: "install" })
 
         if (props.initial === "failure" && state.before?.stage !== "failed")
           return update({ stage: "failed", error: "connection", detail: "Connection refused" })
@@ -135,7 +131,6 @@ function Fixture(props: {
       update({ stage: "disconnected", prompt: undefined })
     },
     cancel: async () => {
-      if (state.item?.stage === "incompatible") return
       clearTimeout(state.timer)
       update({ ...state.before, stage: state.before?.stage ?? "disconnected", prompt: undefined })
     },
@@ -329,19 +324,11 @@ export const Failure = { render: () => <Fixture initial="failure" /> }
 
 export const AuthenticationFailureRetry = { render: () => <Fixture prompts={["password"]} rejectPassword /> }
 
-export const IncompatibleHost = { render: () => <Fixture incompatible prompts={[]} connectionDelay={1500} /> }
-
-export const FailedUpdate = { render: () => <Fixture incompatible="failed-update" connectionDelay={1500} /> }
-
-export const StillIncompatibleAfterUpdate = {
-  render: () => <Fixture incompatible="version-mismatch" connectionDelay={1500} />,
-}
+export const FailedInstall = { render: () => <Fixture installFailure connectionDelay={1500} /> }
 
 export const AuthenticationRequired = { render: () => <Fixture initial="required" /> }
 
 export const SettingsReconnect = { render: () => <Fixture initial="required" settings connectionDelay={200} /> }
-
-export const IncompatibleSession = { render: () => <Fixture initial="required" session incompatible /> }
 
 export const InactiveSession = { render: () => <Fixture initial="required" session connectionDelay={3000} /> }
 

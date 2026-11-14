@@ -14,15 +14,12 @@ export default {
   "session.reconnect": "Sambungkan kembali",
   trust: "Percaya dan hubungkan",
   continue: "Lanjutkan",
-  update: "Perbarui dan sambungkan kembali",
   project: "Buka proyek di {{host}}",
-  "stage.incompatible": "Pembaruan server diperlukan",
   "error.input":
     "Masukkan host atau perintah koneksi SSH. Perintah jarak jauh dan opsi SSH yang tidak didukung tidak diizinkan.",
   "error.connection": "Tidak dapat membuat koneksi SSH. Periksa jaringan dan konfigurasi SSH Anda.",
   "error.platform":
     "Platform jarak jauh ini tidak didukung. Pengaturan otomatis saat ini memerlukan Linux atau macOS pada x64 atau arm64.",
-  "error.version": "Layanan jarak jauh harus cocok dengan versi Desktop ini sebelum terhubung.",
   "error.install":
     "Tidak dapat menginstal server jarak jauh. Periksa konektivitas, ruang disk, dan pastikan tar sudah terpasang.",
   "error.unpublished":

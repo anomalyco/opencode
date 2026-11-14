@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} n'est pas encore installée.",
   "onboarding.openDistroOnce": "Ouvrez {{distro}} une fois pour terminer la configuration.",
   "onboarding.updatingOpencode": "Mise à jour d'OpenCode…",
-  "onboarding.updateOpencode": "Mettre à jour OpenCode",
   "onboarding.installOpencode": "Installer OpenCode",
   "onboarding.installedDistros": "Distributions installées",
   "onboarding.checkAgain": "Vérifier à nouveau",
@@ -42,9 +41,6 @@ export default {
   "error.opencodeMissing": "opencode n'est pas installé dans cette distribution",
   "error.opencodeCannotRun": "opencode est installé, mais n'a pas pu s'exécuter",
   "error.opencodeNotInstalled": "OpenCode n'est pas installé dans {{distro}}",
-  "error.updateVersion":
-    "La mise à jour d'OpenCode est terminée, mais {{distro}} indique toujours {{installed}} au lieu de {{expected}}",
-  "error.noVersion": "aucune version",
   "error.serverExited": "Le serveur WSL s'est arrêté après son démarrage (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "Le serveur WSL s'est arrêté avant d'être opérationnel (code={{code}} signal={{signal}}){{output}}",

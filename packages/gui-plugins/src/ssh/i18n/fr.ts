@@ -14,15 +14,12 @@ export default {
   "session.reconnect": "Reconnecter",
   trust: "Faites confiance et connectez-vous",
   continue: "Continuer",
-  update: "Mettre à jour et reconnecter",
   project: "Projet ouvert sur {{host}}",
-  "stage.incompatible": "Mise à jour du serveur requise",
   "error.input":
     "Entrez une commande de connexion hôte ou SSH. Les commandes à distance et les options SSH non prises en charge ne sont pas autorisées.",
   "error.connection": "Impossible d'établir la connexion SSH. Vérifiez votre réseau et la configuration du SSH.",
   "error.platform":
     "Cette plateforme distante n'est pas prise en charge. La configuration automatique nécessite actuellement Linux ou macOS sur x64 ou arm64.",
-  "error.version": "Le service distant doit correspondre à cette version de bureau avant de se connecter.",
   "error.install":
     "Impossible d'installer le serveur distant. Vérifiez la connectivité, l'espace disque et que tar est installé.",
   "error.unpublished":

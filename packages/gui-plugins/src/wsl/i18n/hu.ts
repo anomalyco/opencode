@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "A {{distro}} még nincs telepítve.",
   "onboarding.openDistroOnce": "Nyissa meg egyszer a {{distro}}-t a beállítás befejezéséhez.",
   "onboarding.updatingOpencode": "OpenCode frissítése…",
-  "onboarding.updateOpencode": "Frissítse a OpenCode-t",
   "onboarding.installOpencode": "Telepítse a OpenCode-t",
   "onboarding.installedDistros": "Telepített disztribúciók",
   "onboarding.checkAgain": "Ellenőrizze újra",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "Az opencode nincs telepítve ebben a disztribúcióban",
   "error.opencodeCannotRun": "Az opencode telepítve van, de nem futtatható",
   "error.opencodeNotInstalled": "Az OpenCode nincs telepítve ebben: {{distro}}",
-  "error.updateVersion":
-    "Az OpenCode frissítése befejeződött, de a(z) {{distro}} továbbra is ezt jelenti: {{installed}}; a várt érték: {{expected}}",
-  "error.noVersion": "nincs verzió",
   "error.serverExited": "A WSL-kiszolgáló indítás után kilépett (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "A WSL-kiszolgáló azelőtt kilépett, hogy üzemkésszé vált volna (code={{code}} signal={{signal}}){{output}}",

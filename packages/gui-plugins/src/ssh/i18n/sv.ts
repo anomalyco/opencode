@@ -14,15 +14,12 @@ export default {
   "session.reconnect": "Återanslut",
   trust: "Lita på och anslut",
   continue: "Fortsätt",
-  update: "Uppdatera och återanslut",
   project: "Öppet projekt på {{host}}",
-  "stage.incompatible": "Serveruppdatering krävs",
   "error.input":
     "Ange ett värd- eller SSH-anslutningskommando. Fjärrkommandon och SSH-alternativ som inte stöds är inte tillåtna.",
   "error.connection": "Det gick inte att upprätta SSH-anslutningen. Kontrollera ditt nätverk och SSH-konfiguration.",
   "error.platform":
     "Denna fjärrplattform stöds inte. Automatisk installation kräver för närvarande Linux eller macOS på x64 eller arm64.",
-  "error.version": "Fjärrtjänsten måste matcha den här skrivbordsversionen innan du ansluter.",
   "error.install":
     "Det gick inte att installera fjärrservern. Kontrollera anslutning, diskutrymme och att tar är installerat.",
   "error.unpublished":

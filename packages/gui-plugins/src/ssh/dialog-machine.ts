@@ -58,7 +58,7 @@ export type SshDialogEvent =
   | { readonly type: "disposed" }
 
 export type SshDialogEffect =
-  | { readonly type: "connect"; readonly config: SshConfig; readonly replace: boolean }
+  | { readonly type: "connect"; readonly config: SshConfig }
   | { readonly type: "respond"; readonly prompt: string; readonly value: string }
   | { readonly type: "cancel" }
   | { readonly type: "complete" }
@@ -74,7 +74,6 @@ export type SshDialogView = {
   readonly title: "add" | "connectTo"
   readonly showForm: boolean
   readonly inputsDisabled: boolean
-  readonly incompatible: boolean
   readonly prompt: SshPrompt | undefined
   readonly response: string
   /** The prompt was answered, or the attempt connects: the response field waits. */
@@ -83,7 +82,7 @@ export type SshDialogView = {
   readonly primary: {
     readonly action: "submit" | "respond"
     readonly disabled: boolean
-    readonly label: "stage.connecting" | "update" | "connect" | "form.add" | "trust" | "continue"
+    readonly label: "stage.connecting" | "connect" | "form.add" | "trust" | "continue"
   }
 }
 
@@ -124,13 +123,7 @@ export function transitionSshDialog(state: SshDialogState, event: SshDialogEvent
         status: "active",
         prompted: false,
       },
-      effects: [
-        {
-          type: "connect",
-          config: { id: state.id, target: state.target, name: state.name },
-          replace: event.snapshot.item?.stage === "incompatible",
-        },
-      ],
+      effects: [{ type: "connect", config: { id: state.id, target: state.target, name: state.name } }],
     }
   }
 
@@ -188,7 +181,6 @@ export function viewSshDialog(state: SshDialogState, snapshot: SshDialogSnapshot
   const shown = state.status === "active" || state.status === "completed"
   const prompted = shown && state.prompted
   const challenge = shown ? state.challenge : undefined
-  const incompatible = snapshot.item?.stage === "incompatible"
   const settled = state.status === "completed" || state.status === "closed"
   const busy = isBusy(state, snapshot)
   const waiting = isWaiting(state, snapshot) || settled
@@ -202,13 +194,12 @@ export function viewSshDialog(state: SshDialogState, snapshot: SshDialogSnapshot
 
   return {
     title: prompted || state.mode !== "add" ? "connectTo" : "add",
-    showForm: state.mode !== "prompt" && !incompatible && (!prompted || (!!error && !challenge)),
+    showForm: state.mode !== "prompt" && (!prompted || (!!error && !challenge)),
     inputsDisabled: busy || !!challenge || settled,
-    incompatible,
     prompt: challenge?.prompt,
     response: challenge?.response ?? "",
     waiting,
-    error: incompatible ? undefined : error,
+    error,
     primary: challenge
       ? {
           action: "respond",
@@ -218,7 +209,7 @@ export function viewSshDialog(state: SshDialogState, snapshot: SshDialogSnapshot
       : {
           action: "submit",
           disabled: busy || !state.target.trim() || settled,
-          label: busy ? "stage.connecting" : incompatible ? "update" : state.mode === "add" ? "form.add" : "connect",
+          label: busy ? "stage.connecting" : state.mode === "add" ? "form.add" : "connect",
         },
   }
 }

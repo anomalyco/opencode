@@ -14,15 +14,12 @@ export default {
   "session.reconnect": "Kết nối lại",
   trust: "Tin cậy và kết nối",
   continue: "Tiếp tục",
-  update: "Cập nhật và kết nối lại",
   project: "Mở dự án trên {{host}}",
-  "stage.incompatible": "Cần cập nhật máy chủ",
   "error.input":
     "Nhập một máy chủ hoặc lệnh kết nối SSH. Các lệnh từ xa và tùy chọn SSH không được hỗ trợ sẽ không được phép.",
   "error.connection": "Không thể thiết lập kết nối SSH. Kiểm tra mạng và cấu hình SSH của bạn.",
   "error.platform":
     "Nền tảng từ xa này không được hỗ trợ. Việc thiết lập tự động hiện yêu cầu Linux hoặc macOS trên x64 hoặc arm64.",
-  "error.version": "Dịch vụ từ xa phải khớp với phiên bản Desktop này trước khi kết nối.",
   "error.install":
     "Không thể cài đặt máy chủ từ xa. Kiểm tra kết nối, dung lượng đĩa và việc tar đã được cài đặt chưa.",
   "error.unpublished":

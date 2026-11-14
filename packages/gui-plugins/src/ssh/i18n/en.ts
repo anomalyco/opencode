@@ -14,14 +14,11 @@ export default {
   "session.reconnect": "Reconnect",
   trust: "Trust and connect",
   continue: "Continue",
-  update: "Update and reconnect",
   project: "Open project on {{host}}",
-  "stage.incompatible": "Server update required",
   "error.input": "Enter a host or SSH connection command. Remote commands and unsupported SSH options aren’t allowed.",
   "error.connection": "Could not establish the SSH connection. Check your network and SSH configuration.",
   "error.platform":
     "This remote platform is not supported. Automatic setup currently requires Linux or macOS on x64 or arm64.",
-  "error.version": "The remote service must match this Desktop version before connecting.",
   "error.install": "Could not install the remote server. Check connectivity, disk space, and that tar is installed.",
   "error.unpublished":
     "This Desktop version has no published remote server. For development builds, install and start V2 on the host, then retry.",

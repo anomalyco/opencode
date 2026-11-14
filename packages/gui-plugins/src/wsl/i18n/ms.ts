@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} belum dipasang.",
   "onboarding.openDistroOnce": "Buka {{distro}} sekali untuk melengkapkan tetapan.",
   "onboarding.updatingOpencode": "Sedang mengemas kini OpenCode…",
-  "onboarding.updateOpencode": "Kemas kini OpenCode",
   "onboarding.installOpencode": "Pasang OpenCode",
   "onboarding.installedDistros": "Distro yang telah dipasang",
   "onboarding.checkAgain": "Semak semula",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencode tidak dipasang dalam distro ini",
   "error.opencodeCannotRun": "opencode dipasang tetapi tidak dapat dijalankan",
   "error.opencodeNotInstalled": "OpenCode tidak dipasang dalam {{distro}}",
-  "error.updateVersion":
-    "Kemas kini OpenCode selesai tetapi {{distro}} masih melaporkan {{installed}}; sepatutnya {{expected}}",
-  "error.noVersion": "tiada versi",
   "error.serverExited": "Pelayan WSL telah keluar selepas permulaan (kod={{code}} isyarat={{signal}})",
   "error.serverExitedBeforeHealthy":
     "Pelayan WSL keluar sebelum menjadi sihat (kod={{code}} isyarat={{signal}}){{output}}",

@@ -14,15 +14,12 @@ export default {
   "session.reconnect": "Csatlakozás újra",
   trust: "Bízzon és csatlakozzon",
   continue: "Folytatás",
-  update: "Frissítés és újracsatlakozás",
   project: "Projekt megnyitása a {{host}}",
-  "stage.incompatible": "Szerverfrissítés szükséges",
   "error.input":
     "Adjon meg egy gazdagép vagy SSH kapcsolódási parancsot. A távoli parancsok és a nem támogatott SSH opciók nem engedélyezettek.",
   "error.connection": "Nem sikerült létrehozni a SSH kapcsolatot. Ellenőrizze a hálózatot és a SSH konfigurációt.",
   "error.platform":
     "Ez a távoli platform nem támogatott. Az automatikus beállításhoz jelenleg Linux vagy macOS szükséges x64-en vagy arm64-en.",
-  "error.version": "A távoli szolgáltatásnak meg kell egyeznie ezzel az asztali verzióval a csatlakozás előtt.",
   "error.install":
     "Nem sikerült telepíteni a távoli kiszolgálót. Ellenőrizze a csatlakozást, a lemezterületet és a tar telepítését.",
   "error.unpublished":

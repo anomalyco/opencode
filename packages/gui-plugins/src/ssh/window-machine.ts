@@ -58,7 +58,6 @@ export type SshWindowEvent =
       readonly ipcActive: boolean
       readonly item?: SshItem
       readonly dialog?: boolean
-      readonly replace?: boolean
       readonly onConnected?: Waiter
     }
   | { readonly type: "start.confirmed"; readonly id: string; readonly attempt: number; readonly item?: SshItem }
@@ -95,7 +94,6 @@ export type SshWindowEffect =
       readonly id: string
       readonly attempt: number
       readonly config: SshConfig
-      readonly replace: boolean
     }
   | {
       readonly type: "rpc.respond"
@@ -345,15 +343,12 @@ export function selectSshPending(state: SshWindowState, id: string, item: SshIte
   return selectSshSubmitting(state, id) || !!item?.authenticatingElsewhere || item?.stage === "connecting"
 }
 
-/** The next attempt whose prompt or update step needs a dialog of its own, while no other dialog shows. */
+/** The next attempt whose prompt needs a dialog of its own, while no other dialog shows. */
 export function selectSshPromptTarget(state: SshWindowState, items: readonly SshItem[]) {
   return items.flatMap((item) => {
     const attempt = state.attempts.get(item.config.id)
 
-    return attempt?.status === "waiting" &&
-      attempt.dialog === "none" &&
-      !attempt.error &&
-      (item.prompt || item.stage === "incompatible")
+    return attempt?.status === "waiting" && attempt.dialog === "none" && !attempt.error && item.prompt
       ? [{ item, attempt: attempt.attempt }]
       : []
   })[0]
@@ -368,7 +363,7 @@ export function selectSshCanOpenDialog(state: SshWindowState, id: string, attemp
 
 /**
  * Whether asking main for the server's endpoint can answer now. While main is gone, or the server waits for the
- * user (disconnected, signing in here, incompatible, or failed for good), a call would only return `null`.
+ * user (disconnected, signing in here, or failed for good), a call would only return `null`.
  */
 export function selectSshResolvable(ipcActive: boolean, item: SshItem | undefined) {
   if (!ipcActive || !item) return false
@@ -405,7 +400,7 @@ function connect(
     return { state, effects: event.onConnected ? [notify([event.onConnected], false)] : [] }
 
   // A second request joins the attempt in progress; a dialog that opens for it shows its prompts.
-  if (current && isActive(current) && !event.replace && !(current.status === "waiting" && current.error))
+  if (current && isActive(current) && !(current.status === "waiting" && current.error))
     return {
       state: put(state, id, {
         ...current,
@@ -425,7 +420,7 @@ function connect(
     }),
     effects: [
       ...(current && isCalling(current) ? [abort(id)] : []),
-      { type: "rpc.start", id, attempt, config: event.config, replace: !!event.replace },
+      { type: "rpc.start", id, attempt, config: event.config },
     ],
   }
 }
