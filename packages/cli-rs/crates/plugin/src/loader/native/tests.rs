@@ -3130,6 +3130,40 @@ fn a_c_plugin_gets_what_its_answers_ask_for() {
     assert!(screen.contains("drawn in C, 0 messages"), "{screen}");
 }
 
+// Expected (P5 over the C ABI): a plugin written in C against the header alone draws a canvas: its manifest says its
+// surface has a draw, the host asks for the canvas's list as it paints it, naming the canvas, again for a new version,
+// and draws the bytes the plugin wrote by hand. A draw asks the host for nothing: a toast it asks for is refused and never shows. A draw that
+// answers no bytes keeps the list the canvas holds.
+#[cfg(unix)]
+#[test]
+fn a_c_plugin_draws_a_canvas() {
+    let Some(library) = c_plugin(&[]) else { return };
+    let run = |options: &str| {
+        let (host, registry) = c_active(&library, options);
+        // The mount is kept, so the message's view and draw reach it.
+        let route = registry.route(&*host, "example.c", "c").unwrap();
+        host.app().root().add(&route.root());
+        host.app.render();
+        let first = host.app.text();
+        host.keymap().dispatch("c.hello", None);
+        host.app.advance(Duration::from_millis(1));
+        host.app.advance(Duration::from_millis(1));
+        host.app.render();
+        let status = entry(&registry.entries(), "c.so").status.clone();
+        (first, host.app.text(), toasts(&host), status)
+    };
+    let (first, bumped, toasted, status) = run("canvas");
+    assert!(first.contains("drawn in C, 0 messages") && first.contains("C draw 1 of m"), "{first}");
+    assert!(bumped.contains("drawn in C, 1 messages") && bumped.contains("C draw 2 of m"), "{bumped}");
+    assert_eq!((toasted, status), (vec!["hello from C".to_owned(), "send answered 0".to_owned()], Status::Active));
+    let (_, kept, _, status) = run("canvas,draw-keep");
+    assert!(kept.contains("drawn in C, 1 messages") && kept.contains("C draw 1 of m"), "{kept}");
+    assert_eq!(status, Status::Active);
+    let (first, _, toasted, status) = run("canvas,draw-toast");
+    assert!(first.contains("C draw 1 of m, toast refused"), "{first}");
+    assert_eq!((toasted, status), (vec!["hello from C".to_owned(), "send answered 0".to_owned()], Status::Active));
+}
+
 // Expected (4.5, reviews F12, bigboi-13, carbon-6): on macOS a library the system refuses gets a message that names the
 // cause the host knows and what to do about it: another team's signature (library validation), the quarantine of a
 // download the host put on its copy, else a missing or invalid signature, with the same words from `dyld` for the last
