@@ -6,6 +6,7 @@
 mod activation;
 pub mod behave;
 pub mod canvas;
+pub mod claim;
 pub mod contain;
 pub mod interact;
 mod list;
@@ -622,6 +623,22 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             };
             setup.surface(place, viewer, commands, fail, calls, &scope.owners, input);
         }
+        for claim in api.claims() {
+            let called = scope.clone();
+            let call: claim::Call =
+                Rc::new(move |host, view| match called.call_timed("view", host, |read| view(read)) {
+                    (None, _) => claim::Called::Failed,
+                    (Some(()), true) => claim::Called::Overran,
+                    (Some(()), false) => claim::Called::Returned,
+                });
+            let registered = claim::Registered::new(claim.clone(), Rc::downgrade(setup.host()), call);
+            match &claim.target {
+                abi::claim::Target::Tool(name) => setup.registration.tools.push((name.clone(), registered)),
+                abi::claim::Target::Fence(language) => {
+                    setup.registration.code_blocks.push((language.clone(), claim::fence(registered)));
+                }
+            }
+        }
         // Disposal removes the plugin's commands, runs its dispose callbacks, then drops its replies and wakes.
         setup.on_dispose(move || scope.dispose(&mut api));
         Ok(())
@@ -844,8 +861,18 @@ impl Scope {
     /// after a disable may ask: a panic fails it. The call is timed; an overrun of a built-in is a host bug, which fails
     /// no plugin (synthesis 4.4).
     fn call<R>(self: &Rc<Self>, export: &'static str, host: &dyn Host, f: impl FnOnce(&Scoped<'_>) -> R) -> Option<R> {
+        self.call_timed(export, host, f).0
+    }
+
+    /// [`Scope::call`], and whether the call took longer than the overrun limit.
+    fn call_timed<R>(
+        self: &Rc<Self>,
+        export: &'static str,
+        host: &dyn Host,
+        f: impl FnOnce(&Scoped<'_>) -> R,
+    ) -> (Option<R>, bool) {
         if self.failure.borrow().is_some() || self.activation.disposed() {
-            return None;
+            return (None, false);
         }
         let (out, timed) = self.monitor.call(self.slot, export, || behave::calling(export, || self.attempt(host, f)));
         let panicked = matches!(out, Some(Err(_)));
@@ -854,14 +881,16 @@ impl Scope {
             self.monitor.host_overran();
             log::error!("plugin {}: {export} took {} ms, a host bug in a built-in", self.id, timed.took.as_millis());
         }
-        match out? {
-            Ok(value) => Some(value),
-            Err(panic) => {
+        let value = match out {
+            Some(Ok(value)) => Some(value),
+            Some(Err(panic)) => {
                 let (revoked, error) = (self.revoked.take(), format!("{export} panicked: {panic}"));
                 fail(&self.host, &self.id, &self.failure, revoked, &self.activation, error);
                 None
             }
-        }
+            None => None,
+        };
+        (value, timed.overrun)
     }
 
     /// Calls `f` with the host as the plugin reads and calls it. What it asks for waits on the effect queue until it
@@ -1838,6 +1867,8 @@ struct Registration {
     /// The searches a select names (P2).
     searches: Vec<(String, SearchCall)>,
     code_blocks: Vec<(String, CodeBlockRender)>,
+    /// The tool claims, by the tool they claim.
+    tools: Vec<(String, Rc<claim::Registered>)>,
     disposers: Vec<Disposer>,
     cleanups: Vec<Box<dyn FnOnce()>>,
 }
@@ -2607,6 +2638,12 @@ impl Registry {
             renderers.register(language, Rc::new(move |block| render(block, &theme())));
         }
         renderers
+    }
+
+    /// The tool claims of the active plugins. The host takes them when it mounts a transcript, and mounts the route
+    /// again when a plugin is enabled, disabled, reloaded or fails, as for the code-block renderers.
+    pub fn tool_claims(&self) -> claim::ToolClaims {
+        claim::ToolClaims::new(self.by_activation(|registration| &registration.tools))
     }
 
     /// Runs `setup` for plugin `id` unless it is active; returns why it failed.

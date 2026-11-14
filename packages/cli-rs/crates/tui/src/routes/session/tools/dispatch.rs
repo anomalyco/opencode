@@ -7,6 +7,7 @@
 use opencode_api::generated::{
     SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent,
 };
+use opencode_plugin::claim;
 use opencode_ui::motion::Spinner;
 use opencode_ui::tool_info::{canonical_tool_name, tool_display_content, tool_display_metadata};
 use serde_json::Map;
@@ -30,6 +31,8 @@ pub struct Tool {
     root: View,
     body: View,
     view: RefCell<Option<(&'static str, Box<dyn ToolView>)>>,
+    /// The plugin claim of the call's tool (Pr), and whether its tree shows in the body instead of the view.
+    claim: RefCell<Option<(claim::Mount, bool)>>,
     /// `ToolImages`: the call's image results under its row.
     images: Images,
 }
@@ -83,7 +86,7 @@ impl Tool {
         let body = View::new(cx.app).column().shrink(0.0);
         let images = Images::new(cx, 3);
         let root = View::new(cx.app).column().shrink(0.0).child(&body).child(images.root());
-        Self { root, body, view: RefCell::default(), images }
+        Self { root, body, view: RefCell::default(), claim: RefCell::default(), images }
     }
 
     pub fn root(&self) -> &View {
@@ -92,13 +95,20 @@ impl Tool {
 
     /// Takes the theme of `cx` in place: the view keeps its widgets and their state.
     pub fn restyle(&self, cx: &Context<'_>) {
+        if let Some((mount, true)) = &*self.claim.borrow() {
+            mount.restyle();
+        }
         if let Some((_, view)) = &*self.view.borrow() {
             view.restyle(cx);
         }
         self.images.restyle(cx.theme);
     }
 
-    pub fn update(&self, cx: &Context<'_>, _message: &SessionMessageAssistant, part: &SessionMessageAssistantTool) {
+    pub fn update(&self, cx: &Context<'_>, message: &SessionMessageAssistant, part: &SessionMessageAssistantTool) {
+        if self.claimed(cx, message, part) {
+            self.images.update(cx, tool_images(part));
+            return;
+        }
         let display = display(&part.name);
         let mut view = self.view.borrow_mut();
         if view.as_ref().is_none_or(|(current, _)| *current != display) {
@@ -125,6 +135,42 @@ impl Tool {
         }
         view.as_ref().expect("tool view").1.update(cx, &Props::new(cx, part));
         self.images.update(cx, tool_images(part));
+    }
+
+    /// Shows the call with the plugin that claims its tool, while the claim accepts it; false when the view must.
+    fn claimed(&self, cx: &Context<'_>, message: &SessionMessageAssistant, part: &SessionMessageAssistantTool) -> bool {
+        let mut claim = self.claim.borrow_mut();
+        if claim.is_none() {
+            let Some(found) = cx.claims.find(&part.name) else { return false };
+            *claim = Some((found.mount(cx.app, &part.id, cx.content), false));
+        }
+        let Some((mount, shown)) = claim.as_mut() else { return false };
+        let state = match &part.state {
+            SessionMessageAssistantToolState::Streaming(_) => Some(claim::State::Pending),
+            SessionMessageAssistantToolState::Running(_) => Some(claim::State::Running),
+            SessionMessageAssistantToolState::Completed(_) => Some(claim::State::Completed),
+            SessionMessageAssistantToolState::Error(_) => Some(claim::State::Error),
+            // A state this client does not know is the host's to show.
+            SessionMessageAssistantToolState::Unknown(_) => None,
+        };
+        let shows = state.is_some_and(|state| {
+            mount.show(claim::Part::Tool(Box::new(claim::ToolPart {
+                session: cx.session.0.clone(),
+                message: message.id.0.clone(),
+                state,
+                permission: permission::tool_pending(cx.tui, cx.state, cx.session, &part.id),
+                tool: part.clone(),
+            })))
+        });
+        if shows != *shown {
+            self.body.clear();
+            self.view.take();
+            if shows {
+                self.body.add(mount.root());
+            }
+            *shown = shows;
+        }
+        shows
     }
 }
 

@@ -17,6 +17,7 @@ use opencode_api::generated::{
     SessionStructuredError,
 };
 use opencode_local::cli_config::{Markdown as MarkdownMode, Resolved, TurnTokens, Visibility};
+use opencode_plugin::claim::ToolClaims;
 use opencode_store::location::{Catalog, Location};
 use opencode_store::{LoadMore, State};
 use opencode_ui::markdown::CodeBlockRenderers;
@@ -85,6 +86,7 @@ struct Inner {
     /// The theme the rows show in; a theme switch replaces it and restyles them.
     paint: RefCell<Rc<Paint>>,
     renderers: CodeBlockRenderers,
+    claims: ToolClaims,
     /// The `session` and `debug` settings the rows show with, as the config has them now.
     view: Cell<RowSettings>,
     groups: Rc<grouping::Settings>,
@@ -206,6 +208,7 @@ impl Transcript {
             this: this.clone(),
             paint: RefCell::new(Rc::new(Paint::new(theme))),
             renderers: crate::plugins::host::code_blocks(tui),
+            claims: crate::plugins::host::tool_claims(tui),
             view: Cell::new(RowSettings::read(&tui.config())),
             groups: grouping::Settings::new(&tui.settings.info()),
             session: RefCell::default(),
@@ -828,6 +831,7 @@ impl Inner {
             syntax: &paint.syntax,
             thinking_syntax: &paint.thinking_syntax,
             renderers: &self.renderers,
+            claims: &self.claims,
             conceal: view.conceal,
             hide_thinking: view.hide_thinking,
             groups: &self.groups,
@@ -1183,6 +1187,8 @@ pub struct Context<'a> {
     /// Reasoning's syntax: every style in `text.muted` (`thinking-syntax.ts`).
     pub thinking_syntax: &'a SyntaxTheme,
     pub renderers: &'a CodeBlockRenderers,
+    /// The plugins' tool claims (Pr).
+    pub claims: &'a ToolClaims,
     /// `session.markdown` is `rendered`.
     pub conceal: bool,
     /// `session.thinking` is `hide`.
