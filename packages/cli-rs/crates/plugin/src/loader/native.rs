@@ -1127,7 +1127,8 @@ fn owners(ctx: &Ctx) -> Result<Rc<crate::Owners>, String> {
     ctx.owners.clone().ok_or_else(|| "setup has no input: it may open, focus and read nothing of it".to_owned())
 }
 
-/// Whether `request` is a render of 1.4 on or a view, which reads only. A 1.3 render is left as it was: its SDK let it
+/// Whether `request` is a render of 1.4 on, a view, a claim's view, a draw, a layout or a search, which read only, as in
+/// process, where they get the host's reads alone. A 1.3 render is left as it was: its SDK let it
 /// ask for effects, which apply when the host draws its answer.
 fn renders(request: &Request) -> bool {
     matches!(
@@ -1139,6 +1140,7 @@ fn renders(request: &Request) -> bool {
             | Request::Draw { .. }
             | Request::Layout { .. }
             | Request::Claim { .. }
+            | Request::Search { .. }
     )
 }
 

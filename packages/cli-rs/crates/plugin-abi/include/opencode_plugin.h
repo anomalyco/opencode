@@ -247,8 +247,9 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   LayoutReply, ScrollEvent, TranscriptView). Effects wait until the plugin's call returns. A call that panics, or
  *   whose answer the host refuses (it cannot decode it, the tree breaks the contract, a handler answers anything but
  *   null), has none, and fails the plugin. A call that answers OPENCODE_ERROR keeps them (see above). A render of 1.4
- *   on, a view, a claim's view, a draw or a layout ("render-fence", "render", "render-route", "view", "claim",
- *   "draw", "layout") reads only: the host answers OPENCODE_ERROR to any request of it that asks for something. A
+ *   on, a view, a claim's view, a draw, a layout or a search ("render-fence", "render", "render-route", "view",
+ *   "claim", "draw", "layout", "search") reads only, as in process, where these get the host's reads alone: the host
+ *   answers OPENCODE_ERROR to any request of it that asks for something. A
  *   render of 1.3 ("fence", "slot", "route") may ask, and what it asks for happens when the host draws its answer. A
  *   "scroll" of the transcript is taken only from a call that answers the user's input (a key, a click, an edit, the
  *   palette, the user's scroll): the host answers OPENCODE_ERROR to any other.
