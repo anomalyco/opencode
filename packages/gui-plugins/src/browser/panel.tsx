@@ -405,6 +405,8 @@ export default function SessionBrowserPane(props: {
     >
       <div
         data-component="browser-bar"
+        // The host fits it to the panel's visible width while the page holds its landing width as a still.
+        data-panel-header="fit"
         class="h-11 shrink-0 flex items-center gap-2 px-3 border-b-[0.5px] border-v2-border-border-muted"
       >
         <div class="flex shrink-0 items-center">
