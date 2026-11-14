@@ -5,12 +5,15 @@
 //! The budget acts after a call returns, because a call on the UI thread cannot be stopped:
 //!
 //! - **frame budget**: [`Limits::frame`] per plugin per frame, summed over its calls; [`Limits::all`] for all plugins
-//!   together. A frame is one value of the host's frame counter: a paint and what runs after it until the next.
+//!   together. A frame is what runs from one paint to the next: the host closes the open frames at the start of each
+//!   paint ([`Monitor::close`]), and a call in a later frame closes its plugin's frame too.
 //! - **slow**: over the frame budget in more than [`Limits::slow`] of the last [`Limits::window`] frames the plugin ran
 //!   in. It informs only, once a session, because wall time on a loaded machine is noisy.
 //! - **overrun**: one call over [`Limits::overrun`]. The caller fails an external plugin; for a built-in it is a host
-//!   bug, logged. A library's first call after `setup` is exempt, because its pages are cold. `setup` and `dispose`
-//!   are timed and do not count: `setup` is shown as the plugin's load.
+//!   bug, logged and counted ([`Monitor::host_overruns`]). A plugin's first call after `setup` is exempt, because its
+//!   pages are cold. Loading a library, `setup` and `dispose` are timed and do not count: they are its load.
+//!
+//! Each build of a plugin has its own slot and statistics: a reload starts afresh.
 //! - **hang**: a call not returned after [`Limits::hang`]; the watchdog acts ([`watchdog`]).
 
 pub mod record;
@@ -22,7 +25,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-pub use record::{Left, Record};
+pub use record::{Artifact, Crash, Handoff, Record, Snapshot};
 
 /// The limits of the budget. These are starting values (synthesis 7, decision 5); `OPENCODE_PLUGIN_LIMITS` changes
 /// them ([`Limits::parse`]).
@@ -102,7 +105,7 @@ fn duration(value: &str) -> Result<Duration, String> {
     Duration::try_from_secs_f64(seconds).map_err(|_| format!("{value}: not a duration"))
 }
 
-/// One plugin as the monitor knows it, for the life of the process.
+/// One build of a plugin as the monitor knows it, for the life of the process.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Slot(u16);
 
@@ -114,6 +117,8 @@ pub struct Timed {
     pub overrun: bool,
     /// The plugin just became slow, for the first time this session: what it costs a frame.
     pub slow: Option<String>,
+    /// The call opened a frame of its plugin, which the host closes at the next paint.
+    pub opened: bool,
 }
 
 /// Times every plugin call and keeps the budget's state; the host owns one.
@@ -125,25 +130,34 @@ pub struct Monitor {
     frame: RefCell<Rc<dyn Fn() -> u64>>,
     plugins: RefCell<Vec<Stats>>,
     /// The frame all plugins' calls are summed in, and their sum.
-    all: Cell<(u64, Duration)>,
+    all: Cell<Option<(u64, Duration)>>,
     over_all: Cell<u64>,
+    host_overruns: Cell<u64>,
     /// A call runs: a call within it is part of it.
     depth: Cell<u32>,
+    /// The host has a close at the next paint pending.
+    closing: Cell<bool>,
     record: OnceCell<(Arc<Record>, Instant)>,
+    /// Told when a call returns whose hang notice the watchdog painted: the plugin and how long the call took.
+    on_notice: RefCell<Option<Rc<OnNotice>>>,
 }
+
+/// What a host does when a call whose hang notice was painted returns.
+type OnNotice = dyn Fn(&Artifact, Duration);
 
 #[derive(Default)]
 struct Stats {
-    id: String,
+    artifact: Artifact,
     /// The frame its calls are summed in, and their sum.
     window: Option<(u64, Duration)>,
     /// The sums of the last frames it ran in, newest last.
     frames: VecDeque<Duration>,
     slow: bool,
     told: bool,
-    /// The next call is the first after a load: exempt from overrun.
+    /// The next call is the first after a setup: exempt from overrun.
     cold: bool,
     load: Option<Duration>,
+    setup: Option<Duration>,
     kinds: Vec<(&'static str, Samples)>,
 }
 
@@ -162,6 +176,25 @@ impl Default for Monitor {
     }
 }
 
+/// Leaves the running call however the plugin's call ends, also by unwinding.
+struct Leave<'a> {
+    monitor: &'a Monitor,
+    generation: Option<u64>,
+}
+
+impl Drop for Leave<'_> {
+    fn drop(&mut self) {
+        self.monitor.depth.set(0);
+        let (Some(generation), Some((record, _))) = (self.generation, self.monitor.record.get()) else { return };
+        if !record.leave(generation) {
+            // The watchdog claimed this call and is ending the process: nothing may run as if it had returned.
+            loop {
+                std::thread::park();
+            }
+        }
+    }
+}
+
 impl Monitor {
     /// A monitor on the monotonic clock, whose frames are counted by the host ([`Monitor::set_frames`]).
     pub fn new(limits: Limits) -> Self {
@@ -171,10 +204,13 @@ impl Monitor {
             injected: Cell::new(false),
             frame: RefCell::new(Rc::new(|| 0)),
             plugins: RefCell::default(),
-            all: Cell::default(),
+            all: Cell::new(None),
             over_all: Cell::new(0),
+            host_overruns: Cell::new(0),
             depth: Cell::new(0),
+            closing: Cell::new(false),
             record: OnceCell::new(),
+            on_notice: RefCell::default(),
         }
     }
 
@@ -197,40 +233,44 @@ impl Monitor {
         *self.frame.borrow_mut() = Rc::new(frame);
     }
 
-    /// Keeps the run record at `path` from now on, with the watchdog over it. Once per process: the record names the
-    /// plugins known so far and those that come later.
-    pub fn attach_record(&self, path: &std::path::Path) -> std::io::Result<Arc<Record>> {
-        let record = Arc::new(Record::create(path)?);
+    /// Calls `notice` when a call returns whose hang notice the watchdog painted.
+    pub fn set_on_notice(&self, notice: impl Fn(&Artifact, Duration) + 'static) {
+        *self.on_notice.borrow_mut() = Some(Rc::new(notice));
+    }
+
+    /// Keeps the run record `record` from now on. Once per process: the record names the plugins known so far and those
+    /// that come later.
+    pub fn attach(&self, record: Arc<Record>) -> std::io::Result<()> {
         if self.record.set((record.clone(), Instant::now())).is_err() {
             return Err(std::io::Error::other("a record is attached already"));
         }
         for (slot, stats) in self.plugins.borrow().iter().enumerate() {
-            record.name(slot as u16, &stats.id);
+            record.name(slot as u16, &stats.artifact);
         }
-        Ok(record)
+        Ok(())
     }
 
-    /// Starts the watchdog over the attached record, painting on `terminal`.
-    pub fn watch(&self, terminal: Option<std::fs::File>) {
-        if let Some((record, epoch)) = self.record.get() {
-            watchdog::spawn(record.clone(), *epoch, self.limits(), terminal);
-        }
+    /// Starts the watchdog over the attached record, painting its notice on `terminal`. Only a client on a real
+    /// terminal, under a parent, does this.
+    pub fn watch(&self, terminal: Option<std::fs::File>) -> std::io::Result<()> {
+        let (record, epoch) = self.record.get().ok_or_else(|| std::io::Error::other("no record"))?;
+        watchdog::spawn(Arc::downgrade(record), *epoch, self.limits(), terminal)
     }
 
     pub fn record(&self) -> Option<&Arc<Record>> {
         self.record.get().map(|(record, _)| record)
     }
 
-    /// The slot of plugin `id`, made on first use.
-    pub fn slot(&self, id: &str) -> Slot {
+    /// The slot of `artifact`, made on first use: each build has its own.
+    pub fn slot(&self, artifact: &Artifact) -> Slot {
         let mut plugins = self.plugins.borrow_mut();
-        if let Some(index) = plugins.iter().position(|stats| stats.id == id) {
+        if let Some(index) = plugins.iter().position(|stats| stats.artifact == *artifact) {
             return Slot(index as u16);
         }
-        plugins.push(Stats { id: id.to_owned(), ..Stats::default() });
+        plugins.push(Stats { artifact: artifact.clone(), ..Stats::default() });
         let slot = (plugins.len() - 1) as u16;
         if let Some((record, _)) = self.record.get() {
-            record.name(slot, id);
+            record.name(slot, artifact);
         }
         Slot(slot)
     }
@@ -243,16 +283,20 @@ impl Monitor {
         }
         let clock = self.clock.borrow().clone();
         let start = clock();
-        if let Some((record, epoch)) = self.record.get() {
+        let generation = self.record.get().map(|(record, epoch)| {
             let now = if self.injected.get() { Instant::now() } else { start };
-            record.enter(slot.0, record::kind(kind), now.saturating_duration_since(*epoch).as_millis() as u64);
-        }
+            record.enter(slot.0, record::kind(kind), now.saturating_duration_since(*epoch).as_millis() as u64)
+        });
         self.depth.set(1);
+        let leave = Leave { monitor: self, generation };
         let value = f();
-        self.depth.set(0);
+        drop(leave);
         let took = clock().saturating_duration_since(start);
-        if let Some((record, _)) = self.record.get() {
-            record.leave();
+        let noticed =
+            generation.zip(self.record.get()).is_some_and(|(generation, (record, _))| record.was_noticed(generation));
+        if noticed && let Some(notice) = self.on_notice.borrow().clone() {
+            let artifact = self.plugins.borrow()[usize::from(slot.0)].artifact.clone();
+            notice(&artifact, took);
         }
         (value, self.account(slot, kind, took))
     }
@@ -264,8 +308,13 @@ impl Monitor {
         let mut plugins = self.plugins.borrow_mut();
         let stats = &mut plugins[usize::from(slot.0)];
         match kind {
-            "setup" => {
+            "load" => {
                 stats.load = Some(took);
+                return Timed { took, ..Timed::default() };
+            }
+            "setup" => {
+                *stats = Stats { artifact: std::mem::take(&mut stats.artifact), load: stats.load, ..Stats::default() };
+                stats.setup = Some(took);
                 stats.cold = true;
                 return Timed { took, ..Timed::default() };
             }
@@ -286,13 +335,40 @@ impl Monitor {
         samples.worst = samples.worst.max(took);
         let cold = std::mem::take(&mut stats.cold);
         let overrun = took > limits.overrun && !cold;
-        let slow = stats.add(frame, took, &limits);
-        let (all, sum) = self.all.get();
-        if all != frame {
+        let (slow, opened) = stats.add(frame, took, &limits);
+        drop(plugins);
+        match self.all.get() {
+            Some((open, sum)) if open == frame => self.all.set(Some((open, sum + took))),
+            Some((_, sum)) => {
+                self.close_all(sum, &limits);
+                self.all.set(Some((frame, took)));
+            }
+            None => self.all.set(Some((frame, took))),
+        }
+        Timed { took, overrun, slow, opened }
+    }
+
+    /// A paint starts: every open frame ends. Returns the plugins that became slow, with what a slow frame costs.
+    pub fn close(&self) -> Vec<(String, String)> {
+        self.closing.set(false);
+        let limits = self.limits();
+        let mut news = Vec::new();
+        for stats in self.plugins.borrow_mut().iter_mut() {
+            if let Some((_, sum)) = stats.window.take()
+                && let Some(cost) = stats.close(sum, &limits)
+            {
+                news.push((stats.artifact.id.clone(), cost));
+            }
+        }
+        if let Some((_, sum)) = self.all.take() {
             self.close_all(sum, &limits);
         }
-        self.all.set((frame, if all == frame { sum + took } else { took }));
-        Timed { took, overrun, slow }
+        news
+    }
+
+    /// Whether the host must close the open frames at the next paint; true once until [`Monitor::close`].
+    pub fn wants_close(&self) -> bool {
+        !self.closing.replace(true)
     }
 
     /// Ends the frame in which all plugins summed to `sum`.
@@ -306,9 +382,24 @@ impl Monitor {
         }
     }
 
-    /// Whether plugin `id` is slow now.
+    /// A built-in overran: a host bug, which a performance test fails on.
+    pub fn host_overran(&self) {
+        self.host_overruns.set(self.host_overruns.get() + 1);
+    }
+
+    /// The overruns of built-ins so far.
+    pub fn host_overruns(&self) -> u64 {
+        self.host_overruns.get()
+    }
+
+    /// The newest build of plugin `id`.
+    fn latest<T>(&self, id: &str, f: impl FnOnce(&Stats) -> T) -> Option<T> {
+        self.plugins.borrow().iter().rev().find(|stats| stats.artifact.id == id).map(f)
+    }
+
+    /// Whether plugin `id`'s newest build is slow now.
     pub fn is_slow(&self, id: &str) -> bool {
-        self.plugins.borrow().iter().any(|stats| stats.id == id && stats.slow)
+        self.latest(id, |stats| stats.slow).unwrap_or(false)
     }
 
     /// The frames all plugins together went over [`Limits::all`].
@@ -318,42 +409,51 @@ impl Monitor {
 
     /// What `/plugins` shows for a slow plugin: p50, p99 and worst per call kind.
     pub fn report(&self, id: &str) -> Option<String> {
-        let plugins = self.plugins.borrow();
-        let stats = plugins.iter().find(|stats| stats.id == id && stats.slow)?;
-        let kinds: Vec<String> = stats
-            .kinds
-            .iter()
-            .filter(|(_, samples)| !samples.recent.is_empty())
-            .map(|(kind, samples)| {
-                let mut sorted: Vec<Duration> = samples.recent.iter().copied().collect();
-                sorted.sort_unstable();
-                let at = |q: f64| sorted[((sorted.len() - 1) as f64 * q).round() as usize];
-                format!("{kind} {:.1}/{:.1}/{:.1} ms", ms(at(0.5)), ms(at(0.99)), ms(samples.worst))
+        self.latest(id, |stats| {
+            stats.slow.then(|| {
+                let kinds: Vec<String> = stats
+                    .kinds
+                    .iter()
+                    .filter(|(_, samples)| !samples.recent.is_empty())
+                    .map(|(kind, samples)| {
+                        let mut sorted: Vec<Duration> = samples.recent.iter().copied().collect();
+                        sorted.sort_unstable();
+                        let at = |q: f64| sorted[((sorted.len() - 1) as f64 * q).round() as usize];
+                        format!("{kind} {:.1}/{:.1}/{:.1} ms", ms(at(0.5)), ms(at(0.99)), ms(samples.worst))
+                    })
+                    .collect();
+                // How long it took to start, as the manager's details say it (4.4); a healthy row says nothing.
+                let start: Vec<String> = [("load", stats.load), ("setup", stats.setup)]
+                    .into_iter()
+                    .filter_map(|(name, took)| Some(format!("{name} {:.1} ms", ms(took?))))
+                    .collect();
+                let start = if start.is_empty() { String::new() } else { format!("; {}", start.join(", ")) };
+                format!("slow (p50/p99/worst): {}{start}", kinds.join(", "))
             })
-            .collect();
-        Some(format!("slow (p50/p99/worst): {}", kinds.join(", ")))
+        })
+        .flatten()
     }
 
-    /// How long plugin `id`'s last `setup` took.
-    pub fn load(&self, id: &str) -> Option<Duration> {
-        self.plugins.borrow().iter().find(|stats| stats.id == id).and_then(|stats| stats.load)
+    /// How long plugin `id`'s newest build took to load and to set up.
+    pub fn load(&self, id: &str) -> (Option<Duration>, Option<Duration>) {
+        self.latest(id, |stats| (stats.load, stats.setup)).unwrap_or_default()
     }
 }
 
 impl Stats {
     /// Adds a call of `took` in `frame`; when that ends the frame before, the slow rule runs on it. Returns the news
-    /// of a plugin that became slow for the first time.
-    fn add(&mut self, frame: u64, took: Duration, limits: &Limits) -> Option<String> {
+    /// of a plugin that became slow for the first time, and whether the call opened a frame.
+    fn add(&mut self, frame: u64, took: Duration, limits: &Limits) -> (Option<String>, bool) {
         let news = match self.window {
             Some((open, sum)) if open == frame => {
                 self.window = Some((open, sum + took));
-                return None;
+                return (None, false);
             }
             Some((_, sum)) => self.close(sum, limits),
             None => None,
         };
         self.window = Some((frame, took));
-        news
+        (news, true)
     }
 
     fn close(&mut self, sum: Duration, limits: &Limits) -> Option<String> {
@@ -371,7 +471,7 @@ impl Stats {
         let typical = over[over.len() / 2];
         log::warn!(
             "plugin {} is slow: {:.1} ms a frame in {} of {} frames",
-            self.id,
+            self.artifact.id,
             ms(typical),
             over.len(),
             self.frames.len()

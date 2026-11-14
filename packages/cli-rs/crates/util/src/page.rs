@@ -1,7 +1,9 @@
 //! A file mapped into memory and shared with the file's pages, so what this process stores reaches the file at once
 //! and another process reads it after this one died: the plugin run record (synthesis 4.5). `mmap` with `MAP_SHARED`
-//! on Unix, `CreateFileMappingW` and `MapViewOfFile` on Windows. A store is a plain store into memory: it costs no
-//! system call, and nothing in it waits for the disk.
+//! on Unix, `CreateFileMappingW` and `MapViewOfFile` on Windows.
+//!
+//! The mapping hands out a raw pointer and nothing else: the record that owns it decides the layout, gives each field
+//! one access type, and keeps the fields apart, which is what makes concurrent access sound.
 
 #![allow(unsafe_code)]
 
@@ -9,9 +11,8 @@ use std::fs::File;
 use std::io;
 use std::path::Path;
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
-/// A mapped file of a fixed length. Dropping it unmaps the file and leaves it on disk.
+/// A mapped file of a fixed length. Dropping it unmaps the file.
 pub struct Page {
     map: NonNull<u8>,
     len: usize,
@@ -20,77 +21,96 @@ pub struct Page {
     _file: File,
 }
 
-// SAFETY: the mapping lives as long as the value, and every access goes through volatile copies or atomics, so two
-// threads may store to different places of it, and read it, at the same time.
+// SAFETY: the mapping lives as long as the value and is only reached through `as_ptr`, whose users make each access
+// atomic.
 unsafe impl Send for Page {}
 // SAFETY: as above.
 unsafe impl Sync for Page {}
 
 impl Page {
-    /// Creates the file at `path` (or truncates it), owner-only on Unix, `len` bytes of zeros, and maps it.
-    pub fn create(path: &Path, len: usize) -> io::Result<Page> {
-        assert!(len > 0 && len.is_multiple_of(8), "a page is a whole number of words");
-        let mut options = std::fs::OpenOptions::new();
-        options.read(true).write(true).create(true).truncate(true);
-        #[cfg(unix)]
-        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-        let file = options.open(path)?;
-        file.set_len(len as u64)?;
+    /// Maps `file`, which is `len` bytes long, shared and writable.
+    pub fn map(file: File, len: usize) -> io::Result<Page> {
+        if len == 0 || !len.is_multiple_of(8) || file.metadata()?.len() != len as u64 {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "not a page of the expected length"));
+        }
         sys::map(file, len)
+    }
+
+    /// The first byte of the mapping, aligned to a page.
+    pub fn as_ptr(&self) -> *mut u8 {
+        self.map.as_ptr()
     }
 
     pub fn len(&self) -> usize {
         self.len
     }
 
+    /// The mapped file, to hand its handle to a child that maps it too.
+    pub fn file(&self) -> &File {
+        &self._file
+    }
+
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
+}
 
-    /// Copies `bytes` to offset `at`.
-    pub fn write(&self, at: usize, bytes: &[u8]) {
-        assert!(at + bytes.len() <= self.len, "a write past the page");
-        for (index, byte) in bytes.iter().enumerate() {
-            // SAFETY: inside the mapping, which is writable.
-            unsafe { self.map.as_ptr().add(at + index).write_volatile(*byte) };
+/// Creates a private file of `len` bytes of zeros in `dir`, under a new name nobody else can have chosen first: owner
+/// only, never following a link, failing on any file already there. On Unix it is unlinked at once, so it lives only
+/// as long as its descriptors; on Windows it is deleted when its last handle closes, and nobody else may open it. Its
+/// blocks are allocated, so a full disk fails here and not at a later store.
+pub fn private_file(dir: &Path, len: usize) -> io::Result<File> {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    for _ in 0..16 {
+        let unique = format!(
+            "opencode-plugins-{}-{}-{}.run",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        );
+        match sys::create(&dir.join(unique), len) {
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            result => return result,
         }
     }
-
-    /// The `len` bytes at offset `at`.
-    pub fn read(&self, at: usize, len: usize) -> Vec<u8> {
-        assert!(at + len <= self.len, "a read past the page");
-        // SAFETY: inside the mapping.
-        (0..len).map(|index| unsafe { self.map.as_ptr().add(at + index).read_volatile() }).collect()
-    }
-
-    /// Stores the 8-byte word at offset `at`, a multiple of 8, in one store.
-    pub fn store(&self, at: usize, value: u64) {
-        self.word(at).store(value, Ordering::Release);
-    }
-
-    pub fn load(&self, at: usize) -> u64 {
-        self.word(at).load(Ordering::Acquire)
-    }
-
-    /// Stores the 4-byte word at offset `at`, a multiple of 4.
-    pub fn store_u32(&self, at: usize, value: u32) {
-        assert!(at.is_multiple_of(4) && at + 4 <= self.len, "a misplaced word");
-        // SAFETY: aligned (the mapping is page-aligned) and inside it; atomics may alias shared memory.
-        unsafe { AtomicU32::from_ptr(self.map.as_ptr().add(at).cast()) }.store(value, Ordering::Release);
-    }
-
-    fn word(&self, at: usize) -> &AtomicU64 {
-        assert!(at.is_multiple_of(8) && at + 8 <= self.len, "a misplaced word");
-        // SAFETY: as in `store_u32`; the word lives as long as `self`.
-        unsafe { AtomicU64::from_ptr(self.map.as_ptr().add(at).cast()) }
-    }
+    Err(io::Error::new(io::ErrorKind::AlreadyExists, "no free name for a private file"))
 }
 
 #[cfg(unix)]
 mod sys {
     use std::os::fd::AsRawFd;
+    use std::os::unix::fs::OpenOptionsExt;
 
     use super::*;
+
+    pub(super) fn create(path: &Path, len: usize) -> io::Result<File> {
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(path)?;
+        let removed = std::fs::remove_file(path);
+        allocate(&file, len)?;
+        removed?;
+        Ok(file)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn allocate(file: &File, len: usize) -> io::Result<()> {
+        // SAFETY: a plain call on an open descriptor.
+        match unsafe { libc::posix_fallocate(file.as_raw_fd(), 0, len as libc::off_t) } {
+            0 => Ok(()),
+            error => Err(io::Error::from_raw_os_error(error)),
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn allocate(file: &File, len: usize) -> io::Result<()> {
+        use std::io::Write;
+        (&*file).write_all(&vec![0; len])
+    }
 
     pub(super) fn map(file: File, len: usize) -> io::Result<Page> {
         // SAFETY: a new shared mapping of a file of `len` bytes; it is unmapped once, in `drop`.
@@ -121,13 +141,28 @@ mod sys {
 
 #[cfg(windows)]
 mod sys {
+    use std::os::windows::fs::OpenOptionsExt;
     use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 
+    use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_DELETE_ON_CLOSE;
     use windows_sys::Win32::System::Memory::{
         CreateFileMappingW, FILE_MAP_WRITE, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile, PAGE_READWRITE, UnmapViewOfFile,
     };
 
     use super::*;
+
+    pub(super) fn create(path: &Path, len: usize) -> io::Result<File> {
+        // No sharing: only the handles this process holds, and those it hands to its child, reach the file.
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .share_mode(0)
+            .custom_flags(FILE_FLAG_DELETE_ON_CLOSE)
+            .open(path)?;
+        file.set_len(len as u64)?;
+        Ok(file)
+    }
 
     pub(super) fn map(file: File, len: usize) -> io::Result<Page> {
         let size = len as u64;
@@ -182,25 +217,18 @@ pub fn exit_now(code: i32) -> ! {
 mod tests {
     use super::*;
 
-    // Expected: what one mapping stores is in the file at once, for a reader that did not map it, and a second
-    // mapping of a new file starts from zeros.
+    // Expected: a private file is new, empty, of its length and already gone from the directory (Unix), and a second
+    // one in the same directory is another file; a file of another length does not map.
     #[test]
-    fn a_store_reaches_the_file_without_a_flush() {
+    fn a_private_file_is_new_and_has_no_name() {
         let dir = crate::temp::tempdir().unwrap();
-        let path = dir.path().join("record");
-        let page = Page::create(&path, 4096).unwrap();
-        page.store(8, 0x0102_0304_0506_0708);
-        page.store_u32(16, 0xAABB_CCDD);
-        page.write(100, b"plugin");
-        let bytes = std::fs::read(&path).unwrap();
-        assert_eq!(bytes.len(), 4096);
-        assert_eq!(u64::from_ne_bytes(bytes[8..16].try_into().unwrap()), 0x0102_0304_0506_0708);
-        assert_eq!(u32::from_ne_bytes(bytes[16..20].try_into().unwrap()), 0xAABB_CCDD);
-        assert_eq!(&bytes[100..106], b"plugin");
-        assert_eq!(page.read(100, 6), b"plugin");
-        assert_eq!(page.load(8), 0x0102_0304_0506_0708);
-        drop(page);
-        let again = Page::create(&path, 4096).unwrap();
-        assert_eq!(again.load(8), 0);
+        let file = private_file(dir.path(), 4096).unwrap();
+        assert_eq!(file.metadata().unwrap().len(), 4096);
+        #[cfg(unix)]
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+        let other = private_file(dir.path(), 4096).unwrap();
+        let page = Page::map(file, 4096).unwrap();
+        assert_eq!(page.len(), 4096);
+        assert!(Page::map(other, 8192).is_err());
     }
 }
