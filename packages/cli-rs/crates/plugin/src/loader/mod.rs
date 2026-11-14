@@ -9,6 +9,7 @@
 //! `.opencode/plugins` loads only once the user approved it ([`approval`]).
 
 pub mod approval;
+pub mod deps;
 pub mod native;
 
 use std::cell::RefCell;
@@ -338,13 +339,16 @@ impl Loader {
             }
         };
         self.waiting.borrow_mut().remove(name);
-        let loaded = self.backend.load(host, &bytes, target.options.as_deref()).and_then(|loaded| {
-            if !registry.id_taken(&loaded.0.id, name) {
-                return Ok(loaded);
-            }
-            self.waiting.borrow_mut().insert(name.to_owned(), loaded.0.id.clone());
-            Err(format!("plugin ID {} is already registered", loaded.0.id))
-        });
+        // Nothing the build names may come from the project, or leave its private copy (bigboi-3).
+        let loaded = deps::check(&bytes, target.project);
+        let loaded =
+            loaded.and_then(|()| self.backend.load(host, &bytes, target.options.as_deref())).and_then(|loaded| {
+                if !registry.id_taken(&loaded.0.id, name) {
+                    return Ok(loaded);
+                }
+                self.waiting.borrow_mut().insert(name.to_owned(), loaded.0.id.clone());
+                Err(format!("plugin ID {} is already registered", loaded.0.id))
+            });
         let (definition, error) = match loaded {
             Ok(loaded) => loaded,
             Err(error) => return self.fail(&**host, registry, &listed, name, digest, error),
