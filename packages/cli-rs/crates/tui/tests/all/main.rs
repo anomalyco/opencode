@@ -31,6 +31,7 @@ mod navigate;
 mod permission;
 mod plugin_approval;
 mod plugin_behave;
+mod plugin_builtins;
 mod plugin_canvas;
 mod plugin_carriers;
 mod plugin_claim;
