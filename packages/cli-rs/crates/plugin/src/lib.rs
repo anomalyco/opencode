@@ -2139,6 +2139,27 @@ impl Registry {
         }
     }
 
+    /// [`Registry::admit`] for the TypeScript plugin of `target`, on the JS host: safe mode holds it; a crash of the
+    /// client or a client no parent guards does not, as nothing of it runs in this process.
+    pub fn admit_script(&self, target: &str) -> bool {
+        let released = self.released.borrow().iter().any(|known| known == target);
+        let mut held = self.held.borrow_mut();
+        held.retain(|(known, _)| known != target);
+        if released || !self.safe.get() {
+            return true;
+        }
+        held.push((target.to_owned(), Hold::Safe));
+        drop(held);
+        self.set_unloaded(target, None);
+        false
+    }
+
+    /// Whether plugin `id`, loaded from `target`, starts enabled: as the plugin loaded from it before is, else as the
+    /// directives say.
+    pub fn starts_enabled(&self, target: &str, id: &str) -> bool {
+        self.with_target(target, |plugin| plugin.enabled).unwrap_or_else(|| self.enabled(target, id))
+    }
+
     /// Whether `target` is held.
     pub fn held(&self, target: &str) -> bool {
         self.held.borrow().iter().any(|(known, _)| known == target)

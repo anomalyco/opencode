@@ -57,6 +57,9 @@ pub struct Config {
     pub window: Duration,
     /// How long a holding command holds the keys after it.
     pub hold: Duration,
+    /// The client's version and channel, which a plugin's setup context reads as `app`.
+    pub version: String,
+    pub channel: String,
 }
 
 impl Config {
@@ -68,6 +71,8 @@ impl Config {
             ends: 3,
             window: Duration::from_secs(60),
             hold: Duration::from_millis(50),
+            version: "local".to_owned(),
+            channel: "latest".to_owned(),
         }
     }
 
@@ -144,6 +149,8 @@ fn count(f: impl FnOnce(&mut Crossed)) {
 pub(crate) enum Step {
     /// Its load is on its way.
     Starting,
+    /// It imported plugin `id`: [`Scripts::set_up`] when it is enabled, else [`Scripts::inactive`].
+    Described(String),
     /// It loaded: register it.
     Ready(Definition, ErrorFn, u64),
     /// Registered already, and unchanged.
@@ -164,6 +171,8 @@ struct Load {
 
 enum Loading {
     Waiting(u64),
+    /// Load `seq` imported plugin `id`, whose setup waits for the loader to know it is enabled.
+    Described(u64, String),
     Loaded(Rc<guest::Loaded>),
     Unsupported,
     Failed(String),
@@ -248,6 +257,10 @@ pub struct Scripts {
     started: RefCell<std::collections::HashSet<u64>>,
     /// Messages the running JS host's queue had no room for yet, in order, and their bytes: they go once it reads.
     overflow: RefCell<(VecDeque<(Down, usize)>, usize)>,
+    /// The theme's mode the JS host was told last.
+    theme: RefCell<String>,
+    /// The plugin whose code the JS host said it runs outside any sequenced work.
+    entered: RefCell<Option<String>>,
     reconcile: RefCell<Option<Rc<dyn Fn()>>>,
     ends: RefCell<VecDeque<Instant>>,
     /// Why the JS host is not started again.
@@ -297,6 +310,8 @@ impl Scripts {
             waiting: RefCell::default(),
             started: RefCell::default(),
             overflow: RefCell::default(),
+            theme: RefCell::default(),
+            entered: RefCell::default(),
             reconcile: RefCell::default(),
             ends: RefCell::default(),
             stopped: RefCell::default(),
@@ -413,6 +428,7 @@ impl Scripts {
         if let Some(load) = loads.get_mut(target).filter(|load| load.digest == digest) {
             return match &load.state {
                 Loading::Waiting(_) => Step::Starting,
+                Loading::Described(_, id) => Step::Described(id.clone()),
                 Loading::Loaded(loaded) if !load.registered => {
                     load.registered = true;
                     let (definition, error) = guest::define(self, loaded.clone());
@@ -437,16 +453,59 @@ impl Scripts {
         );
         drop(loads);
         let options = options.and_then(|options| serde_json::from_str(options).ok());
-        let load = Down::Load { seq, target: target.to_owned(), dir: dir.to_string_lossy().into_owned(), options };
+        // Nothing of it is set up before the loader knows it is enabled (review carbon-8).
+        let dir = dir.to_string_lossy().into_owned();
+        let load = Down::Load { seq, target: target.to_owned(), dir, options, setup: false };
         self.send(load, Some(Waiting::Load(target.to_owned())));
         Step::Starting
     }
 
-    /// Forgets `target`, which the loader removed.
+    /// Runs the setup of the plugin `target`'s load described, which is enabled.
+    pub(crate) fn set_up(&self, target: &str) {
+        let seq = self.next();
+        let mut loads = self.loads.borrow_mut();
+        let Some(load) = loads.get_mut(target) else { return };
+        let Loading::Described(described, _) = load.state else { return };
+        load.state = Loading::Waiting(seq);
+        drop(loads);
+        self.send(Down::Setup { seq, load: described }, Some(Waiting::Load(target.to_owned())));
+    }
+
+    /// Registers the plugin `target`'s load described, which is disabled, without its setup: its activation runs it.
+    pub(crate) fn inactive(&self, target: &str) {
+        let mut loads = self.loads.borrow_mut();
+        let Some(load) = loads.get_mut(target) else { return };
+        let Loading::Described(_, id) = &load.state else { return };
+        let loaded = guest::Loaded {
+            id: id.clone(),
+            target: target.to_owned(),
+            dir: load.dir.clone(),
+            options: load.options.clone(),
+            seq: 0,
+            manifest: opencode_plugin_abi::Manifest { id: id.clone(), ..Default::default() },
+            holds: Vec::new(),
+            effects: RefCell::new(None),
+        };
+        (load.state, load.registered) = (Loading::Loaded(Rc::new(loaded)), false);
+    }
+
+    /// Forgets `target`, which the loader removed: the JS host drops what it has of it.
     pub(crate) fn forget(&self, target: &str) {
         let removed = self.loads.borrow_mut().remove(target);
         if let Some(Loading::Loaded(loaded)) = removed.map(|load| load.state) {
             self.early.borrow_mut().remove(&loaded.id);
+        }
+        if self.child.borrow().is_some() {
+            self.write(&Down::Forget { target: target.to_owned() });
+        }
+    }
+
+    /// Tells the JS host the theme's mode, when it changed.
+    pub(crate) fn theme(&self) {
+        let Some(host) = self.host.upgrade() else { return };
+        let mode = theme_mode(&*host);
+        if self.theme.replace(mode.clone()) != mode && self.child.borrow().is_some() {
+            self.write(&Down::Theme { mode });
         }
     }
 
@@ -543,7 +602,7 @@ impl Scripts {
         let payload = serde_json::to_vec(message).unwrap_or_default();
         log::trace!("js host -> {}", String::from_utf8_lossy(&payload));
         let wait = match message {
-            Down::Load { .. } => child::Wait::Setup,
+            Down::Load { .. } | Down::Setup { .. } => child::Wait::Setup,
             Down::Call { .. } | Down::Ping { .. } | Down::Mount { .. } | Down::Input { .. } => child::Wait::Answer,
             _ => child::Wait::Ack,
         };
@@ -569,7 +628,10 @@ impl Scripts {
         match self.spawn(&host) {
             Ok(child) => {
                 count(|crossed| crossed.started += 1);
-                let hello = serde_json::to_vec(&Down::Hello { version: proto::VERSION, after }).unwrap_or_default();
+                let theme_mode = theme_mode(&*host);
+                self.theme.replace(theme_mode.clone());
+                let hello = Down::Hello { version: proto::VERSION, after, theme_mode };
+                let hello = serde_json::to_vec(&hello).unwrap_or_default();
                 let _ = child.send(wire::CONTROL, &hello, None, child::Wait::Ack);
                 *self.child.borrow_mut() = Some(child);
                 self.read.set((0, 0));
@@ -596,6 +658,7 @@ impl Scripts {
         let script = self.script.borrow().as_ref().map(|dir| dir.path().join("host.ts")).unwrap_or_default();
         let mut command = std::process::Command::new(&self.config.bun);
         command.args(&self.config.args).arg(script);
+        command.env("OPENCODE_VERSION", &self.config.version).env("OPENCODE_CHANNEL", &self.config.channel);
         let proxy = host.app().proxy();
         let id = self.id;
         Child::spawn(command, self.config.limits, move || post(&proxy, id))
@@ -622,8 +685,10 @@ impl Scripts {
                 child::Event::Tree(mut tree) => {
                     match self.tamper.take() {
                         Some(Tamper::Keep) => *self.kept.borrow_mut() = Some(tree.clone()),
+                        // Its memo table is the keep's alone: only the keep is wrong.
                         Some(Tamper::UnknownKeep) => {
-                            tree.node = serde_json::json!({ "type": "keep", "key": "no-such" })
+                            tree.node = serde_json::json!({ "type": "keep", "key": "no-such" });
+                            tree.memo = 1;
                         }
                         None => {}
                     }
@@ -703,6 +768,8 @@ impl Scripts {
                 _ => {}
             },
             Up::Unsupported { seq } => self.answered_load(seq, Loading::Unsupported),
+            Up::Described { seq, id } => self.answered_load(seq, Loading::Described(seq, id)),
+            Up::Entered { id } => *self.entered.borrow_mut() = id,
             Up::Done { seq, effects, error } => {
                 self.started.borrow_mut().remove(&seq);
                 let waiting = self.waiting.borrow_mut().remove(&seq);
@@ -862,10 +929,31 @@ impl Scripts {
                         (load.state, load.registered) =
                             (Loading::Failed(format!("setup ended the JS host: {why}")), false);
                     }
+                    // Its running version cannot be set up again from files whose new version ended the JS host: it
+                    // fails, once, rather than end the next JS host too (review carbon-3).
+                    let running =
+                        self.guests.borrow().values().filter_map(Weak::upgrade).find(|guest| guest.target() == target);
+                    if let Some(guest) = running {
+                        guest.fail(format!("its new version ended the JS host: {why}"));
+                    }
                 }
-                Some(Waiting::Ping) | None => {}
+                Some(Waiting::Ping) => {}
+                // No sequenced work ran: the plugin whose code ran for another message, if any (review carbon-3).
+                None => {
+                    let entered = self.entered.borrow().clone().and_then(|id| self.guest(&id));
+                    if let Some(guest) = entered {
+                        guest.fail(format!("its view or cleanup ended the JS host: {why}"));
+                    }
+                }
             },
             Blame::Nobody => {}
+        }
+        self.entered.take();
+        // A described load's module is gone with the JS host: it loads again.
+        for load in self.loads.borrow_mut().values_mut() {
+            if matches!(load.state, Loading::Described(..)) {
+                load.digest = 0;
+            }
         }
         if let Some(seq) = ran
             && let Some((_, Waiting::Call(call))) = waiting.iter().find(|(known, _)| *known == seq)
@@ -969,6 +1057,18 @@ impl Scripts {
         if hold.seq.is_none() || hold.replaying {
             return;
         }
+        // The reserved chord is never held: it ends the hold and drops what it kept, as a terminal's interrupt drops
+        // typed-ahead input, and goes on to the host (synthesis 3.8, review carbon-4).
+        if let Some(host) = self.host.upgrade()
+            && crate::interact::reserved(&*host, &crate::interact::key_of(&key).0)
+        {
+            hold.keys.clear();
+            hold.seq = None;
+            if let Some(timer) = hold.timer.take() {
+                host.app().cancel_timer(timer);
+            }
+            return;
+        }
         consume();
         if hold.keys.len() == HELD {
             hold.keys.pop_front();
@@ -1059,14 +1159,24 @@ fn digest(dir: &Path, options: Option<&str>) -> u64 {
     hasher.finish()
 }
 
+/// The theme's mode as the setup context names it.
+fn theme_mode(host: &dyn Host) -> String {
+    match host.theme_mode() {
+        opentui::theme::ThemeMode::Light => "light".to_owned(),
+        opentui::theme::ThemeMode::Dark => "dark".to_owned(),
+    }
+}
+
 /// What a read the plugin watches is now, as [`HostRequest`]'s result: P2's reads are of its newest mount.
 pub(crate) fn evaluate(
     host: &Weak<dyn Host>,
     id: &str,
+    keys: Vec<String>,
     owners: Option<Rc<crate::Owners>>,
     request: &HostRequest,
 ) -> serde_json::Value {
-    let mut ctx = crate::loader::native::Ctx::new(host.clone(), id, Vec::new());
+    // The storage keys its manifest declares, which a watched read of storage names (review carbon-8).
+    let mut ctx = crate::loader::native::Ctx::new(host.clone(), id, keys);
     (ctx.read_only, ctx.owners) = (true, owners);
     match crate::loader::native::handle(&mut ctx, request.clone()) {
         Ok(value) => value,
