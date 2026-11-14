@@ -484,11 +484,21 @@ impl World {
         app.advance(Duration::from_millis(1));
         app.render();
         app.advance(Duration::from_millis(1));
-        while let Some(toast) = self.harness.tui.toasts.current() {
-            self.toasts.borrow_mut().push(toast.title.unwrap_or(toast.message));
-            self.harness.tui.toasts.dismiss();
+        // A view at a paint may fail its plugin as the frame renders, and its toast comes after, from the effect
+        // queue: until none is left.
+        for round in 0..4 {
+            app.advance(Duration::from_millis(1));
+            let mut shown = false;
+            while let Some(toast) = self.harness.tui.toasts.current() {
+                self.toasts.borrow_mut().push(toast.title.unwrap_or(toast.message));
+                self.harness.tui.toasts.dismiss();
+                shown = true;
+            }
+            app.render();
+            if round > 0 && !shown {
+                break;
+            }
         }
-        app.render();
     }
 
     fn frame(&self) -> Capture {
@@ -2469,5 +2479,28 @@ fn a_refused_keep_is_asked_once_whole_and_a_decline_after_it_stays_within_bounds
         let status = world.harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "claim.keeper");
         assert_eq!(status.map(|entry| entry.status), Some(opencode_plugin::Status::Active), "{carrier:?}");
         assert!(world.frame().text().contains("⋯ keeper"), "{carrier:?}:\n{}", world.frame().text());
+    }
+}
+
+// Expected (4.11, deep run seed 386): a resize views each claimed part it reaches once, at its new width: the paint's
+// view and the transcript's render at the new width are one.
+#[test]
+fn a_resize_views_a_claimed_part_once() {
+    for carrier in CARRIERS {
+        INPUTS.with_borrow_mut(Vec::clear);
+        NARROW.set(u16::MAX);
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.narrow", setup: plugin_narrow })]);
+        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "narrow" }));
+        world.emit("session.text.started", json!({ "ordinal": 0 }));
+        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```narrow\nfits\n```\n\nAfter.\n" }));
+        world.settle();
+        world.settle();
+        let before = INPUTS.with_borrow(Vec::len);
+        world.harness.app.resize(WIDTH - 20, HEIGHT);
+        for _ in 0..3 {
+            world.settle();
+        }
+        let views = INPUTS.with_borrow(|inputs| inputs[before..].to_vec());
+        assert_eq!(views.len(), 2, "{carrier:?}: {views:?}");
     }
 }
