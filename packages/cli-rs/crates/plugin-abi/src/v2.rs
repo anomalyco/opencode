@@ -127,8 +127,9 @@ pub enum Node {
     Keep { key: String },
     /// Cells the plugin draws itself (P5): its surface's [`Surface::draw`] returns a display list
     /// ([`crate::canvas`]), which the host keeps under the canvas's id while the id stays in the mount and replays on
-    /// every frame it paints. The host asks for a list when the canvas is first laid out, when its size or `version`
-    /// changes, and once a painted frame while `animate` is set and the canvas shows; never while it is hidden. Its
+    /// every frame it paints. The host asks for a list as it paints the canvas, at the canvas's size in that frame: when
+    /// it first shows, when its size or `version` changed, and once a frame while `animate` is set; never while it is
+    /// hidden, out of view or of no size, and what it missed meanwhile it asks for in the frame that shows it. Its
     /// cells cannot be selected or copied. A canvas must have an id.
     Canvas {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -154,7 +155,7 @@ pub struct Draw<'a> {
 /// The frame a canvas draws for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Frame {
-    /// The canvas's size in cells, as laid out in this frame.
+    /// The canvas's size in cells, as laid out in this frame, also where it shows only in part.
     pub width: u16,
     pub height: u16,
     pub cause: Cause,
@@ -168,9 +169,9 @@ pub struct Frame {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Cause {
-    /// The canvas is laid out for the first time.
+    /// The canvas shows for the first time.
     First,
-    /// Its size changed.
+    /// Its size changed since its last draw.
     Resized,
     /// Its [`Node::Canvas`] `version` changed.
     Version,

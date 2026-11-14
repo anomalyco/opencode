@@ -1,21 +1,22 @@
 //! The host's side of a canvas ([`v2::Node::Canvas`], P5): a widget that paints the display list its plugin drew
 //! ([`opencode_plugin_abi::canvas`]) and keeps it, so a frame the plugin did not draw replays it with no call.
 //!
-//! The host asks the surface's draw for a list, as one call of the plugin, after the frame's layout and before its
-//! paint, with the size the canvas has in that frame; at most once a frame unless the size changes again:
+//! The host asks the surface's draw for a list from the canvas's paint, which OpenTUI runs after the last layout
+//! round, with the size the canvas has in that frame; at most once a frame:
 //!
-//! - when the canvas is laid out at a size it has no list for, first or after a resize: from its own resize;
-//! - when its `version` changes: in the next frame;
+//! - when the canvas shows at a size or a version it has no list for: first, after a resize, after a new `version`;
 //! - while it animates: in each frame after one that painted it. The driver is OpenTUI's `App::animate`, as the
 //!   host's own spinners and shimmer have ([`opencode_ui::motion`]), with their rules: a canvas that a frame did not
 //!   paint (hidden, scrolled out of view, under a closed route) stops at the driver's next tick and costs no frame and
 //!   no wakeup; its next paint starts it again, and the time between is not counted. With the `animations` switch off
 //!   it does not run, and the canvas keeps its last list.
 //!
-//! OpenTUI's `App` calls nothing between its layout and its paint but resize handlers, so a version or a frame of the
-//! animation arms a hook, as S0's post-solve hook does: an absolute child of no height whose width flips, so the
-//! layout resizes it and its handler draws with the frame's geometry. It comes after the canvas in the layout's walk,
-//! so the canvas's own size is already the frame's.
+//! A canvas that does not show (out of view, or with no room: a dimension of none, which only the painter sees, since
+//! OpenTUI's `rect()` and resize report one cell) is not drawn; it is drawn in the paint that shows it again.
+//!
+//! A draw inside a paint is a plugin call like any other, timed and caught at the host's edge, and it can only read:
+//! it returns a list or nothing. What a failure does (the plugin fails, its mounts end, the budget's reports) is
+//! deferred until the frame is done, so the paint changes no widget but the canvas's own list.
 //!
 //! A list is checked whole before it is kept. One the host cannot read fails the plugin and the canvas keeps its last
 //! list until the mount ends; one over a limit is dropped and the canvas shows a placeholder.
@@ -121,31 +122,18 @@ pub(crate) struct Canvas {
     state: Rc<State>,
 }
 
-/// A frame of the animation or a version, waiting for the layout.
-#[derive(Clone, Copy)]
-struct Pending {
-    cause: Cause,
-    dt: Duration,
-}
-
 /// What a canvas keeps while its id stays in the mount, also when its widget is built again.
 struct State {
     id: String,
     app: App,
     drawer: Option<Rc<Drawer>>,
     shown: RefCell<Shown>,
-    /// The size laid out last, as OpenTUI's resize reports it: a dimension of none reads as one cell.
-    size: Cell<(u16, u16)>,
-    /// Whether the canvas has room across and down: from its last paint, which sees a dimension of none as none, or
-    /// from a resize to more than one cell.
-    room: Cell<(bool, bool)>,
     /// The size and version the plugin was last asked to draw for.
     asked: Cell<Option<((u16, u16), u64)>>,
     version: Cell<u64>,
     animate: Cell<bool>,
-    /// A draw that waits for the hook, and the widget's hook.
-    pending: Cell<Option<Pending>>,
-    hook: RefCell<Option<View>>,
+    /// The time of the animation's frame that waits for the paint.
+    frame: Cell<Option<Duration>>,
     /// A frame painted the canvas since its driver's last tick.
     painted: Cell<bool>,
     driving: Cell<bool>,
@@ -168,13 +156,10 @@ impl Canvas {
             app: app.clone(),
             drawer,
             shown: RefCell::new(Shown::Empty),
-            size: Cell::new((0, 0)),
-            room: Cell::new((true, true)),
             asked: Cell::new(None),
             version: Cell::new(version),
             animate: Cell::new(animate),
-            pending: Cell::new(None),
-            hook: RefCell::new(None),
+            frame: Cell::new(None),
             painted: Cell::new(false),
             driving: Cell::new(false),
         });
@@ -188,97 +173,40 @@ impl Canvas {
     }
 
     fn around(app: &App, state: Rc<State>) -> Self {
-        let weak = Rc::downgrade(&state);
-        let widget = Custom::new(app, Board(state.clone())).on_resize(move |_, rect| {
-            if let Some(state) = weak.upgrade() {
-                let (width, height) = (rect.width.max(0.0) as u16, rect.height.max(0.0) as u16);
-                let (across, down) = state.room.get();
-                state.room.set((across || width > 1, down || height > 1));
-                state.size.set((width, height));
-                state.resized();
-            }
-        });
-        let weak = Rc::downgrade(&state);
-        let hook = View::new(app).absolute().width(1).height(0).on_resize(move |_, _| {
-            // A draw from the canvas's own resize in this frame took the pending one.
-            if let Some(state) = weak.upgrade()
-                && let Some(pending) = state.pending.get()
-            {
-                state.draw(pending.cause);
-            }
-        });
-        widget.add(&hook);
-        *state.hook.borrow_mut() = Some(hook);
-        Self { widget, state }
+        Self { widget: Custom::new(app, Board(state.clone())), state }
     }
 
     pub fn widget(&self) -> AnyWidget {
         self.widget.as_any()
     }
 
-    /// Takes a revision's `version` and `animate`.
-    /// A paint starts the driver, and one that stops ends at its next tick: the adoption that sets them asks for the
-    /// frame.
+    /// Takes a revision's `version` and `animate`. The adoption that sets them asks for the frame whose paint draws a
+    /// new version, starts the driver, or lets the one that stops end at its next tick.
     pub fn set(&self, version: u64, animate: bool) {
-        let state = &self.state;
-        state.animate.set(animate);
-        if state.version.replace(version) != version {
-            state.arm(Cause::Version, Duration::ZERO);
-        }
+        self.state.animate.set(animate);
+        self.state.version.set(version);
     }
 }
 
 impl State {
-    /// Laid out at a new size: a list for it, in this frame, unless it has one for that size and its version, as a
-    /// canvas built again or back at its size does.
-    fn resized(&self) {
-        if let Some(cause) = self.stale() {
-            self.draw(cause);
-        }
-    }
-
-    /// Why the list the canvas holds is not the one for its size and version, if it is not.
-    fn stale(&self) -> Option<Cause> {
-        let (size, version) = (self.size.get(), self.version.get());
+    /// Why the list the canvas holds is not the one for `size` and its version, if it is not.
+    fn stale(&self, size: (u16, u16)) -> Option<Cause> {
         match self.asked.get() {
-            Some(asked) if asked == (size, version) => None,
+            Some(asked) if asked == (size, self.version.get()) => None,
             Some((asked, _)) if asked == size => Some(Cause::Version),
             Some(_) => Some(Cause::Resized),
             None => Some(Cause::First),
         }
     }
 
-    /// Asks for a draw after the next layout: an animation's frame takes the place of a version, whose list it draws.
-    fn arm(&self, cause: Cause, dt: Duration) {
-        let pending = match self.pending.get() {
-            Some(pending) if cause != Cause::Animate => pending,
-            _ => Pending { cause, dt },
-        };
-        self.pending.set(Some(pending));
-        if let Some(hook) = &*self.hook.borrow() {
-            let width = if hook.rect().width >= 1.5 { 1 } else { 2 };
-            hook.width(width);
-        }
-        self.app.request_redraw();
-    }
-
-    /// Asks the plugin for a list for this frame, and keeps it. A frame of the animation that waits is this draw:
-    /// its time goes with it, whatever else asked.
-    fn draw(&self, cause: Cause) {
-        let pending = self.pending.take();
-        let (width, height) = self.size.get();
-        // A canvas with no room has nothing to draw; its paint asks again once it has room.
-        let Some(drawer) = self.drawer.clone().filter(|_| width > 0 && height > 0 && self.room.get() == (true, true))
-        else {
-            return;
-        };
-        let dt = match pending {
-            Some(Pending { cause: Cause::Animate, dt }) => dt,
-            _ => Duration::ZERO,
-        };
-        self.asked.set(Some(((width, height), self.version.get())));
+    /// Asks the plugin for a list for this frame at `size`, and keeps it. A frame of the animation that waits is this
+    /// draw: its time goes with it, whatever else asked.
+    fn draw(&self, size: (u16, u16), cause: Cause, dt: Duration) {
+        let Some(drawer) = self.drawer.clone() else { return };
+        self.asked.set(Some((size, self.version.get())));
         count(|work| work.draws += 1);
-        if let Some(bytes) = (drawer.draw)(&self.id, Frame { width, height, cause, dt }) {
+        let frame = Frame { width: size.0, height: size.1, cause, dt };
+        if let Some(bytes) = (drawer.draw)(&self.id, frame) {
             self.present(&drawer, bytes);
         }
     }
@@ -315,7 +243,6 @@ impl State {
                 ledger.bytes += bytes.len() as i64;
             }
         });
-        self.app.request_redraw();
     }
 
     /// Whether a frame ran since the tick that saw frame `seen` without painting the canvas. Moves `seen` on.
@@ -332,8 +259,8 @@ impl State {
     }
 }
 
-/// Runs a canvas's animation: a draw in each frame, until a frame did not paint it, it stops animating, its
-/// plugin failed, or the `animations` switch is off.
+/// Runs a canvas's animation: a frame for its paint to draw, until a frame did not paint it, it stops animating, or
+/// the `animations` switch is off.
 fn drive(state: &Rc<State>) {
     state.set_driving(true);
     let weak = Rc::downgrade(state);
@@ -345,7 +272,8 @@ fn drive(state: &Rc<State>) {
             state.set_driving(false);
             return false;
         }
-        state.arm(Cause::Animate, elapsed);
+        // A running animation asks for the frame.
+        state.frame.set(Some(elapsed));
         true
     });
 }
@@ -373,22 +301,14 @@ impl Drop for State {
 impl Component for Board {
     fn paint(&self, painter: &mut Painter<'_>) {
         let state = &self.0;
-        // Room comes back without a resize when a dimension of none grows to one cell, which OpenTUI reports as the
-        // same size: the list the canvas missed is drawn in the next frame.
-        let room = (painter.width() > 0, painter.height() > 0);
-        if state.room.replace(room) != room && room == (true, true) && state.stale().is_some() {
-            let weak = Rc::downgrade(state);
-            state.app.animate(move |_, _| {
-                if let Some(state) = weak.upgrade()
-                    && let Some(cause) = state.stale()
-                {
-                    state.arm(cause, Duration::ZERO);
-                }
-                false
-            });
-        }
+        // A frame that does not show the canvas drops the animation's frame: its time is not counted.
+        let frame = state.frame.take();
         let (_, _, width, height) = painter.visible_rect();
         if width > 0 && height > 0 {
+            let size = (painter.width().min(u16::MAX.into()) as u16, painter.height().min(u16::MAX.into()) as u16);
+            if let Some(cause) = state.stale(size).or(frame.map(|_| Cause::Animate)) {
+                state.draw(size, cause, frame.unwrap_or_default());
+            }
             state.painted.set(true);
             if state.animate.get() && !state.driving.get() && opencode_ui::motion::running() {
                 drive(state);
