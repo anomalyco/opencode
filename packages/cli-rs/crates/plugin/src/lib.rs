@@ -2511,14 +2511,13 @@ impl Registry {
         Some(self.start(host, id))
     }
 
-    /// Runs the `on_plugins` handlers of every running plugin (P6b): what [`Registry::entries`] lists changed. Called
-    /// outside every plugin callback.
+    /// Runs the `on_plugins` handlers of every active plugin (P6b): what [`Registry::entries`] lists changed. A failed
+    /// plugin's calls are refused. Called outside every plugin callback.
     pub fn tell_plugins(&self) {
         let heard: Vec<Rc<dyn Fn()>> = self
             .plugins
             .borrow()
             .iter()
-            .filter(|plugin| plugin.running())
             .filter_map(|plugin| plugin.active.as_ref().and_then(|(_, registration)| registration.plugins.clone()))
             .collect();
         heard.iter().for_each(|run| run());
