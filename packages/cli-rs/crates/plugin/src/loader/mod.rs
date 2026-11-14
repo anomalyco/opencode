@@ -290,69 +290,15 @@ impl Loader {
             }
             return skip(SKIPPED);
         };
-        // Setup runs with the options, so new options load the build again (TS `sameGeneration`).
-        let digest = |build: &[u8]| {
-            let mut hasher = DefaultHasher::new();
-            hasher.write(build);
-            hasher.write(target.options.as_deref().unwrap_or_default().as_bytes());
-            hasher.finish()
+        let (digest, bytes) = match self.admit(host, registry, target, &file, &listed) {
+            Ok(build) => build,
+            Err(changed) => return changed,
         };
-        let unchanged = |digest: u64| self.seen.borrow().get(name).is_some_and(|seen| seen.digest == digest);
-        let (digest, bytes) = match target.project {
-            // A project's build runs only once the user approved this artifact (3.9). Until then nothing of it is read
-            // but its hash, nothing is opened, and it claims nothing. What is loaded is what was hashed. When it
-            // cannot be identified, what ran from it stops (bigboi-8) and nothing is reported (carbon-5).
-            true => {
-                let (artifact, mut handle) = match Artifact::open(target.local.as_deref().unwrap_or(&file), &file) {
-                    Ok(opened) => opened,
-                    Err(error) => return self.hold(host, registry, name, Err(error), None),
-                };
-                match self.approvals.decision(&artifact) {
-                    Some(Decision::Approved) => drop(self.held.borrow_mut().remove(name)),
-                    decision => return self.hold(host, registry, name, Ok(artifact), decision),
-                }
-                let digest = digest(artifact.sha256.as_bytes());
-                if unchanged(digest) {
-                    return false;
-                }
-                match artifact.bytes(&mut handle) {
-                    Ok(bytes) => (digest, bytes),
-                    Err(error) => return self.hold(host, registry, name, Err(error), None),
-                }
-            }
-            false => {
-                let read = std::fs::metadata(&file).and_then(|metadata| match metadata.len() > approval::LIMIT {
-                    true => Err(std::io::Error::other(format!("larger than {} MiB", approval::LIMIT / 1024 / 1024))),
-                    false => std::fs::read(&file),
-                });
-                let bytes = match read {
-                    Ok(bytes) => bytes,
-                    Err(error) => {
-                        return self.fail(&**host, registry, &listed, name, 0, format!("{}: {error}", file.display()));
-                    }
-                };
-                let digest = digest(&bytes);
-                if unchanged(digest) {
-                    return false;
-                }
-                (digest, bytes)
-            }
-        };
-        let build = format!("{digest:016x}");
-        // A held build is not opened at all: no initializer, no `describe`, nothing of it runs (synthesis 4.5).
-        let was_held = registry.held(name);
-        if !registry.admit(name, &build) {
-            if self.seen.borrow_mut().remove(name).is_some() {
-                registry.unload(host, name);
-                return true;
-            }
-            return !was_held;
-        }
         self.waiting.borrow_mut().remove(name);
         // Nothing the build names may come from the project, or leave its private copy (bigboi-3).
         let checked = deps::check(&bytes, target.project);
         // Opening the library runs its code: the record names the build while it does, before its ID is known.
-        let slot = registry.monitor().slot(&crate::contain::Artifact::external("", name, &build));
+        let slot = registry.monitor().slot(&crate::contain::Artifact::external("", name, &format!("{digest:016x}")));
         let (loaded, _) = registry
             .monitor()
             .call(slot, "load", || checked.and_then(|()| self.backend.load(host, &bytes, target.options.as_deref())));
@@ -435,6 +381,87 @@ impl Loader {
             return Ok(false);
         }
         self.approvals.decide(artifact, decision).map(|()| true)
+    }
+
+    /// The one place that decides whether the library of `target`, at `file`, may be opened, before anything of it
+    /// runs: a project's build waits for the user's approval (3.9), and the registry holds a build that crashed the
+    /// client, every external one in safe mode, and every one in a client no parent guards (4.5). Returns the build's
+    /// digest and bytes to open, or, when it is held or unchanged, whether the manager's list changed.
+    fn admit(
+        &self,
+        host: &Rc<dyn Host>,
+        registry: &Registry,
+        target: &Target,
+        file: &Path,
+        listed: &Option<Status>,
+    ) -> Result<(u64, Vec<u8>), bool> {
+        let name = target.target.as_str();
+        // Setup runs with the options, so new options load the build again (TS `sameGeneration`).
+        let digest = |build: &[u8]| {
+            let mut hasher = DefaultHasher::new();
+            hasher.write(build);
+            hasher.write(target.options.as_deref().unwrap_or_default().as_bytes());
+            hasher.finish()
+        };
+        let unchanged = |digest: u64| self.seen.borrow().get(name).is_some_and(|seen| seen.digest == digest);
+        let (digest, bytes) = match target.project {
+            // A project's build runs only once the user approved this artifact (3.9). Until then nothing of it is read
+            // but its hash, nothing is opened, and it claims nothing. What is loaded is what was hashed. When it
+            // cannot be identified, what ran from it stops (bigboi-8) and nothing is reported (carbon-5).
+            true => {
+                let (artifact, mut handle) = match Artifact::open(target.local.as_deref().unwrap_or(file), file) {
+                    Ok(opened) => opened,
+                    Err(error) => return Err(self.hold(host, registry, name, Err(error), None)),
+                };
+                match self.approvals.decision(&artifact) {
+                    Some(Decision::Approved) => drop(self.held.borrow_mut().remove(name)),
+                    decision => return Err(self.hold(host, registry, name, Ok(artifact), decision)),
+                }
+                let digest = digest(artifact.sha256.as_bytes());
+                if unchanged(digest) {
+                    return Err(false);
+                }
+                match artifact.bytes(&mut handle) {
+                    Ok(bytes) => (digest, bytes),
+                    Err(error) => return Err(self.hold(host, registry, name, Err(error), None)),
+                }
+            }
+            false => {
+                let read = std::fs::metadata(file).and_then(|metadata| match metadata.len() > approval::LIMIT {
+                    true => Err(std::io::Error::other(format!("larger than {} MiB", approval::LIMIT / 1024 / 1024))),
+                    false => std::fs::read(file),
+                });
+                let bytes = match read {
+                    Ok(bytes) => bytes,
+                    Err(error) => {
+                        return Err(self.fail(
+                            &**host,
+                            registry,
+                            listed,
+                            name,
+                            0,
+                            format!("{}: {error}", file.display()),
+                        ));
+                    }
+                };
+                let digest = digest(&bytes);
+                if unchanged(digest) {
+                    return Err(false);
+                }
+                (digest, bytes)
+            }
+        };
+        let build = format!("{digest:016x}");
+        // A held build is not opened at all: no initializer, no `describe`, nothing of it runs (synthesis 4.5).
+        let was_held = registry.held(name);
+        if !registry.admit(name, &build) {
+            if self.seen.borrow_mut().remove(name).is_some() {
+                registry.unload(host, name);
+                return Err(true);
+            }
+            return Err(!was_held);
+        }
+        Ok((digest, bytes))
     }
 
     /// Holds back the project build of `target` that the user has not approved, or that cannot be identified:
