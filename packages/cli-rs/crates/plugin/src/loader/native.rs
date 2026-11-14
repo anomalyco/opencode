@@ -1289,7 +1289,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
     guest.activation.on_mail(
         Rc::new(move |message| {
             if let (Some(guest), Message::Json(json)) = (delivered.upgrade(), message) {
-                guest.handle("update", &Request::Message { message: abi::Raw(json) });
+                guest.handle("update", &Request::Message { message: json });
             }
         }),
         Rc::new(move |error| {
