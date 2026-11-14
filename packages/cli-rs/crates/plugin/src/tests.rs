@@ -454,7 +454,8 @@ fn placement_constructors_name_their_kind() {
 fn rendering(id: &str, placement: Placement, render: impl Fn() -> abi::Render + 'static) -> Definition {
     let render: node::SlotRender = Rc::new(move |_, _, _| render());
     Definition::new(id, move |cx: &mut Setup<'_>| {
-        let activation = crate::activation::Activation::new(cx.host(), Arc::new(crate::activation::Wake::new(None)));
+        let mailbox = crate::mailbox::Mailbox::new(&cx.id().to_owned(), Arc::new(crate::activation::Wake::new(None)));
+        let activation = crate::activation::Activation::new(cx.host(), mailbox);
         cx.claim(placement.clone(), render.clone(), None, false, &activation);
     })
 }
@@ -605,7 +606,7 @@ fn a_claim_on_a_child_slot_moves_when_a_wake_or_an_invalidation_redraws_its_pare
         let activation = activation.clone();
         Definition::new("footer", move |cx: &mut Setup<'_>| {
             let wake = Arc::new(crate::activation::Wake::new(None));
-            let created = crate::activation::Activation::new(cx.host(), wake);
+            let created = crate::activation::Activation::new(cx.host(), crate::mailbox::Mailbox::new("footer", wake));
             cx.claim(Placement::append(slot::HOME_FOOTER), render.clone(), None, false, &created);
             *activation.borrow_mut() = Some(created);
         })

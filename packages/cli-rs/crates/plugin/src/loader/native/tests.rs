@@ -163,9 +163,15 @@ fn a_panicking_command_fails_the_plugin() {
 #[test]
 fn versions_follow_the_abi_rules() {
     let load = |library: &[u8], options: Option<&str>| Native.load(&dynamic(&host()), library, options).err();
-    // The current build is 1.6; a 1.0 build has the shorter table and still loads and works on this 1.6 host.
+    // The current build is 2.0. The same source built as a 1.6 plugin loads through the entry of ABI 1, and works.
     let current = build("");
-    assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 1, minor: 6, version: Some("0.1.0".to_owned()) });
+    assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 2, minor: 0, version: Some("0.1.0".to_owned()) });
+    let v1_6 = build("abi-1-6");
+    assert_eq!(Native.inspect(&v1_6).unwrap(), Inspected { major: 1, minor: 6, version: Some("0.1.0".to_owned()) });
+    let host = crate::loader::tests::host();
+    let registry = active(&host, &v1_6);
+    let screen = markdown(&host, &registry, "```sample\nsix\n```\n");
+    assert!(screen.contains("SAMPLE v1 SIX"), "{screen}");
     // A plugin built on the frozen 1.4 crate, from before 1.5, draws its fence and its slot and runs its command.
     let v1_4 = build("abi-1-4");
     assert_eq!(Native.inspect(&v1_4).unwrap(), Inspected { major: 1, minor: 4, version: Some("0.1.0".to_owned()) });
@@ -182,9 +188,10 @@ fn versions_follow_the_abi_rules() {
     assert!(matches!(fresh.keymap().dispatch("sample.hello", None), RunResult::Ok));
     fresh.app.advance(Duration::from_millis(1));
     assert_eq!(*fresh.toasts.borrow(), [abi::Toast::new(abi::Variant::Success, "Hello from sample 1.4")]);
+    // A 1.0 build has the shorter table and still loads and works.
     let old = build("abi-1-0");
     assert_eq!(Native.inspect(&old).unwrap(), Inspected { major: 1, minor: 0, version: None });
-    let host = host();
+    let host = crate::loader::tests::host();
     let registry = active(&host, &old);
     let screen = markdown(&host, &registry, "```sample\nold\n```\n");
     assert!(screen.contains("SAMPLE v1 OLD"), "{screen}");
@@ -223,36 +230,41 @@ fn versions_follow_the_abi_rules() {
     host.app.render();
     assert!(host.app.text().contains("sample plugin 1.3: home.footer"), "{}", host.app.text());
 
-    // A 1.3 host refuses a plugin of this crate, which needs the 1.4 render requests.
+    // A host that serves ABI 1 up to 1.3 refuses this crate's 1.x plugin, which needs the 1.4 render requests.
     assert_eq!(
-        Library::open(&current, 3).err().unwrap(),
+        Library::open(&v1_6, 3).err().unwrap(),
         "plugin needs host ABI 1.4 or newer, this opencode-native has 1.3; update opencode-native"
     );
 
-    // A plugin that asks for the 1.5 host with `requires_minor = 5` loads here and is refused by a 1.4 host.
+    // A 1.x plugin that asks for the 1.5 host with `requires_minor = 5` loads here and is refused by a 1.4 host.
     let needs = build("requires-1-5");
-    assert!(Library::open(&needs, HOST_MINOR).is_ok());
+    assert!(Library::open(&needs, V1_MINOR).is_ok());
     assert_eq!(
         Library::open(&needs, 4).err().unwrap(),
         "plugin needs host ABI 1.5 or newer, this opencode-native has 1.4; update opencode-native"
     );
-
     // A plugin built against a newer minor version loads and uses what this host offers.
     let newer = build("minor-newer");
     assert_eq!(Native.inspect(&newer).unwrap().minor, 99);
+    let host = crate::loader::tests::host();
     let registry = active(&host, &newer);
     let screen = markdown(&host, &registry, "```sample\nnewer\n```\n");
     assert!(screen.contains("SAMPLE v1 NEWER"), "{screen}");
 
-    // Only a major mismatch, or a plugin that needs a newer host, is refused, with a clear reason.
+    // Only a major the host does not serve, a plugin that needs a newer host, or one that needs a feature the host
+    // lacks, is refused, with a clear reason.
     assert_eq!(
-        load(&build("major-2"), None).unwrap(),
-        "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.6); rebuild the \
-         plugin against opencode-plugin-abi 1"
+        load(&build("major-3"), None).unwrap(),
+        "plugin ABI 3.0 is not supported: this opencode-native loads ABI 2.x plugins (up to 2.0) and ABI 1.x \
+         plugins (up to 1.6); rebuild the plugin against opencode-plugin-abi 2"
     );
     assert_eq!(
         load(&build("requires-future"), None).unwrap(),
-        "plugin needs host ABI 1.99 or newer, this opencode-native has 1.6; update opencode-native"
+        "plugin needs host ABI 2.99 or newer, this opencode-native has 2.0; update opencode-native"
+    );
+    assert_eq!(
+        load(&build("requires-feature"), None).unwrap(),
+        "plugin requires the feature terminal, which this opencode-native (ABI 2.0) lacks; update opencode-native"
     );
     assert!(load(b"not a library", None).unwrap().starts_with("cannot load the library"));
     // Setup runs on activation, so a setup that fails fails the plugin there.
@@ -338,7 +350,7 @@ fn a_rebuild_whose_setup_fails_keeps_the_running_version() {
     assert!(screen.contains("SAMPLE v1 STILL"), "{screen}");
     assert!(matches!(host.keymap().dispatch("sample.hello", None), RunResult::Ok));
     // A second failed rebuild keeps it running too.
-    fs::write(dir.join(entry_file()), build("major-2")).unwrap();
+    fs::write(dir.join(entry_file()), build("major-3")).unwrap();
     assert!(loader.reconcile(&dynamic(&host), &registry));
     let entry = crate::loader::tests::entry(&registry.entries(), &target).clone();
     assert!(entry.active);
@@ -361,12 +373,12 @@ fn a_failed_rebuild_of_a_panicked_plugin_shows_its_own_error() {
     assert!(loader.reconcile(&dynamic(&host), &registry));
     host.keymap().dispatch("sample.panic", None);
     host.app.advance(Duration::from_millis(1));
-    fs::write(dir.join(entry_file()), build("major-2")).unwrap();
+    fs::write(dir.join(entry_file()), build("major-3")).unwrap();
     assert!(loader.reconcile(&dynamic(&host), &registry));
     let entry = entry(&registry.entries(), &dir.to_string_lossy()).clone();
     assert!(!entry.active);
     assert!(
-        matches!(&entry.status, Status::Failed(error) if error.contains("ABI 2.0") && !error.contains("previous")),
+        matches!(&entry.status, Status::Failed(error) if error.contains("ABI 3.0") && !error.contains("previous")),
         "{:?}",
         entry.status
     );
@@ -377,15 +389,15 @@ fn a_failed_rebuild_of_a_panicked_plugin_shows_its_own_error() {
 // `destroy` is allowed.
 #[test]
 fn a_malformed_table_is_refused_without_reading_it() {
-    let refused = |api: *const PluginApi| Library::from_table(api, HOST_MINOR).err().unwrap();
-    assert_eq!(refused(std::ptr::null()), "`opencode_plugin_v1` returned no table");
+    let refused = |api: *const PluginApi| Library::from_table(api, ABI_MAJOR, V1_MINOR).err().unwrap();
+    assert_eq!(refused(std::ptr::null()), "`opencode_plugin_v2` returned no table");
     let short: [usize; 1] = [size_of::<usize>()];
     assert_eq!(refused(short.as_ptr().cast()), "plugin table is 8 bytes, shorter than its version header");
     let bytes = [0u64; 16];
     assert_eq!(refused(bytes.as_ptr().cast::<u8>().wrapping_add(1).cast()), "plugin table is not aligned");
     let null = PluginApi {
         size: size_of::<PluginApiV1_0>(),
-        major: 1,
+        major: ABI_MAJOR,
         minor: 0,
         requires_minor: 0,
         create: None,
@@ -403,7 +415,7 @@ fn a_malformed_table_is_refused_without_reading_it() {
     let api = PluginApi { call: Some(abi::runtime::call), ..api };
     assert_eq!(refused(&api), "plugin table has a null `free` callback");
     let api = PluginApi { free: Some(abi::runtime::free), ..api };
-    let library = Library::from_table(&api, HOST_MINOR).unwrap();
+    let library = Library::from_table(&api, ABI_MAJOR, V1_MINOR).unwrap();
     assert!(library.destroy.is_none() && library.describe.is_none());
 }
 
@@ -1536,7 +1548,8 @@ fn a_panic_drops_a_fetch_asked_for_in_the_same_turn() {
 fn a_wake_after_the_activation_ended_posts_nothing() {
     let host = host();
     let wake = Arc::new(crate::activation::Wake::new(Some(host.app().proxy())));
-    let activation = crate::activation::Activation::new(&dynamic(&host), wake.clone());
+    let mailbox = crate::mailbox::Mailbox::new("test.wake", wake.clone());
+    let activation = crate::activation::Activation::new(&dynamic(&host), mailbox);
     let waker = activation.waker();
     waker.wake();
     assert!(wake.pending(), "a wake of a live activation posted nothing");
@@ -1586,20 +1599,20 @@ fn lifecycled(
             // As a library of this crate, which tells its ID, so its setup runs on activation only.
             unsafe extern "C" fn describe(out: *mut Owned) -> i32 {
                 // SAFETY: the loader passes what `PluginApi::describe` documents.
-                unsafe { abi::runtime::describe("lifecycle", "0.1.0", out) }
+                unsafe { abi::runtime::describe("lifecycle", "0.1.0", &[], out) }
             }
             let api = PluginApi {
                 size: size_of::<PluginApi>(),
                 major: ABI_MAJOR,
                 minor: ABI_MINOR,
-                requires_minor: 4,
+                requires_minor: 0,
                 create: Some(create),
                 call: Some(abi::runtime::call),
                 destroy: Some(abi::runtime::destroy),
                 free: Some(abi::runtime::free),
                 describe: Some(describe),
             };
-            let library = Library::from_table(&api, HOST_MINOR).unwrap();
+            let library = Library::from_table(&api, ABI_MAJOR, V1_MINOR).unwrap();
             let (definition, error) = define(&dynamic(&host), library, None).unwrap();
             registry.load(&dynamic(&host), definition.external("lifecycle.so", error));
         }
@@ -1694,8 +1707,8 @@ fn configured(options: &str, directives: &[&str]) -> (opencode_util::temp::TempD
     (root, target, registry, loader)
 }
 
-const MAJOR_2: &str = "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.6); rebuild \
-                       the plugin against opencode-plugin-abi 1";
+const MAJOR_3: &str = "plugin ABI 3.0 is not supported: this opencode-native loads ABI 2.x plugins (up to 2.0) and ABI \
+                       1.x plugins (up to 1.6); rebuild the plugin against opencode-plugin-abi 2";
 
 // Expected (carbon-2): an external plugin whose setup fails says so in a toast that opens the plugin manager, as a
 // load failure does, and is failed and not active, so the manager offers to enable it; a broken rebuild then replaces
@@ -1710,15 +1723,15 @@ fn a_failed_external_setup_is_failed_and_inactive_and_a_reload_error_replaces_it
     let sample = entry(&registry.entries(), &target).clone();
     assert_eq!((sample.status, sample.active), (Status::Failed("sample setup failed".to_owned()), false));
 
-    fs::write(&target, build("major-2")).unwrap();
+    fs::write(&target, build("major-3")).unwrap();
     assert!(loader.reconcile(&dynamic(&host), &registry));
     let sample = entry(&registry.entries(), &target).clone();
-    assert_eq!((sample.status, sample.active), (Status::Failed(MAJOR_2.to_owned()), false));
+    assert_eq!((sample.status, sample.active), (Status::Failed(MAJOR_3.to_owned()), false));
     assert_eq!(host.toasts.borrow()[1], failed.clone().title("Plugin failed: sample"));
     // As a `cli.json` directive enables it, a load that fails again lists it failed and says so.
     assert!(registry.set_active(&dynamic(&host), "sample", true));
     let sample = entry(&registry.entries(), &target).clone();
-    assert_eq!((sample.status, sample.active), (Status::Failed(MAJOR_2.to_owned()), false));
+    assert_eq!((sample.status, sample.active), (Status::Failed(MAJOR_3.to_owned()), false));
     assert_eq!(host.toasts.borrow()[2..], [failed.title("Plugin failed: sample")]);
 }
 
@@ -1727,7 +1740,7 @@ fn a_failed_external_setup_is_failed_and_inactive_and_a_reload_error_replaces_it
 fn a_failed_load_without_an_id_is_named_by_its_target() {
     let host = host();
     let (_root, target, registry, loader) = configured("{}", &[]);
-    fs::write(&target, build("major-2")).unwrap();
+    fs::write(&target, build("major-3")).unwrap();
     assert!(loader.reconcile(&dynamic(&host), &registry));
     let failed = abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.");
     assert_eq!(*host.toasts.borrow(), [failed.title(format!("Plugin failed: {target}"))]);
@@ -1741,14 +1754,14 @@ fn a_broken_build_of_an_inactive_plugin_is_failed_and_enabling_it_starts_nothing
     let (_root, target, registry, loader) = configured("{}", &["-sample"]);
     assert!(loader.reconcile(&dynamic(&host), &registry));
     assert_eq!(entry(&registry.entries(), &target).status, Status::Inactive);
-    fs::write(&target, build("major-2")).unwrap();
+    fs::write(&target, build("major-3")).unwrap();
     assert!(loader.reconcile(&dynamic(&host), &registry));
     let failed = abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.");
     assert_eq!(*host.toasts.borrow(), [failed.title("Plugin failed: sample")]);
-    assert_eq!(entry(&registry.entries(), &target).status, Status::Failed(MAJOR_2.to_owned()));
+    assert_eq!(entry(&registry.entries(), &target).status, Status::Failed(MAJOR_3.to_owned()));
     assert!(registry.set_active(&dynamic(&host), "sample", true));
     let sample = entry(&registry.entries(), &target).clone();
-    assert_eq!((sample.status, sample.active), (Status::Failed(MAJOR_2.to_owned()), false));
+    assert_eq!((sample.status, sample.active), (Status::Failed(MAJOR_3.to_owned()), false));
     let screen = markdown(&host, &registry, "```sample\nstale\n```\n");
     assert!(!screen.contains("SAMPLE"), "{screen}");
 }
@@ -1934,20 +1947,21 @@ fn panicking(host: &Rc<TestHost>, through: bool) -> Rc<Registry> {
     }
     unsafe extern "C" fn describe(out: *mut Owned) -> i32 {
         // SAFETY: the loader passes what `PluginApi::describe` documents.
-        unsafe { abi::runtime::describe("panicky", "0.1.0", out) }
+        unsafe { abi::runtime::describe("panicky", "0.1.0", &[], out) }
     }
     let api = PluginApi {
         size: size_of::<PluginApi>(),
         major: ABI_MAJOR,
         minor: ABI_MINOR,
-        requires_minor: 4,
+        requires_minor: 0,
         create: Some(abi::export_plugin!(@loopback "panicky", panicky)),
         call: Some(abi::runtime::call),
         destroy: Some(abi::runtime::destroy),
         free: Some(abi::runtime::free),
         describe: Some(describe),
     };
-    let (definition, error) = define(&dynamic(host), Library::from_table(&api, HOST_MINOR).unwrap(), None).unwrap();
+    let (definition, error) =
+        define(&dynamic(host), Library::from_table(&api, ABI_MAJOR, V1_MINOR).unwrap(), None).unwrap();
     registry.load(&dynamic(host), definition.external("panicky.so", error));
     registry
 }
@@ -2125,8 +2139,8 @@ fn a_host_call_from_another_thread_is_refused() {
     host.mode.set(ThemeMode::Light);
     let api = PluginApi {
         size: size_of::<PluginApi>(),
-        major: ABI_MAJOR,
-        minor: ABI_MINOR,
+        major: 1,
+        minor: V1_MINOR,
         requires_minor: 4,
         create: Some(catching),
         call: Some(abi::runtime::call),
@@ -2134,7 +2148,7 @@ fn a_host_call_from_another_thread_is_refused() {
         free: Some(abi::runtime::free),
         describe: None,
     };
-    let (definition, error) = define(&dynamic(&host), Library::from_table(&api, HOST_MINOR).unwrap(), None).unwrap();
+    let (definition, error) = define(&dynamic(&host), Library::from_table(&api, 1, V1_MINOR).unwrap(), None).unwrap();
     let registry = Registry::define(Vec::new(), []);
     registry.load(&dynamic(&host), definition.external("threads.so", error));
     let table = Table(CAUGHT.get());
@@ -2163,8 +2177,8 @@ fn a_1_6_host_call_from_another_thread_is_refused() {
     let host = host();
     let api = PluginApi {
         size: size_of::<PluginApi>(),
-        major: ABI_MAJOR,
-        minor: ABI_MINOR,
+        major: 1,
+        minor: V1_MINOR,
         requires_minor: 4,
         create: Some(catching),
         call: Some(abi::runtime::call),
@@ -2174,7 +2188,7 @@ fn a_1_6_host_call_from_another_thread_is_refused() {
     };
     let load = |registry: &Registry| {
         let (definition, error) =
-            define(&dynamic(&host), Library::from_table(&api, HOST_MINOR).unwrap(), None).unwrap();
+            define(&dynamic(&host), Library::from_table(&api, 1, V1_MINOR).unwrap(), None).unwrap();
         registry.load(&dynamic(&host), definition.external("threads.so", error));
         Table(CAUGHT.get())
     };
@@ -2302,7 +2316,8 @@ unsafe extern "C" fn raw_call(_: *mut c_void, request: Bytes, out: *mut Owned) -
 }
 
 // Expected (bigboi 8): a render of a plugin without the SDK that asks the host for effects gets an error for each, and
-// nothing of them happens, whether its answer is drawn or refused: the host equals one whose render asked for nothing.
+// nothing of them happens, whether its answer is drawn or refused: the host equals one whose render asked for nothing,
+// but that a refused answer fails the plugin (P4, O-135), which says so in one toast.
 #[test]
 fn a_render_that_asks_for_effects_gets_none() {
     let outcome = |mode: u8| {
@@ -2311,8 +2326,8 @@ fn a_render_that_asks_for_effects_gets_none() {
         let host = host();
         let api = PluginApi {
             size: size_of::<PluginApi>(),
-            major: ABI_MAJOR,
-            minor: ABI_MINOR,
+            major: 1,
+            minor: V1_MINOR,
             requires_minor: 4,
             create: Some(raw_create),
             call: Some(raw_call),
@@ -2321,7 +2336,7 @@ fn a_render_that_asks_for_effects_gets_none() {
             describe: None,
         };
         let (definition, error) =
-            define(&dynamic(&host), Library::from_table(&api, HOST_MINOR).unwrap(), None).unwrap();
+            define(&dynamic(&host), Library::from_table(&api, 1, V1_MINOR).unwrap(), None).unwrap();
         let registry = Registry::define(Vec::new(), []);
         registry.load(&dynamic(&host), definition.external("raw.so", error));
         let parent = View::new(host.app());
@@ -2341,8 +2356,13 @@ fn a_render_that_asks_for_effects_gets_none() {
     let quiet = outcome(2);
     assert_eq!(quiet.1, (0, 0, 0, None, Status::Active, 0));
     for mode in [0, 1] {
-        let (statuses, seen) = outcome(mode);
+        let (statuses, mut seen) = outcome(mode);
         assert_eq!(statuses, [abi::ERROR; 12], "mode {mode}");
+        if mode == 1 {
+            assert!(matches!(&seen.4, Status::Failed(error) if error.contains("bad result")), "{:?}", seen.4);
+            assert_eq!(seen.1, 1, "one toast says the plugin failed");
+            (seen.1, seen.4) = (0, Status::Active);
+        }
         assert_eq!(seen, quiet.1, "mode {mode}");
     }
 }
@@ -2365,7 +2385,8 @@ unsafe extern "C" fn raw_create_1_3(
 }
 
 // Expected (bigboi 8): a 1.3 fence render may ask for effects; they apply when the host draws its answer, and when it
-// refuses the answer nothing of them happens and the storage it wrote is put back.
+// refuses the answer nothing of them happens and the storage it wrote is put back. The refusal fails the plugin, as an
+// answer the host cannot decode does on every major (P4, O-135): its toast is the one left.
 #[test]
 fn a_refused_render_result_leaves_no_effects() {
     let outcome = |mode: u8| {
@@ -2373,7 +2394,7 @@ fn a_refused_render_result_leaves_no_effects() {
         let host = host();
         let api = PluginApi {
             size: size_of::<PluginApi>(),
-            major: ABI_MAJOR,
+            major: 1,
             minor: 3,
             requires_minor: 0,
             create: Some(raw_create_1_3),
@@ -2383,7 +2404,7 @@ fn a_refused_render_result_leaves_no_effects() {
             describe: None,
         };
         let (definition, error) =
-            define(&dynamic(&host), Library::from_table(&api, HOST_MINOR).unwrap(), None).unwrap();
+            define(&dynamic(&host), Library::from_table(&api, 1, V1_MINOR).unwrap(), None).unwrap();
         let registry = Registry::define(Vec::new(), []);
         registry.load(&dynamic(&host), definition.external("raw.so", error));
         markdown(&host, &registry, "```raw\nx\n```\n");
@@ -2392,13 +2413,13 @@ fn a_refused_render_result_leaves_no_effects() {
         (toasts, host.storage.borrow().get("plugin.raw.k").cloned())
     };
     assert_eq!(outcome(0), (vec!["from a fence".to_owned()], Some("{\"a\":1}".to_owned())));
-    assert_eq!(outcome(1), (Vec::new(), None));
+    assert_eq!(outcome(1), (vec!["Run /plugins to view details.".to_owned()], None));
 }
 
-// Expected (bigboi): a late call's result is checked before its effects apply. A 1.3 fence render that overran and
-// returned a result the host refuses asks for nothing that happens, its storage write goes back, and the plugin fails
-// by the overrun; with a result the host draws, its effects apply, then it fails. The first render after setup is
-// exempt, so the fence renders twice.
+// Expected (bigboi): a late call's result is checked before its effects apply. A 1.3 fence render that returned a
+// result the host draws applies its effects, then, having overrun, fails the plugin; the first render after setup is
+// exempt, so the fence renders twice. One that returned a result the host refuses asks for nothing that happens, its
+// storage write goes back, and the plugin fails by the refusal (P4, O-135) at the first render, before any overrun.
 #[test]
 fn a_late_refused_result_leaves_no_effects() {
     let outcome = |mode: u8| {
@@ -2407,7 +2428,7 @@ fn a_late_refused_result_leaves_no_effects() {
         let host = host();
         let api = PluginApi {
             size: size_of::<PluginApi>(),
-            major: ABI_MAJOR,
+            major: 1,
             minor: 3,
             requires_minor: 0,
             create: Some(raw_create_1_3),
@@ -2417,7 +2438,7 @@ fn a_late_refused_result_leaves_no_effects() {
             describe: None,
         };
         let (definition, error) =
-            define(&dynamic(&host), Library::from_table(&api, HOST_MINOR).unwrap(), None).unwrap();
+            define(&dynamic(&host), Library::from_table(&api, 1, V1_MINOR).unwrap(), None).unwrap();
         let registry = Registry::define(Vec::new(), []);
         let base = std::time::Instant::now();
         registry.monitor().set_clock(move || base + RAW_NOW.get());
@@ -2437,11 +2458,15 @@ fn a_late_refused_result_leaves_no_effects() {
             .filter(|message| message.starts_with("from"))
             .collect();
         let status = registry.entries().into_iter().find(|entry| entry.id == "raw").unwrap().status;
-        let late = matches!(&status, Status::Failed(error) if error.starts_with("render-fence took 150 ms"));
-        (toasts, host.storage.borrow().get("plugin.raw.k").cloned(), late)
+        let cause = match &status {
+            Status::Failed(error) if error.starts_with("render-fence took 150 ms") => "overrun",
+            Status::Failed(error) if error.starts_with("render-fence returned a bad result") => "refused",
+            _ => "none",
+        };
+        (toasts, host.storage.borrow().get("plugin.raw.k").cloned(), cause)
     };
-    assert_eq!(outcome(0), (vec!["from a fence".to_owned()], Some("{\"a\":1}".to_owned()), true));
-    assert_eq!(outcome(1), (Vec::new(), None, true));
+    assert_eq!(outcome(0), (vec!["from a fence".to_owned()], Some("{\"a\":1}".to_owned()), "overrun"));
+    assert_eq!(outcome(1), (Vec::new(), None, "refused"));
 }
 
 /// What the frozen 1.4 host saw: the type of each request it decoded, and `refused` for each it could not.
@@ -2476,7 +2501,8 @@ unsafe extern "C" fn old_host_free(owned: Owned) {
 #[test]
 fn a_1_5_library_gets_what_a_1_4_host_offers() {
     use opencode_plugin_abi_1_4 as old;
-    let library = Library::open(&build("p0a"), 4).unwrap();
+    // The probe as a library of ABI 1.x, which a 1.4 host can load.
+    let library = Library::open(&build("p0a,abi-1-6"), 4).unwrap();
     let api = HostApi {
         size: size_of::<HostApi>(),
         major: 1,
@@ -2486,6 +2512,10 @@ fn a_1_5_library_gets_what_a_1_4_host_offers() {
         free: Some(old_host_free),
         theme_mode: None,
         wake: None,
+        send: None,
+        report: None,
+        stopped: None,
+        features: Bytes::new(&[]),
     };
     let call = |handle: *mut c_void, request: &old::Request| {
         let json = serde_json::to_vec(request).unwrap();

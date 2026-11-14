@@ -12,8 +12,10 @@ use std::time::Duration;
 use opentui::app::ProxyError;
 use opentui::prelude::*;
 
+use crate::mailbox::Mailbox;
 use crate::node::Mount;
 use crate::{Host, abi, defer};
+use opencode_plugin_abi::mail::Message;
 
 /// A mounted claim or route that a wake or an invalidation renders again.
 pub(crate) trait Drawn {
@@ -29,6 +31,8 @@ impl Drawn for Mount {
 pub(crate) struct Activation {
     host: Weak<dyn Host>,
     wake: Arc<Wake>,
+    /// What the plugin's threads send, and their panic reports.
+    pub mailbox: Arc<Mailbox>,
     claims: RefCell<Vec<Weak<dyn Drawn>>>,
     /// An invalidation waits on the effect queue.
     queued: Cell<bool>,
@@ -38,28 +42,42 @@ pub(crate) struct Activation {
     disposed: Cell<bool>,
     /// Runs the plugin's wake handlers, which invalidate its claims; without, a wake only redraws them.
     on_wake: RefCell<Option<Rc<dyn Fn()>>>,
+    /// Runs the plugin's message handler with one message.
+    on_message: RefCell<Option<Rc<dyn Fn(Message)>>>,
+    /// Fails the plugin after a thread of it panicked.
+    on_panic: RefCell<Option<Rc<dyn Fn(String)>>>,
 }
 
 impl Activation {
-    pub fn new(host: &Rc<dyn Host>, wake: Arc<Wake>) -> Rc<Self> {
+    pub fn new(host: &Rc<dyn Host>, mailbox: Arc<Mailbox>) -> Rc<Self> {
+        let wake = mailbox.wake().clone();
         Rc::new_cyclic(|this: &Weak<Self>| {
-            let (this, id) = (this.clone(), wake.id);
+            let (this, wake_id) = (this.clone(), wake.id);
             let handler = host.app().on_message(move |_, message: &Woken| {
                 crate::flush();
-                if let Some(activation) = this.upgrade().filter(|_| message.0 == id) {
+                if let Some(activation) = this.upgrade().filter(|_| message.0 == wake_id) {
                     activation.woken();
                 }
             });
             Self {
                 host: Rc::downgrade(host),
+                mailbox,
                 wake,
                 claims: RefCell::default(),
                 queued: Cell::new(false),
                 handler,
                 disposed: Cell::new(false),
                 on_wake: RefCell::default(),
+                on_message: RefCell::default(),
+                on_panic: RefCell::default(),
             }
         })
+    }
+
+    /// Sets what a delivered message runs, and what a thread's panic report runs.
+    pub fn on_mail(&self, message: Rc<dyn Fn(Message)>, panic: Rc<dyn Fn(String)>) {
+        *self.on_message.borrow_mut() = Some(message);
+        *self.on_panic.borrow_mut() = Some(panic);
     }
 
     /// What wakes this activation from any thread, for a plugin that runs in process. It keeps the activation's `Wake`,
@@ -73,8 +91,11 @@ impl Activation {
     pub fn dispose(&self) {
         self.disposed.set(true);
         self.wake.revoked.store(true, Ordering::Release);
-        // The wake handlers hold what holds the activation.
+        self.mailbox.close();
+        // The wake and mail handlers hold what holds the activation.
         self.on_wake.borrow_mut().take();
+        self.on_message.borrow_mut().take();
+        self.on_panic.borrow_mut().take();
     }
 
     pub fn disposed(&self) -> bool {
@@ -86,17 +107,31 @@ impl Activation {
         *self.on_wake.borrow_mut() = Some(run);
     }
 
-    /// A wake arrived: runs the plugin's wake handlers, or renders the claims again at once.
+    /// A wake arrived: hands the plugin what its threads sent, in order, then a thread's panic report; then, for a
+    /// [`abi::Waker`]'s wake, runs the plugin's wake handlers, or renders the claims again at once.
     fn woken(&self) {
-        let run = self.on_wake.borrow().clone();
+        let hinted = self.wake.hinted.swap(false, Ordering::AcqRel);
+        self.wake.pending.store(false, Ordering::Release);
         if self.disposed() {
-            return self.wake.pending.store(false, Ordering::Release);
+            return;
         }
-        match run {
-            Some(run) => {
-                self.wake.pending.store(false, Ordering::Release);
-                run();
+        let (messages, panic) = self.mailbox.take();
+        let deliver = self.on_message.borrow().clone();
+        for message in messages {
+            match &deliver {
+                Some(deliver) if !self.mailbox.closed() => deliver(message),
+                _ => break,
             }
+        }
+        if let (Some(panic), Some(fail)) = (panic, self.on_panic.borrow().clone()) {
+            fail(panic);
+        }
+        if !hinted || self.disposed() {
+            return;
+        }
+        let run = self.on_wake.borrow().clone();
+        match run {
+            Some(run) => run(),
             None => self.redraw(),
         }
     }
@@ -140,12 +175,14 @@ impl Drop for Activation {
 }
 
 /// An activation's wakes, from any thread: `pending` while a [`Woken`] waits for the UI thread, so a burst posts one.
+/// A wake of the plugin's [`abi::Waker`] also sets `hinted`; a send to its mailbox does not.
 pub(crate) struct Wake {
     id: u64,
     pending: AtomicBool,
     /// The activation ended or failed: a wake posts nothing. A failed C ABI instance is kept, not destroyed, so its
     /// own waker is never revoked; this is.
     revoked: AtomicBool,
+    hinted: AtomicBool,
     proxy: Option<AppProxy>,
 }
 
@@ -168,8 +205,19 @@ struct Woken(u64);
 impl Wake {
     pub fn new(proxy: Option<AppProxy>) -> Self {
         static WAKES: AtomicU64 = AtomicU64::new(0);
-        let id = WAKES.fetch_add(1, Ordering::Relaxed);
-        Self { id, pending: AtomicBool::new(false), revoked: AtomicBool::new(false), proxy }
+        Self {
+            id: WAKES.fetch_add(1, Ordering::Relaxed),
+            pending: AtomicBool::new(false),
+            revoked: AtomicBool::new(false),
+            hinted: AtomicBool::new(false),
+            proxy,
+        }
+    }
+
+    /// The plugin's waker woke the host: its wake handlers run, or its claims draw again.
+    pub fn post(&self) {
+        self.hinted.store(true, Ordering::Release);
+        self.ring();
     }
 
     /// Whether a [`Woken`] waits for the UI thread.
@@ -179,7 +227,7 @@ impl Wake {
     }
 
     /// Posts one [`Woken`] until the UI thread handles it, unless the activation ended. Catches its own panics.
-    pub fn post(&self) {
+    pub fn ring(&self) {
         let _ = catch_unwind(AssertUnwindSafe(|| {
             if self.revoked.load(Ordering::Acquire) || self.pending.swap(true, Ordering::AcqRel) {
                 return;

@@ -215,18 +215,18 @@ fn a_panicking_command_is_caught_and_enabling_restarts_the_plugin() {
 
 #[test]
 fn a_major_abi_mismatch_is_refused_with_its_reason() {
-    let h = open(Route::Home, "", &build("major-2"));
+    let h = open(Route::Home, "", &build("major-3"));
     let opencode_plugin::Status::Failed(error) = h.status() else {
         panic!("{:?}", h.status());
     };
-    assert!(error.starts_with("plugin ABI 2.0 is not supported"), "{error}");
+    assert!(error.starts_with("plugin ABI 3.0 is not supported"), "{error}");
     h.tui.keymap.dispatch("plugins.list", None);
     let screen = h.wait_for("failed, local");
     assert!(!screen.contains("sample plugin v1"), "{screen}");
     print_excerpt("plugin manager with a major mismatch", &screen);
     // A plugin that never loaded cannot be toggled, so enter opens its error.
     h.app.press("enter");
-    let screen = h.wait_for("plugin ABI 2.0 is not supported");
+    let screen = h.wait_for("plugin ABI 3.0 is not supported");
     print_excerpt("error details of a major mismatch", &screen);
 }
 
@@ -397,7 +397,7 @@ fn the_list_comes_back_on_the_row_that_was_asked_about() {
 // footer counts it (carbon-5).
 #[test]
 fn a_plugin_that_fails_to_load_shows_a_toast_and_the_footer_counts_it() {
-    let h = open(Route::Home, "", &build("major-2"));
+    let h = open(Route::Home, "", &build("major-3"));
     let screen = h.wait_for("Plugin failed:");
     assert!(screen.contains("Open plugins"), "{screen}");
     h.wait_for("⊙ 1 plugin failed");

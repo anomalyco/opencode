@@ -6,6 +6,7 @@
 mod activation;
 pub mod contain;
 pub mod loader;
+pub mod mailbox;
 pub mod node;
 pub mod reconcile;
 mod route;
@@ -247,6 +248,9 @@ type CodeBlockRender = Rc<dyn Fn(&CodeBlock<'_>, &Theme) -> Option<AnyWidget>>;
 pub enum Builtin {
     /// A plugin of the one API, run in process.
     Plugin(abi::Plugin),
+    /// The same plugin through the byte shims of the C ABI, as a loaded library runs: its other carrier, for the tests
+    /// that compare the two (`carrier-equal`).
+    Abi(abi::Plugin),
     /// A part of the host that the plugin manager lists and toggles like a plugin. It is not plugin API: `activate`
     /// and `dispose` reach the host on their own.
     Host { id: &'static str, activate: Rc<dyn Fn()>, dispose: Rc<dyn Fn()> },
@@ -316,6 +320,7 @@ impl From<Builtin> for Definition {
     fn from(builtin: Builtin) -> Self {
         match builtin {
             Builtin::Plugin(plugin) => in_process(plugin),
+            Builtin::Abi(plugin) => loader::native::carried(plugin),
             Builtin::Host { id, activate, dispose } => Definition::new(id, move |setup: &mut Setup<'_>| {
                 activate();
                 let dispose = dispose.clone();
@@ -344,7 +349,8 @@ fn in_process(plugin: abi::Plugin) -> Definition {
         let failed = failure.clone();
         setup.failure(Rc::new(move || failed.borrow().clone()));
         let proxy = setup.host().app().proxy();
-        let activation = Activation::new(setup.host(), Arc::new(activation::Wake::new(Some(proxy))));
+        let mailbox = mailbox::Mailbox::new(setup.id(), Arc::new(activation::Wake::new(Some(proxy))));
+        let activation = Activation::new(setup.host(), mailbox.clone());
         let scope = Rc::new(Scope {
             host: Rc::downgrade(setup.host()),
             id: setup.id().to_owned(),
@@ -361,6 +367,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
         });
         let mut api = abi::Registered::new(setup.id(), None);
         api.set_waker(activation.waker());
+        api.set_link(mailbox);
         // Setup reaches the host as a command does: its effects wait on the one queue. A setup that panics runs its
         // dispose callbacks within the same call, as the C ABI's `create` does, so nothing either asked for happens.
         let (set_up, _) = scope.monitor.call(scope.slot, "setup", || {
@@ -390,6 +397,21 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             let (wakes, scope) = (api.wakes().to_vec(), scope.clone());
             activation.on_wake(Rc::new(move || scope.run("on-wake", |host| wakes.iter().for_each(|run| run(host)))));
         }
+        // A thread's message runs the message handler as `update`; a thread's panic fails the plugin, once.
+        let (handler, delivered, failing) = (api.message().cloned(), Rc::downgrade(&scope), Rc::downgrade(&scope));
+        activation.on_mail(
+            Rc::new(move |message| {
+                if let (Some(scope), Some(run)) = (delivered.upgrade(), &handler) {
+                    scope.run("update", |host| run(host, message));
+                }
+            }),
+            Rc::new(move |error| {
+                if let Some(scope) = failing.upgrade() {
+                    let revoked = scope.revoked.take();
+                    crate::fail(&scope.host, &scope.id, &scope.failure, revoked, &scope.activation, error);
+                }
+            }),
+        );
         // A fence key that goes reaches the plugin's handlers once the event that freed its block is done.
         let gone = (!api.fence_gone().is_empty()).then(|| {
             let (runs, scope) = (api.fence_gone().to_vec(), scope.clone());
@@ -509,7 +531,10 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                     })
                     .collect()
             });
-            setup.surface(surface.clone(), commands, call, fail, &activation);
+            let viewer = Rc::new(surface::Linked::new(surface.view.clone(), call));
+            let place =
+                surface::Place { name: surface.name.clone(), at: surface.place.clone(), palette: surface.palette };
+            setup.surface(place, viewer, commands, fail, &activation);
         }
         // Disposal removes the plugin's commands, runs its dispose callbacks, then drops its replies and wakes.
         setup.on_dispose(move || scope.dispose(&mut api));
@@ -1140,6 +1165,8 @@ pub(crate) fn fail(
 ) {
     log::error!("plugin {id} failed: {error}");
     *failure.borrow_mut() = Some(error);
+    // Its threads are told to end, and what they sent is dropped (4.14: a wake for a plugin that is not active).
+    activation.mailbox.close();
     let id = id.to_owned();
     defer(host, move |host| {
         revoked.into_iter().for_each(Disposer::dispose);
@@ -1302,14 +1329,14 @@ impl Setup<'_> {
     /// whose views run through `call`; `activation` draws its mounts again.
     pub(crate) fn surface(
         &mut self,
-        surface: abi::v2::Surface,
+        surface: surface::Place,
+        viewer: Rc<dyn surface::Viewer>,
         commands: surface::Commands,
-        call: surface::Call,
         fail: surface::Fail,
         activation: &Rc<Activation>,
     ) {
         let (owner, activation) = (Rc::downgrade(self.host), activation.clone());
-        match surface.place.clone() {
+        match surface.at.clone() {
             abi::v2::Place::Route(name) => {
                 let key = name.clone();
                 self.route(name, move |host| {
@@ -1320,7 +1347,7 @@ impl Setup<'_> {
                         &key,
                         "",
                         &SlotInput::default(),
-                        call.clone(),
+                        viewer.clone(),
                         fail.clone(),
                     );
                     activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
@@ -1346,7 +1373,7 @@ impl Setup<'_> {
                             &path,
                             &path,
                             input,
-                            call.clone(),
+                            viewer.clone(),
                             fail.clone(),
                         );
                         activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
