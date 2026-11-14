@@ -94,6 +94,17 @@ export const connection = Effect.fn("ClaudeProvider.connection")(function* (ctx:
   return ClaudeQueryOptions.connectionEnv({ settings: info.settings, headers: info.headers, body: info.body })
 })
 
+/** Whether Claude Code talks to Anthropic's own API, checking first if needed. A failed check counts as no. */
+export const firstParty = Effect.fn("ClaudeProvider.firstParty")(function* (
+  ctx: Context,
+  status: ClaudeStatus.Interface,
+  io: ClaudeIO.Interface,
+) {
+  const state = yield* status.settled()
+  if (state.type !== "ready" || state.probe.account.apiProvider !== "firstParty") return false
+  return ((yield* connection(ctx)).ANTHROPIC_BASE_URL ?? io.env().ANTHROPIC_BASE_URL) === undefined
+})
+
 // Context windows only come from the full check, so a chat's startup report keeps the saved ones.
 function fromClaude(models: readonly ClaudeProbe.Model[], saved: readonly CatalogModel[]): CatalogModel[] {
   const known = new Map<string, number | undefined>()

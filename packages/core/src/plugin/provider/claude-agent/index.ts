@@ -40,7 +40,7 @@ export const make = (io: ClaudeIO.Interface, registry = ClaudeSessions.registry(
       yield* ClaudeProvider.register(ctx, status, io)
       yield* ClaudeIntegration.register(ctx, status)
       yield* ClaudeAISDK.register(ctx, sessions)
-      yield* ClaudeSessionHooks.register(ctx)
+      yield* ClaudeSessionHooks.register(ctx, status, io)
       yield* ClaudeInstructions.register(ctx)
     }),
   } satisfies PluginInternal.InternalPlugin)
