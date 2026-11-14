@@ -194,7 +194,8 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   {"type": "claim", "claim": index, "mount", "input", "part", "next": n}
  *                                     -> {"node": tree | null, "content"?, "released"?, "memo"?}
  *      A renderer claim's view of one part: a tool call {"type": "tool", "session", "message", "state": "pending" |
- *      "running" | "completed" | "error", "permission", "tool": the transcript's tool part}, or a fence
+ *      "running" | "completed" | "error", "permission", "tool": the transcript's tool part without what the call
+ *      returned, which a "part-output" source names, and without metadata over 4096 bytes of JSON}, or a fence
  *      {"type": "fence", "language", "info", "code", "streaming", "closed"}. A null node leaves the part to the
  *      host's own row. The rest is as for "view"; each part is a mount of its own.
  *   {"type": "unmount", "mount"}                               -> null

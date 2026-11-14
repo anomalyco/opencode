@@ -129,9 +129,15 @@ pub struct ToolPart {
     pub state: State,
     /// The session's first permission request waits on this call.
     pub permission: bool,
-    /// The call as the transcript has it: its name, its input (text while it streams), and its output.
+    /// The call as the transcript has it, its name and its input (text while it streams), without what the call
+    /// returned: [`Self::output`] names that, and the host reads it. Metadata of more than [`METADATA_BYTES`] bytes
+    /// of JSON is left out too. A view that needs those bytes reads the session's messages.
     pub tool: SessionMessageAssistantTool,
 }
+
+/// The most bytes of JSON a call's metadata takes in a [`ToolPart`]; more is left out, so a request stays small
+/// whatever the call streams into it.
+pub const METADATA_BYTES: usize = 4096;
 
 impl ToolPart {
     /// The call's output as the transcript shows it, which the host reads and the plugin never copies.

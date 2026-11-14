@@ -354,6 +354,7 @@ impl Core {
     }
 
     fn show(self: &Rc<Self>, part: Part) -> bool {
+        let part = without_result(part);
         // The newest revision is kept also where the host's row draws it: a fence's owner draws it from here.
         let previous = self.part.replace(Some(part.clone()));
         if self.fallen.get() {
@@ -615,6 +616,31 @@ impl Core {
             ledger.content_bytes -= content.values().map(|bytes| bytes.len() as i64).sum::<i64>();
         });
     }
+}
+
+/// `part` as a claim's view gets it: a call without what it returned, which its output reference names, and without
+/// metadata over [`abi::claim::METADATA_BYTES`], so a request stays small whatever the call returned.
+fn without_result(part: Part) -> Part {
+    use opencode_plugin_abi::types::SessionMessageAssistantToolState as ToolState;
+    fn bounded<T: serde::Serialize + Default>(metadata: &mut T) {
+        if serde_json::to_vec(metadata).is_ok_and(|bytes| bytes.len() > abi::claim::METADATA_BYTES) {
+            *metadata = T::default();
+        }
+    }
+    let Part::Tool(mut tool) = part else { return part };
+    match &mut tool.tool.state {
+        ToolState::Running(running) => bounded(&mut running.metadata),
+        ToolState::Completed(done) => {
+            done.content.clear();
+            done.metadata.iter_mut().for_each(bounded);
+        }
+        ToolState::Error(failed) => {
+            failed.content = None;
+            failed.metadata.iter_mut().for_each(bounded);
+        }
+        ToolState::Streaming(_) | ToolState::Unknown(_) => {}
+    }
+    Part::Tool(tool)
 }
 
 impl Drop for Core {
