@@ -9,7 +9,7 @@ built-ins (`-<id>`, `<id>`, `*`, `<prefix>.*`) exactly as TS does. The loader (`
 `docs/P.4.md`) discovers the same targets as TS: the subdirectories of the `plugins` directories and the
 `cli.json` entries that name no built-in. A target with a native build (a shared library on the C ABI of
 `opencode-plugin-abi`) loads, with hot reload. A directory target without one is a TypeScript plugin: when Bun is
-found (`OPENCODE_BUN`, or `bun` on the path) and `OPENCODE_PLUGIN_JS` is `1` (off by default), it runs on the JS host, a Bun process
+found (`OPENCODE_BUN`, the local server's opencode binary run as its own Bun, or `bun` on the path) and `OPENCODE_PLUGIN_JS` is `1` (off by default), it runs on the JS host, a Bun process
 the client starts (`docs/P.4.md`, "TypeScript plugins on the JS host"), through the V2 compatibility layer (P8), which
 gives a V2 `{ id, setup }` module the context and the modules TS gives it. Without Bun, or without `OPENCODE_PLUGIN_JS=1`,
 the registry lists it with status `Skipped` and the message "TypeScript TUI plugins do not run in opencode-native yet",
