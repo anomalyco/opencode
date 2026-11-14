@@ -22,9 +22,9 @@ use resize::{PaneResize, Rules};
 
 pub struct Frame {
     body: View,
-    rail: Custom<rail::Rail>,
+    pub(crate) rail: Custom<rail::Rail>,
     rail_handle: Custom<resize::Handle>,
-    strip: Custom<strip::Strip>,
+    pub(crate) strip: Custom<strip::Strip>,
     main: View,
     /// The column under the routes that holds the `app` slot.
     column: View,
@@ -35,8 +35,7 @@ pub struct Frame {
     /// The `layout` storage key as last read or written.
     layout: RefCell<Value>,
     session: RefCell<Option<Weak<SessionState>>>,
-    ticking: Cell<bool>,
-    /// Whether a repaint for a fading unread marker is due.
+    /// Whether the tabs repaint on every frame for a fading unread marker.
     markers: Cell<bool>,
 }
 
@@ -84,7 +83,6 @@ impl Frame {
             pane_resize,
             layout: RefCell::new(json!({})),
             session: RefCell::default(),
-            ticking: Cell::new(false),
             markers: Cell::new(false),
         }
     }
@@ -240,16 +238,14 @@ pub fn refresh(tui: &Tui) {
     if let Some(session) = frame.session() {
         session.layout(tui);
     }
-    tick(tui);
-    tui.app.request_redraw();
-}
-
-/// Arms the tabs' next tick after this frame, for a pulse that moves or a spinner that shows in a paint. Each tick
-/// asks for a frame, and that frame's paint arms the next, so ticks stop with the last paint that needs them.
-pub(crate) fn wake(tui: &Tui) {
-    if !tui.frame.ticking.get() {
-        tui.app.defer(bind!(tui.weak(), |tui, _| tick(&tui)));
+    // The tabs of a hidden strip or rail unmount, with their pulses and spinners.
+    if !visible || vertical {
+        strip::forget(&frame.strip);
     }
+    if !visible || !vertical {
+        rail::forget(&frame.rail);
+    }
+    tui.app.request_redraw();
 }
 
 /// Brings the tabs' unread markers up to the store after a flush.
@@ -258,63 +254,18 @@ pub(crate) fn observe_markers(tui: &Tui) {
     rail::observe(&tui.frame.rail, tui);
 }
 
-/// Repaints the tabs after 16 ms, the TS animation clock's tick, while an unread marker fades out.
+/// Repaints the tabs on every frame while an unread marker fades out (`createAnimatable`, on TS's 60 fps clock).
 pub(crate) fn wake_markers(tui: &Tui) {
     if tui.frame.markers.replace(true) {
         return;
     }
-    // Deferred from a paint as `wake` is: each step is armed by the paint before it.
-    tui.app.defer(bind!(tui.weak(), |tui, _| {
-        tui.app.set_timeout(
-            std::time::Duration::from_millis(16),
-            bind!(tui.weak(), |tui, _| {
-                tui.frame.markers.set(false);
-                tui.app.request_redraw();
-            }),
-        );
+    tui.app.animate(bind!(tui.weak(), |tui, cx, _| {
+        let now = tui.app.now();
+        let fading = strip::fading(&tui.frame.strip, now) || rail::fading(&tui.frame.rail, now);
+        tui.frame.markers.set(fading);
+        cx.request_redraw();
+        fading
     }));
-}
-
-/// Runs the pulses at 20 fps while any moves, else repaints at each spinner step while the compact rail shows a
-/// running tab, which has no pulse: TS's `TabIndicator` spinner keeps its own 80 ms interval. Stops when no paint
-/// asks for the next tick.
-fn tick(tui: &Tui) {
-    let frame = &tui.frame;
-    let animations = opencode_ui::motion::enabled(tui.config().info.animations);
-    let (visible, vertical) = (visible(tui), vertical(tui));
-    if !visible || vertical {
-        strip::forget(&frame.strip);
-    }
-    if !visible || !vertical {
-        rail::forget(&frame.rail);
-    }
-    strip::set_animations(&frame.strip, animations);
-    rail::set_animations(&frame.rail, animations);
-    let pulses = strip::animating(&frame.strip) || rail::animating(&frame.rail);
-    if frame.ticking.get() || !(pulses || rail::spinning(&frame.rail)) {
-        return;
-    }
-    // The next spinner step counts from the tabs' epoch, as the glyph does.
-    let delay = if pulses {
-        crate::tabs::pulse::FRAME
-    } else {
-        let step = opencode_ui::motion::SPINNER_INTERVAL;
-        let elapsed = tui.app.now().saturating_duration_since(tui.tabs.epoch());
-        step - Duration::from_nanos((elapsed.as_nanos() % step.as_nanos()) as u64)
-    };
-    frame.ticking.set(true);
-    tui.app.set_timeout(
-        delay,
-        bind!(tui, |tui, _| {
-            tui.frame.ticking.set(false);
-            if pulses {
-                strip::tick(&tui.frame.strip, crate::tabs::pulse::FRAME);
-                rail::tick(&tui.frame.rail, crate::tabs::pulse::FRAME);
-            } else {
-                tui.app.request_redraw();
-            }
-        }),
-    );
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

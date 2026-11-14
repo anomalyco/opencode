@@ -4,6 +4,7 @@
 use std::time::{Duration, Instant};
 
 use opencode_ui::theme::tint;
+use opentui::app::{AnimationTick, Tick};
 use opentui::input::{MouseButton, MouseEvent, MouseEventKind};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
@@ -35,6 +36,11 @@ pub struct Strip {
     plus: Cell<Option<usize>>,
     pulses: RefCell<HashMap<String, Pulse>>,
     fades: RefCell<HashMap<String, MarkerFade>>,
+    /// The spinner steps of the painted tabs that run, each from 0 when its spinner shows.
+    spins: RefCell<HashMap<String, u64>>,
+    /// The strip's ticks while a spinner shows and while a pulse moves.
+    spin: RefCell<Option<AnimationTick>>,
+    pulse: RefCell<Option<AnimationTick>>,
 }
 
 pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Strip> {
@@ -54,6 +60,9 @@ pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Strip> {
             plus: Cell::new(None),
             pulses: RefCell::default(),
             fades: RefCell::default(),
+            spins: RefCell::default(),
+            spin: RefCell::default(),
+            pulse: RefCell::default(),
         },
     )
     .height(1)
@@ -79,22 +88,19 @@ pub fn leave(strip: &Custom<Strip>) {
     });
 }
 
-/// Whether a pulse under the strip still moves.
-pub fn animating(strip: &Custom<Strip>) -> bool {
-    strip.with(|strip| strip.pulses.borrow().values().any(Pulse::live))
-}
-
-/// Drops the pulses while the strip is hidden, as its tabs unmount.
+/// Drops the pulses and spinners while the strip is hidden, as its tabs unmount. Its ticks park while it is hidden,
+/// and its next paint keeps or drops them.
 pub fn forget(strip: &Custom<Strip>) {
     strip.with(|strip| {
         strip.pulses.borrow_mut().clear();
         strip.fades.borrow_mut().clear();
+        strip.spins.borrow_mut().clear();
     });
 }
 
-/// Turns the pulses' motion on or off (`TabPulse`'s `enabled`).
-pub fn set_animations(strip: &Custom<Strip>, enabled: bool) {
-    strip.with(|strip| strip.pulses.borrow_mut().values_mut().for_each(|pulse| pulse.set_enabled(enabled)));
+/// Whether an unread marker under the strip still fades.
+pub fn fading(strip: &Custom<Strip>, now: Instant) -> bool {
+    strip.with(|strip| strip.fades.borrow().values().any(|marker| marker.moving(now)))
 }
 
 /// Feeds each painted tab's status to its unread marker at a store flush.
@@ -118,8 +124,23 @@ pub(super) fn observe_markers(markers: &RefCell<HashMap<String, MarkerFade>>, tu
     }
 }
 
-pub fn tick(strip: &Custom<Strip>, delta: std::time::Duration) {
-    strip.update(|strip| strip.pulses.borrow_mut().values_mut().for_each(|pulse| pulse.advance(delta)));
+/// Holds `handle` while `wanted`, made by `start` when it is missing; drops it otherwise.
+pub(super) fn hold(handle: &RefCell<Option<AnimationTick>>, wanted: bool, start: impl FnOnce() -> AnimationTick) {
+    if !wanted {
+        drop(handle.take());
+    } else if handle.borrow().is_none() {
+        *handle.borrow_mut() = Some(start());
+    }
+}
+
+/// Moves each spinner that shows by `ticks` steps (`SpinnerRenderable`'s `index += ticks`).
+pub(super) fn step(spins: &RefCell<HashMap<String, u64>>, ticks: u64) {
+    spins.borrow_mut().values_mut().for_each(|step| *step += ticks);
+}
+
+/// The spinner's rate: one step per `SPINNER_INTERVAL`, 12.5 a second.
+pub(super) fn spinner_fps() -> f64 {
+    1.0 / opencode_ui::motion::SPINNER_INTERVAL.as_secs_f64()
 }
 
 /// The colors shared by every tab.
@@ -212,9 +233,8 @@ impl MarkerFade {
     }
 }
 
-/// The indicator's glyph (`TabIndicator`'s label) and whether it shows the unread color. A `fading` marker keeps
-/// its glyph.
-#[allow(clippy::too_many_arguments)]
+/// The indicator's glyph (`TabIndicator`'s label) and whether it shows the unread color. A running tab shows its
+/// spinner at `step`, and a `fading` marker keeps its glyph.
 pub(super) fn indicator(
     status: &Status,
     label: &str,
@@ -222,8 +242,7 @@ pub(super) fn indicator(
     numbers: bool,
     animations: bool,
     fading: bool,
-    now: std::time::Instant,
-    epoch: std::time::Instant,
+    step: u64,
 ) -> (String, bool) {
     let pending = status.busy || status.attention.is_some();
     let unread = status.unread.is_some() && !pending;
@@ -235,7 +254,7 @@ pub(super) fn indicator(
         "?".to_owned()
     } else if status.runs() {
         let frames = opencode_ui::motion::SPINNER_FRAMES;
-        let frame = if animations { (now.duration_since(epoch).as_millis() / 80) as usize % frames.len() } else { 0 };
+        let frame = if animations { (step % frames.len() as u64) as usize } else { 0 };
         frames[frame].to_owned()
     } else if label == "+" {
         "+".to_owned()
@@ -384,6 +403,8 @@ impl Component for Strip {
         let mut slots = Vec::new();
         let mut pulses = self.pulses.borrow_mut();
         let mut markers = self.fades.borrow_mut();
+        let mut spins = self.spins.borrow_mut();
+        let mut spinning = Vec::new();
         let now = tui.app.now();
         for (offset, tab) in items[layout.visible()].iter().enumerate() {
             let index = layout.start + offset;
@@ -414,7 +435,10 @@ impl Component for Strip {
             };
             let pulse = pulses
                 .entry(session.to_owned())
-                .and_modify(|pulse| pulse.set(input))
+                .and_modify(|pulse| {
+                    pulse.set_enabled(animations);
+                    pulse.set(input);
+                })
                 .or_insert_with(|| Pulse::mount(animations, input));
             let colors = pulse::Colors {
                 background,
@@ -449,8 +473,13 @@ impl Component for Strip {
             let marker = markers.entry(session.to_owned()).or_insert_with(|| MarkerFade::new(&status, unread_color));
             marker.set(&status, unread_color, animations, now);
             let faded = marker.color(&status, background, theme.text.base, now);
-            let (glyph, unread) =
-                indicator(&status, &label, "", numbers, animations, faded.is_some(), now, tui.tabs.epoch());
+            // `TabIndicator` mounts a `<spinner>` while the tab runs with animations on and no numbers.
+            let spinner = runs && animations && !numbers;
+            let step = if spinner { *spins.entry(session.to_owned()).or_insert(0) } else { 0 };
+            if spinner {
+                spinning.push(session.to_owned());
+            }
+            let (glyph, unread) = indicator(&status, &label, "", numbers, animations, faded.is_some(), step);
             // The strip's `TabIndicator` takes no `selected`, so a selected tab's marker fades too.
             let indicator_color = if numbers {
                 number
@@ -498,12 +527,31 @@ impl Component for Strip {
             slots.push((x, tab_width, session.to_owned()));
             x += tab_width;
         }
-        // A tab's `TabPulse` unmounts with it: drop the pulses of tabs no longer painted.
+        // A tab's `TabPulse` and spinner unmount with it: drop those of tabs no longer painted.
         pulses.retain(|session, _| slots.iter().any(|(_, _, painted)| painted == session));
-        if pulses.values().any(Pulse::live) {
-            crate::frame::wake(&tui);
-        }
-        drop(pulses);
+        spins.retain(|session, _| spinning.contains(session));
+        let (live, spin) = (pulses.values().any(Pulse::live), !spins.is_empty());
+        drop((pulses, spins));
+        // Both tick only while the strip is drawn. The clock shares their frames: 20 a second while a tab runs.
+        hold(&self.spin, spin, || {
+            tui.frame.strip.on_animation_tick(
+                spinner_fps(),
+                bind!(tui.weak(), |tui, _, tick: Tick| {
+                    tui.frame.strip.with(|strip| step(&strip.spins, tick.ticks));
+                }),
+            )
+        });
+        hold(&self.pulse, live, || {
+            tui.frame.strip.on_animation_tick(
+                pulse::FPS,
+                bind!(tui.weak(), |tui, _, tick: Tick| {
+                    let strip = &tui.frame.strip;
+                    strip.update(|strip| {
+                        strip.pulses.borrow_mut().values_mut().for_each(|pulse| pulse.advance(tick.elapsed))
+                    });
+                }),
+            )
+        });
         markers.retain(|session, _| slots.iter().any(|(_, _, painted)| painted == session));
         if markers.values().any(|marker| marker.moving(now)) {
             crate::frame::wake_markers(&tui);
@@ -646,7 +694,7 @@ mod tests {
         // smoothstep(0.5) = 0.5: half way at 90 ms, so the marker is a blend of background and unread color.
         let half = marker.color(&Status::default(), BG, FLASH, at(90)).unwrap();
         assert_eq!(half, opencode_ui::theme::tint(BG, UNREAD, 0.5 / 0.8));
-        let (glyph, _) = indicator(&Status::default(), "1", "", false, true, true, at(90), start);
+        let (glyph, _) = indicator(&Status::default(), "1", "", false, true, true, 0);
         assert_eq!(glyph, "•", "a fading marker keeps its glyph");
         assert!(!marker.moving(at(180)));
         assert_eq!(marker.color(&Status::default(), BG, FLASH, at(180)), None, "gone after 180 ms");
