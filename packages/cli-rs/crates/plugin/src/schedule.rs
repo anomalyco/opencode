@@ -9,7 +9,7 @@
 //! messages, and no key and no other plugin (`backlog`).
 
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::rc::{Rc, Weak};
 use std::time::Duration;
 
@@ -24,21 +24,19 @@ thread_local! {
 
 #[derive(Default)]
 struct Queue {
-    /// The activations with work, in turn order, each with its app.
-    ready: Vec<(usize, Weak<Activation>)>,
-    /// The apps whose next paint drains what is left.
-    waiting: HashSet<usize>,
-    /// What each activation's updates took in a frame: by its address, the app's frame, the updates and their time.
-    spent: HashMap<usize, (u64, u32, Duration)>,
-    /// What all plugins' updates of an app took in a frame.
-    all: HashMap<usize, (u64, Duration)>,
+    /// The activations with work, in turn order.
+    ready: Vec<Weak<Activation>>,
+    /// What each activation's updates took in a frame of its app, also once it went idle, so mail that comes later
+    /// in the frame finds the budget spent: by its ID, which no other activation gets, the frame, the updates and
+    /// their time.
+    spent: HashMap<u64, (Weak<Activation>, u64, u32, Duration)>,
 }
 
-/// The updates the scheduler ran and the frames it asked for, counted since the thread started, for the tests.
+/// The updates the scheduler ran and the drains that left work for the next frame, counted since the thread started,
+/// for the tests.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Work {
     pub updates: u64,
-    /// Drains that left work for the next frame.
     pub deferred: u64,
 }
 
@@ -51,51 +49,66 @@ pub fn work() -> Work {
     WORK.with(std::cell::Cell::get)
 }
 
-fn key(app: &App) -> usize {
+/// An app, while it lives: the address of its session.
+pub(crate) fn key(app: &App) -> usize {
     std::ptr::from_ref(app.session()) as usize
 }
 
-fn address(activation: &Rc<Activation>) -> usize {
-    Rc::as_ptr(activation) as usize
+/// The ready activations of the app `app`, in turn order: those whose host's app it is now.
+fn of(queue: &Queue, app: usize) -> Vec<Rc<Activation>> {
+    queue.ready.iter().filter_map(Weak::upgrade).filter(|activation| activation.app() == Some(app)).collect()
 }
 
 /// Whether a plugin of `app` has updates waiting for a frame.
 pub fn busy(app: &App) -> bool {
-    let app = key(app);
-    QUEUE.with(|queue| queue.borrow().ready.iter().any(|(of, activation)| *of == app && activation.strong_count() > 0))
+    QUEUE.with(|queue| !of(&queue.borrow(), key(app)).is_empty())
 }
 
 /// `activation` has work: its mailbox has messages, a thread's report or a wake of its waker waits.
-pub(crate) fn ready(app: &App, activation: &Rc<Activation>) {
-    let (app, this) = (key(app), Rc::downgrade(activation));
+pub(crate) fn ready(activation: &Rc<Activation>) {
+    let this = Rc::downgrade(activation);
     QUEUE.with(|queue| {
         let mut queue = queue.borrow_mut();
-        if !queue.ready.iter().any(|(_, known)| known.ptr_eq(&this)) {
-            queue.ready.push((app, this));
+        if !queue.ready.iter().any(|known| known.ptr_eq(&this)) {
+            queue.ready.push(this);
         }
     });
 }
 
-/// Runs the ready plugins of `app` in turn under the frame budget; what is left runs as the next paint starts.
-pub(crate) fn drain(app: &App) {
+/// Runs the ready plugins of `app` in turn under the frame budget, or only `woken`, which a wake of its own made
+/// ready, so one plugin's wake never moves another's updates; what is left runs in turn as the next paint starts.
+pub(crate) fn drain(app: &App, woken: Option<&Rc<Activation>>) {
     let (app_key, frame) = (key(app), app.frame_number());
-    loop {
-        let round: Vec<Rc<Activation>> = QUEUE.with(|queue| {
-            let mut queue = queue.borrow_mut();
-            queue.ready.retain(|(_, activation)| activation.strong_count() > 0);
-            queue.ready.iter().filter(|(of, _)| *of == app_key).filter_map(|(_, known)| known.upgrade()).collect()
+    QUEUE.with(|queue| {
+        let mut queue = queue.borrow_mut();
+        queue.ready.retain(|activation| activation.strong_count() > 0);
+        // What the app's earlier frames spent is past, and an activation that ended spends nothing.
+        queue.spent.retain(|_, (activation, open, ..)| {
+            activation.upgrade().is_some_and(|activation| activation.app() != Some(app_key) || *open == frame)
         });
+    });
+    loop {
+        let mut round = QUEUE.with(|queue| of(&queue.borrow(), app_key));
+        if let Some(woken) = woken {
+            round.retain(|activation| Rc::ptr_eq(activation, woken));
+        }
         let mut ran = false;
         for activation in &round {
             let (limits, clock) = activation.budget();
             let (updates, spent, all) = QUEUE.with(|queue| {
                 let queue = queue.borrow();
-                let (updates, spent) = match queue.spent.get(&address(activation)) {
-                    Some((open, updates, spent)) if *open == frame => (*updates, *spent),
+                let (updates, spent) = match queue.spent.get(&activation.id()) {
+                    Some((_, open, updates, spent)) if *open == frame => (*updates, *spent),
                     _ => (0, Duration::ZERO),
                 };
-                let all =
-                    queue.all.get(&app_key).filter(|(open, _)| *open == frame).map_or(Duration::ZERO, |(_, all)| *all);
+                let all = queue
+                    .spent
+                    .values()
+                    .filter(|(known, open, ..)| {
+                        *open == frame && known.upgrade().and_then(|known| known.app()) == Some(app_key)
+                    })
+                    .map(|(.., spent)| *spent)
+                    .sum::<Duration>();
                 (updates, spent, all)
             });
             // At least one a frame; then while its own and all plugins' updates stay under the budget.
@@ -107,12 +120,16 @@ pub(crate) fn drain(app: &App) {
             let took = clock().saturating_duration_since(start);
             QUEUE.with(|queue| {
                 let mut queue = queue.borrow_mut();
-                queue.spent.insert(address(activation), (frame, updates + 1, spent + took));
-                queue.all.insert(app_key, (frame, all + took));
-                if step == Step::Idle {
-                    let this = Rc::downgrade(activation);
-                    queue.ready.retain(|(_, known)| !known.ptr_eq(&this));
-                    queue.spent.remove(&address(activation));
+                // A step that found nothing to do made no update and spent nothing of the budget.
+                match step {
+                    Step::Ran => {
+                        let entry = (Rc::downgrade(activation), frame, updates + 1, spent + took);
+                        queue.spent.insert(activation.id(), entry);
+                    }
+                    Step::Idle => {
+                        let this = Rc::downgrade(activation);
+                        queue.ready.retain(|known| !known.ptr_eq(&this));
+                    }
                 }
             });
             if step == Step::Ran {
@@ -126,20 +143,21 @@ pub(crate) fn drain(app: &App) {
     }
     let left = QUEUE.with(|queue| {
         let mut queue = queue.borrow_mut();
-        // The plugin served first now goes last, so each one's turn comes round when all plugins' budget binds.
-        if let Some(first) = queue.ready.iter().position(|(of, _)| *of == app_key) {
+        // After a round, the plugin served first goes last, so each one's turn comes round when all plugins' budget
+        // binds.
+        let first = queue.ready.iter().position(|known| known.upgrade().and_then(|known| known.app()) == Some(app_key));
+        if let (Some(first), None) = (first, woken) {
             let served = queue.ready.remove(first);
             queue.ready.push(served);
         }
-        let left = queue.ready.iter().any(|(of, _)| *of == app_key);
-        left && queue.waiting.insert(app_key)
+        !of(&queue, app_key).is_empty()
     });
     if left {
         WORK.with(|work| work.set(Work { deferred: work.get().deferred + 1, ..work.get() }));
-        // Animations run as a paint starts, after the turn's input and before the frame is counted.
+        // Animations run as a paint starts, after the turn's input and before the frame is counted. A drain the
+        // budget stops asks for one; the frame's spend holds for all of them.
         app.animate(move |cx, _| {
-            QUEUE.with(|queue| queue.borrow_mut().waiting.remove(&app_key));
-            drain(cx.app());
+            drain(cx.app(), None);
             false
         });
     }

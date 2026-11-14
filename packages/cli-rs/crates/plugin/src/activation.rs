@@ -102,6 +102,16 @@ impl Activation {
         *self.monitor.borrow_mut() = Some(monitor);
     }
 
+    /// Its ID, which no other activation gets.
+    pub(crate) fn id(&self) -> u64 {
+        self.wake.id
+    }
+
+    /// The app its host runs in, while the host lives ([`crate::schedule::key`]).
+    pub(crate) fn app(&self) -> Option<usize> {
+        self.host.upgrade().map(|host| crate::schedule::key(host.app()))
+    }
+
     /// The frame budget and the clock its updates are scheduled by.
     pub(crate) fn budget(&self) -> (crate::contain::Limits, Rc<dyn Fn() -> std::time::Instant>) {
         match self.monitor.borrow().clone() {
@@ -176,8 +186,8 @@ impl Activation {
         }
         self.hinted.set(self.hinted.get() || hinted);
         let Some(host) = self.host.upgrade() else { return };
-        crate::schedule::ready(host.app(), self);
-        crate::schedule::drain(host.app());
+        crate::schedule::ready(self);
+        crate::schedule::drain(host.app(), Some(self));
     }
 
     /// One update of the scheduler's turn: the next message to the message handler; once none waits, a thread's panic
