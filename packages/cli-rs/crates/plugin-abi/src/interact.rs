@@ -211,11 +211,14 @@ pub struct PanelInput {
     pub focused: bool,
 }
 
-/// Opens the plugin's panel `surface` beside session `session` ([`Host::open_panel`]); one panel shows at a time.
+/// Opens the plugin's panel `surface` beside a session ([`Host::open_panel`]); one panel shows at a time.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OpenPanel {
     pub surface: String,
-    pub session: String,
+    /// The session it shows beside, which must be on screen; without one, the session on screen (TS
+    /// `ui.panel.open`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub fullscreen: bool,
 }

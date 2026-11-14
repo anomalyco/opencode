@@ -437,13 +437,16 @@ impl Host for Tui {
     }
 
     fn open_panel(&self, id: &str, open: &abi::interact::OpenPanel) {
-        // Beside the session it names, while that session shows.
-        if !matches!(self.route(), Route::Session { id: shown } if shown.0 == open.session) {
+        // Beside the session it names, or the one on screen, while that session shows.
+        let Route::Session { id: shown } = self.route() else {
+            log::warn!("plugin {id}: its panel {} opens beside a session, and none shows", open.surface);
+            return;
+        };
+        if open.session.as_ref().is_some_and(|session| *session != shown.0) {
             log::warn!("plugin {id}: its panel {} names a session that is not on screen", open.surface);
             return;
         }
-        let target =
-            crate::panel::Target { plugin: id.to_owned(), name: open.surface.clone(), session: open.session.clone() };
+        let target = crate::panel::Target { plugin: id.to_owned(), name: open.surface.clone(), session: shown.0 };
         let presentation =
             if open.fullscreen { crate::panel::Presentation::Fullscreen } else { crate::panel::Presentation::Panel };
         self.panels.open(self, target, presentation);
