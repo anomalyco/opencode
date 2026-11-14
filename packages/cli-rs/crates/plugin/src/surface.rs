@@ -854,8 +854,7 @@ impl Surface {
         let attempt = std::mem::take(&mut *self.attempt.borrow_mut());
         if let Err(refused) = result {
             drop(state);
-            // A refused view's content is not the mount's: neither are the pictures it started.
-            staged.given.keys().for_each(|handle| self.release_image(ImageKey::Content(*handle)));
+            // A refused view's content is not the mount's: neither are the pictures it started, its content's too.
             attempt.into_iter().for_each(|key| self.release_image(key));
             return Err(refused);
         }

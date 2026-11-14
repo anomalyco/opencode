@@ -392,6 +392,58 @@ fn rows() -> Vec<Row> {
             nodes: 3,
             content: 0,
         },
+        // Markdown: a line is a row (review carbon, the mutant CM13). The column, the head, the foot and the node are
+        // 4, and 96 short lines 96; with 98 the column opens and the Markdown is the node that crosses.
+        Row {
+            name: "markdown at the limit",
+            limits: small(),
+            subject: subject(|_| framed(markdown(96))),
+            shows: subject(|_| framed(markdown(96))),
+            placeholders: 0,
+            parses: 0,
+            nodes: 4,
+            content: 0,
+        },
+        Row {
+            name: "markdown over",
+            limits: small(),
+            subject: subject(|_| framed(markdown(98))),
+            shows: subject(|_| framed(placeholder(None, "too large to build at once"))),
+            placeholders: 1,
+            parses: 0,
+            nodes: 3,
+            content: 0,
+        },
+        // An input's value is its text (CM14): one byte past the text limit is its placeholder, under its id.
+        Row {
+            name: "input over its text",
+            limits: small(),
+            subject: subject(|_| framed(v2::Node::input("x".repeat(201)).with_id("field"))),
+            shows: subject(|_| framed(placeholder(Some("field"), "too large: 201 bytes"))),
+            placeholders: 1,
+            parses: 0,
+            nodes: 4,
+            content: 0,
+        },
+        // Content is admitted in the order of its handles (CM15): of two of 200 bytes in a share of 300, the first
+        // given is held and the second shows the placeholder.
+        Row {
+            name: "content in the order given",
+            limits: Limits { text: 1 << 20, ..small() },
+            subject: subject(|cx| {
+                let first = given_at(cx, 0, || b"first\n".repeat(40));
+                let second = given_at(cx, 1, || b"second\n".repeat(30));
+                v2::Node::column(vec![code(v2::Source::Content(first)), code(v2::Source::Content(second))])
+            }),
+            shows: subject(|_| {
+                let first = code(source("first\n".repeat(40)));
+                v2::Node::column(vec![first, placeholder(None, "its content is past what the plugin may hold")])
+            }),
+            placeholders: 1,
+            parses: 1,
+            nodes: 3,
+            content: 240,
+        },
         // A list's item data builds no rows: 50 items and 50 texts after them are 54 rows, 104 nodes.
         Row {
             name: "list data builds no rows",
@@ -437,6 +489,27 @@ fn given(cx: &mut v2::View, bytes: impl FnOnce() -> Vec<u8>) -> v2::ContentRef {
     }
     let handle = cx.content(bytes());
     GIVEN.with(|given| *given.borrow_mut() = Some((generation, handle)));
+    handle
+}
+
+/// Markdown of `lines` short lines.
+fn markdown(lines: usize) -> v2::Node {
+    v2::Node::Markdown { id: None, source: source("x\n".repeat(lines)) }
+}
+
+thread_local! {
+    /// The handles the route's mount was given, by its generation and their index.
+    static GIVEN_AT: RefCell<std::collections::HashMap<(u64, usize), v2::ContentRef>> = RefCell::default();
+}
+
+/// The handle of `bytes`, given once a mount as the `index`th of its handles.
+fn given_at(cx: &mut v2::View, index: usize, bytes: impl FnOnce() -> Vec<u8>) -> v2::ContentRef {
+    let key = (cx.mount.generation, index);
+    if let Some(handle) = GIVEN_AT.with(|given| given.borrow().get(&key).copied()) {
+        return handle;
+    }
+    let handle = cx.content(bytes());
+    GIVEN_AT.with(|given| given.borrow_mut().insert(key, handle));
     handle
 }
 
@@ -654,7 +727,7 @@ fn images_decode_on_a_worker_within_their_limits() {
         assert_eq!(limits::held(ID).images, 16 * 16 * 4, "{carrier:?}: the decoded bytes are held");
         // Two images of 16 by 16 are twice what the plugin may hold decoded: the second is over.
         let (first, second) = (Rc::new(png(16, 16, gradient)), Rc::new(png(16, 16, |x, y| gradient(y, x))));
-        let two = subject(move |cx| {
+        let two: Subject = subject(move |cx| {
             let (first, second) = (first.clone(), second.clone());
             let one = given(cx, move || (*first).clone());
             let other = cx.content((*second).clone());
@@ -665,13 +738,19 @@ fn images_decode_on_a_worker_within_their_limits() {
         let roomy = Limits { plugin_images: 1 << 20, ..base };
         let encoded = png(16, 16, gradient);
         let one_short = Limits { image_bytes: encoded.len() as u64 - 1, ..roomy };
+        // Two images past what all plugins may hold decoded, with room in the plugin's share (the mutant CM5).
+        let all = Limits { all_images: 16 * 16 * 4, ..roomy };
         let cases = [
             ("pixels", picture(png(16, 17, gradient)), 0, roomy),
             ("a row", picture(png(17, 1, gradient)), 0, roomy),
             ("bytes", picture(encoded), 0, one_short),
-            ("share", two, 1, base),
+            ("share", two.clone(), 1, base),
+            ("all", two, 1, all),
         ];
         for (name, subject, decodes, case) in cases {
+            // A job holds what it reserved until it ends: the case before gives it back first.
+            let ended = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
+            assert!(ended, "{carrier:?}, {name}: a job of the case before never ended");
             let _limits = limits::set(case);
             let before = reconcile::work();
             let frame = show(&harness, subject);
@@ -680,6 +759,26 @@ fn images_decode_on_a_worker_within_their_limits() {
             assert!(lines.contains(&"⋯ image too large"), "{carrier:?}, {name}: no placeholder\n{text}");
             assert!(lines.contains(&"foot"), "{carrier:?}, {name}: the rest of the tree is gone\n{text}");
             assert_eq!(reconcile::work().since(before).parses, decodes, "{carrier:?}, {name}: decodes");
+            // One image over a limit draws as the twin's placeholder does (review carbon 6).
+            if decodes == 0 {
+                let twin = {
+                    let _limits = support::unlimited();
+                    show(
+                        &harness,
+                        crate::plugin_limits::subject(|_| {
+                            v2::Node::column(vec![
+                                placeholder(None, "image too large"),
+                                crate::plugin_limits::text("foot"),
+                            ])
+                        }),
+                    )
+                };
+                assert!(
+                    frame.cells == twin.cells,
+                    "{carrier:?}, {name}: not the twin's frame\n{text}\n---\n{}",
+                    twin.text()
+                );
+            }
         }
         harness.tui.navigate(Route::Home);
         settle(&harness);
@@ -1662,5 +1761,85 @@ fn images_are_given_back_and_decode_two_at_a_time() {
         // Each view of the route's open gives six handles of its own.
         assert!(jobs >= 6 && taken_now == 2, "{carrier:?}: {jobs} jobs, {taken_now} a worker took");
         done(&harness);
+    }
+}
+
+// Expected (rows for the reviews' mutants CM6, CM8, CM10, CM11): a plugin that failed holds no decoded image while its
+// failed mount shows; a released handle gives its image back while the mount lives; a list's window and an image's
+// copy in are host time of the plugin's. On both carriers.
+#[test]
+fn what_a_mount_holds_goes_and_its_host_work_is_timed() {
+    let gradient = |x: u32, y: u32| [(x * 15) as u8, (y * 15) as u8, ((x + y) * 7) as u8, 255];
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        let _limits = limits::set(Limits { plugin_content: 1 << 20, all_content: 1 << 20, ..small() });
+        let monitor = harness.tui.plugins.monitor().clone();
+        let decoded = |harness: &Harness| {
+            let done = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
+            assert!(done, "{carrier:?}: a job never ended");
+            settle(harness);
+        };
+        // The copy in is host time.
+        let hold = opencode_plugin::image::hold(ID);
+        show(&harness, picture(png(16, 16, gradient)));
+        let before = monitor.host_time(ID);
+        drop(hold);
+        decoded(&harness);
+        assert!(monitor.host_time(ID) > before, "{carrier:?}: the copy in is not host time");
+        // A release gives the image back, the mount still there.
+        PHASE.with(|phase| phase.set(0));
+        let picture_bytes = Rc::new(png(16, 16, gradient));
+        show(
+            &harness,
+            subject(move |cx| {
+                let handle = given(cx, || (*picture_bytes).clone());
+                match phase() {
+                    0 => v2::Node::column(vec![image(v2::Source::Content(handle)), text("foot")]),
+                    _ => {
+                        cx.release(handle);
+                        text("released")
+                    }
+                }
+            }),
+        );
+        decoded(&harness);
+        assert_eq!(limits::held(ID).images, 1024, "{carrier:?}: held while shown");
+        next_phase(&harness);
+        assert_eq!(limits::held(ID).images, 0, "{carrier:?}: held after the release");
+        // A failed plugin holds nothing, while its failed mount shows.
+        show(&harness, picture(png(16, 16, gradient)));
+        decoded(&harness);
+        assert_eq!(limits::held(ID).images, 1024, "{carrier:?}: held before the failure");
+        PHASE.with(|phase| phase.set(0));
+        SUBJECT.with(|slot| *slot.borrow_mut() = subject(|_| panic!("the view failed")));
+        WAKE_ROUTE.with(|waker| waker.borrow().as_ref().unwrap().wake());
+        settle(&harness);
+        assert_eq!(limits::held(ID).images, 0, "{carrier:?}: held after the plugin failed");
+        harness.tui.plugins.toggle(&opencode_tui::plugins::host::host(&harness.tui), ID, false);
+        harness.tui.plugins.toggle(&opencode_tui::plugins::host::host(&harness.tui), ID, true);
+        settle(&harness);
+        // A list's window, mounted by a scroll with no view, is host time.
+        let items = || {
+            let items = (0..100)
+                .map(|index| v2::ListItem::new(text(&format!("i{index}")).with_id(format!("i{index}")), 1))
+                .collect();
+            v2::Node::column(vec![
+                v2::Node::list(items).with_id("l").layout(abi::Layout::default().height(abi::Width::Cells(5))),
+            ])
+        };
+        show(&harness, subject(move |_| items()));
+        caught_up(&harness);
+        let before = monitor.host_time(ID);
+        let wheel = opentui::prelude::MouseEvent {
+            kind: opentui::prelude::MouseEventKind::ScrollDown,
+            x: 2,
+            y: 2,
+            modifiers: opentui::prelude::Modifiers::NONE,
+        };
+        for _ in 0..10 {
+            harness.app.app().dispatch(opentui::prelude::Event::Mouse(wheel));
+            harness.app.render();
+        }
+        assert!(monitor.host_time(ID) > before, "{carrier:?}: a list's window is not host time");
     }
 }
