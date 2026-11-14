@@ -82,7 +82,8 @@ in one of these ways:
 - Copy it to `plugin.so` (`plugin.dylib` on macOS, `plugin.dll` on Windows) in a directory of its own under a
   `plugins` directory. The global one is `~/.config/opencode/plugins/` (`$OPENCODE_CONFIG_DIR/plugins/` when that is
   set). The project's is `.opencode/plugins/` in the project root, or in any directory between the root and the
-  working directory:
+  working directory. A plugin in a project's directory runs only once you approve it in `/plugins`, and you are asked
+  again when its library changes. For the global one:
 
   ```sh
   mkdir -p ~/.config/opencode/plugins/hello
