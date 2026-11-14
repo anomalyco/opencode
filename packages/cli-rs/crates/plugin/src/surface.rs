@@ -180,7 +180,7 @@ impl Viewer for Linked {
     }
 }
 
-/// What the mounts of 2.0 surfaces hold now, counted per thread outside any mount.
+/// What the mounts of 2.0 surfaces hold now, counted per thread and per plugin outside any mount.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Ledger {
     pub mounts: i64,
@@ -190,19 +190,33 @@ pub struct Ledger {
 }
 
 thread_local! {
-    static LEDGER: Cell<Ledger> = Cell::new(Ledger::default());
+    static LEDGER: RefCell<HashMap<Rc<str>, Ledger>> = RefCell::default();
 }
 
-/// What the mounts hold on this thread now.
+/// What the mounts of every plugin hold on this thread now.
 pub fn ledger() -> Ledger {
-    LEDGER.with(Cell::get)
+    LEDGER.with(|ledgers| {
+        ledgers.borrow().values().fold(Ledger::default(), |sum, ledger| Ledger {
+            mounts: sum.mounts + ledger.mounts,
+            content: sum.content + ledger.content,
+            content_bytes: sum.content_bytes + ledger.content_bytes,
+            memo_entries: sum.memo_entries + ledger.memo_entries,
+        })
+    })
 }
 
-fn book(f: impl FnOnce(&mut Ledger)) {
-    LEDGER.with(|cell| {
-        let mut ledger = cell.get();
-        f(&mut ledger);
-        cell.set(ledger);
+/// What the mounts of `plugin` hold on this thread now (P6a: the built-ins' own mounts show beside another plugin's).
+pub fn ledger_of(plugin: &str) -> Ledger {
+    LEDGER.with(|ledgers| ledgers.borrow().get(plugin).copied().unwrap_or_default())
+}
+
+fn book(plugin: &Rc<str>, f: impl FnOnce(&mut Ledger)) {
+    LEDGER.with(|ledgers| {
+        let mut ledgers = ledgers.borrow_mut();
+        match ledgers.get_mut(plugin) {
+            Some(ledger) => f(ledger),
+            None => f(ledgers.entry(plugin.clone()).or_default()),
+        }
     });
 }
 
@@ -243,6 +257,8 @@ pub(crate) struct Surface {
     watch: RefCell<Option<Disposer>>,
     /// The host's [`Host::local_revision`] when the view last ran.
     revision: Cell<Option<u64>>,
+    /// The input the view last got, refilled for the next.
+    viewed: RefCell<v2::SurfaceInput>,
     /// Each content handle's image, decoded once however many nodes show it; `None` when it does not decode.
     images: RefCell<HashMap<ContentRef, Option<opentui::native::Image>>>,
     /// A panel or an overlay before its first layout: it draws first as that layout gives it its room, so a change
@@ -330,12 +346,13 @@ impl Surface {
             live: RefCell::new(None),
             watch: RefCell::new(None),
             revision: Cell::new(None),
+            viewed: RefCell::default(),
             images: RefCell::default(),
             pending: Cell::new(matches!(surface.at, v2::Place::Panel(_) | v2::Place::Overlay(_))),
             input: input.clone(),
             holder: RefCell::new(None),
         });
-        book(|ledger| ledger.mounts += 1);
+        book(&mounted.plugin, |ledger| ledger.mounts += 1);
         if mounted.viewer.draws() {
             let (weak, fail) = (Rc::downgrade(&mounted), mounted.fail.clone());
             let drawer = canvas::Drawer {
@@ -457,7 +474,7 @@ impl Surface {
                 memo.finish(&called.nodes);
                 let mut state = self.state.borrow_mut();
                 let size = remote.unwrap_or(memo.len()) as i64;
-                book(|ledger| ledger.memo_entries += size - state.booked);
+                book(&self.plugin, |ledger| ledger.memo_entries += size - state.booked);
                 (state.memo, state.booked) = (memo, size);
                 return;
             }
@@ -469,7 +486,7 @@ impl Surface {
                         memo.finish(last);
                     }
                     let size = remote.unwrap_or(memo.len()) as i64;
-                    book(|ledger| ledger.memo_entries += size - state.booked);
+                    book(&self.plugin, |ledger| ledger.memo_entries += size - state.booked);
                     (state.memo, state.booked, state.refused) = (memo, size, false);
                     return;
                 }
@@ -478,7 +495,7 @@ impl Surface {
                     // the memo values go, as the next view builds whole (a library's own table too, as it is asked
                     // for a whole tree).
                     memo.clear();
-                    book(|ledger| ledger.memo_entries -= state.booked);
+                    book(&self.plugin, |ledger| ledger.memo_entries -= state.booked);
                     (state.memo, state.booked) = (memo, 0);
                     if state.refused {
                         drop(state);
@@ -517,7 +534,7 @@ impl Surface {
         state.last = None;
         let (content, memo) = (std::mem::take(&mut state.content), std::mem::take(&mut state.booked));
         state.memo.clear();
-        book(|ledger| {
+        book(&self.plugin, |ledger| {
             ledger.content -= content.len() as i64;
             ledger.content_bytes -= content.values().map(|bytes| bytes.len() as i64).sum::<i64>();
             ledger.memo_entries -= memo;
@@ -550,14 +567,31 @@ impl Surface {
             (0, _) | (_, 0) => host.app().size(),
             size => size,
         };
-        self.revision.set(host.local_revision());
+        // The host's own state changed since the last view: this view hears it as `local`, as its notice, which
+        // comes later, calls no view once this one ran.
+        let revision = host.local_revision();
+        let local = revision != self.revision.replace(revision);
         self.seen.set((width, height));
         let panel = match self.input.panel {
             true => host.panel_input(&self.input.plugin, &self.id.surface),
             false => None,
         };
-        let changed = if full { abi::Changed::everything() } else { changed.clone() };
-        let input = v2::SurfaceInput { width, height, palette, full, panel, changed };
+        // The input is refilled in place, so a view call allocates nothing for it in the steady state.
+        let mut input = std::mem::take(&mut *self.viewed.borrow_mut());
+        (input.width, input.height, input.palette, input.full, input.panel) = (width, height, palette, full, panel);
+        input.changed.clone_from(changed);
+        input.changed.all |= full;
+        input.changed.local |= local;
+        if !self.path.is_empty() {
+            let slot = input.slot.get_or_insert_with(abi::SlotInput::default);
+            slot.session_id.clone_from(&self.slot_input.session_id);
+            slot.prompt = self
+                .slot_input
+                .prompt
+                .as_ref()
+                .map(|prompt| abi::PromptInput { shell: prompt.shell, show_details: prompt.show_details });
+            (slot.width, slot.height) = (width, height);
+        }
         let owner = self.holder().unwrap_or_else(|| Owner::activation(&self.input.plugin, self.owner.clone()));
         // The view works on the mount's table; what it stages there the host keeps only with its tree.
         let mut memo = std::mem::take(&mut self.state.borrow_mut().memo);
@@ -572,7 +606,7 @@ impl Surface {
             if given.borrow_mut().remove(&handle).is_none()
                 && let Some(bytes) = self.state.borrow_mut().content.remove(&handle)
             {
-                book(|ledger| {
+                book(&self.plugin, |ledger| {
                     ledger.content -= 1;
                     ledger.content_bytes -= bytes.len() as i64;
                 });
@@ -591,6 +625,7 @@ impl Surface {
             laid: self.laid.get().then(|| self.root.rect().height as u16),
         };
         let viewed = self.viewer.view(host, viewing);
+        *self.viewed.borrow_mut() = input;
         let Some(viewed) = viewed else {
             self.state.borrow_mut().memo = memo;
             return None;
@@ -655,7 +690,7 @@ impl Surface {
         }
         *last = Some(nodes);
         for (handle, bytes) in &staged.given {
-            book(|ledger| {
+            book(&self.plugin, |ledger| {
                 ledger.content += 1;
                 ledger.content_bytes += bytes.len() as i64;
             });
@@ -821,7 +856,7 @@ impl Drop for Surface {
         let state = self.state.get_mut();
         let bytes: usize = state.content.values().map(|bytes| bytes.len()).sum();
         let (content, memo) = (state.content.len() as i64, state.booked);
-        book(|ledger| {
+        book(&self.plugin, |ledger| {
             ledger.mounts -= 1;
             ledger.content -= content;
             ledger.content_bytes -= bytes as i64;

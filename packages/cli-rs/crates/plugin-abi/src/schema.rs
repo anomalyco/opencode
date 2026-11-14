@@ -14,7 +14,7 @@ use crate::v2::{
 };
 use crate::{
     Action, Align, Border, BorderStyle, Changed, Click, Color, Edges, Justify, Layout, LocationRef, Overflow, Press,
-    Sides, Span, TitleAlign, Width, Wrap,
+    PromptInput, Sides, SlotInput, Span, TitleAlign, Width, Wrap,
 };
 
 /// What an [`Rgba`] is on the wire: `#rrggbbaa`. The host writes lowercase and reads either case.
@@ -158,8 +158,24 @@ pub fn schema() -> Value {
         (
             "SurfaceInput",
             object!(SurfaceInput, "What a surface's view gets besides the plugin's own state.", {
-            width: uint16(), height: uint16(), palette: reference("Palette"),
-        } { full: boolean(), panel: nullable(reference("PanelInput")), changed: reference("Changed") }),
+                width: uint16(), height: uint16(), palette: reference("Palette"),
+            } {
+                full: boolean(), panel: nullable(reference("PanelInput")), changed: reference("Changed"),
+                slot: nullable(reference("SlotInput")),
+            }),
+        ),
+        (
+            "SlotInput",
+            object!(SlotInput, "What a slot passes to what renders in it.", { } {
+                session_id: nullable(string()), prompt: nullable(reference("PromptInput")), width: uint16(),
+                height: uint16(),
+            }),
+        ),
+        (
+            "PromptInput",
+            object!(PromptInput, "The prompt's mode, and whether its details show.", {
+                shell: boolean(), show_details: boolean(),
+            } { }),
         ),
         (
             "Changed",
@@ -694,6 +710,12 @@ mod tests {
                 size: true,
                 woken: true,
             },
+            slot: Some(SlotInput {
+                session_id: Some("ses_a".into()),
+                prompt: Some(PromptInput { shell: true, show_details: true }),
+                width: 3,
+                height: 4,
+            }),
         };
         assert!(agree::<SurfaceInput>("SurfaceInput", serde_json::to_value(&input).unwrap()));
         let mount = MountId { surface: "s".into(), key: "k".into(), generation: u64::MAX };

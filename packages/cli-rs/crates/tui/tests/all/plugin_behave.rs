@@ -2597,13 +2597,14 @@ fn a_panicking_layout_fails_its_plugin_and_leaves_the_behaviors() {
 
 // Expected (OpenTUI's walk order, opentui #2129; review big-boi 1): the hook is put in its root once and never moved,
 // as a node added or moved in a frame is resized before its siblings; arming flips its width only, and a root child
-// added later goes in before it.
+// added later goes in before it. Counted from the probe's settled route: the built-ins' 2.0 surfaces on the page it
+// replaced had a hook of their own (P6a).
 #[test]
 fn the_hook_stays_the_roots_last_child() {
     use opentui::prelude::*;
-    let before = behave::counts();
     let harness = probe(Shape { cards: cards(30, 1), list: true, ..Shape::default() }, 40, 10);
     settled(&harness);
+    let before = behave::counts();
     let app = harness.app.app();
     let hook = app.root().children().last().map(|last| last.id());
     let late = View::new(app).absolute().width(1).height(1);
@@ -2617,7 +2618,7 @@ fn the_hook_stays_the_roots_last_child() {
     assert_eq!(app.root().children().last().map(|last| last.id()), hook, "a root child went in after the hook");
     let counts = behave::counts().since(before);
     assert!(counts.arms > 3, "{counts:?}");
-    assert_eq!(counts.placed, 1, "the hook was put in its root again");
+    assert_eq!(counts.placed, 0, "the hook was put in its root again");
 }
 
 // Expected (P3's decision 4 on P2's events): the user's scroll is the user's input, so the handler that hears it may

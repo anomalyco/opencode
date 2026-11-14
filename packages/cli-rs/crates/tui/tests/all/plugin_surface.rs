@@ -226,7 +226,7 @@ impl Model for Surfaces {
 
     fn run(&self, commands: &[Command]) -> Option<Failure> {
         board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
-        let baseline = surface::ledger();
+        let baseline = surface::ledger_of(ID);
         let harness = open_tui(self.0);
         // The reference: the generation mounted, the highest one seen, and a bad view armed.
         let mut mounted: Option<u64> = None;
@@ -288,7 +288,7 @@ impl Model for Surfaces {
             // The ledger, read from the host's counts: a mount holds its memo table and one content handle a card,
             // the card's patch as it shows now, since the plugin releases the one before. Counted from this run's
             // start: the counts are the thread's, and a run before may have failed.
-            let ledger = surface::ledger();
+            let ledger = surface::ledger_of(ID);
             let bytes: usize =
                 board(|board| board.values.iter().enumerate().map(|(index, value)| patch(index, *value).len()).sum());
             let expected = match mounted {
@@ -305,8 +305,8 @@ impl Model for Surfaces {
             }
         }
         drop(harness);
-        if surface::ledger() != baseline {
-            return fail_at(commands.len(), "ledger", format!("a closed TUI holds {:?}", surface::ledger()));
+        if surface::ledger_of(ID) != baseline {
+            return fail_at(commands.len(), "ledger", format!("a closed TUI holds {:?}", surface::ledger_of(ID)));
         }
         None
     }
@@ -431,7 +431,7 @@ fn a_second_refusal_in_a_row_fails_the_plugin() {
         apply(&harness, Command::Wake);
         assert_eq!(board(|board| board.calls.len()), calls, "a failed plugin got a view");
         // Nothing of the failed plugin's mount stays, and its route shows the host's screen for a missing route.
-        assert_eq!(surface::ledger(), Ledger::default(), "{carrier:?}");
+        assert_eq!(surface::ledger_of(ID), Ledger::default(), "{carrier:?}");
         assert!(!harness.app.render().text().contains("card 0"), "{carrier:?}");
     }
 }
@@ -913,7 +913,7 @@ fn a_whole_tree_after_a_refusal_takes_nothing_from_before() {
             entry.status
         );
         assert!(!harness.app.render().text().contains("REFUSED BYTES"), "mode {mode}");
-        assert_eq!(surface::ledger(), Ledger::default(), "mode {mode}");
+        assert_eq!(surface::ledger_of("test.retry"), Ledger::default(), "mode {mode}");
     }
 }
 
@@ -1075,7 +1075,7 @@ fn a_failed_surface_gives_its_slot_back() {
     assert!(matches!(entry.status, opencode_plugin::Status::Failed(_)), "{:?}", entry.status);
     let screen = harness.app.render().text();
     assert!(!screen.contains("replaced version") && screen.contains("1 plugin failed"), "{screen}");
-    assert_eq!(surface::ledger(), Ledger::default());
+    assert_eq!(surface::ledger_of("test.replacing"), Ledger::default());
 }
 
 // Expected (`work`, a theme change): a switch to a theme of another name changes what a plugin reads (its name, ABI
@@ -1462,6 +1462,6 @@ fn a_kept_memo_that_holds_a_memo_keeps_a_library_active() {
         settle(&harness);
         let screen = harness.app.text();
         assert!(screen.contains("bumped 1") && screen.contains("kept"), "{carrier:?}:\n{screen}");
-        assert_eq!(opencode_plugin::surface::ledger().memo_entries, 2, "{carrier:?}");
+        assert_eq!(opencode_plugin::surface::ledger_of("test.nest").memo_entries, 2, "{carrier:?}");
     }
 }

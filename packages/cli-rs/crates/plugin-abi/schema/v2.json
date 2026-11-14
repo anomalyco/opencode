@@ -727,10 +727,70 @@
         },
         "changed": {
           "$ref": "#/$defs/Changed"
+        },
+        "slot": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SlotInput"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": ["width", "height", "palette"],
       "description": "What a surface's view gets besides the plugin's own state."
+    },
+    "SlotInput": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "prompt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PromptInput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
+      },
+      "required": [],
+      "description": "What a slot passes to what renders in it."
+    },
+    "PromptInput": {
+      "type": "object",
+      "properties": {
+        "shell": {
+          "type": "boolean"
+        },
+        "show_details": {
+          "type": "boolean"
+        }
+      },
+      "required": ["shell", "show_details"],
+      "description": "The prompt's mode, and whether its details show."
     },
     "Changed": {
       "type": "object",

@@ -296,7 +296,9 @@ of the host's own state or of the surface's room, and `woken` after the plugin's
 that asked to draw again. A view that reads the host's state and finds nothing it shows changed returns `Node::Keep` of
 its last tree's root (so its root needs an id); the host then keeps the mount as it is, with no work and no frame. A
 box with `visible: false` takes no room, not even a gap, as TS's `visible`; a slot surface whose root box is hidden
-shows nothing in its slot, as a 1.x render's `Render::Hide`.
+shows nothing in its slot, as a 1.x render's `Render::Hide`. A slot surface's view gets its slot's input as a 1.x claim
+does (`SurfaceInput::slot`: the session, the prompt's state). A change of the host's own state since the last view is
+`local`, also when the view runs for another cause first.
 
 ### Contract 2.0 input and surfaces (P2)
 

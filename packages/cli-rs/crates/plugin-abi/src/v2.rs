@@ -19,7 +19,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::interact::{HandlerFn, Interact, Layer, PanelInput};
 use crate::{
-    Align, Border, Changed, Click, Color, Edges, Justify, Layout, Overflow, Read, Rgba, Span, ThemeMode, Wrap,
+    Align, Border, Changed, Click, Color, Edges, Justify, Layout, Overflow, Read, Rgba, SlotInput, Span, ThemeMode,
+    Wrap,
 };
 
 mod geometry;
@@ -328,6 +329,10 @@ pub struct SurfaceInput {
     /// changed: the host then keeps the mount as it is, with no work. A claim's view always hears `all`.
     #[serde(default, skip_serializing_if = "is_unchanged")]
     pub changed: Changed,
+    /// P6a: a slot surface's input, as a 1.x claim gets it (the session, the prompt's state); `None` elsewhere. Its
+    /// size is [`Self::width`] and [`Self::height`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slot: Option<SlotInput>,
 }
 
 fn is_unchanged(changed: &Changed) -> bool {
