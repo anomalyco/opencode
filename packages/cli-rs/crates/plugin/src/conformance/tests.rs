@@ -297,6 +297,8 @@ fn pending(tool: &str) -> abi::claim::Part {
 /// What the user sees: the toasts since the last look, the plugin's status in the plugin manager, and the route's
 /// lines while one shows.
 fn observe(host: &TestHost, registry: &Registry, route: bool) -> Value {
+    // A look is at a frame: its paint runs the updates and wake handlers that wait, and their effects (Pl).
+    host.app.render();
     let toasts: Vec<String> = host
         .toasts
         .borrow_mut()
@@ -306,7 +308,6 @@ fn observe(host: &TestHost, registry: &Registry, route: bool) -> Value {
     let status = registry.entries().into_iter().find(|entry| entry.target.as_deref() == Some(TARGET));
     let mut seen = json!({ "toasts": toasts, "status": format!("{:?}", status.map(|entry| entry.status)) });
     if route {
-        host.app.render();
         let text = host.app.text();
         let lines: Vec<&str> = text.lines().map(str::trim_end).filter(|line| !line.is_empty()).collect();
         seen["screen"] = json!(lines);

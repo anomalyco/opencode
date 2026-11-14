@@ -47,6 +47,8 @@ thread_local! {
     /// The monitor's clock, past its start: only updates and the key's handler move it.
     static CLOCK: Cell<Duration> = const { Cell::new(Duration::ZERO) };
     static SENDERS: RefCell<[Option<abi::Sender<u32>>; 2]> = const { RefCell::new([None, None]) };
+    /// Plugin b's waker, whose wake handler shows a toast.
+    static WAKER_B: RefCell<Option<abi::Waker>> = const { RefCell::new(None) };
     /// What a draw of `a`'s canvas costs on the monitor's clock.
     static DRAW_COST: Cell<Duration> = const { Cell::new(Duration::ZERO) };
 }
@@ -96,6 +98,8 @@ fn setup_a(setup: &mut abi::Setup) -> Result<(), String> {
 fn setup_b(setup: &mut abi::Setup) -> Result<(), String> {
     let sender = setup.messages(update(1))?;
     SENDERS.with(|senders| senders.borrow_mut()[1] = Some(sender));
+    WAKER_B.with(|waker| *waker.borrow_mut() = setup.waker());
+    setup.on_wake(|host| host.toast(abi::Toast::new(abi::Variant::Info, "b woke")));
     Ok(())
 }
 
@@ -492,5 +496,21 @@ fn the_last_frame_over_the_budget_ends_without_a_call() {
             harness.app.render();
         }
         assert!(harness.tui.plugins.monitor().is_slow(PLUGINS[0]), "{carrier:?}: the 13th frame never ended");
+    }
+}
+
+// Expected (Pc's transcripts, on the rebase onto P6a): a wake handler runs as the paint starts, and the effects it asks
+// for run in that paint's deferred work, before its layout: its toast shows in the frame whose paint ran it. On both
+// carriers.
+#[test]
+fn a_wake_handlers_toast_shows_in_the_frame_that_ran_it() {
+    for carrier in CARRIERS {
+        let harness = open(carrier, Duration::from_millis(4));
+        WAKER_B.with(|waker| waker.borrow().as_ref().unwrap().wake());
+        harness.app.event(opentui::prelude::Event::Wake);
+        let toast = || harness.tui.toasts.current().is_some_and(|toast| toast.message == "b woke");
+        assert!(!toast(), "{carrier:?}: the wake ran before a paint");
+        let frame = harness.app.render().text();
+        assert!(frame.contains("b woke"), "{carrier:?}: no toast in the frame that ran the wake\n{frame}");
     }
 }
