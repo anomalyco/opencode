@@ -4,6 +4,7 @@ import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { PromptInput } from "@opencode/schema/prompt-input"
 import type { Session } from "@opencode/schema/session"
+import type { SessionAttention } from "@opencode/schema/session-attention"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 import type { SessionError } from "@opencode/schema/session-error"
 import type { SessionMessage } from "@opencode/schema/session-message"
@@ -198,6 +199,19 @@ export interface SessionIdle {
   readonly background: ReadonlyArray<SessionIdleBackground>
 }
 
+/**
+ * Runs after a Session's model response finishes, when the Session is about to go idle: after `experimental.idle`, and
+ * only when that hook admitted no input. `messageID` is the finished assistant message. `attention` starts empty and
+ * becomes the Session's plugin attention for that message, replacing what any earlier response set; leave it empty to
+ * clear it. It cannot change pending permissions or forms. The Session stays busy until the hook returns, so a slow
+ * classifier delays idle. Experimental.
+ */
+export interface SessionAttentionHook {
+  readonly sessionID: Session.ID
+  readonly messageID: SessionMessage.ID
+  attention: Array<SessionAttention.PluginInput>
+}
+
 export interface SessionHooks {
   readonly fork: { readonly sessionID: Session.ID }
   readonly prompt: SessionPrompt
@@ -214,6 +228,7 @@ export interface SessionHooks {
   readonly "experimental.ws.receive": SessionWebSocketReceive
   readonly retry: SessionRetry
   readonly "experimental.idle": SessionIdle
+  readonly "experimental.attention": SessionAttentionHook
 }
 
 export type SessionDomain = Pick<

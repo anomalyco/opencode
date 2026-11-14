@@ -40,6 +40,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Snapshot } from "@opencode/core/snapshot"
 import { SessionEvent } from "@opencode/core/session/event"
+import { SessionAttention } from "@opencode/core/session/attention"
 import { SessionCompaction } from "@opencode/core/session/compaction"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
@@ -294,7 +295,8 @@ const permissionFail = {
       }),
     }),
 }
-const permission = permissionLayer()
+// Nothing here asks for permission, so attention reads an empty pending list.
+const permission = permissionLayer({ list: () => Effect.succeed([]) })
 const transformTools = (registry: Tool.Interface, tools: Readonly<Record<string, ToolInfo>>, options?: Tool.Options) =>
   registry.transform((editor) =>
     Object.entries(tools).forEach(([name, tool]) => editor.add({ ...tool, name, options: options ?? tool.options })),
@@ -507,6 +509,7 @@ const layer = Layer.unwrap(
         Database.node,
         Bus.node,
         Form.node,
+        SessionAttention.node,
         SessionProjector.node,
         SessionStore.node,
         SessionInbox.node,
@@ -1289,6 +1292,51 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(2)
     expect(idles).toEqual([2])
   })
+
+  scenario(
+    "sets plugin attention for the finished response after the idle hook lets the session go idle",
+    function* (s) {
+      const hooks = yield* PluginHooks.Service
+      const attention = yield* SessionAttention.Service
+      const order: string[] = []
+      const finished: SessionMessage.ID[] = []
+      let reason: string | undefined = "Asks which database to use"
+      yield* hooks.register("session", "experimental.idle", (event) =>
+        Effect.gen(function* () {
+          order.push(`idle:${s.requests.length}`)
+          if (s.requests.length > 1) return
+          yield* s.session.synthetic({ sessionID: event.sessionID, text: "Keep going" }).pipe(Effect.orDie)
+        }),
+      )
+      yield* hooks.register("session", "experimental.attention", (event) =>
+        Effect.sync(() => {
+          order.push(`attention:${s.requests.length}`)
+          finished.push(event.messageID)
+          if (reason) event.attention.push({ reason })
+        }),
+      )
+      yield* s.llm.push(TestLLM.text("First answer", "text-first"), TestLLM.text("Postgres or SQLite?", "text-second"))
+
+      yield* s.runPrompt("Start")
+
+      // Only the response the Session went idle on is classified, once the idle hook admitted nothing.
+      expect(order).toEqual(["idle:1", "idle:2", "attention:2"])
+      expect(finished).toHaveLength(1)
+      expect((yield* s.context).at(-1)).toMatchObject({
+        ...Expected.assistant({}, [Expected.text("Postgres or SQLite?")]),
+        id: finished[0],
+      })
+      expect(yield* attention.list()).toEqual(
+        finished.map((messageID) => ({ type: "plugin", sessionID, messageID, reason: "Asks which database to use" })),
+      )
+
+      // The next finished response replaces it; a hook that sets nothing clears it.
+      reason = undefined
+      yield* s.llm.push(TestLLM.text("Using SQLite", "text-third"))
+      yield* s.runPrompt("SQLite")
+      expect(yield* attention.list()).toEqual([])
+    },
+  )
 
   scenario("passes background work of the session and its descendants to the idle hook", function* (s) {
     const jobs = yield* Job.Service

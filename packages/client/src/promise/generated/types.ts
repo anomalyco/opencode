@@ -454,6 +454,13 @@ export type SessionMessageCompactionRunning = {
   summary: string
 }
 
+export type SessionAttentionPlugin = {
+  type: "plugin"
+  sessionID: SessionID
+  messageID: SessionMessageID
+  reason: string
+}
+
 export type UsageLimitsBudgetModel = { providerID: ProviderID; modelID: string; name: string; spent?: MoneyUSD }
 
 export type SessionGenerateResponse = { data: { text: string; tokens: TokenUsageInfo; cost: MoneyUSD } }
@@ -591,6 +598,13 @@ export type SessionMessageIdle = {
   type: "idle"
   outcome: "succeeded" | "failed" | "interrupted"
   error?: SessionStructuredError
+}
+
+export type SessionAttentionQuestion = {
+  type: "question"
+  sessionID: SessionID
+  requestID: FormID
+  messageID?: SessionMessageID
 }
 
 export type FormNumberField = {
@@ -803,6 +817,13 @@ export type Project = {
   commands?: ProjectCommands
   time: ProjectTime
   sandboxes: Array<string>
+}
+
+export type SessionAttentionPermission = {
+  type: "permission"
+  sessionID: SessionID
+  requestID: PermissionID
+  messageID?: SessionMessageID
 }
 
 export type PermissionRequest = {
@@ -1984,6 +2005,15 @@ export type FormCancelled = {
   data: { id: FormID; sessionID: string }
 }
 
+export type SessionAttentionUpdated = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.attention.updated"
+  location?: LocationRef
+  data: { sessionID: SessionID; attention: Array<SessionAttentionPlugin> }
+}
+
 export type WebsearchUpdated = {
   id: EventID
   created: number
@@ -2208,6 +2238,8 @@ export type VoiceSessionResponse = { data: { transport: VoiceTransport } }
 export type CredentialValue = CredentialOAuth | CredentialKey | CredentialExternal
 
 export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
+
+export type SessionAttentionEntry = SessionAttentionPermission | SessionAttentionQuestion | SessionAttentionPlugin
 
 export type PtyCreated = {
   id: EventID
@@ -2971,6 +3003,7 @@ export type V2Event =
   | FormCreated
   | FormReplied
   | FormCancelled
+  | SessionAttentionUpdated
   | WebsearchUpdated
   | ArtifactUpdated
   | SessionStatusUpdated
@@ -4470,6 +4503,7 @@ export type EventSubscribeInput = {
         | "form.created"
         | "form.replied"
         | "form.cancelled"
+        | "session.attention.updated"
         | "websearch.updated"
         | "artifact.updated"
         | "session.status"
@@ -4900,6 +4934,12 @@ export type ExperimentalUsageLimitsInput = {
 
 export type ExperimentalUsageLimitsOutput = { location: LocationPublicRef; data: UsageLimitsInfo | null }
 
+export type ExperimentalAttentionListInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+
+export type ExperimentalAttentionListOutput = { location: LocationPublicRef; data: Array<SessionAttentionEntry> }
+
 export type ConfigGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
 export type ConfigGetOutput = Array<ConfigEntry>
@@ -5053,6 +5093,12 @@ export type UsageLimitsInput = ExperimentalUsageLimitsInput
 
 /** @deprecated Use `ExperimentalUsageLimitsOutput`. Removed in the next minor. */
 export type UsageLimitsOutput = ExperimentalUsageLimitsOutput
+
+/** @deprecated Use `ExperimentalAttentionListInput`. Removed in the next minor. */
+export type AttentionListInput = ExperimentalAttentionListInput
+
+/** @deprecated Use `ExperimentalAttentionListOutput`. Removed in the next minor. */
+export type AttentionListOutput = ExperimentalAttentionListOutput
 
 /** @deprecated Use `ExperimentalConfigUpdateInput`. Removed in the next minor. */
 export type ConfigUpdateInput = ExperimentalConfigUpdateInput
