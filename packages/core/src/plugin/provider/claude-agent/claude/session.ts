@@ -13,6 +13,11 @@ interface Turn {
   finished: boolean
 }
 
+type Phase =
+  | { readonly status: "starting" }
+  | { readonly status: "ready" }
+  | { readonly status: "ended"; readonly failure?: unknown }
+
 export type Interface = Awaited<ReturnType<typeof start>>
 
 export async function start(options: Options) {
@@ -25,15 +30,13 @@ export async function start(options: Options) {
   })
   const session = query({ prompt, options })
   let turn: Turn | undefined
-  let initialized = false
-  let ended = false
-  let failure: unknown
+  let phase: Phase = { status: "starting" }
   let stopping: Promise<void> | undefined
   let persisted = false
   const ready = session.initializationResult().then((init): ClaudeProbe.Result => {
     const error = ClaudeProbe.versionError(init.claude_code_version)
     if (error) throw error
-    initialized = true
+    if (phase.status === "starting") phase = { status: "ready" }
     return { version: init.claude_code_version!, account: init.account, models: init.models }
   })
   // A cancel during startup can stop the session before anything awaits ready.
@@ -56,10 +59,10 @@ export async function start(options: Options) {
         if (message.type === "assistant" || message.type === "result") persisted = true
         if (message.type === "result") finishTurn()
       }
+      phase = { status: "ended" }
     } catch (error) {
-      failure = error
+      phase = { status: "ended", failure: error }
     } finally {
-      ended = true
       finishTurn()
       turn?.wake?.()
     }
@@ -68,7 +71,7 @@ export async function start(options: Options) {
 
   async function interrupt() {
     const active = turn
-    if (!active || active.finished || ended) return
+    if (!active || active.finished || phase.status === "ended") return
     await session.interrupt()
     // interrupt() resolves before the result and transcript flush, so wait for the drain before another turn starts.
     await active.drained.promise
@@ -76,13 +79,13 @@ export async function start(options: Options) {
 
   async function shutdown() {
     try {
-      if (initialized && !ended) {
+      if (phase.status === "ready") {
         await session.interrupt()
         if (turn && !turn.finished) await turn.drained.promise
       }
       input.close()
       // An uninitialized process has no conversation to flush.
-      if (!initialized) session.close()
+      if (phase.status === "starting") session.close()
       await pump
     } finally {
       session.close()
@@ -95,7 +98,8 @@ export async function start(options: Options) {
   }
 
   function begin(content: SDKUserMessage["message"]["content"], uuid = crypto.randomUUID()) {
-    if (ended || stopping) throw failure ?? new Error("Claude Code session has stopped")
+    if (phase.status === "ended") throw phase.failure ?? new Error("Claude Code session has stopped")
+    if (stopping) throw new Error("Claude Code session has stopped")
     if (turn && !turn.finished) throw new Error("Claude Code is still finishing the previous turn")
     turn = { drained: Promise.withResolvers<void>(), messages: [], finished: false }
     input.enqueue({ type: "user", uuid, message: { role: "user", content }, parent_tool_use_id: null })
@@ -111,7 +115,7 @@ export async function start(options: Options) {
     while (true) {
       const message = active.messages.shift()
       if (!message) {
-        if (ended) throw failure ?? new Error("Claude Code stopped before finishing its reply")
+        if (phase.status === "ended") throw phase.failure ?? new Error("Claude Code stopped before finishing its reply")
         await new Promise<void>((resolve) => {
           active.wake = resolve
         })
@@ -135,7 +139,7 @@ export async function start(options: Options) {
     id: options.resume ?? options.sessionId!,
     ready,
     get ended() {
-      return ended
+      return phase.status === "ended"
     },
     get persisted() {
       return persisted
