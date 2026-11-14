@@ -231,6 +231,13 @@ export default function Layout(props: ParentProps) {
           : "max(0px, calc(8px - var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))))",
       }}
     >
+      <button
+        type="button"
+        onClick={() => document.getElementById("shell-main")?.focus()}
+        class="sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-v2-background-bg-base focus:px-3 focus:py-1.5 focus:text-13-regular focus:text-text-strong focus:shadow-[var(--v2-elevation-floating)]"
+      >
+        {language.t("shell.skipToContent")}
+      </button>
       <Titlebar verticalTabs={verticalTabs() ? { mount: state.tabsMount } : undefined} />
       <div class="relative flex flex-1 min-h-0 min-w-0 flex-row">
         {/* The empty inset above the panels moves the window, as the titlebar does. */}
@@ -301,6 +308,8 @@ export default function Layout(props: ParentProps) {
         </Show>
         {/* Size containment collapses percentage-height descendants in WebKit. */}
         <main
+          id="shell-main"
+          tabindex="-1"
           class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-content"
           style={{
             "padding-top": bottomTitlebar() ? "env(safe-area-inset-top, 0px)" : "0px",
