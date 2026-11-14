@@ -148,7 +148,7 @@ export const dict = {
   "provider.connect.title": "Connecta {{provider}}",
   "provider.connect.method.apiKey": "tecla API.",
   "provider.connect.status.inProgress": "Autorització en curs…",
-  "provider.connect.status.waiting": "Esperant l'autorització…",
+  "provider.connect.status.waiting": "Esperant l'autorització",
   "provider.connect.status.failed": "L'autorització ha fallat: {{error}}",
   "provider.connect.apiKey.description":
     "Introduïu la clau API de {{provider}} per connectar el compte i utilitzar els models de {{provider}} a OpenCode.",
@@ -844,7 +844,6 @@ export const dict = {
   "toast.migration.progress.working.progress": "S'estan migrant dades {{current}}/{{total}}",
   "command.session.location.cycle": "Canvia la ubicació de la sessió",
   "dialog.provider.anthropic.note": "Accés directe als models Claude mitjançant una clau d’API",
-  "provider.connect.title.anthropicProMax": "Inicia la sessió amb Anthropic",
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "Cancel·la la pujada de {{filename}}",
   "prompt.toast.uploadFailed.title": "Ha fallat la pujada",

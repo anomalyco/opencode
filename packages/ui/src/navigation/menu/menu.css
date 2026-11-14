@@ -160,6 +160,11 @@
   }
 }
 
+/* Like a native menu, an item stays highlighted while the pointer is in the submenu it opened. */
+[data-component="menu-v2-content"]:not(:has([data-highlighted])) [data-component="menu-v2-item"][data-expanded] {
+  background: var(--menu-v2-hover);
+}
+
 [data-slot="menu-v2-separator"] {
   height: 1px;
   width: calc(100% + 4px);
@@ -255,6 +260,10 @@
       margin-inline-start: auto;
       color: var(--icon-base);
     }
+  }
+
+  &:not(:has([data-highlighted])) [data-component="menu-v2-item"][data-expanded] {
+    background: var(--surface-raised-base-hover);
   }
 
   [data-slot="menu-v2-separator"] {

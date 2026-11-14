@@ -149,7 +149,7 @@ export const dict = {
   "provider.connect.title": "Σύνδεση {{provider}}",
   "provider.connect.method.apiKey": "API κλειδί",
   "provider.connect.status.inProgress": "Εξουσιοδότηση σε εξέλιξη…",
-  "provider.connect.status.waiting": "Αναμονή για εξουσιοδότηση…",
+  "provider.connect.status.waiting": "Αναμονή για εξουσιοδότηση",
   "provider.connect.status.failed": "Η εξουσιοδότηση απέτυχε: {{error}}",
   "provider.connect.apiKey.description":
     "Εισαγάγετε το κλειδί {{provider}} API για να συνδέσετε τον λογαριασμό σας και χρησιμοποιήστε μοντέλα {{provider}} στο OpenCode.",
@@ -840,7 +840,6 @@ export const dict = {
   "toast.migration.progress.working.progress": "Μεταφορά δεδομένων {{current}}/{{total}}",
   "command.session.location.cycle": "Εναλλαγή τοποθεσίας συνεδρίας",
   "dialog.provider.anthropic.note": "Άμεση πρόσβαση στα μοντέλα Claude μέσω κλειδιού API",
-  "provider.connect.title.anthropicProMax": "Σύνδεση με το Anthropic",
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "Ακύρωση μεταφόρτωσης του {{filename}}",
   "prompt.toast.uploadFailed.title": "Η μεταφόρτωση απέτυχε",

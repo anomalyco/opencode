@@ -24,6 +24,13 @@ const absolute = (value: string) => AbsolutePath.make(value)
 describe("ReadTool text serialization", () => {
   const cases = [
     {
+      name: "reads a partial GIF signature as text",
+      content: "GIF8 is text",
+      page: {},
+      output: { type: "file", content: "GIF8 is text", encoding: "utf8" },
+      model: "Read file lines.txt, lines 1-1\n1: GIF8 is text",
+    },
+    {
       name: "preserves a selected trailing blank line before continuation",
       content: "alpha\n\nomega\n",
       page: { offset: 1, limit: 2 },
@@ -90,8 +97,29 @@ describe("ReadTool text serialization", () => {
       name: "preserves empty-file page output",
       content: "",
       page: { limit: 2 },
-      output: { type: "text-page", content: "", offset: 1, truncated: false },
+      output: { type: "text-page", content: "", lineCount: 0, offset: 1, truncated: false },
       model: "Read file lines.txt, 0 lines",
+    },
+    {
+      name: "numbers the only blank line in a newline-only file",
+      content: "\n",
+      page: { limit: 1 },
+      output: { type: "text-page", content: "", lineCount: 1, offset: 1, truncated: false },
+      model: "Read file lines.txt, lines 1-1\n1: ",
+    },
+    {
+      name: "numbers a single blank line before continuation",
+      content: "alpha\n\nomega\n",
+      page: { offset: 2, limit: 1 },
+      output: { type: "text-page", content: "", lineCount: 1, offset: 2, truncated: true, next: 3 },
+      model: "Read file lines.txt, lines 2-2\n2: \n[Output truncated. Continue reading with offset: 3]",
+    },
+    {
+      name: "counts the last blank line when an offset is past EOF",
+      content: "alpha\n\n",
+      page: { offset: 9, limit: 1 },
+      output: { type: "text-page", content: "", lineCount: 1, offset: 2, truncated: false },
+      model: "Read file lines.txt, lines 2-2 (offset 9 is past the end; the file has 2 lines)\n2: ",
     },
   ]
 
@@ -105,13 +133,81 @@ describe("ReadTool text serialization", () => {
         const result = yield* ReadToolFileSystem.read(current.environment, file, "lines.txt", input.page)
 
         expect(result).toMatchObject(input.output)
-        expect(ReadTool.toModelContent("lines.txt", undefined, result)).toBe(input.model)
+        expect(ReadTool.toModelContent("lines.txt", input.page.offset, result)).toBe(input.model)
       }),
     )
   })
 })
 
 describe("ReadToolFileSystem", () => {
+  it.live("applies the default line limit to small files at physical line boundaries", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = absolute(path.join(directory, "dense.txt"))
+      const read = (page?: ReadToolFileSystem.PageInput) => ReadToolFileSystem.read(environment, file, "dense.txt", page)
+      const prefix = "x\r\n".repeat(1_999)
+      for (const ending of ["last", "last\n", "last\r\n", "\n"]) {
+        const content = prefix + ending
+        yield* files.writeFileString(file, content)
+        expect(yield* read()).toMatchObject({ type: "file", content })
+      }
+
+      yield* files.writeFileString(file, prefix + "\r\nlast")
+      const page = yield* read()
+      expect(page.type).toBe("text-page")
+      if (page.type !== "text-page") return
+      expect(page).toMatchObject({ content: "x\n".repeat(1_999), offset: 1, next: 2_001, truncated: true })
+      expect(ReadTool.toModelContent("dense.txt", undefined, page)).toEndWith(
+        "2000: \n[Output truncated. Continue reading with offset: 2001]",
+      )
+      expect(yield* read({ offset: page.next })).toMatchObject({ content: "last", offset: 2_001, truncated: false })
+    }),
+  )
+
+  it.live("applies the byte limit to the returned content of small files", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = absolute(path.join(directory, "bytes.txt"))
+      const read = () => ReadToolFileSystem.read(environment, file, "bytes.txt")
+      const exact = ("é".repeat(799) + "x\n").repeat(32)
+      yield* files.writeFileString(file, exact)
+      expect(yield* read()).toMatchObject({ type: "file", content: exact })
+
+      // Each truncation marker takes more bytes than the one character it replaces.
+      yield* files.writeFileString(file, ("x".repeat(2_001) + "\n").repeat(25) + "é".repeat(500))
+      const page = yield* read()
+      expect(page.type).toBe("text-page")
+      if (page.type !== "text-page") return
+      expect(page).toMatchObject({ offset: 1, next: 26, truncated: true })
+      expect(page.content.split("\n")).toHaveLength(25)
+      expect(Buffer.byteLength(page.content)).toBeLessThanOrEqual(50 * 1024)
+    }),
+  )
+
+  it.live("reads extensionless and renamed GIFs as images", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      for (const [version, name] of [
+        ["GIF87a", "pixel"],
+        ["GIF89a", "pixel.txt"],
+      ]) {
+        // 1x1 screen, black/white palette, one pixel and trailer.
+        const bytes = Buffer.concat([
+          Buffer.from(version),
+          Buffer.from("01000100800000000000ffffff2c00000000010001000002024401003b", "hex"),
+        ])
+        const file = absolute(path.join(directory, name))
+        yield* files.writeFile(file, bytes)
+        expect(yield* ReadToolFileSystem.read(environment, file, name)).toMatchObject({
+          type: "file",
+          mime: "image/gif",
+          encoding: "base64",
+          content: bytes.toString("base64"),
+        })
+      }
+    }),
+  )
+
   it.effect("preserves the environment not-found error", () =>
     Effect.gen(function* () {
       const { environment, directory } = yield* fixture
