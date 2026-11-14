@@ -88,7 +88,9 @@ export default Runtime.handler(Commands, (input) =>
     const config = yield* Config.Service
     const npm = yield* Npm.Service
     const fileSystem = yield* FileSystem.FileSystem
-    const runServicePromise = Effect.runPromiseWith(Context.make(FileSystem.FileSystem, fileSystem))
+    const runServicePromise = Effect.runPromiseWith(
+      Context.make(FileSystem.FileSystem, fileSystem).pipe(Context.add(Global.Service, yield* Global.Service)),
+    )
     const context = yield* Effect.context<FileSystem.FileSystem>()
     const runFork = Effect.runForkWith(context)
     const runPromise = Effect.runPromiseWith(context)
