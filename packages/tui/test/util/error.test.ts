@@ -33,4 +33,40 @@ describe("util.error", () => {
 
     expect(errorMessage(err)).toBe("ResolveMessage: Cannot resolve module")
   })
+
+  // Effect's Schema.TaggedError leaves `message` empty and falls back to the tag
+  // in `name`, so a failure like an npm ERESOLVE exists only on `cause`.
+  class TaggedError extends Error {
+    override name = "NpmInstallFailedError"
+  }
+
+  test("surfaces the cause when a tagged error carries no message", () => {
+    const err = Object.assign(new TaggedError(), { cause: new Error("unable to resolve dependency tree") })
+
+    expect(errorMessage(err)).toBe("unable to resolve dependency tree")
+  })
+
+  test("keeps the tag when a tagged error has no usable cause", () => {
+    expect(errorMessage(new TaggedError())).toBe("NpmInstallFailedError")
+    expect(errorMessage(Object.assign(new TaggedError(), { cause: new Error("") }))).toBe("NpmInstallFailedError")
+  })
+
+  test("prefers a real message over its cause", () => {
+    expect(errorMessage(new Error("Failed to load plugin", { cause: new Error("ENOENT") }))).toBe(
+      "Failed to load plugin",
+    )
+  })
+
+  test("walks a chained cause", () => {
+    const err = Object.assign(new TaggedError(), { cause: Object.assign(new Error(), { cause: new Error("root") }) })
+
+    expect(errorMessage(err)).toBe("root")
+  })
+
+  test("does not loop on a self-referencing cause", () => {
+    const err = new TaggedError()
+    Object.defineProperty(err, "cause", { value: err, enumerable: false })
+
+    expect(errorMessage(err)).toBe("NpmInstallFailedError")
+  })
 })
