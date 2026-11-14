@@ -463,6 +463,12 @@ what maps onto contract 2.0 without Solid: `options`, `app`, `themeMode`, `keyma
 `surface(name, place, view, { palette, notify, onScroll })` with views that return contract 2.0 trees (`memo`,
 `content`), `command`, `on`, `effect` (any host request), `watch`/`read` (snapshots), `invalidate`, `fetch`.
 
+A project's TypeScript plugin waits for approval as a native build does (below): its artifact is the directory and a
+hash of its files, and nothing of it reaches the JS host before. The JS host's standard output is the protocol's: a
+plugin's `console` and `process.stdout`, its own modules' and its dependencies' included, write to the JS host's standard
+error, which the client logs; only a write to the descriptor itself (`fs.writeSync(1, …)`) breaks the protocol, which
+ends the JS host and fails the plugin that wrote it.
+
 It is the second timing tier. No frame waits for the JS host:
 
 - **Events** (commands, events, scroll events, replies) cross with a sequence. The JS host acknowledges each on
@@ -483,7 +489,8 @@ It is the second timing tier. No frame waits for the JS host:
 
 ### Approval of a project's plugins
 
-A native build found in a project's `.opencode/plugins` runs only once the user approved it (rich-plugins 3.9,
+A native build (or, on the JS host, a TypeScript plugin) found in a project's `.opencode/plugins` runs only once the
+user approved it (rich-plugins 3.9,
 decision O-125; TS loads it at once, deviation `F16-project-plugin-approval`). The global `plugins` directory and the
 `cli.json` entries need none, also an entry that names a project's plugin another way (the library itself, or a link
 to it): a project cannot write them.

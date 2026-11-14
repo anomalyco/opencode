@@ -16,7 +16,8 @@ plugins (`GET /api/plugin` with `features.tui`) are TypeScript packages and are 
 With `OPENCODE_PLUGIN_JS=1` (P7, off by default), a directory target without a native build runs on the JS host, a
 Bun process the client starts (`docs/P.4.md`, "TypeScript plugins on the JS host"). Its setup gets the part of the V2
 context that maps without Solid, so a plugin that renders JSX, claims a slot or opens a dialog fails in setup until the
-compatibility layer (P8). Plugins installed from npm by name are not loaded. What does load is a second timing tier: a
+compatibility layer (P8). Plugins installed from npm by name are not loaded. One found in a project's `.opencode/plugins` waits for the user's
+approval first (`F16-project-plugin-approval`). What does load is a second timing tier: a
 tree, an effect and a read arrive a paint late or more, there is no `layout` call, and a handler that throws fails the
 plugin with none of its effects (as `F16-plugin-panic-no-effects` does in process), where TS keeps them and the plugin.
 
