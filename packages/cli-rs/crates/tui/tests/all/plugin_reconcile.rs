@@ -1360,3 +1360,28 @@ fn p0a_properties_change_as_a_fresh_mount_draws_them() {
     apply(&host, &mut tree, &parent, &dressed(true)).unwrap();
     assert_eq!(host.app.render(), fresh(&dressed(true), 1, &|_| None).capture);
 }
+
+// Expected (`work`): a patch adopted again as it was touches nothing, as OpenTUI's diff builds its lines again on any
+// setter; one whose view changes is set once and parses nothing.
+#[test]
+fn an_unchanged_patch_is_not_touched() {
+    let diff = |view| {
+        vec![v2::Node::Diff {
+            id: Some("d".into()),
+            content: v2::Source::Text(PATCHES[0].into()),
+            view,
+            filetype: None,
+        }]
+    };
+    let host = host(0);
+    let parent = root(&host);
+    let mut tree = Tree::default();
+    apply(&host, &mut tree, &parent, &diff(v2::DiffView::Unified)).unwrap();
+    let before = reconcile::work();
+    apply(&host, &mut tree, &parent, &diff(v2::DiffView::Unified)).unwrap();
+    assert_eq!(reconcile::work().since(before).touched(), 0);
+    let before = reconcile::work();
+    apply(&host, &mut tree, &parent, &diff(v2::DiffView::Split)).unwrap();
+    let done = reconcile::work().since(before);
+    assert_eq!((done.touched(), done.set, done.parses), (1, 1, 0), "{done:?}");
+}
