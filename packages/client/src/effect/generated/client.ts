@@ -269,6 +269,9 @@ import type {
   ExperimentalArtifactsDeleteOutput,
   ExperimentalJobListInput,
   ExperimentalJobListOutput,
+  ExperimentalPluginWebListOutput,
+  ExperimentalPluginWebModuleInput,
+  ExperimentalPluginWebModuleOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1715,6 +1718,17 @@ const EndpointExperimentalJobList = (raw: RawClient["server.experimental"]) => (
     ),
   )
 
+const EndpointExperimentalPluginWebList = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalPluginWebListOutput>()(raw["plugin.webList"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointExperimentalPluginWebModule =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPluginWebModuleInput) =>
+    preserveEffect<ExperimentalPluginWebModuleOutput>()(
+      raw["plugin.webModule"]({
+        query: { id: input["id"], revision: input["revision"], ticket: input["ticket"] },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1745,6 +1759,7 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     delete: EndpointExperimentalArtifactsDelete(raw),
   },
   job: { list: EndpointExperimentalJobList(raw) },
+  plugin: { webList: EndpointExperimentalPluginWebList(raw), webModule: EndpointExperimentalPluginWebModule(raw) },
 })
 
 const EndpointShellList = (raw: RawClient["server.shell"]) => (input?: ShellListInput) =>

@@ -6,6 +6,7 @@ import { PTY_CONNECT_PATH, PTY_CONNECT_TICKET_QUERY } from "@opencode/protocol/g
 import { PERSISTENT_PTY_CONNECT_PATH } from "@opencode/protocol/groups/persistent-pty"
 import { MCP_CLIENT_PATH } from "@opencode/protocol/groups/mcp"
 import { PAIRING_CONNECT_PATH } from "@opencode/protocol/groups/server"
+import { WEB_PLUGIN_MODULE_PATH } from "@opencode/protocol/groups/web-plugin"
 import { Effect, Layer, Redacted } from "effect"
 import { Base64 } from "effect/encoding"
 import { HttpEffect, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
@@ -80,14 +81,15 @@ export const authorizationLayer = Layer.effect(
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
         const route = yield* HttpRouter.RouteContext
-        // Ticketed PTY and client MCP connects (browsers cannot set headers on WebSocket upgrades) and pairing links
+        // Ticketed PTY/MCP upgrades, web plugin module imports (neither allows custom headers), and pairing links
         // skip credential checks here; their handlers consume and validate the ticket or code. Use the
         // route selected by Effect so authorization and dispatch cannot disagree about the request path.
         const url = new URL(request.url, "http://localhost")
         if (
           ((route.route.path === PTY_CONNECT_PATH ||
             route.route.path === PERSISTENT_PTY_CONNECT_PATH ||
-            route.route.path === MCP_CLIENT_PATH) &&
+            route.route.path === MCP_CLIENT_PATH ||
+            route.route.path === WEB_PLUGIN_MODULE_PATH) &&
             !!url.searchParams.get(PTY_CONNECT_TICKET_QUERY)) ||
           route.route.path === PAIRING_CONNECT_PATH
         )
