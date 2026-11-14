@@ -3,10 +3,11 @@
 // (u32, little-endian), a kind byte (0 control, 1 tree) and JSON. The client embeds this file and runs it; it is not a
 // module plugins import.
 //
-// What it gives a plugin is a `{ id, setup }` module's setup context: the part of the V2 TUI context that maps onto
-// the contract without Solid (options, app, theme mode, `keymap.layer` commands, `ui.toast`, `data.on`), and under
-// `Symbol.for("opencode.carrier")` the carrier itself, which the V2 compatibility layer (P8) builds the rest on:
-// surfaces whose views return contract trees, effects, and reads the host pushes as snapshots.
+// What it gives a plugin is a `{ id, setup }` module's setup context: the V2 TUI context of the compatibility layer
+// (P8, `compat/`, bundled as `compat.js`), whose slots, routes and dialogs render the plugin's JSX into contract trees,
+// and under `Symbol.for("opencode.carrier")` the carrier that layer is built on: surfaces whose views return contract
+// trees, effects, and reads the host pushes as snapshots. The modules a plugin imports from the TS client
+// (`@opencode/plugin/tui`, Solid, `@opentui/solid`, `@opentui/core`) are the layer's.
 //
 // The rules it keeps:
 // - Standard output is the protocol. Before any plugin loads, `console` and `process.stdout` write to standard error.
@@ -20,6 +21,8 @@ import path from "node:path"
 import { Console } from "node:console"
 import { existsSync, readFileSync, realpathSync, writeSync } from "node:fs"
 import { pathToFileURL } from "node:url"
+import { plugin as runtime } from "bun"
+import { context as compat, modules, reported } from "./compat.js"
 
 const MAGIC = "opencode-js-host"
 const VERSION = 1
@@ -34,6 +37,17 @@ globalThis.console = new Console(process.stderr, process.stderr)
 process.stdout.write = ((chunk: unknown, encoding?: unknown, callback?: unknown) =>
   (process.stderr.write as Function)(chunk, encoding, callback)) as typeof process.stdout.write
 
+// The modules a V2 plugin imports from the TS client are the compatibility layer's, also from a package's own
+// `node_modules`, as the TS client's runtime plugin support gives its own (P8). Virtual modules, since Bun resolves the
+// JSX runtime a `@jsxImportSource` pragma names without a plugin's `onResolve`.
+runtime({
+  name: "opencode-compat",
+  setup(build) {
+    for (const [name, exports] of Object.entries(modules))
+      build.module(name, () => ({ exports, loader: "object" }))
+  },
+})
+
 // Frames go out with blocking writes (review carbon-5): a client that reads nothing stops the JS host in its write,
 // which is the pipe's back-pressure, rather than letting it buffer without bound; and no frame is cut at exit.
 function write(bytes: Buffer) {
@@ -47,9 +61,17 @@ function write(bytes: Buffer) {
   }
 }
 
+// `OPENCODE_JS_HOST_TRACE=<file>` appends every frame the JS host reads and writes to the file, cut at 2,000
+// characters: a diagnosis of the protocol, off by default.
+const TRACE = process.env.OPENCODE_JS_HOST_TRACE
+function trace(line: string) {
+  if (TRACE) require("node:fs").appendFileSync(TRACE, line.slice(0, 2000) + "\n")
+}
+
 // Throws when `message` cannot be JSON (a `BigInt`, a cycle): nothing of it is written.
 function frame(kind: number, message: unknown) {
   const body = Buffer.from(JSON.stringify(message))
+  trace(`up ${body.toString()}`)
   const head = Buffer.alloc(5)
   head.writeUInt32LE(body.length, 0)
   head[4] = kind
@@ -124,6 +146,8 @@ type Request = { type: string; [field: string]: Json }
 
 interface Command {
   name: string
+  // How many times it is registered.
+  count: number
   title: string
   run: (input?: string) => unknown
   hold: boolean
@@ -140,7 +164,10 @@ interface Surface {
   layers: Json[]
   // P6a: the handler hears each mount begin and end (a "mount" event).
   mounts: boolean
+  // A view that returns `undefined` has no tree yet: it views again when a snapshot comes (P8).
   view: (cx: ViewContext) => Json
+  // P8: a mount of it ended.
+  unmount?: (mount: Json) => void
 }
 
 interface ViewContext {
@@ -192,7 +219,9 @@ interface Plugin {
   resolvers: Array<(value: Json) => void>
   commands: Command[]
   storage: string[]
-  events: Array<{ types: string[]; handler: (event: Json) => unknown }>
+  // P8: a subscription of `data.on` names its type, whose handlers `listening` holds.
+  events: Array<{ types: string[]; handler: (event: Json) => unknown; listens?: string }>
+  listening: Record<string, Array<(event: Json) => unknown>>
   // P2: the key layers of setup, each with its handler.
   layers: Array<{ layer: Json; handler: (event: Json) => unknown }>
   surfaces: Surface[]
@@ -203,6 +232,9 @@ interface Plugin {
   answers: Map<string, Array<(value: Json) => void>>
   replies: Map<number, (result: Json) => void>
   batch: number
+  // P8: who hears each snapshot, and the manifest the host was last told.
+  listeners: Array<(key: string) => void>
+  told?: string
 }
 
 // Each plugin's current activation by ID, which its own messages (effects, watches) name; and every activation by the
@@ -210,8 +242,12 @@ interface Plugin {
 // candidate set up for a reload does not end the running one, whose registrations the host still routes to.
 const plugins = new Map<string, Plugin>()
 const generations = new Map<number, Plugin>()
+// How long a component's command outlives its mount, in milliseconds (P8).
+const UNCOMMAND = 250
 let last = 0
 let themeMode = "dark"
+// The page theme's colors by token, `#rrggbbaa`, which the V2 context's `theme` reads (P8).
+let palette: { mode: string; colors: Record<string, string> } = { mode: "dark", colors: {} }
 
 function mountKey(id: Json) {
   return `${id.surface}\u0000${id.key}\u0000${id.generation}`
@@ -318,6 +354,7 @@ function view(plugin: Plugin, mount: Mount) {
   let text: string
   try {
     node = surface.view(cx)
+    if (node === undefined) return
     text = JSON.stringify(node)
   } catch (error) {
     fail(plugin, `view threw: ${message(error)}`)
@@ -364,7 +401,16 @@ function context(plugin: Plugin) {
   const commands = (layer: Json) => {
     for (const command of layer?.commands ?? []) {
       const name = command.id ?? `${plugin.id}.inline-${plugin.commands.length}`
+      // P8: a command registered again, as each mount of a component registers its layer, runs the latest handler;
+      // it goes once every registration of it went.
+      const known = plugin.commands.find((existing) => existing.name === name)
+      if (known) {
+        known.run = command.run
+        known.count += 1
+        continue
+      }
       plugin.commands.push({
+        count: 1,
         name,
         title: command.title ?? name,
         run: command.run,
@@ -395,6 +441,7 @@ function context(plugin: Plugin) {
         on?: (event: Json) => unknown
         layers?: Json[]
         mounts?: boolean
+        unmount?: (mount: Json) => void
       },
     ) {
       plugin.surfaces.push({
@@ -406,7 +453,9 @@ function context(plugin: Plugin) {
         on: options?.on,
         layers: options?.layers ?? [],
         mounts: !!options?.mounts,
+        unmount: options?.unmount,
       })
+      changed(plugin)
     },
     // A key layer of the activation, as contract 2.0's `Setup::layer`. What the handler returns is advisory: the host
     // answers a key from the layer's declaration, as it cannot wait.
@@ -416,11 +465,33 @@ function context(plugin: Plugin) {
     command(command: Json, run: (input?: string) => unknown) {
       const slash = command.slash ? { name: command.slash, arguments: command.arguments } : undefined
       commands({ commands: [{ ...command, id: command.name, run, bind: command.keybind, slash }] })
+      changed(plugin)
+    },
+    // P8: a command of the plugin's goes, as a V2 keymap layer made in a component ends with it.
+    // The host remounts a component after a reload in a later message than the one that ends the last mount: a command
+    // goes only if nothing registered it again meanwhile, so a remount changes nothing.
+    uncommand(name: string) {
+      setTimeout(() => {
+        const index = plugin.commands.findIndex((command) => command.name === name)
+        if (index === -1) return
+        const command = plugin.commands[index]!
+        command.count -= 1
+        if (command.count === 0) plugin.commands.splice(index, 1)
+        changed(plugin)
+      }, UNCOMMAND)
     },
     // The storage keys the plugin reads and writes, as a manifest declares them.
     storage(keys: string[]) {
-      plugin.storage.push(...keys)
+      plugin.storage.push(...keys.filter((key) => !plugin.storage.includes(key)))
+      changed(plugin)
     },
+    // P8: `listener` hears the key of each snapshot that comes; the page theme's colors.
+    listen(listener: (key: string) => void) {
+      plugin.listeners.push(listener)
+    },
+    palette: () => palette,
+    // P8: the registrations may have changed after setup: the host is told, once they settle.
+    changed: () => changed(plugin),
     on(types: string[], handler: (event: Json) => unknown) {
       plugin.events.push({ types, handler })
     },
@@ -445,49 +516,66 @@ function context(plugin: Plugin) {
       )
     },
   }
-  return {
+  const base = {
+    id: plugin.id,
     options: plugin.options ?? {},
     // What the client said as it started the JS host, and the theme's mode as it changes.
     app: { version: process.env.OPENCODE_VERSION ?? "", channel: process.env.OPENCODE_CHANNEL ?? "" },
     get themeMode() {
       return themeMode
     },
-    keymap: {
-      layer(factory: () => Json) {
-        commands(factory())
-      },
-      dispatch(id: string, input?: string) {
-        effect(plugin, { type: "dispatch", name: id, input: input ?? null })
-      },
-    },
-    ui: {
-      toast: {
-        show(options: Json) {
-          effect(plugin, {
-            type: "toast",
-            variant: options.variant ?? "info",
-            message: options.message,
-            ...(options.title ? { title: options.title } : {}),
-            ...(options.sessionID ? { session: options.sessionID } : {}),
-          })
-        },
-      },
-    },
     data: {
       on(type: string, handler: (event: Json) => unknown) {
-        const listener = { types: [type], handler }
-        plugin.events.push(listener)
+        // One subscription a type, which every handler of it hears: a type the plugin hears first after setup, as a
+        // component's `data.on` does, is a new subscription the host is told of.
+        if (!plugin.events.some((events) => events.listens === type)) {
+          plugin.events.push({ types: [type], handler: () => undefined, listens: type })
+          changed(plugin)
+        }
+        const listeners = (plugin.listening[type] ??= [])
+        listeners.push(handler)
         // The host keeps routing the type; the handler hears no more of it.
         return () => {
-          listener.handler = () => undefined
+          const index = listeners.indexOf(handler)
+          if (index !== -1) listeners.splice(index, 1)
         }
       },
     },
-    [Symbol.for("opencode.carrier")]: carrier,
   }
+  const v2 = compat(base, carrier as never) as Json
+  v2[Symbol.for("opencode.carrier")] = carrier
+  return v2
 }
 
-function manifest(plugin: Plugin) {
+// Tells the host plugin `plugin`'s registrations once they settle, after setup, when they changed since it was told:
+// it takes them as a reload (P8: a V2 plugin registers in an async setup, and in its components). They settle once the
+// messages that came are handled: a mount that ends and one that begins with the same layer change nothing.
+const unsettled = new Set<Plugin>()
+let settling = false
+function changed(plugin: Plugin) {
+  if (plugin.setting || !plugin.active || plugin.failed) return
+  unsettled.add(plugin)
+  if (settling) return
+  settling = true
+  setTimeout(settle, 0)
+}
+
+function settle() {
+  settling = false
+  if (running) return
+  for (const plugin of unsettled) {
+    if (!plugin.active || plugin.failed) continue
+    const manifest = manifestOf(plugin)
+    const holds = plugin.commands.filter((command) => command.hold).map((command) => command.name)
+    const told = JSON.stringify([manifest, holds])
+    if (told === plugin.told) continue
+    plugin.told = told
+    sendFor(plugin, { type: "manifest", id: plugin.id, manifest, holds })
+  }
+  unsettled.clear()
+}
+
+function manifestOf(plugin: Plugin) {
   return {
     id: plugin.id,
     commands: plugin.commands.map((command) => command.wire),
@@ -529,18 +617,44 @@ function resolveEntry(dir: string): string | undefined {
 // Sets up `plugin`, a candidate activation. The running activation of its ID, if any, keeps answering what the host
 // routes to it until the host deactivates it, once it registered the candidate. A candidate whose setup throws is
 // dropped, and the running one stays (a reload that fails keeps the previous version).
+//
+// An async setup that waits on the host (a fetch, a read it syncs) cannot finish before the host has the plugin: the
+// host answers the plugin it registered. So once such a setup waits with requests outstanding, the host gets the plugin
+// as it stands, and the rest of setup goes on as the plugin's own: what it registers then the host takes as a reload,
+// and a throw then fails the plugin (P8). A setup that waits on anything else is waited for, as before.
 async function setup(seq: number, plugin: Plugin) {
   plugin.setting = true
   plugin.activation = seq
+  const state: { settled: boolean; cleanup?: unknown; error?: unknown; threw: boolean } = {
+    settled: false,
+    threw: false,
+  }
   try {
-    const cleanup = await plugin.definition.setup(context(plugin))
-    if (typeof cleanup === "function") plugin.cleanups.push(cleanup as () => unknown)
+    const result = plugin.definition.setup(context(plugin))
+    const done = Promise.resolve(result).then(
+      (cleanup) => Object.assign(state, { settled: true, cleanup }),
+      (error) => Object.assign(state, { settled: true, error, threw: true }),
+    )
+    while (!state.settled) {
+      await Promise.race([done, new Promise((next) => setTimeout(next, 0))])
+      if (!state.settled && (plugin.setupEffects.length || plugin.setupWatches.length)) break
+    }
+    if (!state.settled)
+      void done.then(() => {
+        if (state.threw) return fail(plugin, `setup threw: ${message(state.error)}`)
+        if (typeof state.cleanup === "function") plugin.cleanups.push(state.cleanup as () => unknown)
+        changed(plugin)
+      })
   } catch (error) {
+    Object.assign(state, { settled: true, error, threw: true })
+  }
+  if (state.threw) {
     plugin.setting = false
     plugin.failed = true
-    send({ type: "done", seq, error: `setup threw: ${message(error)}` })
+    send({ type: "done", seq, error: `setup threw: ${message(state.error)}` })
     return
   }
+  if (typeof state.cleanup === "function") plugin.cleanups.push(state.cleanup as () => unknown)
   plugin.setting = false
   plugin.active = true
   generations.set(seq, plugin)
@@ -550,7 +664,9 @@ async function setup(seq: number, plugin: Plugin) {
   if (effects.length) plugin.answers.set("setup", plugin.resolvers)
   plugin.resolvers = []
   const holds = plugin.commands.filter((command) => command.hold).map((command) => command.name)
-  sendFor(plugin, { type: "loaded", seq, id: plugin.id, manifest: manifest(plugin), holds, effects }, seq)
+  const registered = manifestOf(plugin)
+  plugin.told = JSON.stringify([registered, holds])
+  sendFor(plugin, { type: "loaded", seq, id: plugin.id, manifest: registered, holds, effects }, seq)
   for (const watch of plugin.setupWatches.splice(0)) sendFor(plugin, watch)
 }
 
@@ -580,6 +696,8 @@ function candidate(definition: Plugin["definition"], target: string, dir: string
     answers: new Map(),
     replies: new Map(),
     batch: 0,
+    listening: {},
+    listeners: [],
   }
 }
 
@@ -627,6 +745,11 @@ function forget(target: string) {
 function deactivate(plugin: Plugin) {
   generations.delete(plugin.activation)
   plugin.active = false
+  for (const mount of plugin.mounts.values()) {
+    try {
+      plugin.surfaces[mount.surface]?.unmount?.(mount.id)
+    } catch {}
+  }
   plugin.mounts.clear()
   for (const cleanup of plugin.cleanups.splice(0).reverse()) {
     try {
@@ -648,7 +771,9 @@ function call(seq: number, plugin: Plugin, request: Json) {
       const command = plugin.commands.find((command) => command.name === request.name)
       result = command?.run(request.input ?? undefined)
     } else if (request.type === "event") {
-      result = plugin.events[request.handler]?.handler(request.event)
+      const events = plugin.events[request.handler]
+      result = events?.handler(request.event)
+      for (const listener of events?.listens ? [...(plugin.listening[events.listens] ?? [])] : []) listener(request.event)
     } else if (request.type === "input") {
       const to = request.to
       const handler = to.type === "layer" ? plugin.layers[to.layer]?.handler : plugin.surfaces[to.surface]?.on
@@ -703,6 +828,7 @@ async function handle(message: Json) {
       return forget(message.target)
     case "theme":
       themeMode = message.mode
+      if (message.palette) palette = message.palette
       return
     case "deactivate":
       if (plugin) within(plugin, () => deactivate(plugin))
@@ -743,9 +869,12 @@ async function handle(message: Json) {
       }
       return send({ type: "done", seq: message.seq })
     }
-    case "unmount":
+    case "unmount": {
+      const mount = plugin?.mounts.get(mountKey(message.mount))
       plugin?.mounts.delete(mountKey(message.mount))
+      if (plugin && mount) within(plugin, () => plugin.surfaces[mount.surface]?.unmount?.(mount.id))
       return
+    }
     case "adopted": {
       const mount = plugin?.mounts.get(mountKey(message.mount))
       if (!plugin || !mount || message.rev !== mount.rev || !mount.inflight) return
@@ -779,7 +908,11 @@ async function handle(message: Json) {
       else plugin.snapshots.set(message.key, message.value)
       if (message.error) plugin.readErrors.set(message.key, message.error)
       else plugin.readErrors.delete(message.key)
-      if (plugin.active && !plugin.failed && plugin.mounts.size) within(plugin, () => viewAll(plugin))
+      if (plugin.active && !plugin.failed)
+        within(plugin, () => {
+          for (const listener of [...plugin.listeners]) listener(message.key)
+          if (plugin.mounts.size) viewAll(plugin)
+        })
       return
     case "answered": {
       const waiting = plugin?.answers.get(message.key)
@@ -808,6 +941,7 @@ async function drain() {
     }
   }
   running = false
+  if (unsettled.size) settle()
 }
 
 send({ type: "hello", magic: MAGIC, version: VERSION, pid: process.pid })
@@ -824,9 +958,11 @@ for await (const chunk of Bun.stdin.stream()) {
     pending = pending.subarray(5 + len)
     if (kind !== CONTROL) continue
     const message = JSON.parse(body.toString())
+    trace(`down ${body.toString()}`)
     if (message.type === "hello") {
       last = message.after ?? 0
       themeMode = message.theme_mode ?? themeMode
+      palette = message.palette ?? palette
     }
     if (typeof message.seq === "number") {
       if (message.seq <= last) continue

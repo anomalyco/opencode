@@ -69,6 +69,8 @@ pub(crate) struct Loaded {
     pub manifest: Manifest,
     pub holds: Vec<String>,
     pub effects: RefCell<Option<Vec<HostRequest>>>,
+    /// The reads a handed-over activation watched, which it goes on watching (P8).
+    pub watches: RefCell<Vec<(String, HostRequest)>>,
 }
 
 /// The definition of the plugin `loaded` names, whose setup registers what it listed.
@@ -106,6 +108,9 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
             register(setup, &guest);
             scripts.guests.borrow_mut().insert(loaded.id.clone(), Rc::downgrade(&guest));
             scripts.registered(&loaded.id);
+            for (key, request) in loaded.watches.take() {
+                guest.watch(key, request);
+            }
             // The first activation's setup ran on the JS host as it loaded; a later one runs it again.
             match loaded.effects.borrow_mut().take() {
                 Some(effects) => guest.effects("setup", effects, false, "setup"),
@@ -247,10 +252,15 @@ impl Guest {
         }
         let Some(scripts) = self.scripts.upgrade() else { return };
         // The replacement adopts this activation of the JS host: this guest's end must not deactivate it (review
-        // carbon-2).
+        // carbon-2). Its mounts still end on the JS host, which keeps them for the activation (P8).
         let handed = self.js.replace(0);
+        for viewer in self.viewers.borrow().iter() {
+            viewer.handed.set(handed);
+        }
         let mut loads = scripts.loads.borrow_mut();
         if let Some(load) = loads.get_mut(&self.loaded.target) {
+            // What the activation watches it keeps watching.
+            let watches = self.watches.borrow().iter().map(|(key, (request, _))| (key.clone(), request.clone())).collect();
             let loaded = Loaded {
                 id: self.loaded.id.clone(),
                 target: self.loaded.target.clone(),
@@ -260,6 +270,7 @@ impl Guest {
                 manifest,
                 holds,
                 effects: RefCell::new(Some(Vec::new())),
+                watches: RefCell::new(watches),
             };
             (load.state, load.registered) = (super::Loading::Loaded(Rc::new(loaded)), false);
         }
@@ -587,6 +598,11 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
 pub(crate) struct Viewer {
     this: Weak<Viewer>,
     guest: Weak<Guest>,
+    /// The plugin and its JS host, which a mount's end is told to after the guest went.
+    id: String,
+    scripts: Weak<Scripts>,
+    /// The JS host's activation a reload handed over, whose mounts of this surface end with this viewer's (P8).
+    handed: Cell<u64>,
     index: usize,
     mounts: RefCell<HashMap<v2::MountId, Mount>>,
     /// The height each key's mount had with a tree, which a placeholder of a mount of that key keeps (review F1).
@@ -622,6 +638,9 @@ impl Viewer {
         Rc::new_cyclic(|this| Self {
             this: this.clone(),
             guest: Rc::downgrade(guest),
+            id: guest.id().to_owned(),
+            scripts: guest.scripts.clone(),
+            handed: Cell::new(0),
             index,
             mounts: RefCell::default(),
             heights: RefCell::default(),
@@ -834,14 +853,14 @@ impl surface::Viewer for Viewer {
 
     fn forget(&self, _host: &dyn Host, id: &v2::MountId) {
         let Some(mount) = self.mounts.borrow_mut().remove(id) else { return };
-        let Some(guest) = self.guest.upgrade().filter(|guest| !guest.ended()) else { return };
+        let running = self.guest.upgrade().filter(|guest| !guest.ended()).map(|guest| guest.js.get());
+        let Some(activation) = running.or(Some(self.handed.get()).filter(|handed| *handed != 0)) else { return };
         if !mount.started {
             return;
         }
-        let Some(scripts) = guest.scripts.upgrade() else { return };
+        let Some(scripts) = self.scripts.upgrade() else { return };
         let seq = scripts.next();
-        let activation = guest.js.get();
-        scripts.send(Down::Unmount { seq, id: guest.id().to_owned(), activation, mount: id.clone() }, None);
+        scripts.send(Down::Unmount { seq, id: self.id.clone(), activation, mount: id.clone() }, None);
     }
 }
 
