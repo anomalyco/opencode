@@ -355,6 +355,27 @@ fn a_theme_switch_restyles_these_rows_in_place() {
     );
 }
 
+/// The store takes events off the UI thread and the transcript syncs on its next frame, so a theme switch in between
+/// restyles against messages the rows were not rendered from: here a revert that hides the newest message.
+#[test]
+fn a_theme_switch_before_the_sync_restyles_against_the_messages_the_store_holds() {
+    let messages = vec![
+        user("msg_1", 1000, "Keep this"),
+        assistant("msg_2", 2000, json!([{ "type": "text", "text": "Edited the file" }])),
+        user("msg_3", 3000, "Undo this"),
+    ];
+    let h = open(30, session(json!({})), messages, Vec::new(), Info::default());
+    h.wait_for("Undo this");
+    h.apply("session.revert.staged", 1, json!({ "sessionID": ID, "revert": { "messageID": "msg_3" } }));
+    assert!(h.tui.theme.borrow_mut().set("tokyonight"));
+    h.tui.theme_changed();
+    // The restyle shows the banner at once; the rows follow at the sync.
+    h.wait("the reverted rows", || {
+        let screen = h.app.text();
+        screen.contains("1 message reverted") && !screen.contains("Undo this")
+    });
+}
+
 #[test]
 fn a_long_running_shell_call_shows_the_background_hint() {
     let messages = vec![
