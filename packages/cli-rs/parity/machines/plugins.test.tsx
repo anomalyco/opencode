@@ -48,11 +48,13 @@ const machine = parse(machines.machines.life)
 const project = parse(machines.machines.project)
 // The plugin manager's keys (phase P2); every action of a state has an edge, or is one it leaves unspecified.
 const managerKeys = parse(machines.machines.manager)
+// The plugin manager's views (phase P6b), with the plugin failing as it loads; as the keys, every action has an outcome.
+const managerViews = parse(machines.machines.views)
 let runs = 0
 
 // A fresh app with a copy of the plugin, which resolves packages/tui's dependencies (as `copyPlugin` does). In the
-// config, or with `inProject` in the `.opencode/plugins` of a project the app starts in.
-async function open(inProject = false) {
+// config, or with `inProject` in the `.opencode/plugins` of a project the app starts in; with `fail`, its setup throws.
+async function open(inProject = false, fail = false) {
   const root = await tmpdir()
   const repo = path.join(root.path, "repo")
   const directory = inProject ? path.join(repo, ".opencode", "plugins", "life") : path.join(root.path, "life")
@@ -66,14 +68,16 @@ async function open(inProject = false) {
     process.platform === "win32" ? "junction" : "dir",
   )
   await Bun.write(entry, Bun.file(plugin))
-  const plugins = inProject ? [] : [{ package: directory, options: { run: ++runs } }]
+  const plugins = inProject ? [] : [{ package: directory, options: { run: ++runs, fail } }]
   // The app reads its plugins directories from the working directory once it runs, after the fixture returns.
   const cwd = process.cwd()
   if (inProject) process.chdir(repo)
   const setup = await (async () => {
     const setup = await createAppFixture({ width: 80, height: 24, config: { animations: false, plugins } })
     await setup.ready
-    await setup.waitForFrame((frame) => frame.includes("life plugin:"))
+    // A plugin whose setup throws draws no line: its failure shows instead.
+    if (fail) await poll(setup, (frame) => frame.includes("Plugin failed") || frame.includes("parity.life"), 5000)
+    else await setup.waitForFrame((frame) => frame.includes("life plugin:"))
     return setup
   })().finally(() => process.chdir(cwd))
   return {
@@ -259,6 +263,51 @@ async function actManager(app: App, action: string) {
   await until(setup, (frame) => row(frame) !== before, "the toggle's outcome")
 }
 
+// An action of the views machine: /plugins, life typed into the filter, the key the footer offers for view error, or
+// escape.
+async function actViews(app: App, action: string) {
+  const setup = app.setup
+  const frame = setup.captureCharFrame()
+  if (action === "open") {
+    await setup.mockInput.typeText("/plugins")
+    await until(setup, (frame) => frame.includes("/plugins"), "/plugins in the prompt")
+    setup.mockInput.pressEnter()
+    await until(setup, (frame) => internal(frame) !== undefined, "the plugin manager")
+    await focusedInput(setup)
+    return
+  }
+  if (action === "filter") {
+    await setup.mockInput.typeText("life")
+    await until(setup, (frame) => !frame.includes("Search"), "the filter")
+    return
+  }
+  if (action === "details") {
+    if (frame.includes("view error space")) setup.mockInput.pressKey(" ")
+    else setup.mockInput.pressEnter()
+    await until(setup, (frame) => frame.includes("TUI plugin error"), "the details")
+    return
+  }
+  setup.mockInput.pressEscape()
+  if (frame.includes("TUI plugin error")) {
+    await until(setup, (frame) => internal(frame) !== undefined, "the list again")
+    await focusedInput(setup)
+    return
+  }
+  // With the manager closed the key goes to the empty home composer, where nothing shows a change.
+  if (internal(frame) === undefined) return void (await poll(setup, () => false, 100))
+  await until(setup, (frame) => internal(frame) === undefined, "the plugin manager closing")
+}
+
+// dialog/filter/life, as plugins.json writes them for the views machine.
+function observeViews(setup: Fixture) {
+  const frame = setup.captureCharFrame()
+  if (frame.includes("TUI plugin error")) return "error/?/?"
+  if (internal(frame) === undefined) return "-/?/?"
+  const found = row(frame)
+  const life = found === undefined ? "none" : found.includes("failed") ? "failed" : "on"
+  return `list/${frame.includes("Search") ? "-" : "life"}/${life}`
+}
+
 // dialog/internal/life, as plugins.json writes them for the manager machine.
 function observeManager(setup: Fixture) {
   const frame = setup.captureCharFrame()
@@ -274,17 +323,19 @@ function observeManager(setup: Fixture) {
 // an outcome for each, and its reader sends every action but those it lists as unspecified. The first difference that
 // is not a known row, or undefined; a known row ends the path, unless the machine says to follow it on.
 async function replay(machine: Machine, path: string[], known: Set<string>, seen: Set<string>) {
-  await using app = await open(machine === project)
-  const keyed = machine === managerKeys
+  await using app = await open(machine === project, machine === managerViews)
+  const views = machine === managerViews
+  const keyed = machine === managerKeys || views
   let state = machine.initial
   for (const [index, action] of ["mount", ...path].entries()) {
     const edge = machine.states[state][1][action]
     const next = index === 0 ? state : (edge ?? state)
     if (index > 0 && !keyed) await act(app, action)
-    if (index > 0 && keyed && edge !== undefined) await actManager(app, action)
+    if (index > 0 && views && edge !== undefined) await actViews(app, action)
+    if (index > 0 && keyed && !views && edge !== undefined) await actManager(app, action)
     if (index > 0 && keyed && edge === undefined && !machine.unspecified?.[state]?.includes(action))
       throw new Error(`the manager machine names no outcome of ${action} in ${state}`)
-    const observed = keyed ? observeManager(app.setup) : await observe(app.setup)
+    const observed = views ? observeViews(app.setup) : keyed ? observeManager(app.setup) : await observe(app.setup)
     const [expected, actual] = [machine.states[next][0], observed]
     if (actual !== expected) {
       const key = `${state} ${action} ${actual}`
@@ -348,7 +399,7 @@ function walks(machine: Machine) {
 }
 
 // Two normal cycles, each with one action dropped, repeated, or swapped with the next.
-function faulted(name: "life" | "manager") {
+function faulted(name: "life" | "manager" | "views") {
   const cycles = machines.faults[name].cycles.map((cycle) => cycle.split(" "))
   const out = new Map<string, string[]>()
   for (const a of cycles)
@@ -416,6 +467,24 @@ test.if(deep)(
   "the plugin manager's keys recover from a dropped, repeated or swapped action",
   async () => {
     await check(faulted("manager"), known(managerKeys.xfail, machines.faults.manager.xfail), managerKeys)
+  },
+  600_000,
+)
+
+test("the plugin manager's views follow the shared fixture", async () => {
+  const rows = known(managerViews.xfail)
+  const seen = await check(deep ? paths(managerViews) : cover(managerViews), rows, managerViews)
+  expect([...rows].filter((row) => !seen.has(row))).toEqual([])
+}, 600_000)
+
+test("the plugin manager's views follow the shared fixture on walks", async () => {
+  await check(walks(managerViews), known(managerViews.xfail), managerViews)
+}, 600_000)
+
+test.if(deep)(
+  "the plugin manager's views recover from a dropped, repeated or swapped action",
+  async () => {
+    await check(faulted("views"), known(managerViews.xfail, machines.faults.views.xfail), managerViews)
   },
   600_000,
 )
