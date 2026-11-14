@@ -916,6 +916,11 @@ impl Live {
             log::error!("plugin {}: its panel's body nests too deep or has a size OpenTUI refuses", self.owner.0);
             return;
         }
+        // The body is past the limits on host work: its placeholder (review carbon 2.4).
+        if let Err(over) = node::admits(body) {
+            self.content.add(&node::add_placeholder(&self.cx.app, &self.cx.theme, &over));
+            return;
+        }
         let act = self.act(tui);
         let mut hovers = Vec::new();
         let links = RefCell::new(Vec::new());

@@ -55,6 +55,8 @@ pub(crate) struct Mounted {
 }
 
 pub(crate) struct List {
+    /// The frame the list last mounted an item in: in a frame with no rows left, it mounts one if it mounted none.
+    mounted_in: Cell<Option<(usize, u64)>>,
     pub scroll: ScrollBox,
     row: bool,
     /// The rows of the items before and after the window.
@@ -107,6 +109,7 @@ impl List {
             scroll.content_view().add(&before).add(&after);
         }
         Self {
+            mounted_in: Cell::new(None),
             scroll,
             row,
             before: before.height(0),
@@ -437,12 +440,49 @@ impl List {
     }
 
     /// Mounts the items the viewport and one viewport on each side reach, unmounts the others, and sizes the
-    /// spacers; whether anything changed.
+    /// spacers; whether anything changed. Items are mounted from the first in view outwards while the frame has rows
+    /// left, and one a frame without: the others are mounted in the frames after (review bigboi 3, carbon 2.1).
     fn place(&mut self, env: &Env<'_>) -> bool {
-        let want = if self.row { 0..self.items.len() } else { self.wanted(env) };
-        let mut changed = want != self.window;
+        let wanted = if self.row { 0..self.items.len() } else { self.wanted(env) };
+        let top = if self.row { 0.0 } else { self.top() };
+        let pivot = self.prefix[1..].partition_point(|end| *end <= top).clamp(wanted.start, wanted.end);
+        let mut mounted_now = 0;
+        let mut ensure = |list: &mut Self, index: usize| {
+            if list.items[index].mounted.is_some() {
+                return true;
+            }
+            let frame = crate::limits::frame_of(env.host.app());
+            if list.mounted_in.replace(Some(frame)) == Some(frame) && !crate::limits::frame_room(env.host.app(), 1) {
+                return false;
+            }
+            let wrapper = View::new(env.host.app()).column().shrink(0.0);
+            let mut mounted = Mounted { wrapper, tree: Tree::default() };
+            apply(env, &mut mounted, &list.items[index].node);
+            mounted.tree.restore_drafts(&mut list.drafts);
+            list.items[index].mounted = Some(mounted);
+            mounted_now += 1;
+            true
+        };
+        let mut end = pivot;
+        while end < wanted.end && ensure(self, end) {
+            end += 1;
+        }
+        let mut start = pivot;
+        while start > wanted.start && ensure(self, start - 1) {
+            start -= 1;
+        }
+        let want = start..end;
+        if want != wanted {
+            // The rest of the window mounts in the next frames.
+            Tree::defer();
+            env.host.app().animate(|cx, _| {
+                crate::behave::arm(cx.app());
+                false
+            });
+        }
+        let mut changed = want != self.window || mounted_now > 0;
         visited(self.window.len() + want.len());
-        for index in self.window.clone() {
+        for index in self.window.start.min(want.start)..self.window.end.max(want.end) {
             if want.contains(&index) {
                 continue;
             }
@@ -450,18 +490,6 @@ impl List {
                 unmount(mounted, &mut self.drafts);
                 changed = true;
             }
-        }
-        for index in want.clone() {
-            let item = &mut self.items[index];
-            if item.mounted.is_some() {
-                continue;
-            }
-            let wrapper = View::new(env.host.app()).column().shrink(0.0);
-            let mut mounted = Mounted { wrapper, tree: Tree::default() };
-            apply(env, &mut mounted, &item.node);
-            mounted.tree.restore_drafts(&mut self.drafts);
-            item.mounted = Some(mounted);
-            changed = true;
         }
         self.window = want.clone();
         let content = self.scroll.content_view();
@@ -617,7 +645,15 @@ fn logical(node: &Node, env: &Env<'_>) -> Vec<(String, AnchorAt)> {
                 out.push((anchor.group.clone(), at));
             }
             Node::Diff { id: Some(id), hunks: Some(group), content, .. } => {
-                let hunks = opencode_ui::diff::hunk_count(&(env.source)(content).unwrap_or_default());
+                // A patch past one node's text or hunks, or whose content its plugin could not hold, is a placeholder
+                // once it mounts: it has no hunks (review carbon 2.2). Its text is read once a handle.
+                let limits = crate::limits::get();
+                let text = match content {
+                    Source::Content(handle) if (env.dropped)(*handle) => Default::default(),
+                    source => (env.measure)(source),
+                };
+                let past = text.bytes > limits.text || text.hunks > limits.hunks;
+                let hunks = if past { 0 } else { text.hunks.max(1) as usize };
                 out.extend((0..hunks).map(|index| {
                     let at = AnchorAt {
                         id: format!("{id}#{index}"),
