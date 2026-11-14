@@ -1241,6 +1241,22 @@ mod tests {
         assert!(matches!(view(&mut memo, false, card(2)), Node::Text { .. }));
     }
 
+    // Expected (big-boi's review of P6c): a view that keeps its whole tree with a literal keep of its root keeps every
+    // value, so the next view keeps the cards that did not change.
+    #[test]
+    fn a_literal_keep_of_the_root_keeps_every_value() {
+        let mut memo = Memo::default();
+        let cards = |cx: &mut View<'_>| {
+            let cards = (0..3).map(|card| cx.memo(format!("c{card}"), card, |_| Node::text(vec![Span::new("x")])));
+            Node::column(cards.collect()).with_id("root")
+        };
+        view(&mut memo, false, cards);
+        view(&mut memo, false, |_| Node::Keep { key: "root".into() });
+        assert_eq!(memo.len(), 3);
+        let Node::Box { children, .. } = view(&mut memo, false, cards) else { panic!() };
+        assert!(children.iter().all(|child| matches!(child, Node::Keep { .. })), "{children:?}");
+    }
+
     // Expected: a 2.0 tree on the wire leaves defaults out, and reads back equal.
     #[test]
     fn a_tree_reads_back_as_it_was_written() {
