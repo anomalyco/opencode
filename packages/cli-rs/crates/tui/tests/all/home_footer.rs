@@ -204,7 +204,7 @@ thread_local! {
 /// command `toggle.flip`, which changes nothing else.
 fn toggle(setup: &mut abi::Setup) -> Result<(), String> {
     use opencode_plugin::abi::v2::{Node, Place, Surface};
-    setup.command(abi::Command { name: "toggle.flip".into(), ..abi::Command::default() }, |_, _| {
+    setup.command(abi::Command::default().with_name("toggle.flip".into()), |_, _| {
         SHOWN.set(!SHOWN.get());
     });
     setup.surface(Surface::new("toggle", Place::Slot(abi::Placement::append("home.footer")), |_| {

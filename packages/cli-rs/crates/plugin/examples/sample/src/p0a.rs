@@ -19,7 +19,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         append(host, format!("setup {started}"));
         started
     };
-    let hidden = |name: &str| Command { name: name.to_owned(), ..Command::default() };
+    let hidden = |name: &str| Command::default().with_name(name.to_owned());
     setup.command(hidden("p0a.confirm"), |host, _| confirm(host));
     setup.command(hidden("p0a.alert"), |host, _| alert(host, "p0a.closed"));
     // An alert whose action is another plugin's command.

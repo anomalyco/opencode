@@ -67,16 +67,16 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     });
     setup.surface(spinner);
     let aside = state.clone();
-    let command = Command {
-        name: "session.aside".to_owned(),
-        title: "Ask a side question".to_owned(),
-        description: Some("One-shot answer from the session's context without adding to the conversation".to_owned()),
-        group: Some("Session".to_owned()),
-        palette: true,
-        slash: Some("btw".to_owned()),
-        arguments: true,
-        ..Command::default()
-    };
+    let command = Command::default()
+        .with_name("session.aside".to_owned())
+        .with_title("Ask a side question".to_owned())
+        .with_description(Some(
+            "One-shot answer from the session's context without adding to the conversation".to_owned(),
+        ))
+        .with_group(Some("Session".to_owned()))
+        .with_palette(true)
+        .with_slash(Some("btw".to_owned()))
+        .with_arguments(true);
     setup.command(command, move |host, input| {
         let abi::Route::Session { id } = host.route() else {
             host.toast(Toast::new(Variant::Warning, "Open a session first"));
@@ -128,7 +128,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 fn hidden(name: &str) -> Command {
-    Command { name: name.to_owned(), ..Command::default() }
+    Command::default().with_name(name.to_owned())
 }
 
 fn ask(host: &dyn Host, state: &State, session: String, question: String) {
@@ -158,18 +158,11 @@ fn panel(answer: &Answer, copied: bool) -> Panel {
             action: copy.clone(),
         },
     };
-    Panel {
-        key: answer.key.clone(),
-        size: PanelSize::Large,
-        title: vec![Span::new("/btw").bold()],
-        subtitle: Some(answer.question.clone()),
-        body: Node::Markdown { text: answer.text.clone() },
-        actions: vec![action],
-        binds: vec![PanelBind { key: "c".to_owned(), title: "Copy answer".to_owned(), action: copy }],
-        bleed: true,
-        centered: true,
-        bare: false,
-        close: None,
-        height: None,
-    }
+    Panel::new(answer.key.clone(), vec![Span::new("/btw").bold()], Node::Markdown { text: answer.text.clone() })
+        .with_size(PanelSize::Large)
+        .with_subtitle(Some(answer.question.clone()))
+        .with_actions(vec![action])
+        .with_binds(vec![PanelBind { key: "c".to_owned(), title: "Copy answer".to_owned(), action: copy }])
+        .with_bleed(true)
+        .with_centered(true)
 }

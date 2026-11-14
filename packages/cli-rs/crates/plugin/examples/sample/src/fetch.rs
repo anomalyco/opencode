@@ -16,7 +16,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     let reply = Rc::new(RefCell::new("none".to_owned()));
     let asked = request.clone();
     setup.command(hidden("sample.fetch"), move |host, _| {
-        let fetch = Fetch { method: "GET".to_owned(), path: "/api/sample".to_owned(), ..Fetch::default() };
+        let fetch = Fetch::default().with_method("GET".to_owned()).with_path("/api/sample".to_owned());
         asked.set(Some(host.fetch(fetch)));
     });
     let answered = reply.clone();
@@ -36,30 +36,27 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     setup.command(hidden("sample.panel"), move |host, _| {
         shown.set(shown.get() + 1);
         let again = Action::Command { name: "sample.panel".to_owned(), input: None };
-        host.dialog(Dialog::Panel(Panel {
-            key: "live".to_owned(),
-            size: PanelSize::Medium,
-            title: vec![Span::new("Sample panel").bold()],
-            subtitle: None,
-            body: Node::text([Span::new(format!("shown {} times", shown.get()))]),
-            actions: vec![PanelAction {
+        host.dialog(Dialog::Panel(
+            Panel::new(
+                "live".to_owned(),
+                vec![Span::new("Sample panel").bold()],
+                Node::text([Span::new(format!("shown {} times", shown.get()))]),
+            )
+            .with_size(PanelSize::Medium)
+            .with_actions(vec![PanelAction {
                 title: "again".to_owned(),
                 key: Some("a".to_owned()),
                 color: None,
                 close: false,
                 action: again.clone(),
-            }],
-            binds: vec![PanelBind { key: "a".to_owned(), title: "Show again".to_owned(), action: again }],
-            bleed: false,
-            centered: true,
-            bare: false,
-            close: None,
-            height: None,
-        }));
+            }])
+            .with_binds(vec![PanelBind { key: "a".to_owned(), title: "Show again".to_owned(), action: again }])
+            .with_centered(true),
+        ));
     });
     Ok(())
 }
 
 fn hidden(name: &str) -> Command {
-    Command { name: name.to_owned(), ..Command::default() }
+    Command::default().with_name(name.to_owned())
 }

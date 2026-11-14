@@ -45,24 +45,11 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
         ("drop.prompt", abi::Dialog::Prompt { title: "Drop prompt".to_owned(), placeholder: None, action: action() }),
         (
             "drop.select",
-            abi::Dialog::Select(abi::Select {
-                title: "Drop select".to_owned(),
-                placeholder: None,
-                options: vec![abi::SelectOption::new("Drop option", "option")],
-                current: None,
-                action: action(),
-                key: None,
-                actions: Vec::new(),
-                binds: Vec::new(),
-                search: None,
-                size: None,
-                focus: None,
-                query: None,
-                query_delay: 0,
-                filterless: false,
-                empty: None,
-                note: None,
-            }),
+            abi::Dialog::Select(abi::Select::new(
+                "Drop select".to_owned(),
+                vec![abi::SelectOption::new("Drop option", "option")],
+                action(),
+            )),
         ),
         (
             "drop.confirm",
@@ -83,29 +70,20 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
         ),
         (
             "drop.panel",
-            abi::Dialog::Panel(abi::Panel {
-                key: "panel".to_owned(),
-                size: abi::PanelSize::Medium,
-                title: title("Drop panel"),
-                subtitle: None,
-                body: abi::Node::text(title("body")),
-                actions: vec![abi::PanelAction {
-                    title: "Run".to_owned(),
-                    key: Some("r".to_owned()),
-                    color: None,
-                    close: false,
-                    action: action(),
-                }],
-                binds: Vec::new(),
-                bleed: false,
-                centered: false,
-                bare: false,
-                close: None,
-                height: None,
-            }),
+            abi::Dialog::Panel(
+                abi::Panel::new("panel".to_owned(), title("Drop panel"), abi::Node::text(title("body")))
+                    .with_size(abi::PanelSize::Medium)
+                    .with_actions(vec![abi::PanelAction {
+                        title: "Run".to_owned(),
+                        key: Some("r".to_owned()),
+                        color: None,
+                        close: false,
+                        action: action(),
+                    }]),
+            ),
         ),
     ];
-    let command = |name: &str| abi::Command { name: name.to_owned(), ..abi::Command::default() };
+    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
     let held = token.clone();
     setup.command(command("drop.run"), move |_, _| {
         let _ = &held;

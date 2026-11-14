@@ -63,5 +63,5 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
 }
 
 fn command(name: &str) -> Command {
-    Command { name: name.to_owned(), title: name.to_owned(), ..Command::default() }
+    Command::default().with_name(name.to_owned()).with_title(name.to_owned())
 }

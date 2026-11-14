@@ -35,15 +35,7 @@ fn view(values: &[u32], cx: &mut v2::View<'_>) -> v2::Node {
                 let patch = format!("@@ -1 +1 @@\n-card {index}\n+card {index} is {value}\n");
                 v2::Node::column(vec![
                     v2::Node::text(vec![Span::new(format!("card {index}: {value}"))]).fg("text.muted"),
-                    v2::Node::Diff {
-                        id: None,
-                        content: v2::Source::Content(cx.content(patch)),
-                        view: v2::DiffView::Unified,
-                        filetype: None,
-                        hunks: None,
-                        wrap: Default::default(),
-                        padding: 0,
-                    },
+                    v2::Node::diff(v2::Source::Content(cx.content(patch))).with_view(v2::DiffView::Unified),
                 ])
             })
         })
@@ -56,5 +48,5 @@ fn view(values: &[u32], cx: &mut v2::View<'_>) -> v2::Node {
 }
 
 fn command(name: &str) -> Command {
-    Command { name: name.to_owned(), title: name.to_owned(), ..Command::default() }
+    Command::default().with_name(name.to_owned()).with_title(name.to_owned())
 }

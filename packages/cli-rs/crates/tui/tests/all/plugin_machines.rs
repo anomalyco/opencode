@@ -44,11 +44,8 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
         return Err("life setup armed to throw".to_owned());
     }
     let side = Rc::new(Cell::new('A'));
-    let command = |name: &str, title: &str| abi::Command {
-        name: name.to_owned(),
-        title: title.to_owned(),
-        palette: true,
-        ..abi::Command::default()
+    let command = |name: &str, title: &str| {
+        abi::Command::default().with_name(name.to_owned()).with_title(title.to_owned()).with_palette(true)
     };
     let flip = |side: &Cell<char>| side.set(if side.get() == 'A' { 'B' } else { 'A' });
     let flipped = side.clone();
@@ -85,7 +82,7 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
             action: Some(answer("life.closed")),
         }));
     });
-    let hidden = |name: &str| abi::Command { name: name.to_owned(), ..abi::Command::default() };
+    let hidden = |name: &str| abi::Command::default().with_name(name.to_owned());
     let answered = side.clone();
     setup.command(hidden("life.answered"), move |_, input| {
         if input == Some("true") {
