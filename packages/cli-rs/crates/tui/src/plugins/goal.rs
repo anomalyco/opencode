@@ -1,5 +1,6 @@
 //! The goal `/goal` set on a session (E.14, rows F02 and DLG45, `feature-plugins/prompt/goal.tsx`): the goal plugin's
-//! RPC read, the status under the prompt, and the goal panel, for the prompt footer plugin.
+//! RPC read, the status under the prompt, and the goal panel, for the prompt footer plugin. The panel is a dialog of
+//! the API both majors share, whose body is a node of 1.x: contract 2.0 has no keyed dialog (P6a).
 //!
 //! [`Goals`] keeps the goal of each session a mounted footer shows. The first footer of a session reads its goal, and
 //! every tracked session is read again after a reconnect, since changes published meanwhile were missed; the `changed`
@@ -235,8 +236,8 @@ fn label(goal: &Goal) -> &'static str {
 }
 
 /// `GoalStatus`: `◎ goal` under the prompt; it brightens under the pointer, and a click opens the panel.
-pub fn status(session: &str, goal: &Goal) -> Node {
-    Node::text([Span::new(format!("◎ {}", label(goal)))])
+pub fn status(session: &str, goal: &Goal) -> abi::v2::Node {
+    abi::v2::Node::text([Span::new(format!("◎ {}", label(goal)))])
         .fg(color(goal))
         .hover_fg("text.base")
         .wrap(Wrap::None)
