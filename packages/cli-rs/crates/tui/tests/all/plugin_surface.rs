@@ -14,6 +14,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::Duration;
 
+use opencode_api::generated::V2Event;
 use opencode_plugin::abi::{self, v2};
 use opencode_plugin::reconcile;
 use opencode_plugin::surface::{self, Ledger};
@@ -372,24 +373,68 @@ fn a_theme_change_calls_only_a_surface_that_reads_the_palette() {
     }
 }
 
-/// A plugin whose route shows a tool call's output of `ses_p` by reference, and a call the transcript lacks.
+thread_local! {
+    /// The views `test.parts` returned.
+    static PART_VIEWS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// A plugin whose route shows tool call outputs of `ses_p` by reference: `call_1`, `call_2` alone and inside a box
+/// it keeps from its second view on, and a user message's id, which names no tool call.
 fn parts(setup: &mut abi::Setup) -> Result<(), String> {
     let part = |part: &str| v2::Node::Markdown {
         id: None,
         source: v2::Source::PartOutput(v2::PartRef { session: "ses_p".into(), part: part.into() }),
     };
     setup.surface(v2::Surface::new("parts", v2::Place::Route("parts".into()), move |_| {
-        v2::Node::column(vec![part("call_1"), part("call_9"), v2::Node::text(vec![abi::Span::new("end")])])
+        let views = PART_VIEWS.get();
+        PART_VIEWS.set(views + 1);
+        let held = match views {
+            0 => v2::Node::column(vec![v2::Node::text(vec![abi::Span::new("kept:")]), part("call_2")]).with_id("held"),
+            _ => v2::Node::Keep { key: "held".into() },
+        };
+        v2::Node::column(vec![
+            part("call_1"),
+            part("call_2"),
+            held,
+            part("msg_1"),
+            v2::Node::text(vec![abi::Span::new("end")]),
+        ])
     }));
     Ok(())
 }
 
+fn tool_event(kind: &str, seq: u64, data: serde_json::Value) -> V2Event {
+    let event = serde_json::json!({
+        "id": format!("evt_{seq}"), "created": 10_000 + seq, "type": kind,
+        "durable": { "aggregateID": "ses_p", "seq": seq, "version": 1 },
+        "data": data,
+    });
+    serde_json::from_value(event).unwrap()
+}
+
 // Expected: a tool call's output named by reference shows the transcript's own text, which never crosses to the
-// plugin; a call the transcript does not have shows nothing.
+// plugin. A call the transcript does not have yet, or that streams its input or runs, shows nothing; once it completes
+// its output shows, also under a kept ancestor, with no view of the plugin's. A newer tool whose input holds the
+// call's id and a text, and a message whose id is named, show nothing of theirs.
 #[test]
 fn a_part_output_shows_the_transcripts_own_text() {
+    PART_VIEWS.set(0);
     let session = support::merge(support::session("ses_p", "Parts"), serde_json::json!({ "agent": "build" }));
     let messages = serde_json::json!([
+        {
+            "id": "msg_3", "type": "assistant", "agent": "build",
+            "model": { "providerID": "provider", "id": "model" },
+            "time": { "created": 5000 },
+            "content": [
+                {
+                    "type": "tool", "id": "call_x", "name": "read", "time": { "created": 5100, "completed": 5200 },
+                    "state": {
+                        "status": "completed", "input": { "id": "call_2", "text": "WRONG_INPUT" },
+                        "content": [{ "type": "text", "text": "x output" }],
+                    },
+                },
+            ],
+        },
         {
             "id": "msg_2", "type": "assistant", "agent": "build",
             "model": { "providerID": "provider", "id": "model" },
@@ -398,7 +443,13 @@ fn a_part_output_shows_the_transcripts_own_text() {
                 { "type": "text", "id": "t1", "text": "part one says hello" },
                 {
                     "type": "tool", "id": "call_1", "name": "read", "time": { "created": 1600, "completed": 1700 },
-                    "state": { "status": "completed", "input": {}, "content": [{ "type": "text", "text": "tool said fn parse" }] },
+                    "state": {
+                        "status": "completed", "input": {},
+                        "content": [
+                            { "type": "text", "text": "tool said fn parse" },
+                            { "type": "file", "uri": "file:///p/lib.rs", "mime": "text/plain", "name": "lib.rs" },
+                        ],
+                    },
                 },
             ],
         },
@@ -419,9 +470,32 @@ fn a_part_output_shows_the_transcripts_own_text() {
     let harness = support::mount(80, 24, deps);
     harness.wait_for("part one says hello");
     harness.tui.navigate(Route::Plugin { id: "test.parts".into(), name: "parts".into() });
-    let screen = harness.wait_for("tool said fn parse");
-    let lines: Vec<&str> = screen.lines().map(str::trim).filter(|line| !line.is_empty()).collect();
-    assert_eq!(lines, ["tool said fn parse", "end"], "{screen}");
+    harness.wait_for("tool said fn parse");
+    let shown = |harness: &Harness| -> Vec<String> {
+        let screen = harness.app.render().text();
+        screen.lines().map(str::trim).filter(|line| !line.is_empty()).map(str::to_owned).collect()
+    };
+    assert_eq!(shown(&harness), ["tool said fn parse", "lib.rs", "kept:", "end"]);
+    let ids = serde_json::json!({ "sessionID": "ses_p", "assistantMessageID": "msg_3", "id": "call_2" });
+    let with = |extra: serde_json::Value| support::merge(ids.clone(), extra);
+    harness.tui.data.apply(&[tool_event("session.tool.input.started", 1, with(serde_json::json!({ "name": "read" })))]);
+    settle(&harness);
+    harness.tui.data.apply(&[tool_event(
+        "session.tool.called",
+        2,
+        with(serde_json::json!({ "input": {}, "executed": true })),
+    )]);
+    settle(&harness);
+    assert_eq!(shown(&harness), ["tool said fn parse", "lib.rs", "kept:", "end"], "a running call shows output");
+    harness.tui.data.apply(&[tool_event(
+        "session.tool.success",
+        3,
+        with(serde_json::json!({ "content": [{ "type": "text", "text": "REAL_RESULT" }], "executed": true })),
+    )]);
+    harness.wait_for("REAL_RESULT");
+    settle(&harness);
+    assert_eq!(shown(&harness), ["tool said fn parse", "lib.rs", "REAL_RESULT", "kept:", "REAL_RESULT", "end"]);
+    assert!(PART_VIEWS.get() >= 2, "the kept box was never kept");
 }
 
 /// A plugin of ABI 1.x whose route shows one text in the theme's muted color.
