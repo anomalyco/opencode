@@ -1,5 +1,5 @@
-import { Context, Layer } from "effect"
-import { networkInterfaces } from "node:os"
+import { Context, Effect, Layer } from "effect"
+import { hostname, networkInterfaces } from "node:os"
 import type { ServerOptions } from "./options"
 
 export class Service extends Context.Service<
@@ -37,5 +37,22 @@ export function connectionURLs(value: string, requestedHostname?: string) {
     ]),
   ]
 }
+
+// The computer's human name: the macOS Computer Name ("Alex's MacBook Pro"), else the hostname without `.local`.
+// Never fails; undefined when the runtime can't tell (e.g. workerd).
+export const deviceName = Effect.gen(function* () {
+  const name = (yield* computerName) || (yield* Effect.try(() => hostname().replace(/\.local$/, "")))
+  return name.trim() || undefined
+}).pipe(Effect.orElseSucceed(() => undefined))
+
+const computerName = Effect.tryPromise(async () => {
+  if (process.platform !== "darwin") return ""
+  const { execFile } = await import("node:child_process")
+  return new Promise<string>((resolve) =>
+    execFile("scutil", ["--get", "ComputerName"], { timeout: 1000 }, (error, stdout) =>
+      resolve(error ? "" : stdout.trim()),
+    ),
+  )
+})
 
 export * as ServerInfo from "./server-info"

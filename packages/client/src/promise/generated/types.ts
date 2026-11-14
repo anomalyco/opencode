@@ -11,7 +11,7 @@ export type ServerInfo = {
 
 export type PairingCode = { code: string; expires_in: number }
 
-export type PairingSession = { token: string }
+export type PairingSession = { token: string; device?: { name: string } | undefined }
 
 export type AbsolutePath = string
 
