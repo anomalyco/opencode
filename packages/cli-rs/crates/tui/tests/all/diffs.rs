@@ -62,7 +62,22 @@ fn mount(route: Route) -> Diffs {
 
 /// Serves `diff`, one file or a list of them.
 fn mount_with(route: Route, diff: Value, width: u16, height: u16) -> Diffs {
-    mount_on(route, diff, width, height, false)
+    mount_on(route, diff, width, height, ABI.with(Cell::get))
+}
+
+thread_local! {
+    /// The carrier [`mount_with`] mounts the built-ins on, which [`on_both`] sets.
+    static ABI: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Runs `row` with the built-ins linked, then on the C ABI's byte shims: 4.9's scenarios on both carriers.
+fn on_both(row: impl Fn()) {
+    for abi in [false, true] {
+        eprintln!("the {} carrier", if abi { "C ABI" } else { "linked" });
+        ABI.with(|cell| cell.set(abi));
+        row();
+    }
+    ABI.with(|cell| cell.set(false));
 }
 
 /// [`mount_with`], with the built-ins on the C ABI's byte shims when `abi`.
@@ -157,23 +172,25 @@ impl Diffs {
 
 #[test]
 fn closing_the_panel_ends_its_file_menu_and_turn_watch() {
-    let h = mount(support::session_route("ses_a"));
-    h.wait_for("Review");
-    h.tui.keymap.dispatch("diff.open", None);
-    h.wait_for("src/main.rs");
-    // While the panel is open, an ended turn loads the diff again.
-    let reads = h.diff_reads();
-    h.turn();
-    let found = h.app.wait_until(support::WAIT, || h.diff_reads() > reads);
-    assert!(found, "an ended turn did not load the diff again");
-    h.open_menu();
-    h.tui.panels.close(&h.tui);
-    h.assert_menu_closed();
+    on_both(|| {
+        let h = mount(support::session_route("ses_a"));
+        h.wait_for("Review");
+        h.tui.keymap.dispatch("diff.open", None);
+        h.wait_for("src/main.rs");
+        // While the panel is open, an ended turn loads the diff again.
+        let reads = h.diff_reads();
+        h.turn();
+        let found = h.app.wait_until(support::WAIT, || h.diff_reads() > reads);
+        assert!(found, "an ended turn did not load the diff again");
+        h.open_menu();
+        h.tui.panels.close(&h.tui);
+        h.assert_menu_closed();
 
-    let reads = h.diff_reads();
-    h.turn();
-    h.app.advance(Duration::from_millis(200));
-    assert_eq!(h.diff_reads(), reads, "the closed viewer loaded the turn again");
+        let reads = h.diff_reads();
+        h.turn();
+        h.app.advance(Duration::from_millis(200));
+        assert_eq!(h.diff_reads(), reads, "the closed viewer loaded the turn again");
+    });
 }
 
 #[test]
@@ -402,9 +419,11 @@ const TREE: usize = 30;
 // its sticky header, so `]` lands on the second file's, which `m` then marks.
 #[test]
 fn a_hunk_step_starts_below_the_sticky_header() {
-    let h = route(4, 4, 120, 30);
-    h.keys(&["]", "m"]);
-    assert_eq!(h.reviewed(), ["f0001.rs"]);
+    on_both(|| {
+        let h = route(4, 4, 120, 30);
+        h.keys(&["]", "m"]);
+        assert_eq!(h.reviewed(), ["f0001.rs"]);
+    });
 }
 
 // Expected (`the_current_file_is_the_last_card_at_the_top`, now `top_anchor` with an inset of 1, and
@@ -412,12 +431,14 @@ fn a_hunk_step_starts_below_the_sticky_header() {
 // the pane's first row, not its gap; a row down clears the selection, and `m` marks the card at the top.
 #[test]
 fn the_current_file_is_the_card_at_the_top() {
-    let h = route(4, 12, 120, 30);
-    h.keys(&["n"]);
-    let row = h.top_card_row();
-    assert!(row.contains("src/f0001.rs") && !row.contains('▄'), "{row:?}\n{}", h.app.text());
-    h.keys(&["j", "m"]);
-    assert_eq!(h.reviewed(), ["f0001.rs"]);
+    on_both(|| {
+        let h = route(4, 12, 120, 30);
+        h.keys(&["n"]);
+        let row = h.top_card_row();
+        assert!(row.contains("src/f0001.rs") && !row.contains('▄'), "{row:?}\n{}", h.app.text());
+        h.keys(&["j", "m"]);
+        assert_eq!(h.reviewed(), ["f0001.rs"]);
+    });
 }
 
 // Expected (4.9 "`]`, `]`, `[` near the bottom", `jumps_continue_from_the_selected_hunk_until_the_view_moves`): at the
@@ -425,19 +446,21 @@ fn the_current_file_is_the_card_at_the_top() {
 // and `]` `]` on another file.
 #[test]
 fn hunk_steps_near_the_bottom_go_on_from_the_last() {
-    let marked = |keys: &[&str]| {
-        let h = route(6, 4, 120, 20);
-        h.keys(&["shift+g"]);
-        h.keys(keys);
-        h.keys(&["m"]);
-        h.reviewed()
-    };
-    let once = marked(&["]"]);
-    assert_eq!(once.len(), 1, "{once:?}");
-    assert_eq!(marked(&["]", "]", "["]), once);
-    let twice = marked(&["]", "]"]);
-    assert_eq!(twice.len(), 1, "{twice:?}");
-    assert_ne!(twice, once, "the second step at the end did not move on");
+    on_both(|| {
+        let marked = |keys: &[&str]| {
+            let h = route(6, 4, 120, 20);
+            h.keys(&["shift+g"]);
+            h.keys(keys);
+            h.keys(&["m"]);
+            h.reviewed()
+        };
+        let once = marked(&["]"]);
+        assert_eq!(once.len(), 1, "{once:?}");
+        assert_eq!(marked(&["]", "]", "["]), once);
+        let twice = marked(&["]", "]"]);
+        assert_eq!(twice.len(), 1, "{twice:?}");
+        assert_ne!(twice, once, "the second step at the end did not move on");
+    });
 }
 
 // Expected (4.9 "mark a file above the viewport reviewed, then wheel across it"): marking the first file from its tree
@@ -445,93 +468,111 @@ fn hunk_steps_near_the_bottom_go_on_from_the_last() {
 // reviewed heading.
 #[test]
 fn a_file_marked_above_the_view_keeps_the_reading_position() {
-    let h = route(5, 12, 120, 30);
-    h.keys(&["n", "n"]);
-    let before = h.top_card_row();
-    assert!(before.contains("src/f0002.rs"), "{before:?}");
-    let (x, y) = h.find("≡ f0000.rs");
-    h.app.mouse(MouseEventKind::Down(MouseButton::Right), x, y);
-    h.wait_for("Mark complete");
-    h.keys(&["return"]);
-    assert_eq!(h.reviewed(), ["f0000.rs"]);
-    assert_eq!(h.top_card_row(), before, "the reading position moved");
-    for _ in 0..40 {
-        h.app.scroll(80, 10, false);
-    }
-    let screen = h.settle();
-    let heading = screen.lines().find(|line| line.contains("src/f0000.rs")).unwrap_or_default();
-    assert!(heading.contains('✓') && !screen.contains("old 0"), "{screen}");
+    on_both(|| {
+        let h = route(5, 12, 120, 30);
+        h.keys(&["n", "n"]);
+        let before = h.top_card_row();
+        assert!(before.contains("src/f0002.rs"), "{before:?}");
+        let (x, y) = h.find("≡ f0000.rs");
+        h.app.mouse(MouseEventKind::Down(MouseButton::Right), x, y);
+        h.wait_for("Mark complete");
+        // The first frame the mark presents already holds the reading position, not only the settled one.
+        h.app.press("return");
+        let first = h.app.render().text();
+        let first: String = first.lines().nth(1).map(|row| row.chars().skip(TREE).collect()).unwrap_or_default();
+        assert_eq!(first, before, "the first frame moved the reading position");
+        assert_eq!(h.reviewed(), ["f0000.rs"]);
+        assert_eq!(h.top_card_row(), before, "the reading position moved");
+        for _ in 0..40 {
+            h.app.scroll(80, 10, false);
+        }
+        let screen = h.settle();
+        let heading = screen.lines().find(|line| line.contains("src/f0000.rs")).unwrap_or_default();
+        assert!(heading.contains('✓') && !screen.contains("old 0"), "{screen}");
+    });
 }
 
 // Expected (4.9 "410 files and more"): the route opens on the first card at 410 and 1,000 files, goes to the last, and
 // counts a mark of all of them.
 #[test]
 fn many_files_open_and_reach_the_last() {
-    for count in [410, 1000] {
-        let h = route(count, 4, 120, 30);
-        let last = format!("src/f{:04}.rs", count - 1);
-        h.keys(&["shift+g"]);
-        h.wait_for(&last);
-        h.keys(&["m"]);
-        h.wait_for(&format!("1/{count}"));
-    }
+    on_both(|| {
+        for count in [410, 1000] {
+            let h = route(count, 4, 120, 30);
+            let last = format!("src/f{:04}.rs", count - 1);
+            h.keys(&["shift+g"]);
+            h.wait_for(&last);
+            h.keys(&["m"]);
+            h.wait_for(&format!("1/{count}"));
+        }
+    });
 }
 
 // Expected (4.9 "a width change that crosses the split threshold during a jump"): a step and a resize from a split
 // view to a unified one in one frame land where the step lands at the narrower width.
 #[test]
 fn a_jump_across_the_split_threshold_lands_as_at_the_new_width() {
-    let jumped = |resize: bool| {
-        let h = route(4, 30, if resize { 140 } else { 120 }, 30);
-        h.app.press("]");
-        if resize {
-            h.app.resize(120, 30);
-        }
-        h.settle()
-    };
-    let narrow = jumped(false);
-    assert!(narrow.contains("+new 1") || narrow.contains("+ new 1"), "{narrow}");
-    assert_eq!(jumped(true), narrow);
+    on_both(|| {
+        // Settled frames: the first frame after a resize still shows the view of the old size, laid out at the new one,
+        // since a surface hears its size from the layout of that frame (steps/plugins-p6c.md, big-boi's review).
+        let jumped = |resize: bool| {
+            let h = route(4, 30, if resize { 140 } else { 120 }, 30);
+            h.app.press("]");
+            if resize {
+                h.app.resize(120, 30);
+            }
+            h.settle()
+        };
+        let narrow = jumped(false);
+        assert!(narrow.contains("+new 1") || narrow.contains("+ new 1"), "{narrow}");
+        assert_eq!(jumped(true), narrow);
+    });
 }
 
 // Expected (4.9 "a menu on right button down"): the press opens the menu; the release does not close it.
 #[test]
 fn the_file_menu_opens_on_the_right_button_down() {
-    let h = route(2, 4, 120, 30);
-    let (x, y) = h.find("≡ f0001.rs");
-    h.app.mouse(MouseEventKind::Down(MouseButton::Right), x, y);
-    h.wait_for("Mark complete");
-    h.app.mouse(MouseEventKind::Up(MouseButton::Right), x, y);
-    assert!(h.settle().contains("Mark complete"));
+    on_both(|| {
+        let h = route(2, 4, 120, 30);
+        let (x, y) = h.find("≡ f0001.rs");
+        h.app.mouse(MouseEventKind::Down(MouseButton::Right), x, y);
+        h.wait_for("Mark complete");
+        h.app.mouse(MouseEventKind::Up(MouseButton::Right), x, y);
+        assert!(h.settle().contains("Mark complete"));
+    });
 }
 
 // Expected (4.9 "open from Home and go back"): the route remembers where `/diff` came from and `q` goes back there.
 #[test]
 fn the_route_opens_from_home_and_goes_back() {
-    let h = route(1, 4, 120, 30);
-    assert_eq!(h.tui.route(), Route::Plugin { id: "opencode.diffs".into(), name: "diff".into() });
-    h.keys(&["q"]);
-    h.wait("the route did not go back home", || h.tui.route() == Route::Home);
+    on_both(|| {
+        let h = route(1, 4, 120, 30);
+        assert_eq!(h.tui.route(), Route::Plugin { id: "opencode.diffs".into(), name: "diff".into() });
+        h.keys(&["q"]);
+        h.wait("the route did not go back home", || h.tui.route() == Route::Home);
+    });
 }
 
 // Expected (4.9 "dock and focus"): the docked panel takes the keys while it has the focus; with the focus on the
 // composer the same key types, the footer dims, and a press on the panel gives it back.
 #[test]
 fn the_docked_panel_takes_the_keys_only_with_the_focus() {
-    let h = mount(support::session_route("ses_a"));
-    h.wait_for("Review");
-    h.tui.keymap.dispatch("diff.open", None);
-    h.wait_for("src/main.rs");
-    h.keys(&["m"]);
-    h.wait_for("1/1");
-    h.dispatch("pane.focus.left");
-    h.keys(&["m"]);
-    assert_eq!(h.text(), "m", "the composer did not take the key");
-    assert!(h.settle().contains("1/1"), "the panel took the key");
-    let (x, y) = h.find("src/main.rs");
-    h.app.click(x, y);
-    h.keys(&["m"]);
-    h.wait_for("0/1");
+    on_both(|| {
+        let h = mount(support::session_route("ses_a"));
+        h.wait_for("Review");
+        h.tui.keymap.dispatch("diff.open", None);
+        h.wait_for("src/main.rs");
+        h.keys(&["m"]);
+        h.wait_for("1/1");
+        h.dispatch("pane.focus.left");
+        h.keys(&["m"]);
+        assert_eq!(h.text(), "m", "the composer did not take the key");
+        assert!(h.settle().contains("1/1"), "the panel took the key");
+        let (x, y) = h.find("src/main.rs");
+        h.app.click(x, y);
+        h.keys(&["m"]);
+        h.wait_for("0/1");
+    });
 }
 
 // Expected (TS binds `app.exit` to close the viewer; big-boi's review of P6c): the reserved chord, which no plugin sees,

@@ -42,8 +42,11 @@ fn out() -> std::fs::File {
     std::fs::OpenOptions::new().create(true).append(true).open(path).unwrap()
 }
 
+/// Writes `line` to `GATE_OUT`; without it (the negative control) nothing is written.
 fn write(line: Value) {
-    writeln!(out(), "{line}").unwrap();
+    if std::env::var_os("GATE_OUT").is_some() {
+        writeln!(out(), "{line}").unwrap();
+    }
 }
 
 fn micros(started: Instant) -> f64 {
@@ -107,7 +110,15 @@ fn frames(app: &support::Harness, since: Instant, usable: &dyn Fn(&str) -> bool)
 
 // Today's viewer.
 
-fn today(count: usize, narrow: bool) {
+/// How [`today`] drives the viewer: its built-ins on the C ABI's byte shims (`GATE_CARRIER=abi`), and, for the negative
+/// control only, actions that dispatch nothing.
+#[derive(Clone, Copy, Default)]
+struct Drive {
+    abi: bool,
+    noop: bool,
+}
+
+fn today(count: usize, narrow: bool, drive: Drive) {
     const DIRECTORY: &str = "/project";
     let location =
         json!({ "directory": DIRECTORY, "project": { "id": "proj", "directory": DIRECTORY, "canonical": DIRECTORY } });
@@ -134,6 +145,7 @@ fn today(count: usize, narrow: bool) {
         config: support::config(support::decode(&config.to_string())),
         route: Route::Home,
         events: true,
+        abi_builtins: drive.abi,
         ..support::deps(Arc::new(memory.clone()))
     };
     let harness = mount(width, height, deps);
@@ -160,33 +172,44 @@ fn today(count: usize, narrow: bool) {
     let usable = usable.expect("the open never showed the first file");
     write(json!({ "part": part, "files": count, "action": "open", "step": 0, "dispatch_us": dispatch_us,
         "usable_us": usable, "frames": all }));
-    let action = |name: &str, step: usize, run: &dyn Fn()| {
+    // Each action is checked after its frames, outside the time: a step that did nothing fails the probe.
+    let shown = RefCell::new(harness.app.text());
+    let action = |name: &str, step: usize, moves: bool, run: &dyn Fn()| {
         let started = Instant::now();
-        run();
+        if !drive.noop {
+            run();
+        }
         let dispatch_us = micros(started);
-        let (frames, _, _) = frames(&harness, started, &|_| false);
+        let (frames, _, text) = frames(&harness, started, &|_| false);
         write(json!({ "part": part, "files": count, "action": name, "step": step, "dispatch_us": dispatch_us,
             "frames": frames }));
+        let before = shown.replace(text.clone());
+        assert_eq!(
+            text != before,
+            moves,
+            "{part} {count} {name} {step}: the screen {}:\n{text}",
+            if moves { "did not change" } else { "changed" }
+        );
     };
+    let app = &harness.app;
+    let key = |key: &'static str| move || app.press(key);
     for step in 0..5 {
-        action("jump_hunk", step, &|| {
-            let _ = harness.tui.keymap.dispatch("diff.next_hunk", None);
-        });
+        action("jump_hunk", step, true, &key("]"));
     }
     for step in 0..3 {
-        action("mark_reviewed", step, &|| {
-            let _ = harness.tui.keymap.dispatch("diff.mark_reviewed", None);
-        });
+        action("mark_reviewed", step, true, &key("m"));
+        // In the list of all files a mark toggles the selected file, so the count goes 1, 0, 1.
+        let marked = format!("{}/{count}", 1 - step % 2);
+        assert!(shown.borrow().contains(&marked), "{part} {count}: mark {step} does not show {marked}");
     }
+    // At 48 columns split has no room, so the toggle changes nothing, as in TS.
     for step in 0..2 {
-        action("toggle_view", step, &|| {
-            let _ = harness.tui.keymap.dispatch("diff.toggle_view", None);
-        });
+        action("toggle_view", step, !narrow, &key("v"));
     }
     for step in 0..30 {
-        action("wheel", step, &|| harness.app.scroll(wheel.0, wheel.1, true));
+        action("wheel", step, true, &|| harness.app.scroll(wheel.0, wheel.1, true));
     }
-    action("resize", 0, &|| harness.app.resize(resized, height));
+    action("resize", 0, true, &|| harness.app.resize(resized, height));
 }
 
 // The plugin's route.
@@ -427,6 +450,7 @@ fn gate_probe() {
         .map(|size| size.parse().unwrap())
         .collect();
     let parts_wanted = std::env::var("GATE_PARTS").unwrap_or_else(|_| "today,route,parts".into());
+    let drive = Drive { abi: std::env::var("GATE_CARRIER").is_ok_and(|carrier| carrier == "abi"), noop: false };
     let wanted = |part: &str| parts_wanted.split(',').any(|wanted| wanted == part);
     for &size in &sizes {
         if wanted("route") {
@@ -439,13 +463,30 @@ fn gate_probe() {
             route(size, true, true);
         }
         if wanted("today") {
-            today(size, false);
+            today(size, false, drive);
         }
         if wanted("today-narrow") {
-            today(size, true);
+            today(size, true, drive);
         }
         if wanted("parts") {
             parts(size);
         }
+    }
+}
+
+// Expected (big-boi's review of P6c): the probe checks what each action did, so a driver whose actions dispatch nothing
+// fails it instead of timing nothing.
+#[test]
+#[should_panic(expected = "jump_hunk 0: the screen did not change")]
+fn the_gate_fails_actions_that_do_nothing() {
+    today(8, false, Drive { abi: false, noop: true });
+}
+
+// Expected: the probe's checks hold for the real viewer, on both carriers, at a size a debug build runs.
+#[test]
+fn the_gate_drives_the_viewer_on_both_carriers() {
+    for abi in [false, true] {
+        today(40, false, Drive { abi, noop: false });
+        today(40, true, Drive { abi, noop: false });
     }
 }
