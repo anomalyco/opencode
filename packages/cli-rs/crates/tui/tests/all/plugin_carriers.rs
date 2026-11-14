@@ -497,3 +497,116 @@ fn panels_overlays_and_reads_are_equal_on_every_carrier() {
         }
     }
 }
+
+/// The board's claims in a session whose answer streams a `board` call that finishes, one that fails, and a `board`
+/// fence, then takes another theme; what each checkpoint sees, with the composer's random placeholder blanked.
+fn claimed(run: Run) -> Vec<(&'static str, Seen)> {
+    let session = support::merge(support::session("ses_c", "Claims"), serde_json::json!({ "agent": "build" }));
+    let messages = serde_json::json!([
+        {
+            "id": "msg_2", "type": "assistant", "agent": "build", "model": { "providerID": "provider", "id": "model" },
+            "time": { "created": 1500 }, "content": [],
+        },
+        { "id": "msg_1", "type": "user", "text": "Stream it", "time": { "created": 1000 } },
+    ]);
+    let fake = support::Fake::new(move |seen| match seen.path.as_str() {
+        "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
+        "/api/session/ses_c" => (200, serde_json::json!({ "data": session })),
+        "/api/session/ses_c/message" => (200, serde_json::json!({ "data": messages, "cursor": {} })),
+        "/api/session/ses_c/permission" | "/api/session/ses_c/inbox" => (200, serde_json::json!({ "data": [] })),
+        _ => support::not_found(),
+    });
+    // Each call in its own row: grouping folds finished calls, claimed or not (E.8).
+    let session = opencode_local::cli_config::Session {
+        grouping: Some(opencode_local::cli_config::Grouping::None),
+        verbosity: Some(opencode_local::cli_config::Verbosity::Medium),
+        ..Default::default()
+    };
+    let info =
+        opencode_local::cli_config::Info { animations: Some(false), session: Some(session), ..Default::default() };
+    let deps =
+        Deps { config: support::config(info), route: support::session_route("ses_c"), ..support::deps(Arc::new(fake)) };
+    let board = open_on(run, 80, deps);
+    let (harness, tui) = (&board.harness, &board.harness.tui);
+    harness.wait_for("Stream it");
+    let seq = std::cell::Cell::new(0);
+    let emit = |kind: &str, data: serde_json::Value| {
+        seq.set(seq.get() + 1);
+        let ids = serde_json::json!({ "sessionID": "ses_c", "assistantMessageID": "msg_2" });
+        let event = serde_json::json!({
+            "id": format!("evt_{}", seq.get()), "created": 10_000 + seq.get(), "type": kind,
+            "durable": { "aggregateID": "ses_c", "seq": seq.get(), "version": 1 }, "data": support::merge(ids, data),
+        });
+        tui.data.apply(&[serde_json::from_value(event).unwrap()]);
+        harness.wait("the views took the event", || tui.synced());
+        settle(harness);
+        harness.app.render();
+    };
+    let observe = || {
+        let (cells, toasts, status) = observe(harness);
+        let rect = tui.textarea.borrow().as_ref().map(opentui::prelude::Widget::rect);
+        let width = usize::from(harness.app.app().size().0);
+        let composer = |index: usize| {
+            let (x, y) = ((index % width) as f64, (index / width) as f64);
+            rect.is_some_and(|r| {
+                x >= r.screen_x
+                    && x < r.screen_x + f64::from(r.width)
+                    && y >= r.screen_y
+                    && y < r.screen_y + f64::from(r.height)
+            })
+        };
+        let cells =
+            cells.into_iter().enumerate().filter(|(index, _)| !composer(*index)).map(|(_, cell)| cell).collect();
+        (cells, toasts, status)
+    };
+    let mut seen = Vec::new();
+    emit("session.tool.input.started", serde_json::json!({ "id": "call_1", "name": "board" }));
+    emit("session.tool.input.delta", serde_json::json!({ "id": "call_1", "delta": "{\"q\": 1" }));
+    seen.push(("streaming", observe()));
+    emit("session.tool.called", serde_json::json!({ "id": "call_1", "input": { "q": 1 }, "executed": true }));
+    seen.push(("running", observe()));
+    let content = serde_json::json!([{ "type": "text", "text": "the board's call is done" }]);
+    emit("session.tool.success", serde_json::json!({ "id": "call_1", "content": content, "executed": true }));
+    seen.push(("completed", observe()));
+    let screen = harness.app.text();
+    assert!(
+        screen.contains("board call_1 Completed") && screen.contains("the board's call is done"),
+        "{run:?}:\n{screen}"
+    );
+    emit("session.tool.input.started", serde_json::json!({ "id": "call_2", "name": "board" }));
+    let error = serde_json::json!({ "type": "unknown", "message": "boom" });
+    emit("session.tool.failed", serde_json::json!({ "id": "call_2", "error": error, "executed": false }));
+    seen.push(("declined", observe()));
+    emit("session.text.started", serde_json::json!({ "ordinal": 0 }));
+    for chunk in ["Before.\n\n", "```board\n", "alpha\n", "beta\n", "```\n"] {
+        emit("session.text.delta", serde_json::json!({ "ordinal": 0, "delta": chunk }));
+    }
+    seen.push(("fence", observe()));
+    let screen = harness.app.text();
+    assert!(screen.contains("fence board") && !screen.contains("board call_2 Error"), "{run:?}:\n{screen}");
+    tui.theme.borrow_mut().set("tokyonight");
+    tui.theme_changed();
+    settle(harness);
+    seen.push(("theme", observe()));
+    seen
+}
+
+// Expected (`carrier-equal` for renderer claims, Pr): the board's claims of a tool call and a fence give the same
+// frames, toasts and status linked, through the byte shims, and as a real library: a call streaming, running and
+// finished with its output by reference, a failed call declined to the host's row, a fence, and a theme change.
+#[test]
+fn a_claimed_part_is_equal_on_every_carrier() {
+    let linked = claimed(Run::In(Carrier::Linked));
+    // The guard: each checkpoint sees a new frame, and the claim draws.
+    assert!(linked.windows(2).all(|pair| pair[0].1.0 != pair[1].1.0), "a checkpoint saw what the one before did");
+    for run in [Run::In(CARRIERS[1]), Run::Library] {
+        let other = claimed(run);
+        for ((name, linked), (_, other)) in linked.iter().zip(&other) {
+            assert_eq!((&linked.1, &linked.2), (&other.1, &other.2), "{run:?} at {name}: toasts and status");
+            if linked.0 != other.0 {
+                let at = linked.0.iter().zip(&other.0).position(|(a, b)| a != b);
+                panic!("{run:?} at {name}: the frames differ, first at cell {at:?}");
+            }
+        }
+    }
+}

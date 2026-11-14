@@ -59,8 +59,8 @@
 #![allow(unsafe_code)]
 
 pub mod canvas;
-pub mod interact;
 pub mod claim;
+pub mod interact;
 pub mod mail;
 mod schema;
 pub mod v2;

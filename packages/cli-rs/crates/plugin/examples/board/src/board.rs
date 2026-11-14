@@ -13,6 +13,8 @@
 //! `file` with its hunks in group `hunk`. Commands bring a file to the top, step between hunks and show a file with
 //! `Nearest`; `layout` paints the header from the top file, and the header shows where the last step landed and how
 //! many `layout` calls ran.
+//! It also claims the calls of a `board` tool and the `board` fences of the transcript (Pr): each part is a card
+//! of its own.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -20,7 +22,9 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use opencode_plugin_abi::canvas::{List, Style};
+use opencode_plugin_abi::claim::{Claim, Part, State};
 use opencode_plugin_abi::interact::{Anchor, Bind, Event, Handled, Interact, Layer, LayerScope, OpenPanel, Overlay};
+use opencode_plugin_abi::types::SessionMessageAssistantToolState;
 use opencode_plugin_abi::{
     Action, Command, Dialog, Host, Layout, Rgba, Select, SelectOption, SendError, Setup, Span, Toast, Variant, Width,
     v2,
@@ -151,6 +155,8 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         });
     setup.surface(surface);
     files(setup);
+    setup.claim(Claim::tool("board", claimed));
+    setup.claim(Claim::fence("board", claimed));
     Ok(())
 }
 
@@ -321,6 +327,32 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
                 _ => Handled::Pass,
             });
     setup.surface(menu);
+}
+
+/// A claimed part as a card: a title, and what the part holds as content, memoized on both. A finished call shows its
+/// output by reference; a call that failed is left to the host's row.
+fn claimed(cx: &mut v2::View<'_>, part: &Part) -> Option<v2::Node> {
+    let (title, body, output) = match part {
+        Part::Tool(tool) => {
+            let input = match &tool.tool.state {
+                SessionMessageAssistantToolState::Streaming(state) => state.input.clone(),
+                SessionMessageAssistantToolState::Running(state) => format!("{:?}", state.input),
+                SessionMessageAssistantToolState::Completed(state) => format!("{:?}", state.input),
+                _ => return None,
+            };
+            let output = (tool.state == State::Completed).then(|| tool.output());
+            (format!("{} {} {:?}", tool.tool.name, tool.tool.id, tool.state), input, output)
+        }
+        Part::Fence(fence) => (format!("fence {}", fence.info), fence.code.clone(), None),
+    };
+    Some(cx.memo("part", (title.clone(), body.clone(), output.clone()), |cx| {
+        let mut children = vec![
+            v2::Node::text(vec![Span::new(title)]).fg("text.muted"),
+            v2::Node::Markdown { id: None, source: v2::Source::Content(cx.content(body)) },
+        ];
+        children.extend(output.map(|source| v2::Node::Markdown { id: None, source }));
+        v2::Node::column(children).bg("background.raised.base")
+    }))
 }
 
 fn view(board: &RefCell<Board>, cx: &mut v2::View<'_>) -> v2::Node {

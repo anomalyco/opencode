@@ -82,7 +82,7 @@ impl Linked {
 
 impl Viewer for Linked {
     fn view(&self, host: &dyn Host, viewing: Viewing<'_>, part: &Part) -> Viewed {
-        let Viewing { mount, input, memo, give, release } = viewing;
+        let Viewing { mount, input, memo, give, release, .. } = viewing;
         let mut node = None;
         let called = (self.call)(host, &mut |read| {
             let mut content = |bytes: Vec<u8>| {
@@ -154,14 +154,21 @@ pub fn mounted() -> Vec<Shown> {
 pub(crate) struct Registered {
     entry: abi::claim::Entry,
     owner: Weak<dyn Host>,
+    /// What a claim's view holds of the input (P2): its plugin's activation's, as a claim has no handler of its own.
+    input: Rc<crate::interact::Owner>,
     viewer: Rc<dyn Viewer>,
     /// The palette of the theme the last view saw.
     palette: RefCell<Option<(Theme, v2::Palette)>>,
 }
 
 impl Registered {
-    pub(crate) fn new(entry: abi::claim::Entry, owner: Weak<dyn Host>, viewer: Rc<dyn Viewer>) -> Rc<Self> {
-        Rc::new(Self { entry, owner, viewer, palette: RefCell::default() })
+    pub(crate) fn new(
+        entry: abi::claim::Entry,
+        owner: Weak<dyn Host>,
+        viewer: Rc<dyn Viewer>,
+        input: Rc<crate::interact::Owner>,
+    ) -> Rc<Self> {
+        Rc::new(Self { entry, owner, viewer, input, palette: RefCell::default() })
     }
 
     fn palette(&self, host: &dyn Host, theme: &Theme) -> v2::Palette {
@@ -266,6 +273,8 @@ struct Held {
     memo: v2::Memo,
     /// The content the accepted views gave and did not release.
     content: HashMap<ContentRef, Rc<[u8]>>,
+    /// The images content decoded to, a handle each, as a surface keeps them (P3).
+    images: RefCell<HashMap<ContentRef, Option<opentui::native::Image>>>,
     /// The last accepted tree, keeps as they came.
     last: Option<Vec<Node>>,
     /// The values a library's memo table holds for the mount, as its last accepted view said.
@@ -453,7 +462,7 @@ impl Core {
             true => self.claim.palette(host, theme),
             false => v2::Palette::default(),
         };
-        let input = v2::SurfaceInput { width, height: host.app().size().1, palette, full };
+        let input = v2::SurfaceInput { width, height: host.app().size().1, palette, full, panel: None };
         let (mut memo, held) = {
             let mut state = self.state.borrow_mut();
             (std::mem::take(&mut state.memo), state.memo_entries())
@@ -472,8 +481,14 @@ impl Core {
                 });
             }
         };
-        let viewing =
-            Viewing { mount: &self.id, input: &input, memo: &mut memo, give: &mut give, release: &mut release };
+        let viewing = Viewing {
+            mount: &self.id,
+            owner: &self.claim.input,
+            input: &input,
+            memo: &mut memo,
+            give: &mut give,
+            release: &mut release,
+        };
         let viewed = self.claim.viewer.view(host, viewing, &part);
         Attempt { viewed, given: staged.take(), memo, held }
     }
@@ -494,15 +509,41 @@ impl Core {
             None
         };
         let mut state = self.state.borrow_mut();
-        let Held { tree, content, last, .. } = &mut *state;
+        let Held { tree, content, last, images, .. } = &mut *state;
         let bytes = |handle: &ContentRef| content.get(handle).or_else(|| given.get(handle));
         let source = |source: &Source| match source {
             Source::Text(text) => Some(Rc::from(text.as_str())),
             Source::Content(handle) => bytes(handle).map(|bytes| Rc::from(String::from_utf8_lossy(bytes).as_ref())),
             Source::PartOutput(part) => crate::surface::part_output(host, part).map(|text| Rc::from(text.as_str())),
         };
+        // An image decodes once a handle, as in a surface (P3).
+        let image = |source: &Source| match source {
+            Source::Content(handle) => {
+                if let Some(image) = images.borrow().get(handle) {
+                    return image.clone();
+                }
+                let image = crate::surface::decode(host.app(), bytes(handle)?);
+                images.borrow_mut().insert(*handle, image.clone());
+                image
+            }
+            Source::Text(text) => crate::surface::decode(host.app(), text.as_bytes()),
+            Source::PartOutput(_) => None,
+        };
         let has = |handle: ContentRef| bytes(&handle).is_some();
-        let env = Env { host, theme, act: &act, slot: &slot, source: &source, content: &has, full };
+        // A claim has no draw call (P5): a canvas in its tree draws nothing. It has no handler (P2): a box's pointer
+        // and hover events reach none, and its clicks run through `act` (P1).
+        let env = Env {
+            host,
+            theme,
+            act: &act,
+            slot: &slot,
+            source: &source,
+            content: &has,
+            image: &image,
+            full,
+            draw: None,
+            owner: None,
+        };
         tree.apply(&env, &self.root, &nodes)?;
         *last = Some(nodes);
         for (handle, bytes) in given {
