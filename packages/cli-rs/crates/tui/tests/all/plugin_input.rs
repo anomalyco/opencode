@@ -38,6 +38,8 @@ pub struct Probe {
     pub pass_press: bool,
     /// Node `b` takes pointer events.
     pub pointer_b: bool,
+    /// Text `t` tells the pointer entering and leaving.
+    pub hover_t: bool,
     /// The `x` bind holds the keys after it.
     pub hold: bool,
     /// The panel's view.
@@ -46,6 +48,12 @@ pub struct Probe {
     /// The rows of the rich select, and the word of their footers.
     pub rows: Vec<String>,
     pub footer: String,
+    /// The rich select lists its rows by the plugin's search.
+    pub search: bool,
+    /// A strip of the plugin in the session's composer top, with a node that takes drops.
+    pub strip: bool,
+    /// A global layer that takes pastes.
+    pub paste_global: bool,
 }
 
 thread_local! {
@@ -64,7 +72,10 @@ fn log(owner: &str, host: &dyn abi::Host, event: &Event) {
             None => format!("any {}", key.key),
         },
         Event::Paste { text } => format!("paste {text}"),
-        Event::Pointer(pointer) => format!("{:?} {} {},{}", pointer.kind, pointer.node, pointer.x, pointer.y),
+        Event::Pointer(pointer) => {
+            let from = pointer.from.as_ref().map(|from| format!(" from {}/{}", from.surface, from.node));
+            format!("{:?} {} {},{}{}", pointer.kind, pointer.node, pointer.x, pointer.y, from.unwrap_or_default())
+        }
         Event::Hover { node, inside } => format!("hover {node} {inside}"),
         Event::Closed { surface } => format!("closed {surface}"),
     };
@@ -82,6 +93,11 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     });
     setup.command(command("input.overlay"), |host, _| {
         host.overlay(Overlay { surface: "menu".into(), anchor: Anchor::Point { x: 4, y: 3 }, width: 24, height: 4 });
+    });
+    // The overlay against an edge of the panel, inside it.
+    setup.command(command("input.beside"), |host, _| {
+        let anchor = Anchor::Surface { surface: "side".into(), edge: input::Edge::Left };
+        host.overlay(Overlay { surface: "menu".into(), anchor, width: 12, height: 3 });
     });
     setup.command(command("input.focus"), |host, input| host.focus(input.unwrap_or("a")));
     // Changes nothing: the plugin's surfaces draw again after it, with what the probe says now.
@@ -117,6 +133,33 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             back: Some(abi::Action::Command { name: "input.picked".into(), input: Some("back".into()) }),
         }));
     });
+    // Lists, last first, the rows whose value holds the query, and logs what it was given.
+    setup.search("probe", |_, query, options| {
+        probe(|probe| probe.log.push(format!("search {query:?} {}", options.len())));
+        options.iter().rev().filter(|option| option.value.contains(query)).map(|option| option.value.clone()).collect()
+    });
+    if probe(|probe| probe.strip) {
+        let strip = v2::Surface::new("strip", v2::Place::Slot(abi::Placement::append("session.composer.top")), |_| {
+            let interact = Interact { pointer: true, ..Interact::default() };
+            v2::Node::row(vec![unselectable(v2::Node::text(vec![abi::Span::new("STRIP")]))])
+                .with_id("s")
+                .interact(interact)
+        });
+        setup.surface(strip.on(|host, event| {
+            log("strip", host, event);
+            Handled::Consume
+        }));
+    }
+    if probe(|probe| probe.paste_global) {
+        // Passes a paste that starts with `pass`.
+        setup.layer(Layer { scope: LayerScope::Global, paste: true, ..Layer::default() }, |host, event| {
+            log("pasted", host, event);
+            match event {
+                Event::Paste { text } if text.starts_with("pass") => Handled::Pass,
+                _ => Handled::Consume,
+            }
+        });
+    }
     let side = v2::Surface::new("side", v2::Place::Panel("side".into()), side)
         .layers(vec![
             Layer {
@@ -263,6 +306,7 @@ fn select() -> abi::Select {
                 "beta" => option.action = Some(command("input.row")),
                 "other" => option.toggle = Some("test.other".into()),
                 "self" => option.toggle = Some(ID.into()),
+                "off" => option.disabled = true,
                 "spin" => option.gutter = Some(abi::Gutter::Spinner),
                 _ => option.gutter = Some(abi::Gutter::Span(abi::Span::new("x"))),
             }
@@ -284,14 +328,22 @@ fn select() -> abi::Select {
             primary: false,
         }],
         binds: vec![abi::PanelBind { key: "ctrl+e".into(), title: "echo".into(), action: command("input.picked") }],
+        search: probe(|probe| probe.search).then(|| "probe".into()),
     }
 }
 
-/// The other plugin a select's row toggles: a line in the home footer while it is active.
+/// The other plugin a select's row toggles: a line in the composer top while it is active, and a node of its own with
+/// pointer events, which a drag may start on.
 pub fn other(setup: &mut abi::Setup) -> Result<(), String> {
     setup.slot(abi::Placement::append("session.composer.top"), |_, _, _| {
         abi::Render::Show(abi::Node::text([abi::Span::new("OTHER ON")]))
     });
+    setup.surface(v2::Surface::new("tag", v2::Place::Slot(abi::Placement::append("session.composer.top")), |_| {
+        let interact = Interact { pointer: true, ..Interact::default() };
+        v2::Node::row(vec![unselectable(v2::Node::text(vec![abi::Span::new("OTHER TAG")]))])
+            .with_id("a")
+            .interact(interact)
+    }));
     Ok(())
 }
 
@@ -309,20 +361,27 @@ fn side(cx: &mut v2::View<'_>) -> v2::Node {
         hover: hover.map(abi::Color::from),
         hover_events: pointer,
     };
-    // Its texts select nothing: a double click would select a word, and escape would clear it before any layer.
-    let text = |text: &str| match v2::Node::text(vec![abi::Span::new(text)]) {
-        v2::Node::Text { id, spans, fg, wrap, truncate, hover_fg, layout, on_click, .. } => {
-            v2::Node::Text { id, spans, fg, wrap, truncate, selectable: false, hover_fg, layout, on_click }
-        }
-        node => node,
-    };
+    let text = |text: &str| unselectable(v2::Node::text(vec![abi::Span::new(text)]));
     v2::Node::column(vec![
         text(&label),
         v2::Node::row(vec![text("AAAA")]).with_id("a").interact(interact(true, true, Some("#ff0000"))),
         v2::Node::row(vec![text("BBBB")]).with_id("b").interact(interact(true, probe(|probe| probe.pointer_b), None)),
+        match probe(|probe| probe.hover_t) {
+            true => text("TTTT").with_id("t").hover_events(),
+            false => text("TTTT").with_id("t"),
+        },
     ])
     .with_id("side")
     .interact(interact(true, false, None))
+}
+
+/// `node`, a text the mouse cannot select: a double click would select a word, and escape would clear it before any
+/// layer.
+fn unselectable(mut node: v2::Node) -> v2::Node {
+    if let v2::Node::Text { selectable, .. } = &mut node {
+        *selectable = false;
+    }
+    node
 }
 
 pub fn open() -> Harness {
@@ -797,4 +856,151 @@ fn a_paste_in_a_panel_goes_to_its_paste_layer() {
     harness.app.paste("zz");
     settle(&harness);
     assert_eq!(taken(), ["side: paste zz [-]"]);
+}
+
+// Expected (TS `dialog.select`'s `search`): a select that names the plugin's search lists the rows it returns, in its
+// order and flat, for the query as it is typed and for the empty one as it opens; the search gets the enabled rows.
+#[test]
+fn a_rich_select_lists_the_rows_of_the_plugins_search() {
+    let harness = open_with(|probe| probe.search = true);
+    rows(&["alpha", "off", "beta", "gamma"], "f");
+    run(&harness, "input.select", None);
+    let screen = harness.app.text();
+    let at = |row: &str| support::at(&screen, row).map(|(_, y)| y);
+    assert!(at("row gamma") < at("row beta") && at("row beta") < at("row alpha"), "{screen}");
+    harness.app.type_text("et");
+    settle(&harness);
+    let screen = harness.app.text();
+    assert!(screen.contains("row beta") && !screen.contains("row alpha") && !screen.contains("row gamma"), "{screen}");
+    harness.app.press("enter");
+    settle(&harness);
+    let log = taken();
+    assert_eq!(log.first().map(String::as_str), Some("search \"\" 3"), "{log:?}");
+    assert!(log.contains(&"search \"et\" 3".to_owned()), "{log:?}");
+    assert_eq!(log.last().map(String::as_str), Some("row beta"), "{log:?}");
+}
+
+// Expected (capture, synthesis 4.4): a resize ends the capture, here one that squeezes the captured node off the
+// screen: the drags after it reach no plugin, also once the node shows again.
+#[test]
+fn a_resize_that_removes_the_captured_node_ends_the_capture() {
+    let harness = open();
+    run(&harness, "input.panel", None);
+    let (x, y) = support::at(&harness.app.text(), "AAAA").unwrap();
+    taken();
+    harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
+    settle(&harness);
+    assert!(interact::ledger(&*harness.tui).capture);
+    harness.app.resize(120, 3);
+    settle(&harness);
+    assert!(!harness.app.text().contains("AAAA"), "{}", harness.app.text());
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), 0, 0);
+    settle(&harness);
+    harness.app.resize(120, 30);
+    settle(&harness);
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), x + 2, y);
+    settle(&harness);
+    assert!(!interact::ledger(&*harness.tui).capture);
+    let log: Vec<String> = taken().into_iter().filter(|line| !line.contains("hover")).collect();
+    assert_eq!(log, ["side: Down a 1,0 [-]"]);
+}
+
+// Expected (hover on text, TS `onMouseOver` and `onMouseOut` on a `text`): a text with an id and hover events tells
+// its mount when the pointer enters and leaves it, also one that gains them in place.
+#[test]
+fn a_text_with_hover_events_tells_the_pointer_entering_and_leaving() {
+    let harness = open();
+    run(&harness, "input.panel", None);
+    let (x, y) = support::at(&harness.app.text(), "TTTT").unwrap();
+    let pass = || {
+        taken();
+        harness.app.hover(x + 1, y);
+        settle(&harness);
+        harness.app.hover(0, 0);
+        settle(&harness);
+        taken().into_iter().filter(|line| line.contains("hover t")).collect::<Vec<String>>()
+    };
+    assert_eq!(pass(), Vec::<String>::new());
+    probe(|probe| probe.hover_t = true);
+    run(&harness, "input.redraw", None);
+    assert_eq!(pass(), ["side: hover t true [-]", "side: hover t false [-]"]);
+}
+
+// Expected (an overlay anchored to another surface, synthesis 4.2): it shows inside that surface of the plugin,
+// against the edge it names; anchored to one that does not show, it does not open.
+#[test]
+fn an_overlay_anchored_to_a_surface_shows_against_its_edge() {
+    let harness = open_with(|probe| probe.strip = true);
+    run(&harness, "input.beside", None);
+    assert!(!harness.app.text().contains("MENU"), "{}", harness.app.text());
+    run(&harness, "input.panel", None);
+    run(&harness, "input.beside", None);
+    let screen = harness.app.text();
+    let (panel, top) = support::at(&screen, "PANEL").unwrap();
+    let (x, y) = support::at(&screen, "MENU one").unwrap();
+    assert_eq!(x, panel, "{screen}");
+    assert!(y > top, "{screen}");
+}
+
+// Expected (a global layer's paste): it hears a paste in the composer before the composer does, and one that lands
+// where no widget takes it; a host widget that takes a paste keeps it (TS offers every paste to a global listener
+// first).
+#[test]
+fn a_global_paste_layer_hears_a_paste_no_host_widget_takes() {
+    let harness = open_with(|probe| probe.paste_global = true);
+    taken();
+    harness.app.paste("c1");
+    settle(&harness);
+    assert_eq!(taken(), ["pasted: paste c1 [-]"]);
+    assert_eq!(composer(&harness), "");
+    harness.app.app().blur();
+    harness.app.paste("e1");
+    settle(&harness);
+    assert_eq!(taken(), ["pasted: paste e1 [-]"]);
+    // Passed in a surface whose layers take no paste, it is not offered again where it lands.
+    opencode_plugin::Host::focus_composer(&*harness.tui);
+    run(&harness, "input.panel", None);
+    harness.app.press("o");
+    settle(&harness);
+    taken();
+    harness.app.paste("pass1");
+    settle(&harness);
+    assert_eq!(taken(), ["pasted: paste pass1 [-]"]);
+    harness.app.press("escape");
+    run(&harness, "input.close", None);
+    taken();
+    rows(&["alpha"], "f");
+    run(&harness, "input.select", None);
+    harness.app.paste("d1");
+    settle(&harness);
+    assert_eq!(taken(), Vec::<String>::new());
+    assert!(harness.app.text().contains("d1"), "{}", harness.app.text());
+}
+
+// Expected (drag and drop between mounts): a drag from a node of one mount of the plugin dropped on a node of another
+// reaches the second with where it started; a drag from a host widget or another plugin's node drops nothing.
+#[test]
+fn a_drop_from_another_mount_of_the_plugin_says_where_it_started() {
+    let harness = open_with(|probe| probe.strip = true);
+    run(&harness, "input.panel", None);
+    let screen = harness.app.text();
+    let (x, y) = support::at(&screen, "AAAA").unwrap();
+    let (sx, sy) = support::at(&screen, "STRIP").unwrap();
+    let (ox, oy) = support::at(&screen, "OTHER ON").unwrap();
+    let (tx, ty) = support::at(&screen, "OTHER TAG").unwrap();
+    taken();
+    harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), sx + 1, sy);
+    harness.app.mouse(MouseEventKind::Up(MouseButton::Left), sx + 1, sy);
+    settle(&harness);
+    harness.app.mouse(MouseEventKind::Down(MouseButton::Left), ox + 1, oy);
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), sx + 2, sy);
+    harness.app.mouse(MouseEventKind::Up(MouseButton::Left), sx + 2, sy);
+    settle(&harness);
+    harness.app.mouse(MouseEventKind::Down(MouseButton::Left), tx + 1, ty);
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), sx + 3, sy);
+    harness.app.mouse(MouseEventKind::Up(MouseButton::Left), sx + 3, sy);
+    settle(&harness);
+    let log: Vec<String> = taken().into_iter().filter(|line| line.starts_with("strip")).collect();
+    assert_eq!(log, ["strip: Drop s 1,0 from side/a [-]"]);
 }

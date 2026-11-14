@@ -184,6 +184,24 @@ fn pick(tui: &Tui, owner: Owner, select: abi::Select) {
                 props.placeholder = shown.placeholder.clone();
                 props.current = shown.current.clone();
                 props.preserve_selection = shown.key.is_some();
+                // The plugin's search lists the rows in place of the host's filter (TS `search`).
+                if let Some(name) = shown.search.clone() {
+                    let searched = Rc::downgrade(&picker);
+                    props.search = Some(Rc::new(bind!(tui.weak(), |tui, query: &str| {
+                        let Some(picker) = searched.upgrade() else { return Vec::new() };
+                        let (owner, shown) = (picker.owner.borrow().clone(), picker.shown.borrow().clone());
+                        let enabled: Vec<abi::SelectOption> =
+                            shown.options.iter().filter(|option| !option.disabled).cloned().collect();
+                        let host = super::host::host(&tui);
+                        let values = tui.plugins.search(&*host, &owner.0, &name, query, &enabled);
+                        let rows = options(&tui, &opencode_ui::theme::Theme::clone(&tui.page()), &shown);
+                        values
+                            .unwrap_or_default()
+                            .iter()
+                            .filter_map(|value| rows.iter().find(|row| row.value == *value).cloned())
+                            .collect()
+                    }, else Vec::new())));
+                }
                 let picked = Rc::downgrade(&picker);
                 props.on_select = Some(Rc::new(bind!(tui.weak(), |tui, option: &SelectOption<String>| {
                     if let Some(picker) = picked.upgrade() {

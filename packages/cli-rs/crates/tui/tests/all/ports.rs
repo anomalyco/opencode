@@ -665,6 +665,7 @@ fn picking(setup: &mut abi::Setup) -> Result<(), String> {
             key: None,
             actions: Vec::new(),
             binds: Vec::new(),
+            search: None,
         }));
     });
     setup.command(command("probe.picked"), |host, input| {

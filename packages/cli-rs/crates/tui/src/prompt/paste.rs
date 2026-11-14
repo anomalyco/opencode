@@ -67,7 +67,7 @@ pub fn connect(inner: &Rc<Inner>) {
         cx.stop_propagation();
         // A plugin's composer layer that declares pastes may take it (synthesis 3.8); else the host's route has it.
         if let Some(tui) = prompt.tui.upgrade()
-            && tui.router.paste(&*tui, text, true)
+            && tui.router.paste(&*tui, text, opencode_plugin::interact::Pasted::Composer)
         {
             return;
         }
