@@ -454,7 +454,7 @@ fn placement_constructors_name_their_kind() {
 fn rendering(id: &str, placement: Placement, render: impl Fn() -> abi::Render + 'static) -> Definition {
     let render: node::SlotRender = Rc::new(move |_, _, _| render());
     Definition::new(id, move |cx: &mut Setup<'_>| {
-        let mailbox = crate::mailbox::Mailbox::new(&cx.id().to_owned(), Arc::new(crate::activation::Wake::new(None)));
+        let mailbox = crate::mailbox::Mailbox::new(cx.id(), Arc::new(crate::activation::Wake::new(None)));
         let activation = crate::activation::Activation::new(cx.host(), mailbox);
         cx.claim(placement.clone(), render.clone(), None, false, &activation);
     })
