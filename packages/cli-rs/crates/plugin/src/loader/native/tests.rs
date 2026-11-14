@@ -1807,6 +1807,18 @@ fn the_quick_start_plugin_loads_from_a_plugins_directory_and_runs() {
     assert!(host.app.text().contains("hello"), "{}", host.app.text());
 }
 
+// Expected (bigboi-3): the sample, a Rust `cdylib`, names only system libraries, so it passes the dependency policy
+// for a project's plugin too; the reader finds them, so the check is not empty.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn the_sample_names_only_system_libraries() {
+    let library = build("");
+    let names = crate::loader::deps::named(&library).unwrap();
+    let system = |name: &crate::loader::deps::Name| matches!(name, crate::loader::deps::Name::Library(text) if text.contains("libc.so") || text.contains("libSystem"));
+    assert!(names.iter().any(system), "{names:?}");
+    assert_eq!(crate::loader::deps::check(&library, true), Ok(()));
+}
+
 // Expected (r2 review, bigboi-ui-1 and carbon-ui-2): a library is staged in a directory this process creates
 // itself, not at a name another user can claim first, and nothing is left behind.
 #[test]
