@@ -1,6 +1,6 @@
 //! The shared fixture of the plugin work (O-124, phase Pt), Rust reader: `parity/machines/plugins.json` holds the
-//! life of a plugin as the user sees it, and of the same plugin found in a project (phase Pa), as states with an
-//! expected observation and named actions. The TS reader is
+//! life of a plugin as the user sees it, of the same plugin found in a project (phase Pa), and the plugin manager's keys
+//! (P2) and views (P6b), as states with an expected observation and named actions. The TS reader is
 //! `parity/machines/plugins.test.tsx`. This drives the real TUI through every legal path to the file's depth and its
 //! seeded walks, each on a fresh mount, observing after every action, in OpenTUI's shape
 //! (`packages/rust/crates/opentui/tests/interaction_machines.rs`). Then it drops, repeats or swaps one action inside
@@ -121,9 +121,9 @@ struct Life {
 
 impl Life {
     /// The life plugin in the config's plugins directory, or with `project` in the project's, where it waits for
-    /// approval (rich-plugins 3.9).
-    fn open(project: bool) -> Self {
-        ARMED.set(false);
+    /// approval (rich-plugins 3.9); with `failing`, its setup fails as it first loads.
+    fn open(project: bool, failing: bool) -> Self {
+        ARMED.set(failing);
         let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
         let root = opencode_util::temp::tempdir().unwrap();
         // The project root, so the loader looks for plugins in this directory and none above it.
@@ -266,6 +266,45 @@ impl Life {
         self.settle();
     }
 
+    /// Runs an action of the views machine: `/plugins` and enter, `life` typed into the filter, the key the footer
+    /// offers for `view error`, or escape.
+    fn act_views(&self, action: &str) {
+        match action {
+            "open" => {
+                self.harness.app.type_text("/plugins");
+                self.settle();
+                self.harness.app.press("enter");
+            }
+            "filter" => self.harness.app.type_text("life"),
+            "details" => {
+                let key = if self.harness.app.text().contains("view error space") { "space" } else { "enter" };
+                self.harness.app.press(key);
+            }
+            "escape" => self.harness.app.press("escape"),
+            _ => panic!("unknown action {action}"),
+        }
+        self.settle();
+    }
+
+    /// `dialog/filter/life`, as `parity/machines/plugins.json` writes them for the views machine.
+    fn observe_views(&self) -> String {
+        let screen = self.harness.app.text();
+        if screen.contains("TUI plugin error") {
+            return "error/?/?".to_owned();
+        }
+        if !screen.contains("show internal") && !screen.contains("hide internal") {
+            return "-/?/?".to_owned();
+        }
+        let filter = if screen.contains("Search") { "-" } else { "life" };
+        let row = screen.lines().find(|line| line.contains("parity.life") && !line.contains("Plugin failed"));
+        let life = match row {
+            Some(row) if row.contains("failed") => "failed",
+            Some(_) => "on",
+            None => "none",
+        };
+        format!("list/{filter}/{life}")
+    }
+
     /// `dialog/internal/life`, as `parity/machines/plugins.json` writes them for the manager machine.
     fn observe_manager(&self) -> String {
         let screen = self.harness.app.text();
@@ -371,8 +410,9 @@ fn traces<'a>(corpus: &Value, machine: &'a Value, walks: bool) -> Vec<Vec<&'a st
 /// is not a known row, or `None`; a known row ends the path, unless the machine says this client follows it on
 /// (`continue`).
 fn replay(machine: &Value, path: &[&str], known: &mut ExpectedFailures) -> Option<String> {
-    let life = Life::open(machine == &CORPUS["machines"]["project"]);
-    let manager = machine == &CORPUS["machines"]["manager"];
+    let views = machine == &CORPUS["machines"]["views"];
+    let life = Life::open(machine == &CORPUS["machines"]["project"], views);
+    let manager = machine == &CORPUS["machines"]["manager"] || views;
     let follows = machine["continue"] == true;
     let mut state = machine["initial"].as_str().unwrap();
     for (index, action) in ["mount"].into_iter().chain(path.iter().copied()).enumerate() {
@@ -385,11 +425,16 @@ fn replay(machine: &Value, path: &[&str], known: &mut ExpectedFailures) -> Optio
             machine["unspecified"][state].as_array().is_some_and(|actions| actions.contains(&action.into()));
         match (index, manager) {
             (0, _) => {}
+            (_, true) if edge.is_some() && views => life.act_views(action),
             (_, true) if edge.is_some() => life.act_manager(action),
             (_, true) => assert!(unspecified, "the manager machine names no outcome of {action} in {state}"),
             (_, false) => life.act(action),
         }
-        let actual = if manager { life.observe_manager() } else { life.observe() };
+        let actual = match (views, manager) {
+            (true, _) => life.observe_views(),
+            (_, true) => life.observe_manager(),
+            _ => life.observe(),
+        };
         let expected = machine["states"][next][0].as_str().unwrap();
         if actual != expected {
             if known.has(&format!("{state} {action} {actual}")) {
@@ -523,4 +568,22 @@ fn the_plugin_manager_keys_follow_the_shared_fixture_on_walks_and_faults() {
     let manager = &CORPUS["machines"]["manager"];
     check("manager", traces(&CORPUS, manager, true), &[&manager["xfail"]]);
     check("manager", faulted(&cycles("manager")), &[&manager["xfail"], &CORPUS["faults"]["manager"]["xfail"]]);
+}
+
+// Expected (P6b, the shared fixture's rows for the manager's views): after every legal path to depth 4 the plugin
+// manager shows the list, the list filtered and a failure's details as the file says, and the known rows are exactly
+// the differences.
+#[test]
+fn the_plugin_manager_views_follow_the_shared_fixture() {
+    let views = &CORPUS["machines"]["views"];
+    check("views", traces(&CORPUS, views, false), &[&views["xfail"]]).check();
+}
+
+// Expected: the same along the file's seeded walks, and after one action of two normal cycles is dropped, repeated or
+// swapped.
+#[test]
+fn the_plugin_manager_views_follow_the_shared_fixture_on_walks_and_faults() {
+    let views = &CORPUS["machines"]["views"];
+    check("views", traces(&CORPUS, views, true), &[&views["xfail"]]);
+    check("views", faulted(&cycles("views")), &[&views["xfail"], &CORPUS["faults"]["views"]["xfail"]]);
 }
