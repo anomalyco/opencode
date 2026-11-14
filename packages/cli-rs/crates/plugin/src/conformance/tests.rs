@@ -487,6 +487,66 @@ fn a_library_that_takes_an_unknown_request_fails_the_later_host() {
     assert_eq!(future_request(&accepted, std::ptr::null_mut()), Ok(()));
 }
 
+unsafe extern "C" fn strict_call(instance: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
+    // SAFETY: the host passes bytes valid for the call.
+    let text = unsafe { request.as_slice() };
+    if text.windows(FUTURE_FIELD.len()).any(|window| window == FUTURE_FIELD.as_bytes()) {
+        // SAFETY: `out` is valid for writes.
+        unsafe { *out = Owned::from_vec(b"unknown field".to_vec()) };
+        return abi::ERROR;
+    }
+    // SAFETY: as the host calls it.
+    unsafe { abi::runtime::call(instance, request, out) }
+}
+
+unsafe extern "C" fn minor_only(
+    host: *const HostApi,
+    options: Bytes,
+    instance: *mut *mut c_void,
+    out: *mut Owned,
+) -> i32 {
+    // SAFETY: the host passes a table valid for the call.
+    match unsafe { (*host).minor } {
+        // SAFETY: as the host calls it.
+        0 => unsafe { (reference(2).create.unwrap())(host, options, instance, out) },
+        _ => abi::ERROR,
+    }
+}
+
+unsafe extern "C" fn size_only(
+    host: *const HostApi,
+    options: Bytes,
+    instance: *mut *mut c_void,
+    out: *mut Owned,
+) -> i32 {
+    // SAFETY: the host passes a table valid for the call.
+    match unsafe { (*host).size } == size_of::<HostApi>() {
+        // SAFETY: as the host calls it.
+        true => unsafe { (reference(2).create.unwrap())(host, options, instance, out) },
+        false => abi::ERROR,
+    }
+}
+
+// Expected: the later host of the library side is later in each way it claims: a library that refuses a request with
+// a field it does not know, one that refuses a host whose minor is not its own, and one that refuses a table longer
+// than its own each pass the transcripts as they are and fail them against the later host.
+#[test]
+fn a_library_that_takes_only_its_own_minor_fails_the_later_host() {
+    let transcript =
+        golden().unwrap().into_iter().find(|transcript| transcript.header.transcript == "actions").unwrap();
+    let strict = [
+        PluginApi { call: Some(strict_call), ..reference(2) },
+        PluginApi { create: Some(minor_only), ..reference(2) },
+        PluginApi { create: Some(size_only), ..reference(2) },
+    ];
+    for (index, api) in strict.iter().enumerate() {
+        // SAFETY: the shims are this process's.
+        let (now, later) = unsafe { (replay(api, &transcript, false), replay(api, &transcript, true)) };
+        assert_eq!(now, Ok(()), "{index}");
+        assert!(later.is_err(), "{index}");
+    }
+}
+
 /// Which side of the C ABI writes a part of an entry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Side {
