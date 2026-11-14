@@ -39,8 +39,8 @@ pub struct Deps {
     /// there does not rebuild it.
     pub builtins: Vec<opencode_plugin::Builtin>,
     /// Runs every built-in plugin through the byte shims of the C ABI, as a loaded library runs, instead of with Rust
-    /// values: the other carrier, for the tests that compare the two (`carrier-equal`, P6a). The diff viewer and the
-    /// plugin manager are host entries and stay as they are.
+    /// values: the other carrier, for the tests that compare the two (`carrier-equal`, P6a). The diff viewer is a host
+    /// entry and stays as it is.
     pub abi_builtins: bool,
 }
 
