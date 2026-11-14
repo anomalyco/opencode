@@ -16,10 +16,14 @@ export function createTuiClipboard(renderer: RendererClipboardBoundary): OwnedCl
       host: createHostClipboard(),
       terminal: createRendererClipboardAdapter(renderer),
     }),
+    process.env,
   )
 }
 
-export function createClipboardAdapter(clipboard: CoreClipboardService): OwnedClipboardService {
+export function createClipboardAdapter(
+  clipboard: CoreClipboardService,
+  env: Record<string, string | undefined> = {},
+): OwnedClipboardService {
   return {
     async read(): Promise<ClipboardContent | undefined> {
       const result = await clipboard.read({
@@ -53,11 +57,13 @@ export function createClipboardAdapter(clipboard: CoreClipboardService): OwnedCl
     },
     async write(text) {
       // OpenTUI rejects NUL before any destination; host clipboard text cannot contain it.
-      const result = await clipboard.writeText(text.replaceAll("\0", ""), {
-        destination: "all-available",
-        selection: "clipboard",
-      })
-      if (result.host.status === "written" || result.terminal.status === "attempted") return
+      const clean = text.replaceAll("\0", "")
+      // tmux exits 0 even when it forwards nothing, so the OpenTUI routes still run alongside it.
+      const [tmux, result] = await Promise.all([
+        writeTmux(clean, env),
+        clipboard.writeText(clean, { destination: "all-available", selection: "clipboard" }),
+      ])
+      if (tmux || result.host.status === "written" || result.terminal.status === "attempted") return
       if (result.host.status === "failed") throw result.host.error
       throw new Error(`Clipboard write failed (host: ${result.host.status}, terminal: ${result.terminal.status})`)
     },
@@ -65,4 +71,34 @@ export function createClipboardAdapter(clipboard: CoreClipboardService): OwnedCl
       return clipboard.dispose()
     },
   }
+}
+
+// Inside tmux, OpenTUI wraps OSC 52 in a DCS passthrough, which tmux drops unless allow-passthrough is on.
+// load-buffer -w makes tmux itself forward the text to the terminal of the client showing this pane.
+// Without -t, tmux may pick another attached client, so the copy would land on the wrong machine.
+async function writeTmux(text: string, env: Record<string, string | undefined>) {
+  if (!env.TMUX) return false
+  const tmux = Bun.which("tmux", { PATH: env.PATH })
+  if (!tmux) return false
+  const target = await new Response(
+    Bun.spawn(
+      [
+        tmux,
+        "display-message",
+        "-p",
+        ...(env.TMUX_PANE ? ["-t", env.TMUX_PANE] : []),
+        "#{client_tty}\t#{set-clipboard}",
+      ],
+      { env, stdout: "pipe", stderr: "ignore" },
+    ).stdout,
+  ).text()
+  const [client, mode] = target.trimEnd().split("\t")
+  if (!client || mode === "off") return false
+  const exitCode = await Bun.spawn([tmux, "load-buffer", "-w", "-t", client, "-"], {
+    env,
+    stdin: new Blob([text]),
+    stdout: "ignore",
+    stderr: "ignore",
+  }).exited
+  return exitCode === 0
 }
