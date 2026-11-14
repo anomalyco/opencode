@@ -795,15 +795,26 @@ export const layer = Layer.effect(
     ) => {
       const sessionID = context.session.id
       const unusable = (error: SessionError.Error) => Effect.fail<Failure>({ error })
+      // Responses can classify a text block only when it ends; filter after the stream completes.
+      const chunks: Array<{ id: string; text: string }> = []
+      const commentary = new Set<string>()
+      const metadataKey = request.model.route.providerMetadataKey ?? request.model.provider
 
       return llm.stream(request, options).pipe(
         Stream.runFoldEffect(
           (): Streamed => ({ text: "" }),
           (streamed, event): Effect.Effect<Streamed, AIError | Failure> => {
+            if (LLMEvent.is.textStart(event) || LLMEvent.is.textDelta(event) || LLMEvent.is.textEnd(event)) {
+              const phase = event.providerMetadata?.[metadataKey]?.phase
+              if (phase === "commentary") commentary.add(event.id)
+              if (phase === "final_answer" || phase === null) commentary.delete(event.id)
+            }
             if (LLMEvent.is.textDelta(event)) {
-              const next = { ...streamed, text: streamed.text + event.text }
-              if (background) return Effect.succeed(next)
-              return bus.publish(SessionEvent.Compaction.Delta, { sessionID, text: event.text }).pipe(Effect.as(next))
+              chunks.push({ id: event.id, text: event.text })
+              if (background) return Effect.succeed(streamed)
+              return bus
+                .publish(SessionEvent.Compaction.Delta, { sessionID, text: event.text })
+                .pipe(Effect.as(streamed))
             }
 
             if (LLMEvent.is.stepFinish(event)) {
@@ -839,6 +850,13 @@ export const layer = Layer.effect(
             }
           },
         ),
+        Effect.map((streamed) => ({
+          ...streamed,
+          text: chunks
+            .filter((chunk) => !commentary.has(chunk.id))
+            .map((chunk) => chunk.text)
+            .join(""),
+        })),
       )
     }
 
