@@ -11,11 +11,23 @@ import {
   type MainPaneEvent,
 } from "./main-machine"
 
+/**
+ * This window's provider state. The pill key is omitted until its embed exists: an explicit `undefined` fails the
+ * IPC state schema and drops the whole state, lock snapshot included.
+ */
+export function browserPaneState(locked: boolean, pill: string | undefined) {
+  if (!pill) return { locked }
+
+  return { locked, pill }
+}
+
 const setup: Plugin.MainSetup = (ctx) => {
   let paneState = createMainPaneState<Pane>()
+  const pillEmbeds = new Map<number, string>()
   const loads = new Map<number, ReturnType<typeof Promise.withResolvers<Pane>>>()
   let disposing: Promise<void> | undefined
   const refs = ctx.storage.store("refs", RefsStore)
+  const screenLock = builtinMainContext(ctx).screenLock
 
   const dispatch = (event: MainPaneEvent<Pane>) => {
     const next = transitionMainPane(paneState, event)
@@ -39,6 +51,12 @@ const setup: Plugin.MainSetup = (ctx) => {
                   storage: builtinMainContext(ctx).storage,
                   refs,
                   embeds: ctx.embeds,
+                  locked: () => screenLock.locked(),
+                  pillEmbed: (window, embed) => {
+                    if (embed) pillEmbeds.set(window, embed)
+                    else pillEmbeds.delete(window)
+                    provider.changed(window)
+                  },
                   emit: (window, value) => provider.emit("event", value, window),
                 }),
               })
@@ -79,7 +97,13 @@ const setup: Plugin.MainSetup = (ctx) => {
   }
 
   const provider = ctx.provide(BrowserPane, {
-    register: async (input, caller) => (await load()).register(caller.window, input.binding, input),
+    state: (window: number) => browserPaneState(screenLock.locked(), pillEmbeds.get(window)),
+    register: async (input, caller) => {
+      // Refused before the pane loads, so a locked screen starts no browser.
+      if (screenLock.locked()) throw new Error("browser.pane.locked")
+
+      return (await load()).register(caller.window, input.binding, input)
+    },
     load: async (input, caller) => (await pane()).load(caller.window, input.binding, input.tabID),
     command: async (input, caller) => (await pane()).command(caller.window, input.binding, input.command),
     inspect: async (input, caller) => (await pane()).inspect(caller.window, input.binding, input.tabID, input.enabled),
@@ -88,7 +112,23 @@ const setup: Plugin.MainSetup = (ctx) => {
     site: async (input, caller) => (await pane()).site(caller.window, input.binding, input.tabID),
     clearSite: async (input, caller) => (await pane()).clearSite(caller.window, input.binding, input.tabID),
     close: async (input, caller) => (await pane()).close(caller.window, input.binding),
+    release: async (input, caller) => (await pane()).release(caller.window, input.server, input.session),
+    pill: async (input, caller) => (await pane()).pill(caller.window, input),
   })
+
+  // A locked screen ends every attachment, which drops this desktop's browser tools from the server's sessions. Windows
+  // keep the tabs and register again when the screen unlocks.
+  ctx.onCleanup(
+    screenLock.on((locked) => {
+      const lookup = selectPane(paneState)
+
+      // The authoritative state reaches the windows before the pane's locked events, so a late lock close reads as
+      // stale only when the screen really is unlocked.
+      provider.changed()
+
+      if (locked && lookup.kind === "ready") lookup.pane.lock()
+    }),
+  )
 
   // The host withdraws the Ipc before this runs, so windows hear nothing; they suspend on the Ipc going away.
   ctx.onCleanup(async () => {

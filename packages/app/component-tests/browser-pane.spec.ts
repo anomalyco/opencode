@@ -51,6 +51,24 @@ story("hides a native page when another takes the pane, the pane hides, or it un
   await expect(alpha).toHaveAttribute("data-visible", "false")
 })
 
+story("owns the window pill from the visible pane and hides it with the review tab", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const pill = root.getByTestId("native-pill")
+  await expect(pill).toHaveAttribute("data-visible", "false")
+
+  await root.getByRole("button", { name: "Drop pane connection" }).click()
+  await expect(pill).toHaveAttribute("data-visible", "true")
+
+  const toggle = root.getByRole("button", { name: "Toggle Review tab" })
+  await toggle.click()
+  await expect(pill).toHaveAttribute("data-visible", "false")
+  await toggle.click()
+  await expect(pill).toHaveAttribute("data-visible", "true")
+
+  await root.getByRole("button", { name: "Unmount pane" }).click()
+  await expect(pill).toHaveAttribute("data-visible", "false")
+})
+
 story("hides the native view immediately while the pane stays mounted", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const toggle = root.getByRole("button", { name: "Toggle Review tab", exact: true })

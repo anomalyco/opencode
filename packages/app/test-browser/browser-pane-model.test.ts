@@ -48,6 +48,8 @@ function fixture() {
     site: async () => ({ cookies: 0 }),
     clearSite: async () => undefined,
     close: async () => undefined,
+    release: async () => undefined,
+    pill: async () => undefined,
     state: () => undefined,
     on: (_name, listener) => {
       // SAFETY: the pane's Ipc has one event, whose payload is exactly this binding and PaneEvent.

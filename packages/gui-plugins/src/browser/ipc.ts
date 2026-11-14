@@ -11,6 +11,18 @@ const binding = text(128)
 /** The longest page icon data URL main reports: a 32px PNG is a few kilobytes; larger icons are dropped. */
 export const MAX_ICON_URL = 24_576
 
+/** The resolved app appearance the renderer gives the small native connection-pill view. */
+export const PillPresentation = Schema.Struct({
+  label: text(256),
+  background: text(128),
+  border: text(128),
+  color: text(128),
+  muted: text(128),
+  font: text(1_024),
+})
+
+export type PillPresentation = typeof PillPresentation.Type
+
 /** An element the user picked in the page. The ref stays valid for browser tools until the page navigates. */
 export const PaneElement = Schema.Struct({
   ref: Browser.Ref,
@@ -35,6 +47,8 @@ export const PaneEvent = Schema.Union([
   }),
   // A tab's page exists; the renderer lays it out through this host embed.
   Schema.Struct({ type: Schema.Literal("embed"), tabID: Browser.TabID, embed: text(256) }),
+  // The tab's page is gone; the renderer drops its stale native view.
+  Schema.Struct({ type: Schema.Literal("unembed"), tabID: Browser.TabID }),
   // The page's element picker started, stopped, or picked an element.
   Schema.Struct({
     type: Schema.Literal("inspect"),
@@ -75,6 +89,10 @@ export type PaneEvent = typeof PaneEvent.Type
  * - `"browser.pane.replaced"`: another window attached to the same session. The event carries no tabs.
  * - `"browser.pane.suspended"`: the server dropped an attached binding (idle eviction), or main's plugin is going away.
  *   The event carries the tabs the binding had.
+ * - `"browser.pane.disconnected"`: the connection to the server went away after it accepted the binding. The desktop
+ *   keeps the live pages and reconnects on its own; the event carries the tabs the binding had.
+ * - `"browser.pane.locked"`: the screen is locked, so main ends every attachment and refuses new ones until it unlocks.
+ *   The event carries the tabs the binding had; the window registers again on the `screen` event that reports unlock.
  * - `"browser.pane.missing"`: the session no longer exists. The event carries no tabs, and main forgot its saved tabs.
  * - `"browser.pane.registration.closed"`: the stream or attachment ended, registration timed out, the window navigated
  *   or closed, or the window closed the binding. The event carries no tabs; the window may register again.
@@ -83,6 +101,8 @@ export const PaneCloseReason = Schema.Literals([
   "browser.pane.unsupported",
   "browser.pane.replaced",
   "browser.pane.suspended",
+  "browser.pane.disconnected",
+  "browser.pane.locked",
   "browser.pane.missing",
   "browser.pane.registration.closed",
 ])
@@ -95,6 +115,8 @@ export type PaneCloseReason = typeof PaneCloseReason.Type
  */
 export const BrowserPane = Ipc.define({
   id: "browser.pane",
+  // The authoritative lock snapshot and this window's native pill embed, pushed with provider.changed().
+  state: Schema.Struct({ locked: Schema.Boolean, pill: Schema.optionalKey(text(256)) }),
   methods: {
     register: {
       input: Schema.Struct({
@@ -124,6 +146,15 @@ export const BrowserPane = Ipc.define({
     // Deletes the cookies the page's address can read and its origin's stored data, then reloads the page.
     clearSite: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
     close: { input: Schema.Struct({ binding }) },
+    // The renderer detached a session: release its window record even when it has no active binding.
+    release: {
+      input: Schema.Struct({
+        server: text(16_384),
+        session: text(256).check(Schema.isStartingWith("ses")),
+      }),
+    },
+    // The app renderer sends the pill's resolved label and appearance when it is visible and changes.
+    pill: { input: PillPresentation },
   },
   events: {
     event: Schema.Struct({ binding: Schema.String, event: PaneEvent }),

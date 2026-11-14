@@ -49,6 +49,7 @@ import { CHANNEL, VERSION } from "../constants"
 import { emitIpcEvent } from "../ipc-events"
 import { isQuitting, type Handoff, type State } from "../lifecycle/machine"
 import { refreshMenu, setMenubarProvider } from "../native/menu"
+import { screenLock } from "../native/screen-lock"
 import {
   formatNativeTemplate,
   nativeLocale,
@@ -834,6 +835,9 @@ export function createHost(input: {
         return (created.lifecycle ??= {
           restart: (handoff) => lifecycle.restart(instance.scope, handoff),
         } satisfies Lifecycle)
+      },
+      get screenLock() {
+        return screenLock()
       },
       get app() {
         return about

@@ -196,6 +196,8 @@ export function createBrowserPage(
     fail: () => void
     /** Adopts a page the document opened; a background one leaves the current tab selected. */
     popup: (options: Electron.BrowserWindowConstructorOptions, background: boolean) => WebContents
+    /** Whether the document may open a popup now; false while its binding is reconnecting or locked. */
+    canOpenPopup: () => boolean
     initialize?: boolean
     restore?: Browser.Tab
     popupOptions?: Electron.BrowserWindowConstructorOptions
@@ -446,7 +448,7 @@ export function createBrowserPage(
   contents.on("will-redirect", guard)
   // Links opened with Cmd or Ctrl arrive as background tabs, and stay behind the current one as in the system browser.
   contents.setWindowOpenHandler(({ url, disposition }) =>
-    url === "about:blank" || destinationOrigin(url)
+    (url === "about:blank" || destinationOrigin(url)) && options.canOpenPopup()
       ? {
           action: "allow",
           outlivesOpener: true,

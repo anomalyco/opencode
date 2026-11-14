@@ -70,6 +70,9 @@ export const registerIpcHandlers = Effect.gen(function* () {
 
     const post = () => {
       if (win.isDestroyed() || win.webContents.isDestroyed()) return
+
+      // Only the app's own renderer document gets a privileged transport port.
+      if (!isRendererUrl(win.webContents.getURL())) return
       const channel = new MessageChannelMain()
       handoff.bind(win.webContents, channel.port1)
       win.webContents.postMessage(IpcTransportPort, null, [channel.port2])

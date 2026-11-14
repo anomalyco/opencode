@@ -26,6 +26,7 @@ export default {
   replaced: "Browser control moved to another desktop window.",
   unsupported: "This desktop app does not support the browser pane.",
   suspended: "Browser suspended. Interact with this session to reconnect.",
+  disconnected: "Disconnected",
   "home.title": "Open a page",
   "home.description": "Preview your app, read docs, or browse the web.",
   "home.recent": "Recent",
