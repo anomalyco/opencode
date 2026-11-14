@@ -817,3 +817,22 @@ fn the_view_toggle_without_room_for_split_costs_no_view() {
         assert!(crossed.received < 1000, "{} bytes crossed", crossed.received);
     }
 }
+
+// Expected (big-boi's review of P6c): a wheel step keeps the viewer whole and its cards' memo with it, so a mark after
+// it keeps the other 99 cards, on both carriers.
+#[test]
+fn a_mark_after_a_wheel_step_keeps_the_other_cards() {
+    for abi in [false, true] {
+        let h = route_on(100, 4, 120, 30, abi);
+        let entries = || opencode_plugin::surface::ledger_of("opencode.diffs").memo_entries;
+        let before = entries();
+        h.app.scroll(80, 10, true);
+        h.settle();
+        assert_eq!(entries(), before, "the wheel step dropped the memo (C ABI: {abi})");
+        let work = reconcile::work();
+        h.keys(&["m"]);
+        assert!(h.settle().contains("1/100"), "{}", h.app.text());
+        let kept = reconcile::work().since(work).kept;
+        assert!(kept >= 99 + 98, "the mark kept {kept} subtrees (C ABI: {abi})");
+    }
+}
