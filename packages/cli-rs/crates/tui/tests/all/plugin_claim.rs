@@ -1655,3 +1655,40 @@ fn a_claimed_call_keeps_its_images_below_the_claim() {
         assert!(!world.frame().text().contains("more"), "{carrier:?}:\n{}", world.frame().text());
     }
 }
+
+/// Claims `nest` calls with a card whose body is a memo holding a memo, and `sibling` calls with [`probe`].
+fn plugin_nest(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::tool("nest", |cx, part| {
+        let Part::Tool(tool) = part else { return None };
+        let head = v2::Node::text(vec![abi::Span::new(format!("nest {} {:?}", tool.tool.id, lines(part)))]);
+        let body = cx.memo("outer", 1u8, |cx| {
+            v2::Node::column(vec![cx.memo("inner", 2u8, |_| v2::Node::text(vec![abi::Span::new("kept")]))])
+        });
+        // No other node has an id: the keyed nodes the tree sends are fewer than the values the table holds.
+        Some(v2::Node::column(vec![head, body]))
+    }));
+    setup.claim(Claim::tool("sibling", probe('s')));
+    Ok(())
+}
+
+// Expected (4.2, P4's memo check): a view that keeps a memoized subtree holding another memo is valid on both
+// carriers: the library's table holds both values, and the tree the host resolves holds both keys. The plugin stays
+// active, and the ledger books both values.
+#[test]
+fn a_kept_memo_that_holds_a_memo_is_valid_on_every_carrier() {
+    for carrier in CARRIERS {
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.nest", setup: plugin_nest })]);
+        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "sibling" }));
+        world.emit("session.tool.input.started", json!({ "id": "call_2", "name": "nest" }));
+        world.settle();
+        world.emit("session.tool.input.delta", json!({ "id": "call_2", "delta": "{\"q\":" }));
+        world.settle();
+        world.emit("session.tool.input.delta", json!({ "id": "call_2", "delta": "1}" }));
+        world.settle();
+        let screen = world.frame().text();
+        assert!(screen.contains("in {\\\"q\\\":1}") && screen.contains("kept"), "{carrier:?}:\n{screen}");
+        assert!(screen.contains("s drew call_1"), "{carrier:?}: the plugin failed:\n{screen}");
+        assert!(mounted().iter().all(|shown| shown.shows), "{carrier:?}: {:?}", mounted());
+        assert_eq!(ledger().memo_entries, 2, "{carrier:?}: {:?}", ledger());
+    }
+}
