@@ -1204,6 +1204,8 @@ fn a_revision_crosses_bytes_that_follow_the_change() {
     assert!(small.1.sent.abs_diff(large.1.sent) <= 1, "the requests grew with the cards: {small:?} {large:?}");
     assert_eq!(small.1.received - small.0.received, large.1.received - large.0.received, "{small:?} {large:?}");
     assert!(small.1.received > small.0.received);
+    // A surface that does not read the palette is not sent one: its request is the mount, its size and two numbers.
+    assert!(small.1.sent < 512, "{small:?}");
     let theme = crossed_by(410, |harness| {
         harness.tui.theme.borrow_mut().set("tokyonight");
         harness.tui.theme_changed();
