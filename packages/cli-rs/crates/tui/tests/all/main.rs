@@ -33,6 +33,7 @@ mod plugin_approval;
 mod plugin_behave;
 mod plugin_canvas;
 mod plugin_carriers;
+mod plugin_claim;
 mod plugin_contain;
 mod plugin_fetch;
 mod plugin_gate;
