@@ -1,34 +1,39 @@
 //! The sidebar's limit section (E.14, row F05, `feature-plugins/sidebar/limit.tsx`): what the OpenCode Console
 //! workspace's limits leave for the selected model, in the error color when it is out or reached. Hidden when
-//! no limit applies to the model. It is a plugin of the one API (O-67).
+//! no limit applies to the model. It is a plugin of the one API (O-67), on contract 2.0 (P6a).
 
-use opencode_plugin::abi::{self, Node, Placement, Render, Span};
+use opencode_plugin::abi::v2::{Node, Place, Surface};
+use opencode_plugin::abi::{self, Placement, Span};
 use opencode_plugin::slot;
 
+use super::{hidden, kept};
 use crate::dialogs::usage::{Level, format_dollars, level, model_usage};
 
 pub fn plugin() -> abi::Plugin {
     abi::Plugin { id: "opencode.sidebar.limit", setup }
 }
 
+const ROOT: &str = "limit";
+
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.slot(Placement::append(slot::SIDEBAR_CONTENT), |read, _, changed| {
+    setup.surface(Surface::new("limit", Place::Slot(Placement::append(slot::SIDEBAR_CONTENT)), |cx| {
         // The limits and the selected model live in the host's own state (`local`); the selection also follows the
         // sessions, and the models and providers their location.
+        let changed = &cx.input.changed;
         if !(changed.all || changed.local || !changed.sessions.is_empty() || !changed.locations.is_empty()) {
-            return Render::Keep;
+            return kept(ROOT);
         }
-        model(read).map_or(Render::Hide, |(left, danger)| {
-            Render::Show(Node::column(vec![
-                Node::text([Span::new("Limit").fg("text.base").bold()]),
-                Node::text([Span::new(format!("{left} remaining")).fg(if danger {
-                    "text.feedback.error.base"
-                } else {
-                    "text.muted"
-                })]),
-            ]))
-        })
-    });
+        let Some((left, danger)) = model(cx.read) else { return hidden(ROOT) };
+        Node::column(vec![
+            Node::text([Span::new("Limit").fg("text.base").bold()]),
+            Node::text([Span::new(format!("{left} remaining")).fg(if danger {
+                "text.feedback.error.base"
+            } else {
+                "text.muted"
+            })]),
+        ])
+        .with_id(ROOT)
+    }));
     Ok(())
 }
 

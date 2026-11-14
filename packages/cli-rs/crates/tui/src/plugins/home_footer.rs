@@ -2,30 +2,37 @@
 //! MCP servers of the default location (`⊙ 2 MCP`, or `⊙ 1 MCP failed`, with `/mcps` from 64 columns; a click
 //! opens the list), the failed TUI and server plugins (`⊙ 1 plugin failed`, with `/plugins` from 80 columns; a
 //! click opens the plugin manager), the `home.footer.status` slot, and the version on the right from 64
-//! columns. Hidden below 44x14. It is a plugin of the one API (O-67).
+//! columns. Hidden below 44x14. It is a plugin of the one API (O-67), on contract 2.0 (P6a).
 
-use opencode_plugin::abi::{self, Click, Layout, Node, Placement, Render, Span, Width};
+use opencode_plugin::abi::v2::{Node, Place, Surface};
+use opencode_plugin::abi::{self, Click, Layout, Placement, Span, Width};
 use opencode_plugin::slot;
+
+use super::{hidden, kept};
 
 pub fn plugin() -> abi::Plugin {
     abi::Plugin { id: "opencode.home.footer", setup }
 }
 
+const ROOT: &str = "footer";
+
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     // Append keeps the path open to additive plugin claims; an external replace still takes it over.
-    setup.slot(Placement::append(slot::HOME_FOOTER), |read, _, changed| {
+    setup.surface(Surface::new("footer", Place::Slot(Placement::append(slot::HOME_FOOTER)), |cx| {
         // It reads the MCP servers where the TUI works, the terminal size, and the failed plugins, which change with
         // where the TUI works as `local`.
+        let changed = &cx.input.changed;
         if !(changed.all || changed.size || changed.local || !changed.locations.is_empty()) {
-            return Render::Keep;
+            return kept(ROOT);
         }
+        let read = cx.read;
         let info = read.info();
         if !(changed.all || changed.size || changed.local || changed.location(&info.location)) {
-            return Render::Keep;
+            return kept(ROOT);
         }
         let (width, height) = info.size;
         if height < 14 || width < 44 {
-            return Render::Hide;
+            return hidden(ROOT);
         }
         let list = read.mcp_servers(None).unwrap_or_default();
         let count = |tag: &str| list.iter().filter(|item| item.status.tag() == tag).count();
@@ -59,14 +66,14 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             let fixed = Layout::default().shrink(false);
             row.push(Node::row(plugins).gap(1).layout(fixed).on_click(Click::command("plugins.list", None)));
         }
-        row.push(Node::slot(slot::HOME_FOOTER_STATUS));
+        row.push(Node::Slot { path: slot::HOME_FOOTER_STATUS.to_owned() });
         row.push(Node::column(Vec::new()).layout(Layout::default().grow()));
         if width >= 64 {
             let version = Node::text([Span::new(info.version)]).fg("text.muted");
             row.push(Node::column(vec![version]).layout(Layout::default().shrink(false)));
         }
         let full = Layout { width: Some(Width::Percent(100.0)), ..Layout::default() }.shrink(false);
-        Render::Show(Node::row(row).gap(2).padding(2, if height < 16 { 0 } else { 1 }).layout(full))
-    });
+        Node::row(row).gap(2).padding(2, if height < 16 { 0 } else { 1 }).layout(full).with_id(ROOT)
+    }));
     Ok(())
 }

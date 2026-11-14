@@ -1,34 +1,43 @@
 //! The sidebar's context section (E.14, row F04, `feature-plugins/sidebar/context.tsx`): the tokens of the last
-//! reply, the share of the model's context they use, and the session's cost. It is a plugin of the one API (O-67).
-//! [`Last`] and [`money`] also serve the prompt footer.
+//! reply, the share of the model's context they use, and the session's cost. It is a plugin of the one API (O-67),
+//! on contract 2.0 (P6a). [`Last`] and [`money`] also serve the prompt footer.
 
 use std::cell::RefCell;
 
 use opencode_api::generated::{ModelInfo, SessionMessageCompaction, SessionMessageInfo};
-use opencode_plugin::abi::{self, Changed, Node, Placement, Render, Span};
+use opencode_plugin::abi::v2::{Node, Place, Surface};
+use opencode_plugin::abi::{self, Changed, Placement, Span};
 use opencode_plugin::slot;
+
+use super::{hidden, kept};
 
 pub fn plugin() -> abi::Plugin {
     abi::Plugin { id: "opencode.sidebar.context", setup }
 }
 
+const ROOT: &str = "context";
+
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     let last: RefCell<Option<Last>> = RefCell::default();
-    setup.slot(Placement::append(slot::SIDEBAR_CONTENT), move |read, input, changed| {
-        let Some(session) = input.session_id.as_deref() else { return Render::Hide };
+    let surface = Surface::new("context", Place::Slot(Placement::append(slot::SIDEBAR_CONTENT)), move |cx| {
+        let Some(session) = cx.input.slot.as_ref().and_then(|slot| slot.session_id.as_deref()) else {
+            return hidden(ROOT);
+        };
+        let changed = &cx.input.changed;
         let mut last = last.borrow_mut();
         let fresh = changed.all || last.as_ref().is_none_or(|last| last.session != session);
         let last = match &mut *last {
             Some(last) if !fresh => last,
             last => last.insert(Last::new(session)),
         };
-        let model = last.update(read, changed, fresh);
+        let model = last.update(cx.read, changed, fresh);
         if !fresh && last.shown == Some(model) {
-            return Render::Keep;
+            return kept(ROOT);
         }
         last.shown = Some(model);
-        model.map_or(Render::Hide, |model| Render::Show(view(model)))
+        model.map_or_else(|| hidden(ROOT), |model| view(model).with_id(ROOT))
     });
+    setup.surface(surface);
     Ok(())
 }
 

@@ -1,12 +1,15 @@
 //! The sidebar's MCP section (E.14, row F06, `feature-plugins/sidebar/mcp.tsx`): each server of the session's
 //! location with its status. Above two servers the header folds the list, and the folded header counts the
 //! active servers and the errors. A click on a server opens the MCP dialog on it, and on its error when it failed
-//! (`mcp.list` with the server's name). It is a plugin of the one API (O-67).
+//! (`mcp.list` with the server's name). It is a plugin of the one API (O-67), on contract 2.0 (P6a).
 
 use opencode_api::generated::McpServer;
-use opencode_plugin::abi::{self, Click, Command, Layout, Node, Placement, Render, Span, Wrap};
+use opencode_plugin::abi::v2::{Node, Place, Surface};
+use opencode_plugin::abi::{self, Click, Command, Layout, Placement, Span, Wrap};
 use opencode_plugin::slot;
 use serde_json::json;
+
+use super::{hidden, kept};
 
 pub fn plugin() -> abi::Plugin {
     abi::Plugin { id: "opencode.sidebar.mcp", setup }
@@ -14,28 +17,33 @@ pub fn plugin() -> abi::Plugin {
 
 /// The hidden command a click on the header runs.
 const FOLD: &str = "sidebar.mcp.fold";
+const ROOT: &str = "mcp";
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("view");
     setup.command(Command { name: FOLD.to_owned(), ..Command::default() }, |host, _| {
         host.storage_merge("view", serde_json::Map::from_iter([("open".to_owned(), json!(!open(host)))]));
     });
-    setup.slot(Placement::append(slot::SIDEBAR_CONTENT), |read, input, changed| {
-        let Some(session) = input.session_id.as_deref() else { return Render::Hide };
+    setup.surface(Surface::new("mcp", Place::Slot(Placement::append(slot::SIDEBAR_CONTENT)), |cx| {
+        let Some(session) = cx.input.slot.as_ref().and_then(|slot| slot.session_id.as_deref()) else {
+            return hidden(ROOT);
+        };
         // The servers follow the session's location, the fold the storage.
+        let changed = &cx.input.changed;
         if !(changed.all || changed.local || changed.session(session) || !changed.locations.is_empty()) {
-            return Render::Keep;
+            return kept(ROOT);
         }
         // Where the TUI works while the session is not known.
-        let location = read
+        let location = cx
+            .read
             .session(session)
             .map(|session| abi::LocationRef { directory: session.info.location.directory.0, workspace: None });
-        let list = read.mcp_servers(location.as_ref()).unwrap_or_default();
+        let list = cx.read.mcp_servers(location.as_ref()).unwrap_or_default();
         if list.is_empty() {
-            return Render::Hide;
+            return hidden(ROOT);
         }
-        Render::Show(view(&list, open(read)))
-    });
+        view(&list, open(cx.read)).with_id(ROOT)
+    }));
     Ok(())
 }
 
