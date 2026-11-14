@@ -393,6 +393,50 @@ fn the_list_comes_back_on_the_row_that_was_asked_about() {
     assert!(screen.contains("plugins/second") && !screen.contains("plugins/first"), "{screen}");
 }
 
+/// A plugin whose command panics.
+fn boom() -> abi::Plugin {
+    fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+        setup.command(abi::Command { name: "boom.boom".to_owned(), ..abi::Command::default() }, |_, _| panic!("boom"));
+        Ok(())
+    }
+    abi::Plugin { id: "test.boom", setup }
+}
+
+// Expected (review bigboi-5): once the question about a project's plugin closes, by escape or by an answer that cannot
+// be saved, the list comes back as the plugins are then: a plugin that failed while the question was open shows
+// failed, with no later change to tell the manager.
+#[cfg(unix)]
+#[test]
+fn the_list_comes_back_as_the_plugins_are_after_the_question() {
+    use std::os::unix::fs::PermissionsExt;
+    for answer in ["escape", "unsaved"] {
+        let root = opencode_util::temp::tempdir().unwrap();
+        project_plugin(root.path(), "first", &build(""));
+        let h = project_tui(root.path());
+        opencode_tui::plugins::host::add(&h.tui, boom().into());
+        h.tui.keymap.dispatch("plugins.list", None);
+        h.wait_for("pending, local");
+        h.wait_for("test.boom");
+        h.app.press("enter");
+        h.wait_for("Run project plugin?");
+        h.tui.keymap.dispatch("boom.boom", None);
+        h.app.render();
+        let state = support::home_paths(&root.path().join("home")).state;
+        match answer {
+            "escape" => h.app.press("escape"),
+            _ => {
+                std::fs::create_dir_all(&state).unwrap();
+                std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o500)).unwrap();
+                h.app.press("right");
+                h.app.press("enter");
+            }
+        }
+        h.wait_for("pending, local");
+        std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o700)).ok();
+        h.wait_for("x test.boom");
+    }
+}
+
 // Expected: a plugin that fails to load shows TS's error toast, which offers to open the plugin manager, and the home
 // footer counts it (carbon-5).
 #[test]
