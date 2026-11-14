@@ -11,10 +11,12 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
-use std::sync::{Condvar, Mutex, PoisonError};
+use std::rc::{Rc, Weak};
+use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError, mpsc};
 
+use opentui::app::ProxyError;
 use opentui::native::{Context, ContextOptions};
+use opentui::prelude::{App, AppProxy};
 use opentui::sys;
 
 use crate::limits;
@@ -99,6 +101,126 @@ pub(crate) struct Pixels {
     pub rgba: Vec<u8>,
 }
 
+/// The image workers: the decodes that run at once, however many images wait (review carbon 3.3).
+const WORKERS: usize = 2;
+
+/// What a worker decoded for job `0`, sent to the UI thread: a send to a full queue is tried again with the same.
+struct Decoded(u64, Arc<Mutex<Option<Pixels>>>);
+
+/// A job for a worker.
+struct Request {
+    job: u64,
+    plugin: String,
+    bytes: Arc<[u8]>,
+    size: (u32, u32),
+    proxy: AppProxy,
+}
+
+/// What a job does with its pixels on the UI thread.
+type Done = Box<dyn FnOnce(&App, Option<Pixels>, &mut Reservation)>;
+
+thread_local! {
+    /// The jobs whose pixels the UI thread has not handled: the app's handler that will, while it lives, the bytes
+    /// the job reserved, and what it does with its pixels.
+    static WAITING: RefCell<HashMap<u64, (Weak<()>, Reservation, Done)>> = RefCell::default();
+    /// Each app's handler of [`Decoded`], while it lives.
+    static HANDLERS: RefCell<HashMap<usize, Weak<()>>> = RefCell::default();
+}
+
+/// The jobs of each plugin a worker has taken and not finished, for the tests.
+static TAKEN: Mutex<Vec<(String, usize)>> = Mutex::new(Vec::new());
+
+/// The jobs of plugin `plugin` a worker has taken and not finished: [`WORKERS`] at most, however many wait.
+pub fn taken(plugin: &str) -> usize {
+    let taken = TAKEN.lock().unwrap_or_else(PoisonError::into_inner);
+    taken.iter().find(|(known, _)| known == plugin).map_or(0, |(_, count)| *count)
+}
+
+fn take(plugin: &str, by: isize) {
+    let mut taken = TAKEN.lock().unwrap_or_else(PoisonError::into_inner);
+    match taken.iter_mut().find(|(known, _)| known == plugin) {
+        Some((_, count)) => *count = count.saturating_add_signed(by),
+        None => taken.push((plugin.to_owned(), by.max(0) as usize)),
+    }
+}
+
+/// Decodes `bytes`, which name an image of `size`, on one of the [`WORKERS`], and runs `done` with the pixels on the UI
+/// thread of `app`; `reserved` stays charged until then, or until the app is gone.
+pub(crate) fn submit(
+    app: &App,
+    job: u64,
+    plugin: &str,
+    (bytes, size): (Arc<[u8]>, (u32, u32)),
+    reserved: Reservation,
+    done: impl FnOnce(&App, Option<Pixels>, &mut Reservation) + 'static,
+) {
+    let handler = handler(app);
+    WAITING.with(|waiting| {
+        let mut waiting = waiting.borrow_mut();
+        // A job of an app that is gone gives back what it reserved: no reply will come.
+        waiting.retain(|_, (handler, ..)| handler.strong_count() > 0);
+        waiting.insert(job, (handler, reserved, Box::new(done)));
+    });
+    let request = Request { job, plugin: plugin.to_owned(), bytes, size, proxy: app.proxy() };
+    let _ = queue().lock().unwrap_or_else(PoisonError::into_inner).send(request);
+}
+
+/// The handler of [`Decoded`] of `app`, registered once while the app lives.
+fn handler(app: &App) -> Weak<()> {
+    let key = crate::schedule::key(app);
+    if let Some(alive) =
+        HANDLERS.with(|handlers| handlers.borrow().get(&key).filter(|known| known.strong_count() > 0).cloned())
+    {
+        return alive;
+    }
+    let token = Rc::new(());
+    let alive = Rc::downgrade(&token);
+    app.on_message(move |cx, decoded: &Decoded| {
+        let _ = &token;
+        let waiting = WAITING.with(|waiting| waiting.borrow_mut().remove(&decoded.0));
+        if let Some((_, mut reserved, done)) = waiting {
+            let pixels = decoded.1.lock().unwrap_or_else(PoisonError::into_inner).take();
+            done(cx.app(), pixels, &mut reserved);
+        }
+    });
+    HANDLERS.with(|handlers| handlers.borrow_mut().insert(key, alive.clone()));
+    alive
+}
+
+/// The queue of the workers, which it starts.
+fn queue() -> &'static Mutex<mpsc::Sender<Request>> {
+    static QUEUE: OnceLock<Mutex<mpsc::Sender<Request>>> = OnceLock::new();
+    QUEUE.get_or_init(|| {
+        let (sender, receiver) = mpsc::channel::<Request>();
+        let receiver = Arc::new(Mutex::new(receiver));
+        for index in 0..WORKERS {
+            let receiver = receiver.clone();
+            let work = move || {
+                loop {
+                    let request = receiver.lock().unwrap_or_else(PoisonError::into_inner).recv();
+                    let Ok(request) = request else { return };
+                    take(&request.plugin, 1);
+                    wait_held(&request.plugin);
+                    let pixels = decode_as(&request.bytes, request.size);
+                    take(&request.plugin, -1);
+                    let pixels = Arc::new(Mutex::new(pixels));
+                    while request.proxy.send(Decoded(request.job, pixels.clone())) == Err(ProxyError::Full) {
+                        std::thread::sleep(std::time::Duration::from_millis(1));
+                    }
+                }
+            };
+            let _ = std::thread::Builder::new().name(format!("plugin-image-{index}")).spawn(work);
+        }
+        Mutex::new(sender)
+    })
+}
+
+/// Decodes `bytes` into pixels of `size`, as their header named it, or of `size` turned (an orientation); `None` for
+/// any other: a header that names another size than the image decodes to is not shown (review carbon 3.1).
+fn decode_as(bytes: &[u8], size: (u32, u32)) -> Option<Pixels> {
+    decode(bytes).filter(|pixels| (pixels.width, pixels.height) == size || (pixels.height, pixels.width) == size)
+}
+
 /// Decodes `bytes` on the calling thread, in a native context of its own that it destroys before it returns: `None`
 /// when they do not decode.
 pub(crate) fn decode(bytes: &[u8]) -> Option<Pixels> {
@@ -135,8 +257,13 @@ pub(crate) fn decode(bytes: &[u8]) -> Option<Pixels> {
     pixels
 }
 
-/// The width and height the header of a PNG, GIF, JPEG or WebP image names.
+/// The width and height the header of a PNG, GIF, JPEG or WebP image names; `None` for no image, or one without
+/// pixels.
 pub(crate) fn size(bytes: &[u8]) -> Option<(u32, u32)> {
+    header(bytes).filter(|(width, height)| *width > 0 && *height > 0)
+}
+
+fn header(bytes: &[u8]) -> Option<(u32, u32)> {
     let at = |from: usize, len: usize| bytes.get(from..from + len);
     let be = |from: usize, len: usize| Some(at(from, len)?.iter().fold(0u32, |n, byte| n << 8 | u32::from(*byte)));
     let le =
@@ -161,17 +288,30 @@ pub(crate) fn size(bytes: &[u8]) -> Option<(u32, u32)> {
     if !bytes.starts_with(&[0xff, 0xd8]) {
         return None;
     }
-    // JPEG: the segments up to the first start of frame, which holds the size.
+    // JPEG: the segments up to the first start of frame, which holds the size. Fill bytes may come before a marker,
+    // and a marker without a length (TEM, a restart) has no segment (ITU T.81 B.1.1), as the decoder reads them
+    // (review carbon 3.1).
     let mut from = 2;
     loop {
         if *bytes.get(from)? != 0xff {
             return None;
         }
+        while *bytes.get(from + 1)? == 0xff {
+            from += 1;
+        }
         let marker = *bytes.get(from + 1)?;
+        if marker == 0x01 || (0xd0..=0xd7).contains(&marker) {
+            from += 2;
+            continue;
+        }
         if (0xc0..=0xcf).contains(&marker) && ![0xc4, 0xc8, 0xcc].contains(&marker) {
             return Some((be(from + 7, 2)?, be(from + 5, 2)?));
         }
-        from += 2 + be(from + 2, 2)? as usize;
+        let length = be(from + 2, 2)? as usize;
+        if length < 2 || marker == 0xd9 || marker == 0xd8 {
+            return None;
+        }
+        from += 2 + length;
     }
 }
 
@@ -184,4 +324,98 @@ pub enum Picture {
     Pending,
     /// Past a limit: the node shows a placeholder.
     Over,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A PNG of `width` by `height` opaque pixels, stored without compression.
+    fn png(width: u32, height: u32) -> Vec<u8> {
+        fn chunk(out: &mut Vec<u8>, kind: &[u8], data: &[u8]) {
+            out.extend((data.len() as u32).to_be_bytes());
+            let mut checked = kind.to_vec();
+            checked.extend(data);
+            let mut crc = !0u32;
+            for byte in &checked {
+                crc ^= u32::from(*byte);
+                for _ in 0..8 {
+                    crc = if crc & 1 != 0 { (crc >> 1) ^ 0xedb8_8320 } else { crc >> 1 };
+                }
+            }
+            out.extend(&checked);
+            out.extend((!crc).to_be_bytes());
+        }
+        let raw: Vec<u8> =
+            (0..height).flat_map(|_| std::iter::once(0).chain((0..width).flat_map(|_| [9, 9, 9, 255]))).collect();
+        let mut zlib = vec![0x78, 0x01, 1];
+        zlib.extend((raw.len() as u16).to_le_bytes());
+        zlib.extend((!(raw.len() as u16)).to_le_bytes());
+        zlib.extend(&raw);
+        let (mut a, mut b) = (1u32, 0u32);
+        for byte in &raw {
+            a = (a + u32::from(*byte)) % 65_521;
+            b = (b + a) % 65_521;
+        }
+        zlib.extend(((b << 16) | a).to_be_bytes());
+        let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+        chunk(
+            &mut out,
+            b"IHDR",
+            &[width.to_be_bytes(), height.to_be_bytes()]
+                .concat()
+                .into_iter()
+                .chain([8, 6, 0, 0, 0])
+                .collect::<Vec<_>>(),
+        );
+        chunk(&mut out, b"IDAT", &zlib);
+        chunk(&mut out, b"IEND", &[]);
+        out
+    }
+
+    // Expected (rows for the reviews' mutants CM1 to CM3, and carbon 3.1): each format's header names its size as the
+    // format lays it out, written here from the formats' specifications; a JPEG's fill bytes, a marker without a
+    // length, and a comment that holds what looks like a frame header are read as the decoder reads them; a header that
+    // names no pixels names no image.
+    #[test]
+    fn a_header_names_the_size_its_format_lays_out() {
+        let le16 = |value: u16| value.to_le_bytes();
+        let gif = [b"GIF89a".as_slice(), &le16(300), &le16(200), &[0; 8]].concat();
+        let riff = |kind: &[u8], body: &[u8]| [b"RIFF".as_slice(), &[0; 4], b"WEBP", kind, &[0; 4], body].concat();
+        let vp8 = riff(b"VP8 ", &[[0; 6].as_slice(), &le16(300), &le16(200), &[0; 4]].concat());
+        let bits: u32 = 299 | (199 << 14);
+        let vp8l = riff(b"VP8L", &[[0x2f].as_slice(), &bits.to_le_bytes(), &[0; 4]].concat());
+        let vp8x = riff(b"VP8X", &[[0; 4].as_slice(), &[43, 1, 0], &[199, 0, 0], &[0; 4]].concat());
+        let sof = |width: u16, height: u16| {
+            [[0xff, 0xc0, 0, 17, 8].as_slice(), &height.to_be_bytes(), &width.to_be_bytes(), &[3; 12]].concat()
+        };
+        let jpeg = [[0xff, 0xd8, 0xff, 0xe0, 0, 4, 0, 0].as_slice(), &sof(300, 200)].concat();
+        // Fill bytes before a marker, a restart marker without a length, and a comment whose bytes look like a frame
+        // header of 1 by 1.
+        let comment = [[0xff, 0xfe, 0, 23].as_slice(), &sof(1, 1)].concat();
+        let padded =
+            [[0xff, 0xd8, 0xff, 0xff, 0xff, 0xd0].as_slice(), &comment, &[0xff, 0xff], &sof(300, 200)[1..]].concat();
+        for (name, bytes) in [
+            ("png", png(300, 200)),
+            ("gif", gif),
+            ("vp8", vp8),
+            ("vp8l", vp8l),
+            ("vp8x", vp8x),
+            ("jpeg", jpeg),
+            ("padded", padded),
+        ] {
+            assert_eq!(size(&bytes), Some((300, 200)), "{name}");
+        }
+        assert_eq!(size(&png(0, 200)), None, "no pixels");
+        assert_eq!(size(b"not an image"), None);
+    }
+
+    // Expected (carbon 3.1): a worker shows only pixels of the size the header named, or that size turned.
+    #[test]
+    fn a_decode_of_another_size_than_the_header_named_shows_nothing() {
+        let bytes = png(3, 2);
+        assert!(decode_as(&bytes, (3, 2)).is_some());
+        assert!(decode_as(&bytes, (2, 3)).is_some(), "turned");
+        assert!(decode_as(&bytes, (1, 1)).is_none(), "a header that names less");
+    }
 }
