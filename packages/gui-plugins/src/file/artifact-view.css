@@ -315,3 +315,12 @@ img[data-slot="artifact-media"] {
     padding: 20px 12px;
   }
 }
+
+/* The same marks as the code view's find. */
+::highlight(file-preview-find) {
+  background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
+}
+
+::highlight(file-preview-find-current) {
+  background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
+}

@@ -348,7 +348,7 @@ export const dict = {
   "provider.connect.title": "Anslut {{provider}}",
   "provider.connect.method.apiKey": "API-nyckel",
   "provider.connect.status.inProgress": "Auktorisering pågår…",
-  "provider.connect.status.waiting": "Väntar på auktorisering…",
+  "provider.connect.status.waiting": "Väntar på auktorisering",
   "provider.connect.status.failed": "Auktorisering misslyckades: {{error}}",
   "provider.connect.apiKey.description":
     "Ange din {{provider}}-API-nyckel för att ansluta ditt konto och använda {{provider}}-modeller i OpenCode.",
@@ -821,7 +821,6 @@ export const dict = {
   "session.background.moveInline": "Tryck på {{keybind}} för att flytta pågående arbete till bakgrunden",
   "command.session.location.cycle": "Växla sessionsplats",
   "dialog.provider.anthropic.note": "Direktåtkomst till Claude-modeller via API-nyckel",
-  "provider.connect.title.anthropicProMax": "Logga in med Anthropic",
   "prompt.toast.uploading.percent": "{{percent}} %",
   "prompt.toast.uploading.cancelFile": "Avbryt uppladdningen av {{filename}}",
   "prompt.toast.uploadFailed.title": "Uppladdningen misslyckades",

@@ -314,6 +314,7 @@ test("a browser sign-in offers a paste box only when its attempt takes a pasted 
     value: "",
     error: undefined,
     locked: false,
+    open: undefined,
     submitting: false,
   })
 
@@ -376,6 +377,29 @@ test("a rejected paste shows the server error and keeps polling the same attempt
   expect(done.state.status).toBe("refreshing")
 })
 
+test("the paste field keeps the user's choice to show it, and stays shown once a URL was sent", () => {
+  const waiting = waitingWithPaste()
+  const shown = transitionProviderConnect(waiting.state, { type: "paste.toggled", open: true })
+
+  expect(selectProviderConnectView(shown.state).paste?.open).toBe(true)
+  expect(transitionProviderConnect(shown.state, { type: "paste.toggled", open: true }).state).toBe(shown.state)
+
+  const hidden = transitionProviderConnect(shown.state, { type: "paste.toggled", open: false })
+  const typed = transitionProviderConnect(hidden.state, { type: "paste.changed", value: "http://x" })
+  expect(selectProviderConnectView(typed.state).paste?.open).toBe(false)
+
+  const sent = transitionProviderConnect(typed.state, { type: "paste.submitted" })
+  expect(transitionProviderConnect(sent.state, { type: "paste.toggled", open: false }).state).toBe(sent.state)
+
+  const rejected = transitionProviderConnect(sent.state, {
+    type: "paste.rejected",
+    attempt: waiting.attempt,
+    error: "x",
+  })
+
+  expect(selectProviderConnectView(rejected.state).paste).toMatchObject({ open: true, locked: false })
+})
+
 test("an accepted paste stays locked while polling reports how the sign-in ends", () => {
   const waiting = waitingWithPaste()
   const typed = transitionProviderConnect(waiting.state, { type: "paste.changed", value: "http://x" })
@@ -386,6 +410,7 @@ test("an accepted paste stays locked while polling reports how the sign-in ends"
     value: "http://x",
     error: undefined,
     locked: true,
+    open: true,
     submitting: false,
   })
   expect(transitionProviderConnect(accepted.state, { type: "paste.submitted" }).effects).toEqual([])

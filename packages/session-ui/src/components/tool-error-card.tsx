@@ -118,6 +118,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
       value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.toolErrorCard.copyError")}
       placement="top"
       gutter={4}
+      forceOpen={copied() || undefined}
     >
       <IconButton
         icon={<Icon name={copied() ? "check" : "copy"} />}

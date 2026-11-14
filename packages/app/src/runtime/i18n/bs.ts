@@ -159,11 +159,11 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "Pogledaj još više od 70 provajdera",
 
   "dialog.provider.viewAll": "Prikaži više provajdera",
-
   "provider.connect.title": "Poveži {{provider}}",
+
   "provider.connect.method.apiKey": "API ključ",
   "provider.connect.status.inProgress": "Autorizacija je u toku…",
-  "provider.connect.status.waiting": "Čekanje na autorizaciju…",
+  "provider.connect.status.waiting": "Čekanje na autorizaciju",
   "provider.connect.status.failed": "Autorizacija nije uspjela: {{error}}",
   "provider.connect.apiKey.description":
     "Unesi svoj {{provider}} API ključ da povežeš račun i koristiš {{provider}} modele u OpenCode-u.",
@@ -894,7 +894,6 @@ export const dict = {
   "workspace.delete.location": "Lokacija",
   "command.session.location.cycle": "Promijeni lokaciju sesije",
   "dialog.provider.anthropic.note": "Direktan pristup Claude modelima putem API ključa",
-  "provider.connect.title.anthropicProMax": "Prijava putem Anthropic-a",
   "prompt.toast.uploading.cancelFile": "Otkaži otpremanje datoteke {{filename}}",
   "prompt.toast.uploadFailed.title": "Otpremanje nije uspjelo",
   "prompt.toast.uploading.percent": "{{percent}}%",

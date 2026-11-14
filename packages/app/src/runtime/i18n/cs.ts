@@ -148,7 +148,7 @@ export const dict = {
   "provider.connect.title": "Připojit {{provider}}",
   "provider.connect.method.apiKey": "API klíč",
   "provider.connect.status.inProgress": "Probíhá autorizace…",
-  "provider.connect.status.waiting": "Čekání na autorizaci…",
+  "provider.connect.status.waiting": "Čekání na autorizaci",
   "provider.connect.status.failed": "Autorizace se nezdařila: {{error}}",
   "provider.connect.apiKey.description":
     "Zadejte klíč API služby {{provider}}, připojte účet a používejte modely {{provider}} v OpenCode.",
@@ -844,7 +844,6 @@ export const dict = {
   "workspace.delete.location": "Umístění",
   "command.session.location.cycle": "Přepnout umístění relace",
   "dialog.provider.anthropic.note": "Přímý přístup k modelům Claude pomocí klíče API",
-  "provider.connect.title.anthropicProMax": "Přihlásit se přes Anthropic",
   "prompt.toast.uploading.cancelFile": "Zrušit nahrávání souboru {{filename}}",
   "prompt.toast.uploadFailed.title": "Nahrávání se nezdařilo",
   "prompt.toast.uploading.percent": "{{percent}}%",

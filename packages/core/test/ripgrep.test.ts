@@ -14,6 +14,22 @@ import { tempLocationLayer } from "./fixture/location"
 const it = testEffect(AppNodeBuilder.build(Ripgrep.node, [Location.node.replace(tempLocationLayer)]))
 
 describe("Ripgrep", () => {
+  // Creating a file symlink can require elevated privileges on Windows.
+  describe.skipIf(process.platform === "win32")("partial results", () => {
+    it.live("keeps matching files when an ignore glob is malformed and a symlink is broken", () =>
+      withTempDir((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => Bun.write(path.join(tmp.path, "visible.ts"), "needle\n"))
+          yield* Effect.promise(() => Bun.write(path.join(tmp.path, ".ignore"), "[z-a]\n"))
+          yield* Effect.promise(() => fs.symlink("missing", path.join(tmp.path, "broken")))
+          const ripgrep = yield* Ripgrep.Service
+          const files = yield* ripgrep.glob({ cwd: tmp.path, pattern: "*.ts", follow: true, limit: 10 })
+          expect(files.map((file) => file.path)).toEqual([RelativePath.make("visible.ts")])
+        }),
+      ),
+    )
+  })
+
   for (const hidden of [undefined, false, true]) {
     for (const limit of hidden ? [10] : [1, 10]) {
       it.live(`glob honors hidden=${hidden} before limit=${limit}`, () =>
