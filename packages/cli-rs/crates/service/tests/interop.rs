@@ -106,7 +106,7 @@ async fn typescript_service_status_sees_a_service_rust_started() {
     for dir in ["home", "state/opencode", "config/opencode", "data", "cache"] {
         std::fs::create_dir_all(isolation.path(dir)).unwrap();
     }
-    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let port = free_port();
     // A source build is channel `local`: its service config is `service-local.json`.
     std::fs::write(isolation.path("config/opencode/service-local.json"), format!("{{\"port\":{port}}}\n")).unwrap();
     let wrapper = isolation.wrapper(&ts_root);
@@ -130,4 +130,23 @@ async fn typescript_service_status_sees_a_service_rust_started() {
     assert_eq!(ensured.file, state.join("service-local.json"));
     assert_eq!(ensured.service.endpoint.url, format!("http://127.0.0.1:{port}"));
     assert_eq!(printed, ensured.service.endpoint.url);
+}
+
+/// A free port on 127.0.0.1 for a service that binds it later, below the kernel's ephemeral range: a port of that range
+/// goes to any port-0 listener or outgoing connection on the machine, and may be taken before the service starts.
+/// Never one given before in this process.
+fn free_port() -> u16 {
+    static GIVEN: std::sync::Mutex<Vec<u16>> = std::sync::Mutex::new(Vec::new());
+    let range = std::fs::read_to_string("/proc/sys/net/ipv4/ip_local_port_range").unwrap_or_default();
+    let below = range.split_whitespace().next().and_then(|first| first.parse().ok()).filter(|&first| first > 10_000);
+    let below: u16 = below.unwrap_or(32_768);
+    loop {
+        let random = std::hash::BuildHasher::hash_one(&std::hash::RandomState::new(), 0);
+        let port = 10_000 + (random % u64::from(below - 10_000)) as u16;
+        let mut given = GIVEN.lock().unwrap();
+        if !given.contains(&port) && std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
+            given.push(port);
+            return port;
+        }
+    }
 }
