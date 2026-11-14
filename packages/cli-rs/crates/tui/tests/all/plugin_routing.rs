@@ -557,9 +557,10 @@ fn every_event_reaches_the_plugin_once_in_order() {
 enum Life {
     Panel(bool),
     /// A key of the panel: `x` (which holds what follows it), `m` (its mode), `o` (its overlay); or escape in the
-    /// composer (the plugin's mode).
+    /// composer (the plugin's mode). Time then passes beyond a hold's deadline, so no hold spans two steps.
     Key(char),
-    /// A press on node `a`, which the plugin consumes: the pointer is captured until a release.
+    /// A press on node `a`, which the plugin consumes: the pointer is captured until a release. Over the overlay, its
+    /// backdrop takes it and closes the overlay.
     Press,
     Release,
     FocusComposer,
@@ -569,18 +570,49 @@ enum Life {
     Fail,
     /// The plugin's route shows, or the session again.
     Route(bool),
-    /// Time passes beyond a hold's deadline.
-    Wait,
+    /// With a hold armed in the panel and a key behind it, the panel closes, the plugin leaves `active`, or its route
+    /// shows; then time passes beyond the hold's deadline and a fresh key comes.
+    HeldExit(Exit),
 }
 
-/// The `ledger` model's state of the plugin, as the test drives it.
+#[derive(Clone, Copy, Debug)]
+enum Exit {
+    Close,
+    Disable,
+    Route,
+}
+
+/// Where the focus is, as the trace moved it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum At {
+    Composer,
+    Panel,
+    Overlay,
+}
+
+/// The `ledger` model's state of the plugin, from the trace.
 #[derive(Clone, Copy, Debug)]
 struct Shown {
     active: bool,
     panel: bool,
+    overlay: bool,
     route: bool,
-    /// The composer's mode `normal`, from the trace: escape in the composer sets it; the focus leaving it ends it.
+    at: At,
+    /// The composer's mode `normal`: escape in the composer sets it; the focus leaving the composer ends it.
     normal: bool,
+}
+
+impl Shown {
+    fn new(active: bool) -> Self {
+        Self { active, panel: false, overlay: false, route: false, at: At::Composer, normal: false }
+    }
+
+    fn focus(&mut self, at: At) {
+        if at != At::Composer {
+            self.normal = false;
+        }
+        self.at = at;
+    }
 }
 
 struct Ledgers;
@@ -596,10 +628,10 @@ impl Model for Ledgers {
                 5 => Life::Press,
                 6 => Life::Release,
                 7 => Life::FocusComposer,
-                8 | 9 => Life::Active(rng.below(3) > 0),
-                10 => Life::Fail,
-                11 => Life::Route(rng.below(2) == 0),
-                _ => Life::Wait,
+                8 => Life::Active(rng.below(3) > 0),
+                9 => Life::Fail,
+                10 => Life::Route(rng.below(2) == 0),
+                _ => Life::HeldExit(*rng.pick(&[Exit::Close, Exit::Disable, Exit::Route])),
             })
             .collect()
     }
@@ -614,7 +646,7 @@ impl Model for Ledgers {
         let without = interact::ledger(&*support::mount(120, 30, deps).tui);
         let harness = plugin::open_with(|probe| probe.hold = true);
         let unmounted = interact::ledger(&*harness.tui);
-        let mut shown = Shown { active: true, panel: false, route: false, normal: false };
+        let mut shown = Shown::new(true);
         for (step, command) in commands.iter().enumerate() {
             live(&harness, &mut shown, *command);
             let ledger = interact::ledger(&*harness.tui);
@@ -626,7 +658,7 @@ impl Model for Ledgers {
                 if ledger != without {
                     return fail("plugin", format!("{command:?}: a plugin that left left {ledger:?}, not {without:?}"));
                 }
-                if !shown.route && !opencode_plugin::Host::composer_focused(&*harness.tui) {
+                if !opencode_plugin::Host::composer_focused(&*harness.tui) {
                     return fail("focus", format!("{command:?}: the focus is not at the composer"));
                 }
                 continue;
@@ -640,6 +672,12 @@ impl Model for Ledgers {
     }
 }
 
+/// Lets time pass beyond a hold's deadline.
+fn wait(harness: &Harness) {
+    harness.app.advance(opencode_plugin::abi::interact::HOLD * 2);
+    plugin::settle(harness);
+}
+
 /// Runs `command` on the TUI and on the trace's state; the driver repairs nothing.
 fn live(harness: &Harness, shown: &mut Shown, command: Life) {
     let tui = &harness.tui;
@@ -647,88 +685,132 @@ fn live(harness: &Harness, shown: &mut Shown, command: Life) {
         Life::Panel(true) if shown.active && !shown.route => {
             plugin::run(harness, "input.panel", None);
             if !shown.panel {
-                shown.normal = false;
+                shown.focus(At::Panel);
             }
             shown.panel = true;
         }
         Life::Panel(false) if shown.active => {
             plugin::run(harness, "input.close", None);
-            shown.panel = false;
+            close(shown);
         }
         Life::Key('\u{1b}') => {
             // Escape in the composer: the composer takes the focus first.
             opencode_plugin::Host::focus_composer(&**tui);
             plugin::settle(harness);
             harness.app.press("escape");
-            plugin::settle(harness);
+            wait(harness);
+            shown.focus(At::Composer);
             shown.normal = shown.active && !shown.route;
         }
         Life::Key(key) => {
             harness.app.press(&key.to_string());
-            plugin::settle(harness);
-            // `o` in the panel moves the focus to the overlay.
-            if key == 'o' && shown.panel && !opencode_plugin::Host::composer_focused(&**tui) {
-                shown.normal = false;
+            wait(harness);
+            if key == 'o' && shown.active && shown.panel && shown.at == At::Panel {
+                shown.overlay = true;
+                shown.focus(At::Overlay);
             }
         }
         Life::Press if shown.panel => {
-            if let Some((x, y)) = support::at(&harness.app.text(), "AAAA") {
-                harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
-                plugin::settle(harness);
-                shown.normal = false;
+            let (x, y) = support::at(&harness.app.text(), "AAAA").expect("the panel shows AAAA");
+            harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
+            plugin::settle(harness);
+            match shown.overlay {
+                true => {
+                    shown.overlay = false;
+                    if shown.at == At::Overlay {
+                        shown.focus(At::Panel);
+                    }
+                }
+                false => shown.focus(At::Panel),
             }
         }
-        Life::Release => {
-            if let Some((x, y)) = support::at(&harness.app.text(), "AAAA") {
-                harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 1, y);
-                plugin::settle(harness);
-            }
+        Life::Release if shown.panel => {
+            let (x, y) = support::at(&harness.app.text(), "AAAA").expect("the panel shows AAAA");
+            harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 1, y);
+            plugin::settle(harness);
         }
         Life::FocusComposer => {
             opencode_plugin::Host::focus_composer(&**tui);
             plugin::settle(harness);
+            shown.focus(At::Composer);
         }
-        Life::Active(active) if active != shown.active => {
-            let host = opencode_tui::plugins::host::host(tui);
-            tui.plugins.toggle(&host, plugin::ID, active);
-            tui.navigate(tui.route());
-            plugin::settle(harness);
-            let active = runs(tui);
-            *shown = Shown { active, panel: false, route: shown.route && active, normal: false };
-            // The route of a plugin that left shows nothing: the user goes back to the session.
-            if !active {
-                session(harness);
-            }
-        }
+        Life::Active(active) if active != shown.active => toggle(harness, shown, active),
         Life::Fail if shown.active && shown.panel => {
             probe(|probe| probe.panic = true);
-            harness.app.press("q");
             plugin::run(harness, "input.focus", Some("a"));
             harness.app.press("x");
             plugin::settle(harness);
             probe(|probe| probe.panic = false);
+            shown.focus(At::Panel);
             if !runs(tui) {
-                *shown = Shown { active: false, panel: false, route: false, normal: false };
+                *shown = Shown::new(false);
                 session(harness);
             }
         }
         Life::Route(true) if shown.active && !shown.route => {
             plugin::run(harness, "input.route", None);
-            *shown = Shown { panel: false, route: true, normal: false, ..*shown };
+            *shown = Shown { panel: false, overlay: false, route: true, ..*shown };
+            shown.focus(At::Panel);
         }
         Life::Route(false) if shown.route => {
             session(harness);
             shown.route = false;
+            shown.at = if opencode_plugin::Host::composer_focused(&**tui) { At::Composer } else { At::Panel };
         }
-        Life::Wait => {
-            harness.app.advance(opencode_plugin::abi::interact::HOLD * 2);
+        Life::HeldExit(exit) if shown.active && shown.panel => {
+            // Out of the panel and back, which ends its mode, so `x` is a key of it again.
+            opencode_plugin::Host::focus_composer(&**tui);
             plugin::settle(harness);
+            plugin::run(harness, "input.focus", Some("a"));
+            shown.focus(At::Panel);
+            shown.overlay = false;
+            harness.app.press("x");
+            harness.app.press("q");
+            assert!(interact::ledger(&**tui).holding, "the hold is armed");
+            match exit {
+                Exit::Close => {
+                    plugin::run(harness, "input.close", None);
+                    close(shown);
+                }
+                Exit::Disable => toggle(harness, shown, false),
+                Exit::Route => {
+                    plugin::run(harness, "input.route", None);
+                    *shown = Shown { panel: false, overlay: false, route: true, ..*shown };
+                }
+            }
+            wait(harness);
             harness.app.press("q");
             plugin::settle(harness);
         }
         _ => {}
     }
     plugin::taken();
+}
+
+/// The panel closed: its overlay goes with it, and a focus in either goes to the composer.
+fn close(shown: &mut Shown) {
+    if shown.panel {
+        shown.panel = false;
+        shown.overlay = false;
+        if shown.at != At::Composer {
+            shown.focus(At::Composer);
+        }
+    }
+}
+
+/// The plugin leaves `active`, or comes back.
+fn toggle(harness: &Harness, shown: &mut Shown, active: bool) {
+    let tui = &harness.tui;
+    let host = opencode_tui::plugins::host::host(tui);
+    tui.plugins.toggle(&host, plugin::ID, active);
+    tui.navigate(tui.route());
+    plugin::settle(harness);
+    let route = shown.route && runs(tui);
+    *shown = Shown { route, ..Shown::new(runs(tui)) };
+    // The route of a plugin that left shows nothing: the user goes back to the session.
+    if !shown.active {
+        session(harness);
+    }
 }
 
 /// Whether the test plugin runs: active, and not failed.
@@ -745,9 +827,10 @@ fn session(harness: &Harness) {
     }
 }
 
-// Expected (`ledger`, 4.14): whatever the plugin's mounts held (layers, a mode, a capture, a hold and its timer, an
-// overlay), a closed panel or a route left leaves the registries as the plugin left them with no mount, and a disabled
-// or failed plugin leaves them as a TUI without it, with the focus at the composer.
+// Expected (`ledger`, 4.14): whatever the plugin's mounts held (layers, a mode, a capture, a hold with a key behind it
+// and its timer, an overlay), a closed panel or a route left leaves the registries as the plugin left them with no
+// mount, also after the hold's deadline and a fresh key, and a disabled or failed plugin leaves them as a TUI without
+// it, with the focus at the composer.
 #[test]
 fn nothing_an_ended_mount_or_plugin_held_is_left() {
     model::check(&Ledgers, 24, 24);
