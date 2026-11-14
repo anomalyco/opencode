@@ -15,6 +15,9 @@ export const TextAttributes = {
 
 // OpenTUI's color: channels from 0 to 1. `token` is the theme path the host restyles by, when the color is the
 // theme's.
+// OpenTUI's mouse buttons; a click the host reports is the left one.
+export const MouseButton = { LEFT: 0, MIDDLE: 1, RIGHT: 2, WHEEL_UP: 4, WHEEL_DOWN: 5 } as const
+
 export class RGBA {
   constructor(
     public r: number,

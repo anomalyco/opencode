@@ -64,19 +64,6 @@ export const reported = new Map<string, Set<string>>()
 // What `usePlugin()` reads in a plugin's components: its context, as TS provides it around each render.
 export const PluginContext = createContext<unknown>()
 
-const SLOTS = new Set([
-  "app",
-  "home.footer",
-  "home.footer.status",
-  "prompt.footer",
-  "prompt.footer.status",
-  "prompt.footer.file",
-  "session.composer.top",
-  "session.panel",
-  "sidebar.content",
-  "sidebar.footer",
-])
-
 export function context(base: Base, carrier: Carrier) {
   const id = base.id
   const unsupported = (feature: string, message = `${id}: ${feature} is not supported by opencode-native yet`) => {
@@ -171,9 +158,10 @@ export function context(base: Base, carrier: Carrier) {
     invalidate() {},
   })
   const none = (name: string) => ({
+    // Reported, and an empty list rather than none, which a plugin would not expect of a list (carbon-4).
     list: () => {
       unsupported(`data.${name}`)
-      return undefined
+      return []
     },
     sync: async () => unsupported(`data.${name}`),
     invalidate() {},
@@ -278,7 +266,7 @@ export function context(base: Base, carrier: Carrier) {
   // Internal commands: a click on a node, a dialog's answer, and its close. The host runs a dialog's action with the
   // answer as its input, and one dialog shows at a time. A click's handler is its mount's (`presses`, by the mount, then
   // by the node): a view replaces its mount's, and an unmount or a close drops them (bigboi P8-8).
-  const presses = new Map<string, Map<string, (event: unknown) => unknown>>()
+  const presses = new Map<string, Map<string, { handler: (event: unknown) => unknown; kind: string }>>()
   let answering: ((value: string | undefined) => void) | undefined
   let asked = 0
   const PRESS = `${id}.compat.press`
@@ -286,7 +274,9 @@ export function context(base: Base, carrier: Carrier) {
   const DISMISS = `${id}.compat.dismiss`
   carrier.command({ name: PRESS, title: PRESS }, (input) => {
     const [mount, node] = (input ?? "").split("\u0001")
-    presses.get(mount ?? "")?.get(node ?? "")?.({ type: "down", stopPropagation() {}, preventDefault() {} })
+    const pressed = presses.get(mount ?? "")?.get(node ?? "")
+    const event = { type: pressed?.kind, button: 0, modifiers: { shift: false, alt: false, ctrl: false } }
+    pressed?.handler({ ...event, stopPropagation() {}, preventDefault() {} })
   })
   carrier.command({ name: ANSWER, title: ANSWER }, (input) => {
     const resolve = answering
@@ -319,8 +309,10 @@ export function context(base: Base, carrier: Carrier) {
   // shows a node, sent again under its key as the JSX changes. A bare panel: the host draws only the dialog's frame
   // around it, as TS does; a close of it (escape, the backdrop, another dialog) calls `onClose`, as TS's
   // `dialog.replace` does.
-  const PANEL = "compat.dialog"
-  let shown: { mounted: Mounted; onClose?: () => void; opened: boolean; keys?: () => void } | undefined
+  // Each `show` is a panel of its own key (carbon-3), so the host tells its open and its close apart from the one it
+  // replaced, which it changed in place under the same key.
+  let shows = 0
+  let shown: { mounted: Mounted; key: string; onClose?: () => void; opened: boolean; keys?: () => void } | undefined
   let presentation = { size: "medium", centered: false }
   let resend = false
   const unshow = () => {
@@ -329,7 +321,7 @@ export function context(base: Base, carrier: Carrier) {
     if (!was) return
     was.mounted.dispose()
     was.keys?.()
-    presses.delete(PANEL)
+    presses.delete(was.key)
     was.onClose?.()
   }
   // A panel's body is a node of ABI 1.x, which has no scroll: a `<scrollbox>` in the dialog is a box that does not
@@ -339,7 +331,15 @@ export function context(base: Base, carrier: Carrier) {
   const sendShown = () => {
     resend = false
     if (!shown) return
-    const reading = pressing(PANEL)
+    const key = shown.key
+    // As TS's boundary around a dialog, which clears it: a render that threw closes the dialog (carbon-3).
+    if (shown.mounted.crashed !== undefined) {
+      void carrier.effect({ type: "dialog", dialog: { type: "close", key } })
+      unshow()
+      return
+    }
+    missing.clear()
+    const reading = pressing(key)
     let body: Json
     try {
       const tree = serialize(shown.mounted.root, reading)
@@ -363,11 +363,12 @@ export function context(base: Base, carrier: Carrier) {
       unshow()
       return
     }
-    for (const dropped of reading.dropped) unsupported(dropped)
+    for (const dropped of [...reading.dropped, ...missing]) unsupported(dropped)
+    missing.clear()
     const size = ["large", "xlarge"].includes(presentation.size) ? presentation.size : "medium"
     void carrier.effect({
       type: "dialog",
-      dialog: { type: "panel", key: PANEL, size, title: [], body, centered: presentation.centered, bare: true },
+      dialog: { type: "panel", key, size, title: [], body, centered: presentation.centered, bare: true },
     })
   }
   const panelChanged = () => {
@@ -376,7 +377,7 @@ export function context(base: Base, carrier: Carrier) {
     queueMicrotask(sendShown)
   }
   carrier.listen((key) => {
-    if (key !== `dialog-open:${PANEL}` || !shown) return
+    if (!shown || key !== `dialog-open:${shown.key}`) return
     const open = carrier.read(key) === true
     if (open) shown.opened = true
     else if (shown.opened) unshow()
@@ -392,12 +393,12 @@ export function context(base: Base, carrier: Carrier) {
     renderer: {},
   }
   let claims = 0
-  // A change of a tree asks for one view of the plugin's mounts once the code that changed it returned; a change
-  // while a view reads the trees is in that view already.
-  let viewing = false
+  // A change of a tree asks for one view of the plugin's mounts once the code that changed it returned; a change of the
+  // mount whose view reads its tree is in that view already, but one of another mount is not (carbon-4).
+  let drawing: string | undefined
   let scheduled = false
-  const invalidate = () => {
-    if (viewing || scheduled) return
+  const invalidate = (at?: string) => {
+    if ((at !== undefined && at === drawing) || scheduled) return
     scheduled = true
     queueMicrotask(() => {
       scheduled = false
@@ -414,17 +415,19 @@ export function context(base: Base, carrier: Carrier) {
     }
     const view = (cx: Json) => {
       if (removed) return { type: "box" }
-      viewing = true
+      const before = drawing
+      drawing = key(cx)
       try {
         return draw(cx)
       } finally {
-        viewing = false
+        drawing = before
       }
     }
     const draw = (cx: Json) => {
       if (cx.input.width || cx.input.height) size[1]({ width: cx.input.width, height: cx.input.height })
+      missing.clear()
       let entry = rendered.get(key(cx))
-      if (entry && !entry.crashed && JSON.stringify(entry.input) !== JSON.stringify(input(cx))) {
+      if (entry && entry.crashed === undefined && JSON.stringify(entry.input) !== JSON.stringify(input(cx))) {
         entry.input = input(cx)
         const before = rendering
         rendering = { pending: false, keys: entry.keys }
@@ -436,7 +439,7 @@ export function context(base: Base, carrier: Carrier) {
       }
       // A first render that read what the host has not pushed yet renders again once its own reads came, a few times
       // at most.
-      const retry = (at: typeof entry) => !!at && at.pending > 0 && at.pending < 4 && !at.crashed
+      const retry = (at: typeof entry) => !!at && at.pending > 0 && at.pending < 4 && at.crashed === undefined
       if (!entry || (retry(entry) && [...entry.keys].every((key) => pushed.has(key)))) {
         entry?.dispose()
         const tries = entry ? entry.pending : 0
@@ -454,7 +457,8 @@ export function context(base: Base, carrier: Carrier) {
                 return render(props)
               },
             })
-          mounted = mount(provided, screen, invalidate, crashed)
+          const at = key(cx)
+          mounted = mount(provided, screen, () => invalidate(at), crashed)
         } finally {
           rendering = before
         }
@@ -471,6 +475,7 @@ export function context(base: Base, carrier: Carrier) {
       try {
         const tree = serialize(entry.root, reading)
         for (const dropped of [...reading.dropped, ...missing]) unsupported(dropped)
+        missing.clear()
         return tree
       } catch (error) {
         crashed(error)
@@ -504,13 +509,13 @@ export function context(base: Base, carrier: Carrier) {
   }
   // What a view of `mount` reads its tree with: its click handlers replace the ones its last view gave.
   const pressing = (mount: string) => {
-    const handlers = new Map<string, (event: unknown) => unknown>()
+    const handlers = new Map<string, { handler: (event: unknown) => unknown; kind: string }>()
     presses.set(mount, handlers)
     return {
       dropped: new Set<string>(),
-      press(node: VNode, handler: (event: unknown) => unknown) {
+      press(node: VNode, handler: (event: unknown) => unknown, kind: string) {
         const at = String(pressIndex(node))
-        handlers.set(at, handler)
+        handlers.set(at, { handler, kind })
         return { type: "command", name: PRESS, input: `${mount}\u0001${at}` }
       },
     }
@@ -611,11 +616,12 @@ export function context(base: Base, carrier: Carrier) {
   const renderer = new Proxy(
     {
       requestRender: () => invalidate(),
+      // The terminal's, as `useTerminalDimensions` (carbon-4): a surface's own box is not the renderer's.
       get width() {
-        return size[0]().width || info()?.size?.[0] || 0
+        return info()?.size?.[0] || size[0]().width || 0
       },
       get height() {
-        return size[0]().height || info()?.size?.[1] || 0
+        return info()?.size?.[1] || size[0]().height || 0
       },
     } as Json,
     {
@@ -641,21 +647,23 @@ export function context(base: Base, carrier: Carrier) {
     data,
     attention: {
       async notify(options: Json) {
-        const when = (value: Json) => (typeof value === "object" ? (value.when ?? "always") : value ? "always" : undefined)
+        // TS's defaults (carbon-4): a notification while the terminal is not focused, and a sound, unless `false`.
+        const notification = typeof options.notification === "object" ? options.notification : {}
+        const sound = typeof options.sound === "object" ? options.sound : {}
         await carrier.effect({
           type: "attention",
           ...(options.title ? { title: options.title } : {}),
           message: options.message,
-          ...(when(options.notification) ? { notify: when(options.notification) } : {}),
-          ...(options.sound
-            ? {
+          ...(options.notification === false ? {} : { notify: notification.when ?? "blurred" }),
+          ...(options.sound === false
+            ? {}
+            : {
                 sound: {
-                  name: options.sound.name ?? "default",
-                  when: options.sound.when ?? "always",
-                  ...(options.sound.volume === undefined ? {} : { volume: options.sound.volume }),
+                  name: sound.name ?? "default",
+                  when: sound.when ?? "always",
+                  ...(sound.volume === undefined ? {} : { volume: sound.volume }),
                 },
-              }
-            : {}),
+              }),
         })
         return { ok: true, notification: !!options.notification, sound: !!options.sound }
       },
@@ -710,11 +718,15 @@ export function context(base: Base, carrier: Carrier) {
       },
       shortcuts: (name: string) => read(`shortcuts:${name}`, { type: "shortcuts", name }) ?? [],
       commands: () =>
-        (read("keymap-commands", { type: "keymap-commands" }) ?? []).map((command: Json) => ({
-          ...command,
-          slash: command.slash,
-          run() {},
-        })),
+        (read("keymap-commands", { type: "keymap-commands" }) ?? [])
+          // The layer's own commands (a click, a dialog's answer) are not the plugin's to list (carbon-5).
+          .filter((command: Json) => !String(command.name ?? command.id ?? "").includes(".compat."))
+          .map((command: Json) => ({
+            ...command,
+            slash: command.slash,
+            // As TS's: running one dispatches it (carbon-4).
+            run: () => void carrier.effect({ type: "dispatch", name: command.name ?? command.id }),
+          })),
       pending: () => read("keymap-pending", { type: "keymap-pending" }) ?? [],
       active: () => read("keymap-active", { type: "keymap-active" }) ?? [],
       mode: {
@@ -809,12 +821,13 @@ export function context(base: Base, carrier: Carrier) {
           const reading = { pending: false, keys: new Set<string>() }
           rendering = reading
           try {
-            shown = { mounted: mount(provided, screen, panelChanged, crashed), onClose, opened: false }
+            const key = `compat.dialog.${++shows}`
+            shown = { mounted: mount(provided, screen, panelChanged, crashed), key, onClose, opened: false }
           } finally {
             rendering = before
           }
           shown.mounted.keys = reading.keys
-          untrack(() => read(`dialog-open:${PANEL}`, { type: "dialog-open", key: PANEL }))
+          untrack(() => read(`dialog-open:${shown!.key}`, { type: "dialog-open", key: shown!.key }))
           sendShown()
         },
         set(options: Json) {
@@ -827,7 +840,7 @@ export function context(base: Base, carrier: Carrier) {
           presentation = { size: "medium", centered: false }
           if (asking) void carrier.effect({ type: "dialog", dialog: { type: "close", key: "" } })
           if (!shown) return
-          void carrier.effect({ type: "dialog", dialog: { type: "close", key: PANEL } })
+          void carrier.effect({ type: "dialog", dialog: { type: "close", key: shown.key } })
           unshow()
         },
         alert: (options: Json) =>
@@ -951,16 +964,9 @@ export function context(base: Base, carrier: Carrier) {
           panels.push(name)
           return surface(name, { type: "panel", name }, slotInput(path), claim.render, `slot ${path}`)
         }
-        // A path the host does not publish degrades as TS's does: to the nearest published ancestor, appended.
-        const at = SLOTS.has(path) ? path : ancestor(path)
-        if (!at) return () => {}
-        return surface(
-          name,
-          { type: "slot", kind: at === path ? kind : "append", path: at },
-          slotInput(at),
-          claim.render,
-          `slot ${path}`,
-        )
+        // As it is: the host degrades a path it does not publish as TS does (carbon-4): a `replace` of one never
+        // degrades, an `append` goes to the nearest published ancestor, and a plugin's own `<Slot>` is a path too.
+        return surface(name, { type: "slot", kind, path }, slotInput(path), claim.render, `slot ${path}`)
       },
     },
   }
@@ -970,12 +976,4 @@ export function context(base: Base, carrier: Carrier) {
     return true
   }
   return ctx
-}
-
-function ancestor(path: string) {
-  for (let index = path.lastIndexOf("."); index !== -1; index = path.lastIndexOf(".", index - 1)) {
-    const at = path.slice(0, index)
-    if (SLOTS.has(at)) return at
-  }
-  return undefined
 }

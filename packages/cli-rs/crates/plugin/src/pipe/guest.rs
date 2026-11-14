@@ -97,6 +97,7 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
                 host: Rc::downgrade(setup.host()),
                 loaded: loaded.clone(),
                 js: Cell::new(loaded.seq),
+                handed_over: Cell::new(false),
                 generation: setup.generation(),
                 failure,
                 revoked: RefCell::default(),
@@ -131,6 +132,9 @@ pub(crate) struct Guest {
     loaded: Rc<Loaded>,
     /// The load whose setup made the JS host's activation of the plugin, which a deactivation names.
     js: Cell<u64>,
+    /// A reload of its registrations handed its activation of the JS host to the guest that replaces it, whose end
+    /// deactivates it; this one's does not (carbon-2: a flag, not a zeroed `js`, as a second reload reads `js`).
+    handed_over: Cell<bool>,
     /// The registry's activation, which owns the dialogs it asks for.
     generation: u64,
     failure: Rc<RefCell<Option<String>>>,
@@ -257,7 +261,8 @@ impl Guest {
         let Some(scripts) = self.scripts.upgrade() else { return };
         // The replacement adopts this activation of the JS host: this guest's end must not deactivate it (review
         // carbon-2). Its mounts still end on the JS host, which keeps them for the activation (P8).
-        let handed = self.js.replace(0);
+        let handed = self.js.get();
+        self.handed_over.set(true);
         for viewer in self.viewers.borrow().iter() {
             viewer.handed.set(handed);
         }
@@ -351,6 +356,9 @@ impl Guest {
     }
 
     fn deactivate(&self) {
+        if self.handed_over.get() {
+            return;
+        }
         if let Some(scripts) = self.scripts.upgrade() {
             let seq = scripts.next();
             let message = Down::Deactivate { seq, id: self.id().to_owned(), activation: self.js.get() };
@@ -871,7 +879,12 @@ impl surface::Viewer for Viewer {
 
     fn forget(&self, _host: &dyn Host, id: &v2::MountId) {
         let Some(mount) = self.mounts.borrow_mut().remove(id) else { return };
-        let running = self.guest.upgrade().filter(|guest| !guest.ended()).map(|guest| guest.js.get());
+        let guest = self.guest.upgrade().filter(|guest| !guest.ended());
+        // A guest that handed its activation to a reload leaves its mounts to the replacement, which mounts its own.
+        if guest.as_ref().is_some_and(|guest| guest.handed_over.get()) {
+            return;
+        }
+        let running = guest.map(|guest| guest.js.get());
         let Some(activation) = running.or(Some(self.handed.get()).filter(|handed| *handed != 0)) else { return };
         if !mount.started {
             return;
