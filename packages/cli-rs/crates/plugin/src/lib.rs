@@ -631,7 +631,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                     (Some(()), true) => claim::Called::Overran,
                     (Some(()), false) => claim::Called::Returned,
                 });
-            setup.renderer_claim(claim.into(), Rc::new(claim::Linked::new(claim.view.clone(), call)));
+            setup.renderer_claim(claim.into(), Rc::new(claim::Linked::new(claim.view.clone(), call)), &scope.owners);
         }
         // Disposal removes the plugin's commands, runs its dispose callbacks, then drops its replies and wakes.
         setup.on_dispose(move || scope.dispose(&mut api));
@@ -1821,9 +1821,9 @@ impl Setup<'_> {
 
     /// Registers a renderer claim, on either path: a tool's calls go to the transcript's tool rows, a fence language to
     /// the Markdown code-block renderers. `viewer` runs its view.
-    pub(crate) fn renderer_claim(&mut self, entry: abi::claim::Entry, viewer: Rc<dyn claim::Viewer>) {
+    pub(crate) fn renderer_claim(&mut self, entry: abi::claim::Entry, viewer: Rc<dyn claim::Viewer>, owners: &Owners) {
         let target = entry.target.clone();
-        let registered = claim::Registered::new(entry, Rc::downgrade(self.host), viewer);
+        let registered = claim::Registered::new(entry, Rc::downgrade(self.host), viewer, owners.input.clone());
         match target {
             abi::claim::Target::Tool(name) => self.registration.tools.push((name, registered)),
             abi::claim::Target::Fence(language) => {

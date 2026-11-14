@@ -12,6 +12,7 @@
 //!   view declines that part from that step on. Every cell outside the composer, and `claim.b`'s own log of its views,
 //!   must equal that twin's. The fault comes from `claim.a`'s own log of what it did.
 
+use crate::plugin_surface::{CARRIERS, Carrier, builtin};
 use crate::support::model::{self, Failure, Model, Rng};
 use crate::support::{self, Harness};
 
@@ -283,10 +284,11 @@ fn messages() -> Value {
 }
 
 impl World {
-    fn open() -> Self {
+    /// The two claiming plugins on `carrier`.
+    fn open(carrier: Carrier) -> Self {
         Self::with(vec![
-            abi::Plugin { id: "claim.a", setup: plugin_a }.into(),
-            abi::Plugin { id: "claim.b", setup: plugin_b }.into(),
+            builtin(carrier, abi::Plugin { id: "claim.a", setup: plugin_a }),
+            builtin(carrier, abi::Plugin { id: "claim.b", setup: plugin_b }),
         ])
     }
 
@@ -616,22 +618,28 @@ pub enum Command {
     Theme(bool),
 }
 
-/// What a step left: the frame, its composer, and `claim.b`'s views.
+/// What a step left: the frame, its composer, `claim.b`'s views, and every view each plugin logged.
 struct Step {
     frame: Capture,
     mask: Option<(u32, u32, u32, u32)>,
     witness: Vec<(String, Vec<String>)>,
+    views: Views,
 }
 
-/// The views of `claim.b` since the last call, runs of one view as one: a remount views every part again.
-fn witness() -> Vec<(String, Vec<String>)> {
+/// Views as a plugin logs them: the plugin, the part, and the lines it drew.
+type Views = Vec<(char, String, Vec<String>)>;
+
+/// The views logged since the last call, and those of `claim.b` with runs of one view as one: a remount views every
+/// part again.
+fn witness() -> (Vec<(String, Vec<String>)>, Views) {
+    let views = VIEWS.with_borrow_mut(std::mem::take);
     let mut seen: Vec<(String, Vec<String>)> = Vec::new();
-    for (plugin, key, lines) in VIEWS.with_borrow_mut(std::mem::take) {
-        if plugin == 'b' && seen.last() != Some(&(key.clone(), lines.clone())) {
-            seen.push((key, lines));
+    for (plugin, key, lines) in &views {
+        if *plugin == 'b' && seen.last() != Some(&(key.clone(), lines.clone())) {
+            seen.push((key.clone(), lines.clone()));
         }
     }
-    seen
+    (seen, views)
 }
 
 /// The first row where `a` and `b` differ outside the composer.
@@ -646,7 +654,10 @@ fn frame_diff(a: &Step, b: &Step) -> Option<String> {
     })
 }
 
-pub struct ClaimModel;
+/// The model on one carrier.
+pub struct ClaimModel {
+    carrier: Carrier,
+}
 
 /// The faults `claim.a`'s log says fired, a list a step.
 type Fired = Vec<Vec<(String, Fault)>>;
@@ -655,7 +666,7 @@ impl ClaimModel {
     /// Runs `commands` in the world with faults, or in the twin that takes `fired`'s faults its own way. Returns each
     /// step, the faults that fired at each step, and the first `stream-whole` failure.
     fn world(&self, commands: &[Command], fired: Option<&Fired>) -> (Vec<Step>, Fired, Option<Failure>) {
-        let world = World::open();
+        let world = World::open(self.carrier);
         let mut expected = Expected::new();
         let (mut steps, mut log, mut failure) = (Vec::new(), Vec::new(), None);
         VIEWS.with_borrow_mut(Vec::clear);
@@ -675,7 +686,7 @@ impl ClaimModel {
             }
             // The twin declines a part from the step its fault fell back on, before that step's view.
             for (key, fault) in twin {
-                if *fault != Fault::Panic {
+                if !self.fails(*fault) {
                     DECLINE.with_borrow_mut(|decline| decline.insert(key.clone()));
                 }
             }
@@ -686,15 +697,15 @@ impl ClaimModel {
             world.send(command, &mut expected);
             let mut faults = FIRED.with_borrow_mut(std::mem::take);
             faults.dedup();
-            if twin.iter().any(|(_, fault)| *fault == Fault::Panic) {
+            if twin.iter().any(|(_, fault)| self.fails(*fault)) {
                 world.enable(false, &mut expected);
                 world.settle();
             }
             // What the plugin's own log says happened: a panic fails it, another fault fails one part.
             for (key, fault) in faults.iter().chain(twin) {
-                match fault {
-                    Fault::Panic => expected.a = false,
-                    _ => drop(expected.off.insert(key.clone())),
+                match self.fails(*fault) {
+                    true => expected.a = false,
+                    false => drop(expected.off.insert(key.clone())),
                 }
             }
             if failure.is_none()
@@ -708,7 +719,8 @@ impl ClaimModel {
                 let detail = format!("{} mounts booked, {} live", ledger.mounts, mounted().len());
                 failure = Some(Failure { property: "ledger", site: "live", step, detail });
             }
-            steps.push(Step { frame: world.frame(), mask: world.mask(), witness: witness() });
+            let (witness, views) = witness();
+            steps.push(Step { frame: world.frame(), mask: world.mask(), witness, views });
             log.push(faults);
         }
         drop(world);
@@ -721,6 +733,14 @@ impl ClaimModel {
             failure = Some(Failure { property: "ledger", site: "end", step: commands.len(), detail });
         }
         (steps, log, failure)
+    }
+}
+
+impl ClaimModel {
+    /// Whether `fault` fails the plugin, rather than the part: a panic on every carrier, and an overrun of a library,
+    /// which P4c fails as an external plugin's (an overrun in process is a counted host bug).
+    fn fails(&self, fault: Fault) -> bool {
+        fault == Fault::Panic || (fault == Fault::Overrun && self.carrier == Carrier::Abi)
     }
 }
 
@@ -787,8 +807,67 @@ impl Model for ClaimModel {
 
 #[test]
 fn claimed_parts_stream_into_what_a_fresh_mount_draws() {
-    // A seed costs about 0.6 s debug (two worlds of 40 commands), so 5 keep the model near 3 s; deep runs take more.
-    model::check(&ClaimModel, 5, 40);
+    // A seed costs about 0.6 s debug (two worlds of 40 commands), so 3 on each carrier keep the model near 3 s; deep
+    // runs take more.
+    for carrier in CARRIERS {
+        model::check(&ClaimModel { carrier }, 3, 40);
+    }
+}
+
+/// `carrier-equal` for claims (P4, synthesis 4.14): one plugin source, linked and through the byte shims of the C ABI,
+/// given the same commands, shows equal frames, and each plugin logs the same views and the same faults. An overrun
+/// fails a library and only the part in process (P4c), so these commands arm no overrun.
+pub struct ClaimCarriers;
+
+impl Model for ClaimCarriers {
+    type Command = Command;
+
+    fn generate(&self, rng: &mut Rng, steps: usize) -> Vec<Command> {
+        let commands = ClaimModel { carrier: Carrier::Linked }.generate(rng, steps);
+        commands
+            .into_iter()
+            .map(|command| match command {
+                Command::Arm(Fault::Overrun, slot) => Command::Arm(Fault::Bad, slot),
+                command => command,
+            })
+            .collect()
+    }
+
+    fn run(&self, commands: &[Command]) -> Option<Failure> {
+        let (linked, linked_fired, failure) = ClaimModel { carrier: Carrier::Linked }.world(commands, None);
+        if failure.is_some() {
+            return failure;
+        }
+        let (carried, carried_fired, failure) = ClaimModel { carrier: Carrier::Abi }.world(commands, None);
+        if let Some(failure) = failure {
+            return Some(Failure { site: "abi", ..failure });
+        }
+        if model::skipped("carrier-equal") {
+            return None;
+        }
+        let steps = linked.iter().zip(&carried).zip(linked_fired.iter().zip(&carried_fired)).enumerate();
+        steps.into_iter().find_map(|(step, ((linked, carried), (linked_fired, carried_fired)))| {
+            let failure = |site, detail| Some(Failure { property: "carrier-equal", site, step, detail });
+            if let Some(diff) = frame_diff(linked, carried) {
+                return failure("cells", diff.replace("fault", "linked").replace("twin ", "abi   "));
+            }
+            if linked.views != carried.views {
+                return failure("views", format!("linked\n  {:?}\nabi\n  {:?}", linked.views, carried.views));
+            }
+            (linked_fired != carried_fired)
+                .then(|| failure("faults", format!("linked {linked_fired:?}, abi {carried_fired:?}")))
+                .flatten()
+        })
+    }
+
+    fn simplify(&self, command: &Command) -> Vec<Command> {
+        ClaimModel { carrier: Carrier::Linked }.simplify(command)
+    }
+}
+
+#[test]
+fn a_claim_is_equal_linked_and_through_the_c_abi() {
+    model::check(&ClaimCarriers, 3, 40);
 }
 
 /// The commands that stream every call and the fence to their end, with `faults` before them.
@@ -806,10 +885,14 @@ fn whole_stream(faults: &[Command]) -> Vec<Command> {
 // their content mounted fresh, also across a theme switch, and the `read` call shows the host's own row.
 #[test]
 fn each_revision_of_a_claimed_part_equals_a_fresh_mount() {
+    CARRIERS.into_iter().for_each(each_revision_of_a_claimed_part_equals_a_fresh_mount_on);
+}
+
+fn each_revision_of_a_claimed_part_equals_a_fresh_mount_on(carrier: Carrier) {
     let mut commands = whole_stream(&[]);
     commands.insert(10, Command::Theme(false));
-    assert_eq!(ClaimModel.run(&commands), None);
-    let world = World::open();
+    assert_eq!(ClaimModel { carrier }.run(&commands), None);
+    let world = World::open(carrier);
     let mut expected = Expected::new();
     for command in &commands {
         world.send(command, &mut expected);
@@ -827,6 +910,10 @@ fn each_revision_of_a_claimed_part_equals_a_fresh_mount() {
 // parts and every other cell stay as in the twin, and each fault fired.
 #[test]
 fn a_fault_in_a_claim_falls_back_for_what_it_claims_alone() {
+    CARRIERS.into_iter().for_each(a_fault_in_a_claim_falls_back_for_what_it_claims_alone_on);
+}
+
+fn a_fault_in_a_claim_falls_back_for_what_it_claims_alone_on(carrier: Carrier) {
     for (fault, slot) in
         [(Fault::Panic, 0), (Fault::Overrun, 1), (Fault::Bad, 0), (Fault::Overrun, FENCE), (Fault::Bad, FENCE)]
     {
@@ -834,9 +921,9 @@ fn a_fault_in_a_claim_falls_back_for_what_it_claims_alone() {
         // Mid stream, so the fallback lands between revisions.
         let at = commands.iter().position(|command| *command == Command::Call(slot)).unwrap_or(26);
         commands.insert(at, Command::Arm(fault, slot));
-        let (_, fired, _) = ClaimModel.world(&commands, None);
+        let (_, fired, _) = ClaimModel { carrier }.world(&commands, None);
         assert!(fired.iter().flatten().any(|(_, fired)| *fired == fault), "{fault:?} on {slot} never fired");
-        assert_eq!(ClaimModel.run(&commands), None, "{fault:?} on slot {slot}");
+        assert_eq!(ClaimModel { carrier }.run(&commands), None, "{fault:?} on slot {slot}");
     }
 }
 
@@ -844,7 +931,11 @@ fn a_fault_in_a_claim_falls_back_for_what_it_claims_alone() {
 // and a twin that never disables the panicking plugin differs from the faulty world.
 #[test]
 fn the_oracles_can_fail() {
-    let world = World::open();
+    CARRIERS.into_iter().for_each(the_oracles_can_fail_on);
+}
+
+fn the_oracles_can_fail_on(carrier: Carrier) {
+    let world = World::open(carrier);
     let mut expected = Expected::new();
     for command in [Command::Start(0), Command::Delta(0, 0), Command::Delta(0, 1)] {
         world.send(&command, &mut expected);
@@ -855,8 +946,8 @@ fn the_oracles_can_fail() {
     drop(world);
 
     let commands = whole_stream(&[Command::Arm(Fault::Panic, 0)]);
-    let (faulty, fired, _) = ClaimModel.world(&commands, None);
-    let (twin, _, _) = ClaimModel.world(&commands, Some(&vec![Vec::new(); fired.len()]));
+    let (faulty, fired, _) = ClaimModel { carrier }.world(&commands, None);
+    let (twin, _, _) = ClaimModel { carrier }.world(&commands, Some(&vec![Vec::new(); fired.len()]));
     assert!(faulty.iter().zip(&twin).any(|(faulty, twin)| frame_diff(faulty, twin).is_some()));
 }
 
@@ -864,7 +955,11 @@ fn the_oracles_can_fail() {
 // newest content; the frame between keeps the last tree.
 #[test]
 fn a_streaming_part_gets_one_view_a_frame() {
-    let world = World::open();
+    CARRIERS.into_iter().for_each(a_streaming_part_gets_one_view_a_frame_on);
+}
+
+fn a_streaming_part_gets_one_view_a_frame_on(carrier: Carrier) {
+    let world = World::open(carrier);
     let mut expected = Expected::new();
     world.send(&Command::Start(0), &mut expected);
     VIEWS.with_borrow_mut(Vec::clear);
@@ -892,7 +987,11 @@ fn a_streaming_part_gets_one_view_a_frame() {
 // Expected: a part the claim declines shows the host's own row, and a later revision the claim takes shows its tree.
 #[test]
 fn a_declined_part_shows_the_host_row() {
-    let world = World::open();
+    CARRIERS.into_iter().for_each(a_declined_part_shows_the_host_row_on);
+}
+
+fn a_declined_part_shows_the_host_row_on(carrier: Carrier) {
+    let world = World::open(carrier);
     let mut expected = Expected::new();
     DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()));
     world.send(&Command::Start(0), &mut expected);
@@ -920,7 +1019,11 @@ fn a_declined_part_shows_the_host_row() {
 // through it.
 #[test]
 fn a_streaming_fence_keeps_its_mount() {
-    let world = World::open();
+    CARRIERS.into_iter().for_each(a_streaming_fence_keeps_its_mount_on);
+}
+
+fn a_streaming_fence_keeps_its_mount_on(carrier: Carrier) {
+    let world = World::open(carrier);
     let mut expected = Expected::new();
     let mut generations = Vec::new();
     for _ in 0..5 {
@@ -936,7 +1039,11 @@ fn a_streaming_fence_keeps_its_mount() {
 // part, with its content and memo values.
 #[test]
 fn leaving_the_session_frees_every_claimed_part() {
-    let world = World::open();
+    CARRIERS.into_iter().for_each(leaving_the_session_frees_every_claimed_part_on);
+}
+
+fn leaving_the_session_frees_every_claimed_part_on(carrier: Carrier) {
+    let world = World::open(carrier);
     let mut expected = Expected::new();
     for command in whole_stream(&[]) {
         world.send(&command, &mut expected);
@@ -1084,7 +1191,11 @@ fn a_long_transcript_of_claimed_calls_against_the_host_rows() {
 // Expected: a tree refused once is asked for again whole, in the same revision, and the part keeps its claim.
 #[test]
 fn a_tree_refused_once_is_asked_again_whole() {
-    let world = World::open();
+    CARRIERS.into_iter().for_each(a_tree_refused_once_is_asked_again_whole_on);
+}
+
+fn a_tree_refused_once_is_asked_again_whole_on(carrier: Carrier) {
+    let world = World::open(carrier);
     let mut expected = Expected::new();
     world.send(&Command::Start(0), &mut expected);
     ONCE.with_borrow_mut(|once| once.insert("call_1".to_owned()));
@@ -1128,14 +1239,26 @@ fn shell_last(setup: &mut abi::Setup) -> Result<(), String> {
 // laid out at another width is viewed again with it.
 #[test]
 fn the_last_claim_of_a_tool_draws_it_with_its_content_at_its_width() {
+    CARRIERS.into_iter().for_each(the_last_claim_of_a_tool_draws_it_with_its_content_at_its_width_on);
+}
+
+fn the_last_claim_of_a_tool_draws_it_with_its_content_at_its_width_on(carrier: Carrier) {
     SEEN.with_borrow_mut(Vec::clear);
     let world = World::with(vec![
-        abi::Plugin { id: "claim.first", setup: shell_first }.into(),
-        abi::Plugin { id: "claim.last", setup: shell_last }.into(),
+        builtin(carrier, abi::Plugin { id: "claim.first", setup: shell_first }),
+        builtin(carrier, abi::Plugin { id: "claim.last", setup: shell_last }),
     ]);
+    let before = opencode_plugin::loader::native::crossed();
     world.emit("session.tool.input.started", json!({ "id": "call_9", "name": "bash" }));
     world.settle();
     world.harness.wait_for("l drew call_9");
+    // The view and its content cross the C ABI on that carrier, and nothing crosses linked.
+    let crossed = opencode_plugin::loader::native::crossed().since(before);
+    match carrier {
+        Carrier::Linked => assert_eq!(crossed.calls, 0, "{crossed:?}"),
+        // A claim that does not declare the palette is sent none: a request stays small.
+        Carrier::Abi => assert!(crossed.calls >= 1 && crossed.received > 13 && crossed.sent < 2048, "{crossed:?}"),
+    }
     assert!(
         SEEN.with_borrow(|seen| seen.iter().all(|(plugin, _)| *plugin == 'l')),
         "{:?}",

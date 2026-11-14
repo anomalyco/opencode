@@ -1624,7 +1624,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
     }
     // 2.0: the renderer claims, whose views run through `Claim`.
     for (index, entry) in manifest.claims.iter().enumerate() {
-        setup.renderer_claim(entry.clone(), Rc::new(RemoteClaim { guest: guest.clone(), index }));
+        setup.renderer_claim(entry.clone(), Rc::new(RemoteClaim { guest: guest.clone(), index }), &guest.owners);
     }
     // 2.0: what the plugin's threads send runs `Message`, one call each, when its manifest says it takes messages; a
     // thread's panic fails the plugin, once.
