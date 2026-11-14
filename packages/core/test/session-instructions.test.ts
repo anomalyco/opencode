@@ -6,6 +6,7 @@ import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Database } from "@opencode/core/database/database"
 import { Bus } from "@opencode/core/bus"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -32,6 +33,8 @@ import { Skill } from "@opencode/core/skill"
 import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Tool } from "@opencode/core/tool"
+import { Document, Info } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { tempLocationLayer } from "./fixture/location"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { testEffect } from "./lib/effect"
@@ -53,6 +56,8 @@ const readToolNode = makeLocationNode({
     FSUtil.node,
     Environment.node,
     Location.node,
+    Config.node,
+    Flag.node,
   ],
 })
 
@@ -89,7 +94,7 @@ const testLayer = AppNodeBuilder.build(
   ],
 )
 
-const it = testEffect(testLayer)
+const it = testEffect(Layer.merge(testLayer, config).pipe(Layer.provide(Layer.succeed(Flag.Overrides, undefined))))
 
 const identity = {
   agent: Agent.ID.make("build"),
@@ -328,6 +333,49 @@ describe("SessionInstructions", () => {
       expect(injected[0]!.text).toBe(`Instructions from: ${subPath}\nsub-instructions`)
       expect(injected[0]!.description).toBe(`Loaded ${path.relative(dir, subPath)}`)
       expect(injected[0]!.metadata).toEqual({ instruction: { paths: [subPath] } })
+    }),
+  )
+
+  it.live("injects every listed name above a read in list order", () =>
+    Effect.gen(function* () {
+      const location = yield* Location.Service
+      const dir = location.directory
+      const subAgents = path.resolve(dir, "sub", "AGENTS.md")
+      const subClaude = path.resolve(dir, "sub", "CLAUDE.md")
+      const deepClaude = path.resolve(dir, "sub", "deep", "CLAUDE.md")
+      yield* mkdir(path.resolve(dir, "sub", "deep"))
+      yield* writeAgents(path.resolve(dir, "CLAUDE.md"), "root-claude")
+      yield* writeAgents(subAgents, "sub-agents")
+      yield* writeAgents(subClaude, "sub-claude")
+      yield* writeAgents(deepClaude, "deep-claude")
+      yield* Effect.promise(() => fs.writeFile(path.resolve(dir, "sub", "deep", "file.txt"), "file content"))
+      const config = yield* Config.Test
+      yield* config.setEntries([
+        new Document({
+          type: "document",
+          info: new Info({
+            experimental: new ConfigExperimental.Info({ instruction_files: true }),
+            instruction_files: ["CLAUDE.md", "AGENTS.md"],
+          }),
+        }),
+      ])
+
+      const session = yield* Session.Service
+      const registry = yield* Tool.Service
+      const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: dir }) })).id
+
+      yield* executeTool(registry, readCall(sessionID, "call-deep", "sub/deep/file.txt"))
+
+      const injected = yield* synthetics(sessionID)
+      expect(injected).toHaveLength(1)
+      expect(injected[0]!.metadata).toEqual({ instruction: { paths: [deepClaude, subClaude, subAgents] } })
+      expect(injected[0]!.text).toBe(
+        [
+          `Instructions from: ${deepClaude}\ndeep-claude`,
+          `Instructions from: ${subClaude}\nsub-claude`,
+          `Instructions from: ${subAgents}\nsub-agents`,
+        ].join("\n\n"),
+      )
     }),
   )
 

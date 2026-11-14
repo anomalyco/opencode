@@ -5,6 +5,9 @@ import { basename, dirname, extname, isAbsolute, join, relative } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Config } from "../../config.js"
+import { Flag } from "../../flag.js"
+import { InstructionDiscovery } from "../../instruction-discovery.js"
 import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
@@ -16,7 +19,6 @@ import { ReadToolFileSystem } from "../read-filesystem.js"
 import { Environment } from "../../environment/index.js"
 
 export const name = "read"
-const FILENAME = "AGENTS.md"
 const LocationInput = Schema.Struct({
   path: Schema.String.annotate({ description: "File or directory to read" }),
   offset: ReadToolFileSystem.PageInput.fields.offset.annotate({
@@ -41,6 +43,8 @@ export const Plugin = {
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const environment = yield* Environment.Service
+    const config = yield* Config.Service
+    const flags = yield* Flag.Service
 
     yield* ctx.tool
       .transform((editor) =>
@@ -128,26 +132,32 @@ export const Plugin = {
                     }),
                 ),
               )
-              // After a successful read, discover nearby AGENTS.md walking up to the Location
+              // After a successful read, discover nearby instruction files walking up to the Location
               // root exclusive and inject them as durable synthetic instructions. For a
-              // directory listing the walk starts at the directory itself (so its own AGENTS.md
-              // is discovered); for a file it starts at the file's dirname. External reads are
+              // directory listing the walk starts at the directory itself (so its own instruction
+              // file is discovered); for a file it starts at the file's dirname. External reads are
               // skipped, and discovery failures never fail the read.
               yield* Effect.gen(function* () {
                 if (result.target.externalDirectory !== undefined) return
+                const names = InstructionDiscovery.fileNames(yield* config.entries(), flags)
+                if (names.length === 0) return
                 const resolved = yield* fs.resolve(result.target.absolute)
                 const root = yield* fs.resolve(location.directory)
                 // The Location and its ancestors are already supplied by initial instructions,
                 // even when an upward walk from elsewhere in the project cannot reach root.
                 const discovered = yield* fs.up({
-                  targets: [FILENAME],
+                  targets: [...names],
                   start: result.content.type === "list-page" ? resolved : dirname(resolved),
                   stop: root,
                   type: "file",
                 })
-                const candidates = (yield* Effect.forEach(discovered, fs.resolve)).filter(
-                  (file) => !FSUtil.contains(dirname(file), root) && file !== resolved,
-                )
+                const candidates = [
+                  ...new Set(
+                    (yield* Effect.forEach(discovered, fs.resolve)).filter(
+                      (file) => !FSUtil.contains(dirname(file), root) && file !== resolved,
+                    ),
+                  ),
+                ]
                 if (candidates.length === 0) return
                 yield* sessionInstructions.load({ sessionID: context.sessionID, paths: candidates })
               }).pipe(

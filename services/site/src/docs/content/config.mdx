@@ -690,6 +690,29 @@ value.
 }
 ```
 
+### Instruction files
+
+Set `instruction_files` to `true` to choose which file names OpenCode looks up as instruction files. Defaults to
+`false`. The names go in the top-level `instruction_files` list. With the flag on and no list, only `AGENTS.md` is
+looked up, as before.
+
+```jsonc
+{
+  "experimental": {
+    "instruction_files": true,
+  },
+  "instruction_files": ["AGENTS.md", "CLAUDE.md"],
+}
+```
+
+Every listed name is looked up like `AGENTS.md`: in the global config directory, upward from the workspace, and when
+the agent reads a file or lists a directory. An empty list turns these lookups off. See the
+[instructions guide](/instructions#file-names) for order, symlinks and invalid names.
+
+The names for the global file in the global config directory come only from config outside the project, such as the
+global and managed config, and from `OPENCODE_CONFIG_CONTENT`. A project's `opencode.json` chooses names only for the
+project's own instruction files, so a cloned repository cannot hide or swap your global file.
+
 ### Deprecated policies
 
 `experimental.policies` is deprecated. Use top-level [`policies`](/policies) instead. The old key still works and
