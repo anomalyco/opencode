@@ -149,7 +149,7 @@ fn lower(node: &v2::Node, pending: &mut Vec<v2::Node>) -> Option<abi::Node> {
         },
         v2::Node::Spinner { label, .. } => abi::Node::Spinner { label: label.clone() },
         v2::Node::Markdown { source: v2::Source::Text(text), .. } => abi::Node::Markdown { text: text.clone() },
-        v2::Node::Scroll { .. } | v2::Node::Diff { .. } => {
+        v2::Node::Scroll { .. } | v2::Node::Diff { .. } | v2::Node::Canvas { .. } => {
             pending.push(node.clone());
             abi::Node::Slot { path: format!("twin:{}", pending.len() - 1) }
         }
@@ -211,6 +211,12 @@ impl Twin<'_> {
                 self.scrolls.push((id.clone().unwrap_or_default(), scroll.clone()));
                 Some(scroll.as_any())
             }
+            // With no draw a canvas paints nothing: an empty box of its layout.
+            v2::Node::Canvas { layout, .. } => {
+                let view = View::new(app);
+                lay_out(&view, layout);
+                Some(view.as_any())
+            }
             v2::Node::Diff { content: v2::Source::Text(patch), view, filetype, .. } => {
                 let syntax = opencode_ui::code::syntax_theme(&self.theme);
                 let view = match view {
@@ -250,7 +256,7 @@ impl Twin<'_> {
 }
 
 /// The layout of ABI 1.x's nodes, for a scroll: sizes, growth, shrinking and margins.
-fn lay_out(widget: &ScrollBox, layout: &abi::Layout) {
+fn lay_out<W: Widget>(widget: &W, layout: &abi::Layout) {
     let length = |size: abi::Width| match size {
         abi::Width::Cells(cells) => Length::from(cells),
         abi::Width::Percent(percent) => Length::percent(percent),
@@ -390,7 +396,7 @@ impl Generator<'_> {
     }
 
     fn node(&mut self, depth: usize) -> v2::Node {
-        let kind = if depth >= 3 { 1 + self.rng.below(3) } else { self.rng.below(8) };
+        let kind = if depth >= 3 { 1 + self.rng.below(3) } else { self.rng.below(9) };
         match kind {
             0 | 4 => {
                 let children = (0..self.rng.below(4)).map(|_| self.node(depth + 1)).collect();
@@ -428,6 +434,12 @@ impl Generator<'_> {
                 content: v2::Source::Text((*self.rng.pick(&PATCHES)).to_owned()),
                 view: *self.rng.pick(&[v2::DiffView::Unified, v2::DiffView::Split]),
                 filetype: self.chance(70).then(|| "rust".to_owned()),
+            },
+            8 => v2::Node::Canvas {
+                id: self.id().or_else(|| self.scrolls.pop().map(str::to_owned)),
+                layout: self.layout(),
+                version: self.rng.below(2) as u64,
+                animate: self.chance(20),
             },
             5 => v2::Node::Scroll {
                 id: self.id().or_else(|| self.scrolls.pop().map(str::to_owned)),
@@ -666,7 +678,8 @@ fn expand(nodes: &[v2::Node], last: &[v2::Node]) -> Option<Vec<v2::Node>> {
 /// a subtree of `last`, and every scroll has an id. The model's own rule, apart from the host's.
 fn valid(nodes: &[v2::Node], last: &[v2::Node]) -> bool {
     fn keyed(node: &v2::Node) -> bool {
-        !matches!(node, v2::Node::Scroll { id: None, .. }) && node.children().iter().all(keyed)
+        !matches!(node, v2::Node::Scroll { id: None, .. } | v2::Node::Canvas { id: None, .. })
+            && node.children().iter().all(keyed)
     }
     let Some(expanded) = expand(nodes, last) else { return false };
     let all: Vec<String> = expanded.iter().flat_map(ids).collect();
