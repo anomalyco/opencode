@@ -118,6 +118,16 @@ story("does not send the emulator's own answers to terminal queries as input", a
   expect(server.frames.filter((frame) => frame.type === 1).map((frame) => frame.data)).toEqual(["x"])
 })
 
+story("shows a terminal that has written nothing yet and stays silent", async ({ page, mount }) => {
+  // An empty checkpoint and no output: nothing ever reaches the emulator.
+  const server = await serveTerminal(page, { ptyID: "pty_silent", output: "" })
+  const root = await mountTerminal(page, mount, "pty_silent")
+
+  await expect.poll(() => server.sockets.length).toBe(1)
+  await expect(root.locator('[data-component="terminal"]')).toHaveCSS("opacity", "1")
+  await expect(root.locator("[data-failures]")).toHaveAttribute("data-failures", "0")
+})
+
 story("tells the user a server that predates the input protocol is too old", async ({ page, mount }) => {
   await serveTerminal(page, { ptyID: "pty_old", output: "old server\r\n", inputProtocol: 0 })
   const root = await mountTerminal(page, mount, "pty_old")

@@ -29,7 +29,7 @@ export type SessionGroup = {
 
 /** Experimental transcript detail; undefined selects the default production rules. */
 export type Verbosity = "low" | "medium" | "high"
-export const defaultVerbosity: Verbosity = "medium"
+export const defaultVerbosity: Verbosity = "low"
 
 export type SessionRow = SessionEntry | SessionGroup
 

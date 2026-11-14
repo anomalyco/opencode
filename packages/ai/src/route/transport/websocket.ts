@@ -74,6 +74,11 @@ const eventMessage = (event: Socket.WebSocketEvent) => {
   return event.type ?? "error"
 }
 
+const systemCode = (cause: unknown) =>
+  typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
+    ? cause.code
+    : undefined
+
 const binaryMessage = (data: unknown) => {
   if (data instanceof Uint8Array) return data
   if (data instanceof ArrayBuffer) return new Uint8Array(data)
@@ -115,12 +120,15 @@ const waitOpen = (ws: Socket.WebSocketLike, input: WebSocketRequest) => {
     }
     const onError = (event: Socket.WebSocketEvent) => {
       cleanup()
+      const cause = "error" in event ? (event.error ?? event) : event
       resume(
         Effect.fail(
           transportError(`Failed to open WebSocket: ${eventMessage(event)}`, {
-            cause: "error" in event ? (event.error ?? event) : event,
+            cause,
             url: input.url,
             operation: "request",
+            // Bun puts the system code (ENOTFOUND, ECONNREFUSED) on the event's error; lift it like HTTP failures do.
+            code: systemCode(cause),
             phase: "connect",
             delivery: "not-sent",
           }),

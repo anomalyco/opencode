@@ -685,7 +685,7 @@ export interface Composer {
   focused(): boolean
 }
 
-/** Work the session moved to the background. */
+/** A running subagent or background shell command of the session. */
 export interface BackgroundTask {
   /** The task's id. */
   id: string
@@ -737,7 +737,7 @@ export interface MountedSession extends SessionRef {
   readonly directory: string
   /** The session runs in the project root rather than a worktree. Reactive. */
   readonly local: boolean
-  /** Shell commands and subagents the session moved to the background; empty once another session is routed. */
+  /** Running subagents and background shell commands of the session; empty once another session is routed. */
   readonly background: readonly BackgroundTask[]
 }
 
@@ -1234,7 +1234,8 @@ export interface Servers {
    * stay in the main process. The same ref for the same id; read its `client` each time you call it. Reactive.
    *
    * @param id - The server's id, as `list()` returns it.
-   * @returns Undefined while the app does not list the server, and before the app interface mounts.
+   * @returns Undefined while the app does not list the server, before the app interface mounts, and while a server
+   * that rejects the app's credentials has not connected in this window yet.
    *
    * @example
    * ```ts

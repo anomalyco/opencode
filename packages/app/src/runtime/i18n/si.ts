@@ -152,7 +152,7 @@ export const dict = {
   "provider.connect.title": "{{provider}} සම්බන්ධ කරන්න",
   "provider.connect.method.apiKey": "API යතුර",
   "provider.connect.status.inProgress": "අවසරය ක්‍රියාත්මක වෙමින් පවතී…",
-  "provider.connect.status.waiting": "අවසරය සඳහා රැඳී සිටිමින්…",
+  "provider.connect.status.waiting": "අවසරය සඳහා රැඳී සිටිමින්",
   "provider.connect.status.failed": "අවසරය අසාර්ථක විය: {{error}}",
   "provider.connect.apiKey.description":
     "ඔබගේ ගිණුම සම්බන්ධ කිරීමට ඔබගේ {{provider}} API යතුර ඇතුලත් කරන්න සහ OpenCode හි {{provider}} මාදිලි භාවිතා කරන්න.",
@@ -339,7 +339,6 @@ export const dict = {
   "session.new.project.search": "ව්යාපෘති සොයන්න",
   "session.new.project.add": "ව්යාපෘතිය එකතු කරන්න",
   "session.new.workspace.runIn": "සැසිය ධාවනය කරන්න",
-  "session.new.workspace.triggerLocal": "දේශීය",
   "session.new.workspace.local": "දේශීය ගබඩාව",
   "session.new.git.none": "Git නැත",
   "session.header.open.finder": "Finder",
@@ -821,7 +820,6 @@ export const dict = {
 
   "command.session.location.cycle": "සැසි ස්ථානය මාරුවෙන් මාරුවට වෙනස් කරන්න",
   "dialog.provider.anthropic.note": "API යතුරක් හරහා Claude මාදිලි වෙත සෘජු ප්‍රවේශය",
-  "provider.connect.title.anthropicProMax": "Anthropic සමඟ පිවිසෙන්න",
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "{{filename}} ගොනුව උඩුගත කිරීම අවලංගු කරන්න",
   "prompt.toast.uploadFailed.title": "උඩුගත කිරීම අසාර්ථකයි",

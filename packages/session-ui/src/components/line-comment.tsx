@@ -1,6 +1,28 @@
-import { useFilteredList } from "@opencode/ui/hooks"
 import { getDirectory, getFilename } from "@opencode/util/path"
-import { createSignal, For, onMount, Show, splitProps, type JSX } from "solid-js"
+import {
+  createComputed,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  splitProps,
+  untrack,
+  type JSX,
+} from "solid-js"
+import {
+  createLineCommentEditorState,
+  MENTION_TIMEOUT_MS,
+  parseMentionToken,
+  transitionLineCommentEditor,
+  viewLineCommentEditor,
+  type LineCommentEditorConfig,
+  type LineCommentEditorEffect,
+  type LineCommentEditorEvent,
+} from "@opencode/ui/line-comment/machine"
 import { Button } from "@opencode/ui/button"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
@@ -189,48 +211,85 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
     "mention",
   ])
 
-  const refs = {
-    textarea: undefined as HTMLTextAreaElement | undefined,
+  let textareaRef: HTMLTextAreaElement | undefined
+
+  let mentionTimer: ReturnType<typeof setTimeout> | undefined
+  let focusFrame: number | undefined
+  const [editorState, setEditorState] = createSignal(createLineCommentEditorState())
+
+  const readConfig = (): LineCommentEditorConfig => ({
+    value: split.value,
+    allowEmpty: false,
+    variant: "default",
+    alternateSubmit: null,
+    submitting: false,
+  })
+
+  const view = createMemo(() => viewLineCommentEditor(editorState(), readConfig()))
+
+  const currentToken = () =>
+    split.mention && textareaRef
+      ? parseMentionToken(textareaRef.value, textareaRef.selectionStart, textareaRef.selectionEnd)
+      : null
+
+  const dispatch = (event: LineCommentEditorEvent) => {
+    const transition = transitionLineCommentEditor(untrack(editorState), event)
+    setEditorState(transition.state)
+
+    if (transition.state.status !== "mention-loading") clearTimeout(mentionTimer)
+    transition.effects.forEach(run)
+
+    return transition.handled
   }
 
-  const [open, setOpen] = createSignal(false)
+  const run = (effect: LineCommentEditorEffect) => {
+    if (effect.type === "mention.load") {
+      const attempt = effect.attempt
+      clearTimeout(mentionTimer)
+      mentionTimer = setTimeout(() => dispatch({ type: "mention.timeout", attempt }), MENTION_TIMEOUT_MS)
+      // A search that returns, rejects or throws settles its attempt.
+      void Promise.resolve()
+        .then(() => untrack(() => split.mention?.items(effect.query) ?? []))
+        .then(
+          (items) => dispatch({ type: "mention.loaded", attempt, items }),
+          () => dispatch({ type: "mention.failed", attempt }),
+        )
 
-  function selectMention(item: { path: string } | undefined) {
-    if (!item) return
+      return
+    }
 
-    const textarea = refs.textarea
-    const query = currentMention()
+    if (effect.type === "mention.insert") {
+      const textarea = textareaRef
 
-    if (!textarea || !query) return
+      if (!textarea) return
+      const value = `${textarea.value.slice(0, effect.token.start)}@${effect.path} ${textarea.value.slice(effect.token.end)}`
+      split.onInput(value)
+      scheduleFocus(effect.token.start + effect.path.length + 2)
 
-    const value = `${textarea.value.slice(0, query.start)}@${item.path} ${textarea.value.slice(query.end)}`
-    const cursor = query.start + item.path.length + 2
+      return
+    }
 
-    split.onInput(value)
-    closeMention()
+    if (effect.type === "submit") return split.onSubmit(effect.value)
 
-    requestAnimationFrame(() => {
-      textarea.focus()
-      textarea.setSelectionRange(cursor, cursor)
+    if (effect.blur) textareaRef?.blur()
+    split.onCancel()
+  }
+
+  const scheduleFocus = (cursor?: number) => {
+    if (focusFrame !== undefined) cancelAnimationFrame(focusFrame)
+    focusFrame = requestAnimationFrame(() => {
+      focusFrame = undefined
+
+      if (untrack(editorState).status === "disposed") return
+      textareaRef?.focus()
+
+      if (cursor !== undefined) textareaRef?.setSelectionRange(cursor, cursor)
     })
   }
 
-  const mention = useFilteredList<{ path: string }>({
-    items: async (query) => {
-      if (!split.mention) return []
+  const syncMention = () => dispatch({ type: "mention.synced", token: currentToken() })
 
-      if (!query.trim()) return []
-      const paths = await split.mention.items(query)
-
-      return paths.map((path) => ({ path }))
-    },
-    key: (item) => item.path,
-    filterKeys: ["path"],
-    skipFilter: () => true,
-    onSelect: selectMention,
-  })
-
-  const focus = () => refs.textarea?.focus()
+  const focus = () => textareaRef?.focus()
 
   const hold: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent> = (e) => {
     e.preventDefault()
@@ -244,63 +303,34 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
       fn()
     }
 
-  const closeMention = () => {
-    setOpen(false)
-    mention.clear()
-  }
+  const cancel = () => dispatch({ type: "cancel.requested" })
+  const submit = () => dispatch({ type: "submit.requested", config: readConfig() })
 
-  const currentMention = () => {
-    const textarea = refs.textarea
+  createComputed(
+    on(
+      () => !!split.mention,
+      () => dispatch({ type: "props.synced", config: readConfig(), token: currentToken() }),
+    ),
+  )
 
-    if (!textarea) return
-
-    if (!split.mention) return
-
-    if (textarea.selectionStart !== textarea.selectionEnd) return
-
-    const end = textarea.selectionStart
-    const match = textarea.value.slice(0, end).match(/@(\S*)$/)
-
-    if (!match) return
-
-    return {
-      query: match[1] ?? "",
-      start: end - match[0].length,
-      end,
-    }
-  }
-
-  const syncMention = () => {
-    const item = currentMention()
-
-    if (!item) {
-      closeMention()
-
-      return
-    }
-
-    setOpen(true)
-    mention.onInput(item.query)
-  }
-
-  const selectActiveMention = () => {
-    const items = mention.flat()
-
-    if (items.length === 0) return
-    const active = mention.active()
-    selectMention(items.find((item) => item.path === active) ?? items[0])
-  }
-
-  const submit = () => {
-    const value = split.value.trim()
-
-    if (!value) return
-    split.onSubmit(value)
-  }
+  // An owner that resets or rewrites the value closes a mention list the new text no longer has.
+  createEffect(
+    on(
+      () => split.value,
+      () => dispatch({ type: "props.synced", config: readConfig(), token: currentToken() }),
+      { defer: true },
+    ),
+  )
 
   onMount(() => {
     if (split.autofocus === false) return
-    requestAnimationFrame(focus)
+    scheduleFocus()
+  })
+
+  onCleanup(() => {
+    if (focusFrame !== undefined) cancelAnimationFrame(focusFrame)
+    clearTimeout(mentionTimer)
+    dispatch({ type: "disposed" })
   })
 
   return (
@@ -308,88 +338,58 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
       <div data-slot="line-comment-editor">
         <textarea
           ref={(el) => {
-            refs.textarea = el
+            textareaRef = el
           }}
           data-slot="line-comment-textarea"
+          // Escape here closes the mention list or cancels the comment, not a dialog or popover around the editor.
+          data-owns-escape
           dir="auto"
           rows={split.rows ?? 3}
           placeholder={split.placeholder ?? i18n.t("ui.lineComment.placeholder")}
           value={split.value}
           style={{ "unicode-bidi": "plaintext", "text-align": "start" }}
-          on:input={(e) => {
-            const value = (e.currentTarget as HTMLTextAreaElement).value
-            split.onInput(value)
+          on:input={(event) => {
+            split.onInput(event.currentTarget.value)
             syncMention()
           }}
           on:click={() => syncMention()}
           on:select={() => syncMention()}
-          on:keydown={(e) => {
-            const event = e as KeyboardEvent
-
+          on:keydown={(event) => {
             if (event.isComposing || event.keyCode === 229) return
             event.stopPropagation()
 
-            if (open()) {
-              if (e.key === "Escape") {
-                event.preventDefault()
-                closeMention()
+            const handled = dispatch({
+              type: "key.down",
+              target: "textarea",
+              key: event.key,
+              ctrl: event.ctrlKey,
+              meta: event.metaKey,
+              alt: event.altKey,
+              shift: event.shiftKey,
+              repeat: event.repeat,
+              config: readConfig(),
+            })
 
-                return
-              }
-
-              if (e.key === "Tab") {
-                if (mention.flat().length === 0) return
-                event.preventDefault()
-                selectActiveMention()
-
-                return
-              }
-
-              const nav = e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "Enter"
-
-              const ctrlNav =
-                event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && (e.key === "n" || e.key === "p")
-
-              if ((nav || ctrlNav) && mention.flat().length > 0) {
-                mention.onKeyDown(event)
-                event.preventDefault()
-
-                return
-              }
-            }
-
-            if (e.key === "Escape") {
-              event.preventDefault()
-              e.currentTarget.blur()
-              split.onCancel()
-
-              return
-            }
-
-            if (e.key !== "Enter") return
-
-            if (e.shiftKey) return
-            event.preventDefault()
-            submit()
+            if (handled) event.preventDefault()
           }}
         />
-        <Show when={open() && mention.flat().length > 0}>
+        <Show when={view().mentionItems.length > 0}>
           <div data-slot="line-comment-mention-list">
-            <For each={mention.flat().slice(0, 10)}>
-              {(item) => {
-                const directory = item.path.endsWith("/") ? item.path : getDirectory(item.path)
-                const name = item.path.endsWith("/") ? "" : getFilename(item.path)
+            <For each={view().mentionItems}>
+              {(path, index) => {
+                const directory = path.endsWith("/") ? path : getDirectory(path)
+                const name = path.endsWith("/") ? "" : getFilename(path)
 
                 return (
                   <button
                     type="button"
                     data-slot="line-comment-mention-item"
-                    data-active={mention.active() === item.path ? "" : undefined}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onMouseEnter={() => mention.setActive(item.path)}
-                    onClick={() => selectMention(item)}
+                    data-active={view().activeMentionPath === path ? "" : undefined}
+                    on:mousedown={(event) => event.preventDefault()}
+                    on:mouseenter={() => dispatch({ type: "mention.hovered", index: index() })}
+                    on:click={() => dispatch({ type: "mention.selected", index: index() })}
                   >
-                    <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-4" />
+                    <FileIcon node={{ path, type: "file" }} class="shrink-0 size-4" />
                     <div data-slot="line-comment-mention-path">
                       <span data-slot="line-comment-mention-dir">{directory}</span>
                       <Show when={name}>
@@ -417,7 +417,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
                   data-slot="line-comment-action"
                   data-variant="ghost"
                   onMouseDown={hold}
-                  onClick={click(split.onCancel)}
+                  onClick={click(cancel)}
                 >
                   {split.cancelLabel ?? i18n.t("ui.common.cancel")}
                 </button>
@@ -425,7 +425,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
                   type="button"
                   data-slot="line-comment-action"
                   data-variant="primary"
-                  disabled={split.value.trim().length === 0}
+                  disabled={!view().canSubmit}
                   onMouseDown={hold}
                   onClick={click(submit)}
                 >
@@ -434,10 +434,10 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
               </>
             }
           >
-            <Button size="small" variant="ghost" onClick={split.onCancel}>
+            <Button size="small" variant="ghost" onClick={cancel}>
               {split.cancelLabel ?? i18n.t("ui.common.cancel")}
             </Button>
-            <Button size="small" variant="contrast" disabled={split.value.trim().length === 0} onClick={submit}>
+            <Button size="small" variant="contrast" disabled={!view().canSubmit} onClick={submit}>
               {split.submitLabel ?? i18n.t("ui.lineComment.submit")}
             </Button>
           </Show>

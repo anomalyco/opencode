@@ -7,6 +7,7 @@ import { prefersReducedMotion } from "@opencode/ui/motion"
 import { Titlebar } from "@/shell/titlebar/titlebar"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ToastRegion } from "@/shell/notifications/toast"
+import { createTipToasts } from "@/tips/model"
 import { UploadToastHost } from "@/composer/attachments/uploads"
 import { useSettingsSurface } from "@/settings/surface"
 import { useSettings } from "@/settings/model"
@@ -43,6 +44,8 @@ export default function Layout(props: ParentProps) {
   const tabs = useTabs()
   const mobile = createMediaQuery("(max-width: 767px)")
 
+  createTipToasts()
+
   const [state, setState] = createStore<{
     tabsWidth: number
     tabsMount: HTMLElement | undefined
@@ -56,6 +59,9 @@ export default function Layout(props: ParentProps) {
   })
 
   const verticalTabs = () => preferences.appearance.tabLayout() !== "horizontal" && !mobile()
+
+  const organizedSidebar = () =>
+    preferences.appearance.tabLayout() === "vertical" && preferences.general.sidebarOrganize() !== "list"
 
   const toggleSidebar = () => preferences.appearance.setSidebarOpen(!preferences.appearance.sidebarOpen())
 
@@ -126,6 +132,7 @@ export default function Layout(props: ParentProps) {
   })
 
   const peek = createSidebarPeek({
+    enabled: verticalTabs,
     available: () => verticalTabs() && !preferences.appearance.sidebarOpen() && !sidebarMotion.present(),
     open: preferences.appearance.sidebarOpen,
     aside: () => state.tabsAside,
@@ -177,7 +184,7 @@ export default function Layout(props: ParentProps) {
               if (!entry.sessionID || !entry.directory || !entry.server) return
               const sessionID = entry.sessionID
               const server = entry.server
-              global.ensureServerCtx(conn).projects.touch(entry.project?.worktree ?? entry.directory)
+              global.serverCtx(server)?.projects.touch(entry.project?.worktree ?? entry.directory)
               void startTransition(() => {
                 tabs.select(tabs.addSessionTab({ server, sessionId: sessionID }))
               })
@@ -210,7 +217,8 @@ export default function Layout(props: ParentProps) {
         "--session-header-inset-end": verticalTabs() ? "10px" : "12px",
         "--sidebar-inset-start": "11px",
         "--sidebar-inset-end": "3px",
-        "--sidebar-divider-bleed": preferences.appearance.tabLayout() === "inbox" ? "var(--shell-inline-inset)" : "0px",
+        "--sidebar-divider-bleed":
+          preferences.appearance.tabLayout() === "inbox" || organizedSidebar() ? "var(--shell-inline-inset)" : "0px",
         // A bottom mobile titlebar leaves main's top edge to the safe area. Native Windows chrome supplies the gap;
         // retain outer-outline clearance.
         "--shell-top-inset": bottomTitlebar()
@@ -250,7 +258,10 @@ export default function Layout(props: ParentProps) {
               ref={(element) => setState("tabsPanel", element)}
               data-slot="vertical-tabs-panel"
               class="absolute inset-0 overflow-clip [contain:layout_style_paint] [overflow-clip-margin:var(--sidebar-divider-bleed,0px)]"
-              classList={{ "[content-visibility:hidden]": !sidebarMotion.present() && !peek.shown() }}
+              classList={{
+                "z-20": organizedSidebar(),
+                "[content-visibility:hidden]": !sidebarMotion.present() && !peek.shown(),
+              }}
             >
               {/* Under a peek's contents, so they dim over the sidebar's own background, as when docking, rather than
                   showing the content beneath through them. */}
@@ -293,10 +304,11 @@ export default function Layout(props: ParentProps) {
           class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-content"
           style={{
             "padding-top": bottomTitlebar() ? "env(safe-area-inset-top, 0px)" : "0px",
+            // A docked composer touch bar takes over the safe area.
             "padding-bottom":
               bottomTitlebar() || settings.active()
                 ? "0px"
-                : "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))",
+                : "var(--shell-safe-area-bottom, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))",
             "--settings-bottom-inset": bottomTitlebar()
               ? "40px"
               : "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))",
@@ -308,6 +320,9 @@ export default function Layout(props: ParentProps) {
         </main>
         <CollapsedSidebarToggle />
       </div>
+      {/* On touch devices the active composer moves its actions here: the bottom edge, or the top of the keyboard.
+          Last in order, so it stays below a bottom titlebar (also order-last, but earlier in the DOM). */}
+      <div data-slot="composer-touch-bar-mount" class="order-last shrink-0" />
       <PluginSlot at="window.bottom" input={{}} />
       <ToastRegion />
       <UploadToastHost />

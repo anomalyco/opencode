@@ -816,6 +816,10 @@
   border-bottom: 0.5px solid var(--v2-border-border-base);
 }
 
+[data-component="settings-row"][data-align="start"] {
+  align-items: flex-start;
+}
+
 [data-component="settings-row"]:last-child {
   border-bottom: none;
 }
@@ -2275,6 +2279,70 @@
 
 .settings-mcp-row {
   gap: 16px;
+}
+
+/* The name keeps its own width so the source sits right after it, not against the actions. */
+.settings-mcp-row .settings-extension-name {
+  flex: 0 1 auto;
+}
+
+/* A Console server or skill name links to where Console manages it. */
+.settings-console-name {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+}
+
+.settings-console-name .settings-extension-name {
+  text-decoration: underline;
+  text-decoration-color: var(--v2-border-border-strong);
+  text-underline-offset: 2px;
+}
+
+.settings-console-name [data-slot="icon-svg"] {
+  flex-shrink: 0;
+  color: var(--v2-icon-icon-muted);
+}
+
+.settings-console-name:focus-visible .settings-extension-name {
+  text-decoration-color: currentColor;
+}
+
+@media (hover: hover) {
+  .settings-console-name:hover .settings-extension-name {
+    text-decoration-color: currentColor;
+  }
+}
+
+/* When the user's config replaces a Console server, the row says so and still links to Console's. */
+.settings-mcp-source {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  color: var(--v2-text-text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+  white-space: nowrap;
+}
+
+.settings-mcp-source [data-slot="icon-svg"] {
+  flex-shrink: 0;
+}
+
+.settings-mcp-source:focus-visible {
+  color: var(--v2-text-text-base);
+  text-decoration: underline;
+}
+
+@media (hover: hover) {
+  .settings-mcp-source:hover {
+    color: var(--v2-text-text-base);
+    text-decoration: underline;
+  }
 }
 
 /* The MCP status dot takes the icon's 16px slot, so names line up with the plugin and skill rows. */

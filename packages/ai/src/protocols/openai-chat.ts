@@ -195,6 +195,7 @@ export const OpenAIChatMessage = Schema.Union([
       reasoning: Schema.optional(Schema.String),
       reasoning_text: Schema.optional(Schema.String),
       reasoning_details: Schema.optional(Schema.Unknown),
+      reasoning_opaque: Schema.optional(Schema.String),
     }),
     [Schema.Record(Schema.String, Schema.Unknown)],
   ),
@@ -264,6 +265,8 @@ export const OpenAIChatUsage = Schema.StructWithRest(
     prompt_cache_hit_tokens: optionalNull(Schema.Number),
     cache_read_input_tokens: optionalNull(Schema.Number),
     cache_created_input_tokens: optionalNull(Schema.Number),
+    // GitHub Copilot reports reasoning at the top level instead of in `completion_tokens_details`.
+    reasoning_tokens: optionalNull(Schema.Number),
     prompt_tokens_details: optionalNull(
       Schema.StructWithRest(
         Schema.Struct({
@@ -309,6 +312,8 @@ export const OpenAIChatDelta = Schema.StructWithRest(
     reasoning: optionalNull(Schema.String),
     reasoning_text: optionalNull(Schema.String),
     reasoning_details: optionalNull(Schema.Unknown),
+    // GitHub Copilot's opaque reasoning state, which must be replayed for multi-turn reasoning.
+    reasoning_opaque: optionalNull(Schema.String),
     tool_calls: optionalNull(Schema.Array(OpenAIChatToolCallDelta)),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
@@ -368,6 +373,8 @@ export interface ParserState {
   readonly reasoningTextObserved: boolean
   readonly reasoningDetails: Array<ReasoningDetail>
   readonly reasoningDetailsObserved: boolean
+  /** Latest `reasoning_opaque`; interleaved reasoning sends a new one before each tool call. */
+  readonly reasoningOpaque?: string
   readonly reasoningEmitted: boolean
   readonly latestToolIndex?: number
   readonly nextToolIndex: number
@@ -496,6 +503,13 @@ const lowerReasoningDetail = (detail: ReasoningDetail) => {
   return detail
 }
 
+// Interleaved reasoning yields one opaque value per segment; like the Copilot VS Code
+// client, replay the latest one with the concatenated reasoning text.
+const reasoningOpaque = (parts: ReadonlyArray<ReasoningPart>, providerMetadataKey: string) =>
+  parts
+    .map((part) => part.providerMetadata?.[providerMetadataKey]?.reasoningOpaque)
+    .findLast((value) => typeof value === "string")
+
 const isKimiDetail = (detail: { readonly type: string }) => detail.type === "summary" || detail.type === "encrypted"
 
 const lowerUserMessage = Effect.fnUntraced(function* (message: UserMessage, options: LoweringOptions) {
@@ -560,7 +574,9 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
     // even when thinking arrived only through structured details.
     if (details?.some(isKimiDetail)) return "reasoning_content"
   })()
-  const reasoningText = reasoning.length === 0 ? (requireReasoning ? "" : undefined) : text
+  const opaque = reasoningOpaque(reasoning, options.providerMetadataKey)
+  const reasoningText =
+    reasoning.length === 0 || (opaque !== undefined && text === "") ? (requireReasoning ? "" : undefined) : text
   const result = {
     role: "assistant" as const,
     content: (() => {
@@ -570,6 +586,7 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
     })(),
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
     ...(details !== undefined ? { reasoning_details: details } : {}),
+    ...(opaque !== undefined ? { reasoning_opaque: opaque } : {}),
   }
   if (field === undefined || reasoningText === undefined) return result
   return { ...result, [field]: reasoningText }
@@ -830,7 +847,7 @@ const lowerOptions = (request: LLMRequest, supportsStore: boolean, hasActiveTool
   // the key where compatibility explicitly allows it. Header-based affinity
   // (x-session-affinity, x-grok-conv-id, ...) is unaffected.
   const cacheKey =
-    (request.model.compatibility?.supportsPromptCacheKey ?? false) ? ProviderShared.promptCacheKey(request) : undefined
+    (request.model.capabilities?.promptCacheKey ?? false) ? ProviderShared.promptCacheKey(request) : undefined
   return {
     ...(supportsStore ? { store: options.store ?? false } : {}),
     ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
@@ -856,15 +873,13 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     return yield* ProviderShared.invalidRequest(
       `OpenAI Chat reasoning field conflicts with reserved field ${reasoningField}`,
     )
-  const generation = request.generation
   const flattened = ProviderShared.flattenToolRequest(request)
   const provider = request.model.provider
   const baseURL = request.model.route.endpoint.baseURL
   const detectedMaxTokensField = detectMaxTokensField(provider, baseURL)
   const maxTokensField = request.model.compatibility?.maxTokensField ?? detectedMaxTokensField
-  const supportsStore = request.model.compatibility?.supportsStore ?? detectSupportsStore(provider, baseURL)
-  const supportsStrictMode =
-    request.model.compatibility?.supportsStrictMode ?? detectSupportsStrictMode(provider, baseURL)
+  const supportsStore = request.model.capabilities?.store ?? detectSupportsStore(provider, baseURL)
+  const supportsStrictMode = request.model.capabilities?.tools?.strict ?? detectSupportsStrictMode(provider, baseURL)
   const zaiToolStream =
     request.model.compatibility?.zaiToolStream ?? detectZaiToolStream(provider, baseURL, request.model.id)
   const hasHistory = hasToolHistory(request.messages)
@@ -882,17 +897,17 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
         : flattened.tools.map((tool) => lowerTool(tool, lowering, supportsStrictMode, custom.get(tool.name))),
     tool_choice: hasActiveTools && request.toolChoice ? yield* lowerToolChoice(request.toolChoice, custom) : undefined,
     stream: true as const,
-    ...((request.model.compatibility?.streamUsage ?? true) ? { stream_options: { include_usage: true } } : {}),
+    ...((request.model.capabilities?.streamUsage ?? true) ? { stream_options: { include_usage: true } } : {}),
     ...(zaiToolStream && hasActiveTools ? { tool_stream: true } : {}),
     ...(maxTokensField === "max_completion_tokens"
-      ? { max_completion_tokens: generation?.maxTokens }
-      : { max_tokens: generation?.maxTokens }),
-    temperature: generation?.temperature,
-    top_p: generation?.topP,
-    frequency_penalty: generation?.frequencyPenalty,
-    presence_penalty: generation?.presencePenalty,
-    seed: generation?.seed,
-    stop: generation?.stop,
+      ? { max_completion_tokens: request.maxTokens }
+      : { max_tokens: request.maxTokens }),
+    temperature: request.temperature,
+    top_p: request.topP,
+    frequency_penalty: request.frequencyPenalty,
+    presence_penalty: request.presencePenalty,
+    seed: request.seed,
+    stop: request.stop,
     ...lowerOptions(request, supportsStore, hasActiveTools),
   }
 })
@@ -947,10 +962,14 @@ const mapFinishReason = Effect.fnUntraced(function* (event: OpenAIChatEvent, rea
 // `prompt_tokens_details.cached_tokens`, DeepSeek uses
 // `prompt_cache_hit_tokens`, Zai uses top-level `cached_tokens`, and
 // DigitalOcean uses top-level `cache_read_input_tokens` / `cache_created_input_tokens`.
-const mapUsage = (usage: OpenAIChatEvent["usage"], providerMetadataKey: string): Usage | undefined => {
+const mapUsage = (
+  usage: OpenAIChatEvent["usage"],
+  providerMetadataKey: string,
+  frame: OpenAIChatEvent,
+): Usage | undefined => {
   if (!usage) return undefined
   const input = usage.prompt_tokens ?? undefined
-  const output = usage.completion_tokens ?? undefined
+  const completion = usage.completion_tokens ?? undefined
   const cached =
     usage.prompt_tokens_details?.cached_tokens ??
     usage.prompt_cache_hit_tokens ??
@@ -958,7 +977,14 @@ const mapUsage = (usage: OpenAIChatEvent["usage"], providerMetadataKey: string):
     usage.cache_read_input_tokens ??
     undefined
   const cacheWrite = usage.prompt_tokens_details?.cache_write_tokens ?? usage.cache_created_input_tokens ?? undefined
-  const reasoning = usage.completion_tokens_details?.reasoning_tokens ?? undefined
+  const reasoning = usage.completion_tokens_details?.reasoning_tokens ?? usage.reasoning_tokens ?? undefined
+  // Copilot's Gemini counts reasoning beside `completion_tokens` rather than inside it; the total tells which.
+  const output =
+    completion !== undefined &&
+    reasoning !== undefined &&
+    usage.total_tokens === ProviderShared.sumTokens(input, completion, reasoning)
+      ? completion + reasoning
+      : completion
   const nonCached = ProviderShared.subtractTokens(input, ProviderShared.sumTokens(cached, cacheWrite))
   return new Usage({
     inputTokens: input,
@@ -968,7 +994,7 @@ const mapUsage = (usage: OpenAIChatEvent["usage"], providerMetadataKey: string):
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(input, output, usage.total_tokens ?? undefined),
-    ...ProviderShared.reportedBilling(usage),
+    ...ProviderShared.reportedBilling(usage, frame),
     providerMetadata: { [providerMetadataKey]: usage },
   })
 }
@@ -1077,10 +1103,12 @@ const reasoningMetadata = (
   providerMetadataKey: string,
   field: ParserState["reasoningField"],
   details?: ReadonlyArray<ReasoningDetail>,
+  opaque?: string,
 ) => ({
   [providerMetadataKey]: {
     ...(field ? { reasoningField: field } : {}),
     ...(details ? { reasoningDetails: details } : {}),
+    ...(opaque ? { reasoningOpaque: opaque } : {}),
   },
 })
 
@@ -1101,14 +1129,22 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     // Moonshot (and a few other OpenAI-compatible providers) attach usage to
     // `choice.usage` instead of the top-level `usage` field.
     const usage =
-      mapUsage(event.usage, state.providerMetadataKey) ??
-      mapUsage(choice?.usage, state.providerMetadataKey) ??
+      mapUsage(event.usage, state.providerMetadataKey, event) ??
+      mapUsage(choice?.usage, state.providerMetadataKey, event) ??
       state.usage
     const rawFinishReason = choice?.finish_reason
     const finishReason = rawFinishReason
       ? {
           normalized: yield* mapFinishReason(event, rawFinishReason),
           raw: choice?.native_finish_reason ?? rawFinishReason,
+          ...(rawFinishReason === "content_filter"
+            ? {
+                category: ProviderShared.contentFilterCategory(
+                  choice?.delta?.copilot_annotations,
+                  choice?.content_filter_results,
+                ),
+              }
+            : {}),
         }
       : state.finishReason
     const delta = choice?.delta
@@ -1145,13 +1181,14 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       : undefined
     if (detailDelta !== undefined) appendReasoningDetails(state.reasoningDetails, detailDelta)
     const reasoningDetailsObserved = state.reasoningDetailsObserved || detailDelta !== undefined
+    const reasoningOpaque = delta?.reasoning_opaque || state.reasoningOpaque
     const deltaMetadata = reasoningMetadata(state.providerMetadataKey, reasoningField)
     const text = detailDelta?.length
       ? (detailText(detailDelta, reasoningTextObserved) ?? reasoning?.text)
       : reasoning?.text
     if (text !== undefined) lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", text, deltaMetadata)
     else if (
-      reasoningDetailsObserved &&
+      (reasoningDetailsObserved || reasoningOpaque !== undefined) &&
       !lifecycle.reasoning.has("reasoning-0") &&
       (Boolean(delta?.content) || Boolean(delta?.refusal) || toolDeltas.length > 0)
     )
@@ -1264,6 +1301,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         reasoningTextObserved,
         reasoningDetails: state.reasoningDetails,
         reasoningDetailsObserved,
+        reasoningOpaque,
         reasoningEmitted,
         latestToolIndex,
         nextToolIndex,
@@ -1308,9 +1346,10 @@ export const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
     state.providerMetadataKey,
     state.reasoningField,
     state.reasoningDetailsObserved ? [...state.reasoningDetails] : undefined,
+    state.reasoningOpaque,
   )
   const started =
-    state.reasoningDetailsObserved && !state.reasoningEmitted
+    (state.reasoningDetailsObserved || state.reasoningOpaque !== undefined) && !state.reasoningEmitted
       ? Lifecycle.reasoningStart(
           state.lifecycle,
           events,

@@ -105,7 +105,7 @@ Most of these rarely reproduce on an idle local machine.
 Run from `packages/app`:
 
 - [ ] Run in built mode, as CI does: `bun run test:e2e:built -- e2e/regression/<file>.spec.ts`. Dev mode serves unbundled modules, with the API on another origin (`playwright.config.ts:19-21`).
-- [ ] Use a free port when another worktree or agent may hold 3000: `PLAYWRIGHT_PORT=4310 bun run test:e2e:built -- ...`. Built runs never reuse a server, and `serve.ts` fails on a busy port. Stay below 49152 on Windows: it reserves ports from there up and hands them out for outgoing connections (`services/www/src/docs/content/cli/web.mdx:43`, `packages/client/test/fixture/service-fixture.ts:108-109`).
+- [ ] Use a free port when another worktree or agent may hold 3000: `PLAYWRIGHT_PORT=4310 bun run test:e2e:built -- ...`. Built runs never reuse a server, and `serve.ts` fails on a busy port. Stay below 49152 on Windows: it reserves ports from there up and hands them out for outgoing connections (`services/site/src/docs/content/cli/web.mdx:43`, `packages/client/test/fixture/service-fixture.ts:108-109`).
 - [ ] To repeat without rebuilding:
   - build once with `VITE_OPENCODE_TEST_FIXTURES=1 bun run build`;
   - keep `bun e2e/utils/serve.ts --host 127.0.0.1 --port 4310` running;
@@ -122,9 +122,9 @@ Run from `packages/app`:
 
 ## When CI flakes
 
-- **Find it.** e2e runs on pull requests that affect `@opencode/app` or `@opencode/stories`, including their workspace dependencies, and on every manual dispatch (`.github/workflows/check-test.yml:50-62`). It never runs on dev (`:28`).
+- **Find it.** e2e runs on every push to dev and beta, on nightly and manual runs, and as the gate `release.yml` calls before a stable release. Pull requests never run it. On a push the `affected` gate still skips it when nothing in `@opencode/app` or `@opencode/stories`, or their workspace dependencies, changed (`.github/workflows/check-test.yml`).
   - Each OS has the legs `app-1` and `app-2` (the shards), `session-ui-components` and `app-components`.
-  - The required `e2e (linux)` and `e2e (windows)` checks only aggregate those legs (`:329-352`).
+  - The `e2e (linux)` and `e2e (windows)` checks only aggregate those legs.
   - A pass on retry leaves a leg green. Check each Windows shard report's Flaky list, and make sure your new tests are not on it.
 - **Download:** `gh run download <run-id> -n playwright-windows-app-2-1 -D <dir>`. Artifacts are named `playwright-<os>-<leg>-<run attempt>` (`check-test.yml:314-327`). App e2e results are in `<dir>/app/e2e/`.
 - **In CI, the failing first attempt has no trace and no video** (`playwright.config.ts:62-65`).
