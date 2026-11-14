@@ -812,7 +812,7 @@ fn a_rebuilt_nested_slot_unmounts_before_it_mounts() {
             let text = v2::Node::text(vec![abi::Span::new("outer")]);
             let nested = v2::Node::Slot { path: "home.footer.status".into() };
             // Each view puts the slot on the other side of the text, so it is built again.
-            v2::Node::row(if views % 2 == 0 { vec![text, nested] } else { vec![nested, text] })
+            v2::Node::row(if views.is_multiple_of(2) { vec![text, nested] } else { vec![nested, text] })
         }));
         Ok(())
     }
