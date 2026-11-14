@@ -33,6 +33,7 @@ const KEYED: u32 = 1000;
 #[derive(Default)]
 struct Mail {
     sender: Option<abi::Sender<Note>>,
+    spawner: Option<abi::Spawner>,
     arrived: Vec<Note>,
 }
 
@@ -46,7 +47,8 @@ fn mail<T>(f: impl FnOnce(&mut Mail) -> T) -> T {
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     let sender = setup.messages(|_, note: Note| mail(|mail| mail.arrived.push(note)));
-    mail(|mail| mail.sender = Some(sender));
+    let spawner = setup.spawner();
+    mail(|mail| (mail.sender, mail.spawner) = (Some(sender), Some(spawner)));
     Ok(())
 }
 
@@ -294,5 +296,40 @@ fn a_disabled_plugin_closes_its_mailbox() {
         assert_eq!(new.send((2, 1)), Ok(()));
         frame(&harness);
         assert_eq!(mail(|mail| std::mem::take(&mut mail.arrived)), [(2, 1)], "{carrier:?}");
+    }
+}
+
+// Expected (`backlog`, `Closed`, and 4.2's stop flag): a thread the spawner started sees its stop flag only once the
+// plugin is disabled, and then ends; after a panic on another thread failed the plugin, every send is `Closed`.
+#[test]
+fn a_stop_flag_ends_a_thread_and_a_failure_closes_the_mailbox() {
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        let tui = &harness.tui;
+        let spawner = mail(|mail| mail.spawner.clone()).unwrap();
+        let (ended, done) = std::sync::mpsc::channel();
+        let waits = move |stop: abi::Stop| {
+            while !stop.stopped() {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            ended.send(()).unwrap();
+        };
+        spawner.spawn("waits", waits).unwrap();
+        frame(&harness);
+        assert!(done.recv_timeout(Duration::from_millis(50)).is_err(), "{carrier:?}: it ended while active");
+        tui.plugins.toggle(&host(tui), ID, false);
+        assert!(done.recv_timeout(Duration::from_secs(10)).is_ok(), "{carrier:?}: it never saw the flag");
+        tui.plugins.toggle(&host(tui), ID, true);
+        let spawner = mail(|mail| mail.spawner.clone()).unwrap();
+        spawner.spawn("boom", |_| panic!("a mail thread panicked")).unwrap();
+        harness.wait("the panic failed the plugin", || {
+            harness.app.advance(Duration::from_millis(1));
+            tui.plugins.entries().iter().any(|entry| entry.id == ID && entry.status != opencode_plugin::Status::Active)
+        });
+        let status = tui.plugins.entries().into_iter().find(|entry| entry.id == ID).unwrap().status;
+        let expected = "thread boom panicked: a mail thread panicked".to_owned();
+        assert_eq!(status, opencode_plugin::Status::Failed(expected), "{carrier:?}");
+        let sender = mail(|mail| mail.sender.clone()).unwrap();
+        assert_eq!(sender.send((3, 1)), Err(SendError::Closed((3, 1))), "{carrier:?}");
     }
 }
