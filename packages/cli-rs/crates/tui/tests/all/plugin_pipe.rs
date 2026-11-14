@@ -875,7 +875,7 @@ fn a_changed_module_reloads_and_the_running_one_stays_meanwhile() {
     harness.tui.keymap.dispatch("probe.hold", Some("600"));
     let file = pipe.root.path().join("config/plugins/twin/tui.ts");
     let source = std::fs::read_to_string(&file).unwrap();
-    std::fs::write(&file, format!("{source}\n// changed\n")).unwrap();
+    std::fs::write(&file, source.replace("`twin ${total}`", "`twin* ${total}`")).unwrap();
     let begun = Instant::now();
     let mut reloaded = false;
     while begun.elapsed() < Duration::from_secs(10) && !reloaded {
@@ -883,7 +883,7 @@ fn a_changed_module_reloads_and_the_running_one_stays_meanwhile() {
         std::thread::sleep(Duration::from_millis(2));
         assert_eq!(pipe.status(twin::ID), Some(Status::Active), "the running build left while the new one loaded");
         let text = harness.app.text();
-        reloaded = text.contains("twin 0");
+        reloaded = text.contains("twin* 0");
         assert!(reloaded || text.contains("twin 1"), "{text}");
     }
     assert!(reloaded, "the changed module did not load: {}", harness.app.text());

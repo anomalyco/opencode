@@ -396,7 +396,8 @@ async function load(seq: number, target: string, dir: string, options: Json) {
   if (!entry) return send({ type: "unsupported", seq })
   let module: Json
   try {
-    module = await import(entry)
+    // Each load imports the module afresh, as a generation of its own: a changed module's new code runs.
+    module = await import(`${entry}?generation=${seq}`)
   } catch (error) {
     return send({ type: "done", seq, error: `cannot load ${target}: ${message(error)}` })
   }
