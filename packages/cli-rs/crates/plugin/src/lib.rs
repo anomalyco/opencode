@@ -1262,7 +1262,13 @@ impl Setup<'_> {
             abi::v2::Place::Slot(at) => {
                 let path = at.path.clone();
                 self.slot(
-                    slot::placement(&abi::SlotClaim { kind: at.kind, path: at.path, render: true, mount: false }),
+                    slot::placement(&abi::SlotClaim {
+                        kind: at.kind,
+                        path: at.path,
+                        render: true,
+                        mount: false,
+                        size: false,
+                    }),
                     move |host, input| {
                         let mounted = surface::Surface::new(
                             host,
