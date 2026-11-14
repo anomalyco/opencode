@@ -456,3 +456,23 @@ fn the_notice_is_only_for_a_running_call() {
     assert!(record.was_noticed(live));
     assert!(record.leave(live));
 }
+
+// Expected (review carbon-4): the monitor says each time a plugin becomes slow or stops being slow, also after the one
+// news a session the toast tells, and nothing while it stays as it was.
+#[test]
+fn every_change_of_slow_is_said_once() {
+    let bench = Bench::new();
+    let slot = bench.monitor.slot(&Artifact::builtin("p"));
+    bench.frames(slot, 12, 0);
+    assert!(!bench.monitor.take_flipped());
+    bench.frames(slot, 2, 0);
+    assert!(bench.monitor.take_flipped() && bench.monitor.is_slow("p"));
+    bench.frames(slot, 0, 1);
+    assert!(!bench.monitor.take_flipped());
+    // The slow frames leave the window of 120: it recovers, then becomes slow again, with no second news.
+    let news = bench.frames(slot, 0, 120);
+    assert!(news.is_empty() && !bench.monitor.is_slow("p") && bench.monitor.take_flipped());
+    let news = bench.frames(slot, 14, 0);
+    assert!(news.is_empty() && bench.monitor.is_slow("p") && bench.monitor.take_flipped());
+    assert!(!bench.monitor.take_flipped());
+}

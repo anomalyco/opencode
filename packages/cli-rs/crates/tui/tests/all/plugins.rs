@@ -402,14 +402,14 @@ fn boom() -> abi::Plugin {
     abi::Plugin { id: "test.boom", setup }
 }
 
-// Expected (review bigboi-5): once the question about a project's plugin closes, by escape or by an answer that cannot
-// be saved, the list comes back as the plugins are then: a plugin that failed while the question was open shows
-// failed, with no later change to tell the manager.
+// Expected (review bigboi-5, carbon-2): once the question about a project's plugin closes, by escape or by an answer
+// that cannot be saved, the list comes back as the plugins are then, with its filter: a plugin that failed while the
+// question was open shows failed, with no later change to tell the manager.
 #[cfg(unix)]
 #[test]
 fn the_list_comes_back_as_the_plugins_are_after_the_question() {
     use std::os::unix::fs::PermissionsExt;
-    for answer in ["escape", "unsaved"] {
+    for answer in ["escape", "unsaved", "filtered"] {
         let root = opencode_util::temp::tempdir().unwrap();
         project_plugin(root.path(), "first", &build(""));
         let h = project_tui(root.path());
@@ -417,13 +417,17 @@ fn the_list_comes_back_as_the_plugins_are_after_the_question() {
         h.tui.keymap.dispatch("plugins.list", None);
         h.wait_for("pending, local");
         h.wait_for("test.boom");
+        if answer == "filtered" {
+            h.app.type_text("first");
+            h.wait_for("pending, local");
+        }
         h.app.press("enter");
         h.wait_for("Run project plugin?");
         h.tui.keymap.dispatch("boom.boom", None);
         h.app.render();
         let state = support::home_paths(&root.path().join("home")).state;
         match answer {
-            "escape" => h.app.press("escape"),
+            "escape" | "filtered" => h.app.press("escape"),
             _ => {
                 std::fs::create_dir_all(&state).unwrap();
                 std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o500)).unwrap();
@@ -433,7 +437,14 @@ fn the_list_comes_back_as_the_plugins_are_after_the_question() {
         }
         h.wait_for("pending, local");
         std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o700)).ok();
-        h.wait_for("x test.boom");
+        if answer != "filtered" {
+            h.wait_for("x test.boom");
+            continue;
+        }
+        let screen = h.app.text();
+        let lines: Vec<&str> = screen.lines().collect();
+        let title = lines.iter().position(|line| line.contains("Plugins") && line.contains("esc")).unwrap();
+        assert_eq!(lines[title + 2].trim(), "first", "the filter went\n{screen}");
     }
 }
 
