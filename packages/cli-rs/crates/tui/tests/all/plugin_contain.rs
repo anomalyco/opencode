@@ -1,15 +1,19 @@
 //! The containment model (O-124, phase P4c): the real TUI in a `TestApp` with two external plugins, `model.a` and
 //! `model.b`, loaded by the real `Loader` through the C ABI's byte shims, a run record attached as a client under a
-//! parent has it, and the budget's clock injected. `model.a` can be made to panic, to overrun (a call of 101 ms on the
-//! injected clock) or to lag (2 ms a call); `model.b` is the witness. Three properties are checked after every
-//! command, each with an oracle that shares no code with the host:
+//! parent has it, and the budget's clock injected. `model.a` replaces the home footer, and can be made to panic, to
+//! overrun (a call of 101 ms on the injected clock) or to lag (2 ms a call); `model.b` appends to it and is the
+//! witness. Four properties are checked after every command, each with an oracle that shares no code with the host:
 //!
-//! - `isolation`: after a fault of `model.a`, every cell outside its line, `model.b`'s call log and the composer equal a
-//!   twin where the user disabled `model.a` at that step.
-//! - `reported-once`: a fault makes one toast, one count in the home footer and one failed row in `/plugins`; slow makes
-//!   one toast a session, when [`Slow`], the rule of 4.4 as code over the plugin's own log, says it became slow.
+//! - `isolation`: after a fault of `model.a`, every cell outside the failure count, `model.b`'s call log and the
+//!   composer equal a twin where the user disabled `model.a` at that step. A failed `Replace` claim that kept the
+//!   footer would differ.
+//! - `reported-once`: a fault makes one toast, one count in the home footer and one failed row in `/plugins`, and no
+//!   slow toast; slow makes one toast a session, when [`Slow`], the rule of 4.4 as code over the plugin's own log and
+//!   the painted frames, says it became slow.
 //! - `record-balanced`: inside each call the plugin reads the mapped record and finds its own ID and call; after each
 //!   command the record names nobody.
+//! - `draft-exact`: after each command the record's snapshot holds the composer's text as the composer has it, through
+//!   typing, clear, history, stash and a remount.
 //!
 //! `budget` at its boundaries is the table of `opencode_plugin::contain::tests`; `restart`, with real processes, is the
 //! P-PTY scenarios `P4c/crash` and `P4c/hang`.
@@ -23,7 +27,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use opencode_plugin::abi;
-use opencode_plugin::contain::{Record, record};
+use opencode_plugin::contain::{Crash, Handoff, Record, Snapshot, record};
 use opencode_plugin::loader::native::loopback_described;
 use opencode_plugin::loader::{Backend, Loader, entry_file};
 use opencode_plugin::{Definition, ErrorFn, Host, Status};
@@ -81,11 +85,17 @@ pub enum Command {
     Arm(Fault, Kind),
     /// `model.a` takes 2 ms a call from now on, or no longer.
     Lag,
+    /// A composer command: clear, history back, stash, stash pop.
+    Prompt(&'static str),
+    /// The route mounts again, as a manager action does.
+    Remount,
 }
 
 /// One call a plugin got, as it logs it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Call {
+    /// The world it ran in: 0 the host, 1 the twin.
+    world: usize,
     plugin: u8,
     kind: Kind,
     /// What the record named while the call ran.
@@ -129,7 +139,9 @@ fn probe<const P: u8>(setup: &mut abi::Setup) -> Result<(), String> {
         called(P, Kind::Command);
         counted.set(counted.get() + 1);
     });
-    setup.slot(abi::Placement::append("home.footer"), move |_, _, _| {
+    // `model.a` takes the footer over; failed, it must give it back.
+    let kind = if P == A { abi::SlotKind::Replace } else { abi::SlotKind::Append };
+    setup.slot(abi::Placement::new(kind, "home.footer"), move |_, _, _| {
         called(P, Kind::Render);
         abi::Render::Show(abi::Node::text([abi::Span::new(format!("{} n{}", id(P), count.get()))]))
     });
@@ -140,8 +152,8 @@ fn probe<const P: u8>(setup: &mut abi::Setup) -> Result<(), String> {
 /// Logs a call with what the record says inside it, then fails as armed.
 fn called(plugin: u8, kind: Kind) {
     let current = CURRENT.with_borrow(|current| current.clone()).expect("a world is current");
-    let seen = current.record.running().and_then(|(slot, kind, _)| {
-        Some((current.record.named(slot)?, record::KINDS.get(usize::from(kind))?.to_string()))
+    let seen = current.record.running().and_then(|running| {
+        Some((current.record.named(running.slot)?.id, record::KINDS.get(usize::from(running.kind))?.to_string()))
     });
     let mine = plugin == A && current.world == 0;
     let fault = ARMED.get().filter(|(_, armed)| mine && *armed == kind).map(|(fault, _)| fault);
@@ -154,7 +166,8 @@ fn called(plugin: u8, kind: Kind) {
         _ => Duration::ZERO,
     };
     current.clock.set(current.clock.get() + took);
-    LOG.with_borrow_mut(|log| log.push(Call { plugin, kind, seen, frame: (current.frame)(), took }));
+    let world = current.world;
+    LOG.with_borrow_mut(|log| log.push(Call { world, plugin, kind, seen, frame: (current.frame)(), took }));
     if fault == Some(Fault::Panic) {
         panic!("{} {kind:?} fault", id(plugin));
     }
@@ -172,6 +185,17 @@ impl Backend for Builds {
     }
 }
 
+/// A directory with both plugins' builds.
+fn builds() -> opencode_util::temp::TempDir {
+    let root = opencode_util::temp::tempdir().unwrap();
+    for (name, build) in [("a", A), ("b", B)] {
+        let dir = root.path().join("config").join("plugins").join(name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(entry_file()), [build]).unwrap();
+    }
+    root
+}
+
 /// A TUI on home with both plugins, a run record and an injected clock.
 struct World {
     harness: Harness,
@@ -182,15 +206,16 @@ struct World {
 
 impl World {
     fn open(world: usize) -> Self {
-        let root = opencode_util::temp::tempdir().unwrap();
+        let root = builds();
+        let record = Arc::new(Record::create(root.path()).unwrap());
+        Self::mount(world, root, record)
+    }
+
+    /// A TUI on home with the plugins of `root` and `record`, which a parent made for it.
+    fn mount(world: usize, root: opencode_util::temp::TempDir, record: Arc<Record>) -> Self {
         let config = root.path().join("config");
-        for (name, build) in [("a", A), ("b", B)] {
-            let dir = config.join("plugins").join(name);
-            std::fs::create_dir_all(&dir).unwrap();
-            std::fs::write(dir.join(entry_file()), [build]).unwrap();
-        }
         let deps = Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) };
-        let contain = Contain { record: Some(root.path().join("run")), ..Contain::default() };
+        let contain = Contain { record: Some(record), ..Contain::default() };
         let harness = support::mount_on(TestApp::new(100, 24), deps, Args { contain, ..Args::default() });
         let monitor = harness.tui.plugins.monitor().clone();
         let clock = Rc::new(Cell::new(Duration::ZERO));
@@ -240,6 +265,10 @@ impl World {
                     LAG.set(!LAG.get());
                 }
             }
+            Command::Prompt(name) => {
+                let _ = tui.keymap.dispatch(name, None);
+            }
+            Command::Remount => tui.navigate(tui.route()),
         }
     }
 
@@ -300,51 +329,60 @@ fn rows(frame: &Capture) -> Vec<String> {
         .collect()
 }
 
-/// The first row where `a` and `b` differ outside `mask`, unless the row of `a` is the failure report.
+/// The failure count the home footer shows in `a` and not in the twin, which moves what follows it.
+const COUNT: &str = "⊙ 1 plugin failed /plugins";
+
+/// The first row where `a` and `b` differ outside `mask`. In the row of `a` that holds the failure count, the count
+/// alone is taken out, and the rest of the row must read as the twin's.
 fn frame_diff(a: &Capture, b: &Capture, mask: Option<(u32, u32, u32, u32)>) -> Option<String> {
     let masked = |x: u32, y: u32| mask.is_some_and(|(mx, my, mw, mh)| x >= mx && x < mx + mw && y >= my && y < my + mh);
     let (ours, theirs) = (rows(a), rows(b));
+    let words = |row: &str| row.split_whitespace().collect::<Vec<_>>().join(" ");
     (0..a.height.max(b.height)).find_map(|y| {
-        let differs = (0..a.width.max(b.width)).any(|x| !masked(x, y) && a.cell(x, y) != b.cell(x, y));
         let row = |rows: &[String]| rows.get(y as usize).cloned().unwrap_or_default();
-        (differs && !row(&ours).contains("plugin failed"))
-            .then(|| format!("row {y}:\n  {:?}\n  {:?}", row(&ours), row(&theirs)))
+        let differs = match row(&ours).contains(COUNT) {
+            true => words(&row(&ours).replacen(COUNT, "", 1)) != words(&row(&theirs)),
+            false => (0..a.width.max(b.width)).any(|x| !masked(x, y) && a.cell(x, y) != b.cell(x, y)),
+        };
+        differs.then(|| format!("row {y}:\n  {:?}\n  {:?}", row(&ours), row(&theirs)))
     })
 }
 
-/// The slow rule of 4.4 as code over the plugin's own log: its calls summed by frame, the frames it ran in, and slow
-/// when over 1 ms in more than 12 of the last 120 of them. It says when the news is due: as the frame that makes the
-/// plugin slow for the first time ends, which is the plugin's next call in a later frame.
+/// The slow rule of 4.4 as code over the plugin's own log: its calls summed by the frame they ran in, a frame ending at
+/// the paint after it (each paint starts the next frame), and slow when over 1 ms in more than 12 of the last 120
+/// frames it ran in. It says when that first happens.
 #[derive(Default)]
 struct Slow {
-    open: Option<(u64, Duration)>,
-    frames: Vec<bool>,
+    open: std::collections::BTreeMap<u64, Duration>,
+    closed: Vec<bool>,
     told: bool,
 }
 
 impl Slow {
-    /// Takes the plugin's budgeted calls of one command; returns whether the news is due.
-    fn step(&mut self, calls: &[&Call]) -> bool {
-        let mut due = false;
+    fn add(&mut self, calls: &[&Call]) {
         for call in calls {
-            match &mut self.open {
-                Some((frame, sum)) if *frame == call.frame => *sum += call.took,
-                open => {
-                    if let Some((_, sum)) = open.take() {
-                        self.frames.push(sum > Duration::from_millis(1));
-                        let window = &self.frames[self.frames.len().saturating_sub(120)..];
-                        if window.iter().filter(|over| **over).count() > 12 && !self.told {
-                            self.told = true;
-                            due = true;
-                        }
-                    }
-                    *open = Some((call.frame, call.took));
-                }
+            *self.open.entry(call.frame).or_default() += call.took;
+        }
+    }
+
+    /// The frames before `frame`, the one now open, have ended; returns whether that made the plugin slow first.
+    fn close(&mut self, frame: u64) -> bool {
+        let open = self.open.split_off(&frame);
+        let mut became = false;
+        for sum in std::mem::replace(&mut self.open, open).into_values() {
+            self.closed.push(sum > Duration::from_millis(1));
+            let window = &self.closed[self.closed.len().saturating_sub(120)..];
+            if window.iter().filter(|over| **over).count() > 12 && !self.told {
+                self.told = true;
+                became = true;
             }
         }
-        due
+        became
     }
 }
+
+/// The composer commands the model runs: each replaces the text without a change event.
+const PROMPT: [&str; 4] = ["prompt.clear", "prompt.history.previous", "prompt.stash", "prompt.stash.pop"];
 
 pub struct ContainModel;
 
@@ -358,9 +396,11 @@ impl Model for ContainModel {
                 0..30 => Command::Run(A),
                 30..42 => Command::Run(B),
                 42..62 => Command::Frame,
-                62..70 => Command::Type(*rng.pick(&['a', 'b', ' '])),
-                70..76 => Command::ToggleB,
-                76..82 => Command::Lag,
+                62..68 => Command::Type(*rng.pick(&['a', 'b', ' '])),
+                68..72 => Command::Prompt(rng.pick(&PROMPT)),
+                72..74 => Command::Remount,
+                74..78 => Command::ToggleB,
+                78..82 => Command::Lag,
                 _ => Command::Arm(*rng.pick(&[Fault::Panic, Fault::Overrun]), *rng.pick(&kinds)),
             })
             .collect()
@@ -373,7 +413,7 @@ impl Model for ContainModel {
     fn simplify(&self, command: &Command) -> Vec<Command> {
         match command {
             Command::Arm(Fault::Overrun, kind) => vec![Command::Arm(Fault::Panic, *kind)],
-            Command::Type(_) => vec![Command::Frame],
+            Command::Type(_) | Command::Prompt(_) | Command::Remount => vec![Command::Frame],
             Command::Run(B) => vec![Command::Frame],
             _ => Vec::new(),
         }
@@ -386,6 +426,19 @@ fn fail(property: &'static str, step: usize, detail: String) -> Option<Failure> 
 
 fn take_calls() -> Vec<Call> {
     LOG.with_borrow_mut(std::mem::take)
+}
+
+/// The calls of world `world`.
+fn only(calls: &[Call], world: usize) -> Vec<Call> {
+    calls.iter().filter(|call| call.world == world).cloned().collect()
+}
+
+/// `draft-exact`: the record's snapshot holds what the composer shows, on home.
+fn exact(world: &World) -> Option<String> {
+    let snapshot = world.current.record.snapshot().unwrap_or_default();
+    let composer = world.composer();
+    (snapshot.draft != composer || snapshot.session.is_some() || snapshot.dropped)
+        .then(|| format!("the composer holds {composer:?}, the record {snapshot:?}"))
 }
 
 /// Runs `commands` on the host and its twin, and checks the three properties after each.
@@ -407,6 +460,9 @@ fn run(commands: &[Command]) -> Option<Failure> {
         world.apply(command);
         let reports = world.settle();
         let calls = take_calls();
+        if let Some(detail) = exact(&world) {
+            return fail("draft-exact", step, detail);
+        }
         twin.apply(command);
         // The user disables `model.a` in the twin at the step its fault failed it in the host.
         let failing = !failed && world.failed();
@@ -418,9 +474,13 @@ fn run(commands: &[Command]) -> Option<Failure> {
         if let Some(detail) = balanced(&world, &calls) {
             return fail("record-balanced", step, detail);
         }
-        let mine: Vec<&Call> =
-            calls.iter().filter(|call| call.plugin == A && matches!(call.kind, Kind::Command | Kind::Render)).collect();
-        let due = !failed && slow.step(&mine);
+        let mine: Vec<&Call> = calls
+            .iter()
+            .filter(|call| call.world == 0 && call.plugin == A && matches!(call.kind, Kind::Command | Kind::Render))
+            .collect();
+        slow.add(&mine);
+        // The news of a frame that ended after the plugin failed is the failure's to tell.
+        let due = slow.close(world.harness.app.app().frame_number()) && !world.failed();
         if let Some(detail) = reported(&world, &reports, failing, due) {
             return fail("reported-once", step, detail);
         }
@@ -439,6 +499,7 @@ fn run(commands: &[Command]) -> Option<Failure> {
             }
             kinds
         };
+        let (calls, twins) = (only(&calls, 0), only(&twins, 1));
         if witness(&calls) != witness(&twins) {
             return fail(
                 "isolation",
@@ -459,7 +520,7 @@ fn run(commands: &[Command]) -> Option<Failure> {
 
 /// `record-balanced`: each call found its own plugin and call in the record, and now the record names nobody.
 fn balanced(world: &World, calls: &[Call]) -> Option<String> {
-    for call in calls {
+    for call in calls.iter().filter(|call| call.world == 0) {
         let expected = Some((id(call.plugin).to_owned(), call.kind.name().to_owned()));
         if call.seen != expected {
             return Some(format!("inside {call:?} the record named {:?}", call.seen));
@@ -469,8 +530,8 @@ fn balanced(world: &World, calls: &[Call]) -> Option<String> {
     if let Some(running) = record.running() {
         return Some(format!("after the command the record names {running:?}"));
     }
-    let left = record::read(&std::fs::read(record.path()).unwrap()).expect("a record");
-    (left.plugin.is_some() || left.call.is_some()).then(|| format!("after the command the file names {left:?}"))
+    let crash = record.crash();
+    (crash != Crash::default()).then(|| format!("after the command the record names {crash:?}"))
 }
 
 /// `reported-once`: the toasts of this step, the footer's count and the manager's row, for a fault that failed the
@@ -575,7 +636,7 @@ fn the_oracles_can_fail() {
     let twin = World::open(1);
     assert!(frame_diff(&world.frame(), &twin.frame(), world.mask()).is_some());
     take_calls();
-    let call = Call { plugin: B, kind: Kind::Command, seen: None, frame: 0, took: Duration::ZERO };
+    let call = Call { world: 0, plugin: B, kind: Kind::Command, seen: None, frame: 0, took: Duration::ZERO };
     assert!(balanced(&world, &[call]).is_some());
 
     let slow = World::open(0);
@@ -590,5 +651,47 @@ fn the_oracles_can_fail() {
     LAG.set(false);
     assert_eq!(toasts, ["Plugin is slow: model.a"]);
     assert!(slow.harness.tui.plugins.entries().iter().any(|entry| entry.id == "model.a" && entry.slow.is_some()));
+    take_calls();
+}
+
+/// A client a parent started after a crash that named no plugin, handed `snapshot`.
+fn restarted(snapshot: Option<Snapshot>) -> World {
+    let root = builds();
+    let record = Arc::new(Record::create(root.path()).unwrap());
+    record.set_handoff(&Handoff { crash: Some(Crash::default()), safe: false });
+    if let Some(snapshot) = &snapshot {
+        record.publish(snapshot);
+    }
+    World::mount(0, root, record)
+}
+
+// Expected (bigboi 8, carbon 2): a client started after a crash shows the draft it was handed and holds it in its own
+// snapshot without a keystroke, so a second crash hands it on whole; a clear after that is what a third client gets.
+#[test]
+fn a_restored_draft_survives_a_second_crash() {
+    LOG.take();
+    let draft = "half a thought\nand a second line é";
+    let first = restarted(Some(Snapshot { session: None, draft: draft.to_owned(), dropped: false }));
+    assert_eq!((first.composer().as_str(), exact(&first)), (draft, None));
+    let second = restarted(first.current.record.snapshot());
+    assert_eq!((second.composer().as_str(), exact(&second)), (draft, None));
+    second.apply(Command::Prompt("prompt.clear"));
+    second.settle();
+    assert_eq!(exact(&second), None);
+    let third = restarted(second.current.record.snapshot());
+    assert_eq!(third.composer(), "");
+    take_calls();
+}
+
+// Expected: `draft-exact` is not empty: a composer whose text changed without the record is caught.
+#[test]
+fn the_draft_oracle_can_fail() {
+    LOG.take();
+    let world = World::open(0);
+    world.apply(Command::Type('a'));
+    world.settle();
+    assert_eq!(exact(&world), None);
+    world.current.record.publish(&Snapshot::default());
+    assert!(exact(&world).is_some());
     take_calls();
 }
