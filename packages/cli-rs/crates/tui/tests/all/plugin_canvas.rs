@@ -1404,8 +1404,9 @@ fn a_canvas_at_a_slots_root_takes_its_layout() {
     assert!(screen.contains("§badge§"), "{screen}");
 }
 
-// Expected: arming a canvas's hook for a version moves nothing: a canvas with no width of its own keeps its size,
-// so each version draws it once at that size and no resize follows.
+// Expected: arming a canvas's hook moves nothing. A canvas with no width of its own in a row has none in layout
+// (OpenTUI's resize reports one cell, so the canvas gets one draw before its first paint shows it has no room); the
+// hook, which flips its width for each version, must not give it any, so the versions draw nothing.
 #[test]
 fn a_version_leaves_the_canvas_its_size() {
     PAD.with(|cell| *cell.borrow_mut() = Pad { auto: true, ..Pad::default() });
@@ -1419,9 +1420,53 @@ fn a_version_leaves_the_canvas_its_size() {
     }
     let draws: Vec<(u16, u16, v2::Cause)> =
         pad(|pad| pad.draws.iter().map(|drawn| (drawn.frame.width, drawn.frame.height, drawn.frame.cause)).collect());
-    let size = (draws[0].0, draws[0].1);
-    let causes = [v2::Cause::First, v2::Cause::Version, v2::Cause::Version, v2::Cause::Version];
-    assert_eq!(draws, causes.map(|cause| (size.0, size.1, cause)));
+    assert_eq!(draws, [(1, 4, v2::Cause::First)]);
+}
+
+// Expected (OpenTUI's answer to P5's finding 3): a canvas given a width of 0 has no room, which its paint sees though
+// OpenTUI's resize reports one cell. It gets the one draw that resize asks for, then none: a version while it has no
+// room draws nothing. Given one cell, which OpenTUI reports as the same size and so resizes nothing, its paint finds
+// room and the next frame draws the version it missed, and shows it. A resize that leaves a dimension of none draws
+// nothing; one to more than a cell either way gives room in its own frame.
+#[test]
+fn a_canvas_without_room_is_not_drawn_and_catches_up() {
+    PAD.with(|cell| *cell.borrow_mut() = Pad::default());
+    let harness = open_tui(80, 24, vec![abi::Plugin { id: ID, setup }.into()]);
+    let causes = |from: usize| -> Vec<(u16, v2::Cause)> {
+        pad(|pad| pad.draws[from..].iter().map(|drawn| (drawn.frame.width, drawn.frame.cause)).collect())
+    };
+    apply(&harness, &Command::Open);
+    let _ = frame(&harness, Duration::from_millis(1));
+    apply(&harness, &Command::Size(0, 4));
+    let _ = frame(&harness, Duration::from_millis(16));
+    assert_eq!(causes(0), [(12, v2::Cause::First), (1, v2::Cause::Resized)]);
+    apply(&harness, &Command::Version);
+    for _ in 0..3 {
+        let _ = frame(&harness, Duration::from_millis(16));
+    }
+    assert_eq!(causes(2), [], "a canvas with no room was drawn");
+    apply(&harness, &Command::Size(1, 4));
+    let _ = frame(&harness, Duration::from_millis(16));
+    let shown = frame(&harness, Duration::from_millis(16));
+    assert_eq!(causes(2), [(1, v2::Cause::Version)], "the version missed is drawn once there is room");
+    let held = pad(|pad| match &pad.draws.last().unwrap().returned {
+        Returned::Art(shapes) => Held::Art(shapes.clone()),
+        other => panic!("{other:?}"),
+    });
+    assert_eq!(differs(&shown, Some(&held), (1, 4)), None);
+
+    // Without room again, a taller canvas still has none across: no draw. Wider than a cell, it has room at once and
+    // is drawn in the frame of its resize.
+    apply(&harness, &Command::Size(0, 4));
+    let _ = frame(&harness, Duration::from_millis(16));
+    let seen = pad(|pad| pad.draws.len());
+    apply(&harness, &Command::Size(0, 6));
+    let _ = frame(&harness, Duration::from_millis(16));
+    let _ = frame(&harness, Duration::from_millis(16));
+    assert_eq!(causes(seen), [], "a canvas with no room across was drawn");
+    apply(&harness, &Command::Size(12, 6));
+    let _ = frame(&harness, Duration::from_millis(16));
+    assert_eq!(causes(seen), [(12, v2::Cause::Resized)], "a canvas with room again was drawn late");
 }
 
 /// How the contained canvas's next draw fails: a panic, or 150 ms on the monitor's clock.
