@@ -23,7 +23,7 @@ pub fn view(diffs: &Diffs, cx: &mut v2::View<'_>) -> Node {
         return Node::column(Vec::new()).with_id(ROOT);
     };
     let changed = &cx.input.changed;
-    let woken = changed.woken && !(viewer.drawn && viewer.panel == cx.input.panel);
+    let woken = changed.woken && !viewer.drawn;
     let unchanged = !(changed.all || changed.local || changed.size || woken);
     if unchanged && !cx.input.full && viewer.contents.mount == cx.mount.generation {
         return Node::Keep { key: ROOT.to_owned() };

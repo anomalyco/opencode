@@ -703,6 +703,30 @@ fn a_patch_line_wraps_inside_its_words() {
     assert!(words.len() > 12 && words.iter().any(|word| *word != "abcdefghij"), "{screen}");
 }
 
+// Expected (TS `panel.focused`): the docked panel's footer dims as the focus leaves the panel, and lights again as it
+// comes back.
+#[test]
+fn the_docked_footer_follows_the_panels_focus() {
+    let h = mount(support::session_route("ses_a"));
+    h.wait_for("Review");
+    h.tui.keymap.dispatch("diff.open", None);
+    h.wait_for("focus prompt");
+    let footer = |h: &Diffs| {
+        h.settle();
+        let (x, y) = h.find("focus prompt");
+        let capture = h.app.render();
+        let cell = capture.cell(u32::from(x), u32::from(y)).unwrap();
+        (cell.fg, cell.attributes)
+    };
+    let focused = footer(&h);
+    h.dispatch("pane.focus.left");
+    let left = footer(&h);
+    assert_ne!(left, focused, "the footer did not dim");
+    let (x, y) = h.find("src/main.rs");
+    h.app.click(x, y);
+    assert_eq!(footer(&h), focused, "the footer did not light again");
+}
+
 // Expected (TS's turn watch, `steps/flakes-8.md`): a turn that starts and ends before the UI hears of its start still
 // loads the last turn's diff again, on both carriers; another session's turn loads nothing.
 #[test]
