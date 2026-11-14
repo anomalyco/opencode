@@ -1,4 +1,8 @@
-import { type Accessor, createMemo } from "solid-js"
+import { ConfigPreset } from "@opencode/schema/config/preset"
+import { useQuery } from "@tanstack/solid-query"
+import { useServerSDK } from "@/runtime/server/client"
+import { useData } from "@/runtime/server/current"
+import { type Accessor, createMemo, onCleanup } from "solid-js"
 import { createSimpleContext } from "@opencode/ui/context"
 import { useProviders } from "@/providers/catalog/providers"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -20,12 +24,17 @@ export const isFreeModel = (model: { provider: { id: string }; cost?: { input: n
   model.provider.id === "opencode" && (!model.cost || model.cost.input === 0)
 
 // The newest release of each family per provider. A free model shares its family and release date with its paid twin,
-// so the two are grouped apart. A tie keeps the first model listed.
+// so the two are grouped apart. Presets stay separate from base families. A tie keeps the first model listed.
 export function latestModels<T extends { id: string; provider: { id: string }; family?: string; release_date: string }>(
   models: T[],
+  presets: ReadonlySet<string> = new Set(),
 ) {
   return [...Map.groupBy(models, (x) => x.provider.id).values()].flatMap((provider) =>
-    [...Map.groupBy(provider, (x) => `${x.family}:${isFreeModel(x)}`).values()].map((group) => {
+    [
+      ...Map.groupBy(provider, (x) =>
+        presets.has(`${x.provider.id}:${x.id}`) ? `preset:${x.id}` : `family:${x.family}:${isFreeModel(x)}`,
+      ).values(),
+    ].map((group) => {
       const first = group.reduce((best, x) => (x.release_date > best.release_date ? x : best))
 
       return { modelID: first.id, providerID: first.provider.id }
@@ -47,6 +56,24 @@ export function uniqueModels(models: ModelKey[]) {
 }
 
 const createModelsController = (directory: Accessor<string | undefined>) => {
+  const sdk = useServerSDK()
+  const data = useData()
+  const location = () => {
+    const dir = directory()
+    return dir ? { directory: dir } : data.location.default()
+  }
+  const config = useQuery(() => ({
+    queryKey: [sdk.scope, "model-presets", location()],
+    enabled: sdk.connection.status() === "connected",
+    queryFn: () => sdk.api.config.get({ location: location() }),
+  }))
+  onCleanup(
+    sdk.event.on("config.updated", (event) => {
+      if (event.location && event.location.directory !== location()?.directory) return
+      void config.refetch()
+    }),
+  )
+  const presets = createMemo(() => ConfigPreset.models(config.data ?? []))
   const providers = useProviders(() => directory())
   const models = useGlobal().models
   const store = models.store
@@ -79,6 +106,7 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
 
         return Math.abs(Date.now() - released) < sixMonths
       }),
+      presets(),
     ),
   )
 

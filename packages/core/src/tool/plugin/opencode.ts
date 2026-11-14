@@ -3,6 +3,8 @@ export * as OpenCodeTools from "./opencode.js"
 import { SystemPart, ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
+import { ConfigPreset } from "@opencode/schema/config/preset"
+import { Config } from "../../config.js"
 import { Model } from "@opencode/schema/model"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
@@ -96,6 +98,7 @@ const ModelsOutput = Schema.Struct({
 export const Plugin = {
   id: "opencode.tools",
   effect: Effect.fn("OpenCodeTools.Plugin")(function* (ctx: Context) {
+    const config = yield* Config.Service
     const access = yield* FileAccess.Service
     const permission = yield* Permission.Service
     const hook = (event: SessionHooks["context"]) =>
@@ -227,9 +230,7 @@ export const Plugin = {
                 output: { directory: target.absolute, removed: true },
                 content: `Removed worktree ${target.absolute}.`,
               }
-            }).pipe(
-              Effect.mapError(toolFailure(`Unable to remove worktree ${input.directory}`)),
-            ),
+            }).pipe(Effect.mapError(toolFailure(`Unable to remove worktree ${input.directory}`))),
         })
         draft.add({
           name: "models",
@@ -240,6 +241,7 @@ export const Plugin = {
           options: { namespace: "opencode", codemode: true },
           execute: (input, context) =>
             Effect.gen(function* () {
+              const presets = ConfigPreset.models(yield* config.entries())
               const offset = input.offset ?? 0
               const limit = input.limit ?? 20
               const own = (yield* ctx.session.get({ sessionID: context.sessionID })).model?.providerID
@@ -264,10 +266,14 @@ export const Plugin = {
                     right.time.released - left.time.released,
                 )
                 .filter((model, index, sorted) => {
-                  if (input.all || model.family === undefined) return true
+                  if (input.all || model.family === undefined || presets.has(`${model.providerID}:${model.id}`))
+                    return true
                   return (
                     sorted.findIndex(
-                      (other) => other.providerID === model.providerID && other.family === model.family,
+                      (other) =>
+                        !presets.has(`${other.providerID}:${other.id}`) &&
+                        other.providerID === model.providerID &&
+                        other.family === model.family,
                     ) === index
                   )
                 })
