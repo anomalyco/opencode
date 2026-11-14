@@ -471,19 +471,23 @@ thread_local! {
     static PART_VIEWS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// `test.parts` keeps its whole page from its second view on, not only the box and the item.
     static PART_ROOT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Whether `test.parts` keeps its box and its list's item from its second view on; else it writes them out.
+    static PART_KEEPS: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
 }
 
 /// A plugin whose route shows tool call outputs of `ses_p` by reference: `call_1`, `call_2` alone and inside a box
-/// it keeps from its second view on, and a user message's id, which names no tool call.
+/// it keeps from its second view on, and a user message's id, which names no tool call. A whole tree asked for has no
+/// keeps.
 fn parts(setup: &mut abi::Setup) -> Result<(), String> {
     let part = |part: &str| v2::Node::Markdown {
         id: None,
         source: v2::Source::PartOutput(v2::PartRef { session: "ses_p".into(), part: part.into() }),
     };
-    setup.surface(v2::Surface::new("parts", v2::Place::Route("parts".into()), move |_| {
+    setup.surface(v2::Surface::new("parts", v2::Place::Route("parts".into()), move |cx| {
         let views = PART_VIEWS.get();
         PART_VIEWS.set(views + 1);
-        if views > 0 && PART_ROOT.get() {
+        let keeps = views > 0 && !cx.input.full;
+        if keeps && PART_ROOT.get() {
             return v2::Node::Keep { key: "page".into() };
         }
         let code = v2::Node::Code {
@@ -493,13 +497,13 @@ fn parts(setup: &mut abi::Setup) -> Result<(), String> {
             numbers: false,
             layout: abi::Layout::default(),
         };
-        let (held, item) = match views {
-            0 => (
+        let (held, item) = match keeps && PART_KEEPS.get() {
+            false => (
                 v2::Node::column(vec![v2::Node::text(vec![abi::Span::new("kept:")]), part("call_2"), code])
                     .with_id("held"),
                 v2::Node::column(vec![part("call_2")]).with_id("item"),
             ),
-            _ => (v2::Node::Keep { key: "held".into() }, v2::Node::Keep { key: "item".into() }),
+            true => (v2::Node::Keep { key: "held".into() }, v2::Node::Keep { key: "item".into() }),
         };
         let list = v2::Node::list(vec![v2::ListItem::new(item, 1)])
             .with_id("list")
@@ -540,8 +544,43 @@ fn a_part_output_shows_the_transcripts_own_text() {
 }
 
 fn part_output(root: bool, carrier: Carrier) {
-    PART_VIEWS.set(0);
     PART_ROOT.set(root);
+    let harness = parts_harness(carrier);
+    let shown = |harness: &Harness| -> Vec<String> {
+        let screen = harness.app.render().text();
+        screen.lines().map(str::trim).filter(|line| !line.is_empty()).map(str::to_owned).collect()
+    };
+    assert_eq!(shown(&harness), ["tool said fn parse", "lib.rs", "kept:", "end"]);
+    call_2(&harness, "session.tool.input.started", 1, serde_json::json!({ "name": "read" }));
+    call_2(&harness, "session.tool.called", 2, serde_json::json!({ "input": {}, "executed": true }));
+    assert_eq!(shown(&harness), ["tool said fn parse", "lib.rs", "kept:", "end"], "a running call shows output");
+    call_2(&harness, "session.tool.success", 3, output("REAL_RESULT"));
+    harness.wait_for("REAL_RESULT");
+    settle(&harness);
+    assert_eq!(
+        shown(&harness),
+        ["tool said fn parse", "lib.rs", "REAL_RESULT", "kept:", "REAL_RESULT", "REAL_RESULT", "REAL_RESULT", "end"],
+        "root kept {root}, {carrier:?}"
+    );
+    assert!(PART_VIEWS.get() >= 2, "the kept box was never kept");
+    PART_ROOT.set(false);
+}
+
+/// What a tool call's success says it output: `text`.
+fn output(text: &str) -> serde_json::Value {
+    serde_json::json!({ "content": [{ "type": "text", "text": text }], "executed": true })
+}
+
+/// A step of the tool call `call_2` of `ses_p`, at `seq`.
+fn call_2(harness: &Harness, kind: &str, seq: u64, extra: serde_json::Value) {
+    let ids = serde_json::json!({ "sessionID": "ses_p", "assistantMessageID": "msg_3", "id": "call_2" });
+    harness.tui.data.apply(&[tool_event(kind, seq, support::merge(ids, extra))]);
+    settle(harness);
+}
+
+/// `test.parts`'s route on `carrier` over the session `ses_p`, whose `call_2` has not started.
+fn parts_harness(carrier: Carrier) -> Harness {
+    PART_VIEWS.set(0);
     let session = support::merge(support::session("ses_p", "Parts"), serde_json::json!({ "agent": "build" }));
     let messages = serde_json::json!([
         {
@@ -594,36 +633,52 @@ fn part_output(root: bool, carrier: Carrier) {
     harness.wait_for("part one says hello");
     harness.tui.navigate(Route::Plugin { id: "test.parts".into(), name: "parts".into() });
     harness.wait_for("tool said fn parse");
-    let shown = |harness: &Harness| -> Vec<String> {
-        let screen = harness.app.render().text();
-        screen.lines().map(str::trim).filter(|line| !line.is_empty()).map(str::to_owned).collect()
+    harness
+}
+
+// Expected (fixed row; review bigboi 4): a box and a list's item the plugin keeps show the tool call output under them
+// as one it writes out does, through an output within the text limit, one past it, and one within it again: the
+// screen equals a twin run's whose view writes them out every time. On both carriers, and with the whole page kept.
+#[test]
+fn a_kept_output_is_admitted_as_one_written_out() {
+    let _limits = opencode_plugin::limits::set(opencode_plugin::limits::Limits {
+        text: 64,
+        ..opencode_plugin::limits::Limits::default()
+    });
+    let run = |keeps: bool, root: bool, carrier: Carrier| {
+        (PART_KEEPS.set(keeps), PART_ROOT.set(root));
+        let harness = parts_harness(carrier);
+        // Each stage runs the call again and completes it with its output.
+        let over = "x".repeat(88);
+        let stages = [
+            (1, "small output", "small output"),
+            (4, &over, "⋯ too large: 88 bytes"),
+            (7, "small again", "small again"),
+        ];
+        let frames: Vec<String> = stages
+            .into_iter()
+            .map(|(seq, text, shows)| {
+                call_2(&harness, "session.tool.input.started", seq, serde_json::json!({ "name": "read" }));
+                call_2(&harness, "session.tool.called", seq + 1, serde_json::json!({ "input": {}, "executed": true }));
+                call_2(&harness, "session.tool.success", seq + 2, output(text));
+                // The nodes it writes out show the output first.
+                harness.wait_for(shows);
+                settle(&harness);
+                harness.app.render().text()
+            })
+            .collect();
+        (PART_KEEPS.set(true), PART_ROOT.set(false));
+        (frames, PART_VIEWS.get())
     };
-    assert_eq!(shown(&harness), ["tool said fn parse", "lib.rs", "kept:", "end"]);
-    let ids = serde_json::json!({ "sessionID": "ses_p", "assistantMessageID": "msg_3", "id": "call_2" });
-    let with = |extra: serde_json::Value| support::merge(ids.clone(), extra);
-    harness.tui.data.apply(&[tool_event("session.tool.input.started", 1, with(serde_json::json!({ "name": "read" })))]);
-    settle(&harness);
-    harness.tui.data.apply(&[tool_event(
-        "session.tool.called",
-        2,
-        with(serde_json::json!({ "input": {}, "executed": true })),
-    )]);
-    settle(&harness);
-    assert_eq!(shown(&harness), ["tool said fn parse", "lib.rs", "kept:", "end"], "a running call shows output");
-    harness.tui.data.apply(&[tool_event(
-        "session.tool.success",
-        3,
-        with(serde_json::json!({ "content": [{ "type": "text", "text": "REAL_RESULT" }], "executed": true })),
-    )]);
-    harness.wait_for("REAL_RESULT");
-    settle(&harness);
-    assert_eq!(
-        shown(&harness),
-        ["tool said fn parse", "lib.rs", "REAL_RESULT", "kept:", "REAL_RESULT", "REAL_RESULT", "REAL_RESULT", "end"],
-        "root kept {root}, {carrier:?}"
-    );
-    assert!(PART_VIEWS.get() >= 2, "the kept box was never kept");
-    PART_ROOT.set(false);
+    for (root, carrier) in [(false, Carrier::Linked), (false, Carrier::Abi), (true, Carrier::Linked)] {
+        let (kept, views) = run(true, root, carrier);
+        let (written, _) = run(false, false, carrier);
+        assert!(views >= 2, "{carrier:?}, root {root}: the kept box was never kept");
+        for (stage, (kept, written)) in ["small", "over", "small again"].iter().zip(kept.iter().zip(&written)) {
+            assert_eq!(kept, written, "{carrier:?}, root {root}, {stage}: a kept output is not the one written out");
+        }
+        assert!(written[1].contains("⋯ too large: 88 bytes"), "the output past the limit shows\n{}", written[1]);
+    }
 }
 
 /// A plugin of ABI 1.x whose route shows one text in the theme's muted color.

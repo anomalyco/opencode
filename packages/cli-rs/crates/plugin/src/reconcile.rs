@@ -266,6 +266,9 @@ pub(crate) struct Mounted {
     pub extra: Extra,
     /// It or a node under it shows a tool call's output, which the host reads again each revision.
     dynamic: bool,
+    /// The node that reads a tool call's output this placeholder stands for: a keep reads the output again
+    /// (review bigboi 4).
+    stood: Option<Box<Node>>,
 }
 
 pub(crate) enum Extra {
@@ -715,8 +718,18 @@ impl Tree {
                         {
                             return Err(Refused::Unknown(key.clone()));
                         }
-                        // What the tree holds under the id, as it holds it.
-                        let rows = self.tree.admitted.rows.get(key.as_str()).copied().unwrap_or(0);
+                        // What the tree holds under the id, as it holds it, with the tool call outputs under it as
+                        // they are now: one admitted otherwise than it shows asks for a whole tree (review bigboi 4).
+                        let mut rows = self.tree.admitted.rows.get(key.as_str()).copied().unwrap_or(0);
+                        if let (true, None) = (built, missing)
+                            && let Some(kept) = find(&self.tree.nodes, key).filter(|kept| kept.dynamic)
+                        {
+                            let (shown, now, changed) = outputs(self.env, kept, &self.limits);
+                            if changed {
+                                return Err(Refused::Unknown(key.clone()));
+                            }
+                            rows = (rows + now).saturating_sub(shown);
+                        }
                         let mounted = held.map(|held| Cost { nodes: held.nodes, rows, ..cost });
                         if let (None, Some(mounted)) = (missing, mounted)
                             && (mode == Mode::Admitted || self.fits(&mounted, built))
@@ -1051,19 +1064,9 @@ fn text_cost(env: &Env<'_>, node: &Node) -> Cost {
         source => (env.measure)(source),
     };
     let (text, rows, hunks) = match node {
-        Node::Diff { content, .. } => {
-            let text = read(content);
-            // An added file over 3,000 lines builds its chunks near the view; validation reads no chunk.
-            let rows = if text.chunked { CHUNKED_ROWS } else { text.lines + HUNK_ROWS * text.hunks };
-            (text.bytes, rows, text.hunks)
-        }
-        Node::Code { content, .. } => {
-            let text = read(content);
-            (text.bytes, CODE_ROWS * text.lines, 0)
-        }
-        Node::Markdown { source, .. } => {
+        Node::Diff { content: source, .. } | Node::Code { content: source, .. } | Node::Markdown { source, .. } => {
             let text = read(source);
-            (text.bytes, text.lines, 0)
+            (text.bytes, rows_of(node, text) - 1, if matches!(node, Node::Diff { .. }) { text.hunks } else { 0 })
         }
         Node::Text { spans, .. } => {
             let bytes: u64 = spans.iter().map(|span| span.text.len() as u64).sum();
@@ -1075,6 +1078,18 @@ fn text_cost(env: &Env<'_>, node: &Node) -> Cost {
         _ => (0, 0, 0),
     };
     Cost { own_rows: 1 + rows, text, hunks, ..Cost::default() }
+}
+
+/// The rows a patch, code or Markdown node builds for text that measures `text`, its own row included: a line of
+/// code two, a patch's line one and its hunk [`HUNK_ROWS`]; an added file over 3,000 lines builds its chunks near the
+/// view, and validation reads no chunk.
+fn rows_of(node: &Node, text: Measure) -> u64 {
+    1 + match node {
+        Node::Diff { .. } if text.chunked => CHUNKED_ROWS,
+        Node::Diff { .. } => text.lines + HUNK_ROWS * text.hunks,
+        Node::Code { .. } => CODE_ROWS * text.lines,
+        _ => text.lines,
+    }
 }
 
 /// What a source's text costs the host: its bytes; and, within one node's text, its lines, the hunks it has as a
@@ -1183,6 +1198,7 @@ fn take(nodes: &mut [Mounted], plan: &Plan, pool: &mut HashMap<String, Mounted>)
                 children: Vec::new(),
                 extra: Extra::Taken,
                 dynamic: false,
+                stood: None,
             };
             pool.insert(id, std::mem::replace(node, taken));
         }
@@ -1207,6 +1223,11 @@ fn collect_ids(nodes: &[Mounted], above: Option<&str>, ids: &mut HashMap<String,
         (deepest, count) = (deepest.max(depth), count + nodes);
     }
     (deepest, count)
+}
+
+/// The node of `nodes`' subtrees under id `id`, outside their lists' items.
+fn find<'a>(nodes: &'a [Mounted], id: &str) -> Option<&'a Mounted> {
+    nodes.iter().find_map(|node| if node.node.id() == Some(id) { Some(node) } else { find(&node.children, id) })
 }
 
 /// Calls `f` with each node of `nodes`' subtrees, the items of their lists with widgets included.
@@ -1240,13 +1261,13 @@ impl Pass<'_, '_> {
     fn children(&mut self, parent: &View, old: Vec<Mounted>, new: &[Node]) -> Vec<Mounted> {
         // A node over a limit is its placeholder from here on.
         let over = self.over.clone();
-        let new: Vec<&Node> = new
+        let (new, stood): (Vec<&Node>, Vec<Option<&Node>>) = new
             .iter()
             .filter_map(|node| match over.get(&std::ptr::from_ref(node)) {
-                Some(placeholder) => placeholder.as_ref(),
-                None => Some(node),
+                Some(placeholder) => placeholder.as_ref().map(|placeholder| (placeholder, Some(node))),
+                None => Some((node, None)),
             })
-            .collect();
+            .unzip();
         let slots = old.iter().any(|node| matches!(node.node, Node::Slot { .. }))
             || new.iter().any(|node| matches!(node, Node::Slot { .. }));
         if slots && !self.stays(&old, &new) {
@@ -1258,7 +1279,7 @@ impl Pass<'_, '_> {
                 self.release_slots(&mut node);
                 self.doom(node);
             }
-            return new.iter().map(|node| self.placed(parent, node)).collect();
+            return new.iter().zip(&stood).map(|(node, stood)| stands_for(self.placed(parent, node), *stood)).collect();
         }
         // The widgets as they are in `parent`, when they are there: the children of a box built again are in the
         // old one.
@@ -1275,7 +1296,7 @@ impl Pass<'_, '_> {
         let mut out = Vec::with_capacity(new.len());
         // Whether each child's widget is one the tree had before.
         let mut reused = Vec::with_capacity(new.len());
-        for (node, found) in new.iter().zip(matched) {
+        for ((node, found), stood) in new.iter().zip(matched).zip(&stood) {
             let held = match node.id() {
                 Some(id) => self.pool.remove(id),
                 None => found.and_then(|index| olds[index].take()),
@@ -1284,7 +1305,7 @@ impl Pass<'_, '_> {
                 Some(old) => self.adopt(old, node),
                 None => (self.build(node), false),
             };
-            out.push(mounted);
+            out.push(stands_for(mounted, *stood));
             reused.push(kept);
         }
         olds.into_iter().flatten().for_each(|node| self.doom(node));
@@ -1660,6 +1681,7 @@ impl Pass<'_, '_> {
                         children: Vec::new(),
                         extra: Extra::Canvas(built),
                         dynamic: false,
+                        stood: None,
                     };
                     return Err(Box::new((old, built)));
                 }
@@ -1842,6 +1864,7 @@ impl Pass<'_, '_> {
                 children: Vec::new(),
                 extra: Extra::Slot(slot),
                 dynamic: false,
+                stood: None,
             };
         }
         let mounted = self.build(node);
@@ -2105,7 +2128,7 @@ impl Pass<'_, '_> {
             }
             Node::Slot { .. } | Node::Keep { .. } => unreachable!("a slot is placed, and a keep is held"),
         };
-        Mounted { node: shell(node), widget: Some(widget), children: Vec::new(), extra, dynamic: false }
+        Mounted { node: shell(node), widget: Some(widget), children: Vec::new(), extra, dynamic: false, stood: None }
     }
 
     /// Drops the nested slots of `node` now, outside the subtrees held again.
@@ -2191,6 +2214,37 @@ fn matches(old: &[Mounted], new: &[&Node]) -> Vec<Option<usize>> {
             found
         })
         .collect()
+}
+
+/// `mounted`, a placeholder for `stood`, remembering a node that reads a tool call's output; or `mounted` as it is.
+fn stands_for(mut mounted: Mounted, stood: Option<&Node>) -> Mounted {
+    mounted.stood = stood.filter(|stood| dynamic(stood, &[])).map(|stood| Box::new(stood.clone()));
+    mounted.dynamic |= mounted.stood.is_some();
+    mounted
+}
+
+/// What the tool call outputs under `mounted` cost now, as [`Tree::validate`] admits a keep of it: the rows of the
+/// nodes that show one, as they show it and as it is now; and whether one would be admitted otherwise than it shows,
+/// over a limit by itself now, or a placeholder for one within its limits now.
+fn outputs(env: &Env<'_>, mounted: &Mounted, limits: &limits::Limits) -> (u64, u64, bool) {
+    let over = |cost: &Cost| cost.text > limits.text || cost.hunks > limits.hunks;
+    let (mut shown, mut now, mut changed) = (0, 0, false);
+    match (&mounted.stood, &mounted.extra) {
+        (Some(stood), _) => changed |= !over(&text_cost(env, stood)),
+        (None, Extra::Diff(_, text) | Extra::Chunked(_, text) | Extra::Markdown(_, text) | Extra::Code(_, text))
+            if dynamic(&mounted.node, &[]) =>
+        {
+            let cost = text_cost(env, &mounted.node);
+            changed |= over(&cost);
+            (shown, now) = (rows_of(&mounted.node, measure(text)), cost.own_rows);
+        }
+        _ => {}
+    }
+    for child in mounted.children.iter().filter(|child| child.dynamic) {
+        let (inner_shown, inner_now, inner_changed) = outputs(env, child, limits);
+        (shown, now, changed) = (shown + inner_shown, now + inner_now, changed || inner_changed);
+    }
+    (shown, now, changed)
 }
 
 /// Whether `node`, with `children` under it, shows a tool call's output.
