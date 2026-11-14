@@ -246,6 +246,7 @@ pub fn deps(transport: Arc<dyn Transport>) -> Deps {
         continue_: false,
         events: false,
         builtins: vec![opencode_mermaid::plugin().into(), opencode_latex::plugin().into()],
+        abi_builtins: false,
     }
 }
 
