@@ -143,7 +143,7 @@ impl Activation {
         self.disposed.set(true);
         self.wake.revoked.store(true, Ordering::Release);
         // An ended activation keeps no wake posted.
-        self.wake.consume();
+        self.wake.clear(PENDING | HINTED | POSTED);
         self.mailbox.retire();
         // The wake and mail handlers hold what holds the activation.
         self.on_wake.borrow_mut().take();
@@ -185,6 +185,7 @@ impl Activation {
     /// claims again ([`Activation::step`], [`crate::schedule`]).
     ///
     fn woken(self: &Rc<Self>) {
+        self.wake.delivered();
         if self.disposed() {
             return;
         }
@@ -194,9 +195,9 @@ impl Activation {
     }
 
     /// The scheduler's drain takes the wake, as the plugin's first turn in it starts: until then the wake stays
-    /// posted, so a thread's sends and replaces post no other and wake the UI thread once a drain at most (review
-    /// carbon 4.2). A send or a wake from now on posts another, so none is lost between what this one sees and what it
-    /// handles.
+    /// pending, so a thread's sends and replaces post no other and wake the UI thread once a drain at most (review
+    /// carbon 4.2). A send or a wake from now on posts another once no `Woken` is on its way, so none is lost between
+    /// what this one sees and what it handles.
     pub(crate) fn take_wake(&self) {
         let hinted = self.wake.consume();
         between(0);
@@ -291,9 +292,10 @@ impl Drop for Activation {
     }
 }
 
-/// An activation's wakes, from any thread, in one atomic state: [`PENDING`] while a [`Woken`] waits for the UI thread,
-/// so a burst posts one, and [`HINTED`] when a wake of the plugin's [`abi::Waker`] is among them (a send to its mailbox
-/// is not). Every change is one atomic operation on both bits, so no interleaving of a sender and the UI thread can
+/// An activation's wakes, from any thread, in one atomic state: [`PENDING`] until a drain takes them, so a burst posts
+/// one [`Woken`]; [`HINTED`] when a wake of the plugin's [`abi::Waker`] is among them (a send to its mailbox is not);
+/// and [`POSTED`] while that `Woken` is on its way, so a full UI queue holds one thread an activation that waits to
+/// deliver it. Every change is one atomic operation on the bits, so no interleaving of a sender and the UI thread can
 /// clear a bit that a later wake set without posting again.
 pub(crate) struct Wake {
     id: u64,
@@ -309,10 +311,12 @@ pub(crate) struct Wake {
     pub handled: std::sync::atomic::AtomicUsize,
 }
 
-/// A [`Woken`] waits for the UI thread.
+/// The plugin has wakes that no drain took yet.
 const PENDING: u8 = 1;
 /// The plugin's waker woke the host since the UI thread last consumed the state.
 const HINTED: u8 = 2;
+/// A [`Woken`] is on its way to the UI thread: in its queue, or with a thread that waits for room there.
+const POSTED: u8 = 4;
 
 /// What the model runs at a step of [`Activation::woken`].
 #[cfg(test)]
@@ -374,10 +378,10 @@ impl Wake {
         self.raise(PENDING | HINTED);
     }
 
-    /// Whether a [`Woken`] waits for the UI thread.
+    /// Whether a [`Woken`] is on its way to the UI thread.
     #[cfg(test)]
     pub(crate) fn pending(&self) -> bool {
-        self.state.load(Ordering::Acquire) & PENDING != 0
+        self.state.load(Ordering::Acquire) & POSTED != 0
     }
 
     /// Posts one [`Woken`] until the UI thread handles it, unless the activation ended.
@@ -385,20 +389,38 @@ impl Wake {
         self.raise(PENDING);
     }
 
-    /// The UI thread handles a [`Woken`]: the state goes back to nothing in one step; whether the waker was among it.
+    /// A drain takes the wakes: they go back to nothing in one step, and a `Woken` on its way stays so; whether the
+    /// waker was among them.
     fn consume(&self) -> bool {
-        let state = self.state.swap(0, Ordering::AcqRel);
-        #[cfg(test)]
-        if state & PENDING != 0 {
-            self.handled.fetch_add(1, Ordering::SeqCst);
-        }
-        state & HINTED != 0
+        self.clear(PENDING | HINTED) & HINTED != 0
     }
 
-    /// Sets `bits`, and posts a [`Woken`] when none waits. Catches its own panics.
+    /// The UI thread handled a [`Woken`]: a wake from now on posts another.
+    fn delivered(&self) {
+        self.clear(POSTED);
+    }
+
+    /// Clears `bits` in one step; the state before.
+    fn clear(&self, bits: u8) -> u8 {
+        let state = self.state.fetch_and(!bits, Ordering::AcqRel);
+        #[cfg(test)]
+        if state & bits & POSTED != 0 {
+            self.handled.fetch_add(1, Ordering::SeqCst);
+        }
+        state
+    }
+
+    /// Sets `bits`, and posts a [`Woken`] unless a drain is to take them: one is on its way, or was handled and its
+    /// drain has not taken them yet. Catches its own panics.
     fn raise(&self, bits: u8) {
         let _ = catch_unwind(AssertUnwindSafe(|| {
-            if self.revoked.load(Ordering::Acquire) || self.state.fetch_or(bits, Ordering::AcqRel) & PENDING != 0 {
+            if self.revoked.load(Ordering::Acquire) {
+                return;
+            }
+            let posts = |state: u8| state & (PENDING | POSTED) == 0;
+            let raised = |state: u8| state | bits | if posts(state) { POSTED } else { 0 };
+            let state = self.state.update(Ordering::AcqRel, Ordering::Acquire, raised);
+            if !posts(state) {
                 return;
             }
             let Some(proxy) = &self.proxy else {
@@ -410,9 +432,10 @@ impl Wake {
             match proxy.send(Woken(self.id)) {
                 Ok(()) => {}
                 Err(ProxyError::Closed) => self.state.store(0, Ordering::Release),
-                // The UI thread is behind. The wake stays pending, so later ones join it, and a thread delivers it
-                // once the queue has room, as `App::spawn` does with a completion. That thread holds no pointer into
-                // the plugin, so it may outlive it; a `Woken` for a disposed activation finds no handler.
+                // The UI thread is behind. The `Woken` stays posted until it is handled, though a drain takes the
+                // wakes meanwhile, so later ones join it and this is the activation's one thread that waits: it
+                // delivers it once the queue has room, as `App::spawn` does with a completion. That thread holds no
+                // pointer into the plugin, so it may outlive it; a `Woken` for a disposed activation finds no handler.
                 Err(ProxyError::Full) => {
                     let (proxy, id) = (proxy.clone(), self.id);
                     let retry = std::thread::Builder::new().name("plugin-wake".to_owned()).spawn(move || {
