@@ -122,10 +122,10 @@ export const Availability = Schema.Struct({
     Schema.Struct({
       /** Days the window applies to, `mon` to `sun`; every day when omitted. */
       days: Schema.Literals(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]).pipe(Schema.Array, optional),
-      /** Inclusive start, HH:mm in the window's timezone; mirrored validated by the config schema. */
-      start: Schema.String,
+      /** Inclusive start of the window, HH:mm in the window's timezone; mirrored validated by the config schema. */
+      start: Schema.String.check(Schema.isPattern(/^(?:[01]\d|2[0-3]):[0-5]\d$/u)),
       /** Inclusive end; earlier than `start` wraps past midnight. */
-      end: Schema.String,
+      end: Schema.String.check(Schema.isPattern(/^(?:[01]\d|2[0-3]):[0-5]\d$/u)),
     }),
   ),
   /** IANA timezone for window times; `UTC` when omitted. Invalid names fail model selection with a config error. */

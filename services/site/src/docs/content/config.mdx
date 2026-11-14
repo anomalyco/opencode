@@ -593,15 +593,21 @@ with a no-route error.
   used; `"allow"` treats them as the only times it may.
 - `windows[].days`: `mon` through `sun`; every day when omitted. `start` and
   `end` are inclusive `HH:mm` in the window's timezone; an `end` earlier
-  than `start` wraps past midnight (counting as the listed day).
-- `timezone`: an IANA timezone name, `UTC` by default.
+  than `start` wraps past midnight (counting as the listed day), and
+  `start === end` matches exactly that one minute, not the whole day.
+- `timezone`: an IANA timezone name, `UTC` by default. Windows are evaluated
+  as wall-clock time in the named zone, so daylight-saving transitions follow
+  that zone's rules.
 - `fallback`: a `provider/model` or `provider/model#variant` reference used
   while a window blocks the model.
 
 While a window blocks the model, requests silently use the fallback: the UI
-and clients keep showing the configured model, and the only trace is a log
-line on the server. Making the substitution visible in the UI may be added
-later.
+and clients keep showing the configured model — cost accounting uses the
+effective (fallback) model — and the only trace is a log line on the server.
+Making the substitution visible in the UI may be added later.
+
+A model-level `availability` in the config replaces (not merges with) any
+availability a catalog or plugin already provided for that model.
 
 Fallback chains are followed transitively up to three hops, cycles are
 detected and reported, and a blocked model with no usable fallback fails

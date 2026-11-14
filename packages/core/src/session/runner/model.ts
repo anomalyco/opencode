@@ -161,7 +161,6 @@ export const layer = Layer.effect(
               try: () => Model.Ref.parse(fallback),
               catch: () => blocked(info, "malformed-fallback", fallback),
             })
-            if (ref === undefined) return yield* blocked(info, "malformed-fallback", fallback)
             const identity = `${ref.providerID}/${ref.id}`
             if (visited.has(identity)) return yield* blocked(info, "cycle-detected", fallback)
             const next = yield* find(ref)
@@ -199,6 +198,10 @@ export const layer = Layer.effect(
     })
     return Service.of({
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, available, request) {
+        const find = (ref: Model.Ref) =>
+          available().pipe(
+            Effect.map((models) => models.find((model) => model.providerID === ref.providerID && model.id === ref.id)),
+          )
         const selected = yield* select(session, available)
         const ref = Model.Ref.make({
           providerID: selected.info.providerID,
@@ -211,6 +214,19 @@ export const layer = Layer.effect(
           kind: request.kind,
           model: ref,
         })).model
+        // Availability applies to hook overrides too: a hook-chosen model that a window currently
+        // blocks is ignored and the availability-approved selection (or its fallback) is used.
+        if (model.providerID !== ref.providerID || model.id !== ref.id || model.variant !== ref.variant) {
+          const override = yield* find(model)
+          const usable = override === undefined || (yield* ModelAvailability.check(override))
+          if (!usable) {
+            yield* Effect.logInfo("hook model blocked by availability window, keeping the availability selection", {
+              provider: model.providerID,
+              model: model.id,
+            })
+            return yield* resolver.resolveModel(selected.info, selected.variant)
+          }
+        }
         if (model.providerID === ref.providerID && model.id === ref.id && model.variant === ref.variant)
           return yield* resolver.resolveModel(selected.info, selected.variant)
         // Same provider only: the model may be hidden from the picker, and its credentials and hooks stay the selection's.

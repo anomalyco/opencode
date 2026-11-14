@@ -95,6 +95,19 @@ describe("ModelAvailability.check", () => {
     }),
   )
 
+  it.effect("does not extend a wrapping window into an unlisted head day", () =>
+    Effect.gen(function* () {
+      // Only the head day (Friday) is listed; the tail after midnight belongs to Friday.
+      const availability: Model.Availability = {
+        windows: [{ days: ["fri"], start: "22:00", end: "04:00" }],
+      }
+      // Friday 23:00 — head day, inside.
+      expect(yield* blocked(availability, UTC(5, 23, 0))).toBe(true)
+      // Friday 04:30 — head day, before the window starts.
+      expect(yield* blocked(availability, UTC(5, 4, 30))).toBe(false)
+    }),
+  )
+
   it.effect("applies a whole-day window on every day by default", () =>
     Effect.gen(function* () {
       const availability: Model.Availability = { windows: [{ start: "00:00", end: "23:59" }] }

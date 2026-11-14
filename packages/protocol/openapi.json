@@ -20586,10 +20586,12 @@
                   }
                 },
                 "start": {
-                  "type": "string"
+                  "type": "string",
+                  "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
                 },
                 "end": {
-                  "type": "string"
+                  "type": "string",
+                  "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
                 }
               },
               "required": ["start", "end"],

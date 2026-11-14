@@ -11,7 +11,9 @@ function parseTime(value: string): number {
   return Number(hours) * 60 + Number(minutes)
 }
 
-// Formatters are expensive; cache one per configured timezone (bounded by config variety).
+// Formatters are expensive; cache a bounded number (config variety is tiny, but the
+// catalog is untrusted input, so the cache cannot grow without limit).
+const FORMATTER_CACHE_LIMIT = 32
 const formatters = new Map<string, Intl.DateTimeFormat>()
 const formatter = (timezone: string) => {
   let value = formatters.get(timezone)
@@ -23,6 +25,14 @@ const formatter = (timezone: string) => {
       minute: "2-digit",
       weekday: "short",
     })
+    formatters.set(timezone, value)
+    if (formatters.size > FORMATTER_CACHE_LIMIT) {
+      // Map iteration is insertion-ordered: drop the oldest entry.
+      formatters.delete(formatters.keys().next().value as string)
+    }
+  } else {
+    // Refresh recency so eviction retires the least-recently used entry.
+    formatters.delete(timezone)
     formatters.set(timezone, value)
   }
   return value

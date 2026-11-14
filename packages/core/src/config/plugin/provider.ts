@@ -273,7 +273,10 @@ function overlay(
     if (config.availability !== undefined) {
       model.availability = {
         ...(config.availability.mode === undefined ? {} : { mode: config.availability.mode }),
-        windows: config.availability.windows.map((window) => ({ ...window, days: window.days ? [...window.days] : undefined })),
+        windows: config.availability.windows.map((window) => ({
+          ...window,
+          days: window.days === undefined ? undefined : [...window.days],
+        })),
         ...(config.availability.timezone === undefined ? {} : { timezone: config.availability.timezone }),
         ...(config.availability.fallback === undefined ? {} : { fallback: config.availability.fallback }),
       }

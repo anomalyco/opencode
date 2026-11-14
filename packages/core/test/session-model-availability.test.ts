@@ -36,11 +36,23 @@ const languageModel = (provider: string, id: string) =>
 const testLayer = (options: {
   readonly agentModel?: { readonly providerID: string; readonly id: string }
   readonly resolverFallback?: Model.Info
+  /** When set, the `experimental.model.resolve` hook returns this model instead of the input. */
+  readonly hookModel?: { readonly providerID: string; readonly id: string; readonly variant?: string }
 }) => {
   const stubResolver = Layer.succeed(
     ModelResolver.Service,
     ModelResolver.Service.of({
-      resolve: () => Effect.succeed(undefined),
+      resolve: (model: Model.Ref) => {
+        const info = modelInfo(model.providerID, model.id)
+        return Effect.succeed(
+          SessionRunnerModel.resolved(languageModel(model.providerID, model.id), {
+            capabilities: info.capabilities,
+            cost: info.cost,
+            limit: info.limit,
+            ...(model.variant === undefined ? {} : { variant: model.variant }),
+          }),
+        )
+      },
       fallback: () => Effect.succeed(options.resolverFallback),
       resolveModel: (info: Model.Info, variant?: Model.VariantID) =>
         Effect.succeed(
@@ -67,7 +79,19 @@ const testLayer = (options: {
   const stubHooks = Layer.succeed(
     PluginHooks.Service,
     PluginHooks.Service.of({
-      trigger: (_domain: never, _name: never, event: never) => Effect.succeed(event),
+      trigger: (_domain: never, _name: never, event: never) =>
+        Effect.succeed(
+          options.hookModel === undefined
+            ? event
+            : {
+                ...(event as object),
+                model: {
+                  providerID: options.hookModel.providerID,
+                  id: options.hookModel.id,
+                  variant: options.hookModel.variant,
+                },
+              },
+        ),
     } as never),
   )
   return Layer.provide(SessionRunnerModel.layer, Layer.mergeAll(stubResolver, stubAgents, stubHooks))
@@ -219,6 +243,43 @@ describe("SessionRunnerModel availability fallback", () => {
       }, UTC(1, 12))
       expect(Exit.isFailure(result)).toBe(true)
       expect(blockedReason(result)).toBe("malformed-fallback")
+    }),
+  )
+
+  it.effect("ignores a hook override that picks a time-blocked model", () =>
+    Effect.gen(function* () {
+      const primary = modelInfo("deepseek", "chat", { ...ALWAYS_BLOCKED, fallback: "anthropic/claude" })
+      const fallback = modelInfo("anthropic", "claude")
+      // The hook redirects to another blocked model; the availability-approved fallback must win.
+      const hookTarget = modelInfo("openai", "gpt", ALWAYS_BLOCKED)
+      const layer = testLayer({ hookModel: { providerID: "openai", id: "gpt" } })
+      const result = yield* resolveSelection([primary, fallback, hookTarget], { providerID: "deepseek", id: "chat" }, UTC(1, 12), layer)
+      const ref = Exit.isSuccess(result) ? result.value.ref : undefined
+      expect(ref && `${ref.providerID}/${ref.id}`).toBe("anthropic/claude")
+    }),
+  )
+
+  it.effect("honors a hook override that picks an allowed model", () =>
+    Effect.gen(function* () {
+      const primary = modelInfo("deepseek", "chat", { ...ALWAYS_BLOCKED, fallback: "anthropic/claude" })
+      const fallback = modelInfo("anthropic", "claude")
+      // Hook overrides stay on the selection's provider; pick another allowed model there.
+      const allowed = modelInfo("anthropic", "other")
+      const layer = testLayer({ hookModel: { providerID: "anthropic", id: "other" } })
+      const result = yield* resolveSelection([primary, fallback, allowed], { providerID: "deepseek", id: "chat" }, UTC(1, 12), layer)
+      const ref = Exit.isSuccess(result) ? result.value.ref : undefined
+      expect(ref && `${ref.providerID}/${ref.id}`).toBe("anthropic/other")
+    }),
+  )
+
+  it.effect("resolves a #variant fallback ref through the runner", () =>
+    Effect.gen(function* () {
+      const primary = modelInfo("deepseek", "chat", { ...ALWAYS_BLOCKED, fallback: "anthropic/claude#fast" })
+      const fallback = modelInfo("anthropic", "claude")
+      const result = yield* resolveSelection([primary, fallback], { providerID: "deepseek", id: "chat" }, UTC(1, 12))
+      const ref = Exit.isSuccess(result) ? result.value.ref : undefined
+      expect(ref && `${ref.providerID}/${ref.id}`).toBe("anthropic/claude")
+      expect(ref && ref.variant).toBe("fast" as never)
     }),
   )
 })
