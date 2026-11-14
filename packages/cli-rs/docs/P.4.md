@@ -394,17 +394,27 @@ and the empty one as it opens, the rows the search returns from the enabled ones
 
 ### The plugin list (P6b)
 
-`Read::plugins` lists the TUI plugins in the host's order: each with its ID, its target, its origin (built in, added,
-configured and not loaded, or external), its status (active, inactive, skipped, failed, pending, declined), the error or
-the reason, whether it has an activation, and what its calls cost while it is slow. `Setup::on_plugins` runs after
-that list changed (a plugin enabled, disabled, loaded, approved, declined, failed or slow), once for changes that come
-together and never when nothing changed; over the C ABI it is `{"type": "plugins"}`, and the read
-`{"type": "plugins"}` of the host. Only the host changes the list: a plugin offers a toggle row and the user picks it.
+`Read::plugins` lists the TUI plugins in the host's order: each with a key that names it and no other entry, its ID,
+its target, its origin (built in, added, configured and not loaded, or external), its status (active, inactive,
+skipped, failed, pending, declined), whether it has an activation, and whether it is slow and what its calls cost then.
+No error text: an error can hold another plugin's paths, data or secrets, so the host shows it to the user alone, in
+an error view whose `plugin` names the entry. A held build that shares its ID with a loaded plugin, after a crash, is
+an entry of its own. `Setup::on_plugins` runs after that list changed (a plugin enabled, disabled, loaded, approved,
+declined, failed, skipped by a config edit, or becoming slow or no longer slow), once for changes that come together
+and never when nothing changed, nor when only the cost of a slow plugin changed; over the C ABI it is
+`{"type": "plugins"}`, and the read `{"type": "plugins"}` of the host. A failed handler is a contained call named
+`on-plugins`. Only the host changes the list: a plugin offers a toggle row, named by the entry's key, and the user
+picks it with the host's `plugins.toggle` (or the select's own enter, as TS's manager). A select action may not take
+`plugins.toggle` or a select command of the host, and one the host cannot bind is left out. A select action that names a
+keybind the config knows takes the config's keys alone, so `none` turns it off.
 
 The plugin manager (`opencode.plugins`, `crates/tui/src/plugins/manager.rs`) is a plugin of this contract on both
-carriers: `/plugins` opens its rich select, its rows follow `on_plugins` while the select shows, and the server rows,
-check and update are fetches. While it has failed, the host keeps a read-only `/plugins` whose row for the manager
-starts it again (`crates/tui/src/plugins/fallback.rs`, deviation `F16-plugin-manager-fallback`).
+carriers: `/plugins` opens its rich select, its rows follow `on_plugins` while the select shows, the newest read of the
+server list shows whatever order the replies come in, and the server rows, check and update are fetches. Its own
+helper commands act only while its list shows. While it has failed, the host keeps a read-only `/plugins` whose row
+for the manager starts it again on the user's key or click (`crates/tui/src/plugins/fallback.rs`, deviation
+`F16-plugin-manager-fallback`); a restart whose setup fails leaves it failed. The manager's slow toast has no
+Disable. A release of a crashed build that the crash list cannot record does not happen, and says why.
 
 ### Storage
 
