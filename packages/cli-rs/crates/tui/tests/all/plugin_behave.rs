@@ -923,3 +923,52 @@ fn a_list_refuses_what_crosses_its_items() {
     adopt(&host, &mut tree, &[list(vec![v2::ListItem::new(keep("a"), 1), item("b", vec![])])]).unwrap();
     adopt(&host, &mut tree, &[list(vec![item("a", vec![keep("a.x")]), item("b", vec![])])]).unwrap();
 }
+
+// A large added file.
+
+fn big_setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let command =
+        |name: &str| abi::Command { name: name.into(), scope: abi::Scope::Route("big".into()), ..Default::default() };
+    let target = || v2::Target::node("big", "files");
+    setup.command(command("big.end"), move |host, _| host.scroll(target(), v2::Scroll::Edge { edge: v2::Edge::Bottom }));
+    setup.command(command("big.at"), move |host, input| {
+        let offset = input.and_then(|offset| offset.parse().ok()).unwrap_or(0);
+        host.scroll(target(), v2::Scroll::Offset { offset });
+    });
+    setup.surface(v2::Surface::new("big", v2::Place::Route("big".into()), |_| {
+        let lines: String = (0..5000).map(|line| format!("+line_{line}\n")).collect();
+        let patch = format!("--- /dev/null\n+++ b/big.txt\n@@ -0,0 +1,5000 @@\n{lines}");
+        let diff = v2::Node::Diff {
+            id: Some("big".into()),
+            content: v2::Source::Text(patch),
+            view: v2::DiffView::Unified,
+            filetype: None,
+            hunks: Some("hunk".into()),
+        };
+        v2::Node::column(vec![v2::Node::scroll(vec![diff]).with_id("files").layout(abi::Layout::default().grow())])
+            .layout(abi::Layout::default().grow())
+    }));
+    Ok(())
+}
+
+// Expected (synthesis 3.5, review F7): a patch that adds a file of more than 3,000 lines mounts its chunks near the
+// view after the solve, so a jump to its end or its middle shows those lines in the frame of the key.
+#[test]
+fn a_large_added_file_mounts_its_chunks_near_the_view() {
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![abi::Plugin { id: "test.big", setup: big_setup }.into()],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount(60, 14, deps);
+    harness.tui.navigate(Route::Plugin { id: "test.big".into(), name: "big".into() });
+    harness.app.advance(Duration::ZERO);
+    assert!(harness.app.render().text().contains("line_0"));
+    for (command, input, line) in [("big.end", None, "line_4999"), ("big.at", Some("2500"), "line_2505")] {
+        let _ = harness.tui.keymap.dispatch(command, input);
+        harness.app.advance(Duration::ZERO);
+        let first = harness.app.render();
+        assert!(first.text().contains(line), "{command} does not show {line}:\n{}", first.text());
+        assert!(!harness.app.needs_frame() || harness.app.render() == first, "{command}'s first frame was not settled");
+    }
+}
