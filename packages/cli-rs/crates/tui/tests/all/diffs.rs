@@ -1362,3 +1362,147 @@ fn the_base_picker_marks_the_base_reported_after_it_opened() {
         h.wait("the reported base is not marked", || marked(&h));
     });
 }
+
+/// The route over files of `lines` lines each, at `width` by `height`, open and drawn.
+fn route_of(lines: &[usize], width: u16, height: u16) -> Diffs {
+    let files: Vec<Value> = lines.iter().enumerate().map(|(index, lines)| hunk_file(index, *lines)).collect();
+    let h = mount_with(Route::Home, Value::Array(files), width, height);
+    h.wait_for("/project");
+    h.tui.keymap.dispatch("diff.open", None);
+    h.wait_for("f0000.rs");
+    h.settle();
+    h
+}
+
+impl Diffs {
+    /// Opens the file menu of `file`'s tree row and runs its one action.
+    fn menu_on_row(&self, file: &str) {
+        let (x, y) = self.find(&format!("≡ {file}"));
+        self.app.mouse(MouseEventKind::Down(MouseButton::Right), x, y);
+        self.wait_for("Mark ");
+        self.keys(&["return"]);
+    }
+}
+
+// Expected (`toggleFileReviewed` keeps the reading position; carbon's REPRO_9 against decision 14): with the selected
+// card mid-screen below another, a file above it that opens again (marked incomplete) keeps the selected card in
+// view, on both carriers.
+#[test]
+fn a_file_above_that_opens_again_keeps_the_selected_card_in_view() {
+    on_both(|| {
+        let h = route_of(&[28, 8, 22, 8, 4], 120, 30);
+        h.menu_on_row("f0002.rs");
+        h.keys(&["n", "n", "n"]);
+        assert!(h.settle().contains("src/f0003.rs"), "{}", h.app.text());
+        h.menu_on_row("f0002.rs");
+        let screen = h.settle();
+        assert!(
+            screen.lines().any(|line| line.chars().skip(TREE).collect::<String>().contains("src/f0003.rs")),
+            "{screen}"
+        );
+    });
+}
+
+// Expected (carbon's CM2): content of an earlier load is released, so what the viewer holds in the host stays flat over
+// reloads of the same files, on both carriers.
+#[test]
+fn reloads_release_the_content_of_the_load_before() {
+    on_both(|| {
+        let h = mount(support::session_route("ses_a"));
+        h.wait_for("Review");
+        h.tui.keymap.dispatch("diff.open", None);
+        h.wait_for("src/main.rs");
+        let held = || opencode_plugin::surface::ledger_of("opencode.diffs").content_bytes;
+        h.turn();
+        h.settle();
+        let first = held();
+        for _ in 0..3 {
+            h.turn();
+            h.settle();
+        }
+        assert_eq!(held(), first, "the content of earlier loads stayed");
+    });
+}
+
+// Expected (carbon's CM3, CM5, CM7, CM8): the compact footer's close leaves a narrow route; the view toggle where split
+// has no room saves nothing; the header's `?` opens the help with the tree hidden; a right press on the file menu's
+// row closes the menu.
+#[test]
+fn the_viewers_small_controls_do_what_they_say() {
+    on_both(|| {
+        let h = route(2, 4, 48, 28);
+        h.keys(&["v"]);
+        assert!(diffs_setting(&h)["view"].is_null(), "the toggle without room saved {}", diffs_setting(&h));
+        let (x, y) = h.find("close");
+        h.app.click(x, y);
+        h.wait("the footer's close did not leave", || h.tui.route() == Route::Home);
+
+        let h = route(2, 4, 140, 30);
+        h.keys(&["b"]);
+        h.wait("the tree did not hide", || !h.app.text().contains("≡ f0000.rs"));
+        let screen = h.settle();
+        let (y, line) = screen.lines().enumerate().find(|(_, line)| line.trim_end().ends_with('?')).unwrap();
+        h.app.click(line.trim_end().chars().count() as u16 - 1, y as u16);
+        h.wait("the header's ? did not open the help", || h.tui.dialogs.is_open());
+        h.keys(&["escape"]);
+
+        let h = route(2, 4, 120, 30);
+        let (x, y) = h.find("≡ f0000.rs");
+        h.app.mouse(MouseEventKind::Down(MouseButton::Right), x, y);
+        h.wait_for("Mark complete");
+        let (x, y) = h.find("Mark complete");
+        h.app.mouse(MouseEventKind::Down(MouseButton::Right), x, y);
+        h.assert_menu_closed();
+        assert!(h.reviewed().is_empty(), "the right press on the menu ran it");
+    });
+}
+
+// Expected (carbon's CM4): picking the base the viewer shows again loads nothing, and a base picked in Uncommitted,
+// which shows no base, loads nothing either, on both carriers.
+#[test]
+fn a_base_pick_that_changes_nothing_loads_nothing() {
+    on_both(|| {
+        for working in [false, true] {
+            let h = base_picker(json!(["main", "dev"]));
+            if working {
+                h.keys(&["escape"]);
+                h.keys(&["d"]);
+                h.wait_for("Diff source");
+                h.keys(&["down", "down", "return"]);
+                h.wait_for("Uncommitted");
+                h.keys(&["d"]);
+                h.wait_for("Diff source");
+                h.keys(&["down", "return"]);
+            }
+            h.wait_for("main");
+            let reads = || h.memory.requests().iter().filter(|logged| logged.path == "/api/vcs/diff").count();
+            if !working {
+                h.keys(&["return"]);
+                h.settle();
+                h.keys(&["d"]);
+                h.wait_for("Diff source");
+                h.keys(&["down", "down", "down", "return"]);
+                h.wait_for("main");
+            }
+            let before = reads();
+            h.keys(&["return"]);
+            h.settle();
+            h.app.advance(Duration::from_millis(50));
+            assert_eq!(reads(), before, "the pick loaded again (Uncommitted: {working})");
+        }
+    });
+}
+
+// Expected (carbon's CM6): a patch too long to show whole (3,100 lines, in chunks) laid out compact after a resize from
+// the full layout shows as one opened compact, its gutter's padding with it.
+#[test]
+fn a_chunked_patch_takes_the_padding_of_the_layout() {
+    let opened = |resize: bool| {
+        let h = route_of(&[3100], if resize { 140 } else { 80 }, 30);
+        if resize {
+            h.app.resize(80, 30);
+        }
+        h.settle()
+    };
+    assert_eq!(opened(true), opened(false));
+}
