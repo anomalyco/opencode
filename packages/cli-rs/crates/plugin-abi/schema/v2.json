@@ -1104,10 +1104,78 @@
               "type": "null"
             }
           ]
+        },
+        "absolute": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Absolute"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [],
       "description": "How a node takes space in its parent's row or column."
+    },
+    "Absolute": {
+      "type": "object",
+      "properties": {
+        "top": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -32768,
+              "maximum": 32767
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "right": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -32768,
+              "maximum": 32767
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bottom": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -32768,
+              "maximum": 32767
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "left": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -32768,
+              "maximum": 32767
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "z": {
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "description": "Where an absolute node sits: cells from its parent's edges, and its paint order."
     },
     "Width": {
       "oneOf": [

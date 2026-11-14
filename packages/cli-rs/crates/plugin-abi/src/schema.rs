@@ -13,8 +13,8 @@ use crate::v2::{
     SurfaceInput, Target, Top, TranscriptRow, TranscriptView,
 };
 use crate::{
-    Action, Align, Border, BorderStyle, Changed, Click, Color, Edges, Justify, Layout, LocationRef, Overflow, Press,
-    PromptInput, Sides, SlotInput, Span, TitleAlign, Width, Wrap,
+    Absolute, Action, Align, Border, BorderStyle, Changed, Click, Color, Edges, Justify, Layout, LocationRef, Overflow,
+    Press, PromptInput, Sides, SlotInput, Span, TitleAlign, Width, Wrap,
 };
 
 /// What an [`Rgba`] is on the wire: `#rrggbbaa`. The host writes lowercase and reads either case.
@@ -249,7 +249,14 @@ pub fn schema() -> Value {
                 width: nullable(reference("Width")), grow: boolean(), shrink: nullable(boolean()),
                 min_width_zero: boolean(), height: nullable(reference("Width")),
                 min_height: nullable(reference("Width")), max_height: nullable(reference("Width")),
-                margin: nullable(reference("Edges")),
+                margin: nullable(reference("Edges")), absolute: nullable(reference("Absolute")),
+            }),
+        ),
+        (
+            "Absolute",
+            object!(Absolute, "Where an absolute node sits: cells from its parent's edges, and its paint order.", { } {
+                top: nullable(int16()), right: nullable(int16()), bottom: nullable(int16()), left: nullable(int16()),
+                z: json!({ "type": "integer" }),
             }),
         ),
         (
