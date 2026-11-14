@@ -1933,7 +1933,26 @@ fn panicky(setup: &mut abi::Setup) -> Result<(), String> {
         render_panic("fence");
         abi::Fenced::Code
     });
+    setup.surface(abi::v2::Surface::new("v", abi::v2::Place::Route("v".into()), |_| {
+        abi::v2::Node::text(vec![abi::Span::new("a view")])
+    }));
     Ok(())
+}
+
+thread_local! {
+    /// What [`corrupting`] answers in place of the plugin's answer, while it is set.
+    static CORRUPT: Cell<Option<&'static [u8]>> = const { Cell::new(None) };
+}
+
+/// The SDK's `call`, whose answer becomes the bytes [`CORRUPT`] holds, as a library with a bug would answer.
+unsafe extern "C" fn corrupting(instance: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
+    // SAFETY: the loader passes what `PluginApi::call` documents.
+    let status = unsafe { abi::runtime::call(instance, request, out) };
+    if let (abi::OK, Some(bytes)) = (status, CORRUPT.get()) {
+        // SAFETY: `out` holds the shim's answer, which the shims' `free` takes back.
+        unsafe { abi::runtime::free(std::ptr::replace(out, Owned::from_vec(bytes.to_vec()))) };
+    }
+    status
 }
 
 /// `panicky` active in process, or through the C ABI's byte shims as a library that tells its ID.
@@ -1955,7 +1974,7 @@ fn panicking(host: &Rc<TestHost>, through: bool) -> Rc<Registry> {
         minor: ABI_MINOR,
         requires_minor: 0,
         create: Some(abi::export_plugin!(@loopback "panicky", panicky)),
-        call: Some(abi::runtime::call),
+        call: Some(corrupting),
         destroy: Some(abi::runtime::destroy),
         free: Some(abi::runtime::free),
         describe: Some(describe),
@@ -2837,4 +2856,42 @@ fn opening_a_library_is_its_load() {
     assert!(loader.reconcile(&dynamic(&host), &registry));
     let (load, setup) = registry.monitor().load("sample");
     assert!(load.is_some() && setup.is_some(), "{load:?} {setup:?}");
+}
+
+// Expected (`no-effects`, a refused buffer; synthesis 4.14): a command whose answer the host cannot decode, because it
+// is cut short, random bytes or empty, leaves the host as the run where the command does nothing, and fails the plugin
+// once, naming the call; the same command with a good answer does have effects. A view whose tree names a node kind
+// the host does not know is refused whole, and the failure names the kind.
+#[test]
+fn a_result_the_host_refuses_has_no_effects() {
+    let (quiet, _) = panicky_run("command", ("", false), true);
+    let (leaked, _) = panicky_run("command", ("command", false), true);
+    assert_ne!(leaked, quiet, "the guard: the command's effects show");
+    let bad: [&'static [u8]; 3] = [b"{\"ty", &[0xff, 0x00, 0x13, 0x37], b""];
+    for bytes in bad {
+        CORRUPT.set(Some(bytes));
+        let (refused, (entry, failed, command)) = panicky_run("command", ("command", false), true);
+        CORRUPT.set(None);
+        assert_eq!(refused, quiet, "{bytes:?}");
+        let error = match &entry.status {
+            Status::Failed(error) => error.clone(),
+            status => panic!("{bytes:?}: {status:?}"),
+        };
+        assert!(error.starts_with("run-command returned a bad result: "), "{error}");
+        assert_eq!((entry.active, failed, command), (true, 1, false), "{bytes:?}");
+    }
+
+    let host = host();
+    let registry = panicking(&host, true);
+    CORRUPT.set(Some(br#"{"node":{"type":"wormhole","depth":7}}"#));
+    let route = registry.route(&*host, "panicky", "v");
+    CORRUPT.set(None);
+    host.app.advance(Duration::from_millis(1));
+    let entry = registry.entries().into_iter().find(|entry| entry.id == "panicky").unwrap();
+    let named = |error: &str| error.starts_with("view returned a bad result") && error.contains("wormhole");
+    assert!(matches!(&entry.status, Status::Failed(error) if named(error)), "{:?}", entry.status);
+    host.app().root().clear();
+    host.app().root().add(&route.unwrap().root());
+    host.app.render();
+    assert!(!host.app.text().contains("a view"), "{}", host.app.text());
 }
