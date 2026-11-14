@@ -210,10 +210,14 @@ const PENDING: u8 = 1;
 /// The plugin's waker woke the host since the UI thread last consumed the state.
 const HINTED: u8 = 2;
 
+/// What the model runs at a step of [`Activation::woken`].
+#[cfg(test)]
+pub(crate) type Between = Box<dyn FnMut(usize)>;
+
 #[cfg(test)]
 thread_local! {
     /// Runs between the steps of [`Activation::woken`], for the model that puts sends and wakes in each gap.
-    pub(crate) static BETWEEN: RefCell<Option<Box<dyn FnMut(usize)>>> = RefCell::new(None);
+    pub(crate) static BETWEEN: RefCell<Option<Between>> = RefCell::new(None);
 }
 
 /// The test hook between the steps of [`Activation::woken`].
