@@ -58,6 +58,7 @@
 
 #![allow(unsafe_code)]
 
+pub mod canvas;
 pub mod mail;
 mod schema;
 pub mod v2;
