@@ -70,7 +70,7 @@ export function Home() {
     const r = ref()
     if (sent) return
     if (!r) return
-    if (!local.model.ready || !local.model.catalogReady) return
+    if (!local.model.ready || !local.catalogsLoaded()) return
     if (!local.agent.current() || !local.model.current()) return
     if (!args.prompt) return
     if (r.current.text !== args.prompt) return
