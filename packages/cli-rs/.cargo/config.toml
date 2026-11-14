@@ -1,4 +1,5 @@
-# Native OpenTUI artifacts whose opentui.h matches the bindings at the client's OpenTUI `rev`, in the shared
-# directory that native-hardening's abi-artifacts.py fills from that `rev`. A value set in the shell wins.
+# Native OpenTUI artifacts whose opentui.h matches the bindings at the client's OpenTUI `rev`. Each pin has its own
+# directory, named by the short `rev`, so a re-pin does not swap the library under another branch's build. Fill it with
+# native-hardening's `abi-artifacts.py --client <Cargo.toml> --dest <that directory>`. A value set in the shell wins.
 [env]
-OPENTUI_LIB_DIR = { value = "/home/simon/.cache/opentui-native/x86_64-linux", force = false }
+OPENTUI_LIB_DIR = { value = "/home/simon/.cache/opentui-native/32e9e414e/x86_64-linux", force = false }
