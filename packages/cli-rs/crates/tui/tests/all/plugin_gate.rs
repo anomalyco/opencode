@@ -9,6 +9,9 @@
 //! - `parts`: where an open, a toggle and a resize of the cards go: making the syntax theme, building the patches,
 //!   the first frame, the view toggle and the resize, each alone.
 //! - `list` (P3): the route's cards as a windowed list, which builds only the cards near the view.
+//! - `narrow` (P3, big-boi's review): the list at 48 by 28 cells, resized to 24 columns, of files of 30, 1, 5, 2 and
+//!   12 hunks of 25 lines in turn, each estimated at 40 rows: modified cards far taller than their estimates, in a
+//!   pane where their lines wrap.
 //!
 //! `GATE_SIZES` (default `40,410,1000`) sets the files, `GATE_PARTS` the parts. Native layout rounds are counted per
 //! frame; OpenTUI does not time a round apart.
@@ -56,10 +59,15 @@ fn rounds(app: &App) -> u32 {
 
 /// A modified file of five hunks of 25 lines, 125 lines in all.
 fn patch(file: usize) -> String {
+    patch_of(file, 5)
+}
+
+/// A modified file of `hunks` hunks of 25 lines.
+fn patch_of(file: usize, hunks: usize) -> String {
     let mut patch = format!(
         "diff --git a/src/f{file:04}.rs b/src/f{file:04}.rs\n--- a/src/f{file:04}.rs\n+++ b/src/f{file:04}.rs\n"
     );
-    for hunk in 0..5 {
+    for hunk in 0..hunks {
         let start = 1 + hunk * 40;
         let _ = writeln!(patch, "@@ -{start},17 +{start},17 @@ fn hunk_{hunk}()");
         for line in 0..25 {
@@ -192,6 +200,8 @@ struct Gate {
     widths: Vec<u16>,
     /// P3: the cards are a windowed list, not a scroll's children.
     list: bool,
+    /// The narrow gate's cards: estimated at 40 rows.
+    narrow: bool,
 }
 
 thread_local! {
@@ -261,9 +271,10 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
             })
         })
         .collect::<Vec<_>>();
-    // A card is its header and 125 patch rows with four hunk headers between.
+    // A card is its header and 125 patch rows with four hunk headers between; a narrow gate's are estimated at 40.
+    let estimate = if gate(|gate| gate.narrow) { 40 } else { 130 };
     let scroll = match list {
-        true => v2::Node::list(cards.into_iter().map(|card| v2::ListItem::new(card, 130)).collect()),
+        true => v2::Node::list(cards.into_iter().map(|card| v2::ListItem::new(card, estimate)).collect()),
         false => v2::Node::scroll(cards),
     };
     let scroll = scroll.with_id("files").layout(abi::Layout::default().grow());
@@ -273,17 +284,27 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
     node
 }
 
-fn route(count: usize, list: bool) {
-    let part = if list { "list" } else { "route" };
-    gate(|gate| {
-        *gate = Gate { patches: (0..count).map(patch).collect(), reviewed: vec![false; count], list, ..Gate::default() }
-    });
+fn route(count: usize, list: bool, narrow: bool) {
+    let part = match (narrow, list) {
+        (true, _) => "narrow",
+        (false, true) => "list",
+        (false, false) => "route",
+    };
+    let patches = match narrow {
+        true => (0..count).map(|file| patch_of(file, [30, 1, 5, 2, 12][file % 5])).collect(),
+        false => (0..count).map(patch).collect(),
+    };
+    gate(|gate| *gate = Gate { patches, reviewed: vec![false; count], list, narrow, ..Gate::default() });
     let deps = Deps {
         route: Route::Home,
         builtins: vec![abi::Plugin { id: "test.gate", setup }.into()],
         ..support::deps(Arc::new(support::empty()))
     };
-    let harness = support::mount(WIDTH, HEIGHT, deps);
+    let (width, height, resized, wheel) = match narrow {
+        true => (48, 28, 24, (20, 14)),
+        false => (WIDTH, HEIGHT, 140, (120, 30)),
+    };
+    let harness = support::mount(width, height, deps);
     frames(&harness, Instant::now(), &|_| false);
     let action = |name: &str, step: usize, usable: &dyn Fn(&str) -> bool, run: &dyn Fn()| -> String {
         gate(|gate| gate.view_us = 0.0);
@@ -320,12 +341,12 @@ fn route(count: usize, list: bool) {
     let top = |screen: &str| screen.lines().nth(1).unwrap_or_default().to_owned();
     let before = top(&harness.app.render().text());
     for step in 0..30 {
-        action("wheel", step, &|_| true, &|| harness.app.scroll(120, 30, true));
+        action("wheel", step, &|_| true, &|| harness.app.scroll(wheel.0, wheel.1, true));
     }
     assert_ne!(top(&harness.app.render().text()), before, "the wheel did not scroll the cards");
-    action("resize", 0, &|_| true, &|| harness.app.resize(140, HEIGHT));
+    action("resize", 0, &|_| true, &|| harness.app.resize(resized, height));
     let width = gate(|gate| gate.widths.last().copied());
-    assert_eq!(width, Some(140), "the view did not get the new width");
+    assert_eq!(width, Some(resized), "the view did not get the new width");
 }
 
 // Where the cards' time goes.
@@ -391,10 +412,13 @@ fn gate_probe() {
     let parts_wanted = std::env::var("GATE_PARTS").unwrap_or_else(|_| "today,route,parts".into());
     for &size in &sizes {
         if parts_wanted.contains("route") {
-            route(size, false);
+            route(size, false, false);
         }
         if parts_wanted.contains("list") {
-            route(size, true);
+            route(size, true, false);
+        }
+        if parts_wanted.contains("narrow") {
+            route(size, true, true);
         }
         if parts_wanted.contains("today") {
             today(size);
