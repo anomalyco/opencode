@@ -529,8 +529,8 @@ mod tests {
 
     // Expected: bytes that are not a list are refused whole, whatever came before the fault: no version, another
     // version, a record cut short or longer than the list, a fixed record of another length, text that is not UTF-8,
-    // a character that is not one, a partial cell, cells of no width, an unknown border, a pop without a clip, and
-    // too many clips.
+    // a character that is not one, alone or in a run of cells, a partial cell, cells of no width, an unknown border,
+    // a pop without a clip, and too many clips.
     #[test]
     fn a_list_the_host_cannot_read_is_refused() {
         let good = List::new().fill(0, 0, 1, 1, RED).clone().into_bytes();
@@ -547,6 +547,10 @@ mod tests {
         let end = cell.len();
         cell[end - 4..].copy_from_slice(&0xd800u32.to_le_bytes());
         assert!(malformed(&cell));
+        let mut run = List::new().cells(0, 0, 2, [('a', Style::new()), ('b', Style::new())]).clone().into_bytes();
+        let end = run.len();
+        run[end - 4..].copy_from_slice(&0x11_0000u32.to_le_bytes());
+        assert!(malformed(&run));
         let mut cells = List::new().cells(0, 0, 1, [('a', Style::new())]).clone().into_bytes();
         cells.push(0);
         cells[2] += 1;
