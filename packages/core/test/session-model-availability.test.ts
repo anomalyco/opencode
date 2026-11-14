@@ -38,6 +38,11 @@ const testLayer = (options: {
   readonly resolverFallback?: Model.Info
   /** When set, the `experimental.model.resolve` hook returns this model instead of the input. */
   readonly hookModel?: { readonly providerID: string; readonly id: string; readonly variant?: string }
+  /**
+   * Catalog entries for `Model.Service.get`, the full-catalog lookup the runner uses to
+   * availability-check hook overrides (includes models hidden from the picker list).
+   */
+  readonly catalog?: readonly Model.Info[]
 }) => {
   const stubResolver = Layer.succeed(
     ModelResolver.Service,
@@ -94,7 +99,21 @@ const testLayer = (options: {
         ),
     } as never),
   )
-  return Layer.provide(SessionRunnerModel.layer, Layer.mergeAll(stubResolver, stubAgents, stubHooks))
+  const stubCatalog = Layer.succeed(
+    Model.Service,
+    Model.Service.of({
+      get: (providerID: never, modelID: never) =>
+        Effect.succeed(
+          (options.catalog ?? []).find(
+            (model) => model.providerID === (providerID as string) && model.id === (modelID as string),
+          ),
+        ),
+    } as never),
+  )
+  return Layer.provide(
+    SessionRunnerModel.layer,
+    Layer.mergeAll(stubResolver, stubAgents, stubHooks, stubCatalog),
+  )
 }
 
 const session = (model?: { readonly providerID: string; readonly id: string; readonly variant?: string }) =>
@@ -250,23 +269,47 @@ describe("SessionRunnerModel availability fallback", () => {
     Effect.gen(function* () {
       const primary = modelInfo("deepseek", "chat", { ...ALWAYS_BLOCKED, fallback: "anthropic/claude" })
       const fallback = modelInfo("anthropic", "claude")
-      // The hook redirects to another blocked model; the availability-approved fallback must win.
-      const hookTarget = modelInfo("openai", "gpt", ALWAYS_BLOCKED)
-      const layer = testLayer({ hookModel: { providerID: "openai", id: "gpt" } })
+      // The hook redirects, same provider as the resolved selection, to another blocked model;
+      // the availability-approved fallback must win.
+      const hookTarget = modelInfo("anthropic", "gpt", ALWAYS_BLOCKED)
+      const layer = testLayer({
+        hookModel: { providerID: "anthropic", id: "gpt" },
+        catalog: [hookTarget],
+      })
       const result = yield* resolveSelection([primary, fallback, hookTarget], { providerID: "deepseek", id: "chat" }, UTC(1, 12), layer)
       const ref = Exit.isSuccess(result) ? result.value.ref : undefined
       expect(ref && `${ref.providerID}/${ref.id}`).toBe("anthropic/claude")
     }),
   )
 
-  it.effect("honors a hook override that picks an allowed model", () =>
+  it.effect("ignores a hook override that picks a blocked model hidden from the picker", () =>
     Effect.gen(function* () {
       const primary = modelInfo("deepseek", "chat", { ...ALWAYS_BLOCKED, fallback: "anthropic/claude" })
       const fallback = modelInfo("anthropic", "claude")
-      // Hook overrides stay on the selection's provider; pick another allowed model there.
-      const allowed = modelInfo("anthropic", "other")
-      const layer = testLayer({ hookModel: { providerID: "anthropic", id: "other" } })
-      const result = yield* resolveSelection([primary, fallback, allowed], { providerID: "deepseek", id: "chat" }, UTC(1, 12), layer)
+      // Hidden from `available()` (not in the picker list) but present in the full catalog:
+      // the availability check must still see it.
+      const hidden = modelInfo("anthropic", "hidden", ALWAYS_BLOCKED)
+      const layer = testLayer({
+        hookModel: { providerID: "anthropic", id: "hidden" },
+        catalog: [hidden],
+      })
+      const result = yield* resolveSelection([primary, fallback], { providerID: "deepseek", id: "chat" }, UTC(1, 12), layer)
+      const ref = Exit.isSuccess(result) ? result.value.ref : undefined
+      expect(ref && `${ref.providerID}/${ref.id}`).toBe("anthropic/claude")
+    }),
+  )
+
+  it.effect("honors a hook override that picks an allowed model hidden from the picker", () =>
+    Effect.gen(function* () {
+      const primary = modelInfo("deepseek", "chat", { ...ALWAYS_BLOCKED, fallback: "anthropic/claude" })
+      const fallback = modelInfo("anthropic", "claude")
+      // Hidden from the picker but allowed by its window: the hook choice wins.
+      const hidden = modelInfo("anthropic", "other")
+      const layer = testLayer({
+        hookModel: { providerID: "anthropic", id: "other" },
+        catalog: [hidden],
+      })
+      const result = yield* resolveSelection([primary, fallback], { providerID: "deepseek", id: "chat" }, UTC(1, 12), layer)
       const ref = Exit.isSuccess(result) ? result.value.ref : undefined
       expect(ref && `${ref.providerID}/${ref.id}`).toBe("anthropic/other")
     }),

@@ -9,6 +9,7 @@ import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { Agent } from "../../agent.js"
 import { ModelAvailability } from "../../model-availability.js"
 import { ModelResolver } from "../../model-resolver.js"
+import { Model as ModelService } from "../../model.js"
 import { PluginHooks } from "../../plugin/hooks.js"
 import { SessionSchema } from "../schema.js"
 
@@ -126,6 +127,7 @@ export const layer = Layer.effect(
     const resolver = yield* ModelResolver.Service
     const agents = yield* Agent.Service
     const hooks = yield* PluginHooks.Service
+    const models = yield* ModelService.Service
     // Location plugins populate and filter the catalog asynchronously during layer startup.
     type Selection = { readonly info: Model.Info; readonly variant: Model.VariantID | undefined }
     type SelectionError = ModelBlockedByAvailabilityError | ModelAvailability.TimezoneError
@@ -198,10 +200,6 @@ export const layer = Layer.effect(
     })
     return Service.of({
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, available, request) {
-        const find = (ref: Model.Ref) =>
-          available().pipe(
-            Effect.map((models) => models.find((model) => model.providerID === ref.providerID && model.id === ref.id)),
-          )
         const selected = yield* select(session, available)
         const ref = Model.Ref.make({
           providerID: selected.info.providerID,
@@ -217,7 +215,9 @@ export const layer = Layer.effect(
         // Availability applies to hook overrides too: a hook-chosen model that a window currently
         // blocks is ignored and the availability-approved selection (or its fallback) is used.
         if (model.providerID !== ref.providerID || model.id !== ref.id || model.variant !== ref.variant) {
-          const override = yield* find(model)
+          // Check availability against the full catalog, not just the picker list: a hidden model
+          // could otherwise be pulled in by the resolver while a window blocks it.
+          const override = yield* models.get(model.providerID, model.id)
           const usable = override === undefined || (yield* ModelAvailability.check(override))
           if (!usable) {
             yield* Effect.logInfo("hook model blocked by availability window, keeping the availability selection", {
@@ -241,5 +241,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [ModelResolver.node, Agent.node, PluginHooks.node],
+  deps: [ModelResolver.node, Agent.node, PluginHooks.node, ModelService.node],
 })
