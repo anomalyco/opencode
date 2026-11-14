@@ -477,3 +477,120 @@ fn a_node_the_layout_cannot_take_does_not_end_the_tui() {
     settle(&harness);
     harness.app.render();
 }
+
+thread_local! {
+    /// The handle the first mount of `test.alias` gave.
+    static FIRST: std::cell::Cell<Option<v2::ContentRef>> = const { std::cell::Cell::new(None) };
+    /// The replies `test.owned` got.
+    static REPLIES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A route whose first mount shows content it gave, and whose later mounts give other content and show the first
+/// mount's handle.
+fn alias(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.surface(v2::Surface::new("alias", v2::Place::Route("alias".into()), |cx| {
+        let handle = match FIRST.get() {
+            None => {
+                let first = cx.content("FIRST BYTES");
+                FIRST.set(Some(first));
+                first
+            }
+            Some(first) => {
+                cx.content("SECOND BYTES");
+                first
+            }
+        };
+        v2::Node::Markdown { id: None, source: v2::Source::Content(handle) }
+    }));
+    Ok(())
+}
+
+// Expected (`lifecycle`, mounts): a content handle names what its own mount gave, and nothing in another mount, also
+// one of the same surface opened again whose first handle would have the same number: such a tree is refused.
+#[test]
+fn a_content_handle_names_nothing_in_another_mount() {
+    FIRST.set(None);
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![abi::Plugin { id: "test.alias", setup: alias }.into()],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount(80, 24, deps);
+    let route = Route::Plugin { id: "test.alias".into(), name: "alias".into() };
+    harness.tui.navigate(route.clone());
+    harness.wait_for("FIRST BYTES");
+    harness.tui.navigate(Route::Home);
+    settle(&harness);
+    harness.tui.navigate(route);
+    settle(&harness);
+    let screen = harness.app.render().text();
+    assert!(!screen.contains("SECOND BYTES") && !screen.contains("FIRST BYTES"), "{screen}");
+}
+
+/// A route with a command of its own and a global one, each of which fetches `/api/hold`; the replies are logged.
+fn owned(setup: &mut abi::Setup) -> Result<(), String> {
+    let fetch = |host: &dyn abi::Host, _: Option<&str>| {
+        host.fetch(abi::Fetch { method: "GET".into(), path: "/api/hold".into(), query: Vec::new(), body: None });
+    };
+    let command = |name: &str, scope| abi::Command { name: name.into(), scope, ..abi::Command::default() };
+    setup.command(command("owned.route", abi::Scope::Route("owned".into())), fetch);
+    setup.command(command("owned.global", abi::Scope::Global), fetch);
+    setup.on_reply(|_, _, result| REPLIES.with(|replies| replies.borrow_mut().push(format!("{result:?}"))));
+    setup.surface(v2::Surface::new("owned", v2::Place::Route("owned".into()), |_| {
+        v2::Node::text(vec![abi::Span::new("owned route")])
+    }));
+    Ok(())
+}
+
+// Expected (`lifecycle`, mounts): what a mount's own command asked for ends with that mount: a reply that arrives
+// after the route closed and opened again under the same key reaches the plugin no more. What the plugin's global
+// command asked for is the plugin's, and arrives.
+#[test]
+fn a_late_reply_does_not_reach_a_mount_opened_again() {
+    use std::sync::{Condvar, Mutex};
+    REPLIES.with(|replies| replies.borrow_mut().clear());
+    let gate = Arc::new((Mutex::new(false), Condvar::new()));
+    let served = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let fake = {
+        let (gate, served) = (gate.clone(), served.clone());
+        support::Fake::new(move |seen| {
+            if seen.path != "/api/hold" {
+                return support::base(seen, support::DIRECTORY);
+            }
+            let (open, wake) = &*gate;
+            let open = wake.wait_timeout_while(open.lock().unwrap(), Duration::from_secs(10), |open| !*open).unwrap();
+            drop(open);
+            served.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            (200, serde_json::json!({ "held": true }))
+        })
+    };
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![abi::Plugin { id: "test.owned", setup: owned }.into()],
+        ..support::deps(Arc::new(fake))
+    };
+    let harness = support::mount(80, 24, deps);
+    let route = Route::Plugin { id: "test.owned".into(), name: "owned".into() };
+    harness.tui.navigate(route.clone());
+    harness.wait_for("owned route");
+    let _ = harness.tui.keymap.dispatch("owned.route", None);
+    settle(&harness);
+    harness.tui.navigate(Route::Home);
+    settle(&harness);
+    harness.tui.navigate(route);
+    harness.wait_for("owned route");
+    let release = || {
+        *gate.0.lock().unwrap() = true;
+        gate.1.notify_all();
+    };
+    release();
+    let arrived = |count| {
+        harness.app.wait_until(Duration::from_secs(5), || served.load(std::sync::atomic::Ordering::SeqCst) >= count);
+        harness.app.wait_until(Duration::from_millis(300), || false);
+    };
+    arrived(1);
+    assert!(REPLIES.with(|replies| replies.borrow().is_empty()), "a reply reached a mount opened again");
+    let _ = harness.tui.keymap.dispatch("owned.global", None);
+    arrived(2);
+    assert_eq!(REPLIES.with(|replies| replies.borrow().len()), 1, "the plugin's own reply did not arrive");
+}
