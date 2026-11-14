@@ -277,6 +277,7 @@ fn a_panicking_draw_is_contained_on_every_carrier() {
     let run = |run: Run| {
         let board = open(run);
         let tui = &board.harness.tui;
+        let work = opencode_plugin::canvas::work();
         tui.navigate(Route::Plugin { id: ID.to_owned(), name: "board".to_owned() });
         settle(&board.harness);
         let open = observe(&board.harness);
@@ -289,16 +290,21 @@ fn a_panicking_draw_is_contained_on_every_carrier() {
         for _ in 0..5 {
             board.harness.app.advance(Duration::from_millis(16));
         }
-        [open, failed, observe(&board.harness)]
+        let done = opencode_plugin::canvas::work().since(work);
+        ([open, failed, observe(&board.harness)], (done.draws, done.lists))
     };
-    let linked = run(Run::In(Carrier::Linked));
+    let (linked, work) = run(Run::In(Carrier::Linked));
+    // The first draw, and the one that panicked, which ran.
+    assert_eq!(work, (2, 1), "draws and lists");
     let (_, toasts, status) = &linked[1];
     assert_eq!(toasts.len(), 1, "{toasts:?}");
     assert!(status.contains("draw panicked: the board's draw panicked"), "{status}");
     assert!(linked[2].1.is_empty(), "a failure was reported again: {:?}", linked[2].1);
     assert_ne!(linked[0].0, linked[1].0, "the failed route still shows");
     for other in [Run::In(CARRIERS[1]), Run::Library] {
-        for (at, (linked, seen)) in linked.iter().zip(run(other)).enumerate() {
+        let (seen, counted) = run(other);
+        assert_eq!(counted, work, "{other:?}: draws and lists");
+        for (at, (linked, seen)) in linked.iter().zip(seen).enumerate() {
             assert_eq!((&linked.1, &linked.2), (&seen.1, &seen.2), "{other:?} at {at}: toasts and status");
             assert!(linked.0 == seen.0, "{other:?} at {at}: the frames differ");
         }
