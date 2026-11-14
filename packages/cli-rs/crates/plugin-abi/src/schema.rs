@@ -138,7 +138,7 @@ pub fn schema() -> Value {
             "Span",
             object!(Span, "Styled text.", { text: string() } {
                 fg: nullable(reference("Color")), bg: nullable(reference("Color")), bold: boolean(), italic: boolean(),
-                underline: boolean(), dim: boolean(), strikethrough: boolean(),
+                underline: boolean(), dim: boolean(), strikethrough: boolean(), link: nullable(string()),
             }),
         ),
         ("Color", {
@@ -382,6 +382,7 @@ mod tests {
             underline: true,
             dim: true,
             strikethrough: true,
+            link: Some("https://opencode.ai".into()),
         };
         let layout = Layout {
             width: Some(Width::Percent(50.0)),

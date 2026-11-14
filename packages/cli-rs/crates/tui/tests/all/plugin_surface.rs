@@ -160,7 +160,9 @@ enum Command {
     Bad,
 }
 
-const THEMES: [&str; 2] = ["opencode", "tokyonight"];
+/// The theme's modes a theme change switches between; the theme's name stays, so only its palette changes.
+const MODES: [opencode_ui::theme::ThemeMode; 2] =
+    [opencode_ui::theme::ThemeMode::Dark, opencode_ui::theme::ThemeMode::Light];
 
 fn apply(harness: &Harness, command: Command) {
     let tui = &harness.tui;
@@ -176,7 +178,7 @@ fn apply(harness: &Harness, command: Command) {
             }
         }
         Command::Theme(index) => {
-            tui.theme.borrow_mut().set(THEMES[index % THEMES.len()]);
+            tui.theme.borrow_mut().set_mode(Some(MODES[index % MODES.len()]), false);
             tui.theme_changed();
         }
         Command::Bad => board(|board| board.bad = 1),
@@ -961,4 +963,24 @@ fn a_failed_surface_gives_its_slot_back() {
     let screen = harness.app.render().text();
     assert!(!screen.contains("replaced version") && screen.contains("1 plugin failed"), "{screen}");
     assert_eq!(surface::ledger(), Ledger::default());
+}
+
+// Expected (`work`, a theme change): a switch to a theme of another name changes what a plugin reads (its name, ABI
+// 1.6), so a surface that does not read the palette gets one view, in its mount; the view keeps every card, and
+// nothing is built.
+#[test]
+fn a_theme_of_another_name_calls_the_view_once_and_builds_nothing() {
+    board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
+    let harness = open_tui();
+    apply(&harness, Command::Open);
+    let calls = board(|board| board.calls.len());
+    let work = reconcile::work();
+    assert!(harness.tui.theme.borrow_mut().set("tokyonight"));
+    harness.tui.theme_changed();
+    settle(&harness);
+    let done = reconcile::work().since(work);
+    let after = board(|board| board.calls[calls..].to_vec());
+    assert_eq!(after.len(), 1, "{after:?}");
+    assert!(after[0].built == 0 && !after[0].full, "{after:?}");
+    assert_eq!((done.created, done.removed, done.parses), (0, 0, 0), "{done:?}");
 }
