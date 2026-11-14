@@ -374,8 +374,8 @@ impl Host for Tui {
         Some(crate::features::events::subscribe_deltas(self, move |events| run(events)))
     }
 
-    fn markdown(&self, text: &str) -> AnyWidget {
-        markdown(self).set_markdown(text).as_any()
+    fn markdown(&self, text: &str) -> opentui::widget::Markdown {
+        markdown(self).set_markdown(text)
     }
 
     fn read(&self, f: &mut dyn FnMut(&dyn abi::Read)) {

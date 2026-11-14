@@ -12,10 +12,12 @@ use std::rc::{Rc, Weak};
 
 use opencode_plugin_abi::v2::{ContentRef, DiffView, Node, Source};
 use opencode_plugin_abi::{self as abi};
-use opencode_ui::theme::{Paints, Theme};
+use opencode_ui::diff::Patch;
+use opencode_ui::theme::Theme;
 use opentui::input::{MouseButton, MouseEventKind};
 use opentui::prelude::*;
 use opentui::style::Color;
+use opentui::syntax::SyntaxTheme;
 
 use crate::node::{Act, bordered, color, edges_of, lay_out, styled};
 use crate::{Host, SlotMount};
@@ -113,6 +115,9 @@ pub enum Refused {
     /// A size in percent that is not a finite number of 0 or more, which OpenTUI's layout refuses with an error that
     /// ends the TUI.
     Number,
+    /// A scroll without an id: a node with state must have one (synthesis 4.2), or another scroll's offset could
+    /// pass to it.
+    Unkeyed,
 }
 impl std::fmt::Display for Refused {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -123,6 +128,7 @@ impl std::fmt::Display for Refused {
             Refused::Content(content) => write!(f, "content {} is not the mount's", content.0),
             Refused::Deep => write!(f, "the tree nests deeper than {MAX_DEPTH} layout levels"),
             Refused::Number => write!(f, "a size in percent is not a finite number of 0 or more"),
+            Refused::Unkeyed => write!(f, "a scroll has no id"),
         }
     }
 }
@@ -154,11 +160,13 @@ pub struct Tree {
     slots_changed: bool,
 }
 
-/// What the tree holds under an id: the nearest ancestor with an id, and the layout levels its subtree takes.
+/// What the tree holds under an id: the nearest ancestor with an id, the layout levels its subtree takes, and its
+/// kind.
 #[derive(Clone, Debug)]
 struct Held {
     above: Option<String>,
     depth: u16,
+    kind: std::mem::Discriminant<Node>,
 }
 
 struct Mounted {
@@ -168,10 +176,11 @@ struct Mounted {
     widget: Option<AnyWidget>,
     children: Vec<Mounted>,
     extra: Extra,
+    /// It or a node under it shows a tool call's output, which the host reads again each revision.
+    dynamic: bool,
 }
 
 enum Extra {
-    None,
     Box {
         view: View,
         click: Option<Rc<RefCell<abi::Click>>>,
@@ -183,35 +192,68 @@ enum Extra {
     },
     Spinner(opencode_ui::motion::Spinner),
     Scroll(ScrollBox),
-    Diff(Paints),
+    /// The patch, and the text it shows.
+    Diff(Patch, Rc<str>),
+    /// The Markdown, and the text it shows.
+    Markdown(opentui::widget::Markdown, Rc<str>),
     Slot(Option<SlotMount>),
-    /// In the tree before, a subtree that the tree being adopted keeps; its widget moved to wherever the keep is.
+    /// In the tree before, a subtree that the tree being adopted holds again; its widget moved to wherever the tree
+    /// has its id now.
     Taken,
 }
 
-/// What a reconcile is doing: the kept subtrees not yet placed, the widgets to drop once every kept one is placed, and
-/// whether the theme changed.
+/// The ids of the tree before that a tree being adopted holds again: the ones it keeps, and the ones it has a node
+/// of the same kind for.
+struct Plan {
+    keeps: HashSet<String>,
+    moves: HashSet<String>,
+}
+
+/// What a reconcile is doing: the subtrees of the tree before that the new one holds again, not yet placed, the
+/// widgets to drop once every one of them is placed, and whether the theme changed.
 struct Pass<'a, 'b> {
     env: &'a Env<'b>,
-    kept: HashMap<String, Mounted>,
+    pool: HashMap<String, Mounted>,
     doomed: Vec<Mounted>,
     restyle: bool,
     slots_changed: bool,
+    syntax: std::cell::OnceCell<Rc<SyntaxTheme>>,
+    /// The widget that took over from a focused one built again.
+    refocus: Option<AnyWidget>,
 }
 
 impl Tree {
     /// Adopts `nodes` into `parent`, which holds this tree's widgets and nothing else, or refuses it and changes
     /// nothing.
     pub fn apply(&mut self, env: &Env<'_>, parent: &View, nodes: &[Node]) -> Result<(), Refused> {
-        let keeps = self.validate(env, nodes)?;
+        let plan = self.validate(env, nodes)?;
         let restyle = self.theme.as_ref().is_some_and(|theme| theme != env.theme);
-        let mut pass = Pass { env, kept: HashMap::new(), doomed: Vec::new(), restyle, slots_changed: false };
-        take(&mut self.nodes, &keeps, &mut pass.kept);
+        let app = env.host.app();
+        let focused = app.focused();
+        let mut pass = Pass {
+            env,
+            pool: HashMap::new(),
+            doomed: Vec::new(),
+            restyle,
+            slots_changed: false,
+            syntax: std::cell::OnceCell::new(),
+            refocus: None,
+        };
+        if !plan.keeps.is_empty() || !plan.moves.is_empty() {
+            take(&mut self.nodes, &plan, &mut pass.pool);
+        }
         let old = std::mem::take(&mut self.nodes);
         self.nodes = pass.children(parent, old, nodes);
-        debug_assert!(pass.kept.is_empty(), "every kept subtree is placed");
+        debug_assert!(pass.pool.is_empty(), "every subtree held again is placed");
         for doomed in pass.doomed.drain(..) {
             drop_mounted(doomed, &mut pass.slots_changed);
+        }
+        // A widget moved within its parent is detached and attached again, which takes the focus from it (OpenTUI's
+        // `subtree_removed`): it gets it back, or the widget that took over from it does.
+        if app.focused().is_none()
+            && let Some(widget) = pass.refocus.take().or(focused.filter(|widget| attached(app, widget)))
+        {
+            app.focus(&widget);
         }
         self.theme = Some(env.theme.clone());
         self.slots_changed = pass.slots_changed;
@@ -270,6 +312,17 @@ impl Tree {
         walk(&self.nodes, f);
     }
 
+    /// Where the scroll with id `id` is scrolled, as of the last frame.
+    pub fn scroll_position(&self, id: &str) -> Option<(f64, f64)> {
+        fn find<'a>(nodes: &'a [Mounted], id: &str) -> Option<&'a Mounted> {
+            nodes.iter().find_map(|node| if node.node.id() == Some(id) { Some(node) } else { find(&node.children, id) })
+        }
+        match &find(&self.nodes, id)?.extra {
+            Extra::Scroll(scroll) => Some(scroll.scroll_position()),
+            _ => None,
+        }
+    }
+
     /// The ids the tree holds.
     pub fn ids(&self) -> impl Iterator<Item = &str> {
         self.ids.keys().map(String::as_str)
@@ -280,14 +333,15 @@ impl Tree {
         self.nodes.is_empty()
     }
 
-    /// Checks `nodes` against the contract and returns the ids it keeps. The walk stops at the depth bound, so a
-    /// deeper tree costs no more than one at the bound.
-    fn validate(&self, env: &Env<'_>, nodes: &[Node]) -> Result<HashSet<String>, Refused> {
+    /// Checks `nodes` against the contract and returns what it holds of this tree. The walk stops at the depth
+    /// bound, so a deeper tree costs no more than one at the bound.
+    fn validate(&self, env: &Env<'_>, nodes: &[Node]) -> Result<Plan, Refused> {
         struct Walk<'a, 'b> {
             tree: &'a Tree,
             env: &'a Env<'b>,
             ids: HashSet<&'a str>,
             keeps: HashSet<&'a str>,
+            moves: HashSet<&'a str>,
         }
         impl<'a> Walk<'a, '_> {
             fn nodes(&mut self, nodes: &'a [Node], above: u16) -> Result<(), Refused> {
@@ -309,12 +363,16 @@ impl Tree {
                     if depth > MAX_DEPTH {
                         return Err(Refused::Deep);
                     }
-                    if let Some(id) = node.id()
-                        && (!self.ids.insert(id) || self.keeps.contains(id))
-                    {
-                        return Err(Refused::Duplicate(id.to_owned()));
+                    if let Some(id) = node.id() {
+                        if !self.ids.insert(id) || self.keeps.contains(id) {
+                            return Err(Refused::Duplicate(id.to_owned()));
+                        }
+                        if self.tree.ids.get(id).is_some_and(|held| held.kind == std::mem::discriminant(node)) {
+                            self.moves.insert(id);
+                        }
                     }
                     match node {
+                        Node::Scroll { id: None, .. } => return Err(Refused::Unkeyed),
                         Node::Box { layout, .. } | Node::Text { layout, .. } | Node::Scroll { layout, .. }
                             if !sizes_ok(layout) =>
                         {
@@ -333,10 +391,11 @@ impl Tree {
                 Ok(())
             }
         }
-        let mut walk = Walk { tree: self, env, ids: HashSet::new(), keeps: HashSet::new() };
+        let mut walk = Walk { tree: self, env, ids: HashSet::new(), keeps: HashSet::new(), moves: HashSet::new() };
         walk.nodes(nodes, 0)?;
+        let moves = walk.moves.iter().map(|id| (*id).to_owned()).collect();
         if walk.keeps.is_empty() {
-            return Ok(HashSet::new());
+            return Ok(Plan { keeps: HashSet::new(), moves });
         }
         // An id of the tree, or a keep, may not be one inside a subtree it keeps. Each ancestor is checked once.
         let mut clear: HashSet<&str> = HashSet::new();
@@ -355,28 +414,35 @@ impl Tree {
             }
             clear.extend(chain);
         }
-        Ok(walk.keeps.into_iter().map(str::to_owned).collect())
+        Ok(Plan { keeps: walk.keeps.into_iter().map(str::to_owned).collect(), moves })
     }
 }
 
-/// Moves each subtree with an id in `keys` from `nodes` into `kept`, leaving a [`Extra::Taken`] in its place.
-fn take(nodes: &mut [Mounted], keys: &HashSet<String>, kept: &mut HashMap<String, Mounted>) {
-    if keys.is_empty() {
-        return;
-    }
+/// Moves each subtree `plan` holds again from `nodes` into `pool`, leaving an [`Extra::Taken`] in its place: a kept
+/// one whole, and one held by id with each subtree under it that is held again taken out too.
+fn take(nodes: &mut [Mounted], plan: &Plan, pool: &mut HashMap<String, Mounted>) {
     for node in nodes {
-        if let Some(id) = node.node.id().filter(|id| keys.contains(*id)) {
-            let id = id.to_owned();
+        if matches!(node.extra, Extra::Taken) {
+            continue;
+        }
+        let Some(id) = node.node.id().map(str::to_owned) else {
+            take(&mut node.children, plan, pool);
+            continue;
+        };
+        let kept = plan.keeps.contains(&id);
+        if !kept {
+            take(&mut node.children, plan, pool);
+        }
+        if kept || plan.moves.contains(&id) {
             let taken = Mounted {
                 node: Node::Keep { key: id.clone() },
                 widget: node.widget.clone(),
                 children: Vec::new(),
                 extra: Extra::Taken,
+                dynamic: false,
             };
-            kept.insert(id, std::mem::replace(node, taken));
-            continue;
+            pool.insert(id, std::mem::replace(node, taken));
         }
-        take(&mut node.children, keys, kept);
     }
 }
 
@@ -387,113 +453,112 @@ fn collect_ids(nodes: &[Mounted], above: Option<&str>, ids: &mut HashMap<String,
         let id = node.node.id();
         let depth = weight(&node.node) + collect_ids(&node.children, id.or(above), ids);
         if let Some(id) = id {
-            ids.insert(id.to_owned(), Held { above: above.map(str::to_owned), depth });
+            let kind = std::mem::discriminant(&node.node);
+            ids.insert(id.to_owned(), Held { above: above.map(str::to_owned), depth, kind });
         }
         deepest = deepest.max(depth);
     }
     deepest
 }
 
+/// Whether `widget` is in the app's tree.
+fn attached(app: &App, widget: &AnyWidget) -> bool {
+    let root = app.root().id();
+    let mut at = widget.clone();
+    while let Some(parent) = at.parent() {
+        at = parent;
+    }
+    at.id() == root
+}
+
 impl Pass<'_, '_> {
-    /// The children `new` of `parent` reconciled with `old`, in place.
-    ///
-    /// OpenTUI paints siblings of one z-index in the order they were attached, not by their index (`paintLessThan`
-    /// in its `scene.zig`), and a move within a parent keeps that order. So a widget is never inserted before a
-    /// sibling: from the first child out of place on, every child is attached again, in order, and the children
-    /// paint as a fresh mount's do where they overlap.
-    fn children(&mut self, parent: &View, mut old: Vec<Mounted>, new: &[Node]) -> Vec<Mounted> {
-        let same_shape = old.len() == new.len() && old.iter().zip(new).all(|(old, new)| same_slot(&old.node, new));
+    /// The children `new` of `parent` reconciled with `old`, in place. A child with an id is the subtree the tree
+    /// before held under that id, wherever it was; one without is the next child of `old` without one, of its kind.
+    fn children(&mut self, parent: &View, old: Vec<Mounted>, new: &[Node]) -> Vec<Mounted> {
         let slots = old.iter().any(|node| matches!(node.node, Node::Slot { .. }))
             || new.iter().any(|node| matches!(node, Node::Slot { .. }));
-        if slots && !(same_shape && old.iter().zip(new).all(|(old, new)| !self.replaces(&old.node, new))) {
+        if slots && !self.stays(&old, new) {
             // A nested slot puts its claims straight into the parent, where nothing else can place them: build all
-            // of the parent's children again. The old widgets go once the kept subtrees under them have moved.
+            // of the parent's children again. The old slots go first, so a claim hears it unmounts before it mounts
+            // again; the other old widgets go once the subtrees under them that are held again have moved.
             parent.clear();
-            let built = new.iter().map(|node| self.placed(parent, node)).collect();
-            old.into_iter().for_each(|node| self.doom(node));
-            return built;
+            for mut node in old {
+                self.release_slots(&mut node);
+                self.doom(node);
+            }
+            return new.iter().map(|node| self.placed(parent, node)).collect();
         }
-        let matched: Vec<Option<usize>> =
-            if same_shape { (0..new.len()).map(Some).collect() } else { matches(&old, new) };
-        let mut olds: Vec<Option<Mounted>> = old.drain(..).map(Some).collect();
+        // The widgets as they are in `parent`, when they are there: the children of a box built again are in the
+        // old one.
+        let here = old
+            .iter()
+            .find_map(|node| node.widget.as_ref())
+            .is_none_or(|widget| widget.parent().is_some_and(|above| above.id() == parent.id()));
+        let before: Vec<Option<u32>> = match here {
+            true => old.iter().map(|node| node.widget.as_ref().map(Widget::id)).collect(),
+            false => Vec::new(),
+        };
+        let matched = matches(&old, new);
+        let mut olds: Vec<Option<Mounted>> = old.into_iter().map(Some).collect();
         let mut out = Vec::with_capacity(new.len());
-        // Whether each child kept its widget from this parent.
-        let mut stayed = Vec::with_capacity(new.len());
-        for (node, found) in new.iter().zip(&matched) {
-            let mounted = match found.and_then(|index| olds[index].take()) {
-                Some(old) => match self.reconcile(old, node) {
-                    Ok(mounted) => {
-                        stayed.push(true);
-                        mounted
-                    }
-                    Err(replaced) => {
-                        let (old, built) = *replaced;
-                        self.doom(old);
-                        stayed.push(false);
-                        built
-                    }
-                },
-                None => {
-                    stayed.push(false);
-                    self.build(node)
-                }
+        // Whether each child's widget is one the tree had before.
+        let mut reused = Vec::with_capacity(new.len());
+        for (node, found) in new.iter().zip(matched) {
+            let held = match node.id() {
+                Some(id) => self.pool.remove(id),
+                None => found.and_then(|index| olds[index].take()),
+            };
+            let (mounted, kept) = match held {
+                Some(old) => self.adopt(old, node),
+                None => (self.build(node), false),
             };
             out.push(mounted);
+            reused.push(kept);
         }
         olds.into_iter().flatten().for_each(|node| self.doom(node));
-        if same_shape && stayed.iter().all(|stayed| *stayed) {
+        if out.iter().map(|node| node.widget.as_ref().map(Widget::id)).eq(before) {
             return out;
         }
-        // The children attached here now that stay, in their order; the first child that is not the next of them is
-        // out of place, and so is everything after it.
-        let wanted: HashSet<u32> = out.iter().filter_map(|node| node.widget.as_ref().map(Widget::id)).collect();
-        let present: Vec<u32> = parent.children().iter().map(Widget::id).filter(|id| wanted.contains(id)).collect();
-        let first = out
-            .iter()
-            .zip(&present)
-            .position(|(node, id)| node.widget.as_ref().map(Widget::id) != Some(*id))
-            .unwrap_or(present.len().min(out.len()));
-        for (node, stayed) in out.iter().zip(&stayed).skip(first) {
-            let Some(widget) = &node.widget else { continue };
-            if present.contains(&widget.id()) {
-                widget.detach();
-                if *stayed {
-                    count(|work| work.moved += 1);
-                }
-            }
-            parent.add(widget);
-        }
+        place(parent, &out, &reused);
         out
     }
 
-    /// Whether `new` builds a new widget in place of `old`'s.
-    fn replaces(&self, old: &Node, new: &Node) -> bool {
-        match (old, new) {
-            (_, Node::Keep { .. }) => false,
-            (Node::Box { .. }, Node::Box { .. }) => matches!(box_change(old, new), Change::Replace),
-            (Node::Text { .. }, Node::Text { .. }) => matches!(text_change(old, new), Change::Replace),
-            (Node::Scroll { .. }, Node::Scroll { .. }) => !same_scroll(old, new),
-            (Node::Diff { .. }, Node::Diff { .. }) => old != new,
-            (Node::Markdown { .. }, Node::Markdown { .. }) => old != new || self.restyle,
-            (Node::Spinner { .. }, Node::Spinner { .. }) => false,
-            (Node::Slot { path }, Node::Slot { path: next }) => path != next,
-            _ => true,
+    /// Whether `new` keeps every child of `old` where it is, with its widget: a parent with a slot can be
+    /// reconciled in place only then. A child with an id may come from anywhere, so it does not.
+    fn stays(&self, old: &[Mounted], new: &[Node]) -> bool {
+        old.len() == new.len()
+            && old.iter().zip(new).all(|(old, new)| {
+                let node = &old.node;
+                new.id().is_none()
+                    && same_kind(node, new)
+                    && match (node, new) {
+                        (Node::Box { .. }, Node::Box { .. }) => !matches!(box_change(node, new), Change::Replace),
+                        (Node::Text { .. }, Node::Text { .. }) => !matches!(text_change(node, new), Change::Replace),
+                        (Node::Slot { path }, Node::Slot { path: next }) => path == next,
+                        _ => true,
+                    }
+            })
+    }
+
+    /// `old` reconciled with `node`, and whether it kept its widget; a replaced one is dropped.
+    fn adopt(&mut self, old: Mounted, node: &Node) -> (Mounted, bool) {
+        match self.reconcile(old, node) {
+            Ok(mounted) => (mounted, true),
+            Err(replaced) => {
+                let (old, built) = *replaced;
+                self.doom(old);
+                (built, false)
+            }
         }
     }
 
-    /// Reconciles in place, or returns the old node with a new one built instead, for the caller to place.
+    /// Reconciles in place, or returns the old node with a new one built instead, for the caller to place. A box or
+    /// a scroll built again takes the children of the old one, reconciled.
     fn reconcile(&mut self, mut old: Mounted, new: &Node) -> Result<Mounted, Box<(Mounted, Mounted)>> {
-        if let Node::Keep { key } = new {
-            let kept = self.kept.remove(key).expect("a validated keep names a held subtree");
+        if let Node::Keep { .. } = new {
             count(|work| work.kept += 1);
-            // In a new theme the kept subtree is reconciled with itself, which restyles it; a Markdown in it, which
-            // takes its theme as it is built, is built again.
-            if self.restyle {
-                let node = unfold(&kept);
-                return self.reconcile(kept, &node);
-            }
-            // The kept subtree's widget is where the placeholder was.
-            return Ok(kept);
+            self.revisit(&mut old);
+            return Ok(old);
         }
         if !same_kind(&old.node, new) {
             let built = self.build(new);
@@ -505,7 +570,7 @@ impl Pass<'_, '_> {
                 match box_change(&old.node, new) {
                     Change::Same => {
                         if self.restyle {
-                            restyle(&old, self.env);
+                            self.restyle(&old);
                         }
                     }
                     Change::InPlace => {
@@ -517,10 +582,18 @@ impl Pass<'_, '_> {
                             *cell.borrow_mut() = next.clone();
                         }
                         old.node = shell(new);
+                        if self.restyle {
+                            self.restyle(&old);
+                        }
                         count(|work| work.set += 1);
                     }
                     Change::Replace => {
-                        let built = self.build(new);
+                        // Its own widget is built again; the children move into it as they are reconciled.
+                        let mut built = self.shell(new);
+                        let Extra::Box { view, .. } = &built.extra else { unreachable!() };
+                        let view = view.clone();
+                        built.children = self.children(&view, std::mem::take(&mut old.children), children);
+                        built.dynamic = built.children.iter().any(|child| child.dynamic);
                         return Err(Box::new((old, built)));
                     }
                 }
@@ -528,23 +601,46 @@ impl Pass<'_, '_> {
                 let view = view.clone();
                 let olds = std::mem::take(&mut old.children);
                 old.children = self.children(&view, olds, children);
+                old.dynamic = old.children.iter().any(|child| child.dynamic);
                 Ok(old)
             }
-            (Node::Scroll { .. }, Node::Scroll { children, .. }) => {
-                if !same_scroll(&old.node, new) {
-                    let built = self.build(new);
+            (Node::Scroll { .. }, Node::Scroll { height, follow, children, .. }) => {
+                let Extra::Scroll(scroll) = &old.extra else { unreachable!() };
+                let scroll = scroll.clone();
+                let Node::Scroll { height: was, follow: followed, layout, .. } = &old.node else { unreachable!() };
+                let Node::Scroll { layout: next, .. } = new else { unreachable!() };
+                if layout != next || was.is_some() != height.is_some() {
+                    // Built again, it keeps where it was scrolled and the focus.
+                    let mut built = self.shell(new);
+                    let Extra::Scroll(next) = &built.extra else { unreachable!() };
+                    let (x, y) = scroll.scroll_position();
+                    next.scroll_to(x, y);
+                    if self.env.host.app().focused().is_some_and(|focused| focused.id() == scroll.id()) {
+                        self.refocus = Some(next.as_any());
+                    }
+                    let content = next.content_view().clone();
+                    built.children = self.children(&content, std::mem::take(&mut old.children), children);
+                    built.dynamic = built.children.iter().any(|child| child.dynamic);
                     return Err(Box::new((old, built)));
                 }
-                let Extra::Scroll(scroll) = &old.extra else { unreachable!() };
+                if was != height || followed != follow {
+                    if let Some(height) = height {
+                        scroll.height(*height);
+                    }
+                    scroll.sticky(*follow);
+                    old.node = shell(new);
+                    count(|work| work.set += 1);
+                }
                 let content = scroll.content_view().clone();
                 let olds = std::mem::take(&mut old.children);
                 old.children = self.children(&content, olds, children);
+                old.dynamic = old.children.iter().any(|child| child.dynamic);
                 Ok(old)
             }
             (Node::Text { .. }, Node::Text { .. }) => match text_change(&old.node, new) {
                 Change::Same => {
                     if self.restyle {
-                        restyle(&old, self.env);
+                        self.restyle(&old);
                     }
                     Ok(old)
                 }
@@ -571,26 +667,31 @@ impl Pass<'_, '_> {
                     count(|work| work.set += 1);
                 }
                 if self.restyle {
-                    restyle(&old, self.env);
+                    self.restyle(&old);
                 }
                 Ok(old)
             }
-            (Node::Diff { .. }, Node::Diff { .. }) => {
-                if old.node != *new {
-                    let built = self.build(new);
-                    return Err(Box::new((old, built)));
-                }
-                if self.restyle {
-                    restyle(&old, self.env);
-                }
-                Ok(old)
-            }
-            (Node::Markdown { .. }, Node::Markdown { .. }) => {
-                // The host's Markdown takes the theme as it is built.
-                if old.node != *new || self.restyle {
-                    let built = self.build(new);
-                    return Err(Box::new((old, built)));
-                }
+            (Node::Diff { .. }, Node::Diff { .. }) | (Node::Markdown { .. }, Node::Markdown { .. }) => {
+                // Both change in place: a patch or Markdown shows its new text, a patch its new view.
+                let text = match (&old.node, new) {
+                    (Node::Diff { content: was, filetype: had, .. }, Node::Diff { content: source, filetype, .. })
+                        if was == source && had == filetype && !matches!(source, Source::PartOutput(_)) =>
+                    {
+                        None
+                    }
+                    (Node::Markdown { source: was, .. }, Node::Markdown { source, .. })
+                        if was == source && !matches!(source, Source::PartOutput(_)) =>
+                    {
+                        None
+                    }
+                    (_, Node::Diff { content: source, .. } | Node::Markdown { source, .. }) => Some(self.text(source)),
+                    _ => unreachable!(),
+                };
+                let filetype_changed = matches!((&old.node, new),
+                    (Node::Diff { filetype: had, .. }, Node::Diff { filetype, .. }) if had != filetype);
+                old.node = new.clone();
+                old.dynamic = dynamic(new, &[]);
+                self.show(&mut old, text, filetype_changed);
                 Ok(old)
             }
             (Node::Slot { path: was }, Node::Slot { path }) => {
@@ -602,12 +703,115 @@ impl Pass<'_, '_> {
         }
     }
 
+    /// Shows a patch's or a Markdown's node in its widget: `text` when it is new, else its view and theme.
+    fn show(&mut self, mounted: &mut Mounted, text: Option<Rc<str>>, rebuild: bool) {
+        let env = self.env;
+        let syntax = self.syntax();
+        match (&mounted.node, &mut mounted.extra) {
+            (Node::Diff { view, filetype, .. }, Extra::Diff(patch, shown)) => {
+                let text = text.filter(|text| rebuild || text != shown);
+                match text {
+                    Some(text) => {
+                        patch.set_patch(
+                            env.host.app(),
+                            env.theme,
+                            &syntax,
+                            &text,
+                            diff_view(*view),
+                            filetype.as_deref(),
+                            WrapMode::Word,
+                            0,
+                        );
+                        *shown = text;
+                        count(|work| {
+                            work.parses += 1;
+                            work.set += 1;
+                        });
+                    }
+                    None => {
+                        patch.set_view(diff_view(*view));
+                        if self.restyle {
+                            patch.restyle(env.theme, &syntax);
+                            count(|work| work.set += 1);
+                        }
+                    }
+                }
+            }
+            (Node::Markdown { .. }, Extra::Markdown(markdown, shown)) => {
+                if self.restyle {
+                    let colors = opencode_ui::markdown::view_colors(env.theme, &syntax);
+                    opencode_ui::markdown::restyle(markdown, colors, &syntax);
+                    count(|work| work.set += 1);
+                }
+                if let Some(text) = text.filter(|text| text != shown) {
+                    markdown.set_markdown(&*text);
+                    *shown = text;
+                    count(|work| work.set += 1);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Restyles a subtree held again in a new theme, and shows the tool call output a node of it reads as it is now.
+    fn revisit(&mut self, mounted: &mut Mounted) {
+        match &mounted.node {
+            Node::Diff { content: source, .. } | Node::Markdown { source, .. } => {
+                let text = matches!(source, Source::PartOutput(_)).then(|| self.text(source));
+                self.show(mounted, text, false);
+            }
+            _ if self.restyle => self.restyle(mounted),
+            _ => {}
+        }
+        let restyle = self.restyle;
+        for child in &mut mounted.children {
+            if restyle || child.dynamic {
+                self.revisit(child);
+            }
+        }
+    }
+
+    /// Paints a node's own colors again, for a new theme.
+    fn restyle(&mut self, mounted: &Mounted) {
+        let theme = self.env.theme;
+        match (&mounted.node, &mounted.extra) {
+            (Node::Box { bg, border, .. }, Extra::Box { view, .. }) => {
+                if bg.is_some() {
+                    view.bg(fill(theme, bg.as_ref()));
+                }
+                if let Some(border) = border {
+                    bordered(view, theme, border);
+                }
+            }
+            (Node::Text { .. }, Extra::Text { .. }) => paint_text(mounted, theme),
+            (Node::Spinner { .. }, Extra::Spinner(spinner)) => spinner.set_color(theme.interactive().step(200)),
+            _ => return,
+        }
+        count(|work| work.set += 1);
+    }
+
+    /// The text of `source`; empty while the host has none.
+    fn text(&self, source: &Source) -> Rc<str> {
+        (self.env.source)(source).unwrap_or_else(|| Rc::from(""))
+    }
+
+    /// The syntax theme of the pass's theme, made once.
+    fn syntax(&self) -> Rc<SyntaxTheme> {
+        self.syntax.get_or_init(|| Rc::new(opencode_ui::code::syntax_theme(self.env.theme))).clone()
+    }
+
     /// `node` built and added to `parent`.
     fn placed(&mut self, parent: &View, node: &Node) -> Mounted {
         if let Node::Slot { path } = node {
             let slot = (self.env.slot)(parent, path);
             self.slots_changed = true;
-            return Mounted { node: node.clone(), widget: None, children: Vec::new(), extra: Extra::Slot(slot) };
+            return Mounted {
+                node: node.clone(),
+                widget: None,
+                children: Vec::new(),
+                extra: Extra::Slot(slot),
+                dynamic: false,
+            };
         }
         let mounted = self.build(node);
         if let Some(widget) = &mounted.widget {
@@ -616,31 +820,35 @@ impl Pass<'_, '_> {
         mounted
     }
 
-    /// `node` built, not yet in a parent. A slot needs its parent and is never built here: a parent with a slot is
-    /// built through [`Pass::placed`].
+    /// `node` built, not yet in a parent; or, for an id the tree before held, that subtree reconciled. A slot needs
+    /// its parent and is never built here: a parent with a slot is built through [`Pass::placed`].
     fn build(&mut self, node: &Node) -> Mounted {
+        if let Some(held) = node.id().and_then(|id| self.pool.remove(id)) {
+            return self.adopt(held, node).0;
+        }
+        let mut mounted = self.shell(node);
+        match (node, &mounted.extra) {
+            (Node::Box { children, .. }, Extra::Box { view, .. }) => {
+                let view = view.clone();
+                mounted.children = self.children(&view, Vec::new(), children);
+            }
+            (Node::Scroll { children, .. }, Extra::Scroll(scroll)) => {
+                let content = scroll.content_view().clone();
+                mounted.children = self.children(&content, Vec::new(), children);
+            }
+            _ => {}
+        }
+        mounted.dynamic = dynamic(node, &mounted.children);
+        mounted
+    }
+
+    /// The widget of `node` alone, without its children.
+    fn shell(&mut self, node: &Node) -> Mounted {
         let env = self.env;
         let theme = env.theme;
         let app = env.host.app();
-        if let Node::Keep { key } = node {
-            // A keep in a parent that is built again: the subtree moves into the new widgets.
-            let kept = self.kept.remove(key).expect("a validated keep names a held subtree");
-            count(|work| work.kept += 1);
-            if !self.restyle {
-                return kept;
-            }
-            let node = unfold(&kept);
-            return match self.reconcile(kept, &node) {
-                Ok(mounted) => mounted,
-                Err(replaced) => {
-                    let (old, built) = *replaced;
-                    self.doom(old);
-                    built
-                }
-            };
-        }
         count(|work| work.created += 1);
-        let (widget, extra, children): (AnyWidget, Extra, Vec<Mounted>) = match node {
+        let (widget, extra): (AnyWidget, Extra) = match node {
             Node::Box {
                 row,
                 gap,
@@ -650,7 +858,6 @@ impl Pass<'_, '_> {
                 bg,
                 layout,
                 on_click,
-                children,
                 border,
                 padding_sides,
                 wrap,
@@ -704,10 +911,9 @@ impl Pass<'_, '_> {
                 if let Some(bg) = color(theme, bg.as_ref()) {
                     view.bg(bg);
                 }
-                let built = children.iter().map(|child| self.placed(&view, child)).collect();
                 let click = on_click.clone().map(|click| clickable(&view, click, env.act));
                 lay_out(&view, layout);
-                (view.as_any(), Extra::Box { view, click }, built)
+                (view.as_any(), Extra::Box { view, click })
             }
             Node::Text { spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click, .. } => {
                 let base = color(theme, fg.as_ref()).unwrap_or(theme.text.base);
@@ -730,18 +936,19 @@ impl Pass<'_, '_> {
                 });
                 let click = on_click.clone().map(|click| clickable(&text, click, env.act));
                 lay_out(&text, layout);
-                (text.as_any(), Extra::Text { text: held, click, hover }, Vec::new())
+                (text.as_any(), Extra::Text { text: held, click, hover })
             }
             Node::Spinner { label, .. } => {
                 let spinner =
                     opencode_ui::motion::Spinner::new(app).color(theme.interactive().step(200)).label(label.clone());
-                (spinner.as_any(), Extra::Spinner(spinner), Vec::new())
+                (spinner.as_any(), Extra::Spinner(spinner))
             }
             Node::Markdown { source, .. } => {
-                let text = (env.source)(source).unwrap_or_default();
-                (env.host.markdown(&text), Extra::None, Vec::new())
+                let text = self.text(source);
+                let markdown = env.host.markdown(&text);
+                (markdown.as_any(), Extra::Markdown(markdown, text))
             }
-            Node::Scroll { height, follow, layout, children, .. } => {
+            Node::Scroll { height, follow, layout, .. } => {
                 // A scroll may be smaller than its content, as CSS's `overflow` makes `min-height: auto` zero; one that
                 // cannot shrink below its content takes the content's height, and every row is laid out and painted.
                 let scroll = ScrollBox::new(app).scrollbars(false).min_height(0);
@@ -757,38 +964,43 @@ impl Pass<'_, '_> {
                 if layout.grow {
                     scroll.basis(0);
                 }
-                let content = scroll.content_view().clone();
-                let built = children.iter().map(|child| self.placed(&content, child)).collect();
-                (scroll.as_any(), Extra::Scroll(scroll), built)
+                (scroll.as_any(), Extra::Scroll(scroll))
             }
             Node::Diff { content, view, filetype, .. } => {
-                let patch = (env.source)(content).unwrap_or_default();
-                let syntax = opencode_ui::code::syntax_theme(theme);
-                let paints = Paints::default();
-                let view = match view {
-                    DiffView::Unified => opentui::widget::DiffView::Unified,
-                    DiffView::Split => opentui::widget::DiffView::Split,
-                };
-                let widget = opencode_ui::diff::view_painted(
+                let text = self.text(content);
+                let patch = Patch::new(
                     app,
                     theme,
-                    &syntax,
-                    &patch,
-                    view,
+                    &self.syntax(),
+                    &text,
+                    diff_view(*view),
                     filetype.as_deref(),
                     WrapMode::Word,
                     0,
-                    &paints,
                 );
                 count(|work| work.parses += 1);
-                (widget.as_any(), Extra::Diff(paints), Vec::new())
+                (patch.view().as_any(), Extra::Diff(patch, text))
             }
-            Node::Slot { .. } | Node::Keep { .. } => unreachable!("built above"),
+            Node::Slot { .. } | Node::Keep { .. } => unreachable!("a slot is placed, and a keep is held"),
         };
-        Mounted { node: shell(node), widget: Some(widget), children, extra }
+        Mounted { node: shell(node), widget: Some(widget), children: Vec::new(), extra, dynamic: false }
     }
 
-    /// Drops `node` once every kept subtree has moved out of it. A placeholder of a kept subtree drops nothing.
+    /// Drops the nested slots of `node` now, outside the subtrees held again.
+    fn release_slots(&mut self, node: &mut Mounted) {
+        match &mut node.extra {
+            Extra::Taken => return,
+            Extra::Slot(slot) => {
+                if slot.take().is_some() {
+                    self.slots_changed = true;
+                }
+            }
+            _ => {}
+        }
+        node.children.iter_mut().for_each(|child| self.release_slots(child));
+    }
+
+    /// Drops `node` once every subtree held again has moved out of it. A placeholder of one drops nothing.
     fn doom(&mut self, node: Mounted) {
         if matches!(node.extra, Extra::Taken) {
             return;
@@ -797,31 +1009,70 @@ impl Pass<'_, '_> {
     }
 }
 
-/// For each of `new`, the index of the child of `old` it is reconciled with: the one of its id and kind, or for a node
-/// without an id the next one without an id of its kind.
-fn matches(old: &[Mounted], new: &[Node]) -> Vec<Option<usize>> {
-    let mut by_id: HashMap<&str, usize> = HashMap::new();
-    for (index, node) in old.iter().enumerate() {
-        if let Some(id) = node.node.id() {
-            by_id.insert(id, index);
+/// Puts the widgets of `out` in `parent` in their order. OpenTUI paints siblings of one z-index in the order they
+/// were attached, not by their index (`paintLessThan` in its `scene.zig`), and a move within a parent keeps that
+/// order. So a widget is never inserted before a sibling: from the first child out of place on, every child is
+/// attached again, in order, and the children paint as a fresh mount's do where they overlap.
+fn place(parent: &View, out: &[Mounted], reused: &[bool]) {
+    let widgets: Vec<(&AnyWidget, bool)> = out
+        .iter()
+        .zip(reused)
+        .filter_map(|(node, reused)| node.widget.as_ref().map(|widget| (widget, *reused)))
+        .collect();
+    let wanted: HashSet<u32> = widgets.iter().map(|(widget, _)| widget.id()).collect();
+    let present: Vec<u32> = parent.children().iter().map(Widget::id).filter(|id| wanted.contains(id)).collect();
+    let first = widgets
+        .iter()
+        .zip(&present)
+        .position(|((widget, _), id)| widget.id() != *id)
+        .unwrap_or(present.len().min(widgets.len()));
+    let here: HashSet<u32> = present[first.min(present.len())..].iter().copied().collect();
+    // Detached last first, each from the end of the parent's list.
+    for (widget, _) in widgets[first..].iter().rev() {
+        if here.contains(&widget.id()) {
+            widget.detach();
         }
     }
+    for (widget, reused) in &widgets[first..] {
+        parent.add(*widget);
+        if *reused {
+            count(|work| work.moved += 1);
+        }
+    }
+}
+
+/// For each of `new` without an id, the index of the child of `old` it is reconciled with: the next one without an
+/// id, of its kind. A child with an id comes from the subtrees held again.
+fn matches(old: &[Mounted], new: &[Node]) -> Vec<Option<usize>> {
     let mut cursor: HashMap<std::mem::Discriminant<Node>, usize> = HashMap::new();
     new.iter()
-        .map(|node| match node.id() {
-            Some(id) => by_id.get(id).copied().filter(|&index| same_slot(&old[index].node, node)),
-            None => {
-                let kind = std::mem::discriminant(node);
-                let start = cursor.get(&kind).copied().unwrap_or(0);
-                let found = (start..old.len())
-                    .find(|&index| old[index].node.id().is_none() && std::mem::discriminant(&old[index].node) == kind);
-                if let Some(index) = found {
-                    cursor.insert(kind, index + 1);
-                }
-                found
+        .map(|node| {
+            if node.id().is_some() {
+                return None;
             }
+            let kind = std::mem::discriminant(node);
+            let start = cursor.get(&kind).copied().unwrap_or(0);
+            let found = (start..old.len())
+                .find(|&index| old[index].node.id().is_none() && std::mem::discriminant(&old[index].node) == kind);
+            cursor.insert(kind, found.map_or(old.len(), |index| index + 1));
+            found
         })
         .collect()
+}
+
+/// Whether `node`, with `children` under it, shows a tool call's output.
+fn dynamic(node: &Node, children: &[Mounted]) -> bool {
+    matches!(
+        node,
+        Node::Diff { content: Source::PartOutput(_), .. } | Node::Markdown { source: Source::PartOutput(_), .. }
+    ) || children.iter().any(|child| child.dynamic)
+}
+
+fn diff_view(view: DiffView) -> opentui::widget::DiffView {
+    match view {
+        DiffView::Unified => opentui::widget::DiffView::Unified,
+        DiffView::Split => opentui::widget::DiffView::Split,
+    }
 }
 
 /// Drops `node` and its widgets, counting them; a slot's claims go with it.
@@ -845,15 +1096,6 @@ fn count_removed(node: &Mounted) {
 
 fn has_slot(node: &Mounted) -> bool {
     matches!(node.extra, Extra::Slot(_)) || node.children.iter().any(has_slot)
-}
-
-/// Whether `new` can be reconciled into `old` where it is: a keep of its id, or the same kind and id.
-fn same_slot(old: &Node, new: &Node) -> bool {
-    match new {
-        Node::Keep { key } => old.id() == Some(key),
-        Node::Slot { path } => matches!(old, Node::Slot { path: was } if was == path),
-        _ => same_kind(old, new) && old.id() == new.id(),
-    }
 }
 
 fn same_kind(old: &Node, new: &Node) -> bool {
@@ -899,17 +1141,6 @@ fn shell(node: &Node) -> Node {
         }
         _ => node.clone(),
     }
-}
-
-/// Whether two scrolls differ only in their children.
-fn same_scroll(old: &Node, new: &Node) -> bool {
-    matches!(
-        (old, new),
-        (
-            Node::Scroll { id, height, follow, layout, .. },
-            Node::Scroll { id: id2, height: height2, follow: follow2, layout: layout2, .. },
-        ) if (id, height, follow, layout) == (id2, height2, follow2, layout2)
-    )
 }
 
 /// How a node of the same kind and id changes.
@@ -1014,35 +1245,6 @@ fn paint_text(mounted: &Mounted, theme: &Theme) {
         }
         None => drop(text.fg(base)),
     }
-}
-
-/// Paints the node's own colors again, for a new theme.
-fn restyle(mounted: &Mounted, env: &Env<'_>) {
-    let theme = env.theme;
-    match (&mounted.node, &mounted.extra) {
-        (Node::Box { bg, border, .. }, Extra::Box { view, .. }) => {
-            if bg.is_some() {
-                view.bg(fill(theme, bg.as_ref()));
-            }
-            if let Some(border) = border {
-                bordered(view, theme, border);
-            }
-        }
-        (Node::Text { .. }, Extra::Text { .. }) => paint_text(mounted, theme),
-        (Node::Spinner { .. }, Extra::Spinner(spinner)) => spinner.set_color(theme.interactive().step(200)),
-        (Node::Diff { .. }, Extra::Diff(paints)) => paints.restyle(theme),
-        _ => return,
-    }
-    count(|work| work.set += 1);
-}
-
-/// The node a mounted subtree shows, children included.
-fn unfold(mounted: &Mounted) -> Node {
-    let mut node = mounted.node.clone();
-    if let Node::Box { children, .. } | Node::Scroll { children, .. } = &mut node {
-        *children = mounted.children.iter().map(unfold).collect();
-    }
-    node
 }
 
 /// Shows the hand over `widget` and runs the click in the cell it returns on the press or the release of the left
