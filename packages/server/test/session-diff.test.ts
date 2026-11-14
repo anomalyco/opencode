@@ -49,13 +49,13 @@ it.live("serves turn diffs by user message with range validation", () =>
             }),
           interrupt: () => Effect.succeed(false),
           awaitIdle: () => Effect.void,
-          periodStartSeq: () => Effect.succeed(undefined),
         })
       }),
     )
     const handler = yield* ServerFetch.make(
       {
         app: { version: "test-version" },
+        config: { directory: tmp.path, project: false },
         database: { path: ":memory:" },
         fs: { filewatcher: false },
         models: { fetch: false },

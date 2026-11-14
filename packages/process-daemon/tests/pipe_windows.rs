@@ -206,6 +206,52 @@ fn batch(name: &str, lines: &[String]) -> TempPath {
     path
 }
 
+/// A long-lived PowerShell grandchild in the job that writes its PID, and the
+/// batch parent that starts it (staying alive when asked).
+struct GrandchildTree {
+    /// The script must outlive the child that runs it.
+    _inner: Script,
+    pid_file: TempPath,
+    outer: TempPath,
+}
+
+impl GrandchildTree {
+    fn start(&self, service: &TerminalService) -> (ProcessInfo, TempPath) {
+        start(service, |file| {
+            cmd(&self.outer.0.display().to_string(), file)
+        })
+    }
+}
+
+fn grandchild_tree(name: &str, keep_parent_alive: bool) -> GrandchildTree {
+    let pid_file = TempPath::new(&format!("{name}-pid"));
+    let inner = Script::powershell(
+        &format!("{name}-grandchild"),
+        &format!(
+            r#"
+            [System.IO.File]::WriteAllText('{}', "$PID")
+            Start-Sleep -Seconds 60
+            "#,
+            ps_path(&pid_file.0)
+        ),
+    );
+    let mut lines = vec![
+        "@echo off".to_string(),
+        format!(
+            "start /b powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{}\"",
+            inner.0.0.display()
+        ),
+    ];
+    if keep_parent_alive {
+        lines.push("ping -n 60 127.0.0.1".to_string());
+    }
+    GrandchildTree {
+        _inner: inner,
+        pid_file,
+        outer: batch(&format!("{name}-outer"), &lines),
+    }
+}
+
 #[test]
 fn reports_ordered_output_and_exit_code_without_a_terminal() {
     let service = TerminalService::default();
@@ -358,7 +404,7 @@ fn rejected_requests_never_touch_the_output_file_or_run() {
     let link = TempPath::new("link");
     let reparse = match std::os::windows::fs::symlink_file(&target.0, &link.0) {
         Ok(()) => {
-            cases.push((cmd(&touch, &link.0), "failed to open output file"));
+            cases.push((cmd(&touch, &link.0), "reparse point"));
             true
         }
         // Symbolic link creation needs Developer Mode or an elevated account.
@@ -463,8 +509,7 @@ fn wait_blocks_until_the_exit_and_answers_every_waiter() {
 #[test]
 fn terminate_ends_a_pending_wait_with_an_error() {
     let service = TerminalService::default();
-    let script = Script::powershell("sleep", "Start-Sleep -Seconds 30");
-    let (info, _file) = start(&service, |file| script.request(file, base_env()));
+    let (info, _file) = start(&service, |file| cmd("ping -n 30 127.0.0.1 >nul", file));
     let wait = service.wait(info.id).unwrap();
     service.terminate(info.id).unwrap();
     assert_eq!(wait.recv().unwrap_err().to_string(), "terminated");
@@ -473,14 +518,9 @@ fn terminate_ends_a_pending_wait_with_an_error() {
 #[test]
 fn signal_stops_a_process_and_keeps_its_record() {
     let service = TerminalService::default();
-    let script = Script::powershell(
-        "signal",
-        r#"
-        [Console]::Out.WriteLine("started")
-        Start-Sleep -Seconds 30
-        "#,
-    );
-    let (info, file) = start(&service, |file| script.request(file, base_env()));
+    let (info, file) = start(&service, |file| {
+        cmd("echo started&ping -n 30 127.0.0.1 >nul", file)
+    });
     first_line(&file);
     service.signal(info.id, ProcessSignal::Term).unwrap();
     let exit = service.wait(info.id).unwrap().recv().unwrap();
@@ -503,30 +543,9 @@ fn signal_stops_a_process_and_keeps_its_record() {
 #[test]
 fn signal_reaches_a_grandchild_in_the_job() {
     let service = TerminalService::default();
-    let pid_file = TempPath::new("grandchild-pid");
-    let inner = Script::powershell(
-        "grandchild",
-        &format!(
-            r#"
-            [System.IO.File]::WriteAllText('{}', "$PID")
-            Start-Sleep -Seconds 60
-            "#,
-            ps_path(&pid_file.0)
-        ),
-    );
-    let outer = batch(
-        "grandchild-outer",
-        &[
-            "@echo off".to_string(),
-            format!(
-                "start /b powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{}\"",
-                inner.0.0.display()
-            ),
-            "ping -n 60 127.0.0.1".to_string(),
-        ],
-    );
-    let (info, _file) = start(&service, |file| cmd(&outer.0.display().to_string(), file));
-    let grandchild = read_pid(&pid_file.0);
+    let tree = grandchild_tree("grandchild", true);
+    let (info, _file) = tree.start(&service);
+    let grandchild = read_pid(&tree.pid_file.0);
     assert!(alive(grandchild));
     service.signal(info.id, ProcessSignal::Term).unwrap();
     let exit = service.wait(info.id).unwrap().recv().unwrap();
@@ -536,47 +555,11 @@ fn signal_reaches_a_grandchild_in_the_job() {
 }
 
 #[test]
-fn a_grandchild_holding_the_pipe_delays_the_exit_by_at_most_the_drain() {
-    let service = TerminalService::default();
-    let (info, file) = start(&service, |file| cmd("start /b ping -n 60 127.0.0.1", file));
-    let finished = run(&service, info.id, &file);
-    assert_eq!(finished.exit.exit_code, Some(0));
-    assert!(
-        finished.elapsed < Duration::from_secs(10),
-        "{:?}",
-        finished.elapsed
-    );
-    // Terminate kills the rest of the job.
-    service.terminate(info.id).unwrap();
-}
-
-#[test]
 fn terminate_does_not_hang_on_a_grandchild() {
     let service = TerminalService::default();
-    let pid_file = TempPath::new("terminate-pid");
-    let inner = Script::powershell(
-        "terminate-grandchild",
-        &format!(
-            r#"
-            [System.IO.File]::WriteAllText('{}', "$PID")
-            Start-Sleep -Seconds 60
-            "#,
-            ps_path(&pid_file.0)
-        ),
-    );
-    let outer = batch(
-        "terminate-outer",
-        &[
-            "@echo off".to_string(),
-            format!(
-                "start /b powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{}\"",
-                inner.0.0.display()
-            ),
-            "ping -n 60 127.0.0.1".to_string(),
-        ],
-    );
-    let (info, _file) = start(&service, |file| cmd(&outer.0.display().to_string(), file));
-    let grandchild = read_pid(&pid_file.0);
+    let tree = grandchild_tree("terminate", true);
+    let (info, _file) = tree.start(&service);
+    let grandchild = read_pid(&tree.pid_file.0);
     assert!(alive(grandchild));
     let started = Instant::now();
     service.terminate(info.id).unwrap();
@@ -639,30 +622,17 @@ fn a_noisy_grandchild_still_exits_after_the_drain() {
 #[test]
 fn signal_after_a_normal_exit_kills_a_leftover_grandchild() {
     let service = TerminalService::default();
-    let pid_file = TempPath::new("leftover-pid");
-    let inner = Script::powershell(
-        "leftover-grandchild",
-        &format!(
-            r#"
-            [System.IO.File]::WriteAllText('{}', "$PID")
-            Start-Sleep -Seconds 60
-            "#,
-            ps_path(&pid_file.0)
-        ),
-    );
-    let outer = batch(
-        "leftover-outer",
-        &[
-            "@echo off".to_string(),
-            format!(
-                "start /b powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{}\"",
-                inner.0.0.display()
-            ),
-        ],
-    );
-    let (info, _file) = start(&service, |file| cmd(&outer.0.display().to_string(), file));
-    let grandchild = read_pid(&pid_file.0);
+    let tree = grandchild_tree("leftover", false);
+    let (info, _file) = tree.start(&service);
+    let grandchild = read_pid(&tree.pid_file.0);
+    // A descendant holds the pipe, so the exit waits for at most the drain.
+    let started = Instant::now();
     let exit = service.wait(info.id).unwrap().recv().unwrap();
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "{:?}",
+        started.elapsed()
+    );
     assert_eq!(exit.exit_code, Some(0));
     assert_eq!(exit.signal, None);
     // The process keeps its record after the exit; the grandchild still runs.
@@ -763,14 +733,9 @@ if ($window -eq [IntPtr]::Zero) {
 #[test]
 fn the_output_file_can_be_read_and_deleted_while_open() {
     let service = TerminalService::default();
-    let script = Script::powershell(
-        "shared",
-        r#"
-        [Console]::Out.WriteLine("started")
-        Start-Sleep -Seconds 30
-        "#,
-    );
-    let (info, file) = start(&service, |file| script.request(file, base_env()));
+    let (info, file) = start(&service, |file| {
+        cmd("echo started&ping -n 30 127.0.0.1 >nul", file)
+    });
     first_line(&file);
     assert!(fs::read_to_string(&file.0).unwrap().starts_with("started"));
     fs::remove_file(&file.0).unwrap();

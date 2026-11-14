@@ -25,11 +25,6 @@ export interface Interface {
   /** Registers newly recorded work. Repeated wakeups may coalesce. */
   readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   /**
-   * The durable sequence where the Session's current busy period started, if one is bound.
-   * Sequence-bounded lookups use it to find only work created by this period.
-   */
-  readonly periodStartSeq: (sessionID: SessionSchema.ID) => Effect.Effect<number | undefined>
-  /**
    * Interrupt active work owned by this process. Idle interruption is a no-op. Resolves once
    * the interruption is accepted; cleanup settles asynchronously in the execution fiber.
    * Returns whether an active execution was interrupted. Compose with `awaitIdle` when
@@ -163,8 +158,7 @@ export const layer = Layer.effect(
               yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: "shutdown" })
               return
             }
-            // Classify and claim the Job generation before cancelling it: the settlement commit
-            // owns the outbox row, and a cancel must not race a foreground classification.
+            // Claim the Job generation before cancelling it so the settlement commit owns its outbox row.
             const settlement = yield* subagentReport.prepare(sessionID, outcome)
             if (outcome.type === "interrupted") yield* jobs.cancel(sessionID)
             yield* publishTerminal(bus, sessionID, outcome, settlement.commit)
@@ -182,7 +176,6 @@ export const layer = Layer.effect(
     return Service.of({
       active: coordinator.active,
       isActive: coordinator.isActive,
-      periodStartSeq: subagentReport.periodStartSeq,
       interrupt: (sessionID, options) =>
         Effect.gen(function* () {
           const interrupted = yield* coordinator.interrupt(sessionID, "user")
@@ -236,7 +229,6 @@ export const noopLayer = Layer.succeed(
     isActive: () => Effect.succeed(false),
     resume: () => Effect.void,
     wake: () => Effect.void,
-    periodStartSeq: () => Effect.succeed(undefined),
     interrupt: () => Effect.succeed(false),
     awaitIdle: () => Effect.void,
   }),

@@ -24,11 +24,18 @@ import {
   toolMetadata,
   type ContextGroupPart,
 } from "../../tools/tool-renderer"
-import { kindKeys, launchKeys, summarizeEvents, toolEvent, verbKeys } from "../events"
+import { TimelineEventRow } from "../event-row"
+import { kindKeys, launchKeys, summarizeEvents, toolEvent, verbKeys, workKey, type TimelineEvent } from "../events"
 import { toolRule, toolStopped, type ToolMode } from "../rules"
 import { FileGroup } from "./file-group"
 import { ThoughtRow } from "./thought"
 import { ToolDisplay } from "./tool-display"
+
+/** A part of an activity group: a call, a thought, a notice, or background work reporting back. */
+export type ActivityGroupPart = ContextGroupPart | { type: "event"; id: string; event: TimelineEvent }
+
+// Subagents and background work listed one after another in an opened group, as one nested events row.
+type WorkRun = { type: "work"; id: string; events: TimelineEvent[] }
 
 /**
  * A stretch of the agent's work folded into one row, named by what it did: "Explored 3 files · 2 commands". It only
@@ -36,7 +43,7 @@ import { ToolDisplay } from "./tool-display"
  * thoughts, without a group around them.
  */
 export function ContextGroup(props: {
-  parts: ContextGroupPart[]
+  parts: ActivityGroupPart[]
   open: boolean
   onOpenChange: (open: boolean) => void
   onSizeChange?: () => void
@@ -49,12 +56,23 @@ export function ContextGroup(props: {
   fileOpen?: (path: string) => boolean | undefined
   onFileOpenChange?: (path: string, open: boolean) => void
   patchGroupKey?: (tools: SessionMessageAssistantTool[]) => string
+  onRevealShell?: (shellID: string) => void
 }) {
   const i18n = useI18n()
   const tools = createMemo(() => props.parts.filter((part) => part.type === "tool"))
   const reasoning = createMemo(() => props.parts.flatMap((part) => (part.type === "reasoning" ? [part] : [])))
   const thoughtsOnly = createMemo(() => reasoning().length > 0 && reasoning().length === props.parts.length)
-  const activity = createMemo(() => activityLabel(tools(), i18n))
+  const events = createMemo(() => [...workEvents(props.parts).values()])
+
+  // A group of only subagents and work reporting back reads as the events row it is, not a group around one. Until a
+  // call has anything to count, it stays a group, so the row never renders empty.
+  const workOnly = createMemo(
+    () =>
+      events().length > 0 &&
+      props.parts.every((part) => part.type === "event" || (part.type === "tool" && toolRule(part).name === "subagent")),
+  )
+
+  const activity = createMemo(() => activityLabel(tools(), events(), i18n))
 
   const label = createMemo(() => {
     const value = activity()
@@ -69,15 +87,50 @@ export function ContextGroup(props: {
 
   const items = createMemo(() =>
     (props.open ? props.parts : []).reduce<
-      (SessionMessageAssistantTool[] | Exclude<ContextGroupPart, SessionMessageAssistantTool>)[]
+      (
+        | SessionMessageAssistantTool[]
+        | Exclude<ActivityGroupPart, SessionMessageAssistantTool | { type: "event" }>
+        | WorkRun
+      )[]
     >((groups, tool) => {
+      const previous = groups.at(-1)
+
+      // Subagents started one after another, and work reporting back, read as one events row nested in the group:
+      // "Started 3 subagents". The rows keep the order things happened in, which the label does not.
+      if (tool.type === "event" || (tool.type === "tool" && toolRule(tool).name === "subagent")) {
+        // A subagent still being asked for has nothing to list yet.
+        const event = tool.type === "event" ? tool.event : toolEvent(tool)
+
+        if (!event) return groups
+        const run = previous && !Array.isArray(previous) && previous.type === "work" ? previous : undefined
+        const key = tool.type === "event" ? workKey(event) : undefined
+
+        // Work reporting back right after its launch, with nothing between, finishes the launch's row. With
+        // anything between, the launch and the report each keep their row.
+        const launch = key && run ? run.events.findIndex((item) => item.verb === "started" && workKey(item) === key) : -1
+
+        if (run && launch >= 0) {
+          run.events[launch] = { ...run.events[launch]!, verb: event.verb, failed: event.failed }
+
+          return groups
+        }
+
+        if (run) {
+          run.events.push(event)
+
+          return groups
+        }
+
+        groups.push({ type: "work", id: tool.id, events: [event] })
+
+        return groups
+      }
+
       if (tool.type !== "tool") {
         groups.push(tool)
 
         return groups
       }
-
-      const previous = groups.at(-1)
 
       if (Array.isArray(previous) && previous[0] && joins(previous[0], tool)) {
         previous.push(tool)
@@ -136,113 +189,152 @@ export function ContextGroup(props: {
         </div>
       }
     >
-      <div
-        ref={root}
-        data-component="collapsed-tool-group"
-        data-timeline-part-ids={props.parts.map((part) => part.id).join(",")}
-      >
-        <BasicTool
-          icon="glasses"
-          status="completed"
-          compact
-          hasContent
-          allowOpenWhilePending
-          open={props.open}
-          onOpenChange={change}
-          trigger={
-            <div data-component="context-tool-group-trigger" aria-label={label().text}>
-              <Show when={activity()} fallback={<UsedTitle label={usedLabel(props.parts, i18n)} />}>
-                {(value) => (
-                  <span data-slot="context-tool-group-title" data-activity="">
-                    <span data-slot="context-tool-group-verb">{value().verb}</span>
-                    <Show when={value().main}>
-                      <span data-slot="context-tool-group-detail">{value().main}</span>
-                    </Show>
-                    <Show when={value().others.length > 0}>
-                      <span data-slot="context-tool-group-separator" aria-hidden="true">
-                        ·
-                      </span>
-                      <span data-slot="context-tool-group-detail">{value().others.join(", ")}</span>
-                    </Show>
-                  </span>
-                )}
-              </Show>
-            </div>
-          }
-        >
-          <div data-component="context-tool-group-list">
-            <Index each={items()}>
-              {(item) => {
-                const group = createMemo(() => {
-                  const value = item()
-
-                  return Array.isArray(value) ? value : undefined
-                })
-
-                const reasoning = createMemo(() => {
-                  const value = item()
-
-                  return !Array.isArray(value) && value.type === "reasoning" ? value : undefined
-                })
-
-                const callback = createMemo(() => {
-                  const value = item()
-
-                  return !Array.isArray(value) &&
-                    (value.type === "notice" || value.type === "shell" || value.type === "text")
-                    ? value
-                    : undefined
-                })
-
-                return (
-                  <Show
-                    when={group()}
-                    fallback={
-                      <Show
-                        when={reasoning()}
-                        fallback={
-                          <Show when={callback()}>
-                            {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
-                          </Show>
-                        }
-                      >
-                        {(part) => (
-                          <div data-slot="context-tool-group-item">
-                            <AssistantReasoningContent
-                              id={part().id}
-                              content={part()}
-                              streaming={part().streaming ?? false}
-                              defaultOpen={props.reasoningDefaultOpen}
-                              open={props.reasoningOpen?.(part().id)}
-                              onOpenChange={(open) => props.onReasoningOpenChange?.(part().id, open)}
-                              onContentRendered={props.onSizeChange}
-                            />
-                          </div>
-                        )}
-                      </Show>
-                    }
-                  >
-                    {(group) => (
-                      <div data-slot="context-tool-group-item">
-                        <GroupItem
-                          tools={group()}
-                          patchKey={patchKeys().get(group()[0]!)}
-                          onSizeChange={props.onSizeChange}
-                          toolDefaultOpen={props.toolDefaultOpen}
-                          toolOpen={props.toolOpen}
-                          onToolOpenChange={props.onToolOpenChange}
-                          fileOpen={props.fileOpen}
-                          onFileOpenChange={props.onFileOpenChange}
-                        />
-                      </div>
-                    )}
-                  </Show>
-                )
-              }}
-            </Index>
+      <Show
+        when={!workOnly()}
+        fallback={
+          <div data-timeline-part-ids={props.parts.map((part) => part.id).join(",")}>
+            <TimelineEventRow
+              events={events()}
+              open={props.open}
+              onOpenChange={change}
+              onRevealShell={props.onRevealShell}
+            />
           </div>
-        </BasicTool>
-      </div>
+        }
+      >
+        <div
+          ref={root}
+          data-component="collapsed-tool-group"
+          data-timeline-part-ids={props.parts.map((part) => part.id).join(",")}
+        >
+          <BasicTool
+            icon="glasses"
+            status="completed"
+            compact
+            hasContent
+            allowOpenWhilePending
+            open={props.open}
+            onOpenChange={change}
+            trigger={
+              <div data-component="context-tool-group-trigger" aria-label={label().text}>
+                <Show when={activity()} fallback={<UsedTitle label={usedLabel(props.parts, i18n)} />}>
+                  {(value) => (
+                    <span data-slot="context-tool-group-title" data-activity="">
+                      <span data-slot="context-tool-group-verb">{value().verb}</span>
+                      <Show when={value().main}>
+                        <span data-slot="context-tool-group-detail">{value().main}</span>
+                      </Show>
+                      <Show when={value().others.length > 0}>
+                        <span data-slot="context-tool-group-separator" aria-hidden="true">
+                          ·
+                        </span>
+                        <span data-slot="context-tool-group-detail">{value().others.join(", ")}</span>
+                      </Show>
+                    </span>
+                  )}
+                </Show>
+              </div>
+            }
+          >
+            <div data-component="context-tool-group-list">
+              <Index each={items()}>
+                {(item) => {
+                  const group = createMemo(() => {
+                    const value = item()
+
+                    return Array.isArray(value) ? value : undefined
+                  })
+
+                  const reasoning = createMemo(() => {
+                    const value = item()
+
+                    return !Array.isArray(value) && value.type === "reasoning" ? value : undefined
+                  })
+
+                  const callback = createMemo(() => {
+                    const value = item()
+
+                    return !Array.isArray(value) &&
+                      (value.type === "notice" || value.type === "shell" || value.type === "text")
+                      ? value
+                      : undefined
+                  })
+
+                  const work = createMemo(() => {
+                    const value = item()
+
+                    return !Array.isArray(value) && value.type === "work" ? value : undefined
+                  })
+
+                  return (
+                    <Show
+                      when={group()}
+                      fallback={
+                        <Show
+                          when={reasoning()}
+                          fallback={
+                            <Show
+                              when={work()}
+                              fallback={
+                                <Show when={callback()}>
+                                  {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
+                                </Show>
+                              }
+                            >
+                              {(work) => (
+                                <div data-slot="context-tool-group-item">
+                                  <TimelineEventRow
+                                    events={work().events}
+                                    open={props.toolOpen?.(`events:${work().id}`) === true}
+                                    onOpenChange={(open) => {
+                                      props.onToolOpenChange?.(`events:${work().id}`, open)
+                                      props.onSizeChange?.()
+                                    }}
+                                    onRevealShell={props.onRevealShell}
+                                  />
+                                </div>
+                              )}
+                            </Show>
+                          }
+                        >
+                          {(part) => (
+                            <div data-slot="context-tool-group-item">
+                              <AssistantReasoningContent
+                                id={part().id}
+                                content={part()}
+                                streaming={part().streaming ?? false}
+                                defaultOpen={props.reasoningDefaultOpen}
+                                open={props.reasoningOpen?.(part().id)}
+                                onOpenChange={(open) => props.onReasoningOpenChange?.(part().id, open)}
+                                onContentRendered={props.onSizeChange}
+                              />
+                            </div>
+                          )}
+                        </Show>
+                      }
+                    >
+                      {(group) => (
+                        <div data-slot="context-tool-group-item">
+                          <GroupItem
+                            tools={group()}
+                            patchKey={patchKeys().get(group()[0]!)}
+                            onSizeChange={props.onSizeChange}
+                            toolDefaultOpen={props.toolDefaultOpen}
+                            toolOpen={props.toolOpen}
+                            onToolOpenChange={props.onToolOpenChange}
+                            fileOpen={props.fileOpen}
+                            onFileOpenChange={props.onFileOpenChange}
+                          />
+                        </div>
+                      )}
+                    </Show>
+                  )
+                }}
+              </Index>
+            </div>
+          </BasicTool>
+        </div>
+      </Show>
     </Show>
   )
 }
@@ -285,6 +377,7 @@ function GroupItem(props: {
       <Match when={currentToolGroupedRead(tool())}>
         <CurrentReadToolGroup
           tools={props.tools}
+          names={2}
           open={props.toolOpen?.(tool().id)}
           onOpenChange={(open) => props.onToolOpenChange?.(tool().id, open)}
           onSizeChange={props.onSizeChange}
@@ -421,7 +514,7 @@ function UsedTitle(props: { label: ReturnType<typeof usedLabel> }) {
   )
 }
 
-function usedLabel(parts: ContextGroupPart[], i18n: UiI18n) {
+function usedLabel(parts: ActivityGroupPart[], i18n: UiI18n) {
   const count = parts.filter((part) => part.type === "reasoning").length
 
   if (!count) {
@@ -450,6 +543,52 @@ function usedLabel(parts: ContextGroupPart[], i18n: UiI18n) {
   }
 }
 
+/**
+ * What each subagent or background shell in a group did, for its label. Work that reports back anywhere in the group
+ * that started it is counted once, as how it ended: "Finished", not "Started" and "Finished".
+ */
+function workEvents(parts: ActivityGroupPart[]) {
+  const launch = (part: ActivityGroupPart) =>
+    part.type === "tool" && toolRule(part).layout === "event" ? toolEvent(part) : undefined
+
+  const launched = new Set(
+    parts.flatMap((part) => {
+      const event = launch(part)
+      const key = event && workKey(event)
+
+      return key ? [key] : []
+    }),
+  )
+
+  const reports = new Map(
+    parts.flatMap((part) => {
+      const key = part.type === "event" ? workKey(part.event) : undefined
+
+      return key && part.type === "event" ? [[key, part.event] as const] : []
+    }),
+  )
+
+  return new Map(
+    parts.flatMap((part): [ActivityGroupPart, TimelineEvent][] => {
+      if (part.type === "event") {
+        const key = workKey(part.event)
+
+        return key && launched.has(key) ? [] : [[part, part.event]]
+      }
+
+      const event = launch(part)
+
+      if (!event) return []
+      const key = workKey(event)
+      const outcome = key ? reports.get(key) : undefined
+
+      return [
+        [part, outcome && event.verb === "started" ? { ...event, verb: outcome.verb, failed: outcome.failed } : event],
+      ]
+    }),
+  )
+}
+
 // The most consequential work names a group: changing files over running commands, and both over reading.
 const modePriority: ToolMode[] = ["edit", "run", "tool", "explore"]
 
@@ -464,25 +603,16 @@ const decodeChangedPath = Schema.decodeUnknownOption(Schema.Struct({ file: Schem
 
 /**
  * Names a stretch of the agent's work by its main mode, then what its other calls did: "Edited 4 files · 2 commands,
- * started 1 shell". Work that runs on is counted by what was started, not among the calls that started it; a stretch of
- * only that reads like an events row: "Started 2 subagents".
+ * started 1 shell". Work that runs on is counted by what happened to it, not among the calls that started it; a
+ * stretch of only that reads like an events row: "Started 2 subagents · finished 2 subagents".
  */
-function activityLabel(group: SessionMessageAssistantTool[], i18n: UiI18n) {
+function activityLabel(group: SessionMessageAssistantTool[], events: TimelineEvent[], i18n: UiI18n) {
   const tools = group.filter((tool) => toolRule(tool).layout !== "event")
+  const launches = summarizeEvents(events).verbs
 
-  const launches = summarizeEvents(
-    group.flatMap((tool) => {
-      const event = toolRule(tool).layout === "event" ? toolEvent(tool) : undefined
-
-      return event ? [event] : []
-    }),
-  ).verbs
-
-  const launched = launches.flatMap((bucket) => {
-    const keys = bucket.verb === "started" || bucket.verb === "ran" ? launchKeys[bucket.verb] : undefined
-
-    return keys ? bucket.kinds.map((item) => i18n.plural(keys[item.kind], item.count)) : []
-  })
+  const launched = launches.flatMap((bucket) =>
+    bucket.kinds.map((item) => i18n.plural(launchKeys[bucket.verb][item.kind], item.count)),
+  )
 
   const modes = new Set(tools.map((tool) => toolRule(tool).mode))
   const mode = modePriority.find((item) => modes.has(item))
@@ -542,7 +672,7 @@ function activityLabel(group: SessionMessageAssistantTool[], i18n: UiI18n) {
   const main = {
     // A few files read better by name; past that, the count says more than a list that truncates.
     edit:
-      files.length <= 3
+      files.length <= 2
         ? files.map((path) => getFilename(path)).join(", ")
         : i18n.plural("ui.timeline.activity.files", files.length),
     run: commands[0]!,

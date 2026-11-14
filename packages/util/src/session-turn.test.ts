@@ -22,7 +22,6 @@ test("measures decode throughput from the first streamed token", () => {
 
   // 65 tokens over the 5s the provider spent streaming them, not the 10s that include waiting for the first.
   expect(SessionTurn.tokensPerSecond(messages, final)).toBe(13)
-  expect(SessionTurn.timeToFirstToken(messages, final)).toBe(2_000)
 })
 
 test("falls back to the request window for steps recorded without a first token", () => {
@@ -32,8 +31,6 @@ test("falls back to the request window for steps recorded without a first token"
 
   // The old step counts its 4s request window, the new one its 3s decode window.
   expect(SessionTurn.tokensPerSecond(messages, final)).toBe(65 / 7)
-  // Only the step that recorded a first token can report how long it waited for one.
-  expect(SessionTurn.timeToFirstToken(messages, final)).toBe(1_000)
 })
 
 test("measures request throughput including reasoning without tool time", () => {
@@ -42,7 +39,6 @@ test("measures request throughput including reasoning without tool time", () => 
   const messages = [input("user-1", 1_000), first, final]
 
   expect(SessionTurn.tokensPerSecond(messages, final)).toBe(6.5)
-  expect(SessionTurn.timeToFirstToken(messages, final)).toBeUndefined()
   first.time.streamed = undefined
   expect(SessionTurn.tokensPerSecond(messages, final)).toBeUndefined()
 })

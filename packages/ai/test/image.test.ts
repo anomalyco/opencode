@@ -1095,7 +1095,6 @@ describe("Image", () => {
       const prompt = "A lighthouse"
       const errors = yield* Effect.all(
         [
-          ai.image.start({ model: Google.configure({ apiKey: "test" }).image("gemini-3.1-flash-image"), prompt }),
           ai.image.generate({
             model: Google.configure({ apiKey: "test" }).image("gemini-3.1-flash-image"),
             prompt,
@@ -1106,7 +1105,6 @@ describe("Image", () => {
       )
       expect(errors.map((error) => [error.reason._tag, "operation" in error.reason && error.reason.operation])).toEqual(
         [
-          ["UnsupportedOperation", "image.start"],
           ["UnsupportedOperation", "media.n"],
           ["UnsupportedOperation", "media.n"],
         ],

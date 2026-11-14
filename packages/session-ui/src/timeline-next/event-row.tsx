@@ -70,7 +70,8 @@ export function TimelineEventRow(props: {
   )
 }
 
-function TimelineEventItem(props: { event: TimelineEvent; onRevealShell?: (shellID: string) => void }) {
+/** One subagent or shell an events row or an opened activity group lists: who did it and what it was. */
+export function TimelineEventItem(props: { event: TimelineEvent; onRevealShell?: (shellID: string) => void }) {
   const i18n = useI18n()
   const data = useData()
 

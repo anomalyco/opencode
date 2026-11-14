@@ -18,6 +18,7 @@
       "exportName": "DataSyncWorkflow"
     },
     "STAGE": { "type": "text", "value": "dev" },
+    "R2_SQL_ACCOUNT_ID": { "type": "text", "value": "d8e944f537ceef3f06a5bd3aec1d7a53" },
     "DATA_DATABASE_HOST": { "type": "secret" },
     "DATA_DATABASE_USERNAME": { "type": "secret" },
     "DATA_DATABASE_PASSWORD": { "type": "secret" },

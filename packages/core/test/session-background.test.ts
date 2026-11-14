@@ -71,38 +71,17 @@ describe("SessionBackground.outstanding", () => {
     }),
   )
 
-  it.effect("skips created foreground-blocking and cancelled descendants when job state is available", () =>
+  it.effect("skips cancelled descendants when job state is available", () =>
     Effect.gen(function* () {
       const jobs = {
         runningBackground: Effect.succeed([]),
         get: (sessionID: string) =>
           Effect.succeed(
-            sessionID === grandchild
-              ? info(grandchild, "running")
-              : sessionID === other
-                ? info(other, "cancelled")
-                : undefined,
+            sessionID === child ? info(child, "cancelled") : info(grandchild, "running", SessionMessage.ID.create()),
           ),
       }
 
-      // A foreground subagent's inline caller owns its result, and a cancelled one is
-      // acknowledged elsewhere: neither is still running for this report.
-      expect(yield* SessionBackground.outstanding(jobs, store, root, new Set([grandchild, other]))).toEqual([])
-
-      expect(
-        yield* SessionBackground.outstanding(
-          {
-            runningBackground: Effect.succeed([]),
-            get: (sessionID) =>
-              Effect.succeed(
-                sessionID === grandchild ? info(grandchild, "running", SessionMessage.ID.create()) : undefined,
-              ),
-          },
-          store,
-          root,
-          new Set([grandchild]),
-        ),
-      ).toEqual([
+      expect(yield* SessionBackground.outstanding(jobs, store, root, new Set([child, grandchild]))).toEqual([
         { kind: "subagent", sessionID: child, childSessionID: grandchild, agent: "subagent", description: "Subagent" },
       ])
     }),

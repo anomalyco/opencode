@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => {
   const host = dev ? "dev.opencode.ai" : "opencode.ai"
   return {
     // Anomaly
-    accountId: "15d29c8639fd3733b1b5486a2acfd968",
+    accountId: dev ? "d8e944f537ceef3f06a5bd3aec1d7a53" : "15d29c8639fd3733b1b5486a2acfd968",
     worker: {
       name: dev ? "opencode-site-dev" : "opencode-site-production",
       compatibilityDate: "2026-07-25",
@@ -39,8 +39,8 @@ export default defineConfig(({ mode }) => {
       triggers:
         dev || productionOwnsRoot
           ? [
-              triggers.fetch({ pattern: host, zone: "opencode.ai" }),
-              triggers.fetch({ pattern: `${host}/*`, zone: "opencode.ai" }),
+              triggers.fetch({ pattern: host, zone: host }),
+              triggers.fetch({ pattern: `${host}/*`, zone: host }),
             ]
           : [],
       // The bare host is a custom domain (it also supplies the DNS record), and cf detaches any domain

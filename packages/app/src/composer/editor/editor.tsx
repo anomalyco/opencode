@@ -2,6 +2,7 @@ import {
   createEffect,
   createMemo,
   createResource,
+  createSelector,
   createSignal,
   createUniqueId,
   For,
@@ -16,6 +17,7 @@ import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMediaQuery } from "@solid-primitives/media"
+import { Key } from "@solid-primitives/keyed"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -1254,6 +1256,7 @@ function ComposerEditorPopover(props: {
 }) {
   const i18n = useI18n()
   const listID = props.id ?? createUniqueId()
+  const active = createSelector(() => props.activeID)
   let container: HTMLDivElement | undefined
   const [store, setStore] = createStore({ maxHeight: COMPOSER_SUGGESTION_MAX_HEIGHT })
 
@@ -1397,34 +1400,34 @@ function ComposerEditorPopover(props: {
           when={props.items.length > 0}
           fallback={<div class="px-2 py-1 text-v2-text-text-muted">{props.emptyLabel}</div>}
         >
-          <For each={props.items}>
+          <Key each={props.items} by="id">
             {(item) => (
               <button
                 type="button"
-                data-suggestion-id={item.id}
-                data-active={props.activeID === item.id ? "" : undefined}
+                data-suggestion-id={item().id}
+                data-active={active(item().id) ? "" : undefined}
                 class="flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 py-1 text-start"
-                classList={{ "bg-v2-overlay-simple-overlay-hover": props.activeID === item.id }}
+                classList={{ "bg-v2-overlay-simple-overlay-hover": active(item().id) }}
                 onPointerMove={(event) => {
-                  if (event.movementX || event.movementY) props.onActiveChange(item)
+                  if (event.movementX || event.movementY) props.onActiveChange(item())
                 }}
-                onClick={() => props.onSelect(item)}
+                onClick={() => props.onSelect(item())}
               >
                 <div class="flex min-w-0 flex-1 items-center gap-2">
-                  <ComposerSuggestionIcon item={item} />
+                  <ComposerSuggestionIcon item={item()} />
                   <bdi dir="auto" class="shrink-0 text-v2-text-text-base">
-                    {item.label}
+                    {item().label}
                   </bdi>
-                  <Show when={item.description}>
-                    <span class="min-w-0 truncate text-v2-text-text-muted">{item.description}</span>
+                  <Show when={item().description}>
+                    <span class="min-w-0 truncate text-v2-text-text-muted">{item().description}</span>
                   </Show>
                 </div>
-                <Show when={item.keybind?.length}>
-                  <span class="shrink-0 text-v2-text-text-muted">{item.keybind?.join("+")}</span>
+                <Show when={item().keybind?.length}>
+                  <span class="shrink-0 text-v2-text-text-muted">{item().keybind?.join("+")}</span>
                 </Show>
               </button>
             )}
-          </For>
+          </Key>
         </Show>
       </Show>
     </div>

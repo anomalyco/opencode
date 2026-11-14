@@ -9,35 +9,32 @@
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::ffi::{OsStr, c_void};
-use std::fs::File;
+use std::ffi::c_void;
+use std::fs::{File, OpenOptions};
 use std::io;
+use std::marker::PhantomData;
 use std::mem::{size_of, size_of_val};
-use std::os::windows::ffi::OsStrExt;
+use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
 use std::os::windows::io::{AsRawHandle, OwnedHandle};
 use std::path::Path;
 use std::ptr::{null, null_mut};
 use std::sync::{Arc, Mutex, PoisonError};
-use std::thread;
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
 use windows_sys::Win32::Foundation::{
     DUPLICATE_SAME_ACCESS, DuplicateHandle, ERROR_ACCESS_DENIED, ERROR_BROKEN_PIPE,
-    ERROR_IO_INCOMPLETE, ERROR_IO_PENDING, ERROR_NO_DATA, ERROR_OPERATION_ABORTED,
-    ERROR_PIPE_CONNECTED, ERROR_PIPE_NOT_CONNECTED, GENERIC_READ, GENERIC_WRITE, HANDLE,
-    WAIT_OBJECT_0, WAIT_TIMEOUT,
+    ERROR_IO_PENDING, ERROR_NO_DATA, ERROR_OPERATION_ABORTED, ERROR_PIPE_NOT_CONNECTED,
+    GENERIC_READ, GENERIC_WRITE, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT,
 };
 use windows_sys::Win32::Globalization::{
     CSTR_EQUAL, CSTR_GREATER_THAN, CSTR_LESS_THAN, CompareStringOrdinal,
 };
 use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
 use windows_sys::Win32::Storage::FileSystem::{
-    BY_HANDLE_FILE_INFORMATION, CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_REPARSE_POINT,
-    FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OPEN_REPARSE_POINT, FILE_FLAG_OVERLAPPED,
-    FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-    GetFileInformationByHandle, OPEN_ALWAYS, OPEN_EXISTING, PIPE_ACCESS_INBOUND, ReadFile,
-    SetEndOfFile,
+    CreateFileW, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_FIRST_PIPE_INSTANCE,
+    FILE_FLAG_OPEN_REPARSE_POINT, FILE_FLAG_OVERLAPPED, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE,
+    FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, PIPE_ACCESS_INBOUND, ReadFile,
 };
 use windows_sys::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
 use windows_sys::Win32::System::JobObjects::{
@@ -46,8 +43,7 @@ use windows_sys::Win32::System::JobObjects::{
     SetInformationJobObject, TerminateJobObject,
 };
 use windows_sys::Win32::System::Pipes::{
-    ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS,
-    PIPE_TYPE_BYTE, PIPE_WAIT,
+    CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
 };
 use windows_sys::Win32::System::Threading::{
     CREATE_NO_WINDOW, CREATE_UNICODE_ENVIRONMENT, CreateProcessW, DeleteProcThreadAttributeList,
@@ -58,10 +54,10 @@ use windows_sys::Win32::System::Threading::{
     WaitForSingleObject,
 };
 
-use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, exit_message, start_pipe};
+use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, Waiter, start_pipe};
 use crate::service::{CreatePipe, ProcessSignal, TerminalHandle, TerminalId};
 use crate::transport::retained::Retained;
-use crate::transport::windows::{event, owned_handle, security::PrivateSecurity};
+use crate::transport::windows::{event, owned_handle, security::PrivateSecurity, wide};
 
 /// Cancel is first so a pipe that is always readable cannot starve it.
 const CANCEL_READY: u32 = WAIT_OBJECT_0;
@@ -85,32 +81,27 @@ impl TerminalHandle {
         // clean up; the reader is the file's only writer.
         let sink = open_output(&request.output_path)?;
         let job = Job::new(id);
-        let process = Arc::new(spawn(id, &request, job.as_ref(), client)?);
-        let cancel = Cancel::new()?;
-        let reader = Arc::clone(&server);
+        let cancel = CancelOnDrop::new()?;
+        let process = Arc::new(spawn(id, &request, job, client)?);
+        let reader_cancel = Arc::clone(&cancel.0);
         let reader_process = Arc::clone(&process);
-        let reader_cancel = cancel.clone();
         start_pipe(
             id,
             order,
             request,
             Arc::clone(&process),
-            sink,
             Box::new(cancel),
-            super::Threads {
-                reader: Box::new(move |sink| {
-                    thread::Builder::new()
-                        .name(format!("opencode-pty-reader-{id}"))
-                        .spawn(move || read_output(reader, sink, reader_cancel, reader_process))
-                }),
-                waiter: Box::new(move |actor| {
-                    // Spawned last: the waiter must be joined before `reap`.
-                    thread::Builder::new()
-                        .name(format!("opencode-pty-wait-{id}"))
-                        .spawn(move || {
-                            let _ = actor.send(exit_message(wait_exit(process)));
-                        })
-                }),
+            move |actor| {
+                read_output(
+                    server,
+                    OutputSink::new(sink, actor),
+                    reader_cancel,
+                    reader_process,
+                )
+            },
+            move || Waiter {
+                exit: wait_exit(process),
+                after: Box::new(()),
             },
         )
     }
@@ -121,16 +112,21 @@ impl TerminalHandle {
 #[derive(Debug)]
 pub(in crate::service) struct Process {
     pid: u32,
+    state: Mutex<State>,
+}
+
+#[derive(Debug)]
+struct State {
     /// Taken by `reap`, which closes both handles.
-    handles: Mutex<Option<Handles>>,
+    handles: Option<Handles>,
     /// The signal recorded by `kill`/`signal` before terminating the tree.
-    killed: Mutex<Option<&'static str>>,
+    killed: Option<&'static str>,
 }
 
 #[derive(Debug)]
 struct Handles {
     process: Arc<OwnedHandle>,
-    job: Option<Arc<OwnedHandle>>,
+    job: Option<OwnedHandle>,
 }
 
 impl Process {
@@ -138,22 +134,24 @@ impl Process {
         self.pid
     }
 
+    fn lock(&self) -> std::sync::MutexGuard<'_, State> {
+        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
     /// The process object, kept open until `reap` so its PID cannot be reused.
     fn process_handle(&self) -> Option<Arc<OwnedHandle>> {
-        self.handles
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
+        self.lock()
+            .handles
             .as_ref()
             .map(|handles| Arc::clone(&handles.process))
     }
 
     /// Kills the process tree. Never terminates after `reap`.
     pub(super) fn kill(&self) {
-        let handles = self.handles.lock().unwrap_or_else(PoisonError::into_inner);
-        let Some(handles) = handles.as_ref() else {
+        let mut state = self.lock();
+        let Some(handles) = record_kill(&mut state, "SIGKILL") else {
             return;
         };
-        self.record_kill("SIGKILL", handles);
         let _ = terminate(handles);
     }
 
@@ -166,43 +164,36 @@ impl Process {
             ProcessSignal::Int => "SIGINT",
             ProcessSignal::Kill => "SIGKILL",
         };
-        let handles = self.handles.lock().unwrap_or_else(PoisonError::into_inner);
-        let Some(handles) = handles.as_ref() else {
+        let mut state = self.lock();
+        let Some(handles) = record_kill(&mut state, name) else {
             bail!("process has been reaped");
         };
-        self.record_kill(name, handles);
         terminate(handles).context("failed to signal process")
     }
 
     /// Call only after the waiter has returned: closes the process and job
     /// handles. Closing the job alone kills anything still in it.
     pub(super) fn reap(&self) {
-        self.handles
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take();
-    }
-
-    /// Records the signal only while the process still runs, so a process that
-    /// exited on its own keeps its own exit code, as on Unix.
-    fn record_kill(&self, name: &'static str, handles: &Handles) {
-        // SAFETY: the handles lock keeps the process handle open.
-        if unsafe { WaitForSingleObject(handles.process.as_raw_handle(), 0) } == WAIT_TIMEOUT {
-            // Termination is asynchronous: the first signal that reached the
-            // running process is the one the client should see.
-            self.killed
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .get_or_insert(name);
-        }
+        self.lock().handles.take();
     }
 
     fn take_signal(&self) -> Option<&'static str> {
-        self.killed
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take()
+        self.lock().killed.take()
     }
+}
+
+/// Records the signal while the process still runs, so a process that exited on
+/// its own keeps its exit code, and returns the handles, or `None` after
+/// `reap`.
+fn record_kill<'a>(state: &'a mut State, name: &'static str) -> Option<&'a Handles> {
+    let handles = state.handles.as_ref()?;
+    // SAFETY: the state lock keeps the process handle open.
+    if !is_signalled(&handles.process) {
+        // Termination is asynchronous: the first signal that reached the
+        // running process is the one the client should see.
+        state.killed.get_or_insert(name);
+    }
+    Some(handles)
 }
 
 /// Terminates the whole tree.
@@ -230,34 +221,50 @@ fn terminate(handles: &Handles) -> io::Result<()> {
 fn spawn(
     id: TerminalId,
     request: &CreatePipe,
-    job: Option<&Job>,
+    job: Option<Job>,
     client: OwnedHandle,
 ) -> Result<Process> {
-    let process = match create_process(request, job, &client) {
-        Ok(process) => process,
+    let (created, job) = match create_process(request, job.as_ref(), &client) {
+        Ok(created) => (created, job),
         Err(error) if job.is_some() && error.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32) => {
             // An outer job with UI restrictions refuses new members. Run the
             // command anyway; only the main process can be killed then.
-            let process = create_process(request, None, &client)
+            let created = create_process(request, None, &client)
                 .with_context(|| format!("failed to spawn {}", request.program))?;
             eprintln!(
                 "pipe process {id}: cannot join the job object, killing only the main process: {error}"
             );
-            process
+            drop(job);
+            (created, None)
         }
         Err(error) => return Err(error).context(format!("failed to spawn {}", request.program)),
     };
     // The daemon's copy of the child's write end: holding it open would keep
     // the pipe from ever breaking.
     drop(client);
-    Ok(process)
+    Ok(Process {
+        pid: created.pid,
+        state: Mutex::new(State {
+            handles: Some(Handles {
+                process: Arc::new(created.process),
+                job: job.map(|job| job.0),
+            }),
+            killed: None,
+        }),
+    })
+}
+
+/// A created process, before it is registered with its job and signal state.
+struct Spawned {
+    pid: u32,
+    process: OwnedHandle,
 }
 
 fn create_process(
     request: &CreatePipe,
     job: Option<&Job>,
     client: &OwnedHandle,
-) -> io::Result<Process> {
+) -> io::Result<Spawned> {
     let stdin = null_handle()?;
     // A child that closes one of stdout or stderr must still write to the
     // other, so stderr gets its own handle to the same pipe.
@@ -268,19 +275,7 @@ fn create_process(
         stderr.as_raw_handle(),
     ];
     let jobs = job.map(|job| [job.handle()]);
-    let mut entries = vec![(
-        PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
-        handles.as_ptr().cast::<c_void>(),
-        size_of_val(&handles),
-    )];
-    entries.extend(jobs.as_ref().map(|jobs| {
-        (
-            PROC_THREAD_ATTRIBUTE_JOB_LIST as usize,
-            jobs.as_ptr().cast::<c_void>(),
-            size_of_val(jobs),
-        )
-    }));
-    let attributes = Attributes::new(&entries)?;
+    let attributes = Attributes::new(&handles, jobs.as_ref().map(|jobs| jobs.as_slice()))?;
     let mut command = command_line(&request.program, &request.args)?;
     let environment = environment_block(&request.env)?;
     let directory = wide(request.cwd.as_os_str())?;
@@ -316,13 +311,9 @@ fn create_process(
     // handle is not needed.
     let process = owned_handle(info.hProcess)?;
     drop(owned_handle(info.hThread)?);
-    Ok(Process {
+    Ok(Spawned {
         pid: info.dwProcessId,
-        handles: Mutex::new(Some(Handles {
-            process: Arc::new(process),
-            job: job.map(|job| Arc::clone(&job.0)),
-        })),
-        killed: Mutex::new(None),
+        process,
     })
 }
 
@@ -347,27 +338,16 @@ fn wait_exit(process: Arc<Process>) -> io::Result<Exit> {
     })
 }
 
-/// Signals the reader to stop. Every clone can signal; the first drop sets the
-/// event, and later ones are harmless.
-#[derive(Clone)]
-struct Cancel(Arc<OwnedHandle>);
+/// Sets the reader's cancel event when dropped.
+struct CancelOnDrop(Arc<OwnedHandle>);
 
-impl Cancel {
+impl CancelOnDrop {
     fn new() -> io::Result<Self> {
         event().map(|event| Self(Arc::new(event)))
     }
-
-    fn handle(&self) -> HANDLE {
-        self.0.as_raw_handle()
-    }
-
-    fn signalled(&self) -> bool {
-        // SAFETY: the shared event stays open through the call.
-        unsafe { WaitForSingleObject(self.0.as_raw_handle(), 0) == WAIT_OBJECT_0 }
-    }
 }
 
-impl Drop for Cancel {
+impl Drop for CancelOnDrop {
     fn drop(&mut self) {
         // SAFETY: the shared event stays open through the call.
         unsafe {
@@ -385,12 +365,12 @@ struct Read {
     overlapped: Retained<OVERLAPPED>,
     buffer: Retained<[u8; READ_BYTES]>,
     event: OwnedHandle,
-    pipe: Arc<OwnedHandle>,
+    pipe: OwnedHandle,
     pending: bool,
 }
 
 impl Read {
-    fn new(pipe: Arc<OwnedHandle>) -> io::Result<Self> {
+    fn new(pipe: OwnedHandle) -> io::Result<Self> {
         let event = event()?;
         Ok(Self {
             overlapped: Retained::new(OVERLAPPED {
@@ -435,8 +415,8 @@ impl Read {
         Ok(None)
     }
 
-    /// Reaps the completion. Waiting is required once the event is signalled:
-    /// the kernel may still be finishing the operation.
+    /// Reaps the completion. Waiting guarantees the kernel is done with the
+    /// buffers whether the read succeeded or failed.
     fn complete(&mut self) -> io::Result<usize> {
         let mut count = 0;
         // SAFETY: this operation was submitted and its buffers are live.
@@ -448,18 +428,11 @@ impl Read {
                 1,
             )
         };
-        if completed != 0 {
-            self.pending = false;
-            return Ok(count as usize);
-        }
-        let error = io::Error::last_os_error();
-        if error.raw_os_error() == Some(ERROR_IO_INCOMPLETE as i32) {
-            // Only possible without waiting; keep the operation pending so
-            // dropping `Read` cancels and reaps it.
-            return Err(error);
-        }
         self.pending = false;
-        Err(error)
+        if completed == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(count as usize)
     }
 
     /// The bytes of a completed read.
@@ -498,8 +471,14 @@ impl Drop for Read {
 }
 
 /// Reads output until every writer is gone, until [`DRAIN_AFTER_EXIT`] after
-/// the process exits, or until [`Cancel`] fires.
-fn read_output(pipe: Arc<OwnedHandle>, sink: OutputSink, cancel: Cancel, process: Arc<Process>) {
+/// the process exits, or until the cancel event fires. Dropping `Read` cancels
+/// and reaps a pending read and closes the pipe.
+fn read_output(
+    pipe: OwnedHandle,
+    sink: OutputSink,
+    cancel: Arc<OwnedHandle>,
+    process: Arc<Process>,
+) {
     let mut sink = sink;
     let Some(process_object) = process.process_handle() else {
         return;
@@ -512,112 +491,105 @@ fn read_output(pipe: Arc<OwnedHandle>, sink: OutputSink, cancel: Cancel, process
         }
     };
     // The process may have exited before the reader started.
-    let mut exited = process_exited(&process_object);
+    let mut exited = is_signalled(&process_object);
     let mut deadline = exited.then(|| Instant::now() + DRAIN_AFTER_EXIT);
     loop {
         // Cancellation and the exit win over output, so a descendant that
         // writes without pause cannot keep the reader from noticing them.
-        if cancel.signalled() {
-            sink.eof();
+        if is_signalled(&cancel) {
+            // Like Unix, shutdown is not an EOF the actor needs to observe.
             return;
         }
-        if !exited && process_exited(&process_object) {
+        if !exited && is_signalled(&process_object) {
             exited = true;
             deadline = Some(Instant::now() + DRAIN_AFTER_EXIT);
         }
         if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-            // Dropping `read` cancels and reaps a pending operation.
+            // Close the pipe before reporting EOF.
+            drop(read);
             sink.eof();
             return;
         }
-        if !read.is_pending() {
-            match read.submit() {
-                Ok(Some(0)) => {
+        let completed = if read.is_pending() {
+            let timeout = match deadline {
+                None => INFINITE,
+                Some(deadline) => {
+                    let left = deadline.saturating_duration_since(Instant::now());
+                    // Round up: a sub-millisecond remainder must not be a busy 0.
+                    left.as_nanos().div_ceil(1_000_000).min(u32::MAX as u128) as u32
+                }
+            };
+            // Cancel is first: WaitForMultipleObjects reports the lowest
+            // signalled index, so an always-readable pipe cannot starve it.
+            let handles = [
+                cancel.as_raw_handle(),
+                read.event(),
+                process_object.as_raw_handle(),
+            ];
+            // Once the exit is seen, stop waiting on its signalled handle.
+            let count = if exited { 2 } else { 3 };
+            // SAFETY: every handle stays live through the wait.
+            match unsafe { WaitForMultipleObjects(count, handles.as_ptr(), 0, timeout) } {
+                CANCEL_READY => return,
+                READ_READY => Some(read.complete()),
+                PROCESS_READY => {
+                    exited = true;
+                    deadline = Some(Instant::now() + DRAIN_AFTER_EXIT);
+                    None
+                }
+                WAIT_TIMEOUT => {
+                    // The drain deadline passed with a descendant still holding the pipe open.
+                    drop(read);
                     sink.eof();
                     return;
                 }
-                Ok(Some(length)) => {
-                    // Check cancel, the exit and the deadline again before
-                    // reading more.
-                    if !sink.write(read.bytes(length)) {
-                        return;
-                    }
-                    continue;
-                }
-                Ok(None) => {}
-                Err(error) => {
-                    end_on_read_error(sink, error);
+                _ => {
+                    let error = io::Error::last_os_error();
+                    drop(read);
+                    sink.failed(error.to_string());
                     return;
                 }
             }
-        }
-        let timeout = match deadline {
-            None => INFINITE,
-            Some(deadline) => {
-                let left = deadline.saturating_duration_since(Instant::now());
-                // Round up: a sub-millisecond remainder must not become a busy 0.
-                left.as_nanos().div_ceil(1_000_000).min(u32::MAX as u128) as u32
+        } else {
+            match read.submit() {
+                Ok(Some(length)) => Some(Ok(length)),
+                Ok(None) => None,
+                Err(error) => Some(Err(error)),
             }
         };
-        // Cancel is first: WaitForMultipleObjects reports the lowest signalled
-        // index, so an always-readable pipe cannot starve it.
-        let handles = [
-            cancel.handle(),
-            read.event(),
-            process_object.as_raw_handle(),
-        ];
-        // Once the exit is seen, stop waiting on its signalled handle.
-        let count = if exited { 2 } else { 3 };
-        // SAFETY: every handle stays live through the wait.
-        match unsafe { WaitForMultipleObjects(count, handles.as_ptr(), 0, timeout) } {
-            CANCEL_READY => {
+        let Some(result) = completed else {
+            continue;
+        };
+        match result {
+            Ok(0) => {
+                drop(read);
                 sink.eof();
                 return;
             }
-            READ_READY => match read.complete() {
-                Ok(0) => {
+            Ok(length) => {
+                // The next iteration checks cancel, the exit and the deadline
+                // again before reading more.
+                if !sink.write(read.bytes(length)) {
+                    return;
+                }
+            }
+            Err(error) => {
+                drop(read);
+                if is_end_of_output(&error) {
                     sink.eof();
-                    return;
+                } else {
+                    sink.failed(error.to_string());
                 }
-                Ok(length) => {
-                    if !sink.write(read.bytes(length)) {
-                        return;
-                    }
-                }
-                Err(error) => {
-                    end_on_read_error(sink, error);
-                    return;
-                }
-            },
-            PROCESS_READY => {
-                exited = true;
-                deadline = Some(Instant::now() + DRAIN_AFTER_EXIT);
-            }
-            WAIT_TIMEOUT => {
-                // The drain deadline passed with a descendant still writing.
-                sink.eof();
-                return;
-            }
-            _ => {
-                let error = io::Error::last_os_error();
-                sink.failed(error.to_string());
                 return;
             }
         }
     }
 }
 
-fn process_exited(process: &OwnedHandle) -> bool {
-    // SAFETY: the process handle stays open for the whole read.
-    unsafe { WaitForSingleObject(process.as_raw_handle(), 0) == WAIT_OBJECT_0 }
-}
-
-fn end_on_read_error(sink: OutputSink, error: io::Error) {
-    if is_end_of_output(&error) {
-        sink.eof();
-    } else {
-        sink.failed(error.to_string());
-    }
+/// Whether `handle` is signalled.
+fn is_signalled(handle: &OwnedHandle) -> bool {
+    // SAFETY: the handle stays open through the zero-timeout wait.
+    unsafe { WaitForSingleObject(handle.as_raw_handle(), 0) == WAIT_OBJECT_0 }
 }
 
 fn is_end_of_output(error: &io::Error) -> bool {
@@ -634,7 +606,7 @@ fn is_end_of_output(error: &io::Error) -> bool {
 
 /// The daemon's read end and the child's inheritable write end.
 struct OutputPipe {
-    server: Arc<OwnedHandle>,
+    server: OwnedHandle,
     client: OwnedHandle,
 }
 
@@ -659,11 +631,12 @@ fn output_pipe() -> Result<OutputPipe> {
             &security.attributes(),
         )
     };
-    let server = Arc::new(owned_handle(server).context("failed to create output pipe")?);
+    let server = owned_handle(server).context("failed to create output pipe")?;
+    // The client connects by opening the single instance; no ConnectNamedPipe
+    // is needed, as with Rust's anonymous pipes. Read attributes are included
+    // so clients that fstat their stdout (Git Bash, Python, Go) can query it.
     // SAFETY: the same NUL-terminated name; only the returned handle is
-    // inheritable, and it is the only handle of this open. Read attributes
-    // are included so clients that fstat their stdout (Git Bash, Python, Go)
-    // can query the pipe.
+    // inheritable, and it is the only handle of this open.
     let client = unsafe {
         CreateFileW(
             name.as_ptr(),
@@ -676,48 +649,12 @@ fn output_pipe() -> Result<OutputPipe> {
         )
     };
     let client = owned_handle(client).context("failed to connect output pipe")?;
-    let connect_event = event()?;
-    let overlapped = Retained::new(OVERLAPPED {
-        hEvent: connect_event.as_raw_handle(),
-        ..Default::default()
-    });
-    // The client end is already open, so the connect normally completes at
-    // once with ERROR_PIPE_CONNECTED instead of waiting.
-    if unsafe { ConnectNamedPipe(server.as_raw_handle(), overlapped.as_ptr()) } == 0 {
-        let error = io::Error::last_os_error();
-        match error.raw_os_error() {
-            Some(code) if code == ERROR_PIPE_CONNECTED as i32 => {}
-            Some(code) if code == ERROR_IO_PENDING as i32 => {
-                let mut count = 0;
-                // SAFETY: the handle and the Retained OVERLAPPED stay live.
-                if unsafe {
-                    GetOverlappedResult(server.as_raw_handle(), overlapped.as_ptr(), &mut count, 1)
-                } == 0
-                {
-                    let error = io::Error::last_os_error();
-                    // Never return while the kernel might still own the
-                    // OVERLAPPED: cancel and reap the completion.
-                    unsafe {
-                        CancelIoEx(server.as_raw_handle(), overlapped.as_ptr());
-                        GetOverlappedResult(
-                            server.as_raw_handle(),
-                            overlapped.as_ptr(),
-                            &mut count,
-                            1,
-                        );
-                    }
-                    return Err(error).context("failed to connect output pipe");
-                }
-            }
-            _ => return Err(error).context("failed to connect output pipe"),
-        }
-    }
     Ok(OutputPipe { server, client })
 }
 
 /// A kill-on-close job: terminating it kills every descendant, and a crashed
 /// daemon closes it and kills them too.
-struct Job(Arc<OwnedHandle>);
+struct Job(OwnedHandle);
 
 impl Job {
     fn new(id: TerminalId) -> Option<Self> {
@@ -750,7 +687,7 @@ impl Job {
             warn_no_job(id, &io::Error::last_os_error());
             return None;
         }
-        Some(Self(Arc::new(job)))
+        Some(Self(job))
     }
 
     fn handle(&self) -> HANDLE {
@@ -766,35 +703,24 @@ fn warn_no_job(id: TerminalId, error: &io::Error) {
 /// to clean up. Truncates through the handle without following a reparse point
 /// planted at the final component.
 fn open_output(path: &Path) -> Result<File> {
-    let name = wide(path.as_os_str())?;
     let message = format!("failed to open output file {}", path.display());
-    // SAFETY: the name is NUL-terminated; the returned handle is inherited by
-    // nothing and adopted at once.
-    let handle = unsafe {
-        CreateFileW(
-            name.as_ptr(),
-            GENERIC_WRITE,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-            null(),
-            OPEN_ALWAYS,
-            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
-            null_mut(),
-        )
-    };
-    let file = File::from(owned_handle(handle).with_context(|| message.clone())?);
-    let mut info = BY_HANDLE_FILE_INFORMATION::default();
-    // SAFETY: the file owns a live handle and info is valid writable output.
-    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0 {
-        return Err(io::Error::last_os_error()).with_context(|| message);
-    }
-    if info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+    let file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+        .with_context(|| message.clone())?;
+    if file
+        .metadata()
+        .with_context(|| message.clone())?
+        .file_attributes()
+        & FILE_ATTRIBUTE_REPARSE_POINT
+        != 0
+    {
         bail!("{message}: output path is a reparse point");
     }
-    // SAFETY: the handle has write access and the position is at the start
-    // after opening.
-    if unsafe { SetEndOfFile(file.as_raw_handle()) } == 0 {
-        return Err(io::Error::last_os_error()).with_context(|| message);
-    }
+    file.set_len(0).with_context(|| message)?;
     Ok(file)
 }
 
@@ -923,23 +849,16 @@ fn environment_block(env: &HashMap<String, String>) -> io::Result<Vec<u16>> {
             value.encode_utf16().collect::<Vec<_>>(),
         ));
     }
-    // Sort deterministically before collapsing case variants, so the same
-    // request always produces the same block; the last variant wins.
-    entries.sort();
-    entries.sort_by(|a, b| compare_keys(&a.0, &b.0));
-    let mut unique: Vec<(Vec<u16>, Vec<u16>)> = Vec::with_capacity(entries.len());
-    for entry in entries {
-        match unique.last_mut() {
-            Some(last) if compare_keys(&last.0, &entry.0) == Ordering::Equal => *last = entry,
-            _ => unique.push(entry),
-        }
-    }
+    // Case-insensitive order, with the ordinal-largest variant first so that
+    // deduplication keeps it: the same request always produces the same block.
+    entries.sort_by(|a, b| compare_keys(&a.0, &b.0).then_with(|| b.cmp(a)));
+    entries.dedup_by(|a, b| compare_keys(&a.0, &b.0) == Ordering::Equal);
     let mut block = Vec::new();
-    // An empty environment is signalled by a null, like Rust std.
-    if unique.is_empty() {
+    // An empty environment is an empty entry before the terminating NUL.
+    if entries.is_empty() {
         block.push(0);
     }
-    for (key, value) in unique {
+    for (key, value) in entries {
         block.extend(key);
         block.push('=' as u16);
         block.extend(value);
@@ -964,29 +883,31 @@ fn compare_keys(a: &[u16], b: &[u16]) -> Ordering {
     }
 }
 
-fn wide(value: &OsStr) -> io::Result<Vec<u16>> {
-    let mut wide = value.encode_wide().collect::<Vec<_>>();
-    if wide.contains(&0) {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "path contains a NUL",
-        ));
-    }
-    wide.push(0);
-    Ok(wide)
-}
-
 /// An initialized process-attribute list and the buffer it points into, freed
-/// in the right order.
-struct Attributes {
+/// in the right order. The lifetime ties it to the handle and job arrays its
+/// values point into.
+struct Attributes<'a> {
     // Never read: the list points into this allocation, which must stay put
     // and alive for the list's lifetime.
     _buffer: Vec<usize>,
     list: *mut c_void,
+    _attached: PhantomData<&'a ()>,
 }
 
-impl Attributes {
-    fn new(entries: &[(usize, *const c_void, usize)]) -> io::Result<Self> {
+impl<'a> Attributes<'a> {
+    fn new(handles: &'a [HANDLE], jobs: Option<&'a [HANDLE]>) -> io::Result<Self> {
+        let mut entries = vec![(
+            PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
+            handles.as_ptr().cast::<c_void>(),
+            size_of_val(handles),
+        )];
+        entries.extend(jobs.map(|jobs| {
+            (
+                PROC_THREAD_ATTRIBUTE_JOB_LIST as usize,
+                jobs.as_ptr().cast::<c_void>(),
+                size_of_val(jobs),
+            )
+        }));
         let mut bytes = 0;
         // SAFETY: the first call only reports the required size.
         unsafe {
@@ -1007,8 +928,9 @@ impl Attributes {
         let this = Self {
             _buffer: buffer,
             list,
+            _attached: PhantomData,
         };
-        for &(attribute, value, length) in entries {
+        for &(attribute, value, length) in &entries {
             // SAFETY: the list was initialized for exactly `entries.len()`
             // attributes; every value outlives the list.
             if unsafe {
@@ -1034,7 +956,7 @@ impl Attributes {
     }
 }
 
-impl Drop for Attributes {
+impl Drop for Attributes<'_> {
     fn drop(&mut self) {
         // SAFETY: the list was successfully initialized and is unused after.
         unsafe {
@@ -1120,7 +1042,7 @@ mod tests {
         ]);
         let block = environment_block(&env).unwrap();
         let block = text(&block);
-        // The last variant in ordinal order wins, deterministically.
+        // The ordinal-largest case variant wins, deterministically.
         assert_eq!(block, "=C:=C:\\work\0Path=lower\0\0");
 
         for invalid in [("", "x"), ("=", "x"), ("A=B", "x"), ("A\0B", "x")] {
@@ -1142,30 +1064,31 @@ mod tests {
     }
 
     #[test]
-    fn a_jobless_spawn_runs_the_command_and_reports_its_exit() {
-        let request = test_request("cmd.exe", &["/d", "/c", "exit /b 5"]);
+    fn signal_kills_a_jobless_child() {
+        let request = test_request("ping.exe", &["-n", "30", "127.0.0.1"]);
         let OutputPipe { client, .. } = output_pipe().unwrap();
         let process = Arc::new(spawn(1, &request, None, client).unwrap());
+        assert!(!is_signalled(&process.process_handle().unwrap()));
+        process.signal(ProcessSignal::Kill).unwrap();
         assert!(matches!(
             wait_exit(Arc::clone(&process)).unwrap(),
-            Exit::Code(5)
+            Exit::Signal(name) if name == "SIGKILL"
         ));
         process.reap();
     }
 
-    #[test]
-    fn a_job_handle_without_assign_access_falls_back_to_a_jobless_spawn() {
-        let job = Job::new(2).unwrap();
-        let mut restricted = null_mut();
-        // JOB_OBJECT_QUERY only: joining a job needs JOB_OBJECT_ASSIGN_PROCESS.
+    /// A duplicate of `job` with only query access: joining it needs
+    /// JOB_OBJECT_ASSIGN_PROCESS.
+    fn query_only_job(job: HANDLE) -> OwnedHandle {
         const JOB_OBJECT_QUERY: u32 = 4;
+        let mut restricted = null_mut();
         // SAFETY: both process handles are pseudo-handles for this process and
         // the job handle is live; the duplicate is adopted below.
         assert_ne!(
             unsafe {
                 DuplicateHandle(
                     GetCurrentProcess(),
-                    job.handle(),
+                    job,
                     GetCurrentProcess(),
                     &mut restricted,
                     JOB_OBJECT_QUERY,
@@ -1175,17 +1098,24 @@ mod tests {
             },
             0
         );
-        let job = Job(Arc::new(owned_handle(restricted).unwrap()));
+        owned_handle(restricted).unwrap()
+    }
+
+    #[test]
+    fn a_job_handle_without_assign_access_falls_back_to_a_jobless_spawn() {
+        let job = Job::new(2).unwrap();
+        let query = query_only_job(job.handle());
+        let restricted = Job(query_only_job(job.handle()));
         let request = test_request("cmd.exe", &["/d", "/c", "exit /b 5"]);
         let OutputPipe { client, .. } = output_pipe().unwrap();
-        let process = Arc::new(spawn(2, &request, Some(&job), client).unwrap());
+        let process = Arc::new(spawn(2, &request, Some(restricted), client).unwrap());
         let mut in_job = 0;
         // SAFETY: the process handle stays open until `reap` and the job is live.
         assert_ne!(
             unsafe {
                 IsProcessInJob(
                     process.process_handle().unwrap().as_raw_handle(),
-                    job.handle(),
+                    query.as_raw_handle(),
                     &mut in_job,
                 )
             },

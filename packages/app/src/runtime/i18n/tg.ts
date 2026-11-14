@@ -149,7 +149,7 @@ export const dict = {
   "provider.connect.title": "Пайвастшавӣ {{provider}}",
   "provider.connect.method.apiKey": "API калид",
   "provider.connect.status.inProgress": "Иҷозатдиҳӣ идома дорад…",
-  "provider.connect.status.waiting": "Мунтазири иҷозат…",
+  "provider.connect.status.waiting": "Мунтазири иҷозат",
   "provider.connect.status.failed": "Иҷозат дода нашуд: {{error}}",
   "provider.connect.apiKey.description":
     "Барои пайваст кардани ҳисоби худ калиди {{provider}} API-ро ворид кунед ва моделҳои {{provider}}-ро дар OpenCode истифода баред.",
@@ -829,7 +829,6 @@ export const dict = {
   "workspace.delete.location": "Ҷойгиршавӣ",
   "command.session.location.cycle": "Ҷойгиршавии сессияро иваз кунед",
   "dialog.provider.anthropic.note": "Дастрасии мустақим ба моделҳои Claude тавассути калиди API",
-  "provider.connect.title.anthropicProMax": "Бо Anthropic ворид шавед",
   "prompt.toast.uploading.cancelFile": "Боркунии файли {{filename}}-ро бекор кунед",
   "prompt.toast.uploadFailed.title": "Боркунӣ ноком шуд",
   "prompt.toast.uploading.percent": "{{percent}}%",

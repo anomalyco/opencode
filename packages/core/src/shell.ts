@@ -22,6 +22,7 @@ import { AppProcess } from "@opencode/util/process"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
+import { TextBoundary } from "@opencode/util/text-boundary"
 import { Bus } from "./bus.js"
 import { Environment } from "./environment/index.js"
 import { FileRetention } from "./file-retention.js"
@@ -141,8 +142,8 @@ type Ended = {
  * here; callers (e.g. `ShellTool`) own that association and store the shell ID.
  *
  * Local commands run in the process daemon when it is available (`Daemon`), so they outlive a planned server
- * restart: the next server takes them back. Remote workspaces, Windows and an unavailable daemon keep spawning
- * them from the server.
+ * restart: the next server takes them back. Remote workspaces and an unavailable daemon keep spawning them from
+ * the server.
  */
 export interface Interface {
   readonly create: <E = never, R = never>(
@@ -615,12 +616,9 @@ const layer = () =>
       // Commands this server spawned for the Location; daemon commands live in `runs`, owned by the server.
       const commands = new Map<Shell.ID, Spawned>()
       const exitOrder: Shell.ID[] = []
-      // Remote workspaces and Windows keep spawning commands from the server. Taken back before the service is
-      // returned, so session restart recovery sees them.
+      // Take local commands back before returning the service so session restart recovery sees them.
       const runs =
-        location.workspaceID === undefined && process.platform !== "win32" && PersistentPty.available
-          ? yield* daemon.at(location)
-          : undefined
+        location.workspaceID === undefined && PersistentPty.available ? yield* daemon.at(location) : undefined
 
       const outputDir = path.join(global.data, DIRECTORY, location.project.id)
       const { mkdir, unlink, stat } = yield* Effect.promise(() => import("fs/promises"))
@@ -828,7 +826,7 @@ const layer = () =>
           // Read the byte before the window too, to tell whether the window starts on a line boundary.
           const before = Math.max(0, start - 1)
           const window = yield* readRange(info.file, before, size - before)
-          const page = window.subarray(charBoundary(window, start - before)).toString("utf8")
+          const page = TextBoundary.utf8Tail(window, size - start)
           const partial = start > 0 && window[0] !== 10
           const endsWithNewline = page.endsWith("\n")
           const lines = page.split("\n")
@@ -1143,13 +1141,6 @@ function annotate(info: Info) {
 function spanCommand(command: string) {
   if (command.length <= SPAN_COMMAND_LIMIT) return command.toWellFormed()
   return `${command.slice(0, SPAN_COMMAND_LIMIT).toWellFormed()}…`
-}
-
-// Moves past UTF-8 continuation bytes (at most 3) so a byte cut never splits a character.
-function charBoundary(bytes: Buffer, offset: number) {
-  const limit = Math.min(bytes.length, offset + 3)
-  for (let index = offset; index < limit; index++) if ((bytes[index] & 0xc0) !== 0x80) return index
-  return limit
 }
 
 function formatSize(bytes: number) {

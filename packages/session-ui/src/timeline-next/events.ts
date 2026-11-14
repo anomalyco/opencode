@@ -35,18 +35,20 @@ export const kindKeys = {
   shell: "ui.timeline.event.shells",
 } as const
 
-/** How a group's label counts work it started, beside its other calls: "1 command, started 1 shell". */
+/** How a group's label counts work that runs on, beside its other calls: "1 command, started 1 shell". */
 export const launchKeys = {
   started: { shell: "ui.timeline.activity.startedShells", subagent: "ui.timeline.activity.startedSubagents" },
   ran: { shell: "ui.timeline.activity.commands", subagent: "ui.timeline.activity.subagents" },
+  finished: { shell: "ui.timeline.activity.finishedShells", subagent: "ui.timeline.activity.finishedSubagents" },
+  stopped: { shell: "ui.timeline.activity.stoppedShells", subagent: "ui.timeline.activity.stoppedSubagents" },
 } as const
 
 // Text a call or notice carries, where it is not empty.
 const decodeText = Schema.decodeUnknownOption(Schema.NonEmptyString)
 
 /**
- * What a call says happened. A call still being written has nothing to count yet. A subagent that returns while it
- * keeps running was started in the background; one that returned with its work done ran in the foreground.
+ * What a call says happened. A call still being written has nothing to count yet. Older sessions marked a
+ * foreground subagent's result as completed; current subagent calls only launch the work.
  */
 export function toolEvent(tool: SessionMessageAssistantTool): TimelineEvent | undefined {
   const kind = toolRule(tool).name === "shell" ? "shell" : "subagent"
@@ -66,10 +68,10 @@ export function toolEvent(tool: SessionMessageAssistantTool): TimelineEvent | un
 
   if (state.status === "running") return { ...item, verb: "started", failed: false }
 
-  const background = metadata.status === "running" || input.background === true
+  const background =
+    kind === "subagent" ? metadata.status !== "completed" : metadata.status === "running" || input.background === true
 
   if (state.status === "error") {
-    // An interrupted turn stops the work it was waiting on.
     if (state.error.type === "aborted") return { ...item, verb: "stopped", failed: false }
 
     return { ...item, verb: background ? "started" : "ran", failed: true }
@@ -97,6 +99,13 @@ export function noticeEvent(message: SessionMessageInfo): TimelineEvent | undefi
   if (state === "cancelled") return { ...item, verb: "stopped", failed: false }
 
   return { ...item, verb: "finished", failed: state === "error" }
+}
+
+/** Which subagent or shell an event is about, where it says. */
+export function workKey(event: TimelineEvent) {
+  const id = event.kind === "shell" ? event.shellID : event.sessionID
+
+  return id ? `${event.kind}:${id}` : undefined
 }
 
 /**

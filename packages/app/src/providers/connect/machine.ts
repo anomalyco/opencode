@@ -59,7 +59,8 @@ export type ProviderEntryError = { readonly type: "required" } | { readonly type
 
 /** The pasted redirect URL of a browser sign-in. The browser's own callback still completes the sign-in meanwhile. */
 export type ProviderPaste =
-  | { readonly status: "editing"; readonly value: string; readonly error?: ProviderEntryError }
+  /** `open` is whether the user showed or hid the field; undefined leaves it to the server (open on a remote one). */
+  | { readonly status: "editing"; readonly value: string; readonly error?: ProviderEntryError; readonly open?: boolean }
   | { readonly status: "submitting"; readonly value: string }
   /** The server took the URL and finishes the sign-in; polling reports how it ends. */
   | { readonly status: "accepted"; readonly value: string }
@@ -120,6 +121,7 @@ export type ProviderConnectEvent =
     }
   | { readonly type: "entry.submitted"; readonly value: string }
   | { readonly type: "paste.changed"; readonly value: string }
+  | { readonly type: "paste.toggled"; readonly open: boolean }
   | { readonly type: "paste.submitted" }
   /** The server took the pasted URL; the sign-in still settles through polling. */
   | { readonly type: "paste.accepted"; readonly attempt: number }
@@ -353,7 +355,8 @@ export function selectProviderConnectView(state: ProviderConnectState) {
     commandOutput: signIn?.kind === "command" ? signIn.output : "",
     form: state.status === "form" ? selectProviderFormView(state.form) : undefined,
     entryError: state.status === "entering" ? state.error : undefined,
-    paste: state.status === "waiting" && signIn?.kind === "browser" && signIn.paste ? pasteView(signIn.paste) : undefined,
+    paste:
+      state.status === "waiting" && signIn?.kind === "browser" && signIn.paste ? pasteView(signIn.paste) : undefined,
     // A typed secret is sent and the catalogs are refreshing: the form takes no second submit.
     submitting: state.status === "submitting" || state.status === "refreshing",
     error: state.status === "failed" ? state.error : undefined,
@@ -475,6 +478,7 @@ function polled(
 ): ProviderConnectTransition {
   if (
     event.type === "paste.changed" ||
+    event.type === "paste.toggled" ||
     event.type === "paste.submitted" ||
     event.type === "paste.accepted" ||
     event.type === "paste.rejected"
@@ -507,7 +511,7 @@ function pasted(
   state: Extract<ProviderConnectState, { status: "waiting" }>,
   event: Extract<
     ProviderConnectEvent,
-    { type: "paste.changed" | "paste.submitted" | "paste.accepted" | "paste.rejected" }
+    { type: "paste.changed" | "paste.toggled" | "paste.submitted" | "paste.accepted" | "paste.rejected" }
   >,
 ): ProviderConnectTransition {
   const signIn = state.signIn
@@ -516,17 +520,24 @@ function pasted(
   const paste = signIn.paste
   const set = (next: ProviderPaste) => ({ ...state, signIn: { ...signIn, paste: next } })
 
+  if (event.type === "paste.toggled") {
+    if (paste.status !== "editing" || paste.open === event.open) return unchanged(state)
+
+    return unchanged(set({ ...paste, open: event.open }))
+  }
+
   if (event.type === "paste.changed") {
     if (paste.status !== "editing" || (event.value === paste.value && !paste.error)) return unchanged(state)
 
-    return unchanged(set({ status: "editing", value: event.value }))
+    return unchanged(set({ status: "editing", value: event.value, open: paste.open }))
   }
 
   if (event.type === "paste.submitted") {
     if (paste.status !== "editing") return unchanged(state)
     const value = paste.value.trim()
 
-    if (!value) return unchanged(set({ status: "editing", value: paste.value, error: { type: "required" } }))
+    if (!value)
+      return unchanged(set({ status: "editing", value: paste.value, error: { type: "required" }, open: true }))
 
     return {
       state: set({ status: "submitting", value: paste.value }),
@@ -538,7 +549,9 @@ function pasted(
 
   if (event.type === "paste.accepted") return unchanged(set({ status: "accepted", value: paste.value }))
 
-  return unchanged(set({ status: "editing", value: paste.value, error: { type: "rejected", message: event.error } }))
+  return unchanged(
+    set({ status: "editing", value: paste.value, error: { type: "rejected", message: event.error }, open: true }),
+  )
 }
 
 function pasteView(paste: ProviderPaste) {
@@ -546,6 +559,8 @@ function pasteView(paste: ProviderPaste) {
     value: paste.value,
     error: paste.status === "editing" ? paste.error : undefined,
     locked: paste.status !== "editing",
+    // A URL the user already sent keeps the field in view.
+    open: paste.status === "editing" ? paste.open : true,
     submitting: paste.status === "submitting",
   }
 }
@@ -559,7 +574,14 @@ function poll(
   // A paste in flight when polling failed reports to the old attempt, so a resumed sign-in starts editable too.
   const next: ProviderPolledSignIn =
     signIn.kind === "browser" && signIn.authorization.paste
-      ? { ...signIn, paste: { status: "editing", value: signIn.paste?.value ?? "" } }
+      ? {
+          ...signIn,
+          paste: {
+            status: "editing",
+            value: signIn.paste?.value ?? "",
+            open: signIn.paste?.status === "editing" ? signIn.paste.open : signIn.paste ? true : undefined,
+          },
+        }
       : signIn
 
   return {

@@ -22,15 +22,17 @@ import {
   type TurnThinkingPlacement,
 } from "../timeline/turn-phase-machine"
 import { errorInfo } from "./errors"
-import { noticeEvent } from "./events"
+import { noticeEvent, toolEvent, workKey, type TimelineEvent } from "./events"
 import {
   contentGroup,
   contentShows,
   echoesUserShell,
   hidesActivity,
   liveThinkingShows,
+  movedInPlace,
   noticePlacement,
   textShows,
+  toolRule,
 } from "./rules"
 
 type Notice = Exclude<SessionMessageInfo, { type: "user" | "assistant" | "shell" | "idle" }>
@@ -314,18 +316,14 @@ function constructRows(input: Input) {
     }),
   ]
 
-  // Like the TUI, a queued compaction waits after the active turn and ahead of every undelivered input:
-  // steers, which own turns, and synthetic notices, which ride at the end of the active one.
-  const pendingAt = rows.findIndex(
-    (row) =>
-      input.pendingInputIDs?.has(row.userMessageID) ||
-      (Predicate.isTagged(row, "Notice") && input.pendingInputIDs?.has(row.messageID)),
-  )
+  // Like the TUI, a queued compaction waits after the active turn and ahead of every steer still waiting for delivery.
+  // Notices waiting for delivery are already in the active turn, since they report what happened.
+  const pendingAt = rows.findIndex((row) => input.pendingInputIDs?.has(row.userMessageID))
 
   rows.splice(
     pendingAt < 0 ? rows.length : pendingAt,
     0,
-    // Live status ends the work the model has seen, so it stays above everything still waiting for delivery.
+    // Live status ends the turn, so it stays above the input the user steered in, which waits for the agent to reply.
     ...(input.status.type !== "idle" && activeMessageID && (pendingAt >= 0 || input.queuedCompactionIDs.length > 0)
       ? [new TimelineRow.Activity({ userMessageID: activeMessageID })]
       : []),
@@ -377,10 +375,14 @@ function constructTurns(input: Input) {
   }
 
   input.messages.forEach((message) => {
-    if (echoesUserShell(message, userShellIDs)) return
+    if (echoesUserShell(message, userShellIDs) || movedInPlace(message)) return
 
     if (isNotice(message)) {
-      if (current) current.entries.push({ type: "notice", message })
+      // A notice still waiting for delivery, such as a subagent reporting back, already happened, so it joins the
+      // working turn above the status line, even when input the user steered in meanwhile waits below it.
+      const turn = input.pendingInputIDs?.has(message.id) ? (execution?.turn ?? current) : current
+
+      if (turn) turn.entries.push({ type: "notice", message })
       else leading.push(message)
 
       return
@@ -651,6 +653,25 @@ function groupNotices(
     // Live status renders nothing while other feedback shows, so a group below it spaces from the content above it.
     const above = Predicate.isTagged(previous, "Activity") ? result.at(-2) : previous
     const message = Predicate.isTagged(row, "Notice") ? messageByID.get(row.messageID) : undefined
+    const event = message && noticeEvent(message)
+
+    // Work that reports back right after the activity group that started it, with nothing between, finishes there.
+    if (
+      event &&
+      !event.failed &&
+      Predicate.isTagged(previous, "AssistantPart") &&
+      previous.group.type === "context" &&
+      previous.userMessageID === row.userMessageID &&
+      launches(previous.group, event, messageByID)
+    ) {
+      result[result.length - 1] = new TimelineRow.AssistantPart({
+        ...previous,
+        group: { ...previous.group, refs: [...previous.group.refs, { messageID: message.id, partID: message.id }] },
+      })
+
+      return result
+    }
+
     const type = message ? noticeGroup(detail, message) : undefined
 
     const current =
@@ -708,6 +729,25 @@ function joins(
     return !((notices(previous) && thoughts(current)) || (thoughts(previous) && notices(current)))
 
   return previous.type === "events" && current.type === "events" && notices(previous) && notices(current)
+}
+
+// Whether an activity group started the work an event is about.
+function launches(
+  group: Exclude<PartGroup, { type: "part" }>,
+  event: TimelineEvent,
+  messageByID: ReadonlyMap<string, SessionMessageInfo>,
+) {
+  const key = workKey(event)
+
+  return (
+    key !== undefined &&
+    group.refs.some((ref) => {
+      const content = resolveContent(messageByID.get(ref.messageID), ref.partID)
+      const launch = content?.type === "tool" && toolRule(content).layout === "event" ? toolEvent(content) : undefined
+
+      return launch !== undefined && workKey(launch) === key
+    })
+  )
 }
 
 function noticeGroup(detail: TimelineDetail, message: SessionMessageInfo) {

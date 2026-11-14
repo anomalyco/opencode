@@ -125,7 +125,6 @@ const execution = (llmClient: Layer.Layer<LLMClientService>) =>
         wake: coordinator.wake,
         interrupt: (sessionID) => coordinator.interrupt(sessionID),
         awaitIdle: coordinator.awaitIdle,
-        periodStartSeq: () => Effect.succeed(undefined),
       })
     }),
   ).pipe(Layer.provide(runnerLayer(llmClient)), Layer.orDie)

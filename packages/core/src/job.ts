@@ -38,7 +38,6 @@ export type Background = typeof Background.Type
 export type Status = Background["status"]
 
 export type SubagentReportState =
-  | { readonly mode: "foreground" }
   | {
       readonly mode: "background"
       readonly notificationID: SessionMessage.ID
@@ -107,7 +106,7 @@ type BackgroundResult = {
   backgrounded?: Deferred.Deferred<Info>
 }
 
-type StartResult = { info: Info } | { info: Info; job: Active } | { info: Info; backgrounded: Deferred.Deferred<Info> }
+type StartResult = { info: Info } | { info: Info; job: Active }
 
 type BlockWait = {
   done: Deferred.Deferred<Info>
@@ -363,14 +362,7 @@ export const make = Effect.gen(function* () {
             const existing = jobs.get(input.id)
             // A settling generation is already reporting; new work starts a fresh generation.
             if (existing?.info.status === "running" && !existing.settling) {
-              if (!input.background || existing.isBackgrounded) return [{ info: snapshot(existing) }, jobs]
-              // Joining live work after its start must register the durable marker before a fast
-              // drain can settle and classify the period as foreground.
-              const updated = yield* markBackground(existing)
-              return [
-                { info: snapshot(updated), backgrounded: existing.backgrounded },
-                new Map(jobs).set(input.id, updated),
-              ]
+              return [{ info: snapshot(existing) }, jobs]
             }
             const scope = yield* Scope.fork(state.scope, "parallel")
             // Closing the registry interrupts the work without settling it; interrupt its observers too.
@@ -406,7 +398,6 @@ export const make = Effect.gen(function* () {
             return [{ info: snapshot(job), job }, new Map(jobs).set(input.id, job)]
           }),
         )
-        if ("backgrounded" in result) yield* Deferred.succeed(result.backgrounded, result.info)
         if ("job" in result)
           yield* restore(input.run).pipe(
             Effect.exit,
@@ -498,8 +489,6 @@ export const make = Effect.gen(function* () {
         const job = jobs.get(id)
         // Recoverable work may finish before the caller backgrounds it.
         if (!job || (job.info.status !== "running" && !job.recovery)) return [{}, jobs]
-        // A settling generation already reported as foreground; a late Ctrl+B must not revive it.
-        if (job.settling) return [{}, jobs]
         if (job.isBackgrounded) return [{ info: snapshot(job) }, jobs]
         const next = yield* markBackground(job)
         return [{ info: snapshot(next), backgrounded: job.backgrounded }, new Map(jobs).set(id, next)]
@@ -519,7 +508,6 @@ export const make = Effect.gen(function* () {
         const next = new Map(jobs)
         for (const [id, job] of jobs) {
           if (job.info.status !== "running") continue
-          if (job.settling) continue
           if (job.isBackgrounded) continue
           if (input.type !== undefined && job.info.type !== input.type) continue
           if (!job.blockingSessions.has(input.sessionID)) continue
@@ -649,7 +637,9 @@ export const make = Effect.gen(function* () {
       return yield* SynchronizedRef.modify(state.jobs, (jobs): readonly [SubagentReportState, Map<string, Active>] => {
         const job = jobs.get(id)
         // A generation reports at most once, even when an earlier attempt only observed a cancel.
-        if (!job || job.reported) return [{ mode: "none" }, jobs]
+        if (!job?.isBackgrounded || job.reported || !job.info.notificationID || job.recovery?.kind !== "subagent") {
+          return [{ mode: "none" }, jobs]
+        }
         const live = job.info.status === "running" && !job.settling
         // A cancel within this busy period already consumed the live entry, but it still belongs
         // here. A creation-tick interruption never bound a generation, so any cancel matches.
@@ -662,8 +652,6 @@ export const make = Effect.gen(function* () {
           ...(job.info.status === "running" ? { settling: true } : {}),
         }
         const next = new Map(jobs).set(id, updated)
-        if (!job.isBackgrounded) return [{ mode: "foreground" }, next]
-        if (!job.info.notificationID || job.recovery?.kind !== "subagent") return [{ mode: "none" }, next]
         return [
           {
             mode: "background",

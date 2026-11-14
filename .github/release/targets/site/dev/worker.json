@@ -24,8 +24,8 @@
   },
   "domains": ["dev.opencode.ai", "docs.dev.opencode.ai"],
   "triggers": [
-    { "type": "fetch", "pattern": "dev.opencode.ai", "zone": "opencode.ai" },
-    { "type": "fetch", "pattern": "dev.opencode.ai/*", "zone": "opencode.ai" }
+    { "type": "fetch", "pattern": "dev.opencode.ai", "zone": "dev.opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/*", "zone": "dev.opencode.ai" }
   ],
   "observability": { "enabled": true },
   "workersDev": false,

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect"
-import { LanguageModel } from "@opencode/ai/effect"
+import { AIError, InvalidRequestError, LanguageModel, LLMEvent } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import path from "path"
@@ -31,7 +31,6 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionStore } from "@opencode/core/session/store"
 import { SubagentJob } from "@opencode/core/session/subagent-job"
-import { SubagentMetadata } from "@opencode/core/session/subagent-metadata"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
@@ -45,9 +44,6 @@ import { testEffect } from "./lib/effect"
 import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 
 const childText = "child final response"
-const subagentOutput = (sessionID: Session.ID, output: string) =>
-  `<subagent sessionID="${sessionID}" state="completed">\n${output}\n</subagent>`
-const completedOutput = (sessionID: Session.ID) => subagentOutput(sessionID, childText)
 const childModel = Model.Ref.make({ id: Model.ID.make("child"), providerID: Provider.ID.make("test") })
 const parentModel = Model.Ref.make({ id: Model.ID.make("parent"), providerID: Provider.ID.make("test") })
 const overrideModel = Model.Ref.make({
@@ -112,7 +108,6 @@ const executionNode = makeGlobalNode({
         resume: complete,
         wake: () => Effect.void,
         interrupt: () => Effect.succeed(false),
-        periodStartSeq: () => Effect.succeed(undefined),
         awaitIdle: (sessionID) => complete(sessionID).pipe(Effect.exit, Effect.asVoid),
       })
     }),
@@ -262,7 +257,7 @@ describe("SubagentTool", () => {
               type: "tool-call",
               id: "call-completion-replay",
               name: SubagentTool.name,
-              input: { agent: "reviewer", description: "background review", prompt: "review", background: true },
+              input: { agent: "reviewer", description: "background review", prompt: "review" },
             },
           })
           const marker = yield* Deferred.await(admitted)
@@ -409,12 +404,13 @@ describe("SubagentTool", () => {
 
           expect(settled).toMatchObject({
             status: "completed",
-            metadata: { status: "completed" },
-            content: [{ type: "text", text: expect.stringContaining(childText) }],
+            output: { status: "running" },
+            metadata: { status: "running" },
+            content: [{ type: "text", text: expect.stringContaining("working in the background") }],
           })
           expect(settled.metadata).toEqual({
             sessionID: outputSessionID(settled.metadata),
-            status: "completed",
+            status: "running",
           })
           expect((yield* sessions.get(outputSessionID(settled.metadata))).parentID).toBe(parent.id)
         }),
@@ -422,7 +418,7 @@ describe("SubagentTool", () => {
     ),
   )
 
-  it.live("runs a foreground child session and returns the final assistant text", () =>
+  it.live("starts a child session and returns the running handle", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
@@ -448,12 +444,14 @@ describe("SubagentTool", () => {
 
           expect(settled).toMatchObject({
             status: "completed",
-            metadata: { status: "completed" },
-            content: [{ type: "text", text: expect.stringContaining(childText) }],
+            output: { status: "running" },
+            metadata: { status: "running" },
+            content: [{ type: "text", text: expect.stringContaining("working in the background") }],
           })
           const child = yield* sessions.get(outputSessionID(settled.metadata))
-          expect(settled.content).toEqual([{ type: "text", text: completedOutput(child.id) }])
-          expect(settled.metadata).toEqual({ sessionID: child.id, status: "completed" })
+          expect(settled.output).toMatchObject({ sessionID: child.id, status: "running" })
+          expect(settled.output.output).toContain(`sessionID: ${child.id}`)
+          expect(settled.metadata).toEqual({ sessionID: child.id, status: "running" })
           expect(progress[0]).toEqual({ sessionID: child.id, status: "running" })
           expect(child).toMatchObject({
             parentID: parent.id,
@@ -529,7 +527,11 @@ describe("SubagentTool", () => {
               message.type === "user" ? [message.payload.text] : [],
             ),
           ).toEqual(["You are a subagent spawned by another session.\nreview this", "continue this"])
-          expect(second.content).toEqual([{ type: "text", text: completedOutput(childID) }])
+          expect(second).toMatchObject({
+            status: "completed",
+            output: { status: "running" },
+            metadata: { sessionID: childID, status: "running" },
+          })
         }),
       ),
     ),
@@ -566,13 +568,13 @@ describe("SubagentTool", () => {
                 description: "follow up",
                 prompt: "continue while running",
                 sessionID: child.id,
-                background: true,
               },
             },
           })
 
           expect(result).toMatchObject({
             status: "completed",
+            output: { status: "running" },
             metadata: { sessionID: child.id, status: "running" },
           })
           expect((yield* sessions.inbox(child.id)).find((message) => message.type === "user")?.payload.text).toBe(
@@ -585,7 +587,7 @@ describe("SubagentTool", () => {
     ),
   )
 
-  completionIt.live("follow-ups to a running background child return immediately and notify once", () =>
+  completionIt.live("follow-ups to a running child return immediately and notify once", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
@@ -605,7 +607,7 @@ describe("SubagentTool", () => {
             Stream.runCollect,
             Effect.forkScoped({ startImmediately: true }),
           )
-          const call = (id: string, input: { background?: boolean; sessionID?: Session.ID }) =>
+          const call = (id: string, input: { sessionID?: Session.ID }) =>
             executeTool(registry, {
               sessionID: parent.id,
               ...toolIdentity,
@@ -617,12 +619,12 @@ describe("SubagentTool", () => {
               },
             }).pipe(Effect.timeout("2 seconds"))
 
-          const launched = yield* call("call-launch", { background: true })
+          const launched = yield* call("call-launch", {})
           const childID = outputSessionID(launched.metadata)
           yield* gate.started
-          const steered = yield* call("call-steer", { background: true, sessionID: childID })
-          const unflagged = yield* call("call-steer-foreground", { sessionID: childID })
-          ;[launched, steered, unflagged].forEach((result) =>
+          const steered = yield* call("call-steer", { sessionID: childID })
+          const followed = yield* call("call-steer-again", { sessionID: childID })
+          ;[launched, steered, followed].forEach((result) =>
             expect(result).toMatchObject({ metadata: { sessionID: childID, status: "running" } }),
           )
 
@@ -713,7 +715,8 @@ describe("SubagentTool", () => {
           })
           expect(yield* call(switched.id, "call-switched-child")).toMatchObject({
             status: "completed",
-            metadata: { sessionID: switched.id, status: "completed" },
+            output: { status: "running" },
+            metadata: { sessionID: switched.id, status: "running" },
           })
           expect(yield* sessions.get(switched.id)).toMatchObject({
             agent: "reviewer",
@@ -722,7 +725,8 @@ describe("SubagentTool", () => {
           // Switching to an agent without a configured model keeps the child's current model.
           expect(yield* call(switched.id, "call-modelless-switch", "fallback")).toMatchObject({
             status: "completed",
-            metadata: { sessionID: switched.id, status: "completed" },
+            output: { status: "running" },
+            metadata: { sessionID: switched.id, status: "running" },
           })
           expect(yield* sessions.get(switched.id)).toMatchObject({
             agent: "fallback",
@@ -757,13 +761,21 @@ describe("SubagentTool", () => {
 
           // The requested model beats the agent's configured model.
           const spawned = yield* call("call-override", { model: "test/override#fast", sessionID: "" })
-          expect(spawned).toMatchObject({ status: "completed", metadata: { status: "completed" } })
+          expect(spawned).toMatchObject({
+            status: "completed",
+            output: { status: "running" },
+            metadata: { status: "running" },
+          })
           const child = yield* sessions.get(outputSessionID(spawned.metadata))
           expect(child).toMatchObject({ agent: "reviewer", model: overrideModel })
 
           // Continuing with a model switches the existing child even when the agent is unchanged.
           const continued = yield* call("call-override-continue", { sessionID: child.id, model: "test/override" })
-          expect(continued).toMatchObject({ status: "completed", metadata: { sessionID: child.id } })
+          expect(continued).toMatchObject({
+            status: "completed",
+            output: { status: "running" },
+            metadata: { sessionID: child.id, status: "running" },
+          })
           expect((yield* sessions.get(child.id)).model).toEqual({
             id: overrideModel.id,
             providerID: overrideModel.providerID,
@@ -790,40 +802,6 @@ describe("SubagentTool", () => {
               error: { type: "tool.execution", message },
             })
           }
-        }),
-      ),
-    ),
-  )
-
-  it.live("returns child runner failures as tool errors", () =>
-    tmpdirScoped().pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
-          const sessions = yield* Session.Service
-          const parent = yield* sessions.create({ location })
-          yield* withSubagent(parent.location)
-          const locations = yield* LocationServiceMap.Service
-          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
-
-          expect(
-            yield* executeTool(registry, {
-              sessionID: parent.id,
-              ...toolIdentity,
-              call: {
-                type: "tool-call",
-                id: "call-subagent-failure",
-                name: SubagentTool.name,
-                input: { agent: "reviewer", description: "fail review", prompt: "please fail" },
-              },
-            }),
-          ).toEqual({
-            status: "error",
-            error: {
-              type: "tool.execution",
-              message: expect.stringContaining("No model is available for session"),
-            },
-          })
         }),
       ),
     ),
@@ -861,7 +839,7 @@ describe("SubagentTool", () => {
               type: "tool-call",
               id: "call-background-subagent",
               name: SubagentTool.name,
-              input: { agent: "reviewer", description: "background review", prompt: "review", background: true },
+              input: { agent: "reviewer", description: "background review", prompt: "review" },
             },
           })
           const childID = outputSessionID(settled.metadata)
@@ -932,162 +910,82 @@ const reportingFixture = () =>
   })
 
 describe("SubagentTool reporting", () => {
-  completionIt.live("returns a foreground answer inline without reporting to the parent", () =>
+  completionIt.live("reports the child's final answer to the parent", () =>
     Effect.gen(function* () {
       const fixture = yield* reportingFixture()
-      const settled = yield* fixture.call("call-foreground-inline")
+      const settled = yield* fixture.call("call-report")
       const childID = outputSessionID(settled.metadata)
 
-      expect(settled.status).toBe("completed")
-      expect(settled.content).toEqual([{ type: "text", text: completedOutput(childID) }])
-      expect((yield* fixture.notices).filter((notice) => notice.metadata?.["source"] === "subagent")).toEqual([])
+      expect(settled).toMatchObject({
+        status: "completed",
+        output: { status: "running" },
+        metadata: { sessionID: childID, status: "running" },
+      })
+      yield* fixture.sessions.wait(childID)
+      yield* fixture.sessions.wait(fixture.parent.id)
+
+      const reports = (yield* fixture.notices).filter((notice) => notice.metadata?.["source"] === "subagent")
+      expect(reports).toHaveLength(1)
+      expect(reports[0]?.text).toContain(`<subagent sessionID="${childID}" state="completed"`)
+      expect(reports[0]?.text).toContain(childText)
     }),
   )
 
-  completionIt.live("returns only the current busy period answer on a foreground continuation", () =>
+  completionIt.live("reports only the current busy period when an idle child is continued", () =>
     Effect.gen(function* () {
       const fixture = yield* reportingFixture()
       const llm = yield* TestLLM.Test
       yield* llm.push(TestLLM.text("first answer", "first"))
 
-      const first = yield* fixture.call("call-foreground-first")
+      const first = yield* fixture.call("call-first")
       const childID = outputSessionID(first.metadata)
-      expect(first.content).toEqual([{ type: "text", text: subagentOutput(childID, "first answer") }])
+      yield* fixture.sessions.wait(childID)
+      yield* fixture.sessions.wait(fixture.parent.id)
+      const firstReports = (yield* fixture.notices).filter((notice) => notice.metadata?.["source"] === "subagent")
+      expect(firstReports).toHaveLength(1)
+      expect(firstReports[0]?.text).toContain("first answer")
 
-      const second = yield* fixture.call("call-foreground-second", { sessionID: childID })
-      expect(second.content).toEqual([{ type: "text", text: completedOutput(childID) }])
-    }),
-  )
-
-  completionIt.live("includes still-running background work in a foreground answer", () =>
-    Effect.gen(function* () {
-      const fixture = yield* reportingFixture()
-      const jobs = yield* Job.Service
-      const child = yield* fixture.sessions.create({
-        parentID: fixture.parent.id,
-        title: "review",
-        agent: Agent.ID.make("reviewer"),
-        model: childModel,
+      const second = yield* fixture.call("call-second", { sessionID: childID })
+      expect(second).toMatchObject({
+        status: "completed",
+        output: { status: "running" },
+        metadata: { sessionID: childID, status: "running" },
       })
-      yield* jobs.start({
-        id: "sh_foreground_shell",
-        type: "shell",
-        recovery: { kind: "shell", sessionID: child.id, shellID: "sh_1", command: "bun test --watch" },
-        background: true,
-        run: Effect.never,
-      })
-
-      const settled = yield* fixture.call("call-foreground-running-shell", { sessionID: child.id })
-      expect(settled.content).toEqual([
-        {
-          type: "text",
-          text: subagentOutput(
-            child.id,
-            `${childText}\n\nBackground work still running:\n- shell (sh_1): bun test --watch`,
-          ),
-        },
-      ])
-      yield* jobs.cancel("sh_foreground_shell")
-    }),
-  )
-
-  completionIt.live("keeps a silent child silent until a follow-up enables notify", () =>
-    Effect.gen(function* () {
-      const fixture = yield* reportingFixture()
-      const jobs = yield* Job.Service
-      const spawned = yield* fixture.call("call-silent-spawn", { background: true, notify: false })
-      const childID = outputSessionID(spawned.metadata)
-      expect(spawned.content).toEqual([
-        {
-          type: "text",
-          text: `The subagent is working in the background (sessionID: ${childID}) and will not notify you when it finishes. To check on it, call the subagent tool with this sessionID or read the session.`,
-        },
-      ])
-      expect((yield* fixture.sessions.get(childID)).metadata).toEqual({ "subagent.notify": false })
       yield* fixture.sessions.wait(childID)
       yield* fixture.sessions.wait(fixture.parent.id)
-      expect(yield* fixture.notices).toEqual([])
 
-      // Omitted notify keeps the child silent across follow-ups.
-      const silent = yield* fixture.call("call-silent-follow", { sessionID: childID, background: true })
-      expect(silent.content).toEqual(spawned.content)
-      yield* fixture.sessions.wait(childID)
-      yield* fixture.sessions.wait(fixture.parent.id)
-      expect((yield* fixture.sessions.get(childID)).metadata).toEqual({ "subagent.notify": false })
-      expect(yield* fixture.notices).toEqual([])
-
-      const loud = yield* fixture.call("call-loud-follow", { sessionID: childID, background: true, notify: true })
-      expect(loud.content).toEqual([
-        { type: "text", text: expect.stringContaining("You will be notified automatically when it finishes.") },
-      ])
-      yield* fixture.sessions.wait(childID)
-      yield* fixture.sessions.wait(fixture.parent.id)
-      expect((yield* fixture.sessions.get(childID)).metadata).toEqual({})
       const reports = (yield* fixture.notices).filter((notice) => notice.metadata?.["source"] === "subagent")
-      expect(reports).toHaveLength(1)
-      expect(reports[0]?.text).toContain(`<subagent sessionID="${childID}" state="completed"`)
-      expect(yield* jobs.pendingBackground).toEqual([])
+      expect(reports).toHaveLength(2)
+      expect(reports[1]?.text).toContain(childText)
+      expect(reports[1]?.text).not.toContain("first answer")
     }),
   )
 
-  completionIt.live("defaults a child of a silent parent to reporting", () =>
-    Effect.gen(function* () {
-      const dir = yield* tmpdirScoped()
-      const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
-      const sessions = yield* Session.Service
-      const parent = yield* sessions.create({
-        location,
-        model: parentModel,
-        metadata: { [SubagentMetadata.KEY]: false },
-      })
-      yield* withSubagent(parent.location)
-      const locations = yield* LocationServiceMap.Service
-      const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
-
-      const spawned = yield* executeTool(registry, {
-        sessionID: parent.id,
-        ...toolIdentity,
-        call: {
-          type: "tool-call",
-          id: "call-silent-parent-child",
-          name: SubagentTool.name,
-          input: { agent: "reviewer", description: "review", prompt: "review this", background: true },
-        },
-      })
-      const childID = outputSessionID(spawned.metadata)
-      // The link switch belongs to the child's link, not to the parent's own metadata.
-      expect((yield* sessions.get(childID)).metadata).toBeUndefined()
-      yield* sessions.wait(childID)
-      yield* sessions.wait(parent.id)
-      const delivered = (yield* sessions.context(parent.id))
-        .filter((message) => message.type === "synthetic")
-        .filter((message) => message.metadata?.["source"] === "subagent")
-      expect(delivered).toHaveLength(1)
-      expect(delivered[0]?.text).toContain(`<subagent sessionID="${childID}" state="completed"`)
-    }),
-  )
-
-  completionIt.live("reports exactly once when a foreground call is moved to the background", () =>
+  completionIt.live("reports a child runner failure to the parent", () =>
     Effect.gen(function* () {
       const fixture = yield* reportingFixture()
       const llm = yield* TestLLM.Test
-      const gate = yield* llm.gate()
-      const running = yield* fixture
-        .call("call-foreground-backgrounded", {})
-        .pipe(Effect.forkScoped({ startImmediately: true }))
+      yield* llm.push(
+        TestLLM.failAfter(
+          new AIError({ reason: new InvalidRequestError({ message: "provider exploded" }) }),
+          LLMEvent.textStart({ id: "failed" }),
+        ),
+      )
 
-      yield* gate.started
-      yield* fixture.sessions.background(fixture.parent.id)
-      const settled = yield* Fiber.join(running)
+      const settled = yield* fixture.call("call-failing-child", { description: "fail review" })
       const childID = outputSessionID(settled.metadata)
-      expect(settled).toMatchObject({ status: "completed", metadata: { sessionID: childID, status: "running" } })
-
-      yield* gate.release
+      expect(settled).toMatchObject({
+        status: "completed",
+        output: { status: "running" },
+        metadata: { sessionID: childID, status: "running" },
+      })
       yield* fixture.sessions.wait(childID)
       yield* fixture.sessions.wait(fixture.parent.id)
+
       const reports = (yield* fixture.notices).filter((notice) => notice.metadata?.["source"] === "subagent")
       expect(reports).toHaveLength(1)
-      expect(reports[0]?.text).toContain(`<subagent sessionID="${childID}" state="completed"`)
+      expect(reports[0]?.text).toContain(`<subagent sessionID="${childID}" state="error"`)
+      expect(reports[0]?.text).toContain("provider exploded")
     }),
   )
 })
@@ -1096,7 +994,6 @@ describe("SubagentJob cancellation", () => {
   it.live("interrupts the child only for an explicit cancel and preserves shutdown claims", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
-      const store = yield* SessionStore.Service
       const scope = yield* Scope.make()
       const cancelStarted = yield* Deferred.make<void>()
       const shutdownStarted = yield* Deferred.make<void>()
@@ -1119,7 +1016,6 @@ describe("SubagentJob cancellation", () => {
             Effect.onInterrupt(() => Effect.sync(() => interrupted.add(sessionID))),
           ),
         wake: () => Effect.void,
-        periodStartSeq: () => Effect.succeed(0),
         interrupt: (sessionID) =>
           Effect.sync(() => {
             interrupts.push(sessionID)
@@ -1132,9 +1028,7 @@ describe("SubagentJob cancellation", () => {
       const context = yield* Layer.buildWithScope(
         SubagentJob.layer.pipe(
           Layer.provide(Layer.succeed(SessionExecution.Service, execution)),
-          Layer.provide(Layer.succeed(SessionStore.Service, store)),
           Layer.provide(Layer.succeed(Job.Service, jobs)),
-          Layer.provide(Layer.succeed(Database.Service, database)),
         ),
         scope,
       )
@@ -1147,7 +1041,7 @@ describe("SubagentJob cancellation", () => {
         description: "review",
       })
 
-      yield* subagents.start(recovery("ses_job_cancel_parent", cancelChild), { background: true })
+      yield* subagents.start(recovery("ses_job_cancel_parent", cancelChild))
       yield* Deferred.await(cancelStarted)
       yield* jobs.cancel(cancelChild)
       expect(interrupted.has(cancelChild)).toBe(true)
@@ -1155,7 +1049,7 @@ describe("SubagentJob cancellation", () => {
       expect(claimed.has(cancelChild)).toBe(false)
 
       // A server shutdown interrupts the job fiber but must not release the child's claim.
-      yield* subagents.start(recovery("ses_job_shutdown_parent", shutdownChild), { background: true })
+      yield* subagents.start(recovery("ses_job_shutdown_parent", shutdownChild))
       yield* Deferred.await(shutdownStarted)
       yield* Scope.close(scope, Exit.void)
       expect(interrupted.has(shutdownChild)).toBe(true)

@@ -21,7 +21,7 @@
 use std::fs::File;
 use std::io::{self, Write};
 use std::sync::{Arc, Mutex, RwLock};
-use std::thread::JoinHandle;
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -149,10 +149,11 @@ fn new_pipe_info(id: TerminalId, pid: u32, request: CreatePipe) -> ProcessInfo {
     }
 }
 
-/// The platform reader and waiter, each spawning its named worker thread.
-struct Threads {
-    reader: Box<dyn FnOnce(OutputSink) -> io::Result<JoinHandle<()>>>,
-    waiter: Box<dyn FnOnce(Sender<ActorMessage>) -> io::Result<JoinHandle<()>>>,
+/// The waiter's result, and something dropped only after the exit message is
+/// sent (Unix starts the reader's drain by dropping a pipe writer).
+struct Waiter {
+    exit: io::Result<Exit>,
+    after: Box<dyn Send>,
 }
 
 /// Registers a spawned pipe process with its actor, then runs the platform's
@@ -163,9 +164,9 @@ fn start_pipe(
     order: u64,
     request: CreatePipe,
     process: Arc<Process>,
-    sink: File,
     cancel: Box<dyn Send>,
-    threads: Threads,
+    reader: impl FnOnce(Sender<ActorMessage>) + Send + 'static,
+    waiter: impl FnOnce() -> Waiter + Send + 'static,
 ) -> Result<TerminalHandle> {
     let info = Arc::new(RwLock::new(new_pipe_info(id, process.pid(), request)));
     // Nothing is ever written to a pipe process; a disconnected queue
@@ -196,21 +197,33 @@ fn start_pipe(
         thread,
     } = actor;
     let mut joins = vec![thread];
-    let reader = (threads.reader)(OutputSink::new(sink, actor_tx.clone()));
+    let reader_actor_tx = actor_tx.clone();
+    let reader = thread::Builder::new()
+        .name(format!("opencode-pty-reader-{id}"))
+        .spawn(move || reader(reader_actor_tx))
+        .context("failed to spawn terminal reader");
     let reader = match reader {
         Ok(reader) => reader,
         Err(error) => {
             stop(shutdown_tx, cancel, &process, joins);
-            return Err(error).context("failed to spawn terminal reader");
+            return Err(error);
         }
     };
     joins.push(reader);
-    let waiter = (threads.waiter)(actor_tx.clone());
+    let wait_actor_tx = actor_tx.clone();
+    let waiter = thread::Builder::new()
+        .name(format!("opencode-pty-wait-{id}"))
+        .spawn(move || {
+            let Waiter { exit, after } = waiter();
+            let _ = wait_actor_tx.send(exit_message(exit));
+            drop(after);
+        })
+        .context("failed to spawn terminal child waiter");
     let waiter = match waiter {
         Ok(waiter) => waiter,
         Err(error) => {
             stop(shutdown_tx, cancel, &process, joins);
-            return Err(error).context("failed to spawn terminal child waiter");
+            return Err(error);
         }
     };
     joins.push(waiter);
