@@ -646,7 +646,8 @@ fn a_kept_output_is_admitted_as_one_written_out() {
         ..opencode_plugin::limits::Limits::default()
     });
     let run = |keeps: bool, root: bool, carrier: Carrier| {
-        (PART_KEEPS.set(keeps), PART_ROOT.set(root));
+        PART_KEEPS.set(keeps);
+        PART_ROOT.set(root);
         let harness = parts_harness(carrier);
         // Each stage runs the call again and completes it with its output.
         let over = "x".repeat(88);
@@ -667,7 +668,8 @@ fn a_kept_output_is_admitted_as_one_written_out() {
                 harness.app.render().text()
             })
             .collect();
-        (PART_KEEPS.set(true), PART_ROOT.set(false));
+        PART_KEEPS.set(true);
+        PART_ROOT.set(false);
         (frames, PART_VIEWS.get())
     };
     for (root, carrier) in [(false, Carrier::Linked), (false, Carrier::Abi), (true, Carrier::Linked)] {
