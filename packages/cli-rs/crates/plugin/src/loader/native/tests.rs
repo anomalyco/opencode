@@ -3419,3 +3419,59 @@ fn the_host_answers_calls_on_its_ui_thread_only() {
     assert_eq!((mode(), std::thread::spawn(mode).join().unwrap()), (abi::THEME_LIGHT, abi::THEME_DARK));
     drop(instance);
 }
+
+/// The C plugin's claim of the call `call_1` as it starts, mounted on `host` and shown: whether it draws, and the
+/// screen; `None` when the plugin claims no `c` calls.
+#[cfg(unix)]
+fn c_claim(host: &Rc<TestHost>, registry: &Registry) -> Option<(bool, String)> {
+    let claim = registry.tool_claims().find("c")?;
+    let mount = claim.mount(host.app(), "call_1", 40);
+    let tool = serde_json::from_value(serde_json::json!({
+        "type": "tool", "id": "call_1", "name": "c", "state": { "status": "streaming", "input": "" },
+        "time": { "created": 1 },
+    }))
+    .unwrap();
+    let part = abi::claim::Part::Tool(Box::new(abi::claim::ToolPart {
+        session: "ses_1".into(),
+        message: "msg_1".into(),
+        state: abi::claim::State::Pending,
+        permission: false,
+        tool,
+    }));
+    let shows = mount.show(part);
+    host.app().root().clear();
+    host.app().root().add(mount.root());
+    host.app.render();
+    Some((shows, host.app.text()))
+}
+
+// Expected (the header, P4's checks; reviews carbon-3 and carbon-9: N2, N6, CM13, CM14): a renderer claim of a plugin
+// written in C against the header alone draws its part. Its view asks the host for nothing: a toast it asks for is
+// refused and never shows. A decline that says the memo table holds more than the last view left, or content the
+// host did not number, fails the plugin. Built as 1.4, its claim is ignored with the rest of 2.0.
+#[cfg(unix)]
+#[test]
+fn a_claim_in_a_c_library_draws_and_keeps_to_the_header() {
+    let Some(library) = c_plugin(&[]) else { return };
+    let (host, registry) = c_active(&library, "");
+    let (shows, screen) = c_claim(&host, &registry).unwrap();
+    assert!(shows && screen.contains("claimed in C"), "{screen}");
+
+    let (host, registry) = c_active(&library, "claim-toast");
+    let (_, screen) = c_claim(&host, &registry).unwrap();
+    host.app.advance(Duration::from_millis(1));
+    assert!(screen.contains("claimed in C, toast refused"), "{screen}");
+    assert!(toasts(&host).is_empty(), "a claim's toast showed");
+
+    for (options, error) in [("claim-memo", "a memo table of 7 values"), ("claim-handle", "content handles")] {
+        let (host, registry) = c_active(&library, options);
+        let (shows, _) = c_claim(&host, &registry).unwrap();
+        let status = entry(&registry.entries(), "c.so").status.clone();
+        assert!(!shows && matches!(&status, Status::Failed(failed) if failed.contains(error)), "{options}: {status:?}");
+        drop(host);
+    }
+
+    let Some(v1) = c_plugin(&["OPENCODE_AS_V1"]) else { return };
+    let (host, registry) = c_active(&v1, "");
+    assert!(c_claim(&host, &registry).is_none(), "a 1.4 library claimed a tool");
+}

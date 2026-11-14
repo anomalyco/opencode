@@ -111,6 +111,9 @@ pub(crate) struct Viewing<'a> {
     pub release: &'a mut dyn FnMut(ContentRef),
     /// The keyed nodes the mount's tree holds at a key and under it, which a [`Node::Keep`] of the key holds again.
     pub kept: &'a dyn Fn(&str) -> usize,
+    /// The values a library's memo table held after the mount's last view: a claim's view that returns no tree drops
+    /// only what it staged, so its table holds no more.
+    pub held: usize,
 }
 
 /// What a view returned.
@@ -558,6 +561,7 @@ impl Surface {
             give: &mut give,
             release: &mut release,
             kept: &kept,
+            held: 0,
         };
         let viewed = self.viewer.view(host, viewing);
         let Some(viewed) = viewed else {

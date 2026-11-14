@@ -1748,10 +1748,11 @@ impl crate::claim::Viewer for RemoteClaim {
             if !numbered {
                 return Err("content handles that do not follow the host's".to_owned());
             }
-            let keyed = reply.node.as_ref().map_or(0, |node| keyed(node, viewing.kept));
-            match reply.memo <= keyed || reply.node.is_none() {
+            // A decline drops only what its view staged: the table holds no more than the last view left.
+            let bound = reply.node.as_ref().map_or(viewing.held, |node| keyed(node, viewing.kept));
+            match reply.memo <= bound {
                 true => Ok(()),
-                false => Err(format!("a memo table of {} values for a tree of {keyed} keyed nodes", reply.memo)),
+                false => Err(format!("a memo table of {} values where {bound} may stay", reply.memo)),
             }
         });
         let Some(reply) = checked else { return crate::claim::Viewed::Failed };
