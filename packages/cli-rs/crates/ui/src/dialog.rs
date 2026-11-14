@@ -319,6 +319,16 @@ impl Dialogs {
         self.finish();
     }
 
+    /// Closes every dialog without running its close handler, for an owner that ends with its app. An open dialog holds
+    /// the stack (its [`DialogCx`], and the closures and layers that close it), and the stack holds the keymap, so
+    /// until this runs neither is freed. Dropping an entry is not enough: a dialog's layers can hold its `DialogCx`.
+    pub fn release(&self) {
+        for mut entry in self.0.stack.take() {
+            entry.on_close = None;
+            close(entry);
+        }
+    }
+
     fn close_all(&self) {
         let entries = std::mem::take(&mut *self.0.stack.borrow_mut());
         for entry in entries {

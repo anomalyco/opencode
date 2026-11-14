@@ -976,8 +976,6 @@ fn run(commands: &[Command]) -> Option<Failure> {
     // Dropping the TUI releases the plugin: an active instance is destroyed once, a failed one not at all.
     take_calls();
     let expected: Vec<Kind> = reference.active().filter(|_| !world.exited).map(|_| Kind::Dispose).into_iter().collect();
-    // An open dialog's stack holds the app, and so the TUI, past the drop: the dialogs close first, as at an exit.
-    world.harness.tui.dialogs.clear();
     drop(world);
     let dropped: Vec<Kind> = take_calls().iter().map(|call| call.kind).collect();
     let detail = (dropped != expected).then(|| format!("dropped while {:?}: {dropped:?}", reference.life));
