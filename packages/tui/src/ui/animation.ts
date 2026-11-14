@@ -31,7 +31,8 @@ type ValueState = {
 
 type AnimationTask = (now: number) => boolean
 
-// One 60 fps subscription on each renderer's shared animation clock while any of its tasks runs.
+// One 60 fps subscription on each renderer's shared animation clock while any of its tasks runs. Tasks belong to no
+// node, so a hidden view's tween runs to its end; it stops early only when its owner is disposed.
 const clocks = new Map<CliRenderer, { tasks: Set<AnimationTask>; stop: () => void }>()
 
 const smoothstep = (progress: number) => progress * progress * (3 - 2 * progress)

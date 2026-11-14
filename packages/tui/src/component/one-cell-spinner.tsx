@@ -40,7 +40,8 @@ export function OneCellSpinner(props: {
     props.animations
     setElapsed(props.age ?? 0)
   })
-  // Ticks on the shared clock leave idle gaps: mini awaits renderer.idle() to flush and admit prompts.
+  // Ticks on the shared clock leave idle gaps: mini awaits renderer.idle() to flush and admit prompts. The Solid
+  // hook is not bound to a node's draw: hidden with visible={false} it keeps ticking. Mount under <Show>.
   const step = createMemo(() => {
     if (!sequenced() || props.animations === false || props.paused || complete()) return
     return Math.max(

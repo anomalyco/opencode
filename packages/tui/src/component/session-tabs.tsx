@@ -289,6 +289,7 @@ export function createMarquee(animations: () => boolean) {
     delay = undefined
     setScrolling(false)
   }
+  // Not bound to a node's draw; reset() and unmount end the scroll.
   onAnimationTick(
     () => (scrolling() ? 1000 / MARQUEE_INTERVAL : undefined),
     (_deltaTime, ticks) => {

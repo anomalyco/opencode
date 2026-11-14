@@ -14,6 +14,7 @@ export function Spinner(props: { children?: JSX.Element; color?: RGBA; shimmer?:
   const config = useConfig().data
   const color = () => props.color ?? theme.text.muted
   const [frame, setFrame] = createSignal(0)
+  // The Solid hook is not bound to a node's draw: hidden with visible={false} it keeps ticking. Mount under <Show>.
   onAnimationTick(
     () => ((config.animations ?? true) && props.shimmer ? 1000 / 80 : undefined),
     (_deltaTime, ticks) => setFrame((value) => (value + ticks) % SPINNER_FRAMES.length),
