@@ -103,6 +103,8 @@ pub enum Refused {
     Duplicate(String),
     /// A keep names an id the last accepted tree does not hold.
     Unknown(String),
+    /// A whole tree, asked for after a refusal, keeps this id.
+    Kept(String),
     /// A node shows content the mount does not have.
     Content(ContentRef),
     /// The widgets the tree would hold nest deeper than [`MAX_DEPTH`], kept subtrees included; OpenTUI's layout
@@ -117,6 +119,7 @@ impl std::fmt::Display for Refused {
         match self {
             Refused::Duplicate(id) => write!(f, "the id {id:?} is in the tree twice"),
             Refused::Unknown(id) => write!(f, "a keep names {id:?}, which the host does not hold"),
+            Refused::Kept(id) => write!(f, "a whole tree keeps {id:?}"),
             Refused::Content(content) => write!(f, "content {} is not the mount's", content.0),
             Refused::Deep => write!(f, "the tree nests deeper than {MAX_DEPTH} layout levels"),
             Refused::Number => write!(f, "a size in percent is not a finite number of 0 or more"),
@@ -136,6 +139,8 @@ pub struct Env<'a> {
     pub source: &'a dyn Fn(&Source) -> Option<Rc<str>>,
     /// Whether the mount holds content `ContentRef`.
     pub content: &'a dyn Fn(ContentRef) -> bool,
+    /// The host asked for a whole tree, after a refusal: a keep names a subtree the view did not vouch for again.
+    pub full: bool,
 }
 
 /// A mounted tree: the widgets of the last accepted tree, in a parent the owner gives each call.
@@ -288,6 +293,9 @@ impl Tree {
             fn nodes(&mut self, nodes: &'a [Node], above: u16) -> Result<(), Refused> {
                 for node in nodes {
                     if let Node::Keep { key } = node {
+                        if self.env.full {
+                            return Err(Refused::Kept(key.clone()));
+                        }
                         let held = self.tree.ids.get(key).ok_or_else(|| Refused::Unknown(key.clone()))?;
                         if !self.keeps.insert(key) || self.ids.contains(key.as_str()) {
                             return Err(Refused::Duplicate(key.clone()));
