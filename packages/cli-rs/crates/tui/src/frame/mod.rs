@@ -244,12 +244,8 @@ pub fn refresh(tui: &Tui) {
     tui.app.request_redraw();
 }
 
-/// Starts the tabs' ticks after this frame, for a pulse that began to move or a spinner that showed in a paint.
-///
-/// OpenTUI's event loop computes its poll deadline before it paints (`App::event_loop`), so the first tick, armed
-/// by a task deferred from a paint, waits for the loop's next wake-up; the store's next batch usually comes right
-/// after. Later ticks re-arm from their timer callbacks, which run before the deadline. OpenTUI is to recompute the
-/// deadline after it paints (native-hardening `fixes/oc-rust-animation-lag.md`, "OpenTUI finding").
+/// Arms the tabs' next tick after this frame, for a pulse that moves or a spinner that shows in a paint. Each tick
+/// asks for a frame, and that frame's paint arms the next, so ticks stop with the last paint that needs them.
 pub(crate) fn wake(tui: &Tui) {
     if !tui.frame.ticking.get() {
         tui.app.defer(bind!(tui.weak(), |tui, _| tick(&tui)));
@@ -267,8 +263,7 @@ pub(crate) fn wake_markers(tui: &Tui) {
     if tui.frame.markers.replace(true) {
         return;
     }
-    // Deferred from a paint as `wake` is, and late the same way. Each step is armed by the paint before it, not by
-    // a timer, so every step waits for a wake-up until OpenTUI recomputes its deadline after it paints.
+    // Deferred from a paint as `wake` is: each step is armed by the paint before it.
     tui.app.defer(bind!(tui.weak(), |tui, _| {
         tui.app.set_timeout(
             std::time::Duration::from_millis(16),
@@ -281,8 +276,8 @@ pub(crate) fn wake_markers(tui: &Tui) {
 }
 
 /// Runs the pulses at 20 fps while any moves, else repaints at each spinner step while the compact rail shows a
-/// running tab, which has no pulse: TS's `TabIndicator` spinner keeps its own 80 ms interval. Stops when neither
-/// needs frames.
+/// running tab, which has no pulse: TS's `TabIndicator` spinner keeps its own 80 ms interval. Stops when no paint
+/// asks for the next tick.
 fn tick(tui: &Tui) {
     let frame = &tui.frame;
     let animations = opencode_ui::motion::enabled(tui.config().info.animations);
@@ -318,7 +313,6 @@ fn tick(tui: &Tui) {
             } else {
                 tui.app.request_redraw();
             }
-            tick(&tui);
         }),
     );
 }
