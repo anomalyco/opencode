@@ -1003,6 +1003,9 @@ fn a_theme_change_keeps_every_surface_mounted() {
         };
         harness.wait_for_all(names);
         settle(&harness);
+        // The startup's reads land when they do, some not yet sent, and each change batch views every claim: the
+        // store's changes wait while the switch runs, so the views and widgets after it are the switch's.
+        harness.tui.hold_sync(true);
         let seen = RESTYLE.with(|log| log.borrow().clone());
         let work = reconcile::work();
         assert!(harness.tui.theme.borrow_mut().set_mode(Some(opencode_ui::theme::ThemeMode::Light), false));
@@ -1010,6 +1013,7 @@ fn a_theme_change_keeps_every_surface_mounted() {
         settle(&harness);
         let done = reconcile::work().since(work);
         let after = RESTYLE.with(|log| log.borrow()[seen.len()..].to_vec());
+        harness.tui.hold_sync(false);
         let palette = seen.iter().rev().find(|(name, _)| *name == "pal").map(|(_, generation)| *generation);
         assert!(
             after.iter().all(|(name, generation)| *name == "pal" && Some(*generation) == palette),
