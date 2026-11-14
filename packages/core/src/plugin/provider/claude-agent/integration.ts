@@ -57,6 +57,6 @@ function problem(state: ClaudeStatus.State): IntegrationConnection.Status | unde
   // The message already says what went wrong with Claude Code.
   if (state.type === "failed") return { status: "needs_auth", message: state.message }
   if (state.type === "ready" && !ClaudeProbe.isLoggedIn(state.probe.account))
-    return { status: "needs_auth", message: "Claude Code is not logged in. Run `claude auth login` in a terminal." }
+    return { status: "needs_auth", message: ClaudeProbe.loginMessage(state.configDir) }
   return undefined
 }

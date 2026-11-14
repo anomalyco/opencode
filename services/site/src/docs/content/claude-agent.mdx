@@ -78,10 +78,71 @@ your shell.
 | `settings.authToken` | `ANTHROPIC_AUTH_TOKEN` |
 | `settings.headerTimeout` | `API_TIMEOUT_MS` |
 | `settings.chunkTimeout` | `CLAUDE_STREAM_IDLE_TIMEOUT_MS` |
+| `settings.configDir` | `CLAUDE_CONFIG_DIR` |
 | `headers` | `ANTHROPIC_CUSTOM_HEADERS` |
 | `body` | `CLAUDE_CODE_EXTRA_BODY` |
 
 Set them on a model to override the provider's values for that model.
+
+## Use a second Claude account
+
+Sign in to the second account in its own folder. Your usual login stays unchanged.
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-2" claude auth login
+```
+
+Then add models that use that folder:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "models": {
+        "sonnet-2": {
+          "modelID": "sonnet",
+          "name": "Sonnet (Claude 2)",
+          "settings": { "configDir": "~/.claude-2" },
+        },
+      },
+    },
+  },
+}
+```
+
+To use one account for every model in a project, set `settings.configDir` on the provider in that project's config
+instead.
+
+## Rotate between accounts
+
+If you have several interchangeable accounts, OpenCode can move to the next one when an account hits its usage limit.
+Sign in to each account in its own folder, then list the folders:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": { "configDir": ["~/.claude-1", "~/.claude-2"] },
+    },
+  },
+}
+```
+
+When an account hits its limit, OpenCode skips it until the limit resets. Rotation only applies to Claude subscription
+logins, not to `apiKey` or `authToken`.
+
+Set `settings.strategy` to choose which account a chat uses:
+
+| Strategy | New chats | Existing chats |
+| --- | --- | --- |
+| `ordered` (default) | Start on the first account with room left | Stay on their account until it hits its limit |
+| `ordered-strict` | Start on the first account with room left | Return to an earlier account in the list as soon as it resets |
+| `round-robin` | Take turns across the accounts | Stay on their account until it hits its limit |
+
+Moving a chat to an account it has not used before sends it the whole conversation again, without the prompt cache.
+`ordered-strict` keeps the first accounts busy at the cost of more of these moves.
 
 ## Limitations
 
@@ -97,5 +158,5 @@ Set them on a model to override the provider's values for that model.
 | Error or symptom | Check |
 | --- | --- |
 | `Claude Code is not installed` | Install Claude Code, or set `OPENCODE_CLAUDE_PATH` to its path. |
-| `Claude Code is not logged in` | Run `claude auth login`, then connect Claude Agent again. |
+| `Claude Code is not logged in` | Run `claude auth login`, then connect Claude Agent again. With `configDir`, run the command the error shows for that folder. |
 | `Claude Code ... is too old` | Run `claude update`. |
