@@ -249,6 +249,150 @@ fn a_1_3_plugin_stores_an_array() {
     assert!(written, "{:?}", storage.load("plugin.sample.list", &Value::Null));
 }
 
+// Expected (rich-plugins 3.9): through `external`, the sample in a project's `.opencode/plugins` waits for approval;
+// approving it in the plugin manager loads it at once, the decision is kept in the state directory, and a client
+// started again on that state loads it without asking.
+#[test]
+fn a_project_plugin_runs_once_approved_and_the_approval_is_kept() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    // The project is `work`; the state directory is outside it.
+    project_plugin(root.path(), "sample", &build(""));
+    let open = || project_tui(root.path());
+    let h = open();
+    h.wait_for("Plugin needs approval");
+    assert!(!h.app.text().contains("sample plugin v1"), "{}", h.app.text());
+    h.tui.keymap.dispatch("plugins.list", None);
+    h.app.type_text("sample");
+    h.wait_for("pending, local");
+    h.app.press("enter");
+    h.wait_for("Run project plugin?");
+    // Decline is active at first.
+    h.app.press("right");
+    h.app.press("enter");
+    // The manager comes back on the plugin's row, now under its ID.
+    let back = h.app.wait_until(support::WAIT, || {
+        let text = h.app.text();
+        !text.contains("Run project plugin?") && text.contains("Plugins") && !text.contains("pending")
+    });
+    assert!(back, "{}", h.app.text());
+    h.app.press("escape");
+    h.wait_for("sample plugin v1: home.footer");
+    assert!(h.tui.state_dir().unwrap().join("plugin-approvals.json").is_file());
+    drop(h);
+    let h = open();
+    h.wait_for("sample plugin v1: home.footer");
+    assert!(!h.app.text().contains("needs approval"), "{}", h.app.text());
+}
+
+// Expected (bigboi-2): a state directory inside the project keeps no decision: the question says the answer lasts until
+// opencode exits, nothing is written there, and a client started again asks again.
+#[test]
+fn a_state_directory_inside_the_project_keeps_no_decision() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    project_plugin(root.path(), "sample", &build(""));
+    let open = || project_tui_at(root.path(), &root.path().join("work/home"));
+    let h = open();
+    h.wait_for("Plugin needs approval");
+    h.tui.keymap.dispatch("plugins.list", None);
+    h.wait_for("pending, local");
+    h.app.press("enter");
+    h.wait_for("Run project plugin?");
+    let target = root.path().join("work/.opencode/plugins/sample").to_string_lossy().into_owned();
+    let (_, unsaved) = opencode_tui::plugins::host::held(&h.tui, &target).unwrap();
+    assert!(unsaved.as_deref().is_some_and(|reason| reason.contains("inside the project")), "{unsaved:?}");
+    h.app.press("right");
+    h.app.press("enter");
+    let back = h.app.wait_until(support::WAIT, || {
+        let text = h.app.text();
+        !text.contains("Run project plugin?") && text.contains("Plugins") && !text.contains("pending")
+    });
+    assert!(back, "{}", h.app.text());
+    h.app.press("escape");
+    h.wait_for("sample plugin v1: home.footer");
+    assert!(!h.tui.state_dir().unwrap().join("plugin-approvals.json").exists());
+    drop(h);
+    open().wait_for("Plugin needs approval");
+}
+
+/// A TUI with real roots under `root`, whose project is `root/work`, with the external plugins loaded.
+fn project_tui(root: &Path) -> Harness {
+    project_tui_at(root, &root.join("home"))
+}
+
+/// [`project_tui`] with the home directory `home`, which holds the state directory.
+fn project_tui_at(root: &Path, home: &Path) -> Harness {
+    let roots = support::roots(support::home_paths(home), "test");
+    let harness =
+        support::mount(80, 24, Deps { route: Route::Home, roots, ..support::deps(Arc::new(fake(String::new()))) });
+    external(&harness.tui, External { config_dir: root.join("config"), cwd: root.join("work") });
+    harness
+}
+
+/// Writes `library` as the project plugin `name` under `root/work`.
+fn project_plugin(root: &Path, name: &str, library: &[u8]) {
+    let dir = root.join("work/.opencode/plugins").join(name);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join(entry_file()), library).unwrap();
+}
+
+// Expected (bigboi-9): nothing of a project's plugin is mapped before it is approved. Its library's static constructor,
+// which runs as the platform loader maps it and before any of its code is called, does not run while it is pending,
+// after a decline, or in a client started again; it runs once the plugin is approved, the positive control.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn nothing_of_a_project_plugin_is_mapped_before_it_is_approved() {
+    let witness = std::env::temp_dir().join(format!("opencode-sample-witness-{}", std::process::id()));
+    let _ = std::fs::remove_file(&witness);
+    let root = opencode_util::temp::tempdir().unwrap();
+    project_plugin(root.path(), "sample", &build("witness"));
+    let h = project_tui(root.path());
+    h.wait_for("Plugin needs approval");
+    assert!(!witness.exists());
+    h.tui.keymap.dispatch("plugins.list", None);
+    h.wait_for("pending, local");
+    h.app.press("enter");
+    h.wait_for("Run project plugin?");
+    // Decline is active at first.
+    h.app.press("enter");
+    h.wait_for("declined, local");
+    h.app.press("escape");
+    assert!(!witness.exists());
+    drop(h);
+    let h = project_tui(root.path());
+    h.tui.keymap.dispatch("plugins.list", None);
+    h.wait_for("declined, local");
+    assert!(!witness.exists());
+    h.app.press("enter");
+    h.wait_for("Run project plugin?");
+    h.app.press("right");
+    h.app.press("enter");
+    let mapped = h.app.wait_until(support::WAIT, || witness.exists());
+    assert!(mapped, "{}", h.app.text());
+    let _ = std::fs::remove_file(&witness);
+}
+
+// Expected (carbon-6): however the question closes, the list comes back on the row it was asked from, also when
+// another plugin's row comes first.
+#[test]
+fn the_list_comes_back_on_the_row_that_was_asked_about() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    project_plugin(root.path(), "first", &build(""));
+    project_plugin(root.path(), "second", &build(""));
+    let h = project_tui(root.path());
+    h.tui.keymap.dispatch("plugins.list", None);
+    h.wait_for("second");
+    h.app.press("down");
+    h.app.press("enter");
+    h.wait_for("plugins/second");
+    h.app.press("escape");
+    let back = h.app.wait_until(support::WAIT, || !h.app.text().contains("Run project plugin?"));
+    assert!(back);
+    h.wait_for("pending, local");
+    h.app.press("enter");
+    let screen = h.wait_for("Run project plugin?");
+    assert!(screen.contains("plugins/second") && !screen.contains("plugins/first"), "{screen}");
+}
+
 // Expected: a plugin that fails to load shows TS's error toast, which offers to open the plugin manager, and the home
 // footer counts it (carbon-5).
 #[test]

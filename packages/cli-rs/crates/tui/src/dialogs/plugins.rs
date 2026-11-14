@@ -6,14 +6,18 @@
 //! `ctrl+a`; a configured TypeScript plugin is listed as `skipped` with the reason as its error (F16), and an
 //! external native plugin that failed to load or crashed as `failed` with its error (P.4). Server rows
 //! come from `GET /api/plugin`. Enter toggles a TUI plugin through `Registry::set_active`, then the route mounts
-//! again so slots follow; on another row it opens the error, if any.
+//! again so slots follow; on another row it opens the error, if any. A project plugin held back for approval
+//! (rich-plugins 3.9, not in TS) is listed `pending` or `declined`, and Enter asks to approve or decline the build held
+//! back at that moment.
 
 use opencode_api::generated::{
     LocationQueryInput, PluginCheckInput, PluginInfo, PluginListInput, PluginSource, PluginState, PluginUpdateInput,
     V2Event,
 };
 use opencode_api::js::locale_compare;
+use opencode_plugin::loader::approval::{Artifact, Decision};
 use opencode_plugin::{Source, Status};
+use opencode_ui::confirm::{ConfirmProps, confirm};
 use opencode_ui::motion::Spinner;
 use opencode_ui::select::{ActionRun, FooterHint, Group, Select, SelectAction, select};
 
@@ -153,6 +157,13 @@ impl Manager {
                 props.dynamic_hints = Some(Rc::new(bind!(manager, |manager| {
                     let focused = manager.focused();
                     let mut hints = Vec::new();
+                    if focused.as_ref().and_then(held).is_some() {
+                        hints.push(FooterHint {
+                            title: "approve or decline".to_owned(),
+                            label: "enter".to_owned(),
+                            group: Some(Group::Primary),
+                        });
+                    }
                     if focused.as_ref().and_then(error).is_some() && manager.toggleable(focused.as_ref()).is_none() {
                         hints.push(FooterHint {
                             title: "view error".to_owned(),
@@ -170,6 +181,10 @@ impl Manager {
                 })));
                 props.on_select = Some(Rc::new(bind!(manager, |manager, option| {
                     let entry = manager.entry(&option.value);
+                    if let Some(target) = entry.as_ref().and_then(held) {
+                        manager.review(target.to_owned(), option.value.clone());
+                        return;
+                    }
                     if manager.toggleable(entry.as_ref()).is_some() {
                         manager.toggle(entry.as_ref());
                         return;
@@ -335,6 +350,8 @@ impl Manager {
                 let failed = status(&entry) == "failed";
                 option.footer_color = Some(if failed {
                     theme.text.feedback.error.base
+                } else if status(&entry) == "pending" {
+                    theme.text.feedback.warning.base
                 } else if outdated(&entry) {
                     theme.text.feedback.info.base
                 } else {
@@ -476,6 +493,66 @@ impl Manager {
         );
     }
 
+    /// Asks whether the build of the project plugin of `target` that the loader holds back now may run (rich-plugins
+    /// 3.9). The answer names that build, so it records nothing when the build changed meanwhile (bigboi-1, carbon-1).
+    /// Approve and Decline keep the answer for this build; Escape, Ctrl+C, the header and the backdrop leave it
+    /// pending (carbon-6). However the question closes, the list comes back on the row `key`.
+    fn review(self: &Rc<Self>, target: String, key: String) {
+        let Some(tui) = self.tui.upgrade() else { return };
+        let Some((held, unsaved)) = crate::plugins::host::held(&tui, &target) else { return };
+        let artifact = match held {
+            Ok(artifact) => artifact,
+            Err(error) => return tui.toasts.error(format!("This plugin cannot be approved: {error}")),
+        };
+        let decide = |decision: Decision| -> Rc<dyn Fn()> {
+            let (manager, target, artifact) = (self.clone(), target.clone(), artifact.clone());
+            Rc::new(move || {
+                let Some(tui) = manager.tui.upgrade() else { return };
+                let (target, artifact) = (target.clone(), artifact.clone());
+                // After the confirm has closed, and before the list comes back.
+                tui.app.defer(bind!(tui, |tui, _| {
+                    match crate::plugins::host::decide(&tui, &target, &artifact, decision) {
+                        Ok(true) => {}
+                        Ok(false) => tui.toasts.show(ToastOptions::new(
+                            Variant::Warning,
+                            "The plugin changed while you were asked, so nothing was saved. Review the new build.",
+                        )),
+                        Err(error) => tui.toasts.error(format!("The decision was not saved: {error}")),
+                    }
+                }));
+            })
+        };
+        let props = ConfirmProps {
+            title: "Run project plugin?".to_owned(),
+            message: question(&target, &artifact, unsaved.as_deref()),
+            on_confirm: Some(decide(Decision::Approved)),
+            on_cancel: Some(decide(Decision::Declined)),
+            confirm_label: Some("approve".to_owned()),
+            cancel_label: Some("decline".to_owned()),
+            dismiss: true,
+            cancel_first: true,
+        };
+        // The select is still handling the key that opened it.
+        let manager = self.clone();
+        tui.app.defer(bind!(tui, |tui, _| {
+            let (props, manager, key) = (props.clone(), manager.clone(), key.clone());
+            let back: Box<dyn FnOnce()> = Box::new(move || {
+                let Some(tui) = manager.tui.upgrade() else { return };
+                // Not over a dialog that replaced the question.
+                tui.app.defer(move |_| {
+                    if manager.tui.upgrade().is_some_and(|tui| !tui.dialogs.is_open()) {
+                        manager.open(Some(key));
+                    }
+                });
+            });
+            tui.dialogs.replace(
+                move |cx| confirm(cx, props.clone()),
+                Some(back),
+                DialogOptions::new(DialogSize::Medium),
+            );
+        }));
+    }
+
     /// `DialogErrorDetails` for `entry`; Back returns to the list on it.
     fn detail(self: &Rc<Self>, entry: Entry) {
         let Some(tui) = self.tui.upgrade() else { return };
@@ -516,9 +593,29 @@ impl Manager {
     }
 }
 
+/// The question about `artifact`, found as plugin directory `target`: the library that would run, where it really is
+/// when that is outside the directory, and its hash (bigboi-1, carbon-1).
+fn question(target: &str, artifact: &Artifact, unsaved: Option<&str>) -> String {
+    let inside = std::fs::canonicalize(target).is_ok_and(|directory| artifact.path.starts_with(directory));
+    let elsewhere = if inside { "" } else { "\nIt is outside this plugin directory." };
+    let saved =
+        unsaved.map(|reason| format!("\nYour answer lasts until opencode exits: {reason}.")).unwrap_or_default();
+    format!(
+        "This project wants to run native code inside opencode:\n\n{target}\nLibrary: {}{elsewhere}\nSHA-256: {}…\n\n\
+         It runs with your permissions. Approve it only if you trust this project.{saved}",
+        artifact.path.display(),
+        artifact.short(),
+    )
+}
+
 fn label(entry: &Entry) -> String {
+    // Nothing of a held plugin is opened, so it has no ID: its directory names it.
+    let name = |target: &str| match held(entry) {
+        Some(_) => std::path::Path::new(target).file_name().map(|name| name.to_string_lossy().into_owned()),
+        None => None,
+    };
     match entry {
-        Entry::Tui { id, target, .. } => id.clone().unwrap_or_else(|| target.clone()),
+        Entry::Tui { id, target, .. } => id.clone().or_else(|| name(target)).unwrap_or_else(|| target.clone()),
         Entry::Server { plugin, source, .. } => plugin.id.as_ref().map_or_else(|| source.clone(), |id| id.0.clone()),
     }
 }
@@ -569,6 +666,8 @@ fn row(entry: opencode_plugin::Entry) -> Entry {
         Status::Inactive => ("inactive", None),
         Status::Skipped(reason) => ("skipped", Some(reason.clone())),
         Status::Failed(error) => ("failed", Some(error.clone())),
+        Status::Pending => ("pending", None),
+        Status::Declined => ("declined", None),
     };
     // Only a plugin with a definition can be toggled; an unloaded target cannot.
     let loaded = entry.source != Source::Configured;
@@ -587,6 +686,14 @@ fn status(entry: &Entry) -> &str {
     match entry {
         Entry::Server { plugin, .. } => plugin.state.tag(),
         Entry::Tui { status, .. } => status,
+    }
+}
+
+/// The target of a project plugin held back for approval, pending or declined.
+fn held(entry: &Entry) -> Option<&str> {
+    match entry {
+        Entry::Tui { target, status: "pending" | "declined", .. } => Some(target),
+        _ => None,
     }
 }
 
@@ -645,6 +752,24 @@ mod tests {
         let mut labels = vec!["beta", "Alpha", "alpha"];
         labels.sort_by(|a, b| locale_compare(a, b));
         assert_eq!(labels, ["alpha", "Alpha", "beta"]);
+    }
+
+    // Expected (bigboi-1, bigboi-2, carbon-1): the question shows the library that would run and its hash, says when it
+    // lies outside the plugin directory, and says when the answer is not saved.
+    #[test]
+    fn the_question_names_the_library_and_says_what_is_not_saved() {
+        let root = opencode_util::temp::tempdir().unwrap();
+        let target = root.path().join("plugins/p");
+        std::fs::create_dir_all(&target).unwrap();
+        let inside = std::fs::canonicalize(&target).unwrap().join("plugin.so");
+        let artifact = |path: std::path::PathBuf| Artifact { target: target.clone(), path, sha256: "ab".repeat(32) };
+        let text = question(&target.to_string_lossy(), &artifact(inside.clone()), None);
+        assert!(text.contains(&format!("Library: {}", inside.display())), "{text}");
+        assert!(text.contains(&format!("SHA-256: {}…", "ab".repeat(8))), "{text}");
+        assert!(!text.contains("outside") && !text.contains("lasts until"), "{text}");
+        let text = question(&target.to_string_lossy(), &artifact("/shared/plugin.so".into()), Some("it is shared"));
+        assert!(text.contains("It is outside this plugin directory."), "{text}");
+        assert!(text.contains("Your answer lasts until opencode exits: it is shared."), "{text}");
     }
 
     // Expected: as in TS, a plugin that failed while active (a panic, or a failed rebuild with the previous

@@ -5,8 +5,10 @@
 //!
 //! A [`Loader`] reconciles the targets with the [`Registry`]: it loads new and changed builds, keeps a running
 //! plugin when its new build fails, and unloads removed ones. The host calls [`Loader::reconcile`] again when a
-//! directory of [`Loader::watch_dirs`] changes, which gives hot reload.
+//! directory of [`Loader::watch_dirs`] changes, which gives hot reload. A build found in a project's
+//! `.opencode/plugins` loads only once the user approved it ([`approval`]).
 
+pub mod approval;
 pub mod native;
 
 use std::cell::RefCell;
@@ -17,6 +19,7 @@ use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 
 use crate::{Definition, ErrorFn, Host, Registry, SKIPPED, Status};
+use approval::{Approvals, Artifact, Decision};
 
 /// The file name of a plugin directory's native build: `plugin.so`, `plugin.dylib`, or `plugin.dll`.
 pub fn entry_file() -> String {
@@ -48,6 +51,8 @@ pub struct Target {
     /// The local path the target names, if it is one.
     pub local: Option<PathBuf>,
     pub options: Option<String>,
+    /// Found in a project's `plugins` directory, and not named by a `cli.json` entry: it needs approval.
+    pub project: bool,
 }
 
 impl Target {
@@ -85,6 +90,11 @@ pub struct Loader {
     /// The targets whose last build was refused for an ID another plugin has, with that ID; each loads again once it is
     /// free.
     waiting: RefCell<HashMap<String, String>>,
+    /// The user's decisions on project plugins.
+    approvals: Approvals,
+    /// The project targets held back for approval, with the artifact the user is asked about, or why it cannot be
+    /// read.
+    held: RefCell<HashMap<String, Result<Artifact, String>>>,
 }
 
 impl Loader {
@@ -98,22 +108,36 @@ impl Loader {
             listed: RefCell::default(),
             skipped: RefCell::default(),
             waiting: RefCell::default(),
+            approvals: Approvals::default(),
+            held: RefCell::default(),
         }
     }
 
+    /// Keeps the decisions on project plugins in `approvals` rather than in memory.
+    pub fn with_approvals(self, approvals: Approvals) -> Self {
+        Self { approvals, ..self }
+    }
+
     /// The discovered directories, then the configured entries, merged by local path (TS `mergePluginTargets`:
-    /// a later entry replaces an earlier one in its place).
+    /// a later entry replaces an earlier one in its place). Only the global `plugins` directory is not a project's. A
+    /// configured entry also replaces a project's plugin whose library is the same file under another spelling (a link,
+    /// another case, or the library rather than its directory; carbon-4, bigboi-6), so it is not listed twice.
     pub fn targets(&self) -> Vec<Target> {
-        let discovered = discover(&plugin_directories(&self.config_dir, &self.cwd)).into_iter().map(|path| Target {
-            target: path.to_string_lossy().into_owned(),
-            local: Some(path),
-            options: None,
+        let directories = plugin_directories(&self.config_dir, &self.cwd);
+        let discovered = directories.iter().enumerate().flat_map(|(index, directory)| {
+            discover(std::slice::from_ref(directory)).into_iter().map(move |path| Target {
+                target: path.to_string_lossy().into_owned(),
+                local: Some(path),
+                options: None,
+                project: index > 0,
+            })
         });
         let configured = self.configured.borrow();
         let configured = configured.iter().map(|entry| Target {
             target: entry.target.clone(),
             local: local_source(&entry.target, &self.config_dir),
             options: entry.options.clone(),
+            project: false,
         });
         let mut targets: Vec<Target> = Vec::new();
         for target in discovered.chain(configured) {
@@ -123,12 +147,29 @@ impl Loader {
                     .as_ref()
                     .map_or_else(|| target.target.clone(), |local| local.to_string_lossy().into_owned())
             };
-            match targets.iter_mut().find(|known| key(known) == key(&target)) {
+            let alias = |known: &Target| {
+                known.project && !target.project && {
+                    let file = |target: &Target| target.library().and_then(|file| identity(&file));
+                    file(known).is_some_and(|known| file(&target) == Some(known))
+                }
+            };
+            match targets.iter_mut().find(|known| key(known) == key(&target) || alias(known)) {
                 Some(known) => *known = target,
                 None => targets.push(target),
             }
         }
         targets
+    }
+
+    /// The artifact the user is asked about for the project plugin of `target`, or why it cannot be read; `None` when
+    /// the plugin is not held back.
+    pub fn held(&self, target: &str) -> Option<Result<Artifact, String>> {
+        self.held.borrow().get(target).cloned()
+    }
+
+    /// Why decisions are not saved, when the state directory was refused ([`Approvals::open`]).
+    pub fn unsaved(&self) -> Option<String> {
+        self.approvals.unsaved().map(str::to_owned)
     }
 
     /// Replaces the configured entries, after `cli.json` changed; the next [`Loader::reconcile`] applies them.
@@ -183,6 +224,7 @@ impl Loader {
         for target in stale.into_iter().chain(removed) {
             self.seen.borrow_mut().remove(&target);
             self.waiting.borrow_mut().remove(&target);
+            self.held.borrow_mut().remove(&target);
             registry.unload(host, &target);
             registry.set_unloaded(&target, None);
             changed = true;
@@ -235,26 +277,66 @@ impl Loader {
             changed
         };
         let Some(file) = target.library() else {
+            self.held.borrow_mut().remove(name);
+            // What ran from a project's plugin whose build went stops now, not at the next reconcile (bigboi-8).
+            if target.project {
+                registry.unload(host, name);
+                self.seen.borrow_mut().remove(name);
+            }
             if target.local.is_none() && registry.selects(name) {
                 registry.set_unloaded(name, None);
                 return false;
             }
             return skip(SKIPPED);
         };
-        let bytes = match std::fs::read(&file) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                return self.fail(&**host, registry, &listed, name, 0, format!("{}: {error}", file.display()));
+        // Setup runs with the options, so new options load the build again (TS `sameGeneration`).
+        let digest = |build: &[u8]| {
+            let mut hasher = DefaultHasher::new();
+            hasher.write(build);
+            hasher.write(target.options.as_deref().unwrap_or_default().as_bytes());
+            hasher.finish()
+        };
+        let unchanged = |digest: u64| self.seen.borrow().get(name).is_some_and(|seen| seen.digest == digest);
+        let (digest, bytes) = match target.project {
+            // A project's build runs only once the user approved this artifact (3.9). Until then nothing of it is read
+            // but its hash, nothing is opened, and it claims nothing. What is loaded is what was hashed. When it
+            // cannot be identified, what ran from it stops (bigboi-8) and nothing is reported (carbon-5).
+            true => {
+                let (artifact, mut handle) = match Artifact::open(target.local.as_deref().unwrap_or(&file), &file) {
+                    Ok(opened) => opened,
+                    Err(error) => return self.hold(host, registry, name, Err(error), None),
+                };
+                match self.approvals.decision(&artifact) {
+                    Some(Decision::Approved) => drop(self.held.borrow_mut().remove(name)),
+                    decision => return self.hold(host, registry, name, Ok(artifact), decision),
+                }
+                let digest = digest(artifact.sha256.as_bytes());
+                if unchanged(digest) {
+                    return false;
+                }
+                match artifact.bytes(&mut handle) {
+                    Ok(bytes) => (digest, bytes),
+                    Err(error) => return self.hold(host, registry, name, Err(error), None),
+                }
+            }
+            false => {
+                let read = std::fs::metadata(&file).and_then(|metadata| match metadata.len() > approval::LIMIT {
+                    true => Err(std::io::Error::other(format!("larger than {} MiB", approval::LIMIT / 1024 / 1024))),
+                    false => std::fs::read(&file),
+                });
+                let bytes = match read {
+                    Ok(bytes) => bytes,
+                    Err(error) => {
+                        return self.fail(&**host, registry, &listed, name, 0, format!("{}: {error}", file.display()));
+                    }
+                };
+                let digest = digest(&bytes);
+                if unchanged(digest) {
+                    return false;
+                }
+                (digest, bytes)
             }
         };
-        // Setup runs with the options, so new options load the build again (TS `sameGeneration`).
-        let mut hasher = DefaultHasher::new();
-        hasher.write(&bytes);
-        hasher.write(target.options.as_deref().unwrap_or_default().as_bytes());
-        let digest = hasher.finish();
-        if self.seen.borrow().get(name).is_some_and(|seen| seen.digest == digest) {
-            return false;
-        }
         self.waiting.borrow_mut().remove(name);
         let loaded = self.backend.load(host, &bytes, target.options.as_deref()).and_then(|loaded| {
             if !registry.id_taken(&loaded.0.id, name) {
@@ -326,6 +408,49 @@ impl Loader {
         true
     }
 
+    /// Records the user's `decision` on `artifact`, the build of `target` they were shown (bigboi-1, carbon-1). It is
+    /// recorded only while that build is the one held back: `Ok(false)` records nothing when the build changed since,
+    /// and the user is asked about the new one. An error when it cannot be saved; nothing changes then. The next
+    /// [`Loader::reconcile`] applies it: an approved build loads, a declined one is not asked about again.
+    pub fn decide(&self, target: &str, artifact: &Artifact, decision: Decision) -> Result<bool, String> {
+        if self.held.borrow().get(target) != Some(&Ok(artifact.clone())) {
+            return Ok(false);
+        }
+        self.approvals.decide(artifact, decision).map(|()| true)
+    }
+
+    /// Holds back the project build of `target` that the user has not approved, or that cannot be identified:
+    /// whatever runs from `target` stops, and it is listed pending, or declined. A new pending build that can be read
+    /// tells the host.
+    fn hold(
+        &self,
+        host: &Rc<dyn Host>,
+        registry: &Registry,
+        target: &str,
+        artifact: Result<Artifact, String>,
+        decision: Option<Decision>,
+    ) -> bool {
+        let status = match decision {
+            Some(Decision::Declined) => Status::Declined,
+            _ => Status::Pending,
+        };
+        if let Err(error) = &artifact {
+            log::warn!("plugin {target} is held back: {error}");
+        }
+        // A build that waits for its ID stays in `waiting`: once the ID is free, it is held again.
+        registry.unload(host, target);
+        self.seen.borrow_mut().remove(target);
+        let listed =
+            registry.entries().iter().any(|entry| entry.target.as_deref() == Some(target) && entry.status == status);
+        registry.set_unloaded(target, Some(status.clone()));
+        let asked = self.held.borrow_mut().insert(target.to_owned(), artifact.clone()).as_ref() == Some(&artifact);
+        if status == Status::Pending && !asked && artifact.is_ok() {
+            host.pending(target);
+        }
+        // A plugin loaded from `target` was not listed with this status, so its unload counts too.
+        !listed
+    }
+
     /// Tells the host that `target` failed with `error`, unless the manager `listed` that failure before this reconcile
     /// (TS `context.tsx` compares the failures it lists). The host names the plugin by the ID its build described, and by
     /// `target` only when no build of it ever described one.
@@ -337,20 +462,39 @@ impl Loader {
     }
 }
 
+/// The project root of `cwd`: the nearest ancestor with `.git` or `.hg`, else `cwd`.
+pub fn project_root(cwd: &Path) -> PathBuf {
+    cwd.ancestors().find(|dir| dir.join(".git").exists() || dir.join(".hg").exists()).unwrap_or(cwd).to_path_buf()
+}
+
+/// What tells a file from another however it is named: its device and inode, or its file index on Windows.
+fn identity(file: &Path) -> Option<(u64, u64)> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::metadata(file).ok().map(|metadata| (metadata.dev(), metadata.ino()))
+    }
+    #[cfg(windows)]
+    {
+        opencode_util::win::file_index(file).ok().map(|index| (0, index))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        std::fs::canonicalize(file).ok().map(|_| (0, 0))
+    }
+}
+
 /// The `plugins` directories to search (TS `localPluginDirectories`): the global config directory's, then each
-/// `.opencode` directory from the project root down to `cwd`. The project root is the nearest ancestor with
-/// `.git` or `.hg`, else `cwd`. Directories other than the global one and the project's that do not exist are
-/// left out.
+/// `.opencode` directory from the project root ([`project_root`]) down to `cwd`. Directories other than the global
+/// one and the project's that do not exist are left out.
 pub fn plugin_directories(config_dir: &Path, cwd: &Path) -> Vec<PathBuf> {
     let ancestors: Vec<PathBuf> = {
         let mut ancestors: Vec<PathBuf> = cwd.ancestors().map(Path::to_path_buf).collect();
         ancestors.reverse();
         ancestors
     };
-    let project = ancestors
-        .iter()
-        .rposition(|dir| dir.join(".git").exists() || dir.join(".hg").exists())
-        .unwrap_or(ancestors.len().saturating_sub(1));
+    let root = project_root(cwd);
+    let project = ancestors.iter().position(|dir| *dir == root).unwrap_or(ancestors.len().saturating_sub(1));
     let project_config = ancestors.get(project).map(|dir| dir.join(".opencode"));
     let mut directories = vec![config_dir.to_path_buf()];
     directories.extend(

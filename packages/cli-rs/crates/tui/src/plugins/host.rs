@@ -16,6 +16,7 @@ use opencode_local::cli_config::AttentionSoundName;
 use opencode_local::serial::Serial;
 use opencode_local::storage::Storage;
 use opencode_plugin::abi;
+use opencode_plugin::loader::approval::{self, Approvals, Artifact, Decision};
 use opencode_plugin::loader::native::Native;
 use opencode_plugin::loader::{Configured, Loader};
 use opencode_plugin::node::{abi_mode, assign, refill, theme_color};
@@ -35,6 +36,15 @@ pub struct Plugins {
     tui: Rc<OnceCell<Weak<Tui>>>,
     /// The diff viewer's state while it is active, which its route shows.
     pub(crate) diffs: RefCell<Option<Rc<super::diffs::viewer::Shared>>>,
+    /// The loader of the external plugins, which the plugin manager's approvals reach.
+    loader: RefCell<Option<Rc<Loader>>>,
+}
+
+impl Plugins {
+    /// Makes `loader` the one whose project plugins the plugin manager approves or declines.
+    pub fn set_loader(&self, loader: Rc<Loader>) {
+        self.loader.replace(Some(loader));
+    }
 }
 
 impl Deref for Plugins {
@@ -143,6 +153,18 @@ impl Host for Tui {
 
     fn revoked(&self, id: &str) {
         super::panel::close(self, id);
+    }
+
+    fn pending(&self, target: &str) {
+        let mut options = ToastOptions::new(
+            Variant::Warning,
+            "This project wants to run native code inside opencode. Run /plugins to approve or decline it.",
+        );
+        options.title = Some(format!("Plugin needs approval: {target}"));
+        let open = bind!(self, |tui| {
+            tui.keymap.dispatch("plugins.list", None);
+        });
+        self.toasts.show(options.action("Open plugins", open));
     }
 
     fn attention(&self, attention: &abi::Attention) {
@@ -841,7 +863,12 @@ fn hosted(tui: &Rc<OnceCell<Weak<Tui>>>, id: &'static str, activate: fn(&Rc<Tui>
 pub fn registry(info: &opencode_local::cli_config::Info, external: Vec<Builtin>) -> Plugins {
     let targets = info.plugins.iter().flatten().map(target);
     let tui = Rc::default();
-    Plugins { registry: Registry::new(builtins(&tui, external), targets), tui, diffs: RefCell::default() }
+    Plugins {
+        registry: Registry::new(builtins(&tui, external), targets),
+        tui,
+        diffs: RefCell::default(),
+        loader: RefCell::default(),
+    }
 }
 
 /// A `plugins` entry's target.
@@ -950,7 +977,14 @@ struct PluginsChanged;
 /// built-in. Each change in a watched directory reconciles them again (hot reload), debounced by 100 ms as in TS.
 pub fn external(tui: &Rc<Tui>, external: External) {
     let entries = configured(tui, tui.plugins.skipped());
-    let loader = Rc::new(Loader::new(Rc::new(Native), external.config_dir, external.cwd, entries));
+    let project = opencode_plugin::loader::project_root(&external.cwd);
+    let loader = Loader::new(Rc::new(Native), external.config_dir, external.cwd, entries);
+    // Without real roots the decisions last as long as the TUI.
+    let loader = Rc::new(match tui.state_dir() {
+        Some(state) => loader.with_approvals(Approvals::open(state.join(approval::FILE), &project)),
+        None => loader,
+    });
+    tui.plugins.set_loader(loader.clone());
     loader.reconcile(&host(tui), &tui.plugins);
     let watches: Rc<RefCell<Vec<Watched>>> = Rc::default();
     watch(tui, &loader, &watches);
@@ -975,6 +1009,25 @@ pub fn external(tui: &Rc<Tui>, external: External) {
         loader.reconcile(&host, &tui.plugins);
         watch(&tui, &loader, &watches);
     }));
+}
+
+/// The build of the project plugin of `target` the user would be asked about, or why it cannot be read, and why
+/// decisions are not saved, if they are not (rich-plugins 3.9).
+pub fn held(tui: &Tui, target: &str) -> Option<(Result<Artifact, String>, Option<String>)> {
+    let loader = tui.plugins.loader.borrow().clone()?;
+    Some((loader.held(target)?, loader.unsaved()))
+}
+
+/// Records the user's `decision` on `artifact`, the build of `target` they were shown, and applies it: an approved
+/// build loads at once. `Ok(false)` records nothing when the build changed since (bigboi-1); an error when the decision
+/// cannot be saved (bigboi-7).
+pub fn decide(tui: &Rc<Tui>, target: &str, artifact: &Artifact, decision: Decision) -> Result<bool, String> {
+    let Some(loader) = tui.plugins.loader.borrow().clone() else { return Ok(false) };
+    let recorded = loader.decide(target, artifact, decision)?;
+    if recorded {
+        loader.reconcile(&host(tui), &tui.plugins);
+    }
+    Ok(recorded)
 }
 
 /// The entries that name no plugin, with their `options` as JSON text.

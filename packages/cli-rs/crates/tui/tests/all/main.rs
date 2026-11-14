@@ -26,6 +26,7 @@ mod models;
 mod more_tools;
 mod navigate;
 mod permission;
+mod plugin_approval;
 mod plugin_fetch;
 mod plugin_machines;
 mod plugin_model;
