@@ -575,8 +575,8 @@ holds the mailbox to its rule (`backlog`). `crates/plugin/examples/c` is a plugi
 The conformance suite (phase Pc) holds the C ABI still for every binding. `crates/plugin/conformance/scripts.json`
 lists scripted sessions: activation and its end, commands and the host requests they make, a route surface with
 content and a memoized subtree, the mailbox and a wake, a canvas and its draws, scroll verbs, a scroll read, a step
-and where it landed, and `layout` (P3), input and surfaces (P2: every verb and read once, a key layer), a renderer
-claim of a tool call (Pr), a panic, a refused tree, a setup that
+and where it landed, and `layout` (P3), input and surfaces (P2: every verb and read once; a key a layer consumes, one it
+passes, a paste and a pointer press; a search), renderer claims of a tool call and of a fence (Pr), a panic, a refused tree, a setup that
 fails, an overrun, and the same plugin as a 1.x library. Each is recorded from `crates/plugin/examples/conformance`
 (the reference, linked into the loader's tests and called through the SDK's byte shims) into
 `crates/plugin/conformance/transcripts.jsonl`: every request and reply that cross the C ABI on the UI thread, with
