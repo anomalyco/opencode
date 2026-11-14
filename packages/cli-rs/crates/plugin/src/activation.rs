@@ -6,7 +6,7 @@ use std::cell::{Cell, RefCell};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use std::time::Duration;
 
 use opentui::app::ProxyError;
@@ -96,7 +96,7 @@ impl Activation {
     pub fn dispose(&self) {
         self.disposed.set(true);
         self.wake.revoked.store(true, Ordering::Release);
-        self.mailbox.close();
+        self.mailbox.retire();
         // The wake and mail handlers hold what holds the activation.
         self.on_wake.borrow_mut().take();
         self.on_message.borrow_mut().take();
@@ -114,13 +114,18 @@ impl Activation {
 
     /// A wake arrived: hands the plugin what its threads sent, in order, then a thread's panic report; then, for a
     /// [`abi::Waker`]'s wake, runs the plugin's wake handlers, or renders the claims again at once.
+    ///
+    /// The wake is consumed first, in one step: a send or a wake from now on posts another, so none is lost between
+    /// what this one sees and what it handles. Once the plugin has failed, by a message or by a report, nothing more of
+    /// this wake reaches it: the first cause is the one reported.
     fn woken(&self) {
-        let hinted = self.wake.hinted.swap(false, Ordering::AcqRel);
-        self.wake.pending.store(false, Ordering::Release);
+        let hinted = self.wake.consume();
+        between(0);
         if self.disposed() {
             return;
         }
         let (messages, panic) = self.mailbox.take();
+        between(1);
         let deliver = self.on_message.borrow().clone();
         for message in messages {
             match &deliver {
@@ -128,12 +133,14 @@ impl Activation {
                 _ => break,
             }
         }
+        between(2);
         // Bound first: failing disposes the activation, which takes the handler.
         let fail = self.on_panic.borrow().clone();
-        if let (Some(panic), Some(fail)) = (panic, fail) {
+        if let (Some(panic), Some(fail), false) = (panic, fail, self.mailbox.closed()) {
             fail(panic);
         }
-        if !hinted || self.disposed() {
+        between(3);
+        if !hinted || self.disposed() || self.mailbox.closed() {
             return;
         }
         let run = self.on_wake.borrow().clone();
@@ -149,9 +156,8 @@ impl Activation {
         claims.push(claim);
     }
 
-    /// Renders the mounted claims and routes again.
+    /// Renders the mounted claims and routes again. It leaves the wake alone: only handling a posted wake consumes it.
     pub fn redraw(&self) {
-        self.wake.pending.store(false, Ordering::Release);
         let Some(host) = self.host.upgrade() else { return };
         let claims: Vec<Rc<dyn Drawn>> = self.claims.borrow().iter().filter_map(Weak::upgrade).collect();
         claims.iter().for_each(|claim| claim.woken(&*host));
@@ -181,16 +187,42 @@ impl Drop for Activation {
     }
 }
 
-/// An activation's wakes, from any thread: `pending` while a [`Woken`] waits for the UI thread, so a burst posts one.
-/// A wake of the plugin's [`abi::Waker`] also sets `hinted`; a send to its mailbox does not.
+/// An activation's wakes, from any thread, in one atomic state: [`PENDING`] while a [`Woken`] waits for the UI thread,
+/// so a burst posts one, and [`HINTED`] when a wake of the plugin's [`abi::Waker`] is among them (a send to its mailbox
+/// is not). Every change is one atomic operation on both bits, so no interleaving of a sender and the UI thread can
+/// clear a bit that a later wake set without posting again.
 pub(crate) struct Wake {
     id: u64,
-    pending: AtomicBool,
+    state: AtomicU8,
     /// The activation ended or failed: a wake posts nothing. A failed C ABI instance is kept, not destroyed, so its
     /// own waker is never revoked; this is.
     revoked: AtomicBool,
-    hinted: AtomicBool,
     proxy: Option<AppProxy>,
+}
+
+/// A [`Woken`] waits for the UI thread.
+const PENDING: u8 = 1;
+/// The plugin's waker woke the host since the UI thread last consumed the state.
+const HINTED: u8 = 2;
+
+#[cfg(test)]
+thread_local! {
+    /// Runs between the steps of [`Activation::woken`], for the model that puts sends and wakes in each gap.
+    pub(crate) static BETWEEN: RefCell<Option<Box<dyn FnMut(usize)>>> = RefCell::new(None);
+}
+
+/// The test hook between the steps of [`Activation::woken`].
+fn between(_step: usize) {
+    #[cfg(test)]
+    {
+        let hook = BETWEEN.with(|hook| hook.borrow_mut().take());
+        if let Some(mut hook) = hook {
+            hook(_step);
+            BETWEEN.with(|slot| {
+                slot.borrow_mut().get_or_insert(hook);
+            });
+        }
+    }
 }
 
 #[cfg(test)]
@@ -214,38 +246,46 @@ impl Wake {
         static WAKES: AtomicU64 = AtomicU64::new(0);
         Self {
             id: WAKES.fetch_add(1, Ordering::Relaxed),
-            pending: AtomicBool::new(false),
+            state: AtomicU8::new(0),
             revoked: AtomicBool::new(false),
-            hinted: AtomicBool::new(false),
             proxy,
         }
     }
 
     /// The plugin's waker woke the host: its wake handlers run, or its claims draw again.
     pub fn post(&self) {
-        self.hinted.store(true, Ordering::Release);
-        self.ring();
+        self.raise(PENDING | HINTED);
     }
 
     /// Whether a [`Woken`] waits for the UI thread.
     #[cfg(test)]
     pub(crate) fn pending(&self) -> bool {
-        self.pending.load(Ordering::Acquire)
+        self.state.load(Ordering::Acquire) & PENDING != 0
     }
 
-    /// Posts one [`Woken`] until the UI thread handles it, unless the activation ended. Catches its own panics.
+    /// Posts one [`Woken`] until the UI thread handles it, unless the activation ended.
     pub fn ring(&self) {
+        self.raise(PENDING);
+    }
+
+    /// The UI thread handles a [`Woken`]: the state goes back to nothing in one step; whether the waker was among it.
+    fn consume(&self) -> bool {
+        self.state.swap(0, Ordering::AcqRel) & HINTED != 0
+    }
+
+    /// Sets `bits`, and posts a [`Woken`] when none waits. Catches its own panics.
+    fn raise(&self, bits: u8) {
         let _ = catch_unwind(AssertUnwindSafe(|| {
-            if self.revoked.load(Ordering::Acquire) || self.pending.swap(true, Ordering::AcqRel) {
+            if self.revoked.load(Ordering::Acquire) || self.state.fetch_or(bits, Ordering::AcqRel) & PENDING != 0 {
                 return;
             }
             let Some(proxy) = &self.proxy else {
-                self.pending.store(false, Ordering::Release);
+                self.state.store(0, Ordering::Release);
                 return;
             };
             match proxy.send(Woken(self.id)) {
                 Ok(()) => {}
-                Err(ProxyError::Closed) => self.pending.store(false, Ordering::Release),
+                Err(ProxyError::Closed) => self.state.store(0, Ordering::Release),
                 // The UI thread is behind. The wake stays pending, so later ones join it, and a thread delivers it
                 // once the queue has room, as `App::spawn` does with a completion. That thread holds no pointer into
                 // the plugin, so it may outlive it; a `Woken` for a disposed activation finds no handler.
@@ -257,7 +297,7 @@ impl Wake {
                         }
                     });
                     if retry.is_err() {
-                        self.pending.store(false, Ordering::Release);
+                        self.state.store(0, Ordering::Release);
                     }
                 }
             }

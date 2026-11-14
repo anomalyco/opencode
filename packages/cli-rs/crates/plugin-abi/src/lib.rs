@@ -1478,8 +1478,9 @@ pub enum Request {
         mount: v2::MountId,
     },
     /// 2.0: runs the [`Setup::messages`] handler with a message a thread sent, in the order the mailbox holds them.
+    /// The message's JSON text, as its sender wrote it.
     Message {
-        message: serde_json::Value,
+        message: String,
     },
 }
 
@@ -1489,12 +1490,88 @@ pub enum Request {
 pub struct ViewReply {
     pub node: v2::Node,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub content: Vec<(v2::ContentRef, String)>,
+    pub content: Vec<(v2::ContentRef, Blob)>,
     /// The handles the view released ([`v2::View::release`]), after the content it gave.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub released: Vec<v2::ContentRef>,
     #[serde(default, skip_serializing_if = "is_zero_usize")]
     pub memo: usize,
+}
+
+/// Content bytes on the wire, whole: a JSON string when they are UTF-8, else `{"base64": "..."}` (standard alphabet,
+/// padded), so an image or any other bytes cross unchanged.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Blob(pub Vec<u8>);
+
+impl Serialize for Blob {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match std::str::from_utf8(&self.0) {
+            Ok(text) => serializer.serialize_str(text),
+            Err(_) => {
+                use serde::ser::SerializeMap;
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("base64", &base64::encode(&self.0))?;
+                map.end()
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Blob {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Wire {
+            Text(String),
+            Bytes { base64: String },
+        }
+        match Wire::deserialize(deserializer)? {
+            Wire::Text(text) => Ok(Blob(text.into_bytes())),
+            Wire::Bytes { base64 } => {
+                base64::decode(&base64).map(Blob).ok_or_else(|| serde::de::Error::custom("bad base64"))
+            }
+        }
+    }
+}
+
+/// Base64 of RFC 4648, with padding: what [`Blob`] needs, and no dependency.
+mod base64 {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    pub fn encode(bytes: &[u8]) -> String {
+        let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+        for chunk in bytes.chunks(3) {
+            let word =
+                chunk.iter().enumerate().fold(0u32, |word, (index, byte)| word | u32::from(*byte) << (16 - 8 * index));
+            for index in 0..4 {
+                let sextet = (word >> (18 - 6 * index)) & 63;
+                out.push(if index <= chunk.len() { char::from(ALPHABET[sextet as usize]) } else { '=' });
+            }
+        }
+        out
+    }
+
+    pub fn decode(text: &str) -> Option<Vec<u8>> {
+        let text = text.as_bytes();
+        if text.len() % 4 != 0 {
+            return None;
+        }
+        let mut out = Vec::with_capacity(text.len() / 4 * 3);
+        for (number, chunk) in text.chunks(4).enumerate() {
+            let last = number + 1 == text.len() / 4;
+            let padding = chunk.iter().rev().take_while(|byte| **byte == b'=').count();
+            if padding > 2 || (padding > 0 && !last) {
+                return None;
+            }
+            let mut word = 0u32;
+            for (index, byte) in chunk[..4 - padding].iter().enumerate() {
+                let sextet = ALPHABET.iter().position(|known| known == byte)? as u32;
+                word |= sextet << (18 - 6 * index);
+            }
+            out.extend_from_slice(&word.to_be_bytes()[1..4 - padding]);
+        }
+        Some(out)
+    }
 }
 
 /// A fence for the render of [`Setup::code_block`] that [`Manifest::fences`] names by `index`. The host matches a fence
@@ -2490,7 +2567,7 @@ impl HostHandle {
 
     /// What the plugin's threads reach the host through; `None` from a host older than 2.0.
     fn link(&self) -> Option<Arc<dyn mail::Link>> {
-        let core = self.covers(std::mem::offset_of!(HostApi, features) + size_of::<Bytes>())?;
+        let core = self.v2()?;
         // SAFETY: `size` covers the entries.
         let (send, report, stopped) = unsafe {
             let api = self.api;
@@ -2503,11 +2580,17 @@ impl HostHandle {
         Some(Arc::new(AbiLink { ctx: Ctx(core.ctx), send, report, stopped }))
     }
 
+    /// The core of a host of ABI 2 or newer whose table has every entry of 2.0: by its major, not only its size, so a
+    /// 1.x host's longer table is never read as 2.0's.
+    fn v2(&self) -> Option<&HostApiV1_1> {
+        self.covers(std::mem::offset_of!(HostApi, features) + size_of::<Bytes>()).filter(|core| core.major >= 2)
+    }
+
     /// The host's optional features; none from a host older than 2.0.
     fn features(&self) -> Vec<String> {
-        let Some(_) = self.covers(std::mem::offset_of!(HostApi, features) + size_of::<Bytes>()) else {
+        if self.v2().is_none() {
             return Vec::new();
-        };
+        }
         // SAFETY: `size` covers the entry, and the host keeps its bytes while the instance lives.
         let bytes = unsafe { std::ptr::addr_of!((*self.api).features).read().as_slice() };
         serde_json::from_slice(bytes).unwrap_or_default()
@@ -2535,7 +2618,8 @@ impl mail::Link for AbiLink {
         match status {
             OK => Ok(()),
             FULL => Err((mail::Refused::Full, message)),
-            _ => Err((mail::Refused::Closed, message)),
+            CLOSED => Err((mail::Refused::Closed, message)),
+            _ => Err((mail::Refused::Unencodable, message)),
         }
     }
 
@@ -3098,15 +3182,17 @@ impl Setup<'_> {
     /// Registers what the plugin's threads send: `run` gets each message on the UI thread, in the order the mailbox
     /// holds them, as the plugin's `update`, with the host of a command; the plugin's claims and surfaces render again
     /// after it. The [`Sender`] it returns sends from any thread (see [`mail`]). A plugin has one message type: a
-    /// second call replaces the handler, which then drops what the first [`Sender`] sends. A sender of a host older
-    /// than 2.0 is closed.
-    pub fn messages<M>(&mut self, run: impl Fn(&dyn Host, M) + 'static) -> Sender<M>
+    /// second call is an error. A sender of a host older than 2.0 is closed.
+    pub fn messages<M>(&mut self, run: impl Fn(&dyn Host, M) + 'static) -> Result<Sender<M>, String>
     where
         M: Serialize + serde::de::DeserializeOwned + Send + 'static,
     {
+        if self.registered.message.is_some() {
+            return Err("a plugin has one message type: messages is registered once".to_owned());
+        }
         self.registered.manifest.messages = true;
         self.registered.message = Some(Rc::new(mail::handler(run)));
-        Sender::new(self.registered.link.clone())
+        Ok(Sender::new(self.registered.link.clone()))
     }
 
     /// What starts the plugin's threads, each with the plugin's [`Stop`] flag and a panic caught and reported.
@@ -3369,7 +3455,7 @@ impl Registered {
                 let (mut next, mut content, mut released) = (next, Vec::new(), Vec::new());
                 let mut give = |bytes: Vec<u8>| {
                     next += 1;
-                    content.push((v2::ContentRef(next), String::from_utf8_lossy(&bytes).into_owned()));
+                    content.push((v2::ContentRef(next), Blob(bytes)));
                     v2::ContentRef(next)
                 };
                 let mut release = |handle| released.push(handle);
@@ -4738,5 +4824,149 @@ mod tests {
         // SAFETY: the test's `ctx` is a live log.
         let log = unsafe { &*api.ctx.cast::<std::sync::Mutex<Vec<String>>>() };
         std::mem::take(&mut *log.lock().unwrap())
+    }
+
+    unsafe extern "C" fn sent(_: *mut c_void, _: Bytes, _: Bytes) -> i32 {
+        OK
+    }
+
+    unsafe extern "C" fn reported(_: *mut c_void, _: Bytes) {}
+
+    unsafe extern "C" fn running(_: *mut c_void) -> u32 {
+        0
+    }
+
+    // Expected (reviews carbon-2, carbon-7): a plugin reads the 2.0 entries and the features from a host of major 2 only;
+    // a table of major 1, though as long, offers no link and no features.
+    #[test]
+    fn only_a_2_0_host_offers_threads_and_features() {
+        let features = br#"["terminal"]"#;
+        let api = HostApi {
+            size: size_of::<HostApi>(),
+            major: 2,
+            minor: 0,
+            ctx: std::ptr::null_mut(),
+            call: Some(call),
+            free: Some(free),
+            theme_mode: None,
+            wake: None,
+            send: Some(sent),
+            report: Some(reported),
+            stopped: Some(running),
+            features: Bytes::new(features),
+        };
+        let host = HostHandle { api: &api };
+        assert!(host.link().is_some());
+        assert_eq!(host.features(), ["terminal"]);
+        let mut registered = Registered::with_host("x", None, &api);
+        assert_eq!(registered.setup().features(), ["terminal"]);
+        let old = HostApi { major: 1, minor: 4, ..api };
+        let host = HostHandle { api: &old };
+        assert!(host.link().is_none() && host.features().is_empty());
+    }
+
+    // Expected (reviews bigboi-5, carbon-7): a plugin has one message type; a second registration is an error.
+    #[test]
+    fn a_plugin_registers_one_message_type() {
+        let mut registered = Registered::new("x", None);
+        let mut setup = registered.setup();
+        assert!(setup.messages(|_, _: u64| {}).is_ok());
+        assert!(setup.messages(|_, _: i64| {}).is_err());
+        assert!(setup.manifest().messages);
+    }
+
+    // Expected (reviews bigboi-5, carbon-4): a message that does not cross as JSON and come back as itself is handed back
+    // as `Unencodable` before any carrier sees it: a NaN, a map whose keys are not strings, a serializer that fails.
+    // One that does crosses (here to a closed plugin, so `Closed`), an integer past 64 bits too: the host keeps the
+    // sender's JSON text and never reads it as a number of its own.
+    #[test]
+    fn a_message_json_cannot_carry_is_handed_back() {
+        struct Failing;
+        impl Serialize for Failing {
+            fn serialize<S: serde::Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
+                Err(serde::ser::Error::custom("no"))
+            }
+        }
+        impl<'de> Deserialize<'de> for Failing {
+            fn deserialize<D: serde::Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
+                Ok(Failing)
+            }
+        }
+        let closed = mail::Revocable::default();
+        assert!(matches!(Sender::<f64>::new(closed.clone()).send(f64::NAN), Err(SendError::Unencodable(_))));
+        assert_eq!(Sender::<f64>::new(closed.clone()).send(1.5), Err(SendError::Closed(1.5)));
+        let wide = u128::from(u64::MAX) + 1;
+        assert_eq!(Sender::<u128>::new(closed.clone()).send(wide), Err(SendError::Closed(wide)));
+        assert_eq!(Sender::<u128>::new(closed.clone()).send(7), Err(SendError::Closed(7)));
+        let keys = std::collections::BTreeMap::from([(vec![1u8], 1u8)]);
+        let sender = Sender::<std::collections::BTreeMap<Vec<u8>, u8>>::new(closed.clone());
+        assert!(matches!(sender.send(keys), Err(SendError::Unencodable(_))));
+        assert!(matches!(Sender::<Failing>::new(closed).send(Failing), Err(SendError::Unencodable(_))));
+    }
+
+    // Expected (review carbon-4): content crosses whole: UTF-8 as a string, other bytes as base64, both back as they
+    // were; a view's content in a reply is the bytes it gave.
+    #[test]
+    fn content_crosses_whole() {
+        for (bytes, base64) in
+            [(&b""[..], ""), (b"f", "Zg=="), (b"fo", "Zm8="), (b"foo", "Zm9v"), (b"foob", "Zm9vYg==")]
+        {
+            assert_eq!(base64::encode(bytes), base64);
+            assert_eq!(base64::decode(base64).as_deref(), Some(bytes));
+        }
+        assert_eq!(base64::decode("Zm9v=Zg="), None);
+        assert_eq!(base64::decode("Zm9"), None);
+        let binary = Blob(vec![0xff, 0x00, 0x89, b'P', b'N', b'G']);
+        let json = serde_json::to_string(&binary).unwrap();
+        assert_eq!(json, r#"{"base64":"/wCJUE5H"}"#);
+        assert_eq!(serde_json::from_str::<Blob>(&json).unwrap(), binary);
+        assert_eq!(serde_json::to_string(&Blob(b"text".to_vec())).unwrap(), r#""text""#);
+
+        let mut registered = Registered::new("x", None);
+        let given = binary.0.clone();
+        registered.setup().surface(v2::Surface::new("s", v2::Place::Route("s".into()), move |cx| {
+            let handle = cx.content(given.clone());
+            v2::Node::Diff {
+                id: None,
+                content: v2::Source::Content(handle),
+                view: v2::DiffView::Unified,
+                filetype: None,
+            }
+        }));
+        let mount = v2::MountId { surface: "s".into(), key: "s".into(), generation: 1 };
+        let request = Request::View { surface: 0, mount, input: v2::SurfaceInput::default(), next: 4 };
+        let reply: ViewReply = serde_json::from_value(registered.handle(request).unwrap()).unwrap();
+        assert_eq!(reply.content, [(v2::ContentRef(5), binary)]);
+    }
+
+    // Expected (review carbon-7): a thread the spawner starts is named `<plugin id>:<name>`.
+    #[test]
+    fn a_plugin_thread_carries_the_plugin_name() {
+        let (named, name) = std::sync::mpsc::channel();
+        let spawner = Spawner::new("x.y", mail::Revocable::default());
+        spawner.spawn("work", move |_| named.send(std::thread::current().name().map(str::to_owned)).unwrap()).unwrap();
+        assert_eq!(name.recv().unwrap().as_deref(), Some("x.y:work"));
+    }
+
+    fn named(_: &mut Setup) -> Result<(), String> {
+        Ok(())
+    }
+
+    plugin!(named);
+
+    // Expected (review carbon-7): `plugin!(setup)` takes the crate's package name as the plugin's ID.
+    #[test]
+    fn plugin_without_an_id_takes_the_package_name() {
+        let api = opencode_plugin_v2();
+        // SAFETY: the table the macro exported, with its `describe`.
+        let describe = unsafe { (*api).describe.unwrap() };
+        let mut out = Owned::EMPTY;
+        // SAFETY: `out` is valid for writes, and goes back to the shims' `free`.
+        let bytes = unsafe {
+            assert_eq!(describe(&mut out), OK);
+            out.into_vec()
+        };
+        let metadata: Metadata = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(metadata.id.as_deref(), Some("opencode-plugin-abi"));
     }
 }
