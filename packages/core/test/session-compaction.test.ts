@@ -1523,3 +1523,82 @@ it.effect("a background summary waits for a response whose prompt is still cache
     expect(yield* summarizedAfterBreak("ses_precompute_hour", "1h")).not.toContain("Third question")
   }),
 )
+
+// A compaction hook's edits survive the request being shrunk.
+const checkpointFixture = Effect.gen(function* () {
+  requests = []
+  reject = undefined
+  const session = yield* insertSession(Session.ID.create())
+  const hooks = yield* PluginHooks.Service
+  const compaction = yield* SessionCompaction.Service
+  yield* compaction.transform((editor) => editor.configure({ keep: 0 }))
+  const canary = `COMPACTION-TEST-CANARY-${crypto.randomUUID()}`
+  const checkpoint = Schema.decodeUnknownSync(SessionMessage.CompactionCompleted)({
+    id: SessionMessage.ID.create(),
+    type: "compaction",
+    status: "completed",
+    reason: "auto",
+    summary: `SUMMARY ${canary}`,
+    metadata: { recent: `RECENT ${canary}` },
+    time: { created: 0, completed: 0 },
+  })
+  const messages = [
+    checkpoint,
+    textUser("Exchange being summarized"),
+    Schema.decodeUnknownSync(SessionMessage.Assistant)({
+      id: SessionMessage.ID.create(),
+      type: "assistant",
+      agent: Agent.defaultID,
+      model: { id: "summary-model", providerID: "test" },
+      // About 75k tokens of visible output: too large for a 10k window, so the request has to be shrunk.
+      content: [{ type: "text", text: "bulky ".repeat(50_000) }],
+      time: { created: 1, completed: 2 },
+    }),
+    textUser("Tail retained outside the summary request"),
+  ]
+  const context = loaded(session, messages)
+  return {
+    session,
+    hooks,
+    canary,
+    redact: () =>
+      hooks.register("session", "compaction", (event) =>
+        Effect.sync(() => {
+          event.messages = JSON.parse(JSON.stringify(event.messages).replaceAll(canary, "[redacted]"))
+        }),
+      ),
+    compact: (window: number) =>
+      compaction.compact({
+        reason: "manual",
+        inputID: SessionMessage.ID.create(),
+        context: { ...context, model: { ...context.model, limit: { context: window, output: 2000 } } },
+      }),
+  }
+})
+
+it.effect("shrinking keeps a hook's edits to the previous summary and its recent part", () =>
+  Effect.gen(function* () {
+    const fixture = yield* checkpointFixture
+    yield* fixture.redact()
+    expect(yield* fixture.compact(10_000)).toEqual({ status: "completed" })
+    expect(requests).toHaveLength(1)
+    const sent = JSON.stringify(requests[0].messages)
+    expect(sent).not.toContain("bulky bulky")
+    expect(sent.includes(fixture.canary)).toBe(false)
+  }),
+)
+
+it.effect("a context overflow retry keeps a hook's edits to the previous summary", () =>
+  Effect.gen(function* () {
+    const fixture = yield* checkpointFixture
+    yield* fixture.redact()
+    reject = () => requests.length === 1
+    const result = yield* fixture.compact(200_000)
+    reject = undefined
+    expect(result).toEqual({ status: "completed" })
+    expect(requests).toHaveLength(2)
+    expect(JSON.stringify(requests[0].messages)).toContain("bulky bulky")
+    expect(JSON.stringify(requests[1].messages)).not.toContain("bulky bulky")
+    expect(JSON.stringify(requests).includes(fixture.canary)).toBe(false)
+  }),
+)
