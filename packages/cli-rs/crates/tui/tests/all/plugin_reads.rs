@@ -426,7 +426,12 @@ fn a_plugin_installs_a_theme() {
         h.tui.keymap.dispatch("p0b.install", Some("p0b-theme"));
         h.wait_for(" i:true");
         assert_eq!(h.tui.theme.borrow().selected(), "opencode");
-        let written: Vec<_> = walk(root.path()).into_iter().filter(|path| path.ends_with("p0b-theme.json")).collect();
+        // Listed at once and written after, on the themes' worker in the order asked: by then a write of the refused
+        // name, asked first, would be on disk too.
+        let written =
+            || walk(root.path()).into_iter().filter(|path| path.ends_with("p0b-theme.json")).collect::<Vec<_>>();
+        assert!(h.app.wait_until(WAIT, || !written().is_empty()), "loopback {loopback}");
+        let written = written();
         assert_eq!(written.len(), 1, "loopback {loopback}: {written:?}");
         assert!(written[0].parent().is_some_and(|dir| dir.ends_with("themes")), "{written:?}");
     }
