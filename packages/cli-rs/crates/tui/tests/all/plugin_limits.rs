@@ -88,12 +88,42 @@ fn sibling(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
+/// A plugin of ABI 1.x: a route of ten texts, and a panel whose body is 3,001 texts.
+fn old(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.route("old", |_, _| {
+        abi::Render::Show(abi::Node::column(
+            (0..10).map(|index| abi::Node::text([abi::Span::new(format!("old {index}"))])).collect(),
+        ))
+    });
+    let panel = abi::Command { name: "old.panel".into(), ..abi::Command::default() };
+    setup.command(panel, |host, _| {
+        let body = abi::Node::column(
+            (0..3_001).map(|index| abi::Node::text([abi::Span::new(format!("body {index}"))])).collect(),
+        );
+        host.dialog(abi::Dialog::Panel(abi::Panel {
+            key: "panel".to_owned(),
+            size: abi::PanelSize::Medium,
+            title: vec![abi::Span::new("old panel")],
+            subtitle: None,
+            body,
+            actions: Vec::new(),
+            binds: Vec::new(),
+            bleed: false,
+            centered: false,
+        }));
+    });
+    Ok(())
+}
+
+const OLD: &str = "test.old";
+
 fn open(carrier: Carrier) -> Harness {
     let deps = Deps {
         route: Route::Home,
         builtins: vec![
             builtin(carrier, abi::Plugin { id: ID, setup }),
             builtin(carrier, abi::Plugin { id: SIBLING, setup: sibling }),
+            builtin(carrier, abi::Plugin { id: OLD, setup: old }),
         ],
         ..support::deps(Arc::new(support::empty()))
     };
@@ -1525,5 +1555,112 @@ fn a_long_line_costs_its_rows() {
             let name = format!("{carrier:?}, {bytes} bytes");
             assert!(frame.cells == twin.cells, "{name}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
         }
+    }
+}
+
+// Expected (fixed rows; review carbon 2.4): a route of ABI 1.x is charged to its plugin and timed as its host time,
+// and a panel's body past a tree's rows shows its placeholder. On both carriers.
+#[test]
+fn trees_of_abi_1_are_held_to_the_limits() {
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        let host_time = harness.tui.plugins.monitor().host_time(OLD);
+        harness.tui.navigate(Route::Plugin { id: OLD.to_owned(), name: "old".to_owned() });
+        settle(&harness);
+        assert!(harness.app.render().text().contains("old 9"), "{carrier:?}: the route of ABI 1.x");
+        assert_eq!(limits::held(OLD).nodes, 11, "{carrier:?}: held for a route of ABI 1.x");
+        assert!(harness.tui.plugins.monitor().host_time(OLD) > host_time, "{carrier:?}: its host time");
+        let _ = harness.tui.keymap.dispatch("old.panel", None);
+        settle(&harness);
+        let screen = harness.app.render().text();
+        assert!(
+            screen.contains("old panel") && screen.contains("⋯ too large to build at once"),
+            "{carrier:?}\n{screen}"
+        );
+        assert!(!screen.contains("body 0"), "{carrier:?}: the body past the rows shows\n{screen}");
+    }
+}
+
+/// A route of one image given inline, and a foot: a GIF of one pixel, all of its bytes ASCII, so they are text;
+/// `background` tells two apart.
+fn inline(background: u8) -> v2::Node {
+    let gif = format!(
+        "GIF89a\x01\x00\x01\x00\x00{}\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;",
+        char::from(background)
+    );
+    v2::Node::column(vec![image(source(gif)), text("foot")])
+}
+
+// Expected (fixed rows; review carbon 3): bytes past one image's bytes are over, image or not; a refused revision gives
+// back the images it admitted; an image given inline that the tree no longer shows goes; and the plugin's decodes wait
+// for the host's two workers. On both carriers.
+#[test]
+fn images_are_given_back_and_decode_two_at_a_time() {
+    let gradient = |x: u32, y: u32| [(x * 15) as u8, (y * 15) as u8, ((x + y) * 7) as u8, 255];
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        let _limits = limits::set(Limits {
+            text: 1 << 20,
+            plugin_content: 1 << 20,
+            all_content: 1 << 20,
+            plugin_images: 1 << 20,
+            ..small()
+        });
+        let done = |harness: &Harness| {
+            let ended = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
+            assert!(ended, "{carrier:?}: a job never ended");
+        };
+        // Past the bytes, whatever they are.
+        let frame = show(
+            &harness,
+            subject(|cx| {
+                v2::Node::column(vec![image(v2::Source::Content(given(cx, || vec![b'x'; 4097]))), text("foot")])
+            }),
+        );
+        assert!(frame.text().contains("⋯ image too large"), "{carrier:?}: bytes past the limit\n{}", frame.text());
+        // A revision refused for a keep the host does not hold gives back the image it admitted; the whole tree shows
+        // none.
+        let picture = Rc::new(png(16, 16, gradient));
+        let shown = picture.clone();
+        show(
+            &harness,
+            subject(move |cx| match cx.input.full {
+                true => text("whole"),
+                false => v2::Node::column(vec![
+                    image(v2::Source::Content(cx.content((*shown).clone()))),
+                    v2::Node::Keep { key: "nowhere".into() },
+                ]),
+            }),
+        );
+        done(&harness);
+        settle(&harness);
+        assert_eq!(limits::held(ID).images, 0, "{carrier:?}: held after a refused revision");
+        // An image given inline, then another: only the one shown is held.
+        PHASE.with(|phase| phase.set(0));
+        show(&harness, subject(move |_| inline(phase())));
+        done(&harness);
+        assert_eq!(limits::held(ID).images, 4, "{carrier:?}: held for an inline image");
+        next_phase(&harness);
+        done(&harness);
+        settle(&harness);
+        assert_eq!(limits::held(ID).images, 4, "{carrier:?}: held after the inline image changed");
+        // Six images held at the workers: two are taken, the others wait.
+        let hold = opencode_plugin::image::hold(ID);
+        let six = picture.clone();
+        show(
+            &harness,
+            subject(move |cx| {
+                let images = (0..6).map(|_| image(v2::Source::Content(cx.content((*six).clone())))).collect();
+                v2::Node::column(images)
+            }),
+        );
+        let taken = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::taken(ID) == 2);
+        std::thread::sleep(Duration::from_millis(20));
+        let (jobs, taken_now) = (opencode_plugin::image::jobs(ID), opencode_plugin::image::taken(ID));
+        drop(hold);
+        assert!(taken, "{carrier:?}: the workers never took two");
+        // Each view of the route's open gives six handles of its own.
+        assert!(jobs >= 6 && taken_now == 2, "{carrier:?}: {jobs} jobs, {taken_now} a worker took");
+        done(&harness);
     }
 }

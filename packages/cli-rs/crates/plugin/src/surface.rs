@@ -297,6 +297,8 @@ pub(crate) struct Surface {
     viewed: RefCell<v2::SurfaceInput>,
     /// What the content the mount holds costs, read once a handle.
     measures: crate::reconcile::Measures,
+    /// The image sources an adoption admitted: a refused one gives them back (review carbon 3.2).
+    attempt: RefCell<Vec<ImageKey>>,
     /// A view waits for the next frame's rows, with what changed for it ([`Surface::draw_next_frame`]).
     deferred: RefCell<Option<abi::Changed>>,
     /// Each image source's picture, admitted and decoded once however many nodes show it, and the decoded bytes it
@@ -434,6 +436,7 @@ impl Surface {
             viewed: RefCell::default(),
             images: RefCell::default(),
             measures: crate::reconcile::Measures::default(),
+            attempt: RefCell::default(),
             deferred: RefCell::new(None),
             pending: Cell::new(matches!(surface.at, v2::Place::Panel(_) | v2::Place::Overlay(_))),
             input: input.clone(),
@@ -848,15 +851,28 @@ impl Surface {
                 tree.apply(env, &self.root, &nodes)
             });
         });
+        let attempt = std::mem::take(&mut *self.attempt.borrow_mut());
         if let Err(refused) = result {
             drop(state);
             // A refused view's content is not the mount's: neither are the pictures it started.
             staged.given.keys().for_each(|handle| self.release_image(ImageKey::Content(*handle)));
+            attempt.into_iter().for_each(|key| self.release_image(key));
             return Err(refused);
         }
+        // An image given inline that the tree no longer shows goes: nothing can name it again but its bytes.
+        let mut shown = HashSet::new();
+        tree.each_image(&mut |source, _| shown.extend(ImageKey::of(source)));
+        let gone: Vec<ImageKey> = self
+            .images
+            .borrow()
+            .keys()
+            .filter(|key| matches!(key, ImageKey::Text(_)) && !shown.contains(*key))
+            .copied()
+            .collect();
         if let Some(owner) = self.holder() {
             owner.set_tree(tree.ids().map(str::to_owned).collect(), tree.focusable());
         }
+        gone.into_iter().for_each(|key| self.release_image(key));
         self.reindex();
         behave::arm(host.app());
         if !self.fills {
@@ -993,15 +1009,20 @@ impl Surface {
     /// and the decoded bytes the plugin and all plugins may hold, which its job reserves. An admitted image decodes on
     /// a worker; bytes that are no image show nothing, as before.
     fn admit_image(&self, app: &App, key: ImageKey, bytes: Arc<[u8]>) -> Picture {
+        self.attempt.borrow_mut().push(key);
+        let limits = limits::get();
+        // Past one image's bytes it is over, image or not (review carbon 3.1).
+        if bytes.len() as u64 > limits.image_bytes {
+            self.images.borrow_mut().insert(key, (Picture::Over, Charge::Held(0)));
+            return Picture::Over;
+        }
         let Some((width, height)) = crate::image::size(&bytes) else {
             log::warn!("an image node's bytes are not a PNG, GIF, JPEG or WebP image");
             self.images.borrow_mut().insert(key, (Picture::Pending, Charge::Held(0)));
             return Picture::Pending;
         };
-        let limits = limits::get();
         let decoded = (u64::from(width) * u64::from(height)).saturating_mul(4);
-        let admitted = bytes.len() as u64 <= limits.image_bytes
-            && u64::from(width.max(height)) <= limits.image_side
+        let admitted = u64::from(width.max(height)) <= limits.image_side
             && limits::charge(&self.plugin, limits::Kind::Images, decoded);
         if !admitted {
             log::warn!(
@@ -1014,18 +1035,20 @@ impl Surface {
         let job = JOB.with(|job| job.replace(job.get() + 1));
         self.images.borrow_mut().insert(key, (Picture::Pending, Charge::Job(job)));
         crate::reconcile::count_decoded();
-        let mut reserved = crate::image::Reservation::new(self.plugin.clone(), decoded);
-        let plugin = self.plugin.to_string();
-        let decoding = app.runtime().spawn_blocking(move || {
-            crate::image::wait_held(&plugin);
-            crate::image::decode(&bytes)
-        });
+        let reserved = crate::image::Reservation::new(self.plugin.clone(), decoded);
         let weak = self.weak();
-        app.spawn(async move { decoding.await.ok().flatten() }, move |cx, pixels| {
-            if let Some(mounted) = weak.upgrade() {
-                mounted.decoded(cx.app(), key, job, pixels, &mut reserved);
-            }
-        });
+        crate::image::submit(
+            app,
+            job,
+            &self.plugin,
+            (bytes, (width, height)),
+            reserved,
+            move |app, pixels, reserved| {
+                if let Some(mounted) = weak.upgrade() {
+                    mounted.decoded(app, key, job, pixels, reserved);
+                }
+            },
+        );
         Picture::Pending
     }
 
@@ -1245,8 +1268,17 @@ pub(crate) fn decode(app: &App, bytes: &[u8]) -> Picture {
         return Picture::Over;
     }
     crate::reconcile::count_decoded();
-    opentui::native::Image::decode(app.session().context(), bytes)
-        .map_or_else(|error| (log::warn!("an image node does not decode: {error}"), Picture::Pending).1, Picture::Ready)
+    let image = opentui::native::Image::decode(app.session().context(), bytes)
+        .map_err(|error| log::warn!("an image node does not decode: {error}"))
+        .ok();
+    // An image whose header names another size than it decodes to is not shown (review carbon 3.1).
+    let named = |info: opentui::native::ImageInfo| {
+        (info.width, info.height) == (width, height) || (info.height, info.width) == (width, height)
+    };
+    match image {
+        Some(image) if image.info().is_ok_and(named) => Picture::Ready(image),
+        _ => Picture::Pending,
+    }
 }
 
 /// Which content of `staged` plugin `plugin` may hold beside what it holds, in the order the view gave it: the bytes
