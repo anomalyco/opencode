@@ -158,7 +158,6 @@ impl Host for Tui {
         self.app.defer(bind!(self, |tui, _| failed_toast(&tui, title.clone(), String::new())));
         // The home footer counts the failed plugins.
         self.reads.changed(self);
-        tell_plugins(self);
     }
 
     fn slow(&self, id: &str, cost: &str) {
