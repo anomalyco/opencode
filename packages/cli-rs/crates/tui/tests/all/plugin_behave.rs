@@ -45,6 +45,8 @@ struct Board {
     list: bool,
     /// When set, the scroll does not ask for the user's scroll events.
     quiet: bool,
+    /// The `file` anchors a read gave, with their rows.
+    anchors: Vec<(String, i32)>,
 }
 
 thread_local! {
@@ -78,6 +80,10 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         host.scroll(files(), v2::Scroll::To { node, align: v2::ScrollAlign::Start });
     });
     setup.command(command("board.forget"), |host, _| host.scroll(files(), v2::Scroll::Forget));
+    setup.command(command("board.anchors"), |host, _| {
+        let anchors = host.anchors(&files(), "file");
+        board(|board| board.anchors = anchors.iter().map(|anchor| (anchor.id.clone(), anchor.row)).collect());
+    });
     // Marks a card reviewed or not, and keeps the card at the top where it is: read at event time.
     setup.command(command("board.review"), |host, input| {
         let card: usize = input.and_then(|card| card.parse().ok()).unwrap_or(0);
@@ -155,6 +161,8 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
 
 struct Mounted {
     harness: support::Harness,
+    /// The open's first frame, when it was not the settled one.
+    unsettled: Option<String>,
 }
 
 fn mount(cards: usize, width: u16, height: u16, list: bool) -> Mounted {
@@ -167,8 +175,11 @@ fn mount(cards: usize, width: u16, height: u16, list: bool) -> Mounted {
     let harness = support::mount(width, height, deps);
     harness.tui.navigate(Route::Plugin { id: "test.board".into(), name: "board".into() });
     harness.app.advance(Duration::ZERO);
-    let mounted = Mounted { harness };
-    mounted.settle();
+    let first = harness.app.render();
+    let mut mounted = Mounted { harness, unsettled: None };
+    if mounted.settle() != first {
+        mounted.unsettled = Some(first.text());
+    }
     mounted
 }
 
@@ -363,6 +374,11 @@ impl Model for Behaviors {
         let fail = |property: &'static str, site: &'static str, step: usize, detail: String| {
             Some(Failure { property, site, step, detail })
         };
+        if let Some(first) = &board_view.unsettled
+            && !model::skipped("settled-first")
+        {
+            return fail("settled-first", "open", 0, format!("the open's first frame:\n{first}"));
+        }
         for (step, command) in commands.iter().enumerate() {
             let landed_before = board(|board| board.landed.len());
             // What the oracle expects the offset to be, when it knows; and the anchor a step lands on.
@@ -573,6 +589,13 @@ fn a_list_of_a_thousand_builds_what_shows() {
     let built = reconcile::work().since(before).created;
     assert!(built < 80, "the open built {built} widgets");
     let rows = Rows::new(&[false; 1000]);
+    // Every card is an anchor, those without widgets at the rows the host assumes for them.
+    board_view.dispatch("board.anchors", None);
+    let anchors = board(|board| board.anchors.clone());
+    assert_eq!(anchors.len(), 1000);
+    assert!(
+        anchors.iter().enumerate().all(|(card, (id, row))| *id == format!("card-{card}") && *row == rows.start(card))
+    );
     board_view.dispatch("board.to", Some("card-700".into()));
     let first = board_view.harness.app.render();
     assert_eq!(offset_shown(&first.text(), &rows, 1), Some(rows.start(700)), "{}", first.text());
@@ -819,4 +842,84 @@ fn the_transcript_takes_three_verbs_from_a_handler_only() {
     harness.app.advance(Duration::from_millis(5));
     assert_eq!(*verbs.borrow(), [v2::Scroll::By { rows: -3 }]);
     assert_eq!(READ.with(|read| read.borrow().clone()), [7]);
+}
+
+// A list's refusals.
+
+/// A host with a theme and nothing else, for adopting trees straight into a [`reconcile::Tree`].
+struct Plain {
+    app: opentui::testing::TestApp,
+    keymap: opencode_ui::dialog::DialogKeymap,
+    theme: opencode_ui::theme::Theme,
+}
+
+impl opencode_plugin::Host for Plain {
+    fn app(&self) -> &opentui::prelude::App {
+        &self.app
+    }
+
+    fn theme(&self) -> opencode_ui::theme::Theme {
+        self.theme.clone()
+    }
+
+    fn keymap(&self) -> &opencode_ui::dialog::DialogKeymap {
+        &self.keymap
+    }
+}
+
+fn adopt(host: &Plain, tree: &mut reconcile::Tree, nodes: &[v2::Node]) -> Result<(), reconcile::Refused> {
+    let act: opencode_plugin::node::Act = std::rc::Rc::new(|_| {});
+    let slot = |_: &opentui::prelude::View, _: &str| None;
+    let source = |source: &v2::Source| match source {
+        v2::Source::Text(text) => Some(std::rc::Rc::from(text.as_str())),
+        _ => None,
+    };
+    let env = reconcile::Env {
+        host,
+        theme: &host.theme,
+        act: &act,
+        slot: &slot,
+        source: &source,
+        content: &|_| false,
+        bytes: &|_| None,
+        full: false,
+        draw: None,
+    };
+    tree.apply(&env, &host.app.root(), nodes)
+}
+
+// Expected (synthesis 3.4, P3's list): an item is the unit of reconcile. Every item needs an id; a keep inside an
+// item names a node of that item, and one outside a list names nothing inside it. Each such tree is refused whole.
+#[test]
+fn a_list_refuses_what_crosses_its_items() {
+    use reconcile::Refused;
+    let host = Plain {
+        app: opentui::testing::TestApp::new(40, 10),
+        keymap: opencode_ui::dialog::DialogKeymap::new(
+            opencode_ui::keymap::Keybinds::defaults(),
+            opencode_ui::keymap::Options::default(),
+        ),
+        theme: opencode_ui::theme::Catalog::default()
+            .load("opencode", opencode_ui::theme::ThemeMode::Dark)
+            .unwrap()
+            .theme,
+    };
+    let item = |key: &str, children: Vec<v2::Node>| v2::ListItem::new(v2::Node::column(children).with_id(key), 1);
+    let keep = |key: &str| v2::Node::Keep { key: key.into() };
+    let list = |items: Vec<v2::ListItem>| v2::Node::list(items).with_id("l");
+    let first = || item("a", vec![text("x".into()).with_id("a.x")]);
+    let mut tree = reconcile::Tree::default();
+    adopt(&host, &mut tree, &[list(vec![first(), item("b", vec![])])]).unwrap();
+    let refused = [
+        (list(vec![v2::ListItem::new(text("bare".into()), 1)]), Refused::Unkeyed),
+        (list(vec![first(), item("b", vec![keep("a.x")])]), Refused::Unknown("a.x".into())),
+        (v2::Node::column(vec![list(vec![first(), item("b", vec![])]), keep("b")]), Refused::Unknown("b".into())),
+        (v2::Node::column(vec![list(vec![first()]), keep("a.x")]), Refused::Unknown("a.x".into())),
+    ];
+    for (tree_of, why) in refused {
+        assert_eq!(adopt(&host, &mut tree, &[tree_of]), Err(why));
+    }
+    // A keep of an item whole, and one inside the item that held it, are taken.
+    adopt(&host, &mut tree, &[list(vec![v2::ListItem::new(keep("a"), 1), item("b", vec![])])]).unwrap();
+    adopt(&host, &mut tree, &[list(vec![item("a", vec![keep("a.x")]), item("b", vec![])])]).unwrap();
 }
