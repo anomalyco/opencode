@@ -424,7 +424,7 @@ impl Host for Tui {
     fn focus_composer(&self) {
         let prompt = self.prompt.current.borrow().upgrade();
         if let Some(prompt) = prompt.filter(|prompt| prompt.shown()) {
-            self.app.focus(&prompt.textarea);
+            opencode_plugin::interact::refocus(self, || self.app.focus(&prompt.textarea));
         }
     }
 

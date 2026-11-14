@@ -54,6 +54,18 @@ pub struct Probe {
     pub strip: bool,
     /// A global layer that takes pastes.
     pub paste_global: bool,
+    /// The panel leaves node `a` out.
+    pub hide_a: bool,
+    /// The panel's handler panics, which fails the plugin.
+    pub panic: bool,
+    /// The rich select has no footer action.
+    pub no_update: bool,
+    /// Node `a` has a click of its own, on the press, which runs `input.row a`.
+    pub click_a: bool,
+    /// Two composer paste layers: an older one above, a newer one below.
+    pub paste_rank: bool,
+    /// The panel's texts may be selected.
+    pub selectable: bool,
 }
 
 thread_local! {
@@ -100,11 +112,20 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         host.overlay(Overlay { surface: "menu".into(), anchor, width: 12, height: 3 });
     });
     setup.command(command("input.focus"), |host, input| host.focus(input.unwrap_or("a")));
+    // Picks the select's row as Enter would, but by the command's name.
+    setup.command(command("input.submit"), |host, _| host.dispatch("dialog.select.submit", None));
+    setup.command(command("input.release"), |host, _| host.release_keys());
+    // Two moves of the focus in one call: out of the panel, and back.
+    setup.command(command("input.bounce"), |host, _| {
+        host.blur();
+        host.focus("a");
+    });
+    setup.command(command("input.route"), |host, _| host.open_route("probe"));
     // Changes nothing: the plugin's surfaces draw again after it, with what the probe says now.
     setup.command(command("input.redraw"), |_, _| {});
     // The geometry and focus reads, as a command makes them: of the plugin's mount that holds the node.
-    setup.command(command("input.where"), |host, _| {
-        let rect = host.rect("a");
+    setup.command(command("input.where"), |host, input| {
+        let rect = host.rect(input.unwrap_or("a"));
         let focused = host.focused();
         probe(|probe| probe.log.push(format!("where {rect:?} {focused:?}")));
     });
@@ -140,12 +161,13 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     });
     if probe(|probe| probe.strip) {
         let strip = v2::Surface::new("strip", v2::Place::Slot(abi::Placement::append("session.composer.top")), |_| {
-            let interact = Interact { pointer: true, ..Interact::default() };
+            let interact = Interact { pointer: true, focusable: true, ..Interact::default() };
             v2::Node::row(vec![unselectable(v2::Node::text(vec![abi::Span::new("STRIP")]))])
                 .with_id("s")
                 .interact(interact)
         });
-        setup.surface(strip.on(|host, event| {
+        let layers = vec![Layer { scope: LayerScope::Surface, paste: true, ..Layer::default() }];
+        setup.surface(strip.layers(layers).on(|host, event| {
             log("strip", host, event);
             Handled::Consume
         }));
@@ -160,6 +182,43 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             }
         });
     }
+    if probe(|probe| probe.paste_rank) {
+        for (name, priority) in [("high", 5), ("low", 0)] {
+            let layer = Layer { scope: LayerScope::Composer, priority, paste: true, ..Layer::default() };
+            setup.layer(layer, move |host, event| {
+                log(name, host, event);
+                Handled::Consume
+            });
+        }
+    }
+    // A route of the plugin: its layer takes `k`, `w` (where its focus is) and pastes.
+    let route = v2::Surface::new("probe", v2::Place::Route("probe".into()), |_| {
+        let interact = Interact { focusable: true, ..Interact::default() };
+        v2::Node::column(vec![
+            unselectable(v2::Node::text(vec![abi::Span::new("ROUTE")])),
+            v2::Node::row(vec![unselectable(v2::Node::text(vec![abi::Span::new("RRRR")]))])
+                .with_id("r")
+                .interact(interact),
+        ])
+    })
+    .layers(vec![Layer {
+        scope: LayerScope::Surface,
+        priority: 5,
+        paste: true,
+        keys: vec![Bind::new("k", "k"), Bind::new("w", "where")],
+        ..Layer::default()
+    }])
+    .on(|host, event| {
+        log("route", host, event);
+        if let Event::Key(key) = event
+            && key.bind.as_deref() == Some("where")
+        {
+            let (rect, focused) = (host.rect("r").is_some(), host.focused());
+            probe(|probe| probe.log.push(format!("where {rect} {focused:?}")));
+        }
+        Handled::Consume
+    });
+    setup.surface(route);
     let side = v2::Surface::new("side", v2::Place::Panel("side".into()), side)
         .layers(vec![
             Layer {
@@ -171,6 +230,7 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
                     Bind::new("m", "mode"),
                     Bind::new("o", "overlay"),
                     Bind::new("ctrl+c", "c"),
+                    Bind::new("Control + C", "c"),
                 ],
                 ..Layer::default()
             },
@@ -183,6 +243,7 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             },
         ])
         .on(|host, event| {
+            assert!(!probe(|probe| probe.panic), "the probe asked for a panic");
             log("side", host, event);
             match event {
                 Event::Key(key) => match key.bind.as_deref() {
@@ -228,9 +289,19 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
                 v2::Node::text(vec![abi::Span::new("MENU two")]),
             ])
         })
-        .layers(vec![Layer { scope: LayerScope::Surface, keys: vec![Bind::new("k", "k")], ..Layer::default() }])
+        .layers(vec![Layer {
+            scope: LayerScope::Surface,
+            keys: vec![Bind::new("k", "k"), Bind::new("n", "nav")],
+            ..Layer::default()
+        }])
         .on(|host, event| {
             log("menu", host, event);
+            // `n`: a mode of the overlay, which binds no escape.
+            if let Event::Key(key) = event
+                && key.bind.as_deref() == Some("nav")
+            {
+                host.set_mode(Some("nav"));
+            }
             Handled::Consume
         }),
     );
@@ -320,14 +391,20 @@ fn select() -> abi::Select {
         current: None,
         action: command("input.picked"),
         key: Some("pick".into()),
-        actions: vec![abi::SelectAction {
-            title: "update".into(),
-            key: Some("ctrl+u".into()),
-            action: command("input.update"),
-            hidden: vec!["beta".into()],
-            primary: false,
-        }],
-        binds: vec![abi::PanelBind { key: "ctrl+e".into(), title: "echo".into(), action: command("input.picked") }],
+        actions: match probe(|probe| probe.no_update) {
+            true => Vec::new(),
+            false => vec![abi::SelectAction {
+                title: "update".into(),
+                key: Some("ctrl+u".into()),
+                action: command("input.update"),
+                hidden: vec!["beta".into()],
+                primary: false,
+            }],
+        },
+        binds: vec![
+            abi::PanelBind { key: "ctrl+e".into(), title: "echo".into(), action: command("input.picked") },
+            abi::PanelBind { key: "Ctrl+C".into(), title: "copy".into(), action: command("input.picked") },
+        ],
         search: probe(|probe| probe.search).then(|| "probe".into()),
     }
 }
@@ -344,6 +421,26 @@ pub fn other(setup: &mut abi::Setup) -> Result<(), String> {
             .with_id("a")
             .interact(interact)
     }));
+    setup.surface(
+        v2::Surface::new("pop", v2::Place::Overlay("pop".into()), |_| {
+            v2::Node::column(vec![v2::Node::text(vec![abi::Span::new("POP")])])
+        })
+        .on(|_, _| Handled::Consume),
+    );
+    let command = |name: &str| abi::Command { name: name.to_owned(), ..abi::Command::default() };
+    setup.command(command("other.pop"), |host, _| {
+        host.overlay(Overlay { surface: "pop".into(), anchor: Anchor::Point { x: 40, y: 8 }, width: 10, height: 2 });
+    });
+    setup.command(command("other.release"), |host, _| host.release_keys());
+    // A mode of a plugin with only a global layer: in it, every key is the plugin's.
+    setup.command(command("other.gmode"), |host, _| host.set_mode(Some("g")));
+    setup.layer(
+        Layer { scope: LayerScope::Global, mode: Some("g".into()), any: true, ..Layer::default() },
+        |host, event| {
+            log("gmode", host, event);
+            Handled::Consume
+        },
+    );
     Ok(())
 }
 
@@ -361,10 +458,23 @@ fn side(cx: &mut v2::View<'_>) -> v2::Node {
         hover: hover.map(abi::Color::from),
         hover_events: pointer,
     };
-    let text = |text: &str| unselectable(v2::Node::text(vec![abi::Span::new(text)]));
+    let selectable = probe(|probe| probe.selectable);
+    let text = |text: &str| match selectable {
+        true => v2::Node::text(vec![abi::Span::new(text)]),
+        false => unselectable(v2::Node::text(vec![abi::Span::new(text)])),
+    };
+    let a = v2::Node::row(vec![text("AAAA")]).with_id("a").interact(interact(true, true, Some("#ff0000")));
+    let a = match probe(|probe| probe.click_a) {
+        true => a.on_click(abi::Click::command("input.row", Some("a".into())).on_down()),
+        false => a,
+    };
+    let a = match probe(|probe| probe.hide_a) {
+        true => text("----"),
+        false => a,
+    };
     v2::Node::column(vec![
         text(&label),
-        v2::Node::row(vec![text("AAAA")]).with_id("a").interact(interact(true, true, Some("#ff0000"))),
+        a,
         v2::Node::row(vec![text("BBBB")]).with_id("b").interact(interact(true, probe(|probe| probe.pointer_b), None)),
         match probe(|probe| probe.hover_t) {
             true => text("TTTT").with_id("t").hover_events(),
@@ -1003,4 +1113,376 @@ fn a_drop_from_another_mount_of_the_plugin_says_where_it_started() {
     settle(&harness);
     let log: Vec<String> = taken().into_iter().filter(|line| line.starts_with("strip")).collect();
     assert_eq!(log, ["strip: Drop s 1,0 from side/a [-]"]);
+}
+
+/// Where the composer is on the screen.
+fn composer_at(harness: &Harness) -> (u16, u16) {
+    let rect = harness.tui.textarea.borrow().as_ref().map(opentui::prelude::Widget::rect).unwrap();
+    (rect.screen_x as u16 + 1, rect.screen_y as u16)
+}
+
+// Expected (review 1, synthesis 3.6): a row that toggles a plugin does so only on a key or a click: a run of the
+// select's submit by name changes nothing, and neither does an Enter whose select is closed or replaced by what runs
+// before its toggle (a task queued before the key).
+#[test]
+fn a_toggle_row_moves_the_registry_only_on_a_key_or_a_click() {
+    let harness = open();
+    rows(&["other"], "f");
+    run(&harness, "input.select", None);
+    run(&harness, "input.submit", None);
+    assert!(active(&harness, "test.other"), "a submit by name toggled the plugin");
+    let tui = harness.tui.clone();
+    harness.app.app().defer(move |_| tui.dialogs.clear());
+    harness.app.press("enter");
+    settle(&harness);
+    assert!(active(&harness, "test.other"), "a toggle ran after its select closed");
+    run(&harness, "input.select", None);
+    let tui = harness.tui.clone();
+    harness.app.app().defer(move |_| {
+        tui.keymap.dispatch("plugins.list", None);
+    });
+    harness.app.press("enter");
+    settle(&harness);
+    assert!(harness.app.text().contains("internal"), "{}", harness.app.text());
+    assert!(active(&harness, "test.other"), "a toggle ran after its select was replaced");
+    harness.app.press("escape");
+    settle(&harness);
+    run(&harness, "input.select", None);
+    let (x, y) = support::at(&harness.app.text(), "row other").unwrap();
+    harness.app.click(x + 1, y);
+    settle(&harness);
+    assert!(!active(&harness, "test.other"), "a click did not toggle the plugin");
+}
+
+// Expected (review 7): a select shown again under its key with other footer actions or keys has those, and keeps its
+// filter and selection; after a toggle the row says what the registry holds at once, and the hint names the plugin.
+#[test]
+fn a_keyed_select_takes_new_actions_and_its_rows_follow_a_toggle() {
+    let harness = open();
+    rows(&["alpha", "beta", "gamma"], "f");
+    run(&harness, "input.select", None);
+    harness.app.type_text("gam");
+    settle(&harness);
+    probe(|probe| probe.no_update = true);
+    run(&harness, "input.reselect", None);
+    let screen = harness.app.text();
+    assert!(screen.contains("row gamma") && !screen.contains("row alpha"), "{screen}");
+    taken();
+    harness.app.press("ctrl+u");
+    settle(&harness);
+    assert_eq!(taken(), Vec::<String>::new());
+    harness.app.press("escape");
+    settle(&harness);
+    probe(|probe| probe.no_update = false);
+    rows(&["other"], "f");
+    run(&harness, "input.select", None);
+    assert!(harness.app.text().contains("disable test.other"), "{}", harness.app.text());
+    harness.app.press("enter");
+    settle(&harness);
+    let screen = harness.app.text();
+    assert!(!active(&harness, "test.other"));
+    assert!(screen.contains("disabled") && screen.contains("enable test.other"), "{screen}");
+}
+
+// Expected (review 2): what follows a hold key waits behind it in order, a paste included; input meant for a focus that
+// a press or a command moved reaches nothing; a hold key routed again holds what follows it.
+#[test]
+fn a_hold_keeps_the_input_after_it_in_order_and_for_its_focus() {
+    let harness = open_with(|probe| probe.hold = true);
+    run(&harness, "input.panel", None);
+    taken();
+    harness.app.press("x");
+    harness.app.press("m");
+    harness.app.paste("P");
+    harness.app.advance(input::HOLD + Duration::from_millis(1));
+    settle(&harness);
+    assert_eq!(taken(), ["side: key x [-]", "side: key mode [-]"], "a paste overtook a held key");
+    // A panel mounted again, in no mode: a press on the composer moves the focus, and the held `m` was the panel's.
+    run(&harness, "input.close", None);
+    run(&harness, "input.panel", None);
+    let (cx, cy) = composer_at(&harness);
+    taken();
+    harness.app.press("x");
+    harness.app.press("m");
+    harness.app.click(cx, cy);
+    harness.app.advance(input::HOLD + Duration::from_millis(1));
+    settle(&harness);
+    assert_eq!(taken(), ["side: key x [-]"]);
+    assert_eq!(composer(&harness), "");
+    assert!(opencode_plugin::Host::composer_focused(&*harness.tui));
+    // A command moves the focus away: the held `m` was the panel's, and reaches nothing.
+    run(&harness, "input.close", None);
+    run(&harness, "input.panel", None);
+    taken();
+    harness.app.press("x");
+    harness.app.press("m");
+    opencode_plugin::Host::focus_composer(&*harness.tui);
+    harness.app.advance(input::HOLD + Duration::from_millis(1));
+    settle(&harness);
+    assert_eq!(taken(), ["side: key x [-]"]);
+    assert_eq!(composer(&harness), "");
+    // A held hold key holds what follows it when it is routed again.
+    run(&harness, "input.close", None);
+    run(&harness, "input.panel", None);
+    taken();
+    harness.app.press("x");
+    harness.app.press("x");
+    harness.app.press("m");
+    harness.app.advance(input::HOLD + Duration::from_millis(1));
+    settle(&harness);
+    assert_eq!(taken(), ["side: key x [-]", "side: key x [-]"]);
+    let ledger = interact::ledger(&*harness.tui);
+    assert!(ledger.holding && ledger.held == 1, "{ledger:?}");
+}
+
+// Expected (review 3): a hold ends only by its own owner, its own timer or its limit: an earlier hold's timer and
+// another plugin's release leave it, and a large read is routed in order with no more than the limit kept.
+#[test]
+fn a_hold_ends_by_its_own_owner_timer_or_limit() {
+    let harness = open_with(|probe| {
+        probe.hold = true;
+        probe.listen = true;
+    });
+    run(&harness, "input.panel", None);
+    taken();
+    harness.app.press("x");
+    harness.app.advance(Duration::from_millis(10));
+    run(&harness, "input.release", None);
+    harness.app.press("x");
+    harness.app.press("m");
+    run(&harness, "other.release", None);
+    // Past the first hold's time, inside the second's.
+    harness.app.advance(input::HOLD - Duration::from_millis(5));
+    let ledger = interact::ledger(&*harness.tui);
+    assert!(ledger.holding && ledger.held == 1 && ledger.timers == 1, "{ledger:?}");
+    harness.app.advance(Duration::from_millis(20));
+    settle(&harness);
+    assert!(taken().contains(&"side: key mode [-]".to_owned()));
+    // Mounted again, in no mode.
+    run(&harness, "input.close", None);
+    run(&harness, "input.panel", None);
+    taken();
+    // A read of many keys after a hold key, with no timer between them.
+    let keys: Vec<Input> = std::iter::once(key(KeyCode::Char('x')))
+        .chain(std::iter::repeat_n(key(KeyCode::Char('q')), interact::HOLD_LIMIT + 44))
+        .collect();
+    for event in &keys {
+        harness.app.app().dispatch(event.clone());
+        assert!(interact::ledger(&*harness.tui).held < interact::HOLD_LIMIT);
+    }
+    settle(&harness);
+    let log = taken();
+    assert_eq!(log.len(), 2 + interact::HOLD_LIMIT + 44, "{log:?}");
+    assert!(log[2..].iter().all(|line| line == "global: any q [-]"), "{log:?}");
+    assert!(!interact::ledger(&*harness.tui).holding);
+}
+
+// Expected (review 4, synthesis 3.8): the reserved chord is never held, however it is spelled no plugin key takes it,
+// it resets the plugins' input before the host's selection may stop it, and the next key reaches the host past a
+// listener that takes every key.
+#[test]
+fn the_reserved_chord_escapes_every_plugin_hold_spelling_and_listener() {
+    let harness = open_with(|probe| {
+        probe.hold = true;
+        probe.selectable = true;
+    });
+    run(&harness, "input.panel", None);
+    taken();
+    harness.app.press("x");
+    harness.app.press("ctrl+c");
+    let ledger = interact::ledger(&*harness.tui);
+    assert!(!ledger.holding && ledger.held == 0 && ledger.timers == 0, "{ledger:?}");
+    assert_eq!(taken(), ["side: key x [-]"], "a plugin key took the reserved chord");
+    // The plugin's layers hold again once the focus moves. A mode, then a selection that copies on the chord: the mode
+    // still ends.
+    run(&harness, "input.focus", Some("a"));
+    let base = interact::ledger(&*harness.tui).modes;
+    harness.app.press("m");
+    settle(&harness);
+    assert_eq!(interact::ledger(&*harness.tui).modes, base + 1);
+    let (x, y) = support::at(&harness.app.text(), "PANEL").unwrap();
+    harness.app.click(x + 1, y);
+    harness.app.click(x + 1, y);
+    settle(&harness);
+    assert!(harness.app.app().selected_text().is_some());
+    harness.app.press("ctrl+c");
+    settle(&harness);
+    harness.app.press("j");
+    settle(&harness);
+    assert!(!taken().iter().any(|line| line.contains("down")), "the mode outlived the chord");
+    // A listener that takes every key: after the chord the composer types again.
+    opencode_plugin::Host::focus_composer(&*harness.tui);
+    settle(&harness);
+    probe(|probe| probe.swallow = true);
+    harness.app.type_text("a");
+    settle(&harness);
+    harness.app.press("ctrl+c");
+    harness.app.type_text("b");
+    settle(&harness);
+    assert_eq!(composer(&harness), "b");
+    // The select's key spelled `Ctrl+C` is no key of it.
+    rows(&["alpha"], "f");
+    run(&harness, "input.select", None);
+    taken();
+    harness.app.press("ctrl+c");
+    settle(&harness);
+    assert!(!taken().iter().any(|line| line.starts_with("picked")));
+}
+
+// Expected (review 5): a host dialog keeps its input over a plugin's mode, focus and overlay; a route's layer does not
+// take keys from an overlay; an overlay in a mode with no escape of its own still closes on escape; closing the upper
+// of two plugins' overlays gives the focus to the other.
+#[test]
+fn a_host_dialog_and_the_top_overlay_keep_their_input() {
+    let harness = open();
+    run(&harness, "input.panel", None);
+    rows(&["alpha"], "f");
+    run(&harness, "input.select", None);
+    run(&harness, "other.gmode", None);
+    run(&harness, "input.focus", Some("a"));
+    run(&harness, "input.overlay", None);
+    taken();
+    harness.app.type_text("z");
+    settle(&harness);
+    let screen = harness.app.text();
+    assert!(!screen.contains("MENU"), "{screen}");
+    assert!(taken().is_empty(), "a plugin took a key of the host's dialog");
+    assert!(screen.contains("No results") || screen.contains('z'), "{screen}");
+    harness.app.press("escape");
+    settle(&harness);
+    run(&harness, "other.gmode", None);
+    // Under the route's overlay, `k` is the overlay's.
+    let harness = open();
+    run(&harness, "input.route", None);
+    assert!(harness.app.text().contains("ROUTE"), "{}", harness.app.text());
+    run(&harness, "input.overlay", None);
+    taken();
+    harness.app.press("k");
+    settle(&harness);
+    assert_eq!(taken(), ["menu: key k [-]"]);
+    // In the overlay's mode, escape still closes it.
+    harness.app.press("n");
+    settle(&harness);
+    harness.app.press("escape");
+    settle(&harness);
+    assert!(!harness.app.text().contains("MENU"), "{}", harness.app.text());
+    // Two plugins' overlays: closing the upper focuses the other.
+    let harness = open();
+    run(&harness, "input.overlay", None);
+    run(&harness, "other.pop", None);
+    assert!(harness.app.text().contains("POP"));
+    harness.app.press("escape");
+    settle(&harness);
+    taken();
+    harness.app.press("k");
+    settle(&harness);
+    assert_eq!(taken(), ["menu: key k [-]"]);
+}
+
+// Expected (review 8): a capture ends with a move of the focus even when the focus comes back before the drag, and a
+// mode ends with a move out of its scope even when one call moves the focus out and back.
+#[test]
+fn a_capture_and_a_mode_end_with_a_move_out_and_back() {
+    let harness = open();
+    run(&harness, "input.panel", None);
+    let (x, y) = support::at(&harness.app.text(), "AAAA").unwrap();
+    harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
+    settle(&harness);
+    harness.app.press("y");
+    settle(&harness);
+    run(&harness, "input.focus", Some("a"));
+    taken();
+    harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), x + 2, y);
+    settle(&harness);
+    assert!(!taken().iter().any(|line| line.contains("Drag")), "a capture came back with the focus");
+    harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 2, y);
+    harness.app.press("m");
+    settle(&harness);
+    run(&harness, "input.bounce", None);
+    taken();
+    harness.app.press("j");
+    settle(&harness);
+    assert!(!taken().iter().any(|line| line.contains("down")), "a mode came back with the focus");
+}
+
+// Expected (review 9): a paste goes to the listeners by priority, as a key does, and a paste in a route or a slot
+// claim goes to its paste layer.
+#[test]
+fn a_paste_goes_by_priority_and_to_a_route_or_slot() {
+    let harness = open_with(|probe| {
+        probe.paste_rank = true;
+        probe.strip = true;
+    });
+    taken();
+    harness.app.paste("p1");
+    settle(&harness);
+    assert_eq!(taken(), ["high: paste p1 [-]"]);
+    run(&harness, "input.focus", Some("s"));
+    harness.app.paste("p2");
+    settle(&harness);
+    assert_eq!(taken(), ["strip: paste p2 [-]"]);
+    run(&harness, "input.route", None);
+    run(&harness, "input.focus", Some("r"));
+    harness.app.paste("p3");
+    settle(&harness);
+    assert_eq!(taken(), ["route: paste p3 [-]"]);
+}
+
+// Expected (review 10): on a box with a click of its own and pointer events, a press the plugin consumes runs no
+// click, and one it passes does.
+#[test]
+fn a_consumed_press_runs_no_click_of_the_same_box() {
+    let harness = open_with(|probe| probe.click_a = true);
+    run(&harness, "input.panel", None);
+    let (x, y) = support::at(&harness.app.text(), "AAAA").unwrap();
+    taken();
+    harness.app.click(x + 1, y);
+    settle(&harness);
+    assert!(!taken().contains(&"row a".to_owned()), "a consumed press ran the click");
+    probe(|probe| probe.pass_press = true);
+    harness.app.click(x + 1, y);
+    settle(&harness);
+    assert!(taken().contains(&"row a".to_owned()), "a passed press ran no click");
+}
+
+// Expected (review 11): in a route, a handler's and a command's reads of the focus agree with the focused node.
+#[test]
+fn a_route_reads_its_focused_node() {
+    let harness = open();
+    run(&harness, "input.route", None);
+    run(&harness, "input.focus", Some("r"));
+    taken();
+    harness.app.press("w");
+    settle(&harness);
+    assert_eq!(taken(), ["route: key where [-]", "where true Focused { node: Some(\"r\"), surface: true }"]);
+    run(&harness, "input.where", Some("r"));
+    let [line] = taken().try_into().unwrap();
+    assert!(line.ends_with("Focused { node: Some(\"r\"), surface: true }"), "{line}");
+}
+
+// Expected (review 8 and 12): a capture ends as its node leaves the tree the host accepts, with no pointer event and no
+// read to end it; reading the ledger changes nothing.
+#[test]
+fn a_capture_ends_as_its_node_leaves_the_tree() {
+    let harness = open();
+    run(&harness, "input.panel", None);
+    let (x, y) = support::at(&harness.app.text(), "AAAA").unwrap();
+    harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
+    settle(&harness);
+    probe(|probe| probe.hide_a = true);
+    run(&harness, "input.redraw", None);
+    assert!(!harness.app.text().contains("AAAA"));
+    assert!(!interact::ledger(&*harness.tui).capture);
+    assert_eq!(interact::ledger(&*harness.tui), interact::ledger(&*harness.tui));
+}
+
+// Expected (review 6): a panel that closes with the focus gives it to the composer, which types what comes next.
+#[test]
+fn a_closed_panel_gives_its_focus_to_the_composer() {
+    let harness = open();
+    run(&harness, "input.panel", None);
+    run(&harness, "input.close", None);
+    harness.app.type_text("q");
+    settle(&harness);
+    assert_eq!(composer(&harness), "q");
 }
