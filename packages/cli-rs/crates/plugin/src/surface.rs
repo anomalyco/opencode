@@ -152,6 +152,9 @@ pub(crate) struct Surface {
     state: RefCell<State>,
     live: RefCell<Option<Rc<slot::Live>>>,
     watch: RefCell<Option<Disposer>>,
+    /// Drawn by its mount and not synced since: the host's first sync of a new mount brings nothing new (review
+    /// bigboi-7: a route's first frame ran two views).
+    mounted: Cell<bool>,
 }
 
 /// What one call of the view returned and asked for; the host takes it only with its tree.
@@ -224,6 +227,7 @@ impl Surface {
             state: RefCell::default(),
             live: RefCell::new(None),
             watch: RefCell::new(None),
+            mounted: Cell::new(true),
         });
         book(|ledger| ledger.mounts += 1);
         let weak = Rc::downgrade(&mounted);
@@ -506,7 +510,9 @@ impl Claimed for Rc<Surface> {
     }
 
     fn sync(&self, host: &dyn Host, changed: &abi::Changed) {
-        self.draw(host);
+        if !self.mounted.replace(false) {
+            self.draw(host);
+        }
         self.state.borrow().tree.each_slot(&mut |slots| slots.sync(host, Some(changed)));
     }
 

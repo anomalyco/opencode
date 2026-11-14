@@ -246,6 +246,10 @@ impl Model for Surfaces {
                     if first.generation <= highest || !first.full || first.built != ITEMS && !first.bad {
                         return fail("lifecycle", format!("a new mount's first view was {first:?} after {highest}"));
                     }
+                    // One view opens a surface, and one more only when the first tree was refused.
+                    if calls.len() != 1 + usize::from(first.bad) {
+                        return fail("work", format!("opening a surface ran {} views: {calls:?}", calls.len()));
+                    }
                     mounted = Some(first.generation);
                     highest = first.generation;
                 }
