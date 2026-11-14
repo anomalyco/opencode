@@ -68,5 +68,6 @@ fn run(diffs: &Diffs, host: &dyn Host) {
     let Some(viewer) = held.as_mut() else { return };
     let file = viewer.menu.take();
     viewer.toggle_reviewed(host, file);
+    viewer.drawn = false;
     viewer.follow_tree(host);
 }
