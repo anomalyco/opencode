@@ -154,6 +154,7 @@ const appearanceSchema = Persistence.struct({
   tabLayout: Schema.Literals(["horizontal", "vertical", "inbox"]),
   sidebarOpen: Persistence.optional(Schema.Boolean),
   reduceMotion: Schema.Literals(["system", "on", "off"]),
+  visuals: Persistence.optional(Schema.Literals(["off", "inline"])),
 })
 
 const permissionsSchema = Persistence.struct({
@@ -316,7 +317,7 @@ export const defaultSettings: Settings = {
     mobileTitlebarPosition: "top",
     followUpBehavior: "steer",
   },
-  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", reduceMotion: "system" },
+  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", reduceMotion: "system", visuals: "off" },
   keybinds: {},
   permissions: { autoApprove: false, autoApproveProjects: {} },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
@@ -499,6 +500,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         reduceMotion,
         setReduceMotion(value: ReduceMotion) {
           setStore("appearance", "reduceMotion", value)
+        },
+        visuals: withFallback(() => store.appearance?.visuals, "off"),
+        setVisuals(value: "off" | "inline") {
+          setStore("appearance", "visuals", value)
         },
       },
       keybinds: {

@@ -45,13 +45,14 @@ import { createRegion, RegionContent } from "../src/runtime/plugin/panels"
 import { createSessionScreenLayout } from "../src/session/screen-layout"
 import type { SessionModel } from "../src/session/model"
 import { createClosedTabs } from "../src/runtime/plugin/closed-tabs"
-import { PluginLinks, PluginSlot, PluginThemes } from "../src/runtime/plugin/render"
+import { PluginLinks, PluginSlot, PluginStyles, PluginThemes } from "../src/runtime/plugin/render"
 import { Markdown } from "@opencode/session-ui/markdown"
 import { ThemeProvider, useTheme, type ColorScheme } from "@opencode/ui/theme/context"
 import { persistedHandle } from "../src/runtime/plugin/stores"
 import { LanguageProvider } from "../src/runtime/i18n/language"
 import { ExtensionPlugins } from "../src/runtime/plugin/extension-plugins"
 import { SessionPluginPills } from "../src/session/composer/plugin-pills"
+import { builtins } from "@opencode/gui-plugins/renderer"
 import { ui } from "../src/runtime/plugin/ui"
 
 export {
@@ -69,7 +70,7 @@ export {
   Theme,
 } from "@opencode/plugin/gui"
 
-export { Schema }
+export { builtins, Schema }
 
 type PluginHost = ReturnType<typeof usePluginHost>
 
@@ -106,7 +107,9 @@ const about: App = { name: "opencode", version: "", channel: "dev", platform: "d
 
 const locale: BuiltinLocale = { locale: () => "en", direction: () => "ltr", setDirection() {} }
 
-const appearance: Appearance = { font: () => "monospace", mode: () => "light" }
+const [visualDisplay, setVisualDisplay] = createSignal<"off" | "inline">("inline")
+
+const appearance: Appearance = { font: () => "monospace", mode: () => "light", visualDisplay }
 
 const router: Router = { routing: () => false, path: () => "/" }
 
@@ -400,6 +403,7 @@ function standIn(overrides: Partial<Interface>): Interface {
     notify: async () => ({ notification: false, sound: false }),
     font: () => "fixture mono",
     mode: () => "dark",
+    visualDisplay: () => "inline",
     routing: () => false,
     path: () => "/",
     keybind: () => [],
@@ -864,6 +868,7 @@ export function mountCodeBlocks(input: { definitions: readonly Entry[] }) {
   function Host() {
     const apis = createHostApis()
     captured.apis = apis
+    onCleanup(apis.attach(standIn({ visualDisplay: () => visualDisplay() })))
 
     return (
       <PluginHostProvider
@@ -872,6 +877,7 @@ export function mountCodeBlocks(input: { definitions: readonly Entry[] }) {
         apis={apis.apis}
         whenMounted={apis.whenMounted}
       >
+        <PluginStyles />
         <Message />
       </PluginHostProvider>
     )
@@ -892,6 +898,7 @@ export function mountCodeBlocks(input: { definitions: readonly Entry[] }) {
 
   return {
     show: (text: string, streaming = false) => setMessage({ text, streaming }),
+    visuals: (value: "off" | "inline") => setVisualDisplay(value),
     define: (next: readonly Entry[]) => setDefinitions(next),
     status: (id: string) => hosts[0]?.status(id),
     failure: (id: string) => hosts[0]?.failure(id),

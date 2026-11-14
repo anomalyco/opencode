@@ -1192,6 +1192,16 @@ export interface Appearance {
    * ```
    */
   mode(): "light" | "dark"
+  /**
+   * Where generative visuals render. Reactive.
+   * - `off`: nowhere; the fenced block keeps its code.
+   * - `inline`: in the conversation, at the fenced block.
+   * @example
+   * ```ts
+   * const inline = ctx.appearance.visualDisplay() === "inline"
+   * ```
+   */
+  visualDisplay(): "off" | "inline"
 }
 
 /** The app's route. */
