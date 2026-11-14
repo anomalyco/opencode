@@ -90,7 +90,21 @@ pub fn view_colors(theme: &Theme, syntax: &SyntaxTheme) -> MarkdownColors {
 /// The table options follow the `conceal` scope, which [`crate::code::syntax_theme`] leaves out, so they stay the
 /// same. A new border color would repaint the tables in place.
 pub fn restyle(markdown: &Markdown, colors: MarkdownColors, syntax: &SyntaxTheme) {
-    markdown.colors(colors).syntax_theme(syntax.clone()).table_options(table(syntax));
+    // Each style Markdown takes builds its blocks again, and a custom block afresh: the first build is not the last.
+    RESTYLING.set(true);
+    markdown.colors(colors);
+    RESTYLING.set(false);
+    markdown.syntax_theme(syntax.clone()).table_options(table(syntax));
+}
+
+thread_local! {
+    static RESTYLING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether Markdown builds its blocks now for a [`restyle`] that builds them once more before it ends: a renderer
+/// whose work is costly may leave a block to the code view now and draw it at the last build.
+pub fn restyling() -> bool {
+    RESTYLING.get()
 }
 
 /// Grid tables with one column of cell padding, bordered in Core's table border: the `conceal` scope's color, else

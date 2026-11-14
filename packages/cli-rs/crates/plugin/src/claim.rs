@@ -21,8 +21,8 @@
 //! which swaps its rows in that paint.
 //!
 //! A theme change restyles a tool call's tree in place with no call, unless the claim reads the palette: then it is
-//! viewed again, also where it declined the revision. Markdown builds a claimed fence again in the new theme, so a
-//! fence is a new mount and gets a view.
+//! viewed again, also where it declined the revision. Markdown builds a claimed fence again in the new theme, once for
+//! each style it sets: the claim takes the last build only, so a fence is a new mount and gets one view.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -723,8 +723,9 @@ pub(crate) fn fence(claim: Rc<Registered>) -> crate::CodeBlockRender {
     let fences: Rc<RefCell<HashMap<u32, Weak<Fence>>>> = Rc::default();
     Rc::new(move |block, theme| {
         static KEYS: AtomicU64 = AtomicU64::new(1);
-        // A fence in a claimed part's own Markdown is code: a claim inside a claim could nest without bound.
-        if ADOPTING.get() > 0 {
+        // A fence in a claimed part's own Markdown is code: a claim inside a claim could nest without bound. A restyle
+        // builds the block again more than once; the claim takes the last build, so it is viewed once.
+        if ADOPTING.get() > 0 || opencode_ui::markdown::restyling() {
             return None;
         }
         let part = Part::Fence(FencePart {
