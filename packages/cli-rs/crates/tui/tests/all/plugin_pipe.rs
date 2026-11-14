@@ -134,7 +134,7 @@ pub fn settle(harness: &Harness, scripts: &Scripts) {
     // A ping would start a JS host that nothing asked for.
     if scripts.pid().is_none() {
         for _ in 0..3 {
-            harness.app.advance(Duration::from_millis(1));
+            turn(harness);
         }
         if scripts.pid().is_none() {
             return;
@@ -143,7 +143,7 @@ pub fn settle(harness: &Harness, scripts: &Scripts) {
     loop {
         // What the UI sends in its next frames (a route's first view is deferred) goes before the ping.
         for _ in 0..3 {
-            harness.app.advance(Duration::from_millis(1));
+            turn(harness);
         }
         let seq = scripts.ping();
         let mut pong = None;
@@ -157,18 +157,27 @@ pub fn settle(harness: &Harness, scripts: &Scripts) {
                     harness.app.text()
                 );
             }
-            harness.app.advance(Duration::from_millis(1));
+            turn(harness);
             pong = scripts.ponged(seq);
             if pong.is_none() {
                 std::thread::sleep(Duration::from_micros(200));
             }
         }
         for _ in 0..3 {
-            harness.app.advance(Duration::from_millis(1));
+            turn(harness);
         }
         if pong == Some(false) && scripts.idle() {
             return;
         }
+    }
+}
+
+/// One turn of the UI thread, and its frame when it wants one, as the run loop paints: a revision past a frame's rows
+/// waits for the next paint (Pl).
+fn turn(harness: &Harness) {
+    harness.app.advance(Duration::from_millis(1));
+    if harness.app.needs_frame() {
+        harness.app.render();
     }
 }
 
