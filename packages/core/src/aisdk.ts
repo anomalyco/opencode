@@ -27,6 +27,7 @@ import {
   TransportError,
   ToolResultValue,
   type ContentPart,
+  type CacheHint,
   type LLMRequest,
   type Media,
   type ToolDefinition,
@@ -377,13 +378,15 @@ export const locationLayer = Layer.effect(
 )
 
 function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
-  const packageName = Provider.packageName(info.package!)
+  const spec = Provider.packageName(info.package!)
+  // Keep the version for loading and identifying the route, not for SDK option namespaces.
+  const packageName = spec.replace(/^((?:@[\w.-]+\/)?[\w.-]+)@[^/]+/, "$1")
   const projected = mapBodyToProviderOptions(info, packageName)
   const providerID = info.canonical ?? info.providerID
   const optionKey = providerOptionKey(packageName, providerID)
   const route: AnyRoute = {
     compact: undefined,
-    id: `ai-sdk:${packageName}`,
+    id: `ai-sdk:${spec}`,
     provider: ProviderID.make(providerID),
     providerMetadataKey: optionKey,
     protocol: "ai-sdk",
@@ -421,7 +424,8 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
     id: info.modelID ?? info.id,
     provider: providerID,
     route,
-    compatibility: info.compatibility,
+    compatibility:
+      packageName === "@ai-sdk/anthropic" ? { cacheFormat: "anthropic", ...info.compatibility } : info.compatibility,
   })
 }
 
@@ -489,8 +493,9 @@ function callOptions(
   optionKey: string,
 ): LanguageModelV3CallOptions {
   const flattened = ProviderShared.flattenToolRequest(request)
+  const anthropic = packageName === "@ai-sdk/anthropic"
   return {
-    prompt: prompt(flattened.request),
+    prompt: prompt(flattened.request, anthropic),
     maxOutputTokens: request.maxTokens,
     temperature: request.temperature,
     stopSequences: request.stop === undefined ? undefined : [...request.stop],
@@ -499,22 +504,28 @@ function callOptions(
     presencePenalty: request.presencePenalty,
     frequencyPenalty: request.frequencyPenalty,
     seed: request.seed,
-    tools: flattened.tools.map(tool),
+    tools: flattened.tools.map(anthropic ? (input) => ({ ...tool(input), ...cacheOptions(input.cache) }) : tool),
     toolChoice: toolChoice(request.toolChoice),
     headers: request.headers,
     providerOptions: requestProviderOptions(request.providerOptions, packageName, modelID, optionKey),
   }
 }
 
-function prompt(request: LLMRequest): LanguageModelV3Prompt {
-  const system = request.system
-    .map((part) => part.text)
-    .filter(Boolean)
-    .join("\n\n")
+function cacheOptions(cache?: CacheHint, options?: SharedV3ProviderOptions) {
+  if (!cache) return {}
+  return {
+    providerOptions: {
+      ...options,
+      anthropic: { ...options?.anthropic, cacheControl: { ...cache, type: "ephemeral" } },
+    },
+  }
+}
+
+function prompt(request: LLMRequest, anthropic: boolean): LanguageModelV3Prompt {
   const pending: UserContent = []
   const messages = request.messages.flatMap((input, index) => {
-    if (input.role !== "tool") return message(input)
-    const lowered = toolMessage(input)
+    if (input.role !== "tool") return message(input, anthropic)
+    const lowered = toolMessage(input, anthropic ? cachedToolResult : toolResultPart)
     pending.push(...lowered.media)
     if (request.messages[index + 1]?.role === "tool" || pending.length === 0) return lowered.messages
     const media = [...pending]
@@ -527,38 +538,50 @@ function prompt(request: LLMRequest): LanguageModelV3Prompt {
       },
     ]
   })
+  const system = request.system.filter((part) => part.text)
   if (!system.length) return messages
-  return [{ role: "system", content: system }, ...messages]
+  if (anthropic)
+    return [
+      ...system.map((part) => ({ role: "system" as const, content: part.text, ...cacheOptions(part.cache) })),
+      ...messages,
+    ]
+  return [{ role: "system", content: system.map((part) => part.text).join("\n\n") }, ...messages]
 }
 
-function message(input: Exclude<LLMRequest["messages"][number], ToolMessage>): LanguageModelV3Message[] {
+function message(
+  input: Exclude<LLMRequest["messages"][number], ToolMessage>,
+  anthropic: boolean,
+): LanguageModelV3Message[] {
   switch (input.role) {
-    case "system":
+    case "system": {
       // The initial privileged prompt lives in `request.system` and is prepended above. A system message here is a
       // chronological instruction update, but opaque AI SDK providers do not uniformly allow the system role after
       // conversation history, so preserve its position using the safe wrapped-user fallback.
+      const parts = input.content.filter((part) => part.type === "text")
       return [
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: ProviderShared.wrapSystemUpdate(input.content.filter((part) => part.type === "text")),
+              text: ProviderShared.wrapSystemUpdate(parts),
+              ...cacheOptions(anthropic ? parts.findLast((part) => part.cache)?.cache : undefined),
             },
           ],
         },
       ]
+    }
     case "user":
-      return [{ role: "user", content: input.content.flatMap(userPart) }]
+      return [{ role: "user", content: input.content.flatMap(anthropic ? cachedUserPart : userPart) }]
     case "assistant":
-      return [{ role: "assistant", content: input.content.flatMap(assistantPart) }]
+      return [{ role: "assistant", content: input.content.flatMap(anthropic ? cachedAssistantPart : assistantPart) }]
   }
 }
 
-function toolMessage(input: ToolMessage) {
+function toolMessage(input: ToolMessage, convert: typeof toolResultPart) {
   const media: UserContent = []
   const content = input.content.flatMap((part) => {
-    if (part.type !== "tool-result" || part.result.type !== "content") return toolResultPart(part)
+    if (part.type !== "tool-result" || part.result.type !== "content") return convert(part)
     const value = part.result.value.filter((item) => {
       if (item.type !== "file") return true
       if (!item.mime.startsWith("image/") && item.mime !== "application/pdf") return true
@@ -570,7 +593,7 @@ function toolMessage(input: ToolMessage) {
       })
       return false
     })
-    return toolResultPart({
+    return convert({
       ...part,
       result:
         value.length === 0
@@ -584,10 +607,22 @@ function toolMessage(input: ToolMessage) {
   }
 }
 
+function cached<T extends UserContent[number] | AssistantContent[number]>(convert: (part: ContentPart) => T[]) {
+  return (part: ContentPart) => {
+    const blocks = convert(part)
+    // Anthropic does not accept cache controls on thinking blocks.
+    if (part.type === "reasoning" || !("cache" in part) || !part.cache) return blocks
+    return blocks.map((block) => ({ ...block, ...cacheOptions(part.cache, block.providerOptions) }))
+  }
+}
+
+const cachedUserPart = cached(userPart)
+const cachedAssistantPart = cached(assistantPart)
+const cachedToolResult = cached(toolResultPart)
+
 function userPart(part: ContentPart): UserContent {
   if (part.type === "text") return [{ type: "text", text: part.text }]
-  if (part.type === "media")
-    return [{ type: "file", mediaType: part.media.mediaType, data: fileData(part.media), filename: part.filename }]
+  if (part.type === "media") return [filePart(part)]
   return []
 }
 
@@ -602,7 +637,7 @@ function assistantPart(part: ContentPart): AssistantContent {
     case "text":
       return [{ type: "text", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "media":
-      return [{ type: "file", mediaType: part.media.mediaType, data: fileData(part.media), filename: part.filename }]
+      return [filePart(part)]
     case "reasoning":
       return [{ type: "reasoning", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "tool-call":
@@ -626,6 +661,15 @@ function assistantPart(part: ContentPart): AssistantContent {
         "tool-call",
         "tool-result",
       ])
+  }
+}
+
+function filePart(part: Extract<ContentPart, { type: "media" }>) {
+  return {
+    type: "file" as const,
+    mediaType: part.media.mediaType,
+    data: fileData(part.media),
+    filename: part.filename,
   }
 }
 
