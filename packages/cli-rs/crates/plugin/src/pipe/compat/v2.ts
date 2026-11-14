@@ -231,7 +231,8 @@ export function context(base: Base, carrier: Carrier) {
     project: { ...none("project"), get: () => undefined, permission: none("project.permission") },
     shell: { ...none("shell"), get: () => undefined },
     location: {
-      default: () => toRef(info()?.location) ?? { directory: process.cwd() },
+      // The directory the client works in, which the JS host does not start in (carbon-1).
+      default: () => toRef(info()?.location) ?? { directory: process.env.OPENCODE_DIRECTORY ?? process.cwd() },
       sync: async () => {},
       invalidate() {},
       vcs: {

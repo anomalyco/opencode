@@ -2406,3 +2406,41 @@ fn the_js_hosts_answers_hash_no_plugin_again() {
         "a reconcile that changed nothing hashed"
     );
 }
+
+// Expected (carbon-1, the flag on): a project the client works in loads nothing into the JS host as it starts for the
+// user's own plugin: not its `bunfig.toml` (a `preload`), not its `.env`, not the `bun` of a relative `PATH` entry.
+// Bun starts in a directory of the JS host's own, and the project's directory reaches plugins as data.
+#[test]
+fn a_hostile_project_loads_nothing_into_the_js_host() {
+    let Some(mut config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let (project, ran) = (root.path().join("work"), root.path().join("ran"));
+    std::fs::create_dir_all(project.join("bin")).unwrap();
+    let write = |name: &str, text: String| std::fs::write(project.join(name), text).unwrap();
+    write("bunfig.toml", "preload = [\"./pwn.ts\"]\n".to_owned());
+    write("pwn.ts", format!("require(\"node:fs\").appendFileSync({:?}, \"preload\\n\")\n", ran));
+    write(".env", "PWN_FROM_ENV=1\n".to_owned());
+    write("bin/bun", format!("#!/bin/sh\necho bun >> {:?}\n", ran));
+    write("package.json", "{ \"name\": \"hostile\", \"type\": \"commonjs\" }\n".to_owned());
+    let log = root.path().join("seen.jsonl");
+    let config_dir = root.path().join("config");
+    let plugin = config_dir.join("plugins/seen");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let seen = format!(
+        "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.seen\", setup() {{ appendFileSync({log:?}, JSON.stringify({{ env: process.env.PWN_FROM_ENV ?? null, cwd: process.cwd(), directory: process.env.OPENCODE_DIRECTORY }}) + \"\\n\") }} }}\n"
+    );
+    std::fs::write(plugin.join("tui.ts"), seen).unwrap();
+    config.directory = project.clone();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = External { config_dir, cwd: project.clone(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.seen");
+    pipe.settle();
+    assert!(!ran.exists(), "the project's code ran: {}", std::fs::read_to_string(&ran).unwrap_or_default());
+    let seen: serde_json::Value =
+        serde_json::from_str(std::fs::read_to_string(&log).unwrap().lines().last().unwrap()).unwrap();
+    assert_eq!(seen["env"], serde_json::Value::Null, "the project's .env reached the JS host");
+    assert_ne!(Path::new(seen["cwd"].as_str().unwrap()), project.as_path(), "Bun started in the project");
+    assert_eq!(Path::new(seen["directory"].as_str().unwrap()), project.as_path());
+}
