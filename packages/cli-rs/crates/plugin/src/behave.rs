@@ -715,6 +715,11 @@ impl Surface {
                         Some(Resolve::Unsolved) | None => {}
                     }
                     let top = scrolled.widget.scroll_position().1.round() as i32;
+                    // A step's memory holds while the offset has not moved: once a solve shows another, it is gone,
+                    // also if the offset comes back later.
+                    if behave.steps.get(id).is_some_and(|(_, _, left)| *left != top) {
+                        behave.steps.remove(id);
+                    }
                     if matches!(aim, Some(Resolve::To(_))) && top == before {
                         behave.pending.remove(id);
                         behave.reached.push((id.clone(), top));
