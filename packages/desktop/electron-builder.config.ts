@@ -108,6 +108,10 @@ const getBase = (appId: string): Configuration => {
         filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
       },
     ],
+    // Electron stores cookies in plain text by default. The browser pane keeps sign-ins, so encrypt them with the OS
+    // key store (Keychain, DPAPI, libsecret or kwallet). This is one-way: turning it off again loses every cookie.
+    // https://www.electronjs.org/docs/latest/tutorial/fuses#cookieencryption
+    electronFuses: { enableCookieEncryption: true },
     afterPack: async (context) => {
       const arch = Arch[context.arch]
 
