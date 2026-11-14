@@ -200,6 +200,17 @@ impl Owner {
     /// The scope of the surface is the focus in `view`, the container the host shows it in: a panel, an overlay.
     pub(crate) fn hold_in(&self, view: View) {
         blurs(&view, &self.host);
+        // A paste in it goes to the layers that declare pastes, before the host's paste route.
+        let host = self.host.clone();
+        view.on_paste(move |cx, text| {
+            if let Some(host) = host.upgrade()
+                && let Some(router) = host.router()
+                && router.paste(&*host, text, false)
+            {
+                cx.prevent_default();
+                cx.stop_propagation();
+            }
+        });
         *self.held.borrow_mut() = Held::Within(view);
     }
 
