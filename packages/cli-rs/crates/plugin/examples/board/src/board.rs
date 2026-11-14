@@ -4,6 +4,11 @@
 //! cards' total as a bar, with the frame it drew for: its version follows the total, and it animates on request,
 //! adding up the animation's time. Commands bump a card, toast, panic, animate the meter or make its next draw panic,
 //! and start threads: one that floods the mailbox, waiting on `Full`, and one that panics.
+//!
+//! Its `files` route is P3's: a windowed list of files whose estimates are not their heights, each an anchor of group
+//! `file` with its hunks in group `hunk`. Commands bring a file to the top, step between hunks and show a file with
+//! `Nearest`; `layout` paints the header from the top file, and the header shows where the last step landed and how
+//! many `layout` calls ran.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -28,6 +33,18 @@ struct Board {
     /// The meter's next draw panics.
     broken: bool,
 }
+
+/// The files: how many `layout` calls ran, and where the last step landed.
+#[derive(Default)]
+struct Files {
+    layouts: u32,
+    landed: String,
+    /// What the last `files.read` read: the offset, the files' anchors and the top file.
+    read: String,
+}
+
+/// The files of the `files` route.
+pub const FILES: usize = 60;
 
 pub fn setup(setup: &mut Setup) -> Result<(), String> {
     let board = Rc::new(RefCell::new(Board { values: vec![0; CARDS], ..Board::default() }));
@@ -86,7 +103,80 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     let drawn = board.clone();
     let surface = v2::Surface::new("board", v2::Place::Route("board".into()), move |cx| view(&board, cx));
     setup.surface(surface.draw(move |cx| Some(meter(&drawn, cx.frame))));
+    files(setup);
     Ok(())
+}
+
+/// The `files` route and its commands.
+fn files(setup: &mut Setup) {
+    let target = || v2::Target::node("files", "list");
+    let route = |name: &str| Command { scope: opencode_plugin_abi::Scope::Route("files".into()), ..command(name) };
+    setup.command(route("files.to"), move |host, input| {
+        let node = format!("f{}", number(input));
+        host.scroll(target(), v2::Scroll::To { node, align: v2::ScrollAlign::Start });
+    });
+    setup.command(route("files.near"), move |host, input| {
+        let node = format!("f{}", number(input));
+        host.scroll(target(), v2::Scroll::To { node, align: v2::ScrollAlign::Nearest { inset: 1 } });
+    });
+    setup.command(route("files.step"), move |host, input| {
+        let by = input.and_then(|input| input.parse().ok()).unwrap_or(1);
+        host.scroll(target(), v2::Scroll::Step { group: "hunk".into(), by, inset: 1 });
+    });
+    let files = Rc::new(RefCell::new(Files::default()));
+    let (shown, laid, landed, read) = (files.clone(), files.clone(), files.clone(), files);
+    setup.command(route("files.read"), move |host, _| {
+        let offset = host.scroll_state(&target()).map_or(-1, |state| i64::from(state.offset));
+        let anchors = host.anchors(&target(), "file").len();
+        let top = host.top_anchor(&target(), "file", 1).map(|top| top.id).unwrap_or_default();
+        read.borrow_mut().read = format!("at {offset} of {anchors} top {top}");
+    });
+    let surface = v2::Surface::new("files", v2::Place::Route("files".into()), move |_| files_view(&shown.borrow()))
+        .layout(vec![v2::Notify::Scroll { id: "list".into() }], move |geometry| {
+            laid.borrow_mut().layouts += 1;
+            let top = geometry.top("list", "file").map(|top| top.id.clone()).unwrap_or_default();
+            let odd = top.trim_start_matches('f').parse::<usize>().is_ok_and(|file| file % 2 == 1);
+            v2::LayoutReply::default()
+                .paint("head", if odd { "background.raised.high" } else { "background.raised.base" })
+        })
+        .on_scroll(move |_, event| {
+            if let v2::ScrollEvent::Landed { anchor, .. } = event {
+                landed.borrow_mut().landed = anchor.id.clone();
+            }
+        });
+    setup.surface(surface);
+}
+
+/// The files: a header, and a list of each file's name and patch, estimated at 5 rows whatever it has.
+fn files_view(files: &Files) -> v2::Node {
+    let header = format!("landed {} layouts {} {}", files.landed, files.layouts, files.read);
+    let head = v2::Node::row(vec![v2::Node::text(vec![Span::new(header)])]).with_id("head");
+    let items = (0..FILES)
+        .map(|file| {
+            let mut patch = format!("--- a/f{file}\n+++ b/f{file}\n");
+            for hunk in 0..1 + file % 4 {
+                patch.push_str(&format!(
+                    "@@ -{0},1 +{0},2 @@\n f{file} h{hunk}\n+f{file} h{hunk} added\n",
+                    1 + hunk * 10
+                ));
+            }
+            let diff = v2::Node::Diff {
+                id: Some(format!("d{file}")),
+                content: v2::Source::Text(patch),
+                view: v2::DiffView::Unified,
+                filetype: None,
+                hunks: Some("hunk".into()),
+            };
+            let name = v2::Node::text(vec![Span::new(format!("file {file}"))]);
+            let node = v2::Node::column(vec![name, diff]).with_id(format!("f{file}")).anchor("file", "");
+            v2::ListItem::new(node, 5)
+        })
+        .collect();
+    let mut list = v2::Node::list(items).with_id("list").layout(Layout::default().grow());
+    if let v2::Node::List { notify_top, .. } = &mut list {
+        *notify_top = Some("file".into());
+    }
+    v2::Node::column(vec![head, list]).layout(Layout::default().grow())
 }
 
 fn view(board: &RefCell<Board>, cx: &mut v2::View<'_>) -> v2::Node {

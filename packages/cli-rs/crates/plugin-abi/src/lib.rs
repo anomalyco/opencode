@@ -373,6 +373,15 @@ pub struct SurfaceClaim {
     /// The surface has a draw ([`v2::Surface::draw`]), which [`Request::Draw`] runs for its canvases.
     #[serde(default, skip_serializing_if = "is_false")]
     pub draw: bool,
+    /// 2.0 (P3): what the surface's `layout` is told about; [`Request::Layout`] runs it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notify: Vec<v2::Notify>,
+    /// 2.0 (P3): the surface has a `layout`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub layout: bool,
+    /// 2.0 (P3): the surface has a scroll handler, which [`Request::Scrolled`] runs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub on_scroll: bool,
 }
 
 /// [`v2::Place`] on the wire.
@@ -1495,6 +1504,17 @@ pub enum Request {
     Message {
         message: String,
     },
+    /// 2.0 (P3): runs the `layout` of the surface [`Manifest::surfaces`] names by index, after the solve, with what it
+    /// named. Result: [`v2::LayoutReply`].
+    Layout {
+        surface: usize,
+        geometry: v2::Geometry,
+    },
+    /// 2.0 (P3): runs the scroll handler of the surface [`Manifest::surfaces`] names by index. Result: null.
+    Scrolled {
+        surface: usize,
+        event: v2::ScrollEvent,
+    },
 }
 
 /// What [`Request::View`] returns: the tree, the content the view gave the host with its handles, and how many values
@@ -1785,6 +1805,29 @@ pub enum HostRequest {
         name: String,
         theme: serde_json::Value,
     },
+    /// 2.0 (P3): [`Host::scroll`], once the current call returns.
+    Scroll {
+        target: v2::Target,
+        verb: v2::Scroll,
+    },
+    /// 2.0 (P3): [`Read::scroll_state`].
+    ScrollState {
+        target: v2::Target,
+    },
+    /// 2.0 (P3): [`Read::anchors`].
+    Anchors {
+        target: v2::Target,
+        group: String,
+    },
+    /// 2.0 (P3): [`Read::top_anchor`].
+    TopAnchor {
+        target: v2::Target,
+        group: String,
+        #[serde(default)]
+        inset: u16,
+    },
+    /// 2.0 (P3): [`Read::transcript`].
+    Transcript,
 }
 
 /// 1.5: the composer on screen, from [`Read::composer`].
@@ -2388,7 +2431,7 @@ pub trait Read {
         None
     }
     /// 2.0 (P3): the anchors of `group` in scroll `target`, in content order. A list's items that have no widgets
-    /// give their own anchor at the row the host assumes for them, and none inside them.
+    /// give theirs, their own and those inside them, hunks included, at the row the host assumes for the item.
     fn anchors(&self, _target: &v2::Target, _group: &str) -> Vec<v2::AnchorAt> {
         Vec::new()
     }
@@ -2491,8 +2534,9 @@ pub trait Host: Read {
     /// `api.theme.install`), at once for [`Host::set_theme`] in the same call. It does not select it. A name that is
     /// not a plain file name, or a value without `theme` or `base`, installs nothing.
     fn install_theme(&self, _name: &str, _theme: serde_json::Value) {}
-    /// 2.0 (P3): scrolls `target` by `verb` once the call returns. The transcript takes a verb from a handler only
-    /// (a command, a click, a scroll event), never from a view, `layout`, a wake or a reply.
+    /// 2.0 (P3): scrolls `target` by `verb` once the call returns. The transcript takes a verb from a handler of the
+    /// user's input only (a key, a click, the palette, the user's scroll), never from a view, `layout`, a wake, a
+    /// reply, a command the plugin dispatched or the report of its own step.
     fn scroll(&self, _target: v2::Target, _verb: v2::Scroll) {}
     /// Declares storage key `key` of the plugin, for [`Setup::storage_key`].
     #[doc(hidden)]
@@ -2731,6 +2775,22 @@ impl Read for HostHandle {
         self.read(&HostRequest::Route).unwrap_or_default()
     }
 
+    fn scroll_state(&self, target: &v2::Target) -> Option<v2::ScrollState> {
+        self.read(&HostRequest::ScrollState { target: target.clone() })
+    }
+
+    fn anchors(&self, target: &v2::Target, group: &str) -> Vec<v2::AnchorAt> {
+        self.read(&HostRequest::Anchors { target: target.clone(), group: group.to_owned() }).unwrap_or_default()
+    }
+
+    fn top_anchor(&self, target: &v2::Target, group: &str, inset: u16) -> Option<v2::AnchorAt> {
+        self.read(&HostRequest::TopAnchor { target: target.clone(), group: group.to_owned(), inset })
+    }
+
+    fn transcript(&self) -> Option<v2::TranscriptView> {
+        self.read(&HostRequest::Transcript)
+    }
+
     fn interactive(&self) -> bool {
         self.read(&HostRequest::Interactive).unwrap_or(true)
     }
@@ -2793,6 +2853,12 @@ impl Read for HostHandle {
 }
 
 impl Host for HostHandle {
+    fn scroll(&self, target: v2::Target, verb: v2::Scroll) {
+        if let Err(error) = self.request(&HostRequest::Scroll { target, verb }) {
+            self.log(Level::Warn, &format!("scroll: {error}"));
+        }
+    }
+
     fn storage_set(&self, key: &str, value: serde_json::Value) {
         let request = HostRequest::StorageSet { key: key.to_owned(), value: value.to_string() };
         if let Err(error) = self.request(&request) {
@@ -3211,6 +3277,9 @@ impl Setup<'_> {
             place: (&surface.place).into(),
             palette: surface.palette,
             draw: surface.draw.is_some(),
+            notify: surface.notify.clone(),
+            layout: surface.layout.is_some(),
+            on_scroll: surface.on_scroll.is_some(),
         };
         self.registered.manifest.surfaces.push(claim);
         self.registered.surfaces.push(surface);
@@ -3522,6 +3591,16 @@ impl Registered {
             Request::Message { message } => {
                 let run = self.message.as_ref().ok_or("no message handler")?;
                 run(&self.host, mail::Message::Json(message));
+                Ok(serde_json::Value::Null)
+            }
+            Request::Layout { surface, geometry } => {
+                let layout =
+                    self.surfaces.get(surface).and_then(|surface| surface.layout.as_ref()).ok_or("no layout")?;
+                json(serde_json::to_value(layout(&geometry)))
+            }
+            Request::Scrolled { surface, event } => {
+                let surface = self.surfaces.get(surface).ok_or("no such surface")?;
+                surface.on_scroll.as_ref().ok_or("no scroll handler")?(&self.host, &event);
                 Ok(serde_json::Value::Null)
             }
         }
