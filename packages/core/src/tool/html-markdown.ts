@@ -338,6 +338,7 @@ export function convertHTMLToMarkdown(html: string) {
         return
       }
       if (name === "a") {
+        if (!("href" in attributes)) return
         if (activeLink && activeCode?.inline) {
           const parent = stack.findLast(
             (candidate) => candidate.link === activeLink && candidate.linkCode === activeCode,
