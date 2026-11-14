@@ -72,11 +72,6 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// The content of card `index` at `value`.
-fn patch(index: usize, value: u32) -> String {
-    format!("@@ -1 +1 @@\n-item {index}\n+item {index} is {value}\n")
-}
-
 fn view(cx: &mut v2::View<'_>) -> v2::Node {
     let (values, bad, palette) = board(|board| {
         let bad = board.bad > 0;
@@ -1205,8 +1200,9 @@ fn a_revision_crosses_bytes_that_follow_the_change() {
     let (small, large) =
         ((run(40, "cards.same"), run(40, "cards.bump")), (run(410, "cards.same"), run(410, "cards.bump")));
     assert_eq!((small.0.calls, small.1.calls), (2, 2), "a command and a view");
-    // The requests name the mount's generation, a number across the process, which may have one digit more.
-    assert!(small.1.sent.abs_diff(large.1.sent) <= 1, "the requests grew with the cards: {small:?} {large:?}");
+    // The requests name two numbers that may have one digit more: the mount's generation, a count across the process,
+    // and `next`, which numbers content after the cards' handles.
+    assert!(small.1.sent.abs_diff(large.1.sent) <= 2, "the requests grew with the cards: {small:?} {large:?}");
     assert_eq!(small.1.received - small.0.received, large.1.received - large.0.received, "{small:?} {large:?}");
     assert!(small.1.received > small.0.received);
     // A surface that does not read the palette is not sent one: its request is the mount, its size and two numbers.
@@ -1336,4 +1332,17 @@ fn a_route_opens_with_one_view() {
         assert_eq!(calls.len(), 1, "{carrier:?}: {calls:?}");
         assert!(harness.app.render().text().contains("card 0"), "{carrier:?}");
     }
+}
+
+// Expected (4.3): leaving a 2.0 route over the C ABI tells the library, which drops the mount's memo table: one call
+// crosses, and nothing more.
+#[test]
+fn leaving_a_surface_unmounts_it_in_the_library() {
+    let harness = open_tui(Carrier::Abi);
+    harness.tui.navigate(route());
+    settle(&harness);
+    let before = opencode_plugin::loader::native::crossed();
+    harness.tui.navigate(Route::Home);
+    settle(&harness);
+    assert_eq!(opencode_plugin::loader::native::crossed().since(before).calls, 1);
 }

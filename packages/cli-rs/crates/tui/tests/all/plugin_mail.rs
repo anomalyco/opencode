@@ -29,6 +29,8 @@ const ID: &str = "test.mail";
 /// A message: who sent it (a thread, or a key from [`KEYED`] on) and its number.
 type Note = (u32, u32);
 const KEYED: u32 = 1000;
+/// The message whose update fails.
+const FAILS: Note = (u32::MAX, 0);
 
 #[derive(Default)]
 struct Mail {
@@ -46,7 +48,10 @@ fn mail<T>(f: impl FnOnce(&mut Mail) -> T) -> T {
 }
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-    let sender = setup.messages(|_, note: Note| mail(|mail| mail.arrived.push(note)))?;
+    let sender = setup.messages(|_, note: Note| {
+        assert!(note != FAILS, "a failing update");
+        mail(|mail| mail.arrived.push(note));
+    })?;
     let spawner = setup.spawner();
     mail(|mail| (mail.sender, mail.spawner) = (Some(sender), Some(spawner)));
     Ok(())
@@ -343,9 +348,9 @@ fn a_stop_flag_ends_a_thread_and_a_failure_closes_the_mailbox() {
         assert!(done.recv_timeout(Duration::from_secs(10)).is_ok(), "{carrier:?}: a thread ran on after the failure");
         let sender = mail(|mail| mail.sender.clone()).unwrap();
         assert_eq!(sender.send((3, 1)), Err(SendError::Closed((3, 1))), "{carrier:?}");
-        // A failed plugin's mailbox shows closed, and a disabled one has none, on every carrier (review carbon-7).
-        let stats = opencode_plugin::mailbox::stats(ID);
-        assert!(stats.is_some_and(|stats| stats.closed), "{carrier:?}: {stats:?}");
+        // A failure ends the activation, so a failed plugin has no mailbox, as a disabled one has none, on every
+        // carrier (review carbon-7).
+        assert_eq!(opencode_plugin::mailbox::stats(ID), None, "{carrier:?}");
         tui.plugins.toggle(&host(tui), ID, false);
         assert_eq!(opencode_plugin::mailbox::stats(ID), None, "{carrier:?}");
     }
@@ -461,5 +466,23 @@ fn an_empty_key_is_no_key_on_both_carriers() {
         .unwrap();
         frame(&harness);
         assert_eq!(mail(|mail| std::mem::take(&mut mail.arrived)), [(1, 1), (1, 2), (2, 2)], "{carrier:?}");
+    }
+}
+
+// Expected (`reported-once`, review carbon-1): an update that fails ends its wake's batch: what waited behind it in the
+// same batch never reaches the failed plugin, on every carrier.
+#[test]
+fn an_update_that_fails_ends_its_batch() {
+    for carrier in CARRIERS {
+        let harness = open(carrier);
+        let sender = mail(|mail| mail.sender.clone()).unwrap();
+        std::thread::spawn(move || [(1, 1), FAILS, (1, 2)].into_iter().for_each(|note| sender.send(note).unwrap()))
+            .join()
+            .unwrap();
+        frame(&harness);
+        assert_eq!(mail(|mail| mail.arrived.clone()), [(1, 1)], "{carrier:?}");
+        let status = harness.tui.plugins.entries().into_iter().find(|entry| entry.id == ID).unwrap().status;
+        let failed = matches!(&status, opencode_plugin::Status::Failed(error) if error.contains("a failing update"));
+        assert!(failed, "{carrier:?}: {status:?}");
     }
 }
