@@ -222,11 +222,13 @@ impl Canvas {
 }
 
 impl State {
-    /// Laid out at a new size: a list for it, in this frame.
+    /// Laid out at a new size: a list for it, in this frame, unless it has one for that size and its version, as a
+    /// canvas built again or back at its size does.
     fn resized(&self) {
-        let size = self.size.get();
+        let (size, version) = (self.size.get(), self.version.get());
         let cause = match self.asked.get() {
-            Some((asked, _)) if asked == size => return,
+            Some(asked) if asked == (size, version) => return,
+            Some((asked, _)) if asked == size => Cause::Version,
             Some(_) => Cause::Resized,
             None => Cause::First,
         };
@@ -250,11 +252,13 @@ impl State {
     /// Asks the plugin for a list for this frame, and keeps it. A frame of the animation that waits is this draw:
     /// its time goes with it, whatever else asked.
     fn draw(&self, cause: Cause) {
+        let pending = self.pending.take();
         let (width, height) = self.size.get();
+        // A canvas of no size has nothing to draw; its version is drawn when it has a size again.
         let Some(drawer) = self.drawer.clone().filter(|_| width > 0 && height > 0) else {
             return;
         };
-        let dt = match self.pending.take() {
+        let dt = match pending {
             Some(Pending { cause: Cause::Animate, dt }) => dt,
             _ => Duration::ZERO,
         };
