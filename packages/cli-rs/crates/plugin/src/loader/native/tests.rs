@@ -2953,8 +2953,11 @@ fn a_result_the_host_refuses_has_no_effects() {
     let host = crate::loader::tests::host();
     let registry = panicking(&host, true);
     CORRUPT.set(Some(br#"{"node":{"type":"text","id":"t","spans":[]},"memo":9223372036854775808}"#));
-    drop(registry.route(&*host, "panicky", "v"));
+    // A route's first view runs in the turn's deferred work.
+    let route = registry.route(&*host, "panicky", "v");
+    host.app.advance(Duration::from_millis(1));
     CORRUPT.set(None);
+    drop(route);
     let entry = registry.entries().into_iter().find(|entry| entry.id == "panicky").unwrap();
     assert!(matches!(&entry.status, Status::Failed(error) if error.contains("memo table")), "{:?}", entry.status);
 
@@ -2962,8 +2965,11 @@ fn a_result_the_host_refuses_has_no_effects() {
     let host = crate::loader::tests::host();
     let registry = panicking(&host, true);
     CORRUPT.set(Some(br#"{"node":{"type":"text","spans":[]},"content":[[99,"stray"]]}"#));
-    drop(registry.route(&*host, "panicky", "v"));
+    // A route's first view runs in the turn's deferred work.
+    let route = registry.route(&*host, "panicky", "v");
+    host.app.advance(Duration::from_millis(1));
     CORRUPT.set(None);
+    drop(route);
     let entry = registry.entries().into_iter().find(|entry| entry.id == "panicky").unwrap();
     assert!(matches!(&entry.status, Status::Failed(error) if error.contains("content handles")), "{:?}", entry.status);
 
@@ -2971,8 +2977,8 @@ fn a_result_the_host_refuses_has_no_effects() {
     let registry = panicking(&host, true);
     CORRUPT.set(Some(br#"{"node":{"type":"wormhole","depth":7}}"#));
     let route = registry.route(&*host, "panicky", "v");
-    CORRUPT.set(None);
     host.app.advance(Duration::from_millis(1));
+    CORRUPT.set(None);
     let entry = registry.entries().into_iter().find(|entry| entry.id == "panicky").unwrap();
     let named = |error: &str| error.starts_with("view returned a bad result") && error.contains("wormhole");
     assert!(matches!(&entry.status, Status::Failed(error) if named(error)), "{:?}", entry.status);

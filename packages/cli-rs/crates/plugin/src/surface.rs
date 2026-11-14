@@ -152,6 +152,8 @@ pub(crate) struct Surface {
     state: RefCell<State>,
     live: RefCell<Option<Rc<slot::Live>>>,
     watch: RefCell<Option<Disposer>>,
+    /// The host's [`Host::local_revision`] when the view last ran.
+    revision: Cell<Option<u64>>,
 }
 
 /// What one call of the view returned and asked for; the host takes it only with its tree.
@@ -224,13 +226,18 @@ impl Surface {
             state: RefCell::default(),
             live: RefCell::new(None),
             watch: RefCell::new(None),
+            revision: Cell::new(None),
         });
         book(|ledger| ledger.mounts += 1);
         let weak = Rc::downgrade(&mounted);
-        // The host's own state and the terminal's size change outside change batches.
-        let watch = host.watch(Rc::new(move |_| {
+        // The host's own state and the terminal's size change outside change batches. A view that ran after the last
+        // change of the host's state has seen it: a notice of it, which comes later, calls no view (review bigboi-7).
+        let watch = host.watch(Rc::new(move |changed: &abi::Changed| {
             if let (Some(mounted), Some(host)) = (weak.upgrade(), owner.upgrade()) {
-                mounted.draw(host.as_ref());
+                let seen = host.local_revision().is_some_and(|now| mounted.revision.get() == Some(now));
+                if changed.size || !seen {
+                    mounted.draw(host.as_ref());
+                }
             }
         }));
         *mounted.watch.borrow_mut() = watch;
@@ -251,7 +258,19 @@ impl Surface {
                 }
             });
         });
-        mounted.draw(host);
+        match fills {
+            // A route's first view runs once the page it replaces is gone, whose keymap layers go in this turn's
+            // deferred work, before the next frame: the view sees the keymap the route has (review bigboi-7).
+            true => {
+                let weak = Rc::downgrade(&mounted);
+                host.app().defer(move |_| {
+                    if let (Some(mounted), Some(host)) = (weak.upgrade(), mounted_owner(&weak)) {
+                        mounted.draw(host.as_ref());
+                    }
+                });
+            }
+            false => mounted.draw(host),
+        }
         mounted
     }
 
@@ -348,11 +367,13 @@ impl Surface {
         // Only a surface that says it reads the palette gets it, on either carrier.
         let palette = if self.palette { self.palette_of(host, theme) } else { v2::Palette::default() };
         let rect = self.root.rect();
-        // Before its first frame a surface has no size of its own; the terminal's stands in.
+        // Before its first frame a surface has no size of its own; the terminal's stands in, which is a route's: a
+        // plugin route shows no tabs and fills the page.
         let (width, height) = match (rect.width as u16, rect.height as u16) {
             (0, _) | (_, 0) => host.app().size(),
             size => size,
         };
+        self.revision.set(host.local_revision());
         self.seen.set((width, height));
         let input = v2::SurfaceInput { width, height, palette, full };
         // The view works on the mount's table; what it stages there the host keeps only with its tree.
