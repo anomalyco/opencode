@@ -13,10 +13,11 @@
 //! - child to host, trees: after [`Limits::trees`] unread ones the reader stops reading, so the child blocks on its own
 //!   pipe: a flood of trees costs neither memory nor the UI thread's time.
 //!
-//! The child dies with the host: it exits when its input ends (a rule of the protocol), and besides that it runs in a
-//! process group of its own that is killed whole on Unix, with `PR_SET_PDEATHSIG` on Linux, and in a job that kills
-//! it when the host's handle closes on Windows. On macOS a host killed outright leaves the child until its input ends,
-//! which is at once, as the pipe's only writer is gone.
+//! The child dies with the host, and takes what it started with it: when its input ends (a rule of the protocol), when
+//! a thread of its own sees its parent gone, and on Linux on the parent-death signal, it kills its descendants and its
+//! process group, itself last (`host.ts` `killAll`). On Linux it is a child subreaper, so a descendant whose parent
+//! exited stays its own, also one that left the group; elsewhere the group alone. The host kills the group whole when it
+//! ends the child. On Windows a job holds the child and everything it starts, and the system closes it with the host.
 
 #![allow(unsafe_code)]
 
@@ -380,7 +381,11 @@ fn contain(command: &mut Command) {
             // SAFETY: async-signal-safe calls only, between fork and exec.
             unsafe {
                 command.pre_exec(move || {
-                    if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
+                    // A signal the JS host answers by ending everything it started, then itself (`host.ts`
+                    // `killAll`); as a subreaper, what its plugins started stays its descendant though its parent exits.
+                    if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) != 0
+                        || libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1) != 0
+                    {
                         return Err(std::io::Error::last_os_error());
                     }
                     // The host may have died before the call: then nobody would kill the child.
@@ -827,8 +832,8 @@ mod tests {
     }
 
     // Expected (review bigboi-9, Linux): a child the client started dies when the client is killed outright, with no
-    // destructor and no reaper, though it is busy and reads nothing (`PR_SET_PDEATHSIG`). Its own descendants are not
-    // covered, and neither macOS nor Windows runs this.
+    // destructor and no reaper, though it is busy and reads nothing (`PR_SET_PDEATHSIG`). The JS host's
+    // descendants are `plugin_pipe`'s row; neither macOS nor Windows runs this.
     #[cfg(target_os = "linux")]
     #[test]
     fn a_busy_child_dies_with_a_client_killed_outright() {
