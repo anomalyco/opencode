@@ -687,9 +687,11 @@ impl Pass<'_, '_> {
                 };
                 let filetype_changed = matches!((&old.node, new),
                     (Node::Diff { filetype: had, .. }, Node::Diff { filetype, .. }) if had != filetype);
+                let view_changed = matches!((&old.node, new),
+                    (Node::Diff { view: had, .. }, Node::Diff { view, .. }) if had != view);
                 old.node = new.clone();
                 old.dynamic = dynamic(new, &[]);
-                self.show(&mut old, text, filetype_changed);
+                self.show(&mut old, text, filetype_changed, view_changed);
                 Ok(old)
             }
             (Node::Slot { path: was }, Node::Slot { path }) => {
@@ -701,8 +703,9 @@ impl Pass<'_, '_> {
         }
     }
 
-    /// Shows a patch's or a Markdown's node in its widget: `text` when it is new, else its view and theme.
-    fn show(&mut self, mounted: &mut Mounted, text: Option<Rc<str>>, rebuild: bool) {
+    /// Shows a patch's or a Markdown's node in its widget: `text` when it is new, else its view when it changed and
+    /// its theme. OpenTUI's diff builds its lines again on any setter, so nothing unchanged is set.
+    fn show(&mut self, mounted: &mut Mounted, text: Option<Rc<str>>, rebuild: bool, view_changed: bool) {
         let env = self.env;
         let syntax = self.syntax();
         match (&mounted.node, &mut mounted.extra) {
@@ -727,7 +730,10 @@ impl Pass<'_, '_> {
                         });
                     }
                     None => {
-                        patch.set_view(diff_view(*view));
+                        if view_changed {
+                            patch.set_view(diff_view(*view));
+                            count(|work| work.set += 1);
+                        }
                         if self.restyle {
                             patch.restyle(env.theme, &syntax);
                             count(|work| work.set += 1);
@@ -756,7 +762,7 @@ impl Pass<'_, '_> {
         match &mounted.node {
             Node::Diff { content: source, .. } | Node::Markdown { source, .. } => {
                 let text = matches!(source, Source::PartOutput(_)).then(|| self.text(source));
-                self.show(mounted, text, false);
+                self.show(mounted, text, false, false);
             }
             _ if self.restyle => self.restyle(mounted),
             _ => {}
