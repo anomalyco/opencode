@@ -368,7 +368,9 @@ export const StreamItem = Schema.StructWithRest(
     call_id: optionalNullish(Schema.String),
     name: optionalNullish(Schema.String),
     namespace: optionalNullish(Schema.String),
-    arguments: optionalNullish(Schema.String),
+    // Function calls carry a JSON string, but hosted items such as OpenAI's
+    // `tool_search_call` send an object, so only the function-call path narrows it.
+    arguments: optionalNullish(Schema.Unknown),
     encrypted_content: optionalNull(Schema.String),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
@@ -1183,7 +1185,7 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
     id: item.call_id,
     name: item.name ?? "",
     namespace: item.namespace,
-    input: custom ? "" : (item.arguments ?? ""),
+    input: custom ? "" : (functionArguments(item) ?? ""),
     providerMetadata: metadata,
   })
   const opened = custom
@@ -1205,6 +1207,7 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
 }
 
 const rawInput = (item: OutputItem) => (typeof item.input === "string" ? item.input : "")
+const functionArguments = (item: OutputItem) => (typeof item.arguments === "string" ? item.arguments : undefined)
 
 const onReasoningSummaryPartAdded = (state: ParserState, event: Event): StepResult => {
   if (event.item_id === undefined || event.summary_index === undefined) return [state, NO_EVENTS]
@@ -1314,7 +1317,7 @@ const onOutputItemDone = Effect.fnUntraced(function* (state: ParserState, item: 
     const custom = item.type === "custom_tool_call"
     const metadata = providerMetadata(state, OpenAIFreeform.metadata(item.id, custom))
     const final = { custom: state.custom.get(item.name), raw: rawInput(item) }
-    const input = custom ? OpenAIFreeform.fromRaw(final.custom, final.raw) : item.arguments
+    const input = custom ? OpenAIFreeform.fromRaw(final.custom, final.raw) : functionArguments(item)
     const registered = state.tools[item.id] !== undefined
     const closed = custom ? OpenAIFreeform.close(state.tools, [item.id], final) : undefined
     const tools = registered
