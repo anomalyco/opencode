@@ -89,7 +89,20 @@ impl Artifact {
         if !path.is_dir() {
             return Err(format!("{}: not a directory", path.display()));
         }
-        let sha256 = tree_sha256(&path, None)?;
+        // A tree whose entries did not change since its last hash is not read again (bigboi P8-9): every reconcile asks
+        // for it, and the JS host's answers each start one. What runs is still what was approved: [`Artifact::stage`]
+        // hashes the bytes it copies.
+        let print = fingerprint(&path)?;
+        let known =
+            TREES.with(|trees| trees.borrow().get(&path).filter(|(at, _)| *at == print).map(|(_, sha)| sha.clone()));
+        let sha256 = match known {
+            Some(sha256) => sha256,
+            None => {
+                let sha256 = tree_sha256(&path, None)?;
+                TREES.with(|trees| trees.borrow_mut().insert(path.clone(), (print, sha256.clone())));
+                sha256
+            }
+        };
         Ok(Self { target: target.to_path_buf(), path, sha256, script: true })
     }
 
@@ -144,6 +157,48 @@ impl Artifact {
     pub fn short(&self) -> &str {
         &self.sha256[..self.sha256.len().min(16)]
     }
+}
+
+thread_local! {
+    /// The last hash of each plugin tree, with the fingerprint of its entries then.
+    static TREES: RefCell<std::collections::HashMap<PathBuf, (u64, String)>> = RefCell::default();
+    /// The bytes of plugin files this thread read to hash them, for the rows that count the work (bigboi P8-9).
+    static HASHED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// The bytes of plugin files this thread read to hash them so far.
+#[doc(hidden)]
+pub fn hashed() -> u64 {
+    HASHED.with(std::cell::Cell::get)
+}
+
+/// What [`Artifact::tree`] reads, by the metadata of each entry alone: its path, kind, size, modification time and
+/// file, as [`walk`] visits them. A save changes it; a reconcile that changed nothing finds it the same.
+fn fingerprint(path: &Path) -> Result<u64, String> {
+    use std::hash::{Hash, Hasher};
+    fn visit(dir: &Path, hasher: &mut std::collections::hash_map::DefaultHasher, depth: usize) -> Result<(), String> {
+        if depth > 32 {
+            return Err(format!("{}: nested too deep", dir.display()));
+        }
+        let error = |error: std::io::Error| format!("{}: {error}", dir.display());
+        let mut entries: Vec<_> = std::fs::read_dir(dir).map_err(error)?.collect::<Result<_, _>>().map_err(error)?;
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let metadata = std::fs::metadata(entry.path()).map_err(error)?;
+            entry.file_name().hash(hasher);
+            (metadata.is_dir(), metadata.len()).hash(hasher);
+            metadata.modified().ok().hash(hasher);
+            #[cfg(unix)]
+            std::os::unix::fs::MetadataExt::ino(&metadata).hash(hasher);
+            if metadata.is_dir() {
+                visit(&entry.path(), hasher, depth + 1)?;
+            }
+        }
+        Ok(())
+    }
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    visit(path, &mut hasher, 0)?;
+    Ok(hasher.finish())
 }
 
 /// Names each copy [`Artifact::stage`] starts apart.
@@ -235,6 +290,7 @@ fn sha256(reader: &mut impl Read) -> Result<String, String> {
         if read == 0 {
             break;
         }
+        HASHED.with(|hashed| hashed.set(hashed.get() + read as u64));
         total += read as u64;
         if total > LIMIT {
             return Err(format!("larger than {} MiB", LIMIT / 1024 / 1024));
