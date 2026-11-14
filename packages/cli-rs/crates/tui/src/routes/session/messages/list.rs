@@ -118,6 +118,8 @@ struct Inner {
     settings: RefCell<Option<Disposer>>,
     /// The transcript's laid-out width, the session pane's less its padding (`sessionWidth - 4`).
     width: Cell<Option<u16>>,
+    /// `Viewport::Transcript` (rich plugins P3), published while the transcript lives.
+    published: RefCell<Option<opencode_plugin::behave::Publication>>,
 }
 
 impl Drop for Inner {
@@ -220,8 +222,10 @@ impl Transcript {
             layer: RefCell::default(),
             settings: RefCell::default(),
             width: Cell::new(None),
+            published: RefCell::default(),
         });
         inner.install(tui);
+        inner.publish(tui);
         Self(inner)
     }
 
@@ -531,6 +535,104 @@ impl Inner {
             );
         });
         self.register(tui);
+    }
+
+    /// Publishes the transcript to plugins as `Viewport::Transcript` (synthesis 4.2, decision 8): its rows and offset to
+    /// read, and `By`, `Offset` and `Edge` verbs that take the wheel's own path, so following, the "scrolled away"
+    /// state and the backfill of older rows behave as for a wheel. Its moves and resizes run the host's behaviors.
+    fn publish(&self, tui: &Tui) {
+        use opencode_plugin::abi::v2;
+        let read = bind!(self.this.clone(), |inner| inner.viewport());
+        let scroll = bind!(self.this.clone(), |inner, verb: &v2::Scroll| {
+            let Some(tui) = inner.tui.upgrade() else { return };
+            let (_, before) = inner.scroll.scroll_position();
+            match verb {
+                v2::Scroll::By { rows } => drop(inner.scroll.scroll_by(0.0, f64::from(*rows))),
+                v2::Scroll::Offset { offset } => drop(inner.scroll.scroll_to(0.0, f64::from(*offset))),
+                v2::Scroll::Edge { edge: v2::Edge::Top } => drop(inner.scroll.scroll_to(0.0, 0.0)),
+                v2::Scroll::Edge { edge: v2::Edge::Bottom } => {
+                    inner.scroll.scroll_to_bottom();
+                }
+                _ => return,
+            }
+            let up = inner.scroll.scroll_position().1 < before;
+            if up && inner.reveal_older(&tui) || !up && inner.reveal_newer(&tui) {
+                return;
+            }
+            inner.follow(&tui, !up);
+        });
+        let publication = opencode_plugin::behave::publish_transcript(opencode_plugin::behave::Published {
+            read: Rc::new(read),
+            scroll: Rc::new(scroll),
+        });
+        *self.published.borrow_mut() = Some(publication);
+        let app = tui.app.clone();
+        self.scroll.on_mouse(move |_, _| opencode_plugin::behave::transcript_moved(&app));
+        for resized in [self.scroll.as_any(), self.scroll.content_view().as_any()] {
+            let app = tui.app.clone();
+            resized.on_resize(move |_, _| opencode_plugin::behave::transcript_moved(&app));
+        }
+    }
+
+    /// `Viewport::Transcript` now: the offset, the viewport, the content, and every mounted row with its kind.
+    fn viewport(&self) -> opencode_plugin::abi::v2::TranscriptView {
+        let origin = self.scroll.content_view().rect().screen_y;
+        let rows = self.rows.borrow();
+        let published: Vec<opencode_plugin::abi::v2::TranscriptRow> = self
+            .mounted
+            .borrow()
+            .iter()
+            .filter_map(|key| {
+                let row = rows.get(key)?;
+                let rect = row.wrapper.rect();
+                let kind = match &row.body {
+                    Body::User(_) => "user",
+                    Body::Text(_) => "text",
+                    Body::Reasoning(_) => "reasoning",
+                    Body::Tool(_) | Body::Shell(_) => "tool",
+                    Body::Group(_) => "group",
+                    _ => "other",
+                };
+                let (message, part) = match key {
+                    RowKey::Part(id, Part::Tool(call)) => (id.clone(), Some(call.clone())),
+                    RowKey::Message(id)
+                    | RowKey::Part(id, _)
+                    | RowKey::Footer(id)
+                    | RowKey::TurnUsage(id)
+                    | RowKey::Group(id)
+                    | RowKey::CompactionQueued(id) => (id.clone(), None),
+                };
+                (rect.height > 0.0).then(|| opencode_plugin::abi::v2::TranscriptRow {
+                    kind: kind.to_owned(),
+                    message,
+                    part,
+                    row: (rect.screen_y - origin).round() as i32,
+                    height: rect.height.round() as i32,
+                })
+            })
+            .collect();
+        let specs = self.specs.borrow();
+        let above: HashSet<String> = specs[..self.window_start(&specs)]
+            .iter()
+            .map(|spec| match spec.key() {
+                RowKey::Message(id)
+                | RowKey::Part(id, _)
+                | RowKey::Footer(id)
+                | RowKey::TurnUsage(id)
+                | RowKey::Group(id)
+                | RowKey::CompactionQueued(id) => id,
+            })
+            .collect();
+        let mut revision = DefaultHasher::new();
+        published.hash(&mut revision);
+        opencode_plugin::abi::v2::TranscriptView {
+            offset: self.scroll.scroll_position().1.round() as i32,
+            viewport: self.scroll.rect().height as i32,
+            extent: self.scroll.content_view().rect().height as i32,
+            revision: revision.finish(),
+            above: above.len() as u32,
+            rows: published,
+        }
     }
 
     /// `session.toggle.thinking` (`index.tsx:1163-1180`): writes `session.thinking`, which the rows follow.

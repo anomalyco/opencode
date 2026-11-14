@@ -104,7 +104,7 @@ pub fn schema() -> Value {
                     lines: nullable(uint16()), on_change: nullable(string()), on_submit: nullable(string()),
                     layout: reference("Layout") },
                 List { } { id: nullable(string()), row: boolean(), items: array(reference("ListItem")),
-                    layout: reference("Layout") },
+                    layout: reference("Layout"), notify_top: nullable(string()), user_scroll: boolean() },
                 Code { content: reference("Source") } { id: nullable(string()), filetype: nullable(string()),
                     numbers: boolean(), layout: reference("Layout") },
                 Image { content: reference("Source") } { id: nullable(string()), fit: reference("Fit"),
@@ -517,6 +517,8 @@ mod tests {
                 row: true,
                 items: vec![ListItem::new(Node::Keep { key: "k".into() }, 9)],
                 layout,
+                notify_top: Some("file".into()),
+                user_scroll: true,
             },
             Node::Code {
                 id: Some("o".into()),
