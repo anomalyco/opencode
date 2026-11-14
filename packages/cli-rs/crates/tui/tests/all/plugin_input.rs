@@ -164,10 +164,16 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         probe(|probe| probe.log.push(format!("where {rect:?} {focused:?}")));
     });
     // The rich select: its rows follow the probe's `rows`, and it is shown again under its key as they change.
-    setup.command(command("input.select"), |host, _| host.dialog(abi::Dialog::Select(select())));
+    setup.command(command("input.select"), |host, _| host.dialog(abi::Dialog::Select(select(host))));
     setup.command(command("input.reselect"), |host, _| {
         if host.dialog_open("pick") {
-            host.dialog(abi::Dialog::Select(select()));
+            host.dialog(abi::Dialog::Select(select(host)));
+        }
+    });
+    // The toggle row's footer follows the plugins the host lists (P6b).
+    setup.on_plugins(|host| {
+        if host.dialog_open("pick") {
+            host.dialog(abi::Dialog::Select(select(host)));
         }
     });
     setup.command(command("input.picked"), |_, input| {
@@ -186,6 +192,8 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             source: Some("probe.rs".into()),
             context: Some("Status: failed".into()),
             back: Some(abi::Action::Command { name: "input.picked".into(), input: Some("back".into()) }),
+            reference: None,
+            key: None,
         }));
     });
     // Lists, last first, the rows whose value holds the query, and logs what it was given.
@@ -424,8 +432,10 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 /// The probe's rich select: a row of each of its `rows`, one with its own action, one that toggles `test.other`, one
-/// that toggles the probe itself (which the host refuses), with a footer action, a key, and live footers.
-fn select() -> abi::Select {
+/// that toggles the probe itself (which the host refuses), with a footer action, a key, and live footers; the row that
+/// toggles `test.other` says whether it is enabled, as the host lists it.
+fn select(read: &dyn abi::Read) -> abi::Select {
+    let other = read.plugins().into_iter().find(|entry| entry.id == "test.other").is_some_and(|entry| entry.active);
     let (rows, footer) = probe(|probe| (probe.rows.clone(), probe.footer.clone()));
     let command = |name: &str| abi::Action::Command { name: name.into(), input: None };
     let options = rows
@@ -442,7 +452,10 @@ fn select() -> abi::Select {
             option.footer_color = Some(abi::Color::from("text.muted"));
             match row.as_str() {
                 "beta" => option.action = Some(command("input.row")),
-                "other" => option.toggle = Some("test.other".into()),
+                "other" => {
+                    option.toggle = Some("test.other".into());
+                    option.footer = Some(if other { "enabled" } else { "disabled" }.into());
+                }
                 "self" => option.toggle = Some(ID.into()),
                 "manager" => option.toggle = Some("opencode.plugins".into()),
                 "acme" => option.toggle = Some("@acme/skipped".into()),
@@ -470,6 +483,8 @@ fn select() -> abi::Select {
                     hidden: Vec::new(),
                     primary: None,
                     rowless: false,
+                    command: None,
+                    disabled: false,
                 })
                 .into_iter()
                 .chain([
@@ -480,6 +495,8 @@ fn select() -> abi::Select {
                         hidden: vec!["beta".into()],
                         primary: Some(false),
                         rowless: false,
+                        command: None,
+                        disabled: false,
                     },
                     abi::SelectAction {
                         title: "cut".into(),
@@ -488,6 +505,8 @@ fn select() -> abi::Select {
                         hidden: Vec::new(),
                         primary: Some(false),
                         rowless: false,
+                        command: None,
+                        disabled: false,
                     },
                     abi::SelectAction {
                         title: "new".into(),
@@ -496,6 +515,8 @@ fn select() -> abi::Select {
                         hidden: Vec::new(),
                         primary: None,
                         rowless: true,
+                        command: None,
+                        disabled: false,
                     },
                 ])
                 .collect(),
@@ -505,6 +526,8 @@ fn select() -> abi::Select {
             abi::PanelBind { key: "Ctrl+C".into(), title: "copy".into(), action: command("input.picked") },
         ],
         search: probe(|probe| probe.search).then(|| "probe".into()),
+        size: None,
+        focus: None,
     }
 }
 
@@ -1272,13 +1295,14 @@ fn a_toggle_row_moves_the_registry_only_on_a_key_or_a_click() {
     settle(&harness);
     assert!(active(&harness, "test.other"), "a toggle ran after its select closed");
     run(&harness, "input.select", None);
+    // A host dialog that opens at once: the plugin manager's waits for its command to return, as any plugin's does.
     let tui = harness.tui.clone();
     harness.app.app().defer(move |_| {
-        tui.keymap.dispatch("plugins.list", None);
+        tui.keymap.dispatch("opencode.status", None);
     });
     harness.app.press("enter");
     settle(&harness);
-    assert!(harness.app.text().contains("internal"), "{}", harness.app.text());
+    assert!(harness.app.text().contains("Status"), "{}", harness.app.text());
     assert!(active(&harness, "test.other"), "a toggle ran after its select was replaced");
     harness.app.press("escape");
     settle(&harness);
@@ -1931,7 +1955,8 @@ fn a_select_toggles_only_what_it_shows() {
     harness.app.press("enter");
     settle(&harness);
     assert!(!active(&harness, "test.other"), "a keyless select's toggle did nothing");
-    assert!(harness.app.text().contains("disabled"), "{}", harness.app.text());
+    // A keyless select cannot be shown again in place: its rows stay as shown, and the host's hint follows the plugin.
+    assert!(harness.app.text().contains("enable test.other"), "{}", harness.app.text());
     harness.app.press("escape");
     settle(&harness);
     run(&harness, "input.select", None);
