@@ -14,7 +14,7 @@
 //! the solve, so what the reader looked at stays on screen. The rows before each item are kept as sums, so finding
 //! the window, an item's row or the top anchor takes no walk of the whole list.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
@@ -40,6 +40,13 @@ pub(crate) struct Item {
     dynamic: bool,
     pub mounted: Option<Mounted>,
 }
+
+/// A move of the list: the frame a solve sees it in, whether it follows the end, and where a verb meant it to go.
+type Moving = (u64, bool, Option<Option<f64>>);
+
+/// A reading position: an item, the rows into it, and whether they stay inside it when it takes fewer rows. What was
+/// on screen stays in its item; a verb's offset is rows, which go on into the items after.
+type Reading = (String, f64, bool);
 
 /// The widgets of an item near the view.
 pub(crate) struct Mounted {
@@ -68,7 +75,20 @@ pub(crate) struct List {
     groups: HashSet<String>,
     /// The item at the viewport's top and the rows into it, taken before a change of the items: the solve after it
     /// shows them again, unless a verb or the user moves the list first.
-    reading: RefCell<Option<(String, f64)>>,
+    reading: RefCell<Option<Reading>>,
+    /// A verb or the user moved the list: where the move goes is the reading position; a move to the end follows the
+    /// end through its frame, as OpenTUI's scroll does. The frame it is solved in (`u64::MAX` until a solve sees
+    /// it), whether it follows the end, and where a verb meant it to go: an offset, or the end (`Some(None)`); a
+    /// user's move goes where the first solve after it shows.
+    moving: Cell<Option<Moving>>,
+    /// Rows the offset moved to hold the reading position since the behaviors last read it: the view did not move,
+    /// so what they keep at an offset (a step's memory) moves with it.
+    shifted: Cell<f64>,
+    /// The end clamped a restore since the behaviors last read it: the view did move.
+    clamped: Cell<bool>,
+    /// An item's content changed since the list last settled: a correction then follows content that moved, so it
+    /// is no shift of the same view.
+    replaced: bool,
     /// What the user typed into the inputs of items that lost their widgets, by input id.
     drafts: HashMap<String, (String, (u32, u32))>,
     /// The offset of the list this one was built again from, until its first solve: the scroll box takes it once it
@@ -99,6 +119,10 @@ impl List {
             prefix: vec![0.0],
             groups: HashSet::new(),
             reading: RefCell::default(),
+            moving: Cell::new(None),
+            shifted: Cell::new(0.0),
+            clamped: Cell::new(false),
+            replaced: false,
             drafts: HashMap::new(),
             carried: None,
         }
@@ -108,8 +132,8 @@ impl List {
     /// node with keeps written out, and an item with widgets reconciles its tree with it. Then the window.
     pub fn reconcile(&mut self, env: &Env<'_>, items: &[ListItem], restyle: bool) {
         // Where the reader is, before any height changes; a reading an earlier change took and no solve has given
-        // back yet stays.
-        if self.reading.borrow().is_none() {
+        // back yet stays, and a move no solve has seen yet sets it.
+        if self.reading.borrow().is_none() && !self.moving.get().is_some_and(|(frame, ..)| frame == u64::MAX) {
             *self.reading.get_mut() = self.at_top();
         }
         let mut old: HashMap<String, Item> = self.items.drain(..).map(|item| (item.key.clone(), item)).collect();
@@ -134,6 +158,7 @@ impl List {
                         apply(env, mounted, node);
                     }
                     if written != held.node {
+                        self.replaced = true;
                         held.measured = None;
                         held.anchors = logical(&written, env);
                         held.dynamic = reads_output(&written);
@@ -143,20 +168,24 @@ impl List {
                     held
                 }
                 // Validation refuses a keep of an item the list does not hold.
-                (None, node) => Item {
-                    key: key.clone(),
-                    node: node.clone(),
-                    estimate,
-                    measured: None,
-                    used: f64::from(estimate),
-                    anchors: logical(node, env),
-                    dynamic: reads_output(node),
-                    mounted: None,
-                },
+                (None, node) => {
+                    self.replaced = true;
+                    Item {
+                        key: key.clone(),
+                        node: node.clone(),
+                        estimate,
+                        measured: None,
+                        used: f64::from(estimate),
+                        anchors: logical(node, env),
+                        dynamic: reads_output(node),
+                        mounted: None,
+                    }
+                }
             };
             self.items.push(next);
         }
         for (_, gone) in old {
+            self.replaced = true;
             if let Some(mounted) = gone.mounted {
                 unmount(mounted, &mut HashMap::new());
             }
@@ -227,7 +256,37 @@ impl List {
         if self.row {
             return self.place(env);
         }
-        let reading = self.reading.take().or_else(|| self.at_top());
+        let frame = env.host.app().frame_number();
+        // A verb's offset, taken before this solve's heights are in the sums: a view that ran after it may have
+        // mounted an item its estimate made taller, and the solve clamped the offset to an end it does not have.
+        // Where a verb meant the offset to be, which the solve may have clamped: what the restore shifts from.
+        let mut meant = None;
+        let (follows, first) = match self.moving.get() {
+            Some((u64::MAX, _, intent)) => {
+                meant = intent.flatten();
+                let (follows, reading) = match intent {
+                    Some(None) => (true, None),
+                    Some(Some(row)) => (false, self.at_row(row).map(|(key, rows, _)| (key, rows, false))),
+                    None => {
+                        let most = f64::from(self.scroll.content_view().rect().height - self.scroll.rect().height);
+                        let follows = most > 0.0 && self.top() >= most - 0.5;
+                        (follows, if follows { None } else { self.at_top() })
+                    }
+                };
+                self.moving.set(Some((frame, follows, intent)));
+                (follows, Some(reading))
+            }
+            Some((solved, follows, _)) if solved == frame => (follows, None),
+            _ => {
+                self.moving.set(None);
+                (false, None)
+            }
+        };
+        let reading = match (follows, first) {
+            (true, _) => None,
+            (false, Some(reading)) => reading,
+            (false, None) => self.reading.take().or_else(|| self.at_top()),
+        };
         let viewport = self.scroll.rect();
         let mut heights = false;
         if f64::from(viewport.width) != self.width {
@@ -260,37 +319,70 @@ impl List {
             self.sum();
         }
         let mut moved = false;
-        if let Some((key, within)) = reading
+        let held = reading.clone();
+        if let Some((key, within, inside)) = reading
             && let Some(&index) = self.owners.get(&key)
         {
-            let target = self.prefix[index] + within.min((self.items[index].used - 1.0).max(0.0));
+            // As far as the content reaches with the heights just taken: past it the scroll clamps, and the restore
+            // would move it again every round.
+            let most = (self.prefix[self.items.len()] - f64::from(viewport.height)).max(0.0);
+            let within = if inside { within.min((self.items[index].used - 1.0).max(0.0)) } else { within };
+            let wanted = self.prefix[index] + within;
+            if wanted > most + 0.5 {
+                self.clamped.set(true);
+            }
+            let target = wanted.min(most);
             let (x, top) = self.scroll.scroll_position();
+            let from = meant.unwrap_or(top);
+            if (target - from).abs() >= 0.5 && !self.replaced {
+                self.shifted.set(self.shifted.get() + target - from);
+            }
             if (target - top).abs() >= 0.5 {
                 self.scroll.scroll_to(x, target);
                 moved = true;
             }
         }
-        self.place(env) || moved
+        // Items this round mounts are laid out by the next solve, before their heights are in the sums: the same
+        // reading holds until the list settles.
+        let changed = self.place(env) || moved;
+        match changed {
+            true => *self.reading.get_mut() = held,
+            false => self.replaced = false,
+        }
+        changed
+    }
+
+    /// The rows the offset moved to hold the reading position since the last call, and whether the end clamped it.
+    pub fn take_shift(&self) -> (f64, bool) {
+        (self.shifted.replace(0.0), self.clamped.replace(false))
     }
 
     /// A verb or the user moves the list: where it goes is the reading position.
     pub fn moved(&self) {
         self.reading.take();
+        self.moving.set(Some((u64::MAX, false, None)));
     }
 
-    /// The item at the viewport's top and the rows into it. `None` at the end, which follows the end (OpenTUI's
-    /// scroll at its end stays there as the content changes).
-    fn at_top(&self) -> Option<(String, f64)> {
-        if self.items.is_empty() || self.row {
+    /// A verb moved the list to row `row`, or to the end when `None`.
+    pub fn intend(&self, row: Option<f64>) {
+        self.moving.set(Some((u64::MAX, false, Some(row))));
+    }
+
+    /// The item at the viewport's top and the rows into it.
+    fn at_top(&self) -> Option<Reading> {
+        if self.row {
             return None;
         }
-        let top = self.top();
-        let most = f64::from(self.scroll.content_view().rect().height - self.scroll.rect().height);
-        if most > 0.0 && top >= most - 0.5 {
+        self.at_row(self.top())
+    }
+
+    /// The item at row `row` and the rows into it, which stay inside it.
+    fn at_row(&self, row: f64) -> Option<Reading> {
+        if self.items.is_empty() {
             return None;
         }
-        let index = self.at(top);
-        Some((self.items[index].key.clone(), top - self.prefix[index]))
+        let index = self.at(row);
+        Some((self.items[index].key.clone(), row - self.prefix[index], true))
     }
 
     /// The offset: the one carried from the list this one was built again from, until its first solve.
