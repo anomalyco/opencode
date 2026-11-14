@@ -184,6 +184,28 @@ describe("Ripgrep", () => {
       }),
     ),
   )
+
+  it.live("ends oversized line previews on a whole character", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() =>
+          fs.writeFile(
+            path.join(tmp.path, "emoji.txt"),
+            [1_998, 1_999, 2_000].map((count) => `${"x".repeat(count)}😀tail\n`).join(""),
+          ),
+        )
+
+        const ripgrep = yield* Ripgrep.Service
+        const matches = yield* ripgrep.grep({ cwd: tmp.path, pattern: "tail", limit: 10 })
+
+        expect(matches.map((match) => match.text)).toEqual([
+          `${"x".repeat(1_998)}😀...`,
+          `${"x".repeat(1_999)}...`,
+          `${"x".repeat(2_000)}...`,
+        ])
+      }),
+    ),
+  )
 })
 
 describe("RipgrepBinary.verify", () => {
