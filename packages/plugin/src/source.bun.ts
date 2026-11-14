@@ -8,6 +8,7 @@ import { localSource } from "./source.js"
 import { missingPackageTarget } from "./source.package.js"
 
 let generation = Date.now()
+let loading = Promise.resolve()
 
 export async function prepareSource(entrypoint: string, track: (file: string, directory?: boolean) => void) {
   const root = fileURLToPath(entrypoint)
@@ -66,6 +67,20 @@ export async function prepareSource(entrypoint: string, track: (file: string, di
       }
     }
   }
-  visit(root)
-  return { version: String(++generation), load: () => Host.load(entrypoint) }
+  return {
+    version: String(++generation),
+    load: () => {
+      // Locations share Bun's module registry. Do not evict a graph while
+      // another location is still importing it.
+      const loaded = loading.then(() => {
+        visit(root)
+        return Host.load(entrypoint)
+      })
+      loading = loaded.then(
+        () => {},
+        () => {},
+      )
+      return loaded
+    },
+  }
 }
