@@ -86,8 +86,7 @@ pub fn open_with(
     let mut entries = Vec::new();
     for (name, options) in plugins {
         let dir = config_dir.join("plugins").join(name);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::copy(Path::new(EXAMPLES).join(name).join("tui.ts"), dir.join("tui.ts")).unwrap();
+        copy(&Path::new(EXAMPLES).join(name), &dir);
         if let Some(options) = options {
             entries.push(serde_json::json!({ "package": dir.to_string_lossy(), "options": options }));
         }
@@ -104,6 +103,21 @@ pub fn open_with(
     Pipe { harness, root }
 }
 
+/// Copies the plugin directory `from` to `to`, its hidden files left out.
+pub fn copy(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap().flatten() {
+        if entry.file_name().to_string_lossy().starts_with('.') {
+            continue;
+        }
+        let target = to.join(entry.file_name());
+        match entry.file_type().unwrap().is_dir() {
+            true => copy(&entry.path(), &target),
+            false => drop(std::fs::copy(entry.path(), target).unwrap()),
+        }
+    }
+}
+
 /// The JS host as the tests run it: Bun, and the default limits but a longer acknowledgement, so a machine under load
 /// does not end it as hung; the hang rows set their own.
 pub fn config() -> Option<Config> {
@@ -115,6 +129,15 @@ pub fn config() -> Option<Config> {
 /// Waits until the JS host handled everything sent before, and no tree waits for the host; then three frames.
 pub fn settle(harness: &Harness, scripts: &Scripts) {
     let begun = Instant::now();
+    // A ping would start a JS host that nothing asked for.
+    if scripts.pid().is_none() {
+        for _ in 0..3 {
+            harness.app.advance(Duration::from_millis(1));
+        }
+        if scripts.pid().is_none() {
+            return;
+        }
+    }
     loop {
         // What the UI sends in its next frames (a route's first view is deferred) goes before the ping.
         for _ in 0..3 {
@@ -891,4 +914,353 @@ fn a_changed_module_reloads_and_the_running_one_stays_meanwhile() {
     harness.tui.keymap.dispatch("twin.bump", Some("2"));
     pipe.settle();
     assert!(harness.app.text().contains("card 2: 1"), "{}", harness.app.text());
+}
+
+// Expected (review F4, standard streams as the protocol): what a plugin prints, through every console method and
+// `process.stdout` (a string, a buffer with its callback, an encoding), and what its own module and a dependency from
+// `node_modules` print as they load and when called, goes to the JS host's standard error and breaks nothing: the JS
+// host never ends, every plugin stays active and answers, and a write's callback runs.
+#[test]
+fn prints_of_a_plugin_and_its_dependencies_never_reach_the_protocol() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let config_dir = root.path().join("config");
+    let printer = config_dir.join("plugins/printer");
+    copy(&Path::new(EXAMPLES).join("printer"), &printer);
+    let chatty = printer.join("node_modules/chatty");
+    std::fs::create_dir_all(&chatty).unwrap();
+    std::fs::write(chatty.join("package.json"), r#"{ "name": "chatty", "main": "index.js" }"#).unwrap();
+    std::fs::write(
+        chatty.join("index.js"),
+        "console.log('chatty loads'); process.stdout.write('chatty writes as it loads\\n');\n\
+         module.exports = (when) => { console.info('chatty in ' + when); process.stdout.write(Buffer.from('chatty ' + when + '\\n')); };\n",
+    )
+    .unwrap();
+    copy(&Path::new(EXAMPLES).join("twin"), &config_dir.join("plugins/twin"));
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = External { config_dir, cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.printer");
+    pipe.active(twin::ID);
+    let pid = pipe.scripts().pid();
+    pipe.settle();
+    assert!(pipe.harness.app.text().contains("the printer is here"), "{}", pipe.harness.app.text());
+    for _ in 0..3 {
+        pipe.harness.tui.keymap.dispatch("printer.print", None);
+        pipe.settle();
+    }
+    let log = std::fs::read_to_string(printer.join(".log.jsonl")).unwrap();
+    assert_eq!(log.lines().filter(|line| line.contains("printed")).count(), 3, "{log}");
+    assert_eq!(log.lines().filter(|line| line.contains("written")).count(), 3, "a write's callback never ran: {log}");
+    twin_open(&pipe);
+    assert_eq!(pipe.scripts().pid(), pid, "a print ended the JS host");
+    assert_eq!(pipe.status("example.printer"), Some(Status::Active));
+    assert_eq!(pipe::crossed().dropped, 0);
+}
+
+// The approval of a project's TypeScript plugin (O-125 (1), Pa's rules), over the pipe.
+
+/// A client in project `work` whose `.opencode/plugins/probe` is the probe at build `build`, with the JS host.
+struct Project {
+    pipe: Pipe,
+    dir: PathBuf,
+}
+
+impl Project {
+    fn open(config: Config) -> Self {
+        let root = opencode_util::temp::tempdir().unwrap();
+        let work = root.path().join("work");
+        std::fs::create_dir_all(work.join(".git")).unwrap();
+        let dir = work.join(".opencode/plugins/probe");
+        copy(&Path::new(EXAMPLES).join("probe"), &dir);
+        // Build 0 is the module with its build line, as each build is.
+        let source = std::fs::read_to_string(dir.join("tui.ts")).unwrap();
+        std::fs::write(dir.join("tui.ts"), format!("{source}\n// build 0\n")).unwrap();
+        let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+        let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+        external_with(&harness.tui, external, Some(config));
+        let project = Self { pipe: Pipe { harness, root }, dir };
+        project.settle();
+        project
+    }
+
+    fn target(&self) -> String {
+        self.dir.to_string_lossy().into_owned()
+    }
+
+    fn settle(&self) {
+        self.pipe.settle();
+        while self.pipe.harness.tui.toasts.current().is_some() {
+            self.pipe.harness.tui.toasts.dismiss();
+        }
+        self.pipe.settle();
+    }
+
+    /// The user answers about the build held back, as the manager's question does.
+    fn answer(&self, decision: opencode_plugin::loader::approval::Decision) -> bool {
+        let tui = &self.pipe.harness.tui;
+        let Some((Ok(artifact), _)) = opencode_tui::plugins::host::held(tui, &self.target()) else { return false };
+        assert!(artifact.script, "{artifact:?}");
+        let recorded = opencode_tui::plugins::host::decide(tui, &self.target(), &artifact, decision).unwrap();
+        self.settle();
+        recorded
+    }
+
+    /// A new build of the probe: another line in its module.
+    fn change(&self, build: u8) {
+        let file = self.dir.join("tui.ts");
+        let source = std::fs::read_to_string(&file).unwrap();
+        let source = source.split("\n// build").next().unwrap().to_owned();
+        std::fs::write(&file, format!("{source}\n// build {build}\n")).unwrap();
+        opencode_tui::plugins::host::reconcile(&self.pipe.harness.tui);
+        self.settle();
+    }
+
+    fn listed(&self) -> Option<Status> {
+        let target = self.target();
+        let entries = self.pipe.harness.tui.plugins.entries();
+        entries.into_iter().find(|entry| entry.target.as_deref() == Some(&target)).map(|entry| entry.status)
+    }
+
+    /// The setups and cleanups the probe logged itself.
+    fn log(&self) -> (usize, usize) {
+        let text = std::fs::read_to_string(self.dir.join(".log.jsonl")).unwrap_or_default();
+        (text.matches("\"setup\"").count(), text.matches("\"cleanup\"").count())
+    }
+}
+
+/// A screen with the composer's placeholder, which the client picks at random, left out.
+fn masked(screen: &str) -> String {
+    screen.lines().map(|line| line.split("Ask anything").next().unwrap_or("")).collect::<Vec<_>>().join("\n")
+}
+
+/// One step of the approval model on the pipe.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Ask {
+    Approve,
+    Decline,
+    /// A new build, 1 to 3.
+    Change(u8),
+    /// The probe's command, as the keymap runs it.
+    Run,
+    Frame,
+}
+
+/// Pa's machine on the pipe: the build in the directory, the last decision with the build it named, and how often the
+/// probe was started and stopped.
+#[derive(Clone, Copy, Debug, Default)]
+struct Asked {
+    build: u8,
+    decision: Option<(u8, opencode_plugin::loader::approval::Decision)>,
+    setups: usize,
+    cleanups: usize,
+}
+
+impl Asked {
+    fn approved(&self) -> bool {
+        self.decision == Some((self.build, opencode_plugin::loader::approval::Decision::Approved))
+    }
+
+    fn listed(&self) -> Status {
+        match self.decision {
+            _ if self.approved() => Status::Active,
+            Some((build, opencode_plugin::loader::approval::Decision::Declined)) if build == self.build => {
+                Status::Declined
+            }
+            _ => Status::Pending,
+        }
+    }
+
+    fn step(&mut self, ask: Ask) {
+        use opencode_plugin::loader::approval::Decision;
+        let running = self.approved();
+        match ask {
+            // An answer names the build held back, which is the one in the directory.
+            Ask::Approve if !running => self.decision = Some((self.build, Decision::Approved)),
+            Ask::Decline if !running => self.decision = Some((self.build, Decision::Declined)),
+            Ask::Change(build) => self.build = build,
+            _ => {}
+        }
+        match (running, self.approved()) {
+            (false, true) => self.setups += 1,
+            (true, false) => self.cleanups += 1,
+            _ => {}
+        }
+    }
+}
+
+/// `pending` over the pipe: while the probe is not approved, nothing of it ran, the JS host did not start for it, no
+/// registry holds its ID, its command is not reachable, and the frame equals a client that never had it.
+struct PendingModel;
+
+impl Model for PendingModel {
+    type Command = Ask;
+
+    fn generate(&self, rng: &mut Rng, steps: usize) -> Vec<Ask> {
+        (0..steps)
+            .map(|_| match rng.below(10) {
+                0 | 1 => Ask::Approve,
+                2 => Ask::Decline,
+                3..=5 => Ask::Change(1 + rng.below(3) as u8),
+                6 | 7 => Ask::Run,
+                _ => Ask::Frame,
+            })
+            .collect()
+    }
+
+    fn run(&self, asks: &[Ask]) -> Option<Failure> {
+        use opencode_plugin::loader::approval::Decision;
+        let config = config()?;
+        let project = Project::open(config.clone());
+        let twin = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+        let mut asked = Asked { build: 0, ..Asked::default() };
+        let mut started = false;
+        for (step, ask) in [None].into_iter().chain(asks.iter().copied().map(Some)).enumerate() {
+            let mut ran = false;
+            if let Some(ask) = ask {
+                asked.step(ask);
+                match ask {
+                    Ask::Approve => drop(project.answer(Decision::Approved)),
+                    Ask::Decline => drop(project.answer(Decision::Declined)),
+                    Ask::Change(build) => project.change(build),
+                    Ask::Run => {
+                        ran = matches!(
+                            project.pipe.harness.tui.keymap.dispatch("probe.step", Some("0")),
+                            opentui::keymap::RunResult::Ok
+                        );
+                        project.settle();
+                    }
+                    Ask::Frame => project.pipe.harness.app.advance(Duration::from_millis(16)),
+                }
+                twin.app.advance(Duration::from_millis(16));
+            }
+            started |= asked.approved();
+            let fail = |site, detail: String| Some(Failure { property: "pending", site, step, detail });
+            if project.listed() != Some(asked.listed()) {
+                return fail(
+                    "listed",
+                    format!("listed {:?}, expected {:?} ({asked:?})", project.listed(), asked.listed()),
+                );
+            }
+            if project.log() != (asked.setups, asked.cleanups) {
+                return fail("log", format!("the probe logged {:?}, expected {asked:?}", project.log()));
+            }
+            if asked.approved() {
+                continue;
+            }
+            if ran {
+                return fail("reachable", "the probe's command ran while it is not approved".to_owned());
+            }
+            if project.pipe.harness.tui.plugins.entries().iter().any(|entry| entry.id == PROBE) {
+                return fail("registry", "the registry holds the probe".to_owned());
+            }
+            if !started && project.pipe.scripts().pid().is_some() {
+                return fail("js-host", "the JS host started for a plugin that never was approved".to_owned());
+            }
+            let (seen, alone) = (masked(&project.pipe.harness.app.text()), masked(&twin.app.text()));
+            if seen != alone {
+                return fail("twin", format!("{seen}\nthe twin:\n{alone}"));
+            }
+        }
+        None
+    }
+
+    fn simplify(&self, ask: &Ask) -> Vec<Ask> {
+        match ask {
+            Ask::Change(build) if *build != 1 => vec![Ask::Change(1)],
+            Ask::Decline => vec![Ask::Approve],
+            _ => Vec::new(),
+        }
+    }
+}
+
+// Expected (Pa's `pending` on the pipe, O-125 (1)): a project's TypeScript plugin waits for approval as a native one
+// does. Pending or declined it equals no plugin: nothing of it ran, the JS host did not start for it, nothing is
+// registered or reachable, and the frame is a client's without it; approved, it runs at once; a new build of it is
+// pending again, which stops the running one (its cleanup runs).
+#[test]
+fn a_project_typescript_plugin_waits_for_approval() {
+    if config().is_none() {
+        return;
+    }
+    model::check(&PendingModel, 6, 16);
+}
+
+// The fixed rows of that machine: the guard that its oracles can fail is the approval itself, which runs the probe.
+#[test]
+fn the_fixed_typescript_approval_rows_pass() {
+    if config().is_none() {
+        return;
+    }
+    let rows: &[(&str, &[Ask])] = &[
+        ("an-approval-runs-it", &[Ask::Approve, Ask::Run]),
+        ("a-new-build-is-pending-again", &[Ask::Approve, Ask::Change(2), Ask::Run]),
+        ("a-decline-names-its-build", &[Ask::Decline, Ask::Change(2), Ask::Change(0), Ask::Run]),
+        ("an-approval-of-an-older-build-holds", &[Ask::Approve, Ask::Change(2), Ask::Change(0), Ask::Run]),
+        // Seed 1: a save that changes nothing loads nothing again, as TS compares a module's content.
+        ("a-save-that-changes-nothing-reloads-nothing", &[Ask::Change(2), Ask::Approve, Ask::Change(2)]),
+    ];
+    for (name, asks) in rows {
+        assert_eq!(PendingModel.run(asks), None, "{name}");
+    }
+}
+
+// Expected (the manager's question for a TypeScript plugin, 3.9): the toast and the question name TypeScript code and
+// the JS host, the directory and the hash of its files, with Decline active; Enter declines, and approving runs it.
+#[test]
+fn the_manager_asks_before_a_project_typescript_plugin_runs() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let work = root.path().join("work");
+    std::fs::create_dir_all(work.join(".git")).unwrap();
+    let dir = work.join(".opencode/plugins/probe");
+    copy(&Path::new(EXAMPLES).join("probe"), &dir);
+    let harness = support::mount(100, 40, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let (app, tui) = (&harness.app, &harness.tui);
+    let toast = tui.toasts.current().unwrap();
+    assert_eq!(toast.title.as_deref(), Some(&*format!("Plugin needs approval: {}", dir.display())));
+    assert!(toast.message.contains("TypeScript code in opencode's JS host"), "{}", toast.message);
+    tui.toasts.dismiss();
+    tui.keymap.dispatch("plugins.list", None);
+    app.advance(Duration::from_millis(16));
+    app.type_text("probe");
+    app.advance(Duration::from_millis(16));
+    app.press("enter");
+    app.advance(Duration::from_millis(16));
+    let screen = app.text();
+    assert!(screen.contains("Run project plugin?"), "{screen}");
+    assert!(screen.contains("run TypeScript code in") && screen.contains("Module directory"), "{screen}");
+    assert!(screen.contains("SHA-256 of its files"), "{screen}");
+    // Decline is active: Enter declines.
+    app.press("enter");
+    app.advance(Duration::from_millis(16));
+    let listed = |status: Status| {
+        tui.plugins
+            .entries()
+            .iter()
+            .any(|entry| entry.target.as_deref() == Some(&*dir.to_string_lossy()) && entry.status == status)
+    };
+    assert!(listed(Status::Declined), "{:?}", tui.plugins.entries());
+    assert!(
+        tui.plugins.scripts.borrow().as_ref().unwrap().pid().is_none(),
+        "the JS host started for a declined plugin"
+    );
+    // Approving it later runs it.
+    app.press("escape");
+    app.advance(Duration::from_millis(16));
+    tui.keymap.dispatch("plugins.list", None);
+    app.advance(Duration::from_millis(16));
+    app.type_text("probe");
+    app.advance(Duration::from_millis(16));
+    app.press("enter");
+    app.advance(Duration::from_millis(16));
+    app.press("right");
+    app.press("enter");
+    harness.wait("the approved plugin runs", || {
+        app.advance(Duration::from_millis(1));
+        tui.plugins.entries().iter().any(|entry| entry.id == PROBE && entry.status == Status::Active)
+    });
 }
