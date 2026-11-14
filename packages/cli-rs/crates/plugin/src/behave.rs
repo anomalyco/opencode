@@ -715,13 +715,18 @@ impl Surface {
                     let viewport = scrolled.widget.rect();
                     let aim = behave.pending.get(id).cloned().map(|(node, aim)| {
                         let found = index.nodes.get(&node).filter(|(_, scroll)| scroll.as_deref() == Some(id));
-                        let Some((widget, _)) = found else {
-                            // A node of a list item without widgets: to the item's row, which mounts it. A node
-                            // that has left the tree drops the verb.
-                            return self.item_row(id, &node).map_or(Resolve::Gone, Resolve::To);
+                        let (y, height) = match found {
+                            Some((widget, _)) => {
+                                let Some(y) = scrolled.y(widget) else { return Resolve::Unsolved };
+                                (y, widget.rect().height as i32)
+                            }
+                            // A node of a list item without widgets: where the host assumes the item is, which
+                            // mounts it; the next round has its own rows. A node that has left drops the verb.
+                            None => match self.item_row(id, &node) {
+                                Some(assumed) => assumed,
+                                None => return Resolve::Gone,
+                            },
                         };
-                        let Some(y) = scrolled.y(widget) else { return Resolve::Unsolved };
-                        let height = widget.rect().height as i32;
                         Resolve::To(match aim {
                             Aim::Row(row) => y - row,
                             Aim::Nearest(inset) if y - inset < before => y - inset,
@@ -768,11 +773,11 @@ impl Surface {
         changed
     }
 
-    /// The row of the list item whose data holds `node`, in list `list`.
-    fn item_row(&self, list: &str, node: &str) -> Option<i32> {
+    /// The row and the rows the host assumes for the list item whose data holds `node`, in list `list`.
+    fn item_row(&self, list: &str, node: &str) -> Option<(i32, i32)> {
         let mut row = None;
         self.each_list(list, |found| {
-            row = found.owner(node).map(|item| found.row_of(item).round() as i32);
+            row = found.owner(node).map(|item| (found.row_of(item).round() as i32, found.rows_of(item).round() as i32));
         });
         row
     }
