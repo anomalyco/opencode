@@ -453,7 +453,9 @@ fn the_host_entries_list_and_toggle_like_plugins() {
     assert!(!matches!(tui.keymap.dispatch("diff.open", None), opentui::keymap::RunResult::Ok));
     assert!(tui.plugins.set_active(&host, "opencode.diffs", true));
     assert!(matches!(tui.keymap.dispatch("diff.open", None), opentui::keymap::RunResult::Ok));
-    assert_eq!(tui.route(), Route::Plugin { id: "opencode.diffs".to_owned(), name: "diff".to_owned() });
+    // The viewer is a plugin, whose navigation is an effect after its command.
+    let route = Route::Plugin { id: "opencode.diffs".to_owned(), name: "diff".to_owned() };
+    assert!(app.wait_until(WAIT, || tui.route() == route), "{:?}", tui.route());
     app.render();
     assert!(!app.text().contains("Unknown plugin route"), "{}", app.text());
 }
