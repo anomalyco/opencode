@@ -570,8 +570,12 @@ pub fn run(launch: Launch) -> opentui::Result<()> {
     if let Some(manifest) = crate::features::drive::manifest() {
         return crate::features::drive::run(manifest?, options, launch);
     }
+    let app = App::new(options)?;
+    // Around the hook `App::new` installed, which restores the terminal: a plugin's panic its catch stops is not the
+    // end of the app.
+    opencode_plugin::contain::filter_panics();
     // Only the TUI on the real terminal plays sounds out loud; tests and harnesses mix them without a device.
-    run_on(App::new(options)?, launch, |tui| {
+    run_on(app, launch, |tui| {
         tui.attention.sound.set_output(crate::features::attention::sound::Output::Device);
         Ok(())
     })

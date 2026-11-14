@@ -2723,3 +2723,31 @@ fn a_builtin_is_timed_and_its_overrun_fails_nothing() {
     assert_eq!(TIMED_SEEN.take(), ["setup", "run-command", "run-command", "dispose"]);
     TIMED_RECORD.set(None);
 }
+
+thread_local! {
+    static MARKED: RefCell<Vec<bool>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A built-in that notes, in each of its calls, whether a panic there would unwind to the host's catch.
+fn noting(setup: &mut abi::Setup) -> Result<(), String> {
+    MARKED.with_borrow_mut(|caught| caught.push(crate::contain::catching()));
+    let command = abi::Command { name: "noting.run".into(), title: "run".into(), ..abi::Command::default() };
+    setup.command(command, |_, _| MARKED.with_borrow_mut(|caught| caught.push(crate::contain::catching())));
+    setup.on_dispose(|_| MARKED.with_borrow_mut(|caught| caught.push(crate::contain::catching())));
+    Ok(())
+}
+
+// Expected (P4's finding): a built-in's setup, command and dispose run inside the host's catch, so the panic hooks
+// let their panics unwind to it (`contain::filter_panics`); outside a call, nothing is.
+#[test]
+fn a_builtin_runs_inside_the_catch() {
+    let host = host();
+    MARKED.take();
+    let registry = Registry::define(Vec::new(), []);
+    registry.add(abi::Plugin { id: "noting", setup: noting });
+    registry.activate(&dynamic(&host));
+    host.keymap().dispatch("noting.run", None);
+    registry.toggle(&dynamic(&host), "noting", false);
+    assert_eq!(MARKED.take(), [true, true, true]);
+    assert!(!crate::contain::catching());
+}
