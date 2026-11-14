@@ -1233,6 +1233,11 @@ pub fn code_blocks(tui: &Tui) -> CodeBlockRenderers {
     tui.plugins.code_blocks(Rc::new(move || weak.upgrade().map_or_else(|| last.clone(), |tui| tui.page())))
 }
 
+/// The plugins' tool claims, which the transcript takes as it mounts.
+pub fn tool_claims(tui: &Tui) -> opencode_plugin::claim::ToolClaims {
+    tui.plugins.tool_claims()
+}
+
 /// An empty [`abi::Node::Markdown`] widget: Markdown in the page theme with the plugins' fences, markers hidden unless
 /// `session.markdown` is `source`.
 pub fn markdown(tui: &Tui) -> opentui::widget::Markdown {

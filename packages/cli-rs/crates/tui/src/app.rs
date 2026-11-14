@@ -262,6 +262,12 @@ impl Tui {
         }
     }
 
+    /// Whether the views have taken every flush of the store: a test that applies events waits for it.
+    #[doc(hidden)]
+    pub fn synced(&self) -> bool {
+        self.seen.get() == self.data.revision()
+    }
+
     /// Passes what changed since the last sync to the route view.
     fn sync(&self) {
         if self.held.get() {
