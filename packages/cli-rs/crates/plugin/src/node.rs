@@ -58,6 +58,7 @@ pub(crate) type Charge = (Rc<str>, crate::surface::HostTime);
 const RESIZE_DRAWS: u8 = 2;
 
 impl Mount {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         host: &dyn Host,
         owner: Weak<dyn Host>,

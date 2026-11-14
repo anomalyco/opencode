@@ -119,10 +119,13 @@ struct Request {
 /// What a job does with its pixels on the UI thread.
 type Done = Box<dyn FnOnce(&App, Option<Pixels>, &mut Reservation)>;
 
+/// A job whose pixels the UI thread has not handled: the app's handler that will, the bytes it reserved, what it does.
+type Waiting = (Weak<()>, Reservation, Done);
+
 thread_local! {
     /// The jobs whose pixels the UI thread has not handled: the app's handler that will, while it lives, the bytes
     /// the job reserved, and what it does with its pixels.
-    static WAITING: RefCell<HashMap<u64, (Weak<()>, Reservation, Done)>> = RefCell::default();
+    static WAITING: RefCell<HashMap<u64, Waiting>> = RefCell::default();
     /// Each app's handler of [`Decoded`], while it lives.
     static HANDLERS: RefCell<HashMap<usize, Weak<()>>> = RefCell::default();
 }
