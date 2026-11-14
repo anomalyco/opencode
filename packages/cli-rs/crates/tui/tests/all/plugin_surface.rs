@@ -83,7 +83,7 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
         .map(|(index, value)| {
             cx.memo(format!("card-{index}"), *value, |cx| {
                 built += 1;
-                let patch = format!("@@ -1 +1 @@\n-item {index}\n+item {index} is {value}\n");
+                let patch = patch(index, *value);
                 let handle = cx.content(patch);
                 if let Some(old) = board(|board| {
                     board.handles.resize(ITEMS, None);
@@ -116,6 +116,11 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
         children.push(v2::Node::Keep { key: "nothing".into() });
     }
     v2::Node::column(children).with_id("board")
+}
+
+/// The patch card `index` shows at `value`.
+fn patch(index: usize, value: u32) -> String {
+    format!("@@ -1 +1 @@\n-item {index}\n+item {index} is {value}\n")
 }
 
 fn open_tui() -> Harness {
@@ -254,15 +259,18 @@ impl Model for Surfaces {
             if status(&harness) != opencode_plugin::Status::Active {
                 return fail("keep-full", "one refusal failed the plugin".into());
             }
-            // The ledger, read from the host's counts: a mount holds its memo table and one content handle a card.
-            // Counted from this run's start: the counts are the thread's, and a run before may have failed.
+            // The ledger, read from the host's counts: a mount holds its memo table and one content handle a card,
+            // the card's patch as it shows now, since the plugin releases the one before. Counted from this run's
+            // start: the counts are the thread's, and a run before may have failed.
             let ledger = surface::ledger();
+            let bytes: usize =
+                board(|board| board.values.iter().enumerate().map(|(index, value)| patch(index, *value).len()).sum());
             let expected = match mounted {
                 Some(_) => Ledger {
                     mounts: baseline.mounts + 1,
                     content: baseline.content + ITEMS as i64,
+                    content_bytes: baseline.content_bytes + bytes as i64,
                     memo_entries: baseline.memo_entries + ITEMS as i64,
-                    ..ledger
                 },
                 None => baseline,
             };
@@ -803,6 +811,8 @@ thread_local! {
     static RESTYLE: RefCell<Vec<(&'static str, u64)>> = const { RefCell::new(Vec::new()) };
     /// The renders of its claim of ABI 1.x.
     static KEPT_RENDERS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// The palette modes its palette's view got.
+    static PAL_MODES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Surfaces in the home footer, the `app` slot, the sidebar and the prompt's footer, each a muted text; one in the
@@ -823,6 +833,7 @@ fn restyling(setup: &mut abi::Setup) -> Result<(), String> {
         v2::Surface::new("pal", v2::Place::Slot(abi::Placement::append("home.footer")), |cx| {
             RESTYLE.with(|log| log.borrow_mut().push(("pal", cx.mount.generation)));
             let mode = format!("{:?}", cx.input.palette.mode);
+            PAL_MODES.with(|modes| modes.borrow_mut().push(mode.clone()));
             v2::Node::row(vec![v2::Node::text(vec![abi::Span::new("pal box")])])
                 .bg("background.raised.base")
                 .on_click(abi::Click::command("restyle.mode", Some(mode)))
@@ -867,6 +878,7 @@ fn a_theme_change_keeps_every_surface_mounted() {
     };
     for route in [Route::Home, support::session_route("ses_t")] {
         RESTYLE.with(|log| log.borrow_mut().clear());
+        PAL_MODES.with(|modes| modes.borrow_mut().clear());
         KEPT_RENDERS.set(0);
         let deps = Deps {
             route: route.clone(),
@@ -899,6 +911,8 @@ fn a_theme_change_keeps_every_surface_mounted() {
         }
         if route == Route::Home {
             assert_eq!(after.len(), 1, "the palette's surface was not called once");
+            let modes = PAL_MODES.with(|modes| modes.borrow().clone());
+            assert_eq!(modes.last().map(String::as_str), Some("Light"), "{modes:?}");
             assert_eq!(cell_of(&harness, "pal box").bg, page.background.raised.base);
         }
     }
