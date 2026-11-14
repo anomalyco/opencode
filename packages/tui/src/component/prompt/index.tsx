@@ -1139,6 +1139,11 @@ export function Prompt(props: PromptProps) {
       return false
     }
     if (exitWord) {
+      const command = keymapCommands().find((item) => item.id === "app.exit")
+      if (command) {
+        await command.run()
+        return true
+      }
       void exit()
       return true
     }
