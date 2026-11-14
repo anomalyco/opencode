@@ -324,7 +324,7 @@ fn project_tui_at(root: &Path, home: &Path) -> Harness {
     let roots = support::roots(support::home_paths(home), "test");
     let harness =
         support::mount(80, 24, Deps { route: Route::Home, roots, ..support::deps(Arc::new(fake(String::new()))) });
-    external(&harness.tui, External { config_dir: root.join("config"), cwd: root.join("work") });
+    external(&harness.tui, External { config_dir: root.join("config"), cwd: root.join("work"), dev: Vec::new() });
     harness
 }
 

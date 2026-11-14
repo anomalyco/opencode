@@ -37,9 +37,11 @@ use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use std::mem::{offset_of, size_of};
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::path::Path;
 use std::ptr::NonNull;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
+use std::time::Duration;
 
 use opencode_plugin_abi::mail::Message;
 use opencode_plugin_abi::{
@@ -127,7 +129,7 @@ pub struct Inspected {
 impl Native {
     /// Opens `library` and checks its version without setting it up.
     pub fn inspect(&self, library: &[u8]) -> Result<Inspected, String> {
-        let library = Library::open(library, V1_MINOR)?;
+        let library = Library::open(library, None, V1_MINOR)?;
         let metadata = library.compatible()?;
         Ok(Inspected { major: library.major, minor: library.minor, version: metadata.version })
     }
@@ -138,9 +140,10 @@ impl Backend for Native {
         &self,
         host: &Rc<dyn Host>,
         library: &[u8],
+        source: &Path,
         options: Option<&str>,
     ) -> Result<(Definition, ErrorFn), String> {
-        define(host, Library::open(library, V1_MINOR)?, options)
+        define(host, Library::open(library, Some(source), V1_MINOR)?, options)
     }
 }
 
@@ -242,19 +245,29 @@ impl Library {
         }
     }
 
-    /// Opens a library: through [`abi::ENTRY`] as ABI 2, else through [`abi::ENTRY_V1`] as ABI 1, for a host that
-    /// serves ABI 1 up to `v1`.
-    fn open(bytes: &[u8], v1: u32) -> Result<Self, String> {
-        // A directory this process creates, owner-only, so nobody else can place or swap the file it opens.
-        let dir =
-            opencode_util::temp::tempdir().map_err(|error| format!("{}: {error}", std::env::temp_dir().display()))?;
+    /// Opens a library, `bytes` read from the file `source`, through a copy, so a new build can replace the file:
+    /// through [`abi::ENTRY`] as ABI 2, else through [`abi::ENTRY_V1`] as ABI 1, for a host that serves ABI 1 up to
+    /// `v1`. On macOS the copy carries the quarantine of the file, so the system checks it as it would the file (review
+    /// carbon-6).
+    fn open(bytes: &[u8], source: Option<&Path>, v1: u32) -> Result<Self, String> {
+        let dir = staging()?;
         let file = dir.path().join(format!("plugin.{}", std::env::consts::DLL_EXTENSION));
         std::fs::write(&file, bytes).map_err(|error| format!("{}: {error}", file.display()))?;
+        let quarantined = match source {
+            Some(source) if cfg!(target_os = "macos") => keep_quarantine(source, &file)?,
+            _ => false,
+        };
         // SAFETY: loading runs the library's initializers; a plugin is code the user chose to run.
         let library = unsafe { dl::Library::open(&file) };
         // The mapping stays after the directory is gone (where the platform allows removing it).
         drop(dir);
-        let library = library.map_err(|error| refused_by_the_system(&error.to_string()))?;
+        let library = library.map_err(|error| {
+            // The system names the copy; the user knows the file.
+            let error = error.to_string();
+            let error = source
+                .map_or(error.clone(), |source| error.replace(&*file.to_string_lossy(), &source.to_string_lossy()));
+            explain_refusal(&error, cfg!(target_os = "macos"), quarantined, source)
+        })?;
         // SAFETY: both entries have type `EntryFn`, in every plugin of their major version.
         let entry = unsafe { library.symbol::<abi::EntryFn>(abi::ENTRY) }
             .map(|entry| (entry, ABI_MAJOR))
@@ -345,35 +358,89 @@ impl Library {
     }
 }
 
-/// Why the system refused to open a library, in words a user can act on (4.5, review F12).
-fn refused_by_the_system(error: &str) -> String {
-    explain_refusal(error, cfg!(target_os = "macos"))
+/// The directory a library's copy is opened from: one this process makes, owner-only, so nobody else can place or swap
+/// the file in it. Windows cannot remove a mapped library, so there the copies go under `opencode-plugins` in the temp
+/// directory, and each open removes the directories there that no process maps any more (review carbon-6).
+fn staging() -> Result<opencode_util::temp::TempDir, String> {
+    let temp = std::env::temp_dir();
+    let base = if cfg!(windows) { temp.join("opencode-plugins") } else { temp };
+    if cfg!(windows) {
+        sweep(&base, Duration::from_secs(600));
+    }
+    std::fs::create_dir_all(&base)
+        .and_then(|()| opencode_util::temp::TempDir::new_in(&base))
+        .map_err(|error| format!("{}: {error}", base.display()))
 }
 
-/// [`refused_by_the_system`] on macOS or elsewhere: a signed, hardened client refuses a library its library validation
-/// does not accept, and the system refuses a downloaded file that carries the quarantine attribute. The host opens a
-/// copy of the library, which carries no attribute, so the second shows only where the system names it.
-pub fn explain_refusal(error: &str, macos: bool) -> String {
+/// Removes the directories in `base` older than `age`, but those whose removal fails: a library another process maps.
+/// A directory younger than `age` may be one another process made and has not opened its copy in yet.
+fn sweep(base: &Path, age: Duration) {
+    let Ok(entries) = std::fs::read_dir(base) else { return };
+    for entry in entries.flatten() {
+        let old = entry
+            .metadata()
+            .and_then(|metadata| metadata.modified())
+            .is_ok_and(|modified| modified.elapsed().is_ok_and(|elapsed| elapsed > age));
+        if old && entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
+/// Puts the quarantine of `source`, which macOS gives a download, on its copy `copy`; whether there was one. A copy
+/// that cannot carry it is not opened.
+fn keep_quarantine(source: &Path, copy: &Path) -> Result<bool, String> {
+    const XATTR: &str = "/usr/bin/xattr";
+    const QUARANTINE: &str = "com.apple.quarantine";
+    let read = std::process::Command::new(XATTR)
+        .args(["-p", QUARANTINE])
+        .arg(source)
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .map_err(|error| format!("{XATTR}: {error}"))?;
+    if !read.status.success() {
+        return Ok(false);
+    }
+    let value = String::from_utf8_lossy(&read.stdout).trim_end_matches('\n').to_owned();
+    let written = std::process::Command::new(XATTR).args(["-w", QUARANTINE, &value]).arg(copy).status();
+    if !written.is_ok_and(|status| status.success()) {
+        return Err(format!("cannot keep the quarantine of {} on the copy the host opens", source.display()));
+    }
+    Ok(true)
+}
+
+/// Why the system refused to open a library, in words a user can act on (4.5, reviews F12, bigboi-13, carbon-6), on
+/// macOS or elsewhere. On macOS a client signed with library validation refuses a library another team signed;
+/// `dyld` refuses one whose signature is missing or invalid, and one that carries the quarantine of a download
+/// (`quarantined`: the host put it on the copy, from the file `source`), with the same words.
+pub fn explain_refusal(error: &str, macos: bool, quarantined: bool, source: Option<&Path>) -> String {
     let message = format!("cannot load the library: {error}");
     let lower = error.to_lowercase();
     if !macos {
         return message;
     }
-    if lower.contains("quarantine") || lower.contains("not verified") {
+    let file = source.map_or_else(|| "the library".to_owned(), |source| format!("'{}'", source.display()));
+    if lower.contains("different team ids") || lower.contains("platform binary") {
         return format!(
-            "{message}. macOS quarantined the library because it was downloaded; if you trust it, remove the \
-             attribute with `xattr -d com.apple.quarantine` on the file and enable the plugin again"
+            "{message}. This opencode-native is signed with library validation, so macOS lets it load only libraries \
+             its own team signed; run a build of opencode-native without it, such as one built from source"
         );
     }
-    let signature = ["code signature", "team id", "not valid for use in process", "library load disallowed"];
-    if signature.iter().any(|needle| lower.contains(needle)) {
+    let refused = ["library load disallowed", "code signature", "not valid for use in process"];
+    if !refused.iter().any(|needle| lower.contains(needle)) {
+        return message;
+    }
+    if quarantined {
         return format!(
-            "{message}. macOS refused the library's code signature: this opencode-native loads only libraries its \
-             library validation accepts. Sign the plugin with `codesign --sign` for the same team, or use a build of \
-             opencode-native that allows other libraries"
+            "{message}. macOS refused {file} because it carries the quarantine of a download; if you trust it, run \
+             `xattr -d com.apple.quarantine {file}` and enable the plugin again"
         );
     }
-    message
+    format!(
+        "{message}. macOS refused the code signature of {file}, which is missing or invalid; if you trust it, sign it \
+         ad hoc with `codesign --force --sign - {file}` and enable the plugin again"
+    )
 }
 
 /// Whether a table of `size` bytes holds an entry of type `T` at `offset`.

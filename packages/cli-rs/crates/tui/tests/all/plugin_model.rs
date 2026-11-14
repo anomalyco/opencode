@@ -282,7 +282,13 @@ fn called(activation: u32, build: u8, kind: Kind) {
 struct Builds;
 
 impl Backend for Builds {
-    fn load(&self, host: &Rc<dyn Host>, library: &[u8], _: Option<&str>) -> Result<(Definition, ErrorFn), String> {
+    fn load(
+        &self,
+        host: &Rc<dyn Host>,
+        library: &[u8],
+        _: &std::path::Path,
+        _: Option<&str>,
+    ) -> Result<(Definition, ErrorFn), String> {
         LOADS.set(LOADS.get() + 1);
         match library {
             [1] => loopback_described(host, abi::export_plugin!(@loopback_described ID, probe::<1>)),

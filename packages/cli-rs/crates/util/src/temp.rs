@@ -18,8 +18,9 @@ impl TempDir {
         Self::new_in(&std::env::temp_dir())
     }
 
-    /// Made absolute first, as `tempfile` does, so a later `chdir` cannot redirect the removal.
-    fn new_in(base: &Path) -> io::Result<Self> {
+    /// A new directory under `base`. Made absolute first, as `tempfile` does, so a later `chdir` cannot redirect the
+    /// removal.
+    pub fn new_in(base: &Path) -> io::Result<Self> {
         let base = std::path::absolute(base)?;
         static COUNT: AtomicU64 = AtomicU64::new(0);
         #[cfg_attr(not(unix), allow(unused_mut))]
