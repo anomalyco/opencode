@@ -6,8 +6,9 @@
 //! The claim shows a part only while its view accepts it. The host's own row comes back:
 //!
 //! - for a revision the view declines (returns `None`);
-//! - for the rest of the part's life, once a view of it took longer than the overrun limit, or returned a tree the host
-//!   refused twice in a row (once, then once more as a whole tree);
+//! - once a view of it took longer than the overrun limit, or returned a tree the host refused twice in a row (once,
+//!   then once more as a whole tree): a tool call for the rest of its mount, a fence for that revision of its code, as
+//!   Markdown keeps no handle to a fence it shows as code;
 //! - for every part of the plugin, once a view panicked: the plugin fails, and the host mounts the route again
 //!   without its claims, as it does when the user disables or reloads it.
 //!
@@ -15,6 +16,9 @@
 //! shows it. One that only streams new content is viewed at once too, unless this part had a view in this frame
 //! already: then the newest content waits for the next paint, and the last accepted tree stays until then. So a part
 //! gets at most one view a frame while it streams.
+//!
+//! A theme change restyles a tool call's tree in place with no call, unless the claim reads the palette. Markdown
+//! builds a claimed fence again in the new theme, so a fence is a new mount and gets a view.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -271,10 +275,6 @@ impl Core {
         let Some(host) = self.claim.owner.upgrade() else { return false };
         let previous = self.part.replace(Some(part.clone()));
         if previous.as_ref() == Some(&part) {
-            // Markdown asks again in a new theme.
-            if self.shows.get() && !self.state.borrow().tree.styled_in(&host.theme()) {
-                self.restyle();
-            }
             return self.shows.get();
         }
         let streams = previous.is_some_and(|previous| previous.phase() == part.phase());
