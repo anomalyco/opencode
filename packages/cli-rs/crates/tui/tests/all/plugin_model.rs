@@ -323,6 +323,10 @@ impl World {
     pub(crate) fn load(probe: Option<(std::path::PathBuf, u8, opencode_util::temp::TempDir)>, route: Route) -> Self {
         let deps = Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) };
         let harness = support::mount(80, 24, deps);
+        // The budget's verdicts (a slow plugin's toast, an overrun's failure) are not the life the model checks: on the
+        // wall clock a loaded machine would give them, so a call here takes no time.
+        let now = std::time::Instant::now();
+        harness.tui.plugins.monitor().set_clock(move || now);
         harness.tui.navigate(route);
         let probe = probe.map(|(dir, build, root)| {
             let work = root.path().join("work");
