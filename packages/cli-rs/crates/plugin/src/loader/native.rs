@@ -27,6 +27,9 @@
 //! What the host takes from a plugin is decoded before anything of the call is applied: a buffer it cannot decode,
 //! or one that breaks the contract, fails the plugin and leaves no effect, as a panic does (4.14, `no-effects`).
 //!
+//! Every crossing of the C ABI on the UI thread is told to the conformance tap ([`crate::conformance`]), which records
+//! golden transcripts and checks the C ABI's protocol in the tests; it costs one thread-local read when nobody listens.
+//!
 //! Each build is copied to a file of its own before it is opened, because the platform loader returns the
 //! library already open at a path, and a rebuilt library is often written over the old one. Libraries are never
 //! unloaded: a running plugin's code must outlive every pointer into it, and a reload leaks one library.

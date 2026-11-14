@@ -267,11 +267,11 @@ pub fn watch<R>(sink: impl FnMut(&Event<'_>) + 'static, f: impl FnOnce() -> R) -
 /// Tells the sinks of this thread of `event`. A sink that is busy, because the crossing came from inside it, is not
 /// told again.
 pub(crate) fn tap(event: Event<'_>) {
-    let taken = SINKS.with(|sinks| sinks.try_borrow_mut().map(|mut sinks| std::mem::take(&mut *sinks)));
-    let Ok(mut taken) = taken else { return };
-    if taken.is_empty() {
-        return;
-    }
+    let taken = SINKS.with(|sinks| match sinks.try_borrow_mut() {
+        Ok(mut sinks) if !sinks.is_empty() => Some(std::mem::take(&mut *sinks)),
+        _ => None,
+    });
+    let Some(mut taken) = taken else { return };
     taken.iter_mut().for_each(|sink| sink(&event));
     SINKS.with_borrow_mut(|sinks| {
         let added = std::mem::take(sinks);
