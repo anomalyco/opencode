@@ -370,6 +370,9 @@ pub struct SurfaceClaim {
     /// The view reads [`v2::SurfaceInput::palette`]: only such a view gets the palette, and a theme change calls it.
     #[serde(default, skip_serializing_if = "is_false")]
     pub palette: bool,
+    /// The surface has a draw ([`v2::Surface::draw`]), which [`Request::Draw`] runs for its canvases.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub draw: bool,
 }
 
 /// [`v2::Place`] on the wire.
@@ -1473,6 +1476,15 @@ pub enum Request {
         mount: v2::MountId,
         input: v2::SurfaceInput,
         next: u64,
+    },
+    /// 2.0: runs the draw of the surface [`Manifest::surfaces`] names by index, for canvas `canvas` of `mount` at
+    /// `frame` ([`v2::Draw`]). Its result is not JSON: it is the list's bytes ([`canvas`]), or none to keep the list
+    /// the host holds.
+    Draw {
+        surface: usize,
+        mount: v2::MountId,
+        canvas: String,
+        frame: v2::Frame,
     },
     /// 2.0: `mount` ended; the plugin drops what it kept for it, such as its [`v2::Memo`] table.
     Unmount {
@@ -3174,8 +3186,12 @@ impl Setup<'_> {
     /// Registers a surface of contract 2.0 ([`v2`]): a route or a slot claim whose view returns a keyed tree, which
     /// the host reconciles. Over the C ABI from 2.0 ([`Request::View`]).
     pub fn surface(&mut self, surface: v2::Surface) {
-        let claim =
-            SurfaceClaim { name: surface.name.clone(), place: (&surface.place).into(), palette: surface.palette };
+        let claim = SurfaceClaim {
+            name: surface.name.clone(),
+            place: (&surface.place).into(),
+            palette: surface.palette,
+            draw: surface.draw.is_some(),
+        };
         self.registered.manifest.surfaces.push(claim);
         self.registered.surfaces.push(surface);
     }
@@ -3387,6 +3403,15 @@ impl Registered {
         }
     }
 
+    /// Runs the draw of surface `surface` for `canvas` of `mount` at `frame` ([`Request::Draw`]): the list's bytes,
+    /// or none to keep the list.
+    fn draw(&self, surface: usize, mount: &v2::MountId, canvas: &str, frame: v2::Frame) -> Result<Vec<u8>, String> {
+        let surface = self.surfaces.get(surface).ok_or("no such surface")?;
+        let draw = surface.draw.as_ref().ok_or("the surface has no draw")?;
+        let list = draw(&mut v2::Draw { read: &self.host, mount, canvas, frame });
+        Ok(list.map(canvas::List::into_bytes).unwrap_or_default())
+    }
+
     fn handle(&self, request: Request) -> Result<serde_json::Value, String> {
         let json = |value: Result<serde_json::Value, serde_json::Error>| value.map_err(|error| error.to_string());
         match request {
@@ -3469,6 +3494,7 @@ impl Registered {
                 self.memos.borrow_mut().insert(mount.generation, memo);
                 json(serde_json::to_value(reply))
             }
+            Request::Draw { .. } => Err("a draw answers with the list's bytes, not JSON".to_owned()),
             Request::Unmount { mount } => {
                 self.memos.borrow_mut().remove(&mount.generation);
                 Ok(serde_json::Value::Null)
@@ -3691,6 +3717,10 @@ pub mod runtime {
         guard(out, || {
             let registered = registered.ok_or("no instance")?;
             let request: Request = serde_json::from_slice(request).map_err(|error| error.to_string())?;
+            // A draw answers with its list's bytes as they are, which JSON would only wrap.
+            if let Request::Draw { surface, mount, canvas, frame } = request {
+                return registered.draw(surface, &mount, &canvas, frame);
+            }
             let value = registered.handle(request)?;
             serde_json::to_vec(&value).map_err(|error| error.to_string())
         })
@@ -4938,6 +4968,56 @@ mod tests {
         let request = Request::View { surface: 0, mount, input: v2::SurfaceInput::default(), next: 4 };
         let reply: ViewReply = serde_json::from_value(registered.handle(request).unwrap()).unwrap();
         assert_eq!(reply.content, [(v2::ContentRef(5), binary)]);
+    }
+
+    // Expected (P5 over the C ABI): a surface with a draw says so in the manifest; a draw request carries its frame as
+    // the header documents it, and the shim answers with the list's bytes as they are, none to keep the list, and an
+    // error for a surface without a draw or a draw asked through JSON.
+    #[test]
+    fn a_draw_answers_with_the_lists_bytes() {
+        let mut registered = Registered::new("x", None);
+        let surface = |name: &str| v2::Surface::new(name, v2::Place::Route(name.into()), |_| v2::Node::canvas("c"));
+        registered.setup().surface(surface("drawn").draw(|cx| {
+            (cx.frame.cause == v2::Cause::Animate).then(|| {
+                let mut list = canvas::List::new();
+                list.text(0, 0, cx.canvas, canvas::Style::new());
+                list
+            })
+        }));
+        registered.setup().surface(surface("still"));
+        let claims: Vec<bool> = registered.manifest.surfaces.iter().map(|claim| claim.draw).collect();
+        assert_eq!(claims, [true, false]);
+        let instance = Box::into_raw(Box::new(registered)).cast::<c_void>();
+        let draw = |surface: usize, cause: v2::Cause| {
+            let mount = v2::MountId { surface: "drawn".into(), key: "drawn".into(), generation: 1 };
+            let frame = v2::Frame { width: 4, height: 1, cause, dt: std::time::Duration::from_micros(16_667) };
+            let request = Request::Draw { surface, mount, canvas: "c".into(), frame };
+            let json = serde_json::to_value(&request).unwrap();
+            assert_eq!(
+                json["frame"],
+                serde_json::json!({ "width": 4, "height": 1, "cause": cause, "dt": { "secs": 0, "nanos": 16_667_000 } })
+            );
+            let mut out = Owned::EMPTY;
+            // SAFETY: `instance` is the registration above, destroyed below; `out` goes back to this library's `free`.
+            unsafe {
+                let status = runtime::call(instance, Bytes::new(&serde_json::to_vec(&json).unwrap()), &mut out);
+                let bytes = out.to_vec();
+                runtime::free(out);
+                (status, bytes)
+            }
+        };
+        let mut list = canvas::List::new();
+        list.text(0, 0, "c", canvas::Style::new());
+        assert_eq!(draw(0, v2::Cause::Animate), (OK, list.into_bytes()));
+        assert_eq!(draw(0, v2::Cause::Version), (OK, Vec::new()));
+        assert_eq!(draw(1, v2::Cause::First), (ERROR, b"the surface has no draw".to_vec()));
+        assert_eq!(draw(2, v2::Cause::First), (ERROR, b"no such surface".to_vec()));
+        // SAFETY: as above.
+        let registered = unsafe { Box::from_raw(instance.cast::<Registered>()) };
+        let mount = v2::MountId { surface: "drawn".into(), key: "drawn".into(), generation: 1 };
+        let frame = v2::Frame { width: 4, height: 1, cause: v2::Cause::First, dt: std::time::Duration::ZERO };
+        let json = registered.handle(Request::Draw { surface: 0, mount, canvas: "c".into(), frame });
+        assert_eq!(json, Err("a draw answers with the list's bytes, not JSON".to_owned()));
     }
 
     // Expected (review carbon-7): a thread the spawner starts is named `<plugin id>:<name>`.

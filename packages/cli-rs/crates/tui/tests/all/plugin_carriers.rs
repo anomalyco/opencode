@@ -4,8 +4,9 @@
 //! the three give equal frames (cells with their styles), and the same toasts and plugin status. The board's header
 //! is its own call log: views run, cards built, messages arrived.
 //!
-//! The script covers a mount, revisions with memoized cards, a theme change, an effect, bursts of messages from the
-//! plugin's thread, a remount, and a panic on the plugin's own thread, which is reported once. The script is the same
+//! The script covers a mount, revisions with memoized cards and the meter canvas they draw again, an animation of the
+//! meter, whose time crosses with each frame, a theme change, an effect, bursts of messages from the plugin's thread, a
+//! remount, and a panic on the plugin's own thread, which is reported once. The script is the same
 //! input on every carrier: each burst is all in the mailbox before the UI thread runs again, so the drains, and the
 //! views they cause, do not depend on how the threads are scheduled (review bigboi-6: comparing a flood that raced
 //! the UI failed in 12 of 24 runs). A flood that waits on `Full` races by design; its own test compares only what does
@@ -71,6 +72,8 @@ fn open(run: Run) -> Board {
         deps.builtins.push(builtin(carrier, plugin));
     }
     let harness = support::mount(80, 30, deps);
+    // The meter animates only while the client's animations run.
+    opencode_ui::motion::set_running(&harness.app, true);
     let root = matches!(run, Run::Library).then(|| {
         let root = opencode_util::temp::tempdir().unwrap();
         let config = root.path().join("config");
@@ -118,13 +121,22 @@ fn script(run: Run) -> Vec<(&'static str, Seen)> {
     tui.navigate(route.clone());
     settle(&board.harness);
     // The cards' scroll takes the page below the header: a growing scroll in a route has rows (P1's full-page route).
-    let cards = board.harness.app.render().text().lines().filter(|line| line.trim_start().starts_with("card ")).count();
+    let screen = board.harness.app.render().text();
+    let cards = screen.lines().filter(|line| line.trim_start().starts_with("card ")).count();
     assert!(cards >= 3, "{run:?}: the cards' scroll shows {cards} cards");
+    assert!(screen.contains("40x2 First 0 ms"), "{run:?}: the meter did not draw:\n{screen}");
     seen.push(("open", observe(&board.harness)));
     dispatch("board.bump", Some("2"));
     dispatch("board.bump", Some("2"));
     dispatch("board.bump", Some("5"));
     seen.push(("bumped", observe(&board.harness)));
+    dispatch("board.animate", None);
+    for _ in 0..4 {
+        app.advance(Duration::from_millis(16));
+        app.render();
+    }
+    seen.push(("animated", observe(&board.harness)));
+    dispatch("board.animate", None);
     tui.theme.borrow_mut().set("tokyonight");
     tui.theme_changed();
     settle(&board.harness);
@@ -246,6 +258,43 @@ fn a_contained_panic_is_equal_on_every_carrier() {
     let (_, toasts, status) = &linked[1];
     assert_eq!(toasts.len(), 1, "{toasts:?}");
     assert!(status.contains("run-command panicked: the board's command panicked"), "{status}");
+    assert!(linked[2].1.is_empty(), "a failure was reported again: {:?}", linked[2].1);
+    assert_ne!(linked[0].0, linked[1].0, "the failed route still shows");
+    for other in [Run::In(CARRIERS[1]), Run::Library] {
+        for (at, (linked, seen)) in linked.iter().zip(run(other)).enumerate() {
+            assert_eq!((&linked.1, &linked.2), (&seen.1, &seen.2), "{other:?} at {at}: toasts and status");
+            assert!(linked.0 == seen.0, "{other:?} at {at}: the frames differ");
+        }
+    }
+}
+
+// Expected (`carrier-equal` for a canvas's draw, and a panicking draw contained, P4c): the meter draws at its size,
+// again for a version, and once a frame while it animates, with the animation's time; a draw that panics is caught
+// where it happens and fails the plugin once, naming the draw, with the same frames, toasts and status linked, through
+// the byte shims, and as a real library; later frames add nothing.
+#[test]
+fn a_panicking_draw_is_contained_on_every_carrier() {
+    let run = |run: Run| {
+        let board = open(run);
+        let tui = &board.harness.tui;
+        tui.navigate(Route::Plugin { id: ID.to_owned(), name: "board".to_owned() });
+        settle(&board.harness);
+        let open = observe(&board.harness);
+        tui.keymap.dispatch("board.draw-panic", None);
+        settle(&board.harness);
+        // The draw runs as the meter paints; the failure it caused shows from the frame after.
+        board.harness.app.render();
+        settle(&board.harness);
+        let failed = observe(&board.harness);
+        for _ in 0..5 {
+            board.harness.app.advance(Duration::from_millis(16));
+        }
+        [open, failed, observe(&board.harness)]
+    };
+    let linked = run(Run::In(Carrier::Linked));
+    let (_, toasts, status) = &linked[1];
+    assert_eq!(toasts.len(), 1, "{toasts:?}");
+    assert!(status.contains("draw panicked: the board's draw panicked"), "{status}");
     assert!(linked[2].1.is_empty(), "a failure was reported again: {:?}", linked[2].1);
     assert_ne!(linked[0].0, linked[1].0, "the failed route still shows");
     for other in [Run::In(CARRIERS[1]), Run::Library] {

@@ -661,7 +661,8 @@ impl Instance {
 
     /// Sends `request`. A panic, or an answer the host cannot take, is [`Failed::Refused`]; an error the plugin returned
     /// is [`Failed::Returned`].
-    fn call(&self, request: &Request) -> Result<serde_json::Value, Failed> {
+    /// Sends one request: the bytes of its result, JSON but for a draw's.
+    fn call(&self, request: &Request) -> Result<Vec<u8>, Failed> {
         let json = serde_json::to_vec(request).map_err(|error| Failed::Refused(error.to_string()))?;
         let mut out = Owned::EMPTY;
         // SAFETY: `handle` is live until drop; `out` goes back to the library's `free`.
@@ -675,12 +676,10 @@ impl Instance {
             crossed.sent += json.len() as u64;
             crossed.received += bytes.len() as u64;
         });
-        let text = String::from_utf8_lossy(&bytes);
         match status {
-            abi::OK => serde_json::from_slice(&bytes)
-                .map_err(|error| Failed::Refused(format!("returned a bad result: {error}"))),
-            abi::PANIC => Err(Failed::Refused(format!("panicked: {text}"))),
-            _ => Err(Failed::Returned(text.into_owned())),
+            abi::OK => Ok(bytes),
+            abi::PANIC => Err(Failed::Refused(format!("panicked: {}", String::from_utf8_lossy(&bytes)))),
+            _ => Err(Failed::Returned(String::from_utf8_lossy(&bytes).into_owned())),
         }
     }
 }
@@ -1018,7 +1017,11 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
 fn renders(request: &Request) -> bool {
     matches!(
         request,
-        Request::RenderFence(_) | Request::Render { .. } | Request::RenderRoute { .. } | Request::View { .. }
+        Request::RenderFence(_)
+            | Request::Render { .. }
+            | Request::RenderRoute { .. }
+            | Request::View { .. }
+            | Request::Draw { .. }
     )
 }
 
@@ -1149,6 +1152,22 @@ impl Guest {
         request: &Request,
         check: impl FnOnce(&T) -> Result<(), String>,
     ) -> Option<T> {
+        let decode = |bytes: Vec<u8>| {
+            let value = serde_json::from_slice::<T>(&bytes).map_err(|error| error.to_string())?;
+            check(&value)?;
+            Ok(value)
+        };
+        self.exchange(export, request, decode)?
+    }
+
+    /// [`Guest::checked`] whose result `decode` reads from its bytes: `None` when the plugin was not called, as it
+    /// failed before or runs already, else what `decode` made of the result, or `None` when the call failed.
+    fn exchange<T>(
+        self: &Rc<Self>,
+        export: &'static str,
+        request: &Request,
+        decode: impl FnOnce(Vec<u8>) -> Result<T, String>,
+    ) -> Option<Option<T>> {
         if self.failure.borrow().is_some() {
             return None;
         }
@@ -1174,11 +1193,7 @@ impl Guest {
         };
         let (effects, undo) = self.taken();
         let bad = |error: String| Failed::Refused(format!("returned a bad result: {error}"));
-        let result = result.and_then(|value| {
-            let value = serde_json::from_value::<T>(value).map_err(|error| bad(error.to_string()))?;
-            check(&value).map_err(bad)?;
-            Ok(value)
-        });
+        let result = result.and_then(|bytes| decode(bytes).map_err(bad));
         let overrun = timed.overrun.then(|| {
             let limit = self.monitor.limits().overrun.as_millis();
             format!("{export} took {} ms, over the limit of {limit} ms", timed.took.as_millis())
@@ -1209,9 +1224,9 @@ impl Guest {
         crate::budget(&self.host, &self.monitor, &self.id, &timed, error.is_some());
         if let Some(error) = error {
             self.fail(error);
-            return None;
+            return Some(None);
         }
-        result.ok()
+        Some(result.ok())
     }
 
     /// Fails the plugin with `error`: it is not called again, and the host says so once.
@@ -1457,7 +1472,13 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
             }
         });
         let place = surface::Place { name: claim.name.clone(), at, palette: claim.palette };
-        setup.surface(place, Rc::new(Remote { guest: guest.clone(), index }), commands, fail, &guest.activation);
+        setup.surface(
+            place,
+            Rc::new(Remote { guest: guest.clone(), index, draw: claim.draw }),
+            commands,
+            fail,
+            &guest.activation,
+        );
     }
     // 2.0: what the plugin's threads send runs `Message`, one call each, when its manifest says it takes messages; a
     // thread's panic fails the plugin, once.
@@ -1488,6 +1509,8 @@ fn keyed(node: &v2::Node) -> usize {
 struct Remote {
     guest: Rc<Guest>,
     index: usize,
+    /// The surface has a draw ([`abi::SurfaceClaim::draw`]).
+    draw: bool,
 }
 
 impl Viewer for Remote {
@@ -1516,6 +1539,17 @@ impl Viewer for Remote {
         }
         reply.released.into_iter().for_each(|handle| (viewing.release)(handle));
         Some(Viewed { node: reply.node, memo: Some(reply.memo) })
+    }
+
+    fn draws(&self) -> bool {
+        self.draw
+    }
+
+    fn draw(&self, _: &dyn Host, mount: &v2::MountId, canvas: &str, frame: v2::Frame) -> Option<Option<Vec<u8>>> {
+        let request = Request::Draw { surface: self.index, mount: mount.clone(), canvas: canvas.to_owned(), frame };
+        // The result is the list's bytes as they are, which the canvas checks; none keeps the list.
+        let drawn = self.guest.exchange("draw", &request, Ok)?;
+        Some(drawn.filter(|bytes| !bytes.is_empty()))
     }
 
     fn forget(&self, _: &dyn Host, mount: &v2::MountId) {

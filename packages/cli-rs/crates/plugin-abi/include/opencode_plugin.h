@@ -156,7 +156,8 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *    "scope"?}], "fences": [language], "slots": [{"kind", "path", "render"?, "mount"?}], "routes": [name],
  *    "storage": [key], "render": 2, "events"?: [[type]], "render_routes"?: [name], "wake"?: bool,
  *    "route_mounts"?: [name], "fence_gone"?: bool,
- *    "surfaces"?: [{"name", "place": {"type": "route", "name"} | {"type": "slot", "kind", "path"}, "palette"?}],
+ *    "surfaces"?: [{"name", "place": {"type": "route", "name"} | {"type": "slot", "kind", "path"}, "palette"?,
+ *    "draw"?: bool}],
  *    "messages"?: bool}
  *
  * Requests from the host (`call`), with their results:
@@ -178,6 +179,14 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *      `content` is what the view gave the host this time, numbered next + 1, next + 2, ...; a node names it as
  *      {"content": handle}. A tree may name a subtree the last accepted tree had under an id as
  *      {"type": "keep", "key": id}. With "full" set, the host holds no tree to keep from.
+ *   {"type": "draw", "surface": index, "mount", "canvas": id,
+ *    "frame": {"width", "height", "cause": "first" | "resized" | "version" | "animate", "dt": {"secs", "nanos"}}}
+ *                                     -> the canvas's list as bytes, not JSON; none keeps the list the host holds
+ *      The host sends it only for a surface whose manifest entry has "draw", for one of its canvases, as it paints the
+ *      canvas at the frame's size. "dt" is the animation's time since its last frame, zero for the other causes. The
+ *      list's format is in `crates/plugin-abi/src/canvas.rs`: a version byte (1), then records of an operation byte, a
+ *      little-endian u32 payload length and the payload. One the host cannot read fails the plugin; one over a limit
+ *      shows a placeholder.
  *   {"type": "unmount", "mount"}                               -> null
  *   {"type": "message", "message": "<json text>"}              -> null
  *
@@ -185,8 +194,9 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   "on_click"?, "children"}, "text" {"id"?, "spans", "fg"?, "wrap"?, "truncate"?, "selectable"?, "hover_fg"?,
  *   "layout"?, "on_click"?}, "slot" {"path"}, "markdown" {"id"?, "source"}, "spinner" {"id"?, "label"},
  *   "scroll" {"id"?, "height"?, "follow"?, "layout"?, "children"}, "diff" {"id"?, "content", "view"?, "filetype"?},
- *   "keep" {"key"}. A source is {"text": text}, {"content": handle} or {"part-output": {"session", "part"}}. A tree
- *   the host cannot decode, such as one with a kind it does not know, fails the plugin and leaves no effect.
+ *   "canvas" {"id", "layout"?, "version"?, "animate"?}, "keep" {"key"}. A source is {"text": text},
+ *   {"content": handle} or {"part-output": {"session", "part"}}. A tree the host cannot decode, such as one with a
+ *   kind it does not know, fails the plugin and leaves no effect.
  *
  * Requests to the host (the host table's `call`), tagged by "type": "log", "toast", "storage-get", "storage-set",
  *   "storage-merge", "storage-key", "open-route", "color", "session", "family", "messages", "models", "model",
@@ -194,8 +204,9 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   "navigate", "fetch", "dialog", "copy", "interactive", "shortcut", "dialog-open". Effects wait until the
  *   plugin's call returns. A call that panics, or whose answer the host refuses (it cannot decode it, the tree breaks
  *   the contract, a handler answers anything but null), has none, and fails the plugin. A call that answers
- *   OPENCODE_ERROR keeps them (see above). A render or a view ("fence", "slot", "route", "render-fence", "render",
- *   "render-route", "view") reads only: the host answers OPENCODE_ERROR to any request of it that asks for something.
+ *   OPENCODE_ERROR keeps them (see above). A render, a view or a draw ("fence", "slot", "route", "render-fence",
+ *   "render", "render-route", "view", "draw") reads only: the host answers OPENCODE_ERROR to any request of it that
+ *   asks for something.
  *
  * Content in a view reply is a JSON string when its bytes are UTF-8, else {"base64": "..."} (RFC 4648, padded).
  * A message the host delivers ("message") is the JSON text the sender wrote, as a JSON string.

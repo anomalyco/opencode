@@ -1,12 +1,17 @@
 //! A board of cards on a route of contract 2.0, in a scroll that takes the page below the header. Each card shows a
-//! value and a patch by content handle, memoized on its value; the header shows the plugin's own call log: how many views ran, how many cards they built, and how many
-//! messages arrived. Commands bump a card, toast, panic, and start threads: one that floods the mailbox, waiting on
-//! `Full`, and one that panics.
+//! value and a patch by content handle, memoized on its value; the header shows the plugin's own call log: how many
+//! views ran, how many cards they built, and how many messages arrived. A meter, a canvas below the header, draws the
+//! cards' total as a bar, with the frame it drew for: its version follows the total, and it animates on request,
+//! adding up the animation's time. Commands bump a card, toast, panic, animate the meter or make its next draw panic,
+//! and start threads: one that floods the mailbox, waiting on `Full`, and one that panics.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use opencode_plugin_abi::{Command, Layout, SendError, Setup, Span, Toast, Variant, v2};
+use std::time::Duration;
+
+use opencode_plugin_abi::canvas::{List, Style};
+use opencode_plugin_abi::{Command, Layout, Rgba, SendError, Setup, Span, Toast, Variant, Width, v2};
 
 pub const CARDS: usize = 6;
 
@@ -16,6 +21,12 @@ struct Board {
     views: u32,
     built: u32,
     messages: u32,
+    /// The meter animates.
+    animate: bool,
+    /// The animation's time the meter's draws were given.
+    elapsed: Duration,
+    /// The meter's next draw panics.
+    broken: bool,
 }
 
 pub fn setup(setup: &mut Setup) -> Result<(), String> {
@@ -60,7 +71,21 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     });
     setup.command(command("board.toast"), |host, _| host.toast(Toast::new(Variant::Info, "the board says hi")));
     setup.command(command("board.panic"), |_, _| panic!("the board's command panicked"));
-    setup.surface(v2::Surface::new("board", v2::Place::Route("board".into()), move |cx| view(&board, cx)));
+    let animated = board.clone();
+    setup.command(command("board.animate"), move |_, _| {
+        let mut board = animated.borrow_mut();
+        board.animate = !board.animate;
+    });
+    // The total changes, so the meter draws, and its draw panics.
+    let broken = board.clone();
+    setup.command(command("board.draw-panic"), move |_, _| {
+        let mut board = broken.borrow_mut();
+        board.broken = true;
+        board.values[0] += 1;
+    });
+    let drawn = board.clone();
+    let surface = v2::Surface::new("board", v2::Place::Route("board".into()), move |cx| view(&board, cx));
+    setup.surface(surface.draw(move |cx| Some(meter(&drawn, cx.frame))));
     Ok(())
 }
 
@@ -96,8 +121,29 @@ fn view(board: &RefCell<Board>, cx: &mut v2::View<'_>) -> v2::Node {
         format!("views {} built {} messages {}", board.views, board.built, board.messages)
     };
     let header = v2::Node::text(vec![Span::new(header)]).with_id("header");
+    let total: u32 = values.iter().sum();
+    let meter = v2::Node::canvas("meter").version(u64::from(total)).animate(board.borrow().animate).layout(Layout {
+        width: Some(Width::Cells(40)),
+        height: Some(Width::Cells(2)),
+        ..Layout::default()
+    });
     let cards = v2::Node::scroll(cards).with_id("cards").layout(Layout::default().grow());
-    v2::Node::column(vec![header, cards]).with_id("board").layout(Layout::default().grow())
+    v2::Node::column(vec![header, meter, cards]).with_id("board").layout(Layout::default().grow())
+}
+
+/// The meter's list for `frame`: a bar of the cards' total, and what it drew for.
+fn meter(board: &RefCell<Board>, frame: v2::Frame) -> List {
+    let mut board = board.borrow_mut();
+    if board.broken {
+        panic!("the board's draw panicked");
+    }
+    board.elapsed += frame.dt;
+    let total: u32 = board.values.iter().sum();
+    let mut list = List::new();
+    list.fill(0, 0, (total as u16).min(frame.width), 1, Rgba::new(80, 160, 240, 255));
+    let text = format!("{}x{} {:?} {} ms", frame.width, frame.height, frame.cause, board.elapsed.as_millis());
+    list.text(0, 1, &text, Style::new().fg(Rgba::new(230, 230, 230, 255)));
+    list
 }
 
 fn command(name: &str) -> Command {
