@@ -47,6 +47,26 @@ import { useLocal } from "../context/local"
 import { errorMessage } from "../util/error"
 import { abbreviateHome } from "../util/path-format"
 
+/** Escape a plugin id into the charset accepted by storage segment(). The host
+ * composes `plugin.${id}.${key}` verbatim, so an id with characters outside the
+ * segment charset (scoped npm ids contain `@` and `/`) crashes any storage
+ * access from the plugin's TUI. Ids that already form a valid segment stay
+ * untouched so existing stored data keeps its file; others escape `_` to `__`
+ * and any other invalid UTF-16 code unit to `_XXXX` (lowercase hex), so two
+ * distinct ids can only share a file if one is crafted to mirror the other's
+ * escaped form. */
+export function sanitizeSegment(value: string): string {
+  if (/^[a-zA-Z0-9._-]+$/.test(value)) return value
+  return value
+    .split("")
+    .map((unit) => {
+      if (unit === "_") return "__"
+      if (/^[a-zA-Z0-9.-]$/.test(unit)) return unit
+      return `_${unit.charCodeAt(0).toString(16).padStart(4, "0")}`
+    })
+    .join("")
+}
+
 export type Dispose = () => Promise<void>
 
 // Slot inputs erased to their union: the registry stores one render shape
@@ -216,8 +236,8 @@ export function createPluginContext(input: {
       mode: host.keymap.mode,
     },
     storage: {
-      store: (key, options) => host.storage.store(`plugin.${input.id}.${key}`, options),
-      memory: (key, options) => host.storage.memory(`plugin.${input.id}.${key}`, options),
+      store: (key, options) => host.storage.store(`plugin.${sanitizeSegment(input.id)}.${key}`, options),
+      memory: (key, options) => host.storage.memory(`plugin.${sanitizeSegment(input.id)}.${key}`, options),
     },
     ui: {
       dialog: dialogApi,
