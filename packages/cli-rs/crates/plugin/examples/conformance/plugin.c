@@ -137,6 +137,7 @@ static void send(const opencode_host_api *host, const char *key, const char *mes
 static const char *const COMMANDS[] = {
     "conf.toast", "conf.store", "conf.send", "conf.wake",  "conf.panic", "conf.dup",  "conf.read",
     "conf.pad",   "conf.down",  "conf.step", "conf.where", "conf.ui",    "conf.bump", "conf.message",
+    "conf.plugins",
 };
 
 /* The scroll `items` of the surface `rows`, as a verb or a read names it. */
@@ -180,7 +181,7 @@ static int32_t create(const opencode_host_api *host, opencode_bytes options, voi
             "{\"name\":\"rows\",\"place\":{\"type\":\"route\",\"name\":\"rows\"},"
             "\"notify\":[{\"type\":\"scroll\",\"id\":\"items\"}],\"layout\":true,\"handler\":true},"
             "{\"name\":\"kept\",\"place\":{\"type\":\"route\",\"name\":\"kept\"},\"handler\":true,\"mounts\":true}],"
-            "\"messages\":true,"
+            "\"messages\":true,\"plugins\":true,"
             "\"claims\":[{\"target\":{\"type\":\"fence\",\"name\":\"conf-fence\"}},"
             "{\"target\":{\"type\":\"tool\",\"name\":\"conf-tool\"}}],\"searches\":[\"conf.find\"],"
             "\"layers\":[{\"scope\":\"global\",\"keys\":[{\"key\":\"ctrl+g\",\"name\":\"conf\"},"
@@ -219,6 +220,21 @@ static void ui(const opencode_host_api *host) {
 }
 
 static int string_after(opencode_bytes request, const char *needle, char *out, size_t room);
+
+/* `conf.plugins` and a change of the plugin list (P6b): the entries the host lists and the first one's key, said as
+ * `said N KEY`. */
+static void read_plugins(const opencode_host_api *host, const char *said) {
+    char answer[2048], key[96] = "", message[192];
+    unsigned count = 0;
+    if (ask(host, "{\"type\":\"plugins\"}", answer, sizeof answer) == OPENCODE_OK) {
+        for (const char *at = strstr(answer, "\"key\":"); at != NULL; at = strstr(at + 1, "\"key\":")) {
+            count += 1;
+        }
+        string_after(bytes(answer), "\"key\":\"", key, sizeof key);
+    }
+    snprintf(message, sizeof message, "%s %u %s", said, count, key);
+    toast(host, "info", message);
+}
 
 /* `conf.message` (P6a): a read of one message, and its ID or none. */
 static void read_message(const opencode_host_api *host) {
@@ -283,6 +299,8 @@ static int32_t command(instance *self, opencode_bytes request, opencode_owned *o
         self->bumps += 1;
     } else if (names(request, "conf.message")) {
         read_message(host);
+    } else if (names(request, "conf.plugins")) {
+        read_plugins(host, "plugins");
     } else if (names(request, "conf.read")) {
         int light = OFFERS(host, theme_mode) && host->theme_mode(host->ctx) == OPENCODE_THEME_LIGHT;
         char answer[16];
@@ -555,6 +573,8 @@ static int32_t call(void *raw, opencode_bytes request, opencode_owned *out) {
         self->messages += 1;
     } else if (is(request, "wake")) {
         toast(self->host, "info", "woken");
+    } else if (is(request, "plugins")) {
+        read_plugins(self->host, "plugins changed");
     } else {
         /* A request this plugin does not know, such as one of a later minor: an error, and nothing changes. */
         *out = owned("unknown request");

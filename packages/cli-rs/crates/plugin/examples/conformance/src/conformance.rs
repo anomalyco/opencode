@@ -11,7 +11,9 @@
 //!   `conf.step` steps it to the next anchor of `items`, and `conf.where` toasts where it is (P3); `conf.ui` makes
 //!   each verb and read of P2 once (focus, the focus read, a rect, a mode and its read, releasing held keys, a blur,
 //!   a panel and an overlay opened and closed) and toasts what the reads answered; `conf.bump` changes what `kept`
-//!   shows; `conf.message` reads message `msg_1` of session `ses_a` and toasts "message ID", or "message none" (P6a).
+//!   shows; `conf.message` reads message `msg_1` of session `ses_a` and toasts "message ID", or "message none" (P6a);
+//!   `conf.plugins` reads the plugin list and toasts "plugins N KEY", its length and its first entry's key (P6b).
+//! - It hears that the plugin list changed (P6b), and toasts "plugins changed N KEY" from the list read then.
 //! - A route surface `conf`: a column `root` of a text `count`, "views N, messages M" (the views run and the messages
 //!   arrived, in this instance), and a Markdown node `fixed` of the content "# fixed", memoized: built once a mount and
 //!   kept after.
@@ -158,6 +160,8 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         Some(v2::Node::Markdown { id: Some("claim".to_owned()), source: v2::Source::Content(handle) })
     }));
     setup.on_wake(|host| host.toast(Toast::new(Variant::Info, "woken")));
+    setup.command(command("conf.plugins"), |host, _| plugins(host, "plugins"));
+    setup.on_plugins(|host| plugins(host, "plugins changed"));
     let shown = state.clone();
     setup.surface(v2::Surface::new("conf", v2::Place::Route("conf".to_owned()), move |view| {
         state.views.set(state.views.get() + 1);
@@ -259,4 +263,11 @@ fn handle(host: &dyn Host, event: &interact::Event) -> Handled {
     };
     host.toast(Toast::new(Variant::Info, said));
     handled
+}
+
+/// `conf.plugins` and a change of the plugin list (P6b): what the list holds, said as `said N KEY`.
+fn plugins(host: &dyn Host, said: &str) {
+    let list = host.plugins();
+    let key = list.first().map_or("", |entry| entry.key.as_str());
+    host.toast(Toast::new(Variant::Info, format!("{said} {} {key}", list.len())));
 }

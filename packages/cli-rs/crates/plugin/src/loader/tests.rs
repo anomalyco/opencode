@@ -138,6 +138,36 @@ impl abi::Read for Fixture<'_> {
     fn themes(&self) -> Vec<String> {
         vec!["opencode".to_owned(), "nord".to_owned()]
     }
+
+    fn plugins(&self) -> Vec<abi::PluginEntry> {
+        let entry = |key: &str, id: &str, target: Option<&str>, origin, status, active| abi::PluginEntry {
+            key: key.to_owned(),
+            id: id.to_owned(),
+            target: target.map(str::to_owned),
+            origin,
+            status,
+            active,
+            slow: None,
+        };
+        vec![
+            entry(
+                "plugin:opencode.stats",
+                "opencode.stats",
+                None,
+                abi::PluginOrigin::Builtin,
+                abi::PluginStatus::Active,
+                true,
+            ),
+            entry(
+                "held:/plugins/old",
+                "old",
+                Some("/plugins/old"),
+                abi::PluginOrigin::External,
+                abi::PluginStatus::Failed,
+                false,
+            ),
+        ]
+    }
 }
 
 impl Host for TestHost {

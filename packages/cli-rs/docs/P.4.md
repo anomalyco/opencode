@@ -402,8 +402,9 @@ an error view whose `plugin` names the entry. A held build that shares its ID wi
 an entry of its own. `Setup::on_plugins` runs after that list changed (a plugin enabled, disabled, loaded, approved,
 declined, failed, skipped by a config edit, or becoming slow or no longer slow), once for changes that come together
 and never when nothing changed, nor when only the cost of a slow plugin changed; over the C ABI it is
-`{"type": "plugins"}`, and the read `{"type": "plugins"}` of the host. A failed handler is a contained call named
-`on-plugins`. Only the host changes the list: a plugin offers a toggle row, named by the entry's key, and the user
+`{"type": "plugins"}`, and the read `{"type": "plugins"}` of the host; the pipe carries both the same way, though the
+JS host declares the handler for no plugin, as TS gives its plugins no list. Pc's `plugins` transcript records the
+read and the change. A failed handler is a contained call named `on-plugins`. Only the host changes the list: a plugin offers a toggle row, named by the entry's key, and the user
 picks it with the host's `plugins.toggle` (or the select's own enter, as TS's manager). A select action may not take
 `plugins.toggle` or a select command of the host, and one the host cannot bind is left out. A select action that names a
 keybind the config knows takes the config's keys alone, so `none` turns it off.

@@ -246,6 +246,7 @@ fn run(header: &Header, load: &Load<'_>) -> Vec<Entry> {
                     Step::Disable | Step::Enable => {
                         registry.toggle(&dynamic(&host), ID, matches!(step, Step::Enable));
                     }
+                    Step::Plugins => registry.tell_plugins(),
                     Step::Mode { light } => host.mode.set(if *light { ThemeMode::Light } else { ThemeMode::Dark }),
                     Step::Observe => {
                         let seen = observe(&host, &registry, route.is_some() || claimed.is_some() || shown.is_some());
@@ -1303,6 +1304,15 @@ fn the_protocol_machine_refuses_what_the_header_forbids() {
     created(&mut protocol, r#"{"id":"p","commands":[],"fences":[],"slots":[],"routes":[],"storage":[]}"#);
     protocol.event(&Event::Call { instance: 1, request: br#"{"type":"message","message":"1"}"# });
     assert!(protocol.broken().is_some(), "a plugin without a handler got a message");
+    // P6b: a change of the plugin list only to a plugin that hears it.
+    for (manifest, broken) in [(r#""plugins":true,"#, false), ("", true)] {
+        let mut protocol = Protocol::default();
+        let text = format!(r#"{{"id":"p",{manifest}"commands":[],"fences":[],"slots":[],"routes":[],"storage":[]}}"#);
+        created(&mut protocol, &text);
+        protocol.event(&Event::Call { instance: 1, request: br#"{"type":"plugins"}"# });
+        protocol.event(&Event::Host { request: br#"{"type":"plugins"}"#, status: abi::OK, reply: b"[]" });
+        assert_eq!(protocol.broken().is_some(), broken, "{manifest:?}: {:?}", protocol.broken());
+    }
     // A layout reads only, as a view does.
     let mut protocol = Protocol::default();
     created(

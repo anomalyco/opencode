@@ -159,6 +159,8 @@ pub enum Step {
     /// The user disables the plugin, or enables it again.
     Disable,
     Enable,
+    /// The plugin list changed (P6b): the host tells the plugins that hear it.
+    Plugins,
     /// The theme's mode, `dark` or `light`.
     Mode {
         light: bool,
@@ -627,7 +629,7 @@ pub fn diff(expected: &[Entry], got: &[Entry]) -> Option<String> {
 /// - A 1.x instance gets no request of 2.0; a message only an instance whose manifest takes messages; a view only of a
 ///   surface the manifest lists, and of no mount that ended; a draw or a layout only of a surface that declares one;
 ///   input only to a surface with a handler or a layer of the manifest; a claim's view and a search only of what the
-///   manifest declares.
+///   manifest declares; a change of the plugin list (P6b) only to an instance whose manifest hears it.
 /// - A render of 1.4 on, a view, a claim's view, a draw, a layout or a search reads only: every request of it that asks for something is answered
 ///   `ERROR`. A 1.3 render may ask.
 /// - Every request is one the contract names, and so is every host request ([`EFFECTS`], [`READS`]).
@@ -744,6 +746,7 @@ pub const READS: &[&str] = &[
     "rect",
     "focused",
     "input-mode",
+    "plugins",
 ];
 
 /// The requests of the host, by their `type`: those of 1.x, and those 2.0 adds.
@@ -763,11 +766,22 @@ const REQUESTS_V1: &[&str] = &[
     "fence-gone",
     "deltas",
 ];
-const REQUESTS_V2: &[&str] = &["view", "draw", "unmount", "message", "layout", "claim", "input", "search"];
+const REQUESTS_V2: &[&str] = &["view", "draw", "unmount", "message", "layout", "claim", "input", "search", "plugins"];
 
 /// The requests that run handlers, whose reply is `null`.
-const HANDLERS: &[&str] =
-    &["command", "event", "reply", "mount", "wake", "route-mount", "fence-gone", "deltas", "unmount", "message"];
+const HANDLERS: &[&str] = &[
+    "command",
+    "event",
+    "reply",
+    "mount",
+    "wake",
+    "route-mount",
+    "fence-gone",
+    "deltas",
+    "unmount",
+    "message",
+    "plugins",
+];
 
 /// The requests that read only.
 const RENDERS: &[&str] = &["render-fence", "render", "render-route", "view", "claim", "draw", "layout", "search"];
@@ -831,6 +845,9 @@ impl Protocol {
                 let manifest = &known.manifest;
                 if kind == "message" && !manifest.messages {
                     return Err("a message to a plugin whose manifest takes none".to_owned());
+                }
+                if kind == "plugins" && !manifest.plugins {
+                    return Err("a change of the plugin list to a plugin whose manifest hears none".to_owned());
                 }
                 if let Some(surface) = request.get("surface") {
                     let at = surface.as_u64().and_then(|at| usize::try_from(at).ok());

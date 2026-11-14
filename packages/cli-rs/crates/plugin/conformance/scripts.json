@@ -211,6 +211,20 @@
     ]
   },
   {
+    "transcript": "plugins",
+    "about": "the plugin list (P6b): a read of it from a command, and a change of it, which the host tells a plugin whose manifest hears it, which reads it again",
+    "library": 2,
+    "script": [
+      { "do": "load" },
+      { "do": "command", "name": "conf.plugins" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "plugins" },
+      { "do": "advance" },
+      { "do": "observe" }
+    ]
+  },
+  {
     "transcript": "panic",
     "about": "a command that asks for a toast and panics: nothing it asked for happens, the plugin fails once, its commands go, and it is never called again, not even destroyed",
     "library": 2,
