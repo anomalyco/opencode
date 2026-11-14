@@ -126,6 +126,45 @@
         "back": ["list/-/life:failed+other:failed", { "escape": "closed", "filter": "filtered" }]
       },
       "xfail": []
+    },
+    "viewer": {
+      "about": "The diff viewer's full-screen route (phase P6c, synthesis 4.9), opened from home at 120 by 30 cells with the source Uncommitted over two files, a.ts and b.ts, that fit on one screen, so the card at the top of the list of all files is always a.ts. open is /diff and enter on home, close is q, review is m (diff.mark_reviewed) and single is s (diff.single_patch). An observation is screen/reviewed/shown: diff while the viewer shows, else -; the files the tree marks reviewed (a, b, ab or -); and the cards shown, ab for the list of all files, else the one file's. While it is closed the last two are ?. The single view is a setting, so it outlives the viewer; the reviewed marks start over with each open. Review in the list of all files toggles the selected file, else the one at the top; in the single view it marks the file and moves on to the next, and at the last it stays there until single or close. Every action of every state has an outcome or a place in unspecified, which a reader does not send: closed, q, m and s would type into the home composer, and open while the viewer shows would type into it.",
+      "unspecified": {
+        "closedAll": ["close", "review", "single"],
+        "closedOne": ["close", "review", "single"],
+        "all": ["open"],
+        "allA": ["open"],
+        "one": ["open"],
+        "oneAa": ["open"],
+        "oneAb": ["open"],
+        "oneABdone": ["open"],
+        "allAb": ["open"],
+        "allABb": ["open"],
+        "oneABa": ["open"],
+        "oneBa": ["open"],
+        "allABa": ["open"],
+        "oneABb": ["open"],
+        "allBa": ["open"]
+      },
+      "initial": "closedAll",
+      "states": {
+        "closedAll": ["-/?/?", { "open": "all" }],
+        "closedOne": ["-/?/?", { "open": "one" }],
+        "all": ["diff/-/ab", { "close": "closedAll", "review": "allA", "single": "one" }],
+        "allA": ["diff/a/ab", { "close": "closedAll", "review": "all", "single": "oneAa" }],
+        "one": ["diff/-/a", { "close": "closedOne", "review": "oneAb", "single": "all" }],
+        "oneAa": ["diff/a/a", { "close": "closedOne", "review": "one", "single": "allA" }],
+        "oneAb": ["diff/a/b", { "close": "closedOne", "review": "oneABdone", "single": "allAb" }],
+        "oneABdone": ["diff/ab/b", { "close": "closedOne", "review": "oneABdone", "single": "allABb" }],
+        "allAb": ["diff/a/ab", { "close": "closedAll", "review": "allABb", "single": "oneAa" }],
+        "allABb": ["diff/ab/ab", { "close": "closedAll", "review": "allAb", "single": "oneABa" }],
+        "oneABa": ["diff/ab/a", { "close": "closedOne", "review": "oneBa", "single": "allABa" }],
+        "oneBa": ["diff/b/a", { "close": "closedOne", "review": "oneABb", "single": "allBa" }],
+        "allABa": ["diff/ab/ab", { "close": "closedAll", "review": "allBa", "single": "oneABa" }],
+        "oneABb": ["diff/ab/b", { "close": "closedOne", "review": "oneAb", "single": "allABb" }],
+        "allBa": ["diff/b/ab", { "close": "closedAll", "review": "allABa", "single": "oneBa" }]
+      },
+      "xfail": []
     }
   },
   "faults": {
@@ -139,6 +178,10 @@
     },
     "views": {
       "cycles": ["open escape", "open filter escape", "open details escape escape", "open down details escape escape", "open filter details escape escape"],
+      "xfail": []
+    },
+    "viewer": {
+      "cycles": ["open close", "open review review close", "open single single close"],
       "xfail": []
     }
   }
