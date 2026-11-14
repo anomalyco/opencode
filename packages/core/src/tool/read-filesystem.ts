@@ -282,14 +282,15 @@ const textPage = Effect.fnUntraced(function* (
       const nul = chunk.indexOf(0)
       if (nul >= 0) firstNul = byte + nul
     }
-    let count = 0
-    for (let i = 0; i < chunk.length; i++) count += Number(chunk[i] === 10)
-    if (count > 0) {
+    const lastNewline = chunk.lastIndexOf(10)
+    if (lastNewline >= 0) {
+      let count = 1
+      for (let i = 0; i < lastNewline; i++) count += Number(chunk[i] === 10)
       const point = { byte, length: chunk.length, firstLine: total + 1, start, lastLine: total + count }
       checkpoints.push(point)
       total += count
       if (requested > 0 && total >= requested) yield* collect(point, chunk)
-      start = byte + chunk.lastIndexOf(10) + 1
+      start = byte + lastNewline + 1
     }
     byte += chunk.length
     // Any byte after a full page starts another line, even if that line has no newline for megabytes.
