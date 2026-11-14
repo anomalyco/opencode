@@ -1467,6 +1467,45 @@ describe("SessionTransfer", () => {
     }),
   )
 
+  it.effect("preserves assistant native metadata by default and redacts it on sanitize", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const template = yield* session.create({ location })
+      const sessionID = Session.ID.create()
+      const assistantID = SessionMessage.ID.create()
+      const native = {
+        gateway: {
+          routing: { finalProvider: "anthropic", clientSessionId: "secret-fingerprint" },
+          generationId: "gen_123",
+        },
+      }
+
+      yield* transfer.import({
+        data: {
+          info: { ...template, id: sessionID },
+          messages: [
+            SessionMessage.Assistant.make({
+              id: assistantID,
+              type: "assistant",
+              agent: Agent.ID.make("build"),
+              model: Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }),
+              content: [],
+              native,
+              time: { created: DateTime.makeUnsafe(1), completed: DateTime.makeUnsafe(2) },
+            }),
+          ],
+        },
+        location,
+      })
+
+      expect((yield* transfer.export({ sessionID })).messages.at(-1)).toMatchObject({ native })
+      expect((yield* transfer.export({ sessionID, sanitize: true })).messages.at(-1)).toMatchObject({
+        native: { redacted: `assistant-native:${assistantID}` },
+      })
+    }),
+  )
+
   it.effect("imports projected messages and reserves their aggregate sequence", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
