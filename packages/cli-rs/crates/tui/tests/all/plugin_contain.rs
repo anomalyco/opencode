@@ -880,3 +880,141 @@ fn a_test_client_starts_no_watchdog() {
     drop(world);
     take_calls();
 }
+
+/// Where the 2.0 plugin of [`a_2_0_surface_is_contained`] fails next, and how.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum At {
+    SlotView,
+    RouteView,
+    Command,
+}
+
+thread_local! {
+    static SURFACE_FAULT: Cell<Option<(At, Fault)>> = const { Cell::new(None) };
+    /// What the record named and whether a panic would unwind to the host's catch, in each call of the plugin.
+    static SURFACE_SEEN: RefCell<Vec<(At, Option<String>, bool)>> = const { RefCell::new(Vec::new()) };
+    /// The generation of the route view's last mount.
+    static SURFACE_MOUNT: Cell<u64> = const { Cell::new(0) };
+    static SURFACE_CLOCK: Cell<Duration> = const { Cell::new(Duration::ZERO) };
+    static SURFACE_RECORD: RefCell<Option<Arc<Record>>> = const { RefCell::new(None) };
+}
+
+/// Notes the call at `at`, then fails as armed: a panic, or 150 ms on the monitor's clock.
+fn surface_call(at: At) {
+    let named = SURFACE_RECORD.with_borrow(|record| {
+        let running = record.as_ref()?.running()?;
+        record::KINDS.get(usize::from(running.kind)).map(|kind| (*kind).to_owned())
+    });
+    SURFACE_SEEN.with_borrow_mut(|seen| seen.push((at, named, opencode_plugin::contain::catching())));
+    match SURFACE_FAULT.get().filter(|(armed, _)| *armed == at) {
+        Some((_, Fault::Panic)) => {
+            SURFACE_FAULT.set(None);
+            panic!("2.0 fault at {at:?}");
+        }
+        Some((_, Fault::Overrun)) => {
+            SURFACE_FAULT.set(None);
+            SURFACE_CLOCK.set(SURFACE_CLOCK.get() + Duration::from_millis(150));
+        }
+        None => {}
+    }
+}
+
+/// A built-in of contract 2.0: a surface in the home footer, a surface on route `page` and a command of that route.
+fn surfaces(setup: &mut abi::Setup) -> Result<(), String> {
+    use abi::v2;
+    let command = abi::Command {
+        name: "s2.go".into(),
+        title: "go".into(),
+        scope: abi::Scope::Route("page".into()),
+        ..abi::Command::default()
+    };
+    setup.command(command, |_, _| surface_call(At::Command));
+    setup.surface(v2::Surface::new("footer", v2::Place::Slot(abi::Placement::append("home.footer")), |cx| {
+        surface_call(At::SlotView);
+        let handle = cx.content("slot body");
+        v2::Node::column(vec![v2::Node::Markdown { id: None, source: v2::Source::Content(handle) }])
+    }));
+    setup.surface(v2::Surface::new("page", v2::Place::Route("page".into()), |cx| {
+        SURFACE_MOUNT.set(cx.mount.generation);
+        surface_call(At::RouteView);
+        v2::Node::text(vec![abi::Span::new("page body")])
+    }));
+    Ok(())
+}
+
+// Expected (P4c on P1): every call into a 2.0 surface goes through the budget and containment. Inside a slot view, a
+// route view and a route command the record names the call (`view`, `run-command`) and a panic would unwind to the
+// host's catch. The plugin is a built-in, so an overrun in a view or a route command is a host bug, counted, and fails
+// nothing. A panic in a route command and in a slot view fails the plugin: its mounts show nothing and hold nothing,
+// and the census is empty once they unmount; enabled again, its route mounts under a new generation.
+#[test]
+fn a_2_0_surface_is_contained() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let record = Arc::new(Record::create(root.path()).unwrap());
+    SURFACE_RECORD.set(Some(record.clone()));
+    SURFACE_SEEN.take();
+    SURFACE_FAULT.set(None);
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![abi::Plugin { id: "test.surfaces", setup: surfaces }.into()],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let contain = Contain { record: Some(record), ..Contain::default() };
+    let harness = support::mount_on(TestApp::new(100, 30), deps, Args { contain, ..Args::default() });
+    let (app, tui) = (&harness.app, &harness.tui);
+    let base = Instant::now();
+    tui.plugins.monitor().set_clock(move || base + SURFACE_CLOCK.get());
+    let settle = || {
+        app.advance(Duration::from_millis(1));
+        app.render();
+        app.advance(Duration::from_millis(1));
+    };
+    let page = || Route::Plugin { id: "test.surfaces".to_owned(), name: "page".to_owned() };
+    let status = || tui.plugins.entries().into_iter().find(|entry| entry.id == "test.surfaces").unwrap().status;
+    let screen = || app.render().text();
+    settle();
+    assert!(screen().contains("slot body"), "{}", screen());
+
+    // Overruns of a built-in: counted, nothing fails, everything still shows.
+    tui.navigate(page());
+    settle();
+    SURFACE_FAULT.set(Some((At::Command, Fault::Overrun)));
+    let _ = tui.keymap.dispatch("s2.go", None);
+    SURFACE_FAULT.set(Some((At::RouteView, Fault::Overrun)));
+    tui.navigate(page());
+    settle();
+    assert_eq!((tui.plugins.monitor().host_overruns(), status()), (2, opencode_plugin::Status::Active));
+    assert!(screen().contains("page body"));
+    let seen = SURFACE_SEEN.take();
+    for at in [At::SlotView, At::RouteView, At::Command] {
+        let kind = if at == At::Command { "run-command" } else { "view" };
+        assert!(seen.contains(&(at, Some(kind.to_owned()), true)), "{at:?}: {seen:?}");
+    }
+    assert!(seen.iter().all(|(_, named, caught)| named.is_some() && *caught), "{seen:?}");
+
+    // A panic in a route command fails the plugin; its route shows nothing more.
+    let before = SURFACE_MOUNT.get();
+    SURFACE_FAULT.set(Some((At::Command, Fault::Panic)));
+    let _ = tui.keymap.dispatch("s2.go", None);
+    settle();
+    assert!(matches!(status(), opencode_plugin::Status::Failed(error) if error.contains("run-command panicked")));
+    assert!(!screen().contains("page body"), "{}", screen());
+    tui.navigate(Route::Home);
+    settle();
+    assert_eq!(opencode_plugin::surface::ledger(), opencode_plugin::surface::Ledger::default());
+
+    // Enabled again: a new activation, whose route mounts under a new generation; then a panic in its slot view.
+    assert_eq!(tui.plugins.toggle(&host(tui), "test.surfaces", true), Some(Ok(())));
+    settle();
+    tui.navigate(page());
+    settle();
+    assert!(SURFACE_MOUNT.get() > before, "{} after {before}", SURFACE_MOUNT.get());
+    tui.navigate(Route::Home);
+    SURFACE_FAULT.set(Some((At::SlotView, Fault::Panic)));
+    settle();
+    assert!(matches!(status(), opencode_plugin::Status::Failed(error) if error.contains("view panicked")));
+    assert!(!screen().contains("slot body"));
+    assert_eq!(opencode_plugin::surface::ledger().content, 0);
+    assert_eq!(tui.plugins.monitor().record().unwrap().crash(), Crash::default(), "the record names nobody after");
+    SURFACE_RECORD.set(None);
+}
