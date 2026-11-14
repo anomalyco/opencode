@@ -172,6 +172,19 @@ const getBase = (appId: string): Configuration => {
       },
       target: ["dmg", "zip"],
     },
+    // script/pack.ts builds this layout around an empty app folder, and sign-desktop-macos.sh puts the notarized app
+    // in its place. Finder draws the icons and their labels, always black, over the background, so it stays light.
+    dmg: {
+      title: "${productName}",
+      background: "icons/dmg/background.png",
+      iconSize: 128,
+      contents: [
+        { x: 180, y: 210, type: "file" },
+        { x: 480, y: 210, type: "link", path: "/Applications" },
+      ],
+      // publish-desktop.sh computes the update feeds from the final files, so no blockmap.
+      writeUpdateInfo: false,
+    },
     protocols: {
       name: "OpenCode",
       schemes: ["opencode"],
@@ -261,7 +274,7 @@ export function getConfig() {
         // (Dock, Finder, system dialogs and the system icon styles). Older macOS keeps using the ICNS.
         mac: { ...base.mac, icon: "resources/icons/icon.icon" },
         // The DMG volume icon would otherwise use the same actool-generated ICNS.
-        dmg: { icon: "resources/icons/icon.icns" },
+        dmg: { ...base.dmg, icon: "resources/icons/icon.icns" },
         publish: {
           provider: "generic",
           url: "https://opencode.ai/update/api/latest/desktop/opencode/",
