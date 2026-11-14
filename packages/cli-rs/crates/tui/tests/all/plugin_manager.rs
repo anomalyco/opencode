@@ -184,7 +184,14 @@ fn boom() -> abi::Plugin {
 
 /// `id status` of each plugin, as a plugin reads them.
 fn listed(plugins: &[abi::PluginEntry]) -> Vec<String> {
-    plugins.iter().map(|entry| format!("{} {:?} {}", entry.id, entry.status, entry.active)).collect()
+    plugins
+        .iter()
+        .map(|entry| format!("{} {:?} {}{}", entry.id, entry.status, entry.active, slow(entry.slow.is_some())))
+        .collect()
+}
+
+fn slow(slow: bool) -> &'static str {
+    if slow { " slow" } else { "" }
 }
 
 /// The registry as the watcher would read it.
@@ -201,7 +208,7 @@ fn registry(harness: &Harness) -> Vec<String> {
                 opencode_plugin::Status::Pending => abi::PluginStatus::Pending,
                 opencode_plugin::Status::Declined => abi::PluginStatus::Declined,
             };
-            format!("{} {status:?} {}", entry.id, entry.active)
+            format!("{} {status:?} {}{}", entry.id, entry.active, slow(entry.slow.is_some()))
         })
         .collect()
 }
@@ -1112,4 +1119,97 @@ fn a_panicking_plugin_list_handler_fails_its_plugin() {
         let opencode_plugin::Status::Failed(error) = status else { panic!("abi {abi}: {status:?}") };
         assert!(error.contains("on-plugins"), "abi {abi}: {error}");
     }
+}
+
+thread_local! {
+    /// The time the monitor reads in [`a_plugin_hears_when_a_plugin_becomes_slow_and_stops`], and what a call of
+    /// `slowly.work` takes on it.
+    static CLOCK: Cell<Duration> = const { Cell::new(Duration::ZERO) };
+    static COST: Cell<Duration> = const { Cell::new(Duration::ZERO) };
+}
+
+/// A plugin whose command takes [`COST`] on [`CLOCK`].
+fn slowly() -> abi::Plugin {
+    fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+        setup.command(Command { name: "slowly.work".to_owned(), ..Command::default() }, |_, _| {
+            CLOCK.set(CLOCK.get() + COST.get());
+        });
+        Ok(())
+    }
+    abi::Plugin { id: "test.slowly", setup }
+}
+
+// Expected (review carbon-4): a plugin that reads the plugin list hears each time a plugin becomes slow and stops, the
+// second time too, which no toast tells; and nothing when only what a slow frame costs changed.
+#[test]
+fn a_plugin_hears_when_a_plugin_becomes_slow_and_stops() {
+    carriers(a_plugin_hears_when_a_plugin_becomes_slow_and_stops_on);
+}
+
+fn a_plugin_hears_when_a_plugin_becomes_slow_and_stops_on() {
+    let (harness, _) = open(&[]);
+    opencode_tui::plugins::host::add(&harness.tui, watcher().into());
+    opencode_tui::plugins::host::add(&harness.tui, slowly().into());
+    let monitor = harness.tui.plugins.monitor();
+    let base = std::time::Instant::now();
+    monitor.set_clock(move || base + CLOCK.get());
+    let limits = monitor.limits();
+    monitor.set_limits(opencode_plugin::contain::Limits {
+        frame: Duration::from_millis(1),
+        window: 4,
+        slow: 1,
+        ..limits
+    });
+    settle(&harness);
+    HEARD.take();
+    let slowly = || {
+        let heard = HEARD.with_borrow(|heard| heard.last().cloned()).unwrap_or_default();
+        heard.iter().find(|row| row.starts_with("test.slowly")).is_some_and(|row| row.ends_with(" slow"))
+    };
+    let frames = |cost: u64, count: usize| {
+        COST.set(Duration::from_micros(cost));
+        for _ in 0..count {
+            harness.dispatch("slowly.work");
+            settle(&harness);
+        }
+    };
+    frames(2000, 4);
+    assert!(slowly(), "{:?}", HEARD.with_borrow(Clone::clone));
+    let heard = HEARD.with_borrow(Vec::len);
+    // Slower frames change the cost, not that it is slow.
+    frames(3000, 2);
+    opencode_tui::plugins::host::tell_plugins(&harness.tui);
+    settle(&harness);
+    assert_eq!(HEARD.with_borrow(Vec::len), heard, "the cost alone was told");
+    frames(0, 6);
+    assert!(!slowly(), "{:?}", HEARD.with_borrow(Clone::clone));
+    frames(2000, 4);
+    assert!(slowly(), "the second slow went untold");
+    monitor.set_limits(limits);
+}
+
+/// A plugin whose keyed select takes its title from its command's input.
+fn titled() -> abi::Plugin {
+    fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+        setup.command(Command { name: "titled.show".to_owned(), ..Command::default() }, |host, input| {
+            let action = abi::Action::Command { name: "titled.show".to_owned(), input: None };
+            let mut select =
+                abi::Select::new(input.unwrap_or_default(), vec![abi::SelectOption::new("row", "r")], action);
+            select.key = Some("t".to_owned());
+            host.dialog(abi::Dialog::Select(select));
+        });
+        Ok(())
+    }
+    abi::Plugin { id: "test.titled", setup }
+}
+
+// Expected (review carbon-5): a keyed select shown again with another title shows it.
+#[test]
+fn a_keyed_select_shown_again_takes_its_new_title() {
+    let (harness, _) = open(&[]);
+    opencode_tui::plugins::host::add(&harness.tui, titled().into());
+    harness.tui.keymap.dispatch("titled.show", Some("First title"));
+    harness.wait_for("First title");
+    harness.tui.keymap.dispatch("titled.show", Some("Second title"));
+    harness.wait_for("Second title");
 }

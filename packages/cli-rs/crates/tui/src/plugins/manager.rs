@@ -84,12 +84,11 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         state.fetch(host, Asked::List(state.opened.get(), state.next()));
     });
     // The list's own commands act only while it shows: run by name with no list, they open nothing (review carbon-5).
+    // The internal rows' switch needs no guard: an open starts it again, and only an open list shows it.
     let internal = state.clone();
     setup.command(hidden("opencode.plugins.internal"), move |host, _| {
-        if host.dialog_open(LIST) {
-            internal.internal.set(!internal.internal.get());
-            internal.show(host);
-        }
+        internal.internal.set(!internal.internal.get());
+        internal.show(host);
     });
     let check = state.clone();
     setup.command(hidden("opencode.plugins.check"), move |host, _| {
