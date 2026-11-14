@@ -94,6 +94,8 @@ pub fn schema() -> Value {
                 Diff { content: reference("Source") } { id: nullable(string()), view: reference("DiffView"),
                     filetype: nullable(string()) },
                 Keep { key: string() } { },
+                Canvas { } { id: nullable(string()), layout: reference("Layout"), version: uint64(),
+                    animate: boolean() },
             }),
         ),
         (
@@ -444,6 +446,7 @@ mod tests {
                 filetype: Some("rust".into()),
             },
             Node::Markdown { id: None, source: Source::Text("x".into()) },
+            Node::Canvas { id: Some("v".into()), layout, version: 7, animate: true },
         ];
         for node in nodes {
             assert!(agree::<Node>("Node", serde_json::to_value(&node).unwrap()), "{node:?}");
@@ -464,6 +467,8 @@ mod tests {
             json!({ "type": "box", "layout": { "width": { "inches": 3 } } }),
             json!({ "type": "markdown", "source": { "text": "a", "content": 1 } }),
             json!({ "type": "diff", "content": { "content": -1 } }),
+            json!({ "type": "canvas", "version": -1 }),
+            json!({ "type": "canvas", "animate": 1 }),
         ];
         for value in refused {
             assert!(!agree::<Node>("Node", value));

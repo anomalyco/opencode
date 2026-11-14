@@ -19,6 +19,7 @@ use opentui::prelude::*;
 use opentui::style::Color;
 use opentui::syntax::SyntaxTheme;
 
+use crate::canvas::{Canvas, Drawer};
 use crate::node::{Act, bordered, color, edges_of, lay_out, styled};
 use crate::{Host, SlotMount};
 
@@ -84,7 +85,7 @@ pub const MAX_DEPTH: u16 = 64;
 /// and Markdown a few levels of its own.
 fn weight(node: &Node) -> u16 {
     match node {
-        Node::Box { .. } | Node::Text { .. } | Node::Spinner { .. } | Node::Slot { .. } => 1,
+        Node::Box { .. } | Node::Text { .. } | Node::Spinner { .. } | Node::Slot { .. } | Node::Canvas { .. } => 1,
         Node::Scroll { .. } | Node::Diff { .. } | Node::Markdown { .. } => 4,
         Node::Keep { .. } => 0,
     }
@@ -115,8 +116,8 @@ pub enum Refused {
     /// A size in percent that is not a finite number of 0 or more, which OpenTUI's layout refuses with an error that
     /// ends the TUI.
     Number,
-    /// A scroll without an id: a node with state must have one (synthesis 4.2), or another scroll's offset could
-    /// pass to it.
+    /// A scroll or a canvas without an id: a node with state must have one (synthesis 4.2), or another scroll's
+    /// offset, or another canvas's list, could pass to it.
     Unkeyed,
 }
 impl std::fmt::Display for Refused {
@@ -128,7 +129,7 @@ impl std::fmt::Display for Refused {
             Refused::Content(content) => write!(f, "content {} is not the mount's", content.0),
             Refused::Deep => write!(f, "the tree nests deeper than {MAX_DEPTH} layout levels"),
             Refused::Number => write!(f, "a size in percent is not a finite number of 0 or more"),
-            Refused::Unkeyed => write!(f, "a scroll has no id"),
+            Refused::Unkeyed => write!(f, "a scroll or a canvas has no id"),
         }
     }
 }
@@ -147,6 +148,8 @@ pub struct Env<'a> {
     pub content: &'a dyn Fn(ContentRef) -> bool,
     /// The host asked for a whole tree, after a refusal: a keep names a subtree the view did not vouch for again.
     pub full: bool,
+    /// How the mount's canvases call their plugin; `None` where nothing draws them.
+    pub draw: Option<&'a Rc<Drawer>>,
 }
 
 /// A mounted tree: the widgets of the last accepted tree, in a parent the owner gives each call.
@@ -195,6 +198,7 @@ enum Extra {
     /// The Markdown, and the text it shows.
     Markdown(opentui::widget::Markdown, Rc<str>),
     Slot(Option<SlotMount>),
+    Canvas(Canvas),
     /// In the tree before, a subtree that the tree being adopted holds again; its widget moved to wherever the tree
     /// has its id now.
     Taken,
@@ -371,8 +375,11 @@ impl Tree {
                         }
                     }
                     match node {
-                        Node::Scroll { id: None, .. } => return Err(Refused::Unkeyed),
-                        Node::Box { layout, .. } | Node::Text { layout, .. } | Node::Scroll { layout, .. }
+                        Node::Scroll { id: None, .. } | Node::Canvas { id: None, .. } => return Err(Refused::Unkeyed),
+                        Node::Box { layout, .. }
+                        | Node::Text { layout, .. }
+                        | Node::Scroll { layout, .. }
+                        | Node::Canvas { layout, .. }
                             if !sizes_ok(layout) =>
                         {
                             return Err(Refused::Number);
@@ -694,6 +701,30 @@ impl Pass<'_, '_> {
                 self.show(&mut old, text, filetype_changed, view_changed);
                 Ok(old)
             }
+            (Node::Canvas { layout: was, .. }, Node::Canvas { layout, version, animate, .. }) => {
+                let Extra::Canvas(canvas) = &old.extra else { unreachable!() };
+                if was != layout {
+                    // Built again alone, it keeps its list, its version and its animation.
+                    let built = canvas.rebuilt(self.env.host.app());
+                    built.set(*version, *animate);
+                    lay_out(&built.widget(), layout);
+                    count(|work| work.created += 1);
+                    let built = Mounted {
+                        node: new.clone(),
+                        widget: Some(built.widget()),
+                        children: Vec::new(),
+                        extra: Extra::Canvas(built),
+                        dynamic: false,
+                    };
+                    return Err(Box::new((old, built)));
+                }
+                if old.node != *new {
+                    canvas.set(*version, *animate);
+                    old.node = new.clone();
+                    count(|work| work.set += 1);
+                }
+                Ok(old)
+            }
             (Node::Slot { path: was }, Node::Slot { path }) => {
                 // A slot's claims restyle as they render; a slot of another path is built where it is.
                 debug_assert_eq!(was, path, "a parent with a slot changes only in place");
@@ -984,6 +1015,11 @@ impl Pass<'_, '_> {
                 );
                 count(|work| work.parses += 1);
                 (patch.view().as_any(), Extra::Diff(patch, text))
+            }
+            Node::Canvas { id, layout, version, animate } => {
+                let canvas = Canvas::new(app, id.as_deref().unwrap_or_default(), env.draw.cloned(), *version, *animate);
+                lay_out(&canvas.widget(), layout);
+                (canvas.widget(), Extra::Canvas(canvas))
             }
             Node::Slot { .. } | Node::Keep { .. } => unreachable!("a slot is placed, and a keep is held"),
         };

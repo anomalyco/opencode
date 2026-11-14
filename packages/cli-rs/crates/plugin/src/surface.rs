@@ -16,12 +16,14 @@ use opencode_ui::theme::Theme;
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
 
+use crate::canvas;
 use crate::node::{Act, abi_mode};
 use crate::reconcile::{Env, Refused, Tree};
 use crate::{Claimed, Host, SlotInput, slot};
 
-/// Runs a view as one call of the plugin: `false` when it panicked, which fails the plugin.
-pub(crate) type Call = Rc<dyn Fn(&dyn Host, &mut dyn FnMut(&dyn abi::Read)) -> bool>;
+/// Runs a view or a canvas draw as one call of the plugin, named for its report: `false` when it panicked, which
+/// fails the plugin.
+pub(crate) type Call = Rc<dyn Fn(&'static str, &dyn Host, &mut dyn FnMut(&dyn abi::Read)) -> bool>;
 /// Fails the plugin with the error.
 pub(crate) type Fail = Rc<dyn Fn(String)>;
 /// A route's commands, bound to one mount: what they ask for ends with the mount.
@@ -53,6 +55,14 @@ pub(crate) struct Place {
 pub(crate) trait Viewer {
     /// One call of the view: its tree, or `None` when the call failed, which failed the plugin.
     fn view(&self, host: &dyn Host, viewing: Viewing<'_>) -> Option<Viewed>;
+    /// Whether the surface has a draw, which its canvases call.
+    fn draws(&self) -> bool {
+        false
+    }
+    /// One call of the draw for `canvas` of `mount` at `frame`.
+    fn draw(&self, _host: &dyn Host, _mount: &v2::MountId, _canvas: &str, _frame: v2::Frame) -> canvas::Drawn {
+        canvas::Drawn::Failed
+    }
     /// The mount ended.
     fn forget(&self, _host: &dyn Host, _mount: &v2::MountId) {}
 }
@@ -74,15 +84,17 @@ pub(crate) struct Viewed {
     pub memo: Option<usize>,
 }
 
-/// A view in process: the plugin's own function, as one call of it, on the mount's memo table in the host.
+/// A view in process: the plugin's own function, as one call of it, on the mount's memo table in the host; and the
+/// surface's draw, if it has one.
 pub(crate) struct Linked {
     view: v2::ViewFn,
+    draw: Option<v2::DrawFn>,
     call: Call,
 }
 
 impl Linked {
-    pub fn new(view: v2::ViewFn, call: Call) -> Self {
-        Self { view, call }
+    pub fn new(view: v2::ViewFn, draw: Option<v2::DrawFn>, call: Call) -> Self {
+        Self { view, draw, call }
     }
 }
 
@@ -90,7 +102,7 @@ impl Viewer for Linked {
     fn view(&self, host: &dyn Host, viewing: Viewing<'_>) -> Option<Viewed> {
         let Viewing { mount, input, memo, give, release } = viewing;
         let mut node = None;
-        let called = (self.call)(host, &mut |read| {
+        let called = (self.call)("view", host, &mut |read| {
             let mut content = |bytes: Vec<u8>| {
                 let handle = ContentRef(CONTENT.fetch_add(1, Ordering::Relaxed));
                 give(handle, bytes);
@@ -100,6 +112,23 @@ impl Viewer for Linked {
         });
         called.then_some(())?;
         Some(Viewed { node: node?, memo: None })
+    }
+
+    fn draws(&self) -> bool {
+        self.draw.is_some()
+    }
+
+    fn draw(&self, host: &dyn Host, mount: &v2::MountId, canvas: &str, frame: v2::Frame) -> canvas::Drawn {
+        let Some(draw) = &self.draw else { return canvas::Drawn::Failed };
+        let mut list = None;
+        let called = (self.call)("draw", host, &mut |read| {
+            list = draw(&mut v2::Draw { read, mount, canvas, frame });
+        });
+        match (called, list) {
+            (false, _) => canvas::Drawn::Failed,
+            (true, None) => canvas::Drawn::Kept,
+            (true, Some(list)) => canvas::Drawn::List(list.into_bytes()),
+        }
     }
 }
 
@@ -134,6 +163,8 @@ pub(crate) struct Surface {
     root: View,
     owner: Weak<dyn Host>,
     viewer: Rc<dyn Viewer>,
+    /// How its canvases call the surface's draw.
+    drawer: std::cell::OnceCell<Rc<canvas::Drawer>>,
     fail: Fail,
     /// The slot it renders in; empty for a route.
     path: String,
@@ -213,6 +244,7 @@ impl Surface {
             root,
             owner: owner.clone(),
             viewer,
+            drawer: std::cell::OnceCell::new(),
             fail,
             path: path.to_owned(),
             slot_input: slot_input.clone(),
@@ -229,6 +261,16 @@ impl Surface {
             revision: Cell::new(None),
         });
         book(|ledger| ledger.mounts += 1);
+        if mounted.viewer.draws() {
+            let (weak, fail) = (Rc::downgrade(&mounted), mounted.fail.clone());
+            let drawer = canvas::Drawer {
+                draw: Box::new(move |id, frame| {
+                    weak.upgrade().map_or(canvas::Drawn::Failed, |mounted| mounted.draw_canvas(id, frame))
+                }),
+                fail: Box::new(move |error| fail(error)),
+            };
+            let _ = mounted.drawer.set(Rc::new(drawer));
+        }
         let weak = Rc::downgrade(&mounted);
         // The host's own state and the terminal's size change outside change batches. A view that ran after the last
         // change of the host's state has seen it: a notice of it, which comes later, calls no view (review bigboi-7).
@@ -418,8 +460,12 @@ impl Surface {
         // is kept as it came, so a later adoption of it takes the same.
         let mut taken = None;
         if !self.fills
-            && let Some(Node::Box { layout, .. } | Node::Text { layout, .. } | Node::Scroll { layout, .. }) =
-                nodes.first_mut()
+            && let Some(
+                Node::Box { layout, .. }
+                | Node::Text { layout, .. }
+                | Node::Scroll { layout, .. }
+                | Node::Canvas { layout, .. },
+            ) = nodes.first_mut()
             && crate::reconcile::sizes_ok(layout)
         {
             taken = Some(crate::node::take_layout(layout));
@@ -446,7 +492,8 @@ impl Surface {
             Source::PartOutput(part) => part_output(host, part).map(|text| Rc::from(text.as_str())),
         };
         let has = |handle: ContentRef| bytes(&handle).is_some();
-        let env = Env { host, theme, act: &act, slot: &slot, source: &source, content: &has, full };
+        let env =
+            Env { host, theme, act: &act, slot: &slot, source: &source, content: &has, full, draw: self.drawer.get() };
         tree.apply(&env, &self.root, &nodes)?;
         if !self.fills {
             if let Some(taken) = taken {
@@ -454,8 +501,12 @@ impl Surface {
                     crate::node::root_layout(&self.root, &taken);
                     self.layout.set(Some(taken));
                 }
-                if let Some(Node::Box { layout, .. } | Node::Text { layout, .. } | Node::Scroll { layout, .. }) =
-                    nodes.first_mut()
+                if let Some(
+                    Node::Box { layout, .. }
+                    | Node::Text { layout, .. }
+                    | Node::Scroll { layout, .. }
+                    | Node::Canvas { layout, .. },
+                ) = nodes.first_mut()
                 {
                     *layout = taken;
                 }
@@ -478,6 +529,12 @@ impl Surface {
         }
         host.app().request_redraw();
         Ok(())
+    }
+
+    /// One call of the surface's draw for canvas `id` at `frame`.
+    fn draw_canvas(&self, id: &str, frame: v2::Frame) -> canvas::Drawn {
+        let Some(host) = self.owner.upgrade() else { return canvas::Drawn::Failed };
+        self.viewer.draw(&*host, &self.id, id, frame)
     }
 
     /// The palette of `theme`, kept while the theme stays.

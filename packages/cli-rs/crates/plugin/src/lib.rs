@@ -4,6 +4,7 @@
 //! plugin draws into widgets. The TUI implements [`Host`] once, and that is the only code here that sees it.
 
 mod activation;
+pub mod canvas;
 pub mod contain;
 pub mod loader;
 pub mod mailbox;
@@ -513,7 +514,8 @@ fn in_process(plugin: abi::Plugin) -> Definition {
         }
         for surface in api.surfaces() {
             let called = scope.clone();
-            let call: surface::Call = Rc::new(move |host, view| called.call("view", host, |read| view(read)).is_some());
+            let call: surface::Call =
+                Rc::new(move |export, host, view| called.call(export, host, |read| view(read)).is_some());
             let failing = scope.clone();
             let fail: surface::Fail = Rc::new(move |error| {
                 let revoked = failing.revoked.take();
@@ -540,7 +542,7 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                     })
                     .collect()
             });
-            let viewer = Rc::new(surface::Linked::new(surface.view.clone(), call));
+            let viewer = Rc::new(surface::Linked::new(surface.view.clone(), surface.draw.clone(), call));
             let place =
                 surface::Place { name: surface.name.clone(), at: surface.place.clone(), palette: surface.palette };
             setup.surface(place, viewer, commands, fail, &activation);
