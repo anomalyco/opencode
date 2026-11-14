@@ -100,6 +100,7 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
                         content: v2::Source::Content(handle),
                         view: v2::DiffView::Unified,
                         filetype: None,
+                        hunks: None,
                     },
                 ])
             })

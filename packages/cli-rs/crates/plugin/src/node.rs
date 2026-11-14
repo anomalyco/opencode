@@ -207,6 +207,7 @@ impl Mount {
                     slot: &slot,
                     source: &source,
                     content: &|_| false,
+                    bytes: &|_| None,
                     full: false,
                     draw: None,
                 };

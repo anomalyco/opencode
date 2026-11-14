@@ -4,8 +4,10 @@
 //! plugin draws into widgets. The TUI implements [`Host`] once, and that is the only code here that sees it.
 
 mod activation;
+pub mod behave;
 pub mod canvas;
 pub mod contain;
+mod list;
 pub mod loader;
 pub mod mailbox;
 pub mod node;
@@ -530,6 +532,22 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                     .collect(),
                 abi::v2::Place::Slot(_) => Vec::new(),
             };
+            // P3: `layout` and the scroll handler run as calls of the plugin, as its view does.
+            let laying = scope.clone();
+            let calls = behave::Calls {
+                plugin: setup.id().to_owned(),
+                layout: surface.layout.clone().map(|layout| {
+                    Rc::new(move |geometry: &abi::v2::Geometry| {
+                        let Some(host) = laying.host.upgrade() else { return abi::v2::LayoutReply::default() };
+                        laying.call("layout", &*host, |_| layout(geometry)).unwrap_or_default()
+                    }) as abi::v2::LayoutFn
+                }),
+                scrolled: surface.on_scroll.clone().map(|handler| {
+                    let scope = scope.clone();
+                    Rc::new(move |event: &abi::v2::ScrollEvent| scope.run("on-scroll", |host| handler(host, event)))
+                        as Rc<dyn Fn(&abi::v2::ScrollEvent)>
+                }),
+            };
             let owning = scope.clone();
             let commands: surface::Commands = Rc::new(move |alive: &Weak<()>| {
                 routed
@@ -543,9 +561,13 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                     .collect()
             });
             let viewer = Rc::new(surface::Linked::new(surface.view.clone(), surface.draw.clone(), call));
-            let place =
-                surface::Place { name: surface.name.clone(), at: surface.place.clone(), palette: surface.palette };
-            setup.surface(place, viewer, commands, fail, &activation);
+            let place = surface::Place {
+                name: surface.name.clone(),
+                at: surface.place.clone(),
+                palette: surface.palette,
+                notify: surface.notify.clone(),
+            };
+            setup.surface(place, viewer, commands, fail, calls, &activation);
         }
         // Disposal removes the plugin's commands, runs its dispose callbacks, then drops its replies and wakes.
         setup.on_dispose(move || scope.dispose(&mut api));
@@ -629,7 +651,7 @@ impl Scope {
         if self.failure.borrow().is_some() || self.activation.disposed() {
             return None;
         }
-        let (out, timed) = self.monitor.call(self.slot, export, || self.attempt(host, f));
+        let (out, timed) = self.monitor.call(self.slot, export, || behave::calling(export, || self.attempt(host, f)));
         let panicked = matches!(out, Some(Err(_)));
         budget(&self.host, &self.monitor, &self.id, &timed, panicked);
         if timed.overrun {
@@ -846,9 +868,36 @@ impl abi::Read for Scoped<'_> {
     fn themes(&self) -> Vec<String> {
         self.read.themes()
     }
+
+    fn scroll_state(&self, target: &abi::v2::Target) -> Option<abi::v2::ScrollState> {
+        behave::scroll_state(&self.scope.id, target)
+    }
+
+    fn anchors(&self, target: &abi::v2::Target, group: &str) -> Vec<abi::v2::AnchorAt> {
+        behave::anchors(&self.scope.id, target, group)
+    }
+
+    fn top_anchor(&self, target: &abi::v2::Target, group: &str, inset: u16) -> Option<abi::v2::AnchorAt> {
+        behave::top_anchor(&self.scope.id, target, group, inset)
+    }
+
+    fn transcript(&self) -> Option<abi::v2::TranscriptView> {
+        behave::transcript()
+    }
 }
 
 impl abi::Host for Scoped<'_> {
+    fn scroll(&self, target: abi::v2::Target, verb: abi::v2::Scroll) {
+        // A verb on the transcript answers the user's input to this plugin (decision 8): from a view, `layout`, a
+        // wake or a reply it would fight the user's wheel, or loop through the transcript's own `layout` call.
+        if target == abi::v2::Target::Transcript && !behave::in_handler() {
+            log::warn!("plugin {}: a transcript verb outside a handler is dropped", self.scope.id);
+            return;
+        }
+        let plugin = self.scope.id.clone();
+        self.defer(move |_| behave::scroll(&plugin, &target, &verb));
+    }
+
     fn storage_set(&self, key: &str, value: serde_json::Value) {
         let Some(stored) = self.scope.stored(key) else { return };
         self.written(&stored);
@@ -1347,6 +1396,7 @@ impl Setup<'_> {
         viewer: Rc<dyn surface::Viewer>,
         commands: surface::Commands,
         fail: surface::Fail,
+        calls: behave::Calls,
         activation: &Rc<Activation>,
     ) {
         let (owner, activation) = (Rc::downgrade(self.host), activation.clone());
@@ -1368,6 +1418,7 @@ impl Setup<'_> {
                         alive,
                         viewer.clone(),
                         fail.clone(),
+                        calls.clone(),
                     );
                     activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
                     Box::new(route::View::fill(host, Box::new(mounted), layer))
@@ -1394,6 +1445,7 @@ impl Setup<'_> {
                             Rc::new(()),
                             viewer.clone(),
                             fail.clone(),
+                            calls.clone(),
                         );
                         activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
                         Box::new(mounted)
