@@ -199,7 +199,7 @@ impl Diffs {
             if viewer.surface() != surface {
                 return false;
             }
-            let before = (viewer.selected, viewer.expanded.len());
+            let before = viewer.shown();
             handled = match event {
                 Event::Key(key) => match key.bind.as_deref().and_then(keys::action) {
                     Some(action) => viewer.run(host, self, action),
@@ -220,9 +220,9 @@ impl Diffs {
                 }
                 _ => Handled::Pass,
             };
-            // A wheel step or a hunk step that leaves the selection and the open folders as they were shows nothing
-            // new, so it costs no rebuild of the cards.
-            !matches!(event, Event::Scroll { .. }) || before != (viewer.selected, viewer.expanded.len())
+            // A key, press or step that changes nothing the view shows (a wheel step, a hunk step within the selected
+            // file, the view toggle where split is not available) costs no view.
+            viewer.shown() != before
         });
         handled
     }

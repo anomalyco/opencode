@@ -76,7 +76,12 @@ fn mount_on(route: Route, diff: Value, width: u16, height: u16, abi: bool) -> Di
         abi_builtins: abi,
         ..support::deps(Arc::new(memory.clone()))
     };
-    Diffs { harness: support::mount(width, height, deps), memory, turns: Cell::new(0) }
+    let harness = support::mount(width, height, deps);
+    // The budget's verdicts are not what these rows check, and a debug build of the C ABI's view at 1,000 files runs
+    // past it: a call here takes no time, as in `plugin_model`.
+    let now = std::time::Instant::now();
+    harness.tui.plugins.monitor().set_clock(move || now);
+    Diffs { harness, memory, turns: Cell::new(0) }
 }
 
 impl Diffs {
@@ -336,11 +341,16 @@ fn hunk_file(index: usize, lines: usize) -> Value {
 
 /// The route over `count` files of `lines` lines, at `width` by `height`, open and drawn.
 fn route(count: usize, lines: usize, width: u16, height: u16) -> Diffs {
+    route_on(count, lines, width, height, false)
+}
+
+/// [`route`], with the built-ins on the C ABI's byte shims when `abi`.
+fn route_on(count: usize, lines: usize, width: u16, height: u16, abi: bool) -> Diffs {
     let files: Vec<Value> = (0..count).map(|index| hunk_file(index, lines)).collect();
-    let h = mount_with(Route::Home, Value::Array(files), width, height);
+    let h = mount_on(Route::Home, Value::Array(files), width, height, abi);
     h.wait_for("/project");
     h.tui.keymap.dispatch("diff.open", None);
-    h.wait_for("≡ f0000.rs");
+    h.wait_for("f0000.rs");
     h.settle();
     h
 }
@@ -767,5 +777,43 @@ fn a_turn_too_short_to_see_running_loads_the_diff_again() {
         h.short_turn("ses_a");
         let loaded = h.app.wait_until(support::WAIT, || h.diff_reads() > reads);
         assert!(loaded, "a short turn did not load the diff again (C ABI: {abi})");
+    }
+}
+
+// Expected (big-boi's review of P6c): a mark at 1,000 files keeps the other cards on both carriers, and over the C ABI
+// the host counts what the view's keeps hold in one pass of the ids, not one a keep.
+#[test]
+fn a_mark_at_1000_files_costs_one_pass_on_both_carriers() {
+    for abi in [false, true] {
+        let h = route_on(1000, 4, 200, 58, abi);
+        let (work, crossed) = (reconcile::work(), opencode_plugin::loader::native::crossed());
+        h.keys(&["m"]);
+        assert!(h.settle().contains("1/1000"), "{}", h.app.text());
+        let (work, crossed) =
+            (reconcile::work().since(work), opencode_plugin::loader::native::crossed().since(crossed));
+        // The 999 other cards and the tree's rows but the two whose marks changed.
+        assert!(work.kept >= 999 + 998, "the mark kept {} subtrees (C ABI: {abi})", work.kept);
+        if abi {
+            // An id's walk up is a few steps; a scan of the ids a keep was 20 million.
+            assert!(work.held <= 25 * 1000, "the keeps visited {} ids", work.held);
+            // A keep a card and a keep a row cross, not the cards or the rows: 97 KB, where 766 KB crossed with the
+            // rows built each view.
+            assert!(crossed.received <= 150 * 1000, "{} bytes crossed", crossed.received);
+        }
+    }
+}
+
+// Expected (big-boi's review of P6c; TS returns when split is not available): the view toggle where split has no
+// room changes nothing, so it costs no view, on both carriers.
+#[test]
+fn the_view_toggle_without_room_for_split_costs_no_view() {
+    for abi in [false, true] {
+        let h = route_on(40, 4, 48, 28, abi);
+        let (work, crossed) = (reconcile::work(), opencode_plugin::loader::native::crossed());
+        h.keys(&["v"]);
+        // The view keeps its root, which holds every id, so the host counts nothing to check it.
+        assert_eq!(reconcile::work().since(work), reconcile::Work::default(), "C ABI: {abi}");
+        let crossed = opencode_plugin::loader::native::crossed().since(crossed);
+        assert!(crossed.received < 1000, "{} bytes crossed", crossed.received);
     }
 }
