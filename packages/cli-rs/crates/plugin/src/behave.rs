@@ -41,8 +41,11 @@ pub const DELIVERIES: u32 = 2;
 pub(crate) struct Calls {
     pub plugin: String,
     pub layout: Option<LayoutFn>,
-    pub scrolled: Option<Rc<dyn Fn(&ScrollEvent)>>,
+    pub scrolled: Option<Scrolls>,
 }
+
+/// A surface's handler of its scrolls' events, as one call of the plugin.
+pub(crate) type Scrolls = Rc<dyn Fn(&ScrollEvent)>;
 
 /// What the behaviors of one mount hold.
 #[derive(Default)]
@@ -787,7 +790,7 @@ impl Surface {
     /// This frame's geometry of what the surface named, and its signature.
     fn geometry(&self) -> Option<(Geometry, Signature)> {
         let notify = self.notify.clone();
-        let transcript = notify.iter().any(|watch| *watch == Notify::Transcript).then(transcript).flatten();
+        let transcript = notify.contains(&Notify::Transcript).then(transcript).flatten();
         let mut tops = Vec::new();
         let tops_of: Vec<(String, String)> = self
             .with_index(|index, _| {
