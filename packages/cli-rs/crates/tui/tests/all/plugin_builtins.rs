@@ -188,15 +188,21 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
         Node::text([Span::new("probe")]).with_id("root")
     })
     .mounts()
-    .on(|_, event| {
+    .on(|host, event| {
         if let Event::Mount { mounted, slot } = event {
             let shell = slot.as_ref().and_then(|slot| slot.prompt).is_some_and(|prompt| prompt.shell);
             let session = slot.as_ref().and_then(|slot| slot.session_id.clone()).unwrap_or_default();
             HEARD.with(|heard| heard.borrow_mut().push(format!("mount {mounted} {session} shell {shell}")));
+            // What the plugin starts as a mount ends is the plugin's: its reply comes after the mount went.
+            if !mounted {
+                let fetch = abi::Fetch { method: "GET".into(), path: "/api/probe".into(), ..abi::Fetch::default() };
+                host.fetch(fetch);
+            }
         }
         Handled::Pass
     });
     setup.surface(surface);
+    setup.on_reply(|_, _, _| HEARD.with(|heard| heard.borrow_mut().push("reply".to_owned())));
     Ok(())
 }
 
@@ -237,8 +243,13 @@ fn a_surface_hears_its_mounts_begin_and_end_in_order() {
     harness.app.press("escape");
     harness.wait_gone("exit shell mode");
     settle(&harness);
-    let log: Vec<String> =
-        heard().into_iter().filter(|line| !line.starts_with("view") || line.contains("all")).collect();
+    // The reads started as the two mounts ended are the plugin's: both answer, after their mounts went.
+    harness
+        .wait("the replies", || HEARD.with(|heard| heard.borrow().iter().filter(|line| *line == "reply").count()) == 2);
+    let log: Vec<String> = heard()
+        .into_iter()
+        .filter(|line| line != "reply" && (!line.starts_with("view") || line.contains("all")))
+        .collect();
     let views: Vec<u64> = log.iter().filter(|line| line.starts_with("view")).map(|line| generation(line)).collect();
     assert!(views.len() == 2 && views[0] > opened && views[1] > views[0], "{log:?}");
     let expected = [

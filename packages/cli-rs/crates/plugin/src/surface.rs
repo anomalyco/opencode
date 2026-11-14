@@ -872,13 +872,9 @@ impl Surface {
 
 impl Drop for Surface {
     fn drop(&mut self) {
-        // The plugin hears the mount end while the mount's owner lives: a failed plugin's was revoked.
-        if let Some(host) = self.owner.upgrade()
-            && self.holder.get_mut().as_ref().is_some_and(|owner| owner.alive())
-        {
-            self.tell_mount(&*host, false);
-        }
+        // The plugin hears the mount end; a failed or disabled one's calls are refused and hear nothing.
         if let Some(host) = self.owner.upgrade() {
+            self.tell_mount(&*host, false);
             self.viewer.forget(&*host, &self.id);
         }
         behave::detach(&self.app, self);
