@@ -48,6 +48,19 @@ pub(crate) struct Activation {
     on_panic: RefCell<Option<Report>>,
     /// What holds input for it: its mounts and itself (P2). They end with it.
     owners: RefCell<Vec<Weak<crate::interact::Owner>>>,
+    /// A wake of the plugin's waker waits for its wake handlers, which run once its messages are handed over.
+    hinted: Cell<bool>,
+    /// Times its updates against the frame budget ([`crate::schedule`]); the defaults until the host sets it.
+    monitor: RefCell<Option<Rc<crate::contain::Monitor>>>,
+}
+
+/// What one [`Activation::step`] did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Step {
+    /// It made one update: a message, or the wake handlers.
+    Ran,
+    /// It has nothing left to do, or ended.
+    Idle,
 }
 
 /// Hands one message to the plugin.
@@ -78,8 +91,23 @@ impl Activation {
                 on_message: RefCell::default(),
                 on_panic: RefCell::default(),
                 owners: RefCell::default(),
+                hinted: Cell::new(false),
+                monitor: RefCell::default(),
             }
         })
+    }
+
+    /// Times its updates against `monitor`'s frame budget and clock.
+    pub fn set_monitor(&self, monitor: Rc<crate::contain::Monitor>) {
+        *self.monitor.borrow_mut() = Some(monitor);
+    }
+
+    /// The frame budget and the clock its updates are scheduled by.
+    pub(crate) fn budget(&self) -> (crate::contain::Limits, Rc<dyn Fn() -> std::time::Instant>) {
+        match self.monitor.borrow().clone() {
+            Some(monitor) => (monitor.limits(), Rc::new(move || monitor.now())),
+            None => crate::schedule::default_budget(),
+        }
     }
 
     /// Sets what a delivered message runs, and what a thread's panic report runs.
@@ -134,43 +162,59 @@ impl Activation {
         *self.on_wake.borrow_mut() = Some(run);
     }
 
-    /// A wake arrived: hands the plugin what its threads sent, in order, then a thread's panic report; then, for a
-    /// [`abi::Waker`]'s wake, runs the plugin's wake handlers, or renders the claims again at once.
+    /// A wake arrived: the activation is ready, and the scheduler hands the plugin what its threads sent, in order, one
+    /// `update` a message under the frame budget, then a thread's panic report; then, for an [`abi::Waker`]'s wake,
+    /// runs the plugin's wake handlers, or renders the claims again ([`Activation::step`], [`crate::schedule`]).
     ///
     /// The wake is consumed first, in one step: a send or a wake from now on posts another, so none is lost between
-    /// what this one sees and what it handles. Once the plugin has failed, by a message or by a report, nothing more of
-    /// this wake reaches it: the first cause is the one reported.
-    fn woken(&self) {
+    /// what this one sees and what it handles.
+    fn woken(self: &Rc<Self>) {
         let hinted = self.wake.consume();
         between(0);
         if self.disposed() {
             return;
         }
-        let (messages, panic) = self.mailbox.take();
+        self.hinted.set(self.hinted.get() || hinted);
+        let Some(host) = self.host.upgrade() else { return };
+        crate::schedule::ready(host.app(), self);
+        crate::schedule::drain(host.app());
+    }
+
+    /// One update of the scheduler's turn: the next message to the message handler; once none waits, a thread's panic
+    /// report; then a wake of the waker, to the wake handlers or a redraw. Once the plugin has failed, by a message or
+    /// by a report, nothing more reaches it: the first cause is the one reported.
+    pub(crate) fn step(&self) -> Step {
+        if self.disposed() {
+            return Step::Idle;
+        }
+        let message = self.mailbox.take_one();
         between(1);
-        let deliver = self.on_message.borrow().clone();
-        for message in messages {
-            match &deliver {
-                Some(deliver) if !self.mailbox.closed() => deliver(message),
-                _ => break,
+        if let Some(message) = message {
+            let deliver = self.on_message.borrow().clone();
+            // A failing update closed the mailbox, which dropped what waited.
+            if let (Some(deliver), false) = (deliver, self.mailbox.closed()) {
+                deliver(message);
             }
+            between(2);
+            return Step::Ran;
         }
         between(2);
-        // A failing update closed the mailbox; failing is first-cause-wins, so this report then changes nothing. Bound
-        // first: failing disposes the activation, which takes the handler.
+        // Failing is first-cause-wins, so a report after a failing update changes nothing. Bound first: failing
+        // disposes the activation, which takes the handler.
         let fail = self.on_panic.borrow().clone();
-        if let (Some(panic), Some(fail)) = (panic, fail) {
+        if let (Some(panic), Some(fail)) = (self.mailbox.take_panic(), fail) {
             fail(panic);
         }
         between(3);
-        if !hinted || self.disposed() || self.mailbox.closed() {
-            return;
+        if !self.hinted.replace(false) || self.disposed() || self.mailbox.closed() {
+            return Step::Idle;
         }
         let run = self.on_wake.borrow().clone();
         match run {
             Some(run) => run(),
             None => self.redraw(),
         }
+        Step::Ran
     }
 
     pub fn track(&self, claim: Weak<dyn Drawn>) {

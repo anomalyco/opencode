@@ -627,3 +627,16 @@ pub fn at(screen: &str, needle: &str) -> Option<(u16, u16)> {
         Some((line[..byte].chars().count() as u16, y as u16))
     })
 }
+
+/// Limits of host work no tree reaches, until the guard drops: for rows that check something else than the limits
+/// with trees past them (Pl).
+pub fn unlimited() -> opencode_plugin::limits::Restore {
+    let most = u64::MAX;
+    opencode_plugin::limits::set(opencode_plugin::limits::Limits {
+        nodes: most,
+        rows: most,
+        plugin_nodes: most,
+        all_nodes: most,
+        ..opencode_plugin::limits::Limits::default()
+    })
+}

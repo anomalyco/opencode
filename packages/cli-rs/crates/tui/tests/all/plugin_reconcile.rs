@@ -97,10 +97,13 @@ fn apply_acting(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::No
         slot: &slot,
         source: &source,
         content: &|_| false,
-        image: &|_| None,
+        dropped: &|_| false,
+        image: &|_| opencode_plugin::image::Picture::Pending,
         full: false,
         draw: None,
         owner: None,
+        plugin: None,
+        item: false,
     };
     tree.apply(&env, parent, nodes)
 }

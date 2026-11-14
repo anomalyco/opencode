@@ -965,6 +965,9 @@ fn mail_scenario(before: &[MailOp], inside: &[(usize, MailOp)]) -> Result<(usize
     let host = host();
     seen(|seen| *seen = MailSeen::default());
     let registry = Registry::define(vec![abi::Plugin { id: MODEL, setup: mail_model }.into()], []);
+    // The frame budget is not what this model checks: on a clock that does not move, a wake hands over everything.
+    let still = std::time::Instant::now();
+    registry.monitor().set_clock(move || still);
     registry.activate(&dynamic(&host));
     MODEL_BOX.with(|held| *held.borrow_mut() = crate::mailbox::current(MODEL));
     let run = Rc::new(std::cell::RefCell::new(MailRun::default()));
@@ -984,11 +987,13 @@ fn mail_scenario(before: &[MailOp], inside: &[(usize, MailOp)]) -> Result<(usize
     });
     host.app.advance(std::time::Duration::from_millis(1));
     crate::activation::BETWEEN.with(|hook| hook.borrow_mut().take());
+    // Updates past the frame budget wait for the next frame (Pl).
     for _ in 0..20 {
-        if in_flight() == 0 {
+        if in_flight() == 0 && !crate::schedule::busy(&host.app) {
             break;
         }
         host.app.advance(std::time::Duration::from_millis(1));
+        host.app.render();
     }
     let run = run.borrow();
     let status = registry.entries().into_iter().find(|entry| entry.id == MODEL).unwrap().status;

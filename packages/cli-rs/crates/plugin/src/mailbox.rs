@@ -215,10 +215,21 @@ impl Mailbox {
     }
 
     /// The messages that wait, in order, and a thread's panic report.
+    #[cfg(test)]
     pub fn take(&self) -> (Vec<Message>, Option<String>) {
         let mut state = self.state();
         let messages = state.entries.drain(..).map(|(_, message)| message).collect();
         (messages, state.panic.take())
+    }
+
+    /// The first message that waits: its place is free at once.
+    pub fn take_one(&self) -> Option<Message> {
+        self.state().entries.pop_front().map(|(_, message)| message)
+    }
+
+    /// A thread's panic report.
+    pub fn take_panic(&self) -> Option<String> {
+        self.state().panic.take()
     }
 
     pub fn stats(&self) -> Stats {

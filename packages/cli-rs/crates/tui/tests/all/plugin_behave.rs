@@ -907,6 +907,8 @@ fn layout_hears_the_top_card_and_paints_the_edge_in_the_same_frame() {
 
 /// What each of six wheel steps down cost: views, `layout` calls, widgets touched, scroll events, behavior rounds.
 fn wheel_work(cards: usize, list: bool, quiet: bool) -> Vec<(usize, usize, u64, usize, u64)> {
+    // A scroll of 410 cards is past the rows the host builds at once (Pl); this row counts behaviors, not limits.
+    let _limits = crate::support::unlimited();
     board(|board| board.quiet = quiet);
     let board_view = mount(cards, 60, 16, list);
     let app = &board_view.harness.app;
@@ -1309,10 +1311,13 @@ fn adopt(host: &Plain, tree: &mut reconcile::Tree, nodes: &[v2::Node]) -> Result
         slot: &slot,
         source: &source,
         content: &|_| false,
-        image: &|_| None,
+        dropped: &|_| false,
+        image: &|_| opencode_plugin::image::Picture::Pending,
         full: false,
         draw: None,
         owner: None,
+        plugin: None,
+        item: false,
     };
     tree.apply(&env, &host.app.root(), nodes)
 }
