@@ -932,17 +932,18 @@ impl abi::Read for Reader<'_> {
     }
 }
 
-/// A registry entry as a plugin reads it.
+/// A registry entry as a plugin reads it: without the error, which may hold another plugin's secrets (review bigboi-2).
 fn entry(entry: opencode_plugin::Entry) -> abi::PluginEntry {
-    let (status, error) = match entry.status {
-        Status::Active => (abi::PluginStatus::Active, None),
-        Status::Inactive => (abi::PluginStatus::Inactive, None),
-        Status::Skipped(reason) => (abi::PluginStatus::Skipped, Some(reason)),
-        Status::Failed(error) => (abi::PluginStatus::Failed, Some(error)),
-        Status::Pending => (abi::PluginStatus::Pending, None),
-        Status::Declined => (abi::PluginStatus::Declined, None),
+    let status = match entry.status {
+        Status::Active => abi::PluginStatus::Active,
+        Status::Inactive => abi::PluginStatus::Inactive,
+        Status::Skipped(_) => abi::PluginStatus::Skipped,
+        Status::Failed(_) => abi::PluginStatus::Failed,
+        Status::Pending => abi::PluginStatus::Pending,
+        Status::Declined => abi::PluginStatus::Declined,
     };
     abi::PluginEntry {
+        key: entry.key,
         id: entry.id,
         target: entry.target,
         origin: match entry.source {
@@ -952,7 +953,6 @@ fn entry(entry: opencode_plugin::Entry) -> abi::PluginEntry {
             opencode_plugin::Source::External => abi::PluginOrigin::External,
         },
         status,
-        error,
         active: entry.active,
         slow: entry.slow,
     }
@@ -971,8 +971,10 @@ pub fn tell_plugins(tui: &Tui) {
         if *tui.plugins.told.borrow() == entries {
             return;
         }
+        // The manager that serves `/plugins`, not a held build of its ID (review bigboi-3).
+        let manager = opencode_plugin::Entry::plugin_key(super::manager::ID);
         let failed = |entries: &[opencode_plugin::Entry]| {
-            entries.iter().any(|entry| entry.id == super::manager::ID && matches!(entry.status, Status::Failed(_)))
+            entries.iter().any(|entry| entry.key == manager && matches!(entry.status, Status::Failed(_)))
         };
         if failed(&entries) != tui.plugins.fallback.borrow().is_some() {
             let fallback = failed(&entries).then(|| super::fallback::activate(&tui));
@@ -981,6 +983,11 @@ pub fn tell_plugins(tui: &Tui) {
         *tui.plugins.told.borrow_mut() = entries;
         tui.plugins.tell_plugins();
     }));
+}
+
+/// Whether the host's own `/plugins` stands in for the plugin manager now.
+pub(super) fn fallback_shown(tui: &Tui) -> bool {
+    tui.plugins.fallback.borrow().is_some()
 }
 
 /// Tells the mounted claims that the TUI's own state the plugins read changed ([`abi::Changed::local`]), such as the

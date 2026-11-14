@@ -1433,9 +1433,13 @@ fn is_zero_usize(value: &usize) -> bool {
 
 /// 2.0 (P6b): a TUI plugin as the host lists it, from [`Read::plugins`]: a built-in, a plugin of the `plugins`
 /// config or directories, or one of those that did not load. Only the host enables or disables one, on the user's
-/// pick of a [`SelectOption::toggle`] row (synthesis 3.6).
+/// pick of a [`SelectOption::toggle`] row (synthesis 3.6). What failed is not in it: an error may hold paths, data or
+/// a secret of another plugin, so only the host shows it, to the user ([`ErrorDetails::plugin`]).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginEntry {
+    /// The host's name for this entry and no other, which a [`SelectOption::toggle`] names: a held build may share its
+    /// ID with a loaded plugin.
+    pub key: String,
     /// The plugin's ID; the configured target of one that never loaded.
     pub id: String,
     /// Where it comes from: its `plugins` target or path.
@@ -1443,9 +1447,6 @@ pub struct PluginEntry {
     pub target: Option<String>,
     pub origin: PluginOrigin,
     pub status: PluginStatus,
-    /// Why it is skipped, or what failed.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
     /// It has an activation, failed or not (TS `registered().active`): a toggle disables it.
     #[serde(default, skip_serializing_if = "is_false")]
     pub active: bool,
@@ -1473,9 +1474,9 @@ pub enum PluginOrigin {
 pub enum PluginStatus {
     Active,
     Inactive,
-    /// Configured and not loaded; [`PluginEntry::error`] says why.
+    /// Configured and not loaded; the host's error view says why.
     Skipped,
-    /// It failed to load or while it ran; [`PluginEntry::error`] says how.
+    /// It failed to load or while it ran; the host's error view says how.
     Failed,
     /// Found in a project and waiting for the user's approval (rich-plugins 3.9); a toggle asks.
     Pending,
@@ -2311,6 +2312,10 @@ pub struct ErrorDetails {
     /// 2.0 (P6b): the plugin's name for the view, which [`Read::dialog_open`] answers for while it shows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
+    /// 2.0 (P6b): the [`PluginEntry::key`] of a TUI plugin whose error this is: the host shows that plugin's own error
+    /// (or why it is skipped) in place of `error`, which no plugin reads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<String>,
 }
 
 /// A [`Dialog::Confirm`]. `Confirm` is active as it opens; the arrows and tab move between the buttons, and enter or a
@@ -2435,11 +2440,13 @@ pub struct SelectOption {
     /// 2.0: what picking this row runs, with its value as the input, instead of the select's action.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<Action>,
-    /// 2.0: picking this row enables or disables the plugin with this id, which the host does, and only the host
-    /// (synthesis 3.6): it draws the footer's `enable` or `disable` hint from the plugin's state, naming the plugin
-    /// unless the row's title is its id, refuses the caller's own id and the plugin manager's, and runs it after the
-    /// key, if the row still names that plugin. For a project plugin waiting for approval (P6b), the host asks the user
-    /// to approve or decline the build it holds, and shows the select again on that row once the question closes.
+    /// 2.0: picking this row enables or disables a plugin, which the host does, and only the host (synthesis 3.6). From
+    /// 2.0 P6b it names the entry by its [`PluginEntry::key`] (an ID still names a plugin of the registry): the host draws
+    /// the `enable` or `disable` action from that entry's state, naming the plugin unless the row's title is its ID,
+    /// refuses the caller's own plugin and the plugin manager, and runs it after the key, if the row still names that
+    /// entry; for a held build, `enable` releases it. For a project plugin waiting for approval, the host asks the user
+    /// to approve or decline the build it holds; once the question closes, it runs the row's `action`, if any, with
+    /// the row's value, or shows the select again on that row.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub toggle: Option<String>,
     /// 2.0 (P6b): what the filter matches instead of the title (TS `searchText`).
@@ -2473,8 +2480,8 @@ pub struct SelectAction {
     /// Runs with no row and no value, so it shows and runs also while no row matches (TS `selection: "none"`).
     #[serde(default, skip_serializing_if = "is_false")]
     pub rowless: bool,
-    /// 2.0 (P6b): the name of the user's keybind for it, such as `dialog.plugins.check`: the config's key for that name
-    /// runs it and shows beside it, and `key` when the config has none.
+    /// 2.0 (P6b): the name of the user's keybind for it, such as `dialog.plugins.check`: for a name the host's keybinds
+    /// know, the config's keys alone run it (so the user's `none` turns it off), and `key` for any other name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
     /// 2.0 (P6b): shown dimmed, and its key does nothing (TS `disabled`).
