@@ -364,6 +364,8 @@ fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
         // may still paint once.
         frames(&h);
         assert!(frames(&h).len() <= 1, "{name}: idle");
+        // The app's other timers, which wake `App::run`'s loop without a frame.
+        let rest = h.app.idle(std::time::Duration::from_secs(8));
         // Off the spinner's steps, which count from the tabs' epoch.
         h.app.advance(std::time::Duration::from_millis(30));
         h.tui.data.apply(&[execution("started", 1)]);
@@ -381,6 +383,12 @@ fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
         if compact {
             assert!(busy_frames.iter().all(|at| at % 80 == 0), "{name}: off the spinner's steps, {busy_frames:?}");
         }
+        // The same in `App::run`'s loop, which sleeps until the next timer or frame slot: each paint arms the next
+        // tick, and the loop wakes for nothing more than at rest.
+        let idle = h.app.idle(std::time::Duration::from_secs(8));
+        let busy = busy as u64;
+        assert!((busy..=busy + 2).contains(&idle.frames), "{name}: idle loop, {idle:?}");
+        assert!(idle.wakeups <= idle.frames + rest.wakeups, "{name}: idle loop, {idle:?}, at rest {rest:?}");
         h.app.resize(60, 30);
         h.tui.data.apply(&[execution("succeeded", 2)]);
         frames(&h);
