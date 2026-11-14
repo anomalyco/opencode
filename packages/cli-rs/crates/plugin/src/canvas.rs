@@ -134,8 +134,11 @@ struct State {
     app: App,
     drawer: Option<Rc<Drawer>>,
     shown: RefCell<Shown>,
-    /// The size laid out last.
+    /// The size laid out last, as OpenTUI's resize reports it: a dimension of none reads as one cell.
     size: Cell<(u16, u16)>,
+    /// Whether the canvas has room across and down: from its last paint, which sees a dimension of none as none, or
+    /// from a resize to more than one cell.
+    room: Cell<(bool, bool)>,
     /// The size and version the plugin was last asked to draw for.
     asked: Cell<Option<((u16, u16), u64)>>,
     version: Cell<u64>,
@@ -166,6 +169,7 @@ impl Canvas {
             drawer,
             shown: RefCell::new(Shown::Empty),
             size: Cell::new((0, 0)),
+            room: Cell::new((true, true)),
             asked: Cell::new(None),
             version: Cell::new(version),
             animate: Cell::new(animate),
@@ -187,7 +191,10 @@ impl Canvas {
         let weak = Rc::downgrade(&state);
         let widget = Custom::new(app, Board(state.clone())).on_resize(move |_, rect| {
             if let Some(state) = weak.upgrade() {
-                state.size.set((rect.width.max(0.0) as u16, rect.height.max(0.0) as u16));
+                let (width, height) = (rect.width.max(0.0) as u16, rect.height.max(0.0) as u16);
+                let (across, down) = state.room.get();
+                state.room.set((across || width > 1, down || height > 1));
+                state.size.set((width, height));
                 state.resized();
             }
         });
@@ -225,14 +232,20 @@ impl State {
     /// Laid out at a new size: a list for it, in this frame, unless it has one for that size and its version, as a
     /// canvas built again or back at its size does.
     fn resized(&self) {
+        if let Some(cause) = self.stale() {
+            self.draw(cause);
+        }
+    }
+
+    /// Why the list the canvas holds is not the one for its size and version, if it is not.
+    fn stale(&self) -> Option<Cause> {
         let (size, version) = (self.size.get(), self.version.get());
-        let cause = match self.asked.get() {
-            Some(asked) if asked == (size, version) => return,
-            Some((asked, _)) if asked == size => Cause::Version,
-            Some(_) => Cause::Resized,
-            None => Cause::First,
-        };
-        self.draw(cause);
+        match self.asked.get() {
+            Some(asked) if asked == (size, version) => None,
+            Some((asked, _)) if asked == size => Some(Cause::Version),
+            Some(_) => Some(Cause::Resized),
+            None => Some(Cause::First),
+        }
     }
 
     /// Asks for a draw after the next layout: an animation's frame takes the place of a version, whose list it draws.
@@ -254,8 +267,9 @@ impl State {
     fn draw(&self, cause: Cause) {
         let pending = self.pending.take();
         let (width, height) = self.size.get();
-        // A canvas of no size has nothing to draw; its version is drawn when it has a size again.
-        let Some(drawer) = self.drawer.clone().filter(|_| width > 0 && height > 0) else {
+        // A canvas with no room has nothing to draw; its paint asks again once it has room.
+        let Some(drawer) = self.drawer.clone().filter(|_| width > 0 && height > 0 && self.room.get() == (true, true))
+        else {
             return;
         };
         let dt = match pending {
@@ -359,6 +373,20 @@ impl Drop for State {
 impl Component for Board {
     fn paint(&self, painter: &mut Painter<'_>) {
         let state = &self.0;
+        // Room comes back without a resize when a dimension of none grows to one cell, which OpenTUI reports as the
+        // same size: the list the canvas missed is drawn in the next frame.
+        let room = (painter.width() > 0, painter.height() > 0);
+        if state.room.replace(room) != room && room == (true, true) && state.stale().is_some() {
+            let weak = Rc::downgrade(state);
+            state.app.animate(move |_, _| {
+                if let Some(state) = weak.upgrade()
+                    && let Some(cause) = state.stale()
+                {
+                    state.arm(cause, Duration::ZERO);
+                }
+                false
+            });
+        }
         let (_, _, width, height) = painter.visible_rect();
         if width > 0 && height > 0 {
             state.painted.set(true);
