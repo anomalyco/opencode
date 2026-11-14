@@ -217,6 +217,8 @@ struct Expected {
     off: HashSet<String>,
     /// The theme is the dark default.
     dark: bool,
+    /// The permission request that waits.
+    asked: Option<String>,
 }
 
 impl Expected {
@@ -280,6 +282,8 @@ impl Expected {
 struct World {
     harness: Harness,
     seq: Cell<u64>,
+    /// The toasts [`World::settle`] dismissed, by their titles.
+    toasts: RefCell<Vec<String>>,
 }
 
 fn messages() -> Value {
@@ -338,9 +342,11 @@ impl World {
         harness.tui.plugins.monitor().set_clock(move || base + now.get());
         CLOCK.set(Some(clock));
         harness.wait_for("Stream it");
+        // A draft in the composer: its placeholder is random, and the frames compare every cell.
+        harness.app.type_text("draft");
         // A card fills its cells: a token the theme lacks would paint nothing, and the twin's clear color would show.
         assert!(opencode_plugin::node::theme_color(&harness.tui.page(), "background.raised.base").is_some());
-        let world = Self { harness, seq: Cell::new(0) };
+        let world = Self { harness, seq: Cell::new(0), toasts: RefCell::default() };
         world.settle();
         world
     }
@@ -435,6 +441,20 @@ impl World {
                 }
                 expected.dark = dark;
             }
+            Command::Resize(narrow) => self.harness.app.resize(if narrow { WIDTH - 20 } else { WIDTH }, HEIGHT),
+            Command::Wheel(up) => {
+                let kind = if up { MouseEventKind::ScrollUp } else { MouseEventKind::ScrollDown };
+                self.harness.app.mouse(kind, WIDTH / 2, 10);
+            }
+            Command::Permission(slot) => match expected.asked.take() {
+                Some(id) => self.reply(&id),
+                None if expected.calls[slot] != Call::None => {
+                    let id = format!("per_{}", self.seq.get());
+                    self.ask(&id, SLOTS[slot].0);
+                    expected.asked = Some(id);
+                }
+                None => {}
+            },
             _ => {}
         }
         self.settle();
@@ -454,7 +474,8 @@ impl World {
         app.advance(Duration::from_millis(1));
         app.render();
         app.advance(Duration::from_millis(1));
-        while self.harness.tui.toasts.current().is_some() {
+        while let Some(toast) = self.harness.tui.toasts.current() {
+            self.toasts.borrow_mut().push(toast.title.unwrap_or(toast.message));
             self.harness.tui.toasts.dismiss();
         }
         app.render();
@@ -464,11 +485,10 @@ impl World {
         self.harness.app.render()
     }
 
-    /// The composer's cells: its placeholder is random.
-    fn mask(&self) -> Option<(u32, u32, u32, u32)> {
-        let textarea = self.harness.tui.textarea.borrow().clone()?;
-        let rect = textarea.rect();
-        Some((rect.screen_x as u32, rect.screen_y as u32, rect.width as u32, rect.height as u32))
+    /// Whether the composer has the focus.
+    fn composing(&self) -> bool {
+        let textarea = self.harness.tui.textarea.borrow().clone();
+        self.harness.app.focused().map(|widget| widget.id()) == textarea.map(|textarea| textarea.id())
     }
 
     fn theme(&self) -> Theme {
@@ -625,12 +645,19 @@ pub enum Command {
     Enable(bool),
     /// A theme switch: the dark default, or another theme.
     Theme(bool),
+    /// The terminal narrows, or takes its width back.
+    Resize(bool),
+    /// A wheel step over the transcript, up or down.
+    Wheel(bool),
+    /// A permission request for a slot's call, or the answer to the one that waits.
+    Permission(usize),
 }
 
 /// What a step left: the frame, its composer, `claim.b`'s views, and every view each plugin logged.
 struct Step {
     frame: Capture,
-    mask: Option<(u32, u32, u32, u32)>,
+    /// The composer has the focus.
+    composing: bool,
     /// The model says `claim.a` draws a part.
     a_draws: bool,
     witness: Vec<(String, Vec<String>)>,
@@ -644,22 +671,14 @@ type Views = Vec<(char, String, Vec<String>)>;
 /// part again.
 fn witness() -> (Vec<(String, Vec<String>)>, Views) {
     let views = VIEWS.with_borrow_mut(std::mem::take);
-    let mut seen: Vec<(String, Vec<String>)> = Vec::new();
-    for (plugin, key, lines) in &views {
-        if *plugin == 'b' && seen.last() != Some(&(key.clone(), lines.clone())) {
-            seen.push((key.clone(), lines.clone()));
-        }
-    }
-    (seen, views)
+    let seen = views.iter().filter(|(plugin, _, _)| *plugin == 'b').map(|(_, key, lines)| (key.clone(), lines.clone()));
+    (seen.collect(), views)
 }
 
 /// The first row where `a` and `b` differ outside the composer.
 fn frame_diff(a: &Step, b: &Step) -> Option<String> {
-    let masked = |x: u32, y: u32| {
-        [a.mask, b.mask].into_iter().flatten().any(|(mx, my, mw, mh)| x >= mx && x < mx + mw && y >= my && y < my + mh)
-    };
     (0..a.frame.height).find_map(|y| {
-        let differs = (0..a.frame.width).any(|x| !masked(x, y) && a.frame.cell(x, y) != b.frame.cell(x, y));
+        let differs = (0..a.frame.width).any(|x| a.frame.cell(x, y) != b.frame.cell(x, y));
         let line = |frame: &Capture| frame.text().lines().nth(y as usize).unwrap_or_default().to_owned();
         differs.then(|| format!("row {y}:\n  fault {:?}\n  twin  {:?}", line(&a.frame), line(&b.frame)))
     })
@@ -732,7 +751,7 @@ impl ClaimModel {
                 .shown()
                 .iter()
                 .any(|(key, _)| key == "fence" || SLOTS.iter().any(|(id, name)| id == key && *name == "probe"));
-            steps.push(Step { frame: world.frame(), mask: world.mask(), a_draws, witness, views });
+            steps.push(Step { frame: world.frame(), composing: world.composing(), a_draws, witness, views });
             log.push(faults);
         }
         drop(world);
@@ -758,7 +777,7 @@ impl ClaimModel {
             .map(|command| {
                 world.send(command, &mut expected);
                 let (witness, views) = witness();
-                Step { frame: world.frame(), mask: world.mask(), a_draws: false, witness, views }
+                Step { frame: world.frame(), composing: world.composing(), a_draws: false, witness, views }
             })
             .collect()
     }
@@ -777,7 +796,7 @@ impl Model for ClaimModel {
         (0..steps)
             .map(|_| {
                 let slot = rng.below(SLOTS.len());
-                match rng.below(100) {
+                match rng.below(110) {
                     0..12 => Command::Start(slot),
                     12..34 => Command::Delta(slot, rng.below(TOKENS.len())),
                     34..44 => Command::Call(slot),
@@ -790,7 +809,10 @@ impl Model for ClaimModel {
                         Command::Arm(fault, *rng.pick(&[0, 1, FENCE]))
                     }
                     90..96 => Command::Enable(rng.below(3) != 0),
-                    _ => Command::Theme(rng.below(2) == 0),
+                    96..100 => Command::Theme(rng.below(2) == 0),
+                    100..103 => Command::Resize(rng.below(2) == 0),
+                    103..105 => Command::Wheel(rng.below(2) == 0),
+                    _ => Command::Permission(slot),
                 }
             })
             .collect()
@@ -822,6 +844,11 @@ impl Model for ClaimModel {
         faulty.iter().zip(&twin).enumerate().find_map(|(step, (faulty, twin))| {
             if let Some(diff) = frame_diff(faulty, twin) {
                 return Some(Failure { property: "isolation", site: "cells", step, detail: diff });
+            }
+            if faulty.composing != twin.composing {
+                let detail =
+                    format!("the composer has the focus: {}, in the twin {}", faulty.composing, twin.composing);
+                return Some(Failure { property: "isolation", site: "focus", step, detail });
             }
             (faulty.witness != twin.witness).then(|| Failure {
                 property: "isolation",
@@ -1199,7 +1226,7 @@ fn a_long_transcript_of_claimed_calls_against_the_host_rows() {
         };
         let harness = support::mount(WIDTH, 40, deps);
         harness.wait_for(&format!("turn {}", turns - 1));
-        let world = World { harness, seq: Cell::new(0) };
+        let world = World { harness, seq: Cell::new(0), toasts: RefCell::default() };
         world.settle();
         let (app, tui) = (&world.harness.app, &world.harness.tui);
         let views = ledger().views;
@@ -2078,5 +2105,81 @@ fn a_part_that_falls_back_above_the_reader_leaves_the_reader_in_place() {
         ARMED.set(None);
         let screen = rows(world.frame().text());
         assert_eq!(screen.last().map(String::as_str), Some("call_8:11"), "{carrier:?}: left the tail: {screen:?}");
+    }
+}
+
+// Expected (synthesis 4.4 and P4c, review policy on decisions 4 and 14): the one rule that differs by carrier. An
+// overrun of a claim's view in process is a counted host bug: that part falls back, the plugin stays active and its
+// other part keeps its tree, with no toast. As a library the plugin fails, as an external plugin does: every part it
+// claimed shows the host's row, with the `Plugin failed` toast. The other plugin's claim draws on, on both.
+#[test]
+fn an_overrun_falls_back_in_process_and_fails_a_library() {
+    for carrier in CARRIERS {
+        let world = World::open(carrier);
+        let mut expected = Expected::new();
+        for slot in [0, 1, 2] {
+            world.send(&Command::Start(slot), &mut expected);
+        }
+        COLD.set(false);
+        ARMED.set(Some(("call_1".to_owned(), Fault::Overrun)));
+        world.send(&Command::Delta(0, 0), &mut expected);
+        let status =
+            world.harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "claim.a").unwrap().status;
+        let screen = world.frame().text();
+        let failed = world.toasts.borrow().iter().any(|toast| toast == "Plugin failed: claim.a");
+        assert!(!screen.contains("probe call_1") && screen.contains("witness call_3"), "{carrier:?}:\n{screen}");
+        match carrier {
+            Carrier::Linked => {
+                assert_eq!(status, opencode_plugin::Status::Active, "{carrier:?}");
+                assert_eq!(world.harness.tui.plugins.monitor().host_overruns(), 1, "{carrier:?}");
+                assert!(screen.contains("probe call_2") && !failed, "{carrier:?}:\n{screen}");
+            }
+            Carrier::Abi => {
+                assert!(matches!(status, opencode_plugin::Status::Failed(_)), "{carrier:?}: {status:?}");
+                assert!(!screen.contains("probe call_2") && failed, "{carrier:?}:\n{screen}");
+            }
+        }
+    }
+}
+
+thread_local! {
+    /// The flags `claim.closed`'s fence views got: streaming, closed.
+    static FLAGS: RefCell<Vec<(bool, bool)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Claims `probe` fences and logs the flags each view got.
+fn plugin_closed(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::fence("probe", |_, part| {
+        let Part::Fence(fence) = part else { return None };
+        FLAGS.with_borrow_mut(|flags| flags.push((fence.streaming, fence.closed)));
+        Some(card(&lines(part), None))
+    }));
+    Ok(())
+}
+
+// Expected (review policy on fence closure): a claimed fence learns that it closed once Markdown decides the closing
+// line. The transcript gives Markdown the text trimmed (`message-parts.tsx:191`), so a closing line at the end of the
+// text so far is pending: the fence is open until more text follows it, and closed, no longer streaming, once the
+// message completes.
+#[test]
+fn a_claimed_fence_learns_it_closed_once_markdown_decides_it() {
+    for carrier in CARRIERS {
+        FLAGS.with_borrow_mut(Vec::clear);
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.closed", setup: plugin_closed })]);
+        let last = || FLAGS.with_borrow(|flags| flags.last().copied());
+        world.emit("session.text.started", json!({ "ordinal": 0 }));
+        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```probe\nx\n" }));
+        world.settle();
+        assert_eq!(last(), Some((true, false)), "{carrier:?}");
+        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```\n" }));
+        world.settle();
+        assert_eq!(last(), Some((true, false)), "{carrier:?}: a closing line that ends the text is pending");
+        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "\nAfter.\n" }));
+        world.settle();
+        assert_eq!(last(), Some((true, true)), "{carrier:?}: text after the closing line decides it");
+        let tokens = json!({ "input": 1, "output": 1, "reasoning": 0, "cache": { "read": 0, "write": 0 } });
+        world.emit("session.step.ended", json!({ "finish": "stop", "cost": 0, "tokens": tokens }));
+        world.settle();
+        assert_eq!(last(), Some((false, true)), "{carrier:?}: the message completed");
     }
 }
