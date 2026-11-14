@@ -480,7 +480,8 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         .width(Length::percent(100.0))
         .height(Length::percent(100.0))
         .visible(false);
-    app.root().add(&plugin_overlays);
+    // Before the plugin behaviors' hook, which stays the root's last child.
+    opencode_ui::root::add(app, &plugin_overlays);
     let local_files = deps.roots.as_ref().map(|roots| crate::local::Files {
         state: roots.paths.state.clone(),
         storage: files.as_ref().and_then(|files| files.storage.clone()),
