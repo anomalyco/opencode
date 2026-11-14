@@ -11,6 +11,10 @@ use opencode_ui::prompt::{PromptProps, prompt};
 use crate::features::session_links::{self, Links};
 use crate::prelude::*;
 
+/// The keybind name of the host's toggle in a plugin list (P6b): a host action of the select, which no plugin's
+/// action may take.
+const TOGGLE: &str = "plugins.toggle";
+
 /// The panel on screen, which a panel of the same key changes in place.
 pub struct Live {
     key: String,
@@ -296,7 +300,7 @@ fn toggle(tui: &Tui, picker: &Rc<Picker>) -> opencode_ui::select::SelectAction<S
     let (titled, hidden) = (target.clone(), target);
     let (weak, picked) = (tui.weak(), Rc::downgrade(picker));
     let mut action = SelectAction::new(
-        "plugins.toggle",
+        TOGGLE,
         "toggle",
         bind!(weak, |tui, option: &SelectOption<String>| {
             let Some(picker) = picked.upgrade() else { return };
@@ -572,7 +576,7 @@ fn usable_action(tui: &Tui, action: &abi::SelectAction) -> bool {
     let command = action
         .command
         .as_deref()
-        .is_none_or(|name| !name.trim().is_empty() && name != "plugins.toggle" && !name.starts_with("dialog.select."));
+        .is_none_or(|name| !name.trim().is_empty() && name != TOGGLE && !name.starts_with("dialog.select."));
     let usable = command && action.key.as_deref().is_none_or(|key| usable_key(tui, key));
     if !usable {
         log::warn!("a plugin's select action {:?} cannot be bound; it is left out", action.title);
