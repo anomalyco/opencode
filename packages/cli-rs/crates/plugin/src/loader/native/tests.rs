@@ -3475,3 +3475,21 @@ fn a_claim_in_a_c_library_draws_and_keeps_to_the_header() {
     let (host, registry) = c_active(&v1, "");
     assert!(c_claim(&host, &registry).is_none(), "a 1.4 library claimed a tool");
 }
+
+// Expected (review carbon-6): a library of ABI 1.x has none of 2.0's registrations, the plugin list's handlers (P6b)
+// and P2's layers and searches included; 2.x keeps them.
+#[test]
+fn a_1x_manifest_drops_the_2_0_registrations() {
+    let manifest = abi::Manifest {
+        id: "old".to_owned(),
+        plugins: true,
+        searches: vec!["s".to_owned()],
+        render: abi::RENDER,
+        ..abi::Manifest::default()
+    };
+    let bytes = serde_json::to_vec(&manifest).unwrap();
+    let old = super::manifest(&bytes, 1, None).unwrap();
+    assert!(!old.plugins && old.searches.is_empty() && old.layers.is_empty());
+    let new = super::manifest(&bytes, 2, None).unwrap();
+    assert!(new.plugins && new.searches == ["s"]);
+}
