@@ -1,0 +1,28 @@
+export default {
+  "command.title": "Sparuj urządzenie",
+  title: "Parowanie",
+  description: "Połącz inne urządzenie z serwerem OpenCode na tym komputerze.",
+  "pair.title": "Sparuj urządzenie",
+  "pair.description":
+    "Połącz telefon, tablet lub inny komputer z dowolnego miejsca za pomocą w pełni szyfrowanego tunelu.",
+  "pair.open": "Sparuj urządzenie",
+  "pair.unavailable": "Parowanie jest obecnie niedostępne.",
+  "dialog.description": "Zeskanuj kod aplikacją OpenCode na innym urządzeniu lub skopiuj link.",
+  "remote.title": "Dostęp zdalny",
+  "remote.description":
+    "Sparowane urządzenia łączą się z serwerem OpenCode tego komputera przez Internet. Wyłączenie tej opcji rozłączy je do czasu ponownego sparowania.",
+  "remote.error": "Nie udało się zaktualizować dostępu zdalnego. Spróbuj ponownie.",
+  "setup.title": "Konfigurowanie dostępu zdalnego…",
+  "setup.description": "To może chwilę potrwać.",
+  "setup.error": "Nie udało się skonfigurować dostępu zdalnego.",
+  retry: "Spróbuj ponownie",
+  "screenActive.title": "Utrzymuj ekran w stanie aktywnym",
+  "screenActive.description": "Zapobiegaj wygaszaniu lub usypianiu ekranu tego komputera podczas działania OpenCode.",
+  "screenActive.error": "Nie udało się zaktualizować ustawienia aktywności ekranu. Spróbuj ponownie.",
+  qr: "Kod QR parowania",
+  copyLink: "Kopiuj link",
+  "copy.error": "Nie udało się skopiować danych parowania. Spróbuj ponownie.",
+  error: "Nie udało się zaktualizować danych parowania. Spróbuj ponownie.",
+  expires: "Wygasa za {{time}}",
+  refresh: "Odśwież kod",
+}
