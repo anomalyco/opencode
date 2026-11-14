@@ -1019,29 +1019,30 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
                 ctx.effects.push(Effect::InstallTheme(name, theme));
             }
         }
-        // 2.0 (P3): the verbs and reads of the plugin's newest live mount of a surface, as for a built-in's command,
-        // which a library's command is bound to no mount like. A transcript verb answers the user's input only.
+        // 2.0 (P3): the verbs and reads of the mount whose handler runs, else of the plugin's newest live mount of a
+        // surface, as for a built-in's command, which a library's command is bound to no mount like. A transcript verb
+        // answers the user's input only.
         HostRequest::Scroll { target, verb } => {
             if target == v2::Target::Transcript && !behave::in_handler() {
                 return Err("a transcript verb outside a handler of the user's input is dropped".to_owned());
             }
             let host = ctx.host.upgrade().ok_or("the host is gone")?;
-            let caller = behave::Caller { app: host.app(), plugin: &ctx.id, mount: None };
+            let caller = behave::Caller { app: host.app(), plugin: &ctx.id, mount: called_mount(ctx) };
             ctx.effects.push(Effect::Scroll(behave::scroll(&caller, target, verb)));
         }
         HostRequest::ScrollState { target } => {
             let host = ctx.host.upgrade().ok_or("the host is gone")?;
-            let caller = behave::Caller { app: host.app(), plugin: &ctx.id, mount: None };
+            let caller = behave::Caller { app: host.app(), plugin: &ctx.id, mount: called_mount(ctx) };
             return Ok(serde_json::to_value(behave::scroll_state(&caller, &target)).unwrap_or_default());
         }
         HostRequest::Anchors { target, group } => {
             let host = ctx.host.upgrade().ok_or("the host is gone")?;
-            let caller = behave::Caller { app: host.app(), plugin: &ctx.id, mount: None };
+            let caller = behave::Caller { app: host.app(), plugin: &ctx.id, mount: called_mount(ctx) };
             return Ok(serde_json::to_value(behave::anchors(&caller, &target, &group)).unwrap_or_default());
         }
         HostRequest::TopAnchor { target, group, inset } => {
             let host = ctx.host.upgrade().ok_or("the host is gone")?;
-            let caller = behave::Caller { app: host.app(), plugin: &ctx.id, mount: None };
+            let caller = behave::Caller { app: host.app(), plugin: &ctx.id, mount: called_mount(ctx) };
             return Ok(serde_json::to_value(behave::top_anchor(&caller, &target, &group, inset)).unwrap_or_default());
         }
         HostRequest::Transcript => {
@@ -1067,6 +1068,12 @@ fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, Stri
         HostRequest::InputMode => return Ok(serde_json::to_value(owners(ctx)?.mode()).unwrap_or_default()),
     }
     Ok(serde_json::Value::Null)
+}
+
+/// The mount whose handler or view runs, which P3's verbs and reads name; `None` for a command, which is bound to no
+/// mount: then the plugin's newest live mount of the surface.
+fn called_mount(ctx: &Ctx) -> Option<std::rc::Weak<()>> {
+    ctx.owners.as_ref().and_then(|owners| owners.mounted())
 }
 
 /// What the calls hold of the input; a setup asks nothing of it, as it has no mount and no owner yet.

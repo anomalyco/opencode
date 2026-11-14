@@ -747,6 +747,11 @@ impl Owners {
         self.owner_of(id).rect(id)
     }
 
+    /// The mount of the running call's owner: the one a verb or a read of its scrolls names (P3).
+    pub(crate) fn mounted(&self) -> Option<Weak<()>> {
+        self.current.borrow().as_ref().and_then(|owner| owner.mounted())
+    }
+
     pub(crate) fn focused(&self) -> abi::interact::Focused {
         self.owner_focused().focused()
     }
