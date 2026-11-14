@@ -65,7 +65,7 @@ fn stream(harness: &Harness, count: u64) {
     let started = json!({ "sessionID": "ses_a", "assistantMessageID": id, "ordinal": 0 });
     harness.tui.data.apply(&[event("session.text.started", 2, started)]);
     settle(harness);
-    let before = reconcile::work();
+    let (before, adopted) = (reconcile::work(), surface::adopted());
     for index in 0..count {
         let delta =
             json!({ "sessionID": "ses_a", "assistantMessageID": id, "ordinal": 0, "delta": format!("w{index} ") });
@@ -74,24 +74,20 @@ fn stream(harness: &Harness, count: u64) {
     }
     let work = reconcile::work().since(before);
     assert_eq!(work, reconcile::Work::default(), "streamed deltas worked in the built-ins");
+    assert_eq!(surface::adopted() - adopted, 0, "a built-in answered a delta with a tree");
     assert!(harness.app.text().contains(&format!("w{} ", count - 1)), "{}", harness.app.text());
 }
 
 // Expected (`work`, per streamed update): a delta that changes nothing a built-in shows builds, sets, moves and keeps
 // nothing in their trees: each view answers a keep of its root, which the host takes with no work. The counters are
-// the host's, and only plugin trees count in them. A tree built again equal to the last is no work to the host, so on
-// the C ABI carrier each view also crosses no more than a keep (review carbon-7): one call a surface, a few dozen bytes
-// back, where a section built again sends its whole tree.
+// the host's, and only plugin trees count in them. A tree built again equal to the last is no reconcile work, so the
+// host also counts the trees it adopts: none (review carbon-7). On both carriers, one view call a surface on the C ABI.
 #[test]
 fn a_streamed_delta_does_no_work_in_the_built_ins() {
     stream(&session(&[], Vec::new()), 20);
     let crossed = stream_crossed(&history(0, true), 20);
     assert_eq!(crossed.calls, 20 * SESSION.len() as u64, "{crossed:?}");
-    assert!(crossed.received <= crossed.calls * KEEP_BYTES, "{crossed:?}");
 }
-
-/// The most a view's reply that keeps its root crosses the C ABI, in bytes.
-const KEEP_BYTES: u64 = 96;
 
 /// `ses_a` with `turns` question and answer pairs before, each answer with its tokens, on the C ABI carrier when `abi`.
 fn history(turns: u64, abi: bool) -> Harness {
@@ -157,7 +153,7 @@ fn stream_crossed(harness: &Harness, count: u64) -> opencode_plugin::loader::nat
     let text = json!({ "sessionID": "ses_a", "assistantMessageID": id, "ordinal": 0 });
     harness.tui.data.apply(&[event("session.text.started", 2, text)]);
     settle(harness);
-    let (before, work) = (opencode_plugin::loader::native::crossed(), reconcile::work());
+    let (before, work, adopted) = (opencode_plugin::loader::native::crossed(), reconcile::work(), surface::adopted());
     for index in 0..count {
         let delta =
             json!({ "sessionID": "ses_a", "assistantMessageID": id, "ordinal": 0, "delta": format!("w{index} ") });
@@ -166,6 +162,7 @@ fn stream_crossed(harness: &Harness, count: u64) -> opencode_plugin::loader::nat
     }
     assert!(harness.app.text().contains(&format!("w{} ", count - 1)), "{}", harness.app.text());
     assert_eq!(reconcile::work().since(work), reconcile::Work::default(), "streamed deltas worked in the built-ins");
+    assert_eq!(surface::adopted() - adopted, 0, "a built-in answered a delta with a tree");
     opencode_plugin::loader::native::crossed().since(before)
 }
 
@@ -655,11 +652,12 @@ thread_local! {
     static SIZES: RefCell<Vec<[u16; 4]>> = const { RefCell::new(Vec::new()) };
 }
 
-/// A slot surface in the prompt's status row that reads the palette and keeps its root unless it is new or its command
+/// A slot surface first in the prompt's status row (a root shown that should hide puts a gap before the rest) that
+/// reads the palette and keeps its root unless it is new or its command
 /// woke it, also when told `all` (as one whose memo of its whole input hit). Its cards are memos.
 fn keeper(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(Command { name: "keeper.wake".into(), ..Command::default() }, |_, _| {});
-    let surface = Surface::new("keeper", Place::Slot(Placement::append(slot::PROMPT_FOOTER_STATUS)), |cx| {
+    let surface = Surface::new("keeper", Place::Slot(Placement::prepend(slot::PROMPT_FOOTER_STATUS)), |cx| {
         if let Some(slot) = &cx.input.slot {
             SIZES.with(|sizes| sizes.borrow_mut().push([slot.width, slot.height, cx.input.width, cx.input.height]));
         }
