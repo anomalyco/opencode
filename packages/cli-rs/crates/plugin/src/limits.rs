@@ -19,8 +19,9 @@ use std::collections::HashMap;
 pub struct Limits {
     /// The nodes of one tree, the data of a list's items and kept subtrees included.
     pub nodes: u64,
-    /// The rows the host builds for one tree at once: a node is one, and a patch, code or Markdown also its lines. A
-    /// list's items are built when they come into view, each under this limit of its own.
+    /// The rows the host builds for one tree at once, by what each costs it: a node is one, a text's or Markdown's
+    /// line one more, a line of code two, a patch's line one and its hunk 30. A list's items are built when they come
+    /// into view, each under this limit of its own.
     pub rows: u64,
     /// The text of one node, in bytes: a patch, code, Markdown, a text's spans, an input's value.
     pub text: u64,
@@ -41,13 +42,17 @@ pub struct Limits {
     pub all_images: u64,
 }
 
+/// Measured in release, `TestApp` 200x58 (`steps/plugins-pl.md`): a row costs the host about 4 us to build and lay out
+/// the first time, so 3,000 rows of any kind are under a 16.7 ms frame; 20,000 nodes of a list's data cost 12 ms; a
+/// patch's hunk 0.12 ms; a text of 1 MiB 4 ms; an image of 2048x2048 pixels 28 ms to decode, which a worker does, and
+/// 0.6 ms to copy in.
 impl Default for Limits {
     fn default() -> Self {
         Self {
             nodes: 20_000,
-            rows: 4_000,
+            rows: 3_000,
             text: 1 << 20,
-            hunks: 500,
+            hunks: 100,
             image_bytes: 8 << 20,
             image_pixels: 2048 * 2048,
             plugin_nodes: 40_000,
