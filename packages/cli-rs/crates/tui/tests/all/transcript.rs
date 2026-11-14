@@ -97,8 +97,11 @@ fn open(width: u16, height: u16, id: &str, messages: Vec<Value>, info: Info) -> 
     let older = Arc::new(AtomicUsize::new(0));
     let fixture =
         Fixture { sessions: HashMap::from([(id.to_owned(), messages)]), gate: gate.clone(), older: older.clone() };
-    let deps =
+    let mut deps =
         Deps { config: support::config(info), route: support::session_route(id), ..support::deps(Arc::new(fixture)) };
+    if PLUGGED.with(std::cell::Cell::get) {
+        deps.builtins.push(opencode_plugin::abi::Plugin { id: "test.minimap", setup: minimap }.into());
+    }
     View { harness: support::mount(width, height, deps), gate, older }
 }
 
@@ -357,6 +360,54 @@ fn scroll_up_to(h: &View, turn: u32) -> String {
     assert!(gated, "the history hint never showed");
     assert!(!previous.contains(hint), "{previous}");
     previous
+}
+
+thread_local! {
+    static SEEN: std::cell::RefCell<Vec<opencode_plugin::abi::v2::TranscriptView>> = const {
+        std::cell::RefCell::new(Vec::new())
+    };
+    /// The next [`open`] loads the [`minimap`] plugin.
+    static PLUGGED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// A plugin whose commands read the published transcript and move it to its top.
+fn minimap(setup: &mut opencode_plugin::abi::Setup) -> Result<(), String> {
+    use opencode_plugin::abi::{Command, v2};
+    setup.command(Command { name: "mini.read".into(), ..Command::default() }, |host, _| {
+        SEEN.with(|seen| seen.borrow_mut().extend(host.transcript()));
+    });
+    setup.command(Command { name: "mini.top".into(), ..Command::default() }, |host, _| {
+        host.scroll(v2::Target::Transcript, v2::Scroll::Edge { edge: v2::Edge::Top });
+    });
+    Ok(())
+}
+
+// Expected (rich plugins P3, decision 8): the transcript publishes its offset and mounted rows, and a plugin's verb on
+// it takes the wheel's own path: a jump to the top reveals older rows, or asks for an older page, as the wheel near
+// the top does.
+#[test]
+fn a_plugin_moves_the_transcript_through_its_own_scroll_path() {
+    PLUGGED.with(|plugged| plugged.set(true));
+    let h = long_session();
+    h.wait_for("Answer 50 part 3");
+    let read = |h: &View| {
+        let _ = h.tui.keymap.dispatch("mini.read", None);
+        h.app.advance(Duration::from_millis(1));
+        SEEN.with(|seen| seen.borrow().last().cloned()).expect("the transcript is published")
+    };
+    let before = read(&h);
+    assert!(before.offset > 0 && !before.rows.is_empty() && before.above > 0, "{before:?}");
+    assert!(before.rows.iter().any(|row| row.kind == "user"), "{before:?}");
+    let _ = h.tui.keymap.dispatch("mini.top", None);
+    h.app.advance(Duration::from_millis(1));
+    h.app.render();
+    let after = read(&h);
+    assert!(
+        after.above < before.above || h.older.load(Ordering::SeqCst) > 0,
+        "the jump revealed nothing: {} above before, {} after",
+        before.above,
+        after.above
+    );
 }
 
 #[test]
