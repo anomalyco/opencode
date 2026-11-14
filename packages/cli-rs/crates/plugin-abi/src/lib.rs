@@ -2383,6 +2383,23 @@ pub trait Read {
     fn themes(&self) -> Vec<String> {
         Vec::new()
     }
+    /// 2.0 (P3): where scroll `target` is, as of the last settled frame and the current offset.
+    fn scroll_state(&self, _target: &v2::Target) -> Option<v2::ScrollState> {
+        None
+    }
+    /// 2.0 (P3): the anchors of `group` in scroll `target`, in content order. A list's items that have no widgets
+    /// give their own anchor at the row the host assumes for them, and none inside them.
+    fn anchors(&self, _target: &v2::Target, _group: &str) -> Vec<v2::AnchorAt> {
+        Vec::new()
+    }
+    /// 2.0 (P3): the last anchor of `group`, in content order, at or above `inset` rows below the top of `target`.
+    fn top_anchor(&self, _target: &v2::Target, _group: &str, _inset: u16) -> Option<v2::AnchorAt> {
+        None
+    }
+    /// 2.0 (P3): the published `Viewport::Transcript`, while the session route shows.
+    fn transcript(&self) -> Option<v2::TranscriptView> {
+        None
+    }
 }
 
 /// What a command or an event handler reads and asks of the host. An effect waits until the outermost plugin
@@ -2474,6 +2491,9 @@ pub trait Host: Read {
     /// `api.theme.install`), at once for [`Host::set_theme`] in the same call. It does not select it. A name that is
     /// not a plain file name, or a value without `theme` or `base`, installs nothing.
     fn install_theme(&self, _name: &str, _theme: serde_json::Value) {}
+    /// 2.0 (P3): scrolls `target` by `verb` once the call returns. The transcript takes a verb from a handler only
+    /// (a command, a click, a scroll event), never from a view, `layout`, a wake or a reply.
+    fn scroll(&self, _target: v2::Target, _verb: v2::Scroll) {}
     /// Declares storage key `key` of the plugin, for [`Setup::storage_key`].
     #[doc(hidden)]
     fn declare_storage_key(&self, _key: &str) {}
@@ -4962,6 +4982,7 @@ mod tests {
                 content: v2::Source::Content(handle),
                 view: v2::DiffView::Unified,
                 filetype: None,
+                hunks: None,
             }
         }));
         let mount = v2::MountId { surface: "s".into(), key: "s".into(), generation: 1 };

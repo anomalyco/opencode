@@ -105,6 +105,36 @@
             "overflow": {
               "$ref": "#/$defs/Overflow"
             },
+            "sticky": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Edge"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "anchor": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Anchor"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "split": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Split"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "type": {
               "const": "box"
             }
@@ -271,6 +301,19 @@
                 "$ref": "#/$defs/Node"
               }
             },
+            "notify_top": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "user_scroll": {
+              "type": "boolean"
+            },
             "type": {
               "const": "scroll"
             }
@@ -306,8 +349,175 @@
                 }
               ]
             },
+            "hunks": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "type": {
               "const": "diff"
+            }
+          },
+          "required": ["type", "content"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "value": {
+              "type": "string"
+            },
+            "placeholder": {
+              "type": "string"
+            },
+            "lines": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "on_change": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "on_submit": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "type": {
+              "const": "input"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "row": {
+              "type": "boolean"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ListItem"
+              }
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "type": {
+              "const": "list"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/Source"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "filetype": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "numbers": {
+              "type": "boolean"
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "type": {
+              "const": "code"
+            }
+          },
+          "required": ["type", "content"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/Source"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fit": {
+              "$ref": "#/$defs/Fit"
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "type": {
+              "const": "image"
             }
           },
           "required": ["type", "content"]
@@ -356,6 +566,59 @@
         }
       ],
       "description": "A node of a surface's tree."
+    },
+    "ListItem": {
+      "type": "object",
+      "properties": {
+        "node": {
+          "$ref": "#/$defs/Node"
+        },
+        "estimate": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
+      },
+      "required": ["node"],
+      "description": "An item of a list: a node with an id, and the rows assumed until it is laid out."
+    },
+    "Edge": {
+      "type": "string",
+      "enum": ["top", "bottom"]
+    },
+    "Fit": {
+      "type": "string",
+      "enum": ["contain", "cover", "fill"]
+    },
+    "Anchor": {
+      "type": "object",
+      "properties": {
+        "group": {
+          "type": "string"
+        },
+        "variant": {
+          "type": "string"
+        }
+      },
+      "required": ["group"],
+      "description": "One of a named group of a scroll's anchors."
+    },
+    "Split": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "min": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
+      },
+      "required": ["at"],
+      "description": "A row whose first child the user resizes."
     },
     "Source": {
       "oneOf": [

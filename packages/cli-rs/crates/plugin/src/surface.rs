@@ -19,7 +19,7 @@ use opentui::prelude::*;
 use crate::canvas;
 use crate::node::{Act, abi_mode};
 use crate::reconcile::{Env, Refused, Tree};
-use crate::{Claimed, Host, SlotInput, slot};
+use crate::{Claimed, Host, SlotInput, behave, slot};
 
 /// Runs a view or a canvas draw as one call of the plugin, named for its report: `false` when it panicked, which
 /// fails the plugin.
@@ -49,6 +49,8 @@ pub(crate) struct Place {
     pub name: String,
     pub at: v2::Place,
     pub palette: bool,
+    /// P3: what its `layout` call is told about.
+    pub notify: Vec<v2::Notify>,
 }
 
 /// Runs a surface's view for one mount, on either carrier.
@@ -165,7 +167,8 @@ fn book(f: impl FnOnce(&mut Ledger)) {
 
 /// One mount of a surface.
 pub(crate) struct Surface {
-    root: View,
+    pub(crate) root: View,
+    app: App,
     owner: Weak<dyn Host>,
     /// The plugin's ID, which its canvases' lists are charged to.
     plugin: Rc<str>,
@@ -177,7 +180,12 @@ pub(crate) struct Surface {
     path: String,
     slot_input: SlotInput,
     palette: bool,
-    id: v2::MountId,
+    pub(crate) id: v2::MountId,
+    /// P3: the plugin's `layout` and scroll handler, what `layout` is told about, and what the behaviors hold.
+    pub(crate) calls: behave::Calls,
+    pub(crate) notify: Vec<v2::Notify>,
+    pub(crate) behave: RefCell<behave::State>,
+    this: RefCell<Weak<Surface>>,
     /// Lives as long as the mount; what its route's commands asked for checks it before it arrives.
     _alive: Rc<()>,
     /// A route's surface fills the page; a slot's takes its node's layout, as a 1.x claim's root does.
@@ -187,7 +195,7 @@ pub(crate) struct Surface {
     /// The size the last view was given, and how many views in a row a change of it called.
     seen: Cell<(u16, u16)>,
     resized: Cell<u8>,
-    state: RefCell<State>,
+    pub(crate) state: RefCell<State>,
     live: RefCell<Option<Rc<slot::Live>>>,
     watch: RefCell<Option<Disposer>>,
     /// The host's [`Host::local_revision`] when the view last ran.
@@ -210,8 +218,8 @@ struct Staged {
 }
 
 #[derive(Default)]
-struct State {
-    tree: Tree,
+pub(crate) struct State {
+    pub(crate) tree: Tree,
     memo: v2::Memo,
     /// The memo values the ledger counts for the mount, in the host's table or the library's.
     booked: i64,
@@ -236,6 +244,7 @@ impl Surface {
         alive: Rc<()>,
         viewer: Rc<dyn Viewer>,
         fail: Fail,
+        calls: behave::Calls,
     ) -> Rc<Self> {
         static GENERATION: AtomicU64 = AtomicU64::new(1);
         let id = v2::MountId {
@@ -250,6 +259,11 @@ impl Surface {
         };
         let mounted = Rc::new(Self {
             root,
+            app: host.app().clone(),
+            calls,
+            notify: surface.notify.clone(),
+            behave: RefCell::default(),
+            this: RefCell::default(),
             owner: owner.clone(),
             plugin,
             viewer,
@@ -279,6 +293,8 @@ impl Surface {
             };
             let _ = mounted.drawer.set(Rc::new(drawer));
         }
+        *mounted.this.borrow_mut() = Rc::downgrade(&mounted);
+        behave::attach(host.app(), &mounted.calls.plugin, &mounted);
         let weak = Rc::downgrade(&mounted);
         // The host's own state and the terminal's size change outside change batches. A view that ran after the last
         // change of the host's state has seen it: a notice of it, which comes later, calls no view (review bigboi-7).
@@ -385,6 +401,7 @@ impl Surface {
 
     /// Drops all the mount holds but itself: its plugin failed, so it shows nothing more.
     fn wipe(&self) {
+        *self.behave.borrow_mut() = behave::State::default();
         let mut state = self.state.borrow_mut();
         state.tree.clear(&self.root);
         state.last = None;
@@ -478,31 +495,11 @@ impl Surface {
         {
             taken = Some(crate::node::take_layout(layout));
         }
-        let owner = self.owner.clone();
-        let act: Act = Rc::new(move |action| crate::node::act(&owner, action));
-        let slot = |parent: &View, path: &str| {
-            if self.path.is_empty() || !slot::PATHS.contains(&path) || !slot::contains(&self.path, path) {
-                log::warn!("surface {} cannot show slot {path}: it is not a slot inside its own", self.id.surface);
-                return None;
-            }
-            let mounted = host.slot(parent, path, &self.slot_input)?;
-            if let Some(live) = mounted.live() {
-                *self.live.borrow_mut() = Some(live.clone());
-            }
-            Some(mounted)
-        };
         let mut state = self.state.borrow_mut();
         let State { tree, content, last, .. } = &mut *state;
-        let bytes = |handle: &ContentRef| content.get(handle).or_else(|| staged.given.get(handle));
-        let source = |source: &Source| match source {
-            Source::Text(text) => Some(Rc::from(text.as_str())),
-            Source::Content(handle) => bytes(handle).map(|bytes| Rc::from(String::from_utf8_lossy(bytes).as_ref())),
-            Source::PartOutput(part) => part_output(host, part).map(|text| Rc::from(text.as_str())),
-        };
-        let has = |handle: ContentRef| bytes(&handle).is_some();
-        let env =
-            Env { host, theme, act: &act, slot: &slot, source: &source, content: &has, full, draw: self.drawer.get() };
-        tree.apply(&env, &self.root, &nodes)?;
+        self.reconciling(host, theme, tree, content, staged, full, |env, tree| tree.apply(env, &self.root, &nodes))?;
+        self.reindex();
+        behave::arm(host.app());
         if !self.fills {
             if let Some(taken) = taken {
                 if self.layout.get() != Some(taken) {
@@ -544,6 +541,96 @@ impl Surface {
         self.viewer.draw(&*self.owner.upgrade()?, &self.id, id, frame)
     }
 
+    /// Calls `f` with what a reconcile of `tree` builds with: the content the mount holds and the view staged.
+    #[allow(clippy::too_many_arguments)]
+    fn reconciling<R>(
+        &self,
+        host: &dyn Host,
+        theme: &Theme,
+        tree: &mut Tree,
+        content: &HashMap<ContentRef, Rc<[u8]>>,
+        staged: &Staged,
+        full: bool,
+        f: impl FnOnce(&Env<'_>, &mut Tree) -> R,
+    ) -> R {
+        let owner = self.owner.clone();
+        let act: Act = Rc::new(move |action| crate::node::act(&owner, action));
+        let slot = |parent: &View, path: &str| {
+            if self.path.is_empty() || !slot::PATHS.contains(&path) || !slot::contains(&self.path, path) {
+                log::warn!("surface {} cannot show slot {path}: it is not a slot inside its own", self.id.surface);
+                return None;
+            }
+            let mounted = host.slot(parent, path, &self.slot_input)?;
+            if let Some(live) = mounted.live() {
+                *self.live.borrow_mut() = Some(live.clone());
+            }
+            Some(mounted)
+        };
+        let held = |handle: &ContentRef| content.get(handle).or_else(|| staged.given.get(handle));
+        let source = |source: &Source| match source {
+            Source::Text(text) => Some(Rc::from(text.as_str())),
+            Source::Content(handle) => held(handle).map(|bytes| Rc::from(String::from_utf8_lossy(bytes).as_ref())),
+            Source::PartOutput(part) => part_output(host, part).map(|text| Rc::from(text.as_str())),
+        };
+        let bytes = |source: &Source| match source {
+            Source::Content(handle) => held(handle).cloned(),
+            Source::Text(text) => Some(Rc::from(text.as_bytes())),
+            Source::PartOutput(_) => None,
+        };
+        let has = |handle: ContentRef| held(&handle).is_some();
+        let env = Env {
+            host,
+            theme,
+            act: &act,
+            slot: &slot,
+            source: &source,
+            content: &has,
+            bytes: &bytes,
+            full,
+            draw: self.drawer.get(),
+        };
+        f(&env, tree)
+    }
+
+    /// After a solve: the windows of the tree's lists. Whether one changed.
+    pub(crate) fn windows(&self) -> bool {
+        let Some(host) = self.owner.upgrade() else { return false };
+        let theme = host.theme();
+        let mut state = self.state.borrow_mut();
+        let State { tree, content, .. } = &mut *state;
+        if !tree.has_lists() {
+            return false;
+        }
+        let changed = self.reconciling(host.as_ref(), &theme, tree, content, &Staged::default(), false, |env, tree| {
+            tree.resolve_lists(env)
+        });
+        if changed {
+            host.app().request_redraw();
+        }
+        changed
+    }
+
+    /// Calls the view again, as `layout` asked.
+    pub(crate) fn draw_again(&self) {
+        if let Some(host) = self.owner.upgrade() {
+            self.draw(host.as_ref());
+        }
+    }
+
+    /// The mount, weakly.
+    pub(crate) fn weak(&self) -> Weak<Surface> {
+        self.this.borrow().clone()
+    }
+
+    pub(crate) fn app(&self) -> &App {
+        &self.app
+    }
+
+    /// The page theme.
+    pub(crate) fn theme(&self) -> Option<Theme> {
+        self.owner.upgrade().map(|host| host.theme())
+    }
+
     /// The palette of `theme`, kept while the theme stays.
     fn palette_of(&self, host: &dyn Host, theme: &Theme) -> v2::Palette {
         let mut state = self.state.borrow_mut();
@@ -568,6 +655,7 @@ impl Drop for Surface {
         if let Some(host) = self.owner.upgrade() {
             self.viewer.forget(&*host, &self.id);
         }
+        behave::detach(&self.app);
         let state = self.state.get_mut();
         let bytes: usize = state.content.values().map(|bytes| bytes.len()).sum();
         let (content, memo) = (state.content.len() as i64, state.booked);

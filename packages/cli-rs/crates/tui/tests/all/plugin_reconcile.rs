@@ -97,6 +97,7 @@ fn apply_acting(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::No
         slot: &slot,
         source: &source,
         content: &|_| false,
+        bytes: &|_| None,
         full: false,
         draw: None,
     };
@@ -193,7 +194,7 @@ impl Twin<'_> {
     fn built(&mut self, node: &v2::Node) -> Option<AnyWidget> {
         let app = &self.host.app;
         match node {
-            v2::Node::Scroll { id, height, follow, layout, children } => {
+            v2::Node::Scroll { id, height, follow, layout, children, .. } => {
                 let scroll = ScrollBox::new(app).scrollbars(false).min_height(0);
                 if let Some(height) = height {
                     scroll.height(*height).shrink(0.0);
@@ -415,6 +416,9 @@ impl Generator<'_> {
                     padding_sides: self.chance(20).then(|| self.edges()),
                     wrap: self.chance(15),
                     overflow: if self.chance(15) { abi::Overflow::Hidden } else { abi::Overflow::Visible },
+                    sticky: None,
+                    anchor: None,
+                    split: None,
                 }
             }
             1 | 2 => v2::Node::Text {
@@ -434,6 +438,7 @@ impl Generator<'_> {
                 content: v2::Source::Text((*self.rng.pick(&PATCHES)).to_owned()),
                 view: *self.rng.pick(&[v2::DiffView::Unified, v2::DiffView::Split]),
                 filetype: self.chance(70).then(|| "rust".to_owned()),
+                hunks: None,
             },
             8 => v2::Node::Canvas {
                 id: self.id().or_else(|| self.scrolls.pop().map(str::to_owned)),
@@ -447,6 +452,8 @@ impl Generator<'_> {
                 follow: self.chance(20),
                 layout: self.layout(),
                 children: (0..self.rng.below(4)).map(|_| self.node(depth + 1)).collect(),
+                notify_top: None,
+                user_scroll: false,
             },
             _ => v2::Node::Markdown {
                 id: self.id(),
@@ -1038,6 +1045,7 @@ fn a_theme_change_rebuilds_nothing() {
             content: v2::Source::Text("@@ -1,2 +1,2 @@\n-a\n+b\n c\n".into()),
             view: v2::DiffView::Unified,
             filetype: Some("rust".into()),
+            hunks: None,
         });
         children.push(v2::Node::Spinner { id: None, label: "wait".into() });
     }
@@ -1206,6 +1214,7 @@ fn a_tree_with_unknown_content_is_refused() {
         content: v2::Source::Content(v2::ContentRef(7)),
         view: v2::DiffView::Unified,
         filetype: None,
+        hunks: None,
     };
     assert_eq!(
         apply(&host, &mut tree, &parent, &[v2::Node::column(vec![diff])]),
@@ -1222,6 +1231,8 @@ fn nested_scrolls(levels: usize) -> v2::Node {
         follow: false,
         layout: abi::Layout::default(),
         children: vec![inner],
+        notify_top: None,
+        user_scroll: false,
     })
 }
 
@@ -1266,7 +1277,15 @@ fn a_tree_the_layout_cannot_take_is_refused() {
 /// A scroll of `rows` rows, `height` rows tall, with id `sc`.
 fn rows_scroll(rows: usize, height: u16, layout: abi::Layout) -> v2::Node {
     let rows = (0..rows).map(|row| v2::Node::text(vec![abi::Span::new(format!("row {row}"))])).collect();
-    v2::Node::Scroll { id: Some("sc".into()), height: Some(height), follow: false, layout, children: rows }
+    v2::Node::Scroll {
+        id: Some("sc".into()),
+        height: Some(height),
+        follow: false,
+        layout,
+        children: rows,
+        notify_top: None,
+        user_scroll: false,
+    }
 }
 
 /// The first row of the scroll the frame shows.
@@ -1429,6 +1448,7 @@ fn an_unchanged_patch_is_not_touched() {
             content: v2::Source::Text(PATCHES[0].into()),
             view,
             filetype: None,
+            hunks: None,
         }]
     };
     let host = host(0);

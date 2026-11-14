@@ -252,6 +252,7 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
                     content: v2::Source::Content(handle),
                     view: if split { v2::DiffView::Split } else { v2::DiffView::Unified },
                     filetype: Some("rust".into()),
+                    hunks: None,
                 };
                 v2::Node::column(vec![head, body])
             })

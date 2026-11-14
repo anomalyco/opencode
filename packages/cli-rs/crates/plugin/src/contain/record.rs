@@ -79,6 +79,9 @@ pub const KINDS: &[&str] = &[
     "update",
     "unmount",
     "draw",
+    // P3: a surface's `layout` and its scroll handler.
+    "layout",
+    "on-scroll",
 ];
 
 /// The index of `kind` in [`KINDS`], or the last index past it for a kind it does not list.

@@ -6,7 +6,10 @@
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::v2::{Cause, ContentRef, DiffView, Frame, Mode, MountId, Node, Palette, PartRef, Source, SurfaceInput};
+use crate::v2::{
+    Anchor, Cause, ContentRef, DiffView, Edge, Fit, Frame, ListItem, Mode, MountId, Node, Palette, PartRef, Source,
+    Split, SurfaceInput,
+};
 use crate::{
     Action, Align, Border, BorderStyle, Click, Color, Edges, Justify, Layout, Overflow, Press, Sides, Span, TitleAlign,
     Width, Wrap,
@@ -82,7 +85,9 @@ pub fn schema() -> Value {
                     justify: reference("Justify"), align: reference("Align"), bg: nullable(reference("Color")),
                     layout: reference("Layout"), on_click: nullable(reference("Click")),
                     children: array(reference("Node")), border: nullable(reference("Border")),
-                    padding_sides: nullable(reference("Edges")), wrap: boolean(), overflow: reference("Overflow") },
+                    padding_sides: nullable(reference("Edges")), wrap: boolean(), overflow: reference("Overflow"),
+                    sticky: nullable(reference("Edge")), anchor: nullable(reference("Anchor")),
+                    split: nullable(reference("Split")) },
                 Text { spans: array(reference("Span")) } { id: nullable(string()), fg: nullable(reference("Color")),
                     wrap: reference("Wrap"), truncate: boolean(), selectable: boolean(),
                     hover_fg: nullable(reference("Color")), layout: reference("Layout"),
@@ -91,14 +96,37 @@ pub fn schema() -> Value {
                 Markdown { source: reference("Source") } { id: nullable(string()) },
                 Spinner { label: string() } { id: nullable(string()) },
                 Scroll { } { id: nullable(string()), height: nullable(uint16()), follow: boolean(),
-                    layout: reference("Layout"), children: array(reference("Node")) },
+                    layout: reference("Layout"), children: array(reference("Node")),
+                    notify_top: nullable(string()), user_scroll: boolean() },
                 Diff { content: reference("Source") } { id: nullable(string()), view: reference("DiffView"),
-                    filetype: nullable(string()) },
+                    filetype: nullable(string()), hunks: nullable(string()) },
+                Input { } { id: nullable(string()), value: string(), placeholder: string(),
+                    lines: nullable(uint16()), on_change: nullable(string()), on_submit: nullable(string()),
+                    layout: reference("Layout") },
+                List { } { id: nullable(string()), row: boolean(), items: array(reference("ListItem")),
+                    layout: reference("Layout") },
+                Code { content: reference("Source") } { id: nullable(string()), filetype: nullable(string()),
+                    numbers: boolean(), layout: reference("Layout") },
+                Image { content: reference("Source") } { id: nullable(string()), fit: reference("Fit"),
+                    layout: reference("Layout") },
                 Keep { key: string() } { },
                 Canvas { } { id: nullable(string()), layout: reference("Layout"), version: uint64(),
                     animate: boolean() },
             }),
         ),
+        (
+            "ListItem",
+            object!(ListItem, "An item of a list: a node with an id, and the rows assumed until it is laid out.", {
+                node: reference("Node"),
+            } { estimate: uint16() }),
+        ),
+        ("Edge", unit!(Edge { Top, Bottom })),
+        ("Fit", unit!(Fit { Contain, Cover, Fill })),
+        (
+            "Anchor",
+            object!(Anchor, "One of a named group of a scroll's anchors.", { group: string() } { variant: string() }),
+        ),
+        ("Split", object!(Split, "A row whose first child the user resizes.", { at: uint16() } { min: uint16() })),
         (
             "Source",
             external!(Source, "What a text-bearing node shows.", {
@@ -438,6 +466,9 @@ mod tests {
                 padding_sides: Some(Edges { top: 1, ..Edges::default() }),
                 wrap: true,
                 overflow: Overflow::Hidden,
+                sticky: Some(Edge::Bottom),
+                anchor: Some(Anchor::new("file", "reviewed")),
+                split: Some(Split { at: 30, min: 4 }),
             },
             Node::Text {
                 id: Some("t".into()),
@@ -456,13 +487,45 @@ mod tests {
                 source: Source::PartOutput(PartRef { session: "s".into(), part: "p".into() }),
             },
             Node::Spinner { id: Some("s".into()), label: "l".into() },
-            Node::Scroll { id: Some("c".into()), height: Some(3), follow: true, layout, children: vec![] },
+            Node::Scroll {
+                id: Some("c".into()),
+                height: Some(3),
+                follow: true,
+                layout,
+                children: vec![],
+                notify_top: Some("file".into()),
+                user_scroll: true,
+            },
             Node::Diff {
                 id: Some("d".into()),
                 content: Source::Content(ContentRef(7)),
                 view: DiffView::Split,
                 filetype: Some("rust".into()),
+                hunks: Some("hunk".into()),
             },
+            Node::Input {
+                id: Some("i".into()),
+                value: "v".into(),
+                placeholder: "p".into(),
+                lines: Some(3),
+                on_change: Some("c".into()),
+                on_submit: Some("s".into()),
+                layout,
+            },
+            Node::List {
+                id: Some("l".into()),
+                row: true,
+                items: vec![ListItem::new(Node::Keep { key: "k".into() }, 9)],
+                layout,
+            },
+            Node::Code {
+                id: Some("o".into()),
+                content: Source::Text("fn x() {}".into()),
+                filetype: Some("rust".into()),
+                numbers: true,
+                layout,
+            },
+            Node::Image { id: Some("g".into()), content: Source::Content(ContentRef(2)), fit: Fit::Cover, layout },
             Node::Markdown { id: None, source: Source::Text("x".into()) },
             Node::Canvas { id: Some("v".into()), layout, version: 7, animate: true },
         ];
@@ -495,6 +558,8 @@ mod tests {
             json!({ "type": "diff", "content": { "content": -1 } }),
             json!({ "type": "canvas", "version": -1 }),
             json!({ "type": "canvas", "animate": 1 }),
+            json!({ "type": "list", "items": [{ "estimate": 3 }] }),
+            json!({ "type": "box", "sticky": "left" }),
         ];
         for value in refused {
             assert!(!agree::<Node>("Node", value));
